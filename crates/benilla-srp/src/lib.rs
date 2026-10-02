@@ -20,6 +20,7 @@ use rand::{thread_rng, RngCore};
 use sha1::{Digest, Sha1};
 
 pub mod vanilla_header;
+pub mod wrath_header;
 
 pub use vanilla_header::{DecrypterHalf, EncrypterHalf, HeaderCrypto, ProofSeed};
 

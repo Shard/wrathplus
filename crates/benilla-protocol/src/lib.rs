@@ -7,6 +7,8 @@ pub mod guid;
 pub mod messages;
 pub mod wire;
 pub mod world;
+pub mod wrath_auth;
+pub mod wrath_world;
 pub use auth::AuthReject;
 pub use events::{
     decode, CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,

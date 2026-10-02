@@ -1,3 +1,6 @@
+# Dedicated local development credentials (never commit).
+/.azerothbench-test.env
+
 # Rust build artifacts
 /target/
 **/*.rs.bk

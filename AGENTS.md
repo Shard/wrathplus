@@ -3,7 +3,9 @@
 Fork-specific scope: read `docs/AZEROTHBENCH.md` first. This fork targets Wrath
 3.3.5a/build 12340; upstream's vanilla-only feature scope below describes the
 baseline, not the fork's destination. Preserve upstream engineering and asset
-provenance rules. Never run probes against the personal play realm. External
+provenance rules. The owner authorized current-realm testing and service restarts
+on 2026-10-02. Use dedicated test credentials, preserve player state and back up
+before migrations; no destructive resets without specific authorization. External
 harnesses own policies/training; the client provides ordinary human play and
 low-level, declared observation/control interfaces.
 
