@@ -3,7 +3,7 @@
 //! carry no `(listfile)`, so resolution is by name hash.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use benilla_mpq::Archive;
@@ -59,6 +59,120 @@ fn mount_order(dir_names: &[String]) -> Vec<String> {
     order
 }
 
+const WRATH_ROOT_BASE_ORDER: &[&str] = &[
+    "common.MPQ",
+    "common-2.MPQ",
+    "expansion.MPQ",
+    "lichking.MPQ",
+];
+
+fn validate_wrath_locale(locale: &str) -> Result<()> {
+    if locale.len() != 4 || !locale.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+        bail!("invalid Wrath locale {locale:?}: expected four ASCII letters");
+    }
+    Ok(())
+}
+
+fn sorted_file_names(path: &Path) -> Result<Vec<String>> {
+    let mut names = std::fs::read_dir(path)
+        .with_context(|| format!("listing {}", path.display()))?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            entry.path().is_file().then(|| entry.file_name())
+        })
+        .filter_map(|name| name.into_string().ok())
+        .collect::<Vec<_>>();
+    names.sort_by_cached_key(|name| (name.to_ascii_lowercase(), name.clone()));
+    Ok(names)
+}
+
+fn find_case_insensitive(names: &[String], wanted: &str) -> Option<String> {
+    names
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case(wanted))
+        .cloned()
+}
+
+fn patch_number(name: &str, prefix: &str) -> Option<u32> {
+    let lower = name.to_ascii_lowercase();
+    let middle = lower.strip_prefix(prefix)?.strip_suffix(".mpq")?;
+    if middle.is_empty() {
+        Some(0)
+    } else {
+        middle.strip_prefix('-')?.parse().ok()
+    }
+}
+
+fn numeric_patch_family(names: &[String], prefix: &str) -> Vec<String> {
+    let mut patches = names
+        .iter()
+        .filter_map(|name| patch_number(name, prefix).map(|number| (number, name.clone())))
+        .collect::<Vec<_>>();
+    patches.sort_by_cached_key(|(number, name)| (*number, name.to_ascii_lowercase(), name.clone()));
+    patches.into_iter().map(|(_, name)| name).collect()
+}
+
+/// Build the 3.3.5 archive profile, ascending priority, from names actually present on disk.
+fn wrath_mount_plan(path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
+    validate_wrath_locale(locale)?;
+    if !path.is_dir() {
+        bail!("Wrath data path is not a directory: {}", path.display());
+    }
+
+    let root_names = sorted_file_names(path)?;
+    let mut locale_dirs = std::fs::read_dir(path)
+        .with_context(|| format!("listing {}", path.display()))?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            entry.path().is_dir().then(|| entry.file_name())
+        })
+        .filter_map(|name| name.into_string().ok())
+        .collect::<Vec<_>>();
+    locale_dirs.sort_by_cached_key(|name| (name.to_ascii_lowercase(), name.clone()));
+    let locale_dir_name = find_case_insensitive(&locale_dirs, locale).ok_or_else(|| {
+        anyhow!(
+            "Wrath locale directory {locale:?} not found under {}",
+            path.display()
+        )
+    })?;
+    let locale_dir = path.join(locale_dir_name);
+    let locale_names = sorted_file_names(&locale_dir)?;
+
+    let mut plan = WRATH_ROOT_BASE_ORDER
+        .iter()
+        .filter_map(|name| find_case_insensitive(&root_names, name))
+        .map(|name| path.join(name))
+        .collect::<Vec<_>>();
+    for stem in [
+        "locale",
+        "speech",
+        "expansion-locale",
+        "expansion-speech",
+        "lichking-locale",
+        "lichking-speech",
+    ] {
+        let wanted = format!("{stem}-{locale}.MPQ");
+        if let Some(name) = find_case_insensitive(&locale_names, &wanted) {
+            plan.push(locale_dir.join(name));
+        }
+    }
+
+    // Patch suffixes are numeric priority, not lexical order; accept the family present rather
+    // than asserting a maximum patch number for every 3.3.5 distribution.
+    plan.extend(
+        numeric_patch_family(&root_names, "patch")
+            .into_iter()
+            .map(|name| path.join(name)),
+    );
+    let locale_patch_prefix = format!("patch-{}", locale.to_ascii_lowercase());
+    plan.extend(
+        numeric_patch_family(&locale_names, &locale_patch_prefix)
+            .into_iter()
+            .map(|name| locale_dir.join(name)),
+    );
+    Ok(plan)
+}
+
 impl Chain {
     /// Open a `Data` directory's archives in [`mount_order`], or a single `.MPQ` file.
     ///
@@ -93,6 +207,25 @@ impl Chain {
                 Archive::open(path).with_context(|| format!("opening MPQ {}", path.display()))?,
             );
         }
+        Ok(Self { archives })
+    }
+
+    /// Open the read-only Wrath 3.3.5 archive profile for `locale` from a `Data` directory.
+    ///
+    /// Base archives mount root-first then locale-specific; root and locale patch families follow,
+    /// each in numeric order. Archive and locale-directory names are resolved case-insensitively.
+    pub fn open_wrath(path: &Path, locale: &str) -> Result<Self> {
+        let plan = wrath_mount_plan(path, locale)?;
+        if plan.is_empty() {
+            bail!(
+                "no known Wrath MPQs found for locale {locale:?} in {}",
+                path.display()
+            );
+        }
+        let archives = plan
+            .into_iter()
+            .map(|mpq| Archive::open(&mpq).with_context(|| format!("opening {}", mpq.display())))
+            .collect::<Result<Vec<_>>>()?;
         Ok(Self { archives })
     }
 
@@ -177,9 +310,46 @@ impl Chain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     fn owned(names: &[&str]) -> Vec<String> {
         names.iter().map(|n| n.to_string()).collect()
+    }
+
+    fn synthetic_data_tree(
+        root_names: &[&str],
+        locale_dir: &str,
+        locale_names: &[&str],
+    ) -> PathBuf {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "benilla-wrath-chain-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let locale = root.join(locale_dir);
+        fs::create_dir_all(&locale).unwrap();
+        for name in root_names {
+            fs::write(root.join(name), []).unwrap();
+        }
+        for name in locale_names {
+            fs::write(locale.join(name), []).unwrap();
+        }
+        root
+    }
+
+    fn relative_plan(root: &Path, locale: &str) -> Vec<String> {
+        wrath_mount_plan(root, locale)
+            .unwrap()
+            .into_iter()
+            .map(|path| {
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect()
     }
 
     #[test]
@@ -240,5 +410,90 @@ mod tests {
             mount_order(&dir),
             owned(&["DBC.mpq", "Model.MPQ", "PATCH.mpq"])
         );
+    }
+
+    #[test]
+    fn wrath_mount_plan_matches_335_profile_and_numeric_patch_layers() {
+        let root = synthetic_data_tree(
+            &[
+                "PATCH-10.mpq",
+                "lichking.MPQ",
+                "common.MPQ",
+                "patch-3.MPQ",
+                "expansion.MPQ",
+                "patch.MPQ",
+                "common-2.MPQ",
+                "patch-2.MPQ",
+                "patch-not-a-number.MPQ",
+            ],
+            "enUS",
+            &[
+                "patch-enUS-4.MPQ",
+                "lichking-speech-enUS.MPQ",
+                "locale-enUS.MPQ",
+                "expansion-locale-enUS.MPQ",
+                "patch-enUS.MPQ",
+                "speech-enUS.MPQ",
+                "patch-enUS-3.MPQ",
+                "lichking-locale-enUS.MPQ",
+                "expansion-speech-enUS.MPQ",
+                "patch-enUS-2.MPQ",
+            ],
+        );
+        assert_eq!(
+            relative_plan(&root, "enUS"),
+            owned(&[
+                "common.MPQ",
+                "common-2.MPQ",
+                "expansion.MPQ",
+                "lichking.MPQ",
+                "enUS/locale-enUS.MPQ",
+                "enUS/speech-enUS.MPQ",
+                "enUS/expansion-locale-enUS.MPQ",
+                "enUS/expansion-speech-enUS.MPQ",
+                "enUS/lichking-locale-enUS.MPQ",
+                "enUS/lichking-speech-enUS.MPQ",
+                "patch.MPQ",
+                "patch-2.MPQ",
+                "patch-3.MPQ",
+                "PATCH-10.mpq",
+                "enUS/patch-enUS.MPQ",
+                "enUS/patch-enUS-2.MPQ",
+                "enUS/patch-enUS-3.MPQ",
+                "enUS/patch-enUS-4.MPQ",
+            ])
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn wrath_mount_plan_resolves_locale_and_archives_case_insensitively() {
+        let root = synthetic_data_tree(
+            &["COMMON.mpq", "Patch-2.mpq", "PATCH.MPQ"],
+            "ENus",
+            &["LOCALE-ENUS.mpq", "PATCH-enUS.MPQ"],
+        );
+        assert_eq!(
+            relative_plan(&root, "enus"),
+            owned(&[
+                "COMMON.mpq",
+                "ENus/LOCALE-ENUS.mpq",
+                "PATCH.MPQ",
+                "Patch-2.mpq",
+                "ENus/PATCH-enUS.MPQ",
+            ])
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn wrath_locale_rejects_path_components_and_non_locale_shapes() {
+        for locale in ["../x", "en/US", "en\\US", ".enU", "en1S", "enusx", ""] {
+            assert!(
+                validate_wrath_locale(locale).is_err(),
+                "accepted {locale:?}"
+            );
+        }
+        assert!(validate_wrath_locale("enUS").is_ok());
     }
 }
