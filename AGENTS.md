@@ -1,4 +1,11 @@
-# benilla
+# AzerothBench fork of benilla
+
+Fork-specific scope: read `docs/AZEROTHBENCH.md` first. This fork targets Wrath
+3.3.5a/build 12340; upstream's vanilla-only feature scope below describes the
+baseline, not the fork's destination. Preserve upstream engineering and asset
+provenance rules. Never run probes against the personal play realm. External
+harnesses own policies/training; the client provides ordinary human play and
+low-level, declared observation/control interfaces.
 
 A from-scratch World of Warcraft 1.12.1 client in Rust and Bevy. The reference client is the
 spec: benilla is a faithful, modern implementation of it, not a place to get creative.
