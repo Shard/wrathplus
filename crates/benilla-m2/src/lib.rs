@@ -6,6 +6,7 @@ mod error;
 mod model;
 mod skin;
 mod track;
+pub mod wrath;
 
 pub use error::Error;
 pub use model::{
@@ -549,3 +550,6 @@ fn attachment_z(b: &[u8], id: usize, attachments: (u32, u32), lookup: (u32, u32)
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod wrath_tests;

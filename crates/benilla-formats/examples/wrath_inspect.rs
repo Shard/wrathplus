@@ -50,11 +50,27 @@ fn main() -> anyhow::Result<()> {
             .and_then(|name| name.to_str())
             .unwrap_or("<non-UTF-8 archive name>");
         match chain.read(name) {
-            Ok(bytes) => println!(
-                "{kind}: size={} magic={} archive={archive_name}",
-                bytes.len(),
-                magic(&bytes)
-            ),
+            Ok(bytes) => {
+                println!(
+                    "{kind}: size={} magic={} archive={archive_name}",
+                    bytes.len(),
+                    magic(&bytes)
+                );
+                if kind == &"M2" {
+                    match benilla_m2::wrath::parse_wrath_m2(&mut std::io::Cursor::new(
+                        bytes.as_slice(),
+                    )) {
+                        Ok(_) => println!("M2: Wrath semantic parser accepted"),
+                        Err(error) => println!("M2: semantic parser error={error}"),
+                    }
+                }
+                if kind == &"SKIN" {
+                    match benilla_m2::wrath::parse_wrath_skin(&bytes) {
+                        Ok(_) => println!("SKIN: Wrath semantic parser accepted"),
+                        Err(error) => println!("SKIN: semantic parser error={error}"),
+                    }
+                }
+            }
             Err(error) => println!("{kind}: archive={archive_name} error={error:#}"),
         }
     }
