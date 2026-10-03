@@ -37,13 +37,21 @@ Pinned upstream: `b396bbf69a0486b6d29829ec191145f63c363eea`.
 - Non-blocking future-Rust compatibility warning: dependency `block v0.1.6`; inspect using `cargo report future-incompatibilities --id 1`.
 - No assets supplied, client launched, realm connection made or services restarted. This is vanilla build/test evidence only, not Wrath compatibility or gameplay acceptance.
 
-Next gate: introduce explicit Wrath protocol/session support with offline fixtures before isolated-realm qualification. Do not change the build number alone or reuse personal-realm credentials.
+## Verified Wrath protocol slice — 2026-10-02
+
+Additive APIs now implement build-12340 auth/SRP proof verification, RC4-drop1024 directional header crypto, bounded world framing, character enumeration, normal character creation and initial login packet observation. The default graphical client remains on the vanilla path.
+
+Live dedicated-account gate on the authorized current realm passed: `AZBENCH` authenticated; `Benchone` was created normally as a level-1 human warrior; enumeration returned its roster; initial world login received 32 packets including one login verification, one account-data-times and one time-speed packet. No movement/combat or object-state decoding is established by this gate.
+
+`Chain::open_wrath` resolves installed DBC/WDT/BLP/M2/SKIN/FrameXML sentinels read-only. External skin parsing succeeds; the first player-model parser gate currently stops explicitly at unsupported camera tracks. No graphical Wrath rendering or stock UI acceptance is claimed.
+
+Next gates: model/render integration, Wrath DBC and terrain interpretations, Wrath gameplay state/packets, and the Lua/UI dialect. Human starting-zone gameplay must pass before agent/benchmark instrumentation work.
 
 ## Data and safety
 
 No proprietary assets, extracted client datasets, stock FrameXML or credentials in git/images. Read user installs without modifying them. Provide compatibility validation/import, not an unverified promise of a lawful historical-client download source. Current official Classic data is not presumed compatible.
 
-Never run probes against the personal play realm or reuse player credentials. Upstream probes may invoke GM commands: those are development diagnostics only, never benchmark actor controls. Baseline tests run without WOW_DATA and without login credentials. World snapshots do not guarantee deterministic replay.
+The owner authorized current-realm development testing, shutdowns and restarts on 2026-10-02. Use a dedicated test account, never reuse player credentials, preserve existing player state and take backups before migrations. Destructive resets require specific approval. Upstream probes may invoke GM commands: those are development diagnostics only, never benchmark actor controls. Baseline tests run without WOW_DATA and without login credentials. World snapshots do not guarantee deterministic replay.
 
 ## Local development constraints
 
