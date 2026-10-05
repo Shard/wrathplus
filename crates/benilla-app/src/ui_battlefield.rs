@@ -16,7 +16,7 @@ use benilla_protocol::messages::{BattlefieldList, BattlefieldStatus};
 use benilla_ui::script::{BattlefieldListView, BattlefieldMapInfo, BattlefieldQueueSlot, UiScript};
 
 use crate::names::NameCache;
-use crate::net::{ClientCommand, EnteredWorldMessage, NetCommands};
+use crate::net::{ClientCommand, EnteredWorldMessage, NetCommands, SessionDialect};
 use crate::player::Player;
 use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::ui_party::GroupState;
@@ -269,6 +269,7 @@ fn drain_battlefield(
     maps: Option<Res<MapCatalogRes>>,
     group: Option<Res<GroupState>>,
     commands: Res<NetCommands>,
+    dialect: Res<SessionDialect>,
     mut sink: crate::ui_action::MessageSink,
 ) {
     let Some(mut script) = script else {
@@ -300,10 +301,14 @@ fn drain_battlefield(
                 as_group,
             }
         };
-        let _ = commands.0.send(command);
+        send_supported(&commands, *dialect, command);
     }
     for map_id in script.take_battlefield_list_requests() {
-        let _ = commands.0.send(ClientCommand::BattlefieldList { map_id });
+        send_supported(
+            &commands,
+            *dialect,
+            ClientCommand::BattlefieldList { map_id },
+        );
     }
 }
 
@@ -314,6 +319,7 @@ fn reset_on_world_enter(
     mut state: ResMut<Battlefield>,
     script: Option<NonSendMut<UiScript>>,
     commands: Res<NetCommands>,
+    dialect: Res<SessionDialect>,
 ) {
     if entered.read().next().is_none() {
         return;
@@ -322,7 +328,20 @@ fn reset_on_world_enter(
     if let Some(mut script) = script {
         script.reset_battlefield_selection();
     }
-    let _ = commands.0.send(ClientCommand::BattlefieldStatusRequest);
+    request_battlefield_status(&commands, *dialect);
+}
+
+/// Temporarily leaves Wrath battleground actions unavailable instead of borrowing Vanilla wire.
+/// A future native implementation activates these producers through `NetCommands::supports`.
+fn send_supported(commands: &NetCommands, dialect: SessionDialect, command: ClientCommand) -> bool {
+    if !commands.supports(dialect, &command) {
+        return false;
+    }
+    commands.0.send(command).is_ok()
+}
+
+fn request_battlefield_status(commands: &NetCommands, dialect: SessionDialect) {
+    send_supported(commands, dialect, ClientCommand::BattlefieldStatusRequest);
 }
 
 /// The battlemaster window's packet handlers.
@@ -376,6 +395,25 @@ impl Plugin for BattlefieldPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_request_is_vanilla_only_until_wrath_wire_exists() {
+        use crossbeam_channel::TryRecvError;
+
+        for (dialect, expected) in [
+            (SessionDialect::Vanilla5875, true),
+            (SessionDialect::Wrath12340, false),
+        ] {
+            let (tx, rx) = crossbeam_channel::unbounded();
+            let commands = NetCommands(tx);
+            request_battlefield_status(&commands, dialect);
+            match (expected, rx.try_recv()) {
+                (true, Ok(ClientCommand::BattlefieldStatusRequest)) => {}
+                (false, Err(TryRecvError::Empty)) => {}
+                (_, result) => panic!("unexpected {dialect:?} producer result: {result:?}"),
+            }
+        }
+    }
 
     fn status(slot: u32, map_id: u32, status: u32) -> BattlefieldStatus {
         BattlefieldStatus {

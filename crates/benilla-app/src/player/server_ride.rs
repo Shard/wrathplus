@@ -122,7 +122,9 @@ pub(super) fn drive_self_ride(
                 // Each spline sets the walk gait from its `SPLINEFLAG_RUNMODE`, inverted: the
                 // reference passes the bit to `SetRunMode` (`0x7c6ac2` → `0x7c71c0`), whose
                 // argument is run. Once per spline, into the keybind's latch.
-                player.walking = !spline.run_mode;
+                if let Some(run_mode) = spline.run_mode {
+                    player.walking = !run_mode;
+                }
                 super::move_trace::gait("spline", player.walking, false, player.modes.rooted, true);
             }
             let yaw = yaw_of(transform.rotation);
@@ -280,7 +282,8 @@ mod tests {
                     duration: Duration::from_secs(600), // far from ending during the test
                     id: 77,
                     grounded: true,
-                    run_mode,
+                    interpolation: benilla_protocol::SplineInterpolation::Linear,
+                    run_mode: Some(run_mode),
                 },
                 twist,
                 Embodied,

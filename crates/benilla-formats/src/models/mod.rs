@@ -19,6 +19,7 @@ mod records;
 mod tex_anim;
 mod types;
 mod wmo;
+pub mod wrath;
 pub use anim::*;
 pub use anim_summary::*;
 pub use art_extent::*;

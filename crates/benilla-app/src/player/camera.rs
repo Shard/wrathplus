@@ -1976,6 +1976,28 @@ mod tests {
         assert!(!rig.world_mouse.held(LookButton::Left));
     }
 
+    #[test]
+    fn ui_owned_primary_gestures_never_arm_world_clicks() {
+        for (button, channel) in [
+            (MouseButton::Left, LookButton::Left),
+            (MouseButton::Right, LookButton::Right),
+        ] {
+            let mut rig = CameraControl::default();
+            let mut buttons = ButtonInput::<MouseButton>::default();
+            buttons.press(button);
+            rig.world_mouse.update(&buttons, false);
+            assert!(!rig.world_mouse.down(channel));
+            assert!(!rig.world_mouse.channel(channel));
+            buttons.clear();
+            rig.world_mouse.update(&buttons, true);
+            assert!(!rig.world_mouse.channel(channel));
+            buttons.release(button);
+            rig.world_mouse.update(&buttons, true);
+            assert!(!rig.world_mouse.channel(channel));
+            assert!(rig.look.is_none());
+        }
+    }
+
     /// A right mouse-down in the world ends repair mode (`0x492c68`), from the latch through the
     /// press edge to the reset; the same press on a UI frame, or one that drops a held payload
     /// (`0x492b50`), leaves it standing.

@@ -18,6 +18,10 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 
+#[path = "wrath_m2.rs"]
+mod wrath_m2;
+pub use wrath_m2::WrathM2ModelLoader;
+
 use crate::bone_target_id;
 use crate::coords::wow_to_bevy;
 use crate::model::{
@@ -119,7 +123,7 @@ pub struct PaneCamera {
     /// The rig at rest (bases plus first keys); every camera a `<Model>` pane can name is static.
     pub still: PortraitCamera,
     /// The tracks in WoW space, kept only when one moves (the `Cameras\*.m2` fly-bys).
-    tracks: Option<Arc<benilla_formats::M2CameraTracks>>,
+    pub(crate) tracks: Option<Arc<benilla_formats::M2CameraTracks>>,
 }
 
 impl PaneCamera {

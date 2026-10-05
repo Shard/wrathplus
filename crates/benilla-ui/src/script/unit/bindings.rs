@@ -415,7 +415,10 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
             if !ua.exists || !ub.exists {
                 return Ok(Value::Nil);
             }
-            Ok(flag(a == b || (ua.guid != 0 && ua.guid == ub.guid)))
+            // Unit tokens use the resolver's ASCII-insensitive identity semantics.
+            Ok(flag(
+                a.eq_ignore_ascii_case(&b) || (ua.guid != 0 && ua.guid == ub.guid),
+            ))
         })?,
     )?;
 

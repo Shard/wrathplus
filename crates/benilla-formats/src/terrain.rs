@@ -9,7 +9,7 @@ use std::io::Cursor;
 
 use crate::Chain;
 use anyhow::{Context, Result};
-use benilla_adt::{parse_adt, CombinedAlphaMap, ParsedAdt};
+use benilla_adt::{parse_adt, CombinedAlphaMap, Mh2oChunk, ParsedAdt};
 use benilla_wdt::{version::WowVersion, WdtFile, WdtReader};
 
 /// Edge length (texels) of a chunk's combined alpha map (always 64×64 in vanilla).
@@ -30,6 +30,28 @@ pub const STORMWIND_XY: (f32, f32) = (-8840.56, 489.7);
 
 /// Ground-texture repeats per chunk, one per cell: the reference's fixed 8, not a setting.
 pub const TERRAIN_LAYER_TILES: f32 = 8.0;
+
+/// ADT texture/liquid decoding controls. [`Default`] is byte-for-byte the existing vanilla path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerrainDecodeOptions {
+    /// WDT MPHD `0x4` or `0x80`: uncompressed MCAL layers are 4096-byte, 8-bit maps.
+    pub big_alpha: bool,
+    /// Duplicate alpha texel row/column 62 into row/column 63 unless the MCNK explicitly sets
+    /// `do_not_fix_alpha_map` (`0x8000`).
+    pub fix_alpha: bool,
+    /// Honor MCNK `do_not_fix_alpha_map`; Wrath does, while the vanilla default remains unchanged.
+    pub honor_do_not_fix_alpha: bool,
+}
+
+impl Default for TerrainDecodeOptions {
+    fn default() -> Self {
+        Self {
+            big_alpha: false,
+            fix_alpha: true,
+            honor_do_not_fix_alpha: false,
+        }
+    }
+}
 
 /// One MCNK as an indexed triangle mesh in raw WoW coords, plus its texturing data.
 #[derive(Debug, Clone)]
@@ -275,6 +297,9 @@ pub struct TileMesh {
     pub chunks: Vec<ChunkMesh>,
     pub doodads: Vec<Doodad>,
     pub wmos: Vec<WmoInstance>,
+    /// Raw, bounded Wrath MH2O layers. These cannot enter [`ChunkMesh::liquids`] until the parent
+    /// loader resolves each `liquid_type` through `LiquidType.dbc` to a render/sound class.
+    pub mh2o: Option<Mh2oChunk>,
 }
 
 impl TileMesh {
@@ -294,6 +319,17 @@ pub(crate) fn snap_to_lattice(coord: f32) -> f32 {
 
 /// Build per-chunk meshes from one vanilla (monolithic) ADT file's bytes.
 pub fn adt_to_tile_mesh(adt_bytes: &[u8]) -> Result<TileMesh> {
+    adt_to_tile_mesh_with_options(adt_bytes, TerrainDecodeOptions::default())
+}
+
+/// Build a tile with explicit MCAL/MH2O dialect controls.
+/// For build 12340, set `big_alpha` iff the matching WDT's MPHD has `0x4` or `0x80`, and set
+/// `honor_do_not_fix_alpha`; do not infer alpha depth merely from the client version.
+#[allow(dead_code)] // Re-export from formats once the Wrath asset-loader integration lands.
+pub fn adt_to_tile_mesh_with_options(
+    adt_bytes: &[u8],
+    options: TerrainDecodeOptions,
+) -> Result<TileMesh> {
     let mut cursor = Cursor::new(adt_bytes);
     let parsed = parse_adt(&mut cursor).map_err(|e| anyhow::anyhow!("parsing ADT: {e}"))?;
     // A vanilla ADT is always one monolithic root.
@@ -399,11 +435,11 @@ pub fn adt_to_tile_mesh(adt_bytes: &[u8]) -> Result<TileMesh> {
 
         // Layers 1..3 into one RGBA map; 1.12 alpha is 4-bit, last row and column duplicated.
         let alpha_map = (layer_textures.len() > 1).then(|| {
-            CombinedAlphaMap::new(
-                mcnk, /* has_big_alpha */ false, /* fix_alpha */ true,
-            )
-            .as_slice()
-            .to_vec()
+            let fix_alpha = options.fix_alpha
+                && (!options.honor_do_not_fix_alpha || mcnk.header.flags & 0x8000 == 0);
+            CombinedAlphaMap::new(mcnk, options.big_alpha, fix_alpha)
+                .as_slice()
+                .to_vec()
         });
 
         let shadow = mcnk.shadow.as_ref().map(|sh| {
@@ -506,10 +542,12 @@ pub fn adt_to_tile_mesh(adt_bytes: &[u8]) -> Result<TileMesh> {
         })
         .collect();
 
+    let mh2o = root.mh2o.clone();
     Ok(TileMesh {
         chunks,
         doodads,
         wmos,
+        mh2o,
     })
 }
 

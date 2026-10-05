@@ -404,6 +404,7 @@ mod tests {
             hair_color: 0,
             facial_hair: 0,
             equipment: [0; 10],
+            cloak: 0,
             bake_name: None,
         });
         app.insert_resource(Creatures {

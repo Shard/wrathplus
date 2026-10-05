@@ -49,6 +49,7 @@ pub(super) fn load_blood_tables(mut commands: Commands, assets: Option<Res<World
 /// blood tables drops it, as the client skips a null record, and logs why at `info`.
 pub(super) fn blood_spurts(
     mut swings: MessageReader<SwingImpact>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
     transforms: Query<&Transform>,
     net: Query<&NetEntity>,
     creatures: Option<Res<crate::entities::Creatures>>,
@@ -106,7 +107,13 @@ pub(super) fn blood_spurts(
             }
             _ => true,
         };
-        let large = swing.hit_info & 0x2000 != 0; // crushing picks the large row; a crit does not
+        let large = large_blood(
+            swing.hit_info,
+            dialect
+                .as_deref()
+                .copied()
+                .unwrap_or(crate::net::SessionDialect::Vanilla5875),
+        );
         let Some((effect, path)) = blood
             .0
             .effect_id(blood_id, VIOLENCE_LEVEL, front, large)
@@ -139,4 +146,53 @@ fn swing_attacker<'a>(
     swing: &SwingMessage,
 ) -> Option<&'a Transform> {
     transforms.get(swing.attacker).ok()
+}
+
+/// Preserve the legacy consumer's reference bit; Wrath reports arrive through the explicit
+/// presentation projection, whose shared combat-text crushing semantic is 0x8000.
+fn large_blood(hit_info: u32, dialect: crate::net::SessionDialect) -> bool {
+    let crushing = match dialect {
+        crate::net::SessionDialect::Vanilla5875 => 0x2000,
+        crate::net::SessionDialect::Wrath12340 => 0x8000,
+    };
+    hit_info & crushing != 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::net::SessionDialect::{Vanilla5875, Wrath12340};
+
+    #[test]
+    fn blood_size_preserves_vanilla_and_uses_projected_wrath_crushing() {
+        assert!(large_blood(0x2000, Vanilla5875));
+        assert!(!large_blood(0x8000, Vanilla5875));
+        assert!(large_blood(0x8000, Wrath12340));
+        assert!(!large_blood(0x2000, Wrath12340));
+        for dialect in [Vanilla5875, Wrath12340] {
+            assert!(!large_blood(0x80, dialect));
+            assert!(!large_blood(0x4000, dialect));
+        }
+        let native = benilla_protocol::wrath_combat::AttackerState {
+            hit_info: benilla_protocol::wrath_combat::HITINFO_CRUSHING,
+            attacker: 1,
+            victim: 2,
+            damage: 70,
+            overkill: 0,
+            damages: vec![benilla_protocol::wrath_combat::MeleeDamage {
+                school_mask: 1,
+                damage_float: 70.0,
+                damage: 70,
+                absorb: None,
+                resist: None,
+            }],
+            target_state: 1,
+            attacker_state: 0,
+            melee_spell_id: 0,
+            blocked: None,
+            rage_gain: None,
+        };
+        let view = crate::net::wrath_melee::presentation(&native).unwrap();
+        assert!(large_blood(view.hit_info, Wrath12340));
+    }
 }

@@ -669,7 +669,14 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             stop,
             duration_ms,
             flying,
-            run_mode,
+            interpolation: if flying {
+                crate::SplineInterpolation::CatmullRom
+            } else {
+                crate::SplineInterpolation::Linear
+            },
+            cyclic: false,
+            effect: None,
+            run_mode: Some(run_mode),
         }],
         ServerPacket::PlayerMove {
             guid,

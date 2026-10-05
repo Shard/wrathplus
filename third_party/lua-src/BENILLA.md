@@ -5,10 +5,11 @@ the version mlua 0.11 resolves to. Wired in through `[patch.crates-io]` in the w
 
 ## Why a fork exists at all
 
-benilla's Lua has to accept exactly the grammar the 1.12.1 client's Lua accepts, no more and no
-less. Every hunk below is that one rule: three restore 5.0 constructs 5.1 deleted, three delete 5.1
-constructs 5.0 never had. A grammar difference in either direction is invisible to every instrument
-until an addon trips over it, and the addon corpus asks about the difference directly.
+By default, benilla's Lua has to accept exactly the grammar the 1.12.1 client's Lua accepts, no more
+and no less. Every compatibility hunk below follows that rule: three restore 5.0 constructs 5.1
+deleted, three disable 5.1 constructs 5.0 never had. A grammar difference in either direction is
+invisible to every instrument until an addon trips over it, and the addon corpus asks about the
+difference directly. The explicit Wrath switch documented below restores stock 5.1 behavior.
 
 The 1.12 addon corpus is Lua 5.0 code. It uses the iterator-less generic-for:
 
@@ -31,9 +32,53 @@ benilla is not adopting Lua 5.0. It stays on 5.1.5 and restores the behaviour of
 that Lua itself shipped and labelled `/* for compatibility only */`. Every other 5.1 fix, and the
 whole of mlua's surface, stay exactly as upstream.
 
+## Runtime dialect seam
+
+Vanilla remains the default. To select stock Lua 5.1 behavior for a Wrath Lua
+state, set the boolean registry entry `benilla.wrath51` to `true` before
+installing or loading any scripts. The engine can do this through mlua's named
+registry API; the vendored parser, lexer, and VM read the registry table
+directly with `luaH_getstr` and `luaS_newliteral`, without making Lua stack
+calls. The setting belongs to the Lua registry (shared by coroutines belonging
+to that state), not to process globals or the Lua global environment, so
+independent Vanilla and Wrath states can coexist.
+
+Only boolean `true` selects Wrath. A missing key, `false`, or a value of any
+other type preserves Vanilla behavior.
+
+The switch gates all dialect-specific executable changes described below:
+
+* Wrath restores 5.1's `...` expression, `#`, and `%` parser arms.
+* Wrath uses 5.1's constructor semicolon handling and record-field table-size
+  hint; Vanilla keeps the two 5.0 constructor behaviors.
+* Wrath leaves a table-valued generic-for generator to 5.1's normal call path;
+  Vanilla retains the 5.0 table-to-global-`next` substitution.
+* Wrath restores 5.1's nested `[[...]]` advisory error and non-nesting long
+  string handling; Vanilla retains 5.0 nesting.
+* Wrath limits each native `string.find`, `string.match`, `gmatch` iterator
+  call, or `string.gsub` call to 100,000 deterministic matcher steps and 200
+  recursive matcher frames. Plain-search byte comparisons, search-position iterations, and recursive/
+  backtrack matcher entries consume the same per-call budget. Exhaustion raises `pattern
+  matching work limit exceeded` or `pattern matching recursion limit exceeded`.
+  Vanilla deliberately retains the uncapped upstream matcher.
+
+The matcher limit counts native work rather than elapsed time. It bounds the
+pathological backtracking/search CPU that runs below Lua's VM hook, but it is
+not wall-clock enforcement or full native-call preemption. Other native string
+operations remain governed by Lua's allocator; in particular `string.rep` is
+not part of this matcher cap and the embedding's 128 MiB allocator limit still
+handles its output growth.
+
+`LUA_QL` remains a compile-time macro and therefore keeps the Vanilla 5.0
+backtick/apostrophe spelling in both dialects. Making every exception quote
+state-dependent would require replacing a broad, upstream-wide compile-time
+format-string facility and is intentionally outside this bounded seam.
+
 ## The delta, and the command that proves it
 
-Eight hunks in three files. `src/lib.rs` additionally differs by having Lua 5.2/5.3/5.4/5.5 stripped
+The original eight compatibility hunks are now runtime-gated, with the shared
+registry reader in `lua-5.1.5/ldialect.h` and the long-string gate in `llex.c`.
+`src/lib.rs` additionally differs by having Lua 5.2/5.3/5.4/5.5 stripped
 from the `Version` enum (with their source trees deleted): benilla builds 5.1 and only 5.1, and a
 fork that still offered the other four would answer a request for one with a missing directory at
 build time instead of a compile error.
@@ -71,7 +116,8 @@ diff -r third_party/lua-src/lua-5.1.5 \
   ~/.cargo/registry/src/*/lua-src-550.0.0/lua-5.1.5
 ```
 
-That must print exactly the eight hunks in the tables above and nothing else.
+That diff includes the eight hunks in the tables above plus their runtime
+dialect gates, `ldialect.h`, and the `llex.c` long-string gate.
 
 ## The generic-for, in detail
 

@@ -1,13 +1,13 @@
 //! The bounded Wrath 3.3.5a world login and character-select protocol.
 //!
-//! This intentionally stops after bounded character creation / initial-login observation:
-//! gameplay, movement, combat, and GM packets still use the vanilla path.
+//! Typed support intentionally stops after bounded character creation / initial-login observation;
+//! gameplay consumers use the lossless raw framed transport and supply their own Wrath codecs.
 //! The layouts come from AzerothCore's `WorldSocket.cpp`, `ServerPktHeader.h`, and
 //! `Player::BuildEnumData`.
 
-use std::io::{Cursor, Read, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use benilla_srp::wrath_header::{DecrypterHalf, EncrypterHalf, HeaderCrypto};
@@ -49,6 +49,7 @@ const MAX_CREATE_PACKETS: usize = 64;
 const MAX_INITIAL_LOGIN_PACKETS: usize = 512;
 const MAX_CHARACTERS: usize = 50;
 const MAX_SERVER_PACKET_SIZE: usize = 0x7f_ffff;
+const MAX_CLIENT_PACKET_BODY_SIZE: usize = u16::MAX as usize - 4;
 
 /// The world server requires Warden, which this initial Wrath protocol slice does not implement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,16 +216,56 @@ pub struct WrathCharacter {
     pub equipment: [WrathCharEnumItem; 23],
 }
 
-#[derive(Debug)]
-struct RawPacket {
-    opcode: u16,
-    body: Vec<u8>,
+/// One complete server-to-client Wrath world packet, without its encrypted framing header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrathServerPacket {
+    pub opcode: u16,
+    pub body: Vec<u8>,
 }
+
+type RawPacket = WrathServerPacket;
+
+/// Read half of a split [`WrathWorldSession`], retaining the server-to-client RC4 stream.
+pub struct WrathWorldReader {
+    stream: TcpStream,
+    decrypter: DecrypterHalf,
+    failed: bool,
+}
+
+/// Write half of a split [`WrathWorldSession`], retaining the client-to-server RC4 stream.
+pub struct WrathWorldWriter {
+    stream: TcpStream,
+    encrypter: EncrypterHalf,
+    failed: bool,
+}
+
+/// A receive failed after consuming bytes from the current encrypted frame.
+///
+/// The reader is poisoned after this error; its source retains the framing or socket failure that
+/// made continuing unsafe.
+#[derive(Debug)]
+pub struct WrathPartialFrameRead {
+    pub consumed: usize,
+}
+
+impl std::fmt::Display for WrathPartialFrameRead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Wrath partial frame read failed after {} byte(s)",
+            self.consumed
+        )
+    }
+}
+
+impl std::error::Error for WrathPartialFrameRead {}
 
 /// An authenticated Wrath world connection with bounded character-select and login observation.
 pub struct WrathWorldSession {
     stream: TcpStream,
     crypto: HeaderCrypto,
+    read_failed: bool,
+    write_failed: bool,
 }
 
 impl WrathWorldSession {
@@ -280,7 +321,12 @@ impl WrathWorldSession {
             .context("sending CMSG_AUTH_SESSION")?;
 
         let crypto = HeaderCrypto::from_session_key(session_key);
-        let mut session = Self { stream, crypto };
+        let mut session = Self {
+            stream,
+            crypto,
+            read_failed: false,
+            write_failed: false,
+        };
         let mut queue_updates = 0usize;
         for _ in 0..MAX_STARTUP_PACKETS {
             let packet = session.recv_raw()?;
@@ -323,8 +369,7 @@ impl WrathWorldSession {
         self.stream
             .set_read_timeout(Some(IO_TIMEOUT))
             .context("restoring Wrath character-enumeration timeout")?;
-        let encrypter = self.crypto.encrypter();
-        send_raw(&mut self.stream, Some(encrypter), CMSG_CHAR_ENUM, &[])
+        self.send_raw(CMSG_CHAR_ENUM, &[])
             .context("sending CMSG_CHAR_ENUM")?;
 
         for _ in 0..MAX_ENUM_PACKETS {
@@ -346,8 +391,7 @@ impl WrathWorldSession {
     /// Validate and submit a normal character-create request, waiting for its one-byte result.
     pub fn create_character(&mut self, request: &WrathCreateCharacter) -> Result<()> {
         let body = create_character_body(request)?;
-        let encrypter = self.crypto.encrypter();
-        send_raw(&mut self.stream, Some(encrypter), CMSG_CHAR_CREATE, &body)
+        self.send_raw(CMSG_CHAR_CREATE, &body)
             .context("sending CMSG_CHAR_CREATE")?;
 
         for _ in 0..MAX_CREATE_PACKETS {
@@ -367,14 +411,7 @@ impl WrathWorldSession {
     /// `SMSG_LOGIN_VERIFY_WORLD`, the AzerothCore initial-packet marker. Bodies are intentionally
     /// not decoded as vanilla objects; only opcode and payload size are retained.
     pub fn observe_initial_login(&mut self, guid: u64) -> Result<WrathInitialLoginObservation> {
-        let encrypter = self.crypto.encrypter();
-        send_raw(
-            &mut self.stream,
-            Some(encrypter),
-            CMSG_PLAYER_LOGIN,
-            &guid.to_le_bytes(),
-        )
-        .context("sending CMSG_PLAYER_LOGIN")?;
+        self.begin_player_login(guid)?;
 
         let mut observation = WrathInitialLoginObservation::new();
         for _ in 0..MAX_INITIAL_LOGIN_PACKETS {
@@ -396,8 +433,196 @@ impl WrathWorldSession {
         )
     }
 
-    fn recv_raw(&mut self) -> Result<RawPacket> {
-        recv_raw(&mut self.stream, Some(self.crypto.decrypter()))
+    /// Send `CMSG_PLAYER_LOGIN` without reading or discarding any server packets.
+    ///
+    /// Callers that need the lossless gameplay stream should call this and then use [`Self::recv_raw`]
+    /// or [`Self::into_split`]. [`Self::observe_initial_login`] remains the compatibility helper that
+    /// consumes the bounded initial sequence.
+    pub fn begin_player_login(&mut self, guid: u64) -> Result<()> {
+        self.send_raw(CMSG_PLAYER_LOGIN, &guid.to_le_bytes())
+            .context("sending CMSG_PLAYER_LOGIN")
+    }
+
+    /// Receive one complete framed packet, rejecting Warden rather than exposing an unusable session.
+    ///
+    /// A timeout before any byte of a new frame is consumed may be retried. Any error after a partial
+    /// header or body permanently fails this receive side: Wrath's RC4 header stream and TCP framing
+    /// cannot safely be treated as a fresh packet after such an error.
+    pub fn recv_raw(&mut self) -> Result<WrathServerPacket> {
+        let Some(timeout) = self
+            .stream
+            .read_timeout()
+            .context("reading Wrath world read timeout")?
+        else {
+            let packet = recv_raw_fail_closed(
+                &mut self.stream,
+                Some(self.crypto.decrypter()),
+                &mut self.read_failed,
+            )?;
+            return reject_warden(packet);
+        };
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(|| anyhow!("Wrath world read timeout exceeds monotonic clock range"))?;
+        self.recv_raw_until(deadline)
+    }
+
+    /// Receive one complete framed packet before an absolute monotonic deadline.
+    ///
+    /// The same deadline bounds the complete encrypted header and body. A timeout after any frame
+    /// byte is consumed permanently fails the receive side; a timeout while still waiting for the
+    /// first byte may be retried.
+    pub fn recv_raw_until(&mut self, deadline: Instant) -> Result<WrathServerPacket> {
+        let packet = recv_raw_fail_closed_until(
+            &mut self.stream,
+            Some(self.crypto.decrypter()),
+            &mut self.read_failed,
+            deadline,
+        )?;
+        reject_warden(packet)
+    }
+
+    /// Frame and send one raw client packet with the Wrath client-to-server header cipher.
+    ///
+    /// Bodies are bounded by the protocol's 16-bit client size field. A failed socket write poisons
+    /// this write side because the number of encrypted header bytes accepted by TCP is unknowable.
+    pub fn send_raw(&mut self, opcode: u32, body: &[u8]) -> Result<()> {
+        send_raw_fail_closed(
+            &mut self.stream,
+            Some(self.crypto.encrypter()),
+            &mut self.write_failed,
+            opcode,
+            body,
+        )
+    }
+
+    /// Set the socket read timeout. The authenticated session defaults to ten seconds.
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<()> {
+        self.stream
+            .set_read_timeout(timeout)
+            .context("setting Wrath world read timeout")
+    }
+
+    /// Set the socket write timeout. The authenticated session defaults to ten seconds.
+    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<()> {
+        self.stream
+            .set_write_timeout(timeout)
+            .context("setting Wrath world write timeout")
+    }
+
+    /// Split the socket and directional Wrath crypto without resetting either RC4 stream.
+    pub fn into_split(self) -> Result<(WrathWorldReader, WrathWorldWriter)> {
+        let read_stream = self
+            .stream
+            .try_clone()
+            .context("cloning Wrath world socket for split")?;
+        let (encrypter, decrypter) = self.crypto.split();
+        Ok((
+            WrathWorldReader {
+                stream: read_stream,
+                decrypter,
+                failed: self.read_failed,
+            },
+            WrathWorldWriter {
+                stream: self.stream,
+                encrypter,
+                failed: self.write_failed,
+            },
+        ))
+    }
+}
+
+impl WrathWorldReader {
+    /// Receive one complete raw server packet; see [`WrathWorldSession::recv_raw`] for retry safety.
+    pub fn recv_raw(&mut self) -> Result<WrathServerPacket> {
+        let Some(timeout) = self
+            .stream
+            .read_timeout()
+            .context("reading split Wrath world read timeout")?
+        else {
+            let packet = recv_raw_fail_closed(
+                &mut self.stream,
+                Some(&mut self.decrypter),
+                &mut self.failed,
+            )?;
+            return reject_warden(packet);
+        };
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(|| anyhow!("Wrath world read timeout exceeds monotonic clock range"))?;
+        self.recv_raw_until(deadline)
+    }
+
+    /// Receive one complete framed packet before an absolute monotonic deadline.
+    ///
+    /// The same deadline bounds the complete encrypted header and body. See
+    /// [`WrathWorldSession::recv_raw_until`] for retry and poisoning semantics.
+    pub fn recv_raw_until(&mut self, deadline: Instant) -> Result<WrathServerPacket> {
+        let packet = recv_raw_fail_closed_until(
+            &mut self.stream,
+            Some(&mut self.decrypter),
+            &mut self.failed,
+            deadline,
+        )?;
+        reject_warden(packet)
+    }
+
+    /// Receive one packet while keeping the socket timeout as an idle poll before the first byte.
+    ///
+    /// Once any frame byte arrives, `frame_timeout` replaces that poll timeout and bounds the whole
+    /// header and body. This lets a caller poll side channels frequently without treating an
+    /// ordinarily fragmented packet as if every frame had the same short deadline.
+    pub fn recv_raw_with_frame_timeout(
+        &mut self,
+        frame_timeout: Duration,
+    ) -> Result<WrathServerPacket> {
+        let idle_timeout = self
+            .stream
+            .read_timeout()
+            .context("reading split Wrath world idle timeout")?;
+        let packet = recv_raw_fail_closed_with_frame_timeout(
+            &mut self.stream,
+            Some(&mut self.decrypter),
+            &mut self.failed,
+            idle_timeout,
+            frame_timeout,
+        )?;
+        reject_warden(packet)
+    }
+
+    /// Set the read timeout; `None` permits an indefinitely quiet gameplay connection.
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<()> {
+        self.stream
+            .set_read_timeout(timeout)
+            .context("setting split Wrath world read timeout")
+    }
+}
+
+impl WrathWorldWriter {
+    /// Frame and send one raw client packet while preserving the split encryption stream.
+    pub fn send_raw(&mut self, opcode: u32, body: &[u8]) -> Result<()> {
+        send_raw_fail_closed(
+            &mut self.stream,
+            Some(&mut self.encrypter),
+            &mut self.failed,
+            opcode,
+            body,
+        )
+    }
+
+    /// Set the socket write timeout. The authenticated session defaults to ten seconds.
+    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<()> {
+        self.stream
+            .set_write_timeout(timeout)
+            .context("setting split Wrath world write timeout")
+    }
+}
+
+fn reject_warden(packet: WrathServerPacket) -> Result<WrathServerPacket> {
+    if packet.opcode == SMSG_WARDEN_DATA {
+        Err(WrathWardenRequired.into())
+    } else {
+        Ok(packet)
     }
 }
 
@@ -631,6 +856,29 @@ fn send_raw(
     Ok(())
 }
 
+fn send_raw_fail_closed(
+    stream: &mut impl Write,
+    encrypter: Option<&mut EncrypterHalf>,
+    failed: &mut bool,
+    opcode: u32,
+    body: &[u8],
+) -> Result<()> {
+    if *failed {
+        bail!("Wrath world writer is unusable after a previous frame write failed");
+    }
+    if body.len() > MAX_CLIENT_PACKET_BODY_SIZE {
+        bail!(
+            "client packet body too large: {} bytes (maximum {MAX_CLIENT_PACKET_BODY_SIZE})",
+            body.len()
+        );
+    }
+    let result = send_raw(stream, encrypter, opcode, body);
+    if result.is_err() {
+        *failed = true;
+    }
+    result
+}
+
 fn recv_raw(stream: &mut impl Read, decrypter: Option<&mut DecrypterHalf>) -> Result<RawPacket> {
     let mut first = [0u8; 4];
     stream
@@ -657,6 +905,164 @@ fn recv_raw(stream: &mut impl Read, decrypter: Option<&mut DecrypterHalf>) -> Re
         .read_exact(&mut body)
         .with_context(|| format!("reading Wrath body for opcode {opcode:#x} ({body_len} bytes)"))?;
     Ok(RawPacket { opcode, body })
+}
+
+fn recv_raw_fail_closed(
+    stream: &mut impl Read,
+    decrypter: Option<&mut DecrypterHalf>,
+    failed: &mut bool,
+) -> Result<RawPacket> {
+    if *failed {
+        bail!("Wrath world reader is unusable after a partial frame read failed");
+    }
+
+    let mut reader = FrameReader::new(stream);
+    let result = recv_raw(&mut reader, decrypter);
+    match &result {
+        Err(error) if reader.consumed != 0 => {
+            *failed = true;
+            if error.downcast_ref::<io::Error>().is_some() {
+                return result.context(WrathPartialFrameRead {
+                    consumed: reader.consumed,
+                });
+            }
+        }
+        _ => {}
+    }
+    result
+}
+
+fn recv_raw_fail_closed_until(
+    stream: &mut TcpStream,
+    decrypter: Option<&mut DecrypterHalf>,
+    failed: &mut bool,
+    deadline: Instant,
+) -> Result<RawPacket> {
+    let original_timeout = stream
+        .read_timeout()
+        .context("reading Wrath world socket timeout before deadline receive")?;
+    let result = {
+        let mut reader = DeadlineReader::new(stream, deadline);
+        recv_raw_fail_closed(&mut reader, decrypter, failed)
+    };
+    if let Err(error) = stream.set_read_timeout(original_timeout) {
+        *failed = true;
+        return Err(error).context("restoring Wrath world socket timeout after deadline receive");
+    }
+    result
+}
+
+fn recv_raw_fail_closed_with_frame_timeout(
+    stream: &mut TcpStream,
+    decrypter: Option<&mut DecrypterHalf>,
+    failed: &mut bool,
+    idle_timeout: Option<Duration>,
+    frame_timeout: Duration,
+) -> Result<RawPacket> {
+    let result = {
+        let mut reader = FrameDeadlineReader::new(stream, idle_timeout, frame_timeout);
+        recv_raw_fail_closed(&mut reader, decrypter, failed)
+    };
+    if let Err(error) = stream.set_read_timeout(idle_timeout) {
+        *failed = true;
+        return Err(error).context("restoring Wrath world socket idle timeout after frame receive");
+    }
+    result
+}
+
+struct DeadlineReader<'a> {
+    stream: &'a mut TcpStream,
+    deadline: Instant,
+}
+
+impl<'a> DeadlineReader<'a> {
+    fn new(stream: &'a mut TcpStream, deadline: Instant) -> Self {
+        Self { stream, deadline }
+    }
+}
+
+impl Read for DeadlineReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let remaining = self
+            .deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::TimedOut, "Wrath frame deadline elapsed")
+            })?;
+        self.stream.set_read_timeout(Some(remaining))?;
+        self.stream.read(buffer)
+    }
+}
+
+struct FrameDeadlineReader<'a> {
+    stream: &'a mut TcpStream,
+    idle_timeout: Option<Duration>,
+    frame_timeout: Duration,
+    deadline: Option<Instant>,
+}
+
+impl<'a> FrameDeadlineReader<'a> {
+    fn new(
+        stream: &'a mut TcpStream,
+        idle_timeout: Option<Duration>,
+        frame_timeout: Duration,
+    ) -> Self {
+        Self {
+            stream,
+            idle_timeout,
+            frame_timeout,
+            deadline: None,
+        }
+    }
+}
+
+impl Read for FrameDeadlineReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let timeout = match self.deadline {
+            Some(deadline) => Some(
+                deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|remaining| !remaining.is_zero())
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::TimedOut, "Wrath frame deadline elapsed")
+                    })?,
+            ),
+            None => self.idle_timeout,
+        };
+        self.stream.set_read_timeout(timeout)?;
+        let read = self.stream.read(buffer)?;
+        if read != 0 && self.deadline.is_none() {
+            self.deadline = Some(Instant::now().checked_add(self.frame_timeout).ok_or_else(
+                || {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Wrath frame timeout exceeds monotonic clock range",
+                    )
+                },
+            )?);
+        }
+        Ok(read)
+    }
+}
+
+struct FrameReader<'a, R> {
+    inner: &'a mut R,
+    consumed: usize,
+}
+
+impl<'a, R> FrameReader<'a, R> {
+    fn new(inner: &'a mut R) -> Self {
+        Self { inner, consumed: 0 }
+    }
+}
+
+impl<R: Read> Read for FrameReader<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let read = self.inner.read(buffer)?;
+        self.consumed += read;
+        Ok(read)
+    }
 }
 
 fn decode_server_header(
@@ -808,6 +1214,72 @@ fn read_cstring(r: &mut impl Read, max_len: usize) -> Result<String> {
 mod tests {
     use super::*;
     use flate2::read::ZlibDecoder;
+    use std::net::TcpListener;
+    use std::thread;
+
+    const TRANSPORT_KEY: [u8; SESSION_KEY_LENGTH] = [0x5a; SESSION_KEY_LENGTH];
+
+    fn loopback_session() -> (WrathWorldSession, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        client.set_read_timeout(Some(IO_TIMEOUT)).unwrap();
+        client.set_write_timeout(Some(IO_TIMEOUT)).unwrap();
+        (
+            WrathWorldSession {
+                stream: client,
+                crypto: HeaderCrypto::from_session_key(TRANSPORT_KEY),
+                read_failed: false,
+                write_failed: false,
+            },
+            server,
+        )
+    }
+
+    fn send_server_packet(
+        stream: &mut TcpStream,
+        crypto: &mut DecrypterHalf,
+        opcode: u16,
+        body: &[u8],
+    ) {
+        let size = body.len() + 2;
+        let mut header = if size > 0x7fff {
+            vec![
+                0x80 | ((size >> 16) as u8),
+                (size >> 8) as u8,
+                size as u8,
+                opcode as u8,
+                (opcode >> 8) as u8,
+            ]
+        } else {
+            let size = (size as u16).to_be_bytes();
+            vec![size[0], size[1], opcode as u8, (opcode >> 8) as u8]
+        };
+        crypto.decrypt(&mut header);
+        stream.write_all(&header).unwrap();
+        stream.write_all(body).unwrap();
+    }
+
+    fn server_packet_bytes(crypto: &mut DecrypterHalf, opcode: u16, body: &[u8]) -> Vec<u8> {
+        let size = body.len() + 2;
+        assert!(size <= 0x7fff);
+        let size = (size as u16).to_be_bytes();
+        let mut wire = vec![size[0], size[1], opcode as u8, (opcode >> 8) as u8];
+        crypto.decrypt(&mut wire);
+        wire.extend_from_slice(body);
+        wire
+    }
+
+    fn recv_client_packet(stream: &mut TcpStream, crypto: &mut EncrypterHalf) -> (u32, Vec<u8>) {
+        let mut header = [0; 6];
+        stream.read_exact(&mut header).unwrap();
+        crypto.encrypt(&mut header);
+        let size = usize::from(u16::from_be_bytes([header[0], header[1]]));
+        let opcode = u32::from_le_bytes(header[2..6].try_into().unwrap());
+        let mut body = vec![0; size - 4];
+        stream.read_exact(&mut body).unwrap();
+        (opcode, body)
+    }
 
     fn enum_fixture() -> Vec<u8> {
         let mut body = vec![1];
@@ -1066,5 +1538,289 @@ mod tests {
         body[0] = AUTH_WAIT_QUEUE;
         body[11..15].copy_from_slice(&1234u32.to_le_bytes());
         assert_eq!(parse_queue_position(&body).unwrap(), 1234);
+    }
+
+    #[test]
+    fn split_loopback_preserves_both_crypto_streams_and_extended_headers() {
+        let (mut session, mut server) = loopback_session();
+        session.send_raw(0x1122_3344, b"before split").unwrap();
+        let (mut reader, mut writer) = session.into_split().unwrap();
+
+        let server_thread = thread::spawn(move || {
+            let (mut client_encrypt, mut server_decrypt) =
+                HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+            assert_eq!(
+                recv_client_packet(&mut server, &mut client_encrypt),
+                (0x1122_3344, b"before split".to_vec())
+            );
+            assert_eq!(
+                recv_client_packet(&mut server, &mut client_encrypt),
+                (0x5566_7788, b"after split".to_vec())
+            );
+
+            send_server_packet(&mut server, &mut server_decrypt, 0x1234, b"small");
+            let large = vec![0xa5; 0x8_000];
+            send_server_packet(&mut server, &mut server_decrypt, 0x5678, &large);
+        });
+
+        writer.send_raw(0x5566_7788, b"after split").unwrap();
+        assert_eq!(
+            reader.recv_raw().unwrap(),
+            WrathServerPacket {
+                opcode: 0x1234,
+                body: b"small".to_vec(),
+            }
+        );
+        let large = reader.recv_raw().unwrap();
+        assert_eq!(large.opcode, 0x5678);
+        assert_eq!(large.body, vec![0xa5; 0x8_000]);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn begin_player_login_does_not_consume_an_already_arrived_packet() {
+        let (mut session, mut server) = loopback_session();
+        let server_thread = thread::spawn(move || {
+            let (mut client_encrypt, mut server_decrypt) =
+                HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+            send_server_packet(&mut server, &mut server_decrypt, 0x1234, b"queued");
+            assert_eq!(
+                recv_client_packet(&mut server, &mut client_encrypt),
+                (
+                    CMSG_PLAYER_LOGIN,
+                    0x0102_0304_0506_0708u64.to_le_bytes().to_vec()
+                )
+            );
+        });
+
+        session.begin_player_login(0x0102_0304_0506_0708).unwrap();
+        assert_eq!(
+            session.recv_raw().unwrap(),
+            WrathServerPacket {
+                opcode: 0x1234,
+                body: b"queued".to_vec(),
+            }
+        );
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn raw_transport_rejects_warden_and_oversized_client_bodies() {
+        let (mut session, mut server) = loopback_session();
+        let server_thread = thread::spawn(move || {
+            let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+            send_server_packet(&mut server, &mut server_decrypt, SMSG_WARDEN_DATA, &[]);
+        });
+
+        let error = session.recv_raw().unwrap_err();
+        assert!(error.downcast_ref::<WrathWardenRequired>().is_some());
+        server_thread.join().unwrap();
+
+        let error = session
+            .send_raw(0x1234, &vec![0; MAX_CLIENT_PACKET_BODY_SIZE + 1])
+            .unwrap_err();
+        assert!(error.to_string().contains("too large"));
+    }
+
+    #[test]
+    fn partial_encrypted_header_timeout_or_body_truncation_poison_reader() {
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let mut header = [0, 2, 0x34, 0x12];
+        server_decrypt.decrypt(&mut header);
+        server.write_all(&header[..2]).unwrap();
+        let timeout = session
+            .recv_raw_until(Instant::now() + Duration::from_millis(100))
+            .unwrap_err();
+        let io_error = timeout.downcast_ref::<io::Error>().unwrap();
+        assert!(matches!(
+            io_error.kind(),
+            io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+        ));
+        let second = session.recv_raw().unwrap_err();
+        assert!(second.to_string().contains("partial frame"));
+
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let mut header = [0, 6, 0x34, 0x12];
+        server_decrypt.decrypt(&mut header);
+        server.write_all(&header).unwrap();
+        server.write_all(&[1, 2]).unwrap();
+        server.shutdown(std::net::Shutdown::Write).unwrap();
+        assert!(session.recv_raw().is_err());
+        assert!(session
+            .recv_raw()
+            .unwrap_err()
+            .to_string()
+            .contains("partial frame"));
+    }
+
+    #[test]
+    fn continuously_arriving_frame_expires_at_absolute_deadline_and_poisons() {
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let wire = server_packet_bytes(&mut server_decrypt, 0x1234, &[0xa5; 32]);
+        let server_thread = thread::spawn(move || {
+            for byte in wire {
+                if server.write_all(&[byte]).is_err() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+        });
+
+        let started = Instant::now();
+        let error = session
+            .recv_raw_until(started + Duration::from_millis(120))
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_millis(350));
+        assert!(matches!(
+            error.downcast_ref::<io::Error>().map(io::Error::kind),
+            Some(io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock)
+        ));
+        assert!(session
+            .recv_raw_until(Instant::now() + Duration::from_millis(20))
+            .unwrap_err()
+            .to_string()
+            .contains("partial frame"));
+        drop(session);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn header_and_body_share_deadline_and_partial_body_timeout_poisons() {
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let wire = server_packet_bytes(&mut server_decrypt, 0x1234, b"body");
+        let server_thread = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(70));
+            server.write_all(&wire[..4]).unwrap();
+            thread::sleep(Duration::from_millis(70));
+            let _ = server.write_all(&wire[4..]);
+        });
+
+        let started = Instant::now();
+        let error = session
+            .recv_raw_until(started + Duration::from_millis(110))
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(matches!(
+            error.downcast_ref::<io::Error>().map(io::Error::kind),
+            Some(io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock)
+        ));
+        assert!(session
+            .recv_raw_until(Instant::now() + Duration::from_millis(20))
+            .unwrap_err()
+            .to_string()
+            .contains("partial frame"));
+        drop(session);
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn decrypted_invalid_header_poisons_reader() {
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let mut header = [0, 1, 0x34, 0x12];
+        server_decrypt.decrypt(&mut header);
+        server.write_all(&header).unwrap();
+
+        let error = session
+            .recv_raw_until(Instant::now() + Duration::from_secs(1))
+            .unwrap_err();
+        assert!(error.to_string().contains("smaller than its opcode"));
+        assert!(session
+            .recv_raw_until(Instant::now() + Duration::from_millis(20))
+            .unwrap_err()
+            .to_string()
+            .contains("partial frame"));
+    }
+
+    #[test]
+    fn no_byte_deadline_timeout_is_retryable() {
+        let (mut session, mut server) = loopback_session();
+        let error = session
+            .recv_raw_until(Instant::now() + Duration::from_millis(20))
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<io::Error>().map(io::Error::kind),
+            Some(io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock)
+        ));
+
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        send_server_packet(&mut server, &mut server_decrypt, 0x1234, b"retry");
+        assert_eq!(
+            session
+                .recv_raw_until(Instant::now() + Duration::from_secs(1))
+                .unwrap(),
+            WrathServerPacket {
+                opcode: 0x1234,
+                body: b"retry".to_vec(),
+            }
+        );
+    }
+
+    #[test]
+    fn short_idle_poll_does_not_become_the_partial_frame_deadline() {
+        let (session, mut server) = loopback_session();
+        let (mut reader, _writer) = session.into_split().unwrap();
+        reader
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let wire = server_packet_bytes(&mut server_decrypt, 0x1234, b"slow");
+        let server_thread = thread::spawn(move || {
+            for byte in wire {
+                server.write_all(&[byte]).unwrap();
+                thread::sleep(Duration::from_millis(30));
+            }
+        });
+
+        assert_eq!(
+            reader
+                .recv_raw_with_frame_timeout(Duration::from_millis(300))
+                .unwrap(),
+            WrathServerPacket {
+                opcode: 0x1234,
+                body: b"slow".to_vec(),
+            }
+        );
+        server_thread.join().unwrap();
+    }
+
+    #[test]
+    fn partial_frame_reports_the_poisoning_error_before_unusable_reader() {
+        let (session, mut server) = loopback_session();
+        let (mut reader, _writer) = session.into_split().unwrap();
+        reader
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let wire = server_packet_bytes(&mut server_decrypt, 0x1234, b"late");
+        server.write_all(&wire[..2]).unwrap();
+
+        let first = reader
+            .recv_raw_with_frame_timeout(Duration::from_millis(40))
+            .unwrap_err();
+        let partial = first.downcast_ref::<WrathPartialFrameRead>().unwrap();
+        assert_eq!(partial.consumed, 2);
+        assert!(first.to_string().contains("partial frame read failed"));
+        assert!(reader
+            .recv_raw_with_frame_timeout(Duration::from_secs(1))
+            .unwrap_err()
+            .to_string()
+            .contains("reader is unusable"));
+    }
+
+    #[test]
+    fn invalid_extended_size_fails_closed_without_allocating_body() {
+        let (mut session, mut server) = loopback_session();
+        let (_, mut server_decrypt) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+        let mut header = [0x80, 0, 1, 0x34, 0x12];
+        server_decrypt.decrypt(&mut header);
+        server.write_all(&header).unwrap();
+        let error = session.recv_raw().unwrap_err();
+        assert!(error.to_string().contains("smaller than its opcode"));
+        assert!(session.recv_raw().is_err());
     }
 }

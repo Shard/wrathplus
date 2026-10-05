@@ -1,0 +1,38 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Frame name="AzerothBenchObserverReportFrame" parent="UIParent">
+        <Size><AbsDimension x="460" y="90"/></Size>
+        <Anchors><Anchor point="TOP"><Offset><AbsDimension x="0" y="-270"/></Offset></Anchor></Anchors>
+        <Layers><Layer level="BACKGROUND">
+            <Texture name="$parentBackground">
+                <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                <Color r="0.08" g="0.06" b="0.16" a="0.9"/>
+            </Texture>
+        </Layer><Layer level="ARTWORK">
+            <FontString name="AzerothBenchObserverReportStatus" font="Fonts\FRIZQT__.TTF" text="AzerothBench report: awaiting copied observation">
+                <Size><AbsDimension x="440" y="24"/></Size>
+                <Anchors><Anchor point="TOP"><Offset><AbsDimension x="0" y="-8"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="12"/></FontHeight>
+            </FontString>
+        </Layer></Layers>
+        <Frames>
+            <Button name="AzerothBenchObserverReportRefresh" enableMouse="true">
+                <Size><AbsDimension x="220" y="32"/></Size>
+                <Anchors><Anchor point="BOTTOM"><Offset><AbsDimension x="0" y="8"/></Offset></Anchor></Anchors>
+                <Layers><Layer level="BACKGROUND"><Texture name="$parentBackground">
+                    <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                    <Color r="0.34" g="0.20" b="0.48" a="1"/>
+                </Texture></Layer><Layer level="ARTWORK">
+                    <FontString name="$parentLabel" font="Fonts\FRIZQT__.TTF" text="Refresh copied observation">
+                        <Anchors><Anchor point="CENTER"/></Anchors>
+                        <FontHeight><AbsValue val="12"/></FontHeight>
+                    </FontString>
+                </Layer></Layers>
+                <Scripts><OnClick>AzerothBenchObserverReport_OnClick(self, button)</OnClick></Scripts>
+            </Button>
+        </Frames>
+        <Scripts>
+            <OnLoad>AzerothBenchObserverReport_OnLoad(self)</OnLoad>
+            <OnEvent>AzerothBenchObserverReport_OnEvent(self, event, ...)</OnEvent>
+        </Scripts>
+    </Frame>
+</Ui>

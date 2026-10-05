@@ -1,0 +1,10 @@
+<Ui>
+    <!-- Authored root only: player addons supply every visible widget. -->
+    <Frame name="UIParent">
+        <Scripts><OnLoad>
+            self:SetWidth(GetScreenWidth())
+            self:SetHeight(GetScreenHeight())
+            self:SetPoint("BOTTOMLEFT", 0, 0)
+        </OnLoad></Scripts>
+    </Frame>
+</Ui>

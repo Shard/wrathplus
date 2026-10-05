@@ -85,6 +85,7 @@ pub(crate) struct HeldCast {
 #[derive(SystemParam)]
 pub(crate) struct CastLadder<'w, 's> {
     pub(crate) commands: Res<'w, NetCommands>,
+    pub(crate) dialect: Res<'w, crate::net::SessionDialect>,
     pub(crate) self_player:
         Query<'w, 's, (Entity, Has<crate::creature_anim::Engaged>), With<SelfPlayer>>,
     pub(crate) spells: Option<Res<'w, Spells>>,
@@ -267,6 +268,7 @@ impl CastLadder<'_, '_> {
             on_object,
             hold,
             &self.commands,
+            *self.dialect,
             &self.self_player,
             self.spells.as_deref(),
             &self.objects,
@@ -322,6 +324,7 @@ fn send_spell_cast(
     // Set for a player's spell press, which parks in `held_for_pick` at the attack pick.
     hold: Option<HeldCast>,
     commands: &NetCommands,
+    dialect: crate::net::SessionDialect,
     self_player: &Query<(Entity, Has<crate::creature_anim::Engaged>), With<SelfPlayer>>,
     spells: Option<&Spells>,
     objects: &Objects,
@@ -692,7 +695,7 @@ fn send_spell_cast(
                 // being the active player (`0x6e5957`–`0x6e5972`): starting a repeat ends the
                 // melee swing and its queued strike. This is where melee and auto-repeat are kept
                 // exclusive. It runs after the arm above, so it never cancels this repeat.
-                crate::creature_anim::stop_attack_local(engaged, queued_melee, commands);
+                crate::creature_anim::stop_attack_local(dialect, engaged, queued_melee, commands);
             }
         }
     }
@@ -753,6 +756,7 @@ fn send_spell_cast(
                     debug!("ui_action: cast {spell_id} initiates auto-attack at {guid:#x}");
                     // No stop is in flight: the gate above guarantees the lock is clear.
                     crate::creature_anim::start_attack_local(
+                        dialect,
                         e,
                         guid,
                         engaged,
@@ -821,6 +825,7 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
+        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
         world.init_resource::<Items>();
         world.init_resource::<crate::net::GuidIndex>();
         world.init_resource::<crate::spell::PendingCast>();

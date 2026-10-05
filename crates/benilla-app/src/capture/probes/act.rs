@@ -164,6 +164,8 @@ fn probe_key_by_name(name: &str) -> Option<KeyCode> {
         // Enter at character select enters the world (`char_select::input`): `/logout` then
         // `Enter` is a relog in one process, since `WOW_CHAR` applies once (`run_mode`).
         "Enter" => KeyCode::Enter,
+        // Native Wrath's ordinary safe-logout key, through the same input plane as a human.
+        "Escape" => KeyCode::Escape,
         // The SCREENSHOT binding's key; a Lua `TakeScreenshot()` skips the binding. On macOS it
         // arrives as F13 (`bindings::chord`'s fold) under the same token.
         "PrintScreen" => KeyCode::PrintScreen,

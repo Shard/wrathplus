@@ -214,7 +214,7 @@ pub(crate) fn end_chat_session(
     *log = ChatLog::default();
     if let Some(script) = script {
         for frame in ["ChatFrame1", "ChatFrame2"] {
-            crate::ui_script::run_or_warn(script, &format!("{frame}:Clear()"));
+            crate::ui_script::run_or_warn(script, &format!("if {frame} then {frame}:Clear() end"));
         }
     }
 }

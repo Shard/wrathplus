@@ -53,7 +53,36 @@ struct BindingDispatch {
     seen_generation: crate::ui_script::VmMemo<Option<u64>>,
 }
 
+/// The VM-less executor is a Wrath-only compatibility path. Vanilla without a VM remains
+/// unbound rather than acquiring synthetic controls.
+#[derive(Resource, Default)]
+struct NativeBindingRoute(bool);
+
 impl BindingDispatch {
+    /// The ordinary movement subset from Wrath's shipped `WTF\\DefaultBindings.wtf`. These are
+    /// commands, not controller actions: they still latch and feed [`BindingsState`] at this layer.
+    fn wrath_defaults() -> Self {
+        let mut dispatch = Self::default();
+        for (key, command) in [
+            ("W", "MOVEFORWARD"),
+            ("S", "MOVEBACKWARD"),
+            ("A", "TURNLEFT"),
+            ("D", "TURNRIGHT"),
+            ("Q", "STRAFELEFT"),
+            ("E", "STRAFERIGHT"),
+            ("SPACE", "JUMP"),
+            ("T", "ATTACKTARGET"),
+            ("TAB", "TARGETNEARESTENEMY"),
+            ("SHIFT-TAB", "TARGETPREVIOUSENEMY"),
+        ] {
+            dispatch.map.insert(
+                Chord::parse(key).expect("fixed Wrath binding"),
+                command.into(),
+            );
+        }
+        dispatch
+    }
+
     /// Resolve a press as the reference's `CBindings::ExecuteBinding` (`0x4b7990`) does: the exact
     /// chord, then one retry with the leftmost modifier dropped ([`Chord::fallback`]).
     ///
@@ -156,8 +185,19 @@ pub(crate) struct BindingsPlugin;
 
 impl Plugin for BindingsPlugin {
     fn build(&self, app: &mut App) {
+        let native_wrath = matches!(
+            app.world()
+                .get_resource::<benilla_assets::ClientDataProfile>()
+                .map(|profile| &profile.0),
+            Some(benilla_formats::DataProfile::Wrath { .. })
+        );
         app.add_plugins(layout::plugin)
-            .init_resource::<BindingDispatch>()
+            .insert_resource(if native_wrath {
+                BindingDispatch::wrath_defaults()
+            } else {
+                BindingDispatch::default()
+            })
+            .insert_resource(NativeBindingRoute(native_wrath))
             .init_resource::<BindingsState>()
             .init_resource::<BindingFiles>()
             .add_systems(
@@ -175,7 +215,18 @@ impl Plugin for BindingsPlugin {
                     // handlers the tick dispatched, and a save must not wait a frame.
                     drain_binding_requests.after(crate::ui_script::UiInput),
                 ),
+            )
+            .add_systems(
+                OnExit(crate::char_select::ClientState::InWorld),
+                clear_native_world_input,
             );
+    }
+}
+
+/// Native control lifetime is the admitted world session, never the addon VM lifetime.
+fn clear_native_world_input(native: Res<NativeBindingRoute>, mut state: ResMut<BindingsState>) {
+    if native.0 {
+        *state = BindingsState::default();
     }
 }
 
@@ -266,7 +317,16 @@ fn drain_binding_requests(script: Option<NonSendMut<UiScript>>, files: Res<Bindi
 /// Rebuild the dispatch map when the engine table moved (a rebind, a set switch, the seed, a
 /// load), and fire `UPDATE_BINDINGS` so the Lua consumers (the action bar's hotkey corners)
 /// repaint.
-fn sync_dispatch(script: Option<NonSendMut<UiScript>>, mut dispatch: ResMut<BindingDispatch>) {
+fn sync_dispatch(
+    script: Option<NonSendMut<UiScript>>,
+    mut dispatch: ResMut<BindingDispatch>,
+    native: Res<NativeBindingRoute>,
+) {
+    // The addon VM does not own Wrath's bounded ground bindings. Its empty or authored
+    // binding table must never replace the qualified native dispatch map.
+    if native.0 {
+        return;
+    }
     let Some(mut script) = script else { return };
     let generation = script.keybinds_generation();
     if *dispatch.seen_generation.get(&script) == Some(generation) {
@@ -335,6 +395,7 @@ fn latch_and_dispatch(
     // The chrome flag; only the wheel branch reads it.
     over_ui: Res<PointerOverUiPanel>,
     dispatch: Res<BindingDispatch>,
+    native: Res<NativeBindingRoute>,
     mut state: ResMut<BindingsState>,
     mut same_vm: Local<crate::ui_script::VmMemo<bool>>,
     mut notches: Local<WheelNotches>,
@@ -349,10 +410,12 @@ fn latch_and_dispatch(
     // VM's table and releasing it against a new one would run another load's up-half. The
     // reference keeps a held key running through `ReloadUI`; here it re-latches on its next press.
     // The held bits die with it, as the key's Stop would have cleared them.
-    if let Some(script) = script.as_ref() {
-        if same_vm.claim(script) {
-            state.latched.clear();
-            state.held.clear();
+    if !native.0 {
+        if let Some(script) = script.as_ref() {
+            if same_vm.claim(script) {
+                state.latched.clear();
+                state.held.clear();
+            }
         }
     }
     // The reference's two bulk clears: the window deactivate (`0x514490`'s `and eax,0xfffff00f`,
@@ -369,7 +432,10 @@ fn latch_and_dispatch(
     // Lua's binding calls made since the last pass, before this frame's keys.
     if let Some(s) = script.as_mut() {
         let inputs = s.take_binding_input();
-        state.apply_script_input(inputs);
+        // The addon VM must not acquire control of the qualified native ground route.
+        if !native.0 {
+            state.apply_script_input(inputs);
+        }
     }
 
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -441,12 +507,12 @@ fn latch_and_dispatch(
                     key: BindKey::Key(name),
                 };
                 if let Some(command) = dispatch.resolve(chord, dev_plane) {
-                    press(&mut state, &mut script, command, Held::Key(key));
+                    press(&mut state, &mut script, native.0, command, Held::Key(key));
                 }
             }
             ButtonState::Released => {
                 state.down.retain(|&kc| kc != key);
-                release(&mut state, &mut script, Held::Key(key));
+                release(&mut state, &mut script, native.0, Held::Key(key));
             }
         }
     }
@@ -472,11 +538,11 @@ fn latch_and_dispatch(
                 key: BindKey::Mouse(b),
             };
             if let Some(command) = dispatch.resolve(chord, false) {
-                press(&mut state, &mut script, command, Held::Mouse(b));
+                press(&mut state, &mut script, native.0, command, Held::Mouse(b));
             }
         }
         if buttons.just_released(b) {
-            release(&mut state, &mut script, Held::Mouse(b));
+            release(&mut state, &mut script, native.0, Held::Mouse(b));
         }
     }
 
@@ -502,8 +568,8 @@ fn latch_and_dispatch(
         };
         if let Some(command) = dispatch.resolve(chord, false) {
             for _ in 0..steps.unsigned_abs() {
-                press(&mut state, &mut script, command, Held::Wheel);
-                release(&mut state, &mut script, Held::Wheel);
+                press(&mut state, &mut script, native.0, command, Held::Wheel);
+                release(&mut state, &mut script, native.0, Held::Wheel);
             }
         }
     }
@@ -519,14 +585,16 @@ fn latch_and_dispatch(
         }
     }
     for k in stuck {
-        release(&mut state, &mut script, k);
+        release(&mut state, &mut script, native.0, k);
     }
 
     // The calls this pass's binding bodies made act this frame, as the reference's return from
     // `0x515090` has already moved the bit.
     if let Some(s) = script.as_mut() {
         let inputs = s.take_binding_input();
-        state.apply_script_input(inputs);
+        if !native.0 {
+            state.apply_script_input(inputs);
+        }
     }
 }
 
@@ -554,10 +622,15 @@ fn physically_down(
 fn press(
     state: &mut BindingsState,
     script: &mut Option<NonSendMut<UiScript>>,
+    native: bool,
     command: &str,
     key: Held,
 ) {
-    if let Some(s) = script.as_mut() {
+    if native {
+        if !state.apply_native_movement(command, true) {
+            return;
+        }
+    } else if let Some(s) = script.as_mut() {
         if let Err(e) = s.execute_binding(command, true) {
             warn!("bindings({command}): {e}");
         }
@@ -567,12 +640,19 @@ fn press(
 
 /// A base key's release: drop its latch and run the command's `runOnUp` up-half, even while
 /// typing (the reference completes a pressed binding's release regardless of focus).
-fn release(state: &mut BindingsState, script: &mut Option<NonSendMut<UiScript>>, key: Held) {
+fn release(
+    state: &mut BindingsState,
+    script: &mut Option<NonSendMut<UiScript>>,
+    native: bool,
+    key: Held,
+) {
     let mut i = 0;
     while i < state.latched.len() {
         if state.latched[i].0 == key {
             let (_, command) = state.latched.remove(i);
-            if let Some(s) = script.as_mut() {
+            if native {
+                state.apply_native_movement(&command, false);
+            } else if let Some(s) = script.as_mut() {
                 if let Err(e) = s.execute_binding(&command, false) {
                     warn!("bindings({command}): {e}");
                 }
@@ -710,9 +790,34 @@ mod tests {
             .init_resource::<PointerOverUiPanel>()
             .init_resource::<BindingsState>()
             .init_resource::<BindingDispatch>()
+            .init_resource::<NativeBindingRoute>()
             .init_resource::<LayoutNames>()
             .add_systems(Update, (sync_dispatch, latch_and_dispatch).chain());
         app.insert_non_send_resource(script);
+        app
+    }
+
+    /// The native Wrath route has no `UiScript`: only its explicit command table and executor.
+    fn native_wrath_harness() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::input::InputPlugin))
+            .init_resource::<UiKeyboardCapture>()
+            .init_resource::<PlayerUiHover>()
+            .init_resource::<PointerOverUiPanel>()
+            .init_resource::<BindingsState>()
+            .insert_resource(BindingDispatch::wrath_defaults())
+            .insert_resource(NativeBindingRoute(true))
+            .init_resource::<LayoutNames>()
+            .add_systems(Update, latch_and_dispatch);
+        app
+    }
+
+    /// A no-VM Vanilla route is intentionally inert: Wrath compatibility must not invent bindings
+    /// for the original profile when its stock interface is unavailable.
+    fn native_vanilla_harness() -> App {
+        let mut app = native_wrath_harness();
+        app.world_mut().insert_resource(BindingDispatch::default());
+        app.world_mut().insert_resource(NativeBindingRoute(false));
         app
     }
 
@@ -798,6 +903,197 @@ mod tests {
 
         // `keystate` does not outlive the call: `RunCommand` sets it to nil (`0x4b7c42`).
         assert_eq!(lua_str(&app, "tostring(keystate)"), "nil");
+    }
+
+    #[test]
+    fn wrath_native_melee_bindings_fire_once_and_obey_ui_capture() {
+        let mut app = native_wrath_harness();
+        press_key(&mut app, KeyCode::KeyT);
+        app.update();
+        assert!(state(&app).fired(Input::AttackTarget));
+        app.update();
+        assert!(!state(&app).fired(Input::AttackTarget));
+        release_key(&mut app, KeyCode::KeyT);
+        app.update();
+        assert!(!state(&app).fired(Input::AttackTarget));
+        press_key(&mut app, KeyCode::Tab);
+        app.update();
+        assert!(state(&app).fired(Input::TargetNearestEnemy));
+        release_key(&mut app, KeyCode::Tab);
+        app.update();
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = true;
+        press_key(&mut app, KeyCode::KeyT);
+        app.update();
+        assert!(!state(&app).fired(Input::AttackTarget));
+    }
+
+    /// Real keyboard-shaped messages reach the existing state plane without a Lua VM on Wrath.
+    /// Every supported default has a held edge and a release; no raw controller seam is involved.
+    #[test]
+    fn wrath_native_keyboard_defaults_feed_held_edges_and_releases_without_a_vm() {
+        let mut app = native_wrath_harness();
+        assert!(!app
+            .world()
+            .contains_non_send::<benilla_ui::script::UiScript>());
+
+        for (key_code, input) in [
+            (KeyCode::KeyW, Input::MoveForward),
+            (KeyCode::KeyS, Input::MoveBackward),
+            (KeyCode::KeyA, Input::TurnLeft),
+            (KeyCode::KeyD, Input::TurnRight),
+            (KeyCode::KeyQ, Input::StrafeLeft),
+            (KeyCode::KeyE, Input::StrafeRight),
+        ] {
+            press_key(&mut app, key_code);
+            app.update();
+            assert!(state(&app).pressed(input), "{key_code:?} holds {input:?}");
+            assert!(
+                state(&app).just_pressed(input),
+                "{key_code:?} has a press edge"
+            );
+            app.update();
+            assert!(state(&app).pressed(input), "{key_code:?} remains held");
+            assert!(!state(&app).just_pressed(input), "edge is one frame");
+            release_key(&mut app, key_code);
+            app.update();
+            assert!(!state(&app).pressed(input), "{key_code:?} releases");
+        }
+    }
+
+    #[test]
+    fn wrath_native_jump_is_a_single_press_edge_and_obeys_ui_capture() {
+        let mut app = native_wrath_harness();
+        press_key(&mut app, KeyCode::Space);
+        app.update();
+        assert!(state(&app).fired(Input::Jump));
+        assert!(state(&app).just_pressed(Input::Jump));
+        assert!(!state(&app).pressed(Input::Jump));
+        repeat_key(&mut app, KeyCode::Space);
+        app.update();
+        assert!(!state(&app).fired(Input::Jump));
+        release_key(&mut app, KeyCode::Space);
+        app.update();
+        assert!(!state(&app).fired(Input::Jump));
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = true;
+        press_key(&mut app, KeyCode::Space);
+        app.update();
+        assert!(!state(&app).fired(Input::Jump));
+    }
+
+    /// An addon VM cannot replace native dispatch or inject its own movement calls.
+    #[test]
+    fn wrath_native_bindings_keep_ownership_with_an_addon_vm() {
+        let mut app = native_wrath_harness();
+        let script = core_script();
+        script
+            .run("SetBinding('W', 'TURNLEFT')")
+            .expect("addon rebind");
+        script
+            .run_binding("MoveBackwardStart()")
+            .expect("binding-context input");
+        app.insert_non_send_resource(script);
+        app.add_systems(Update, sync_dispatch.before(latch_and_dispatch));
+        press_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(state(&app).pressed(Input::MoveForward));
+        assert!(!state(&app).pressed(Input::MoveBackward));
+        assert!(!state(&app).pressed(Input::TurnLeft));
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = true;
+        release_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(!state(&app).pressed(Input::MoveForward));
+    }
+
+    #[test]
+    fn wrath_native_hold_survives_addon_vm_creation_and_replacement() {
+        let mut app = native_wrath_harness();
+        press_key(&mut app, KeyCode::KeyW);
+        app.update();
+        for _ in 0..2 {
+            app.insert_non_send_resource(core_script());
+            app.update();
+            assert!(state(&app).pressed(Input::MoveForward));
+            assert_eq!(state(&app).latched.len(), 1);
+        }
+        release_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(!state(&app).pressed(Input::MoveForward));
+        assert!(state(&app).latched.is_empty());
+    }
+
+    #[test]
+    fn wrath_native_world_exit_clears_input_without_an_addon_vm() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = native_wrath_harness();
+        press_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(state(&app).pressed(Input::MoveForward));
+        app.world_mut()
+            .run_system_once(clear_native_world_input)
+            .expect("exit cleanup");
+        assert!(state(&app).held.is_empty());
+        assert!(state(&app).latched.is_empty());
+        assert!(state(&app).down.is_empty());
+    }
+
+    /// The native executor obeys the same ownership gates and stuck-release sweep as Lua-backed
+    /// bindings: captured presses do nothing, while a held key still releases under capture.
+    #[test]
+    fn wrath_native_keyboard_preserves_capture_and_stuck_release_semantics() {
+        let mut app = native_wrath_harness();
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = true;
+        press_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(!state(&app).pressed(Input::MoveForward));
+        release_key(&mut app, KeyCode::KeyW);
+        app.update();
+
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = false;
+        frame_ate(&mut app, &[KeyCode::KeyS]);
+        press_key(&mut app, KeyCode::KeyS);
+        app.update();
+        assert!(!state(&app).pressed(Input::MoveBackward));
+        release_key(&mut app, KeyCode::KeyS);
+        app.update();
+
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = false;
+        press_key(&mut app, KeyCode::KeyW);
+        app.update();
+        assert!(state(&app).pressed(Input::MoveForward));
+        app.world_mut().resource_mut::<UiKeyboardCapture>().typing = true;
+        app.update();
+        assert!(state(&app).pressed(Input::MoveForward));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .release_all();
+        app.update();
+        assert!(!state(&app).pressed(Input::MoveForward));
+    }
+
+    #[test]
+    fn vanilla_without_a_vm_does_not_acquire_wrath_native_defaults() {
+        let mut app = native_vanilla_harness();
+        for key_code in [
+            KeyCode::KeyW,
+            KeyCode::KeyS,
+            KeyCode::KeyA,
+            KeyCode::KeyD,
+            KeyCode::KeyQ,
+            KeyCode::KeyE,
+        ] {
+            press_key(&mut app, key_code);
+        }
+        app.update();
+        for input in [
+            Input::MoveForward,
+            Input::MoveBackward,
+            Input::TurnLeft,
+            Input::TurnRight,
+            Input::StrafeLeft,
+            Input::StrafeRight,
+        ] {
+            assert!(!state(&app).pressed(input), "Vanilla invented {input:?}");
+        }
     }
 
     /// A focused EditBox swallows every key (the reference's handler returns 1 on every path,

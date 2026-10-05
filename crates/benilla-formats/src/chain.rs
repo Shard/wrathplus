@@ -20,6 +20,7 @@ pub struct ChainEntry {
 pub struct Chain {
     /// Ascending priority: later archives win.
     archives: Vec<Archive>,
+    profile: crate::DataProfile,
 }
 
 /// `patch-?.MPQ` as the reference's `FindFirstFileW` glob matches it (template `0x82edbc`, wrapper
@@ -207,7 +208,23 @@ impl Chain {
                 Archive::open(path).with_context(|| format!("opening MPQ {}", path.display()))?,
             );
         }
-        Ok(Self { archives })
+        Ok(Self {
+            archives,
+            profile: crate::DataProfile::Vanilla,
+        })
+    }
+
+    /// Open using an explicit dialect without probing or guessing from archive names.
+    pub fn open_profile(path: &Path, profile: &crate::DataProfile) -> Result<Self> {
+        match profile {
+            crate::DataProfile::Vanilla => Self::open(path),
+            crate::DataProfile::Wrath { locale } => Self::open_wrath(path, locale),
+        }
+    }
+
+    /// The schema dialect of this chain.
+    pub fn profile(&self) -> &crate::DataProfile {
+        &self.profile
     }
 
     /// Open the read-only Wrath 3.3.5 archive profile for `locale` from a `Data` directory.
@@ -226,7 +243,12 @@ impl Chain {
             .into_iter()
             .map(|mpq| Archive::open(&mpq).with_context(|| format!("opening {}", mpq.display())))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self { archives })
+        Ok(Self {
+            archives,
+            profile: crate::DataProfile::Wrath {
+                locale: locale.into(),
+            },
+        })
     }
 
     /// The highest-priority archive with an entry for `name`, a delete marker included, as a
@@ -275,10 +297,17 @@ impl Chain {
         self.read(name)
     }
 
-    /// The chain's named files with sizes, for development and extraction; a file in no listfile
-    /// (most of `texture.MPQ`) is readable by name but not listed. Unions every archive's
-    /// `(listfile)`, as each names only its own files; sizes come from the winning archive.
-    pub fn list(&self) -> Result<Vec<ChainEntry>> {
+    /// The chain's named files with sizes that satisfy `predicate`. The predicate runs against a
+    /// listfile name before any archive-index lookup, tombstone check, or size lookup.
+    ///
+    /// A file in no listfile (most of `texture.MPQ`) is readable by name but not listed. This
+    /// unions every archive's `(listfile)`, as each names only its own files; sizes come from the
+    /// winning archive. Names retain the same normalized deduplication and archive-order traversal
+    /// as [`Chain::list`].
+    pub fn list_filtered(
+        &self,
+        mut predicate: impl FnMut(&str) -> bool,
+    ) -> Result<Vec<ChainEntry>> {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
         for archive in &self.archives {
@@ -289,6 +318,9 @@ impl Chain {
                 let name = raw.trim();
                 // Dedupe the way MPQ hashing compares names: any case, `/` and `\` alike.
                 if name.is_empty() || !seen.insert(name.replace('/', "\\").to_ascii_lowercase()) {
+                    continue;
+                }
+                if !predicate(name) {
                     continue;
                 }
                 if let Some(a) = self.resolve(name) {
@@ -304,6 +336,11 @@ impl Chain {
             }
         }
         Ok(out)
+    }
+
+    /// The chain's named files with sizes, for development and extraction.
+    pub fn list(&self) -> Result<Vec<ChainEntry>> {
+        self.list_filtered(|_| true)
     }
 }
 

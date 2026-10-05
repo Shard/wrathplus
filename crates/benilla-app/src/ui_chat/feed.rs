@@ -17,6 +17,16 @@ use super::edit::ChannelState;
 use super::event::{flag_of_tag, kind_of_wire, language_name, ChatEvent, ChatEventKind};
 use super::frames::{route, ChatWindows};
 
+/// Wrath currently has no guaranteed stock `ChatFrame`. Raw host-composed events must therefore
+/// also reach the durable host log; this does not claim a visible native overlay. The event still
+/// dispatches normally so addons receive it.
+fn wrath_needs_raw_event_host_log(script: &benilla_ui::script::UiScript) -> bool {
+    script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340
+        && !script
+            .eval::<bool>("return ChatFrame1 ~= nil")
+            .unwrap_or(false)
+}
+
 /// Frames a line waits on a name, about 2 s at 60 fps, before it gives up.
 const NAME_MAX_TRIES: u16 = 120;
 
@@ -641,6 +651,13 @@ pub(super) fn feed_chat(
     for item in pending {
         match item {
             Pending::Event(mut event) => {
+                if wrath_needs_raw_event_host_log(&script) {
+                    warn!(
+                        kind = ?event.kind,
+                        text = %event.text,
+                        "Wrath raw pending chat event has no ChatFrame; preserving it in the host log"
+                    );
+                }
                 deliver(&mut script, &mut windows, &mut channels, &mut event);
             }
             Pending::Wire { msg, tries } => {

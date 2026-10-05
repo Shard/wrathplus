@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: AzerothBench Observer
+## Notes: Declared player-visible observations; no gameplay control or evaluator authority.
+## Version: 0.1.0
+## SavedVariables: AzerothBenchObserverDB
+Observer.lua
+Observer.xml

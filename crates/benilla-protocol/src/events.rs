@@ -62,6 +62,27 @@ impl MoveSpeeds {
     }
 }
 
+/// How the server evaluates points between a movement spline's nodes. This is independent of
+/// `flying`: Wrath permits a smooth ground path and a linear path that retains wire Z.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplineInterpolation {
+    Linear,
+    CatmullRom,
+}
+
+/// Optional vertical/time effect carried by a Wrath movement spline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SplineEffect {
+    Animation {
+        animation_id: u8,
+        effect_start_time_ms: u32,
+    },
+    Parabolic {
+        vertical_acceleration: f32,
+        effect_start_time_ms: u32,
+    },
+}
+
 /// A login attempt's pre-roster stage; the connecting dialog shows its `LOGIN_STATE_*` string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginStage {
@@ -248,8 +269,14 @@ pub enum SessionEvent {
         duration_ms: u32,
         /// Ground walks take Z from the terrain; flights and `transport` paths keep the wire Z.
         flying: bool,
-        /// `SPLINEFLAG_RUNMODE`; its absence forces `MOVEFLAG_WALK_MODE` on the moved unit.
-        run_mode: bool,
+        interpolation: SplineInterpolation,
+        /// The path repeats. Consumers which do not implement cycle topology must reject it.
+        cyclic: bool,
+        /// Animation/parabolic timing, retained separately from interpolation and Z authority.
+        effect: Option<SplineEffect>,
+        /// Vanilla `SPLINEFLAG_RUNMODE`, or Wrath create-block walk state. Wrath monster-move does
+        /// not carry gait, so it is `None` there rather than inventing run mode.
+        run_mode: Option<bool>,
     },
     /// Same-map teleport (`MSG_MOVE_TELEPORT_ACK`): the app snaps our player and echoes the ack.
     Teleport {
@@ -528,12 +555,18 @@ pub enum SessionEvent {
         /// The destination bag's absolute player slot, reason 16's `%s`; 255 is the player's own.
         bag_slot: u8,
     },
+    /// Build-12340 inventory refusal. Wrath's byte after the item GUIDs is a bag subclass, not
+    /// Vanilla's destination player slot, and several reasons append native metadata.
+    WrathInventoryFailure(crate::wrath_loot::InventoryChangeFailure),
     /// A unit began melee auto-attack (`SMSG_ATTACKSTART`), our own included.
     AttackStart { attacker: u64, victim: u64 },
     /// A unit stopped melee auto-attack (`SMSG_ATTACKSTOP`).
     AttackStop { attacker: u64, victim: u64 },
     /// One melee swing (`SMSG_ATTACKERSTATEUPDATE`): one packet is one swing, no client timer.
     AttackerState(AttackerState),
+    /// Build-12340 melee report, retaining native flags, masks, overkill and conditional arrays.
+    /// Presentation consumers must explicitly project semantics rather than read Vanilla bits.
+    WrathAttackerState(Box<crate::wrath_combat::AttackerState>),
     /// Our melee swing was refused (`SMSG_ATTACKSWING_*`); sent to the swinger alone.
     AttackSwingError(AttackSwingError),
     /// The server stopped our attack (`SMSG_CANCEL_COMBAT`): the reference stops, no message.

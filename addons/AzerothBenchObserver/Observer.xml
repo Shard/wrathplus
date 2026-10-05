@@ -1,0 +1,53 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Frame name="AzerothBenchObserverFrame" parent="UIParent">
+        <Size><AbsDimension x="380" y="130"/></Size>
+        <Anchors><Anchor point="TOP"><Offset><AbsDimension x="0" y="-80"/></Offset></Anchor></Anchors>
+        <Layers><Layer level="BACKGROUND">
+            <Texture name="$parentBackground">
+                <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                <Color r="0.04" g="0.08" b="0.14" a="0.9"/>
+            </Texture>
+        </Layer><Layer level="ARTWORK">
+            <FontString name="AzerothBenchObserverStatus" font="Fonts\FRIZQT__.TTF" text="AzerothBench: awaiting observed player">
+                <Size><AbsDimension x="360" y="24"/></Size>
+                <Anchors><Anchor point="TOP"><Offset><AbsDimension x="0" y="-8"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="12"/></FontHeight>
+            </FontString>
+        </Layer></Layers>
+        <Frames>
+            <Button name="AzerothBenchObserverSample" enableMouse="true">
+                <Size><AbsDimension x="220" y="32"/></Size>
+                <Anchors><Anchor point="BOTTOM"><Offset><AbsDimension x="0" y="48"/></Offset></Anchor></Anchors>
+                <Layers><Layer level="BACKGROUND"><Texture name="$parentBackground">
+                    <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                    <Color r="0.12" g="0.32" b="0.48" a="1"/>
+                </Texture></Layer><Layer level="ARTWORK">
+                    <FontString name="$parentLabel" font="Fonts\FRIZQT__.TTF" text="Record player observation">
+                        <Anchors><Anchor point="CENTER"/></Anchors>
+                        <FontHeight><AbsValue val="12"/></FontHeight>
+                    </FontString>
+                </Layer></Layers>
+                <Scripts><OnClick>AzerothBenchObserver_OnClick(self, button)</OnClick></Scripts>
+            </Button>
+            <Button name="AzerothBenchObserverReportButton" enableMouse="true">
+                <Size><AbsDimension x="220" y="32"/></Size>
+                <Anchors><Anchor point="BOTTOM"><Offset><AbsDimension x="0" y="8"/></Offset></Anchor></Anchors>
+                <Layers><Layer level="BACKGROUND"><Texture name="$parentBackground">
+                    <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                    <Color r="0.18" g="0.24" b="0.38" a="1"/>
+                </Texture></Layer><Layer level="ARTWORK">
+                    <FontString name="$parentLabel" font="Fonts\FRIZQT__.TTF" text="Load observation report">
+                        <Anchors><Anchor point="CENTER"/></Anchors>
+                        <FontHeight><AbsValue val="12"/></FontHeight>
+                    </FontString>
+                </Layer></Layers>
+                <Scripts><OnClick>AzerothBenchObserver_LoadReport(self, button)</OnClick></Scripts>
+            </Button>
+        </Frames>
+        <Scripts>
+            <OnLoad>AzerothBenchObserver_OnLoad(self)</OnLoad>
+            <OnEvent>AzerothBenchObserver_OnEvent(self, event, ...)</OnEvent>
+            <OnUpdate>AzerothBenchObserver_OnUpdate(self, elapsed)</OnUpdate>
+        </Scripts>
+    </Frame>
+</Ui>

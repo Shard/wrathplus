@@ -20,7 +20,7 @@ use bevy::prelude::*;
 use super::ProbeClock;
 use crate::entities::{FallbackCube, HeldAttached, VisualAttached, ATTACH_SLOT_NAMES};
 use crate::names::NameCache;
-use crate::net::{Guid, NetEntity, SelfPlayer};
+use crate::net::{Guid, NetEntity, SelfPlayer, Spline};
 use crate::target::hover::pick_model_roots;
 
 /// Census radius in yards, past the server's visibility radius; `WOW_UNIT_VISUALS_RADIUS` sets it.
@@ -71,6 +71,7 @@ type VisualQuery = (
     Option<&'static crate::entities::mount::MountChild>,
     // For a `TYPEID_CORPSE`, which has no name: bone pile or dressed body.
     Option<&'static crate::net::ObjectStore>,
+    Option<&'static Spline>,
 );
 
 /// One line per streamed entity within [`UnitVisuals::radius`], cubes first, under a summary line.
@@ -107,7 +108,7 @@ fn fire_unit_visuals(
     let mut rows: Vec<(bool, i64, String)> = Vec::new();
     let (mut cube_n, mut blank_n, mut pending_n) = (0u32, 0u32, 0u32);
     let mut cube_displays: Vec<u32> = Vec::new();
-    for (entity, guid, net, t, children, attached, held, mount, store) in &entities {
+    for (entity, guid, net, t, children, attached, held, mount, store, spline) in &entities {
         if matches!(net.kind, EntityKind::DynamicObject | EntityKind::Other)
             || t.translation.distance_squared(body.translation) > radius2
         {
@@ -149,6 +150,11 @@ fn fire_unit_visuals(
                 .count() as u32;
         }
         let dist = t.translation.distance(body.translation);
+        let pose = bevy_to_wow(t.translation);
+        let spline_state = spline.map_or_else(
+            || "none".to_string(),
+            |s| format!("{}:{:.3}:{:.2}", s.id, s.elapsed_frac(), s.speed()),
+        );
         let held: Vec<&str> = held
             .map(|h| {
                 h.spawned_slots()
@@ -163,12 +169,16 @@ fn fire_unit_visuals(
             (dist * 100.0) as i64,
             format!(
                 "UVIS {:#018x} {:<12} display={display:<6} d={dist:6.1} cube={} meshes={mesh_n:<3} \
-                 pick={pick_n:<3} held=[{:<12}] {:<8} {}",
+                 pick={pick_n:<3} held=[{:<12}] {:<8} pose=({:.2},{:.2},{:.2}) spline={} {}",
                 guid.0,
                 format!("{:?}", net.kind),
                 u8::from(cube),
                 held.join(","),
                 if attached { "attached" } else { "PENDING" },
+                pose[0],
+                pose[1],
+                pose[2],
+                spline_state,
                 // The name, or for a corpse which fork it took.
                 match (net.kind, store) {
                     (EntityKind::Corpse, Some(s)) if s.0.corpse_is_bones() => "<bones>",

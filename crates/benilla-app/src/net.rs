@@ -24,6 +24,7 @@ pub(crate) mod handlers;
 pub(crate) mod io;
 mod motion;
 mod objects;
+pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
 mod session;
 mod world;
@@ -55,6 +56,23 @@ pub(crate) struct NetPlugin {
     pub(crate) connect: bool,
 }
 
+/// The wire/snapshot dialect fixed when the app is built. It is copied into every login request,
+/// so a changed environment cannot silently cross an asset/network dialect boundary mid-session.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SessionDialect {
+    Vanilla5875,
+    Wrath12340,
+}
+
+impl SessionDialect {
+    fn from_profile(profile: &benilla_formats::DataProfile) -> Self {
+        match profile {
+            benilla_formats::DataProfile::Vanilla => Self::Vanilla5875,
+            benilla_formats::DataProfile::Wrath { .. } => Self::Wrath12340,
+        }
+    }
+}
+
 /// This process has no IO thread ([`NetPlugin::connect`] false); `crate::preflight` announces it.
 /// Not [`NetStatus`]'s `connected`, which a dropped connection also clears.
 #[derive(Resource)]
@@ -66,7 +84,20 @@ impl Plugin for NetPlugin {
         crate::query_cache::register::<crate::names::NameCache>(app);
         crate::query_cache::register::<crate::go_templates::GameObjectTemplates>(app);
         crate::query_cache::register::<crate::items::Items>(app);
-        let handles = io::spawn_net(self.connect);
+        let profile = benilla_formats::DataProfile::from_env()
+            .expect("valid explicit WOW_CLIENT_PROFILE/WOW_LOCALE network configuration");
+        let dialect = SessionDialect::from_profile(&profile);
+        if let Some(snapshot) = app
+            .world()
+            .get_resource::<benilla_assets::ClientDataProfile>()
+        {
+            assert_eq!(
+                dialect,
+                SessionDialect::from_profile(&snapshot.0),
+                "network backend/data snapshot dialect mismatch"
+            );
+        }
+        let handles = io::spawn_net(self.connect, dialect);
         if !self.connect {
             app.insert_resource(NetOffline);
         }
@@ -76,11 +107,18 @@ impl Plugin for NetPlugin {
             publish_world_time.in_set(benilla_world::schedule::WorldStage::Net),
         );
         world::register(app);
+        // This first Connected handler is the ECS publication barrier for the new immutable sender.
+        app.net_handler(
+            benilla_protocol::SessionEventKind::Connected,
+            activate_command_endpoint,
+        );
         session::register(app);
         objects::register(app);
         crate::names::net::register(app);
-        app.insert_resource(NetEvents(handles.events))
-            .insert_resource(NetCommands(handles.commands))
+        app.insert_resource(dialect)
+            .insert_resource(NetEvents(handles.events))
+            .insert_resource(handles.commands)
+            .insert_resource(CommandEndpoints(handles.command_endpoints))
             .insert_resource(CharPick(handles.pick))
             .insert_resource(RealmChoice(handles.realm))
             .insert_resource(LoginSubmit(handles.login))
@@ -365,9 +403,178 @@ pub(crate) struct ActiveMover;
 #[derive(Resource)]
 pub(crate) struct NetEvents(Receiver<SessionEvent>);
 
-/// The outbound command channel.
+/// Fresh producer endpoints published immediately before their ordered [`SessionEvent::Connected`]
+/// edge. The connection handler installs one only when that edge reaches ECS.
 #[derive(Resource)]
-pub(crate) struct NetCommands(pub(crate) Sender<ClientCommand>);
+pub(crate) struct CommandEndpoints(Receiver<SessionCommandSender>);
+
+/// One app command stamped with the connection epoch observed by its producer. Stamping happens
+/// here, before enqueue, so an old producer backlog can never be relabelled for a new socket.
+pub(crate) struct SessionCommand {
+    pub(crate) epoch: u64,
+    pub(crate) command: ClientCommand,
+}
+
+/// The outbound command channel. Its tuple constructor remains source-compatible with fixtures
+/// that provide a raw channel; production replaces its immutable endpoint at each ECS connection
+/// barrier.
+#[derive(Resource, Clone)]
+pub(crate) struct NetCommandsRaw(pub(crate) CommandSender);
+
+pub(crate) type NetCommands = NetCommandsRaw;
+
+#[allow(non_snake_case)]
+pub(crate) fn NetCommands(sender: Sender<ClientCommand>) -> NetCommands {
+    NetCommandsRaw(CommandSender::Raw(sender))
+}
+
+/// A source-compatible command endpoint: fixtures can still supply a raw sender, while the live
+/// Wrath backend stamps the epoch in this `send` call made by the actual ECS producer.
+#[derive(Clone)]
+pub(crate) enum CommandSender {
+    Raw(Sender<ClientCommand>),
+    Session(SessionCommandSender),
+}
+
+impl CommandSender {
+    pub(crate) fn send(
+        &self,
+        command: ClientCommand,
+    ) -> Result<(), crossbeam_channel::SendError<ClientCommand>> {
+        match self {
+            Self::Raw(sender) => sender.send(command),
+            Self::Session(sender) => sender.send(command),
+        }
+    }
+}
+
+/// One immutable production endpoint. Every clone retains this producer-observed epoch forever;
+/// only the ECS `Connected` barrier replaces the endpoint held by [`NetCommands`].
+#[derive(Clone)]
+pub(crate) struct SessionCommandSender {
+    sender: Sender<SessionCommand>,
+    epoch: u64,
+}
+
+impl SessionCommandSender {
+    pub(crate) fn new(sender: Sender<SessionCommand>, epoch: u64) -> Self {
+        Self { sender, epoch }
+    }
+
+    pub(crate) fn send(
+        &self,
+        command: ClientCommand,
+    ) -> Result<(), crossbeam_channel::SendError<ClientCommand>> {
+        self.sender
+            .send(SessionCommand {
+                epoch: self.epoch,
+                command,
+            })
+            .map_err(|error| crossbeam_channel::SendError(error.0.command))
+    }
+}
+
+impl NetCommandsRaw {
+    pub(crate) fn session_stamped(sender: SessionCommandSender) -> Self {
+        Self(CommandSender::Session(sender))
+    }
+
+    /// Activates the endpoint paired with the `Connected` event currently crossing the ECS
+    /// barrier. Raw fixture/Vanilla senders have no endpoint side channel.
+    fn activate_connected(
+        &mut self,
+        endpoints: &CommandEndpoints,
+        player: Option<&mut crate::player::Player>,
+    ) {
+        if matches!(self.0, CommandSender::Session(_)) {
+            // Wrath reconnects in-process. Clear the old mover synchronously, before publishing
+            // the new endpoint: the deferred session-end message reader runs later in Input and
+            // must not get one frame in which it can stream the old pose to the new socket.
+            if let Some(player) = player {
+                *player = crate::player::Player::default();
+            }
+            self.0 = CommandSender::Session(
+                endpoints
+                    .0
+                    .try_recv()
+                    .expect("Wrath Connected event must carry a command endpoint"),
+            );
+        }
+    }
+}
+
+fn activate_command_endpoint(
+    In(event): In<SessionEvent>,
+    endpoints: Res<CommandEndpoints>,
+    mut commands: ResMut<NetCommands>,
+    mut player: Option<ResMut<crate::player::Player>>,
+) {
+    if matches!(event, SessionEvent::Connected { .. }) {
+        commands.activate_connected(&endpoints, player.as_deref_mut());
+    }
+}
+
+impl NetCommands {
+    /// Commands the selected dialect can currently encode without borrowing another build's wire.
+    /// Wrath admits only its implemented on-foot, lifecycle, item, solo corpse-loot and melee codecs.
+    pub(crate) fn supports(&self, dialect: SessionDialect, command: &ClientCommand) -> bool {
+        match dialect {
+            SessionDialect::Vanilla5875 => true,
+            SessionDialect::Wrath12340 => {
+                if let ClientCommand::Move {
+                    kind,
+                    flags,
+                    pos,
+                    orientation,
+                    pitch,
+                    fall_time,
+                    jump,
+                    transport,
+                } = command
+                {
+                    return *pitch == 0.0
+                        && transport.is_none()
+                        && benilla_protocol::wrath_ground::encode_on_foot(
+                            u32::from(kind.opcode()),
+                            1,
+                            *flags,
+                            0,
+                            *pos,
+                            *orientation,
+                            *fall_time,
+                            jump.map(|jump| benilla_protocol::wrath_ground::FallTail {
+                                vertical_speed: jump.zspeed,
+                                sin_angle: jump.sin_angle,
+                                cos_angle: jump.cos_angle,
+                                horizontal_speed: jump.xy_speed,
+                            }),
+                        )
+                        .is_ok();
+                }
+                matches!(
+                    command,
+                    ClientCommand::SetActiveMover { .. }
+                        | ClientCommand::Logout
+                        | ClientCommand::ForceLogout
+                        | ClientCommand::ItemQuery { .. }
+                        | ClientCommand::SetSelection { .. }
+                        | ClientCommand::AttackSwing { .. }
+                        | ClientCommand::AttackStop
+                        | ClientCommand::Loot { .. }
+                        | ClientCommand::LootMoney
+                        | ClientCommand::LootRelease { .. }
+                ) || matches!(
+                    command,
+                    ClientCommand::AutostoreLootItem { slot: 0..=17 }
+                        | ClientCommand::SetSheathed { state: 0..=2 }
+                        | ClientCommand::StandStateChange {
+                            state: 0 | 1 | 3 | 8
+                        }
+                )
+            }
+        }
+    }
+}
 
 /// The character-select channel to the IO thread parked at select: create and delete are served
 /// in place, re-emitting the roster, until an [`CharRequest::Enter`] moves into the world.
@@ -558,6 +765,7 @@ const RESYNC_AFTER: Duration = Duration::from_secs(3600);
 fn send_query_time(
     mut entered: MessageReader<EnteredWorldMessage>,
     commands: Res<NetCommands>,
+    dialect: Res<SessionDialect>,
     clock: Res<ServerWallClock>,
     status: Res<NetStatus>,
     mut asked_at: Local<Option<Instant>>,
@@ -566,7 +774,7 @@ fn send_query_time(
     // Only while connected; the world-enter send covers a reconnect.
     let due =
         status.connected && clock.stale() && asked_at.is_none_or(|t| t.elapsed() >= RESYNC_AFTER);
-    if entering || due {
+    if (entering || due) && commands.supports(*dialect, &ClientCommand::QueryTime) {
         *asked_at = Some(Instant::now());
         let _ = commands.0.send(ClientCommand::QueryTime);
     }
@@ -2233,6 +2441,150 @@ pub(crate) struct PetDismissSoundMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrath_capabilities_admit_only_verified_melee_posture_states() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        for command in [
+            ClientCommand::SetSelection { guid: 0 },
+            ClientCommand::AttackSwing { guid: 7 },
+            ClientCommand::AttackStop,
+            ClientCommand::SetSheathed { state: 2 },
+            ClientCommand::StandStateChange { state: 8 },
+            ClientCommand::Loot { guid: 7 },
+            ClientCommand::AutostoreLootItem { slot: 17 },
+            ClientCommand::LootMoney,
+            ClientCommand::LootRelease { guid: 7 },
+        ] {
+            assert!(net.supports(SessionDialect::Wrath12340, &command));
+        }
+        for command in [
+            ClientCommand::SetSheathed { state: 3 },
+            ClientCommand::StandStateChange { state: 2 },
+            ClientCommand::CancelAutoRepeat,
+            ClientCommand::CancelCast { spell_id: 78 },
+            ClientCommand::QueryTime,
+            ClientCommand::MoveTimeSkipped {
+                guid: 1057,
+                lag_ms: 2_210,
+            },
+            ClientCommand::AutostoreLootItem { slot: 18 },
+            ClientCommand::OpenItem {
+                bag_index: 255,
+                slot: 0,
+            },
+        ] {
+            assert!(!net.supports(SessionDialect::Wrath12340, &command));
+            assert!(net.supports(SessionDialect::Vanilla5875, &command));
+        }
+    }
+
+    fn connected() -> SessionEvent {
+        SessionEvent::Connected {
+            self_guid: 0x1234,
+            name: "New".into(),
+            billing_time_rested: 0,
+            tutorial_flags: None,
+            addon_info: None,
+        }
+    }
+
+    fn old_pose_move(pos: Vec3) -> ClientCommand {
+        ClientCommand::Move {
+            kind: MoveKind::Heartbeat,
+            flags: 0,
+            pos: [pos.x, pos.y, pos.z],
+            orientation: 0.0,
+            pitch: 0.0,
+            fall_time: 0,
+            jump: None,
+            transport: None,
+        }
+    }
+
+    #[test]
+    fn wrath_connected_clears_old_pose_before_publishing_the_new_endpoint() {
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        let (wire_tx, wire_rx) = crossbeam_channel::unbounded();
+        let old = SessionCommandSender::new(wire_tx.clone(), 7);
+        let old_clone = old.clone();
+        let new = SessionCommandSender::new(wire_tx, 8);
+        let (endpoint_tx, endpoint_rx) = crossbeam_channel::unbounded();
+        endpoint_tx.send(new).unwrap();
+        app.insert_resource(NetCommands::session_stamped(old))
+            .insert_resource(CommandEndpoints(endpoint_rx))
+            .init_resource::<crate::player::Player>();
+        {
+            let mut player = app.world_mut().resource_mut::<crate::player::Player>();
+            player.active = true;
+            player.pos = Vec3::new(11.0, 22.0, 33.0);
+        }
+
+        // The prior session edge and the new connection are drained in one ECS frame.
+        handlers::dispatch(app.world_mut(), vec![SessionEvent::LoggedOut, connected()]);
+
+        let player = app.world().resource::<crate::player::Player>();
+        assert!(*player == crate::player::Player::default());
+        // Even a producer retaining the old clone remains stamped old. The normal movement gate
+        // sees inactive and therefore cannot copy the old pose through the newly active endpoint.
+        old_clone
+            .send(old_pose_move(Vec3::new(11.0, 22.0, 33.0)))
+            .unwrap();
+        if player.active {
+            app.world()
+                .resource::<NetCommands>()
+                .0
+                .send(old_pose_move(player.pos))
+                .unwrap();
+        }
+        app.world()
+            .resource::<NetCommands>()
+            .0
+            .send(ClientCommand::Logout)
+            .unwrap();
+        let queued: Vec<_> = wire_rx.try_iter().collect();
+        assert_eq!(queued.len(), 2);
+        assert_eq!(queued[0].epoch, 7);
+        assert!(matches!(queued[0].command, ClientCommand::Move { .. }));
+        assert_eq!(queued[1].epoch, 8);
+        assert!(matches!(queued[1].command, ClientCommand::Logout));
+    }
+
+    #[test]
+    fn raw_offline_connected_neither_waits_for_a_sidechannel_nor_resets_vanilla_player() {
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        let (raw_tx, _raw_rx) = crossbeam_channel::unbounded();
+        let (_endpoint_tx, endpoint_rx) = crossbeam_channel::unbounded();
+        app.insert_resource(NetCommands(raw_tx))
+            .insert_resource(CommandEndpoints(endpoint_rx))
+            .init_resource::<crate::player::Player>();
+        app.world_mut()
+            .resource_mut::<crate::player::Player>()
+            .active = true;
+
+        handlers::dispatch(app.world_mut(), vec![connected()]);
+
+        assert!(app.world().resource::<crate::player::Player>().active);
+        assert!(matches!(
+            app.world().resource::<NetCommands>().0,
+            CommandSender::Raw(_)
+        ));
+    }
+
+    #[test]
+    fn session_backend_selection_is_explicit_and_vanilla_default_stays_vanilla() {
+        assert_eq!(
+            SessionDialect::from_profile(&benilla_formats::DataProfile::default()),
+            SessionDialect::Vanilla5875
+        );
+        assert_eq!(
+            SessionDialect::from_profile(&benilla_formats::DataProfile::Wrath {
+                locale: "enUS".into()
+            }),
+            SessionDialect::Wrath12340
+        );
+    }
 
     /// A re-create of a live object notifies like a delta.
     #[test]

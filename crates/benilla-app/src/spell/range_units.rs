@@ -139,7 +139,8 @@ mod tests {
             duration: std::time::Duration::from_secs(secs),
             id: 1,
             grounded: true,
-            run_mode: true,
+            interpolation: benilla_protocol::SplineInterpolation::Linear,
+            run_mode: Some(true),
             deck: None,
         }
     }

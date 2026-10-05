@@ -55,6 +55,18 @@ impl Addon {
         Self::shipped(super::manifest::LAYER_MANIFEST)
     }
 
+    /// The authored Wrath root. It is not an addon registry row and grants no game actions.
+    pub(super) fn wrath_bootstrap() -> Self {
+        let manifest = "wrath/bootstrap.toc";
+        Addon {
+            name: "AzerothBench_WrathRoot".to_string(),
+            toc: content::read(manifest)
+                .map(|text| Toc::parse(&text))
+                .unwrap_or_default(),
+            source: Source::Builtin,
+        }
+    }
+
     /// The interface one shipped `.toc` names.
     fn shipped(manifest: &str) -> Self {
         let toc = content::read(manifest)
@@ -113,6 +125,56 @@ impl Addon {
     /// `"<Addon>/<file>: <error>"`, for the tests to assert empty.
     fn load(&self, script: &UiScript, toc: &mut Status) -> Vec<String> {
         self.load_files_into(script, &self.toc.files, toc)
+    }
+
+    /// Wrath's Lua file ABI passes `(addonName, privateTable)` and reuses the private table for
+    /// every file in an addon. XML still uses the shared widget loader and this addon's provider.
+    fn load_wrath(&self, script: &UiScript, toc: &mut Status) -> Vec<String> {
+        let mut failures = Vec::new();
+        let provider = |req: &str| -> Option<Vec<u8>> { self.read(req) };
+        for file in &self.toc.files {
+            let path = benilla_ui::loader::join_ref(&self.prefix(), file);
+            let Some(bytes) = self.read(&path) else {
+                toc.report(status::FAILURE, status::missing(&path, is_lua(file)));
+                let error = format!("{}/{file}: not found", self.name);
+                script.report_load_failure(&error);
+                failures.push(error);
+                continue;
+            };
+            if is_lua(file) {
+                if let Err(error) =
+                    script.run_addon_chunk_named(&self.name, &bytes, &self.chunk_name(file, &path))
+                {
+                    let error = format!("{}/{file}: {error}", self.name);
+                    script.report_script_error(&error);
+                    failures.push(error);
+                }
+                continue;
+            }
+            let doc = match benilla_ui::framexml::parse(&benilla_ui::source::decode(&bytes)) {
+                Ok(doc) => doc,
+                Err(error) => {
+                    toc.report(status::FAILURE, status::unparsed(&path));
+                    let error = format!("{}/{file}: {error}", self.name);
+                    script.report_load_failure(&error);
+                    failures.push(error);
+                    continue;
+                }
+            };
+            let report =
+                benilla_ui::loader::load_in_addon(script, &doc, &path, &provider, &self.name);
+            for missing in report.missing_files {
+                let error = format!("{}/{file}: {missing}", self.name);
+                script.report_load_failure(&error);
+                failures.push(error);
+            }
+            for error in report.errors {
+                let error = format!("{}/{file}: {error}", self.name);
+                script.report_script_error(&error);
+                failures.push(error);
+            }
+        }
+        failures
     }
 
     /// [`Addon::load_files_into`] with the load record dropped.
@@ -801,6 +863,8 @@ pub(super) fn load_third_party(
     let mut state = Walk {
         disabled: disabled_names,
         version_check,
+        client_interface: benilla_ui::script::addon_gate::CLIENT_INTERFACE,
+        wrath: false,
         ..Walk::default()
     };
     for addon in &addons {
@@ -829,6 +893,62 @@ pub(super) fn load_third_party(
     state.failures
 }
 
+/// Discover and load only player addons from `benilla-config/AddOns` under the 30300 gate. No
+/// archive Blizzard rows or binding files are admitted on this route.
+pub(super) fn load_wrath_third_party(
+    script: &mut UiScript,
+    identity: Option<&(String, String)>,
+    roster: &[String],
+    version_check: bool,
+) -> Vec<String> {
+    let addons = discover_folder();
+    let mut infos: Vec<_> = addons.iter().map(info_for).collect();
+    let store = EnableStore::load(
+        identity
+            .map(|(realm, _)| realm.as_str())
+            .unwrap_or_default(),
+        &store_nodes(identity, roster),
+    );
+    let character = identity.map(|(_, character)| character.as_str());
+    for (info, addon) in infos.iter_mut().zip(&addons) {
+        info.enabled = store.enabled_for(&info.name, addon.toc.default_state(), character);
+    }
+    script.register_addons(
+        infos,
+        root(),
+        crate::local_state::addon_saved_account_dir(),
+        identity.and_then(|(realm, character)| {
+            crate::local_state::addon_saved_character_dir(realm, character)
+        }),
+    );
+    script.set_addon_enable_hash(
+        character
+            .and_then(|name| store.node(name))
+            .cloned()
+            .unwrap_or_default(),
+    );
+    let disabled: HashSet<String> = addons
+        .iter()
+        .filter(|addon| !store.enabled_for(&addon.name, addon.toc.default_state(), character))
+        .map(|addon| addon.name.to_ascii_lowercase())
+        .collect();
+    let mut state = Walk {
+        disabled,
+        version_check,
+        client_interface: 30300,
+        wrath: true,
+        ..Walk::default()
+    };
+    for addon in &addons {
+        if addon.toc.load_on_demand() {
+            continue;
+        }
+        script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
+        let _ = state.load(script, &addons, &addon.name);
+    }
+    state.failures
+}
+
 /// The recursive load's bookkeeping, for [`Walk::load`].
 #[derive(Default)]
 struct Walk {
@@ -843,6 +963,10 @@ struct Walk {
     /// `checkAddonVersion`: when on, an addon whose `## Interface` is not exactly the client's is
     /// skipped like a disabled one, and a dependent gets `Err` (`DEP_INTERFACE_VERSION`).
     version_check: bool,
+    /// Dialect-scoped exact `## Interface` gate.
+    client_interface: u32,
+    /// Use Wrath addon chunk arguments and omit the unsupported addon Bindings.xml surface.
+    wrath: bool,
 }
 
 impl Walk {
@@ -875,14 +999,12 @@ impl Walk {
         // The version gate, `AddOn_CanLoad` check 6: after the enable state, before the dependency
         // loop, an exact `==` (a missing `## Interface` is 0). Not a failure either: the AddOns
         // screens show it, and the Load out of date AddOns checkbox loads it anyway.
-        if self.version_check
-            && addon.toc.interface_version() != benilla_ui::script::addon_gate::CLIENT_INTERFACE
-        {
+        if self.version_check && addon.toc.interface_version() != self.client_interface {
             info!(
                 "ui_script: {key} is out of date (## Interface: {}, client {}) — not loaded \
                  (the AddOns screen's 'Load out of date AddOns' loads it anyway)",
                 addon.toc.interface_version(),
-                benilla_ui::script::addon_gate::CLIENT_INTERFACE
+                self.client_interface
             );
             self.failed.insert(addon.name.clone());
             return Err(());
@@ -929,7 +1051,11 @@ impl Walk {
         // (`0x51f464`), merged into the UI load's.
         let debug = script.framexml_debug();
         let mut toc = Status::default();
-        self.failures.extend(addon.load(script, &mut toc));
+        self.failures.extend(if self.wrath {
+            addon.load_wrath(script, &mut toc)
+        } else {
+            addon.load(script, &mut toc)
+        });
         let mut own = Status::default();
         let toc_path = status::addon_toc_path(&addon.name);
         toc.close_into(&mut own, debug, status::toc_banner(&toc_path));
@@ -939,7 +1065,7 @@ impl Walk {
         // `Bindings.xml` (`0x51f400`), after the files whose functions a binding calls, through
         // the addon's own sandboxed reader; absent is normal.
         let bindings_xml = benilla_ui::loader::join_ref(&addon.prefix(), "Bindings.xml");
-        if let Some(bytes) = addon.read(&bindings_xml) {
+        if let Some(bytes) = (!self.wrath).then(|| addon.read(&bindings_xml)).flatten() {
             match benilla_ui::bindings_xml::parse(&benilla_ui::source::decode(&bytes)) {
                 Ok(bindings) => script.register_addon_bindings(&addon.name, &bindings),
                 Err(e) => {
@@ -2157,6 +2283,187 @@ mod tests {
                 .as_deref(),
             Some("1")
         );
+        let _ = std::fs::remove_dir_all(home.parent().unwrap());
+    }
+
+    /// The authored companion is an ordinary 30300 registry row: it waits for `LoadAddOn`, loads
+    /// its already-loaded observer dependency only once, receives no invented login replay, and
+    /// restores only the current character's saved state in a replacement VM.
+    #[test]
+    fn actual_wrath_observer_report_loads_on_demand_and_restores_per_character_state() {
+        use benilla_ui::script::{ScriptDialect, UnitState};
+
+        let _l = crate::local_state::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
+        let (home, _h) = hermetic_root("wrath-observer-report");
+        write_addon(
+            &home,
+            "AzerothBenchObserver",
+            include_str!("../../../../addons/AzerothBenchObserver/AzerothBenchObserver.toc"),
+            &[
+                (
+                    "Observer.lua",
+                    include_str!("../../../../addons/AzerothBenchObserver/Observer.lua"),
+                ),
+                (
+                    "Observer.xml",
+                    include_str!("../../../../addons/AzerothBenchObserver/Observer.xml"),
+                ),
+            ],
+        );
+        write_addon(
+            &home,
+            "AzerothBenchObserverReport",
+            include_str!(
+                "../../../../addons/AzerothBenchObserverReport/AzerothBenchObserverReport.toc"
+            ),
+            &[
+                (
+                    "Report.lua",
+                    include_str!("../../../../addons/AzerothBenchObserverReport/Report.lua"),
+                ),
+                (
+                    "Report.xml",
+                    include_str!("../../../../addons/AzerothBenchObserverReport/Report.xml"),
+                ),
+            ],
+        );
+
+        let start = |identity: &(String, String)| {
+            let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            script.set_screen_size(1024.0, 768.0);
+            script.seed_cvars(crate::cvars::Cvars::default().vm_seed());
+            assert!(
+                crate::ui_script::wrath_addons::load_bootstrap(&script).is_empty(),
+                "the authored root must load before addon widgets"
+            );
+            script
+                .run(
+                    "LateProbe = { login = 0 }; local f = CreateFrame('Frame'); \
+                     f:RegisterEvent('ADDON_LOADED'); f:RegisterEvent('PLAYER_LOGIN'); \
+                     f:SetScript('OnEvent', function(self, event, name) \
+                       if event == 'PLAYER_LOGIN' then LateProbe.login = LateProbe.login + 1 \
+                       elseif name == 'AzerothBenchObserverReport' then \
+                         LateProbe.addon = name; \
+                         LateProbe.filesAndWidgets = AzerothBenchObserverReport ~= nil \
+                           and AzerothBenchObserverReportFrame ~= nil \
+                           and AzerothBenchObserverReportRefresh ~= nil \
+                       end \
+                     end)",
+                )
+                .unwrap();
+            let failures = load_wrath_third_party(&mut script, Some(identity), &[], true);
+            assert!(
+                failures.is_empty(),
+                "actual addon load errors: {failures:?}"
+            );
+            // Registration alone does not admit the in-game index space: mirror the server reply.
+            script.note_addon_info_reply(&[]);
+            script.fire_event("PLAYER_LOGIN", vec![]);
+            script.set_unit(
+                "player",
+                Some(UnitState {
+                    exists: true,
+                    name: Some("Benchone".into()),
+                    guid: 0x1234,
+                    health: 60,
+                    max_health: 60,
+                    level: 1,
+                    ..Default::default()
+                }),
+            );
+            script.fire_event("PLAYER_ENTERING_WORLD", vec![]);
+            script
+        };
+
+        let char_a = ("Realm".to_string(), "Alice".to_string());
+        let mut first = start(&char_a);
+        assert_eq!(first.eval::<i64>("return GetNumAddOns()").ok(), Some(2));
+        assert!(
+            first
+                .eval::<bool>(
+                    "return IsAddOnLoadOnDemand('AzerothBenchObserverReport') == 1 \
+                 and IsAddOnLoaded('AzerothBenchObserver') == 1 \
+                 and IsAddOnLoaded('AzerothBenchObserverReport') == nil \
+                 and AzerothBenchObserverReport == nil \
+                 and AzerothBenchObserverReportFrame == nil"
+                )
+                .unwrap(),
+            "startup registers the companion without executing it"
+        );
+        first.tick(0.01);
+        let (x,y) = first.eval::<(f32,f32)>("local f=AzerothBenchObserverSample; return (f:GetLeft()+f:GetRight())/2,(f:GetTop()+f:GetBottom())/2").unwrap();
+        assert!(first.mouse_button(x, y, "LeftButton", true));
+        assert!(first.mouse_button(x, y, "LeftButton", false));
+        first
+            .run("assert(AzerothBenchObserverDB.clicks==1 and AzerothBenchObserverReport==nil)")
+            .unwrap();
+        let (x,y) = first.eval::<(f32,f32)>("local f=AzerothBenchObserverReportButton; return (f:GetLeft()+f:GetRight())/2,(f:GetTop()+f:GetBottom())/2").unwrap();
+        assert!(first.mouse_button(x, y, "LeftButton", true));
+        assert!(first.mouse_button(x, y, "LeftButton", false));
+        first.run("assert(IsAddOnLoaded('AzerothBenchObserverReport')==1); assert(AzerothBenchObserverReportDB.reasons.SUCCESS==1); assert(string.find(AzerothBenchObserverReportStatus:GetText(),'Benchone',1,true))").unwrap();
+        first.run("assert(AzerothBenchObserverReportFrame:GetTop() < AzerothBenchObserverFrame:GetBottom(), 'authored report must not overlap observer controls')").unwrap();
+        assert_eq!(
+            first
+                .eval::<Vec<String>>(
+                    "local loaded, reason = LoadAddOn('AzerothBenchObserverReport'); \
+                     return { tostring(loaded), tostring(reason), \
+                       tostring(AzerothBenchObserverDB.loads), \
+                       tostring(LateProbe.filesAndWidgets), tostring(LateProbe.login), \
+                       tostring(AzerothBenchObserverReportDB.lifecycle[1].event) }"
+                )
+                .unwrap(),
+            vec!["1", "nil", "1", "true", "1", "ADDON_LOADED"],
+            "LoadAddOn is synchronous, does not rerun the dependency or fake PLAYER_LOGIN, and \
+             fires ADDON_LOADED only after the companion chunks and widgets exist"
+        );
+        first
+            .run("AzerothBenchObserverReportDB.characterMarker = 'Alice-only'")
+            .unwrap();
+        first.run("local d=AzerothBenchObserverReportDB; for i=1,40 do d.lifecycle[i]={event='old'}; d.loadResults[i]={reason='old'} end; AzerothBenchObserverReport.RecordLoadResult(1,nil); assert(#d.lifecycle==16 and #d.loadResults==16); assert(d.events.ADDON_LOADED==1)").unwrap();
+        // Logout-only shutdown is valid while the mirrored unit still exists: stale samples
+        // must not become available again through periodic updates or a report refresh.
+        first.fire_event("PLAYER_LOGOUT", vec![]);
+        first.run("local s,r=AzerothBenchObserver.Snapshot(); local h,q=AzerothBenchObserver.History(); assert(s==nil and r=='NOT_READY' and h==nil and q=='NOT_READY'); AzerothBenchObserver_OnUpdate(nil,5); AzerothBenchObserverReport.Refresh('after-logout'); assert(AzerothBenchObserverReportStatus:GetText()=='Observer report unavailable: NOT_READY')").unwrap();
+        first.fire_event("PLAYER_LEAVING_WORLD", vec![]);
+        first.run("assert(AzerothBenchObserverReportStatus:GetText()=='Observer report unavailable: NOT_READY')").unwrap();
+        crate::ui_script::wrath_addons::shutdown(&mut first, Some(&char_a), false);
+
+        let replacement = start(&char_a);
+        assert!(
+            replacement
+                .eval::<bool>(
+                    "return AzerothBenchObserverReportDB == nil \
+                 and IsAddOnLoaded('AzerothBenchObserverReport') == nil"
+                )
+                .unwrap(),
+            "a replacement VM still defers the companion and its saved file"
+        );
+        replacement
+            .run("assert(LoadAddOn('AzerothBenchObserverReport'))")
+            .unwrap();
+        assert_eq!(
+            replacement
+                .eval::<String>("return AzerothBenchObserverReportDB.characterMarker")
+                .ok()
+                .as_deref(),
+            Some("Alice-only")
+        );
+
+        let char_b = ("Realm".to_string(), "Bob".to_string());
+        let other = start(&char_b);
+        other
+            .run("assert(LoadAddOn('AzerothBenchObserverReport'))")
+            .unwrap();
+        assert!(
+            other
+                .eval::<bool>("return AzerothBenchObserverReportDB.characterMarker == nil")
+                .unwrap(),
+            "SavedVariablesPerCharacter must not cross character identities"
+        );
+
         let _ = std::fs::remove_dir_all(home.parent().unwrap());
     }
 

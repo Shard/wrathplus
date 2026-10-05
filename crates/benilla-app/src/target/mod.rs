@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use benilla_ui::script::UiScript;
 
 use crate::creature_anim::Engaged;
-use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};
+use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer, SessionDialect};
 use crate::ui_script::InspectMode;
 use benilla_assets::AssetSet;
 use benilla_world::interact::{WorldClick, WorldRightClick};
@@ -78,6 +78,17 @@ pub(crate) use ring::{duel_rung, ring_reaction, ring_variant, Factions, RingVari
 
 pub(crate) use click::DeselectGuid;
 pub use click::Interact;
+
+/// Send through the selected build's own selection codec. A successful enqueue is neither a
+/// socket-write receipt nor the server's descriptor echo; selection presentation is immediate.
+pub(crate) fn send_selection(commands: &NetCommands, dialect: SessionDialect, guid: u64) -> bool {
+    let command = ClientCommand::SetSelection { guid };
+
+    if !commands.supports(dialect, &command) {
+        return false;
+    }
+    commands.0.send(command).is_ok()
+}
 
 /// Our target, set the instant we click, as the 1.12 client does without waiting for the server,
 /// and cleared on deselect or when it streams out. `CMSG_SET_SELECTION` carries the guid, which the

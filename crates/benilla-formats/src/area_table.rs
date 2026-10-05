@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
-use crate::chain::Chain;
 use crate::dbc::{parse, str_at, u32_at};
+use crate::{chain::Chain, DataProfile};
 
 const AREA_TABLE: &str = "DBFilesClient\\AreaTable.dbc";
 
@@ -111,23 +111,51 @@ impl AreaTableCatalog {
     }
 }
 
-fn schema() -> Schema {
+fn schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("AreaTable");
-    for i in 0..25 {
+    let fields = match profile {
+        DataProfile::Vanilla => 25,
+        DataProfile::Wrath { .. } => 36,
+    };
+    let name_field = match profile {
+        DataProfile::Vanilla => 11,
+        DataProfile::Wrath { locale } => 11 + wrath_locale_slot(locale),
+    };
+    for i in 0..fields {
         match i {
-            11 => s.add_field(SchemaField::new("AreaName", FieldType::String)),
+            i if i == name_field => s.add_field(SchemaField::new("AreaName", FieldType::String)),
             _ => s.add_field(SchemaField::new(format!("c{i}"), FieldType::UInt32)),
         }
     }
     s
 }
 
+fn wrath_locale_slot(locale: &str) -> usize {
+    match locale.to_ascii_lowercase().as_str() {
+        "enus" | "engb" => 0,
+        "kokr" => 1,
+        "frfr" => 2,
+        "dede" => 3,
+        "zhcn" => 4,
+        "zhtw" => 5,
+        "eses" => 6,
+        "esmx" => 7,
+        "ruru" => 8,
+        _ => 0,
+    }
+}
+
 /// Read `AreaTable.dbc` off the patch chain into an [`AreaTableCatalog`].
 pub fn load_area_table_catalog(chain: &mut Chain) -> Result<AreaTableCatalog> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(AREA_TABLE)
         .context("reading AreaTable.dbc")?;
-    let rs = parse(&bytes, schema(), "AreaTable")?;
+    let rs = parse(&bytes, schema(&profile), "AreaTable")?;
+    let (name_field, faction_group_field) = match &profile {
+        DataProfile::Vanilla => (11, 20),
+        DataProfile::Wrath { locale } => (11 + wrath_locale_slot(locale), 28),
+    };
     let mut by_id = HashMap::with_capacity(rs.records().len());
     for r in rs.records() {
         let (Some(id), Some(map_id), Some(zone_id), Some(explore_flag), Some(flags), Some(name)) = (
@@ -136,11 +164,11 @@ pub fn load_area_table_catalog(chain: &mut Chain) -> Result<AreaTableCatalog> {
             u32_at(r, 2),
             u32_at(r, 3),
             u32_at(r, 4),
-            str_at(&rs, r, 11),
+            str_at(&rs, r, name_field),
         ) else {
             continue;
         };
-        let faction_group_mask = u32_at(r, 20).unwrap_or(0);
+        let faction_group_mask = u32_at(r, faction_group_field).unwrap_or(0);
         // Signed; an absent column reads as `-1`, no exploration gate.
         let exploration_level = u32_at(r, 10).map_or(-1, |v| v as i32);
         by_id.insert(
@@ -162,6 +190,72 @@ pub fn load_area_table_catalog(chain: &mut Chain) -> Result<AreaTableCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wdbc(fields: &[u32], strings: &[u8]) -> Vec<u8> {
+        let mut bytes = b"WDBC".to_vec();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&(fields.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&((fields.len() * 4) as u32).to_le_bytes());
+        bytes.extend_from_slice(&(strings.len() as u32).to_le_bytes());
+        for field in fields {
+            bytes.extend_from_slice(&field.to_le_bytes());
+        }
+        bytes.extend_from_slice(strings);
+        bytes
+    }
+
+    #[test]
+    fn vanilla_and_wrath_area_offsets_are_distinct_and_localized() {
+        let strings = b"\0vanilla\0wrath-de\0";
+        let mut vanilla = (100..125).collect::<Vec<u32>>();
+        vanilla[11] = 1;
+        let set = parse(
+            &wdbc(&vanilla, strings),
+            schema(&DataProfile::Vanilla),
+            "synthetic vanilla AreaTable",
+        )
+        .unwrap();
+        assert_eq!(
+            str_at(&set, &set.records()[0], 11).as_deref(),
+            Some("vanilla")
+        );
+        assert_eq!(u32_at(&set.records()[0], 20), Some(120));
+
+        let profile = DataProfile::Wrath {
+            locale: "deDE".into(),
+        };
+        let mut wrath = (200..236).collect::<Vec<u32>>();
+        wrath[14] = 9;
+        let set = parse(
+            &wdbc(&wrath, strings),
+            schema(&profile),
+            "synthetic Wrath AreaTable",
+        )
+        .unwrap();
+        assert_eq!(
+            str_at(&set, &set.records()[0], 14).as_deref(),
+            Some("wrath-de")
+        );
+        assert_eq!(u32_at(&set.records()[0], 28), Some(228));
+    }
+
+    #[test]
+    fn installed_wrath_area_table_schema_loads() {
+        let data = std::path::Path::new("/Users/shannon/Games/Client/Data");
+        if !data.is_dir() {
+            return;
+        }
+        let profile = DataProfile::Wrath {
+            locale: "enUS".into(),
+        };
+        let mut chain = Chain::open_profile(data, &profile).expect("open installed Wrath data");
+        let catalog = load_area_table_catalog(&mut chain).expect("load Wrath AreaTable.dbc");
+        assert_eq!(catalog.name(12), Some("Elwynn Forest"));
+        let northshire = catalog.get(9).expect("Northshire Valley (id 9)");
+        assert_eq!(northshire.name, "Northshire Valley");
+        assert_eq!(northshire.zone_id, 12);
+        assert!(catalog.len() > 2000);
+    }
 
     #[test]
     fn real_area_table_parent_chains_and_names() {

@@ -32,7 +32,7 @@ use crate::glue::dialog::{DialogKind, GlueDialog};
 use crate::glue_strings::GlueStrings;
 use crate::net::{
     CharListMessage, DisconnectedMessage, LoginAbandon, LoginFailedMessage, LoginQueuedMessage,
-    LoginRequest, LoginStageMessage, LoginSubmit,
+    LoginRequest, LoginStageMessage, LoginSubmit, SessionDialect,
 };
 use crate::portrait::{GluePreview, GlueScene};
 use crate::sound::GlueSound;
@@ -147,6 +147,7 @@ pub(super) struct Attempt<'w> {
     submit: Res<'w, LoginSubmit>,
     abandon: Res<'w, LoginAbandon>,
     realmlist: Res<'w, crate::realmlist::Realmlist>,
+    dialect: Res<'w, SessionDialect>,
 }
 
 impl Attempt<'_> {
@@ -162,6 +163,7 @@ impl Attempt<'_> {
             pass: pass.to_string(),
             host: self.realmlist.address().to_string(),
             generation: self.abandon.0.load(Ordering::SeqCst),
+            dialect: *self.dialect,
         });
     }
 }
@@ -984,6 +986,7 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
         app.init_resource::<Time>()
+            .insert_resource(SessionDialect::Vanilla5875)
             .init_resource::<LoginIntent>()
             // `GluePlugin`'s resource, seated here without the plugin.
             .init_resource::<GlueDialog>()

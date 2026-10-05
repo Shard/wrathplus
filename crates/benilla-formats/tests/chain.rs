@@ -1143,6 +1143,95 @@ fn tombstoned_paths_never_fall_through_to_the_base_copy() {
     }
 }
 
+/// Manual install probe for the macro-catalog stall: the filtered listing must remain exactly
+/// equivalent to filtering the full listing while resolving far fewer listfile names.
+#[test]
+#[ignore = "install timing probe; run explicitly with WOW_DATA"]
+fn filtered_macro_icon_listing_matches_the_full_listing() {
+    use std::time::Instant;
+
+    const ICON_DIR: &str = "interface\\icons\\";
+    let is_candidate = |name: &str| {
+        let normalized = name.replace('/', "\\");
+        let lower = normalized.to_ascii_lowercase();
+        let Some(file) = lower.strip_prefix(ICON_DIR) else {
+            return false;
+        };
+        !file.contains('\\')
+            && (file.starts_with("spell_") || file.starts_with("ability_"))
+            && (file.ends_with(".blp") || file.ends_with(".tga"))
+    };
+
+    let data = benilla_formats::wow_data_or_skip!();
+    let profile = match std::env::var("WOW_CLIENT_PROFILE").as_deref() {
+        Ok("wrath") => benilla_formats::DataProfile::Wrath {
+            locale: std::env::var("WOW_LOCALE").unwrap_or_else(|_| "enUS".into()),
+        },
+        Ok("vanilla") | Err(_) => benilla_formats::DataProfile::Vanilla,
+        Ok(other) => panic!("unsupported timing-probe profile: {other}"),
+    };
+    let chain = Chain::open_profile(&data, &profile).expect("open explicit-profile patch chain");
+    let full_started = Instant::now();
+    let mut full_resolved = 0usize;
+    let full = chain
+        .list_filtered(|_| {
+            full_resolved += 1;
+            true
+        })
+        .expect("full chain listing");
+    let full_elapsed = full_started.elapsed();
+    let expected: Vec<_> = full
+        .iter()
+        .filter(|entry| is_candidate(&entry.name))
+        .map(|entry| (&entry.name, entry.size))
+        .collect();
+    let mut expected_icons: Vec<_> = expected
+        .iter()
+        .map(|(name, _)| {
+            let normalized = name.replace('/', "\\");
+            let stem = normalized[ICON_DIR.len()..].rsplit_once('.').unwrap().0;
+            format!("Interface\\Icons\\{stem}")
+        })
+        .collect();
+    expected_icons.sort_by_key(|name| name.to_ascii_lowercase());
+    expected_icons.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+
+    let filtered_started = Instant::now();
+    let mut filtered_resolved = 0usize;
+    let filtered = chain
+        .list_filtered(|name| {
+            let keep = is_candidate(name);
+            filtered_resolved += usize::from(keep);
+            keep
+        })
+        .expect("filtered chain listing");
+    let filtered_elapsed = filtered_started.elapsed();
+    let actual: Vec<_> = filtered
+        .iter()
+        .map(|entry| (&entry.name, entry.size))
+        .collect();
+
+    assert_eq!(
+        actual, expected,
+        "filtering must not change names, sizes, or order"
+    );
+    let mut icon_chain =
+        Chain::open_profile(&data, &profile).expect("reopen explicit-profile patch chain");
+    let actual_icons = benilla_formats::load_macro_icons(&mut icon_chain).expect("macro icons");
+    assert_eq!(
+        actual_icons, expected_icons,
+        "filtered and full-list catalogs differ"
+    );
+    eprintln!(
+        "macro-list probe: full={} live names / {} resolution calls in {:?}; filtered={} live names / {} resolution calls in {:?}; {:.1}x fewer resolution calls (full then filtered, warm-cache-biased timing)",
+        full.len(), full_resolved,
+        full_elapsed,
+        filtered.len(), filtered_resolved,
+        filtered_elapsed,
+        full_resolved as f64 / filtered_resolved.max(1) as f64
+    );
+}
+
 /// A WMO root's MOSB skybox and the per-group `0x40000` flag that asks for it: the Stratholme city
 /// root names one and 61 of 83 groups ask, the dungeon root names none. Four 1.12 roots name a
 /// skybox no group asks for, so the gate is the flag, not the chunk.

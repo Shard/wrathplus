@@ -1636,6 +1636,35 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
     }
 
+    #[test]
+    fn wrath_readonly_presentation_mirror_tracks_host_sync_and_vm_replacement() {
+        use benilla_ui::script::ScriptDialect;
+        let mut app = cvar_app();
+        app.world_mut().insert_non_send_resource(
+            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
+        );
+        app.update();
+        app.world_mut().resource_mut::<Cvars>().set("gamma", "1.2");
+        app.update();
+        let check = |app: &mut App| {
+            let mut script = app.world_mut().non_send_resource_mut::<UiScript>();
+            assert_eq!(
+                script.eval::<String>("return GetCVar('GAMMA')").unwrap(),
+                "1.2"
+            );
+            assert!(script.eval::<bool>("return GetCVar('realmList') == nil and GetCVar('fpsJournal') == nil and GetCVarDefault == nil and SetCVar == nil and RegisterCVar == nil").unwrap());
+            assert!(script.take_cvar_changes().is_empty());
+            assert!(script.take_cvar_registrations().is_empty());
+        };
+        check(&mut app);
+        assert_eq!(res::<crate::ui_gamma::DisplayGamma>(&app).0, 1.2);
+        app.world_mut().insert_non_send_resource(
+            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
+        );
+        app.update();
+        check(&mut app);
+    }
+
     /// A client with a real CVar host: every knob resource an observer writes, every observer,
     /// [`CvarPlugin`] and a VM for the mirror.
     fn cvar_app() -> App {

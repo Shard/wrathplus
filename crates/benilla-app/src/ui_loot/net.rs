@@ -22,12 +22,18 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::FishNotHooked, on_fish_verdict)
         .net_handler(K::FishEscaped, on_fish_verdict)
         .net_handler(K::ItemPushResult, on_item_push_result)
+        .net_handler(K::WrathInventoryFailure, on_wrath_inventory_failure)
+        .net_handler(K::Connected, on_session_end)
         .net_handler(K::Disconnected, on_session_end);
 }
 
 /// An admitted response selects a looted unit (`0x5ebc35` → `0x48f3a0`) before the window opens
 /// (`0x4c1cb0`), so the outgoing target's teardown closes a window still open on it.
-fn on_response(In(ev): In<SessionEvent>, mut select: crate::target::SelectCommit) {
+fn on_response(
+    In(ev): In<SessionEvent>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
+    mut select: crate::target::SelectCommit,
+) {
     let SessionEvent::LootResponse {
         guid,
         loot_type,
@@ -37,6 +43,24 @@ fn on_response(In(ev): In<SessionEvent>, mut select: crate::target::SelectCommit
     else {
         return;
     };
+    if dialect
+        .as_deref()
+        .copied()
+        .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+        == crate::net::SessionDialect::Wrath12340
+    {
+        if !select.seam.loot.wrath.admit_response(guid) {
+            return;
+        }
+        select.seam.loot_latch.0 = Some(guid);
+        debug!(
+            "net: Wrath loot response {guid:#x} gold {gold} {} item(s)",
+            items.len()
+        );
+        select.select_unit(guid);
+        select.seam.loot.open(guid, loot_type, gold, items);
+        return;
+    }
     let seam = &mut select.seam;
     if !admit_response(guid, loot_type, &mut seam.loot_latch, &seam.net) {
         return;
@@ -55,8 +79,21 @@ fn on_error(
     mut latch: ResMut<LootLatch>,
     mut pending: ResMut<PendingItemOps>,
     mut lock_cleared: ResMut<LockTransitions>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
+    mut loot: ResMut<LootState>,
 ) {
     if let SessionEvent::LootError { guid, error } = ev {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            if loot.wrath.admit_error(guid) {
+                latch.clear_for(guid);
+            }
+            return;
+        }
         let unlock = ItemUnlock {
             pending: &mut pending,
             lock_cleared: &mut lock_cleared,
@@ -65,20 +102,59 @@ fn on_error(
     }
 }
 
-fn on_removed(In(ev): In<SessionEvent>, mut loot: ResMut<LootState>) {
+fn on_removed(
+    In(ev): In<SessionEvent>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
+    mut loot: ResMut<LootState>,
+) {
     if let SessionEvent::LootRemoved { slot } = ev {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+            && !loot.wrath.acknowledge_take(slot)
+        {
+            return;
+        }
         loot_removed(slot, &mut loot);
     }
 }
 
-fn on_money_notify(In(ev): In<SessionEvent>) {
+fn on_money_notify(
+    In(ev): In<SessionEvent>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
+    loot: Res<LootState>,
+) {
     if let SessionEvent::LootMoneyNotify { amount } = ev {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+            && !loot.wrath.acknowledge_money_notify()
+        {
+            return;
+        }
         loot_money_notify(amount);
     }
 }
 
-fn on_clear_money(In(ev): In<SessionEvent>, mut loot: ResMut<LootState>) {
+fn on_clear_money(
+    In(ev): In<SessionEvent>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
+    mut loot: ResMut<LootState>,
+) {
     if let SessionEvent::LootClearMoney = ev {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+            && !loot.wrath.acknowledge_money_clear()
+        {
+            return;
+        }
         loot_clear_money(&mut loot);
     }
 }
@@ -90,8 +166,25 @@ fn on_release_response(
     mut pending: ResMut<PendingItemOps>,
     mut lock_cleared: ResMut<LockTransitions>,
     mut dead: super::DeadUnitDeselect,
+    dialect: Option<Res<crate::net::SessionDialect>>,
 ) {
     if let SessionEvent::LootReleaseResponse { guid } = ev {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            if !loot.wrath.acknowledge_release(guid) {
+                return;
+            }
+            latch.clear_for(guid);
+            let closed = (loot.source() == Some(guid))
+                .then(|| super::close_interaction(&mut loot, &mut latch, None))
+                .flatten();
+            dead.after_close(closed);
+            return;
+        }
         let unlock = ItemUnlock {
             pending: &mut pending,
             lock_cleared: &mut lock_cleared,
@@ -138,14 +231,29 @@ fn on_item_push_result(
     }
 }
 
+fn on_wrath_inventory_failure(
+    In(ev): In<SessionEvent>,
+    mut loot: ResMut<LootState>,
+    mut errors: ResMut<UiErrorKeys>,
+) {
+    if let SessionEvent::WrathInventoryFailure(failure) = ev {
+        super::wrath::inventory_failure(failure, &mut loot, &mut errors);
+    }
+}
+
 /// The open window and the latch die with the session, unconditionally.
 fn on_session_end(
-    In(_): In<SessionEvent>,
+    In(event): In<SessionEvent>,
     mut loot: ResMut<LootState>,
     mut latch: ResMut<LootLatch>,
 ) {
-    loot.clear_session();
-    latch.0 = None;
+    if matches!(
+        event,
+        SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
+    ) {
+        loot.clear_session();
+        latch.0 = None;
+    }
 }
 
 /// The `loot_type`s a cold latch admits (`0x5eb94b`, `0x5eb953`, `0x5eb95b`): pickpocketing,
@@ -750,6 +858,7 @@ mod tests {
         };
         let (net, rx) = net();
         world.insert_resource(net);
+        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
         world.init_resource::<LootState>();
         world.init_resource::<LootLatch>();
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
@@ -818,6 +927,63 @@ mod tests {
                 },
             )
             .expect("the handler runs as a one-shot system");
+    }
+
+    #[test]
+    fn wrath_owner_packet_reaches_real_response_take_and_removal_handlers() {
+        use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
+        use benilla_protocol::wrath_loot::{LOOT_SLOT_OWNER, SMSG_LOOT_RESPONSE};
+        let (mut world, rx) = tabbed_world();
+        world.insert_resource(crate::net::SessionDialect::Wrath12340);
+        world.resource_mut::<crate::target::Selection>().guid = Some(CORPSE);
+        let corpse = world.resource::<crate::net::GuidIndex>().0[&CORPSE];
+        world.resource_mut::<crate::target::Selection>().target = Some(corpse);
+        assert!(world.resource_scope(|world, mut loot: Mut<LootState>| {
+            world.resource_scope(|world, mut latch: Mut<LootLatch>| {
+                super::super::wrath::begin_wrath_corpse_loot(
+                    &mut loot,
+                    &mut latch,
+                    world.resource::<NetCommands>(),
+                    CORPSE,
+                )
+            })
+        }));
+        assert!(matches!(rx.try_recv(), Ok(ClientCommand::Loot { guid }) if guid == CORPSE));
+        // OWNER_PERMISSION's exact row layout; use the real codec and adapter, not a shared-event
+        // fixture that assumes every single-player corpse has Vanilla's ALLOW_LOOT type.
+        let mut body = CORPSE.to_le_bytes().to_vec();
+        body.extend([1, 0, 0, 0, 0, 1, 3]); // corpse, no money, one item, wire slot 3
+        for word in [2589u32, 2, 1, 0, 0] {
+            body.extend(word.to_le_bytes());
+        }
+        body.push(LOOT_SLOT_OWNER);
+        let WrathDispatch::Handled { session_events, .. } = WrathEventAdapter::new()
+            .dispatch(SMSG_LOOT_RESPONSE, &body, 0)
+            .unwrap()
+        else {
+            panic!("expected owner response");
+        };
+        for event in session_events {
+            world.run_system_once_with(on_response, event).unwrap();
+        }
+        assert_eq!(world.resource::<LootState>().source(), Some(CORPSE));
+        let action = world.resource::<LootState>().action_at(1).unwrap();
+        assert!(matches!(
+            action,
+            super::super::LootAction::Item { slot_type: 4, .. }
+        ));
+        assert!(world.resource_scope(|world, mut loot: Mut<LootState>| {
+            super::super::wrath::send_pick(&mut loot, world.resource::<NetCommands>(), action)
+        }));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ClientCommand::AutostoreLootItem { slot: 3 })
+        ));
+        assert!(world.resource::<LootState>().action_at(1).is_some());
+        world
+            .run_system_once_with(on_removed, SessionEvent::LootRemoved { slot: 3 })
+            .unwrap();
+        assert!(world.resource::<LootState>().action_at(1).is_none());
     }
 
     /// `0x5ebc35` → `0x48f3a0` → `SetSelection 0x493540` on the looted unit's guid.

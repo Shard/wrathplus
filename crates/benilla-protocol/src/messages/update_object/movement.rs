@@ -66,10 +66,14 @@ pub struct CreateSpline {
     pub duration_ms: u32,
     /// `MoveSplineFlag::Flying`: a 3-D flight path (keep the spline's Z); clear for a ground walk.
     pub flying: bool,
+    /// Curve evaluation, independent of whether wire Z is retained.
+    pub interpolation: crate::SplineInterpolation,
     /// `MoveSplineFlag::Cyclic`: the server loops this path forever.
     pub cyclic: bool,
+    /// Wrath effect metadata. Vanilla create splines have no transported equivalent here.
+    pub effect: Option<crate::SplineEffect>,
     /// `MoveSplineFlag::Runmode`; its absence forces walk mode on.
-    pub run_mode: bool,
+    pub run_mode: Option<bool>,
 }
 
 /// A `LIVING` block's live mover state: the `MOVEMENTFLAGS` word and the swim pitch that rides it.
@@ -172,8 +176,14 @@ impl MovementBlock {
                     time_passed_ms,
                     duration_ms,
                     flying: spline_flags & SPLINE_FLAG_FLYING != 0,
+                    interpolation: if spline_flags & SPLINE_FLAG_FLYING != 0 {
+                        crate::SplineInterpolation::CatmullRom
+                    } else {
+                        crate::SplineInterpolation::Linear
+                    },
                     cyclic: spline_flags & SPLINE_FLAG_CYCLIC != 0,
-                    run_mode: spline_flags & SPLINE_FLAG_RUNMODE != 0,
+                    effect: None,
+                    run_mode: Some(spline_flags & SPLINE_FLAG_RUNMODE != 0),
                 });
             }
         } else if update_flag & UPDATE_FLAG_HAS_POSITION != 0 {

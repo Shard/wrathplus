@@ -75,12 +75,27 @@ pub fn run(build: BuildId) -> AppExit {
     }
 
     // The `mpq://` source must be registered before `AssetPlugin` (in `DefaultPlugins`) builds.
+    let wrath_smoke = std::env::var("WOW_WORLDVIEW_WRATH_SMOKE").as_deref() == Ok("1");
+    let data_profile = benilla_formats::DataProfile::from_env()
+        .expect("valid explicit WOW_CLIENT_PROFILE/WOW_LOCALE configuration");
+    if wrath_smoke && !matches!(data_profile, benilla_formats::DataProfile::Wrath { .. }) {
+        panic!("WOW_WORLDVIEW_WRATH_SMOKE=1 requires WOW_CLIENT_PROFILE=wrath");
+    }
+    eprintln!("benilla-worldview: client data profile={data_profile:?}");
     match benilla_formats::wow_data() {
         Some(data_dir) => {
-            if let Err(e) = benilla_assets::register_mpq_source(&mut app, &data_dir) {
+            let opened =
+                benilla_assets::register_mpq_source_profile(&mut app, &data_dir, &data_profile);
+            if wrath_smoke {
+                opened.expect("opening explicitly requested Wrath mpq:// source");
+            } else if let Err(e) = opened {
                 eprintln!("benilla-assets: mpq:// source unavailable ({e:#})");
             }
         }
+        None if wrath_smoke => panic!(
+            "WOW_WORLDVIEW_WRATH_SMOKE=1 requires an explicit readable WOW_DATA directory; looked in {:?}",
+            benilla_formats::candidates()
+        ),
         None => eprintln!(
             "benilla-worldview: no WoW install found — looked in {:?}",
             benilla_formats::candidates()
@@ -128,6 +143,10 @@ pub fn run(build: BuildId) -> AppExit {
     stubs(&mut app);
 
     app.add_plugins(plugin);
+    if wrath_smoke {
+        app.insert_resource(WrathSmoke::from_env())
+            .add_systems(Update, wrath_smoke_gate);
+    }
 
     // After `AssetPlugin`: the loaders go into the live `AssetServer`, as in the client.
     benilla_assets::register_asset_loaders(&mut app);
@@ -222,8 +241,202 @@ fn plugin(app: &mut App) {
 
     // `WOW_WORLDVIEW_SHOT=<png>` (at `WOW_WORLDVIEW_SHOT_AT` seconds, default 20) writes one frame
     // and exits, with no subject gate: the client's live shot needs a player the engine lacks.
-    if std::env::var("WOW_WORLDVIEW_SHOT").is_ok() {
+    if std::env::var("WOW_WORLDVIEW_SHOT").is_ok()
+        && std::env::var("WOW_WORLDVIEW_WRATH_SMOKE").as_deref() != Ok("1")
+    {
         app.add_systems(Update, shoot_and_exit);
+    }
+}
+
+const WRATH_SMOKE_TIMEOUT_SECS: f32 = 90.0;
+
+#[derive(Resource)]
+struct WrathSmoke {
+    timeout: f32,
+    shot: String,
+    fired_at: Option<f32>,
+}
+
+impl WrathSmoke {
+    fn from_env() -> Self {
+        let timeout = std::env::var("WOW_WORLDVIEW_WRATH_TIMEOUT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(WRATH_SMOKE_TIMEOUT_SECS);
+        let shot = std::env::var("WOW_WORLDVIEW_SHOT")
+            .expect("WOW_WORLDVIEW_WRATH_SMOKE=1 requires WOW_WORLDVIEW_SHOT=/tmp/<name>.png");
+        assert!(
+            std::path::Path::new(&shot).starts_with("/tmp"),
+            "Wrath smoke screenshots must stay under /tmp"
+        );
+        Self {
+            timeout,
+            shot,
+            fired_at: None,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct WrathReadiness {
+    profile_resource_wrath: bool,
+    chain_profile_wrath: bool,
+    profiles_coherent: bool,
+    map_azeroth: bool,
+    wdt_loaded: bool,
+    northshire_tile_furnished: bool,
+    drawable_terrain: bool,
+    real_placement: bool,
+    lighting_catalog: bool,
+}
+
+impl WrathReadiness {
+    fn ready(&self) -> bool {
+        self.profile_resource_wrath
+            && self.chain_profile_wrath
+            && self.profiles_coherent
+            && self.map_azeroth
+            && self.wdt_loaded
+            && self.northshire_tile_furnished
+            && self.drawable_terrain
+            && self.real_placement
+            && self.lighting_catalog
+    }
+
+    fn absent(&self) -> Vec<&'static str> {
+        [
+            (!self.profile_resource_wrath).then_some("active asset profile is not Wrath"),
+            (!self.chain_profile_wrath).then_some("world patch chain is not Wrath"),
+            (!self.profiles_coherent).then_some("asset and world profile chains disagree"),
+            (!self.map_azeroth).then_some("current map is not map 0 Azeroth"),
+            (!self.wdt_loaded).then_some("Azeroth WDT not loaded"),
+            (!self.northshire_tile_furnished).then_some("authored Northshire tile not furnished"),
+            (!self.drawable_terrain).then_some("no drawable terrain mesh"),
+            (!self.real_placement).then_some("no real terrain placement drawable"),
+            (!self.lighting_catalog).then_some("lighting catalog absent; neutral fallback active"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+}
+
+fn wrath_readiness(world: &mut World) -> WrathReadiness {
+    use benilla_assets::LockRecover;
+
+    let asset_profile = world
+        .get_resource::<benilla_assets::ClientDataProfile>()
+        .map(|profile| profile.0.clone());
+    let chain_profile = world
+        .get_resource::<benilla_assets::WorldAssets>()
+        .map(|assets| assets.chain.lock_recover().profile().clone());
+    let expected_focus = benilla_formats::world_to_tile(SPAWN_XY.0, SPAWN_XY.1);
+    let expected_focus = (expected_focus.0 as i32, expected_focus.1 as i32);
+    let northshire_tile = world
+        .get_resource::<crate::terrain_stream::TerrainStreamer>()
+        .and_then(|streamer| streamer.furnished_tile_render(expected_focus));
+    let northshire_tile_furnished = northshire_tile.is_some();
+    let wdt_loaded = world
+        .get_resource::<crate::terrain_stream::TerrainStreamer>()
+        .zip(world.get_resource::<Assets<benilla_assets::WdtIndex>>())
+        .is_some_and(|(streamer, wdts)| streamer.wdt_loaded(wdts));
+    let drawable_terrain = northshire_tile.is_some_and(|(root, material)| {
+        world
+            .get_resource::<Assets<benilla_assets::materials::TerrainMaterial>>()
+            .is_some_and(|materials| materials.contains(&material))
+            && world.get::<Children>(root).is_some_and(|children| {
+                children.iter().any(|child| {
+                    let Some(mesh) = world.get::<Mesh3d>(child) else {
+                        return false;
+                    };
+                    world
+                        .get_resource::<Assets<Mesh>>()
+                        .is_some_and(|meshes| meshes.contains(&mesh.0))
+                        && world
+                            .get::<MeshMaterial3d<benilla_assets::materials::TerrainMaterial>>(
+                                child,
+                            )
+                            .is_some_and(|bound| bound.0 == material)
+                        && world
+                            .get::<InheritedVisibility>(child)
+                            .is_some_and(|visibility| visibility.get())
+                        && world
+                            .get::<ViewVisibility>(child)
+                            .is_some_and(|visibility| visibility.get())
+                })
+            })
+    });
+    let placement_draws: Vec<_> = world
+        .query::<(
+            &Mesh3d,
+            &MeshMaterial3d<benilla_assets::materials::WowModelMaterial>,
+            &InheritedVisibility,
+            &ViewVisibility,
+            &crate::interact::WorldObject,
+        )>()
+        .iter(world)
+        .filter(|(_, _, inherited, viewed, _)| inherited.get() && viewed.get())
+        .map(|(mesh, material, _, _, _)| (mesh.0.clone(), material.0.clone()))
+        .collect();
+    let entity_placement = world
+        .get_resource::<Assets<Mesh>>()
+        .zip(world.get_resource::<Assets<benilla_assets::materials::WowModelMaterial>>())
+        .is_some_and(|(meshes, materials)| {
+            placement_draws
+                .iter()
+                .any(|(mesh, material)| meshes.contains(mesh) && materials.contains(material))
+        });
+    let diverted_placement = world
+        .get_resource::<crate::static_gx::StaticGx>()
+        .is_some_and(|gx| {
+            let (doodads, wmos, groups) = gx.draw_census();
+            doodads + wmos + groups > 0
+        });
+    WrathReadiness {
+        profile_resource_wrath: matches!(
+            asset_profile,
+            Some(benilla_formats::DataProfile::Wrath { .. })
+        ),
+        chain_profile_wrath: matches!(
+            chain_profile,
+            Some(benilla_formats::DataProfile::Wrath { .. })
+        ),
+        profiles_coherent: asset_profile.is_some() && asset_profile == chain_profile,
+        map_azeroth: world
+            .get_resource::<crate::world_map::CurrentMap>()
+            .is_some_and(|map| map.0 == 0),
+        wdt_loaded,
+        northshire_tile_furnished,
+        drawable_terrain,
+        real_placement: entity_placement || diverted_placement,
+        lighting_catalog: crate::lighting::catalog_loaded(world),
+    }
+}
+
+/// Strictly opt-in serverless Wrath proof: capture only after authored Northshire is drawable.
+fn wrath_smoke_gate(world: &mut World) {
+    let elapsed = world.resource::<Time>().elapsed_secs();
+    let readiness = wrath_readiness(world);
+    let fired_at = world.resource::<WrathSmoke>().fired_at;
+    if let Some(fired_at) = fired_at {
+        if elapsed >= fired_at + 2.0 {
+            world.write_message(AppExit::Success);
+        }
+        return;
+    }
+    if readiness.ready() {
+        let shot = world.resource::<WrathSmoke>().shot.clone();
+        info!("WRATH_WORLDVIEW_READY {:?}; writing {shot}", readiness);
+        world
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(shot));
+        world.resource_mut::<WrathSmoke>().fired_at = Some(elapsed);
+    } else if elapsed >= world.resource::<WrathSmoke>().timeout {
+        error!(
+            "WRATH_WORLDVIEW_TIMEOUT absent: {}",
+            readiness.absent().join("; ")
+        );
+        world.write_message(AppExit::error());
     }
 }
 
@@ -352,5 +565,38 @@ fn fly(
             1.0
         };
         xf.translation += dir.normalize() * cam.speed * boost * time.delta_secs();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wrath_readiness_requires_every_authored_scene_fact() {
+        let mut readiness = WrathReadiness::default();
+        assert!(!readiness.ready());
+        assert_eq!(readiness.absent().len(), 9);
+
+        readiness = WrathReadiness {
+            profile_resource_wrath: true,
+            chain_profile_wrath: true,
+            profiles_coherent: true,
+            map_azeroth: true,
+            wdt_loaded: true,
+            northshire_tile_furnished: true,
+            drawable_terrain: true,
+            real_placement: true,
+            lighting_catalog: true,
+        };
+        assert!(readiness.ready());
+        assert!(readiness.absent().is_empty());
+
+        readiness.real_placement = false;
+        assert!(!readiness.ready());
+        assert_eq!(
+            readiness.absent(),
+            vec!["no real terrain placement drawable"]
+        );
     }
 }

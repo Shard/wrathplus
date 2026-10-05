@@ -9,7 +9,8 @@ use super::{
     loot_roll, macros, mail, merchant, parse_unit_token, party, petition, pvp, quest, quest_log,
     reputation, session, simplehtml, skills, slider, social, spellbook, stable, taxi, trade,
     tradeskill, trainer, weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView,
-    MusicRequest, PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState, UnitTokenParse,
+    MusicRequest, PlayerReqState, RegionData, ScriptDialect, ScriptValue, SoundRequest, UnitState,
+    UnitTokenParse,
 };
 
 // ── The Rust-side model ──
@@ -61,6 +62,8 @@ impl<T: Copy> IdMap<T> {
 /// The Rust-side model behind the Lua VM, in `lua.app_data`. It holds no mlua handles, whose
 /// persistent count the vendored `LUAI_MAXCSTACK` caps.
 pub(crate) struct Model {
+    /// The client script ABI this VM was constructed for; immutable for the VM's lifetime.
+    pub(crate) dialect: ScriptDialect,
     /// Every discovered addon in load order: the AddOn API's registry, filled at world entry.
     pub(crate) addons: Vec<super::addon::AddOnInfo>,
     /// The Lua index space into `addons`, a title-sorted, hidden-filtered list (`0x51da70`).
@@ -1031,8 +1034,9 @@ impl Model {
         }
     }
 
-    pub(crate) fn new() -> Model {
+    pub(crate) fn new(dialect: ScriptDialect) -> Model {
         Model {
+            dialect,
             addons: Vec::new(),
             addon_index: Vec::new(),
             addon_info_hidden: None,

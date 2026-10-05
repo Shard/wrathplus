@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::Chain;
+use crate::{Chain, DataProfile};
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
@@ -50,6 +50,8 @@ pub struct NpcAppearance {
     /// Worn `ItemDisplayInfo` ids (fields 8..17), 0 = empty, by body slot: head, shoulder, shirt,
     /// chest, belt, pants, boots, wrist, gloves, tabard (no cloak column).
     pub equipment: [u32; 10],
+    /// Wrath's eleventh NPC item display, the cloak slot. Vanilla has no column and yields 0.
+    pub cloak: u32,
     /// The baked body atlas under `Textures\BakedNpcTextures\`; `None` composites the body live.
     pub bake_name: Option<String>,
 }
@@ -273,7 +275,7 @@ impl CreatureCatalog {
 }
 
 /// CreatureModelData.dbc: 16 fields in build 5875 (no `mountHeight`).
-pub(crate) fn creature_model_data_schema() -> Schema {
+pub(crate) fn creature_model_data_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureModelData");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -295,11 +297,29 @@ pub(crate) fn creature_model_data_schema() -> Schema {
     ] {
         s.add_field(SchemaField::new(name, ty));
     }
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        for name in [
+            "MountHeight",
+            "GeoBoxMinX",
+            "GeoBoxMinY",
+            "GeoBoxMinZ",
+            "GeoBoxMaxX",
+            "GeoBoxMaxY",
+            "GeoBoxMaxZ",
+            "WorldEffectScale",
+            "AttachedEffectScale",
+            "MissileCollisionRadius",
+            "MissileCollisionPush",
+            "MissileCollisionRaise",
+        ] {
+            s.add_field(SchemaField::new(name, FieldType::Float32));
+        }
+    }
     s
 }
 
 /// CreatureDisplayInfo.dbc: 12 fields in build 5875.
-pub(crate) fn creature_display_info_schema() -> Schema {
+pub(crate) fn creature_display_info_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureDisplayInfo");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -311,20 +331,27 @@ pub(crate) fn creature_display_info_schema() -> Schema {
         ("TextureVariation0", FieldType::String),
         ("TextureVariation1", FieldType::String),
         ("TextureVariation2", FieldType::String),
-        // Not `PortraitTextureName` (absent in 5875): a signed size class, tested for -1 at
-        // `0x625509`.
-        ("SizeClass", FieldType::UInt32),
-        ("BloodLevel", FieldType::UInt32),
-        // Some maps label this BloodID, but its 5875 values (33..188) are NPC sound ids.
-        ("NPCSoundID", FieldType::UInt32),
+        ("VanillaSizeClassOrWrathPortrait", FieldType::UInt32),
+        ("VanillaBloodLevelOrWrathSizeClass", FieldType::UInt32),
+        ("VanillaNPCSoundOrWrathBloodID", FieldType::UInt32),
     ] {
         s.add_field(SchemaField::new(name, ty));
+    }
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        for name in [
+            "NPCSoundID",
+            "ParticleColorID",
+            "CreatureGeosetData",
+            "ObjectEffectPackageID",
+        ] {
+            s.add_field(SchemaField::new(name, FieldType::UInt32));
+        }
     }
     s
 }
 
 /// CreatureDisplayInfoExtra.dbc: 19 fields, 76-byte records in 5875 (vmangos `DBCStructure.h`).
-pub(crate) fn creature_display_info_extra_schema() -> Schema {
+pub(crate) fn creature_display_info_extra_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureDisplayInfoExtra");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -341,17 +368,29 @@ pub(crate) fn creature_display_info_extra_schema() -> Schema {
     for i in 0..10 {
         s.add_field(SchemaField::new(format!("Equipment{i}"), FieldType::UInt32));
     }
-    s.add_field(SchemaField::new("BakeName", FieldType::String));
+    match profile {
+        DataProfile::Vanilla => s.add_field(SchemaField::new("BakeName", FieldType::String)),
+        DataProfile::Wrath { .. } => {
+            s.add_field(SchemaField::new("CloakDisplay", FieldType::UInt32));
+            s.add_field(SchemaField::new("Flags", FieldType::UInt32));
+            s.add_field(SchemaField::new("BakeName", FieldType::String));
+        }
+    }
     s
 }
 
 /// Load the creature DBCs from the patch chain into a [`CreatureCatalog`].
 pub fn load_creature_catalog(chain: &mut Chain) -> Result<CreatureCatalog> {
+    let profile = chain.profile().clone();
     let models = {
         let bytes = chain
             .read_file(CREATURE_MODEL_DATA)
             .with_context(|| format!("reading {CREATURE_MODEL_DATA}"))?;
-        let rs = parse(&bytes, creature_model_data_schema(), "CreatureModelData")?;
+        let rs = parse(
+            &bytes,
+            creature_model_data_schema(&profile),
+            "CreatureModelData",
+        )?;
         let mut m = HashMap::with_capacity(rs.records().len());
         for r in rs.records() {
             if let (Some(id), Some(name)) = (u32_at(r, 0), str_at(&rs, r, 2)) {
@@ -383,7 +422,7 @@ pub fn load_creature_catalog(chain: &mut Chain) -> Result<CreatureCatalog> {
             .with_context(|| format!("reading {CREATURE_DISPLAY_INFO}"))?;
         let rs = parse(
             &bytes,
-            creature_display_info_schema(),
+            creature_display_info_schema(&profile),
             "CreatureDisplayInfo",
         )?;
         let mut d = HashMap::with_capacity(rs.records().len());
@@ -396,8 +435,24 @@ pub fn load_creature_catalog(chain: &mut Chain) -> Result<CreatureCatalog> {
                         extended_id: u32_at(r, 3).unwrap_or(0),
                         scale: f32_at(r, 4).unwrap_or(1.0),
                         textures: [str_at(&rs, r, 6), str_at(&rs, r, 7), str_at(&rs, r, 8)],
-                        blood_level: u32_at(r, 10).unwrap_or(0),
-                        size_class: u32_at(r, 9).map_or(-1, |v| v as i32),
+                        blood_level: u32_at(
+                            r,
+                            if matches!(profile, DataProfile::Vanilla) {
+                                10
+                            } else {
+                                11
+                            },
+                        )
+                        .unwrap_or(0),
+                        size_class: u32_at(
+                            r,
+                            if matches!(profile, DataProfile::Vanilla) {
+                                9
+                            } else {
+                                10
+                            },
+                        )
+                        .map_or(-1, |v| v as i32),
                         model_alpha: u32_at(r, 5).unwrap_or(255),
                     },
                 );
@@ -418,12 +473,13 @@ pub fn load_creature_catalog(chain: &mut Chain) -> Result<CreatureCatalog> {
 
 /// Load CreatureDisplayInfoExtra.dbc: `extendedDisplayInfoId` → [`NpcAppearance`].
 fn load_creature_display_info_extra(chain: &mut Chain) -> Result<HashMap<u32, NpcAppearance>> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(CREATURE_DISPLAY_INFO_EXTRA)
         .with_context(|| format!("reading {CREATURE_DISPLAY_INFO_EXTRA}"))?;
     let rs = parse(
         &bytes,
-        creature_display_info_extra_schema(),
+        creature_display_info_extra_schema(&profile),
         "CreatureDisplayInfoExtra",
     )?;
     let mut e = HashMap::with_capacity(rs.records().len());
@@ -440,7 +496,20 @@ fn load_creature_display_info_extra(chain: &mut Chain) -> Result<HashMap<u32, Np
                     hair_color: u32_at(r, 6).unwrap_or(0) as u8,
                     facial_hair: u32_at(r, 7).unwrap_or(0) as u8,
                     equipment: std::array::from_fn(|i| u32_at(r, 8 + i).unwrap_or(0)),
-                    bake_name: str_at(&rs, r, 18),
+                    cloak: if matches!(profile, DataProfile::Wrath { .. }) {
+                        u32_at(r, 18).unwrap_or(0)
+                    } else {
+                        0
+                    },
+                    bake_name: str_at(
+                        &rs,
+                        r,
+                        if matches!(profile, DataProfile::Vanilla) {
+                            18
+                        } else {
+                            20
+                        },
+                    ),
                 },
             );
         }

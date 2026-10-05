@@ -249,6 +249,7 @@ fn an_empty_account_parks_at_select_without_creating_a_character() {
             pass: PASS.into(),
             host: realmd,
             generation: 0,
+            dialect: crate::net::SessionDialect::Vanilla5875,
         })
         .unwrap();
     match next_event(&events) {

@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: AzerothBench Observer Report
+## Notes: Demand-loaded read-only presentation of copied observer samples.
+## Version: 0.1.0
+## Dependencies: AzerothBenchObserver
+## LoadOnDemand: 1
+## SavedVariablesPerCharacter: AzerothBenchObserverReportDB
+Report.lua
+Report.xml

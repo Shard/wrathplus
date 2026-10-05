@@ -199,4 +199,29 @@ mod tests {
         z.ingest_small(&[0x00; W * W / 2], 0);
         assert_eq!(z.get(0, 0, 0), 0);
     }
+
+    /// Wrath RLE is byte alpha regardless of an uncompressed map's WDT-selected bit depth. Runs
+    /// are bounded at 4096 even when corrupt input asks for more output.
+    #[test]
+    fn rle_big_alpha_stops_at_one_layer_and_handles_truncation() {
+        let mut encoded = Vec::new();
+        for _ in 0..32 {
+            encoded.extend_from_slice(&[0xff, 0x7b]); // fill 127
+        }
+        encoded.extend_from_slice(&[0xff, 0x55]); // the final run is clipped to 32 texels
+        let mut m = blank();
+        m.has_big_alpha = true;
+        m.fix_alpha = false;
+        m.ingest_compressed(&encoded, 0);
+        assert_eq!(m.get(0, 0, 0), 0x7b);
+        assert_eq!(m.get(31, 63, 0), 0x7b);
+        assert_eq!(m.get(32, 63, 0), 0x55);
+        assert_eq!(m.get(63, 63, 0), 0x55);
+
+        let mut truncated = blank();
+        truncated.fix_alpha = false;
+        truncated.ingest_compressed(&[0x84], 0); // fill token without its value
+        assert_eq!(truncated.get(0, 0, 0), 0);
+        assert_eq!(truncated.get(63, 63, 0), 0);
+    }
 }

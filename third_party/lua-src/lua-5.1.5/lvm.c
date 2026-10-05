@@ -14,6 +14,7 @@
 
 #include "lua.h"
 
+#include "ldialect.h"
 #include "ldebug.h"
 #include "ldo.h"
 #include "lfunc.h"
@@ -710,7 +711,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         ** 95 corpus addons contain the shape, concentrated in Dewdrop-2.0.lua (123 sites) and
         ** AceEvent-2.0.lua (113).
         */
-        if (ttistable(ra)) {
+        if (!benilla_iswrath51(L) && ttistable(ra)) {
           setobjs2s(L, ra+1, ra);
           setobj2s(L, ra, luaH_getstr(hvalue(gt(L)), luaS_new(L, "next")));
         }

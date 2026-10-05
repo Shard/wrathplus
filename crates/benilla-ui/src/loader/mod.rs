@@ -68,6 +68,18 @@ pub fn load_in(
     load_into(script.lua(), doc, path, files)
 }
 
+/// [`load_in`] with an explicit add-on owner. Wrath executes every Lua chunk reached from the
+/// add-on's XML with that add-on's `(addonName, privateTable)` chunk ABI.
+pub fn load_in_addon(
+    script: &UiScript,
+    doc: &ParsedDocument,
+    path: &str,
+    files: &dyn Fn(&str) -> Option<Vec<u8>>,
+    addon_name: &str,
+) -> LoadReport {
+    load_into_under_owned(script.lua(), doc, path, files, "", Some(addon_name))
+}
+
 /// [`load_in`] on the VM directly, for a Lua binding (`LoadAddOn`), which holds only `&Lua`.
 pub fn load_into(
     lua: &mlua::Lua,
@@ -87,6 +99,28 @@ pub fn load_into_under(
     files: &dyn Fn(&str) -> Option<Vec<u8>>,
     status_root: &str,
 ) -> LoadReport {
+    load_into_under_owned(lua, doc, path, files, status_root, None)
+}
+
+fn load_into_under_owned(
+    lua: &mlua::Lua,
+    doc: &ParsedDocument,
+    path: &str,
+    files: &dyn Fn(&str) -> Option<Vec<u8>>,
+    status_root: &str,
+    addon_owner: Option<&str>,
+) -> LoadReport {
+    let mut active_paths = HashSet::new();
+    let addon_owner = addon_owner.map(str::to_string).or_else(|| {
+        (status_root == "Interface/AddOns/")
+            .then(|| path.split('/').next())
+            .flatten()
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    });
+    if !path.is_empty() {
+        active_paths.insert(path.to_ascii_lowercase());
+    }
     let mut loader = Loader {
         lua,
         files,
@@ -95,6 +129,9 @@ pub fn load_into_under(
         report: LoadReport::default(),
         warned: HashSet::new(),
         deferred_anchors: Vec::new(),
+        active_paths,
+        include_depth: 0,
+        addon_owner,
     };
     loader.report.warnings.extend(doc.warnings.iter().cloned());
     loader.load_doc(doc);
@@ -121,6 +158,9 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
         report: LoadReport::default(),
         warned: HashSet::new(),
         deferred_anchors: Vec::new(),
+        active_paths: HashSet::new(),
+        include_depth: 0,
+        addon_owner: None,
     };
 
     let (own_name, parent_name) = loader.frame_names(wrapper);
@@ -182,6 +222,43 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
     let mut out = loader.report.warnings;
     out.extend(loader.report.errors);
     out
+}
+
+/// Whether a runtime `CreateFrame(..., inherits)` request reaches a secure template, including
+/// through case-insensitive aliases. This is intended for rejection before frame allocation.
+pub fn is_secure_template(lua: &mlua::Lua, name: &str) -> bool {
+    let model = lua
+        .app_data_ref::<crate::script::Model>()
+        .expect("model app_data");
+    let templates = model.framexml_templates.borrow();
+    let mut active = HashSet::new();
+    secure_template_name(name, &templates, &mut active)
+}
+
+fn secure_template_name(
+    name: &str,
+    templates: &HashMap<String, Element>,
+    active: &mut HashSet<String>,
+) -> bool {
+    if name.to_ascii_lowercase().contains("secure") {
+        return true;
+    }
+    let key = name.to_ascii_lowercase();
+    if !active.insert(key.clone()) {
+        return false;
+    }
+    let answer = templates
+        .get(name)
+        .or_else(|| {
+            templates
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v)
+        })
+        .and_then(|template| template.attr("inherits"))
+        .is_some_and(|parent| secure_template_name(parent, templates, active));
+    active.remove(&key);
+    answer
 }
 
 /// Join a FrameXML reference to its file's directory, lexically: `\` and `/` both separate, `..`
@@ -257,6 +334,12 @@ struct Loader<'a> {
     /// target built later waits here (`ClassTrainerFrameTemplates.xml:67` hangs the label off the
     /// highlight). Each `decorate` drains its own.
     pub(super) deferred_anchors: Vec<DeferredAnchor>,
+    /// Case-folded provider paths currently being loaded, guarding direct and indirect cycles.
+    active_paths: HashSet<String>,
+    /// XML include edges below the root document.
+    include_depth: usize,
+    /// Explicit TOC/add-on owner for Wrath's two-argument chunk ABI.
+    addon_owner: Option<String>,
 }
 
 /// One `SetPoint` held until its target exists.
@@ -283,11 +366,22 @@ impl Loader<'_> {
     fn run(&self, chunk: &[u8], path: &str) -> mlua::Result<()> {
         // The reference's file chunk name, `"@%s"` (`0x8716e0`, `0x704bc0`; a file name to
         // `luaO_chunkid 0x6f5c40`), with `\` separators as in `crate::script::addon_chunk_name`.
-        self.run_named(chunk, &format!("@{}", path.replace('/', "\\")))
+        let name = format!("@{}", path.replace('/', "\\"));
+        let inferred_owner = (self.status_root == "Interface/AddOns/")
+            .then(|| path.split('/').next())
+            .flatten()
+            .filter(|name| !name.is_empty());
+        if let Some(addon_name) = self.addon_owner.as_deref().or(inferred_owner) {
+            return crate::script::addon::run_addon_chunk(self.lua, addon_name, chunk, &name);
+        }
+        self.run_named(chunk, &name)
     }
 
     /// Run a chunk under a complete chunk name, for a producer whose name is not a path.
     fn run_named(&self, chunk: &[u8], name: &str) -> mlua::Result<()> {
+        if let Some(addon_name) = self.addon_owner.as_deref() {
+            return crate::script::addon::run_addon_chunk(self.lua, addon_name, chunk, name);
+        }
         self.lua
             .load(chunk)
             .set_name(name)
@@ -307,7 +401,7 @@ impl Loader<'_> {
         wrapper: &mlua::Table,
         func: &mlua::Function,
     ) -> mlua::Result<()> {
-        crate::script::event::invoke_with_globals(self.lua, wrapper.clone(), func, None, Vec::new())
+        crate::script::event::invoke_handler(self.lua, wrapper.clone(), func, None, Vec::new())
     }
 
     pub(super) fn warn_once(&mut self, key: &str, msg: impl Into<String>) {
@@ -401,6 +495,20 @@ impl Loader<'_> {
 
     pub(super) fn do_include(&mut self, path: &str) {
         let joined = join_ref(self.base(), path);
+        let active_key = joined.to_ascii_lowercase();
+        if self.active_paths.contains(&active_key) {
+            self.report.errors.push(format!(
+                "<Include file=\"{path}\">: recursive include of \"{joined}\" skipped"
+            ));
+            return;
+        }
+        const MAX_INCLUDE_DEPTH: usize = 64;
+        if self.include_depth >= MAX_INCLUDE_DEPTH {
+            self.report.errors.push(format!(
+                "<Include file=\"{path}\">: include depth exceeds {MAX_INCLUDE_DEPTH}; \"{joined}\" skipped"
+            ));
+            return;
+        }
         let Some(bytes) = (self.files)(&joined) else {
             // Reported into this document's record, before the included one has its own.
             let line = status::missing(&self.status_path(&joined), status::runs_as_lua(&joined));
@@ -431,7 +539,11 @@ impl Loader<'_> {
                 // and reports into a record of its own, closed under its banner (`0x6ee21c`).
                 let outer = std::mem::replace(&mut self.path, joined.clone());
                 let outer_status = std::mem::take(&mut self.report.status);
+                self.active_paths.insert(active_key.clone());
+                self.include_depth += 1;
                 self.load_doc(&sub);
+                self.include_depth -= 1;
+                self.active_paths.remove(&active_key);
                 self.path = outer;
                 let own = std::mem::replace(&mut self.report.status, outer_status);
                 let banner = status::file_banner(&self.status_path(&joined));
@@ -485,6 +597,13 @@ impl Loader<'_> {
         } else {
             el.clone()
         }
+    }
+
+    /// Whether `inherits=` names a secure template directly or through an alias.
+    fn secure_inherits(&self, el: &Element) -> bool {
+        el.attr("inherits")
+            .filter(|name| !name.is_empty())
+            .is_some_and(|name| is_secure_template(self.lua(), name))
     }
 
     /// A top-level `<Font name=…>`: flatten its `inherits=` chain (fonts inherit only fonts),
@@ -545,6 +664,23 @@ impl Loader<'_> {
             self.report
                 .warnings
                 .push(format!("Unknown frame type: {}", el.tag));
+            return None;
+        }
+
+        // Reject protected aliases before CreateFrame allocates an ordinary, unprotected frame.
+        if self
+            .lua()
+            .app_data_ref::<crate::script::Model>()
+            .expect("model")
+            .dialect
+            == crate::script::ScriptDialect::Wrath12340
+            && self.secure_inherits(el)
+        {
+            self.report.errors.push(format!(
+                "CreateFrame(<{}>{}): secure template inheritance is unsupported: Wrath protected execution is not implemented",
+                el.tag,
+                el.name().map(|n| format!(" name=\"{n}\"")).unwrap_or_default()
+            ));
             return None;
         }
 

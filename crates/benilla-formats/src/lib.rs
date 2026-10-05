@@ -13,6 +13,8 @@ pub use benilla_blp::BlpTexels;
 
 mod chain;
 pub use chain::{Chain, ChainEntry};
+mod profile;
+pub use profile::DataProfile;
 /// Loose `.tga` art, as addon folders ship it.
 mod tga;
 pub use tga::tga_to_rgba;
@@ -236,6 +238,10 @@ pub use ribbons::{parse_m2_ribbon_emitters, RibbonEmitterDef, RibbonVisibility};
 mod value_track;
 pub use value_track::{TrackValue, ValueTrack};
 mod models;
+pub use models::wrath::{
+    parse_wrath_render_model, parse_wrath_render_model_with_animations, sample_wrath_camera,
+    wrath_render_animation_dependencies, WrathBoneInterpolation, WrathCameraPose, WrathRenderModel,
+};
 pub use models::{
     accumulate_wmo_group_camera_collision, accumulate_wmo_group_camera_only_collision,
     accumulate_wmo_group_collision, authored_half_height, batch_footprint, glue_art_extent,
@@ -264,11 +270,12 @@ pub use models::{
     OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
 };
 mod terrain;
+pub use benilla_adt::Mh2oChunk;
 pub use terrain::{
-    adt_to_tile_mesh, area_id_at, find_tile_near, ground_effect_at, impassable_at, load_tile_mesh,
-    load_tiles_around, mcsh_shadowed_at, terrain_height_at, triangle_z_at, ChunkMesh, Doodad,
-    MapTiles, TileMesh, WmoInstance, ALPHA_MAP_SIZE, CHUNK_SIZE, SHADOW_MAP_SIZE, STORMWIND_XY,
-    TERRAIN_LAYER_TILES, TILE_SIZE,
+    adt_to_tile_mesh, adt_to_tile_mesh_with_options, area_id_at, find_tile_near, ground_effect_at,
+    impassable_at, load_tile_mesh, load_tiles_around, mcsh_shadowed_at, terrain_height_at,
+    triangle_z_at, ChunkMesh, Doodad, MapTiles, TerrainDecodeOptions, TileMesh, WmoInstance,
+    ALPHA_MAP_SIZE, CHUNK_SIZE, SHADOW_MAP_SIZE, STORMWIND_XY, TERRAIN_LAYER_TILES, TILE_SIZE,
 };
 mod wdl;
 /// World (x, y) to ADT tile `(col, row)`; minimap `map<X>_<Y>.blp` names use the same order.
@@ -355,6 +362,11 @@ pub const VANILLA_BASE_ORDER: &[&str] = &[
 /// [`Chain::open`] on one `.MPQ` file or a vanilla `Data` directory.
 pub fn open_chain(path: &Path) -> Result<Chain> {
     Chain::open(path)
+}
+
+/// Open the launcher's explicitly configured data profile; vanilla remains the default.
+pub fn open_configured_chain(path: &Path) -> Result<Chain> {
+    Chain::open_profile(path, &DataProfile::from_env()?)
 }
 
 /// Write a BLP2 texture's level 0 (1.12 ships no BLP1) as a PNG at `out`; returns its size.
@@ -591,46 +603,33 @@ pub fn blp_bytes_to_native_chain(bytes: &[u8]) -> Result<BlpMipChain> {
 fn schema_for(dbc_name: &str) -> Option<Schema> {
     let base = dbc_name.rsplit(['/', '\\']).next().unwrap_or(dbc_name);
 
-    // A table with a typed loader reuses its schema, so a dump reads what the loader reads.
-    for (name, ctor) in [
-        (
-            "CreatureDisplayInfo.dbc",
-            creatures::creature_display_info_schema as fn() -> Schema,
-        ),
-        (
-            "CreatureDisplayInfoExtra.dbc",
-            creatures::creature_display_info_extra_schema,
-        ),
-        (
-            "CreatureModelData.dbc",
-            creatures::creature_model_data_schema,
-        ),
-        ("CharHairGeosets.dbc", characters::char_hair_geosets_schema),
-        (
-            "CharacterFacialHairStyles.dbc",
-            characters::char_facial_hair_schema,
-        ),
-        ("HelmetGeosetVisData.dbc", characters::helmet_vis_schema),
-        ("CharSections.dbc", characters::char_sections_schema),
-        ("ItemDisplayInfo.dbc", items::item_display_info_schema),
-        ("ItemVisuals.dbc", item_visuals::item_visuals_schema),
-        (
-            "ItemVisualEffects.dbc",
-            item_visuals::item_visual_effects_schema,
-        ),
-        (
-            "SpellItemEnchantment.dbc",
-            item_visuals::spell_item_enchantment_schema,
-        ),
-        (
-            "ItemRandomProperties.dbc",
-            item_random_properties::item_random_properties_schema,
-        ),
-        ("AreaTrigger.dbc", area_trigger::area_trigger_schema),
-    ] {
-        if base.eq_ignore_ascii_case(name) {
-            return Some(ctor());
+    // A table with a typed loader reuses its vanilla schema, so a dump reads what the loader reads.
+    let typed = match base.to_ascii_lowercase().as_str() {
+        "creaturedisplayinfo.dbc" => Some(creatures::creature_display_info_schema(
+            &DataProfile::Vanilla,
+        )),
+        "creaturedisplayinfoextra.dbc" => Some(creatures::creature_display_info_extra_schema(
+            &DataProfile::Vanilla,
+        )),
+        "creaturemodeldata.dbc" => {
+            Some(creatures::creature_model_data_schema(&DataProfile::Vanilla))
         }
+        "charhairgeosets.dbc" => Some(characters::char_hair_geosets_schema(&DataProfile::Vanilla)),
+        "characterfacialhairstyles.dbc" => {
+            Some(characters::char_facial_hair_schema(&DataProfile::Vanilla))
+        }
+        "helmetgeosetvisdata.dbc" => Some(characters::helmet_vis_schema(&DataProfile::Vanilla)),
+        "charsections.dbc" => Some(characters::char_sections_schema(&DataProfile::Vanilla)),
+        "itemdisplayinfo.dbc" => Some(items::item_display_info_schema(&DataProfile::Vanilla)),
+        "itemvisuals.dbc" => Some(item_visuals::item_visuals_schema()),
+        "itemvisualeffects.dbc" => Some(item_visuals::item_visual_effects_schema()),
+        "spellitemenchantment.dbc" => Some(item_visuals::spell_item_enchantment_schema()),
+        "itemrandomproperties.dbc" => Some(item_random_properties::item_random_properties_schema()),
+        "areatrigger.dbc" => Some(area_trigger::area_trigger_schema()),
+        _ => None,
+    };
+    if typed.is_some() {
+        return typed;
     }
 
     if base.eq_ignore_ascii_case("TaxiNodes.dbc") {

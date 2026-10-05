@@ -160,6 +160,9 @@ mod tests {
     /// `Local`s in VM-holding systems that are not memory about the VM, keyed
     /// `(path under src/, parameter name)`.
     const EXEMPT: &[(&str, &str)] = &[
+        // Immutable archive-source catalog, not VM memory: keyed by weak source Arc identity.
+        // The separate `seeded` VmMemo still pushes cached icons into every replacement VM.
+        ("ui_macro/mod.rs", "catalog"),
         // A raster fact; a fresh VM re-seats its measurer on `!has_text_measurer()` anyway.
         ("ui_script/extract/mod.rs", "last_seam"),
         // The plate driver's anti-overlap scratch, cleared at the top of every run.

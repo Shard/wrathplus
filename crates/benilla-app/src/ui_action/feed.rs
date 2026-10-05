@@ -15,11 +15,14 @@ use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::net::{NetCommands, ObjectStore, SelfPlayer};
 
-use super::errors::{first_missing_totem, first_short_reagent, mount_result_key};
+use super::errors::{
+    first_missing_totem, first_short_reagent, global_string, mount_result_key,
+    ui_error_text_for_script,
+};
 use super::weapon_icon::{auto_attack_icon, substitutes_weapon_icon};
 use super::{
-    cast_fail, show_messages, ui_error_text, CastErrors, MessageSink, MountErrors, PetTameFailures,
-    PlayerActions, Shown, Spells, UiError, UiErrorKeys, UiErrorTexts,
+    cast_fail, show_messages, CastErrors, MessageSink, MountErrors, PetTameFailures, PlayerActions,
+    Shown, Spells, UiError, UiErrorKeys, UiErrorTexts,
 };
 
 /// An item action's icon when its template has not answered or its display id has no
@@ -112,7 +115,7 @@ pub(super) fn feed_actions(
             } = fail;
             let pet = caster == crate::ui_action::Caster::Pet;
             let d = spells.as_ref().and_then(|s| s.catalog.get(spell_id));
-            let get = |key: &str| script.lua().globals().get::<String>(key).ok();
+            let get = |key: &str| global_string(&script, key);
             // The displayed line first and the log line from it, the reference's order.
             let line = (|| -> Option<cast_fail::CastFailLine> {
                 // `0x19`-`0x1b` (`0x6e1db7`, through `0x6e2380`): the singular subclass name,
@@ -255,22 +258,15 @@ pub(super) fn feed_actions(
     );
 
     // (Dis)mount refusals by key ([`mount_result_key`]); none of these strings takes arguments.
-    let mount_texts: Vec<(&'static str, String)> = mount_errors
+    let mount_texts: Vec<Shown> = mount_errors
         .0
         .drain(..)
         .filter_map(|(mount, code)| {
             let key = mount_result_key(mount, code)?;
-            Some((key, script.lua().globals().get::<String>(key).ok()?))
+            super::keyed_line(&script, key)
         })
         .collect();
-    show_messages(
-        &mut script,
-        &mut sink,
-        "ui_action",
-        mount_texts
-            .into_iter()
-            .map(|(key, text)| Shown::keyed(key, text)),
-    );
+    show_messages(&mut script, &mut sink, "ui_action", mount_texts);
 
     // Taming refusals ([`PetTameFailures`]): the reason's `PETTAME_*` string fills
     // `ERR_TAME_FAILED` ("%s."), two lookups in that order.
@@ -279,7 +275,7 @@ pub(super) fn feed_actions(
         .drain(..)
         .filter_map(|reason| {
             let reason_key = benilla_protocol::messages::pet_tame_failure_key(reason);
-            let reason_text = script.lua().globals().get::<String>(reason_key).ok()?;
+            let reason_text = global_string(&script, reason_key)?;
             super::keyed_line_s(&script, "ERR_TAME_FAILED", &[&reason_text])
         })
         .collect();
@@ -289,10 +285,7 @@ pub(super) fn feed_actions(
     let key_lines: Vec<Shown> = ui_error_keys
         .0
         .drain(..)
-        .filter_map(|e| {
-            ui_error_text(&e, &|key| script.lua().globals().get::<String>(key).ok())
-                .map(|t| Shown::keyed(e.key, t))
-        })
+        .filter_map(|e| ui_error_text_for_script(&e, &script).map(|t| Shown::keyed(e.key, t)))
         .collect();
     show_messages(&mut script, &mut sink, "ui_action", key_lines);
 
@@ -311,8 +304,7 @@ pub(super) fn feed_actions(
         .into_iter()
         .filter_map(|key| {
             let e = UiError::key(key);
-            ui_error_text(&e, &|k| script.lua().globals().get::<String>(k).ok())
-                .map(|t| Shown::keyed(e.key, t))
+            ui_error_text_for_script(&e, &script).map(|t| Shown::keyed(e.key, t))
         })
         .collect();
     show_messages(&mut script, &mut sink, "ui_action", engine_lines);

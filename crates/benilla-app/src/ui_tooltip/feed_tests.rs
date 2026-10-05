@@ -25,7 +25,8 @@ fn on_spline(speed: f32) -> crate::net::Spline {
         duration: std::time::Duration::from_secs(2),
         id: 1,
         grounded: true,
-        run_mode: true,
+        interpolation: benilla_protocol::SplineInterpolation::Linear,
+        run_mode: Some(true),
         deck: None,
     }
 }

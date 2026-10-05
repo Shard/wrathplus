@@ -13,8 +13,13 @@ use super::super::{
 };
 use super::drive_animations;
 use crate::names::type_flags::{DO_NOT_PLAY_WOUND_ANIM, MORE_AUDIBLE, NO_FACTION_TOOLTIP};
-use crate::net::NetCommands;
+use crate::net::{ClientCommand, NetCommands, SessionDialect};
 use benilla_protocol::ObjectFields;
+
+#[cfg(test)]
+mod wrath_death;
+#[cfg(test)]
+mod wrath_oneshot;
 
 /// A held non-weapon keeps Special1H(57): the substitution (`0x5fe3cc`) keys on an empty hand.
 fn holding_a_non_weapon() -> Wielded {
@@ -120,7 +125,7 @@ fn advance(app: &mut App, ms: u64) {
     app.update();
 }
 
-fn app() -> App {
+fn app_with_dialect(dialect: SessionDialect) -> (App, crossbeam_channel::Receiver<ClientCommand>) {
     let mut app = App::new();
     // The client's one `rand()` stream: the variation and replay rolls.
     app.init_resource::<benilla_assets::AnimRng>();
@@ -144,12 +149,182 @@ fn app() -> App {
         .add_message::<SheathRequest>()
         .add_message::<SheathSwapMessage>();
     // A dead-letter net channel; the driver tolerates the dropped receiver.
-    let (tx, _rx) = crossbeam_channel::unbounded();
+    let (tx, rx) = crossbeam_channel::unbounded();
     app.insert_resource(NetCommands(tx));
+    app.insert_resource(dialect);
     app.init_resource::<crate::names::NameCache>();
     app.insert_resource(catalog());
     app.add_systems(Update, drive_animations);
-    app
+    (app, rx)
+}
+
+fn app() -> App {
+    app_with_dialect(SessionDialect::Vanilla5875).0
+}
+
+fn self_sheath_unit(app: &mut App, descriptor: u8) -> Entity {
+    let mut model = caster_model();
+    let mut hip_sheath = clip(90, 6, false);
+    hip_sheath.arm_nodes = Some((AnimationNodeIndex::new(6), AnimationNodeIndex::new(7)));
+    model.clips.push(hip_sheath);
+    app.world_mut()
+        .spawn((
+            model,
+            AnimationPlayer::default(),
+            AnimationTransitions::new(),
+            AnimDriver::default(),
+            crate::net::SelfPlayer,
+            crate::net::ObjectStore(ObjectFields::from_pairs(&[(164, u32::from(descriptor))])),
+            Wielded {
+                main: Some((2, 0x7)),
+                main_sheath: 3,
+                ..Default::default()
+            },
+        ))
+        .id()
+}
+
+fn sheath_state(app: &App, unit: Entity) -> Option<u8> {
+    app.world()
+        .entity(unit)
+        .get::<AnimDriver>()
+        .unwrap()
+        .sheath_state()
+}
+
+fn set_sheathed(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u32> {
+    rx.try_iter()
+        .filter_map(|command| match command {
+            ClientCommand::SetSheathed { state } => Some(state),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn vanilla_self_sheath_request_mutates_and_sends_through_the_driver() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Vanilla5875);
+    let unit = self_sheath_unit(&mut app, 0);
+    app.update();
+
+    app.world_mut().write_message(SheathRequest {
+        entity: unit,
+        state: 1,
+        ceremony: true,
+    });
+    app.update();
+
+    assert_eq!(sheath_state(&app, unit), Some(1));
+    assert!(
+        app.world()
+            .entity(unit)
+            .get::<AnimDriver>()
+            .unwrap()
+            .sheath_swap
+            .is_some(),
+        "the supported request starts its local ceremony"
+    );
+    assert_eq!(set_sheathed(&rx), vec![1]);
+}
+
+#[test]
+fn wrath_self_sheath_request_uses_the_native_codec_and_local_ceremony() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let unit = self_sheath_unit(&mut app, 0);
+    app.update();
+    app.world_mut().write_message(SheathRequest {
+        entity: unit,
+        state: 1,
+        ceremony: true,
+    });
+    app.update();
+    assert_eq!(sheath_state(&app, unit), Some(1));
+    assert!(
+        app.world()
+            .entity(unit)
+            .get::<AnimDriver>()
+            .unwrap()
+            .sheath_swap
+            .is_some(),
+        "the admitted request starts its local ceremony"
+    );
+    assert_eq!(set_sheathed(&rx), vec![1]);
+}
+
+fn force_stow_self(app: &mut App) -> Entity {
+    let unit = self_sheath_unit(app, 1);
+    app.world_mut().entity_mut(unit).insert((
+        Engaged(0),
+        CastHold {
+            ranged: false,
+            anim_id: 51,
+            spell_id: 20793,
+        },
+    ));
+    unit
+}
+
+#[test]
+fn vanilla_self_automatic_reconcile_stows_and_sends_through_the_driver() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Vanilla5875);
+    let unit = force_stow_self(&mut app);
+    app.update();
+
+    assert_eq!(sheath_state(&app, unit), Some(0));
+    assert_eq!(set_sheathed(&rx), vec![0]);
+}
+
+#[test]
+fn wrath_self_automatic_reconcile_stows_through_its_native_codec() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let unit = force_stow_self(&mut app);
+    app.update();
+
+    assert_eq!(sheath_state(&app, unit), Some(0));
+    assert_eq!(set_sheathed(&rx), vec![0]);
+}
+
+#[test]
+fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let unit = app
+        .world_mut()
+        .spawn((
+            caster_model(),
+            AnimationPlayer::default(),
+            AnimationTransitions::new(),
+            AnimDriver::default(),
+            crate::net::ObjectStore(ObjectFields::from_pairs(&[(164, 1)])),
+            Engaged(0),
+            CastHold {
+                ranged: false,
+                anim_id: 51,
+                spell_id: 20793,
+            },
+        ))
+        .id();
+    app.update();
+
+    assert_eq!(sheath_state(&app, unit), Some(0));
+    assert!(set_sheathed(&rx).is_empty());
+}
+
+#[test]
+fn wrath_self_descriptor_sheath_echo_still_applies() {
+    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let unit = self_sheath_unit(&mut app, 1);
+    app.update();
+    assert_eq!(sheath_state(&app, unit), Some(1));
+
+    app.world_mut()
+        .entity_mut(unit)
+        .insert(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
+            164, 2,
+        )])));
+    app.update();
+
+    assert_eq!(sheath_state(&app, unit), Some(2));
+    assert!(set_sheathed(&rx).is_empty());
 }
 
 /// vmangos sets every creature's sheath to melee at spawn (`Creature.cpp:605`), so the hold clip's

@@ -6,7 +6,7 @@ use bevy::render::renderer::RenderDevice;
 
 use crate::art_scope::{ArtScope, ArtSlot};
 use benilla_assets::{AssetSet, RenderConfig, WorldAssets};
-use benilla_formats::open_chain;
+use benilla_formats::open_configured_chain as open_chain;
 
 /// Opens the patch chain at startup and inserts the shared [`WorldAssets`] and [`RenderConfig`].
 pub(crate) struct AssetPlugin;

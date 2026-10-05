@@ -1,0 +1,393 @@
+//! Strict projection of Wrath build-12340 on-foot movement relays into shared session events.
+//!
+//! AzerothCore's `WorldSession::WriteMovementInfo` writes a packed mover GUID followed by Wrath
+//! `MovementInfo`. This helper deliberately admits only the ordinary on-foot opcodes and fields
+//! whose shared meanings are established; transports, pitch, spline movement, and extra flags
+//! remain fenced.
+
+use crate::events::SessionEvent;
+use crate::messages::{JumpInfo, RelayVerb};
+use crate::wrath_gameplay::{CodecError, OutboundMovement};
+
+const MSG_MOVE_START_FORWARD: u16 = 0x00b5;
+const MSG_MOVE_STOP_TURN: u16 = 0x00be;
+const MSG_MOVE_SET_RUN_MODE: u16 = 0x00c2;
+const MSG_MOVE_SET_WALK_MODE: u16 = 0x00c3;
+const MSG_MOVE_FALL_LAND: u16 = 0x00c9;
+const MSG_MOVE_SET_FACING: u16 = 0x00da;
+const MSG_MOVE_ROOT: u16 = 0x00ec;
+const MSG_MOVE_UNROOT: u16 = 0x00ed;
+const MSG_MOVE_HEARTBEAT: u16 = 0x00ee;
+
+const WRATH_ROOT: u32 = 0x0000_0800;
+const WRATH_FALLING: u32 = 0x0000_1000;
+const WRATH_FALLING_FAR: u32 = 0x0000_2000;
+const SHARED_ROOT: u32 = 0x0000_1000;
+const SHARED_FALLING: u32 = 0x0000_2000;
+const SHARED_FALLING_FAR: u32 = 0x0000_4000;
+const WRATH_ON_FOOT_FLAGS: u32 = 0x0000_013f | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
+
+/// Whether `opcode` has a source-verified AzerothCore on-foot relay layout.
+///
+/// This is intentionally a whitelist rather than a movement-family range: pitch, swimming,
+/// flight, transport changes, knockback, and later expansion movement opcodes need their own
+/// semantics before they may reach the shared movement consumer.
+pub const fn handles(opcode: u16) -> bool {
+    matches!(
+        opcode,
+        MSG_MOVE_START_FORWARD
+            ..=MSG_MOVE_STOP_TURN
+                | MSG_MOVE_SET_RUN_MODE
+                | MSG_MOVE_SET_WALK_MODE
+                | MSG_MOVE_FALL_LAND
+                | MSG_MOVE_SET_FACING
+                | MSG_MOVE_ROOT
+                | MSG_MOVE_UNROOT
+                | MSG_MOVE_HEARTBEAT
+    )
+}
+
+/// Decode one already-framed Wrath movement relay.
+///
+/// AzerothCore writes the fall tail as positive-up `zspeed, sin, cos, xyspeed`; the shared
+/// Vanilla event uses down-positive z-speed and orders its named fields as cos then sin.
+pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
+    if !handles(opcode) {
+        return Err(CodecError::InvalidFlags(
+            "unsupported Wrath movement relay opcode",
+        ));
+    }
+
+    let outbound = OutboundMovement::from_bytes(body)?;
+    let movement = outbound.movement;
+    if movement.flags2 != 0 {
+        return Err(CodecError::InvalidFlags(
+            "Wrath on-foot relay has secondary movement flags",
+        ));
+    }
+    if movement.transport.is_some() {
+        return Err(CodecError::InvalidFlags(
+            "Wrath on-foot relay has transport data",
+        ));
+    }
+    if movement.pitch.is_some() {
+        return Err(CodecError::InvalidFlags("Wrath on-foot relay has pitch"));
+    }
+    if movement.spline_elevation.is_some() {
+        return Err(CodecError::InvalidFlags(
+            "Wrath on-foot relay has spline elevation",
+        ));
+    }
+    if movement.flags & !WRATH_ON_FOOT_FLAGS != 0 {
+        return Err(CodecError::InvalidFlags(
+            "unsupported Wrath on-foot movement flag",
+        ));
+    }
+    if movement.flags & WRATH_FALLING_FAR != 0 && movement.flags & WRATH_FALLING == 0 {
+        return Err(CodecError::InvalidFlags(
+            "Wrath FALLING_FAR without FALLING",
+        ));
+    }
+    if ![
+        movement.position.x,
+        movement.position.y,
+        movement.position.z,
+        movement.position.orientation,
+    ]
+    .into_iter()
+    .all(f32::is_finite)
+    {
+        return Err(CodecError::InvalidFlags(
+            "non-finite Wrath on-foot movement pose",
+        ));
+    }
+    if movement.jump.is_some_and(|jump| {
+        ![
+            jump.vertical_speed,
+            jump.sin_angle,
+            jump.cos_angle,
+            jump.horizontal_speed,
+        ]
+        .into_iter()
+        .all(f32::is_finite)
+    }) {
+        return Err(CodecError::InvalidFlags(
+            "non-finite Wrath on-foot fall tail",
+        ));
+    }
+
+    let mut flags = movement.flags & !(WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR);
+    if movement.flags & WRATH_ROOT != 0 {
+        flags |= SHARED_ROOT;
+    }
+    if movement.flags & WRATH_FALLING != 0 {
+        flags |= SHARED_FALLING;
+    }
+    if movement.flags & WRATH_FALLING_FAR != 0 {
+        flags |= SHARED_FALLING_FAR;
+    }
+    let jump = movement.jump.map(|jump| JumpInfo {
+        zspeed: -jump.vertical_speed,
+        cos_angle: jump.cos_angle,
+        sin_angle: jump.sin_angle,
+        xy_speed: jump.horizontal_speed,
+    });
+
+    Ok(SessionEvent::UnitMove {
+        guid: outbound.mover_guid,
+        position: [
+            movement.position.x,
+            movement.position.y,
+            movement.position.z,
+        ],
+        orientation: movement.position.orientation,
+        flags,
+        pitch: 0.0,
+        time: movement.timestamp,
+        verb: RelayVerb::of(opcode),
+        fall_time: movement.fall_time,
+        jump,
+        transport: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wrath_gameplay::{
+        JumpInfo as WrathJumpInfo, MovementInfo, OutboundMovement, Position, TransportInfo,
+        MOVEMENT_FLAG2_ALWAYS_ALLOW_PITCHING, MOVEMENT_FLAG_FLYING, MOVEMENT_FLAG_ON_TRANSPORT,
+        MOVEMENT_FLAG_SPLINE_ELEVATION, MOVEMENT_FLAG_SWIMMING,
+    };
+    use crate::wrath_ground::{self, FallTail};
+
+    const GUID: u64 = 0x0000_0000_0500_0001;
+
+    fn event(opcode: u16, body: &[u8]) -> SessionEvent {
+        decode(opcode, body).expect("relay decodes")
+    }
+
+    fn movement(flags: u32) -> OutboundMovement {
+        OutboundMovement {
+            mover_guid: GUID,
+            movement: MovementInfo {
+                flags,
+                flags2: 0,
+                timestamp: 77,
+                position: Position {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0,
+                    orientation: 0.5,
+                },
+                transport: None,
+                pitch: None,
+                fall_time: 0,
+                jump: (flags & WRATH_FALLING != 0).then_some(WrathJumpInfo {
+                    vertical_speed: 7.0,
+                    sin_angle: 0.6,
+                    cos_angle: 0.8,
+                    horizontal_speed: 7.0,
+                }),
+                spline_elevation: None,
+            },
+        }
+    }
+
+    #[test]
+    fn whitelist_is_exact_and_does_not_admit_pitch_swim_or_flight_families() {
+        for opcode in 0x00b5..=0x00be {
+            assert!(handles(opcode), "{opcode:#05x}");
+        }
+        for opcode in [
+            0x00b4, 0x00bf, 0x00c0, 0x00c1, 0x00c4, 0x00ca, 0x00cb, 0x00db, 0x00ef, 0x035a,
+        ] {
+            assert!(!handles(opcode), "{opcode:#05x}");
+        }
+        for opcode in [0x00c2, 0x00c3, 0x00c9, 0x00da, 0x00ec, 0x00ed, 0x00ee] {
+            assert!(handles(opcode), "{opcode:#05x}");
+        }
+    }
+
+    #[test]
+    fn standing_and_running_jumps_project_exact_shared_flags_and_signs() {
+        for (wrath_flags, shared_flags, xy_speed) in [
+            (WRATH_FALLING, SHARED_FALLING, 0.0),
+            (
+                wrath_ground::MOVE_FORWARD | WRATH_FALLING | WRATH_FALLING_FAR,
+                wrath_ground::MOVE_FORWARD | SHARED_FALLING | SHARED_FALLING_FAR,
+                7.0,
+            ),
+        ] {
+            let body = wrath_ground::encode_on_foot(
+                crate::wrath_ground::MSG_MOVE_JUMP,
+                GUID,
+                wrath_flags,
+                0x1122_3344,
+                [1.0, 2.0, 3.0],
+                0.5,
+                0,
+                Some(FallTail {
+                    vertical_speed: 7.0,
+                    sin_angle: 0.6,
+                    cos_angle: 0.8,
+                    horizontal_speed: xy_speed,
+                }),
+            )
+            .unwrap();
+            let SessionEvent::UnitMove {
+                guid,
+                position,
+                orientation,
+                flags,
+                time,
+                fall_time,
+                jump,
+                ..
+            } = event(crate::wrath_ground::MSG_MOVE_JUMP as u16, &body)
+            else {
+                unreachable!()
+            };
+            assert_eq!(guid, GUID);
+            assert_eq!(position, [1.0, 2.0, 3.0]);
+            assert_eq!(orientation, 0.5);
+            assert_eq!(flags, shared_flags);
+            assert_eq!(time, 0x1122_3344);
+            assert_eq!(fall_time, 0);
+            assert_eq!(
+                jump,
+                Some(JumpInfo {
+                    zspeed: -7.0,
+                    cos_angle: 0.8,
+                    sin_angle: 0.6,
+                    xy_speed,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn landing_and_heartbeat_round_trip_without_touching_vanilla_bits() {
+        let landing = wrath_ground::encode_on_foot(
+            u32::from(MSG_MOVE_FALL_LAND),
+            GUID,
+            wrath_ground::MOVE_FORWARD,
+            10,
+            [4.0, 5.0, 6.0],
+            0.25,
+            1_234,
+            None,
+        )
+        .unwrap();
+        let SessionEvent::UnitMove {
+            flags,
+            fall_time,
+            jump,
+            verb,
+            ..
+        } = event(MSG_MOVE_FALL_LAND, &landing)
+        else {
+            unreachable!()
+        };
+        assert_eq!(flags, wrath_ground::MOVE_FORWARD);
+        assert_eq!(fall_time, 1_234);
+        assert_eq!(jump, None);
+        assert_eq!(verb, RelayVerb::Pose);
+
+        let heartbeat = wrath_ground::encode(
+            u32::from(MSG_MOVE_HEARTBEAT),
+            GUID,
+            wrath_ground::MOVE_FORWARD | wrath_ground::MOVE_WALKING,
+            11,
+            [7.0, 8.0, 9.0],
+            1.0,
+        )
+        .unwrap();
+        let SessionEvent::UnitMove { flags, verb, .. } = event(MSG_MOVE_HEARTBEAT, &heartbeat)
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            flags,
+            wrath_ground::MOVE_FORWARD | wrath_ground::MOVE_WALKING
+        );
+        assert_eq!(verb, RelayVerb::Heartbeat);
+    }
+
+    #[test]
+    fn root_relays_preserve_the_wire_root_bit_instead_of_inventing_ack_state() {
+        for (opcode, raw_flags, shared_flags, verb) in [
+            (
+                MSG_MOVE_ROOT,
+                WRATH_ROOT,
+                SHARED_ROOT,
+                RelayVerb::Root(true),
+            ),
+            (MSG_MOVE_UNROOT, 0, 0, RelayVerb::Root(false)),
+        ] {
+            let body = movement(raw_flags).to_bytes().unwrap();
+            let SessionEvent::UnitMove {
+                flags, verb: got, ..
+            } = event(opcode, &body)
+            else {
+                unreachable!()
+            };
+            assert_eq!(flags, shared_flags);
+            assert_eq!(got, verb);
+        }
+    }
+
+    #[test]
+    fn transport_flags2_pitch_spline_and_other_modes_fail_closed() {
+        let mut transport = movement(MOVEMENT_FLAG_ON_TRANSPORT);
+        transport.movement.transport = Some(TransportInfo {
+            guid: 2,
+            position: Position {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                orientation: 0.0,
+            },
+            time: 0,
+            seat: 0,
+            time2: None,
+        });
+        let mut flags2 = movement(0);
+        flags2.movement.flags2 = MOVEMENT_FLAG2_ALWAYS_ALLOW_PITCHING;
+        flags2.movement.pitch = Some(0.25);
+        let mut pitch = movement(MOVEMENT_FLAG_SWIMMING);
+        pitch.movement.pitch = Some(0.25);
+        let mut flying = movement(MOVEMENT_FLAG_FLYING);
+        flying.movement.pitch = Some(0.25);
+        let mut spline = movement(MOVEMENT_FLAG_SPLINE_ELEVATION);
+        spline.movement.spline_elevation = Some(1.0);
+        let falling_far_alone = movement(WRATH_FALLING_FAR);
+
+        for packet in [transport, flags2, pitch, flying, spline, falling_far_alone] {
+            let body = packet.to_bytes().unwrap();
+            assert!(matches!(
+                decode(MSG_MOVE_HEARTBEAT, &body),
+                Err(CodecError::InvalidFlags(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn trailing_and_every_truncated_prefix_fail_closed() {
+        let body = movement(WRATH_FALLING).to_bytes().unwrap();
+        for len in 0..body.len() {
+            assert!(matches!(
+                decode(MSG_MOVE_HEARTBEAT, &body[..len]),
+                Err(CodecError::Truncated)
+            ));
+        }
+        assert!(decode(MSG_MOVE_HEARTBEAT, &body).is_ok());
+
+        let mut trailing = body;
+        trailing.push(0);
+        assert!(matches!(
+            decode(MSG_MOVE_HEARTBEAT, &trailing),
+            Err(CodecError::TrailingBytes(1))
+        ));
+    }
+}

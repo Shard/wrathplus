@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use crate::Chain;
+use crate::{Chain, DataProfile};
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, RecordSet, Schema, SchemaField};
 
@@ -100,7 +100,7 @@ impl ItemDisplayCatalog {
 }
 
 /// All 23 columns, the unread ones included, so the field-count check against the header is exact.
-pub(crate) fn item_display_info_schema() -> Schema {
+pub(crate) fn item_display_info_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("ItemDisplayInfo");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -109,11 +109,14 @@ pub(crate) fn item_display_info_schema() -> Schema {
         ("ModelTextureLeft", FieldType::String),
         ("ModelTextureRight", FieldType::String),
         ("Icon", FieldType::String),
-        ("GeosetGroup0", FieldType::UInt32),
-        ("GeosetGroup1", FieldType::UInt32),
-        ("GeosetGroup2", FieldType::UInt32),
     ] {
         s.add_field(SchemaField::new(name, ty));
+    }
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        s.add_field(SchemaField::new("Icon2", FieldType::String));
+    }
+    for name in ["GeosetGroup0", "GeosetGroup1", "GeosetGroup2"] {
+        s.add_field(SchemaField::new(name, FieldType::UInt32));
     }
     for name in [
         "Flags",
@@ -137,11 +140,15 @@ pub(crate) fn item_display_info_schema() -> Schema {
         s.add_field(SchemaField::new(name, FieldType::String));
     }
     s.add_field(SchemaField::new("ItemVisualID", FieldType::UInt32));
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        s.add_field(SchemaField::new("ParticleColorID", FieldType::UInt32));
+    }
     s
 }
 
 /// The catalog from a parsed record set, testable without a chain.
-fn catalog_from_records(rs: RecordSet) -> ItemDisplayCatalog {
+fn catalog_from_records(rs: RecordSet, profile: &DataProfile) -> ItemDisplayCatalog {
+    let shift = usize::from(matches!(profile, DataProfile::Wrath { .. }));
     let mut displays = HashMap::with_capacity(rs.records().len());
     for r in rs.records() {
         let Some(id) = u32_at(r, 0) else { continue };
@@ -151,17 +158,20 @@ fn catalog_from_records(rs: RecordSet) -> ItemDisplayCatalog {
         ];
         let model_texture = [str_at(&rs, r, 3), str_at(&rs, r, 4)];
         let geoset_groups = [
-            u32_at(r, 6).unwrap_or(0),
-            u32_at(r, 7).unwrap_or(0),
-            u32_at(r, 8).unwrap_or(0),
+            u32_at(r, 6 + shift).unwrap_or(0),
+            u32_at(r, 7 + shift).unwrap_or(0),
+            u32_at(r, 8 + shift).unwrap_or(0),
         ];
-        let region_textures = std::array::from_fn(|i| str_at(&rs, r, 14 + i));
-        let helmet_vis = [u32_at(r, 12).unwrap_or(0), u32_at(r, 13).unwrap_or(0)];
+        let region_textures = std::array::from_fn(|i| str_at(&rs, r, 14 + shift + i));
+        let helmet_vis = [
+            u32_at(r, 12 + shift).unwrap_or(0),
+            u32_at(r, 13 + shift).unwrap_or(0),
+        ];
         let icon = str_at(&rs, r, 5).map(|i| format!("Interface\\Icons\\{i}"));
-        let group_sounds = u32_at(r, 11).unwrap_or(0);
-        let spell_visual = u32_at(r, 10).unwrap_or(0);
-        let flags = u32_at(r, 9).unwrap_or(0);
-        let item_visual = u32_at(r, 22).unwrap_or(0) as i32;
+        let group_sounds = u32_at(r, 11 + shift).unwrap_or(0);
+        let spell_visual = u32_at(r, 10 + shift).unwrap_or(0);
+        let flags = u32_at(r, 9 + shift).unwrap_or(0);
+        let item_visual = u32_at(r, 22 + shift).unwrap_or(0) as i32;
         displays.insert(
             id,
             ItemDisplay {
@@ -183,11 +193,16 @@ fn catalog_from_records(rs: RecordSet) -> ItemDisplayCatalog {
 
 /// Load `ItemDisplayInfo.dbc` off the patch chain into an [`ItemDisplayCatalog`].
 pub fn load_item_display_catalog(chain: &mut Chain) -> Result<ItemDisplayCatalog> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(ITEM_DISPLAY_INFO)
         .with_context(|| format!("reading {ITEM_DISPLAY_INFO}"))?;
-    let rs = parse(&bytes, item_display_info_schema(), "ItemDisplayInfo")?;
-    Ok(catalog_from_records(rs))
+    let rs = parse(
+        &bytes,
+        item_display_info_schema(&profile),
+        "ItemDisplayInfo",
+    )?;
+    Ok(catalog_from_records(rs, &profile))
 }
 
 #[cfg(test)]
@@ -292,8 +307,13 @@ mod tests {
         assert_eq!(rec.len(), RECORD_SIZE as usize);
 
         let bytes = build_wdbc(1, FIELD_COUNT, RECORD_SIZE, &rec, &strings.0);
-        let rs = parse(&bytes, item_display_info_schema(), "test").expect("synthetic DBC parses");
-        let catalog = catalog_from_records(rs);
+        let rs = parse(
+            &bytes,
+            item_display_info_schema(&DataProfile::Vanilla),
+            "test",
+        )
+        .expect("synthetic DBC parses");
+        let catalog = catalog_from_records(rs, &DataProfile::Vanilla);
 
         assert_eq!(catalog.len(), 1);
         let display = catalog.get(18730).expect("displayId 18730 present");
@@ -329,8 +349,13 @@ mod tests {
     fn unknown_display_id_misses() {
         let rec = vec![0u8; RECORD_SIZE as usize]; // ID 0, everything else empty or zero
         let bytes = build_wdbc(1, FIELD_COUNT, RECORD_SIZE, &rec, &StringBlock::new().0);
-        let rs = parse(&bytes, item_display_info_schema(), "test").expect("synthetic DBC parses");
-        let catalog = catalog_from_records(rs);
+        let rs = parse(
+            &bytes,
+            item_display_info_schema(&DataProfile::Vanilla),
+            "test",
+        )
+        .expect("synthetic DBC parses");
+        let catalog = catalog_from_records(rs, &DataProfile::Vanilla);
         assert_eq!(catalog.len(), 1);
         assert!(catalog.get(999).is_none());
     }

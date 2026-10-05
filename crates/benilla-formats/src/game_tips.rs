@@ -9,6 +9,7 @@ use benilla_dbc::{FieldType, Schema, SchemaField};
 
 use crate::chain::Chain;
 use crate::dbc::{parse, str_at};
+use crate::DataProfile;
 
 const GAME_TIPS: &str = "DBFilesClient\\GameTips.dbc";
 
@@ -38,10 +39,37 @@ impl GameTipsCatalog {
     }
 }
 
-fn schema() -> Schema {
+// GameTipsRec is ID + langstringref. Build 12340 has 16 locale offsets and
+// a mask (18 fields total), not Vanilla's 8 offsets + mask (10 fields).
+// References: https://wowdev.wiki/DB/GameTips and https://wowdev.wiki/Localization.
+fn text_layout(profile: &DataProfile) -> (usize, usize) {
+    match profile {
+        DataProfile::Vanilla => (8, 0),
+        DataProfile::Wrath { locale } => {
+            let slot = match locale.as_str() {
+                "koKR" => 1,
+                "frFR" => 2,
+                "deDE" => 3,
+                "zhCN" => 4,
+                "zhTW" => 5,
+                "esES" => 6,
+                "esMX" => 7,
+                "ruRU" => 8,
+                _ => 0, // enUS/enGB share the first locale slot.
+            };
+            (16, slot)
+        }
+    }
+}
+
+fn schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("GameTips");
     s.add_field(SchemaField::new("ID", FieldType::UInt32));
-    s.add_field(SchemaField::new_array("Text", FieldType::String, 8));
+    s.add_field(SchemaField::new_array(
+        "Text",
+        FieldType::String,
+        text_layout(profile).0,
+    ));
     s.add_field(SchemaField::new("TextMask", FieldType::UInt32));
     s.set_key_field("ID");
     s
@@ -49,11 +77,16 @@ fn schema() -> Schema {
 
 pub fn load_game_tips(chain: &mut Chain) -> Result<GameTipsCatalog> {
     let bytes = chain.read_file(GAME_TIPS).context("reading GameTips.dbc")?;
-    let rs = parse(&bytes, schema(), "GameTips")?;
+    parse_tips(&bytes, chain.profile())
+}
+
+fn parse_tips(bytes: &[u8], profile: &DataProfile) -> Result<GameTipsCatalog> {
+    let rs = parse(bytes, schema(profile), "GameTips")?;
+    let text_column = 1 + text_layout(profile).1;
     let mut tips = Vec::with_capacity(rs.records().len());
     for r in rs.records() {
         // A row with an empty text slot is dropped, not shown blank; the shipped file has none.
-        match str_at(&rs, r, 1) {
+        match str_at(&rs, r, text_column) {
             Some(text) if !text.trim().is_empty() => tips.push(text),
             _ => {}
         }
@@ -64,6 +97,58 @@ pub fn load_game_tips(chain: &mut Chain) -> Result<GameTipsCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture(rows: &[Vec<u32>], strings: &[u8]) -> Vec<u8> {
+        let fields = rows[0].len() as u32;
+        let mut bytes = b"WDBC".to_vec();
+        for word in [rows.len() as u32, fields, fields * 4, strings.len() as u32] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        for row in rows {
+            for word in row {
+                bytes.extend_from_slice(&word.to_le_bytes());
+            }
+        }
+        bytes.extend_from_slice(strings);
+        bytes
+    }
+
+    #[test]
+    fn vanilla_and_wrath_tip_layouts_preserve_file_order_and_locale() {
+        let strings = b"\0English\0Francais\0Second\0";
+        let mut first = vec![0; 18];
+        first[0] = 99;
+        first[1] = 1;
+        first[3] = 9;
+        let mut second = first.clone();
+        second[0] = 1;
+        second[3] = 18;
+        let bytes = fixture(&[first, second], strings);
+        let french = DataProfile::Wrath {
+            locale: "frFR".into(),
+        };
+        let cat = parse_tips(&bytes, &french).unwrap();
+        assert_eq!(cat.get(0), Some("Francais"));
+        assert_eq!(cat.get(1), Some("Second"));
+        assert!(parse_tips(&bytes, &DataProfile::Vanilla).is_err());
+        let spanish = DataProfile::Wrath {
+            locale: "esES".into(),
+        };
+        assert!(
+            parse_tips(&bytes, &spanish).unwrap().is_empty(),
+            "no fabricated English fallback for empty locale"
+        );
+
+        let mut vanilla = vec![0; 10];
+        vanilla[0] = 5;
+        vanilla[1] = 1;
+        let bytes = fixture(&[vanilla], strings);
+        assert_eq!(
+            parse_tips(&bytes, &DataProfile::Vanilla).unwrap().get(0),
+            Some("English")
+        );
+        assert!(parse_tips(&bytes, &french).is_err());
+    }
 
     #[test]
     fn the_real_table_is_seventy_four_tips_in_file_order() {

@@ -304,22 +304,31 @@ pub(crate) fn plan_walk(
 }
 
 /// Apply a plan in order; answers whether a slot name moved, the VM mirror's cue.
-fn apply_walk(steps: &[WalkStep], channels: &mut ChannelState, commands: &NetCommands) -> bool {
+fn apply_walk(
+    steps: &[WalkStep],
+    channels: &mut ChannelState,
+    commands: &NetCommands,
+    dialect: crate::net::SessionDialect,
+) -> bool {
     let mut names_moved = false;
     for step in steps {
         match step {
             WalkStep::Leave(name) => {
                 debug!("chat: leaving zone channel {name:?}");
-                let _ = commands
-                    .0
-                    .send(ClientCommand::LeaveChannel { name: name.clone() });
+                let command = ClientCommand::LeaveChannel { name: name.clone() };
+                if commands.supports(dialect, &command) {
+                    let _ = commands.0.send(command);
+                }
             }
             WalkStep::Join(name) => {
                 debug!("chat: joining zone channel {name:?}");
-                let _ = commands.0.send(ClientCommand::JoinChannel {
+                let command = ClientCommand::JoinChannel {
                     name: name.clone(),
                     password: String::new(),
-                });
+                };
+                if commands.supports(dialect, &command) {
+                    let _ = commands.0.send(command);
+                }
             }
             WalkStep::Rename { old, new } => {
                 if let Some(n) = channels.rename_slot(old, new) {
@@ -365,6 +374,7 @@ fn zone_is_settled(player: Option<&crate::player::Player>) -> bool {
 /// its ready flag (`0x49a219`) until the cache loader calls the walk (`0x499a22`).
 pub(super) fn auto_join_zone_channels(
     commands: Res<NetCommands>,
+    dialect: Res<crate::net::SessionDialect>,
     mut channels: ResMut<ChannelState>,
     areas: Option<Res<AreaTableRes>>,
     world: benilla_world::world_point::WorldPoint,
@@ -435,7 +445,7 @@ pub(super) fn auto_join_zone_channels(
     }
 
     let steps = plan_walk(&channels, &zone_name, in_city, city_word(&areas.0));
-    if apply_walk(&steps, &mut channels, &commands) {
+    if apply_walk(&steps, &mut channels, &commands, *dialect) {
         if let Some(script) = script.as_mut() {
             // `GetChannelName(n)` answers the new name from this frame on, as in the reference.
             script.set_joined_channels(channels.names());
@@ -875,6 +885,30 @@ mod tests {
         assert!(
             steps.contains(&W::Join(s("General - Westfall"))),
             "walked again from its slot: {steps:?}"
+        );
+    }
+
+    #[test]
+    fn wrath_walk_applies_local_channel_state_without_sending_unsupported_packets() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let net = NetCommands(tx);
+        let mut channels = state(SEED);
+        let steps = vec![
+            W::Register(s("General - Elwynn Forest")),
+            W::Join(s("General - Elwynn Forest")),
+            W::Leave(s("General - Durotar")),
+        ];
+
+        assert!(apply_walk(
+            &steps,
+            &mut channels,
+            &net,
+            crate::net::SessionDialect::Wrath12340,
+        ));
+        assert_eq!(channels.number_of("General - Elwynn Forest"), Some(1));
+        assert!(
+            rx.try_iter().next().is_none(),
+            "JoinChannel and LeaveChannel are fenced"
         );
     }
 

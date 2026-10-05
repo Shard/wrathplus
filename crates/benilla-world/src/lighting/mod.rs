@@ -138,6 +138,11 @@ pub(crate) fn quantize_glow(glow: f32) -> f32 {
 #[derive(Resource)]
 pub(crate) struct LightSampler(pub(crate) LightCatalog);
 
+/// Whether startup loaded authored lighting rather than retaining neutral defaults.
+pub(crate) fn catalog_loaded(world: &World) -> bool {
+    world.contains_resource::<LightSampler>()
+}
+
 /// Where the lighting's time of day comes from, for the debug panel.
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum ClockSource {

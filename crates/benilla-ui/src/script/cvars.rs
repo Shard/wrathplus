@@ -10,7 +10,15 @@
 use mlua::{Lua, Value};
 
 use super::binding_abi::lua_number_text;
-use super::{Model, ScriptValue};
+use super::{Model, ScriptDialect, ScriptValue};
+
+/// Host-backed settings the bounded Wrath addon surface may observe. Their values come from the
+/// running host; admitting a name does not claim build-12340's exact shipped default.
+const WRATH_READABLE_CVARS: [&str; 4] = ["uiscale", "gamma", "mouseinvertpitch", "mousespeed"];
+
+fn cvar_is_admitted(model: &Model, key: &str) -> bool {
+    model.dialect == ScriptDialect::Vanilla || WRATH_READABLE_CVARS.contains(&key)
+}
 
 /// One registered CVar.
 #[derive(Clone, Debug)]
@@ -138,13 +146,17 @@ impl super::UiScript {
         }
     }
 
-    /// Seed the mirror from the host's registry, creating or overwriting each row. The host's
-    /// table outlives the VM, so a re-seed re-asserts it and drops any staged value (the host
+    /// Seed the mirror from the host's registry, creating or overwriting each admitted row. Wrath
+    /// admits only its bounded read-only observation policy; Vanilla keeps the full registry. The
+    /// host's table outlives the VM, so a re-seed re-asserts it and drops any staged value (the host
     /// holds the pending copy). `&self` for [`Self::register_cvars`]'s reason.
     pub fn seed_cvars(&self, rows: impl IntoIterator<Item = SeededCvar>) {
         let mut model = self.model_mut();
         for row in rows {
             let key = row.name.to_ascii_lowercase();
+            if !cvar_is_admitted(&model, &key) {
+                continue;
+            }
             model.cvars.insert(
                 key,
                 CvarSlot {
@@ -158,12 +170,16 @@ impl super::UiScript {
         }
     }
 
-    /// Host-side write (a loaded value, a committed latch): sets the value and clears any staged
-    /// one without queueing a change, since an echo would re-dirty the file the host just read.
-    /// An unknown name warns once.
+    /// Host-side write (a loaded value, a committed latch): sets an admitted existing value and
+    /// clears any staged one without queueing a change, since an echo would re-dirty the file the
+    /// host just read. An unknown admitted Vanilla name warns once; disallowed Wrath names do not
+    /// enter or alter the mirror.
     pub fn set_cvar_host(&mut self, name: &str, value: &str) {
         let mut model = self.model_mut();
         let key = name.to_ascii_lowercase();
+        if !cvar_is_admitted(&model, &key) {
+            return;
+        }
         match model.cvars.get_mut(&key) {
             Some(slot) => {
                 slot.value = value.to_string();
@@ -419,7 +435,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetCVar",
         lua.create_function(|lua, name: String| {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            match model.cvars.get(&name.to_ascii_lowercase()) {
+            let key = name.to_ascii_lowercase();
+            if !cvar_is_admitted(&model, &key) {
+                return Ok(Value::Nil);
+            }
+            match model.cvars.get(&key) {
                 Some(slot) => Ok(Value::String(lua.create_string(&slot.value)?)),
                 None => {
                     warn_unknown(&mut model, &name);

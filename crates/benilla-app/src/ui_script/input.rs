@@ -28,6 +28,8 @@ pub(super) struct PointerFeed<'w> {
     synthetic: Res<'w, super::SyntheticPointer>,
     /// A capture owns the pointer ([`super::CapturePointerPinned`]): no OS cursor in the shot.
     capture_pinned: Res<'w, super::CapturePointerPinned>,
+    /// Native Wrath chrome owns a gesture that began over it, through the release frame.
+    native_owned: Option<Res<'w, super::wrath_native::NativePointerOwnership>>,
 }
 
 impl PointerFeed<'_> {
@@ -103,6 +105,7 @@ pub(super) fn feed_ui_input(
     // capture pins it: skip the mouse half whole, else-arm included, whose `pointer_left_window`
     // would disarm the probe's gesture between its press and release.
     let synthetic = pointer.synthetic.0 || pointer.capture_pinned.0;
+    let native_owned = pointer.native_owned.as_ref().is_some_and(|owned| owned.0);
     let (hover, click_consumed, payload_held) = (
         &mut pointer.hover,
         &mut pointer.click_consumed,
@@ -134,7 +137,14 @@ pub(super) fn feed_ui_input(
     // ── Mouse ── A cursor off the window skips only the mouse feed.
     // The headless hover probe's aim stands in for a missing cursor, so `PointerOverUi` rises and
     // falls over a panel in an automated run as it does for a person; a real pointer always wins.
-    if let Some(cursor) = window
+    if native_owned {
+        // Native chrome won this gesture. Cancel any Lua press begun before ownership changed and
+        // keep suppressing only the pointer half; keyboard delivery below remains live.
+        if hover.0.take().is_some() {
+            script.mouse_move(f32::MIN, f32::MIN);
+        }
+        script.pointer_left_window();
+    } else if let Some(cursor) = window
         .cursor_position()
         .or_else(crate::target::hover_probe_point)
         .filter(|_| !synthetic)

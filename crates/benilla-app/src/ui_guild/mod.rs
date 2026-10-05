@@ -12,7 +12,7 @@ use benilla_protocol::ObjectFields;
 use benilla_ui::script::{LastOnline, UnitGuild};
 use bevy::prelude::*;
 
-use crate::net::{ClientCommand, NetCommands};
+use crate::net::{ClientCommand, NetCommands, SessionDialect};
 use crate::query_cache::QueryCache;
 use crate::ui_script::{UiFeed, UiInput};
 
@@ -86,6 +86,8 @@ pub(crate) struct GuildMemberNotify(pub(crate) bool);
 /// The guild session mirror: filled by the packet handlers, read by the feed, reset on disconnect.
 #[derive(Resource, Default)]
 pub(crate) struct GuildState {
+    /// Selected wire dialect; `None` is the vanilla default used by isolated tests.
+    dialect: Option<SessionDialect>,
     /// Our `PLAYER_GUILDID` (field 191), `0` when guildless; `IsInGuild` reads it, not the roster.
     guild_id: u32,
     /// Our `PLAYER_GUILDRANK` (field 192), 0-based, `0` = guild master.
@@ -180,10 +182,19 @@ impl GuildState {
     /// Send `CMSG_GUILD_QUERY` for a guild we hold nothing for, a negative counting as held.
     fn request_identity(&self, guild_id: u32, commands: &NetCommands) {
         if guild_id != 0 {
+            let command = ClientCommand::GuildQuery { guild_id };
+            let dialect = self.dialect.unwrap_or(SessionDialect::Vanilla5875);
+            if !commands.supports(dialect, &command) {
+                return;
+            }
             self.identities.get_or_ask(guild_id, || {
-                let _ = commands.0.send(ClientCommand::GuildQuery { guild_id });
+                let _ = commands.0.send(command);
             });
         }
+    }
+
+    fn set_dialect(&mut self, dialect: SessionDialect) {
+        self.dialect = Some(dialect);
     }
 
     /// A guild's identity if we hold a real one; `None` while in flight and for no such guild.
@@ -569,7 +580,9 @@ pub(crate) mod net {
     /// cache goes too, where the reference keeps it in `guildcache.wdb`, because a renamed guild
     /// would otherwise show its old name.
     fn on_session_end(In(_): In<SessionEvent>, mut guild: ResMut<GuildState>) {
+        let dialect = guild.dialect;
         *guild = GuildState::default();
+        guild.dialect = dialect;
     }
 
     /// Queue the message ids [`lines`] named.
@@ -681,6 +694,7 @@ impl Plugin for UiGuildPlugin {
         crate::query_cache::register::<GuildState>(app);
         app.init_resource::<GuildState>()
             .init_resource::<GuildMemberNotify>()
+            .add_systems(PreStartup, configure_dialect)
             .add_systems(
                 Update,
                 (
@@ -691,6 +705,17 @@ impl Plugin for UiGuildPlugin {
                     // an edge spent on a VM with no frames, such as the login MOTD, is lost.
                     .run_if(crate::ui_script::ingame_ui_up),
             );
+    }
+}
+
+fn configure_dialect(dialect: Option<Res<SessionDialect>>, guild: Option<ResMut<GuildState>>) {
+    if let Some(mut guild) = guild {
+        guild.set_dialect(
+            dialect
+                .as_deref()
+                .copied()
+                .unwrap_or(SessionDialect::Vanilla5875),
+        );
     }
 }
 
@@ -852,6 +877,23 @@ mod tests {
                 days: 5,
                 hours: 12,
             }
+        );
+    }
+
+    #[test]
+    fn wrath_identity_misses_do_not_send_or_poison_the_ask_once_cache() {
+        let (commands, rx) = net_commands();
+        let mut guild = GuildState::default();
+        guild.set_dialect(SessionDialect::Wrath12340);
+
+        assert!(guild.resolve_identity(7, &commands).is_none());
+        assert!(
+            rx.try_iter().next().is_none(),
+            "GuildQuery is unsupported in Wrath"
+        );
+        assert!(
+            !guild.identities.is_pending(7),
+            "support is checked before get_or_ask"
         );
     }
 

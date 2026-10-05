@@ -21,4 +21,4 @@ pub use sections::{
 
 // The loaders' own schemas, for the `benilla-extract dbc` CSV dump (`crate::schema_for`).
 pub(crate) use geosets::{char_facial_hair_schema, char_hair_geosets_schema, helmet_vis_schema};
-pub(crate) use sections::char_sections_schema;
+pub(crate) use sections::{char_section_columns, char_sections_schema};

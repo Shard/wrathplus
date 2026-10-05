@@ -5,6 +5,23 @@
 
 use super::*;
 
+#[derive(Default)]
+pub(super) struct WrathGroundGate {
+    warned: u8,
+}
+
+impl WrathGroundGate {
+    fn report(&mut self, limit: movement_net::WrathGroundLimit) {
+        if self.warned & limit.bit() == 0 {
+            self.warned |= limit.bit();
+            warn!(
+                "Wrath ground-only controller: {} is not implemented; holding the last honest pose and suppressing movement input",
+                limit.description()
+            );
+        }
+    }
+}
+
 /// Free-flies until the server places us, then drives the avatar and streams its movement as the
 /// mover; the dev chord with `F` toggles free fly.
 #[allow(clippy::type_complexity)]
@@ -64,6 +81,7 @@ pub(super) fn control(
         Res<scoped_view::ScopedView>,
         // The loading cover blanks input at the source; a gesture in flight is unwound below.
         Res<crate::loading_screen::LoadingScreen>,
+        Res<crate::net::SessionDialect>,
     ),
     mut commands: Commands,
     mut player: ResMut<Player>,
@@ -78,6 +96,7 @@ pub(super) fn control(
     mut click_test: (
         Local<Option<camera::PressGesture>>,
         Local<Option<camera::PressGesture>>,
+        Local<WrathGroundGate>,
     ),
     // The liquid query, the transports, and the parent chain from a deck collider to its transport.
     world_q: (
@@ -87,7 +106,8 @@ pub(super) fn control(
     ),
 ) {
     let (world, transports, child_of) = (&world_q.0, &world_q.1, &world_q.2);
-    let (left_click, right_click) = (&mut *click_test.0, &mut *click_test.1);
+    let (left_click, right_click, wrath_ground_gate) =
+        (&mut *click_test.0, &mut *click_test.1, &mut *click_test.2);
     let Ok((mut cam_t, mut cam)) = cameras.single_mut() else {
         return;
     };
@@ -107,6 +127,7 @@ pub(super) fn control(
     let self_guid = speed_capsule.7 .0;
     let scoped = &speed_capsule.8;
     let covered = speed_capsule.9.covering();
+    let dialect = *speed_capsule.10;
     // Far sight turns the auto-follow off: our facing is not "behind" for a body we only watch.
     let follow_cfg = camera::FollowConfig {
         style: if view_subject.remote.is_some() {
@@ -299,8 +320,15 @@ pub(super) fn control(
 
     let flat = |v: Vec3| Vec3::new(v.x, 0.0, v.z).normalize_or_zero();
 
-    // On a transport, recompose the rider from the deck's pose this frame, before input integrates.
-    ride::carry(&mut player, &mut cam, transports);
+    // Wrath currently has an explicit ground-only contract. Refuse unsupported physical modes
+    // before input or integration so local motion can never outrun a silently dropped packet.
+    let wrath_surface = (dialect == crate::net::SessionDialect::Wrath12340)
+        .then(|| swim::surface_over_feet(world, player.pos))
+        .flatten();
+    if dialect == crate::net::SessionDialect::Wrath12340 {
+        player.liquid_surface = wrath_surface;
+    }
+    let wrath_limit = movement_net::wrath_ground_limit(dialect, &player, wrath_surface);
 
     if player.active && !player.detached {
         // Not driving, while the camera stays on the body and input, physics and the stream yield:
@@ -311,7 +339,14 @@ pub(super) fn control(
         // - `reseat`: the mover guid is changing and the claimed unit has not streamed in; moves
         //   carry no guid, so driving would write one body's pose onto another.
         // Possession is none of these: it runs the ordinary path below, on the creature.
-        if player.server_riding || player.control_lost || player.reseat {
+        if player.server_riding || player.control_lost || player.reseat || wrath_limit.is_some() {
+            if let Some(limit) = wrath_limit {
+                wrath_ground_gate.report(limit);
+                player.autorun = false;
+                player.auto_forward = false;
+                player.horiz_vel = Vec3::ZERO;
+                player.vel_y = 0.0;
+            }
             // The moving body's transform is the truth; without this the camera stays behind
             // during a fear. Not while reseating, when `Player` still holds the body let go.
             if player.control_lost && !player.reseat {
@@ -353,12 +388,16 @@ pub(super) fn control(
             );
             // Flush a stale run once, but never under a ride, whose FORWARD is deliberate.
             if !player.server_riding {
-                movement_net::park_mover(&net.0 .0, &mut player);
+                movement_net::park_mover_for_dialect(&net.0 .0, &mut player, dialect);
             }
-            // After the park, so a fear's ack carries the stopped word.
-            movement_net::ack_speeds_undriven(&net.0 .0, &player, &speed_acks);
+            // Wrath cannot encode these acks until its full movement dialect is integrated.
+            if dialect == crate::net::SessionDialect::Vanilla5875 {
+                movement_net::ack_speeds_undriven(&net.0 .0, &player, &speed_acks);
+            }
             return;
         }
+        // Wrath returns above before a transport pose can be recomposed locally.
+        ride::carry(&mut player, &mut cam, transports);
         // `0x514560`, after `apply_server_moves`, so this frame's root edge is already in `modes`.
         let may_translate = mover.may_translate(player.modes.rooted);
         let axes = input::move_axes(
@@ -456,6 +495,7 @@ pub(super) fn control(
             &body,
             binds,
             &net.0,
+            dialect,
             &mut net.3,
             &mut net.10,
             &mut net.15,
@@ -496,7 +536,11 @@ pub(super) fn control(
         let mut want_jump = binds.fired(crate::bindings::Input::Jump) && may_translate;
 
         // Swim or walk, latched with hysteresis at the `0x6030c0` boundary against flicker.
-        let surface_y = swim::surface_over_feet(world, player.pos);
+        let surface_y = if dialect == crate::net::SessionDialect::Wrath12340 {
+            wrath_surface
+        } else {
+            swim::surface_over_feet(world, player.pos)
+        };
         // For the camera's water corridor, which reads it a frame late, as `0x670630` does.
         player.liquid_surface = surface_y;
         let swimming = swim::update_swimming(&mut player, surface_y, time.elapsed_secs());
@@ -770,7 +814,7 @@ pub(super) fn control(
             held: player.settling,
             mover: player.foreign_mover.or(self_guid),
         };
-        movement_net::stream_self_movement(
+        movement_net::stream_self_movement_for_dialect(
             &net.0 .0,
             &mut player,
             move_flags_now,
@@ -790,11 +834,12 @@ pub(super) fn control(
             knockback.filter(|_| knocked),
             wire_transport,
             skip,
+            dialect,
         );
     } else {
         // Free fly. Park the mover first, so a detach mid-move leaves no stale flags for observers
         // to extrapolate; a no-op once stopped.
-        movement_net::park_mover(&net.0 .0, &mut player);
+        movement_net::park_mover_for_dialect(&net.0 .0, &mut player, dialect);
         camera::fly_free(dt, &keys, typing, &mut rig, &mut cam, &mut cam_t);
     }
 }

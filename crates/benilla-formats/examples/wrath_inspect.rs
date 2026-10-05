@@ -74,5 +74,65 @@ fn main() -> anyhow::Result<()> {
             Err(error) => println!("{kind}: archive={archive_name} error={error:#}"),
         }
     }
+    let model = chain.read("Character\\Human\\Male\\HumanMale.m2")?;
+    let skin = chain.read("Character\\Human\\Male\\HumanMale00.skin")?;
+    let rendered = benilla_formats::parse_wrath_render_model(&model, &skin, "", &[])?;
+    println!(
+        "Wrath render adapter: batches={} bones={} animations={} cameras={}",
+        rendered.submeshes.len(),
+        rendered.skeleton.bones.len(),
+        rendered.animations.len(),
+        rendered.cameras.len()
+    );
+    let wdt = chain.read("World\\Maps\\Azeroth\\Azeroth.wdt")?;
+    let mut remaining = wdt.as_slice();
+    let mut flags = None;
+    while !remaining.is_empty() {
+        anyhow::ensure!(remaining.len() >= 8, "truncated WDT header");
+        let size = u32::from_le_bytes(remaining[4..8].try_into()?) as usize;
+        anyhow::ensure!(size <= remaining.len() - 8, "truncated WDT payload");
+        if &remaining[..4] == b"DHPM" {
+            anyhow::ensure!(size >= 4, "short MPHD flags");
+            flags = Some(u32::from_le_bytes(remaining[8..12].try_into()?));
+        }
+        remaining = &remaining[8 + size..];
+    }
+    let flags = flags.context("missing MPHD")?;
+    let parsed = benilla_formats::WdtReader::new(
+        std::io::Cursor::new(wdt),
+        benilla_formats::WowVersion::Classic,
+    )
+    .read()?;
+    let (x, y) = benilla_formats::world_to_tile(-8949.95, -132.49);
+    anyhow::ensure!(
+        parsed
+            .get_tile(x as usize, y as usize)
+            .is_some_and(|tile| tile.has_adt),
+        "Northshire tile missing"
+    );
+    let tile = chain.read(&format!("World\\Maps\\Azeroth\\Azeroth_{x}_{y}.adt"))?;
+    let mesh = benilla_formats::adt_to_tile_mesh_with_options(
+        &tile,
+        benilla_formats::TerrainDecodeOptions {
+            big_alpha: flags & (0x4 | 0x80) != 0,
+            fix_alpha: true,
+            honor_do_not_fix_alpha: true,
+        },
+    )?;
+    println!(
+        "Northshire terrain: tile={x},{y} chunks={} MH2O={}",
+        mesh.chunks.len(),
+        mesh.mh2o.is_some()
+    );
+    let mut chain = chain;
+    let maps = benilla_formats::load_map_catalog(&mut chain)?;
+    println!(
+        "Wrath Map: map0 directory={:?} name={:?}",
+        maps.directory(0),
+        maps.name(0)
+    );
+    let _areas = benilla_formats::load_area_table_catalog(&mut chain)?;
+    let _lights = benilla_formats::LightCatalog::load(&mut chain)?;
+    println!("Wrath Area/Light catalogs parsed");
     Ok(())
 }

@@ -6,10 +6,11 @@
 //! shares one material.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use benilla_formats::{
-    adt_to_tile_mesh, blp_bytes_to_native_chain, ChunkMesh, Doodad, WmoInstance, ALPHA_MAP_SIZE,
-    SHADOW_MAP_SIZE,
+    adt_to_tile_mesh, adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad,
+    Mh2oChunk, TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
 };
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext, RenderAssetUsages};
@@ -40,6 +41,9 @@ pub struct AdtTile {
     /// The decoded MCNK chunks, kept resident: the app derives the collider, the MCLQ liquids and
     /// the ground clutter from them.
     pub chunks: Vec<ChunkMesh>,
+    /// Parsed Wrath MH2O layers. They are retained for renderer integration but are not yet
+    /// rendered; unlike legacy MCLQ, their liquid type still needs `LiquidType.dbc` resolution.
+    pub mh2o: Option<Mh2oChunk>,
 }
 
 /// One drawn chunk's array indices, uniform over its vertices.
@@ -144,104 +148,203 @@ impl AssetLoader for AdtLoader {
         reader.read_to_end(&mut bytes).await?;
         let to_io = |e: anyhow::Error| std::io::Error::other(format!("{e:#}"));
         let tile = adt_to_tile_mesh(&bytes).map_err(to_io)?;
-
-        // Layer array: a solid-green fallback at index 0, then each unique layer texture, packed
-        // once the whole tile is read.
-        let mut layers: Vec<RawLayer> = Vec::new();
-        let mut layer_index: HashMap<String, u32> = HashMap::new();
-
-        let mut alpha_buf: Vec<u8> = Vec::new();
-        let mut alpha_count = 0u32;
-        let mut shadow_buf: Vec<u8> = Vec::new();
-        let mut shadow_count = 0u32;
-
-        let mut shading: Vec<ChunkShading> = Vec::with_capacity(tile.chunks.len());
-
-        for chunk in tile.chunks.iter() {
-            // A hole-emptied chunk takes no alpha or shadow slot either.
-            if chunk.indices.len() < 3 {
-                shading.push(ChunkShading::default());
-                continue;
-            }
-            let mut li = [0u32; 4];
-            for (slot, name) in chunk.layer_textures.iter().take(4).enumerate() {
-                let key = normalize_path(name);
-                li[slot] = if let Some(&i) = layer_index.get(&key) {
-                    i
-                } else if let Some(layer) = read_layer(ctx, &key).await {
-                    // +1: index 0 is the fallback layer, which is not in `layers`.
-                    let index = layers.len() as u32 + 1;
-                    layers.push(layer);
-                    layer_index.insert(key, index);
-                    index
-                } else {
-                    0
-                };
-            }
-            for slot in chunk.layer_textures.len().min(4)..4 {
-                li[slot] = li[0];
-            }
-
-            let ai = match &chunk.alpha_map {
-                Some(rgba) => {
-                    alpha_buf.extend_from_slice(rgba);
-                    alpha_count += 1;
-                    alpha_count - 1
-                }
-                None => 0,
-            };
-            let si: f32 = match &chunk.shadow {
-                Some(map) => {
-                    shadow_buf.extend_from_slice(map);
-                    shadow_count += 1;
-                    (shadow_count - 1) as f32
-                }
-                None => -1.0,
-            };
-            shading.push(ChunkShading {
-                layers: li,
-                alpha: ai,
-                shadow: si,
-            });
-        }
-
-        // A `texture_2d_array` needs ≥1 layer even when a tile carries no alpha / shadow maps.
-        if alpha_count == 0 {
-            alpha_buf = vec![0u8; (ALPHA_MAP_SIZE * ALPHA_MAP_SIZE * 4) as usize];
-            alpha_count = 1;
-        }
-        if shadow_count == 0 {
-            shadow_buf = vec![0u8; (SHADOW_MAP_SIZE * SHADOW_MAP_SIZE) as usize];
-            shadow_count = 1;
-        }
-
-        let layer_count = layers.len() as u32 + 1;
-        let packed = pack_layers([107, 133, 82, 0], layers);
-        // Per tile, so a log shows which tiles fell back to the decoded format.
-        debug!(
-            "adt {}: layer array {layer_count} x {:?}, {} KiB",
-            ctx.path(),
-            packed.format,
-            packed.data.len() >> 10
-        );
-        let layer_array = layer_array_image(LAYER_TEX_SIZE, layer_count, packed);
-        let alpha_array = alpha_array_image(ALPHA_MAP_SIZE, alpha_count, alpha_buf);
-        let shadow_array = shadow_array_image(SHADOW_MAP_SIZE, shadow_count, shadow_buf);
-
-        Ok(AdtTile {
-            shading,
-            layer_array: ctx.add_labeled_asset("layer_array".to_string(), layer_array),
-            alpha_array: ctx.add_labeled_asset("alpha_array".to_string(), alpha_array),
-            shadow_array: ctx.add_labeled_asset("shadow_array".to_string(), shadow_array),
-            doodads: tile.doodads,
-            wmos: tile.wmos,
-            chunks: tile.chunks,
-        })
+        finish_tile(tile, ctx).await
     }
 
     fn extensions(&self) -> &[&str] {
         &["adt"]
     }
+}
+
+/// Wrath ADT loader. Its MCAL dialect comes only from the matching WDT's `MPHD` flags.
+#[derive(Default, TypePath)]
+pub struct WrathAdtLoader;
+
+impl AssetLoader for WrathAdtLoader {
+    type Asset = AdtTile;
+    type Settings = ();
+    type Error = std::io::Error;
+
+    async fn load(
+        &self,
+        reader: &mut dyn Reader,
+        _settings: &(),
+        ctx: &mut LoadContext<'_>,
+    ) -> Result<AdtTile, Self::Error> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+        let wdt_name = matching_wdt_filename(ctx.path().path())?;
+        let wdt_path = ctx
+            .path()
+            .parent()
+            .expect("validated ADT path has a parent")
+            .resolve(&wdt_name)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+        let wdt = ctx
+            .read_asset_bytes(wdt_path)
+            .await
+            .map_err(|error| std::io::Error::other(format!("reading matching WDT: {error}")))?;
+        let flags = crate::wdt::mphd_flags(&wdt)?;
+        let options = TerrainDecodeOptions {
+            big_alpha: flags & (0x4 | 0x80) != 0,
+            fix_alpha: true,
+            honor_do_not_fix_alpha: true,
+        };
+        let tile = adt_to_tile_mesh_with_options(&bytes, options)
+            .map_err(|error| std::io::Error::other(format!("{error:#}")))?;
+        finish_tile(tile, ctx).await
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["adt"]
+    }
+}
+
+/// Derive `{map}.wdt` only from `world/maps/{map}/{map}_x_y.adt` paths.
+fn matching_wdt_filename(path: &Path) -> std::io::Result<String> {
+    let invalid = || {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Wrath ADT path must be world/maps/{{map}}/{{map}}_x_y.adt: {}",
+                path.display()
+            ),
+        )
+    };
+    let file = path
+        .file_name()
+        .and_then(|part| part.to_str())
+        .ok_or_else(invalid)?;
+    let parent = path.parent().ok_or_else(invalid)?;
+    let map = parent
+        .file_name()
+        .and_then(|part| part.to_str())
+        .ok_or_else(invalid)?;
+    let maps = parent
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|part| part.to_str())
+        .ok_or_else(invalid)?;
+    let world = parent
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .and_then(|part| part.to_str())
+        .ok_or_else(invalid)?;
+    if !world.eq_ignore_ascii_case("world") || !maps.eq_ignore_ascii_case("maps") {
+        return Err(invalid());
+    }
+    let stem = file
+        .strip_suffix(".adt")
+        .or_else(|| file.strip_suffix(".ADT"))
+        .ok_or_else(invalid)?;
+    let (prefix_and_x, y) = stem.rsplit_once('_').ok_or_else(invalid)?;
+    let (prefix, x) = prefix_and_x.rsplit_once('_').ok_or_else(invalid)?;
+    if !prefix.eq_ignore_ascii_case(map)
+        || x.is_empty()
+        || y.is_empty()
+        || !x.bytes().all(|byte| byte.is_ascii_digit())
+        || !y.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(invalid());
+    }
+    Ok(format!("{map}.wdt"))
+}
+
+async fn finish_tile(tile: TileMesh, ctx: &mut LoadContext<'_>) -> Result<AdtTile, std::io::Error> {
+    // Layer array: a solid-green fallback at index 0, then each unique layer texture, packed
+    // once the whole tile is read.
+    let mut layers: Vec<RawLayer> = Vec::new();
+    let mut layer_index: HashMap<String, u32> = HashMap::new();
+
+    let mut alpha_buf: Vec<u8> = Vec::new();
+    let mut alpha_count = 0u32;
+    let mut shadow_buf: Vec<u8> = Vec::new();
+    let mut shadow_count = 0u32;
+
+    let mut shading: Vec<ChunkShading> = Vec::with_capacity(tile.chunks.len());
+
+    for chunk in tile.chunks.iter() {
+        // A hole-emptied chunk takes no alpha or shadow slot either.
+        if chunk.indices.len() < 3 {
+            shading.push(ChunkShading::default());
+            continue;
+        }
+        let mut li = [0u32; 4];
+        for (slot, name) in chunk.layer_textures.iter().take(4).enumerate() {
+            let key = normalize_path(name);
+            li[slot] = if let Some(&i) = layer_index.get(&key) {
+                i
+            } else if let Some(layer) = read_layer(ctx, &key).await {
+                // +1: index 0 is the fallback layer, which is not in `layers`.
+                let index = layers.len() as u32 + 1;
+                layers.push(layer);
+                layer_index.insert(key, index);
+                index
+            } else {
+                0
+            };
+        }
+        for slot in chunk.layer_textures.len().min(4)..4 {
+            li[slot] = li[0];
+        }
+
+        let ai = match &chunk.alpha_map {
+            Some(rgba) => {
+                alpha_buf.extend_from_slice(rgba);
+                alpha_count += 1;
+                alpha_count - 1
+            }
+            None => 0,
+        };
+        let si: f32 = match &chunk.shadow {
+            Some(map) => {
+                shadow_buf.extend_from_slice(map);
+                shadow_count += 1;
+                (shadow_count - 1) as f32
+            }
+            None => -1.0,
+        };
+        shading.push(ChunkShading {
+            layers: li,
+            alpha: ai,
+            shadow: si,
+        });
+    }
+
+    // A `texture_2d_array` needs ≥1 layer even when a tile carries no alpha / shadow maps.
+    if alpha_count == 0 {
+        alpha_buf = vec![0u8; (ALPHA_MAP_SIZE * ALPHA_MAP_SIZE * 4) as usize];
+        alpha_count = 1;
+    }
+    if shadow_count == 0 {
+        shadow_buf = vec![0u8; (SHADOW_MAP_SIZE * SHADOW_MAP_SIZE) as usize];
+        shadow_count = 1;
+    }
+
+    let layer_count = layers.len() as u32 + 1;
+    let packed = pack_layers([107, 133, 82, 0], layers);
+    // Per tile, so a log shows which tiles fell back to the decoded format.
+    debug!(
+        "adt {}: layer array {layer_count} x {:?}, {} KiB",
+        ctx.path(),
+        packed.format,
+        packed.data.len() >> 10
+    );
+    let layer_array = layer_array_image(LAYER_TEX_SIZE, layer_count, packed);
+    let alpha_array = alpha_array_image(ALPHA_MAP_SIZE, alpha_count, alpha_buf);
+    let shadow_array = shadow_array_image(SHADOW_MAP_SIZE, shadow_count, shadow_buf);
+
+    Ok(AdtTile {
+        shading,
+        layer_array: ctx.add_labeled_asset("layer_array".to_string(), layer_array),
+        alpha_array: ctx.add_labeled_asset("alpha_array".to_string(), alpha_array),
+        shadow_array: ctx.add_labeled_asset("shadow_array".to_string(), shadow_array),
+        doodads: tile.doodads,
+        wmos: tile.wmos,
+        chunks: tile.chunks,
+        mh2o: tile.mh2o,
+    })
 }
 
 /// Read a layer texture with its blocks intact, preferring the `_s` specular variant (sheen mask in
@@ -290,4 +393,32 @@ fn computed_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
     acc.into_iter()
         .map(|n| n.normalize_or_zero().to_array())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derives_matching_wdt_from_tile_filename() {
+        assert_eq!(
+            matching_wdt_filename(Path::new("World/Maps/Northrend/Northrend_31_22.adt")).unwrap(),
+            "Northrend.wdt"
+        );
+        assert_eq!(
+            matching_wdt_filename(Path::new("world/maps/azeroth/AZEROTH_0_63.ADT")).unwrap(),
+            "azeroth.wdt"
+        );
+        for invalid in [
+            "World/Maps/Northrend/Other_31_22.adt",
+            "World/Northrend/Northrend_31_22.adt",
+            "World/Maps/Northrend/Northrend_x_22.adt",
+            "Northrend_31_22.adt",
+        ] {
+            assert!(
+                matching_wdt_filename(Path::new(invalid)).is_err(),
+                "{invalid}"
+            );
+        }
+    }
 }

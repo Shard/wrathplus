@@ -1,6 +1,7 @@
 //! The Lua scripting host: the engine-free VM that runs FrameXML and addons over the frame arena,
-//! the anchor resolver and the draw order. It embeds mlua's Lua 5.1, reshaped by [`lua50`] to
-//! answer as the 1.12 client's Lua 5.0.
+//! the anchor resolver and the draw order. It embeds mlua's Lua 5.1. [`ScriptDialect::Vanilla`]
+//! reshapes it through [`lua50`] to answer as the 1.12 client's Lua 5.0, while
+//! [`ScriptDialect::Wrath12340`] keeps native Lua 5.1 library semantics.
 //!
 //! A frame's Lua value is a table whose `T[0]` lightuserdata (`0x701bd0`) holds a `u32` id where
 //! the reference holds the `CScriptObject*`, with an `__index` metatable (`0x7020b0`). A handler
@@ -142,6 +143,7 @@ mod who_sort;
 mod worldmap;
 mod worldstate;
 mod worn_display;
+mod wrath_surface;
 mod zone_text;
 
 pub use action::{ActionSlot, ActionState, ActionUse};
@@ -275,6 +277,7 @@ pub use worldmap::{
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
+pub use wrath_surface::allowed_engine_functions as wrath_allowed_engine_functions;
 pub use zone_text::ZoneTexts;
 
 use mlua::Lua;
@@ -465,9 +468,73 @@ const SCRIPT_KINDS: [&str; 39] = [
 /// sit beside their concerns: [`extract`], [`tick`], [`editbox::seam`], [`layout`] and [`pointer`].
 pub struct UiScript {
     lua: Lua,
+    dialect: ScriptDialect,
     /// VM instructions counted while a budget is installed ([`UiScript::set_instruction_budget`]).
-    instructions: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    instruction_budget: std::sync::Arc<InstructionBudget>,
     session: u64,
+}
+
+/// Shared by the main state, every coroutine hook and the protected-call guards. `exhausted` is
+/// deliberately sticky: once a hook trips, Lua cannot continue by catching that one hook error.
+struct InstructionBudget {
+    used: std::sync::atomic::AtomicU64,
+    limit: std::sync::atomic::AtomicU64,
+    armed: std::sync::atomic::AtomicBool,
+    exhausted: std::sync::atomic::AtomicBool,
+}
+
+impl InstructionBudget {
+    fn new() -> Self {
+        Self {
+            used: std::sync::atomic::AtomicU64::new(0),
+            limit: std::sync::atomic::AtomicU64::new(0),
+            armed: std::sync::atomic::AtomicBool::new(false),
+            exhausted: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    fn charge(&self) -> mlua::Result<mlua::VmState> {
+        use std::sync::atomic::Ordering::Relaxed;
+
+        if !self.armed.load(Relaxed) {
+            return Ok(mlua::VmState::Continue);
+        }
+        if self.exhausted.load(Relaxed) {
+            return Err(instruction_budget_error(self.used.load(Relaxed)));
+        }
+        let previous = self
+            .used
+            .fetch_update(Relaxed, Relaxed, |n| {
+                Some(n.saturating_add(u64::from(WRATH_INSTRUCTION_HOOK_STEP)))
+            })
+            .unwrap_or_else(|n| n);
+        let used = previous.saturating_add(u64::from(WRATH_INSTRUCTION_HOOK_STEP));
+        if used > self.limit.load(Relaxed) {
+            self.exhausted.store(true, Relaxed);
+            return Err(instruction_budget_error(used));
+        }
+        Ok(mlua::VmState::Continue)
+    }
+}
+
+fn instruction_budget_error(used: u64) -> mlua::Error {
+    mlua::Error::runtime(format!(
+        "benilla: instruction budget exhausted after {used} VM instructions — treating this as a non-terminating loop"
+    ))
+}
+
+/// The client script language and handler ABI hosted by [`UiScript`].
+///
+/// This does not claim every global API for that client build is implemented. In particular, the
+/// Wrath dialect supplies Lua 5.1 and Wrath's handler/addon argument conventions while the engine
+/// API remains the explicitly incomplete surface implemented by this crate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ScriptDialect {
+    /// WoW 1.12.1/build 5875: Lua 5.0 compatibility and legacy handler globals.
+    #[default]
+    Vanilla,
+    /// WoW 3.3.5a/build 12340: native Lua 5.1 and positional handler/addon arguments.
+    Wrath12340,
 }
 
 /// Hands out [`UiScript::session`] ids: process-global and monotone, so an id is never reused.
@@ -475,6 +542,14 @@ static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64
 
 /// How often the instruction hook fires: an instruction budget's resolution (low values cost).
 pub const INSTRUCTION_HOOK_STEP: u32 = 1_000_000;
+
+/// Wrath uses a global hook, shared by the main state and coroutines. Call hooks are also charged
+/// one quantum, preventing an addon from obtaining an uncounted quantum by repeatedly creating a
+/// fresh coroutine just before the count hook would fire.
+pub const WRATH_INSTRUCTION_HOOK_STEP: u32 = 10_000;
+
+/// Allocator ceiling for a Wrath Lua state, installed before any host API or bootstrap Lua.
+pub const WRATH_MEMORY_LIMIT: usize = 128 * 1024 * 1024;
 
 /// The chunk name the 1.12 client gives an addon's file, `Interface\AddOns\<Folder>\<File>`,
 /// backslashed and with the file, because addons parse it: `FuBarPlugin-2.0` finds its folder with
@@ -487,8 +562,35 @@ pub fn addon_chunk_name(folder: &str, file: &str) -> String {
 impl UiScript {
     /// Build a fully sandboxed, stdlib- and object-model-equipped host.
     pub fn new() -> mlua::Result<UiScript> {
+        Self::new_with_dialect(ScriptDialect::Vanilla)
+    }
+
+    /// Build a fully sandboxed host with an explicit client script dialect.
+    pub fn new_with_dialect(dialect: ScriptDialect) -> mlua::Result<UiScript> {
         let lua = Lua::new();
-        lua.set_app_data(Model::new());
+        // The vendored parser/VM's compatibility mode is per-state, like the API dialect.
+        // Set it before compiling any bootstrap or addon chunk; Vanilla stays the default.
+        lua.set_named_registry_value("benilla.wrath51", dialect == ScriptDialect::Wrath12340)?;
+        if dialect == ScriptDialect::Wrath12340 {
+            lua.set_memory_limit(WRATH_MEMORY_LIMIT)?;
+        }
+        let instruction_budget = std::sync::Arc::new(InstructionBudget::new());
+        if dialect == ScriptDialect::Wrath12340 {
+            let budget = instruction_budget.clone();
+            // Install this before Lua can create a coroutine. mlua's global hook is inherited by
+            // subsequently-created threads; keeping the dormant hook installed also means a
+            // coroutine created before a later arm cannot bypass that arm.
+            lua.set_global_hook(
+                mlua::HookTriggers {
+                    on_calls: true,
+                    every_nth_instruction: Some(WRATH_INSTRUCTION_HOOK_STEP),
+                    ..Default::default()
+                },
+                move |_, _| budget.charge(),
+            )?;
+            stdlib::install_wrath_budget_guards(&lua, instruction_budget.clone())?;
+        }
+        lua.set_app_data(Model::new(dialect));
         // Before anything can fire a handler and while no app-data borrow is held, as the
         // profiler's slot requires.
         handler_prof::install(&lua);
@@ -503,9 +605,11 @@ impl UiScript {
         client::install(&lua)?;
         screenshot::install(&lua)?;
         stdlib::sandbox(&lua)?;
-        // Before the stdlib layer, so its aliases bind the 5.0-shaped functions.
-        lua50::install(&lua)?;
-        stdlib::install(&lua)?;
+        if dialect == ScriptDialect::Vanilla {
+            // Before the stdlib layer, so its aliases bind the 5.0-shaped functions.
+            lua50::install(&lua)?;
+        }
+        stdlib::install(&lua, dialect)?;
         object::install(&lua)?;
         frame_enum::install(&lua)?;
         // After `object`, whose `publish_global` it reuses, and before any FrameXML loads:
@@ -588,13 +692,32 @@ impl UiScript {
         worldmap::install(&lua)?;
         worldstate::install(&lua)?;
         net_stats::install(&lua)?;
+        if dialect == ScriptDialect::Wrath12340 {
+            // Install the mature implementation above, then expose only the bounded Wrath slice.
+            // This runs before any FrameXML/addon code, so addon-created globals are unaffected.
+            wrath_surface::install(&lua)?;
+        }
 
         let s = UiScript {
             lua,
-            instructions: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            dialect,
+            instruction_budget,
             session: NEXT_SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         };
         Ok(s)
+    }
+
+    /// The immutable client script dialect selected when this VM was constructed.
+    pub fn dialect(&self) -> ScriptDialect {
+        self.dialect
+    }
+
+    /// Whether protected/secure templates and restricted execution are implemented.
+    ///
+    /// They are currently unsupported; callers must not treat ordinary frames or bindings as a
+    /// simulation of Wrath's secure execution environment.
+    pub const fn supports_secure_execution(&self) -> bool {
+        false
     }
 
     /// The embedded VM, for the app and the loader to add their bindings over this object model.
@@ -613,43 +736,63 @@ impl UiScript {
         self.session
     }
 
-    /// Bound how long a chunk may run: past `budget` VM instructions the hook raises a Lua error,
-    /// so a loop that never ends fails its addon and the rest still runs. The app arms it only for
-    /// the world-entry load, so a hung load reports instead of freezing the loading screen, and
-    /// disarms it ([`Self::clear_instruction_budget`]) before the session's first frame.
+    /// Bound Lua execution. Vanilla retains its legacy main-thread million-instruction sampling.
+    /// Wrath uses one sticky counter across the main state and every coroutine, sampled every
+    /// [`WRATH_INSTRUCTION_HOOK_STEP`] instructions and conservatively charged one sample at each
+    /// Lua call. For Wrath the hook must execute no later than
+    /// `(budget / WRATH_INSTRUCTION_HOOK_STEP + 1) * WRATH_INSTRUCTION_HOOK_STEP` actual VM
+    /// instructions after arming (with saturating accounting); once tripped, protected-call guards
+    /// keep propagating the failure until [`Self::clear_instruction_budget`] explicitly disarms it.
     pub fn set_instruction_budget(&self, budget: u64) {
-        let used = self.instructions.clone();
-        used.store(0, std::sync::atomic::Ordering::Relaxed);
+        use std::sync::atomic::Ordering::Relaxed;
+
+        self.instruction_budget.used.store(0, Relaxed);
+        self.instruction_budget.limit.store(budget, Relaxed);
+        self.instruction_budget.exhausted.store(false, Relaxed);
+        self.instruction_budget.armed.store(true, Relaxed);
+        if self.dialect == ScriptDialect::Wrath12340 {
+            return;
+        }
+        let used = self.instruction_budget.clone();
         let _ = self.lua.set_hook(
             mlua::HookTriggers {
                 every_nth_instruction: Some(INSTRUCTION_HOOK_STEP),
                 ..Default::default()
             },
             move |_, _| {
-                let n = used.fetch_add(
-                    u64::from(INSTRUCTION_HOOK_STEP),
-                    std::sync::atomic::Ordering::Relaxed,
-                ) + u64::from(INSTRUCTION_HOOK_STEP);
+                let previous = used
+                    .used
+                    .fetch_update(Relaxed, Relaxed, |n| {
+                        Some(n.saturating_add(u64::from(INSTRUCTION_HOOK_STEP)))
+                    })
+                    .unwrap_or_else(|n| n);
+                let n = previous.saturating_add(u64::from(INSTRUCTION_HOOK_STEP));
                 if n > budget {
-                    return Err(mlua::Error::runtime(format!(
-                        "benilla: instruction budget exhausted after {n} VM instructions — \
-                         treating this as a non-terminating loop"
-                    )));
+                    return Err(instruction_budget_error(n));
                 }
                 Ok(mlua::VmState::Continue)
             },
         );
     }
 
-    /// Remove the instruction budget; the counter keeps its value for [`Self::instructions_used`].
+    /// Disarm the instruction budget; the counter keeps its value for [`Self::instructions_used`].
     pub fn clear_instruction_budget(&self) {
-        self.lua.remove_hook();
+        use std::sync::atomic::Ordering::Relaxed;
+
+        self.instruction_budget.armed.store(false, Relaxed);
+        self.instruction_budget.exhausted.store(false, Relaxed);
+        if self.dialect == ScriptDialect::Vanilla {
+            self.lua.remove_hook();
+        }
     }
 
-    /// VM instructions since the last [`Self::set_instruction_budget`], to the resolution of
-    /// [`INSTRUCTION_HOOK_STEP`]; zero when no budget was ever set.
+    /// Charged instruction units since the last [`Self::set_instruction_budget`]. Vanilla's
+    /// resolution is [`INSTRUCTION_HOOK_STEP`]. Wrath's is [`WRATH_INSTRUCTION_HOOK_STEP`] and a
+    /// Lua call is conservatively charged as one full unit; zero means no budget was ever charged.
     pub fn instructions_used(&self) -> u64 {
-        self.instructions.load(std::sync::atomic::Ordering::Relaxed)
+        self.instruction_budget
+            .used
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Set the screen-root rect from a pixel size (origin `[0,0]`, y-up), compared first so the
@@ -778,6 +921,19 @@ impl UiScript {
             .set_name(name)
             .set_mode(mlua::ChunkMode::Text)
             .exec()
+    }
+
+    /// Run an addon file with the selected client build's chunk arguments.
+    ///
+    /// Wrath files receive `(addon_name, private_table)`, with one private table shared by every
+    /// file of that addon. Vanilla deliberately preserves its zero-argument chunk ABI.
+    pub fn run_addon_chunk_named(
+        &self,
+        addon_name: &str,
+        chunk: &[u8],
+        name: &str,
+    ) -> mlua::Result<()> {
+        addon::run_addon_chunk(self.lua(), addon_name, chunk, name)
     }
 
     /// Load and evaluate a Lua chunk, returning its result: for tests and one-shot queries.

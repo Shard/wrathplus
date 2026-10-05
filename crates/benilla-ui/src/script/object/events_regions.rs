@@ -9,7 +9,9 @@ use crate::script::region::region_wrapper;
 use crate::script::{Model, RegionData, REG_SCRIPTS, SCRIPT_KINDS};
 use crate::widget::RegionKind;
 
-use super::{decode_id, draw_layer_from_str, frame_handle_of, publish_global};
+use super::{
+    decode_id, draw_layer_from_str, ensure_host_object_capacity, frame_handle_of, publish_global,
+};
 
 /// Populate `m`'s event, script and region-creation methods.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
@@ -337,6 +339,7 @@ fn create_region(
 
     let id = {
         let mut model = lua.app_data_mut::<Model>().expect("model");
+        ensure_host_object_capacity(&model)?;
         let rh = model
             .arena
             .create_region(owner, kind, dl, 0)

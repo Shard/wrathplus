@@ -29,6 +29,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::Emote, on_emote)
         .net_handler(K::PlaySpellVisual, on_play_spell_visual)
         .net_handler(K::AttackerState, on_attacker_state)
+        .net_handler(K::WrathAttackerState, on_wrath_attacker_state)
         .net_handler(K::EnvironmentalDamageLog, on_environmental_damage_log);
 }
 
@@ -139,6 +140,51 @@ fn on_attacker_state(
             play_seq.next(),
         );
     }
+}
+
+fn on_wrath_attacker_state(
+    In(ev): In<SessionEvent>,
+    index: Res<GuidIndex>,
+    self_guid: Res<SelfGuid>,
+    mut swings: MessageWriter<SwingMessage>,
+    mut impacts: MessageWriter<SwingImpact>,
+    mut center: MessageWriter<CombatTextEvent>,
+    mut sheaths: MessageWriter<SheathRequest>,
+    mut edges: MessageWriter<SwingRefusalEdge>,
+    stores: Query<&mut crate::net::ObjectStore>,
+    mut play_seq: ResMut<PlaySeq>,
+) {
+    let SessionEvent::WrathAttackerState(native) = ev else {
+        return;
+    };
+    if benilla_assets::trace::enabled() {
+        benilla_assets::trace::line(
+            "fct",
+            &format!(
+                "recv wrath swing atk={:#x} victim={:#x} raw_hit={:#x} overkill={}",
+                native.attacker, native.victim, native.hit_info, native.overkill
+            ),
+        );
+    }
+    let Some(view) = crate::net::wrath_melee::presentation(&native) else {
+        warn!(
+            "net: Wrath melee report is not representable for presentation (attacker {:#x}, victim {:#x}, flags {:#x}, overkill {})",
+            native.attacker, native.victim, native.hit_info, native.overkill
+        );
+        return;
+    };
+    attacker_state(
+        view,
+        &index,
+        &self_guid,
+        &mut swings,
+        &mut impacts,
+        &mut center,
+        &mut sheaths,
+        &mut edges,
+        &stores,
+        play_seq.next(),
+    );
 }
 
 fn on_environmental_damage_log(
@@ -405,5 +451,129 @@ fn mount_special(
         if let Some(&e) = index.0.get(&guid) {
             out.write(MountFlourish { unit: e });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use benilla_protocol::messages::{ObjectFields, ObjectType};
+    use benilla_protocol::wrath_combat::{self, MeleeDamage};
+    use bevy::ecs::system::RunSystemOnce;
+
+    use crate::net::ObjectStore;
+
+    const ATTACKER: u64 = 0x11;
+    const VICTIM: u64 = 0x22;
+
+    fn melee_world() -> (World, Entity, Entity) {
+        let mut world = World::new();
+        world.init_resource::<GuidIndex>();
+        world.init_resource::<SelfGuid>();
+        world.init_resource::<PlaySeq>();
+        world.init_resource::<Messages<SwingMessage>>();
+        world.init_resource::<Messages<SwingImpact>>();
+        world.init_resource::<Messages<CombatTextEvent>>();
+        world.init_resource::<Messages<SheathRequest>>();
+        world.init_resource::<Messages<SwingRefusalEdge>>();
+        world.init_resource::<Messages<SwingFlush>>();
+        let attacker = world
+            .spawn(ObjectStore(
+                ObjectFields::from_pairs(&[(22, 100)]).into_created(ObjectType::Unit),
+            ))
+            .id();
+        let victim = world
+            .spawn(ObjectStore(
+                ObjectFields::from_pairs(&[(22, 100)]).into_created(ObjectType::Unit),
+            ))
+            .id();
+        let mut index = world.resource_mut::<GuidIndex>();
+        index.0.insert(ATTACKER, attacker);
+        index.0.insert(VICTIM, victim);
+        (world, attacker, victim)
+    }
+
+    fn wrath_swing(hit_info: u32) -> SessionEvent {
+        SessionEvent::WrathAttackerState(Box::new(wrath_combat::AttackerState {
+            hit_info,
+            attacker: ATTACKER,
+            victim: VICTIM,
+            damage: 12,
+            overkill: 7,
+            damages: vec![MeleeDamage {
+                school_mask: 1,
+                damage_float: 12.0,
+                damage: 12,
+                absorb: None,
+                resist: None,
+            }],
+            target_state: 1,
+            attacker_state: 0,
+            melee_spell_id: 0,
+            blocked: None,
+            rage_gain: None,
+        }))
+    }
+
+    #[test]
+    fn attack_start_inserts_engaged_and_stop_removes_it_and_flushes() {
+        let (mut world, attacker, _) = melee_world();
+        world
+            .run_system_once_with(
+                on_attack_start,
+                SessionEvent::AttackStart {
+                    attacker: ATTACKER,
+                    victim: VICTIM,
+                },
+            )
+            .unwrap();
+        assert_eq!(world.get::<Engaged>(attacker).map(|e| e.0), Some(VICTIM));
+
+        world
+            .run_system_once_with(
+                on_attack_stop,
+                SessionEvent::AttackStop {
+                    attacker: ATTACKER,
+                    victim: VICTIM,
+                },
+            )
+            .unwrap();
+        assert!(world.get::<Engaged>(attacker).is_none());
+        let flushes: Vec<_> = world
+            .resource_mut::<Messages<SwingFlush>>()
+            .drain()
+            .collect();
+        assert_eq!(flushes.len(), 1);
+        assert_eq!(flushes[0].0, attacker);
+    }
+
+    #[test]
+    fn native_glancing_renders_without_predicting_health_or_engagement() {
+        let (mut world, attacker, victim) = melee_world();
+        world
+            .run_system_once_with(
+                on_wrath_attacker_state,
+                wrath_swing(wrath_combat::HITINFO_GLANCING),
+            )
+            .unwrap();
+
+        let swings: Vec<_> = world
+            .resource_mut::<Messages<SwingMessage>>()
+            .drain()
+            .collect();
+        assert_eq!(
+            swings.len(),
+            1,
+            "one native report produces one swing message"
+        );
+        assert_eq!(swings[0].attacker, attacker);
+        assert_eq!(swings[0].victim, Some(victim));
+        assert_eq!(swings[0].hit_info, 0x4000);
+        assert!(world.get::<Engaged>(attacker).is_none());
+        assert_eq!(
+            world.get::<ObjectStore>(victim).unwrap().0.unit_health(),
+            Some(100),
+            "melee presentation never predicts descriptor health"
+        );
     }
 }

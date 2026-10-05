@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::Chain;
+use crate::{Chain, DataProfile};
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
@@ -35,22 +35,29 @@ impl GameObjectCatalog {
     }
 }
 
-fn schema() -> Schema {
+fn schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("GameObjectDisplayInfo");
     s.add_field(SchemaField::new("ID", FieldType::UInt32));
     s.add_field(SchemaField::new("ModelName", FieldType::String));
     for i in 0..10 {
         s.add_field(SchemaField::new(format!("Sound{i}"), FieldType::UInt32));
     }
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        for name in ["MinX", "MinY", "MinZ", "MaxX", "MaxY", "MaxZ"] {
+            s.add_field(SchemaField::new(name, FieldType::Float32));
+        }
+        s.add_field(SchemaField::new("Transport", FieldType::UInt32));
+    }
     s
 }
 
 /// Load GameObjectDisplayInfo.dbc from the patch chain into a [`GameObjectCatalog`].
 pub fn load_gameobject_catalog(chain: &mut Chain) -> Result<GameObjectCatalog> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(GAMEOBJECT_DISPLAY_INFO)
         .with_context(|| format!("reading {GAMEOBJECT_DISPLAY_INFO}"))?;
-    let rs = parse(&bytes, schema(), "GameObjectDisplayInfo")?;
+    let rs = parse(&bytes, schema(&profile), "GameObjectDisplayInfo")?;
     let mut models = HashMap::with_capacity(rs.records().len());
     for r in rs.records() {
         if let (Some(id), Some(path)) = (u32_at(r, 0), str_at(&rs, r, 1)) {
@@ -89,10 +96,11 @@ impl GameObjectSounds {
 
 /// Load the sound slots off GameObjectDisplayInfo.dbc.
 pub fn load_gameobject_sounds(chain: &mut Chain) -> Result<GameObjectSounds> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(GAMEOBJECT_DISPLAY_INFO)
         .with_context(|| format!("reading {GAMEOBJECT_DISPLAY_INFO}"))?;
-    let rs = parse(&bytes, schema(), "GameObjectDisplayInfo")?;
+    let rs = parse(&bytes, schema(&profile), "GameObjectDisplayInfo")?;
     let mut sounds = HashMap::new();
     for r in rs.records() {
         let Some(id) = u32_at(r, 0) else { continue };

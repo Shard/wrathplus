@@ -494,6 +494,15 @@ impl Dispatch<'_, '_> {
             return;
         }
         debug!("right-click loot: {guid:#x}");
+        if *self.seam.dialect == SessionDialect::Wrath12340 {
+            crate::ui_loot::begin_wrath_corpse_loot(
+                &mut self.seam.loot,
+                &mut self.seam.loot_latch,
+                &self.seam.net,
+                guid,
+            );
+            return;
+        }
         let _ = self.seam.net.0.send(ClientCommand::Loot { guid });
         // Predicted at the send, as the reference's sender (`0x5df253`) arms `[player+0x1d28]` and
         // kneels before any reply; the anim driver reads the latch.
@@ -703,6 +712,10 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     // highlightable (our `Point` cursor, silent), then usable (`0x5f3130`), whose lock arm toasts
     // first, even out of range.
     if go_is_nearest(hovered, hovered_object) {
+        if *dispatch.seam.dialect == SessionDialect::Wrath12340 {
+            warn!("Wrath gameobject interaction unavailable; no action or approach issued");
+            return;
+        }
         // Traced (tag `use`): a `Point` cursor refuses silently; the range gray raises
         // `ERR_USE_TOO_FAR`.
         if benilla_assets::trace::enabled_for("use") {
@@ -747,6 +760,10 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     // skin cast (`0x5f05e0`). Your own corpse takes neither: the resurrect prompt comes from the
     // 40 yd `CORPSE_IN_RANGE` poll (`0x492130`), never a click.
     if let (Some(entity), Some(guid)) = (hovered.corpse, hovered.corpse_guid) {
+        if *dispatch.seam.dialect == SessionDialect::Wrath12340 {
+            warn!("Wrath corpse interaction unavailable; no loot/skin action or prediction issued");
+            return;
+        }
         let store = dispatch.stores.get(entity).ok().map(|(s, _)| s);
         if benilla_assets::trace::enabled_for("use") {
             benilla_assets::trace::line(
@@ -863,7 +880,12 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
         Select::First(selection) => commit(&mut dispatch.seam, selection),
         Select::OnAttack(_) => scan::CommitOutcome::default(),
     };
-    match unit_branch(attack, dead_fork, leg) {
+    let branch = unit_branch(attack, dead_fork, leg);
+    if !interaction_supported(*dispatch.seam.dialect, branch) {
+        warn!("Wrath unit service/loot/skin interaction unavailable; selection only");
+        return;
+    }
+    match branch {
         UnitBranch::Attack => {
             // `0x60c22b`, past the dead and mounted gates (`0x60c1a1`, `0x60c1bc`) and before
             // StartAttack, so a refused swing still walks.
@@ -939,6 +961,15 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     }
 }
 
+/// Only verified build-specific interaction families may enter the producer's side-effect ladder.
+fn interaction_supported(dialect: SessionDialect, branch: UnitBranch) -> bool {
+    dialect == SessionDialect::Vanilla5875
+        || matches!(
+            branch,
+            UnitBranch::Attack | UnitBranch::Dead(DeadUnitLeg::Loot)
+        )
+}
+
 /// Interact with an object by running its own virtual dispatcher (slot `+0x60`): `0x60bea0` for a
 /// unit or player, `0x5d6bf0` for a corpse, `0x5f8660` for a GameObject. It skips the world click's
 /// select-first entry (`0x492820`); the attack leg selects through StartAttack (`0x5ecb70`), and
@@ -990,6 +1021,11 @@ pub(super) fn act_on_arrival(
     let Some((verb, guid)) = dispatch.auto.approach.arrived.take() else {
         return;
     };
+    // Arrival is a terminal producer boundary too: an old approach must never borrow a
+    // replacement Wrath session's writer for an unimplemented service/loot/use/skin action.
+    if *dispatch.seam.dialect == SessionDialect::Wrath12340 && verb != ApproachVerb::Loot {
+        return;
+    }
     let Some(&entity) = index.0.get(&guid) else {
         return;
     };
@@ -1004,10 +1040,15 @@ pub(super) fn act_on_arrival(
         ApproachVerb::Talk if unit => dispatch.talk(entity, guid, d2 <= SERVICE_RANGE_SQ, false),
         // `0x5df2a0`'s own lootable test (`0x6003a0`), which the click's dead fork made earlier.
         ApproachVerb::Loot if unit => {
-            if dispatch
-                .stores
-                .get(entity)
-                .is_ok_and(|(s, _)| s.0.unit_lootable())
+            if (*dispatch.seam.dialect != SessionDialect::Wrath12340
+                || dispatch
+                    .stores
+                    .get(entity)
+                    .is_ok_and(|(s, _)| s.0.unit_is_dead()))
+                && dispatch
+                    .stores
+                    .get(entity)
+                    .is_ok_and(|(s, _)| s.0.unit_lootable())
             {
                 let reach = dispatch.melee_reach(entity);
                 let can_loot = dispatch.auto.can_auto_interact() || d2 <= reach * reach;
@@ -1473,7 +1514,7 @@ pub(super) fn clear(
             // The teardown `0x493910` closes the old target's loot before its own send.
             seam.close_loot_on(old);
         }
-        let _ = seam.net.0.send(ClientCommand::SetSelection { guid: 0 });
+        super::send_selection(&seam.net, *seam.dialect, 0);
         // `SetSelection 0x493540`'s own `0x493a08 call 0x5ecac0`, the real StopAttack, which
         // also un-queues a pending on-next-swing strike.
         seam.stop(engaged);
@@ -1483,6 +1524,26 @@ pub(super) fn clear(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrath_interaction_ladder_admits_only_melee_and_preserves_vanilla() {
+        assert!(interaction_supported(
+            SessionDialect::Wrath12340,
+            UnitBranch::Attack
+        ));
+        assert!(interaction_supported(
+            SessionDialect::Wrath12340,
+            UnitBranch::Dead(DeadUnitLeg::Loot)
+        ));
+        for branch in [
+            UnitBranch::Service,
+            UnitBranch::Dead(DeadUnitLeg::Skin),
+            UnitBranch::Dead(DeadUnitLeg::Nothing),
+        ] {
+            assert!(!interaction_supported(SessionDialect::Wrath12340, branch));
+            assert!(interaction_supported(SessionDialect::Vanilla5875, branch));
+        }
+    }
 
     /// The `0x5f3427..` toast routing on real data: Peacebloom (lock 29: skill slot, LockType 2,
     /// Skill 0), a rank-155 vein (lock 42: LockType 3), a keyed door, a padlocked chest.
@@ -1950,6 +2011,7 @@ mod tests {
             let (tx, _rx) = crossbeam_channel::unbounded();
             let mut world = World::new();
             world.insert_resource(NetCommands(tx));
+            world.insert_resource(crate::net::SessionDialect::Vanilla5875);
             world.init_resource::<InspectMode>();
             world.init_resource::<crate::spell::QueuedMeleeSpell>();
             world.init_resource::<crate::spell::AutoRepeatActive>();
@@ -2026,6 +2088,7 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
+        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
         world.init_resource::<Messages<WorldRightClick>>();
         world.init_resource::<PressPick>();
         world.init_resource::<Selection>();
@@ -2341,6 +2404,26 @@ mod tests {
             .resource::<crate::player::Approach>()
             .arrived
             .is_none());
+    }
+
+    #[test]
+    fn wrath_retained_arrivals_are_consumed_without_unsupported_interaction_side_effects() {
+        for verb in [
+            crate::player::ApproachVerb::Talk,
+            crate::player::ApproachVerb::Loot,
+            crate::player::ApproachVerb::Use,
+            crate::player::ApproachVerb::Skin,
+        ] {
+            let (mut world, _vendor, rx) = walking_world(Vec3::new(2.5, 0.0, 0.0), true);
+            world.insert_resource(SessionDialect::Wrath12340);
+            world.resource_mut::<crate::player::Approach>().arrived = Some((verb, VENDOR));
+            world.run_system_once(act_on_arrival).unwrap();
+            assert!(rx.try_iter().next().is_none());
+            assert!(world
+                .resource::<crate::player::Approach>()
+                .arrived
+                .is_none());
+        }
     }
 
     const CHEST: u64 = 0xC4E5;

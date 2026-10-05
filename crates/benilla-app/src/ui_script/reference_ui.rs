@@ -101,7 +101,7 @@ fn chain() -> Option<&'static Chain> {
                 );
                 return None;
             };
-            match benilla_formats::open_chain(&data) {
+            match benilla_formats::open_configured_chain(&data) {
                 Ok(chain) => Some(chain),
                 Err(e) => {
                     error!("ui_script: opening the patch chain to source the reference UI: {e:#}");

@@ -24,15 +24,22 @@ fn install_boot_vm(world: &mut World) {
     let Some(script) = new_vm(world) else {
         return;
     };
-    load_global_strings(world, &script);
-    load_emote_tokens(world, &script);
+    if !wrath_profile(world) {
+        load_global_strings(world, &script);
+        load_emote_tokens(world, &script);
+    }
     world.insert_non_send_resource(script);
 }
 
 /// A fresh VM on the process clock with the addon asset probes wired, or `None` (the world's VM
 /// removed) when the VM cannot start.
 fn new_vm(world: &mut World) -> Option<UiScript> {
-    let mut script = match UiScript::new() {
+    let created = if wrath_profile(world) {
+        UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
+    } else {
+        UiScript::new()
+    };
+    let mut script = match created {
         Ok(s) => s,
         Err(e) => {
             error!("ui_script: VM init failed: {e}");
@@ -44,6 +51,12 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
     Some(script)
+}
+
+fn wrath_profile(world: &World) -> bool {
+    world
+        .get_resource::<benilla_assets::ClientDataProfile>()
+        .is_some_and(|profile| matches!(profile.0, benilla_formats::DataProfile::Wrath { .. }))
 }
 
 /// Start the new VM's `GetTime()` where the process already is and re-anchor [`UiClock`] to it,
@@ -154,7 +167,9 @@ pub(crate) fn arm_entry_ui_load(world: &mut World) {
 /// [`super::VmMemo`], which is meant to reset here. It starts bare: `FrameXML.toc` runs
 /// `GlobalStrings.lua` and `Fonts.xml` as its first rows, and `ChatFrame.lua` the emote tokens.
 fn mint_entry_vm(world: &mut World) {
-    crate::cvars::fold_dying_vm_cvars(world);
+    if !wrath_profile(world) {
+        crate::cvars::fold_dying_vm_cvars(world);
+    }
     if let Some(script) = new_vm(world) {
         world.insert_non_send_resource(script);
     }
@@ -275,6 +290,10 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
         warn!("ui_script: entering the world with no VM — the in-game UI will not load");
         return;
     };
+    if wrath_profile(world) {
+        load_wrath_ingame_ui_on_world_entry(world, script);
+        return;
+    }
     // The character whose AddOn enable state gates which addons run.
     let identity = world
         .get_resource::<crate::char_select::Roster>()
@@ -413,6 +432,64 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
     // to re-arm it, so without this a second `/reload` would not fire `PLAYER_LEAVING_WORLD`. The
     // reference skips this leg on a fresh login (`0x490166 je`, the GUID still 0) and arms from
     // the player's create instead; both reach the same armed byte.
+    if let Some(mut armed) = world.get_resource_mut::<LeavingWorldArmed>() {
+        armed.arm();
+    }
+}
+
+/// No registry means no observable settings, never a default-only substitute. The UI mirror
+/// applies its dialect-specific row policy, including on subsequent per-frame synchronization.
+fn seed_wrath_host_cvars(world: &World, script: &UiScript) {
+    if let Some(cvars) = world.get_resource::<crate::cvars::Cvars>() {
+        script.seed_cvars(cvars.vm_seed());
+    }
+}
+
+/// Build the authored Wrath root and local-state addons without touching either stock FrameXML
+/// tree. Only observed roster facts are seeded; live unit feeds replace this pending snapshot.
+fn load_wrath_ingame_ui_on_world_entry(world: &mut World, mut script: UiScript) {
+    let identity = world
+        .get_resource::<crate::char_select::Roster>()
+        .and_then(crate::ui_macro::identity);
+    let roster: Vec<String> = world
+        .get_resource::<crate::char_select::Roster>()
+        .map(|r| r.chars.iter().map(|c| c.name.clone()).collect())
+        .unwrap_or_default();
+    let realm = world
+        .get_resource::<crate::char_select::Roster>()
+        .and_then(|r| r.realm.as_ref().map(|r| r.name.clone()))
+        .unwrap_or_default();
+    script.set_realm_name(&realm);
+    if let Some(record) = world
+        .get_resource::<crate::char_select::Roster>()
+        .and_then(record_from_roster)
+    {
+        script.set_player_record(record);
+    }
+    if let Some(seat) = world
+        .get_resource::<crate::char_select::Roster>()
+        .and_then(seat_from_roster)
+    {
+        script.set_unit("player", Some(seat));
+    }
+    seed_wrath_host_cvars(world, &script);
+    seat_raster_seam_for_load(world, &mut script);
+    let version_check = world
+        .get_resource::<crate::cvars::Cvars>()
+        .is_none_or(crate::cvars::Cvars::addon_version_check);
+    silenced_ui_load(&mut script, |script| {
+        for failure in
+            super::manifest::load_wrath_ui(script, identity.as_ref(), &roster, version_check)
+        {
+            warn!("ui_script: Wrath addon load: {failure}");
+        }
+        script.fire_event("PLAYER_LOGIN", vec![]);
+    });
+    script.finish_ui_load_log();
+    super::load_log::write(script.take_load_log_writes());
+    script.set_instruction_budget(super::wrath_addons::RUNTIME_INSTRUCTION_BUDGET);
+    world.insert_non_send_resource(script);
+    world.insert_resource(AddOnIdentity(identity));
     if let Some(mut armed) = world.get_resource_mut::<LeavingWorldArmed>() {
         armed.arm();
     }
@@ -569,16 +646,21 @@ pub(crate) fn end_ui_session(world: &mut World) {
     let leaving_world = world
         .get_resource_mut::<LeavingWorldArmed>()
         .is_some_and(|mut l| l.spend());
+    let wrath = wrath_profile(world);
     if !ui_never_loaded {
         if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
-            shutdown_ui_state(&mut script, identity.as_ref(), leaving_world);
+            if wrath {
+                super::wrath_addons::shutdown(&mut script, identity.as_ref(), leaving_world);
+            } else {
+                shutdown_ui_state(&mut script, identity.as_ref(), leaving_world);
+            }
         }
     }
-    // After the shutdown events (a `PLAYER_LOGOUT` handler may `SetCVar`, which in the reference
-    // lands in an engine-side store that survives) and before the VM is replaced.
-    crate::cvars::fold_dying_vm_cvars(world);
-    // The chat cache folds here, not in its own `OnExit(InWorld)` system, which a `/reload` skips.
-    crate::ui_chat::settings::fold_dying_vm_chat_cache(world);
+    // Wrath VMs expose no CVar mutation/chat persistence surface; only addon saved variables write.
+    if !wrath {
+        crate::cvars::fold_dying_vm_cvars(world);
+        crate::ui_chat::settings::fold_dying_vm_chat_cache(world);
+    }
     world.insert_resource(AddOnIdentity(None));
 
     // Host values taken from the dying frame tree go with it (a `VmMemo` resets on its own): the
@@ -790,6 +872,32 @@ pub(crate) fn is_emote_token_line(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrath_preload_seed_preserves_host_values_across_new_vms_without_fallback() {
+        use benilla_ui::script::ScriptDialect;
+        let mut world = World::new();
+        let mut cvars = crate::cvars::Cvars::default();
+        cvars.set("gamma", "9");
+        world.insert_resource(cvars);
+        for value in ["9", "1.2"] {
+            world
+                .resource_mut::<crate::cvars::Cvars>()
+                .set("gamma", value);
+            let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            seed_wrath_host_cvars(&world, &script);
+            script.run_addon_chunk_named("CvarScope", b"CvarAtScope = GetCVar('GAMMA'); assert(GetCVar('realmList') == nil and GetCVar('useUiScale') == nil); assert(SetCVar == nil and RegisterCVar == nil and GetCVarDefault == nil)", "@CvarScope.lua").unwrap();
+            assert_eq!(script.eval::<String>("return CvarAtScope").unwrap(), value);
+            assert!(script.take_cvar_changes().is_empty());
+            assert!(script.take_cvar_registrations().is_empty());
+        }
+        world.remove_resource::<crate::cvars::Cvars>();
+        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        seed_wrath_host_cvars(&world, &script);
+        assert!(script
+            .eval::<bool>("return GetCVar('gamma') == nil")
+            .unwrap());
+    }
 
     #[test]
     fn the_entry_edge_parks_the_boot_vm_and_the_session_end_returns_it() {

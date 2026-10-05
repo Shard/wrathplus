@@ -95,6 +95,24 @@ impl TerrainStreamer {
         let spawned = self.tiles.values().filter(|t| t.furnished).count();
         (spawned, self.tiles.len())
     }
+
+    /// Whether the current map's WDT has loaded, without counting the legacy ungated fallback.
+    pub fn wdt_loaded(&self, wdts: &Assets<WdtIndex>) -> bool {
+        self.wdt
+            .as_ref()
+            .is_some_and(|handle| wdts.get(handle).is_some())
+    }
+
+    /// The furnished terrain root and material for one authored tile. An absent WDT square has no
+    /// `TileState`, so render-readiness probes cannot mistake off-grid focus residency for terrain.
+    pub(crate) fn furnished_tile_render(
+        &self,
+        tile: (i32, i32),
+    ) -> Option<(Entity, Handle<TerrainMaterial>)> {
+        let tile = self.tiles.get(&tile)?;
+        tile.furnished
+            .then(|| Some((tile.entity?, tile.material.clone()?)))?
+    }
 }
 
 /// One loaded tile and everything it owns.

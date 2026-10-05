@@ -90,6 +90,7 @@ pub(super) fn guild_recruitment_cascade(
     areas: Option<Res<AreaTableRes>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
+    dialect: Res<crate::net::SessionDialect>,
 ) {
     let Some(mut script) = script else { return };
     // `SetGuildRecruitmentMode(1)` runs it even when the value did not move (`0x49ea70`).
@@ -143,7 +144,7 @@ pub(super) fn guild_recruitment_cascade(
     match action {
         Cascade::Leave => {
             info!("chat: guild recruitment cascade — guilded, leaving {name:?}");
-            cascade_leave(&mut channels, &commands, name);
+            cascade_leave(&mut channels, &commands, *dialect, name);
         }
         Cascade::Join => {
             info!("chat: guild recruitment cascade — unguilded in a capital, joining {name:?}");
@@ -159,10 +160,11 @@ pub(super) fn guild_recruitment_cascade(
                 ),
             }
             script.register_chat_window_channel(0, &row.shortcut, row.id);
-            let _ = commands.0.send(ClientCommand::JoinChannel {
+            let command = ClientCommand::JoinChannel {
                 name,
                 password: String::new(),
-            });
+            };
+            send_supported(&commands, *dialect, command);
         }
         Cascade::Deferred => {}
     }
@@ -173,10 +175,26 @@ pub(super) fn guild_recruitment_cascade(
 
 /// Leave by the full name (`0x49ee70`): the packet and the mask bit (`0x49f10a`/`0x49f11a`). No
 /// window loses its entry: the strip matches that name verbatim (`0x49f017`), which none holds.
-fn cascade_leave(channels: &mut ChannelState, commands: &NetCommands, name: String) {
-    let _ = commands
-        .0
-        .send(ClientCommand::LeaveChannel { name: name.clone() });
+fn send_supported(
+    commands: &NetCommands,
+    dialect: crate::net::SessionDialect,
+    command: ClientCommand,
+) -> bool {
+    if !commands.supports(dialect, &command) {
+        return false;
+    }
+    let _ = commands.0.send(command);
+    true
+}
+
+fn cascade_leave(
+    channels: &mut ChannelState,
+    commands: &NetCommands,
+    dialect: crate::net::SessionDialect,
+    name: String,
+) {
+    let command = ClientCommand::LeaveChannel { name: name.clone() };
+    send_supported(commands, dialect, command);
     channels.note_zone_channel_left(&name);
 }
 
@@ -226,6 +244,7 @@ mod tests {
         cascade_leave(
             &mut channels,
             &NetCommands(tx),
+            crate::net::SessionDialect::Vanilla5875,
             "GuildRecruitment - City".into(),
         );
 
@@ -238,6 +257,64 @@ mod tests {
             script.chat_window_looks()[0].channels,
             vec![("GuildRecruitment".to_string(), GUILD_RECRUITMENT)],
             "window 1 still carries the entry the join registered"
+        );
+    }
+
+    #[test]
+    fn wrath_recruitment_join_and_leave_commands_are_both_unsupported() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let commands = NetCommands(tx);
+        for command in [
+            ClientCommand::JoinChannel {
+                name: "GuildRecruitment - City".into(),
+                password: String::new(),
+            },
+            ClientCommand::LeaveChannel {
+                name: "GuildRecruitment - City".into(),
+            },
+        ] {
+            assert!(!send_supported(
+                &commands,
+                crate::net::SessionDialect::Wrath12340,
+                command,
+            ));
+        }
+        assert!(rx.try_iter().next().is_none());
+    }
+
+    #[test]
+    fn wrath_cascade_leave_updates_the_mask_without_sending() {
+        const GUILD_RECRUITMENT: u32 = 25;
+        let mut channels = ChannelState {
+            channels: benilla_formats::ChatChannelsCatalog::from_rows(vec![
+                benilla_formats::ChatChannelRow {
+                    id: GUILD_RECRUITMENT,
+                    flags: 0x32,
+                    pattern: "GuildRecruitment - %s".into(),
+                    shortcut: "GuildRecruitment".into(),
+                },
+            ]),
+            zone_mask: Some(1 << (GUILD_RECRUITMENT - 1)),
+            ..Default::default()
+        };
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        channels.claim_slot("GuildRecruitment - City");
+        cascade_leave(
+            &mut channels,
+            &NetCommands(tx),
+            crate::net::SessionDialect::Wrath12340,
+            "GuildRecruitment - City".into(),
+        );
+
+        assert!(
+            rx.try_iter().next().is_none(),
+            "unsupported leave is fenced"
+        );
+        assert_eq!(
+            channels.zone_mask,
+            Some(0),
+            "the automatic local transition still applies"
         );
     }
 

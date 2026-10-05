@@ -16,6 +16,9 @@ use crate::ui_party::{GroupState, GROUPTYPE_RAID, GROUP_MEMBER_SUBGROUP};
 use crate::ui_script::{UiFeed, UiInput};
 
 mod net;
+mod wrath;
+
+pub(crate) use wrath::begin_wrath_corpse_loot;
 
 /// `ItemBondingType::BIND_WHEN_PICKED_UP`, the first conjunct of the `LOOT_BIND` confirm: the
 /// client compares `item_template + 0x194` against 1.
@@ -101,6 +104,9 @@ pub(crate) struct LootState {
     pending_master_candidates: Vec<u64>,
     /// The wire `loot_type` (`0x4c2740`); a disenchant window with rows left survives movement.
     loot_type: u8,
+    /// Build-12340's one-source request/ack correlation. It deliberately survives local close
+    /// until the matching release response, so slot-less late packets cannot reach a newer source.
+    wrath: wrath::WrathLootState,
 }
 
 /// The client's candidate array: 40 slots at `0xc4dc38`, bound-checked by the getter `0x61c660`.
@@ -109,6 +115,7 @@ const MASTER_LOOT_CANDIDATE_SLOTS: usize = 40;
 const MEMBERS_PER_RAID_GROUP: usize = 5;
 
 /// A clicked row resolved: the coin pile, or an item at its wire loot slot.
+#[derive(Clone, Copy)]
 enum LootAction {
     Money,
     Item {
@@ -201,6 +208,7 @@ impl LootState {
     pub(crate) fn clear_session(&mut self) {
         self.clear();
         self.receives.clear();
+        self.wrath.reset();
     }
 
     /// Queued pushes, for the net handler's self-gate test.
@@ -713,11 +721,19 @@ fn feed_loot(
             if templates_outstanding(&items, snap) {
                 return;
             }
-            script.fire_event("LOOT_OPENED", vec![]);
+            let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
+            script.fire_event(
+                "LOOT_OPENED",
+                if wrath {
+                    vec![ScriptValue::Int(0)]
+                } else {
+                    vec![]
+                },
+            );
             // Auto-loot (`LootConfig`), inverted by a held Shift: every row gets a hand pick's
             // sends, and emptying the window auto-releases it.
             let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-            if cfg.auto_loot != shift {
+            if !wrath && cfg.auto_loot != shift {
                 let mut bind_confirm_fired = false;
                 for index in 1..=snap.rows.len() as u32 {
                     match loot.action_at(index) {
@@ -796,7 +812,15 @@ pub(crate) fn close_interaction(
     let source = loot.source?;
     latch.clear_for(source);
     if let Some(commands) = release {
-        let _ = commands.0.send(ClientCommand::LootRelease { guid: source });
+        if commands
+            .0
+            .send(ClientCommand::LootRelease { guid: source })
+            .is_ok()
+        {
+            // No-op for Vanilla's idle correlation state. Wrath must retain its source fence
+            // through target teardown/movement closes until the matching server release arrives.
+            loot.wrath.begin_release(source);
+        }
     }
     loot.clear();
     Some(source)
@@ -873,17 +897,42 @@ fn drain_loot(
     mut pickup: MessageWriter<crate::sound::LootPickupSound>,
     group: Res<GroupState>,
     items: Res<Items>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
     // The move-start close runs before the VM check: it needs no Lua.
     mut move_start: ResMut<LootMoveStart>,
     mut dead: DeadUnitDeselect,
 ) {
     if std::mem::take(&mut move_start.0) {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            if let Some(guid) = loot.source() {
+                loot.wrath.begin_release(guid);
+            }
+        }
         dead.after_close(close_on_move_start(&mut loot, &mut latch, &commands));
     }
     let Some(mut script) = script else {
         return;
     };
     for index in script.take_loot_picks() {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            match loot.action_at(index) {
+                Some(action) => {
+                    let _ = wrath::send_pick(&mut loot, &commands, action);
+                }
+                None => debug!("ui_loot: Wrath row {index} clicked out of range — ignored"),
+            }
+            continue;
+        }
         match loot.action_at(index) {
             Some(LootAction::Money) => {
                 // No sound here: the coinage watcher (`sound::money`) plays it as the purse rises.
@@ -982,6 +1031,16 @@ fn drain_loot(
     }
     // `CloseLoot` (`0x4c2ec0` → `0x48f200(cl=1, dl=0)`), which stock `LootFrame_OnHide` calls.
     if script.take_loot_close() {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            if let Some(guid) = loot.source() {
+                loot.wrath.begin_release(guid);
+            }
+        }
         let closed = close_interaction(&mut loot, &mut latch, Some(&commands));
         if let Some(guid) = closed {
             debug!("ui_loot: release loot {guid:#x}");
@@ -991,6 +1050,16 @@ fn drain_loot(
     // The last-row auto-close (`0x4c1f8d`, `0x4c2785` → `0x48f200(cl=1, dl=0)`). The feed then
     // fires `LOOT_CLOSED`, and the `CloseLoot()` from `OnHide` finds no source.
     if loot.take_auto_release() {
+        if dialect
+            .as_deref()
+            .copied()
+            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
+            == crate::net::SessionDialect::Wrath12340
+        {
+            if let Some(guid) = loot.source() {
+                loot.wrath.begin_release(guid);
+            }
+        }
         let closed = close_interaction(&mut loot, &mut latch, Some(&commands));
         if let Some(guid) = closed {
             debug!("ui_loot: loot emptied — auto-release {guid:#x}");

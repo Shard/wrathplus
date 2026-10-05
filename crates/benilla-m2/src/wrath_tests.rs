@@ -1,6 +1,9 @@
 use std::io::Cursor;
 
-use crate::wrath::{parse_wrath_m2, parse_wrath_skin, WrathError};
+use crate::wrath::{
+    parse_wrath_m2, parse_wrath_m2_with_animations, parse_wrath_skin, wrath_animation_dependencies,
+    WrathError,
+};
 
 const HEADER_LEN: usize = 0x130;
 
@@ -185,6 +188,12 @@ fn wrath_vertex_texture_material_animation_and_nested_bone_track_decode() {
 #[test]
 fn wrath_camera_retains_nested_sequences_and_cubic_tangents() {
     let mut b = header();
+    let animation_at = b.len() as u32;
+    let mut animation = vec![0; 64];
+    set_u32(&mut animation, 4, 1000);
+    set_u32(&mut animation, 12, 0x20);
+    b.extend(animation);
+    set_arr(&mut b, 0x1c, 1, animation_at);
     let times_at = b.len() as u32;
     b.extend_from_slice(&250u32.to_le_bytes());
     let positions_at = b.len() as u32;
@@ -260,6 +269,82 @@ fn wrath_camera_tables_and_lookup_fail_closed() {
         Err(WrathError::UnsupportedField(
             "camera lookup references a missing camera"
         ))
+    ));
+}
+
+#[test]
+fn external_animation_descriptors_are_not_read_from_the_m2() {
+    let mut b = header();
+    let animation_at = b.len() as u32;
+    let mut animations = vec![0; 128];
+    set_u32(&mut animations, 4, 1000);
+    set_u32(&mut animations, 12, 0x20); // Resident in the M2.
+    set_u32(&mut animations, 64 + 4, 1000);
+    // `(flags & 0x130) == 0`: build 12340 resolves this sequence from a sibling .anim file.
+    b.extend(animations);
+    set_arr(&mut b, 0x1c, 2, animation_at);
+
+    let resident_times_at = b.len() as u32;
+    b.extend_from_slice(&0u32.to_le_bytes());
+    let resident_values_at = b.len() as u32;
+    for component in [0.0f32, 0.0, 0.0] {
+        b.extend_from_slice(&component.to_le_bytes());
+    }
+    let times_outer_at = b.len() as u32;
+    b.extend_from_slice(&1u32.to_le_bytes());
+    b.extend_from_slice(&resident_times_at.to_le_bytes());
+    // These are valid offsets in the sibling .anim payload but deliberately point at M2 header
+    // bytes here. Dereferencing them previously manufactured keys from unrelated model data.
+    b.extend_from_slice(&1u32.to_le_bytes());
+    b.extend_from_slice(&4096u32.to_le_bytes());
+    let values_outer_at = b.len() as u32;
+    b.extend_from_slice(&1u32.to_le_bytes());
+    b.extend_from_slice(&resident_values_at.to_le_bytes());
+    b.extend_from_slice(&1u32.to_le_bytes());
+    b.extend_from_slice(&4100u32.to_le_bytes());
+
+    let bone_at = b.len() as u32;
+    let mut bone = vec![0; 88];
+    set_u16(&mut bone, 8, u16::MAX);
+    set_u16(&mut bone, 16, 1);
+    set_u16(&mut bone, 18, u16::MAX);
+    set_arr(&mut bone, 20, 2, times_outer_at);
+    set_arr(&mut bone, 28, 2, values_outer_at);
+    set_u16(&mut bone, 38, u16::MAX);
+    set_u16(&mut bone, 58, u16::MAX);
+    b.extend(bone);
+    set_arr(&mut b, 0x2c, 1, bone_at);
+
+    let wrath = parse_wrath_m2(&mut Cursor::new(b.as_slice())).unwrap();
+    let track = &wrath.bone_tracks()[0].translation;
+    assert_eq!(track.keys, vec![(0, [0.0, 0.0, 0.0])]);
+    assert_eq!(track.ranges, vec![(0, 0), (u32::MAX, 0)]);
+
+    let dependencies = wrath_animation_dependencies(&b).unwrap();
+    assert_eq!(dependencies.len(), 1);
+    assert_eq!(dependencies[0].sequence_index, 1);
+    assert!(matches!(
+        parse_wrath_m2_with_animations(&b, &[]),
+        Err(WrathError::MissingExternalAnimation(1))
+    ));
+
+    // External offsets are deliberately beyond the M2 and valid only in this sibling payload.
+    let mut anim = vec![0; 4112];
+    set_u32(&mut anim, 4096, 750);
+    for (at, value) in [(4100, 7.0), (4104, 8.0), (4108, 9.0)] {
+        set_f32(&mut anim, at, value);
+    }
+    let external = [None, Some(anim.as_slice())];
+    let parsed = parse_wrath_m2_with_animations(&b, &external).unwrap();
+    let track = &parsed.bone_tracks()[0].translation;
+    assert_eq!(track.ranges, vec![(0, 0), (1, 1)]);
+    assert_eq!(track.keys[1], (750, [7.0, 8.0, 9.0]));
+
+    anim.truncate(4111);
+    let external = [None, Some(anim.as_slice())];
+    assert!(matches!(
+        parse_wrath_m2_with_animations(&b, &external),
+        Err(WrathError::Truncated("bone translation track"))
     ));
 }
 

@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use mlua::{Function, Lua, Table, Value};
 
-use super::{Model, ScriptValue, REG_SCRIPTS};
+use super::{Model, ScriptDialect, ScriptValue, REG_SCRIPTS};
 use crate::script::object::frame_wrapper;
 use crate::widget::{ButtonState, FrameHandle};
 
@@ -212,7 +212,40 @@ fn fire(
     // when the guard drops, unwinds included.
     let _fire =
         super::handler_prof::armed().then(|| super::handler_prof::Fire::open(lua, id, script));
-    invoke_with_globals(lua, wrapper, &func, event_name, extra)
+    invoke_handler(lua, wrapper, &func, event_name, extra)
+}
+
+/// Invoke one engine handler according to the VM's immutable client ABI.
+pub(crate) fn invoke_handler(
+    lua: &Lua,
+    wrapper: Table,
+    func: &Function,
+    event_name: Option<&str>,
+    extra: Vec<Value>,
+) -> mlua::Result<()> {
+    let dialect = lua.app_data_ref::<Model>().expect("model app_data").dialect;
+    match dialect {
+        ScriptDialect::Vanilla => invoke_with_globals(lua, wrapper, func, event_name, extra),
+        ScriptDialect::Wrath12340 => invoke_with_arguments(lua, wrapper, func, event_name, extra),
+    }
+}
+
+/// Wrath's handler ABI: `self`, then the event name for `OnEvent`, then event/widget values.
+/// No legacy `this`, `event` or `argN` globals are created or modified.
+fn invoke_with_arguments(
+    lua: &Lua,
+    wrapper: Table,
+    func: &Function,
+    event_name: Option<&str>,
+    extra: Vec<Value>,
+) -> mlua::Result<()> {
+    let mut args = mlua::MultiValue::with_capacity(extra.len() + 2);
+    args.push_back(Value::Table(wrapper));
+    if let Some(event_name) = event_name {
+        args.push_back(Value::String(lua.create_string(event_name)?));
+    }
+    args.extend(extra);
+    func.call(args)
 }
 
 /// The `argN` global names, spelled out so the common arities allocate nothing.

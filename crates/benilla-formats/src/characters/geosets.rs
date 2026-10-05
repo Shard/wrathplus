@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{parse, u32_at};
-use crate::Chain;
+use crate::{Chain, DataProfile};
 
 const CHAR_HAIR_GEOSETS: &str = "DBFilesClient\\CharHairGeosets.dbc";
 const CHAR_FACIAL_HAIR: &str = "DBFilesClient\\CharacterFacialHairStyles.dbc";
@@ -181,11 +181,16 @@ impl CharacterGeosets {
     /// takes its first row, as the client's linear scans (`0x478540`, `0x478740`) do: the shipped
     /// CharHairGeosets lists goblin male variation 0 four times (geosets 1, 2, 1, 2).
     pub fn load(chain: &mut Chain) -> Result<Self> {
+        let profile = chain.profile().clone();
         let hair = {
             let bytes = chain
                 .read_file(CHAR_HAIR_GEOSETS)
                 .with_context(|| format!("reading {CHAR_HAIR_GEOSETS}"))?;
-            let rs = parse(&bytes, char_hair_geosets_schema(), "CharHairGeosets")?;
+            let rs = parse(
+                &bytes,
+                char_hair_geosets_schema(&profile),
+                "CharHairGeosets",
+            )?;
             let mut m = HashMap::with_capacity(rs.records().len());
             for r in rs.records() {
                 // fields: ID, RaceID, SexID, VariationID(hairStyle), GeosetID, ShowScalp.
@@ -205,7 +210,7 @@ impl CharacterGeosets {
                 .with_context(|| format!("reading {CHAR_FACIAL_HAIR}"))?;
             let rs = parse(
                 &bytes,
-                char_facial_hair_schema(),
+                char_facial_hair_schema(&profile),
                 "CharacterFacialHairStyles",
             )?;
             let mut m = HashMap::with_capacity(rs.records().len());
@@ -214,11 +219,12 @@ impl CharacterGeosets {
                 if let (Some(race), Some(sex), Some(var)) =
                     (u32_at(r, 0), u32_at(r, 1), u32_at(r, 2))
                 {
-                    let g = [
-                        u32_at(r, 6).unwrap_or(0),
-                        u32_at(r, 7).unwrap_or(0),
-                        u32_at(r, 8).unwrap_or(0),
-                    ];
+                    let start = if matches!(profile, DataProfile::Vanilla) {
+                        6
+                    } else {
+                        3
+                    };
+                    let g = std::array::from_fn(|i| u32_at(r, start + i).unwrap_or(0));
                     // The first row wins.
                     m.entry((race as u8, sex as u8, var as u8)).or_insert(g);
                 }
@@ -228,7 +234,7 @@ impl CharacterGeosets {
         // HelmetGeosetVisData, the helm hide-masks: without the file, helms hide nothing.
         let helmet_vis = match chain.read_file(HELMET_GEOSET_VIS) {
             Ok(bytes) => {
-                let rs = parse(&bytes, helmet_vis_schema(), "HelmetGeosetVisData")?;
+                let rs = parse(&bytes, helmet_vis_schema(&profile), "HelmetGeosetVisData")?;
                 let mut m = HashMap::with_capacity(rs.records().len());
                 for r in rs.records() {
                     if let Some(id) = u32_at(r, 0) {
@@ -248,7 +254,7 @@ impl CharacterGeosets {
 }
 
 /// CharHairGeosets.dbc: 6 fields.
-pub(crate) fn char_hair_geosets_schema() -> Schema {
+pub(crate) fn char_hair_geosets_schema(_profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CharHairGeosets");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -265,7 +271,7 @@ pub(crate) fn char_hair_geosets_schema() -> Schema {
 
 /// HelmetGeosetVisData.dbc: 6 fields, 0x18-byte records (loader `0x546f00`); the five masks are
 /// race bitmasks (`0x4799a0`).
-pub(crate) fn helmet_vis_schema() -> Schema {
+pub(crate) fn helmet_vis_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("HelmetGeosetVisData");
     for (name, ty) in [
         ("ID", FieldType::UInt32),
@@ -277,23 +283,40 @@ pub(crate) fn helmet_vis_schema() -> Schema {
     ] {
         s.add_field(SchemaField::new(name, ty));
     }
+    if matches!(profile, DataProfile::Wrath { .. }) {
+        s.add_field(SchemaField::new("Unknown6", FieldType::UInt32));
+        s.add_field(SchemaField::new("Unknown7", FieldType::UInt32));
+    }
     s
 }
 
 /// CharacterFacialHairStyles.dbc: 9 fields, no ID column.
-pub(crate) fn char_facial_hair_schema() -> Schema {
+pub(crate) fn char_facial_hair_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CharacterFacialHairStyles");
-    for (name, ty) in [
-        ("RaceID", FieldType::UInt32),
-        ("SexID", FieldType::UInt32),
-        ("VariationID", FieldType::UInt32),
-        ("Unused3", FieldType::UInt32),
-        ("Unused4", FieldType::UInt32),
-        ("Unused5", FieldType::UInt32),
-        ("Geoset100", FieldType::UInt32),
-        ("Geoset300", FieldType::UInt32),
-        ("Geoset200", FieldType::UInt32),
-    ] {
+    let fields: &[(&str, FieldType)] = match profile {
+        DataProfile::Vanilla => &[
+            ("RaceID", FieldType::UInt32),
+            ("SexID", FieldType::UInt32),
+            ("VariationID", FieldType::UInt32),
+            ("Unused3", FieldType::UInt32),
+            ("Unused4", FieldType::UInt32),
+            ("Unused5", FieldType::UInt32),
+            ("Geoset100", FieldType::UInt32),
+            ("Geoset300", FieldType::UInt32),
+            ("Geoset200", FieldType::UInt32),
+        ],
+        DataProfile::Wrath { .. } => &[
+            ("RaceID", FieldType::UInt32),
+            ("SexID", FieldType::UInt32),
+            ("VariationID", FieldType::UInt32),
+            ("Geoset100", FieldType::UInt32),
+            ("Geoset300", FieldType::UInt32),
+            ("Geoset200", FieldType::UInt32),
+            ("Unknown6", FieldType::UInt32),
+            ("Unknown7", FieldType::UInt32),
+        ],
+    };
+    for &(name, ty) in fields {
         s.add_field(SchemaField::new(name, ty));
     }
     s
@@ -629,7 +652,12 @@ mod tests {
 
         // The file's rows, read without the loader.
         let bytes = chain.read_file(CHAR_HAIR_GEOSETS).expect("CharHairGeosets");
-        let rs = parse(&bytes, char_hair_geosets_schema(), "CharHairGeosets").expect("parse");
+        let rs = parse(
+            &bytes,
+            char_hair_geosets_schema(&DataProfile::Vanilla),
+            "CharHairGeosets",
+        )
+        .expect("parse");
         let mut keys: HashMap<(u32, u32, u32), Vec<u32>> = HashMap::new();
         for r in rs.records() {
             if let (Some(race), Some(sex), Some(var), Some(geoset)) =

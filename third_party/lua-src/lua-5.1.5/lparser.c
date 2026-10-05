@@ -13,6 +13,7 @@
 #include "lua.h"
 
 #include "lcode.h"
+#include "ldialect.h"
 #include "ldebug.h"
 #include "ldo.h"
 #include "lfunc.h"
@@ -451,8 +452,13 @@ static void recfield (LexState *ls, struct ConsControl *cc) {
     cc->nh++;  /* benilla: 5.0's placement -- `[expr] = v` credits NEITHER size hint */
     checkname(ls, &key);
   }
-  else  /* ls->t.token == '[' */
+  else {  /* ls->t.token == '[' */
+    if (benilla_iswrath51(ls->L)) {
+      luaY_checklimit(fs, cc->nh, MAX_INT, "items in a constructor");
+      cc->nh++;  /* stock 5.1 credits all record fields to the hash hint */
+    }
     yindex(ls, &key);
+  }
   checknext(ls, '=');
   rkkey = luaK_exp2RK(fs, &key);
   expr(ls, &val);
@@ -520,7 +526,8 @@ static void constructor (LexState *ls, expdesc *t) {
     ** continuation at 0x6fd4f5/0x6fd505 does test it; of testnext 0x6fccf0's 16
     ** call sites, the only other `;' consumer is chunk 0x6fcccc, at statement
     ** level, with no such head skip. */
-    testnext(ls, ';');  /* compatibility only */
+    if (!benilla_iswrath51(ls->L))
+      testnext(ls, ';');  /* 5.0 compatibility only */
     if (ls->t.token == '}') break;
     closelistfield(fs, &cc);
     switch(ls->t.token) {
@@ -761,7 +768,7 @@ static void simpleexp (LexState *ls, expdesc *v) {
       init_exp(v, VFALSE, 0);
       break;
     }
-    /* BENILLA: 5.1's vararg EXPRESSION arm, deleted (see
+    /* BENILLA: 5.1's vararg EXPRESSION arm, disabled by default (see
     ** third_party/lua-src/BENILLA.md). Lua 5.0 has no grammar for `...' as a
     ** value: a vararg function reads its extra arguments out of the implicit
     ** `arg' table. `...' as an expression is how the Ace2 corpus asks which
@@ -786,7 +793,20 @@ static void simpleexp (LexState *ls, expdesc *v) {
     ** It also restores 5.0's `arg' rule: the deleted line cleared
     ** VARARG_NEEDSARG for any function that mentioned `...', so with the arm
     ** gone every vararg function gets its `arg' table, which is what 5.0 does
-    ** and what the shipped 1.12 FrameXML reads. */
+    ** and what the shipped 1.12 FrameXML reads. Wrath restores stock 5.1. */
+    case TK_DOTS: {  /* vararg expression in the Wrath dialect */
+      FuncState *fs;
+      if (!benilla_iswrath51(ls->L)) {
+        primaryexp(ls, v);  /* raises 5.0's "unexpected symbol" */
+        return;
+      }
+      fs = ls->fs;
+      check_condition(ls, fs->f->is_vararg,
+                      "cannot use " LUA_QL("...") " outside a vararg function");
+      fs->f->is_vararg &= ~VARARG_NEEDSARG;  /* don't need 'arg' */
+      init_exp(v, VVARARG, luaK_codeABC(fs, OP_VARARG, 0, 1, 0));
+      break;
+    }
     case '{': {  /* constructor */
       constructor(ls, v);
       return;
@@ -805,10 +825,12 @@ static void simpleexp (LexState *ls, expdesc *v) {
 }
 
 
-static UnOpr getunopr (int op) {
+static UnOpr getunopr (LexState *ls, int op) {
   switch (op) {
     case TK_NOT: return OPR_NOT;
     case '-': return OPR_MINUS;
+    case '#':
+      return benilla_iswrath51(ls->L) ? OPR_LEN : OPR_NOUNOPR;
     /* BENILLA: 5.1's `#' length operator, deleted. 5.0 asks a table for its
     ** size with table.getn and a string with string.len; the operator does not
     ** exist and neither does its __len metamethod. Byte-read in the client:
@@ -822,12 +844,14 @@ static UnOpr getunopr (int op) {
 }
 
 
-static BinOpr getbinopr (int op) {
+static BinOpr getbinopr (LexState *ls, int op) {
   switch (op) {
     case '+': return OPR_ADD;
     case '-': return OPR_SUB;
     case '*': return OPR_MUL;
     case '/': return OPR_DIV;
+    case '%':
+      return benilla_iswrath51(ls->L) ? OPR_MOD : OPR_NOBINOPR;
     /* BENILLA: 5.1's `%' modulo operator, deleted. 5.0 spells it math.mod
     ** (and the bare global `mod'), which this VM publishes. Byte-read in the
     ** client: getbinopr is 0x6fe0c0 and its switch is based at `ecx-0x2A' (`*',
@@ -874,7 +898,7 @@ static BinOpr subexpr (LexState *ls, expdesc *v, unsigned int limit) {
   BinOpr op;
   UnOpr uop;
   enterlevel(ls);
-  uop = getunopr(ls->t.token);
+  uop = getunopr(ls, ls->t.token);
   if (uop != OPR_NOUNOPR) {
     luaX_next(ls);
     subexpr(ls, v, UNARY_PRIORITY);
@@ -882,7 +906,7 @@ static BinOpr subexpr (LexState *ls, expdesc *v, unsigned int limit) {
   }
   else simpleexp(ls, v);
   /* expand while operators have priorities higher than `limit' */
-  op = getbinopr(ls->t.token);
+  op = getbinopr(ls, ls->t.token);
   while (op != OPR_NOBINOPR && priority[op].left > limit) {
     expdesc v2;
     BinOpr nextop;

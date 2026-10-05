@@ -11,7 +11,9 @@ use benilla_protocol::{ItemInfo, ObjectFields};
 
 use bevy::ecs::system::SystemParam;
 
-use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Objects};
+use crate::net::{
+    ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Objects, SessionDialect,
+};
 use crate::query_cache::QueryCache;
 
 /// An item or container entity's kind (`TYPEMASK_ITEM` / `TYPEMASK_CONTAINER`), with no model or
@@ -360,7 +362,7 @@ impl RollCatalogs<'_> {
 }
 
 /// Item templates by entry, asked once, and the enchant times queued for items not yet held.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub(crate) struct Items {
     /// A `None` answer is the server's unknown entry, cached so it is never re-asked.
     templates: QueryCache<u32, ItemInfo>,
@@ -371,6 +373,19 @@ pub(crate) struct Items {
     /// when the item is set up (`0x5d8440`), counting seconds from then; they live as long as the
     /// player, here the session. `SMSG_ITEM_TIME_UPDATE` has no such list.
     pending_enchant_times: Vec<(u64, u32, u32)>,
+    /// The active wire dialect; direct/offline fixtures retain Vanilla query semantics.
+    dialect: SessionDialect,
+}
+
+impl Default for Items {
+    fn default() -> Self {
+        Self {
+            templates: QueryCache::default(),
+            fresh: Vec::new(),
+            pending_enchant_times: Vec::new(),
+            dialect: SessionDialect::Vanilla5875,
+        }
+    }
 }
 
 impl Items {
@@ -402,10 +417,21 @@ impl Items {
         guid: u64,
         commands: &NetCommands,
     ) -> Option<&ItemInfo> {
+        if self.templates.answered(entry) {
+            return self.templates.get(entry);
+        }
+        let command = ClientCommand::ItemQuery { entry, guid };
+        if !commands.supports(self.dialect, &command) {
+            return None;
+        }
         self.templates.get_or_ask(entry, || {
             debug!("items: asking template (entry {entry})");
-            let _ = commands.0.send(ClientCommand::ItemQuery { entry, guid });
+            let _ = commands.0.send(command);
         })
+    }
+
+    pub(crate) fn set_dialect(&mut self, dialect: SessionDialect) {
+        self.dialect = dialect;
     }
 
     /// Whether the server answered `entry` as unknown, not still pending; the cast-fail redisplay
@@ -683,6 +709,55 @@ mod tests {
     fn commands() -> (NetCommands, crossbeam_channel::Receiver<ClientCommand>) {
         let (tx, rx) = crossbeam_channel::unbounded();
         (NetCommands(tx), rx)
+    }
+
+    #[test]
+    fn wrath_template_query_is_asked_once_then_held_after_positive_answer() {
+        let (cmds, rx) = commands();
+        let mut items = Items {
+            dialect: SessionDialect::Wrath12340,
+            ..default()
+        };
+
+        assert!(items.held(117, &cmds).is_none());
+        assert!(items.held(117, &cmds).is_none());
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ClientCommand::ItemQuery {
+                entry: 117,
+                guid: 0
+            })
+        ));
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+
+        items.insert_template(117, Some(info("Tough Jerky")));
+        assert_eq!(
+            items.held(117, &cmds).unwrap().display_info_id,
+            info("Tough Jerky").display_info_id
+        );
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn wrath_negative_answer_stays_unresolved_without_requery() {
+        let (cmds, rx) = commands();
+        let mut items = Items {
+            dialect: SessionDialect::Wrath12340,
+            ..default()
+        };
+
+        assert!(items.template(9999, 0x42, &cmds).is_none());
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ClientCommand::ItemQuery {
+                entry: 9999,
+                guid: 0x42
+            })
+        ));
+        items.insert_template(9999, None);
+        assert!(items.template_answered_unknown(9999));
+        assert!(items.template(9999, 0x43, &cmds).is_none());
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
     }
 
     #[test]

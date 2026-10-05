@@ -80,11 +80,24 @@ mod tests {
         let Some(dir) = crate::run_mode::dev_source_dir().map(|d| d.join("assets/ui")) else {
             return;
         };
-        let mut on_disk: Vec<String> = std::fs::read_dir(dir)
+        let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
-        let mut embedded: Vec<String> = super::shipped_files().map(str::to_owned).collect();
+        let mut embedded: Vec<String> = super::shipped_files()
+            .chain(super::UI.dirs().filter_map(|d| d.path().to_str()))
+            .map(str::to_owned)
+            .collect();
+        // The fork's authored Wrath root is a separate profile tree, never Vanilla layer growth.
+        for file in ["wrath/bootstrap.toc", "wrath/UIParent.xml"] {
+            assert_eq!(
+                super::UI
+                    .get_file(file)
+                    .expect("embedded Wrath root")
+                    .contents(),
+                std::fs::read(dir.join(file)).expect("source Wrath root")
+            );
+        }
         on_disk.sort();
         embedded.sort();
         assert_eq!(

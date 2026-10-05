@@ -17,6 +17,23 @@ use crate::order::{DrawLayer, Strata};
 use crate::widget::{FrameHandle, FrameKind};
 
 // The frame method clusters, split out for size.
+
+/// Maximum number of Rust-backed script objects a Wrath VM may allocate. Frames and regions use
+/// the monotonic id counter; font-object records are never removed, so their map length is likewise
+/// monotonic. Vanilla deliberately bypasses this host-memory guard.
+pub(crate) const WRATH_HOST_OBJECT_LIMIT: usize = 4096;
+
+pub(crate) fn ensure_host_object_capacity(model: &Model) -> mlua::Result<()> {
+    if model.dialect == super::ScriptDialect::Wrath12340
+        && (model.next_id.saturating_sub(1) as usize + model.font_objects_by_lower.len())
+            >= WRATH_HOST_OBJECT_LIMIT
+    {
+        return Err(mlua::Error::runtime(format!(
+            "Wrath host object limit exceeded (maximum {WRATH_HOST_OBJECT_LIMIT} frames, regions, and font objects per VM)"
+        )));
+    }
+    Ok(())
+}
 pub(crate) mod anchor_args;
 mod events_regions;
 mod frame_state;
@@ -588,6 +605,7 @@ pub(super) fn create_frame(
     // Create in the arena, mint the id, seed a default layout input. All under one write borrow.
     let id = {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        ensure_host_object_capacity(&model)?;
         let h = model.arena.create(frame_kind, name, parent_handle);
         if frame_kind == FrameKind::WorldFrame {
             model.world_frame_made = true;
@@ -649,8 +667,8 @@ pub(crate) fn fullscreen_scale(aspect: f32) -> f32 {
 
 #[cfg(test)]
 mod fullscreen_scale_tests {
-    use super::fullscreen_scale;
-    use crate::script::UiScript;
+    use super::{ensure_host_object_capacity, fullscreen_scale, WRATH_HOST_OBJECT_LIMIT};
+    use crate::script::{Model, ScriptDialect, UiScript};
 
     #[test]
     fn the_scale_is_three_quarters_of_the_aspect_capped_at_one() {
@@ -658,6 +676,25 @@ mod fullscreen_scale_tests {
         assert_eq!(fullscreen_scale(16.0 / 9.0), 1.0);
         assert!((fullscreen_scale(5.0 / 4.0) - 0.9375).abs() < 1e-6);
         assert_eq!(fullscreen_scale(f32::NAN), 1.0);
+    }
+
+    #[test]
+    fn wrath_host_object_capacity_is_combined_monotonic_and_vanilla_is_unlimited() {
+        let mut wrath = Model::new(ScriptDialect::Wrath12340);
+        wrath.next_id = WRATH_HOST_OBJECT_LIMIT as u32; // 4095 frame/region ids already minted.
+        assert!(ensure_host_object_capacity(&wrath).is_ok());
+        wrath
+            .font_objects_by_lower
+            .insert("lastfont".to_string(), crate::script::FontObject::default());
+        let error = ensure_host_object_capacity(&wrath).unwrap_err().to_string();
+        assert!(
+            error.contains("Wrath host object limit exceeded"),
+            "{error}"
+        );
+
+        let mut vanilla = Model::new(ScriptDialect::Vanilla);
+        vanilla.next_id = u32::MAX;
+        assert!(ensure_host_object_capacity(&vanilla).is_ok());
     }
 
     #[test]

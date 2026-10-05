@@ -2468,6 +2468,118 @@ mod chunk_name_tests {
             .eval::<bool>("return Named:GetScript(\"OnShow\") == nil")
             .unwrap());
     }
+
+    #[test]
+    fn recursive_xml_includes_are_bounded_by_active_path_and_depth() {
+        let s = UiScript::new().unwrap();
+        let cycle = parse(r#"<Ui><Include file="B.xml"/><Frame name="AfterCycle"/></Ui>"#);
+        let files = |path: &str| match path {
+            "B.xml" => Some(br#"<Ui><Include file="A.xml"/></Ui>"#.to_vec()),
+            "A.xml" => Some(br#"<Ui><Include file="B.xml"/></Ui>"#.to_vec()),
+            _ => None,
+        };
+        let report = load_in(&s, &cycle, "A.xml", &files);
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("recursive include")),
+            "{report:?}"
+        );
+        assert!(s.eval::<bool>("return AfterCycle ~= nil").unwrap());
+
+        let root = parse(r#"<Ui><Include file="1.xml"/></Ui>"#);
+        let deep = |path: &str| {
+            let n = path.strip_suffix(".xml")?.parse::<usize>().ok()?;
+            Some(format!(r#"<Ui><Include file="{}.xml"/></Ui>"#, n + 1).into_bytes())
+        };
+        let report = load_in(&s, &root, "0.xml", &deep);
+        assert!(
+            report.errors.iter().any(|e| e.contains("depth exceeds 64")),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn wrath_xml_chunks_keep_the_explicit_addon_owner_abi_through_nested_xml() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let doc = parse(
+            r#"<Ui><Script>local addon, private = ...; private.inline = addon</Script><Include file="Nested.xml"/></Ui>"#,
+        );
+        let files = |path: &str| match path {
+            "Pkg/Nested.xml" => Some(br#"<Ui><Script file="Child.lua"/></Ui>"#.to_vec()),
+            "Pkg/Child.lua" => {
+                Some(b"local addon, private = ...; OWNER = addon; SAME = private.inline".to_vec())
+            }
+            _ => None,
+        };
+        let report = load_in_addon(&s, &doc, "Pkg/Main.xml", &files, "RealOwner");
+        assert!(report.errors.is_empty(), "{report:?}");
+        assert_eq!(
+            s.eval::<(String, String)>("return OWNER, SAME").unwrap(),
+            ("RealOwner".into(), "RealOwner".into())
+        );
+    }
+
+    #[test]
+    fn wrath_function_handlers_and_named_formals_are_compiled() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        s.run("function NamedHandler(self) FUNCTION_SELF = self end")
+            .unwrap();
+        let doc = parse(
+            r#"<Ui><Frame name="WrathHandlers"><Scripts>
+              <OnShow function="NamedHandler"/>
+              <OnMouseDown>FORMALS = {self, button}</OnMouseDown>
+              <OnMouseWheel>FORMALS = {self, delta}</OnMouseWheel>
+              <OnKeyDown>FORMALS = {self, key}</OnKeyDown>
+              <OnValueChanged>FORMALS = {self, value}</OnValueChanged>
+              <OnSizeChanged>FORMALS = {self, width, height}</OnSizeChanged>
+              <OnDragStart>FORMALS = {self, button}</OnDragStart>
+            </Scripts></Frame></Ui>"#,
+        );
+        let report = load(&s, &doc, &no_files);
+        assert!(report.errors.is_empty(), "{report:?}");
+        s.run("WrathHandlers:GetScript('OnShow')(WrathHandlers)")
+            .unwrap();
+        assert!(s
+            .eval::<bool>("return FUNCTION_SELF == WrathHandlers")
+            .unwrap());
+        for (handler, args, expected) in [
+            ("OnMouseDown", "WrathHandlers, 'LeftButton'", "LeftButton"),
+            ("OnMouseWheel", "WrathHandlers, -1", "-1"),
+            ("OnKeyDown", "WrathHandlers, 'SPACE'", "SPACE"),
+            ("OnValueChanged", "WrathHandlers, 7", "7"),
+            ("OnSizeChanged", "WrathHandlers, 12, 34", "12:34"),
+            ("OnDragStart", "WrathHandlers, 'RightButton'", "RightButton"),
+        ] {
+            s.run(&format!("WrathHandlers:GetScript('{handler}')({args})"))
+                .unwrap();
+            let got = s.eval::<String>("return tostring(FORMALS[2]) .. (FORMALS[3] and ':' .. tostring(FORMALS[3]) or '')").unwrap();
+            assert_eq!(got, expected, "{handler}");
+        }
+    }
+
+    #[test]
+    fn wrath_secure_alias_is_rejected_before_xml_frame_allocation() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let doc = parse(
+            r#"<Ui>
+              <Frame name="SecureActionButtonTemplate" virtual="true"/>
+              <Frame name="Alias" virtual="true" inherits="SecureActionButtonTemplate"/>
+              <Frame name="MustNotExist" inherits="Alias"/>
+            </Ui>"#,
+        );
+        let report = load(&s, &doc, &no_files);
+        assert_eq!(report.frames, 0, "{report:?}");
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("secure template inheritance")),
+            "{report:?}"
+        );
+        assert!(s.eval::<bool>("return MustNotExist == nil").unwrap());
+    }
 }
 
 #[test]

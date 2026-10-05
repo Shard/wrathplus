@@ -126,6 +126,68 @@ pub struct MclqChunk {
     pub tile_flags: [u8; 64],
 }
 
+/// Wrath MH2O vertex payload layout (`SMLiquidInstance::LVF`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mh2oVertexFormat {
+    HeightDepth,
+    HeightTextureCoordinates,
+    Depth,
+    HeightTextureCoordinatesDepth,
+}
+
+impl Mh2oVertexFormat {
+    fn from_raw(raw: u16) -> Option<Self> {
+        match raw {
+            0 => Some(Self::HeightDepth),
+            1 => Some(Self::HeightTextureCoordinates),
+            2 => Some(Self::Depth),
+            3 => Some(Self::HeightTextureCoordinatesDepth),
+            _ => None,
+        }
+    }
+}
+
+/// One Wrath MH2O liquid layer. Cell coverage is local to the layer's `width × height` rectangle;
+/// vertex arrays are `(width + 1) × (height + 1)`, row-major. `liquid_type` is a
+/// `LiquidType.dbc` id: rendering requires the parent loader to resolve its sound/material class.
+#[derive(Debug, Clone)]
+pub struct Mh2oLayer {
+    pub liquid_type: u16,
+    pub vertex_format: Mh2oVertexFormat,
+    pub min_height: f32,
+    pub max_height: f32,
+    pub offset_x: u8,
+    pub offset_y: u8,
+    pub width: u8,
+    pub height: u8,
+    pub exists: Vec<bool>,
+    /// Absolute liquid heights. LVF 2 is defined at zero; a missing height payload uses
+    /// `min_height` for the formats which carry heights.
+    pub heights: Vec<f32>,
+    pub depths: Option<Vec<u8>>,
+    pub texture_coordinates: Option<Vec<[u16; 2]>>,
+}
+
+/// Per-MCNK MH2O attributes, both bitmaps in the MCNK's full 8×8 cell coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mh2oAttributes {
+    pub fishable: u64,
+    pub deep: u64,
+}
+
+/// MH2O data for one MCNK, indexed in the same order as the tile's MCNK chunks.
+#[derive(Debug, Clone, Default)]
+pub struct Mh2oEntry {
+    pub layers: Vec<Mh2oLayer>,
+    pub attributes: Option<Mh2oAttributes>,
+}
+
+/// A bounded Wrath MH2O chunk: exactly 256 MCNK entries when present.
+#[derive(Debug, Clone)]
+pub struct Mh2oChunk {
+    pub entries: Vec<Mh2oEntry>,
+}
+
 /// MCNK header flag bit 1: a chunk a mover may not enter, the bands along mountain rims such as
 /// Searing Gorge's. The reference's header walk copies it to its chunk flag `0x40` (`0x6af5f0`).
 pub const MCNK_IMPASSABLE: u32 = 0x2;
@@ -201,6 +263,8 @@ pub struct RootAdt {
     pub doodad_placements: Vec<DoodadPlacement>,
     pub wmo_placements: Vec<WmoPlacement>,
     pub mcnk_chunks: Vec<McnkChunk>,
+    /// Wrath's tile-level multi-layer liquid data. Vanilla files have no MH2O.
+    pub mh2o: Option<Mh2oChunk>,
 }
 
 /// A parsed ADT; vanilla has only the monolithic root.
@@ -213,12 +277,14 @@ pub enum ParsedAdt {
 #[derive(Debug)]
 pub enum Error {
     Truncated(&'static str),
+    Invalid(&'static str),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Truncated(w) => write!(f, "truncated ADT: {w}"),
+            Error::Invalid(w) => write!(f, "invalid ADT: {w}"),
         }
     }
 }
@@ -249,6 +315,7 @@ pub fn parse_adt(cursor: &mut Cursor<&[u8]>) -> Result<ParsedAdt> {
     let mut doodad_placements = Vec::new();
     let mut wmo_placements = Vec::new();
     let mut mcnk_chunks = Vec::new();
+    let mut mh2o = None;
 
     for (magic, data) in chunks(b) {
         match &magic {
@@ -260,6 +327,7 @@ pub fn parse_adt(cursor: &mut Cursor<&[u8]>) -> Result<ParsedAdt> {
             b"FDDM" => doodad_placements = read_mddf(data)?, // MDDF
             b"FDOM" => wmo_placements = read_modf(data)?,    // MODF
             b"KNCM" => mcnk_chunks.push(read_mcnk(data)?),   // MCNK
+            b"O2HM" => mh2o = Some(read_mh2o(data)?),        // MH2O
             _ => {}
         }
     }
@@ -281,6 +349,7 @@ pub fn parse_adt(cursor: &mut Cursor<&[u8]>) -> Result<ParsedAdt> {
         doodad_placements,
         wmo_placements,
         mcnk_chunks,
+        mh2o,
     })))
 }
 
@@ -545,6 +614,183 @@ fn read_mclq_block(sub: &[u8]) -> Option<MclqChunk> {
     })
 }
 
+const MH2O_ENTRY_COUNT: usize = 16 * 16;
+const MH2O_HEADER_SIZE: usize = 12;
+const MH2O_INSTANCE_SIZE: usize = 24;
+
+/// Parse MH2O using offsets relative to its payload. Every multiplication and offset is checked
+/// before slicing, so corrupt layer counts and dimensions cannot wrap or allocate from file data.
+fn read_mh2o(data: &[u8]) -> Result<Mh2oChunk> {
+    let headers_len = MH2O_ENTRY_COUNT * MH2O_HEADER_SIZE;
+    if data.len() < headers_len {
+        return Err(Error::Truncated("MH2O headers"));
+    }
+    let mut entries = Vec::with_capacity(MH2O_ENTRY_COUNT);
+    for index in 0..MH2O_ENTRY_COUNT {
+        let h = &data[index * MH2O_HEADER_SIZE..][..MH2O_HEADER_SIZE];
+        let instances_offset = h.u32_at(0).ok_or(Error::Truncated("MH2O header"))? as usize;
+        let layer_count = h.u32_at(4).ok_or(Error::Truncated("MH2O header"))? as usize;
+        let attributes_offset = h.u32_at(8).ok_or(Error::Truncated("MH2O header"))? as usize;
+        if layer_count == 0 {
+            entries.push(Mh2oEntry::default());
+            continue;
+        }
+        if instances_offset == 0 {
+            return Err(Error::Invalid("MH2O layers have no instance offset"));
+        }
+        let instances_len = layer_count
+            .checked_mul(MH2O_INSTANCE_SIZE)
+            .ok_or(Error::Invalid("MH2O instance count overflow"))?;
+        let instances_end = instances_offset
+            .checked_add(instances_len)
+            .ok_or(Error::Invalid("MH2O instance offset overflow"))?;
+        let instances = data
+            .get(instances_offset..instances_end)
+            .ok_or(Error::Truncated("MH2O instances"))?;
+        let attributes = if attributes_offset == 0 {
+            None
+        } else {
+            let end = attributes_offset
+                .checked_add(16)
+                .ok_or(Error::Invalid("MH2O attributes offset overflow"))?;
+            let a = data
+                .get(attributes_offset..end)
+                .ok_or(Error::Truncated("MH2O attributes"))?;
+            Some(Mh2oAttributes {
+                fishable: u64::from_le_bytes(a[0..8].try_into().unwrap()),
+                deep: u64::from_le_bytes(a[8..16].try_into().unwrap()),
+            })
+        };
+        let mut layers = Vec::with_capacity(layer_count.min(8));
+        for raw in instances.as_chunks::<MH2O_INSTANCE_SIZE>().0 {
+            layers.push(read_mh2o_layer(data, raw)?);
+        }
+        entries.push(Mh2oEntry { layers, attributes });
+    }
+    Ok(Mh2oChunk { entries })
+}
+
+fn read_mh2o_layer(data: &[u8], raw: &[u8; MH2O_INSTANCE_SIZE]) -> Result<Mh2oLayer> {
+    let liquid_type = raw.u16_at(0).ok_or(Error::Truncated("MH2O instance"))?;
+    let vertex_format =
+        Mh2oVertexFormat::from_raw(raw.u16_at(2).ok_or(Error::Truncated("MH2O instance"))?)
+            .ok_or(Error::Invalid("MH2O vertex format"))?;
+    let min_height = raw.f32_at(4).ok_or(Error::Truncated("MH2O instance"))?;
+    let max_height = raw.f32_at(8).ok_or(Error::Truncated("MH2O instance"))?;
+    let (offset_x, offset_y, width, height) = (raw[12], raw[13], raw[14], raw[15]);
+    if width == 0
+        || height == 0
+        || usize::from(offset_x) + usize::from(width) > 8
+        || usize::from(offset_y) + usize::from(height) > 8
+    {
+        return Err(Error::Invalid("MH2O liquid rectangle"));
+    }
+    let mask_offset = raw.u32_at(16).ok_or(Error::Truncated("MH2O instance"))? as usize;
+    let vertex_offset = raw.u32_at(20).ok_or(Error::Truncated("MH2O instance"))? as usize;
+    let cell_count = usize::from(width)
+        .checked_mul(usize::from(height))
+        .ok_or(Error::Invalid("MH2O cell count overflow"))?;
+    let vertex_count = (usize::from(width) + 1)
+        .checked_mul(usize::from(height) + 1)
+        .ok_or(Error::Invalid("MH2O vertex count overflow"))?;
+    let exists = if mask_offset == 0 {
+        vec![true; cell_count]
+    } else {
+        let byte_count = cell_count.div_ceil(8);
+        let end = mask_offset
+            .checked_add(byte_count)
+            .ok_or(Error::Invalid("MH2O bitmap offset overflow"))?;
+        let mask = data
+            .get(mask_offset..end)
+            .ok_or(Error::Truncated("MH2O exists bitmap"))?;
+        (0..cell_count)
+            .map(|bit| mask[bit / 8] & (1 << (bit % 8)) != 0)
+            .collect()
+    };
+
+    let mut heights = vec![
+        if vertex_format == Mh2oVertexFormat::Depth {
+            0.0
+        } else {
+            min_height
+        };
+        vertex_count
+    ];
+    let mut depths = None;
+    let mut texture_coordinates = None;
+    if vertex_offset != 0 {
+        let block_len = vertex_count
+            .checked_mul(4)
+            .ok_or(Error::Invalid("MH2O vertex data overflow"))?;
+        let has_heights = vertex_format != Mh2oVertexFormat::Depth;
+        let has_uvs = matches!(
+            vertex_format,
+            Mh2oVertexFormat::HeightTextureCoordinates
+                | Mh2oVertexFormat::HeightTextureCoordinatesDepth
+        );
+        let has_depths = matches!(
+            vertex_format,
+            Mh2oVertexFormat::HeightDepth
+                | Mh2oVertexFormat::Depth
+                | Mh2oVertexFormat::HeightTextureCoordinatesDepth
+        );
+        let total_len = (if has_heights { block_len } else { 0usize })
+            .checked_add(if has_uvs { block_len } else { 0 })
+            .and_then(|n| n.checked_add(if has_depths { vertex_count } else { 0 }))
+            .ok_or(Error::Invalid("MH2O vertex data overflow"))?;
+        let end = vertex_offset
+            .checked_add(total_len)
+            .ok_or(Error::Invalid("MH2O vertex offset overflow"))?;
+        let vertex_data = data
+            .get(vertex_offset..end)
+            .ok_or(Error::Truncated("MH2O vertex data"))?;
+        let mut cursor = 0;
+        if has_heights {
+            for (i, height) in heights.iter_mut().enumerate() {
+                *height = vertex_data
+                    .f32_at(i * 4)
+                    .ok_or(Error::Truncated("MH2O heights"))?;
+            }
+            cursor += block_len;
+        }
+        if has_uvs {
+            let uv_data = &vertex_data[cursor..cursor + block_len];
+            texture_coordinates = Some(
+                (0..vertex_count)
+                    .map(|i| {
+                        Ok([
+                            uv_data
+                                .u16_at(i * 4)
+                                .ok_or(Error::Truncated("MH2O texture coordinates"))?,
+                            uv_data
+                                .u16_at(i * 4 + 2)
+                                .ok_or(Error::Truncated("MH2O texture coordinates"))?,
+                        ])
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            cursor += block_len;
+        }
+        if has_depths {
+            depths = Some(vertex_data[cursor..cursor + vertex_count].to_vec());
+        }
+    }
+    Ok(Mh2oLayer {
+        liquid_type,
+        vertex_format,
+        min_height,
+        max_height,
+        offset_x,
+        offset_y,
+        width,
+        height,
+        exists,
+        heights,
+        depths,
+        texture_coordinates,
+    })
+}
+
 mod combined_alpha;
 pub use combined_alpha::CombinedAlphaMap;
 
@@ -703,5 +949,79 @@ mod tests {
             height: 1.0,
         };
         assert_eq!(max.texcoords(), [65535, 65535], "unsigned, not −1");
+    }
+
+    fn mh2o_with_layer(format: u16, width: u8, height: u8, vertex_data: &[u8]) -> Vec<u8> {
+        let mut payload = vec![0u8; MH2O_ENTRY_COUNT * MH2O_HEADER_SIZE];
+        let instance_offset = payload.len();
+        payload[0..4].copy_from_slice(&(instance_offset as u32).to_le_bytes());
+        payload[4..8].copy_from_slice(&1u32.to_le_bytes());
+        let mut instance = [0u8; MH2O_INSTANCE_SIZE];
+        instance[0..2].copy_from_slice(&7u16.to_le_bytes());
+        instance[2..4].copy_from_slice(&format.to_le_bytes());
+        instance[4..8].copy_from_slice(&12.5f32.to_le_bytes());
+        instance[8..12].copy_from_slice(&18.0f32.to_le_bytes());
+        instance[12..16].copy_from_slice(&[1, 2, width, height]);
+        let mask_offset = instance_offset + MH2O_INSTANCE_SIZE;
+        instance[16..20].copy_from_slice(&(mask_offset as u32).to_le_bytes());
+        instance[20..24].copy_from_slice(&((mask_offset + 1) as u32).to_le_bytes());
+        payload.extend_from_slice(&instance);
+        payload.push(0b0000_0010);
+        payload.extend_from_slice(vertex_data);
+        chunk(b"O2HM", &payload)
+    }
+
+    #[test]
+    fn mh2o_reads_masks_and_all_wrath_vertex_formats() {
+        for format in 0..=3u16 {
+            let vertex_count = 6usize; // width 2, height 1
+            let mut vertex_data = Vec::new();
+            if format != 2 {
+                for n in 0..vertex_count {
+                    vertex_data.extend_from_slice(&(20.0 + n as f32).to_le_bytes());
+                }
+            }
+            if format == 1 || format == 3 {
+                for n in 0..vertex_count as u16 {
+                    vertex_data.extend_from_slice(&(n + 100).to_le_bytes());
+                    vertex_data.extend_from_slice(&(n + 200).to_le_bytes());
+                }
+            }
+            if format == 0 || format == 2 || format == 3 {
+                vertex_data.extend(10..10 + vertex_count as u8);
+            }
+            let ParsedAdt::Root(root) =
+                parse(&mh2o_with_layer(format, 2, 1, &vertex_data)).unwrap();
+            let layer = &root.mh2o.as_ref().unwrap().entries[0].layers[0];
+            assert_eq!(layer.exists, [false, true]);
+            assert_eq!(layer.heights.len(), vertex_count);
+            assert_eq!(layer.heights[0], if format == 2 { 0.0 } else { 20.0 });
+            assert_eq!(layer.depths.is_some(), matches!(format, 0 | 2 | 3));
+            assert_eq!(layer.texture_coordinates.is_some(), matches!(format, 1 | 3));
+        }
+    }
+
+    #[test]
+    fn mh2o_rejects_truncation_and_overflowing_rectangles() {
+        let short = chunk(b"O2HM", &[0u8; 12]);
+        assert!(matches!(
+            parse(&short),
+            Err(Error::Truncated("MH2O headers"))
+        ));
+
+        let bad_rect = mh2o_with_layer(2, 8, 1, &[0u8; 18]);
+        assert!(matches!(
+            parse(&bad_rect),
+            Err(Error::Invalid("MH2O liquid rectangle"))
+        ));
+
+        let mut payload = vec![0u8; MH2O_ENTRY_COUNT * MH2O_HEADER_SIZE];
+        payload[0..4].copy_from_slice(&3072u32.to_le_bytes());
+        payload[4..8].copy_from_slice(&u32::MAX.to_le_bytes());
+        let overflow = chunk(b"O2HM", &payload);
+        assert!(matches!(
+            parse(&overflow),
+            Err(Error::Truncated("MH2O instances")) | Err(Error::Invalid(_))
+        ));
     }
 }

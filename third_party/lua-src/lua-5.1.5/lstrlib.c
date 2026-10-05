@@ -19,6 +19,8 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "ldialect.h"
+
 
 /* macro to `unsign' a character */
 #define uchar(c)        ((unsigned char)(c))
@@ -167,16 +169,49 @@ static int str_dump (lua_State *L) {
 #define CAP_UNFINISHED	(-1)
 #define CAP_POSITION	(-2)
 
+/* Wrath-only deterministic limits for one public matcher invocation. */
+#define WRATH_MATCH_STEPS	100000
+#define WRATH_MATCH_DEPTH	200
+
 typedef struct MatchState {
   const char *src_init;  /* init of source string */
   const char *src_end;  /* end (`\0') of source string */
   lua_State *L;
+  unsigned long matchsteps;
+  unsigned int matchdepth;
+  int limited;
   int level;  /* total number of captures (finished or unfinished) */
   struct {
     const char *init;
     ptrdiff_t len;
   } capture[LUA_MAXCAPTURES];
 } MatchState;
+
+
+static void matchinit (MatchState *ms, lua_State *L, const char *src,
+                       const char *end) {
+  ms->L = L;
+  ms->src_init = src;
+  ms->src_end = end;
+  ms->matchsteps = WRATH_MATCH_STEPS;
+  ms->matchdepth = 0;
+  ms->limited = benilla_iswrath51(L);
+}
+
+
+static void matchstep (MatchState *ms) {
+  if (ms->limited) {
+    if (ms->matchsteps == 0)
+      luaL_error(ms->L, "pattern matching work limit exceeded");
+    ms->matchsteps--;
+  }
+}
+
+
+static void matchenter (MatchState *ms) {
+  if (ms->limited && ++ms->matchdepth > WRATH_MATCH_DEPTH)
+    luaL_error(ms->L, "pattern matching recursion limit exceeded");
+}
 
 
 #define L_ESC		'%'
@@ -200,6 +235,7 @@ static int capture_to_close (MatchState *ms) {
 
 
 static const char *classend (MatchState *ms, const char *p) {
+  matchstep(ms);
   switch (*p++) {
     case L_ESC: {
       if (*p == '\0')
@@ -209,6 +245,7 @@ static const char *classend (MatchState *ms, const char *p) {
     case '[': {
       if (*p == '^') p++;
       do {  /* look for a `]' */
+        matchstep(ms);
         if (*p == '\0')
           luaL_error(ms->L, "malformed pattern (missing " LUA_QL("]") ")");
         if (*(p++) == L_ESC && *p != '\0')
@@ -242,13 +279,14 @@ static int match_class (int c, int cl) {
 }
 
 
-static int matchbracketclass (int c, const char *p, const char *ec) {
+static int matchbracketclass (MatchState *ms, int c, const char *p, const char *ec) {
   int sig = 1;
   if (*(p+1) == '^') {
     sig = 0;
     p++;  /* skip the `^' */
   }
   while (++p < ec) {
+    matchstep(ms);
     if (*p == L_ESC) {
       p++;
       if (match_class(c, uchar(*p)))
@@ -265,11 +303,11 @@ static int matchbracketclass (int c, const char *p, const char *ec) {
 }
 
 
-static int singlematch (int c, const char *p, const char *ep) {
+static int singlematch (MatchState *ms, int c, const char *p, const char *ep) {
   switch (*p) {
     case '.': return 1;  /* matches any char */
     case L_ESC: return match_class(c, uchar(*(p+1)));
-    case '[': return matchbracketclass(c, p, ep-1);
+    case '[': return matchbracketclass(ms, c, p, ep-1);
     default:  return (uchar(*p) == c);
   }
 }
@@ -288,6 +326,7 @@ static const char *matchbalance (MatchState *ms, const char *s,
     int e = *(p+1);
     int cont = 1;
     while (++s < ms->src_end) {
+      matchstep(ms);
       if (*s == e) {
         if (--cont == 0) return s+1;
       }
@@ -301,8 +340,10 @@ static const char *matchbalance (MatchState *ms, const char *s,
 static const char *max_expand (MatchState *ms, const char *s,
                                  const char *p, const char *ep) {
   ptrdiff_t i = 0;  /* counts maximum expand for item */
-  while ((s+i)<ms->src_end && singlematch(uchar(*(s+i)), p, ep))
+  while ((s+i)<ms->src_end && singlematch(ms, uchar(*(s+i)), p, ep)) {
+    matchstep(ms);
     i++;
+  }
   /* keeps trying to match with the maximum repetitions */
   while (i>=0) {
     const char *res = match(ms, (s+i), ep+1);
@@ -319,8 +360,10 @@ static const char *min_expand (MatchState *ms, const char *s,
     const char *res = match(ms, s, ep+1);
     if (res != NULL)
       return res;
-    else if (s<ms->src_end && singlematch(uchar(*s), p, ep))
+    else if (s<ms->src_end && singlematch(ms, uchar(*s), p, ep)) {
+      matchstep(ms);
       s++;  /* try with one more repetition */
+    }
     else return NULL;
   }
 }
@@ -355,15 +398,21 @@ static const char *match_capture (MatchState *ms, const char *s, int l) {
   size_t len;
   l = check_capture(ms, l);
   len = ms->capture[l].len;
-  if ((size_t)(ms->src_end-s) >= len &&
-      memcmp(ms->capture[l].init, s, len) == 0)
+  if ((size_t)(ms->src_end-s) >= len) {
+    size_t i;
+    for (i = 0; i < len; i++) {
+      matchstep(ms);
+      if (ms->capture[l].init[i] != s[i]) return NULL;
+    }
     return s+len;
+  }
   else return NULL;
 }
 
 
-static const char *match (MatchState *ms, const char *s, const char *p) {
+static const char *match_impl (MatchState *ms, const char *s, const char *p) {
   init: /* using goto's to optimize tail recursion */
+  matchstep(ms);
   switch (*p) {
     case '(': {  /* start capture */
       if (*(p+1) == ')')  /* position capture? */
@@ -389,8 +438,8 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
                                LUA_QL("%%f") " in pattern");
           ep = classend(ms, p);  /* points to what is next */
           previous = (s == ms->src_init) ? '\0' : *(s-1);
-          if (matchbracketclass(uchar(previous), p, ep-1) ||
-             !matchbracketclass(uchar(*s), p, ep-1)) return NULL;
+          if (matchbracketclass(ms, uchar(previous), p, ep-1) ||
+             !matchbracketclass(ms, uchar(*s), p, ep-1)) return NULL;
           p=ep; goto init;  /* else return match(ms, s, ep); */
         }
         default: {
@@ -413,7 +462,7 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
     }
     default: dflt: {  /* it is a pattern item */
       const char *ep = classend(ms, p);  /* points to what is next */
-      int m = s<ms->src_end && singlematch(uchar(*s), p, ep);
+      int m = s<ms->src_end && singlematch(ms, uchar(*s), p, ep);
       switch (*ep) {
         case '?': {  /* optional */
           const char *res;
@@ -440,6 +489,15 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
 }
 
 
+static const char *match (MatchState *ms, const char *s, const char *p) {
+  const char *result;
+  matchenter(ms);
+  result = match_impl(ms, s, p);
+  if (ms->limited) ms->matchdepth--;
+  return result;
+}
+
+
 
 static const char *lmemfind (const char *s1, size_t l1,
                                const char *s2, size_t l2) {
@@ -460,6 +518,23 @@ static const char *lmemfind (const char *s1, size_t l1,
     }
     return NULL;  /* not found */
   }
+}
+
+
+static const char *limited_lmemfind (MatchState *ms, const char *s1,
+                                      size_t l1, const char *s2, size_t l2) {
+  size_t i, j;
+  if (l2 == 0) return s1;
+  if (l2 > l1) return NULL;
+  for (i = 0; i <= l1-l2; i++) {
+    matchstep(ms);
+    for (j = 0; j < l2; j++) {
+      matchstep(ms);
+      if (s1[i+j] != s2[j]) break;
+    }
+    if (j == l2) return s1+i;
+  }
+  return NULL;
 }
 
 
@@ -501,8 +576,15 @@ static int str_find_aux (lua_State *L, int find) {
   else if ((size_t)(init) > l1) init = (ptrdiff_t)l1;
   if (find && (lua_toboolean(L, 4) ||  /* explicit request? */
       strpbrk(p, SPECIALS) == NULL)) {  /* or no special characters? */
-    /* do a plain search */
-    const char *s2 = lmemfind(s+init, l1-init, p, l2);
+    /* do a plain search; Wrath charges byte comparisons too */
+    const char *s2;
+    if (benilla_iswrath51(L)) {
+      MatchState ms;
+      matchinit(&ms, L, s, s+l1);
+      s2 = limited_lmemfind(&ms, s+init, l1-init, p, l2);
+    }
+    else
+      s2 = lmemfind(s+init, l1-init, p, l2);
     if (s2) {
       lua_pushinteger(L, s2-s+1);
       lua_pushinteger(L, s2-s+l2);
@@ -513,11 +595,10 @@ static int str_find_aux (lua_State *L, int find) {
     MatchState ms;
     int anchor = (*p == '^') ? (p++, 1) : 0;
     const char *s1=s+init;
-    ms.L = L;
-    ms.src_init = s;
-    ms.src_end = s+l1;
+    matchinit(&ms, L, s, s+l1);
     do {
       const char *res;
+      matchstep(&ms);
       ms.level = 0;
       if ((res=match(&ms, s1, p)) != NULL) {
         if (find) {
@@ -551,13 +632,12 @@ static int gmatch_aux (lua_State *L) {
   const char *s = lua_tolstring(L, lua_upvalueindex(1), &ls);
   const char *p = lua_tostring(L, lua_upvalueindex(2));
   const char *src;
-  ms.L = L;
-  ms.src_init = s;
-  ms.src_end = s+ls;
+  matchinit(&ms, L, s, s+ls);
   for (src = s + (size_t)lua_tointeger(L, lua_upvalueindex(3));
        src <= ms.src_end;
        src++) {
     const char *e;
+    matchstep(&ms);
     ms.level = 0;
     if ((e = match(&ms, src, p)) != NULL) {
       lua_Integer newstart = e-s;
@@ -655,11 +735,10 @@ static int str_gsub (lua_State *L) {
                    tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3,
                       "string/function/table expected");
   luaL_buffinit(L, &b);
-  ms.L = L;
-  ms.src_init = src;
-  ms.src_end = src+srcl;
+  matchinit(&ms, L, src, src+srcl);
   while (n < max_s) {
     const char *e;
+    matchstep(&ms);
     ms.level = 0;
     e = match(&ms, src, p);
     if (e) {
@@ -868,4 +947,3 @@ LUALIB_API int luaopen_string (lua_State *L) {
   createmetatable(L);
   return 1;
 }
-

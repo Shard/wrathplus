@@ -55,6 +55,14 @@ impl LogoutState {
         self.pending
     }
 
+    /// Mark a native request as sent through the same latch Lua requests use. Call this only after
+    /// the command channel accepts the packet, so a dead channel leaves logout retryable.
+    #[cfg(test)]
+    pub(crate) fn mark_pending(&mut self) {
+        self.quitting = false;
+        self.pending = true;
+    }
+
     /// `SMSG_LOGOUT_RESPONSE`, the module doc's table; an instant logout signals nothing.
     pub(crate) fn apply_response(&mut self, reason: u32, instant: bool) {
         // Logged: the server's inputs (combat, resting, account level) are invisible from here.
@@ -279,6 +287,23 @@ mod tests {
             !s.pending,
             "the refusal arm clears the pending byte — otherwise a logout refused in combat \
              would never be retryable"
+        );
+    }
+
+    #[test]
+    fn native_request_uses_the_shared_retry_latch() {
+        let mut s = LogoutState::default();
+        s.mark_pending();
+        assert!(s.pending());
+
+        s.apply_response(1, false);
+        assert!(!s.pending(), "a refusal makes the native control retryable");
+
+        s.mark_pending();
+        s.apply_cancelled();
+        assert!(
+            !s.pending(),
+            "a cancellation makes the native control retryable"
         );
     }
 

@@ -17,7 +17,9 @@ use bevy::prelude::*;
 
 use crate::creature_anim::{Engaged, SwingMessage};
 use crate::names::NameCache;
-use crate::net::{ClientCommand, Guid, GuidIndex, NetEntity, ObjectStore, Reputations, SelfPlayer};
+#[cfg(test)]
+use crate::net::ClientCommand;
+use crate::net::{Guid, GuidIndex, NetEntity, ObjectStore, Reputations, SelfPlayer};
 use benilla_assets::{LockRecover, WorldAssets};
 
 use super::relations::{can_assist, can_attack};
@@ -429,7 +431,8 @@ impl TabHistory {
     }
 }
 
-/// What one [`commit`] did; `swung` means it already sent `CMSG_ATTACKSWING`, so a caller must not.
+/// What one [`commit`] did; `swung` means StartAttack enqueued its swing, so a caller must not
+/// repeat it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct CommitOutcome {
     pub(super) changed: bool,
@@ -477,12 +480,11 @@ pub(super) fn commit(
         // `0x493a08`: the real StopAttack, which also un-queues a next-swing strike (`0x6e6f30`).
         seam.stop(engaged);
     }
-    let _ = seam.net.0.send(ClientCommand::SetSelection { guid });
-    let swung = stop_and_repoint && new_attackable && self_guid != Some(guid);
-    if swung {
-        // `0x4938c8`: the swing goes out despite the lock, and cancels auto-repeat (`0x6ea080`).
-        seam.start(guid, engaged, true);
-    }
+    super::send_selection(&seam.net, *seam.dialect, guid);
+    // `0x4938c8`: an admitted swing goes out despite the lock and cancels auto-repeat
+    // (`0x6ea080`). Unsupported dialects refuse before either effect.
+    let wants_swing = stop_and_repoint && new_attackable && self_guid != Some(guid);
+    let swung = wants_swing && seam.start(guid, engaged, true);
     CommitOutcome {
         changed: true,
         swung,
@@ -841,6 +843,7 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
+        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::AutoRepeatActive>();
         world.init_resource::<Messages<crate::creature_anim::SheathRequest>>();
@@ -850,6 +853,106 @@ mod tests {
         world.init_resource::<crate::ui_loot::LootLatch>();
         world.spawn(SelfPlayer);
         (world, rx)
+    }
+
+    #[test]
+    fn engaged_switch_and_clear_are_fenced_as_complete_attack_transactions() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let drain = |rx: &crossbeam_channel::Receiver<ClientCommand>| {
+            rx.try_iter()
+                .map(|command| match command {
+                    ClientCommand::AttackStop => "stop",
+                    ClientCommand::SetSelection { .. } => "select",
+                    ClientCommand::AttackSwing { .. } => "swing",
+                    ClientCommand::CancelCast { .. } => "cancel-cast",
+                    ClientCommand::CancelAutoRepeat => "cancel-repeat",
+                    _ => "other",
+                })
+                .collect::<Vec<_>>()
+        };
+
+        for dialect in [
+            crate::net::SessionDialect::Wrath12340,
+            crate::net::SessionDialect::Vanilla5875,
+        ] {
+            let (mut world, rx) = commit_world();
+            world.insert_resource(dialect);
+            *world.resource_mut::<Selection>() = Selection {
+                target: Some(Entity::PLACEHOLDER),
+                guid: Some(0xA),
+                last: None,
+            };
+            world.resource_mut::<crate::spell::AutoRepeatActive>().0 = Some(75);
+
+            let switched = go(&mut world, 0xB, true, Some(1), true);
+            assert!(switched.changed);
+            world
+                .resource_mut::<crate::spell::QueuedMeleeSpell>()
+                .arm(78);
+            world
+                .run_system_once(
+                    |mut selection: ResMut<Selection>,
+                     mut seam: crate::creature_anim::AttackSeam| {
+                        super::super::click::clear(&mut selection, &mut seam, true);
+                    },
+                )
+                .expect("engaged clear runs through the real seam");
+
+            assert_eq!(world.resource::<Selection>().guid, None);
+            let commands = drain(&rx);
+            let queued = world.resource::<crate::spell::QueuedMeleeSpell>().current();
+            let repeat = world.resource::<crate::spell::AutoRepeatActive>().0;
+            let stand = world
+                .resource::<Messages<crate::player::StandStateRequest>>()
+                .len();
+            let sheath = world
+                .resource::<Messages<crate::creature_anim::SheathRequest>>()
+                .len();
+
+            if dialect == crate::net::SessionDialect::Wrath12340 {
+                assert!(switched.swung, "native swing reached the command endpoint");
+                assert_eq!(commands, ["stop", "select", "swing", "select", "stop"]);
+                assert_eq!(queued, Some(78), "unported cancel-cast remains fenced");
+                assert_eq!(repeat, Some(75), "unported auto-repeat remains fenced");
+                assert_eq!((stand, sheath), (1, 1));
+            } else {
+                assert!(switched.swung);
+                assert_eq!(
+                    commands,
+                    [
+                        "stop",
+                        "select",
+                        "swing",
+                        "cancel-repeat",
+                        "select",
+                        "stop",
+                        "cancel-cast",
+                    ]
+                );
+                assert_eq!(queued, None);
+                assert_eq!(repeat, None);
+                assert_eq!((stand, sheath), (1, 1));
+            }
+        }
+    }
+
+    #[test]
+    fn commit_reports_no_swing_when_the_attack_channel_is_closed() {
+        let (mut world, rx) = commit_world();
+        drop(rx);
+        *world.resource_mut::<Selection>() = Selection {
+            target: Some(Entity::PLACEHOLDER),
+            guid: Some(0xA),
+            last: None,
+        };
+
+        let switched = go(&mut world, 0xB, true, Some(1), true);
+        assert!(switched.changed);
+        assert!(
+            !switched.swung,
+            "swung is an enqueue receipt, not attack intent"
+        );
     }
 
     /// The teardown of the outgoing target (`0x493910`) closes a loot window on it

@@ -270,9 +270,10 @@ pub fn build_collider_task(verts: Vec<Vec3>, tris: Vec<[u32; 3]>) -> Task<Collid
 #[cfg(test)]
 mod tests {
     use super::*;
-    use avian3d::prelude::PhysicsPlugins;
+    use avian3d::prelude::{ColliderOf, PhysicsPlugins};
     use bevy::app::TaskPoolPlugin;
     use bevy::ecs::system::RunSystemOnce;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use benilla_formats::{ChunkMesh, CHUNK_SIZE};
 
@@ -542,6 +543,36 @@ mod tests {
         app
     }
 
+    static TEARDOWN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static DEFERRED_ERRORS: AtomicUsize = AtomicUsize::new(0);
+
+    fn count_deferred_error(
+        _error: bevy::ecs::error::BevyError,
+        _context: bevy::ecs::error::ErrorContext,
+    ) {
+        DEFERRED_ERRORS.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn teardown_test_app() -> App {
+        DEFERRED_ERRORS.store(0, Ordering::SeqCst);
+        let mut app = App::new();
+        app.set_error_handler(count_deferred_error);
+        app.add_plugins((
+            TaskPoolPlugin::default(),
+            bevy::asset::AssetPlugin::default(),
+        ));
+        app.init_asset::<Mesh>();
+        app.add_plugins(PhysicsPlugins::default());
+        app.finish();
+        app.cleanup();
+        app
+    }
+
+    fn ready_trimesh(static_body: bool) -> PendingCollider {
+        let (verts, tris) = grid(1);
+        PendingCollider::ready(Collider::trimesh(verts, tris), None, static_body)
+    }
+
     /// Polled until done, not slept for: the timing is the pool's and is not asserted.
     #[test]
     fn a_finished_task_hands_its_shape_over_and_attaches() {
@@ -615,5 +646,81 @@ mod tests {
             assert!(app.world().entity(*e).contains::<RigidBody>());
             assert!(!app.world().entity(*e).contains::<PendingCollider>());
         }
+    }
+
+    /// Regression for Avian's same-entity linked relationship teardown: the finish path inserts the
+    /// static body and collider together, Avian defers `ColliderOf { body: self }`, and despawning
+    /// the body must leave no fallible relationship cleanup behind for the next flush.
+    #[test]
+    fn a_finished_static_collider_can_be_despawned_and_flushed_cleanly() {
+        let _serial = TEARDOWN_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = teardown_test_app();
+        let entity = app
+            .world_mut()
+            .spawn((Transform::default(), ready_trimesh(true)))
+            .id();
+
+        app.world_mut().run_system_once(finish_colliders).unwrap();
+        app.world_mut().flush();
+
+        let collider_of = app
+            .world()
+            .get::<ColliderOf>(entity)
+            .expect("Avian attached the finished collider to its same-entity static body");
+        assert_eq!(collider_of.body, entity);
+
+        app.world_mut().entity_mut(entity).despawn();
+        app.world_mut().flush();
+
+        assert!(app.world().get_entity(entity).is_err());
+        assert_eq!(
+            DEFERRED_ERRORS.load(Ordering::SeqCst),
+            0,
+            "same-entity ColliderOf teardown reported a deferred command failure"
+        );
+    }
+
+    /// The streamed bare-collider shape also occurs below an owning body. Both Bevy's `ChildOf` and
+    /// Avian's linked `RigidBodyColliders` then own the collider, so parent teardown exercises the
+    /// competing linked-spawn paths and their deferred relationship cleanup.
+    #[test]
+    fn a_finished_child_collider_goes_with_its_parent_body_without_deferred_errors() {
+        let _serial = TEARDOWN_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = teardown_test_app();
+        let body = app
+            .world_mut()
+            .spawn((RigidBody::Static, Transform::default()))
+            .id();
+        let collider = app
+            .world_mut()
+            .spawn((Transform::default(), ChildOf(body), ready_trimesh(false)))
+            .id();
+
+        app.world_mut().run_system_once(finish_colliders).unwrap();
+        app.world_mut().flush();
+
+        let collider_of = app
+            .world()
+            .get::<ColliderOf>(collider)
+            .expect("Avian attached the finished child collider to its parent body");
+        assert_eq!(collider_of.body, body);
+
+        app.world_mut().entity_mut(body).despawn();
+        app.world_mut().flush();
+
+        assert!(app.world().get_entity(body).is_err());
+        assert!(
+            app.world().get_entity(collider).is_err(),
+            "linked parent teardown left its collider alive"
+        );
+        assert_eq!(
+            DEFERRED_ERRORS.load(Ordering::SeqCst),
+            0,
+            "parent/child linked-spawn teardown reported a deferred command failure"
+        );
     }
 }

@@ -11,6 +11,44 @@
 
 use mlua::{Lua, Value, Variadic};
 
+use super::ScriptDialect;
+
+/// Put native protected operations behind a sticky host check. Lua 5.1 can catch a hook error, and
+/// `coroutine.resume` reports one as a false result. Once the shared budget trips, these wrappers
+/// raise a fresh Rust callback error after the protected operation returns, so nesting protected
+/// calls only moves the same failure outward and cannot resume useful Lua execution.
+pub(super) fn install_wrath_budget_guards(
+    lua: &Lua,
+    budget: std::sync::Arc<super::InstructionBudget>,
+) -> mlua::Result<()> {
+    let check = lua.create_function(move |_, values: mlua::MultiValue| {
+        use std::sync::atomic::Ordering::Relaxed;
+
+        if budget.exhausted.load(Relaxed) {
+            return Err(super::instruction_budget_error(budget.used.load(Relaxed)));
+        }
+        Ok(values)
+    })?;
+    lua.globals().set("__benilla_budget_check", check)?;
+    lua.load(WRATH_BUDGET_GUARDS)
+        .set_name("=[benilla wrath budget guards]")
+        .set_mode(mlua::ChunkMode::Text)
+        .exec()
+}
+
+const WRATH_BUDGET_GUARDS: &str = r#"
+do
+    local check = __benilla_budget_check
+    local native_pcall, native_xpcall = pcall, xpcall
+    local native_resume = coroutine.resume
+    __benilla_budget_check = nil
+
+    function pcall(...) return check(native_pcall(...)) end
+    function xpcall(...) return check(native_xpcall(...)) end
+    coroutine.resume = function(...) return check(native_resume(...)) end
+end
+"#;
+
 /// An mlua error's bare Lua message, as `loadstring` returns it: without the `syntax error: ` or
 /// `runtime error: ` word mlua's `Display` adds and the reference never does.
 pub(super) fn lua_message(e: &mlua::Error) -> String {
@@ -48,9 +86,11 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
                 Some(Value::Number(n)) if *n >= 0.0 => *n as usize,
                 _ => default,
             };
-            let start = num(args.first(), 1);
-            let count1 = num(args.get(1), 12);
-            let count2 = num(args.get(2), 10);
+            // Stack inspection is diagnostic only. Clamp hostile counts both to bound work/output
+            // and to keep all level arithmetic representable on 32- and 64-bit hosts.
+            let start = num(args.first(), 1).min(MAX_DEBUGSTACK_LEVELS);
+            let count1 = num(args.get(1), 12).min(MAX_DEBUGSTACK_LEVELS);
+            let count2 = num(args.get(2), 10).min(MAX_DEBUGSTACK_LEVELS);
             Ok(traceback_frames(lua, start, count1, count2))
         })?,
     )?;
@@ -90,18 +130,43 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
 }
 
 /// Install the stdlib layer: the bare globals, `time`/`date` and the positional `format`.
-pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+pub(super) fn install(lua: &Lua, dialect: ScriptDialect) -> mlua::Result<()> {
     install_error_handler(lua)?;
     install_time(lua)?;
     // Before the Lua layer, whose `debugprofile*` pair keeps its own `GetTime`.
     super::clock::install(lua)?;
     super::zone_text::install(lua)?;
-    lua.load(WOW_STDLIB)
+    let source = match dialect {
+        ScriptDialect::Vanilla => WOW_STDLIB,
+        ScriptDialect::Wrath12340 => WRATH_STDLIB,
+    };
+    lua.load(source)
         .set_name("=[benilla wow stdlib]")
         .set_mode(mlua::ChunkMode::Text)
         .exec()?;
     Ok(())
 }
+
+/// Only aliases shared by Wrath's stock API and this crate's implemented surface. Keeping this
+/// separate from [`WOW_STDLIB`] avoids publishing 1.12-only compatibility readers in a Wrath VM.
+const WRATH_STDLIB: &str = r#"
+strlen = string.len
+strsub = string.sub
+strupper = string.upper
+strlower = string.lower
+strrep = string.rep
+strfind = string.find
+strbyte = string.byte
+strchar = string.char
+gsub = string.gsub
+tinsert = table.insert
+tremove = table.remove
+-- Installed Wrath LootFrame.lua:145 calls this standard math alias unqualified.
+ceil = math.ceil
+function getglobal(name) return _G[name] end
+function setglobal(name, value) _G[name] = value end
+function GetLocale() return "enUS" end
+"#;
 
 /// The handler `seterrorhandler` holds, `None` until one is given.
 pub(super) fn error_handler(lua: &Lua) -> Option<mlua::Function> {
@@ -552,26 +617,36 @@ fn traceback_frames(lua: &Lua, start: usize, count1: usize, count2: usize) -> St
     let mut level = start;
     let mut first_part = true;
     while lua.inspect_stack(level, |_| ()).is_some() {
-        level += 1;
-        if level > start + count1 && first_part {
+        level = level.saturating_add(1);
+        if level > start.saturating_add(count1) && first_part {
             first_part = false;
-            if lua.inspect_stack(level + count2, |_| ()).is_none() {
-                level -= 1; // nothing to elide: print this level after all
+            if lua
+                .inspect_stack(level.saturating_add(count2), |_| ())
+                .is_none()
+            {
+                level = level.saturating_sub(1); // nothing to elide: print this level after all
             } else {
                 out.push_str("...\n");
-                while lua.inspect_stack(level + count2, |_| ()).is_some() {
-                    level += 1;
+                while lua
+                    .inspect_stack(level.saturating_add(count2), |_| ())
+                    .is_some()
+                {
+                    level = level.saturating_add(1);
                 }
             }
             continue;
         }
-        if let Some(f) = lua.inspect_stack(level - 1, traceback_frame) {
+        if let Some(f) = lua.inspect_stack(level.saturating_sub(1), traceback_frame) {
             out.push_str(&f);
             out.push('\n');
         }
     }
     out
 }
+
+/// More than this is neither useful in an addon traceback nor safe to let hostile numeric input
+/// turn into unbounded diagnostic work.
+const MAX_DEBUGSTACK_LEVELS: usize = 256;
 
 #[cfg(test)]
 mod date_table_tests {

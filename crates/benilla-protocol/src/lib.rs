@@ -8,11 +8,20 @@ pub mod messages;
 pub mod wire;
 pub mod world;
 pub mod wrath_auth;
+pub mod wrath_authority;
+pub mod wrath_combat;
+pub mod wrath_events;
+pub mod wrath_gameplay;
+pub mod wrath_ground;
+pub mod wrath_items;
+pub mod wrath_loot;
+pub mod wrath_movement;
+pub mod wrath_relay;
 pub mod wrath_world;
 pub use auth::AuthReject;
 pub use events::{
     decode, CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
-    SessionEvent, SessionEventKind,
+    SessionEvent, SessionEventKind, SplineEffect, SplineInterpolation,
 };
 pub use messages::field;
 pub use messages::{

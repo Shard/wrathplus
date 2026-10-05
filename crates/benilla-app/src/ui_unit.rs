@@ -476,6 +476,12 @@ fn fire_unit_combat(
     let Some(mut script) = script else {
         return;
     };
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        // Shared feedback carries Vanilla school-index/event semantics. Do not advertise
+        // that payload as Wrath's Lua UNIT_COMBAT ABI before independent qualification.
+        events.read().for_each(|_| {});
+        return;
+    }
     for ev in events.read() {
         let mut fire = |token: &str| {
             script.fire_event(
@@ -3435,6 +3441,88 @@ mod tests {
         assert!(
             !exists(&mut app),
             "the window closed, yet UnitExists(\"npc\")"
+        );
+    }
+
+    /// `UnitIsUnit` in the Wrath VM reads the ordinary host feed: equal observed GUIDs answer 1,
+    /// while a different observed GUID and an unavailable target both answer nil.
+    #[test]
+    fn wrath_unit_is_unit_tracks_actual_player_and_target_snapshots() {
+        use benilla_protocol::messages::{ObjectFields, ObjectType};
+        use benilla_ui::script::ScriptDialect;
+
+        const PLAYER: u64 = 0x77;
+        const OTHER: u64 = 0xF130_0000_4500_0001;
+
+        let mut app = App::new();
+        app.init_resource::<UnitFeedState>()
+            .init_resource::<Selection>()
+            .init_resource::<NameCache>()
+            .init_resource::<Reputations>()
+            .init_resource::<crate::ui_party::GroupState>()
+            .init_resource::<crate::ui_chat::ChatLog>()
+            .init_resource::<crate::sound::MessageSounds>()
+            .init_resource::<crate::ui_guild::GuildState>();
+        app.add_message::<FieldChanged>();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        app.insert_resource(NetCommands(tx));
+        app.insert_non_send_resource(
+            UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM"),
+        );
+        app.add_systems(Update, feed_units);
+
+        let player = app
+            .world_mut()
+            .spawn((
+                SelfPlayer,
+                Guid(PLAYER),
+                ObjectStore(ObjectFields::from_pairs(&[]).into_created(ObjectType::Player)),
+            ))
+            .id();
+        let other = app
+            .world_mut()
+            .spawn(ObjectStore(
+                ObjectFields::from_pairs(&[]).into_created(ObjectType::Unit),
+            ))
+            .id();
+        let is_nil = |app: &mut App| {
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .eval::<bool>(r#"return UnitIsUnit("player", "target") == nil"#)
+                .expect("UnitIsUnit result")
+        };
+
+        {
+            let mut selection = app.world_mut().resource_mut::<Selection>();
+            selection.target = Some(player);
+            selection.guid = Some(PLAYER);
+        }
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .eval::<i64>(r#"return UnitIsUnit("player", "target")"#)
+                .expect("matching UnitIsUnit result"),
+            1,
+            "the feed published the player's GUID for both snapshots"
+        );
+
+        {
+            let mut selection = app.world_mut().resource_mut::<Selection>();
+            selection.target = Some(other);
+            selection.guid = Some(OTHER);
+        }
+        app.update();
+        assert!(
+            is_nil(&mut app),
+            "different GUIDs from the feed compared equal"
+        );
+
+        *app.world_mut().resource_mut::<Selection>() = Selection::default();
+        app.update();
+        assert!(
+            is_nil(&mut app),
+            "a target absent from the feed did not become nil"
         );
     }
 

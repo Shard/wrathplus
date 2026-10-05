@@ -520,7 +520,9 @@ fn meeting_stone_enter_world(
     let Some(script) = script else {
         return;
     };
-    if !asked.claim(&script) {
+    // This bring-up opcode belongs to Vanilla. An authored Wrath addon VM is not permission
+    // to enqueue an unported command through the live Wrath transport.
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 || !asked.claim(&script) {
         return;
     }
     stone.enter_world();
@@ -1466,6 +1468,24 @@ mod tests {
 
     /// A registered schedule: `run_system_once` would build a fresh `Local<VmMemo<bool>>` per call,
     /// an unclaimed memo every frame.
+    #[test]
+    fn a_wrath_addon_vm_never_enqueues_vanilla_meeting_stone_bringup() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.init_resource::<MeetingStone>()
+            .insert_resource(NetCommands(tx))
+            .add_systems(Update, meeting_stone_enter_world);
+        for _ in 0..2 {
+            app.insert_non_send_resource(
+                UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
+                    .expect("Wrath VM"),
+            );
+            app.update();
+            app.update();
+            assert!(rx.try_iter().next().is_none());
+        }
+    }
+
     #[test]
     fn a_rebuilt_vm_re_asks_the_server_for_the_meeting_stone_queue() {
         let (tx, rx) = crossbeam_channel::unbounded();

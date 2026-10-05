@@ -668,7 +668,12 @@ mod tests {
             duration: std::time::Duration::from_secs(1),
             id: 1,
             grounded,
-            run_mode: true,
+            interpolation: if grounded {
+                benilla_protocol::SplineInterpolation::Linear
+            } else {
+                benilla_protocol::SplineInterpolation::CatmullRom
+            },
+            run_mode: Some(true),
         };
 
         assert!(!suspended(None, None), "walking about: the shake plays");

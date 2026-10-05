@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use mlua::{Lua, MultiValue, Value};
 
-use super::addon_gate::{can_load, GateRow, Verdict};
+use super::addon_gate::{GateRow, Verdict};
 use super::binding_abi::flag;
 use super::Model;
 use crate::status::Status;
@@ -176,13 +176,26 @@ fn version_check(model: &Model) -> bool {
         .is_none_or(|s| s.value != "0")
 }
 
+fn client_interface(model: &Model) -> u32 {
+    match model.dialect {
+        super::ScriptDialect::Vanilla => super::addon_gate::CLIENT_INTERFACE,
+        super::ScriptDialect::Wrath12340 => 30300,
+    }
+}
+
 /// [`can_load`] in the in-game flavour (`dl=1`). A loaded addon is loadable before the gate
 /// runs, as in `0x48e390`, so disabling it mid-session does not mark it unloadable.
 fn verdict(model: &Model, i: usize) -> Verdict {
     if model.addons[i].loaded {
         return Verdict::Loadable;
     }
-    can_load(&gate_rows(model), i, true, version_check(model))
+    super::addon_gate::can_load_for_interface(
+        &gate_rows(model),
+        i,
+        true,
+        version_check(model),
+        client_interface(model),
+    )
 }
 
 fn lua_str(lua: &Lua, s: &str) -> mlua::Result<Value> {
@@ -507,7 +520,9 @@ fn load_addon(lua: &Lua, i: usize) -> Result<(), String> {
         own.close_into(&mut model.load_log.demand, debug, banner);
     }
     // `Bindings.xml` loads between the files and the saved variables.
-    load_bindings(lua, &name, &read);
+    if lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Vanilla {
+        load_bindings(lua, &name, &read);
+    }
     load_saved_variables(lua, i);
     // `ADDON_LOADED` closes the addon's load (`0x51f5ad`).
     super::event::fire_global(lua, "ADDON_LOADED", &[super::ScriptValue::Str(name)]);
@@ -615,7 +630,12 @@ fn run_files(lua: &Lua, name: &str, read: &Reader, files: &[String], toc: &mut S
             continue;
         };
         if lua_file {
-            if let Err(e) = run_chunk(lua, &bytes, &crate::script::addon_chunk_name(name, file)) {
+            if let Err(e) = run_addon_chunk(
+                lua,
+                name,
+                &bytes,
+                &crate::script::addon_chunk_name(name, file),
+            ) {
                 log_error(lua, &format!("{name}/{file}: {e}"));
             }
             continue;
@@ -676,10 +696,56 @@ fn read_under(root: &std::path::Path, rel: &str) -> Option<Vec<u8>> {
 /// Run a chunk read off disk, BOM stripped: [`crate::script::UiScript::run_chunk`] for the
 /// demand-load path, which has no `UiScript`.
 fn run_chunk(lua: &Lua, bytes: &[u8], name: &str) -> mlua::Result<()> {
-    lua.load(crate::source::chunk(bytes))
+    let addon_name = name
+        .strip_prefix("@Interface\\AddOns\\")
+        .and_then(|rest| rest.split('\\').next());
+    match addon_name {
+        Some(addon_name) => run_addon_chunk(lua, addon_name, bytes, name),
+        None => lua
+            .load(crate::source::chunk(bytes))
+            .set_name(name)
+            .set_mode(mlua::ChunkMode::Text)
+            .exec(),
+    }
+}
+
+const REG_ADDON_PRIVATE_TABLES: &str = "__benilla_addon_private_tables";
+
+/// Execute an addon file using the VM's selected addon chunk ABI.
+pub(crate) fn run_addon_chunk(
+    lua: &Lua,
+    addon_name: &str,
+    bytes: &[u8],
+    name: &str,
+) -> mlua::Result<()> {
+    let dialect = lua.app_data_ref::<Model>().expect("model").dialect;
+    let function = lua
+        .load(crate::source::chunk(bytes))
         .set_name(name)
         .set_mode(mlua::ChunkMode::Text)
-        .exec()
+        .into_function()?;
+    match dialect {
+        super::ScriptDialect::Vanilla => function.call(()),
+        super::ScriptDialect::Wrath12340 => {
+            let tables = match lua.named_registry_value::<mlua::Table>(REG_ADDON_PRIVATE_TABLES) {
+                Ok(tables) => tables,
+                Err(_) => {
+                    let tables = lua.create_table()?;
+                    lua.set_named_registry_value(REG_ADDON_PRIVATE_TABLES, tables.clone())?;
+                    tables
+                }
+            };
+            let private = match tables.raw_get::<Value>(addon_name)? {
+                Value::Table(private) => private,
+                _ => {
+                    let private = lua.create_table()?;
+                    tables.raw_set(addon_name, private.clone())?;
+                    private
+                }
+            };
+            function.call((addon_name, private))
+        }
+    }
 }
 
 /// Record a demand-load error as the startup walk does ([`super::UiScript::report_script_error`]):

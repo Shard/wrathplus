@@ -301,9 +301,17 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     // The `mpq://` source must be registered before `AssetPlugin` (in `DefaultPlugins`) builds. The
     // install is found by `benilla_formats::wow_data`, as everywhere; without one the source is
     // absent and terrain loads fail gracefully.
+    let data_profile = benilla_formats::DataProfile::from_env()
+        .expect("valid explicit WOW_CLIENT_PROFILE/WOW_LOCALE configuration");
+    eprintln!("benilla: client data profile={data_profile:?}");
+    // Profile routing must not depend on a readable install: in particular, an unavailable Wrath
+    // chain must still never fall through to the Vanilla FrameXML/Lua host.
+    app.insert_resource(benilla_assets::ClientDataProfile(data_profile.clone()));
     match benilla_formats::wow_data() {
         Some(data_dir) => {
-            if let Err(e) = benilla_assets::register_mpq_source(&mut app, &data_dir) {
+            if let Err(e) =
+                benilla_assets::register_mpq_source_profile(&mut app, &data_dir, &data_profile)
+            {
                 eprintln!("benilla-assets: mpq:// source unavailable ({e:#})");
             }
         }

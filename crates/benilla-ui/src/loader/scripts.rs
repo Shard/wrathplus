@@ -1,6 +1,7 @@
 use mlua::{Function, ObjectLike, Table};
 
 use crate::framexml::Element;
+use crate::script::{Model, ScriptDialect};
 
 use super::{children_named, Loader};
 
@@ -28,8 +29,22 @@ impl Loader<'_> {
                 // function: `SetScript` (`0x7025c0`) tests only NULL and the first byte
                 // (`0x7025f8`), and nothing trims the body (`0x6f29d0`). The stock blanks
                 // (`BuffFrame.xml:101`) are whitespace, so their `GetScript` answers a function.
-                let cleared = handler.body.is_empty();
-                let func = if cleared {
+                let named = (self.lua().app_data_ref::<Model>().expect("model").dialect
+                    == ScriptDialect::Wrath12340)
+                    .then(|| handler.attr("function"))
+                    .flatten();
+                let cleared = handler.body.is_empty() && named.is_none();
+                let func = if let Some(global) = named {
+                    match self.lua().globals().get::<Function>(global) {
+                        Ok(function) => Some(function),
+                        Err(e) => {
+                            self.report.errors.push(format!(
+                                "{dbg}: resolving <{name} function=\"{global}\">: {e}"
+                            ));
+                            continue;
+                        }
+                    }
+                } else if cleared {
                     None
                 } else {
                     match self.compile_handler(handler, &name, &owner, dbg) {
@@ -79,7 +94,7 @@ impl Loader<'_> {
 
     /// Compile a handler body as the chunk itself, as the reference loads it (`0x704c70`): it takes
     /// no arguments and reads its frame from `this`, so a `self` in it is an ordinary global. The
-    /// loader reads no other attribute of the element (no `function=`).
+    /// Wrath additionally resolves `function=` from the global table.
     pub(super) fn compile_handler(
         &mut self,
         handler: &Element,
@@ -92,13 +107,58 @@ impl Loader<'_> {
         if body.is_empty() {
             return None;
         }
-        match self
+        let body = match self.lua().app_data_ref::<Model>().expect("model").dialect {
+            ScriptDialect::Vanilla => body.to_string(),
+            ScriptDialect::Wrath12340 => {
+                // FrameXML compiles the well-known handler arguments as named locals. Keeping
+                // the trailing varargs is material for OnEvent payloads beyond `event`.
+                let formals = if name.eq_ignore_ascii_case("OnEvent") {
+                    "self, event, ..."
+                } else if name.eq_ignore_ascii_case("OnUpdate") {
+                    "self, elapsed"
+                } else if name.eq_ignore_ascii_case("OnClick") {
+                    "self, button, down"
+                } else if matches_ci(name, &["OnMouseDown", "OnMouseUp", "OnDragStart"]) {
+                    "self, button"
+                } else if name.eq_ignore_ascii_case("OnMouseWheel") {
+                    "self, delta"
+                } else if matches_ci(name, &["OnKeyDown", "OnKeyUp"]) {
+                    "self, key"
+                } else if name.eq_ignore_ascii_case("OnChar") {
+                    "self, text"
+                } else if name.eq_ignore_ascii_case("OnValueChanged") {
+                    "self, value"
+                } else if name.eq_ignore_ascii_case("OnSizeChanged") {
+                    "self, width, height"
+                } else if matches_ci(name, &["OnDragStop", "OnReceiveDrag"]) {
+                    "self"
+                } else {
+                    "self, ..."
+                };
+                format!("return function({formals})\n{body}\nend")
+            }
+        };
+        let compiled = self
             .lua()
-            .load(body)
+            .load(&body)
             .set_name(format!("{owner}:{name}"))
             .set_mode(mlua::ChunkMode::Text)
-            .into_function()
-        {
+            .into_function();
+        match compiled {
+            Ok(chunk)
+                if self.lua().app_data_ref::<Model>().expect("model").dialect
+                    == ScriptDialect::Wrath12340 =>
+            {
+                match chunk.call::<Function>(()) {
+                    Ok(f) => Some(f),
+                    Err(e) => {
+                        self.report
+                            .errors
+                            .push(format!("{dbg}: compiling <{name}>: {e}"));
+                        None
+                    }
+                }
+            }
             Ok(f) => Some(f),
             Err(e) => {
                 self.report
@@ -144,4 +204,10 @@ impl Loader<'_> {
                 .push(format!("{dbg}: region {method}: {e}"));
         }
     }
+}
+
+fn matches_ci(value: &str, choices: &[&str]) -> bool {
+    choices
+        .iter()
+        .any(|choice| value.eq_ignore_ascii_case(choice))
 }

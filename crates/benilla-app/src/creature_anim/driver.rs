@@ -13,8 +13,8 @@ use bevy::prelude::*;
 
 use crate::names::type_flags::DO_NOT_PLAY_WOUND_ANIM;
 use crate::net::{
-    ClientCommand, FacingStep, NetCommands, ObjectStore, RemoteMotion, SelfPlayer, Spline,
-    UnitSpeeds,
+    ClientCommand, FacingStep, NetCommands, ObjectStore, RemoteMotion, SelfPlayer, SessionDialect,
+    Spline, UnitSpeeds,
 };
 use crate::sound::EmoteSounds;
 
@@ -227,7 +227,9 @@ fn transplant_up(
     if benilla_assets::trace::enabled() {
         benilla_assets::trace::line(
             "fct",
-            &format!("anim transplant unit={entity} id={id} -> key-bone at {seek:.3}s (bone 0 takes the request)"),
+            &format!(
+                "anim transplant unit={entity} id={id} -> key-bone at {seek:.3}s (bone 0 takes the request)"
+            ),
         );
     }
     true
@@ -309,13 +311,16 @@ pub(super) fn drive_animations(
         // The open NPC session's unit (`[0xb4e2d0]`): its state emote is passed over when the
         // row's `EmoteFlags` carry `0x2000` (`0x5fd7e2`-`0x5fd7fd`).
         Option<Res<crate::ui_session::InteractNpc>>,
+        // Capability admission requires an explicit session dialect, including fixture worlds.
+        Res<SessionDialect>,
     ),
     // The variation roll's LCG, the reference's single CRT `_rand` stream shared by every play.
     mut rng: ResMut<benilla_assets::AnimRng>,
     // The last anim trace line per traced unit; the trace writes only on change.
     mut anim_trace_last: Local<std::collections::HashMap<Entity, String>>,
 ) {
-    let (emote_sounds, loot_kneel, time, names, mut recomputes, riders, interact) = aux;
+    let (emote_sounds, loot_kneel, time, names, mut recomputes, riders, interact, dialect) = aux;
+    let dialect = *dialect;
     let dt = time.delta_secs();
     // This frame's one-shot plays per unit, replayed in the reference's call order (`PlaySeq`
     // stamps): a later call overwrites an earlier, and the combat fast path keys on what is playing
@@ -589,7 +594,14 @@ pub(super) fn drive_animations(
                     };
                     let active =
                         tr.play(&mut player, c.node, Duration::from_secs_f32(c.blend_time));
-                    if c.looping {
+                    if dialect == SessionDialect::Wrath12340 {
+                        // v264 0x20 is in-model residency, not a repeat request. Death's
+                        // play-once/hold policy must not inherit that legacy loader hint.
+                        active.set_repeat(bevy::animation::RepeatAnimation::Never);
+                        if first {
+                            active.seek_to(c.duration); // streamed corpse: already settled
+                        }
+                    } else if c.looping {
                         active.repeat();
                     } else if first {
                         active.seek_to(c.duration); // streamed in dead: settled, not replayed
@@ -682,18 +694,22 @@ pub(super) fn drive_animations(
         // per-arm masked overlays (`0x60b770`) by each item's stow family (hip 90, back 89).
         if let Some(req) = pending_sheath.get(&entity) {
             let cur = drv.sheath_cur.unwrap_or(0);
+            let command = ClientCommand::SetSheathed {
+                state: u32::from(req.state),
+            };
             // Deviation: a mounted draw is refused at the setter, because our rider track never
             // replays the reference's per-play force-stow (`0x5fdf80`); the result is the same.
-            if req.state != cur && !(mounted && req.state != 0) {
+            if req.state != cur
+                && !(mounted && req.state != 0)
+                && (!is_self || net.supports(dialect, &command))
+            {
                 debug!(
                     "sheath: unit {entity} {cur} -> {} (request, ceremony {})",
                     req.state, req.ceremony
                 );
                 drv.sheath_cur = Some(req.state);
                 if is_self {
-                    let _ = net.0.send(ClientCommand::SetSheathed {
-                        state: u32::from(req.state),
-                    });
+                    let _ = net.0.send(command);
                 }
                 if req.ceremony {
                     start_sheath_ceremony(
@@ -1100,10 +1116,12 @@ pub(super) fn drive_animations(
         if let Some(ov) = drv.overlay {
             let done = if ov.looping {
                 false // a cast-hold loop: the hold block below owns its release
-            } else if find_resolved(anims, ov.id, catalog).is_some_and(|c| c.looping) {
-                // A hold-less looping clip (a kit's seated eat/drink) releases on movement; the
-                // reference's release for this case is untraced. A Special does not release it:
-                // a jump is a bone-0 play and leaves the key bone alone.
+            } else if dialect == SessionDialect::Vanilla5875
+                && find_resolved(anims, ov.id, catalog).is_some_and(|c| c.looping)
+            {
+                // Wrath's legacy looping hint is v264 residency, not a release policy: its
+                // one-shots finish on their armed Never/Count clock. Preserve Vanilla's hold-less
+                // looping clip release on movement (untraced); a Special leaves the key bone alone.
                 moving
             } else {
                 player.animation(ov.node).is_none_or(|a| a.is_finished())
@@ -1271,16 +1289,17 @@ pub(super) fn drive_animations(
                 } else {
                     forced
                 };
-                if forced != cur {
+                let command = ClientCommand::SetSheathed {
+                    state: u32::from(forced),
+                };
+                if forced != cur && (!is_self || net.supports(dialect, &command)) {
                     debug!(
                         "sheath: unit {entity} {cur} -> {forced} (anim {anim} flags {flags:#x}, \
                          engaged {engaged})"
                     );
                     drv.sheath_cur = Some(forced);
                     if is_self {
-                        let _ = net.0.send(ClientCommand::SetSheathed {
-                            state: u32::from(forced),
-                        });
+                        let _ = net.0.send(command);
                     }
                 }
             }

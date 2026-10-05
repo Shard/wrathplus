@@ -283,3 +283,122 @@ fn every_macro_chooser_icon_resolves_in_the_client_archives() {
         "the chooser list must be case-insensitively sorted"
     );
 }
+
+#[test]
+fn macro_icon_catalog_is_cached_per_source_and_reseeded_for_new_vms() {
+    let source = std::sync::Arc::new(());
+    let replacement = std::sync::Arc::new(());
+    let mut catalog = super::IconCatalogCache::default();
+    let mut first = UiScript::new().unwrap();
+    let mut second = UiScript::new().unwrap();
+    let (icons, hit) =
+        catalog.get_or_load(&source, || Ok(vec!["Interface\\Icons\\Spell_Test".into()]));
+    assert!(!hit);
+    first.set_macro_icons(icons.as_ref().unwrap().clone());
+    let (icons, hit) = catalog.get_or_load(&source, || {
+        panic!("new VM must not enumerate the same source")
+    });
+    assert!(hit);
+    second.set_macro_icons(icons.as_ref().unwrap().clone());
+    for vm in [&first, &second] {
+        assert_eq!(vm.eval::<u32>("return GetNumMacroIcons()").unwrap(), 1);
+        assert_eq!(
+            vm.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
+            "Interface\\Icons\\Spell_Test"
+        );
+    }
+    let (icons, hit) = catalog.get_or_load(&replacement, || {
+        Ok(vec!["Interface\\Icons\\Ability_New".into()])
+    });
+    assert!(!hit);
+    assert_eq!(icons.as_ref().unwrap(), &["Interface\\Icons\\Ability_New"]);
+    drop(replacement);
+    assert!(
+        catalog.source.upgrade().is_none(),
+        "cache must not retain archives"
+    );
+}
+
+#[test]
+fn macro_icon_catalog_failure_is_cached_only_for_its_source() {
+    let source = std::sync::Arc::new(());
+    let replacement = std::sync::Arc::new(());
+    let mut catalog = super::IconCatalogCache::default();
+    assert!(catalog
+        .get_or_load(&source, || Err("missing listfile".into()))
+        .0
+        .is_err());
+    let (result, hit) = catalog.get_or_load(&source, || {
+        panic!("failed immutable source should not be retried per VM")
+    });
+    assert!(hit);
+    assert_eq!(result.as_ref().unwrap_err(), "missing listfile");
+    assert!(catalog.get_or_load(&replacement, || Ok(vec![])).0.is_ok());
+}
+
+#[test]
+fn wrath_does_not_enumerate_the_unavailable_macro_chooser_surface() {
+    use benilla_ui::script::ScriptDialect;
+    let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    assert!(!super::macro_catalog_enabled(&wrath));
+    assert!(wrath
+        .eval::<bool>("return GetNumMacroIcons == nil and GetMacroIconInfo == nil")
+        .unwrap());
+    assert!(super::macro_catalog_enabled(&UiScript::new().unwrap()));
+}
+
+#[test]
+fn actual_catalog_feed_gates_wrath_and_tracks_vm_and_source_replacement() {
+    use benilla_ui::script::ScriptDialect;
+    let source = std::sync::Arc::new(());
+    let replacement = std::sync::Arc::new(());
+    let mut cache = super::IconCatalogCache::default();
+    let mut seeded = crate::ui_script::VmMemo::default();
+    let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    super::seed_icon_catalog(&mut wrath, &source, &mut seeded, &mut cache, || {
+        panic!("Wrath must never enumerate icons")
+    });
+    assert!(cache.icons.is_none());
+    let mut first = UiScript::new().unwrap();
+    super::seed_icon_catalog(&mut first, &source, &mut seeded, &mut cache, || {
+        Ok(vec!["Interface\\Icons\\Spell_Test".into()])
+    });
+    first.set_macro_icons(vec!["Interface\\Icons\\Ability_Sentinel".into()]);
+    super::seed_icon_catalog(&mut first, &source, &mut seeded, &mut cache, || {
+        panic!("same VM/source must not load or reseed")
+    });
+    assert_eq!(
+        first.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
+        "Interface\\Icons\\Ability_Sentinel"
+    );
+    let mut second = UiScript::new().unwrap();
+    super::seed_icon_catalog(&mut second, &source, &mut seeded, &mut cache, || {
+        panic!("new VM same source must use cache")
+    });
+    assert_eq!(
+        second.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
+        "Interface\\Icons\\Spell_Test"
+    );
+    super::seed_icon_catalog(&mut second, &replacement, &mut seeded, &mut cache, || {
+        Ok(vec!["Interface\\Icons\\Ability_New".into()])
+    });
+    assert_eq!(
+        second.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
+        "Interface\\Icons\\Ability_New"
+    );
+}
+
+#[test]
+fn dead_failed_catalog_source_is_not_reused() {
+    let mut catalog = super::IconCatalogCache::default();
+    {
+        let source = std::sync::Arc::new(());
+        let (result, hit) = catalog.get_or_load(&source, || Err("old failure".into()));
+        assert!(!hit && result.is_err());
+    }
+    let replacement = std::sync::Arc::new(());
+    let (result, hit) = catalog.get_or_load(&replacement, || Ok(vec![]));
+    assert!(!hit && result.is_ok());
+    let (result, hit) = catalog.get_or_load(&replacement, || panic!("replacement loaded once"));
+    assert!(hit && result.is_ok());
+}

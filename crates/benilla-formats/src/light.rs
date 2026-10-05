@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{f32_at, parse, str_at, u32_at};
-use crate::Chain;
+use crate::{Chain, DataProfile};
 
 mod atmosphere;
 mod tables;
@@ -176,7 +176,7 @@ pub struct LightCatalog {
     skyboxes: HashMap<u32, String>,
 }
 
-fn light_schema() -> Schema {
+fn light_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("Light");
     for (n, t) in [
         ("ID", FieldType::UInt32),
@@ -189,7 +189,11 @@ fn light_schema() -> Schema {
     ] {
         s.add_field(SchemaField::new(n, t));
     }
-    for i in 0..5 {
+    let params = match profile {
+        DataProfile::Vanilla => 5,
+        DataProfile::Wrath { .. } => 8,
+    };
+    for i in 0..params {
         s.add_field(SchemaField::new(format!("param{i}"), FieldType::UInt32));
     }
     s
@@ -230,11 +234,12 @@ fn blend_alpha(dist: f32, start: f32, end: f32) -> f32 {
 impl LightCatalog {
     /// Read the lighting DBCs off the patch chain.
     pub fn load(chain: &mut Chain) -> Result<Self> {
+        let profile = chain.profile().clone();
         let lights = {
             let bytes = chain
                 .read_file(LIGHT)
                 .with_context(|| format!("reading {LIGHT}"))?;
-            let rs = parse(&bytes, light_schema(), "Light")?;
+            let rs = parse(&bytes, light_schema(&profile), "Light")?;
             let mut v = Vec::with_capacity(rs.records().len());
             for r in rs.records() {
                 if let (Some(id), Some(map), Some(x), Some(y), Some(z), Some(start), Some(end)) = (
@@ -326,6 +331,9 @@ impl LightCatalog {
             let mut schema = Schema::new("LightSkybox");
             schema.add_field(SchemaField::new("ID", FieldType::UInt32));
             schema.add_field(SchemaField::new("Name", FieldType::String));
+            if matches!(profile, DataProfile::Wrath { .. }) {
+                schema.add_field(SchemaField::new("Flags", FieldType::UInt32));
+            }
             let rs = parse(&bytes, schema, "LightSkybox")?;
             let mut m = HashMap::with_capacity(rs.records().len());
             for r in rs.records() {
@@ -835,6 +843,52 @@ mod ocean_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wdbc(fields: &[u32]) -> Vec<u8> {
+        let mut bytes = b"WDBC".to_vec();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&(fields.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&((fields.len() * 4) as u32).to_le_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        for field in fields {
+            bytes.extend_from_slice(&field.to_le_bytes());
+        }
+        bytes.push(0);
+        bytes
+    }
+
+    #[test]
+    fn vanilla_and_wrath_light_records_keep_five_and_eight_params() {
+        for (profile, count) in [
+            (DataProfile::Vanilla, 12usize),
+            (
+                DataProfile::Wrath {
+                    locale: "frFR".into(),
+                },
+                15,
+            ),
+        ] {
+            let fields = (300..300 + count as u32).collect::<Vec<_>>();
+            let set = parse(&wdbc(&fields), light_schema(&profile), "synthetic Light").unwrap();
+            let row = &set.records()[0];
+            assert_eq!(u32_at(row, 7), Some(307));
+            assert_eq!(u32_at(row, count - 1), Some(300 + count as u32 - 1));
+        }
+    }
+
+    #[test]
+    fn installed_wrath_light_schema_loads() {
+        let data = std::path::Path::new("/Users/shannon/Games/Client/Data");
+        if !data.is_dir() {
+            return;
+        }
+        let profile = DataProfile::Wrath {
+            locale: "enUS".into(),
+        };
+        let mut chain = Chain::open_profile(data, &profile).expect("open installed Wrath data");
+        let catalog = LightCatalog::load(&mut chain).expect("load Wrath lighting DBCs");
+        assert!(catalog.sample_params_id(1, 0).is_some());
+    }
 
     #[test]
     fn dbc_to_world_matches_wiki_convertdbtogamecoords() {

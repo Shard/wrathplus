@@ -76,6 +76,12 @@ pub(super) fn apply_buff_durations(script: &UiScript) -> Result<(), String> {
 /// the blackout would stop short of the new screen. Host-side, not in the layer: it adapts the
 /// engine's resizable window, and changes nothing the stock UI does at a fixed size.
 pub(super) fn on_screen_resized(script: &UiScript) {
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        if let Err(error) = script.run("if UIParent then UIParent:SetWidth(GetScreenWidth()); UIParent:SetHeight(GetScreenHeight()) end") {
+            error!("ui_script: Wrath root resize: {error}");
+        }
+        return;
+    }
     let _ = script.run("if UIParent_ManageFramePositions then UIParent_ManageFramePositions() end");
     if let Err(e) = script.run(FULLSCREEN_QUADS_RESEAT) {
         error!("ui_script: full-screen quad re-seat: {e}");
@@ -284,6 +290,27 @@ pub(crate) fn load_ingame_ui(
     version_check: bool,
 ) -> Vec<String> {
     load_ingame_ui_with(script, identity, roster, version_check, layer_enabled())
+}
+
+/// The Wrath host: one authored root, the audited stock GameMenu dependency closure, then
+/// local-state addons. It deliberately does not claim the rest of FrameXML or stock bindings.
+pub(crate) fn load_wrath_ui(
+    script: &mut UiScript,
+    identity: Option<&(String, String)>,
+    roster: &[String],
+    version_check: bool,
+) -> Vec<String> {
+    script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
+    let mut failures = super::wrath_addons::load_bootstrap(script);
+    failures.extend(super::wrath_stock::load(script));
+    failures.extend(super::wrath_loot_ui::load(script));
+    failures.extend(super::addons::load_wrath_third_party(
+        script,
+        identity,
+        roster,
+        version_check,
+    ));
+    failures
 }
 
 /// [`load_ingame_ui`] with the layer decided by the caller.

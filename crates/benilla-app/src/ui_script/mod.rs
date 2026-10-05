@@ -20,6 +20,10 @@ mod input;
 mod layer_tests;
 mod load_log;
 mod manifest;
+mod wrath_addons;
+mod wrath_loot_ui;
+mod wrath_native;
+mod wrath_stock;
 
 /// The stock FrameXML this client runs off the player's own patch chain; its header is the rule.
 mod reference_ui;
@@ -257,6 +261,16 @@ fn console_reload_ui(world: &mut World, _args: &str) -> Vec<String> {
 
 impl Plugin for UiScriptPlugin {
     fn build(&self, app: &mut App) {
+        if uses_native_wrath_route(
+            app.world()
+                .get_resource::<benilla_assets::ClientDataProfile>()
+                .map(|profile| &profile.0),
+        ) {
+            info!("ui_script: Wrath profile selected — bounded stock GameMenu and addon host enabled; full FrameXML remains disabled");
+            wrath_native::build(app);
+            wrath_addons::build(app);
+            return;
+        }
         use crate::console::ConsoleCommandApp;
         app.add_observer(on_cvar);
         app.console_command("reloadUI", "Reload the interface.", console_reload_ui);
@@ -358,6 +372,27 @@ impl Plugin for UiScriptPlugin {
     }
 }
 
+fn uses_native_wrath_route(profile: Option<&benilla_formats::DataProfile>) -> bool {
+    matches!(profile, Some(benilla_formats::DataProfile::Wrath { .. }))
+}
+
+#[cfg(test)]
+mod profile_route_tests {
+    use super::*;
+
+    #[test]
+    fn vanilla_keeps_framexml_and_wrath_never_opens_it() {
+        assert!(!uses_native_wrath_route(Some(
+            &benilla_formats::DataProfile::Vanilla
+        )));
+        assert!(uses_native_wrath_route(Some(
+            &benilla_formats::DataProfile::Wrath {
+                locale: "enUS".into(),
+            }
+        )));
+    }
+}
+
 /// Whether a capture includes the player UI: world baselines stay UI-free unless
 /// [`crate::run_mode::capture_ui_opted_in`], which the UI load and window size also read.
 fn capture_ui_active(capture: Option<Res<crate::run_mode::CaptureMode>>) -> bool {
@@ -369,11 +404,12 @@ fn arbitrate_pointer_over_ui(
     egui: Option<Res<EguiPointerOver>>,
     hover: Res<PlayerUiHover>,
     plate_hover: Res<crate::vplates::PlateHover>,
+    native_hover: Option<Res<wrath_native::NativeChromeHover>>,
     mut over: ResMut<PointerOverUi>,
     mut panel: ResMut<PointerOverUiPanel>,
 ) {
     // No cinematic term: the hit test finds the full-screen, mouse-enabled `CinematicFrame`.
-    over.0 = egui.is_some_and(|e| e.0) || hover.0.is_some();
+    over.0 = egui.is_some_and(|e| e.0) || hover.0.is_some() || native_hover.is_some_and(|h| h.0);
     // Chrome excludes the plates; the plate hover is last frame's, as the plate driver runs later.
     panel.0 = over.0 && plate_hover.0.is_none();
 }

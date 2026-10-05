@@ -25,7 +25,9 @@ use benilla_protocol::{
 };
 use crossbeam_channel::{Receiver, Sender};
 
-use super::{CharRequest, ClientCommand, RealmRequest};
+use super::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
+
+mod wrath;
 
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::net::motion`]).
@@ -65,6 +67,8 @@ pub(crate) struct LoginRequest {
     /// connection in flight.
     pub(crate) host: String,
     pub(crate) generation: u64,
+    /// The app's startup snapshot dialect. The backend rejects a mismatch rather than falling back.
+    pub(crate) dialect: super::SessionDialect,
 }
 
 /// The park-answer receivers, in the order a cycle blocks on them: credentials, realm, character.
@@ -180,7 +184,8 @@ enum Cycle {
 /// Everything [`spawn_net`] hands the app.
 pub(super) struct NetHandles {
     pub(super) events: Receiver<SessionEvent>,
-    pub(super) commands: Sender<ClientCommand>,
+    pub(super) commands: super::NetCommands,
+    pub(super) command_endpoints: Receiver<SessionCommandSender>,
     pub(super) pick: Sender<CharRequest>,
     pub(super) realm: Sender<RealmRequest>,
     pub(super) login: Sender<LoginRequest>,
@@ -189,15 +194,45 @@ pub(super) struct NetHandles {
 }
 
 /// Spawns the read thread with its park and cycle loop, and the one long-lived write thread.
-pub(super) fn spawn_net(connect: bool) -> NetHandles {
+pub(super) fn spawn_net(connect: bool, dialect: super::SessionDialect) -> NetHandles {
     let (events_tx, events_rx) = crossbeam_channel::unbounded();
-    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded::<ClientCommand>();
+    let (session_cmd_tx, session_cmd_rx) = crossbeam_channel::unbounded::<SessionCommand>();
+    let (command_endpoint_tx, command_endpoint_rx) = crossbeam_channel::unbounded();
     let (pick_tx, pick_rx) = crossbeam_channel::unbounded::<CharRequest>();
     let (realm_tx, realm_rx) = crossbeam_channel::unbounded::<RealmRequest>();
     let (login_tx, login_rx) = crossbeam_channel::unbounded::<LoginRequest>();
     let login_abandon = Arc::new(AtomicU64::new(0));
     let ping_clock = Arc::new(Mutex::new(PingClock::default()));
     if connect {
+        if dialect == super::SessionDialect::Wrath12340 {
+            wrath::spawn_threads(
+                events_tx.clone(),
+                session_cmd_rx,
+                Parks {
+                    login_rx,
+                    realm_rx,
+                    pick_rx,
+                },
+                Arc::clone(&login_abandon),
+                Arc::clone(&ping_clock),
+                session_cmd_tx.clone(),
+                command_endpoint_tx,
+            );
+            return NetHandles {
+                events: events_rx,
+                commands: super::NetCommands::session_stamped(SessionCommandSender::new(
+                    session_cmd_tx,
+                    0,
+                )),
+                command_endpoints: command_endpoint_rx,
+                pick: pick_tx,
+                realm: realm_tx,
+                login: login_tx,
+                login_abandon,
+                ping: ping_clock,
+            };
+        }
         // The writer thread outlives connections; the read thread hands it each new WorldWriter.
         let (writer_tx, writer_rx) = crossbeam_channel::unbounded::<WorldWriter>();
         let clock = Arc::clone(&ping_clock);
@@ -280,7 +315,8 @@ pub(super) fn spawn_net(connect: bool) -> NetHandles {
     // the event stream stays empty.
     NetHandles {
         events: events_rx,
-        commands: cmd_tx,
+        commands: super::NetCommands(cmd_tx),
+        command_endpoints: command_endpoint_rx,
         pick: pick_tx,
         realm: realm_tx,
         login: login_tx,
@@ -312,6 +348,15 @@ fn run(
         Ok(req) => req,
         Err(_) => return Ok(Cycle::Exit),
     };
+    if req.dialect != super::SessionDialect::Vanilla5875 {
+        let _ = events_tx.send(SessionEvent::LoginFailed {
+            refusal: None,
+            reason: "network backend/data snapshot dialect mismatch: Vanilla backend requires vanilla-5875".into(),
+            terminal: true,
+            dial: None,
+        });
+        return Ok(Cycle::Repark);
+    }
     // Checked at every stage boundary; a blocking dial's result is discarded.
     let generation = req.generation;
     let canceled = move || abandon.load(Ordering::SeqCst) != generation;

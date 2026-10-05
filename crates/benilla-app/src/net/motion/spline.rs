@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use benilla_assets::coords::{bevy_to_wow, wow_to_bevy};
-use benilla_protocol::{CreateSpline, EntityKind};
+use benilla_protocol::{CreateSpline, EntityKind, SplineEffect, SplineInterpolation};
 use bevy::prelude::*;
 
 use crate::entities::CollisionHeight;
@@ -26,11 +26,12 @@ pub(crate) struct Spline {
     /// The `FLYING` bit was clear: the 1.12 client zeroes the spline's Δz (`0x616cec`) and takes Z
     /// from the terrain, so [`ground_clamp_creatures`] re-grounds this unit. Flying keeps its Z.
     pub(crate) grounded: bool,
+    pub(crate) interpolation: SplineInterpolation,
     /// `SPLINEFLAG_RUNMODE`: the 1.12 client's commit `0x7c6a50` passes it to
     /// `CMovement::SetRunMode` (`0x7c71c0`, from `0x7c6ac2`), so a spline without it sets
     /// `MOVEFLAG_WALK_MODE`. Only the body we drive reads it ([`crate::player::server_ride`]); a
     /// creature's gait comes from [`Spline::speed`].
-    pub(crate) run_mode: bool,
+    pub(crate) run_mode: Option<bool>,
     /// The transport of a deck path (`SMSG_MONSTER_MOVE_TRANSPORT`), whose points are deck-local:
     /// sampled into the rider's [`crate::transport::TransportRider`] pose, never terrain-clamped.
     pub(crate) deck: Option<u64>,
@@ -97,7 +98,7 @@ impl Spline {
                 } else {
                     0.0
                 };
-                let (pos, dir) = if self.grounded {
+                let (pos, dir) = if self.interpolation == SplineInterpolation::Linear {
                     let (a, b) = (pts[i], pts[i + 1]);
                     let pos = [
                         a[0] + (b[0] - a[0]) * t,
@@ -178,6 +179,10 @@ fn catmull_rom(pts: &[[f32; 3]], i: usize, u: f32) -> ([f32; 3], [f32; 3]) {
     (pos, dir)
 }
 
+fn valid_path(path: &[[f32; 3]]) -> bool {
+    path.iter().flatten().all(|v| v.is_finite())
+}
+
 /// The [`Spline`] for one `SMSG_MONSTER_MOVE` along `path` (`[start, …, endpoint]`), or `None`
 /// for a stop, a zero duration or a path under two points.
 pub(in crate::net) fn monster_move_spline(
@@ -186,10 +191,19 @@ pub(in crate::net) fn monster_move_spline(
     stop: bool,
     duration_ms: u32,
     flying: bool,
-    run_mode: bool,
+    interpolation: SplineInterpolation,
+    cyclic: bool,
+    effect: Option<SplineEffect>,
+    run_mode: Option<bool>,
     deck: Option<u64>,
 ) -> Option<Spline> {
-    if stop || duration_ms == 0 || path.len() < 2 {
+    if stop
+        || duration_ms == 0
+        || path.len() < 2
+        || cyclic
+        || effect.is_some()
+        || !valid_path(&path)
+    {
         return None;
     }
     Some(Spline {
@@ -197,9 +211,9 @@ pub(in crate::net) fn monster_move_spline(
         start: Instant::now(),
         duration: Duration::from_millis(u64::from(duration_ms)),
         id: spline_id,
-        // `grounded` also picks the sampler (lerp or Catmull-Rom); the clamp skips a deck path on
-        // `deck`.
+        // Z authority is independent from interpolation; the terrain clamp skips deck paths.
         grounded: !flying,
+        interpolation,
         run_mode,
         deck,
     })
@@ -213,6 +227,9 @@ pub(in crate::net) fn create_spline(spline: CreateSpline) -> Option<Spline> {
         || spline.duration_ms == 0
         || spline.path.len() < 2
         || spline.time_passed_ms >= spline.duration_ms
+        || spline.cyclic
+        || spline.effect.is_some()
+        || !valid_path(&spline.path)
     {
         return None;
     }
@@ -226,6 +243,7 @@ pub(in crate::net) fn create_spline(spline: CreateSpline) -> Option<Spline> {
         duration: Duration::from_millis(u64::from(spline.duration_ms)),
         id: spline.id,
         grounded: !spline.flying,
+        interpolation: spline.interpolation,
         run_mode: spline.run_mode,
         // The create block's spline tail names no transport; its path is in world coordinates.
         deck: None,
@@ -1128,7 +1146,12 @@ mod tests {
             duration: Duration::from_secs(10),
             id: 7,
             grounded,
-            run_mode: true,
+            interpolation: if grounded {
+                benilla_protocol::SplineInterpolation::Linear
+            } else {
+                benilla_protocol::SplineInterpolation::CatmullRom
+            },
+            run_mode: Some(true),
         };
         let now = Instant::now();
         (spline, now)
@@ -1213,8 +1236,10 @@ mod tests {
             time_passed_ms: 9_000,
             duration_ms: 12_000,
             flying: false,
+            interpolation: benilla_protocol::SplineInterpolation::Linear,
             cyclic: false,
-            run_mode: true,
+            effect: None,
+            run_mode: Some(true),
         })
         .expect("a live walk");
         let (pos, facing, _) = s.sample(Instant::now());
@@ -1235,8 +1260,10 @@ mod tests {
             time_passed_ms,
             duration_ms,
             flying: false,
+            interpolation: benilla_protocol::SplineInterpolation::Linear,
             cyclic: false,
-            run_mode: true,
+            effect: None,
+            run_mode: Some(true),
         };
         let straight = vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]];
         assert!(create_spline(spline(5_000, 5_000, straight.clone())).is_none());
@@ -1458,7 +1485,8 @@ mod server_moved_players {
             duration: Duration::from_secs(4),
             id: 77,
             grounded: true,
-            run_mode: true,
+            interpolation: benilla_protocol::SplineInterpolation::Linear,
+            run_mode: Some(true),
         });
     }
 
@@ -1536,7 +1564,8 @@ mod server_moved_players {
             duration: Duration::from_secs(4),
             id: 78,
             grounded: false,
-            run_mode: true,
+            interpolation: benilla_protocol::SplineInterpolation::CatmullRom,
+            run_mode: Some(true),
         });
         clamp(&mut app);
         assert_eq!(y_of(&app, body), RIM_Z, "a flight owns its own altitude");
@@ -1846,7 +1875,8 @@ mod inside_a_hull {
             duration: Duration::from_secs(secs),
             id,
             grounded: true,
-            run_mode: true,
+            interpolation: benilla_protocol::SplineInterpolation::Linear,
+            run_mode: Some(true),
         });
     }
 

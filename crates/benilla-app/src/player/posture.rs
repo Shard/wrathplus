@@ -15,6 +15,7 @@ pub(super) fn update(
     body: &BodyQuery,
     binds: &crate::bindings::BindingsState,
     net: &NetCommands,
+    dialect: crate::net::SessionDialect,
     sheath: &mut MessageWriter<crate::creature_anim::SheathRequest>,
     asks: &mut MessageReader<StandStateRequest>,
     server: &mut MessageReader<super::ServerStandState>,
@@ -83,12 +84,17 @@ pub(super) fn update(
         request_stand = None;
     }
     if let Some(s) = request_stand.filter(|&s| s != stand_state) {
-        move_trace::posture("commit", s, stand_state, player.move_flags());
-        // `0x5ed430` sends at `0x5ed501`, then calls the local apply at `0x5ed53f`.
-        let _ = net.0.send(ClientCommand::StandStateChange {
+        let command = ClientCommand::StandStateChange {
             state: u32::from(s),
-        });
-        apply_locally(player, s, stand_state, body, sheath);
+        };
+        // A volunteered state is one transaction: if this dialect cannot encode its packet, do
+        // not publish either the prediction or the setter's forced local sheath change.
+        if net.supports(dialect, &command) {
+            move_trace::posture("commit", s, stand_state, player.move_flags());
+            // `0x5ed430` sends at `0x5ed501`, then calls the local apply at `0x5ed53f`.
+            let _ = net.0.send(command);
+            apply_locally(player, s, stand_state, body, sheath);
+        }
     }
     let stand_now = player.stand_pending.unwrap_or(stand_byte);
     // The sheath toggle (Z) cycles the anim layer's committed sheath state through its one setter
@@ -172,7 +178,76 @@ fn predict(pending: &mut Option<u8>, s: u8, stand_now: u8) -> bool {
 
 #[cfg(test)]
 mod setter_tests {
-    use super::predict;
+    use benilla_protocol::ObjectFields;
+    use bevy::prelude::*;
+    use crossbeam_channel::{unbounded, Receiver};
+
+    use super::{predict, update};
+    use crate::net::{Embodied, NetCommands, ObjectStore, SessionDialect};
+    use crate::player::{BodyQuery, ClientCommand, Player, ServerStandState, StandStateRequest};
+
+    #[derive(Resource)]
+    struct Moving(bool);
+
+    fn drive_posture(
+        mut player: ResMut<Player>,
+        body: BodyQuery,
+        binds: Res<crate::bindings::BindingsState>,
+        net: Res<crate::net::NetCommands>,
+        dialect: Res<SessionDialect>,
+        moving: Res<Moving>,
+        mut sheath: MessageWriter<crate::creature_anim::SheathRequest>,
+        mut asks: MessageReader<StandStateRequest>,
+        mut server: MessageReader<ServerStandState>,
+    ) {
+        update(
+            &mut player,
+            &body,
+            &binds,
+            &net,
+            *dialect,
+            &mut sheath,
+            &mut asks,
+            &mut server,
+            moving.0,
+            false,
+        );
+    }
+
+    fn world(
+        dialect: SessionDialect,
+        stand_state: u32,
+        moving: bool,
+    ) -> (App, Receiver<ClientCommand>) {
+        let (tx, rx) = unbounded();
+        let mut app = App::new();
+        app.init_resource::<Player>()
+            .init_resource::<crate::bindings::BindingsState>()
+            .insert_resource(NetCommands(tx))
+            .insert_resource(dialect)
+            .insert_resource(Moving(moving))
+            .add_message::<StandStateRequest>()
+            .add_message::<ServerStandState>()
+            .add_message::<crate::creature_anim::SheathRequest>()
+            .add_systems(Update, drive_posture);
+        app.world_mut().spawn((
+            Embodied,
+            Transform::default(),
+            ObjectStore(ObjectFields::from_pairs(&[
+                (22, 100),
+                (28, 100),
+                (138, stand_state),
+            ])),
+        ));
+        (app, rx)
+    }
+
+    fn stand_change(rx: &Receiver<ClientCommand>) -> Option<u32> {
+        match rx.try_recv().ok()? {
+            ClientCommand::StandStateChange { state } => Some(state),
+            other => panic!("unexpected posture command: {other:?}"),
+        }
+    }
 
     #[test]
     fn the_local_half_writes_the_prediction_only_on_a_change() {
@@ -188,5 +263,55 @@ mod setter_tests {
         let mut pending = Some(1);
         assert!(predict(&mut pending, 0, 1));
         assert_eq!(pending, Some(0));
+    }
+
+    #[test]
+    fn vanilla_movement_stands_and_a_sit_request_commits_through_update() {
+        let (mut moving, move_rx) = world(SessionDialect::Vanilla5875, 1, true);
+        moving.update();
+        assert_eq!(stand_change(&move_rx), Some(0));
+        assert_eq!(moving.world().resource::<Player>().stand_pending, Some(0));
+
+        let (mut sitting, sit_rx) = world(SessionDialect::Vanilla5875, 0, false);
+        sitting
+            .world_mut()
+            .write_message(StandStateRequest { state: 1 });
+        sitting.update();
+        assert_eq!(stand_change(&sit_rx), Some(1));
+        assert_eq!(sitting.world().resource::<Player>().stand_pending, Some(1));
+    }
+
+    #[test]
+    fn wrath_qualified_posture_commits_movement_stand_and_requested_sit() {
+        let (mut moving, move_rx) = world(SessionDialect::Wrath12340, 1, true);
+        moving.update();
+        assert_eq!(stand_change(&move_rx), Some(0));
+        assert_eq!(moving.world().resource::<Player>().stand_pending, Some(0));
+
+        let (mut sitting, sit_rx) = world(SessionDialect::Wrath12340, 0, false);
+        sitting
+            .world_mut()
+            .write_message(StandStateRequest { state: 1 });
+        sitting.update();
+        assert_eq!(stand_change(&sit_rx), Some(1));
+        assert_eq!(sitting.world().resource::<Player>().stand_pending, Some(1));
+        assert_eq!(
+            sitting
+                .world_mut()
+                .resource_mut::<Messages<crate::creature_anim::SheathRequest>>()
+                .drain()
+                .count(),
+            0,
+            "the admitted posture needs no sheath request without a drawn weapon driver"
+        );
+    }
+
+    #[test]
+    fn wrath_server_stand_echo_still_applies_locally_without_a_command() {
+        let (mut app, rx) = world(SessionDialect::Wrath12340, 0, false);
+        app.world_mut().write_message(ServerStandState { state: 1 });
+        app.update();
+        assert_eq!(stand_change(&rx), None);
+        assert_eq!(app.world().resource::<Player>().stand_pending, Some(1));
     }
 }

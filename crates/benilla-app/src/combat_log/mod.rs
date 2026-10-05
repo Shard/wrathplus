@@ -77,6 +77,7 @@ impl Plugin for CombatLogPlugin {
     fn build(&self, app: &mut App) {
         use SessionEventKind as K;
         app.net_handler(K::AttackerState, on_attacker_state)
+            .net_handler(K::WrathAttackerState, on_wrath_attacker_state)
             .net_handler(K::SpellDamageLog, on_spell_damage_log)
             .net_handler(K::PeriodicAuraLog, on_periodic_aura_log)
             .net_handler(K::SpellHealLog, on_spell_heal_log)
@@ -104,6 +105,21 @@ fn on_attacker_state(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
         let ctx = c.ctx();
         chat::attacker_state(s, &ctx, &l.stores, &l.poses, &mut l.log);
     }
+}
+
+fn on_wrath_attacker_state(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    let SessionEvent::WrathAttackerState(native) = ev else {
+        return;
+    };
+    let Some(view) = crate::net::wrath_melee::presentation(&native) else {
+        warn!(
+            "combat log: Wrath melee report is not representable for presentation (attacker {:#x}, victim {:#x}, flags {:#x}, overkill {})",
+            native.attacker, native.victim, native.hit_info, native.overkill
+        );
+        return;
+    };
+    let ctx = c.ctx();
+    chat::attacker_state(view, &ctx, &l.stores, &l.poses, &mut l.log);
 }
 
 fn on_spell_damage_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {

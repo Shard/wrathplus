@@ -80,6 +80,7 @@ pub(super) fn register(app: &mut App) {
 pub(crate) struct Scene<'w, 's> {
     commands: Commands<'w, 's>,
     net: Res<'w, NetCommands>,
+    dialect: Res<'w, super::SessionDialect>,
     index: ResMut<'w, GuidIndex>,
     self_guid: Res<'w, SelfGuid>,
     real: Res<'w, Time<Real>>,
@@ -310,6 +311,7 @@ fn on_object_destroyed(In(ev): In<SessionEvent>, mut sc: Scene) {
             held,
             &sc.names,
             &sc.net,
+            *sc.dialect,
         );
         object_destroyed(guid, &mut sc.commands, &mut sc.index);
     }
@@ -328,6 +330,7 @@ fn on_objects_removed(In(ev): In<SessionEvent>, mut sc: Scene) {
                 held,
                 &sc.names,
                 &sc.net,
+                *sc.dialect,
             );
         }
         objects_removed(guids, &mut sc.commands, &mut sc.index);
@@ -345,6 +348,9 @@ fn on_monster_move(In(ev): In<SessionEvent>, mut sc: Scene) {
         stop,
         duration_ms,
         flying,
+        interpolation,
+        cyclic,
+        effect,
         run_mode,
     } = ev
     {
@@ -359,6 +365,9 @@ fn on_monster_move(In(ev): In<SessionEvent>, mut sc: Scene) {
             stop,
             duration_ms,
             flying,
+            interpolation,
+            cyclic,
+            effect,
             run_mode,
             rooted,
             &mut sc.commands,
@@ -858,7 +867,10 @@ fn monster_move(
     stop: bool,
     duration_ms: u32,
     flying: bool,
-    run_mode: bool,
+    interpolation: benilla_protocol::SplineInterpolation,
+    cyclic: bool,
+    effect: Option<benilla_protocol::SplineEffect>,
+    run_mode: Option<bool>,
     rooted: bool,
     commands: &mut Commands,
     index: &GuidIndex,
@@ -965,24 +977,37 @@ fn monster_move(
         // The spline supersedes the relay stream: a splined player (charge, taxi) would otherwise
         // keep stale flags that outrank the spline in the anim selector.
         commands.entity(e).remove::<RemoteMotion>();
+        let node_count = path.len();
         match monster_move_spline(
             path,
             spline_id,
             stop,
             duration_ms,
             flying,
+            interpolation,
+            cyclic,
+            effect,
             run_mode,
             transport,
         ) {
             Some(spline) => {
                 commands.entity(e).insert(spline).remove::<SplineStopped>();
             }
-            // A stop keeps the id, which the server awaits back for a player-driven unit.
-            None => {
+            // Only an actual stop arms the spline-done acknowledgement. Unsupported cyclic or
+            // effect paths are diagnosed and refused without fabricating a server stop/ack.
+            None if stop => {
                 commands
                     .entity(e)
                     .remove::<Spline>()
                     .insert(SplineStopped(spline_id));
+            }
+            None => {
+                warn!(
+                    "net: refusing unsupported/invalid spline {spline_id} for {guid:#x} \
+                     (nodes={}, duration_ms={duration_ms}, cyclic={cyclic}, effect={effect:?})",
+                    node_count
+                );
+                commands.entity(e).remove::<(Spline, SplineStopped)>();
             }
         }
     }
@@ -1245,6 +1270,76 @@ mod tests {
         assert!(world.get_entity(e).is_err(), "the cells died with the item");
     }
 
+    /// A real Wrath packet crosses the stateful adapter and the actual object handler before the
+    /// shared spline sampler supplies movement, facing, and a later stop.
+    #[test]
+    fn wrath_monster_move_adapter_drives_and_stops_the_ecs_spline() {
+        use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_MONSTER_MOVE};
+        use bevy::ecs::system::RunSystemOnce;
+        use std::time::Duration;
+
+        const MOB: u64 = 0x2a;
+        fn packet(move_type: u8, spline_id: u32) -> Vec<u8> {
+            let mut body = vec![0x01, MOB as u8, 0];
+            for value in [1.0f32, 2.0, 3.0] {
+                body.extend(value.to_le_bytes());
+            }
+            body.extend(spline_id.to_le_bytes());
+            body.push(move_type);
+            if move_type != 1 {
+                body.extend(0u32.to_le_bytes());
+                body.extend(1_000u32.to_le_bytes());
+                body.extend(1u32.to_le_bytes());
+                for value in [5.0f32, 2.0, 3.0] {
+                    body.extend(value.to_le_bytes());
+                }
+            }
+            body
+        }
+        fn events(adapter: &mut WrathEventAdapter, body: &[u8]) -> Vec<SessionEvent> {
+            let WrathDispatch::Handled { session_events, .. } = adapter
+                .dispatch(SMSG_MONSTER_MOVE, body, 0)
+                .expect("Wrath fixture decodes")
+            else {
+                panic!("monster move must be handled")
+            };
+            session_events
+        }
+
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        let entity = app.world_mut().spawn(Transform::default()).id();
+        app.world_mut()
+            .resource_mut::<GuidIndex>()
+            .0
+            .insert(MOB, entity);
+        let mut adapter = WrathEventAdapter::new();
+
+        super::super::handlers::dispatch(app.world_mut(), events(&mut adapter, &packet(0, 17)));
+        let now = {
+            let spline = app
+                .world()
+                .get::<Spline>(entity)
+                .expect("handler installs spline");
+            assert_eq!(spline.points, vec![[1.0, 2.0, 3.0], [5.0, 2.0, 3.0]]);
+            spline.start + Duration::from_millis(500)
+        };
+        app.world_mut()
+            .run_system_once(move |mut q: Query<(&Spline, &mut Transform)>| {
+                let (spline, mut transform) = q.single_mut().unwrap();
+                let (position, facing, _) = spline.sample(now);
+                transform.translation = benilla_assets::coords::wow_to_bevy(position);
+                transform.rotation = Quat::from_rotation_y(facing.unwrap());
+            })
+            .unwrap();
+        let transform = app.world().get::<Transform>(entity).unwrap();
+        assert!((bevy_to_wow(transform.translation)[0] - 3.0).abs() < 1e-5);
+        assert!(transform.rotation.to_euler(EulerRot::YXZ).0.abs() < 1e-5);
+
+        super::super::handlers::dispatch(app.world_mut(), events(&mut adapter, &packet(1, 18)));
+        assert!(app.world().get::<Spline>(entity).is_none());
+        assert_eq!(app.world().get::<SplineStopped>(entity).unwrap().0, 18);
+    }
+
     /// The observer movement-mode family, on a bare `World` with one indexed unit.
     mod spline_modes {
         use super::*;
@@ -1440,7 +1535,10 @@ mod tests {
                             false,
                             3000,
                             false,
-                            true,
+                            benilla_protocol::SplineInterpolation::Linear,
+                            false,
+                            None,
+                            Some(true),
                             rooted,
                             &mut commands,
                             &index,
@@ -1496,7 +1594,10 @@ mod tests {
                         false,
                         3000,
                         false,
-                        true,
+                        benilla_protocol::SplineInterpolation::Linear,
+                        false,
+                        None,
+                        Some(true),
                         false,
                         &mut commands,
                         &index,
@@ -1543,7 +1644,10 @@ mod tests {
                         false,
                         3000,
                         false,
-                        true,
+                        benilla_protocol::SplineInterpolation::Linear,
+                        false,
+                        None,
+                        Some(true),
                         false,
                         &mut commands,
                         &index,

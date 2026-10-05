@@ -1,10 +1,10 @@
 //! `Map.dbc`: a server `mapId` to its MPQ directory (`0` "Azeroth", `1` "Kalimdor", `36`
 //! "DeadminesInstance") for `MapTiles::load`, plus the columns the client reads per map. Records
-//! are 42 four-byte fields; `MapName` and the two descriptions are localized blocks of nine.
+//! are 42 four-byte fields in vanilla and 66 in Wrath.
 
 use std::collections::HashMap;
 
-use crate::Chain;
+use crate::{Chain, DataProfile};
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
@@ -12,13 +12,13 @@ use crate::dbc::{f32_at, parse, str_at, u32_at};
 
 const MAP: &str = "DBFilesClient\\Map.dbc";
 
-/// Field index of `LoadingScreenID`, a `LoadingScreens.dbc` id; 0 on the dev and test maps.
+/// Vanilla field index of `LoadingScreenID`, a `LoadingScreens.dbc` id.
 const LOADING_SCREEN_FIELD: usize = 38;
 
 /// `Map.dbc`'s per-map data, keyed by map id.
 pub struct MapCatalog {
     dirs: HashMap<u32, String>,
-    /// `MapName_Lang[enUS]` (field 4, `+0x10`, read by `0x4a65a0`). The continent dropdown shows
+    /// The selected locale's `MapName_Lang`. The continent dropdown shows
     /// this ("Eastern Kingdoms"), not the art folder ("Azeroth") (`GetMapContinents` `0x4a7ce0`).
     names: HashMap<u32, String>,
     /// `LoadingScreenID`, for maps with a non-zero one.
@@ -76,7 +76,7 @@ impl MapCatalog {
         self.dirs.get(&map_id).map(String::as_str)
     }
 
-    /// The enUS display name (`MapName_Lang`) for `map_id`, "Eastern Kingdoms".
+    /// The selected locale's display name (`MapName_Lang`) for `map_id`.
     pub fn name(&self, map_id: u32) -> Option<&str> {
         self.names.get(&map_id).map(String::as_str)
     }
@@ -127,39 +127,98 @@ const BRACKET_SPAN_FIELD: usize = 39;
 const GROUP_QUEUE_FIELD: usize = 40;
 const MINIMAP_ICON_SCALE_FIELD: usize = 41;
 
-/// The unread fields are `u32` placeholders: only the 42 × 4 = 168-byte record has to add up.
-fn map_schema() -> Schema {
+const WRATH_MAP_NAME_FIELD: usize = 5;
+const WRATH_DESCRIPTION_0_FIELD: usize = 23;
+const WRATH_DESCRIPTION_1_FIELD: usize = 40;
+// AzerothCore's build-12340 `MapEntryfmt` and WoWDBDefs both place `LoadingScreenID` at field 57.
+const WRATH_LOADING_SCREEN_FIELD: usize = 57;
+const WRATH_MINIMAP_ICON_SCALE_FIELD: usize = 58;
+const WRATH_MAX_PLAYERS_FIELD: usize = 65;
+
+fn wrath_locale_slot(locale: &str) -> usize {
+    match locale.to_ascii_lowercase().as_str() {
+        "enus" | "engb" => 0,
+        "kokr" => 1,
+        "frfr" => 2,
+        "dede" => 3,
+        "zhcn" => 4,
+        "zhtw" => 5,
+        "eses" => 6,
+        "esmx" => 7,
+        "ruru" => 8,
+        _ => 0,
+    }
+}
+
+/// The unread fields are `u32` placeholders: only the profile's record width has to add up.
+fn map_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("Map");
-    s.add_field(SchemaField::new("ID", FieldType::UInt32));
-    s.add_field(SchemaField::new("Directory", FieldType::String));
-    for i in 2..42 {
-        match i {
-            INSTANCE_TYPE_FIELD => s.add_field(SchemaField::new("InstanceType", FieldType::UInt32)),
-            MAP_NAME_FIELD => s.add_field(SchemaField::new("MapName", FieldType::String)),
-            DESCRIPTION_0_FIELD => {
-                s.add_field(SchemaField::new("MapDescription0", FieldType::String))
-            }
-            DESCRIPTION_1_FIELD => {
-                s.add_field(SchemaField::new("MapDescription1", FieldType::String))
-            }
-            FIELD_17 | FIELD_18 | MINIMAP_ICON_SCALE_FIELD => {
-                s.add_field(SchemaField::new(format!("_f{i}"), FieldType::Float32))
-            }
-            LOADING_SCREEN_FIELD => {
-                s.add_field(SchemaField::new("LoadingScreenID", FieldType::UInt32))
-            }
-            _ => s.add_field(SchemaField::new(format!("_pad{i}"), FieldType::UInt32)),
+    let fields = match profile {
+        DataProfile::Vanilla => 42,
+        DataProfile::Wrath { .. } => 66,
+    };
+    let (name, description_0, description_1) = match profile {
+        DataProfile::Vanilla => (MAP_NAME_FIELD, DESCRIPTION_0_FIELD, DESCRIPTION_1_FIELD),
+        DataProfile::Wrath { locale } => {
+            let slot = wrath_locale_slot(locale);
+            (
+                WRATH_MAP_NAME_FIELD + slot,
+                WRATH_DESCRIPTION_0_FIELD + slot,
+                WRATH_DESCRIPTION_1_FIELD + slot,
+            )
         }
+    };
+    for i in 0..fields {
+        let ty = if i == 1 || i == name || i == description_0 || i == description_1 {
+            FieldType::String
+        } else if matches!(profile, DataProfile::Vanilla)
+            && matches!(i, FIELD_17 | FIELD_18 | MINIMAP_ICON_SCALE_FIELD)
+            || matches!(profile, DataProfile::Wrath { .. })
+                && matches!(i, WRATH_MINIMAP_ICON_SCALE_FIELD | 60 | 61)
+        {
+            FieldType::Float32
+        } else {
+            FieldType::UInt32
+        };
+        s.add_field(SchemaField::new(format!("c{i}"), ty));
     }
     s
 }
 
 /// Read Map.dbc off the patch chain into a [`MapCatalog`].
 pub fn load_map_catalog(chain: &mut Chain) -> Result<MapCatalog> {
+    let profile = chain.profile().clone();
     let bytes = chain
         .read_file(MAP)
         .with_context(|| format!("reading {MAP}"))?;
-    let rs = parse(&bytes, map_schema(), "Map")?;
+    parse_map_catalog(&bytes, &profile)
+}
+
+fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> {
+    let rs = parse(bytes, map_schema(profile), "Map")?;
+    let (name, description_0, description_1, loading_screen, max_players, minimap_icon_scale) =
+        match profile {
+            DataProfile::Vanilla => (
+                MAP_NAME_FIELD,
+                DESCRIPTION_0_FIELD,
+                DESCRIPTION_1_FIELD,
+                Some(LOADING_SCREEN_FIELD),
+                MAX_PLAYERS_FIELD,
+                MINIMAP_ICON_SCALE_FIELD,
+            ),
+            DataProfile::Wrath { locale } => {
+                let locale = wrath_locale_slot(locale);
+                (
+                    WRATH_MAP_NAME_FIELD + locale,
+                    WRATH_DESCRIPTION_0_FIELD + locale,
+                    WRATH_DESCRIPTION_1_FIELD + locale,
+                    Some(WRATH_LOADING_SCREEN_FIELD),
+                    WRATH_MAX_PLAYERS_FIELD,
+                    WRATH_MINIMAP_ICON_SCALE_FIELD,
+                )
+            }
+        };
+    let wrath = matches!(profile, DataProfile::Wrath { .. });
     let mut dirs = HashMap::with_capacity(rs.records().len());
     let mut names = HashMap::with_capacity(rs.records().len());
     let mut loading_screens = HashMap::new();
@@ -170,33 +229,63 @@ pub fn load_map_catalog(chain: &mut Chain) -> Result<MapCatalog> {
         battleground.insert(
             id,
             MapBattlegroundColumns {
-                min_level: u32_at(r, MIN_LEVEL_FIELD).unwrap_or(0),
-                max_level: u32_at(r, MAX_LEVEL_FIELD).unwrap_or(0),
-                max_players: u32_at(r, MAX_PLAYERS_FIELD).unwrap_or(0),
-                field_16: u32_at(r, FIELD_16).unwrap_or(0) as i32,
-                field_17: f32_at(r, FIELD_17).unwrap_or(0.0),
-                field_18: f32_at(r, FIELD_18).unwrap_or(0.0),
+                min_level: if wrath {
+                    0
+                } else {
+                    u32_at(r, MIN_LEVEL_FIELD).unwrap_or(0)
+                },
+                max_level: if wrath {
+                    0
+                } else {
+                    u32_at(r, MAX_LEVEL_FIELD).unwrap_or(0)
+                },
+                max_players: u32_at(r, max_players).unwrap_or(0),
+                field_16: if wrath {
+                    0
+                } else {
+                    u32_at(r, FIELD_16).unwrap_or(0) as i32
+                },
+                field_17: if wrath {
+                    0.0
+                } else {
+                    f32_at(r, FIELD_17).unwrap_or(0.0)
+                },
+                field_18: if wrath {
+                    0.0
+                } else {
+                    f32_at(r, FIELD_18).unwrap_or(0.0)
+                },
                 descriptions: [
-                    str_at(&rs, r, DESCRIPTION_0_FIELD).unwrap_or_default(),
-                    str_at(&rs, r, DESCRIPTION_1_FIELD).unwrap_or_default(),
+                    str_at(&rs, r, description_0).unwrap_or_default(),
+                    str_at(&rs, r, description_1).unwrap_or_default(),
                 ],
-                bracket_span: u32_at(r, BRACKET_SPAN_FIELD).unwrap_or(0),
-                group_queue: u32_at(r, GROUP_QUEUE_FIELD).unwrap_or(0),
-                minimap_icon_scale: f32_at(r, MINIMAP_ICON_SCALE_FIELD).unwrap_or(1.0),
+                bracket_span: if wrath {
+                    0
+                } else {
+                    u32_at(r, BRACKET_SPAN_FIELD).unwrap_or(0)
+                },
+                group_queue: if wrath {
+                    0
+                } else {
+                    u32_at(r, GROUP_QUEUE_FIELD).unwrap_or(0)
+                },
+                minimap_icon_scale: f32_at(r, minimap_icon_scale).unwrap_or(1.0),
             },
         );
         if let Some(dir) = str_at(&rs, r, 1) {
             dirs.insert(id, dir);
         }
-        if let Some(name) = str_at(&rs, r, MAP_NAME_FIELD).filter(|n| !n.is_empty()) {
+        if let Some(name) = str_at(&rs, r, name).filter(|n| !n.is_empty()) {
             names.insert(id, name);
         }
         // Type 0 is recorded too, so `None` means only that no such map exists.
         if let Some(ty) = u32_at(r, INSTANCE_TYPE_FIELD) {
             instance_types.insert(id, ty);
         }
-        if let Some(ls) = u32_at(r, LOADING_SCREEN_FIELD).filter(|&v| v != 0) {
-            loading_screens.insert(id, ls);
+        if let Some(loading_screen) = loading_screen {
+            if let Some(ls) = u32_at(r, loading_screen).filter(|&v| v != 0) {
+                loading_screens.insert(id, ls);
+            }
         }
     }
     Ok(MapCatalog {
@@ -211,6 +300,84 @@ pub fn load_map_catalog(chain: &mut Chain) -> Result<MapCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wdbc(fields: &[u32], strings: &[u8]) -> Vec<u8> {
+        let mut bytes = b"WDBC".to_vec();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&(fields.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&((fields.len() * 4) as u32).to_le_bytes());
+        bytes.extend_from_slice(&(strings.len() as u32).to_le_bytes());
+        for field in fields {
+            bytes.extend_from_slice(&field.to_le_bytes());
+        }
+        bytes.extend_from_slice(strings);
+        bytes
+    }
+
+    #[test]
+    fn vanilla_and_wrath_map_offsets_are_distinct_and_localized() {
+        let strings = b"\0directory\0vanilla-name\0wrath-fr\0horde-fr\0alliance-fr\0";
+        let mut vanilla = (10_000..10_042).collect::<Vec<u32>>();
+        vanilla[1] = 1;
+        vanilla[MAP_NAME_FIELD] = 11;
+        vanilla[MINIMAP_ICON_SCALE_FIELD] = 1.25f32.to_bits();
+        let set = parse(
+            &wdbc(&vanilla, strings),
+            map_schema(&DataProfile::Vanilla),
+            "synthetic vanilla Map",
+        )
+        .unwrap();
+        let row = &set.records()[0];
+        assert_eq!(
+            str_at(&set, row, MAP_NAME_FIELD).as_deref(),
+            Some("vanilla-name")
+        );
+        assert_eq!(u32_at(row, MAX_PLAYERS_FIELD), Some(10_015));
+
+        let profile = DataProfile::Wrath {
+            locale: "frFR".into(),
+        };
+        let mut wrath = (20_000..20_066).collect::<Vec<u32>>();
+        wrath[0] = 0;
+        wrath[1] = 1;
+        wrath[WRATH_MAP_NAME_FIELD + 2] = 24;
+        wrath[WRATH_DESCRIPTION_0_FIELD + 2] = 33;
+        wrath[WRATH_DESCRIPTION_1_FIELD + 2] = 42;
+        wrath[WRATH_LOADING_SCREEN_FIELD] = 4;
+        wrath[WRATH_MINIMAP_ICON_SCALE_FIELD] = 1.5f32.to_bits();
+        let set = parse(
+            &wdbc(&wrath, strings),
+            map_schema(&profile),
+            "synthetic Wrath Map",
+        )
+        .unwrap();
+        let row = &set.records()[0];
+        assert_eq!(str_at(&set, row, 7).as_deref(), Some("wrath-fr"));
+        assert_eq!(str_at(&set, row, 25).as_deref(), Some("horde-fr"));
+        assert_eq!(str_at(&set, row, 42).as_deref(), Some("alliance-fr"));
+        assert_eq!(u32_at(row, WRATH_LOADING_SCREEN_FIELD), Some(4));
+        assert_eq!(u32_at(row, WRATH_MAX_PLAYERS_FIELD), Some(20_065));
+        assert_eq!(f32_at(row, WRATH_MINIMAP_ICON_SCALE_FIELD), Some(1.5));
+
+        let catalog = parse_map_catalog(&wdbc(&wrath, strings), &profile).unwrap();
+        assert_eq!(catalog.loading_screen_id(0), Some(4));
+    }
+
+    #[test]
+    fn installed_wrath_map_schema_loads() {
+        let data = std::path::Path::new("/Users/shannon/Games/Client/Data");
+        if !data.is_dir() {
+            return;
+        }
+        let profile = DataProfile::Wrath {
+            locale: "enUS".into(),
+        };
+        let mut chain = Chain::open_profile(data, &profile).expect("open installed Wrath data");
+        let catalog = load_map_catalog(&mut chain).expect("load Wrath Map.dbc");
+        assert_eq!(catalog.directory(0), Some("Azeroth"));
+        assert!(catalog.name(0).is_some_and(|name| !name.is_empty()));
+        assert!(catalog.len() > 100);
+    }
 
     #[test]
     fn the_battleground_columns_read_the_shipped_rows() {

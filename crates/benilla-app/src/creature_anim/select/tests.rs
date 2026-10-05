@@ -920,7 +920,12 @@ fn unify_stamps_flying_from_the_live_spline_on_every_leg() {
         duration: Duration::from_secs(10),
         id: 1,
         grounded,
-        run_mode: true,
+        interpolation: if grounded {
+            benilla_protocol::SplineInterpolation::Linear
+        } else {
+            benilla_protocol::SplineInterpolation::CatmullRom
+        },
+        run_mode: Some(true),
     };
     // Self leg: the live spline says flying, not the stored state, as the client reads the
     // spline flags at select time.
@@ -957,7 +962,8 @@ fn the_granted_modes_fold_into_the_flags_word_on_every_leg_but_our_own() {
         duration: Duration::from_secs(10),
         id: 1,
         grounded: true,
-        run_mode: true,
+        interpolation: benilla_protocol::SplineInterpolation::Linear,
+        run_mode: Some(true),
     };
     let v = unify(None, None, Some(&spline), false, Some(&walking));
     assert_eq!(

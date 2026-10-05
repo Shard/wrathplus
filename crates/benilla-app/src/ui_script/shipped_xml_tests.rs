@@ -1950,8 +1950,20 @@ fn the_layer_does_not_grow() {
         .expect("assets/ui")
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| !n.starts_with('.'))
+        .filter(|n| !n.starts_with('.') && n != "wrath")
         .collect();
+    // Wrath's authored bootstrap is profile-separated; the Vanilla layer remains frozen.
+    let mut wrath_files: Vec<_> = std::fs::read_dir(dir.join("wrath"))
+        .expect("Wrath root")
+        .map(|e| {
+            e.expect("Wrath entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    wrath_files.sort();
+    assert_eq!(wrath_files, ["UIParent.xml", "bootstrap.toc"]);
     found.sort();
     let mut shipped: Vec<String> = LAYER
         .iter()

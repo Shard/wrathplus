@@ -38,6 +38,11 @@ pub(crate) enum Input {
     SitOrStand,
     /// `ToggleSheath()`.
     ToggleSheath,
+    /// Native ATTACKTARGET binding while the Wrath stock binding VM is not yet qualified.
+    AttackTarget,
+    /// Native TARGETNEARESTENEMY / reverse direction, using the ordinary target cycler.
+    TargetNearestEnemy,
+    TargetPreviousEnemy,
     /// `CameraZoomIn([yards])`, its yards in [`BindingsState::amount`].
     CameraZoomIn,
     /// `CameraZoomOut([yards])`, its yards in [`BindingsState::amount`].
@@ -72,6 +77,47 @@ fn fired_input(input: FiredInput) -> (Input, f32) {
 }
 
 impl BindingsState {
+    /// Execute the movement commands supported by Wrath's native, VM-less binding route. Keeping
+    /// this command-shaped preserves the same state edges as the Lua binding functions.
+    pub(super) fn apply_native_movement(&mut self, command: &str, pressed: bool) -> bool {
+        let fired = match command {
+            "JUMP" => Some(Input::Jump),
+            "ATTACKTARGET" => Some(Input::AttackTarget),
+            "TARGETNEARESTENEMY" => Some(Input::TargetNearestEnemy),
+            "TARGETPREVIOUSENEMY" => Some(Input::TargetPreviousEnemy),
+            _ => None,
+        };
+        if let Some(input) = fired {
+            if pressed {
+                self.fired.push(input);
+                self.just.push(input);
+            }
+            return true;
+        }
+        let input = match command {
+            "MOVEFORWARD" => Input::MoveForward,
+            "MOVEBACKWARD" => Input::MoveBackward,
+            "TURNLEFT" => Input::TurnLeft,
+            "TURNRIGHT" => Input::TurnRight,
+            "STRAFELEFT" => Input::StrafeLeft,
+            "STRAFERIGHT" => Input::StrafeRight,
+            _ => return false,
+        };
+        self.apply_held(input, pressed);
+        true
+    }
+
+    fn apply_held(&mut self, input: Input, pressed: bool) {
+        if pressed {
+            if !self.pressed(input) {
+                self.just.push(input);
+                self.held.push(input);
+            }
+        } else {
+            self.held.retain(|&held| held != input);
+        }
+    }
+
     /// Apply Lua's binding calls, in call order.
     pub(super) fn apply_script_input(&mut self, inputs: Vec<BindingInput>) {
         for input in inputs {
@@ -80,16 +126,13 @@ impl BindingsState {
                 // bit is no new edge.
                 BindingInput::Start(held) => {
                     let i = held_input(held);
-                    if !self.pressed(i) {
-                        self.just.push(i);
-                        self.held.push(i);
-                    }
+                    self.apply_held(i, true);
                 }
                 // `0x514b70` clears the bit whoever set it, so a second key still down on the
                 // same command stops too, and its release is a no-op second Stop.
                 BindingInput::Stop(held) => {
                     let i = held_input(held);
-                    self.held.retain(|&h| h != i);
+                    self.apply_held(i, false);
                 }
                 // A one-shot is its own press edge.
                 BindingInput::Fire(fired) => {

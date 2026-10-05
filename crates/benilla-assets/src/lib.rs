@@ -37,7 +37,7 @@ pub use model::{
 mod adt;
 mod terrain;
 mod wdt;
-pub use adt::{chunk_to_mesh, chunks_to_mesh, AdtLoader, AdtTile, ChunkShading};
+pub use adt::{chunk_to_mesh, chunks_to_mesh, AdtLoader, AdtTile, ChunkShading, WrathAdtLoader};
 pub use wdt::{WdtIndex, WdtIndexLoader};
 mod blp;
 pub use blp::{BlpImageLoader, BlpLoaderSettings, BlpVariant};
@@ -49,7 +49,7 @@ pub use tex_filter::{publish_tex_filter, tex_filter, TexFilterSetting, ANISO_RAN
 mod m2;
 pub use m2::{
     EmitterBillboard, M2Model, M2ModelLoader, M2SequenceInfo, ModelEmitter, ModelLight,
-    ModelRibbon, PortraitCamera,
+    ModelRibbon, PortraitCamera, WrathM2ModelLoader,
 };
 mod wmo;
 pub use benilla_formats::{WmoPortalInfo, WmoPortalRef};
@@ -72,6 +72,13 @@ impl MpqAssetReader {
     pub fn open(data_dir: &Path) -> Result<Self> {
         Ok(Self {
             chain: Arc::new(Chain::open(data_dir)?),
+        })
+    }
+
+    /// Open an explicitly selected client-data dialect.
+    pub fn open_profile(data_dir: &Path, profile: &benilla_formats::DataProfile) -> Result<Self> {
+        Ok(Self {
+            chain: Arc::new(Chain::open_profile(data_dir, profile)?),
         })
     }
 }
@@ -188,10 +195,24 @@ fn strip_sampler_marker(path: &str) -> Option<String> {
     matches!(tag, "rc" | "cr" | "cc").then(|| format!("{base}.{ext}"))
 }
 
+/// The explicitly selected archive/schema dialect used by the loaders.
+#[derive(Resource, Clone, Default)]
+pub struct ClientDataProfile(pub benilla_formats::DataProfile);
+
 /// Register the `mpq://` source on `app`, backed by the patch chain at `data_dir`. Call it before
 /// `AssetPlugin` builds (before `DefaultPlugins`), which reads the sources.
 pub fn register_mpq_source(app: &mut App, data_dir: &Path) -> Result<()> {
-    let reader = MpqAssetReader::open(data_dir)?;
+    register_mpq_source_profile(app, data_dir, &benilla_formats::DataProfile::Vanilla)
+}
+
+/// Register the explicitly selected archive dialect before Bevy's asset plugin builds.
+pub fn register_mpq_source_profile(
+    app: &mut App,
+    data_dir: &Path,
+    profile: &benilla_formats::DataProfile,
+) -> Result<()> {
+    let reader = MpqAssetReader::open_profile(data_dir, profile)?;
+    app.insert_resource(ClientDataProfile(profile.clone()));
     app.register_asset_source(
         MPQ_SOURCE,
         AssetSourceBuilder::new(move || -> Box<dyn ErasedAssetReader> { Box::new(reader.clone()) }),
@@ -208,9 +229,22 @@ pub fn register_asset_loaders(app: &mut App) {
     // A plugin: whether the device takes DXT blocks is known only after `RenderPlugin::finish`.
     app.add_plugins(BlpGpuSupportPlugin);
     app.register_asset_loader(BlpImageLoader);
-    app.register_asset_loader(M2ModelLoader);
+    let profile = app
+        .world()
+        .get_resource::<ClientDataProfile>()
+        .cloned()
+        .unwrap_or_default();
+    match profile.0 {
+        benilla_formats::DataProfile::Vanilla => {
+            app.register_asset_loader(M2ModelLoader);
+            app.register_asset_loader(AdtLoader);
+        }
+        benilla_formats::DataProfile::Wrath { .. } => {
+            app.register_asset_loader(WrathM2ModelLoader);
+            app.register_asset_loader(WrathAdtLoader);
+        }
+    }
     app.register_asset_loader(WmoModelLoader);
-    app.register_asset_loader(AdtLoader);
     app.register_asset_loader(WdtIndexLoader);
     // The materials' WGSL, compiled in; it too needs `AssetPlugin` first.
     materials::register_shaders(app);

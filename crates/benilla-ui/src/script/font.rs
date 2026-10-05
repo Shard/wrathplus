@@ -450,10 +450,16 @@ fn create_font(lua: &Lua, name: Option<String>) -> mlua::Result<Table> {
     })?;
     {
         let mut model = lua.app_data_mut::<Model>().expect("model");
-        model
+        let exists = model
             .font_objects_by_lower
-            .entry(name.to_ascii_lowercase())
-            .or_default();
+            .keys()
+            .any(|existing| existing.eq_ignore_ascii_case(&name));
+        if !exists {
+            super::object::ensure_host_object_capacity(&model)?;
+            model
+                .font_objects_by_lower
+                .insert(name.to_ascii_lowercase(), FontObject::default());
+        }
     }
     let t = wrapper(lua, &name)?;
     publish_global(lua, &name, &t)?;

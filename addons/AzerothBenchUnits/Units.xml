@@ -1,0 +1,38 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Frame name="AzerothBenchUnitsFrame" parent="UIParent">
+        <Size><AbsDimension x="300" y="100"/></Size>
+        <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="16" y="-90"/></Offset></Anchor></Anchors>
+        <Layers><Layer level="BACKGROUND">
+            <Texture name="$parentBackground">
+                <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+                <Color r="0.04" g="0.08" b="0.14" a="0.9"/>
+            </Texture>
+        </Layer><Layer level="ARTWORK">
+            <FontString name="AzerothBenchUnitsHeading" font="Fonts\FRIZQT__.TTF" text="Observed units">
+                <Size><AbsDimension x="296" y="18"/></Size>
+                <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="12" y="-8"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="13"/></FontHeight>
+            </FontString>
+            <FontString name="AzerothBenchUnitsPlayer" font="Fonts\FRIZQT__.TTF" text="Player: unavailable">
+                <Size><AbsDimension x="296" y="18"/></Size>
+                <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="12" y="-31"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="12"/></FontHeight>
+            </FontString>
+            <FontString name="AzerothBenchUnitsTarget" font="Fonts\FRIZQT__.TTF" text="Selected target: none">
+                <Size><AbsDimension x="296" y="18"/></Size>
+                <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="12" y="-52"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="12"/></FontHeight>
+            </FontString>
+            <FontString name="AzerothBenchUnitsQualification" font="Fonts\FRIZQT__.TTF" text="Local selection; not target server confirmation">
+                <Size><AbsDimension x="296" y="18"/></Size>
+                <Anchors><Anchor point="TOPLEFT"><Offset><AbsDimension x="12" y="-75"/></Offset></Anchor></Anchors>
+                <FontHeight><AbsValue val="10"/></FontHeight>
+            </FontString>
+        </Layer></Layers>
+        <Scripts>
+            <OnLoad>AzerothBenchUnits_OnLoad(self)</OnLoad>
+            <OnEvent>AzerothBenchUnits_OnEvent(self, event, ...)</OnEvent>
+            <OnUpdate>AzerothBenchUnits_OnUpdate(self, elapsed)</OnUpdate>
+        </Scripts>
+    </Frame>
+</Ui>

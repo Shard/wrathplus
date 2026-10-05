@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use benilla_dbc::{FieldType, Schema, SchemaField};
+use benilla_dbc::{FieldType, RecordSet, Schema, SchemaField};
 
 use crate::dbc::{parse, str_at, u32_at};
 use crate::items::ItemDisplay;
-use crate::{read_texture_mip_chain, BlpMipChain, Chain};
+use crate::{read_texture_mip_chain, BlpMipChain, Chain, DataProfile};
 
 const CHAR_SECTIONS: &str = "DBFilesClient\\CharSections.dbc";
 
@@ -100,6 +100,8 @@ fn emblem_half(layer: usize) -> Option<&'static str> {
 /// CharSections: (race, sex, sectionType, variation, colorIndex) → the row's `TextureName`s.
 pub struct CharSections {
     sections: HashMap<(u8, u8, u8, u8, u8), [String; 3]>,
+    /// Wrath's body UV partition is the same, but the base atlas can be 512².
+    scaled_atlas: bool,
 }
 
 impl CharSections {
@@ -226,42 +228,58 @@ impl CharSections {
         for step in &plan {
             layers.push((step.candidates(sex), EQUIP_TILES[step.layer]));
         }
-        Some(CompositePlan { base, layers })
+        Some(CompositePlan {
+            base,
+            layers,
+            scaled_atlas: self.scaled_atlas,
+        })
     }
 
     /// Load CharSections.dbc from the patch chain.
     pub fn load(chain: &mut Chain) -> Result<Self> {
+        let profile = chain.profile().clone();
         let bytes = chain
             .read_file(CHAR_SECTIONS)
             .with_context(|| format!("reading {CHAR_SECTIONS}"))?;
-        let rs = parse(&bytes, char_sections_schema(), "CharSections")?;
+        let rs = parse(&bytes, char_sections_schema(&profile), "CharSections")?;
+        Ok(Self::from_records(&rs, &profile))
+    }
+
+    fn from_records(rs: &RecordSet, profile: &DataProfile) -> Self {
+        let columns = char_section_columns(profile);
         let mut sections = HashMap::with_capacity(rs.records().len());
         for r in rs.records() {
-            // fields: ID, Race, Sex, SectionType, Variation, Color, Tex0, Tex1, Tex2, Flags.
             if let (Some(race), Some(sex), Some(ty), Some(var), Some(color)) = (
                 u32_at(r, 1),
                 u32_at(r, 2),
-                u32_at(r, 3),
-                u32_at(r, 4),
-                u32_at(r, 5),
+                u32_at(r, columns.section_type),
+                u32_at(r, columns.variation),
+                u32_at(r, columns.color),
             ) {
-                let texs = [
-                    str_at(&rs, r, 6).unwrap_or_default(),
-                    str_at(&rs, r, 7).unwrap_or_default(),
-                    str_at(&rs, r, 8).unwrap_or_default(),
-                ];
+                let texs =
+                    std::array::from_fn(|i| str_at(rs, r, columns.texture + i).unwrap_or_default());
                 let key = (race as u8, sex as u8, ty as u8, var as u8, color as u8);
                 // A row flagged `0x1` can share its key with a standard row (Human male skin 0 has
-                // `…Skin00_00` and `…_100`); the standard row wins in either order.
-                let extra = u32_at(r, 9).unwrap_or(0) & 0x1 != 0;
-                if extra {
-                    sections.entry(key).or_insert(texs);
-                } else {
-                    sections.insert(key, texs);
+                // `…Skin00_00` and `…_100`). Vanilla prefers the unflagged standard row; Wrath's
+                // bit means SECTION_FLAG_PLAYER, so the flagged player row wins instead.
+                let player_flag = u32_at(r, columns.flags).unwrap_or(0) & 0x1 != 0;
+                match profile {
+                    DataProfile::Vanilla if player_flag => {
+                        sections.entry(key).or_insert(texs);
+                    }
+                    DataProfile::Wrath { .. } if !player_flag => {
+                        sections.entry(key).or_insert(texs);
+                    }
+                    DataProfile::Vanilla | DataProfile::Wrath { .. } => {
+                        sections.insert(key, texs);
+                    }
                 }
             }
         }
-        Ok(Self { sections })
+        Self {
+            sections,
+            scaled_atlas: matches!(profile, DataProfile::Wrath { .. }),
+        }
     }
 }
 
@@ -271,6 +289,7 @@ impl CharSections {
 pub struct CompositePlan {
     base: String,
     layers: Vec<(Vec<String>, Tile)>,
+    scaled_atlas: bool,
 }
 
 impl CompositePlan {
@@ -284,7 +303,11 @@ impl CompositePlan {
             read(&self.base).with_context(|| format!("reading base skin '{}'", self.base))?;
         for (candidates, tile) in &self.layers {
             if let Some(overlay) = candidates.iter().find_map(|path| read(path).ok()) {
-                blit_over(&mut atlas, &overlay, *tile);
+                if self.scaled_atlas {
+                    blit_over_scaled(&mut atlas, &overlay, *tile);
+                } else {
+                    blit_over(&mut atlas, &overlay, *tile);
+                }
             }
         }
         Ok(atlas)
@@ -532,44 +555,85 @@ pub fn equip_region_candidates(layer: usize, name: &str, sex: u8) -> [String; 2]
 /// Source-over blit of an overlay's mip pyramid at `tile`, level by level, from the overlay's own
 /// origin (`0x4770f0`: src `(0,0)`, extent the tile); an opaque texel copies, the client's REPLACE.
 fn blit_over(dst: &mut BlpMipChain, src: &BlpMipChain, tile: Tile) {
-    // Both chains must be decoded RGBA: DXT blocks would blend into garbage without failing.
+    blit_body_region(dst, src, tile, false);
+}
+
+/// Wrath's installed 512² base uses the same normalized UV regions. A later WMV implementation
+/// (v0.7.0.5-mingw2, CharTexture::compose / REGION_FAC_X/Y) corroborates region resizing.
+/// Deviation: coverage-premultiplied bilinear filtering is used here; the exact build-12340
+/// resampling kernel is unverified. Source mip density follows the resized region, not its index.
+fn blit_over_scaled(dst: &mut BlpMipChain, src: &BlpMipChain, tile: Tile) {
+    blit_body_region(dst, src, tile, true);
+}
+
+fn blit_body_region(dst: &mut BlpMipChain, src: &BlpMipChain, tile: Tile, scaled: bool) {
     debug_assert!(
         dst.is_rgba8() && src.is_rgba8(),
         "character-skin compositing needs decoded chains on both sides"
     );
-    let (tx, ty, tw, th) = tile;
-    let levels = dst.mips.len().min(src.mips.len());
+    if src.mips.is_empty() {
+        return;
+    }
+    let (tx, ty, tw, th) = if scaled {
+        let (x, y, w, h) = tile;
+        (
+            x * dst.width / 256,
+            y * dst.height / 256,
+            w * dst.width / 256,
+            h * dst.height / 256,
+        )
+    } else {
+        tile
+    };
+    let levels = if scaled {
+        dst.mips.len()
+    } else {
+        dst.mips.len().min(src.mips.len())
+    };
     for i in 0..levels {
         let dw = (dst.width >> i).max(1) as usize;
         let dh = (dst.height >> i).max(1) as usize;
-        let sw = (src.width >> i).max(1) as usize;
-        let sh = (src.height >> i).max(1) as usize;
         let (ox, oy) = ((tx >> i) as usize, (ty >> i) as usize);
-        let cw = ((tw >> i).max(1) as usize)
-            .min(sw)
+        let target_width = (tw >> i).max(1) as usize;
+        let target_height = (th >> i).max(1) as usize;
+        let source_level = if scaled {
+            region_source_mip(src, target_width, target_height)
+        } else {
+            i
+        };
+        let sw = (src.width >> source_level).max(1) as usize;
+        let sh = (src.height >> source_level).max(1) as usize;
+        let cw = target_width
+            .min(if scaled { usize::MAX } else { sw })
             .min(dw.saturating_sub(ox));
-        let ch = ((th >> i).max(1) as usize)
-            .min(sh)
+        let ch = target_height
+            .min(if scaled { usize::MAX } else { sh })
             .min(dh.saturating_sub(oy));
-        let (d, s) = (&mut dst.mips[i], &src.mips[i]);
+        let (d, s) = (&mut dst.mips[i], &src.mips[source_level]);
         for row in 0..ch {
             for col in 0..cw {
-                let si = (row * sw + col) * 4;
                 let di = ((oy + row) * dw + (ox + col)) * 4;
-                if si + 4 > s.len() || di + 4 > d.len() {
+                let pixel: Option<[u8; 4]> = if scaled {
+                    region_texel(s, (sw, sh), (col, row), (cw, ch))
+                } else {
+                    let si = (row * sw + col) * 4;
+                    s.get(si..si + 4).and_then(|pixel| pixel.try_into().ok())
+                };
+                let Some(pixel) = pixel else { continue };
+                if di + 4 > d.len() {
                     continue;
                 }
-                let a = s[si + 3] as u32;
+                let a = pixel[3] as u32;
                 if a == 0 {
                     continue;
                 }
                 if a == 255 {
-                    d[di..di + 4].copy_from_slice(&s[si..si + 4]);
+                    d[di..di + 4].copy_from_slice(&pixel);
                     continue;
                 }
                 let ia = 255 - a;
                 for c in 0..3 {
-                    d[di + c] = ((s[si + c] as u32 * a + d[di + c] as u32 * ia + 127) / 255) as u8;
+                    d[di + c] = ((pixel[c] as u32 * a + d[di + c] as u32 * ia + 127) / 255) as u8;
                 }
                 d[di + 3] = (a + (d[di + 3] as u32 * ia + 127) / 255).min(255) as u8;
             }
@@ -577,10 +641,68 @@ fn blit_over(dst: &mut BlpMipChain, src: &BlpMipChain, tile: Tile) {
     }
 }
 
+/// Select the last authored level whose texel density still covers the destination region.
+fn region_source_mip(source: &BlpMipChain, width: usize, height: usize) -> usize {
+    (0..source.mips.len())
+        .rev()
+        .find(|&level| {
+            (source.width >> level).max(1) as usize >= width
+                && (source.height >> level).max(1) as usize >= height
+        })
+        .unwrap_or(0)
+}
+
+/// Pixel-centred bilinear filtering; equal-sized regions copy their authored texels exactly.
+fn region_texel(
+    pixels: &[u8],
+    source: (usize, usize),
+    at: (usize, usize),
+    extent: (usize, usize),
+) -> Option<[u8; 4]> {
+    let axis = |at: usize, source: usize, target: usize| {
+        let position = ((at as f32 + 0.5) * source as f32 / target as f32 - 0.5)
+            .clamp(0.0, (source - 1) as f32);
+        let low = position.floor() as usize;
+        (low, (low + 1).min(source - 1), position - low as f32)
+    };
+    let (x0, x1, fx) = axis(at.0, source.0, extent.0);
+    let (y0, y1, fy) = axis(at.1, source.1, extent.1);
+    let pixel = |x: usize, y: usize| pixels.get((y * source.0 + x) * 4..(y * source.0 + x) * 4 + 4);
+    let (p00, p10, p01, p11) = (
+        pixel(x0, y0)?,
+        pixel(x1, y0)?,
+        pixel(x0, y1)?,
+        pixel(x1, y1)?,
+    );
+    let samples = [
+        (p00, (1.0 - fx) * (1.0 - fy)),
+        (p10, fx * (1.0 - fy)),
+        (p01, (1.0 - fx) * fy),
+        (p11, fx * fy),
+    ];
+    let alpha: f32 = samples
+        .iter()
+        .map(|(pixel, weight)| pixel[3] as f32 * weight)
+        .sum();
+    if alpha <= 0.0 {
+        return Some([0; 4]);
+    }
+    // Filter coverage-premultiplied RGB to prevent transparent texels bleeding dark fringes.
+    let mut result = std::array::from_fn(|channel| {
+        let value: f32 = samples
+            .iter()
+            .map(|(pixel, weight)| pixel[channel] as f32 * pixel[3] as f32 * weight)
+            .sum();
+        (value / alpha).round() as u8
+    });
+    result[3] = alpha.round() as u8;
+    Some(result)
+}
+
 /// CharSections.dbc: 10 fields, three of them texture names.
-pub(crate) fn char_sections_schema() -> Schema {
+pub(crate) fn char_sections_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CharSections");
-    for (name, ty) in [
+    let vanilla = [
         ("ID", FieldType::UInt32),
         ("RaceID", FieldType::UInt32),
         ("SexID", FieldType::UInt32),
@@ -591,10 +713,56 @@ pub(crate) fn char_sections_schema() -> Schema {
         ("TextureName1", FieldType::String),
         ("TextureName2", FieldType::String),
         ("Flags", FieldType::UInt32),
-    ] {
+    ];
+    let wrath = [
+        ("ID", FieldType::UInt32),
+        ("RaceID", FieldType::UInt32),
+        ("SexID", FieldType::UInt32),
+        ("SectionType", FieldType::UInt32),
+        ("TextureName0", FieldType::String),
+        ("TextureName1", FieldType::String),
+        ("TextureName2", FieldType::String),
+        ("Flags", FieldType::UInt32),
+        ("VariationIndex", FieldType::UInt32),
+        ("ColorIndex", FieldType::UInt32),
+    ];
+    for (name, ty) in match profile {
+        DataProfile::Vanilla => vanilla,
+        DataProfile::Wrath { .. } => wrath,
+    } {
         s.add_field(SchemaField::new(name, ty));
     }
     s
+}
+
+/// Physical columns shared by every CharSections consumer. Wrath calls column 3 `GenType` and
+/// column 8 `Type`; they are respectively the section kind and its appearance variation in
+/// AzerothCore's `GetCharSectionEntry(race, genType, gender, type, color)` lookup.
+pub(crate) struct CharSectionColumns {
+    pub(crate) section_type: usize,
+    pub(crate) variation: usize,
+    pub(crate) color: usize,
+    pub(crate) texture: usize,
+    pub(crate) flags: usize,
+}
+
+pub(crate) fn char_section_columns(profile: &DataProfile) -> CharSectionColumns {
+    match profile {
+        DataProfile::Vanilla => CharSectionColumns {
+            section_type: 3,
+            variation: 4,
+            color: 5,
+            texture: 6,
+            flags: 9,
+        },
+        DataProfile::Wrath { .. } => CharSectionColumns {
+            section_type: 3,
+            variation: 8,
+            color: 9,
+            texture: 4,
+            flags: 7,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -608,6 +776,74 @@ mod tests {
     }
     use super::*;
 
+    fn char_sections_fixture(profile: &DataProfile, rows: &[(u32, &str)]) -> RecordSet {
+        let columns = char_section_columns(profile);
+        let mut records = Vec::new();
+        let mut strings = vec![0u8];
+        for (id, &(flags, texture)) in rows.iter().enumerate() {
+            let texture_offset = strings.len() as u32;
+            strings.extend_from_slice(texture.as_bytes());
+            strings.push(0);
+            let mut fields = [0u32; 10];
+            fields[0] = 0x1020_3000 + id as u32;
+            fields[1] = 1;
+            fields[2] = 0;
+            fields[columns.section_type] = SECTION_HAIR as u32;
+            fields[columns.variation] = 71;
+            fields[columns.color] = 9;
+            fields[columns.texture] = texture_offset;
+            fields[columns.flags] = flags;
+            for field in fields {
+                records.extend_from_slice(&field.to_le_bytes());
+            }
+        }
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"WDBC");
+        bytes.extend_from_slice(&(rows.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&10u32.to_le_bytes());
+        bytes.extend_from_slice(&40u32.to_le_bytes());
+        bytes.extend_from_slice(&(strings.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&records);
+        bytes.extend_from_slice(&strings);
+        parse(
+            &bytes,
+            char_sections_schema(profile),
+            "synthetic CharSections",
+        )
+        .expect("parse synthetic CharSections")
+    }
+
+    #[test]
+    fn char_sections_uses_profile_columns_and_prefers_the_profile_player_row() {
+        let vanilla = DataProfile::Vanilla;
+        let wrath = DataProfile::Wrath {
+            locale: "enUS".to_string(),
+        };
+        let vanilla_rows =
+            char_sections_fixture(&vanilla, &[(0, "vanilla-player"), (1, "vanilla-extra")]);
+        let wrath_rows = char_sections_fixture(&wrath, &[(1, "wrath-player"), (0, "wrath-npc")]);
+
+        let vanilla_sections = CharSections::from_records(&vanilla_rows, &vanilla);
+        let wrath_sections = CharSections::from_records(&wrath_rows, &wrath);
+        assert_eq!(
+            vanilla_sections.hair_texture(1, 0, 71, 9),
+            Some("vanilla-player")
+        );
+        assert_eq!(
+            wrath_sections.hair_texture(1, 0, 71, 9),
+            Some("wrath-player")
+        );
+        for (profile, rows, expected, scaled) in [
+            (&vanilla, [(1, "extra"), (0, "player")], "player", false),
+            (&wrath, [(0, "npc"), (1, "player")], "player", true),
+        ] {
+            let parsed =
+                CharSections::from_records(&char_sections_fixture(profile, &rows), profile);
+            assert_eq!(parsed.hair_texture(1, 0, 71, 9), Some(expected));
+            assert_eq!(parsed.scaled_atlas, scaled);
+        }
+    }
+
     /// The value is the shipped Human male skinColor 3 row.
     #[test]
     fn base_skin_texture_resolves() {
@@ -620,7 +856,10 @@ mod tests {
                 String::new(),
             ],
         );
-        let cs = CharSections { sections };
+        let cs = CharSections {
+            sections,
+            scaled_atlas: false,
+        };
         assert_eq!(
             cs.skin_texture(1, 0, 3),
             Some("Character\\Human\\Male\\HumanMaleSkin00_03.blp")
@@ -1229,6 +1468,149 @@ mod tests {
         let before = dst.mips[0].clone();
         blit_over(&mut dst, &chain(1, 1, vec![1, 2, 3, 0]), (0, 0, 1, 1));
         assert_eq!(dst.mips[0], before, "transparent texel is a no-op");
+    }
+
+    #[test]
+    fn wrath_composite_scales_regions_and_fills_every_destination_mip() {
+        let base = [17, 29, 43, 255];
+        let garment = [210, 80, 20, 255];
+        let mut dst = chain(512, 512, base.repeat(512 * 512));
+        dst.mips = (0..10)
+            .map(|level| {
+                let size = (512 >> level).max(1);
+                base.repeat(size * size)
+            })
+            .collect();
+        let src = chain(128, 64, garment.repeat(128 * 64));
+        blit_over_scaled(&mut dst, &src, EQUIP_TILES[3]);
+        for (level, pixels) in dst.mips.iter().enumerate() {
+            let width = (512 >> level).max(1);
+            let origin = 256 >> level;
+            let region_width = (256 >> level).max(1);
+            let region_height = (128 >> level).max(1);
+            for y in 0..width {
+                for x in 0..width {
+                    let offset = (y * width + x) * 4;
+                    let expected = if x >= origin && x < origin + region_width && y < region_height
+                    {
+                        garment
+                    } else {
+                        base
+                    };
+                    assert_eq!(
+                        &pixels[offset..offset + 4],
+                        &expected,
+                        "level {level}, x{x}, y{y}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wrath_composite_resampling_is_pixel_centred_and_preserves_alpha_blending() {
+        let pixels = [0, 0, 0, 255, 100, 0, 0, 255];
+        let red = (0..4)
+            .map(|x| region_texel(&pixels, (2, 1), (x, 0), (4, 1)).unwrap()[0])
+            .collect::<Vec<_>>();
+        assert_eq!(red, [0, 25, 75, 100]);
+        assert_eq!(
+            region_texel(&pixels, (2, 1), (1, 0), (2, 1)),
+            Some([100, 0, 0, 255])
+        );
+        let mut dst = chain(512, 512, [128, 128, 128, 255].repeat(512 * 512));
+        let overlay = chain(128, 64, [0, 0, 255, 128].repeat(128 * 64));
+        blit_over_scaled(&mut dst, &overlay, EQUIP_TILES[5]);
+        let offset = (192 * 512 + 256) * 4;
+        assert_eq!(&dst.mips[0][offset..offset + 4], &[64, 64, 192, 255]);
+        assert_eq!(&dst.mips[0][0..4], &[128, 128, 128, 255]);
+    }
+
+    #[test]
+    fn wrath_resampling_keeps_authored_density_and_transparent_edges_clean() {
+        let mut source = chain(128, 64, [0, 0, 0, 255].repeat(128 * 64));
+        source.mips.push([1, 2, 3, 255].repeat(64 * 32));
+        source.mips.push([4, 5, 6, 255].repeat(32 * 16));
+        assert_eq!(region_source_mip(&source, 256, 128), 0);
+        assert_eq!(region_source_mip(&source, 128, 64), 0);
+        assert_eq!(region_source_mip(&source, 64, 32), 1);
+        assert_eq!(region_source_mip(&source, 32, 16), 2);
+        let pixels = [255, 0, 0, 255, 0, 0, 0, 0];
+        assert_eq!(
+            region_texel(&pixels, (2, 1), (1, 0), (4, 1)),
+            Some([255, 0, 0, 191])
+        );
+        assert_eq!(region_texel(&pixels, (2, 1), (3, 0), (4, 1)), Some([0; 4]));
+    }
+
+    #[test]
+    fn wrath_composite_uses_density_matched_authored_mips_not_duplicate_blur() {
+        let mut source = chain(128, 64, [10, 0, 0, 255].repeat(128 * 64));
+        source.mips.push([20, 0, 0, 255].repeat(64 * 32));
+        source.mips.push([30, 0, 0, 255].repeat(32 * 16));
+        let mut atlas = chain(512, 512, Vec::new());
+        atlas.mips = (0..6)
+            .map(|level| [0, 0, 0, 255].repeat((512 >> level) * (512 >> level)))
+            .collect();
+        blit_over_scaled(&mut atlas, &source, EQUIP_TILES[3]);
+        for (level, expected) in [10, 10, 20, 30, 30, 30].into_iter().enumerate() {
+            let offset = (256 >> level) * 4;
+            assert_eq!(atlas.mips[level][offset], expected, "mip {level}");
+        }
+    }
+
+    #[test]
+    fn wrath_scaled_regions_stay_inside_all_eight_uv_tiles() {
+        for tile in EQUIP_TILES {
+            let mut atlas = chain(512, 512, [0, 0, 0, 255].repeat(512 * 512));
+            let (x, y, w, h) = tile;
+            let source = chain(w, h, [250, 10, 20, 255].repeat((w * h) as usize));
+            blit_over_scaled(&mut atlas, &source, tile);
+            for row in 0..512 {
+                for col in 0..512 {
+                    let offset = (row * 512 + col) * 4;
+                    let inside =
+                        col >= x * 2 && col < (x + w) * 2 && row >= y * 2 && row < (y + h) * 2;
+                    assert_eq!(atlas.mips[0][offset as usize], if inside { 250 } else { 0 });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wrath_composite_plan_selects_scaled_lane_but_vanilla_keeps_original_tiles() {
+        let mut sections = HashMap::new();
+        sections.insert(
+            (1, 0, SECTION_SKIN, 0, 0),
+            ["base".into(), String::new(), String::new()],
+        );
+        let garment = worn(
+            [None, None, None, Some("shirt"), None, None, None, None],
+            [0; 3],
+        );
+        let equipment = [Some(&garment), None, None, None, None, None, None, None];
+        for scaled_atlas in [false, true] {
+            let cs = CharSections {
+                sections: sections.clone(),
+                scaled_atlas,
+            };
+            let plan = cs
+                .composite_plan(1, 0, 0, 0, 0, 0, 0, equipment, None, false)
+                .unwrap();
+            let output = plan
+                .run(|path| {
+                    Ok(if path == "base" {
+                        chain(512, 512, [0, 0, 0, 255].repeat(512 * 512))
+                    } else {
+                        chain(128, 64, [255, 0, 0, 255].repeat(128 * 64))
+                    })
+                })
+                .unwrap();
+            let wrong = (128 * 4) as usize;
+            let right = (256 * 4) as usize;
+            assert_eq!(output.mips[0][wrong], if scaled_atlas { 0 } else { 255 });
+            assert_eq!(output.mips[0][right], if scaled_atlas { 255 } else { 0 });
+        }
     }
 
     /// On the shipped files a Human male's head and pelvis tiles change, and the torso does not.

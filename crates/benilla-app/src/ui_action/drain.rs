@@ -96,6 +96,7 @@ impl AttackPress<'_, '_> {
             if engaged { "toggled off" } else { "swing" }
         );
         crate::creature_anim::toggle_attack_local(
+            *seam.dialect,
             e,
             guid,
             engaged,
