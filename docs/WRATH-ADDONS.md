@@ -1,5 +1,47 @@
 # Wrath authored-addon compatibility
 
+## Build-12340 power readers — 2026-10-05 (offline verified)
+
+The bounded Wrath surface installs `UnitPower`, `UnitPowerMax`, and ordinary two-result
+`UnitPowerType`. Native slots 25–31/33–39 stay raw in a profile-only sidecar through
+creates, sparse deltas, replacement, and snapshots. Sidecar-only rune/runic changes are
+delivered; unchanged values are not. Vanilla descriptors/readers remain separate.
+
+Local binary inspection identified wrappers 0x60ed40/0x60ef40/0x60f100 and divisor table
+0xaf5220 via helper 0x7fde00. Both readers integer-divide rage/runic by 10 and happiness
+by 1000; other resources by 1. Type 7 selects the active resource; invalid numeric indices
+(including -2) return zero. The third argument is ignored, not a modern raw-value bypass.
+Missing resolved units return zero; missing power type returns `(0, "")`.
+
+Inactive current reads require local-player identity (including aliases); remote inactive
+current reads return zero. Maxima lack that restriction. Native dynamic flag 0x20 has
+membership-dependent current visibility: self is exempt, but flagged nonself current reads
+explicitly error until membership tables are qualified. This is a declared fence, not stock
+behavior. Unknown native snapshots also error. Roster/pet fallback, alternate predicted
+storage in helper 0x71c2e0, and indexed/color display records remain unsupported/unqualified.
+Ordinary reads use server-backed descriptor data. Events use per-resource Wrath names,
+including `UNIT_RUNIC_POWER`/`UNIT_MAXRUNIC_POWER`; no synthetic `UNIT_RUNES` is added.
+
+Stock PlayerFrame/TargetFrame inherit `SecureUnitButtonTemplate`. They remain blocked
+on genuine protected-frame/attribute enforcement, combat lockdown, hardware provenance,
+secure execution and taint tracking. Do not strip inheritance or substitute ordinary buttons.
+Power readers neither enable these templates nor introduce game-action authority.
+
+Fresh offline gates under `/tmp/azbench-ui-power-final-*` passed: 4,363 app, 337 protocol,
+and 1,713 UI tests (6,413 passed, zero failures, 11 ignored), strict three-package all-target
+Clippy, format and diff checks. This is not full-workspace/player/Linux qualification.
+The dedicated-account attended `human-power1` run displayed Benchone `RAGE 10/100`
+and selected-target `MANA 0/0`; the owner confirmed the display and normal logout.
+Client exit and installed-data size/mtime comparison both returned zero. The saved
+per-character fixture contains 60 samples, resource observations, `UNIT_RAGE` events,
+`PLAYER_LEAVING_WORLD` and `PLAYER_LOGOUT`. This establishes bounded authored-panel
+integration and logout persistence, not measured combat rage gain/decay, every resource
+kind, reconnect, target-name correctness or stock unit-frame loading. The selected creature
+still displayed `Unknown`. Evidence: `/tmp/azbench-human-power1.{log,exit}` and isolated
+saved fixture under `/tmp/azbench-human-power1-state/saved/`; screenshots/reference
+scratch artifacts stay outside the repository. Dependency `block v0.1.6` retains its
+future-compatibility warning.
+
 ## Target and acceptance boundary
 
 Build 12340 / interface 30300, selected explicitly by the Wrath data profile. Vanilla remains the default and retains its Lua 5.0-shaped API. The interpreter is already vendored Lua 5.1; the Wrath host must not apply the Vanilla shim.

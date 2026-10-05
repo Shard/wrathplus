@@ -604,7 +604,12 @@ fn vanilla_type(object_type: ObjectType) -> VanillaObjectType {
 
 fn project_fields(state: &TrackedObject, created: bool) -> ObjectFields {
     let pairs = projected_pairs(state.object_type, |index| Some(state.get(index)));
-    let fields = ObjectFields::from_pairs(&pairs);
+    let mut fields = ObjectFields::from_pairs(&pairs);
+    if matches!(state.object_type, ObjectType::Unit | ObjectType::Player) {
+        fields = fields.with_wrath_powers(std::array::from_fn(|slot| {
+            (Some(state.get(25 + slot)), Some(state.get(33 + slot)))
+        }));
+    }
     if created {
         fields.into_created(vanilla_type(state.object_type))
     } else {
@@ -618,7 +623,18 @@ fn project_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
     after_state.apply(fields);
     let mut after = projected_pairs(state.object_type, |index| Some(after_state.get(index)));
     after.retain(|pair| !before.contains(pair));
-    ObjectFields::from_pairs(&after)
+    let mut projected = ObjectFields::from_pairs(&after);
+    if matches!(state.object_type, ObjectType::Unit | ObjectType::Player) {
+        projected = projected.with_wrath_powers(std::array::from_fn(|slot| {
+            let current = after_state.get(25 + slot);
+            let maximum = after_state.get(33 + slot);
+            (
+                (current != state.get(25 + slot)).then_some(current),
+                (maximum != state.get(33 + slot)).then_some(maximum),
+            )
+        }));
+    }
+    projected
 }
 
 fn projected_pairs(
@@ -929,6 +945,40 @@ mod tests {
                 .map(|&(index, value)| FieldValue { index, value })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn wrath_resources_project_all_seven_slots_and_sparse_raw_precision() {
+        let initial = fields(
+            ObjectType::Player,
+            &[
+                (25, 721),
+                (26, 437),
+                (31, 659),
+                (33, 1000),
+                (34, 1000),
+                (39, 1250),
+            ],
+        );
+        let mut state = TrackedObject::from_create(ObjectType::Player, &initial);
+        let mut store = project_fields(&state, true);
+        let powers = store.wrath_powers().unwrap();
+        assert_eq!(powers[0], (721, 1000));
+        assert_eq!(powers[1], (437, 1000));
+        assert_eq!(powers[5], (0, 0));
+        assert_eq!(powers[6], (659, 1250));
+        let delta = fields(ObjectType::Player, &[(26, 439), (31, 0)]);
+        store.merge(project_delta(&state, &delta));
+        state.apply(&delta);
+        assert_eq!(store.wrath_powers().unwrap()[1], (439, 1000));
+        assert_eq!(store.wrath_powers().unwrap()[6], (0, 1250));
+        assert_eq!(store.wrath_powers().unwrap()[0], (721, 1000));
+        store.merge(project_fields(
+            &TrackedObject::from_create(ObjectType::Player, &fields(ObjectType::Player, &[])),
+            true,
+        ));
+        assert_eq!(store.wrath_powers(), Some([(0, 0); 7]));
+        assert_eq!(state.get(26), 439);
     }
 
     fn living() -> MovementBlock {
@@ -1245,6 +1295,48 @@ mod tests {
                 turn_rate: std::f32::consts::PI,
             }
         );
+    }
+
+    #[test]
+    fn wrath_resources_sidecar_only_wire_deltas_are_delivered_and_zero_retained() {
+        for index in [30, 31, 38, 39] {
+            let guid = 42;
+            let mut adapter = WrathEventAdapter::new();
+            adapter
+                .dispatch(
+                    SMSG_UPDATE_OBJECT,
+                    &raw_create(guid, ObjectType::Player, &[(index, 107)]),
+                    0,
+                )
+                .unwrap();
+            let mut store = project_fields(adapter.objects.get(&guid).unwrap(), true);
+            for value in [439, 0] {
+                let WrathDispatch::Handled { session_events, .. } = adapter
+                    .dispatch(SMSG_UPDATE_OBJECT, &raw_delta(guid, &[(index, value)]), 0)
+                    .unwrap()
+                else {
+                    panic!()
+                };
+                assert_eq!(session_events.len(), 1, "field {index}");
+                let SessionEvent::ObjectValues { fields, .. } = &session_events[0] else {
+                    panic!()
+                };
+                store.merge(fields.clone());
+                let slot = if index < 33 { index - 25 } else { index - 33 };
+                let pair = store.wrath_powers().unwrap()[slot];
+                assert_eq!(if index < 33 { pair.0 } else { pair.1 }, value);
+                let WrathDispatch::Handled { session_events, .. } = adapter
+                    .dispatch(SMSG_UPDATE_OBJECT, &raw_delta(guid, &[(index, value)]), 0)
+                    .unwrap()
+                else {
+                    panic!()
+                };
+                assert!(session_events.is_empty());
+            }
+        }
+        assert!(ObjectFields::default()
+            .with_wrath_powers([(None, None); 7])
+            .is_empty());
     }
 
     #[test]

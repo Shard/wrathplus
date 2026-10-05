@@ -874,6 +874,9 @@ pub(crate) fn snapshot(
         power_type,
         power: store.0.unit_shown_power(power_type).unwrap_or(0),
         max_power: store.0.unit_shown_max_power(power_type).unwrap_or(0),
+        powers: store.0.wrath_powers().map(|powers| {
+            powers.map(|(current, maximum)| benilla_ui::script::UnitPowerState { current, maximum })
+        }),
         // `UnitIsDead` (`0x517ac0`): health ≤ 0 or the dead-looking flag.
         dead: store.0.unit_reads_dead(),
         // `PLAYER_FLAGS` bit `0x10`; a ghost's health is 1, so `dead` is false for it.
@@ -1107,6 +1110,40 @@ fn creature_type_word(t: u32) -> Option<&'static str> {
     })
 }
 
+/// Build-12340 UnitFrame.lua listens for these per-resource events, not modern UNIT_POWER_UPDATE.
+fn fire_wrath_power_transitions(
+    script: &mut UiScript,
+    token: &str,
+    prev: Option<&UnitState>,
+    cur: &UnitState,
+) {
+    let Some(powers) = cur.powers else { return };
+    let previous = prev.and_then(|unit| unit.powers);
+    for (slot, suffix) in [
+        (0, "MANA"),
+        (1, "RAGE"),
+        (2, "FOCUS"),
+        (3, "ENERGY"),
+        (4, "HAPPINESS"),
+        (6, "RUNIC_POWER"),
+    ] {
+        if previous.is_none_or(|old| old[slot].current != powers[slot].current)
+            || prev.is_some_and(|old| (old.dynamic_flags ^ cur.dynamic_flags) & 0x20 != 0)
+        {
+            script.fire_event(
+                &format!("UNIT_{suffix}"),
+                vec![ScriptValue::Str(token.into())],
+            );
+        }
+        if previous.is_none_or(|old| old[slot].maximum != powers[slot].maximum) {
+            script.fire_event(
+                &format!("UNIT_MAX{suffix}"),
+                vec![ScriptValue::Str(token.into())],
+            );
+        }
+    }
+}
+
 /// Diff a token's snapshot against the last pushed and fire the per-field `UNIT_*` events. The
 /// watch-bridge arms fire off `edges`, as the reference's create runs no notify pass; the rest fire
 /// on a token's first snapshot (`prev = None`) too, where the reference's behaviour is untraced.
@@ -1150,19 +1187,22 @@ pub(crate) fn fire_transitions(
     if edges.moved(cur.guid, benilla_protocol::field::FIELD_UNIT_DYNAMIC_FLAGS) {
         script.fire_event("UNIT_DYNAMIC_FLAGS", vec![tok()]);
     }
-    // 1.12 names the power events per resource (`UNIT_MANA`, `UNIT_MAXRAGE`, …;
-    // `UnitFrame.lua:190-199`), and `power_token` yields the suffix.
-    if changed(|u| u64::from(u.power)) {
-        script.fire_event(
-            &format!("UNIT_{}", power_token(cur.power_type)),
-            vec![tok()],
-        );
-    }
-    if changed(|u| u64::from(u.max_power)) {
-        script.fire_event(
-            &format!("UNIT_MAX{}", power_token(cur.power_type)),
-            vec![tok()],
-        );
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        fire_wrath_power_transitions(script, token, prev, cur);
+    } else {
+        // Preserve the 1.12 active-resource event contract.
+        if changed(|u| u64::from(u.power)) {
+            script.fire_event(
+                &format!("UNIT_{}", power_token(cur.power_type)),
+                vec![tok()],
+            );
+        }
+        if changed(|u| u64::from(u.max_power)) {
+            script.fire_event(
+                &format!("UNIT_MAX{}", power_token(cur.power_type)),
+                vec![tok()],
+            );
+        }
     }
     if prev.is_none_or(|p| p.name != cur.name) {
         script.fire_event("UNIT_NAME_UPDATE", vec![tok()]);
@@ -1635,6 +1675,51 @@ pub(crate) fn add_unit_feed(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
+        use benilla_protocol::messages::ObjectFields;
+        use benilla_ui::script::ScriptDialect;
+        let raw = std::array::from_fn(|slot| (Some(100 + slot as u32), Some(1000 + slot as u32)));
+        let store = ObjectStore(ObjectFields::from_pairs(&[(36, 6 << 24)]).with_wrath_powers(raw));
+        let previous = snapshot(&store, 1, None, 0, None, Default::default());
+        assert_eq!(previous.power_type, 6);
+        assert_eq!(previous.powers.unwrap()[6].current, 106);
+        let mut current = previous.clone();
+        current.powers.as_mut().unwrap()[0].current = 731;
+        current.powers.as_mut().unwrap()[6].current = 439;
+        current.powers.as_mut().unwrap()[6].maximum = 1250;
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.run("SEEN={} local f=CreateFrame('Frame') for _,e in ipairs({'UNIT_MANA','UNIT_RUNIC_POWER','UNIT_MAXRUNIC_POWER','UNIT_RAGE'}) do f:RegisterEvent(e) end f:SetScript('OnEvent',function(self,event,unit) table.insert(SEEN,event..':'..UnitPower(unit,6)) end)").unwrap();
+        script.set_unit("player", Some(current.clone()));
+        fire_transitions(
+            &mut script,
+            "player",
+            Some(&previous),
+            &current,
+            &FieldEdges::default(),
+        );
+        assert_eq!(
+            script.eval::<Vec<String>>("return SEEN").unwrap(),
+            vec![
+                "UNIT_MANA:43",
+                "UNIT_RUNIC_POWER:43",
+                "UNIT_MAXRUNIC_POWER:43"
+            ]
+        );
+        script.run("SEEN={}").unwrap();
+        fire_transitions(
+            &mut script,
+            "player",
+            Some(&current),
+            &current,
+            &FieldEdges::default(),
+        );
+        assert!(script
+            .eval::<Vec<String>>("return SEEN")
+            .unwrap()
+            .is_empty());
+    }
 
     /// `"mouseover"` resolves through the pick the tooltip publishes: the hovered unit, until a
     /// nearer GameObject wins it and the resolver rejects the GameObject's guid (`0x515bd9 je`).

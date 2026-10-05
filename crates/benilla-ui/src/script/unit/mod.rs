@@ -47,6 +47,13 @@ pub struct PlayerRecord {
     pub sex: u8,
 }
 
+/// Raw build-12340 resource values, retained before display scaling.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UnitPowerState {
+    pub current: u32,
+    pub maximum: u32,
+}
+
 /// One unit's snapshot, pushed by the app each frame under a token, or under a guid for a unit a
 /// `target` chain ends on, and read by the `Unit*` bindings; plain data, with no mlua handles or
 /// ECS types.
@@ -86,6 +93,8 @@ pub struct UnitState {
     pub power: u32,
     /// Maximum power of the active type (`UnitManaMax`).
     pub max_power: u32,
+    /// All seven Wrath resources on the raw wire scale; absent for Vanilla snapshots.
+    pub powers: Option<[UnitPowerState; 7]>,
     /// `UnitIsDead`; a released ghost is not dead by it, as its health is 1.
     pub dead: bool,
     /// `UnitIsCharmed` (`0x516cf0`): `UNIT_FIELD_CHARMEDBY` (fields 10-11) is non-zero.

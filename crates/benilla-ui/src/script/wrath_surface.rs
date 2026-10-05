@@ -10,6 +10,9 @@ use mlua::{Function, Lua, Table, Value};
 #[path = "wrath_loot.rs"]
 mod wrath_loot;
 
+#[path = "wrath_power.rs"]
+mod wrath_power;
+
 use super::Model;
 
 /// Engine functions admitted to the Wrath addon VM. Widget/event operations are methods on the
@@ -76,6 +79,9 @@ const ALLOWED_ENGINE_FUNCTIONS: &[&str] = &[
     "UnitIsUnit",
     "UnitHealth",
     "UnitHealthMax",
+    "UnitPower",
+    "UnitPowerMax",
+    "UnitPowerType",
     "UnitLevel",
     "UnitGUID",
     // Safe scripting/error helpers supplied by the host rather than Lua itself.
@@ -133,6 +139,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_truthful_readers(lua)?;
     install_panel_visibility(lua)?;
     wrath_loot::install(lua)?;
+    wrath_power::install(lua)?;
     reject_secure_templates(lua)?;
     prune_engine_functions(lua)
 }

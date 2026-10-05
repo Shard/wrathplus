@@ -1,5 +1,27 @@
 use super::*;
 
+#[test]
+fn wrath_resources_preserve_sparse_updates_zero_and_recreate_without_vanilla_aliases() {
+    let mut created = ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 123)])
+        .with_wrath_powers(std::array::from_fn(|slot| {
+            (Some(100 + slot as u32), Some(1000 + slot as u32))
+        }))
+        .into_created(ObjectType::Unit);
+    let mut powers = [(None, None); 7];
+    powers[1].0 = Some(437);
+    powers[6] = (Some(0), Some(1250));
+    created.merge(ObjectFields::default().with_wrath_powers(powers));
+    let result = created.wrath_powers().unwrap();
+    assert_eq!(result[0], (100, 1000));
+    assert_eq!(result[1], (437, 1001));
+    assert_eq!(result[6], (0, 1250));
+    assert_eq!(created.unit_health(), Some(123));
+    assert_eq!(created.unit_power(1), Some(0));
+    created.merge(ObjectFields::default().into_created(ObjectType::Unit));
+    assert!(created.wrath_powers().is_none());
+    assert!(ObjectFields::default().wrath_powers().is_none());
+}
+
 /// The indices re-derived from vmangos's enum arithmetic and chained to two anchors known
 /// independently: `FIELD_PLAYER_INV_SLOT_HEAD` (486, a live descriptor dump) and
 /// `FIELD_PLAYER_BUYBACK_PRICE_1` (1226, the client binary).
