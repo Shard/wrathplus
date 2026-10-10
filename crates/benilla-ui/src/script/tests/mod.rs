@@ -59,6 +59,7 @@ mod worldmap;
 mod wrath_budget;
 mod wrath_dialect;
 mod wrath_power;
+mod wrath_script_kinds;
 
 #[test]
 fn an_instruction_budget_turns_a_runaway_loop_into_an_error() {
