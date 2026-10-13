@@ -30,6 +30,11 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
   re-solves on every read. Wrath instruction budget counts instructions, not calls.
 - The XP pair seeds into the VM before the entry load (stock `MainMenuExpBar` hides itself for good
   when it loads with max 0). Factions decode (`SMSG_INITIALIZE_FACTIONS`, `SET_FACTION_STANDING`).
+- Casting: `UseAction(action, unit, button)` in its 3.3.5 shape (1.12 read `button` as self-cast,
+  so every press targeted the player); `GetActionInfo`; a cast of ours starts its `Spell.dbc`
+  recovery on success, since a 3.3.5 server sends `SMSG_SPELL_COOLDOWN` only for modified ones.
+- Auras: `SMSG_AURA_UPDATE(_ALL)` map onto 1.12's aura descriptor block (`wrath_auras.rs`), our
+  own with durations.
 - Key bindings dispatch through the VM (`Bindings.xml` over `WTF\DefaultBindings.wtf`).
 - DBCs: a 1.12 schema reads a 3.3.5 file whose only change is wider locale blocks automatically
   (`benilla-dbc`), and `benilla-formats/src/wrath_layouts.rs` maps the restructured tables
@@ -45,7 +50,10 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
    names read "Unknown"), spell cast, action buttons and initial spells (empty action bars),
    quest giver/gossip/vendor/trainer, chat, group. Reuse the codecs on `park/secure-runtime`
    (`wrath_names`, `wrath_group`, `wrath_instance`, `wrath_threat`, `wrath_trade`).
-2. **Unit data.** Power bars, casting info (`UnitCastingInfo`), threat, focus.
+2. **Unit data.** Power bars, casting info (`UnitCastingInfo`), threat, focus. Other units' aura
+   durations and casters (target debuff timers, `PLAYER` filter). `GetSpellInfo` and the other
+   2.0+ spell readers (the VM has no spell catalog). `SMSG_GAMEOBJECT_QUERY_RESPONSE` (0x5F).
+   The Wrath M2 loader rejects models with lights or particle emitters (campfires, elevators).
 3. **Remaining DBCs** listed above.
 4. **Remaining UI surface:** animations (`AnimationGroup`), cooldown sweep, `OnEnable`/`OnDisable`,
    `PreClick`/`PostClick`, `OnTooltipSet*`, quest POI blobs, chat dock order.

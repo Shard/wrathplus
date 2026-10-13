@@ -536,6 +536,9 @@ fn dispatch_packet(
             }
             // The adapter's vectors preserve packet/block order. Replies use the sole cipher writer.
             for event in session_events {
+                if *crate::net::CAST_TRACE {
+                    bevy::log::info!("net(wrath) RECV {event:?}");
+                }
                 send(events, event)?;
             }
             for reply in replies {
@@ -548,6 +551,9 @@ fn dispatch_packet(
             }
         }
         Ok(WrathDispatch::Unhandled { opcode }) => {
+            if *crate::net::CAST_TRACE {
+                bevy::log::info!("net(wrath) RECV unhandled opcode 0x{opcode:04x}");
+            }
             send(
                 events,
                 SessionEvent::PacketDropped {
@@ -1187,6 +1193,9 @@ fn writer_loop(
                     WrathRoute::NativeLoot => send_loot(active, command),
                     WrathRoute::NativeSession => {
                         let (opcode, body) = session_packet(command);
+                        if *crate::net::CAST_TRACE {
+                            bevy::log::info!("net(wrath) SEND 0x{opcode:04x} {body:02x?}");
+                        }
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::DeferredReadOnlyQuery => {

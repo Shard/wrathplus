@@ -448,6 +448,30 @@ impl Cooldowns {
         );
     }
 
+    /// A 3.3.5 cast of ours went off: its `Spell.dbc` recovery and category recovery start now,
+    /// or an on-event spell parks. The GCD is the cast send's ([`Self::start_gcd`]), so none here.
+    pub(crate) fn start_cast_recovery(&mut self, spell_id: u32, spell: &SpellDisplay, now: Instant) {
+        let on_hold = spell.cooldown_on_event();
+        self.add(
+            now,
+            spell_id,
+            0,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(spell.recovery_ms)),
+            },
+            spell.category,
+            spell.category_wildcard,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(spell.category_recovery_ms)),
+            },
+            on_hold,
+            0,
+            Timer::none(now),
+        );
+    }
+
     /// `SMSG_ITEM_COOLDOWN` (`0x6e95d0`): the client's hardcoded 30 s on the item's on-use spell.
     pub(crate) fn apply_wire_item_cooldown(
         &mut self,

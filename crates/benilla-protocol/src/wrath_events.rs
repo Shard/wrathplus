@@ -171,6 +171,8 @@ pub struct WrathEventAdapter {
     objects: HashMap<u64, TrackedObject>,
     /// Our player, from its self create; spell-go confirms our casts against it.
     self_guid: Option<u64>,
+    /// Visible auras, which 3.3.5 sends as packets, as the 1.12 descriptor block.
+    auras: crate::wrath_auras::AuraTracker,
 }
 
 impl WrathEventAdapter {
@@ -181,6 +183,7 @@ impl WrathEventAdapter {
     pub fn reset(&mut self) {
         self.objects.clear();
         self.self_guid = None;
+        self.auras.reset();
     }
 
     pub fn object_type(&self, guid: u64) -> Option<ObjectType> {
@@ -401,6 +404,12 @@ impl WrathEventAdapter {
                     }],
                 ))
             }
+            crate::wrath_auras::SMSG_AURA_UPDATE_ALL | crate::wrath_auras::SMSG_AURA_UPDATE => {
+                Ok(match self.auras.decode(opcode, body, self.self_guid) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_session::handles(opcode) => {
                 // A message that does not decode is dropped, never fatal to the session.
                 Ok(match crate::wrath_session::decode(opcode, body, self.self_guid) {
@@ -428,6 +437,7 @@ impl WrathEventAdapter {
                     if movement.update_flags & UPDATE_FLAG_SELF != 0 {
                         self.self_guid = Some(guid);
                     }
+                    self.auras.forget(guid);
                     let state = TrackedObject::from_create(object_type, &fields);
                     let projected = project_fields(&state, true);
                     self.objects.insert(guid, state);
@@ -483,6 +493,7 @@ impl WrathEventAdapter {
                 ObjectUpdate::OutOfRange(guids) => {
                     for guid in &guids {
                         self.objects.remove(guid);
+                        self.auras.forget(*guid);
                     }
                     session_events.push(SessionEvent::ObjectsRemoved(guids));
                 }

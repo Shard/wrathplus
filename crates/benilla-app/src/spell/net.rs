@@ -190,6 +190,16 @@ fn on_cast_result(
             }
             crate::net::SessionDialect::Vanilla5875 => reason,
         };
+        // A 3.3.5 server sends `SMSG_SPELL_COOLDOWN` for a player's own cast only when a modifier
+        // changed it (AzerothCore `Player::AddSpellAndCategoryCooldowns`); the client starts the
+        // `Spell.dbc` recovery itself when its cast goes off.
+        if success && *dialect == crate::net::SessionDialect::Wrath12340 {
+            if let Some(display) = ladder.spells.as_deref().and_then(|s| s.catalog.get(spell_id)) {
+                ladder
+                    .cooldowns
+                    .start_cast_recovery(spell_id, display, std::time::Instant::now());
+            }
+        }
         let chained = cast_result(
             spell_id,
             success,

@@ -3,7 +3,7 @@
 //! Construction installs the mature Vanilla implementation first; this module then replaces the
 //! bindings whose Wrath ABI differs and installs the trusted secure environment.
 
-use mlua::{Lua, Value};
+use mlua::{Lua, MultiValue, Value};
 
 #[path = "wrath_loot.rs"]
 mod wrath_loot;
@@ -233,6 +233,36 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                 None => !model.buttons_down.is_empty(),
             };
             Ok(held.then_some(1))
+        })?,
+    )?;
+
+    // `GetActionInfo(slot)` (2.0+): `"spell", bookIndex, "spell", spellId`, `"item", itemId` or
+    // `"macro", macroIndex`; nil for an empty slot. A spell not in the book has no index.
+    globals.set(
+        "GetActionInfo",
+        lua.create_function(|lua, slot: u32| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let Some(a) = model.actions.get(&slot) else {
+                return Ok(MultiValue::new());
+            };
+            let s = |t: &str| lua.create_string(t).map(Value::String);
+            let values = match a.kind & 0xf0 {
+                super::action::ACTION_KIND_SPELL => {
+                    let index = model
+                        .spellbook
+                        .slots
+                        .iter()
+                        .position(|v| v.spell_id == a.action)
+                        .map_or(Value::Nil, |i| Value::Integer(i as i64 + 1));
+                    vec![s("spell")?, index, s("spell")?, Value::Integer(a.action.into())]
+                }
+                super::action::ACTION_KIND_ITEM => vec![s("item")?, Value::Integer(a.action.into())],
+                super::action::ACTION_KIND_MACRO => {
+                    vec![s("macro")?, Value::Integer(a.action.into())]
+                }
+                _ => vec![],
+            };
+            Ok(MultiValue::from_vec(values))
         })?,
     )?;
 

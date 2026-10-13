@@ -8,6 +8,7 @@ pub mod messages;
 pub mod wire;
 pub mod world;
 pub mod wrath_auth;
+pub mod wrath_auras;
 pub mod wrath_authority;
 pub mod wrath_combat;
 pub mod wrath_events;
