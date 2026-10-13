@@ -516,7 +516,8 @@ fn activate_command_endpoint(
 
 impl NetCommands {
     /// Commands the selected dialect can currently encode without borrowing another build's wire.
-    /// Wrath admits only its implemented on-foot, lifecycle, item, solo corpse-loot and melee codecs.
+    /// Wrath admits its implemented on-foot, lifecycle, item, loot, melee, query, action-bar and
+    /// cast codecs.
     pub(crate) fn supports(&self, dialect: SessionDialect, command: &ClientCommand) -> bool {
         match dialect {
             SessionDialect::Vanilla5875 => true,
@@ -563,6 +564,18 @@ impl NetCommands {
                         | ClientCommand::Loot { .. }
                         | ClientCommand::LootMoney
                         | ClientCommand::LootRelease { .. }
+                        // `benilla_protocol::wrath_session`: queries, action bar, casting.
+                        | ClientCommand::NameQuery { .. }
+                        | ClientCommand::CreatureQuery { .. }
+                        | ClientCommand::GameObjectQuery { .. }
+                        | ClientCommand::SetActionButton { .. }
+                        | ClientCommand::CastSpell { .. }
+                        | ClientCommand::CastSpellAtDest { .. }
+                        | ClientCommand::CastSpellAtSource { .. }
+                        | ClientCommand::CastSpellGameObject { .. }
+                        | ClientCommand::CastSpellItem { .. }
+                        | ClientCommand::CancelCast { .. }
+                        | ClientCommand::CancelAura { .. }
                 ) || matches!(
                     command,
                     ClientCommand::AutostoreLootItem { slot: 0..=17 }
@@ -2456,6 +2469,9 @@ mod tests {
             ClientCommand::AutostoreLootItem { slot: 17 },
             ClientCommand::LootMoney,
             ClientCommand::LootRelease { guid: 7 },
+            ClientCommand::CancelCast { spell_id: 78 },
+            ClientCommand::CastSpell { spell_id: 78, target: Some(7) },
+            ClientCommand::CreatureQuery { entry: 69, guid: 7 },
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
@@ -2463,7 +2479,6 @@ mod tests {
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
             ClientCommand::CancelAutoRepeat,
-            ClientCommand::CancelCast { spell_id: 78 },
             ClientCommand::QueryTime,
             ClientCommand::MoveTimeSkipped {
                 guid: 1057,

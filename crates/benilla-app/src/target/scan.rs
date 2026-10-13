@@ -912,8 +912,11 @@ mod tests {
 
             if dialect == crate::net::SessionDialect::Wrath12340 {
                 assert!(switched.swung, "native swing reached the command endpoint");
-                assert_eq!(commands, ["stop", "select", "swing", "select", "stop"]);
-                assert_eq!(queued, Some(78), "unported cancel-cast remains fenced");
+                assert_eq!(
+                    commands,
+                    ["stop", "select", "swing", "select", "stop", "cancel-cast"]
+                );
+                assert_eq!(queued, None);
                 assert_eq!(repeat, Some(75), "unported auto-repeat remains fenced");
                 assert_eq!((stand, sheath), (1, 1));
             } else {

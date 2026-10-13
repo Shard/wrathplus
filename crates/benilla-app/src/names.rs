@@ -623,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_misses_do_not_enqueue_or_mark_name_queries_pending() {
+    fn wrath_misses_ask_the_server_once() {
         let (cmds, rx) = commands();
         let cache = NameCache {
             dialect: SessionDialect::Wrath12340,
@@ -631,18 +631,16 @@ mod tests {
         };
         let player = compose(guid::HIGH_PLAYER, 0, 7);
         let creature = compose(guid::HIGH_UNIT, 69, 1);
-        let pet = compose(guid::HIGH_PET, 137, 9);
 
         assert_eq!(cache.resolve(player, &cmds), None);
         assert_eq!(cache.resolve(creature, &cmds), None);
-        assert_eq!(cache.resolve(pet, &cmds), None);
-        assert!(
-            rx.try_iter().next().is_none(),
-            "Wrath cannot encode the asks"
-        );
-        assert!(!cache.players.is_pending(player));
-        assert!(!cache.creatures.is_pending(69));
-        assert!(!cache.pets.is_pending(137));
+        let asked: Vec<_> = rx.try_iter().collect();
+        assert!(matches!(
+            &asked[..],
+            [ClientCommand::NameQuery { .. }, ClientCommand::CreatureQuery { entry: 69, .. }]
+        ));
+        assert!(cache.players.is_pending(player));
+        assert!(cache.creatures.is_pending(69));
     }
 
     /// An ask must not move the counter, or an outstanding query would hold every gated feed open.

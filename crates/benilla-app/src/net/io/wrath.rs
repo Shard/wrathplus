@@ -964,6 +964,7 @@ enum WrathRoute {
     NativeItemQuery,
     NativeMelee,
     NativeLoot,
+    NativeSession,
     DisabledMovement,
     DisabledGameAction,
     DeferredReadOnlyQuery,
@@ -984,6 +985,17 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AttackStop
         | ClientCommand::StandStateChange { .. }
         | ClientCommand::SetSheathed { .. } => WrathRoute::NativeMelee,
+        ClientCommand::NameQuery { .. }
+        | ClientCommand::CreatureQuery { .. }
+        | ClientCommand::GameObjectQuery { .. }
+        | ClientCommand::SetActionButton { .. }
+        | ClientCommand::CastSpell { .. }
+        | ClientCommand::CastSpellAtDest { .. }
+        | ClientCommand::CastSpellAtSource { .. }
+        | ClientCommand::CastSpellGameObject { .. }
+        | ClientCommand::CastSpellItem { .. }
+        | ClientCommand::CancelCast { .. }
+        | ClientCommand::CancelAura { .. } => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
@@ -1173,6 +1185,10 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeSession => {
+                        let (opcode, body) = session_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::DeferredReadOnlyQuery => {
                         if warned < SEND_WARN_CAP {
                             bevy::log::warn!("net(wrath): query unavailable in this client; no request sent or result synthesized: {command:?}");
@@ -1259,6 +1275,53 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
         ),
         _ => bail!("invalid or unsupported native Wrath solo corpse-loot command"),
     })
+}
+
+/// Queries, the action bar and casting, in build 12340's layouts.
+fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_session::{self as s, CastTarget};
+    // The client's cast counter, echoed by the server's cast results.
+    static CAST_COUNT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+    let cast = |spell_id: u32, target: CastTarget| {
+        let count = CAST_COUNT
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .wrapping_add(1);
+        (s::CMSG_CAST_SPELL, s::encode_cast_spell(count, spell_id, &target))
+    };
+    match command {
+        ClientCommand::NameQuery { guid } => (s::CMSG_NAME_QUERY, s::encode_name_query(guid)),
+        ClientCommand::CreatureQuery { entry, guid } => {
+            (s::CMSG_CREATURE_QUERY, s::encode_template_query(entry, guid))
+        }
+        ClientCommand::GameObjectQuery { entry, guid } => {
+            (s::CMSG_GAMEOBJECT_QUERY, s::encode_template_query(entry, guid))
+        }
+        ClientCommand::SetActionButton { button, packed } => (
+            s::CMSG_SET_ACTION_BUTTON,
+            s::encode_set_action_button(button, packed),
+        ),
+        ClientCommand::CastSpell { spell_id, target } => cast(
+            spell_id,
+            target.map_or(CastTarget::None, CastTarget::Unit),
+        ),
+        ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
+        ClientCommand::CastSpellAtSource { spell_id, src } => {
+            cast(spell_id, CastTarget::Source(src))
+        }
+        ClientCommand::CastSpellGameObject { spell_id, go_guid } => {
+            cast(spell_id, CastTarget::GameObject(go_guid))
+        }
+        ClientCommand::CastSpellItem { spell_id, item_guid } => {
+            cast(spell_id, CastTarget::Item(item_guid))
+        }
+        ClientCommand::CancelCast { spell_id } => {
+            (s::CMSG_CANCEL_CAST, s::encode_cancel_cast(spell_id))
+        }
+        ClientCommand::CancelAura { spell_id } => {
+            (s::CMSG_CANCEL_AURA, s::encode_cancel_aura(spell_id))
+        }
+        other => unreachable!("not a Wrath session command: {other:?}"),
+    }
 }
 
 fn send_loot(active: &mut WrathWriterSwap, command: ClientCommand) -> Result<()> {

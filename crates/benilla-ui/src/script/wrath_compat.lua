@@ -619,3 +619,5 @@ for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
 IsPVPTimerRunning = IsPVPTimerRunning or none
+debuginfo = debuginfo or none
+CombatTextSetActiveUnit = CombatTextSetActiveUnit or none

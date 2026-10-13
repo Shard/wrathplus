@@ -196,7 +196,7 @@ mod tests {
     use crossbeam_channel::TryRecvError;
 
     #[test]
-    fn wrath_template_miss_does_not_enqueue_or_mark_pending() {
+    fn wrath_template_miss_asks_once() {
         let (tx, rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
         let templates = GameObjectTemplates {
@@ -206,8 +206,13 @@ mod tests {
         let guid = 0xF110_0000_0000_0000 | (1731u64 << 24) | 0x40;
 
         templates.request(guid, &commands);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ClientCommand::GameObjectQuery { entry: 1731, .. })
+        ));
+        assert!(templates.templates.is_pending(1731));
+        templates.request(guid, &commands);
         assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
-        assert!(!templates.templates.is_pending(1731));
     }
 
     #[test]

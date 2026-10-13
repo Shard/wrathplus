@@ -398,6 +398,13 @@ impl WrathEventAdapter {
                     }],
                 ))
             }
+            opcode if crate::wrath_session::handles(opcode) => {
+                // A message that does not decode is dropped, never fatal to the session.
+                Ok(match crate::wrath_session::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             _ => Ok(WrathDispatch::Unhandled { opcode }),
         }
     }
@@ -741,6 +748,26 @@ fn projected_pairs(
                     }
                 }
                 copy(&mut out, get(1170), 1176);
+                // The private player block (AzerothCore `UpdateFields.h`, `UNIT_END` 148), as
+                // runs of build-12340 source → 1.12 destination.
+                for (src, dst, words) in [
+                    (148usize, 188u16, 2usize), // duel arbiter
+                    (155, 195, 3),              // bytes 3, duel team, guild timestamp
+                    (634, 716, 2),              // XP, next-level XP
+                    (636, 718, 384),            // skill info
+                    (1020, 1102, 7),            // character points 1-2, tracking, block/dodge/parry
+                    (1029, 1109, 2),            // melee and ranged crit
+                    (1041, 1111, 64),           // explored zones (1.12 holds 64 of 128)
+                    (1169, 1175, 1),            // rested XP
+                    (1171, 1201, 21),           // damage done pos/neg/pct
+                    (1197, 1222, 3),            // field bytes, ammo, self-res spell
+                    (1201, 1226, 24),           // buyback prices and timestamps
+                    (1229, 1260, 2),            // field bytes 2, watched faction
+                ] {
+                    for offset in 0..words {
+                        copy(&mut out, get(src + offset), dst + offset as u16);
+                    }
+                }
             }
         }
         ObjectType::GameObject => {
