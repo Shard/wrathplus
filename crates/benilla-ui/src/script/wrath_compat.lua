@@ -635,3 +635,13 @@ do
     end
 end
 UnitIsTappedByAllThreatList = UnitIsTappedByAllThreatList or none
+
+-- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
+SpellCanTargetItem, SpellTargetItem = none, none
+FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
+IsEquippableItem, IsEquippedItem = IsEquippableItem or none, IsEquippedItem or none
+EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
+PickupCompanion, PickupEquipmentSet, SetMultiCastSpell = none, none, none
+ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
+SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
+GetCursorInfo = GetCursorInfo or none

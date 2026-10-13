@@ -361,6 +361,18 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
     {
         script.set_unit("player", Some(seat));
     }
+    // The XP pair from the descriptor the login burst already delivered: stock 3.3.5 loads with
+    // it in place, and `CharacterFrame_OnLoad`'s `TextStatusBar_UpdateTextString(MainMenuExpBar)`
+    // hides a bar whose max reads 0, which its `OnValueChanged` (`MainMenuBar.xml`, returns while
+    // hidden) never undoes. The feed's own first sight still fires `PLAYER_XP_UPDATE` after.
+    let xp = world
+        .query_filtered::<&crate::net::ObjectStore, With<crate::net::SelfPlayer>>()
+        .iter(world)
+        .next()
+        .map(|store| (store.0.player_xp(), store.0.player_next_level_xp()));
+    if let Some((Some(xp), Some(next))) = xp {
+        script.set_player_xp(xp, next);
+    }
     // The addon version gate, read from the persisted base the fold above just made current, so a
     // character-screen "Load out of date AddOns" click counts. A bare test world is check on.
     let version_check = world

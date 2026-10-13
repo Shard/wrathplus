@@ -28,6 +28,8 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
 - Archive `Blizzard_*` addons load on demand; addon-info reply recorded on the Wrath route.
 - Layout: non-finite offsets read as 0; fixpoint capped at 100 rounds; a bailed solve no longer
   re-solves on every read. Wrath instruction budget counts instructions, not calls.
+- The XP pair seeds into the VM before the entry load (stock `MainMenuExpBar` hides itself for good
+  when it loads with max 0). Factions decode (`SMSG_INITIALIZE_FACTIONS`, `SET_FACTION_STANDING`).
 - Key bindings dispatch through the VM (`Bindings.xml` over `WTF\DefaultBindings.wtf`).
 - DBCs: a 1.12 schema reads a 3.3.5 file whose only change is wider locale blocks automatically
   (`benilla-dbc`), and `benilla-formats/src/wrath_layouts.rs` maps the restructured tables

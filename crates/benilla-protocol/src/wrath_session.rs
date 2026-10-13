@@ -22,6 +22,8 @@ pub const SMSG_SPELL_GO: u16 = 0x0132;
 pub const SMSG_SPELL_COOLDOWN: u16 = 0x0134;
 pub const SMSG_SPELL_DELAYED: u16 = 0x01E2;
 pub const SMSG_SPELL_FAILED_OTHER: u16 = 0x02A6;
+pub const SMSG_INITIALIZE_FACTIONS: u16 = 0x0122;
+pub const SMSG_SET_FACTION_STANDING: u16 = 0x0124;
 
 pub const CMSG_NAME_QUERY: u32 = 0x0050;
 pub const CMSG_GAMEOBJECT_QUERY: u32 = 0x005E;
@@ -51,6 +53,8 @@ pub const fn handles(opcode: u16) -> bool {
             | SMSG_SPELL_COOLDOWN
             | SMSG_SPELL_DELAYED
             | SMSG_SPELL_FAILED_OTHER
+            | SMSG_INITIALIZE_FACTIONS
+            | SMSG_SET_FACTION_STANDING
     )
 }
 
@@ -59,6 +63,24 @@ pub const fn handles(opcode: u16) -> bool {
 pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
     let mut r = Cursor::new(body);
     Ok(match opcode {
+        // 1.12's layout with 128 slots: the count, then `(u8 flags, i32 standing)` each.
+        SMSG_INITIALIZE_FACTIONS => {
+            let count = u32_le(&mut r)?;
+            let standings = (0..count)
+                .map(|_| Ok((u8_le(&mut r)?, u32_le(&mut r)? as i32)))
+                .collect::<io::Result<Vec<_>>>()?;
+            vec![SessionEvent::Reputations { standings }]
+        }
+        // A refer-a-friend bonus float and a visual byte precede 1.12's `(list id, standing)`s.
+        SMSG_SET_FACTION_STANDING => {
+            let _bonus = u32_le(&mut r)?;
+            let _visual = u8_le(&mut r)?;
+            let count = u32_le(&mut r)?;
+            let standings = (0..count)
+                .map(|_| Ok((u32_le(&mut r)?, u32_le(&mut r)? as i32)))
+                .collect::<io::Result<Vec<_>>>()?;
+            vec![SessionEvent::ReputationDelta { standings }]
+        }
         SMSG_CAST_FAILED => cast_failed(&mut r)?,
         SMSG_SPELL_START => spell_start(&mut r)?,
         SMSG_SPELL_GO => spell_go(&mut r, self_guid)?,
