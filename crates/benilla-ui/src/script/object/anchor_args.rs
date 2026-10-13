@@ -93,8 +93,13 @@ pub(crate) fn parse_set_point(
         return Err(usage(who));
     };
 
-    let Some(rel_arg) = args.get(1) else {
-        return Err(usage(who));
+    // Wrath takes `SetPoint(point)` alone, against the default parent; 1.12 raises Usage.
+    let wrath = lua.app_data_ref::<Model>().expect("model").dialect
+        == crate::script::ScriptDialect::Wrath12340;
+    let rel_arg = match args.get(1) {
+        Some(rel_arg) => rel_arg,
+        None if wrath => &Value::Integer(0),
+        None => return Err(usage(who)),
     };
     let target = match rel_arg {
         Value::String(s) => RelTarget::Named(match s.to_str() {
@@ -131,6 +136,10 @@ pub(crate) fn parse_set_point(
         (Some(x), Some(y)) => (x, y),
         _ => (0.0, 0.0),
     };
+    // A computed offset can be NaN (stock `ExhaustionTick` divides by a max XP of 0 before the
+    // player's fields arrive); a NaN rect never equals itself, so the fixpoint would never settle.
+    let finite = |v: f32| if v.is_finite() { v } else { 0.0 };
+    let (x, y) = (finite(x), finite(y));
 
     Ok(PointArgs {
         point,

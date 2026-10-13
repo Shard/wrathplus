@@ -67,7 +67,7 @@ impl Schema {
     }
 
     /// The 4-byte slots covered, arrays expanded; the header's `field_count` must match.
-    fn expanded_len(&self) -> usize {
+    pub fn expanded_len(&self) -> usize {
         self.fields.iter().map(|f| f.count).sum()
     }
 }
@@ -173,6 +173,9 @@ pub struct DbcParser<'a> {
     /// Everything after the 20-byte header: the record bytes, then the string block.
     body: &'a [u8],
     schema: Option<Schema>,
+    /// Schema slot → file column (`None`: a column the file lacks, read as 0), when a 1.12 schema
+    /// reads a 3.3.5 file ([`Self::widened_locale_columns`], [`Self::with_schema_columns`]).
+    columns: Option<Vec<Option<usize>>>,
 }
 
 impl<'a> DbcParser<'a> {
@@ -202,6 +205,7 @@ impl<'a> DbcParser<'a> {
             header,
             body,
             schema: None,
+            columns: None,
         })
     }
 
@@ -210,16 +214,86 @@ impl<'a> DbcParser<'a> {
     }
 
     /// Attach a schema, validating its expanded field count against the file header.
+    ///
+    /// A 1.12 schema also attaches to a 3.3.5 file whose only difference is that each localized
+    /// string grew from 8 locale slots + flags to 16 + flags: the schema's slots then read the
+    /// matching file columns ([`Self::widened_locale_columns`]).
     pub fn with_schema(mut self, schema: Schema) -> Result<Self> {
         let n = schema.expanded_len();
         if n != self.header.field_count as usize {
-            return Err(Error::SchemaFieldMismatch {
-                schema: n,
-                file: self.header.field_count,
-            });
+            let Some(columns) = self.widened_locale_columns(n) else {
+                return Err(Error::SchemaFieldMismatch {
+                    schema: n,
+                    file: self.header.field_count,
+                });
+            };
+            self.columns = Some(columns.into_iter().map(Some).collect());
         }
         self.schema = Some(schema);
         Ok(self)
+    }
+
+    /// Attach a schema whose slots read the given file columns: `columns[i]` is slot `i`'s
+    /// column, `None` for a value the file does not carry (read as 0). For a 1.12 schema over a
+    /// 3.3.5 file with an explicit layout map.
+    pub fn with_schema_columns(mut self, schema: Schema, columns: Vec<Option<usize>>) -> Result<Self> {
+        let fc = self.header.field_count as usize;
+        if columns.len() != schema.expanded_len() || columns.iter().flatten().any(|&c| c >= fc) {
+            return Err(Error::SchemaFieldMismatch {
+                schema: schema.expanded_len(),
+                file: self.header.field_count,
+            });
+        }
+        self.columns = Some(columns);
+        self.schema = Some(schema);
+        Ok(self)
+    }
+
+    /// One record field as stored, by file column.
+    fn raw(&self, record: usize, column: usize) -> u32 {
+        let base = record * self.header.record_size as usize;
+        rd_u32_at(self.body, base + column * 4)
+    }
+
+    /// Whether file column `c` starts a 3.3.5 localized string as an enUS file stores it: a
+    /// string offset, fifteen empty locale slots, then the (per-row) flags column.
+    fn is_wrath_locale_block(&self, c: usize) -> bool {
+        let fc = self.header.field_count as usize;
+        let rc = self.header.record_count as usize;
+        if c + 16 >= fc || rc == 0 {
+            return false;
+        }
+        (0..rc).all(|r| {
+            self.raw(r, c) < self.header.string_block_size
+                && (c + 1..=c + 15).all(|k| self.raw(r, k) == 0)
+        })
+    }
+
+    /// Map a 1.12 schema of `schema_len` slots onto this file when the difference is exactly
+    /// widened locale blocks: each 9-slot block (8 locales + flags) reads the file's 17-column
+    /// block (16 + flags) at its string, its first seven empty slots and its flags. `None` when
+    /// the file differs in any other way, which needs its own schema.
+    fn widened_locale_columns(&self, schema_len: usize) -> Option<Vec<usize>> {
+        let fc = self.header.field_count as usize;
+        let extra = fc.checked_sub(schema_len)?;
+        if extra == 0 || extra % 8 != 0 {
+            return None;
+        }
+        let mut blocks = extra / 8;
+        let mut columns = Vec::with_capacity(schema_len);
+        let mut c = 0;
+        while c < fc {
+            if blocks > 0 && self.is_wrath_locale_block(c) {
+                columns.extend(c..c + 8);
+                columns.push(c + 16);
+                c += 17;
+                blocks -= 1;
+            } else {
+                columns.push(c);
+                c += 1;
+            }
+        }
+        (blocks == 0 && columns.len() == schema_len).then_some(columns)
     }
 
     /// Decode all records into an owned [`RecordSet`] (records + a copy of the string block).
@@ -266,7 +340,10 @@ impl<'a> DbcParser<'a> {
             let base = r * rs;
             let mut values = Vec::with_capacity(fc);
             for (i, ty) in types.iter().enumerate() {
-                let raw = rd_u32_at(records_bytes, base + i * 4);
+                let raw = match self.columns.as_ref().map_or(Some(i), |columns| columns[i]) {
+                    Some(column) => rd_u32_at(records_bytes, base + column * 4),
+                    None => 0,
+                };
                 values.push(match ty {
                     FieldType::UInt32 => Value::UInt32(raw),
                     FieldType::Int32 => Value::Int32(raw as i32),
@@ -341,6 +418,69 @@ fn csv_quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// A WDBC of `rows` (each `fields` u32s) over string block `strings`.
+    fn wdbc(fields: usize, rows: &[Vec<u32>], strings: &[u8]) -> Vec<u8> {
+        let mut b = b"WDBC".to_vec();
+        for v in [rows.len() as u32, fields as u32, (fields * 4) as u32, strings.len() as u32] {
+            b.extend(v.to_le_bytes());
+        }
+        for row in rows {
+            for v in row {
+                b.extend(v.to_le_bytes());
+            }
+        }
+        b.extend(strings);
+        b
+    }
+
+    /// `id, Name (16 locales + flags), value`: a 3.3.5 row.
+    fn wrath_row(id: u32, name: u32, value: u32) -> Vec<u32> {
+        let mut row = vec![id, name];
+        row.extend([0; 15]);
+        row.extend([0x00FF_01FE, value]);
+        row
+    }
+
+    fn vanilla_schema() -> Schema {
+        let mut s = Schema::new("T");
+        s.add_field(SchemaField::new("ID", FieldType::UInt32));
+        s.add_field(SchemaField::new("Name", FieldType::String));
+        s.add_field(SchemaField::new_array("NameLoc", FieldType::UInt32, 7));
+        s.add_field(SchemaField::new("NameFlags", FieldType::UInt32));
+        s.add_field(SchemaField::new("Value", FieldType::UInt32));
+        s
+    }
+
+    #[test]
+    fn a_vanilla_schema_reads_a_wrath_file_whose_locale_blocks_widened() {
+        let bytes = wdbc(19, &[wrath_row(7, 1, 42), wrath_row(9, 5, 43)], b"\0Ash\0Oak\0");
+        let set = DbcParser::parse(&mut Cursor::new(&bytes[..]))
+            .unwrap()
+            .with_schema(vanilla_schema())
+            .unwrap()
+            .parse_records()
+            .unwrap();
+        let rows = set.records();
+        assert!(matches!(rows[1].get_value(0), Some(Value::UInt32(9))));
+        let Some(Value::StringRef(name)) = rows[1].get_value(1) else { panic!() };
+        assert_eq!(set.get_string(*name).unwrap(), "Oak");
+        assert!(matches!(rows[0].get_value(9), Some(Value::UInt32(0x00FF_01FE))));
+        assert!(matches!(rows[0].get_value(10), Some(Value::UInt32(42))));
+    }
+
+    #[test]
+    fn a_wrath_file_differing_otherwise_still_refuses_the_vanilla_schema() {
+        let mut row = wrath_row(7, 1, 42);
+        row[5] = 3; // a locale slot that is not empty: not a widened block
+        let bytes = wdbc(19, &[row], b"\0Ash\0");
+        let err = DbcParser::parse(&mut Cursor::new(&bytes[..]))
+            .unwrap()
+            .with_schema(vanilla_schema())
+            .err();
+        assert!(matches!(err, Some(Error::SchemaFieldMismatch { .. })));
+    }
+
     use super::*;
 
     /// A WDBC: the 20-byte header, the record bytes, the string block.

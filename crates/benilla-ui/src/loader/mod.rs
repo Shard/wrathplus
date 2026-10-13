@@ -224,43 +224,6 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
     out
 }
 
-/// Whether a runtime `CreateFrame(..., inherits)` request reaches a secure template, including
-/// through case-insensitive aliases. This is intended for rejection before frame allocation.
-pub fn is_secure_template(lua: &mlua::Lua, name: &str) -> bool {
-    let model = lua
-        .app_data_ref::<crate::script::Model>()
-        .expect("model app_data");
-    let templates = model.framexml_templates.borrow();
-    let mut active = HashSet::new();
-    secure_template_name(name, &templates, &mut active)
-}
-
-fn secure_template_name(
-    name: &str,
-    templates: &HashMap<String, Element>,
-    active: &mut HashSet<String>,
-) -> bool {
-    if name.to_ascii_lowercase().contains("secure") {
-        return true;
-    }
-    let key = name.to_ascii_lowercase();
-    if !active.insert(key.clone()) {
-        return false;
-    }
-    let answer = templates
-        .get(name)
-        .or_else(|| {
-            templates
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(name))
-                .map(|(_, v)| v)
-        })
-        .and_then(|template| template.attr("inherits"))
-        .is_some_and(|parent| secure_template_name(parent, templates, active));
-    active.remove(&key);
-    answer
-}
-
 /// Join a FrameXML reference to its file's directory, lexically: `\` and `/` both separate, `..`
 /// walks up. A `..` above the root is kept, not clamped, so the provider can refuse the escape.
 pub fn join_ref(base: &str, path: &str) -> String {
@@ -571,7 +534,8 @@ impl Loader<'_> {
         let font_names: std::collections::HashSet<&str> =
             fonts.keys().map(|k| k.as_str()).collect();
         let mut warns = Vec::new();
-        let out = framexml::expand_known(el, &view, &font_names, &mut warns);
+        let list = model.dialect == crate::script::ScriptDialect::Wrath12340;
+        let out = framexml::expand_known(el, &view, &font_names, list, &mut warns);
         drop(font_names);
         drop(fonts);
         drop(view);
@@ -585,25 +549,25 @@ impl Loader<'_> {
     /// a FontString's `inherits=` usually names a font object, which passes through unwarned.
     pub(super) fn expand_region(&mut self, el: &Element) -> Element {
         // One verbatim name, matched case-insensitively, as `framexml::expand` looks it up.
-        let hit = el.attr("inherits").is_some_and(|name| {
+        let hit = el.attr("inherits").is_some_and(|inherits| {
             let model = self.model();
             let templates = model.framexml_templates.borrow();
-            !name.is_empty()
-                && (templates.contains_key(name)
-                    || templates.keys().any(|k| k.eq_ignore_ascii_case(name)))
+            let names: Vec<&str> = if model.dialect == crate::script::ScriptDialect::Wrath12340 {
+                inherits.split(',').map(str::trim).collect()
+            } else {
+                vec![inherits]
+            };
+            names.into_iter().any(|name| {
+                !name.is_empty()
+                    && (templates.contains_key(name)
+                        || templates.keys().any(|k| k.eq_ignore_ascii_case(name)))
+            })
         });
         if hit {
             self.expand(el)
         } else {
             el.clone()
         }
-    }
-
-    /// Whether `inherits=` names a secure template directly or through an alias.
-    fn secure_inherits(&self, el: &Element) -> bool {
-        el.attr("inherits")
-            .filter(|name| !name.is_empty())
-            .is_some_and(|name| is_secure_template(self.lua(), name))
     }
 
     /// A top-level `<Font name=…>`: flatten its `inherits=` chain (fonts inherit only fonts),
@@ -664,23 +628,6 @@ impl Loader<'_> {
             self.report
                 .warnings
                 .push(format!("Unknown frame type: {}", el.tag));
-            return None;
-        }
-
-        // Reject protected aliases before CreateFrame allocates an ordinary, unprotected frame.
-        if self
-            .lua()
-            .app_data_ref::<crate::script::Model>()
-            .expect("model")
-            .dialect
-            == crate::script::ScriptDialect::Wrath12340
-            && self.secure_inherits(el)
-        {
-            self.report.errors.push(format!(
-                "CreateFrame(<{}>{}): secure template inheritance is unsupported: Wrath protected execution is not implemented",
-                el.tag,
-                el.name().map(|n| format!(" name=\"{n}\"")).unwrap_or_default()
-            ));
             return None;
         }
 
@@ -757,6 +704,9 @@ impl Loader<'_> {
                 }
             };
         self.report.frames += 1;
+        if let Some(parent) = parent {
+            self.apply_parent_key(el, parent, &wrapper);
+        }
 
         let dbg_name = resolved_name
             .clone()
@@ -775,6 +725,19 @@ impl Loader<'_> {
 
         self.decorate(el, &wrapper, &self_name, parent_name, &dbg_name);
         Some(wrapper)
+    }
+
+    /// Wrath's `parentKey="key"`: the new frame or region is stored as `parent.key`.
+    pub(super) fn apply_parent_key(&self, el: &Element, parent: &Table, child: &Table) {
+        let wrath = self
+            .lua()
+            .app_data_ref::<crate::script::Model>()
+            .expect("model")
+            .dialect
+            == crate::script::ScriptDialect::Wrath12340;
+        if let Some(key) = el.attr("parentKey").filter(|key| wrath && !key.is_empty()) {
+            let _ = parent.raw_set(key, child.clone());
+        }
     }
 
     /// Everything a frame element does to an existing frame, from `LoadXML` attributes to its

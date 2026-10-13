@@ -651,8 +651,14 @@ impl UnitTokens<'_, '_> {
                 .and_then(|member| self.pet_of(member, true)),
             UnitBase::Raid(row) => self.raid_member(row).and_then(|guid| self.held(guid)),
             UnitBase::Party(row) => self.party_member(row).and_then(|guid| self.held(guid)),
-            // The interaction NPC is unresolved here, a quiet nil.
-            UnitBase::Npc => None,
+            // The interaction NPC is unresolved here, a quiet nil; so are Wrath's bases, which
+            // this client does not yet track.
+            UnitBase::Npc
+            | UnitBase::Focus
+            | UnitBase::Vehicle
+            | UnitBase::Boss(_)
+            | UnitBase::Arena(_)
+            | UnitBase::ArenaPet(_) => None,
         }
     }
 

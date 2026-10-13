@@ -6,11 +6,11 @@ use mlua::{Function, Lua, MultiValue, Table, Value};
 
 use crate::script::binding_abi::optional_string;
 use crate::script::region::region_wrapper;
-use crate::script::{Model, RegionData, REG_SCRIPTS, SCRIPT_KINDS};
+use crate::script::{script_kind, Model, RegionData, REG_SCRIPTS};
 use crate::widget::RegionKind;
 
 use super::{
-    decode_id, draw_layer_from_str, ensure_host_object_capacity, frame_handle_of, publish_global,
+    decode_id, draw_layer_from_str, frame_handle_of, publish_global,
 };
 
 /// Populate `m`'s event, script and region-creation methods.
@@ -88,13 +88,13 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         lua.create_function(|lua, (this, name): (Table, String)| get_script(lua, &this, &name))?,
     )?;
     // `HasScript(name)`: 1 if the widget can carry that script kind, else nil, whether or not one
-    // is set. Answered from the flat `SCRIPT_KINDS`, so another type's kind reads 1 too, where the
+    // is set. Answered from the flat dialect kind list, so another type's kind reads 1 too, where the
     // reference's tables are per widget type (base `0x76a0d0`; a plain Frame has no `OnClick`).
     m.set(
         "HasScript",
-        lua.create_function(|_, (_this, name): (Table, String)| {
+        lua.create_function(|lua, (_this, name): (Table, String)| {
             Ok(crate::script::binding_abi::flag(
-                SCRIPT_KINDS.iter().any(|k| k.eq_ignore_ascii_case(&name)),
+                script_kind(lua, &name).is_some(),
             ))
         })?,
     )?;
@@ -212,16 +212,12 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
-/// `SetScript(name, func)`: stores the closure under one of [`SCRIPT_KINDS`], else raises.
+/// `SetScript(name, func)`: stores the closure under one of the dialect's script kinds, else raises.
 /// Deviation: real 1.12 kinds nothing fires yet raise too (`OnHyperlinkEnter`, `OnHyperlinkLeave`,
 /// `OnMessageScrollChanged`, `OnInputLanguageChanged`, the movie frame's), because an accepted
-/// handler that never runs fails silently. `OnAttributeChanged` is 2.0's, with no 1.12 slot.
+/// handler that never runs fails silently. `OnAttributeChanged` is 2.0's: Wrath-only.
 fn set_script(lua: &Lua, this: &Table, name: &str, func: Option<Function>) -> mlua::Result<()> {
-    let kind = SCRIPT_KINDS
-        .iter()
-        .copied()
-        .find(|&k| k.eq_ignore_ascii_case(name))
-        .ok_or_else(|| mlua::Error::runtime(format!("SetScript: unsupported script '{name}'")))?;
+    let kind = script_kind(lua, name).ok_or_else(|| mlua::Error::runtime(format!("SetScript: unsupported script '{name}'")))?;
     let h = frame_handle_of(lua, this)?;
     let id = lua.app_data_mut::<Model>().expect("model").frame_id(h);
 
@@ -270,11 +266,7 @@ fn set_script(lua: &Lua, this: &Table, name: &str, func: Option<Function>) -> ml
 }
 
 fn get_script(lua: &Lua, this: &Table, name: &str) -> mlua::Result<Value> {
-    let kind = match SCRIPT_KINDS
-        .iter()
-        .copied()
-        .find(|&k| k.eq_ignore_ascii_case(name))
-    {
+    let kind = match script_kind(lua, name) {
         Some(k) => k,
         None => return Ok(Value::Nil),
     };
@@ -339,7 +331,6 @@ fn create_region(
 
     let id = {
         let mut model = lua.app_data_mut::<Model>().expect("model");
-        ensure_host_object_capacity(&model)?;
         let rh = model
             .arena
             .create_region(owner, kind, dl, 0)

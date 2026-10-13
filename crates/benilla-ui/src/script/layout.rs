@@ -8,6 +8,10 @@ use super::backdrop;
 use super::types::RegionData;
 use super::{ExtractedQuad, MeasureRequest, Model, QuadContent, UiScript, SCREEN};
 
+/// The fixpoint's absolute round ceiling: deeper than any authored anchor chain, and short enough
+/// that a cycle costs a frame, not the session.
+const MAX_LAYOUT_ROUNDS: usize = 100;
+
 /// A frame's `effective_alpha` and `effective_scale`, worn by the quads it emits itself.
 #[derive(Clone, Copy)]
 pub(super) struct FramePaint {
@@ -743,7 +747,10 @@ impl UiScript {
         }
         // This solve's width, beside `layout_solves` (how often) and `layout_rounds` (how deep).
         *layout_last_scope = (solve_frames.len(), sweep_regions.len());
-        let round_cap = scope.plan.len() + region_data.len() + 2;
+        // A converging graph settles in about its anchor depth; the node count bounds that, but
+        // a cycle then spins one full pass per node (tens of thousands on the Wrath stock UI,
+        // a frozen client), so the cap is also an absolute ceiling.
+        let round_cap = (scope.plan.len() + region_data.len() + 2).min(MAX_LAYOUT_ROUNDS);
         // `WOW_LAYOUT_PROF=1`: rounds, graph size, and the frame-solve and region-sweep split.
         let prof = layout_prof_enabled();
         let mut t_frames = std::time::Duration::ZERO;
@@ -780,6 +787,8 @@ impl UiScript {
                 }
             }
             solver.solve();
+            let last_round = round + 1 == round_cap;
+            let mut moving: Vec<String> = Vec::new();
             for &i in &solve_frames {
                 let (h, id, _) = scope.plan[i as usize];
                 match solver.rect(id) {
@@ -787,6 +796,14 @@ impl UiScript {
                         if resolved.get(&h) != Some(&r) {
                             resolved.insert(h, r);
                             changed = true;
+                            if last_round && moving.len() < 8 {
+                                moving.push(
+                                    arena
+                                        .frame(h)
+                                        .and_then(|f| f.name.clone())
+                                        .unwrap_or_else(|| format!("{h:?}")),
+                                );
+                            }
                         }
                     }
                     None => {
@@ -956,15 +973,17 @@ impl UiScript {
                 // truncates `warnings` but not the log, so a verify build may count a row twice.
                 let msg = format!(
                     "layout: anchor graph did not converge in {round_cap} rounds — \
-                     an anchor cycle? (rects left at their last pass)"
+                     an anchor cycle? (rects left at their last pass; still moving: {moving:?})"
                 );
                 diagnostics.record(super::diagnostics::DiagnosticKind::Warning, &msg);
                 warnings.push(msg);
             }
         }
         // The cycle bail: its rects are this frame's, so their size changes still fire, and the
-        // scope forgets a graph that never settled.
+        // scope forgets a graph that never settled. Tier 1 still closes: re-solving an unchanged
+        // cycle only repeats the same bail, which every layout read would otherwise pay for.
         scope.invalidate();
+        *layout_epoch_resolved = Some(epoch_at_entry);
         queue_size_changes(&watched, resolved, frame_to_id, pending_size_changed);
     }
 

@@ -421,6 +421,8 @@ fn spell_schema() -> Schema {
 
 /// Load the joined spell display catalog off the patch chain.
 pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
+    // Build 12340 stores a school mask where 1.12 stores the school's index.
+    let school_is_mask = matches!(chain.profile(), crate::DataProfile::Wrath { .. });
     let icons = crate::dbc::load_spell_icon_map(chain)?;
     let dispel_types = load_spell_dispel_types(chain)?;
     // Categories whose `SpellCategory.dbc` flags carry `0x2` match every cooldown query
@@ -520,7 +522,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex2: u32_at(r, COL_ATTRIBUTES_EX2).unwrap_or(0),
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
-                school: u32_at(r, COL_SCHOOL).unwrap_or(0),
+                school: u32_at(r, COL_SCHOOL)
+                    .map(|v| if school_is_mask && v != 0 { v.trailing_zeros() } else { v })
+                    .unwrap_or(0),
                 mechanic: u32_at(r, COL_MECHANIC).unwrap_or(0),
                 effect_mechanic: std::array::from_fn(|i| {
                     u32_at(r, COL_EFFECT_MECHANIC_1 + i).unwrap_or(0)

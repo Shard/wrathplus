@@ -2558,28 +2558,6 @@ mod chunk_name_tests {
             assert_eq!(got, expected, "{handler}");
         }
     }
-
-    #[test]
-    fn wrath_secure_alias_is_rejected_before_xml_frame_allocation() {
-        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
-        let doc = parse(
-            r#"<Ui>
-              <Frame name="SecureActionButtonTemplate" virtual="true"/>
-              <Frame name="Alias" virtual="true" inherits="SecureActionButtonTemplate"/>
-              <Frame name="MustNotExist" inherits="Alias"/>
-            </Ui>"#,
-        );
-        let report = load(&s, &doc, &no_files);
-        assert_eq!(report.frames, 0, "{report:?}");
-        assert!(
-            report
-                .errors
-                .iter()
-                .any(|e| e.contains("secure template inheritance")),
-            "{report:?}"
-        );
-        assert!(s.eval::<bool>("return MustNotExist == nil").unwrap());
-    }
 }
 
 #[test]

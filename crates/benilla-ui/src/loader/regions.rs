@@ -57,6 +57,7 @@ impl Loader<'_> {
                                 continue;
                             }
                         };
+                    self.apply_parent_key(region, wrapper, &region_wrapper);
                     if region.attr_bool("hidden") {
                         if let Err(e) = region_wrapper.call_method::<()>("Hide", ()) {
                             self.report.errors.push(format!("{dbg}: region Hide: {e}"));

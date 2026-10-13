@@ -277,7 +277,6 @@ pub use worldmap::{
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
-pub use wrath_surface::allowed_engine_functions as wrath_allowed_engine_functions;
 pub use zone_text::ZoneTexts;
 
 use mlua::Lua;
@@ -460,6 +459,19 @@ const SCRIPT_KINDS: [&str; 39] = [
     "OnKeyUp",
 ];
 
+/// Script kinds only the Wrath dialect has: `OnAttributeChanged` is fired by its `SetAttribute`.
+const WRATH_SCRIPT_KINDS: [&str; 1] = ["OnAttributeChanged"];
+
+/// The canonical spelling of script kind `name` in `lua`'s dialect, or `None` if it has no slot.
+fn script_kind(lua: &Lua, name: &str) -> Option<&'static str> {
+    let wrath = lua.app_data_ref::<Model>().expect("model").dialect == ScriptDialect::Wrath12340;
+    SCRIPT_KINDS
+        .iter()
+        .chain(if wrath { WRATH_SCRIPT_KINDS.iter() } else { [].iter() })
+        .copied()
+        .find(|k| k.eq_ignore_ascii_case(name))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // UiScript: the public host
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -543,13 +555,12 @@ static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64
 /// How often the instruction hook fires: an instruction budget's resolution (low values cost).
 pub const INSTRUCTION_HOOK_STEP: u32 = 1_000_000;
 
-/// Wrath uses a global hook, shared by the main state and coroutines. Call hooks are also charged
-/// one quantum, preventing an addon from obtaining an uncounted quantum by repeatedly creating a
-/// fresh coroutine just before the count hook would fire.
+/// Wrath uses a global count hook, shared by the main state and coroutines; each firing charges
+/// one quantum of executed instructions.
 pub const WRATH_INSTRUCTION_HOOK_STEP: u32 = 10_000;
 
 /// Allocator ceiling for a Wrath Lua state, installed before any host API or bootstrap Lua.
-pub const WRATH_MEMORY_LIMIT: usize = 128 * 1024 * 1024;
+pub const WRATH_MEMORY_LIMIT: usize = 1024 * 1024 * 1024;
 
 /// The chunk name the 1.12 client gives an addon's file, `Interface\AddOns\<Folder>\<File>`,
 /// backslashed and with the file, because addons parse it: `FuBarPlugin-2.0` finds its folder with
@@ -582,7 +593,6 @@ impl UiScript {
             // coroutine created before a later arm cannot bypass that arm.
             lua.set_global_hook(
                 mlua::HookTriggers {
-                    on_calls: true,
                     every_nth_instruction: Some(WRATH_INSTRUCTION_HOOK_STEP),
                     ..Default::default()
                 },
@@ -693,8 +703,7 @@ impl UiScript {
         worldstate::install(&lua)?;
         net_stats::install(&lua)?;
         if dialect == ScriptDialect::Wrath12340 {
-            // Install the mature implementation above, then expose only the bounded Wrath slice.
-            // This runs before any FrameXML/addon code, so addon-created globals are unaffected.
+            // The mature implementation above, with the Wrath ABI and trusted secure environment.
             wrath_surface::install(&lua)?;
         }
 
@@ -710,14 +719,6 @@ impl UiScript {
     /// The immutable client script dialect selected when this VM was constructed.
     pub fn dialect(&self) -> ScriptDialect {
         self.dialect
-    }
-
-    /// Whether protected/secure templates and restricted execution are implemented.
-    ///
-    /// They are currently unsupported; callers must not treat ordinary frames or bindings as a
-    /// simulation of Wrath's secure execution environment.
-    pub const fn supports_secure_execution(&self) -> bool {
-        false
     }
 
     /// The embedded VM, for the app and the loader to add their bindings over this object model.
@@ -738,8 +739,7 @@ impl UiScript {
 
     /// Bound Lua execution. Vanilla retains its legacy main-thread million-instruction sampling.
     /// Wrath uses one sticky counter across the main state and every coroutine, sampled every
-    /// [`WRATH_INSTRUCTION_HOOK_STEP`] instructions and conservatively charged one sample at each
-    /// Lua call. For Wrath the hook must execute no later than
+    /// [`WRATH_INSTRUCTION_HOOK_STEP`] instructions. For Wrath the hook must execute no later than
     /// `(budget / WRATH_INSTRUCTION_HOOK_STEP + 1) * WRATH_INSTRUCTION_HOOK_STEP` actual VM
     /// instructions after arming (with saturating accounting); once tripped, protected-call guards
     /// keep propagating the failure until [`Self::clear_instruction_budget`] explicitly disarms it.

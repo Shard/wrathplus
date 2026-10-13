@@ -1,11 +1,9 @@
-//! The deliberately bounded Wrath 3.3.5a global API surface.
+//! The Wrath 3.3.5a global API surface.
 //!
-//! Construction installs the mature Vanilla implementation first, then this module removes every
-//! engine function not explicitly admitted below and replaces the build/unit bindings whose Wrath
-//! ABI differs. Lua 5.1's own globals and libraries remain available. Addons may subsequently
-//! publish their own globals normally; pruning happens only once, before any UI or addon loads.
+//! Construction installs the mature Vanilla implementation first; this module then replaces the
+//! bindings whose Wrath ABI differs and installs the trusted secure environment.
 
-use mlua::{Function, Lua, Table, Value};
+use mlua::{Lua, Value};
 
 #[path = "wrath_loot.rs"]
 mod wrath_loot;
@@ -15,150 +13,201 @@ mod wrath_power;
 
 use super::Model;
 
-/// Engine functions admitted to the Wrath addon VM. Widget/event operations are methods on the
-/// frame objects, so their much larger surface does not need to appear here.
-const ALLOWED_ENGINE_FUNCTIONS: &[&str] = &[
-    // Widget construction and safe screen/input observations.
-    "CreateFrame",
-    "CreateFont",
-    "EnumerateFrames",
-    "GetScreenWidth",
-    "GetScreenHeight",
-    "SetupFullscreenScale",
-    "GetCursorPosition",
-    "GetMouseFocus",
-    "IsMacClient",
-    "IsShiftKeyDown",
-    "IsControlKeyDown",
-    "IsAltKeyDown",
-    // Addon registry, demand loading, saved state and reload.
-    "GetNumAddOns",
-    "GetAddOnInfo",
-    "GetAddOnMetadata",
-    "GetAddOnDependencies",
-    "IsAddOnLoaded",
-    "IsAddOnLoadOnDemand",
-    "EnableAddOn",
-    "DisableAddOn",
-    "EnableAllAddOns",
-    "DisableAllAddOns",
-    "ResetDisabledAddOns",
-    "LoadAddOn",
-    "RegisterForSave",
-    "ReloadUI",
-    // The bounded stock GameMenu slice uses the real session and sound queues.
-    // Manual solo corpse loot; the profile adapter supplies the build-12340 ABI.
-    "CloseLoot",
-    "GetItemQualityColor",
-    "GetLootSlotInfo",
-    "GetLootSlotLink",
-    "GetNumLootItems",
-    "IsAutoLootKeyDown",
-    "IsFishingLoot",
-    "LootSlot",
-    "LootSlotIsCoin",
-    "LootSlotIsItem",
-    "Logout",
-    "Quit",
-    "PlaySound",
-    // Panel presentation is ordinary widget visibility; no protected execution is involved.
-    "ShowUIPanel",
-    "HideUIPanel",
-    // Truthful client/session observations.
-    "GetBuildInfo",
-    "GetLocale",
-    "GetRealmName",
-    "GetTime",
-    "GetGameTime",
-    "GetFramerate",
-    // Bounded read-only access to host settings admitted centrally by the CVar store.
-    "GetCVar",
-    // The observed-unit slice fed by the engine.
-    "UnitName",
-    "UnitExists",
-    "UnitIsUnit",
-    "UnitHealth",
-    "UnitHealthMax",
-    "UnitPower",
-    "UnitPowerMax",
-    "UnitPowerType",
-    "UnitLevel",
-    "UnitGUID",
-    // Safe scripting/error helpers supplied by the host rather than Lua itself.
-    "debugstack",
-    "geterrorhandler",
-    "seterrorhandler",
-    "getglobal",
-    "setglobal",
-    "time",
-    "date",
-    "difftime",
-    "strlen",
-    "strsub",
-    "strupper",
-    "strlower",
-    "strrep",
-    "strfind",
-    "strbyte",
-    "strchar",
-    "gsub",
-    "tinsert",
-    "tremove",
-    // Installed build-12340 LootFrame.lua:145 uses the bare alias supplied by stdlib.
-    "ceil",
-];
-
-/// Functions present in an untouched Lua 5.1 state. These are language facilities, not game API.
-const LUA51_GLOBAL_FUNCTIONS: &[&str] = &[
-    "assert",
-    "collectgarbage",
-    "error",
-    "gcinfo",
-    "getfenv",
-    "getmetatable",
-    "ipairs",
-    "loadstring",
-    "next",
-    "pairs",
-    "pcall",
-    "print",
-    "rawequal",
-    "rawget",
-    "rawset",
-    "select",
-    "setfenv",
-    "setmetatable",
-    "tonumber",
-    "tostring",
-    "type",
-    "unpack",
-    "xpcall",
-];
-
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_truthful_readers(lua)?;
-    install_panel_visibility(lua)?;
     wrath_loot::install(lua)?;
     wrath_power::install(lua)?;
-    reject_secure_templates(lua)?;
-    prune_engine_functions(lua)
+    super::aura::wrath::install(lua)?;
+    install_trusted_secure_environment(lua)?;
+    install_frame_methods(lua)?;
+    install_compat(lua)
 }
 
-/// Wrath's GameMenu buttons use the panel helpers only to show or hide ordinary frames. The full
-/// UIParent panel-position delegate is outside this bounded stock slice; these bindings preserve
-/// the helpers' concrete visibility effect without claiming options/social panel support.
-fn install_panel_visibility(lua: &Lua) -> mlua::Result<()> {
-    let globals = lua.globals();
-    for (name, method) in [("ShowUIPanel", "Show"), ("HideUIPanel", "Hide")] {
-        globals.set(
-            name,
-            lua.create_function(move |_, frame: Table| {
-                let call: Function = frame.get(method)?;
-                call.call::<()>(frame)
-            })?,
-        )?;
-    }
-    Ok(())
+/// The build-12340 engine functions the 1.12 surface lacks (`wrath_compat.lua`).
+fn install_compat(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "__azb_fire_event",
+        lua.create_function(|lua, (event, args): (String, mlua::Variadic<String>)| {
+            let args = args.into_iter().map(super::ScriptValue::Str).collect();
+            super::tick::fire_event_into(lua, &event, args);
+            Ok(())
+        })?,
+    )?;
+    lua.load(include_str!("wrath_compat.lua"))
+        .set_name("=[AzerothBench Wrath compat]")
+        .exec()
+}
+
+/// Wrath-era methods every frame kind shares: attributes (the state the secure templates key
+/// on), `HookScript`, and the protection queries, which answer "not protected" for every frame.
+fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
+    let methods: mlua::Table = lua.named_registry_value(super::REG_FRAME_METHODS)?;
+    let table = |name: &str| lua.named_registry_value::<mlua::Table>(name);
+    let install: mlua::Function = lua
+        .load(
+            r##"
+            local methods, regions, fontstrings, buttons, editboxes, minimaps, sliders, textures,
+                tooltips = ...
+            -- A tooltip remembers its owner.
+            local owners = setmetatable({}, { __mode = "k" })
+            local setOwner = tooltips.SetOwner
+            function tooltips.SetOwner(self, owner, ...)
+                owners[self] = owner
+                return setOwner(self, owner, ...)
+            end
+            function tooltips.GetOwner(self) return owners[self] end
+            -- Cooldown frames: timing is kept for readers; no sweep is drawn.
+            local cooldowns = setmetatable({}, { __mode = "k" })
+            function methods.SetCooldown(self, start, duration)
+                cooldowns[self] = { start, duration }
+            end
+            function methods.GetCooldownTimes(self)
+                local c = cooldowns[self]
+                if c then return c[1] * 1000, c[2] * 1000 end
+                return 0, 0
+            end
+            -- QuestPOIFrame (the world map's quest blobs): accepted, not drawn.
+            for _, name in ipairs({ "DrawQuestBlob", "DrawBlob", "DrawNone", "SetFillTexture",
+                "SetBorderTexture", "SetFillAlpha", "SetBorderAlpha", "SetBorderScalar",
+                "EnableSmoothing", "EnableMerging", "UpdateMouseOverTooltip" }) do
+                methods[name] = function() end
+            end
+            function methods.GetNumTooltips() return 0 end
+            function methods.GetTooltipIndex() return nil end
+            function methods.SetReverse() end
+            function methods.SetDrawEdge() end
+            -- Sliders enable and disable like buttons.
+            local disabled = setmetatable({}, { __mode = "k" })
+            function sliders.Enable(self)
+                disabled[self] = nil
+                self:EnableMouse(true)
+            end
+            function sliders.Disable(self)
+                disabled[self] = true
+                self:EnableMouse(false)
+            end
+            function sliders.IsEnabled(self) return not disabled[self] and 1 or nil end
+            -- Layout shorthands every frame and region has.
+            for _, t in ipairs({ methods, regions, textures, fontstrings }) do
+                function t.SetSize(self, width, height)
+                    self:SetWidth(width)
+                    self:SetHeight(height)
+                end
+                function t.GetSize(self) return self:GetWidth(), self:GetHeight() end
+                function t.GetRect(self)
+                    local left, bottom = self:GetLeft(), self:GetBottom()
+                    if not left then return end
+                    return left, bottom, self:GetWidth(), self:GetHeight()
+                end
+                function t.IsMouseOver(self, top, bottom, left, right)
+                    local l, b, w, h = t.GetRect(self)
+                    if not l then return nil end
+                    local x, y = GetCursorPosition()
+                    local scale = self:GetEffectiveScale()
+                    x, y = x / scale, y / scale
+                    return (x >= l - (left or 0) and x <= l + w + (right or 0)
+                        and y >= b - (bottom or 0) and y <= b + h + (top or 0)) and 1 or nil
+                end
+            end
+            for _, t in ipairs({ fontstrings, buttons, editboxes }) do
+                function t.SetFormattedText(self, fmt, ...) self:SetText(format(fmt, ...)) end
+            end
+            buttons.SetNormalFontObject = buttons.SetTextFontObject
+            buttons.GetNormalFontObject = buttons.GetTextFontObject
+            fontstrings.SetSpacing = fontstrings.SetSpacing or function() end
+            fontstrings.GetSpacing = fontstrings.GetSpacing or function() return 0 end
+            minimaps.SetPlayerTextureHeight = minimaps.SetPlayerTextureHeight or function() end
+            minimaps.SetPlayerTextureWidth = minimaps.SetPlayerTextureWidth or function() end
+            function methods.IgnoreDepth() end
+            local attributes = setmetatable({}, { __mode = "k" })
+            local clamp = setmetatable({}, { __mode = "k" })
+            function methods.SetAttribute(self, name, value)
+                local own = attributes[self]
+                if not own then own = {} attributes[self] = own end
+                own[name] = value
+                local handler = self:GetScript("OnAttributeChanged")
+                if handler then handler(self, name, value) end
+            end
+            function methods.GetAttribute(self, name)
+                local own = attributes[self]
+                return own and own[name]
+            end
+            function methods.HookScript(self, kind, hook)
+                local original = self:GetScript(kind)
+                if original then
+                    self:SetScript(kind, function(...)
+                        original(...)
+                        hook(...)
+                    end)
+                else
+                    self:SetScript(kind, hook)
+                end
+            end
+            function methods.IsProtected() return nil, nil end
+            function methods.IsForbidden() return nil end
+            function methods.CanChangeAttribute() return 1 end
+            function methods.CanChangeProtectedState() return 1 end
+            function methods.SetClampRectInsets(self, left, right, top, bottom)
+                clamp[self] = { left, right, top, bottom }
+            end
+            function methods.GetClampRectInsets(self)
+                local insets = clamp[self]
+                if insets then return unpack(insets, 1, 4) end
+                return 0, 0, 0, 0
+            end
+            "##,
+        )
+        .set_name("=[AzerothBench Wrath frame methods]")
+        .into_function()?;
+    install.call::<()>((
+        methods,
+        table(super::REG_REGION_METHODS)?,
+        table(super::REG_FONTSTRING_METHODS)?,
+        table(super::button::REG_BUTTON_METHODS)?,
+        table(super::editbox::REG_EDITBOX_METHODS)?,
+        table(super::minimap::REG_MINIMAP_METHODS)?,
+        table(super::slider::REG_SLIDER_METHODS)?,
+        table(super::REG_TEXTURE_METHODS)?,
+        table(super::tooltip::REG_TOOLTIP_METHODS)?,
+    ))
+}
+
+/// AzerothBench runs every UI chunk as trusted: there is no taint, nothing is protected from
+/// addon code, and secure templates build as ordinary frames. Agents are meant to be able to
+/// automate the interface, so Blizzard's anti-automation layer is deliberately not reproduced.
+/// These are the language-level entry points stock FrameXML expects of that layer.
+fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
+    lua.load(
+        r##"
+        function issecure() return 1 end
+        function issecurevariable() return 1, nil end
+        function forceinsecure() end
+        function InCombatLockdown() return nil end
+        function securecall(f, ...)
+            if type(f) == "string" then f = _G[f] end
+            if type(f) == "function" then return f(...) end
+        end
+        function hooksecurefunc(t, name, hook)
+            if type(t) ~= "table" then t, name, hook = _G, t, name end
+            local original = t[name]
+            if type(original) ~= "function" then
+                error("hooksecurefunc(): " .. tostring(name) .. " is not a function", 2)
+            end
+            t[name] = function(...)
+                local results = { n = 0 }
+                local function keep(...)
+                    results.n = select("#", ...)
+                    for i = 1, results.n do results[i] = (select(i, ...)) end
+                end
+                keep(original(...))
+                hook(...)
+                return unpack(results, 1, results.n)
+            end
+        end
+        "##,
+    )
+    .set_name("=[AzerothBench trusted secure environment]")
+    .exec()
 }
 
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
@@ -209,112 +258,64 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Secure templates require taint tracking, protected attributes and restricted execution, none
-/// of which this host implements. Failing at construction is safer than creating an ordinary
-/// frame that merely looks protected.
-fn reject_secure_templates(lua: &Lua) -> mlua::Result<()> {
-    let globals = lua.globals();
-    let create: Function = globals.get("CreateFrame")?;
-    globals.set(
-        "CreateFrame",
-        lua.create_function(
-            move |lua, (kind, name, parent, inherits): (String, Option<Value>, Option<Value>, Option<Value>)| {
-                if let Some(template) = inherits.as_ref()
-                    .map(|value| lua.coerce_string(value.clone()))
-                    .transpose()?
-                    .flatten()
-                {
-                    let template = template.to_string_lossy();
-                    if crate::loader::is_secure_template(lua, &template) {
-                        return Err(mlua::Error::runtime(format!(
-                            "CreateFrame: secure template '{template}' is unsupported: Wrath protected execution is not implemented"
-                        )));
-                    }
-                }
-                create.call::<Table>((kind, name, parent, inherits))
-            },
-        )?,
-    )
-}
-
-fn prune_engine_functions(lua: &Lua) -> mlua::Result<()> {
-    let globals = lua.globals();
-    let mut remove = Vec::new();
-    for pair in globals.clone().pairs::<Value, Value>() {
-        let (key, value) = pair?;
-        let (Value::String(key), Value::Function(_)) = (key, value) else {
-            continue;
-        };
-        let name = key.to_string_lossy();
-        if !LUA51_GLOBAL_FUNCTIONS.contains(&name.as_str())
-            && !ALLOWED_ENGINE_FUNCTIONS.contains(&name.as_str())
-            && !wrath_loot::ENGINE_FUNCTIONS.contains(&name.as_str())
-        {
-            remove.push(key);
-        }
-    }
-    for key in remove {
-        globals.raw_set(key, Value::Nil)?;
-    }
-    Ok(())
-}
-
-/// Public documentation/introspection for the bounded engine surface.
-pub fn allowed_engine_functions() -> &'static [&'static str] {
-    ALLOWED_ENGINE_FUNCTIONS
-}
-
 #[cfg(test)]
 mod tests {
-    use super::super::{ScriptDialect, SessionRequest, UiScript};
+    use super::super::{ScriptDialect, UiScript};
 
     #[test]
-    fn wrath_loot_math_alias_survives_pruning_without_opening_engine_actions() {
+    fn wrath_keeps_the_full_engine_api() {
         let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         assert!(script
-            .eval::<bool>("return ceil == math.ceil and ceil(7/6)==2 and ceil(-1.5)==-1")
-            .unwrap());
-        assert!(script
-            .eval::<bool>("return UseContainerItem==nil and CastSpellByName==nil")
+            .eval::<bool>("return ceil == math.ceil and type(UseContainerItem) == 'function'")
             .unwrap());
     }
 
     #[test]
-    fn wrath_panel_helpers_have_real_visibility_and_session_effects() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-        script
-            .run(
-                "local f=CreateFrame('Frame','MenuProbe'); f:Hide(); ShowUIPanel(f); \
-                 assert(f:IsShown()); HideUIPanel(f); assert(not f:IsShown()); Logout(); Quit()",
-            )
-            .unwrap();
-        assert_eq!(
-            script.take_session_requests(),
-            [SessionRequest::Logout, SessionRequest::Quit]
-        );
-    }
-
-    #[test]
-    fn bounded_menu_work_does_not_weaken_secure_template_rejection() {
+    fn secure_templates_build_as_ordinary_trusted_frames() {
         let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-        benilla_ui_test_secure_template(&script);
-        let error = script
-            .run("CreateFrame('Button', nil, nil, 'SecureActionButtonTemplate')")
-            .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("protected execution is not implemented"),
-            "{error}"
-        );
-    }
-
-    fn benilla_ui_test_secure_template(script: &UiScript) {
         let doc = crate::framexml::parse(
             r#"<Ui><Button name="SecureActionButtonTemplate" virtual="true"/></Ui>"#,
         )
         .unwrap();
-        let report = crate::loader::load(script, &doc, &|_| None);
+        let report = crate::loader::load(&script, &doc, &|_| None);
         assert!(report.errors.is_empty(), "{:?}", report.errors);
+        script
+            .run("assert(CreateFrame('Button', 'B', nil, 'SecureActionButtonTemplate'))")
+            .unwrap();
+    }
+
+    #[test]
+    fn secure_entry_points_are_trusted_pass_throughs() {
+        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        assert!(script
+            .eval::<bool>(
+                "local calls = 0 \
+                 function Probe(a) calls = calls + a return a * 2 end \
+                 hooksecurefunc('Probe', function(a) calls = calls + 10 end) \
+                 return issecure() and securecall(Probe, 3) == 6 and securecall('Probe', 1) == 2 \
+                    and calls == 24"
+            )
+            .unwrap());
+    }
+
+    #[test]
+    fn attributes_store_per_frame_and_fire_on_attribute_changed() {
+        let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let doc = crate::framexml::parse(
+            r#"<Ui><Button name="Unitish"><Scripts>
+                <OnAttributeChanged>SEEN = name .. "=" .. tostring(value)</OnAttributeChanged>
+            </Scripts></Button></Ui>"#,
+        )
+        .unwrap();
+        let report = crate::loader::load(&script, &doc, &|_| None);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert!(script
+            .eval::<bool>(
+                "Unitish:SetAttribute('unit', 'target') \
+                 local other = CreateFrame('Frame') \
+                 return Unitish:GetAttribute('unit') == 'target' and SEEN == 'unit=target' \
+                    and other:GetAttribute('unit') == nil and Unitish:IsProtected() == nil"
+            )
+            .unwrap());
     }
 }

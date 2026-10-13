@@ -77,6 +77,8 @@ pub(super) fn read(req: &str) -> Option<Vec<u8>> {
         return overlaid;
     }
     let chain = chain()?;
+    // Archive paths separate with `\`; addon manifests resolve with `/`.
+    let req = &req.replace('/', "\\");
     match chain.read(req) {
         Ok(bytes) => Some(bytes),
         Err(e) => {

@@ -1,7 +1,7 @@
 use crate::script::{ScriptDialect, UiScript, UnitPowerState, UnitState};
 
 #[test]
-fn wrath_current_power_uses_identity_and_fences_unqualified_flagged_visibility() {
+fn wrath_current_power_uses_identity() {
     let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     let mut unit = UnitState {
         exists: true,
@@ -39,7 +39,10 @@ fn wrath_current_power_uses_identity_and_fences_unqualified_flagged_visibility()
     );
     unit.dynamic_flags = 0x20;
     script.set_unit("target", Some(unit.clone()));
-    assert!(script.run("UnitPower('target')").is_err());
+    assert_eq!(
+        script.eval::<u32>("return UnitPower('target')").unwrap(),
+        73
+    );
     assert_eq!(
         script.eval::<u32>("return UnitPowerMax('target')").unwrap(),
         125
@@ -128,7 +131,7 @@ fn wrath_power_readers_use_all_resources_and_native_integer_scaling() {
 }
 
 #[test]
-fn wrath_power_requires_truthful_snapshot_and_keeps_vanilla_surface() {
+fn wrath_power_reads_zero_before_the_snapshot_and_keeps_vanilla_surface() {
     let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     wrath.set_unit(
         "player",
@@ -138,11 +141,7 @@ fn wrath_power_requires_truthful_snapshot_and_keeps_vanilla_surface() {
             ..Default::default()
         }),
     );
-    assert!(wrath.run("UnitPower('player')").is_err());
-    assert!(wrath
-        .eval::<bool>("return CastSpellByName==nil and UseContainerItem==nil")
-        .unwrap());
-    assert!(!wrath.supports_secure_execution());
+    assert_eq!(wrath.eval::<u32>("return UnitPower('player')").unwrap(), 0);
     let vanilla = UiScript::new().unwrap();
     assert!(vanilla
         .eval::<bool>("return UnitPower==nil and UnitPowerMax==nil")

@@ -141,7 +141,7 @@ fn logout_invalidates_display_while_retaining_host_snapshot_for_reentry() {
 }
 
 #[test]
-fn bounded_timer_recovers_missed_observations_without_exporting_control_state() {
+fn bounded_timer_recovers_missed_observations() {
     let mut script = load_units();
     script.set_unit("player", Some(unit(Some("Benchone"), 0x1234, 80, 100, 7)));
     script.fire_event("PLAYER_ENTERING_WORLD", vec![]);
@@ -160,12 +160,6 @@ fn bounded_timer_recovers_missed_observations_without_exporting_control_state() 
         )
         .unwrap());
 
-    assert!(script
-        .eval::<bool>(
-            "return AzerothBenchUnits == nil and SetTarget == nil and TargetUnit == nil \
-             and AttackTarget == nil and CastSpell == nil and SaveBindings == nil",
-        )
-        .unwrap());
     assert!(script
         .eval::<bool>(
             "return AzerothBenchUnitsFrame:GetLeft() == 16 \

@@ -28,6 +28,11 @@ pub struct UnitGuids {
     pub raid: Vec<u64>,
     /// `raidpetN`'s guid, row for row with [`Self::raid`] (`0x491960`).
     pub raid_pets: Vec<u64>,
+    /// Wrath's focus unit; 0 for none.
+    pub focus: u64,
+    /// Whether the resolver reads Wrath's tokens (`focus`, `vehicle`, `bossN`, `arenaN`,
+    /// `arenapetN`). The VM sets it from its dialect; the app's pushes leave it alone.
+    pub wrath: bool,
     /// Each held unit a token can reach, to its `UNIT_FIELD_TARGET` (0 for none): the object
     /// manager's lookup with the unit typemask (`0x468460`, `ecx = 8`) and the descriptor read a
     /// `target` hop makes (`0x515a0f`-`0x515a25`). A guid missing here is not held.
@@ -76,7 +81,31 @@ pub enum UnitBase {
     PartyPet(u32),
     Raid(u32),
     RaidPet(u32),
+    /// Wrath's bases.
+    Focus,
+    Vehicle,
+    Boss(u32),
+    Arena(u32),
+    ArenaPet(u32),
 }
+
+/// Wrath's additional bases, after the 1.12 compares; `arenapet` before `arena`.
+#[derive(Clone, Copy)]
+enum WrathBase {
+    Focus,
+    Vehicle,
+    Boss,
+    ArenaPet,
+    Arena,
+}
+
+const WRATH_PREFIXES: [(&str, WrathBase); 5] = [
+    ("focus", WrathBase::Focus),
+    ("vehicle", WrathBase::Vehicle),
+    ("boss", WrathBase::Boss),
+    ("arenapet", WrathBase::ArenaPet),
+    ("arena", WrathBase::Arena),
+];
 
 /// What `0x515970` makes of a token's text, before it reads any state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,8 +135,17 @@ fn base_of(token: &[u8]) -> Option<(Base, usize)> {
 
 /// Whether the resolver recognises the token, not whether it names a unit: `"party5"` solo is
 /// recognised and answers nil, and only a token none of its nine compares match raises.
-pub(crate) fn token_recognised(token: &str) -> bool {
-    token.eq_ignore_ascii_case("npc") || base_of(token.as_bytes()).is_some()
+pub(crate) fn token_recognised(token: &str, wrath: bool) -> bool {
+    token.eq_ignore_ascii_case("npc")
+        || base_of(token.as_bytes()).is_some()
+        || (wrath && wrath_base_of(token.as_bytes()).is_some())
+}
+
+fn wrath_base_of(token: &[u8]) -> Option<(WrathBase, usize)> {
+    WRATH_PREFIXES
+        .iter()
+        .find(|(p, _)| has_prefix(token, p))
+        .map(|&(p, b)| (b, p.len()))
 }
 
 /// The inline base-10 parse after `party`, `partypet`, `raid` and `raidpet`, then `dec` to a
@@ -126,9 +164,32 @@ fn index_of(s: &[u8]) -> (u32, usize) {
 /// party1 and one hop, `"targettarget"` the target and one, and `"npctarget"` is none of the nine
 /// compares, as `npc` is one full-string compare.
 pub fn parse_unit_token(token: &str) -> UnitTokenParse {
+    parse_unit_token_in(token, false)
+}
+
+/// [`parse_unit_token`] in a dialect: `wrath` adds Wrath's bases after the 1.12 compares.
+pub fn parse_unit_token_in(token: &str, wrath: bool) -> UnitTokenParse {
     let bytes = token.as_bytes();
     if bytes.is_empty() {
         return UnitTokenParse::Nobody;
+    }
+    if wrath && base_of(bytes).is_none() {
+        if let Some((base, len)) = wrath_base_of(bytes) {
+            let mut rest = &bytes[len..];
+            let mut numbered = |make: fn(u32) -> UnitBase| {
+                let (row, digits) = index_of(rest);
+                rest = &rest[digits..];
+                make(row)
+            };
+            let base = match base {
+                WrathBase::Focus => UnitBase::Focus,
+                WrathBase::Vehicle => UnitBase::Vehicle,
+                WrathBase::Boss => numbered(UnitBase::Boss),
+                WrathBase::ArenaPet => numbered(UnitBase::ArenaPet),
+                WrathBase::Arena => numbered(UnitBase::Arena),
+            };
+            return target_hops(base, rest);
+        }
     }
     let Some((base, len)) = base_of(bytes) else {
         return if token.eq_ignore_ascii_case("npc") {
@@ -156,6 +217,11 @@ pub fn parse_unit_token(token: &str) -> UnitTokenParse {
         Base::RaidPet => numbered(UnitBase::RaidPet),
         Base::Raid => numbered(UnitBase::Raid),
     };
+    target_hops(base, rest)
+}
+
+/// The `target` hops after a base, to the end of the text.
+fn target_hops(base: UnitBase, mut rest: &[u8]) -> UnitTokenParse {
     let mut hops = 0;
     while !rest.is_empty() {
         if !has_prefix(rest, "target") {
@@ -172,7 +238,7 @@ impl UnitGuids {
     /// match, where the reference raises `Unknown unit name: %s` (`0x515c14`). An empty token is
     /// nobody (`0x51599d`).
     pub(crate) fn resolve(&self, token: &str) -> Result<Option<u64>, ()> {
-        match parse_unit_token(token) {
+        match parse_unit_token_in(token, self.wrath) {
             UnitTokenParse::Unknown => Err(()),
             UnitTokenParse::Nobody => Ok(None),
             UnitTokenParse::Unit { base, hops } => Ok(self.resolve_unit(base, hops)),
@@ -205,6 +271,8 @@ impl UnitGuids {
             UnitBase::Raid(row) => at(&self.raid, row),
             UnitBase::Mouseover if !self.held.contains_key(&self.mouseover) => return None,
             UnitBase::Mouseover => self.mouseover,
+            UnitBase::Focus => self.focus,
+            UnitBase::Vehicle | UnitBase::Boss(_) | UnitBase::Arena(_) | UnitBase::ArenaPet(_) => 0,
         };
         self.follow(guid, hops)
     }
@@ -270,6 +338,7 @@ mod tests {
                 (P1_PET, MOB),
                 (R3, 0),
             ]),
+            ..Default::default()
         }
     }
 

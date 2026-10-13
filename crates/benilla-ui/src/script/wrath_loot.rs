@@ -7,20 +7,6 @@ use mlua::{Function, Lua, MultiValue, Value};
 
 use super::Model;
 
-/// Engine globals used by the audited stock LootFrame closure.
-pub(super) const ENGINE_FUNCTIONS: &[&str] = &[
-    "CloseLoot",
-    "GetItemQualityColor",
-    "GetLootSlotInfo",
-    "GetLootSlotLink",
-    "GetNumLootItems",
-    "IsAutoLootKeyDown",
-    "IsFishingLoot",
-    "LootSlot",
-    "LootSlotIsCoin",
-    "LootSlotIsItem",
-];
-
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let globals = lua.globals();
     let vanilla_info: Function = globals.get("GetLootSlotInfo")?;

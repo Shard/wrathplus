@@ -365,13 +365,41 @@ const BLIZZARD_ADDONS: [&str; 12] = [
     "Blizzard_TrainerUI",
 ];
 
+/// Build 12340's `Blizzard_*` addons, carried in its archives the same way.
+const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
+    "Blizzard_AchievementUI",
+    "Blizzard_ArenaUI",
+    "Blizzard_AuctionUI",
+    "Blizzard_BarbershopUI",
+    "Blizzard_BattlefieldMinimap",
+    "Blizzard_BindingUI",
+    "Blizzard_Calendar",
+    "Blizzard_CombatLog",
+    "Blizzard_CombatText",
+    "Blizzard_DebugTools",
+    "Blizzard_FeedbackUI",
+    "Blizzard_GlyphUI",
+    "Blizzard_GMChatUI",
+    "Blizzard_GMSurveyUI",
+    "Blizzard_GuildBankUI",
+    "Blizzard_InspectUI",
+    "Blizzard_ItemSocketingUI",
+    "Blizzard_MacroUI",
+    "Blizzard_RaidUI",
+    "Blizzard_TalentUI",
+    "Blizzard_TimeManager",
+    "Blizzard_TokenUI",
+    "Blizzard_TradeSkillUI",
+    "Blizzard_TrainerUI",
+];
+
 /// The Blizzard addons the chain carries as LoadOnDemand registry rows, for `UIParentLoadAddOn`;
 /// a toc that is not LoadOnDemand is skipped, as the startup walk does not read the chain.
-fn chain_addons() -> Vec<Addon> {
-    BLIZZARD_ADDONS
+fn chain_addons(names: &[&str]) -> Vec<Addon> {
+    names
         .iter()
         .filter_map(|name| {
-            let bytes = super::reference_ui::read(&format!("Interface/AddOns/{name}/{name}.toc"))?;
+            let bytes = super::reference_ui::read(&format!(r"Interface\AddOns\{name}\{name}.toc"))?;
             let toc = Toc::parse(&benilla_ui::source::decode(&bytes));
             toc.load_on_demand().then(|| Addon {
                 name: (*name).to_string(),
@@ -390,7 +418,7 @@ fn chain_addons() -> Vec<Addon> {
 /// it decides whose copy of a global wins.
 fn discover() -> Vec<Addon> {
     // The archive pass, in `BLIZZARD_ADDONS` order: the shipped `patch.MPQ` listfile's too.
-    let mut found = chain_addons();
+    let mut found = chain_addons(&BLIZZARD_ADDONS);
     // The loose pass, minus the names the archive registered.
     let seen: HashSet<String> = found.iter().map(|a| a.name.to_ascii_lowercase()).collect();
     found.extend(
@@ -901,7 +929,17 @@ pub(super) fn load_wrath_third_party(
     roster: &[String],
     version_check: bool,
 ) -> Vec<String> {
-    let addons = discover_folder();
+    // The archive's Blizzard addons first, then the loose folders, a name's first registration
+    // winning, as `discover` orders the 1.12 registry.
+    let mut addons = chain_addons(&WRATH_BLIZZARD_ADDONS);
+    let seen: HashSet<String> = addons.iter().map(|a| a.name.to_ascii_lowercase()).collect();
+    addons.extend(
+        discover_folder()
+            .into_iter()
+            .filter(|a| !seen.contains(&a.name.to_ascii_lowercase())),
+    );
+    // A Blizzard addon's files come off the chain, as in `load_third_party`.
+    script.set_addon_chain_reader(Box::new(super::reference_ui::read));
     let mut infos: Vec<_> = addons.iter().map(info_for).collect();
     let store = EnableStore::load(
         identity
@@ -1206,7 +1244,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
         let (home, _h) = hermetic_root("scanorder");
-        let chain = chain_addons();
+        let chain = chain_addons(&BLIZZARD_ADDONS);
         if chain.is_empty() {
             eprintln!("skipping: the chain carries no Blizzard addon rows");
             return;
@@ -1253,7 +1291,7 @@ mod tests {
     #[test]
     fn the_chain_carries_blizzards_load_on_demand_addons_as_registry_rows() {
         let _data = benilla_formats::wow_data_or_skip!();
-        let rows = chain_addons();
+        let rows = chain_addons(&BLIZZARD_ADDONS);
         assert!(
             rows.iter().any(|a| a.name == "Blizzard_TrainerUI"),
             "the trainer addon is a row: {:?}",

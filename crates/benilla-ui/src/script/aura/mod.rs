@@ -18,6 +18,7 @@ use mlua::{Lua, MultiValue, Value};
 use super::Model;
 
 mod player_buff;
+pub(super) mod wrath;
 
 /// One aura on one unit, as the app's feed pushes it ([`crate::script::UiScript::set_unit_auras`],
 /// [`crate::script::UiScript::set_player_auras`]).
@@ -162,8 +163,10 @@ impl super::UiScript {
     /// Push the unit-token resolver's inputs, copied only when they moved.
     pub fn set_unit_guids(&mut self, guids: &super::UnitGuids) {
         let mut model = self.model_mut();
-        if model.unit_guids != *guids {
+        let wrath = model.unit_guids.wrath;
+        if model.unit_guids != (super::UnitGuids { wrath, ..guids.clone() }) {
             model.unit_guids.clone_from(guids);
+            model.unit_guids.wrath = wrath;
         }
     }
 

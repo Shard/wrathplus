@@ -170,7 +170,7 @@ static int str_dump (lua_State *L) {
 #define CAP_POSITION	(-2)
 
 /* Wrath-only deterministic limits for one public matcher invocation. */
-#define WRATH_MATCH_STEPS	100000
+#define WRATH_MATCH_STEPS	100000000
 #define WRATH_MATCH_DEPTH	200
 
 typedef struct MatchState {

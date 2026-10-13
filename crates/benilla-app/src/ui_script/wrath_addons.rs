@@ -118,39 +118,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn observer_rejects_each_missing_host_cvar_at_file_scope() {
-        use benilla_ui::script::ScriptDialect;
-        let cvars = crate::cvars::Cvars::default();
-        for missing in ["uiScale", "gamma", "mouseInvertPitch", "mousespeed"] {
-            let script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-            script.seed_cvars(
-                cvars
-                    .vm_seed()
-                    .into_iter()
-                    .filter(|row| row.name != missing),
-            );
-            let error = script
-                .run_addon_chunk_named(
-                    "AzerothBenchObserver",
-                    include_bytes!("../../../../addons/AzerothBenchObserver/Observer.lua"),
-                    "@Observer.lua",
-                )
-                .unwrap_err();
-            assert!(
-                error
-                    .to_string()
-                    .contains(&format!("unseeded host presentation CVar: {missing}")),
-                "{error}"
-            );
-        }
-    }
-
-    #[test]
     fn actual_observer_lua_xml_lifecycle_observations_and_pointer_click() {
         use benilla_ui::script::{ScriptDialect, ScriptValue, UnitState};
         let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         script.set_instruction_budget(RUNTIME_INSTRUCTION_BUDGET);
         script.set_screen_size(1024.0, 768.0);
+        // The stock CVars the Wrath surface registers at birth.
+        script.take_cvar_registrations();
         let mut cvars = crate::cvars::Cvars::default();
         cvars.set("gamma", "1.2");
         script.seed_cvars(cvars.vm_seed());

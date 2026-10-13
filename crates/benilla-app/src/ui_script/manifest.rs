@@ -292,8 +292,8 @@ pub(crate) fn load_ingame_ui(
     load_ingame_ui_with(script, identity, roster, version_check, layer_enabled())
 }
 
-/// The Wrath host: one authored root, the audited stock GameMenu dependency closure, then
-/// local-state addons. It deliberately does not claim the rest of FrameXML or stock bindings.
+/// The Wrath host: the installed stock FrameXML, the authored AzerothBench root, then local-state
+/// addons. Every chunk runs trusted; see `benilla_ui`'s Wrath surface.
 pub(crate) fn load_wrath_ui(
     script: &mut UiScript,
     identity: Option<&(String, String)>,
@@ -301,9 +301,8 @@ pub(crate) fn load_wrath_ui(
     version_check: bool,
 ) -> Vec<String> {
     script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
-    let mut failures = super::wrath_addons::load_bootstrap(script);
-    failures.extend(super::wrath_stock::load(script));
-    failures.extend(super::wrath_loot_ui::load(script));
+    let mut failures = load_core(script);
+    failures.extend(super::wrath_addons::load_bootstrap(script));
     failures.extend(super::addons::load_wrath_third_party(
         script,
         identity,

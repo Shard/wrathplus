@@ -337,13 +337,10 @@ fn macro_icon_catalog_failure_is_cached_only_for_its_source() {
 }
 
 #[test]
-fn wrath_does_not_enumerate_the_unavailable_macro_chooser_surface() {
+fn wrath_does_not_enumerate_the_vanilla_macro_icon_catalog() {
     use benilla_ui::script::ScriptDialect;
     let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     assert!(!super::macro_catalog_enabled(&wrath));
-    assert!(wrath
-        .eval::<bool>("return GetNumMacroIcons == nil and GetMacroIconInfo == nil")
-        .unwrap());
     assert!(super::macro_catalog_enabled(&UiScript::new().unwrap()));
 }
 

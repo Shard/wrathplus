@@ -6,7 +6,7 @@ use crate::widget::{FrameHandle, RegionHandle, WidgetArena};
 use super::{
     auction, backdrop, bank, bind_confirm, camera_view, char_stats, chat_window, colorselect,
     container, craft, cursor, death, duel, follow, gossip, guild, inspect, item_text, loot,
-    loot_roll, macros, mail, merchant, parse_unit_token, party, petition, pvp, quest, quest_log,
+    loot_roll, macros, mail, merchant, party, petition, pvp, quest, quest_log,
     reputation, session, simplehtml, skills, slider, social, spellbook, stable, taxi, trade,
     tradeskill, trainer, weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView,
     MusicRequest, PlayerReqState, RegionData, ScriptDialect, ScriptValue, SoundRequest, UnitState,
@@ -305,7 +305,7 @@ pub(crate) struct Model {
     /// Charter calls (`BuyGuildCharter`, `SignPetition`, `TurnInGuildCharter`, …) queued.
     pub(crate) petition_requests: Vec<petition::PetitionRequest>,
     /// Per chat window from `ChatFrame1`, the tint, alpha and font size its tab menu can change.
-    pub(crate) chat_window_looks: [chat_window::ChatWindowLook; chat_window::NUM_CHAT_WINDOWS],
+    pub(crate) chat_window_looks: [chat_window::ChatWindowLook; chat_window::ENGINE_CHAT_WINDOW_SLOTS],
     /// 0-based windows whose look Lua changed, the persist cue.
     pub(crate) chat_window_changes: HashSet<usize>,
     /// Chat-type colours (`0xb4e518`): 94 fixed and 10 `CHANNELn`, overlaid by `chat-cache.txt`.
@@ -1025,7 +1025,7 @@ impl Model {
     /// guid's snapshot. A token without a hop is the app's to push, base by base, and reads
     /// nothing here.
     fn chained_unit(&self, token: &str) -> Option<&UnitState> {
-        match parse_unit_token(token) {
+        match super::unit::parse_unit_token_in(token, self.unit_guids.wrath) {
             UnitTokenParse::Unit { base, hops } if hops > 0 => {
                 let guid = self.unit_guids.resolve_unit(base, hops)?;
                 self.units_by_guid.get(&guid)
@@ -1111,7 +1111,10 @@ impl Model {
             units_by_guid: HashMap::new(),
             player_auras: Vec::new(),
             unit_auras: HashMap::new(),
-            unit_guids: Default::default(),
+            unit_guids: super::UnitGuids {
+                wrath: dialect == super::ScriptDialect::Wrath12340,
+                ..Default::default()
+            },
             cancel_aura_requests: Vec::new(),
             tracking: None,
             script_calls: Vec::new(),

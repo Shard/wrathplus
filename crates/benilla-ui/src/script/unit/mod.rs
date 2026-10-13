@@ -490,9 +490,10 @@ use resolve::token_recognised;
 /// ends in `luaL_error`; `""`, an absent token and a recognised one naming nothing pass. Whether
 /// nil arrives is per binding: of the 83 in the table at `0x850438`, 53 raise `Usage:` first and
 /// 13 unit-token bindings take nil with no gate.
-pub(crate) fn check_unit_token(token: &Option<String>) -> mlua::Result<()> {
+pub(crate) fn check_unit_token(lua: &mlua::Lua, token: &Option<String>) -> mlua::Result<()> {
+    let wrath = lua.app_data_ref::<Model>().expect("model").unit_guids.wrath;
     match token {
-        Some(t) if !t.is_empty() && !token_recognised(t) => {
+        Some(t) if !t.is_empty() && !token_recognised(t, wrath) => {
             Err(mlua::Error::runtime(format!("Unknown unit name: {t}")))
         }
         _ => Ok(()),
@@ -507,7 +508,7 @@ fn with_unit<T>(
     default: T,
     f: impl FnOnce(&UnitState) -> T,
 ) -> mlua::Result<T> {
-    check_unit_token(token)?;
+    check_unit_token(lua, token)?;
     let model = lua.app_data_ref::<Model>().expect("model app_data");
     Ok(match token.as_ref().and_then(|t| model.unit(t)) {
         Some(u) => f(u),
@@ -535,6 +536,6 @@ mod resolve;
 #[cfg(test)]
 mod tests;
 
-pub use resolve::{parse_unit_token, UnitBase, UnitGuids, UnitTokenParse};
+pub use resolve::{parse_unit_token, parse_unit_token_in, UnitBase, UnitGuids, UnitTokenParse};
 
 pub(super) use bindings::install;

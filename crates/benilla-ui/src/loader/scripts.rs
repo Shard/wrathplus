@@ -32,7 +32,9 @@ impl Loader<'_> {
                 let named = (self.lua().app_data_ref::<Model>().expect("model").dialect
                     == ScriptDialect::Wrath12340)
                     .then(|| handler.attr("function"))
-                    .flatten();
+                    .flatten()
+                    // `function=""` names no handler: it clears, like an empty body.
+                    .filter(|global| !global.is_empty());
                 let cleared = handler.body.is_empty() && named.is_none();
                 let func = if let Some(global) = named {
                     match self.lua().globals().get::<Function>(global) {
@@ -132,6 +134,22 @@ impl Loader<'_> {
                     "self, width, height"
                 } else if matches_ci(name, &["OnDragStop", "OnReceiveDrag"]) {
                     "self"
+                } else if name.eq_ignore_ascii_case("OnAttributeChanged") {
+                    "self, name, value"
+                } else if matches_ci(name, &["OnVerticalScroll", "OnHorizontalScroll"]) {
+                    "self, offset"
+                } else if name.eq_ignore_ascii_case("OnScrollRangeChanged") {
+                    "self, xrange, yrange"
+                } else if matches_ci(name, &["OnHyperlinkClick", "OnHyperlinkEnter", "OnHyperlinkLeave"]) {
+                    "self, link, text, button"
+                } else if matches_ci(name, &["OnEnter", "OnLeave"]) {
+                    "self, motion"
+                } else if name.eq_ignore_ascii_case("OnDoubleClick") {
+                    "self, button"
+                } else if name.eq_ignore_ascii_case("OnTextChanged") {
+                    "self, userInput"
+                } else if name.eq_ignore_ascii_case("OnTooltipAddMoney") {
+                    "self, cost, maxcost"
                 } else {
                     "self, ..."
                 };

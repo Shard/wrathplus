@@ -13,9 +13,13 @@ use crate::Chain;
 pub(crate) fn parse(bytes: &[u8], schema: Schema, what: &str) -> Result<RecordSet> {
     let parser = DbcParser::parse(&mut Cursor::new(bytes))
         .map_err(|e| anyhow!("parsing {what} header: {e}"))?;
-    let parser = parser
-        .with_schema(schema)
-        .map_err(|e| anyhow!("applying {what} schema (field-count mismatch?): {e}"))?;
+    // A 1.12 schema over a 3.3.5 file whose shape changed: the explicit build-12340 layout.
+    let file_fields = parser.header().field_count as usize;
+    let parser = match crate::wrath_layouts::columns(what, schema.expanded_len(), file_fields) {
+        Some(columns) => parser.with_schema_columns(schema, columns),
+        None => parser.with_schema(schema),
+    }
+    .map_err(|e| anyhow!("applying {what} schema (field-count mismatch?): {e}"))?;
     parser
         .parse_records()
         .map_err(|e| anyhow!("parsing {what} records: {e}"))

@@ -23,10 +23,6 @@ for _, name in ipairs({ "uiScale", "gamma", "mouseInvertPitch", "mousespeed" }) 
     assert(type(private.presentationAtLoad[name]) == "string",
         "unseeded host presentation CVar: " .. name)
 end
-assert(GetCVar("realmList") == nil and GetCVar("lastCharacterIndex") == nil,
-    "internal host CVar exposed")
-assert(SetCVar == nil and RegisterCVar == nil and GetCVarDefault == nil,
-    "unsupported CVar API exposed")
 
 local function record(event)
     private.events[#private.events + 1] = { event = event, time = GetTime() }

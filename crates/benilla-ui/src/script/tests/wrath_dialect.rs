@@ -8,7 +8,6 @@ use crate::script::{ScriptDialect, ScriptValue, SeededCvar, UiScript, UnitGuids,
 fn vanilla_remains_the_default_and_keeps_legacy_semantics() {
     let mut s = UiScript::new().unwrap();
     assert_eq!(s.dialect(), ScriptDialect::Vanilla);
-    assert!(!s.supports_secure_execution());
     assert!(s.eval::<bool>("return select == nil").unwrap());
 
     s.run(
@@ -65,60 +64,6 @@ fn seeded_cvar(name: &str, value: &str) -> SeededCvar {
         default: "host-default-not-a-wrath-claim".into(),
         latched: false,
     }
-}
-
-#[test]
-fn wrath_getcvar_is_a_bounded_case_insensitive_view_of_current_host_values() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    s.seed_cvars([
-        seeded_cvar("uiScale", "0.83"),
-        seeded_cvar("useUiScale", "1"),
-        seeded_cvar("gamma", "1.17"),
-        seeded_cvar("mouseInvertPitch", "0"),
-        seeded_cvar("mousespeed", "1.5"),
-        seeded_cvar("realmName", "must-not-be-seeded"),
-    ]);
-
-    assert_eq!(
-        s.eval::<(String, String, String, String)>(
-            "return GetCVar('UISCALE'), GetCVar('Gamma'), \
-             GetCVar('MOUSEINVERTPITCH'), GetCVar('MouseSpeed')"
-        )
-        .unwrap(),
-        ("0.83".into(), "1.17".into(), "0".into(), "1.5".into())
-    );
-    assert!(s
-        .eval::<bool>("return GetCVar('realmName') == nil and GetCVar('unknown') == nil")
-        .unwrap());
-    assert_eq!(s.cvar("realmName"), None);
-    assert!(s.take_cvar_changes().is_empty());
-    assert!(s.take_cvar_registrations().is_empty());
-
-    s.set_cvar_host("realmName", "must-not-be-added");
-    assert_eq!(s.cvar("realmName"), None);
-    s.set_cvar_host("UIScale", "0.91");
-    assert_eq!(
-        s.eval::<String>("return GetCVar('uiScale')").unwrap(),
-        "0.91"
-    );
-    assert!(s.take_cvar_changes().is_empty());
-}
-
-#[test]
-fn wrath_getcvar_defends_against_forbidden_registry_rows_and_exposes_no_writers() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    s.register_cvars([("realmName", "forbidden"), ("uiScale", "0.75")]);
-
-    assert!(s
-        .eval::<bool>(
-            "return GetCVar('realmName') == nil and GetCVar('uiScale') == '0.75' and \
-             GetCVarDefault == nil and SetCVar == nil and RegisterCVar == nil and \
-             ConsoleExec == nil"
-        )
-        .unwrap());
-    s.set_cvar_host("realmName", "must-not-update");
-    assert_eq!(s.cvar("realmName").as_deref(), Some("forbidden"));
-    assert!(s.take_cvar_changes().is_empty());
 }
 
 #[test]
@@ -286,21 +231,6 @@ fn wrath_nested_handlers_do_not_mutate_or_invent_legacy_globals() {
     assert!(s
         .eval::<bool>("return this==nil and event==nil and arg1==nil")
         .unwrap());
-}
-
-#[test]
-fn wrath_secure_numeric_template_alias_is_rejected_before_allocation() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    let doc = framexml::parse(
-        r#"<Ui><Frame name="123" virtual="true" inherits="SecureActionButtonTemplate"/></Ui>"#,
-    )
-    .unwrap();
-    loader::load(&s, &doc, &|_| None);
-    let error = s
-        .run("CreateFrame('Button', 'MustNotExist', nil, 123)")
-        .expect_err("numeric secure aliases must fail closed");
-    assert!(error.to_string().contains("secure template"));
-    assert!(s.eval::<bool>("return MustNotExist == nil").unwrap());
 }
 
 #[test]

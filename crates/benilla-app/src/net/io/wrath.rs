@@ -380,7 +380,9 @@ fn run(
                 name,
                 billing_time_rested: 0,
                 tutorial_flags: None,
-                addon_info: None,
+                // `SMSG_ADDON_INFO` is not decoded on this route; the realm hides no addon, and
+                // without a reply the client's addon array stays empty and nothing can load.
+                addon_info: Some(Vec::new()),
             },
         )?;
         reader.set_read_timeout(Some(READ_SLICE))?;
@@ -1178,14 +1180,13 @@ fn writer_loop(
                         }
                         continue;
                     }
-                    WrathRoute::DisabledMovement => {
-                        let reason = format!("Wrath movement command disabled until the dialect-native movement backend is integrated: {command:?}");
-                        let _ = control_tx.send(WrathWriterControl::Fatal { epoch, reason });
-                        continue;
-                    }
-                    WrathRoute::DisabledGameAction => {
-                        let reason = format!("Wrath game-action command disabled; refusing Vanilla serialization: {command:?}");
-                        let _ = control_tx.send(WrathWriterControl::Fatal { epoch, reason });
+                    // Not yet encoded for build 12340: dropped, never sent in Vanilla's format, and
+                    // never fatal: the stock UI issues many of these routinely.
+                    WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction => {
+                        if warned < SEND_WARN_CAP {
+                            bevy::log::warn!("net(wrath): command not yet encoded for build 12340; dropped: {command:?}");
+                            warned += 1;
+                        }
                         continue;
                     }
                 };

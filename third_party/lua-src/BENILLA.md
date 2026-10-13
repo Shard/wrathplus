@@ -56,7 +56,7 @@ The switch gates all dialect-specific executable changes described below:
 * Wrath restores 5.1's nested `[[...]]` advisory error and non-nesting long
   string handling; Vanilla retains 5.0 nesting.
 * Wrath limits each native `string.find`, `string.match`, `gmatch` iterator
-  call, or `string.gsub` call to 100,000 deterministic matcher steps and 200
+  call, or `string.gsub` call to 100,000,000 deterministic matcher steps and 200
   recursive matcher frames. Plain-search byte comparisons, search-position iterations, and recursive/
   backtrack matcher entries consume the same per-call budget. Exhaustion raises `pattern
   matching work limit exceeded` or `pattern matching recursion limit exceeded`.

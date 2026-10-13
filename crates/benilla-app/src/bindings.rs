@@ -59,8 +59,9 @@ struct BindingDispatch {
 struct NativeBindingRoute(bool);
 
 impl BindingDispatch {
-    /// The ordinary movement subset from Wrath's shipped `WTF\\DefaultBindings.wtf`. These are
-    /// commands, not controller actions: they still latch and feed [`BindingsState`] at this layer.
+    /// The ordinary movement subset from Wrath's shipped `WTF\\DefaultBindings.wtf`, for the
+    /// VM-less harness. These are commands, not controller actions.
+    #[cfg(test)]
     fn wrath_defaults() -> Self {
         let mut dispatch = Self::default();
         for (key, command) in [
@@ -185,19 +186,11 @@ pub(crate) struct BindingsPlugin;
 
 impl Plugin for BindingsPlugin {
     fn build(&self, app: &mut App) {
-        let native_wrath = matches!(
-            app.world()
-                .get_resource::<benilla_assets::ClientDataProfile>()
-                .map(|profile| &profile.0),
-            Some(benilla_formats::DataProfile::Wrath { .. })
-        );
+        // Both profiles dispatch through the VM's table: the stock `Bindings.xml` commands over
+        // the chain's `WTF\DefaultBindings.wtf` keys.
         app.add_plugins(layout::plugin)
-            .insert_resource(if native_wrath {
-                BindingDispatch::wrath_defaults()
-            } else {
-                BindingDispatch::default()
-            })
-            .insert_resource(NativeBindingRoute(native_wrath))
+            .insert_resource(BindingDispatch::default())
+            .insert_resource(NativeBindingRoute(false))
             .init_resource::<BindingsState>()
             .init_resource::<BindingFiles>()
             .add_systems(

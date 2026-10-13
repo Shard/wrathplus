@@ -322,25 +322,28 @@ pub fn expand(
     templates: &HashMap<&str, &Element>,
     warnings: &mut Vec<String>,
 ) -> Element {
-    expand_known(element, templates, &HashSet::new(), warnings)
+    expand_known(element, templates, &HashSet::new(), false, warnings)
 }
 
 /// [`expand`], skipping without a warning an `inherits` that names a font object: a
 /// `<FontString inherits="GameFontNormalSmall">` takes a font, applied later, not a template.
+/// `list` reads `inherits` as Wrath does, a comma-separated list applied in order.
 pub fn expand_known(
     element: &Element,
     templates: &HashMap<&str, &Element>,
     fonts: &HashSet<&str>,
+    list: bool,
     warnings: &mut Vec<String>,
 ) -> Element {
     let mut active = HashSet::new();
-    expand_inner(element, templates, fonts, warnings, &mut active)
+    expand_inner(element, templates, fonts, list, warnings, &mut active)
 }
 
 fn expand_inner(
     element: &Element,
     templates: &HashMap<&str, &Element>,
     fonts: &HashSet<&str>,
+    list: bool,
     warnings: &mut Vec<String>,
     active: &mut HashSet<String>,
 ) -> Element {
@@ -348,12 +351,17 @@ fn expand_inner(
         return element.clone();
     };
 
-    // `inherits` is one name, not a list: `0x6ee6f0` has no splitter, so `"A, B"` misses (later
-    // clients split it). It is used verbatim (`GetAttribute 0x6f2cf0` does not trim; `""` is
-    // skipped, `" "` misses) and matched case-insensitively, ASCII only: `_strnicmp` at
-    // `0x6ee747`, reached despite a mis-cased name because `SStrHash 0x64b3f0` uppercases.
+    // In 1.12 `inherits` is one name, not a list: `0x6ee6f0` has no splitter, so `"A, B"` misses.
+    // It is used verbatim (`GetAttribute 0x6f2cf0` does not trim; `""` is skipped, `" "` misses)
+    // and matched case-insensitively, ASCII only: `_strnicmp` at `0x6ee747`, reached despite a
+    // mis-cased name because `SStrHash 0x64b3f0` uppercases. Wrath splits on commas and trims.
+    let names: Vec<&str> = if list {
+        inherits.split(',').map(str::trim).collect()
+    } else {
+        vec![inherits]
+    };
     let mut base: Option<Element> = None;
-    for name in [inherits].into_iter().filter(|s| !s.is_empty()) {
+    for name in names.into_iter().filter(|s| !s.is_empty()) {
         if !active.insert(name.to_string()) {
             warnings.push(format!(
                 "inheritance cycle detected at template '{name}'; skipping this reference"
@@ -376,7 +384,7 @@ fn expand_inner(
             active.remove(name);
             continue;
         };
-        let expanded_template = expand_inner(template, templates, fonts, warnings, active);
+        let expanded_template = expand_inner(template, templates, fonts, list, warnings, active);
         active.remove(name);
         base = Some(match base {
             None => expanded_template,

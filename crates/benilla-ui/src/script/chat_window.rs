@@ -23,11 +23,9 @@ use mlua::{Lua, MultiValue, Value};
 use super::channel::ZoneChannelRow;
 use super::Model;
 
-/// The reference's record slots (`0xb4fe50`); FrameXML builds only [`NUM_CHAT_WINDOWS`] frames.
+/// The reference's record slots (`0xb4fe50`): 1.12's FrameXML builds seven frames on them,
+/// Wrath's all ten.
 pub(super) const ENGINE_CHAT_WINDOW_SLOTS: usize = 10;
-
-/// `NUM_CHAT_WINDOWS = 7` (ChatFrame.lua:5), the frames `ChatFrame1`..`ChatFrame7`.
-pub(super) const NUM_CHAT_WINDOWS: usize = 7;
 
 /// `CHATMSGGROUP`, the client's 68-entry message-group table (`0x805fb0`, stride 0xc):
 /// `(name, defaultOn, addedVersion)` in the order of the record's `+0x20` flags. Not the 94-entry
@@ -239,15 +237,12 @@ fn from_byte(b: u8) -> f64 {
     f64::from(b) / 255.0
 }
 
-/// The 0-based index of a Lua window id. Deviation: an id outside the seven built windows raises,
-/// where the reference serves ten records and silently ignores any other id (`0x4a0be1`), because
-/// benilla keeps only the seven and every caller loops `1, NUM_CHAT_WINDOWS`.
+/// The 0-based index of a Lua window id over the ten records (Wrath builds all ten frames).
+/// Deviation: any other id raises, where the reference silently ignores it (`0x4a0be1`).
 fn window_index(id: i64) -> mlua::Result<usize> {
-    if id < 1 || id as usize > NUM_CHAT_WINDOWS {
+    if id < 1 || id as usize > ENGINE_CHAT_WINDOW_SLOTS {
         return Err(mlua::Error::runtime(format!(
-            "chat window {id} out of range — benilla builds ChatFrame1..ChatFrame{NUM_CHAT_WINDOWS} \
-             (the client's settings array holds {ENGINE_CHAT_WINDOW_SLOTS} slots, but only \
-             {NUM_CHAT_WINDOWS} have frames)"
+            "chat window {id} out of range (the client has {ENGINE_CHAT_WINDOW_SLOTS} chat windows)"
         )));
     }
     Ok(id as usize - 1)
@@ -843,9 +838,10 @@ mod tests {
     #[test]
     fn the_setters_raise_on_a_window_with_no_frame() {
         let s = UiScript::new().unwrap();
-        assert!(s.run("SetChatWindowAlpha(8, 1)").is_err());
+        assert!(s.run("SetChatWindowAlpha(11, 1)").is_err());
         assert!(s.run("SetChatWindowColor(0, 1, 1, 1)").is_err());
-        assert!(s.run("SetChatWindowSize(8, 14)").is_err());
+        assert!(s.run("SetChatWindowSize(11, 14)").is_err());
+        assert!(s.run("SetChatWindowSize(10, 14)").is_ok());
     }
 
     /// The deviation: the reference stores the low byte of `__ftol(2.0 · 255) = 510`, answering

@@ -1637,7 +1637,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_readonly_presentation_mirror_tracks_host_sync_and_vm_replacement() {
+    fn wrath_cvar_mirror_tracks_host_sync_and_vm_replacement() {
         use benilla_ui::script::ScriptDialect;
         let mut app = cvar_app();
         app.world_mut().insert_non_send_resource(
@@ -1652,7 +1652,6 @@ mod tests {
                 script.eval::<String>("return GetCVar('GAMMA')").unwrap(),
                 "1.2"
             );
-            assert!(script.eval::<bool>("return GetCVar('realmList') == nil and GetCVar('fpsJournal') == nil and GetCVarDefault == nil and SetCVar == nil and RegisterCVar == nil").unwrap());
             assert!(script.take_cvar_changes().is_empty());
             assert!(script.take_cvar_registrations().is_empty());
         };

@@ -93,6 +93,7 @@ impl Loader<'_> {
                 }
                 let getter = method.replacen("Set", "Get", 1);
                 if let Ok(region) = wrapper.call_method::<Table>(getter.as_str(), ()) {
+                    this.apply_parent_key(t, wrapper, &region);
                     if let (None, Some(c)) = (t.attr("file"), color) {
                         this.call_region(&region, "SetTexture", (c[0], c[1], c[2], c[3]), dbg);
                     }
@@ -410,6 +411,7 @@ impl Loader<'_> {
                 self.call(wrapper, "SetThumbTexture", (c[0], c[1], c[2], c[3]), dbg);
             }
             if let Ok(region) = wrapper.call_method::<Table>("GetThumbTexture", ()) {
+                self.apply_parent_key(tt, wrapper, &region);
                 if let Some(mode) = tt.attr("alphaMode") {
                     self.call_region(&region, "SetBlendMode", mode.to_string(), dbg);
                 }

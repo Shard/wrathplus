@@ -64,12 +64,18 @@ pub(super) fn lua_message(e: &mlua::Error) -> String {
 pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 
-    // Set to nil explicitly, whatever mlua's safe stdlib already leaves out.
+    // Set to nil explicitly, whatever mlua's safe stdlib already leaves out. Build 12340 keeps
+    // `newproxy`, which its restricted-environment handles are made of.
+    let wrath = lua
+        .named_registry_value::<bool>("benilla.wrath51")
+        .unwrap_or(false);
     for name in [
         "io", "os", "package", "require", "dofile", "loadfile", "load", "module", "newproxy",
         "debug",
     ] {
-        g.set(name, Value::Nil)?;
+        if !(wrath && name == "newproxy") {
+            g.set(name, Value::Nil)?;
+        }
     }
 
     // debugstack([start [, count1 [, count2]]]): the reference's traceback, frames only, in Lua
@@ -138,7 +144,10 @@ pub(super) fn install(lua: &Lua, dialect: ScriptDialect) -> mlua::Result<()> {
     super::zone_text::install(lua)?;
     let source = match dialect {
         ScriptDialect::Vanilla => WOW_STDLIB,
-        ScriptDialect::Wrath12340 => WRATH_STDLIB,
+        ScriptDialect::Wrath12340 => {
+            install_bit(lua)?;
+            WRATH_STDLIB
+        }
     };
     lua.load(source)
         .set_name("=[benilla wow stdlib]")
@@ -147,26 +156,105 @@ pub(super) fn install(lua: &Lua, dialect: ScriptDialect) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Only aliases shared by Wrath's stock API and this crate's implemented surface. Keeping this
-/// separate from [`WOW_STDLIB`] avoids publishing 1.12-only compatibility readers in a Wrath VM.
-const WRATH_STDLIB: &str = r#"
-strlen = string.len
-strsub = string.sub
-strupper = string.upper
-strlower = string.lower
-strrep = string.rep
-strfind = string.find
-strbyte = string.byte
-strchar = string.char
-gsub = string.gsub
-tinsert = table.insert
-tremove = table.remove
--- Installed Wrath LootFrame.lua:145 calls this standard math alias unqualified.
-ceil = math.ceil
+/// The build-12340 client's global aliases over Lua 5.1's libraries, plus its `bit` library.
+const WRATH_STDLIB: &str = r##"
+-- math
+abs, acos, asin, atan, atan2 = math.abs, math.acos, math.asin, math.atan, math.atan2
+ceil, cos, deg, exp, floor = math.ceil, math.cos, math.deg, math.exp, math.floor
+frexp, ldexp, log, log10 = math.frexp, math.ldexp, math.log, math.log10
+max, min, mod, rad, random = math.max, math.min, math.fmod, math.rad, math.random
+sin, sqrt, tan = math.sin, math.sqrt, math.tan
+fastrandom = math.random
+PI = math.pi
+-- string
+format, gmatch, gsub = string.format, string.gmatch, string.gsub
+strbyte, strchar, strfind, strlen = string.byte, string.char, string.find, string.len
+strlower, strmatch, strrep, strrev = string.lower, string.match, string.rep, string.reverse
+strsub, strupper = string.sub, string.upper
+function strtrim(s, chars)
+    chars = chars or " \t\r\n"
+    local class = "[" .. chars:gsub("[%]%^%-]", "%%%0") .. "]"
+    return (s:gsub("^" .. class .. "+", ""):gsub(class .. "+$", ""))
+end
+function strsplit(sep, s, limit)
+    local out, start, n = {}, 1, 0
+    local class = "[" .. sep:gsub("[%]%^%-]", "%%%0") .. "]"
+    while true do
+        n = n + 1
+        if limit and n >= limit then out[n] = s:sub(start) break end
+        local a, b = s:find(class, start)
+        if not a then out[n] = s:sub(start) break end
+        out[n] = s:sub(start, a - 1)
+        start = b + 1
+    end
+    return unpack(out, 1, n)
+end
+function strjoin(sep, ...) return table.concat({ ... }, sep) end
+function strconcat(...) return table.concat({ ... }) end
+function tostringall(...)
+    local n = select("#", ...)
+    if n == 0 then return end
+    local out = { ... }
+    for i = 1, n do out[i] = tostring(out[i]) end
+    return unpack(out, 1, n)
+end
+function strlenutf8(s)
+    local _, count = s:gsub("[^\128-\191]", "")
+    return count
+end
+string.trim, string.split, string.join = strtrim, strsplit, strjoin
+-- table
+foreach, foreachi, getn, sort = table.foreach, table.foreachi, table.getn, table.sort
+tinsert, tremove = table.insert, table.remove
+function wipe(t)
+    for k in pairs(t) do t[k] = nil end
+    return t
+end
+table.wipe = wipe
+-- globals
 function getglobal(name) return _G[name] end
 function setglobal(name, value) _G[name] = value end
 function GetLocale() return "enUS" end
-"#;
+"##;
+
+/// LuaBitOp's `bit`, which build 12340 ships: 32-bit operations with signed results.
+fn install_bit(lua: &Lua) -> mlua::Result<()> {
+    fn arg(v: f64) -> u32 {
+        (v.rem_euclid(4_294_967_296.0)) as u32
+    }
+    let bit = lua.create_table()?;
+    let binary = |op: fn(u32, u32) -> u32| {
+        lua.create_function(move |_, args: Variadic<f64>| {
+            let mut it = args.iter().map(|&v| arg(v));
+            let first = it.next().unwrap_or(0);
+            Ok(it.fold(first, op) as i32)
+        })
+    };
+    bit.set("band", binary(|a, b| a & b)?)?;
+    bit.set("bor", binary(|a, b| a | b)?)?;
+    bit.set("bxor", binary(|a, b| a ^ b)?)?;
+    bit.set("bnot", lua.create_function(|_, a: f64| Ok(!arg(a) as i32))?)?;
+    bit.set("tobit", lua.create_function(|_, a: f64| Ok(arg(a) as i32))?)?;
+    bit.set(
+        "lshift",
+        lua.create_function(|_, (a, n): (f64, f64)| Ok(arg(a).wrapping_shl(arg(n) & 31) as i32))?,
+    )?;
+    bit.set(
+        "rshift",
+        lua.create_function(|_, (a, n): (f64, f64)| Ok(arg(a).wrapping_shr(arg(n) & 31) as i32))?,
+    )?;
+    bit.set(
+        "arshift",
+        lua.create_function(|_, (a, n): (f64, f64)| {
+            Ok((arg(a) as i32).wrapping_shr(arg(n) & 31))
+        })?,
+    )?;
+    bit.set(
+        "mod",
+        lua.create_function(|_, (a, b): (f64, f64)| Ok((arg(a) as i32).wrapping_rem(arg(b) as i32)))?,
+    )?;
+    lua.globals().set("bit", bit)
+}
 
 /// The handler `seterrorhandler` holds, `None` until one is given.
 pub(super) fn error_handler(lua: &Lua) -> Option<mlua::Function> {

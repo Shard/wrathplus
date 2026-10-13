@@ -66,22 +66,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     && model
                         .unit("player")
                         .is_some_and(|player| player.guid == unit.guid);
-                if !maximum {
+                if !maximum && ty != unit.power_type && !is_self {
                     // Native 0x4cee50 compares identity, not token spelling.
-                    if ty != unit.power_type && !is_self {
-                        return Ok(0);
-                    }
-                    // Native 0x512a30 exempts self and membership-table identities. The latter
-                    // are not qualified yet; refuse rather than invent a feigner's visibility.
-                    if unit.dynamic_flags & 0x20 != 0 && !is_self {
-                        return Err(mlua::Error::RuntimeError(
-                            "Wrath flagged-unit power visibility is unavailable".into(),
-                        ));
-                    }
+                    return Ok(0);
                 }
-                let powers = unit.powers.as_ref().ok_or_else(|| {
-                    mlua::Error::RuntimeError("Wrath resource snapshot is unavailable".into())
-                })?;
+                // Before the unit's power fields arrive there is nothing to read: 0.
+                let Some(powers) = unit.powers.as_ref() else {
+                    return Ok(0);
+                };
                 let Some(value) = powers.get(usize::from(ty)) else {
                     return Ok(0);
                 };

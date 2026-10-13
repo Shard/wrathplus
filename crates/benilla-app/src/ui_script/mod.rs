@@ -21,9 +21,9 @@ mod layer_tests;
 mod load_log;
 mod manifest;
 mod wrath_addons;
-mod wrath_loot_ui;
+#[cfg(test)]
+mod wrath_framexml_tests;
 mod wrath_native;
-mod wrath_stock;
 
 /// The stock FrameXML this client runs off the player's own patch chain; its header is the rule.
 mod reference_ui;
@@ -266,7 +266,7 @@ impl Plugin for UiScriptPlugin {
                 .get_resource::<benilla_assets::ClientDataProfile>()
                 .map(|profile| &profile.0),
         ) {
-            info!("ui_script: Wrath profile selected — bounded stock GameMenu and addon host enabled; full FrameXML remains disabled");
+            info!("ui_script: Wrath profile selected — stock build-12340 FrameXML and addon host");
             wrath_native::build(app);
             wrath_addons::build(app);
             return;
@@ -381,7 +381,7 @@ mod profile_route_tests {
     use super::*;
 
     #[test]
-    fn vanilla_keeps_framexml_and_wrath_never_opens_it() {
+    fn the_wrath_profile_selects_the_wrath_route() {
         assert!(!uses_native_wrath_route(Some(
             &benilla_formats::DataProfile::Vanilla
         )));
@@ -404,12 +404,11 @@ fn arbitrate_pointer_over_ui(
     egui: Option<Res<EguiPointerOver>>,
     hover: Res<PlayerUiHover>,
     plate_hover: Res<crate::vplates::PlateHover>,
-    native_hover: Option<Res<wrath_native::NativeChromeHover>>,
     mut over: ResMut<PointerOverUi>,
     mut panel: ResMut<PointerOverUiPanel>,
 ) {
     // No cinematic term: the hit test finds the full-screen, mouse-enabled `CinematicFrame`.
-    over.0 = egui.is_some_and(|e| e.0) || hover.0.is_some() || native_hover.is_some_and(|h| h.0);
+    over.0 = egui.is_some_and(|e| e.0) || hover.0.is_some();
     // Chrome excludes the plates; the plate hover is last frame's, as the plate driver runs later.
     panel.0 = over.0 && plate_hover.0.is_none();
 }
