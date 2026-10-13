@@ -6,7 +6,7 @@
 use std::io::{self, Cursor, Read};
 
 use crate::events::{decode as session_decode, SessionEvent};
-use crate::messages::{ActionButton, CreatureQueryInfo, ServerPacket};
+use crate::messages::{ActionButton, CreatureQueryInfo, ServerPacket, SpellCooldown};
 use crate::wire::read_packed_guid;
 
 pub const SMSG_NAME_QUERY_RESPONSE: u16 = 0x0051;
@@ -195,9 +195,28 @@ fn initial_spells(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         spell_ids.push(u32_le(r)?);
         u16_le(r)?;
     }
+    // Running cooldowns: `u32 spell, u16 item, u16 category, u32 cooldown, u32 category cooldown`.
+    // AzerothCore counts entries it then skips (`needSendToClient`), so the body's end decides.
+    let listed = u16_le(r).unwrap_or(0);
+    let mut cooldowns = Vec::new();
+    for _ in 0..listed {
+        let entry = (|| -> io::Result<SpellCooldown> {
+            Ok(SpellCooldown {
+                spell_id: u32_le(r)?,
+                item_id: u16_le(r)?,
+                category: u16_le(r)?,
+                spell_cd_ms: u32_le(r)?,
+                category_cd_ms: u32_le(r)?,
+            })
+        })();
+        match entry {
+            Ok(cd) => cooldowns.push(cd),
+            Err(_) => break,
+        }
+    }
     Ok(vec![SessionEvent::SpellBook {
         spell_ids,
-        cooldowns: Vec::new(),
+        cooldowns,
     }])
 }
 
@@ -524,5 +543,23 @@ mod tests {
         let events = decode(SMSG_INITIAL_SPELLS, &body, None).unwrap();
         let [SessionEvent::SpellBook { spell_ids, .. }] = &events[..] else { panic!() };
         assert_eq!(spell_ids, &[6603, 70_000]);
+    }
+
+    /// A running cooldown survives the relog; the server's count may include entries it skipped.
+    #[test]
+    fn initial_spells_carry_running_cooldowns_and_tolerate_an_overcount() {
+        let mut body = vec![0, 1, 0];
+        body.extend(59752u32.to_le_bytes());
+        body.extend(0u16.to_le_bytes());
+        body.extend(2u16.to_le_bytes()); // two listed, one written
+        body.extend(59752u32.to_le_bytes());
+        body.extend(0u16.to_le_bytes());
+        body.extend(0u16.to_le_bytes());
+        body.extend(95_000u32.to_le_bytes());
+        body.extend(0u32.to_le_bytes());
+        let events = decode(SMSG_INITIAL_SPELLS, &body, None).unwrap();
+        let [SessionEvent::SpellBook { cooldowns, .. }] = &events[..] else { panic!() };
+        assert_eq!(cooldowns.len(), 1);
+        assert_eq!((cooldowns[0].spell_id, cooldowns[0].spell_cd_ms), (59752, 95_000));
     }
 }

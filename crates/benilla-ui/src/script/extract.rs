@@ -91,7 +91,20 @@ impl UiScript {
                             light: m.light,
                             fog: m.armed_fog(),
                         },
-                        _ => QuadContent::Frame,
+                        _ => match model.wrath_cooldowns.get(&fh) {
+                            Some(&(start, duration, reverse)) if duration > 0.0 => {
+                                let left = 1.0 - (model.now - start) / duration;
+                                if left > 0.0 && left <= 1.0 {
+                                    QuadContent::CooldownSweep {
+                                        remaining_milli: (left * 1000.0).ceil() as u16,
+                                        reverse,
+                                    }
+                                } else {
+                                    QuadContent::Frame
+                                }
+                            }
+                            _ => QuadContent::Frame,
+                        },
                     };
                     (
                         model.resolved.get(&fh).copied(),

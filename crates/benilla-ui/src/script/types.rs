@@ -96,6 +96,10 @@ pub enum QuadContent {
         /// The fog, when armed; a material with the UNFOGGED bit ignores it.
         fog: Option<crate::widget::ModelFog>,
     },
+    /// A Wrath `Cooldown` frame's dark sweep over its rect, which the 3.3.5 engine draws itself:
+    /// the share still to run, clockwise from 12 o'clock, in thousandths so a steady frame repeats
+    /// its value. `reverse` (`SetReverse`) darkens the elapsed share instead.
+    CooldownSweep { remaining_milli: u16, reverse: bool },
     /// A `Texture` region: a BLP path, a solid or vertex colour, or both (a tinted texture).
     Texture {
         path: Option<String>,

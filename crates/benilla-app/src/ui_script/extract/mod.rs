@@ -95,6 +95,7 @@ fn content_kind(c: &QuadContent) -> &'static str {
         QuadContent::Minimap { .. } => "minimap",
         QuadContent::ModelPane { .. } => "modelpane",
         QuadContent::Texture { .. } => "texture",
+        QuadContent::CooldownSweep { .. } => "cooldown",
         QuadContent::ColorWheel => "colorwheel",
         QuadContent::ColorValue { .. } => "colorvalue",
         QuadContent::Backdrop { .. } => "backdrop",
@@ -1358,6 +1359,22 @@ fn convert_entry(
             });
         }
         // The colour picker's hue disc, a generated image drawn at full value ([`colorselect`]).
+        QuadContent::CooldownSweep {
+            remaining_milli,
+            reverse,
+        } => {
+            let remaining = f32::from(remaining_milli) / 1000.0;
+            for corners in cooldown_wedges(rect, remaining, reverse) {
+                out.push(UiQuad {
+                    rect,
+                    z_key: eq.z,
+                    color: [0.0, 0.0, 0.0, COOLDOWN_SWEEP_ALPHA * eq.alpha],
+                    clip,
+                    corners: Some(corners),
+                    ..default()
+                });
+            }
+        }
         QuadContent::ColorWheel => {
             let Some(assets) = assets.as_mut() else {
                 return;
@@ -1481,6 +1498,45 @@ fn convert_entry(
 }
 
 /// One pass of the FontString measure round-trip; true when anything was measured.
+/// The cooldown sweep's darkness over the icon.
+const COOLDOWN_SWEEP_ALPHA: f32 = 0.75;
+
+/// The dark share of a cooldown sweep over `rect` (y-down px) as triangles from its centre, each
+/// a [`UiQuad::corners`] fan `(c, a, b, b)`. The dark part is the `remaining` share, running
+/// clockwise from 12 o'clock to the end of the turn; `reverse` darkens the elapsed share. Split at
+/// the rect's corners, so every triangle's outer edge lies on one side and the union is exact.
+fn cooldown_wedges(rect: Rect, remaining: f32, reverse: bool) -> Vec<[Vec2; 4]> {
+    use std::f32::consts::TAU;
+    let c = rect.center();
+    let (hw, hh) = (rect.width() / 2.0, rect.height() / 2.0);
+    if hw <= 0.0 || hh <= 0.0 {
+        return Vec::new();
+    }
+    let elapsed = (1.0 - remaining.clamp(0.0, 1.0)) * TAU;
+    let (from, to) = if reverse { (0.0, elapsed) } else { (elapsed, TAU) };
+    // Clockwise from 12 o'clock on a y-down screen: (sin θ, −cos θ).
+    let point = |a: f32| {
+        let d = Vec2::new(a.sin(), -a.cos());
+        let t = (hw / d.x.abs().max(f32::EPSILON)).min(hh / d.y.abs().max(f32::EPSILON));
+        c + d * t
+    };
+    let corner = hw.atan2(hh);
+    let mut cuts = vec![from];
+    cuts.extend(
+        [corner, TAU / 2.0 - corner, TAU / 2.0 + corner, TAU - corner]
+            .into_iter()
+            .filter(|&a| a > from && a < to),
+    );
+    cuts.push(to);
+    cuts.windows(2)
+        .filter(|w| w[1] > w[0])
+        .map(|w| {
+            let (a, b) = (point(w[0]), point(w[1]));
+            [c, a, b, b]
+        })
+        .collect()
+}
+
 fn measure_fontstrings(
     script: &mut UiScript,
     atlas: &mut UiFontAtlas,
@@ -1616,8 +1672,30 @@ mod uv_clamp_tests {
 
 #[cfg(test)]
 mod cursor_quad_tests {
-    use super::cursor_icon_quad;
+    use super::{cooldown_wedges, cursor_icon_quad};
     use bevy::prelude::*;
+
+    fn wedge_area(ws: &[[Vec2; 4]]) -> f32 {
+        ws.iter()
+            .map(|[c, a, b, _]| (*a - *c).perp_dot(*b - *c).abs() / 2.0)
+            .sum()
+    }
+
+    /// The sweep covers its share exactly, even on a non-square rect: the cuts at the corners
+    /// keep every triangle on one side, and the quarter from 9 to 12 o'clock is the top-left
+    /// quarter rect.
+    #[test]
+    fn a_cooldown_sweep_darkens_exactly_its_share() {
+        let r = Rect::new(0.0, 0.0, 40.0, 20.0);
+        assert!((wedge_area(&cooldown_wedges(r, 1.0, false)) - 800.0).abs() < 0.01);
+        assert!((wedge_area(&cooldown_wedges(r, 0.5, false)) - 400.0).abs() < 0.01);
+        assert!((wedge_area(&cooldown_wedges(r, 0.25, false)) - 200.0).abs() < 0.01);
+        assert!((wedge_area(&cooldown_wedges(r, 0.25, true)) - 600.0).abs() < 0.01);
+        assert!(cooldown_wedges(r, 1.0, true).is_empty());
+        // The dark share ends at 12 o'clock: the last triangle's far point is the top centre.
+        let last = *cooldown_wedges(r, 0.3, false).last().unwrap();
+        assert!((last[2] - Vec2::new(20.0, 0.0)).length() < 0.01);
+    }
 
     #[test]
     fn cursor_icon_quad_is_32px_top_left_anchored_at_the_hotspot() {

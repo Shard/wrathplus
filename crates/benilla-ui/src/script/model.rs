@@ -546,6 +546,9 @@ pub(crate) struct Model {
     pub(crate) containers: HashMap<i64, container::ContainerState>,
     /// Per `(bag, slot)`, `(start, duration, enabled)` in `GetTime` seconds, stamped at push.
     pub(crate) container_cooldowns: HashMap<(i64, u32), (f64, f64, bool)>,
+    /// A Wrath `Cooldown` frame's `SetCooldown`/`SetReverse`: `(start, duration, reverse)` in
+    /// `GetTime` seconds. The engine draws the sweep (`QuadContent::CooldownSweep`).
+    pub(crate) wrath_cooldowns: HashMap<FrameHandle, (f64, f64, bool)>,
     /// `HasKey()`: a keys-family item in equipment, bags, bank or keyring; gates the keyring UI.
     pub(crate) has_key: bool,
     /// What the cursor carries; nothing moves locally, the server's updates settle the bags.
@@ -1254,6 +1257,7 @@ impl Model {
             pet_renames: Vec::new(),
             containers: HashMap::new(),
             container_cooldowns: HashMap::new(),
+            wrath_cooldowns: HashMap::new(),
             has_key: false,
             cursor: None,
             cursor_grid_shown: false,

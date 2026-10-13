@@ -57,6 +57,7 @@ mod widget_surface;
 mod worldframe;
 mod worldmap;
 mod wrath_budget;
+mod wrath_cooldown;
 mod wrath_dialect;
 mod wrath_power;
 mod wrath_script_kinds;
