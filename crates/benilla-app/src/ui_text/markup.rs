@@ -66,6 +66,8 @@ pub(super) fn parse_markup(input: &str, base_color: [f32; 4]) -> Vec<Vec<ColorRu
                 }
             }
             T::Char(c) => push_visible(c, &mut cur, &mut link),
+            // Inline textures are not drawn yet.
+            T::Texture { .. } => {}
         }
     }
     // An unterminated link's runs stay plain text: the `|H` is consumed, the text still shows.
@@ -137,7 +139,11 @@ pub(super) fn visible_map(input: &str) -> (String, Vec<usize>) {
             T::EscapedPipe => '|',
             T::LineBreak => '\n',
             // Zero-width: no drawn byte, so no boundary of its own.
-            T::Color(_) | T::ColorReset | T::LinkOpen { .. } | T::LinkClose => continue,
+            T::Color(_)
+            | T::ColorReset
+            | T::LinkOpen { .. }
+            | T::LinkClose
+            | T::Texture { .. } => continue,
         };
         // The boundary before this char is where the previous drawn token ended, before any escape
         // in between; a multi-byte char's interior boundaries are its own raw bytes.
@@ -211,10 +217,10 @@ mod markup_tests {
     /// Build 5875 has no inline-texture escape: the remap table at `0x5c2b10` sends every `|` lead
     /// but C, H, N and R to the ordinary-character arm, so `|T…|t` draws as text.
     #[test]
-    fn there_is_no_inline_texture_escape() {
+    fn an_inline_texture_escape_draws_nothing_yet() {
         let lines = parse_markup("a|TInterface\\Icons\\Foo:16:16|tb", WHITE);
         assert_eq!(lines[0].len(), 1);
-        assert_eq!(lines[0][0].text, "a|TInterface\\Icons\\Foo:16:16|tb");
+        assert_eq!(lines[0][0].text, "ab");
     }
 
     #[test]
@@ -327,7 +333,7 @@ mod markup_tests {
         assert_eq!(parse_markup("a\r\nb", WHITE).len(), 2);
         assert_eq!(check_map("a\r\nb", "a\nb"), vec![0, 1, 3, 4]);
         let (drawn, _) = visible_map("a|Tfoo|tb");
-        assert_eq!(drawn, "a|Tfoo|tb");
+        assert_eq!(drawn, "ab");
     }
 
     /// The line-count law (`0x5c2070`) where it differs from a split, and where it does not.

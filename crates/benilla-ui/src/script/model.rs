@@ -961,6 +961,8 @@ pub(crate) struct Model {
     pub(crate) framerate: f64,
     /// `(shift, ctrl, alt)` for `Is*KeyDown`, pushed before the frame's mouse events.
     pub(crate) modifiers: (bool, bool, bool),
+    /// The mouse buttons held, by WoW name, as [`super::UiScript::mouse_button`] reported them.
+    pub(crate) buttons_down: Vec<String>,
 }
 
 impl Model {
@@ -1420,6 +1422,7 @@ impl Model {
             summon_confirms: 0,
             framerate: 0.0,
             modifiers: (false, false, false),
+            buttons_down: Vec::new(),
             money: 0,
             net_latency_ms: 0,
             player_xp: 0,

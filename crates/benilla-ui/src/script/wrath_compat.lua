@@ -621,3 +621,17 @@ COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
 IsPVPTimerRunning = IsPVPTimerRunning or none
 debuginfo = debuginfo or none
 CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
+
+-- ── unit selection colour (the target frame's name background) ─────────────────────────────────
+do
+    local colors = {
+        [1] = { 1, 0, 0 }, [2] = { 1, 0, 0 }, [3] = { 1, 0.5, 0 }, [4] = { 1, 1, 0 },
+        [5] = { 0, 1, 0 }, [6] = { 0, 1, 0 }, [7] = { 0, 1, 0 }, [8] = { 0, 1, 0 },
+    }
+    function UnitSelectionColor(unit)
+        if UnitIsPlayer(unit) and UnitIsFriend("player", unit) then return 0, 0, 1, 1 end
+        local c = colors[UnitReaction(unit, "player") or 4] or colors[4]
+        return c[1], c[2], c[3], 1
+    end
+end
+UnitIsTappedByAllThreatList = UnitIsTappedByAllThreatList or none

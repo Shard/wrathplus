@@ -169,6 +169,8 @@ struct TrackedObject {
 #[derive(Debug, Default)]
 pub struct WrathEventAdapter {
     objects: HashMap<u64, TrackedObject>,
+    /// Our player, from its self create; spell-go confirms our casts against it.
+    self_guid: Option<u64>,
 }
 
 impl WrathEventAdapter {
@@ -178,6 +180,7 @@ impl WrathEventAdapter {
 
     pub fn reset(&mut self) {
         self.objects.clear();
+        self.self_guid = None;
     }
 
     pub fn object_type(&self, guid: u64) -> Option<ObjectType> {
@@ -400,7 +403,7 @@ impl WrathEventAdapter {
             }
             opcode if crate::wrath_session::handles(opcode) => {
                 // A message that does not decode is dropped, never fatal to the session.
-                Ok(match crate::wrath_session::decode(opcode, body) {
+                Ok(match crate::wrath_session::decode(opcode, body, self.self_guid) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
@@ -422,6 +425,9 @@ impl WrathEventAdapter {
                     fields,
                     ..
                 } => {
+                    if movement.update_flags & UPDATE_FLAG_SELF != 0 {
+                        self.self_guid = Some(guid);
+                    }
                     let state = TrackedObject::from_create(object_type, &fields);
                     let projected = project_fields(&state, true);
                     self.objects.insert(guid, state);

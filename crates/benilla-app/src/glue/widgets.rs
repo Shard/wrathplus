@@ -168,7 +168,7 @@ pub(crate) fn markup_spans(text: &str, base: Color, wrap: bool) -> Vec<(String, 
                 cur.push(if wrap { '\n' } else { ' ' });
                 None
             }
-            TokenKind::LinkOpen { .. } | TokenKind::LinkClose => None,
+            TokenKind::LinkOpen { .. } | TokenKind::LinkClose | TokenKind::Texture { .. } => None,
             TokenKind::Char(c) => {
                 cur.push(c);
                 None

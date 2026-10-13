@@ -42,3 +42,13 @@ fn installed_wrath_catalogs_load() {
     eprintln!("form 1: {:?}", forms.get(&1));
     assert!(skills.is_ok() && talents.is_ok() && classes.is_ok() && families.is_ok());
 }
+
+#[test]
+fn installed_wrath_human_reaction_to_a_diseased_young_wolf() {
+    let Some(mut chain) = chain() else { return };
+    let factions = crate::load_faction_catalog(&mut chain).expect("factions");
+    let human = factions.race_template(1).expect("human template");
+    let wolf = factions.template(32).expect("template 32");
+    eprintln!("human {human:?}\nwolf {wolf:?}\nwolf→human {:?} human→wolf {:?}",
+        wolf.reaction_toward(human), human.reaction_toward(wolf));
+}

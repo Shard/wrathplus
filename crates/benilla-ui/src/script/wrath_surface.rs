@@ -213,6 +213,29 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
     let globals = lua.globals();
 
+    // `IsMouseButtonDown([button])`: a named button ("LeftButton", or 1-5), else any button.
+    globals.set(
+        "IsMouseButtonDown",
+        lua.create_function(|lua, button: Option<Value>| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let name = match button {
+                Some(Value::String(s)) => Some(s.to_string_lossy()),
+                Some(Value::Integer(n)) => Some(match n {
+                    1 => "LeftButton".to_string(),
+                    2 => "RightButton".to_string(),
+                    3 => "MiddleButton".to_string(),
+                    n => format!("Button{n}"),
+                }),
+                _ => None,
+            };
+            let held = match name {
+                Some(name) => model.buttons_down.iter().any(|b| b.eq_ignore_ascii_case(&name)),
+                None => !model.buttons_down.is_empty(),
+            };
+            Ok(held.then_some(1))
+        })?,
+    )?;
+
     globals.set(
         "GetBuildInfo",
         lua.create_function(|lua, ()| {

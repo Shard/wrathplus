@@ -174,6 +174,7 @@ fn on_cast_result(
     mut ladder: CastLadder,
     targeting: CastTargeting,
     mut r: Reply,
+    dialect: Res<crate::net::SessionDialect>,
 ) {
     if let SessionEvent::CastResult {
         spell_id,
@@ -182,6 +183,13 @@ fn on_cast_result(
         arg,
     } = ev
     {
+        // Build 12340 renumbered `SpellCastResult`; the tables below are 1.12's.
+        let reason = match *dialect {
+            crate::net::SessionDialect::Wrath12340 => {
+                reason.map(crate::ui_action::cast_fail::from_wrath)
+            }
+            crate::net::SessionDialect::Vanilla5875 => reason,
+        };
         let chained = cast_result(
             spell_id,
             success,

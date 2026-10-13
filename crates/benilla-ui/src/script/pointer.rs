@@ -260,6 +260,13 @@ impl UiScript {
     /// `"<Button>ButtonUp"`. Its `down` argument is not 1.12, whose firer (`0x779540`) passes only
     /// the button name. Returns whether the UI consumed the event.
     pub fn mouse_button(&mut self, x: f32, y: f32, button: &str, down: bool) -> bool {
+        {
+            let mut model = self.model_mut();
+            model.buttons_down.retain(|b| b != button);
+            if down {
+                model.buttons_down.push(button.to_string());
+            }
+        }
         let hit_id = self.hit_test(x, y);
         // ── The raise, first ────────────────────────────────────────────────────────────────────
         //

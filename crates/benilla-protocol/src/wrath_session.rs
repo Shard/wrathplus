@@ -16,6 +16,12 @@ pub const SMSG_INITIAL_SPELLS: u16 = 0x012A;
 pub const SMSG_LEARNED_SPELL: u16 = 0x012B;
 pub const SMSG_SUPERCEDED_SPELL: u16 = 0x012C;
 pub const SMSG_REMOVED_SPELL: u16 = 0x0203;
+pub const SMSG_CAST_FAILED: u16 = 0x0130;
+pub const SMSG_SPELL_START: u16 = 0x0131;
+pub const SMSG_SPELL_GO: u16 = 0x0132;
+pub const SMSG_SPELL_COOLDOWN: u16 = 0x0134;
+pub const SMSG_SPELL_DELAYED: u16 = 0x01E2;
+pub const SMSG_SPELL_FAILED_OTHER: u16 = 0x02A6;
 
 pub const CMSG_NAME_QUERY: u32 = 0x0050;
 pub const CMSG_GAMEOBJECT_QUERY: u32 = 0x005E;
@@ -39,13 +45,33 @@ pub const fn handles(opcode: u16) -> bool {
             | SMSG_LEARNED_SPELL
             | SMSG_SUPERCEDED_SPELL
             | SMSG_REMOVED_SPELL
+            | SMSG_CAST_FAILED
+            | SMSG_SPELL_START
+            | SMSG_SPELL_GO
+            | SMSG_SPELL_COOLDOWN
+            | SMSG_SPELL_DELAYED
+            | SMSG_SPELL_FAILED_OTHER
     )
 }
 
-/// Decode one of the [`handles`] opcodes.
-pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
+/// Decode one of the [`handles`] opcodes. `self_guid` is our player, once its create arrived:
+/// build 12340 confirms our own successful cast only by its spell-go.
+pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
     let mut r = Cursor::new(body);
     Ok(match opcode {
+        SMSG_CAST_FAILED => cast_failed(&mut r)?,
+        SMSG_SPELL_START => spell_start(&mut r)?,
+        SMSG_SPELL_GO => spell_go(&mut r, self_guid)?,
+        SMSG_SPELL_COOLDOWN => spell_cooldown(&mut r)?,
+        SMSG_SPELL_DELAYED => vec![SessionEvent::SpellDelayed {
+            caster: read_packed_guid(&mut r)?,
+            delay_ms: u32_le(&mut r)?,
+        }],
+        SMSG_SPELL_FAILED_OTHER => {
+            let caster = read_packed_guid(&mut r)?;
+            let _count = u8_le(&mut r)?;
+            vec![SessionEvent::SpellFailedOther { caster, spell_id: u32_le(&mut r)? }]
+        }
         SMSG_NAME_QUERY_RESPONSE => name_query(&mut r)?,
         SMSG_CREATURE_QUERY_RESPONSE => session_decode(creature_query(&mut r)?),
         SMSG_ACTION_BUTTONS => action_buttons(&mut r)?,
@@ -151,6 +177,130 @@ fn initial_spells(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         spell_ids,
         cooldowns: Vec::new(),
     }])
+}
+
+/// Cast count, spell, a build-12340 `SpellCastResult` (renumbered from 1.12; the client maps
+/// it by name), then the first extra word some results carry.
+fn cast_failed(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
+    let _count = u8_le(r)?;
+    let spell_id = u32_le(r)?;
+    let reason = u8_le(r)?;
+    let arg = u32_le(r).ok();
+    Ok(vec![SessionEvent::CastResult {
+        spell_id,
+        success: false,
+        reason: Some(reason),
+        arg,
+    }])
+}
+
+/// What a `SpellCastTargets` block names.
+#[derive(Default)]
+struct Targets {
+    unit: Option<u64>,
+    game_object: Option<u64>,
+    dest: Option<[f32; 3]>,
+}
+
+fn targets(r: &mut Cursor<&[u8]>) -> io::Result<Targets> {
+    let mask = u32_le(r)?;
+    let mut out = Targets::default();
+    if mask & (TARGET_FLAG_UNIT | TARGET_FLAG_GAMEOBJECT | 0x0200 | 0x8000 | 0x1_0000) != 0 {
+        let guid = read_packed_guid(r)?;
+        if mask & TARGET_FLAG_GAMEOBJECT != 0 {
+            out.game_object = Some(guid);
+        } else {
+            out.unit = Some(guid).filter(|g| *g != 0);
+        }
+    }
+    if mask & (TARGET_FLAG_ITEM | 0x1000) != 0 {
+        read_packed_guid(r)?;
+    }
+    for flag in [TARGET_FLAG_SOURCE_LOCATION, TARGET_FLAG_DEST_LOCATION] {
+        if mask & flag != 0 {
+            read_packed_guid(r)?;
+            let at = [f32_le(r)?, f32_le(r)?, f32_le(r)?];
+            if flag == TARGET_FLAG_DEST_LOCATION {
+                out.dest = Some(at);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Cast item or caster, caster, cast count, spell, flags, cast time, targets.
+fn spell_start(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
+    let item_or_caster = read_packed_guid(r)?;
+    let caster = read_packed_guid(r)?;
+    let _count = u8_le(r)?;
+    let spell_id = u32_le(r)?;
+    let cast_flags = u32_le(r)?;
+    let cast_time_ms = u32_le(r)?;
+    let t = targets(r)?;
+    Ok(vec![SessionEvent::SpellStart {
+        caster: if caster == 0 { item_or_caster } else { caster },
+        spell_id,
+        cast_flags: cast_flags as u16,
+        cast_time_ms,
+        target: t.unit,
+        ammo_display_id: None,
+    }])
+}
+
+/// As spell start, then a timestamp, the hit and miss lists, and targets. Our own player-cast
+/// spell-go (a nonzero cast count) is also its success result.
+fn spell_go(r: &mut Cursor<&[u8]>, self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
+    let item_or_caster = read_packed_guid(r)?;
+    let caster_slot = read_packed_guid(r)?;
+    let caster = if caster_slot == 0 { item_or_caster } else { caster_slot };
+    let count = u8_le(r)?;
+    let spell_id = u32_le(r)?;
+    let cast_flags = u32_le(r)?;
+    let _timestamp = u32_le(r)?;
+    let hits = (0..u8_le(r)?).map(|_| u64_le(r)).collect::<io::Result<Vec<_>>>()?;
+    let mut misses = Vec::new();
+    for _ in 0..u8_le(r)? {
+        let guid = u64_le(r)?;
+        let condition = u8_le(r)?;
+        if condition == 11 {
+            u8_le(r)?; // the reflect result
+        }
+        misses.push((guid, condition));
+    }
+    let t = targets(r)?;
+    let mut events = Vec::with_capacity(2);
+    if count != 0 && Some(caster) == self_guid {
+        events.push(SessionEvent::CastResult {
+            spell_id,
+            success: true,
+            reason: None,
+            arg: None,
+        });
+    }
+    events.push(SessionEvent::SpellGo {
+        caster,
+        spell_id,
+        cast_flags: cast_flags as u16,
+        hits,
+        misses,
+        target: t.unit,
+        go_target: t.game_object,
+        dest: t.dest,
+        ammo_display_id: None,
+        item_caster: (item_or_caster != caster).then_some(item_or_caster),
+    });
+    Ok(events)
+}
+
+/// Caster guid, a flags byte, then `(spell, cooldown ms)` pairs.
+fn spell_cooldown(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
+    let caster = u64_le(r)?;
+    let _flags = u8_le(r)?;
+    let mut cooldowns = Vec::new();
+    while let Ok(spell) = u32_le(r) {
+        cooldowns.push((spell, u32_le(r)?));
+    }
+    Ok(vec![SessionEvent::SpellCooldowns { caster, cooldowns }])
 }
 
 /// `CMSG_NAME_QUERY`: the full guid.
@@ -260,6 +410,16 @@ fn u32_le(r: &mut impl Read) -> io::Result<u32> {
     Ok(u32::from_le_bytes(b))
 }
 
+fn u64_le(r: &mut impl Read) -> io::Result<u64> {
+    let mut b = [0; 8];
+    r.read_exact(&mut b)?;
+    Ok(u64::from_le_bytes(b))
+}
+
+fn f32_le(r: &mut impl Read) -> io::Result<f32> {
+    Ok(f32::from_bits(u32_le(r)?))
+}
+
 fn cstring(r: &mut impl Read) -> io::Result<String> {
     let mut bytes = Vec::new();
     loop {
@@ -285,10 +445,35 @@ mod tests {
     }
 
     #[test]
+    fn our_spell_go_is_also_the_success_result() {
+        // Caster 0x10 twice, count 1, Heroic Strike, flags, timestamp, one hit, no misses,
+        // unit target 0x05.
+        let mut body = vec![0x01, 0x10, 0x01, 0x10, 1];
+        body.extend(78u32.to_le_bytes());
+        body.extend(0x100u32.to_le_bytes());
+        body.extend(0u32.to_le_bytes());
+        body.push(1);
+        body.extend(5u64.to_le_bytes());
+        body.push(0);
+        body.extend(TARGET_FLAG_UNIT.to_le_bytes());
+        body.extend([0x01, 0x05]);
+        let events = decode(SMSG_SPELL_GO, &body, Some(0x10)).unwrap();
+        assert!(matches!(
+            &events[..],
+            [
+                SessionEvent::CastResult { spell_id: 78, success: true, .. },
+                SessionEvent::SpellGo { caster: 0x10, target: Some(5), .. }
+            ]
+        ));
+        let others = decode(SMSG_SPELL_GO, &body, Some(0x99)).unwrap();
+        assert_eq!(others.len(), 1);
+    }
+
+    #[test]
     fn a_known_player_name_decodes() {
         // Packed guid 0x05 (mask 0x01, byte 0x05), known, "Bob", realm "", human male warrior.
         let body = [0x01, 0x05, 0, b'B', b'o', b'b', 0, 0, 1, 0, 1, 0];
-        let events = decode(SMSG_NAME_QUERY_RESPONSE, &body).unwrap();
+        let events = decode(SMSG_NAME_QUERY_RESPONSE, &body, None).unwrap();
         assert!(matches!(
             &events[..],
             [SessionEvent::PlayerName { guid: 5, name, race: 1, gender: 0, class: 1 }] if name == "Bob"
@@ -301,7 +486,7 @@ mod tests {
         for slot in 0..ACTION_BUTTONS as u32 {
             body.extend(if slot == 143 { 78u32 } else { 0 }.to_le_bytes());
         }
-        let events = decode(SMSG_ACTION_BUTTONS, &body).unwrap();
+        let events = decode(SMSG_ACTION_BUTTONS, &body, None).unwrap();
         let [SessionEvent::ActionButtons { buttons }] = &events[..] else { panic!() };
         assert_eq!((buttons[0].slot, buttons[0].action, buttons[0].kind), (143, 78, 0));
     }
@@ -314,7 +499,7 @@ mod tests {
             body.extend(0u16.to_le_bytes());
         }
         body.extend(0u16.to_le_bytes());
-        let events = decode(SMSG_INITIAL_SPELLS, &body).unwrap();
+        let events = decode(SMSG_INITIAL_SPELLS, &body, None).unwrap();
         let [SessionEvent::SpellBook { spell_ids, .. }] = &events[..] else { panic!() };
         assert_eq!(spell_ids, &[6603, 70_000]);
     }

@@ -82,6 +82,8 @@ pub enum TokenClass {
     LinkClose = 5,
     /// An ordinary character, its UTF-8 length.
     Char = 6,
+    /// A later client's inline texture, `|T<path>:<size>...|t`; drawn as nothing for now.
+    Texture = 7,
 }
 
 /// A token and what it carries.
@@ -99,6 +101,10 @@ pub enum TokenKind<'a> {
     },
     LinkClose,
     Char(char),
+    /// `|T<spec>|t` (2.x+): `spec` is the texture path and its `:`-separated size and offsets.
+    Texture {
+        spec: &'a str,
+    },
 }
 
 impl TokenKind<'_> {
@@ -111,6 +117,7 @@ impl TokenKind<'_> {
             TokenKind::LinkOpen { .. } => TokenClass::LinkOpen,
             TokenKind::LinkClose => TokenClass::LinkClose,
             TokenKind::Char(_) => TokenClass::Char,
+            TokenKind::Texture { .. } => TokenClass::Texture,
         }
     }
 }
@@ -190,6 +197,16 @@ pub fn token_at(text: &str, at: usize) -> Option<Token<'_>> {
             Some(b'h') => Token {
                 kind: TokenKind::LinkClose,
                 byte_len: 2,
+            },
+            // Not 1.12 markup, but harmless to it: an unterminated `|T` stays literal.
+            Some(b'T') => match rest[2..].find("|t") {
+                Some(end) => Token {
+                    kind: TokenKind::Texture {
+                        spec: &rest[2..2 + end],
+                    },
+                    byte_len: end + 4,
+                },
+                None => literal_pipe,
             },
             _ => literal_pipe,
         });
@@ -606,17 +623,12 @@ mod tests {
     }
 
     #[test]
-    fn there_is_no_inline_texture_escape_in_1_12_1() {
-        // `|T…|t` is a later client's escape; in 1.12 every byte of it is an ordinary character.
-        let text = "|TInterface\\Icons\\Foo:16:16|t";
-        let first = token_at(text, 0).expect("a token");
-        assert_eq!(first.kind, TokenKind::Char('|'));
-        assert_eq!(first.byte_len, 1);
-        assert_eq!(
-            token_at(text, 1).expect("a token").kind,
-            TokenKind::Char('T')
-        );
-        assert!(tokens(text).all(|(_, t)| t.class() == TokenClass::Char));
+    fn an_inline_texture_is_one_token_and_an_unterminated_one_is_text() {
+        let text = "a|TInterface\\Icons\\Foo:16:16|tb";
+        let t = token_at(text, 1).expect("a token");
+        assert_eq!(t.kind, TokenKind::Texture { spec: "Interface\\Icons\\Foo:16:16" });
+        assert_eq!(t.byte_len, text.len() - 2);
+        assert_eq!(token_at("|Tfoo", 0).unwrap().kind, TokenKind::Char('|'));
     }
 
     #[test]
