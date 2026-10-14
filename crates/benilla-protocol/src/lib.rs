@@ -23,6 +23,7 @@ pub mod wrath_relay;
 pub mod wrath_session;
 pub mod wrath_spline;
 pub mod wrath_vendor;
+pub mod wrath_trainer;
 pub mod wrath_world;
 pub mod wrath_misc;
 pub mod wrath_progress;
