@@ -17,10 +17,8 @@ use benilla_ui::script::{
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
-use benilla_protocol::field::{
-    FIELD_PLAYER_FIELD_COINAGE, FIELD_PLAYER_SKILL_INFO_1_1, FIELD_UNIT_LEVEL,
-};
 use benilla_protocol::messages::PLAYER_SKILL_SLOTS;
+use benilla_protocol::messages::{Field, ObjectType};
 use bevy::ecs::system::SystemParam;
 
 use crate::net::{ClientCommand, FieldChanged, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
@@ -345,18 +343,7 @@ pub(crate) fn feed_trainer(
         }
         // The reference watches each slot's value, max and permanent bonus (`0x5de180`,
         // `0x5de450`): the second dword always, the third only when its high half moved.
-        let skill_edge = edge
-            .raw_index_compat()
-            .checked_sub(FIELD_PLAYER_SKILL_INFO_1_1)
-            .filter(|&r| r < 3 * u16::from(PLAYER_SKILL_SLOTS))
-            .is_some_and(|r| match r % 3 {
-                1 => true,
-                2 => (edge.old ^ edge.new) & 0xFFFF_0000 != 0,
-                _ => false,
-            });
-        let player_field = edge.kind == benilla_protocol::messages::ObjectType::Player
-            && (edge.raw_index_compat() == FIELD_PLAYER_FIELD_COINAGE || skill_edge);
-        if player_field || edge.unit_field(FIELD_UNIT_LEVEL) {
+        if rederive_edge(edge) {
             open.trigger_re_derive();
         }
     }
@@ -529,6 +516,19 @@ fn drain_trainer(
 
 mod law;
 use law::{category, service_group, service_icon, service_tooltip};
+
+/// The trainer watches skill values/maxima, permanent bonuses, money and level.
+fn rederive_edge(edge: &FieldChanged) -> bool {
+    let skill_edge = edge
+        .unit_slot(Field::PlayerSkillInfo11, 3 * u16::from(PLAYER_SKILL_SLOTS))
+        .is_some_and(|r| match r % 3 {
+            1 => true,
+            2 => (edge.old ^ edge.new) & 0xFFFF_0000 != 0,
+            _ => false,
+        });
+    (edge.kind == ObjectType::Player && (edge.named_field(Field::PlayerCoinage) || skill_edge))
+        || (edge.is_unit() && edge.named_field(Field::UnitLevel))
+}
 
 #[cfg(test)]
 mod tests;
