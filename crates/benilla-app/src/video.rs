@@ -26,7 +26,8 @@ pub(crate) fn novsync_env() -> bool {
 /// Whether this run sizes its own window (a capture, a background run) and so stays windowed.
 /// Session-only: `gxWindow`/`gxResolution` are env-overridden while it holds, never saved over.
 pub(crate) fn windowed_env() -> bool {
-    std::env::var_os("WOW_WIN").is_some()
+    crate::run_mode::showcase_active()
+        || std::env::var_os("WOW_WIN").is_some()
         || std::env::var_os("WOW_CAPTURE").is_some()
         || std::env::var_os("WOW_CAPTURE_UI").is_some()
         || benilla_world::bgwin::background_run()
@@ -622,6 +623,9 @@ fn apply_window_mode(
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut last_restart: Local<u32>,
 ) {
+    if crate::run_mode::showcase_active() {
+        return;
+    }
     // A `RestartGx()` re-asserts even when nothing moved, re-applying `gxResolution` to a window
     // that is already windowed.
     let forced = std::mem::replace(&mut *last_restart, restarts.0) != restarts.0;
@@ -666,6 +670,35 @@ fn apply_window_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn showcase_disabled_preserves_window_policy_and_enabled_owns_resolution() {
+        use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _path = EnvGuard::unset("WOW_SHOWCASE_PATH");
+        assert!(!crate::run_mode::showcase_active());
+        assert_eq!(crate::run_mode::offline_active(), crate::run_mode::scenario_active());
+        assert_eq!(crate::run_mode::start_state(), if crate::run_mode::scenario_active() { crate::char_select::ClientState::InWorld } else { crate::char_select::ClientState::Login });
+        let baseline = (windowed_env(), boot_window_mode(), boot_windowed_size(), requested_dpi());
+        {
+            let _set = EnvGuard::set("WOW_SHOWCASE_PATH", "path.toml");
+            if crate::run_mode::dev_affordances() {
+                assert!(windowed_env());
+                assert_eq!(boot_window_mode(), WindowMode::Windowed);
+                let mut app = App::new();
+                app.insert_resource(VideoConfig { display: DisplayMode::Fullscreen, maximize: true, windowed: UVec2::new(320,200), ..Default::default() });
+                app.init_resource::<GxRestarts>();
+                app.add_systems(Update, apply_window_mode);
+                app.world_mut().spawn((Window { resolution: WindowResolution::new(1920,1080).with_scale_factor_override(1.0), ..Default::default() }, PrimaryWindow));
+                app.update();
+                let mut windows = app.world_mut().query::<&Window>();
+                let window = windows.single(app.world()).unwrap();
+                assert_eq!(window.mode, WindowMode::Windowed);
+                assert_eq!((window.resolution.physical_width(), window.resolution.physical_height()), (1920,1080));
+            }
+        }
+        assert_eq!(baseline, (windowed_env(), boot_window_mode(), boot_windowed_size(), requested_dpi()));
+    }
 
     #[test]
     fn display_modes_are_seeded_before_framexml_and_on_replacement_vms() {

@@ -64,6 +64,9 @@ impl Plugin for DevProbesPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(feature = "dev")]
         {
+            if crate::run_mode::showcase_active() {
+                app.add_plugins(crate::showcase_capture::driver::ShowcasePlugin);
+            }
             // `$WOW_CAPTURE`: one deterministic screenshot, then exit.
             if crate::run_mode::scenario_active() {
                 app.add_plugins(crate::capture::CapturePlugin);

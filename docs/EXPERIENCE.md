@@ -186,3 +186,42 @@ fov_degrees = 60.0
 
 This is a schema example, not a manager-verified filming route. No runtime image or Classic
 pixel-equality claim follows from CPU sampler tests.
+
+### Recording the offline sequence (explicit developer mode)
+
+`WOW_SHOWCASE_PATH=<path.toml>` selects the recorder before plugins build. The app starts directly
+in-world with `connect: false`: neither Vanilla nor Wrath network threads start. It never creates
+an avatar or sends camera/player commands. The currently selected experience is retained, including
+Classic; no Plus gate applies. `WOW_CAPTURE` and the showcase knob are mutually exclusive. With
+no path knob, recorder preparation and registration do nothing and existing eval selection,
+window sizing, camera controls and time strategy remain unchanged.
+
+`WOW_SHOWCASE_OUT=<directory>` chooses the sequence directory (default `target/showcase`). It must
+be empty; previous clips are never overwritten. The recorder copies the path and writes a manifest
+with profile, map, minute, resolution, FPS and expected frame count. `result.toml` distinguishes
+completion from failure. `frame000000.png`, etc., are RGB PNGs at exactly 1920×1080; the recorder
+refuses an incorrectly sized readback. Window/DPI settings are owned by recording mode, not
+`WOW_WIN`, `WOW_DPI`, `gxResolution`, or `RestartGx`. A display too small to host 1080p cannot record.
+
+The camera is pinned after input/stock camera writers and before world streaming. Lighting uses
+the authored minute with server-time following off (the engine samples integer minutes, so a
+fractional minute is truncated; the manifest records `effective_minute`). Simulation advances once by 1/60 second only
+after the previous PNG is saved; streaming/readback/write waits have zero game-clock delta. Each
+pose waits for focus residency and presentability, then eight render frames for warm-up. This is
+a bounded readiness gate, not a guarantee that every distant shader/asset is visually settled.
+Each pose has a 120-second wall-clock deadline covering streaming, readback and disk write;
+failures exit nonzero. Offline clips contain scenery, lighting and shadows, not network actors.
+Rendering can be slower than realtime; encoding defines the playback rate.
+
+Manager-only launch example (workers never run the client):
+
+```sh
+WOW_EXPERIENCE=plus WOW_SHOWCASE_PATH=/tmp/path.toml WOW_SHOWCASE_OUT=/tmp/plus-clip \
+  cargo run -p benilla
+ffmpeg -framerate 60 -start_number 0 -i /tmp/plus-clip/frame%06d.png \
+  -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart /tmp/plus-clip.mp4
+```
+
+Use the same path and `WOW_EXPERIENCE=classic` with a different empty output directory for a
+matched comparison. Headless tests establish gating, sampler/state/clock contracts only; manager
+runs must still verify actual streaming, screenshots, shadow appearance and Classic pixel equality.
