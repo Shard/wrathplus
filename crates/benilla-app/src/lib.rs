@@ -54,6 +54,7 @@ mod dev;
 mod doodad_events;
 mod entities;
 pub mod experience;
+mod experience_ui;
 mod fishing_line;
 mod footprints;
 mod game_plugins;
@@ -268,6 +269,12 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         experience::sync_lighting
             .before(benilla_world::modern_shadows::ShadowSyncSet)
             .before(bevy::transform::TransformSystems::Propagate),
+    );
+    app.add_systems(
+        Update,
+        experience_ui::sync_text
+            .after(ui_script::UiFeed)
+            .before(ui_script::UiInput),
     );
     // Static-scene transform tracking pinned on: the default threshold re-decides every frame with
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It

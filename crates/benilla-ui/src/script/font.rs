@@ -21,6 +21,9 @@
 //! 0x783c30` calls the `SetFontObject` link `0x770c60` for `inherits=` (`0x783ce6`) and `font=`
 //! (`0x783d22`). No corpus addon mutates a declared font object.
 
+#[path = "experience_text.rs"]
+pub(super) mod experience_text;
+
 use mlua::{Lua, Table, Value};
 
 use super::binding_abi;
