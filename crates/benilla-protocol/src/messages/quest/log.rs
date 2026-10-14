@@ -49,6 +49,7 @@ pub mod quest_flags {
 /// template behind the quest log's detail view. Its arrays are fixed-count with no display ids.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuestTemplate {
+    pub wrath: Option<super::giver::WrathQuestInfo>,
     pub quest_id: u32,
     pub method: u32,
     pub level: u32,
@@ -166,6 +167,7 @@ pub(in crate::messages) fn read_quest_query_response(r: &mut &[u8]) -> io::Resul
         .expect("read_quest_query_response always reads QUEST_OBJECTIVES_COUNT quads/texts");
 
     Ok(QuestTemplate {
+        wrath: None,
         quest_id,
         method,
         level,

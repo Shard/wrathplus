@@ -202,7 +202,8 @@ pub use quest::{
     questlog_remove_quest, questlog_swap_quest, QuestComplete, QuestConfirmAccept, QuestDetails,
     QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestPushResult,
     QuestRequestItems, QuestRequiredItem, QuestRewardItem, QuestShareMsg, QuestTemplate,
-    QUEST_EMOTE_COUNT, QUEST_OBJECTIVES_COUNT, QUEST_REWARDS_COUNT, QUEST_REWARD_CHOICES_COUNT,
+    WrathQuestInfo, QUEST_EMOTE_COUNT, QUEST_OBJECTIVES_COUNT, QUEST_REWARDS_COUNT,
+    QUEST_REWARD_CHOICES_COUNT,
 };
 pub use reputation::{
     set_faction_at_war, set_faction_inactive, set_watched_faction, FACTION_LIST_LEN,

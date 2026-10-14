@@ -29,6 +29,7 @@ fn on_gossip_menu(
         text_id,
         options,
         quests,
+        quest_info,
     } = ev
     {
         gossip_menu(
@@ -41,6 +42,7 @@ fn on_gossip_menu(
             &index,
             &stores,
         );
+        gossip.quest_info = quest_info;
     }
 }
 

@@ -212,6 +212,7 @@ mod tests {
 
         fn detail(npc: u64) -> QuestView {
             QuestView::Detail(benilla_protocol::messages::QuestDetails {
+                wrath: None,
                 npc,
                 quest_id: 1,
                 title: "A Threat Within".into(),

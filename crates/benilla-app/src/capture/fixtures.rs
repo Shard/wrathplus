@@ -383,6 +383,7 @@ pub(super) fn seed_ui_fixture(
             quest.open(
                 NPC_GUID,
                 crate::ui_quest::QuestView::Detail(benilla_protocol::messages::QuestDetails {
+                    wrath: None,
                     npc: NPC_GUID,
                     quest_id: 783,
                     title: "A Threat Within".into(),
@@ -424,12 +425,14 @@ pub(super) fn seed_ui_fixture(
                     emote: 0,
                     quests: vec![
                         benilla_protocol::messages::QuestListEntry {
+                            wrath: None,
                             quest_id: 84,
                             icon: 0,
                             level: 4,
                             title: "Brotherhood of Thieves".into(),
                         },
                         benilla_protocol::messages::QuestListEntry {
+                            wrath: None,
                             quest_id: 40,
                             icon: 0,
                             level: 3,
@@ -482,6 +485,7 @@ pub(super) fn seed_ui_fixture(
             // rewards and money. `quest_type: 1` is `QuestInfo.dbc`'s "Elite", though the real 783
             // is plain, so a row tag is in the shot.
             quest_log.insert_template(QuestTemplate {
+                wrath: None,
                 quest_id: 783,
                 method: 2,
                 level: 2,
@@ -531,6 +535,7 @@ pub(super) fn seed_ui_fixture(
             });
             // Entry 2: complete, for the row's "(Complete)" tag.
             quest_log.insert_template(QuestTemplate {
+                wrath: None,
                 quest_id: 7,
                 method: 2,
                 level: 3,

@@ -444,6 +444,7 @@ mod tests {
         giver.open(
             0x4000_0000_0000_0BAD,
             crate::ui_quest::QuestView::Detail(QuestDetails {
+                wrath: None,
                 npc: 0x4000_0000_0000_0BAD,
                 quest_id,
                 title: "A Threat Within".into(),
@@ -532,6 +533,7 @@ mod tests {
 
     fn detail(npc: u64, quest_id: u32) -> QuestDetails {
         QuestDetails {
+            wrath: None,
             npc,
             quest_id,
             title: "A Threat Within".into(),
@@ -626,6 +628,7 @@ mod tests {
 
     fn progress(npc: u64, quest_id: u32, close_on_cancel: u32) -> QuestRequestItems {
         QuestRequestItems {
+            wrath: None,
             npc,
             quest_id,
             title: "A Threat Within".into(),
@@ -640,6 +643,7 @@ mod tests {
 
     fn offer(npc: u64, quest_id: u32, auto_finish: u32) -> QuestOfferReward {
         QuestOfferReward {
+            wrath: None,
             npc,
             quest_id,
             title: "A Threat Within".into(),

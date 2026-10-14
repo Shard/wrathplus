@@ -28,6 +28,7 @@ pub(crate) struct GossipState {
     /// because `GetGossipAvailableQuests` and `GetGossipActiveQuests` return `(title, level)`
     /// pairs, walked in twos by stock `GossipFrame.lua` (lines 66 and 90).
     pub(crate) quests: Vec<(u32, u32, u32, String)>,
+    pub(crate) quest_info: Vec<benilla_protocol::messages::WrathQuestInfo>,
     records: HashMap<u32, Vec<NpcTextBlock>>,
 }
 
@@ -66,6 +67,7 @@ impl GossipState {
         self.text_id = text_id;
         self.options = options;
         self.quests = quests;
+        self.quest_info.clear();
         self.greeting = None;
         if text_id == 0 {
             return false;
@@ -120,6 +122,7 @@ impl GossipState {
         self.greeting = None;
         self.options.clear();
         self.quests.clear();
+        self.quest_info.clear();
     }
 
     /// The disconnect clear; NPC text is static per id, so the records stay.
@@ -202,7 +205,16 @@ fn snapshot(state: &GossipState) -> Option<GossipMenu> {
         quests: state
             .quests
             .iter()
-            .map(|(_id, icon, level, title)| GossipQuestRow {
+            .enumerate()
+            .map(|(i, (_id, icon, level, title))| GossipQuestRow {
+                daily: state
+                    .quest_info
+                    .get(i)
+                    .is_some_and(|q| q.flags & 0x1000 != 0),
+                repeatable: state.quest_info.get(i).is_some_and(|q| q.repeatable),
+                // AzerothCore PlayerQuest.cpp: both COMPLETE and INCOMPLETE use icon 4.
+                // Do not infer completion from the greeting icon.
+                complete: false,
                 title: title.clone(),
                 level: *level,
                 active: row_is_active(*icon),
@@ -218,6 +230,16 @@ fn snapshot(state: &GossipState) -> Option<GossipMenu> {
             })
             .collect(),
     })
+}
+
+/// Greeting icons cannot distinguish completion; use the authoritative player log slot.
+fn quest_complete(store: &benilla_protocol::ObjectFields, quest: u32) -> bool {
+    (0..store.player_quest_log_slots())
+        .filter_map(|i| store.player_quest_log(i))
+        .any(|slot| {
+            slot.quest_id == quest
+                && slot.state & benilla_protocol::messages::quest_slot_state::COMPLETE != 0
+        })
 }
 
 /// Push the menu into the VM and fire `GOSSIP_SHOW` or `GOSSIP_CLOSED` on a change.
@@ -251,6 +273,11 @@ fn feed_gossip(
         return;
     }
     let mut fresh = snapshot(&state);
+    if let (Some(menu), Ok((store, _))) = (fresh.as_mut(), self_q.single()) {
+        for (row, &(quest_id, _, _, _)) in menu.quests.iter_mut().zip(&state.quests) {
+            row.complete = quest_complete(&store.0, quest_id);
+        }
+    }
     // Expand the greeting's `$N`/`$B`/`$G`/`$<n>w` macros client-side, as the reference does.
     if let Some(greeting) = fresh.as_mut().map(|m| &mut m.greeting) {
         let player = crate::npc_text::player_identity(&self_q, &names, &commands);
@@ -371,6 +398,32 @@ mod tests {
 
     /// The one type in [`GOSSIP_ICON_TYPES`] with no art in the 1.12 install.
     const GOSSIP_ICON_TYPE_UNSHIPPED: &str = "auctioneer";
+
+    #[test]
+    fn greeting_completion_uses_log_state_not_the_shared_icon() {
+        use benilla_protocol::messages::field::FIELD_PLAYER_QUEST_LOG_1_1 as BASE;
+        let incomplete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7)]);
+        assert!(!quest_complete(&incomplete, 7));
+        let complete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1 << 24)]);
+        assert!(quest_complete(&complete, 7));
+        assert!(!quest_complete(&complete, 8));
+        let mut state = GossipState::default();
+        state.npc = Some(1);
+        state.greeting = Some("hello".into());
+        state.quests.push((7, 4, 80, "daily".into()));
+        state
+            .quest_info
+            .push(benilla_protocol::messages::WrathQuestInfo {
+                flags: 0x1000,
+                repeatable: true,
+                ..Default::default()
+            });
+        let row = &snapshot(&state).unwrap().quests[0];
+        assert!(row.active && row.daily && row.repeatable);
+        assert!(!row.complete);
+        state.clear();
+        assert!(state.quest_info.is_empty());
+    }
 
     #[test]
     fn snapshot_is_none_until_a_menu_opens() {
