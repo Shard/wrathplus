@@ -1001,7 +1001,21 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
         | ClientCommand::CancelCast { .. }
-        | ClientCommand::CancelAura { .. } => WrathRoute::NativeSession,
+        | ClientCommand::CancelAura { .. }
+        | ClientCommand::GossipHello { .. }
+        | ClientCommand::GossipSelectOption { .. }
+        | ClientCommand::NpcTextQuery { .. }
+        | ClientCommand::QuestgiverStatusQuery { .. }
+        | ClientCommand::QuestgiverHello { .. }
+        | ClientCommand::QuestgiverQuery { .. }
+        | ClientCommand::QuestgiverAccept { .. }
+        | ClientCommand::QuestgiverComplete { .. }
+        | ClientCommand::QuestgiverRequestReward { .. }
+        | ClientCommand::QuestgiverChooseReward { .. }
+        | ClientCommand::QuestQuery { .. }
+        | ClientCommand::QuestlogRemove { .. }
+        | ClientCommand::PushQuestToParty { .. }
+        | ClientCommand::QuestConfirmAccept { .. } => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
@@ -1288,6 +1302,7 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
 
 /// Queries, the action bar and casting, in build 12340's layouts.
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_npc as n;
     use benilla_protocol::wrath_session::{self as s, CastTarget};
     // The client's cast counter, echoed by the server's cast results.
     static CAST_COUNT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
@@ -1328,6 +1343,48 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         }
         ClientCommand::CancelAura { spell_id } => {
             (s::CMSG_CANCEL_AURA, s::encode_cancel_aura(spell_id))
+        }
+        ClientCommand::GossipHello { guid } => (n::CMSG_GOSSIP_HELLO, guid.to_le_bytes().to_vec()),
+        ClientCommand::GossipSelectOption { guid, option } => (
+            n::CMSG_GOSSIP_SELECT_OPTION,
+            n::encode_gossip_select_option(guid, option),
+        ),
+        ClientCommand::NpcTextQuery { text_id, guid } => {
+            (n::CMSG_NPC_TEXT_QUERY, n::encode_npc_text_query(text_id, guid))
+        }
+        ClientCommand::QuestgiverStatusQuery { npc } => {
+            (n::CMSG_QUESTGIVER_STATUS_QUERY, npc.to_le_bytes().to_vec())
+        }
+        ClientCommand::QuestgiverHello { npc } => {
+            (n::CMSG_QUESTGIVER_HELLO, npc.to_le_bytes().to_vec())
+        }
+        ClientCommand::QuestgiverQuery { npc, quest } => (
+            n::CMSG_QUESTGIVER_QUERY_QUEST,
+            n::encode_questgiver_query_quest(npc, quest),
+        ),
+        ClientCommand::QuestgiverAccept { npc, quest } => (
+            n::CMSG_QUESTGIVER_ACCEPT_QUEST,
+            n::encode_questgiver_accept_quest(npc, quest),
+        ),
+        ClientCommand::QuestgiverComplete { npc, quest } => (
+            n::CMSG_QUESTGIVER_COMPLETE_QUEST,
+            n::encode_guid_quest(npc, quest),
+        ),
+        ClientCommand::QuestgiverRequestReward { npc, quest } => (
+            n::CMSG_QUESTGIVER_REQUEST_REWARD,
+            n::encode_guid_quest(npc, quest),
+        ),
+        ClientCommand::QuestgiverChooseReward { npc, quest, choice } => (
+            n::CMSG_QUESTGIVER_CHOOSE_REWARD,
+            n::encode_questgiver_choose_reward(npc, quest, choice),
+        ),
+        ClientCommand::QuestQuery { quest } => (n::CMSG_QUEST_QUERY, quest.to_le_bytes().to_vec()),
+        ClientCommand::QuestlogRemove { slot } => (n::CMSG_QUESTLOG_REMOVE_QUEST, vec![slot]),
+        ClientCommand::PushQuestToParty { quest } => {
+            (n::CMSG_PUSHQUESTTOPARTY, quest.to_le_bytes().to_vec())
+        }
+        ClientCommand::QuestConfirmAccept { quest } => {
+            (n::CMSG_QUEST_CONFIRM_ACCEPT, quest.to_le_bytes().to_vec())
         }
         other => unreachable!("not a Wrath session command: {other:?}"),
     }

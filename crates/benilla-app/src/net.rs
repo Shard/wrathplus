@@ -576,6 +576,21 @@ impl NetCommands {
                         | ClientCommand::CastSpellItem { .. }
                         | ClientCommand::CancelCast { .. }
                         | ClientCommand::CancelAura { .. }
+                        // `benilla_protocol::wrath_npc`: gossip and the quest giver.
+                        | ClientCommand::GossipHello { .. }
+                        | ClientCommand::GossipSelectOption { .. }
+                        | ClientCommand::NpcTextQuery { .. }
+                        | ClientCommand::QuestgiverStatusQuery { .. }
+                        | ClientCommand::QuestgiverHello { .. }
+                        | ClientCommand::QuestgiverQuery { .. }
+                        | ClientCommand::QuestgiverAccept { .. }
+                        | ClientCommand::QuestgiverComplete { .. }
+                        | ClientCommand::QuestgiverRequestReward { .. }
+                        | ClientCommand::QuestgiverChooseReward { .. }
+                        | ClientCommand::QuestQuery { .. }
+                        | ClientCommand::QuestlogRemove { .. }
+                        | ClientCommand::PushQuestToParty { .. }
+                        | ClientCommand::QuestConfirmAccept { .. }
                 ) || matches!(
                     command,
                     ClientCommand::AutostoreLootItem { slot: 0..=17 }

@@ -410,6 +410,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_npc::handles(opcode) => {
+                Ok(match crate::wrath_npc::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_session::handles(opcode) => {
                 // A message that does not decode is dropped, never fatal to the session.
                 Ok(match crate::wrath_session::decode(opcode, body, self.self_guid) {
@@ -661,6 +667,34 @@ fn project_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
     projected
 }
 
+/// `UNIT_NPC_FLAGS` from build 12340's bits (AzerothCore `UnitDefines.h`) to 1.12's: 2.0 split
+/// trainers and vendors by kind and moved every service bit up. Bits 1.12 has no meaning for
+/// (spell click, vehicles, guild bank, mailbox) are dropped.
+fn npc_flags_1_12(flags: u32) -> u32 {
+    const MAP: [(u32, u32); 17] = [
+        (0x0000_0001, 0x0001), // gossip
+        (0x0000_0002, 0x0002), // quest giver
+        (0x0000_0010, 0x0010), // trainer
+        (0x0000_0020, 0x0010), // class trainer
+        (0x0000_0040, 0x0010), // profession trainer
+        (0x0000_0f80, 0x0004), // vendor: generic, ammo, food, poison, reagent
+        (0x0000_1000, 0x4000), // repair
+        (0x0000_2000, 0x0008), // flight master
+        (0x0000_4000, 0x0020), // spirit healer
+        (0x0000_8000, 0x0040), // spirit guide
+        (0x0001_0000, 0x0080), // innkeeper
+        (0x0002_0000, 0x0100), // banker
+        (0x0004_0000, 0x0200), // petitioner
+        (0x0008_0000, 0x0400), // tabard designer
+        (0x0010_0000, 0x0800), // battlemaster
+        (0x0020_0000, 0x1000), // auctioneer
+        (0x0040_0000, 0x2000), // stable master
+    ];
+    MAP.iter()
+        .filter(|(wrath, _)| flags & wrath != 0)
+        .fold(0, |acc, (_, vanilla)| acc | vanilla)
+}
+
 fn projected_pairs(
     object_type: ObjectType,
     mut get: impl FnMut(usize) -> Option<u32>,
@@ -727,6 +761,9 @@ fn projected_pairs(
             ] {
                 copy(&mut out, get(src), dst);
             }
+            if let Some(flags) = get(82) {
+                out.push((147, npc_flags_1_12(flags)));
+            }
             let bytes1 = get(74);
             let bytes2 = get(122);
             if bytes1.is_some() || bytes2.is_some() {
@@ -784,6 +821,28 @@ fn projected_pairs(
                     for offset in 0..words {
                         copy(&mut out, get(src + offset), dst + offset as u16);
                     }
+                }
+                // The quest log: 3.3.5's slot (from 158) is `id, state, counters 0-1 and 2-3 as
+                // u16 pairs, timer`; 1.12's (from 198) is `id, four 6-bit counters with the
+                // state byte at bit 24, timer`. 1.12 holds 20 of the 25 slots.
+                for slot in 0..20usize {
+                    let src = 158 + slot * 5;
+                    let dst = 198 + slot as u16 * 3;
+                    copy(&mut out, get(src), dst);
+                    let (state, low, high) = (get(src + 1), get(src + 2), get(src + 3));
+                    if state.is_some() || low.is_some() || high.is_some() {
+                        let (low, high) = (low.unwrap_or(0), high.unwrap_or(0));
+                        let counter = |v: u32| (v & 0xffff).min(0x3f);
+                        out.push((
+                            dst + 1,
+                            counter(low)
+                                | counter(low >> 16) << 6
+                                | counter(high) << 12
+                                | counter(high >> 16) << 18
+                                | (state.unwrap_or(0) & 0xff) << 24,
+                        ));
+                    }
+                    copy(&mut out, get(src + 4), dst + 2);
                 }
             }
         }
@@ -1654,5 +1713,36 @@ mod tests {
             adapter.dispatch(SMSG_WARDEN_DATA, &[], 0),
             Err(WrathEventError::WardenRequired)
         ));
+    }
+}
+
+#[cfg(test)]
+mod quest_log_projection_tests {
+    use super::*;
+
+    #[test]
+    fn npc_flags_translate_to_the_1_12_bits() {
+        // Godric Rothgar: gossip, vendor, repair (3.3.5 0x1081) → 1.12 0x4005.
+        let pairs = projected_pairs(ObjectType::Unit, |i| Some(if i == 82 { 0x1081 } else { 0 }));
+        assert!(pairs.contains(&(147, 0x4005)));
+        assert_eq!(npc_flags_1_12(0x0001_0003), 0x0083); // innkeeper quest giver
+    }
+
+    #[test]
+    fn a_quest_slot_packs_its_counters_and_state_into_the_1_12_slot() {
+        let mut fields = std::collections::HashMap::new();
+        // Slot 1: quest 783, complete, counters 3, 1, 0, 70 (clamped to 63), timer 0.
+        fields.insert(158 + 5, 783u32);
+        fields.insert(159 + 5, 1);
+        fields.insert(160 + 5, 3 | 1 << 16);
+        fields.insert(161 + 5, 70 << 16);
+        let pairs = projected_pairs(ObjectType::Player, |i| fields.get(&i).copied().or(Some(0)));
+        let at = |dst: u16| pairs.iter().find(|(d, _)| *d == dst).map(|(_, v)| *v);
+        assert_eq!(at(201), Some(783));
+        let packed = at(202).unwrap();
+        assert_eq!(packed & 0x3f, 3);
+        assert_eq!((packed >> 6) & 0x3f, 1);
+        assert_eq!((packed >> 18) & 0x3f, 63);
+        assert_eq!(packed >> 24, 1);
     }
 }

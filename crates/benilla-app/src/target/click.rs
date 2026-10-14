@@ -882,7 +882,7 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     };
     let branch = unit_branch(attack, dead_fork, leg);
     if !interaction_supported(*dispatch.seam.dialect, branch) {
-        warn!("Wrath unit service/loot/skin interaction unavailable; selection only");
+        warn!("Wrath unit skin interaction unavailable; selection only");
         return;
     }
     match branch {
@@ -966,7 +966,7 @@ fn interaction_supported(dialect: SessionDialect, branch: UnitBranch) -> bool {
     dialect == SessionDialect::Vanilla5875
         || matches!(
             branch,
-            UnitBranch::Attack | UnitBranch::Dead(DeadUnitLeg::Loot)
+            UnitBranch::Attack | UnitBranch::Dead(DeadUnitLeg::Loot) | UnitBranch::Service
         )
 }
 
@@ -1023,7 +1023,9 @@ pub(super) fn act_on_arrival(
     };
     // Arrival is a terminal producer boundary too: an old approach must never borrow a
     // replacement Wrath session's writer for an unimplemented service/loot/use/skin action.
-    if *dispatch.seam.dialect == SessionDialect::Wrath12340 && verb != ApproachVerb::Loot {
+    if *dispatch.seam.dialect == SessionDialect::Wrath12340
+        && !matches!(verb, ApproachVerb::Loot | ApproachVerb::Talk)
+    {
         return;
     }
     let Some(&entity) = index.0.get(&guid) else {
@@ -1526,17 +1528,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wrath_interaction_ladder_admits_only_melee_and_preserves_vanilla() {
+    fn wrath_interaction_ladder_admits_melee_loot_and_service_and_preserves_vanilla() {
         assert!(interaction_supported(
             SessionDialect::Wrath12340,
             UnitBranch::Attack
         ));
         assert!(interaction_supported(
             SessionDialect::Wrath12340,
+            UnitBranch::Service
+        ));
+        assert!(interaction_supported(
+            SessionDialect::Wrath12340,
             UnitBranch::Dead(DeadUnitLeg::Loot)
         ));
         for branch in [
-            UnitBranch::Service,
             UnitBranch::Dead(DeadUnitLeg::Skin),
             UnitBranch::Dead(DeadUnitLeg::Nothing),
         ] {
@@ -2408,8 +2413,8 @@ mod tests {
 
     #[test]
     fn wrath_retained_arrivals_are_consumed_without_unsupported_interaction_side_effects() {
+        // `Talk` is supported (gossip and the quest giver); a live unit is never looted.
         for verb in [
-            crate::player::ApproachVerb::Talk,
             crate::player::ApproachVerb::Loot,
             crate::player::ApproachVerb::Use,
             crate::player::ApproachVerb::Skin,

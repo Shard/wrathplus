@@ -17,6 +17,7 @@ pub mod wrath_ground;
 pub mod wrath_items;
 pub mod wrath_loot;
 pub mod wrath_movement;
+pub mod wrath_npc;
 pub mod wrath_relay;
 pub mod wrath_session;
 pub mod wrath_world;
