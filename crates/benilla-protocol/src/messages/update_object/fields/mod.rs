@@ -10,27 +10,8 @@ pub use npc::{NpcFlags, NpcService};
 mod layout;
 pub use layout::{Field, FieldLayout, FieldSpan};
 
-// Descriptor field indices for build 5875.
-const FIELD_OBJECT_TYPE: u16 = 2;
-// The creator of a spell-spawned object (bobber, ritual portal); 0 for a world spawn.
-const FIELD_GAMEOBJECT_CREATED_BY: u16 = 6;
-const FIELD_GAMEOBJECT_DISPLAYID: u16 = 8;
-const FIELD_GAMEOBJECT_FLAGS: u16 = 9;
-// The spawn's rotation quaternion (x, y, z, w), four floats.
-const FIELD_GAMEOBJECT_ROTATION: u16 = 10;
+// Legacy build-5875 public anchors, retained only for transitional callers.
 pub const FIELD_GAMEOBJECT_STATE: u16 = 14;
-const FIELD_GAMEOBJECT_POS_X: u16 = 15;
-const FIELD_GAMEOBJECT_POS_Y: u16 = 16;
-const FIELD_GAMEOBJECT_POS_Z: u16 = 17;
-const FIELD_GAMEOBJECT_FACING: u16 = 18;
-// The client reads it at GameObject block byte 0x34. vmangos `UpdateFields_1_5_1.h` adds a
-// `GAMEOBJECT_TIMESTAMP` that would make it 20, but that is not the 5875 layout.
-const FIELD_GAMEOBJECT_DYN_FLAGS: u16 = 19;
-// The client reads it at `[go+0x110]+0x38`, between DYN_FLAGS and TYPE_ID.
-const FIELD_GAMEOBJECT_FACTION: u16 = 20;
-const FIELD_GAMEOBJECT_TYPE_ID: u16 = 21;
-// OBJECT_END + 0x10 (vmangos `UpdateFields_1_12_1.h:317`).
-const FIELD_GAMEOBJECT_LEVEL: u16 = 22;
 /// `CORPSE_FIELD_DYNAMIC_FLAGS`; bit 0 is lootable insignia. On a unit, index 36 is
 /// `UNIT_FIELD_BYTES_0`, so a field edge carries its object class.
 pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 = 36;
@@ -63,6 +44,7 @@ pub const FIELD_UNIT_AURA: u16 = 47;
 /// Nibble-packed, 8 slots per `u32` (`SpellAuraHolder::SetAuraFlag`, `SpellAuras.cpp:7456-7462`).
 pub const FIELD_UNIT_AURAFLAGS: u16 = 95;
 /// Byte-packed, 4 slots per `u32`: the caster's level (`SetAuraLevel`, `SpellAuras.cpp:7484`).
+#[cfg(test)]
 const FIELD_UNIT_AURALEVELS: u16 = 101;
 /// Byte-packed, 4 slots per `u32`, holding `stack - 1` (`SpellAuras.cpp:7500-7507`).
 pub const FIELD_UNIT_AURAAPPLICATIONS: u16 = 113;
@@ -115,11 +97,13 @@ const FIELD_UNIT_RESISTANCES: u16 = 155; // +0x95 ×7, INT; [0] = armor
 const FIELD_UNIT_ATTACK_POWER: u16 = 165; // +0x9F, INT
 /// +0xA0, `TWO_SHORT`: signed halves, the low positive, the high already negative or zero
 /// (`StatSystem.cpp:335-336`).
+#[cfg(test)]
 const FIELD_UNIT_ATTACK_POWER_MODS: u16 = 166;
 #[cfg(test)]
 const FIELD_UNIT_ATTACK_POWER_MULTIPLIER: u16 = 167; // +0xA1, FLOAT: multiplier − 1.0
 #[cfg(test)]
 const FIELD_UNIT_RANGED_ATTACK_POWER: u16 = 168; // +0xA2, INT
+#[cfg(test)]
 const FIELD_UNIT_RANGED_ATTACK_POWER_MODS: u16 = 169; // +0xA3, TWO_SHORT as above
 #[cfg(test)]
 const FIELD_UNIT_RANGED_ATTACK_POWER_MULTIPLIER: u16 = 170; // +0xA4, FLOAT
@@ -217,66 +201,74 @@ pub mod quest_slot_state {
 
 // From the CONTAINER block on, the hex comments in vmangos `UpdateFields_1_12_1.h` run 6 low. The
 // indices here follow its enum arithmetic, which the server compiles: INV_SLOT_HEAD = 188 + 0x12A.
-const FIELD_PLAYER_VISIBLE_ITEM_1_CREATOR: u16 = 258; // UNIT_END + 0x46; 12 fields per slot
 pub const FIELD_PLAYER_INV_SLOT_HEAD: u16 = 486; // 23 slots × 2 (equipment 0–18, bags 19–22)
-const FIELD_PLAYER_PACK_SLOT_1: u16 = 532; // 16 slots × 2 (the backpack)
-const FIELD_PLAYER_BANK_SLOT_1: u16 = 564; // 24 slots × 2
-const FIELD_PLAYER_BANK_BAG_SLOT_1: u16 = 612; // 564 + 24×2; 6 bag slots × 2 (item guids)
-const FIELD_PLAYER_VENDORBUYBACK_SLOT_1: u16 = 624; // 12 slots × 2 (item guids)
+#[cfg(test)]
 const FIELD_PLAYER_KEYRING_SLOT_1: u16 = 648; // 32 slots × 2 (item guids), wire slots 81–112
+#[cfg(test)]
 const FIELD_PLAYER_FARSIGHT: u16 = 712; // our view's anchor (Mind Vision, Sentry Totem), or 0
+#[cfg(test)]
 const FIELD_PLAYER_BUYBACK_PRICE_1: u16 = 1226; // 12 × u32 copper, indexed slot−69
+#[cfg(test)]
 const FIELD_PLAYER_BUYBACK_TIMESTAMP_1: u16 = 1238; // 12 × u32, the client's sort key only
 pub const FIELD_PLAYER_FIELD_COINAGE: u16 = 1176; // copper
+#[cfg(test)]
 const FIELD_PLAYER_XP: u16 = 716;
+#[cfg(test)]
 const FIELD_PLAYER_NEXT_LEVEL_XP: u16 = 717;
 // The watched reputation slot, signed: slot 0 is a real faction, so only -1 means none.
+#[cfg(test)]
 const FIELD_PLAYER_WATCHED_FACTION_INDEX: u16 = 1261;
 // The rested pool in base kill-XP units: a kill drains it 1:1 while granting +100%
 // (`Player::GetXPRestBonus`), so the doubled span on the XP bar is twice this value.
+#[cfg(test)]
 const FIELD_PLAYER_REST_STATE_EXPERIENCE: u16 = 1175;
 // EXPLORED_ZONES_1 is the discovery bitset, 2048 bits indexed by `AreaTable.dbc` exploreFlag. Just
 // below it sit block, dodge, parry and crit chance (FLOAT, UNIT_END + 0x396..0x399).
-const FIELD_PLAYER_BLOCK_PERCENTAGE: u16 = 1106;
-const FIELD_PLAYER_DODGE_PERCENTAGE: u16 = 1107;
-const FIELD_PLAYER_PARRY_PERCENTAGE: u16 = 1108;
-const FIELD_PLAYER_CRIT_PERCENTAGE: u16 = 1109;
+#[cfg(test)]
 const FIELD_PLAYER_EXPLORED_ZONES_1: u16 = 1111;
 /// The bitset's slot count (`Size: 64` in the server enum).
 pub const PLAYER_EXPLORED_ZONES_SLOTS: u16 = 64;
 // PLAYER stat block. POSSTAT, NEGSTAT and the resistance buff mods are floats in vmangos but go out
 // as INT (`Object::BuildValuesUpdate` narrows them). Read them signed: the server's cast of a
 // negative float wraps on x86 and saturates to 0 on aarch64.
+#[cfg(test)]
 const FIELD_PLAYER_POSSTAT0: u16 = 1177; // UNIT_END+0x3DD ×5, INT
+#[cfg(test)]
 const FIELD_PLAYER_NEGSTAT0: u16 = 1182; // ×5, INT; negative-or-zero where the wire can carry it
+#[cfg(test)]
 const FIELD_PLAYER_RESISTANCEBUFFMODSPOSITIVE: u16 = 1187; // ×7, INT
+#[cfg(test)]
 const FIELD_PLAYER_RESISTANCEBUFFMODSNEGATIVE: u16 = 1194; // ×7, INT; negative-or-zero
+#[cfg(test)]
 const FIELD_PLAYER_MOD_DAMAGE_DONE_POS: u16 = 1201; // ×7 schools ([0] physical), INT
+#[cfg(test)]
 const FIELD_PLAYER_MOD_DAMAGE_DONE_NEG: u16 = 1208; // ×7, INT; negative-or-zero
+#[cfg(test)]
 const FIELD_PLAYER_MOD_DAMAGE_DONE_PCT: u16 = 1215; // ×7, FLOAT (header says INT), default 1.0
                                                     // (`Player.cpp:3336`, `Player.cpp:7274`)
 pub const FIELD_PLAYER_SKILL_INFO_1_1: u16 = 718; // ×384: 128 skills × 3 dwords
 
 // Unspent talent points and free primary professions, `UnitCharacterPoints("player")`.
+#[cfg(test)]
 const FIELD_PLAYER_CHARACTER_POINTS1: u16 = 1102;
+#[cfg(test)]
 const FIELD_PLAYER_CHARACTER_POINTS2: u16 = 1103;
 // Tracking masks the minimap tests: bit `1 << (n - 1)` for creature type or `LockType.dbc` id `n`,
 // one bit per active tracking aura.
+#[cfg(test)]
 const FIELD_PLAYER_TRACK_CREATURES: u16 = 1104;
+#[cfg(test)]
 const FIELD_PLAYER_TRACK_RESOURCES: u16 = 1105;
+#[cfg(test)]
 const FIELD_PLAYER_AMMO_ID: u16 = 1223; // UNIT_END+0x40B, INT: the equipped ammo item id
-const FIELD_PLAYER_SELF_RES_SPELL: u16 = 1224;
-// Bit 0x10 is PLAYER_FLAGS_GHOST (`Player.h:319`), held by the ghost aura 8326 until resurrection.
+                                        // Bit 0x10 is PLAYER_FLAGS_GHOST (`Player.h:319`), held by the ghost aura 8326 until resurrection.
 pub const FIELD_PLAYER_FLAGS: u16 = 190;
 // The client's player block base `[player+0xe68]` is field 188: the arbiter at +0x0, PLAYER_FLAGS
 // at +0x8 and the duel team at +0x20, the three reads of `UnitReaction`'s duel leg (`0x6061e0`).
-const FIELD_PLAYER_DUEL_ARBITER: u16 = 188;
-const FIELD_PLAYER_DUEL_TEAM: u16 = 196;
 // Public, so `GetGuildInfo(unit)` (`0x4c9330`, reading block +0xc and +0x10) answers for any
 // visible player; a guild id of 0 is guildless.
-const FIELD_PLAYER_GUILDID: u16 = 191;
-const FIELD_PLAYER_GUILDRANK: u16 = 192;
 // `GetComboPoints` (`0x51a190`) reads the target at block +0x838 and the count byte at +0x1029.
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_COMBO_TARGET: u16 = 714;
 #[cfg(test)]
 const FIELD_PLAYER_FIELD_BYTES: u16 = 1222; // UNIT_END+0x40A: flags, combo points, action bars,
@@ -286,15 +278,25 @@ const FIELD_PLAYER_FIELD_BYTES: u16 = 1222; // UNIT_END+0x40A: flags, combo poin
 // `MSG_INSPECT_HONOR_STATS`. The four kill counters are TWO_SHORT (honorable, dishonorable), but
 // vmangos writes all except SESSION_KILLS as a whole dword. LAST_WEEK_RANK is the weekly standing,
 // not a rank. BYTES2 byte 0 is the rank bar (`Player.h:366-372`).
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_SESSION_KILLS: u16 = 1250;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_YESTERDAY_KILLS: u16 = 1251;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_LAST_WEEK_KILLS: u16 = 1252;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_THIS_WEEK_KILLS: u16 = 1253;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_THIS_WEEK_CONTRIBUTION: u16 = 1254;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_LIFETIME_HONORABLE_KILLS: u16 = 1255;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_LIFETIME_DISHONORABLE_KILLS: u16 = 1256;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_YESTERDAY_CONTRIBUTION: u16 = 1257;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_LAST_WEEK_CONTRIBUTION: u16 = 1258;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_LAST_WEEK_RANK: u16 = 1259;
 #[cfg(test)]
 const FIELD_PLAYER_FIELD_BYTES2: u16 = 1260;
@@ -551,25 +553,30 @@ impl ObjectFields {
 
     /// The ground caster (`UpdateFields_1_12_1.h:325`), at the same index as a corpse's owner.
     pub fn dynamicobject_caster(&self) -> Option<u64> {
-        self.get_guid(6).filter(|&g| g != 0)
+        self.get_field_guid(Field::DynamicobjectCaster, 0)
+            .filter(|&g| g != 0)
     }
     /// The type byte; vmangos sends 1 (area spell) for every persistent-area cast.
     pub fn dynamicobject_bytes(&self) -> Option<u32> {
-        self.get_u32(8)
+        self.get(Field::DynamicobjectBytes)
     }
     /// The anchoring spell, the root of the ground-targeted visual chain.
     pub fn dynamicobject_spell_id(&self) -> Option<u32> {
-        self.get_u32(9).filter(|&s| s != 0)
+        self.get(Field::DynamicobjectSpellid).filter(|&s| s != 0)
     }
     /// The area's radius in yards, which the server resolves from `SpellRadius.dbc`.
     pub fn dynamicobject_radius(&self) -> Option<f32> {
-        self.get_f32(10)
+        self.get_float(Field::DynamicobjectRadius, 0)
     }
     /// The anchored point and facing in raw WoW coordinates, equal to the create's position.
     pub fn dynamicobject_position(&self) -> Option<([f32; 3], f32)> {
         Some((
-            [self.get_f32(11)?, self.get_f32(12)?, self.get_f32(13)?],
-            self.get_f32(14).unwrap_or(0.0),
+            [
+                self.get_float(Field::DynamicobjectPosX, 0)?,
+                self.get_float(Field::DynamicobjectPosY, 0)?,
+                self.get_float(Field::DynamicobjectPosZ, 0)?,
+            ],
+            self.get_float(Field::DynamicobjectFacing, 0).unwrap_or(0.0),
         ))
     }
 
@@ -607,29 +614,19 @@ impl ObjectFields {
         self.get_raw(index)
             .or((index < self.descriptor_end).then_some(0))
     }
-    fn get_f32(&self, index: u16) -> Option<f32> {
-        self.get_u32(index).map(f32::from_bits)
-    }
-    fn get_i32(&self, index: u16) -> Option<i32> {
-        self.get_u32(index).map(|v| v as i32)
-    }
-    /// A `TWO_SHORT` field as its (low, high) halves (vmangos `shared/Common.h:119-121`).
-    fn get_u16_pair(&self, index: u16) -> Option<(u16, u16)> {
-        self.get_u32(index).map(|v| (v as u16, (v >> 16) as u16))
-    }
 
     /// One slot's `UNIT_FIELD_AURAFLAGS` nibble; an absent word reads 0, as in the client.
     fn get_aura_nibble(&self, slot: u8) -> u8 {
         let word = self
-            .get_u32(FIELD_UNIT_AURAFLAGS + u16::from(slot >> 3))
+            .get_at(Field::UnitAuraFlags, u16::from(slot >> 3))
             .unwrap_or(0);
         ((word >> ((slot & 7) * 4)) & 0x0F) as u8
     }
 
     /// One slot's byte of `UNIT_FIELD_AURALEVELS` or `UNIT_FIELD_AURAAPPLICATIONS`; an absent word
     /// reads 0.
-    fn get_aura_byte(&self, base: u16, slot: u8) -> u8 {
-        let word = self.get_u32(base + u16::from(slot >> 2)).unwrap_or(0);
+    fn get_aura_byte(&self, field: Field, slot: u8) -> u8 {
+        let word = self.get_at(field, u16::from(slot >> 2)).unwrap_or(0);
         (word >> ((slot & 3) * 8)) as u8
     }
 
@@ -742,3 +739,9 @@ pub use unit::{power_display_scale, OwnerFallback};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod accessor_tests;
+
+#[cfg(test)]
+mod dialect_policy_tests;
