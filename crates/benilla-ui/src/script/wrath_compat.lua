@@ -647,31 +647,7 @@ SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none,
 GetCursorInfo = GetCursorInfo or none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
--- 2.0+ widened the gossip quest lists: available rows are `title, level, isTrivial, isDaily,
--- isRepeatable`, active rows `title, level, isTrivial, isComplete`; 1.12 answers pairs. Dailies,
--- repeatables and completion are not carried yet, so those columns are nil.
-do
-    local available, active = GetGossipAvailableQuests, GetGossipActiveQuests
-    local function widen(width, ...)
-        local out, n = {}, select("#", ...)
-        for i = 1, n, 2 do
-            local base = #out
-            out[base + 1], out[base + 2] = select(i, ...)
-            for k = 3, width do out[base + k] = false end
-        end
-        for i = 1, #out do if out[i] == false then out[i] = nil end end
-        return unpack(out, 1, (n / 2) * width)
-    end
-    function GetGossipAvailableQuests() return widen(5, available()) end
-    function GetGossipActiveQuests() return widen(4, active()) end
-    function GetNumGossipAvailableQuests() return select("#", available()) / 2 end
-    function GetNumGossipActiveQuests() return select("#", active()) / 2 end
-    function GetNumGossipOptions() return select("#", GetGossipOptions()) / 2 end
-end
 ForceGossip = ForceGossip or function() return nil end
-GetAvailableQuestInfo = GetAvailableQuestInfo or function() return nil, nil, nil end
-IsActiveQuestTrivial = IsActiveQuestTrivial or function() return nil end
-QuestGetAutoAccept = QuestGetAutoAccept or function() return nil end
 QuestFlagsPVP = QuestFlagsPVP or function() return nil end
 GetNumQuestItemDrops = GetNumQuestItemDrops or function() return 0 end
 GetQuestLogItemDrop = GetQuestLogItemDrop or none
@@ -704,10 +680,6 @@ QuestPOIUpdateIcons = QuestPOIUpdateIcons or none
 QuestPOIGetIconInfo = QuestPOIGetIconInfo or none
 QuestPOIGetQuestIDByVisibleIndex = QuestPOIGetQuestIDByVisibleIndex or none
 GetQuestPOILeaderBoard = GetQuestPOILeaderBoard or none
-GetRewardXP, GetRewardHonor = GetRewardXP or zero, GetRewardHonor or zero
-GetRewardTalents, GetRewardArenaPoints = GetRewardTalents or zero, GetRewardArenaPoints or zero
-GetRewardTitle = GetRewardTitle or none
-GetSuggestedGroupNum = GetSuggestedGroupNum or zero
 
 -- ── 3.x movement binding names ────────────────────────────────────────────────────────────────
 -- `Bindings.xml` calls the flying-era names; on the ground they are 1.12's jump and sit.

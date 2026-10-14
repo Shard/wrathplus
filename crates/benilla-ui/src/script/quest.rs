@@ -52,6 +52,14 @@ pub struct QuestRewardSpell {
     pub tradeskill: bool,
 }
 
+/// Wrath greeting metadata, parallel to the corresponding title list.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QuestGreetingInfo {
+    pub trivial: bool,
+    pub daily: bool,
+    pub repeatable: bool,
+}
+
 /// One open questgiver panel, with every field the four panels read; pushed whole by the app.
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestState {
@@ -60,6 +68,16 @@ pub struct QuestState {
     pub greeting: String,
     pub active_titles: Vec<String>,
     pub available_titles: Vec<String>,
+    pub active_info: Vec<QuestGreetingInfo>,
+    pub available_info: Vec<QuestGreetingInfo>,
+    pub auto_accept: bool,
+    pub reward_xp: u32,
+    pub reward_honor: u32,
+    pub reward_talents: u32,
+    pub reward_arena_points: u32,
+    /// Localized CharTitles name, or None when no title is granted.
+    pub reward_title: Option<String>,
+    pub suggested_group_num: u32,
     // Detail, progress and reward panels.
     pub title: String,
     /// The text of whichever panel is live: quest, progress or reward.
@@ -89,6 +107,15 @@ impl Default for QuestState {
             greeting: String::new(),
             active_titles: Vec::new(),
             available_titles: Vec::new(),
+            active_info: Vec::new(),
+            available_info: Vec::new(),
+            auto_accept: false,
+            reward_xp: 0,
+            reward_honor: 0,
+            reward_talents: 0,
+            reward_arena_points: 0,
+            reward_title: None,
+            suggested_group_num: 0,
             title: String::new(),
             body: String::new(),
             objectives: String::new(),
@@ -194,6 +221,76 @@ pub(super) fn item_vec<'a>(state: &'a QuestState, kind: &str) -> Option<&'a Vec<
 /// Register the questgiver globals.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+
+    if lua.app_data_ref::<Model>().expect("model app_data").dialect
+        == super::ScriptDialect::Wrath12340
+    {
+        for (name, pick) in [
+            (
+                "GetRewardXP",
+                (|q: &QuestState| q.reward_xp) as fn(&QuestState) -> u32,
+            ),
+            ("GetRewardHonor", |q: &QuestState| q.reward_honor),
+            ("GetRewardTalents", |q: &QuestState| q.reward_talents),
+            ("GetRewardArenaPoints", |q: &QuestState| {
+                q.reward_arena_points
+            }),
+            ("GetSuggestedGroupNum", |q: &QuestState| {
+                q.suggested_group_num
+            }),
+        ] {
+            g.set(
+                name,
+                lua.create_function(move |lua, ()| {
+                    let model = lua.app_data_ref::<Model>().expect("model app_data");
+                    Ok(model.quest.as_ref().map_or(0, pick))
+                })?,
+            )?;
+        }
+        g.set(
+            "GetRewardTitle",
+            lua.create_function(|lua, ()| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(model.quest.as_ref().and_then(|q| q.reward_title.clone()))
+            })?,
+        )?;
+        g.set(
+            "QuestGetAutoAccept",
+            lua.create_function(|lua, ()| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(model.quest.as_ref().is_some_and(|q| q.auto_accept))
+            })?,
+        )?;
+        g.set(
+            "GetAvailableQuestInfo",
+            lua.create_function(|lua, index: usize| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                let row = model
+                    .quest
+                    .as_ref()
+                    .and_then(|q| q.available_info.get(index.wrapping_sub(1)));
+                Ok(match row {
+                    Some(row) => MultiValue::from_vec(vec![
+                        Value::Boolean(row.trivial),
+                        Value::Boolean(row.daily),
+                        Value::Boolean(row.repeatable),
+                    ]),
+                    None => MultiValue::from_vec(vec![Value::Nil, Value::Nil, Value::Nil]),
+                })
+            })?,
+        )?;
+        g.set(
+            "IsActiveQuestTrivial",
+            lua.create_function(|lua, index: usize| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(model
+                    .quest
+                    .as_ref()
+                    .and_then(|q| q.active_info.get(index.wrapping_sub(1)))
+                    .map(|row| row.trivial))
+            })?,
+        )?;
+    }
 
     // ── Text getters ──
     fn install_text(lua: &Lua, name: &str, pick: fn(&QuestState) -> String) -> mlua::Result<()> {
@@ -463,6 +560,47 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::{QuestAction, QuestItemView, QuestPanel, QuestSelect, QuestState};
     use crate::script::UiScript;
+
+    #[test]
+    fn wrath_quest_metadata_is_native_and_snapshot_driven() {
+        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(s.eval::<u32>("return GetRewardXP()").unwrap(), 0);
+        assert!(s
+            .eval::<bool>("return not QuestGetAutoAccept() and GetRewardTitle() == nil")
+            .unwrap());
+        s.set_quest(Some(QuestState {
+            auto_accept: true,
+            reward_xp: 1200,
+            reward_honor: 50,
+            reward_talents: 1,
+            reward_arena_points: 2,
+            reward_title: Some("Champion".into()),
+            suggested_group_num: 5,
+            available_info: vec![super::QuestGreetingInfo {
+                trivial: true,
+                daily: true,
+                repeatable: false,
+            }],
+            active_info: vec![super::QuestGreetingInfo {
+                trivial: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }));
+        assert_eq!(s.eval::<(u32,u32,u32,u32,u32)>("return GetRewardXP(), GetRewardHonor(), GetRewardTalents(), GetRewardArenaPoints(), GetSuggestedGroupNum()").unwrap(), (1200,50,1,2,5));
+        assert_eq!(
+            s.eval::<String>("return GetRewardTitle()").unwrap(),
+            "Champion"
+        );
+        assert!(s.eval::<bool>("local t,d,r = GetAvailableQuestInfo(1); return t and d and not r and IsActiveQuestTrivial(1) and QuestGetAutoAccept()").unwrap());
+        assert!(s
+            .eval::<bool>(
+                "return GetAvailableQuestInfo(0) == nil and IsActiveQuestTrivial(2) == nil"
+            )
+            .unwrap());
+        s.set_quest(None);
+        assert_eq!(s.eval::<u32>("return GetRewardHonor()").unwrap(), 0);
+    }
 
     fn detail() -> QuestState {
         QuestState {
