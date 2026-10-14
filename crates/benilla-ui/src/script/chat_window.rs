@@ -725,6 +725,12 @@ mod tests {
             .unwrap());
     }
 
+    #[test]
+    fn wrath_combat_log_docks_after_the_primary_window() {
+        let s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(s.eval::<i64>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(2) return d").unwrap(), 2);
+    }
+
     /// The boot init docks window 2 at 1 (`0x4982c0`: `mov ds:0xb4ff78, 1`).
     #[test]
     fn docked_is_a_dock_position_not_a_flag() {

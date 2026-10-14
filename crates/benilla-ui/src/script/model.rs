@@ -1148,7 +1148,15 @@ impl Model {
             petition: petition::PetitionState::default(),
             petition_requests: Vec::new(),
             // Per window, as the stock dock differs: 1 and 2 are the dock, the rest undocked.
-            chat_window_looks: std::array::from_fn(chat_window::ChatWindowLook::stock),
+            chat_window_looks: std::array::from_fn(|index| {
+                let mut look = chat_window::ChatWindowLook::stock(index);
+                // Wrath reserves dock position 1 for the primary window
+                // (FloatingChatFrame.lua:1988); vanilla's combat-log default is 1.
+                if dialect == ScriptDialect::Wrath12340 && index == 1 {
+                    look.docked = Some(2);
+                }
+                look
+            }),
             chat_window_changes: HashSet::new(),
             chat_colors: super::chat_types::seed(),
             chat_colors_changed: false,
