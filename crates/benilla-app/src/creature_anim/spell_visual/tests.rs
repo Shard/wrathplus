@@ -1719,3 +1719,83 @@ fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
         }
     }
 }
+
+#[test]
+fn state_aura_ids_prefer_packet_snapshots_including_authoritative_empty() {
+    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::{messages::ObjectFields, wrath_auras::NativeAura};
+    let layout = FieldLayout::Vanilla5875;
+    let aura = layout.resolve(Field::UnitAura).unwrap().index;
+    let flags = layout.resolve(Field::UnitAuraFlags).unwrap().index;
+    let store = crate::net::ObjectStore(ObjectFields::from_native_pairs(
+        layout,
+        &[(aura, 123), (flags, 0x0e)],
+    ));
+    let guid = crate::net::Guid(42);
+    let mut packets = crate::net::wrath_auras::PacketAuras::default();
+    assert_eq!(
+        super::state_aura_ids(&store, Some(&guid), Some(&packets)),
+        vec![123]
+    );
+    packets.by_guid.insert(
+        42,
+        vec![crate::net::wrath_auras::StampedAura {
+            aura: NativeAura {
+                slot: 63,
+                spell_id: 456,
+                flags: 0x10,
+                level: 80,
+                stacks: 1,
+                caster_guid: None,
+                max_duration_ms: None,
+                remaining_ms: None,
+            },
+            received_at: 0.0,
+        }],
+    );
+    assert_eq!(
+        super::state_aura_ids(&store, Some(&guid), Some(&packets)),
+        vec![456]
+    );
+    packets.by_guid.insert(42, vec![]);
+    assert!(super::state_aura_ids(&store, Some(&guid), Some(&packets)).is_empty());
+}
+
+#[test]
+fn vanilla_state_aura_watch_uses_real_id_and_flag_spans_only() {
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    let layout = FieldLayout::Vanilla5875;
+    for (field, len, watched) in [
+        (Field::UnitAura, 48, true),
+        (Field::UnitAuraFlags, 6, true),
+        (Field::UnitAuraApplications, 12, false),
+        (Field::UnitAuraLevels, 12, false),
+    ] {
+        let span = layout.resolve(field).unwrap();
+        assert_eq!(span.width, len);
+        for offset in [0, len - 1] {
+            let (field, offset) = layout
+                .field_at(ObjectType::Unit, span.index + offset)
+                .unwrap();
+            let mut edge = crate::net::FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::Unit,
+                layout,
+                field,
+                offset,
+                old: 0,
+                new: 1,
+            };
+            assert_eq!(super::is_descriptor_aura_state_edge(&edge), watched);
+            edge.kind = ObjectType::Player;
+            assert_eq!(super::is_descriptor_aura_state_edge(&edge), watched);
+            edge.kind = ObjectType::GameObject;
+            assert!(!super::is_descriptor_aura_state_edge(&edge));
+        }
+    }
+    assert!(FieldLayout::Wrath12340.resolve(Field::UnitAura).is_none());
+    assert!(FieldLayout::Wrath12340
+        .resolve(Field::UnitAuraFlags)
+        .is_none());
+}

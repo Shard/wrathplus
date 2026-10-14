@@ -960,10 +960,24 @@ pub(super) fn route_cast_visuals(
     channel_cache.retain(|e, _| units.contains(*e));
 }
 
-/// The reference's aura watch span (`0x604d00`, registered at `0x604226`): from
-/// `FIELD_UNIT_AURA`, 54 dwords, the 48 slot ids and the 6 packed flag words.
-const AURA_WATCH_BASE: u16 = benilla_protocol::field::FIELD_UNIT_AURA;
-const AURA_WATCH_SPAN: u16 = 54;
+/// Vanilla's aura ids and packed flag words; Wrath auras arrive as packet snapshots.
+fn is_descriptor_aura_state_edge(edge: &FieldChanged) -> bool {
+    edge.layout == benilla_protocol::messages::FieldLayout::Vanilla5875
+        && (edge.unit_slot(Field::UnitAura, 48).is_some()
+            || edge.unit_slot(Field::UnitAuraFlags, 6).is_some())
+}
+
+fn state_aura_ids(
+    store: &ObjectStore,
+    guid: Option<&crate::net::Guid>,
+    packets: Option<&crate::net::wrath_auras::PacketAuras>,
+) -> Vec<u32> {
+    if let Some(snapshot) = guid.and_then(|g| packets?.by_guid.get(&g.0)) {
+        snapshot.iter().map(|a| a.aura.spell_id).collect()
+    } else {
+        store.0.unit_auras().map(|a| a.spell_id).collect()
+    }
+}
 
 /// Arm and reap each aura's state kit (stage 2) off the unit's `UNIT_AURA` slots: a spell entering
 /// the slots begins its kit's models persistent, also on a unit streamed in mid-aura, and leaving
@@ -975,7 +989,8 @@ const AURA_WATCH_SPAN: u16 = 54;
 pub(crate) fn arm_aura_state_fx(
     // Re-run on an edge inside the aura watch span and on first sight (a standing aura is a
     // state); the full sweep runs once per DBC-resource arrival.
-    units: Query<(Entity, &ObjectStore), Without<ItemObject>>,
+    units: Query<(Entity, &ObjectStore, Option<&crate::net::Guid>), Without<ItemObject>>,
+    packets: Option<Res<crate::net::wrath_auras::PacketAuras>>,
     arrived: Query<Entity, (Added<ObjectStore>, Without<ItemObject>)>,
     mut edges: MessageReader<FieldChanged>,
     visuals: Option<Res<SpellVisuals>>,
@@ -991,25 +1006,22 @@ pub(crate) fn arm_aura_state_fx(
     let (Some(visuals), Some(spells)) = (visuals.as_deref(), spells.as_deref()) else {
         return; // no client data
     };
-    let scan = if full_sweep {
+    let scan = if full_sweep || packets.as_ref().is_some_and(|p| p.is_changed()) {
         units.iter().collect::<Vec<_>>()
     } else {
         let mut due: EntityHashSet = arrived.iter().collect();
         due.extend(
             edges
                 .read()
-                .filter(|e| {
-                    e.unit_array_slot(AURA_WATCH_BASE, AURA_WATCH_SPAN)
-                        .is_some()
-                })
+                .filter(|e| is_descriptor_aura_state_edge(e))
                 .map(|e| e.entity),
         );
         due.into_iter().filter_map(|e| units.get(e).ok()).collect()
     };
-    for (entity, store) in scan {
+    for (entity, store, guid) in scan {
         let prev = armed.entry(entity).or_default();
         // Occupied slots, deduped: one state instance per spell however many casters hold it.
-        let mut cur: Vec<u32> = store.0.unit_auras().map(|a| a.spell_id).collect();
+        let mut cur = state_aura_ids(store, guid, packets.as_deref());
         cur.sort_unstable();
         cur.dedup();
         for &spell_id in prev.iter() {
