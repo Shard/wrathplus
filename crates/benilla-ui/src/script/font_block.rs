@@ -164,6 +164,7 @@ pub(super) fn install(
                 let after = (d.font_path.clone(), d.font_height, d.outline);
                 model.touch_measure(rh);
                 drop(model);
+                super::font::experience_text::authored_height(lua, rh, height);
                 // A loaded face that changed the path, height or flags notifies (`0x79f32f` sets
                 // the change bits, `0x79f342` calls the notify); a failed load does not.
                 if ok && before.as_ref() != Some(&after) {
