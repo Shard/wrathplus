@@ -25,6 +25,8 @@ struct Recording {
     inflight: bool,
     finished: bool,
     started: Instant,
+    actors: Vec<crate::entities::showcase::SpawnedActor>,
+    actors_manifest_saved: bool,
     tx: crossbeam_channel::Sender<Result<u32, String>>,
     rx: crossbeam_channel::Receiver<Result<u32, String>>,
 }
@@ -38,12 +40,6 @@ pub(crate) fn prepare(app: &mut App) -> Result<(), String> {
         return Err("WOW_SHOWCASE_PATH and WOW_CAPTURE are mutually exclusive".into());
     }
     let path = ShowcasePath::parse(&std::fs::read_to_string(&file).map_err(|e| e.to_string())?)?;
-    // c7 schema lands before the visual spawner: never silently record missing actors.
-    if !path.actors.is_empty() {
-        return Err(
-            "showcase actors are validated but the visual spawner is not available yet".into(),
-        );
-    }
     let out = PathBuf::from(
         std::env::var_os("WOW_SHOWCASE_OUT").unwrap_or_else(|| "target/showcase".into()),
     );
@@ -63,6 +59,11 @@ pub(crate) fn prepare(app: &mut App) -> Result<(), String> {
     let manifest = format!("status = \"recording\"\nmap = {}\nminute = {}\neffective_minute = {}\nfps = {FPS}\nwidth = {WIDTH}\nheight = {HEIGHT}\nframes = {}\nexperience = \"{:?}\"\n", path.map, path.minute, path.minute as u32, path.frame_count(), app.world().get_resource::<crate::experience::Experience>().map(|e| e.profile()).unwrap_or_default());
     std::fs::write(out.join("manifest.toml"), manifest).map_err(|e| e.to_string())?;
     std::fs::copy(file, out.join("path.toml")).map_err(|e| e.to_string())?;
+    if !path.actors.is_empty() {
+        app.insert_resource(crate::entities::showcase::RequestedDisplays(
+            path.actors.iter().map(|a| a.display_id).collect(),
+        ));
+    }
     app.insert_resource(crate::run_mode::CaptureMode)
         .insert_resource(Recording {
             path,
@@ -73,6 +74,8 @@ pub(crate) fn prepare(app: &mut App) -> Result<(), String> {
             inflight: false,
             finished: false,
             started: Instant::now(),
+            actors: Vec::new(),
+            actors_manifest_saved: false,
             tx,
             rx,
         });
@@ -92,8 +95,106 @@ impl Plugin for ShowcasePlugin {
                 Update,
                 pin.after(WorldStage::Input).before(WorldStage::Stream),
             )
+            .add_systems(Update, spawn_actors.after(crate::entities::DisplayBuildSet))
             .add_systems(Last, shutter);
     }
+}
+
+fn spawn_actors(
+    mut state: ResMut<Recording>,
+    creatures: Option<Res<crate::entities::Creatures>>,
+    server: Res<AssetServer>,
+    materials: Res<Assets<benilla_assets::materials::WowModelMaterial>>,
+    images: Res<Assets<Image>>,
+    ibps: Res<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
+    mut palettes: ResMut<benilla_world::rig_palette::RigPalettes>,
+    mut commands: Commands,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if state.finished || state.actors.len() == state.path.actors.len() {
+        return;
+    }
+    let Some(creatures) = creatures else { return };
+    let actor = &state.path.actors[state.actors.len()];
+    let result = creatures
+        .showcase_display(actor.display_id, &server, &materials, &images)
+        .and_then(|ready| {
+            ready
+                .filter(|r| r.bindposes_resident(&ibps))
+                .map(|r| {
+                    crate::entities::showcase::spawn_actor(&mut commands, &mut palettes, actor, r)
+                })
+                .transpose()
+        });
+    match result {
+        Ok(Some(actor)) => {
+            state.actors.push(actor);
+            state.stable = 0;
+        }
+        Ok(None) => (),
+        Err(error) => finish(&mut state, Err(error), &mut exit),
+    }
+}
+
+type ActorAssets<'a> = (
+    Option<Res<'a, crate::entities::Creatures>>,
+    Option<Res<'a, AssetServer>>,
+    Option<Res<'a, Assets<benilla_assets::materials::WowModelMaterial>>>,
+    Option<Res<'a, Assets<Image>>>,
+);
+
+fn actors_ready(
+    state: &Recording,
+    assets: &ActorAssets<'_>,
+    palettes: Option<&benilla_world::rig_palette::RigPalettes>,
+    globals: &Query<&GlobalTransform>,
+) -> Result<bool, String> {
+    if state.actors.len() != state.path.actors.len() {
+        return Ok(false);
+    }
+    let (Some(creatures), Some(server), Some(materials), Some(images)) = assets else {
+        return Ok(false);
+    };
+    let Some(palettes) = palettes else {
+        return Ok(false);
+    };
+    for (requested, actor) in state.path.actors.iter().zip(&state.actors) {
+        if creatures
+            .showcase_display(requested.display_id, server, materials, images)?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        let Ok(global) = globals.get(actor.root) else {
+            return Ok(false);
+        };
+        if !global
+            .affine()
+            .abs_diff_eq(GlobalTransform::from(actor.transform).affine(), 0.001)
+        {
+            return Ok(false);
+        }
+        let Some(rows) = palettes.world_palette(actor.slot, actor.bones) else {
+            return Ok(false);
+        };
+        if rows.len() != actor.bones
+            || rows.iter().any(|row| !row.is_finite())
+            || rows.iter().all(|row| {
+                row.x_axis.truncate() == Vec3::ZERO
+                    && row.y_axis.truncate() == Vec3::ZERO
+                    && row.z_axis.truncate() == Vec3::ZERO
+            })
+        {
+            return Ok(false);
+        }
+        if palettes
+            .slot_origin(actor.slot)
+            .is_none_or(|o| o.distance(global.translation()) > 0.01)
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn clock(mut state: ResMut<Recording>, mut strategy: ResMut<TimeUpdateStrategy>) {
@@ -160,6 +261,9 @@ fn shutter(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    actor_assets: ActorAssets,
+    palettes: Option<Res<benilla_world::rig_palette::RigPalettes>>,
+    actor_globals: Query<&GlobalTransform>,
 ) {
     if state.finished {
         return;
@@ -196,6 +300,36 @@ fn shutter(
             Err(_) => (),
         }
         return;
+    }
+    if !state.path.actors.is_empty() {
+        match actors_ready(&state, &actor_assets, palettes.as_deref(), &actor_globals) {
+            Err(error) => {
+                finish(&mut state, Err(error), &mut exit);
+                return;
+            }
+            Ok(false) => {
+                state.stable = 0;
+                return;
+            }
+            Ok(true) => (),
+        }
+        if !state.actors_manifest_saved {
+            use std::io::Write;
+            let saved = std::fs::OpenOptions::new()
+                .append(true)
+                .open(state.out.join("manifest.toml"))
+                .and_then(|mut file| {
+                    for actor in &state.actors {
+                        file.write_all(actor.manifest.as_bytes())?;
+                    }
+                    Ok(())
+                });
+            if let Err(error) = saved {
+                finish(&mut state, Err(error.to_string()), &mut exit);
+                return;
+            }
+            state.actors_manifest_saved = true;
+        }
     }
     let size_ok = windows.single().is_ok_and(|w| {
         w.resolution.physical_width() == WIDTH && w.resolution.physical_height() == HEIGHT
@@ -266,6 +400,31 @@ mod tests {
         assert_eq!(std::env::var("WOW_MAP").unwrap(), "1");
     }
 
+    #[test]
+    fn requested_actor_never_captures_without_cache_and_palette_readiness() {
+        let mut app = recording_app();
+        let text = format!(
+            "{}\n[[actors]]\ndisplay_id = 42\nposition = [1, 2, 3]\n",
+            super::super::tests::PATH
+        );
+        app.world_mut().resource_mut::<Recording>().path = ShowcasePath::parse(&text).unwrap();
+        for _ in 0..SETTLE_FRAMES + 2 {
+            app.update();
+        }
+        let state = app.world().resource::<Recording>();
+        assert!(!state.inflight);
+        assert_eq!(state.frame, 0);
+        assert_eq!(state.stable, 0);
+        assert!(!state.actors_manifest_saved);
+        assert_eq!(
+            app.world_mut()
+                .query::<&Screenshot>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+    }
+
     fn recording_app() -> App {
         let mut app = App::new();
         let path = ShowcasePath::parse(super::super::tests::PATH).unwrap();
@@ -279,6 +438,8 @@ mod tests {
             inflight: false,
             finished: false,
             started: Instant::now(),
+            actors: Vec::new(),
+            actors_manifest_saved: false,
             tx,
             rx,
         });

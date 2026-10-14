@@ -275,21 +275,25 @@ clears `WOW_CAPTURE`, preserves the caller's data/locale and other renderer sett
 contact a server; a rendering failure stops before the second run/encoder command. Workers do
 not execute this script with the client. Plus feature settings still come from the usual config.
 
-### Planned optional showcase actors (c7 schema only)
+### Optional offline showcase actors
 
-The path schema now accepts up to 16 optional `[[actors]]` entries with a nonzero installed
+The path accepts up to 16 optional `[[actors]]` entries with a nonzero installed
 `CreatureDisplayInfo` `display_id`, finite bounded WoW `position = [x, y, z]`, optional `yaw`
 (radians, ±one turn, default 0), and `scale` (0.1–4, default 1; multiplier on installed scale).
-These are visual placements, not server creature-entry IDs, GUIDs or network units. Empty/absent
-actors preserve the existing camera sequence. **Recording a nonempty actor list currently fails
-explicitly at startup**: the schema precedes the visual spawner, so no clip can silently omit
-requested models. The next unit will load plain-creature displays, freeze deterministic Stand,
-wait for their assets and pose before frame zero, and fail on missing data. No actor sample route
-is claimed usable yet; humanoid customization/equipment is deferred.
+These are visual placements, not server creature-entry IDs, GUIDs or network units: no object
+store, collision, combat, interaction or nameplates. Empty/absent actors keep scenery-only capture.
 
-The app-side display cache now has a narrow recorder request/readiness seam (not yet activated by
-capture). It validates installed plain-creature rows and deterministic skinned Stand availability,
-rejects unsupported frozen batch/effect channels rather than silently dropping them, and checks
-all material image dependencies. Generated resident images are distinguished from asynchronously
-loaded assets; root/recursive failures are errors. Existing world batch handles remain unchanged.
-The recorder still rejects nonempty actor lists until the visual-spawner integration lands.
+The recorder uses the existing world display cache and unchanged world batch materials, not
+portrait/studio lighting. Every supported actor has a paused Stand at t=0 and global bone tracks
+sampled once at t=0. Version one explicitly rejects humanoid customization/equipment, unskinned
+or missing Stand models, effects, lights, bone billboards/billboard cards/welded cards, ground quads and animated
+material alpha/RGB/UV channels. Missing rows/models/textures and palette exhaustion fail the
+recording; no cube, bind-pose fallback or silently omitted part is substituted.
+
+Capture waits for model/recursive assets, **all** effective material image dependencies,
+inverse bindposes, propagated instance transforms and finite world rig palettes, then the normal
+eight render warm-up frames. Generated resident images need not have AssetServer load state.
+Manifest actor entries record normalized requested model/skin paths, authored placement,
+installed/effective scale and frozen pose. These paths are **not winning-archive provenance**;
+actual override consumption remains in existing reader tracing (`asset override` with path/source).
+No actor route is claimed live-verified; the manager owns framing/render checks and client runs.
