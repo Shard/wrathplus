@@ -364,6 +364,7 @@ fn build_detail(
         choices,
         rewards,
         reward_spell: crate::ui_quest::reward_spell_view(template.reward_spell, spells),
+        ..Default::default()
     }
 }
 
