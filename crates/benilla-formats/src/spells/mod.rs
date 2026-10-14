@@ -523,7 +523,13 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 attributes_ex3: u32_at(r, COL_ATTRIBUTES_EX3).unwrap_or(0),
                 attributes_ex4: u32_at(r, COL_ATTRIBUTES_EX4).unwrap_or(0),
                 school: u32_at(r, COL_SCHOOL)
-                    .map(|v| if school_is_mask && v != 0 { v.trailing_zeros() } else { v })
+                    .map(|v| {
+                        if school_is_mask && v != 0 {
+                            v.trailing_zeros()
+                        } else {
+                            v
+                        }
+                    })
                     .unwrap_or(0),
                 mechanic: u32_at(r, COL_MECHANIC).unwrap_or(0),
                 effect_mechanic: std::array::from_fn(|i| {
@@ -619,7 +625,13 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                     i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0)
                 }),
                 effect_base_dice: std::array::from_fn(|i| {
-                    i32_at(r, COL_EFFECT_BASE_DICE_1 + i).unwrap_or(0)
+                    if school_is_mask {
+                        // 3.3.5 removed BaseDice. AC SpellEffectInfo::CalcValue rolls
+                        // one die for positive DieSides; zero sides adds nothing.
+                        i32::from(i32_at(r, COL_EFFECT_DIE_SIDES_1 + i).unwrap_or(0) > 0)
+                    } else {
+                        i32_at(r, COL_EFFECT_BASE_DICE_1 + i).unwrap_or(0)
+                    }
                 }),
                 effect_dice_per_level: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_DICE_PER_LEVEL_1 + i).unwrap_or(0)

@@ -14,16 +14,64 @@ fn installed_wrath_spells_read_through_the_mapped_layout() {
     let fireball = spells.get(133).expect("Fireball rank 1");
     eprintln!(
         "133: {:?} {:?} icon={:?} school={} family={} mana={} level={} range={}",
-        fireball.name, fireball.rank, fireball.icon, fireball.school, fireball.spell_family,
-        fireball.mana_cost, fireball.spell_level, fireball.range_index
+        fireball.name,
+        fireball.rank,
+        fireball.icon,
+        fireball.school,
+        fireball.spell_family,
+        fireball.mana_cost,
+        fireball.spell_level,
+        fireball.range_index
     );
     assert_eq!(fireball.name, "Fireball");
     assert_eq!(fireball.rank.as_deref(), Some("Rank 1"));
     assert_eq!(fireball.school, 2, "fire");
     assert_eq!(fireball.spell_family, 3, "mage");
-    assert_eq!(fireball.icon.as_deref(), Some("Interface\\Icons\\Spell_Fire_FlameBolt"));
+    assert_eq!(
+        fireball.icon.as_deref(),
+        Some("Interface\\Icons\\Spell_Fire_FlameBolt")
+    );
+    assert_eq!(fireball.effect_base_points[0], 13);
+    assert_eq!(fireball.effect_die_sides[0], 9);
+    assert_eq!(fireball.effect_base_dice[0], 1);
+    let durations = crate::load_spell_durations(&mut chain).unwrap();
+    let radii = crate::load_spell_radii(&mut chain).unwrap();
+    let context = crate::TokenContext {
+        durations: &durations,
+        radii: &radii,
+        ranges: None,
+        skill: &|_| 0,
+        lookup: &|id| spells.get(id),
+        mods: None,
+        unmodified_points: false,
+        home_area: &|| None,
+        global: &|key| (key == "INT_SPELL_POINTS_SPREAD_TEMPLATE").then(|| "%d to %d".into()),
+        printf: &|template, args| {
+            let mut text = template.to_owned();
+            for arg in args {
+                if let crate::TokenNumber::Int(n) = arg {
+                    text = text.replacen("%d", &n.to_string(), 1);
+                }
+            }
+            text
+        },
+    };
+    assert_eq!(
+        crate::substitute("$s1 damage", fireball, &context),
+        "14 to 22 damage"
+    );
+    let pick_lock = spells.get(1804).expect("Pick Lock");
+    assert_eq!(pick_lock.effect_base_points, [4, 0, 0]);
+    assert_eq!(pick_lock.effect_die_sides, [1, 0, 0]);
+    assert_eq!(pick_lock.effect_base_dice, [1, 0, 0]);
+    for skill in [150, 225, 300] {
+        assert_eq!(pick_lock.open_lock_skill(skill), Some(skill as i32));
+    }
     let heroic = spells.get(78).expect("Heroic Strike rank 1");
-    eprintln!("78: {:?} power={} cost={}", heroic.name, heroic.power_type, heroic.mana_cost);
+    eprintln!(
+        "78: {:?} power={} cost={}",
+        heroic.name, heroic.power_type, heroic.mana_cost
+    );
     assert_eq!(heroic.name, "Heroic Strike");
 }
 
@@ -49,8 +97,11 @@ fn installed_wrath_human_reaction_to_a_diseased_young_wolf() {
     let factions = crate::load_faction_catalog(&mut chain).expect("factions");
     let human = factions.race_template(1).expect("human template");
     let wolf = factions.template(32).expect("template 32");
-    eprintln!("human {human:?}\nwolf {wolf:?}\nwolf→human {:?} human→wolf {:?}",
-        wolf.reaction_toward(human), human.reaction_toward(wolf));
+    eprintln!(
+        "human {human:?}\nwolf {wolf:?}\nwolf→human {:?} human→wolf {:?}",
+        wolf.reaction_toward(human),
+        human.reaction_toward(wolf)
+    );
 }
 
 #[test]
@@ -71,13 +122,20 @@ fn installed_wrath_particle_emitters_read() {
     for e in &emitters {
         eprintln!(
             "campfire emitter: blend={:?} tex={:?} rate={:?} color0={:?} scale={:?}",
-            e.blend, e.texture, e.timing.constant_rate(), e.over_life.color[0], e.over_life.scale
+            e.blend,
+            e.texture,
+            e.timing.constant_rate(),
+            e.over_life.color[0],
+            e.over_life.scale
         );
     }
     assert_eq!(emitters.len(), 2);
-    assert!(emitters.iter().all(|e| e.blend == crate::ParticleBlend::Add && e.texture.is_some()));
+    assert!(emitters
+        .iter()
+        .all(|e| e.blend == crate::ParticleBlend::Add && e.texture.is_some()));
     assert!(emitters.iter().all(|e| e.timing.peak_rate() > 0.0));
-    let kobold = crate::parse_m2_particle_emitters(&chain.read_file("Creature\\Kobold\\Kobold.m2").unwrap())
-        .expect("kobold");
+    let kobold =
+        crate::parse_m2_particle_emitters(&chain.read_file("Creature\\Kobold\\Kobold.m2").unwrap())
+            .expect("kobold");
     assert_eq!(kobold.len(), 1, "the candle");
 }
