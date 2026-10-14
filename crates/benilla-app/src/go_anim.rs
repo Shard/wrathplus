@@ -234,6 +234,11 @@ fn resolve(prev: Option<u32>, cur: u32) -> Option<Play> {
     }
 }
 
+fn is_go_state_edge(edge: &crate::net::FieldChanged) -> bool {
+    edge.kind == benilla_protocol::messages::ObjectType::GameObject
+        && edge.named_field(benilla_protocol::messages::Field::GameobjectState)
+}
+
 /// Caller 1, the wire (`0x5f89e0`): seeds the state at first sight, then follows the
 /// `GAMEOBJECT_STATE` edge, so an unrelated field change never re-closes a looted chest.
 #[allow(clippy::type_complexity)]
@@ -251,9 +256,7 @@ fn sync_wire_go_state(
     }
     let mut live = gos.p1();
     for e in edges.read() {
-        if e.kind != benilla_protocol::messages::ObjectType::GameObject
-            || e.raw_index_compat() != benilla_protocol::field::FIELD_GAMEOBJECT_STATE
-        {
+        if !is_go_state_edge(e) {
             continue;
         }
         if let Ok(mut anim) = live.get_mut(e.entity) {
@@ -573,10 +576,7 @@ fn drive_go_collision(
     arrived: Query<Entity, Added<Collider>>,
     mut edges: MessageReader<crate::net::FieldChanged>,
 ) {
-    let state_edges = edges.read().filter(|e| {
-        e.kind == benilla_protocol::messages::ObjectType::GameObject
-            && e.raw_index_compat() == benilla_protocol::field::FIELD_GAMEOBJECT_STATE
-    });
+    let state_edges = edges.read().filter(|e| is_go_state_edge(e));
     let mut due: bevy::ecs::entity::EntityHashSet = arrived.iter().collect();
     due.extend(state_edges.map(|e| e.entity));
     for entity in due {
@@ -711,6 +711,41 @@ pub(crate) fn plugin(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn semantic_state_edges_match_only_gameobject_state_in_both_layouts() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let mut edge = crate::net::FieldChanged {
+                entity: bevy::prelude::Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::GameObject,
+                field: Field::GameobjectState,
+                offset: 0,
+                layout,
+                old: 1,
+                new: 0,
+            };
+            assert!(super::is_go_state_edge(&edge));
+            edge.old = 0;
+            edge.new = 1;
+            assert!(
+                super::is_go_state_edge(&edge),
+                "both opening and closing update animation and collision"
+            );
+            edge.kind = ObjectType::Unit;
+            assert!(!super::is_go_state_edge(&edge));
+            edge.kind = ObjectType::GameObject;
+            edge.offset = 1;
+            assert!(!super::is_go_state_edge(&edge));
+            edge.offset = 0;
+            edge.field = Field::GameobjectFlags;
+            assert!(
+                !super::is_go_state_edge(&edge),
+                "unrelated fields do not re-close a chest"
+            );
+        }
+    }
+
     use super::*;
     use benilla_world::model_fade::DespawnFade;
 
