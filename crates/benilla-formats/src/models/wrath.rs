@@ -980,6 +980,33 @@ mod tests {
         bytes
     }
 
+    #[test]
+    fn unsupported_ribbon_does_not_drop_model_or_supported_sibling() {
+        let mut bytes = synthetic_m2();
+        let offset = bytes.len();
+        bytes.resize(offset + 3 * 176, 0);
+        put_array(&mut bytes, 0x120, 3, offset as u32);
+        for i in 0..3 {
+            put_u32(&mut bytes, offset+i*176, i as u32);
+            put_u16(&mut bytes, offset+i*176+154, u16::MAX);
+        }
+        // Second ribbon authors a cubic appearance track.
+        put_u16(&mut bytes, offset+176+36, 2);
+        // Third authors animated visibility on a global clock.
+        let track = offset+2*176+152;
+        put_u16(&mut bytes, track+2, 0);
+        let descriptors = bytes.len();
+        bytes.resize(descriptors+26, 0);
+        put_array(&mut bytes, track+4, 1, descriptors as u32);
+        put_array(&mut bytes, track+12, 1, (descriptors+8) as u32);
+        put_array(&mut bytes, descriptors, 2, (descriptors+16) as u32);
+        put_array(&mut bytes, descriptors+8, 2, (descriptors+24) as u32);
+        bytes[descriptors+25] = 1;
+        let model = parse_wrath_render_model(&bytes, &synthetic_skin(0), "", &[]).unwrap();
+        assert!(!model.submeshes.is_empty(), "geometry survives");
+        assert_eq!(model.ribbons.len(), 1, "only unsupported ribbons dropped");
+    }
+
     fn synthetic_skin(texture_count: u16) -> Vec<u8> {
         let mut bytes = vec![0; 48];
         bytes[..4].copy_from_slice(b"SKIN");

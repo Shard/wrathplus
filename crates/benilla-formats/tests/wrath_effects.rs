@@ -68,3 +68,67 @@ fn installed_wrath_native_effect_records() {
     assert!(light_models > 0, "installed point-light fixtures");
     assert!(ribbon_models > 0, "installed ribbon fixtures");
 }
+
+#[test]
+fn installed_wrath_unsupported_ribbon_census() {
+    if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+        return;
+    }
+    let mut chain =
+        Chain::open_wrath(Path::new(&std::env::var("WOW_DATA").unwrap()), "enUS").unwrap();
+    let entries = chain
+        .list_filtered(|p| p.to_ascii_lowercase().ends_with(".m2"))
+        .unwrap();
+    let (mut models, mut ribbon_models, mut cubic_models, mut global_models, mut parse_errors) =
+        (0, 0, 0, 0, 0);
+    for entry in entries {
+        let b = chain.read_file(&entry.name).unwrap();
+        if b.get(4..8) != Some(&264u32.to_le_bytes()) {
+            continue;
+        }
+        models += 1;
+        if u32::from_le_bytes(b[0x120..0x124].try_into().unwrap()) == 0 {
+            continue;
+        }
+        ribbon_models += 1;
+        let m = match parse_wrath_m2(&mut Cursor::new(&b)) {
+            Ok(m) => m,
+            Err(e) => {
+                parse_errors += 1;
+                eprintln!("CENSUS ERROR {}: {e}", entry.name);
+                continue;
+            }
+        };
+        let cubic = m.ribbons().iter().any(|r| {
+            [
+                r.color.interpolation,
+                r.alpha.interpolation,
+                r.height_above.interpolation,
+                r.height_below.interpolation,
+            ]
+            .iter()
+            .any(|&i| i > 1)
+        });
+        let global = m.ribbons().iter().any(|r| {
+            r.visibility.global_sequence != u16::MAX
+                && r.visibility.sequences.first().is_some_and(|keys| {
+                    keys.first()
+                        .is_some_and(|first| keys.iter().any(|k| k.value != first.value))
+                })
+        });
+        if cubic {
+            cubic_models += 1;
+        }
+        if global {
+            global_models += 1;
+        }
+        if cubic || global {
+            eprintln!(
+                "UNSUPPORTED {} cubic={cubic} global_visibility={global}",
+                entry.name
+            );
+        }
+    }
+    eprintln!("CENSUS native_models={models} ribbon_models={ribbon_models} cubic_models={cubic_models} animated_global_visibility_models={global_models} ribbon_parse_errors={parse_errors}");
+    assert!(models > 0 && ribbon_models > 0);
+}

@@ -2,9 +2,9 @@
 //! Lights retain the same first-key semantics as the vanilla adapter; ribbons retain keyed
 //! color/width/alpha and per-animation visibility. No flat vanilla offsets are used here.
 use crate::{M2Light, ParticleBlend, RibbonEmitterDef, RibbonVisibility, ValueTrack};
-use anyhow::{bail, Context, Result};
-use benilla_m2::wrath::WrathM2;
+use anyhow::{Context, Result};
 use benilla_m2::wrath::WrathTrack;
+use benilla_m2::wrath::{WrathM2, WrathRibbon};
 
 fn first<V: Copy>(track: &WrathTrack<V>, default: V) -> V {
     track
@@ -88,80 +88,109 @@ pub(super) fn ribbons(
     dir: &str,
     skins: &[Option<String>],
 ) -> Result<Vec<RibbonEmitterDef>> {
-    wrath
-        .ribbons()
-        .iter()
-        .map(|r| {
-            if [
-                &r.color.interpolation,
-                &r.alpha.interpolation,
-                &r.height_above.interpolation,
-                &r.height_below.interpolation,
-            ]
+    Ok(wrath.ribbons().iter().enumerate().filter_map(|(index, r)| {
+        if let Some(reason) = unsupported_ribbon(r) {
+            eprintln!("WARN: skipping Wrath ribbon {index} (id {}): {reason}; model geometry retained", r.id);
+            return None;
+        }
+        Some(adapt_ribbon(wrath, r, dir, skins))
+    }).collect::<Result<Vec<_>>>()?)
+}
+
+fn unsupported_ribbon(r: &WrathRibbon) -> Option<&'static str> {
+    if [
+        r.color.interpolation,
+        r.alpha.interpolation,
+        r.height_above.interpolation,
+        r.height_below.interpolation,
+    ]
+    .iter()
+    .any(|&mode| mode > 1)
+    {
+        return Some("cubic appearance curve is not representable by ValueTrack");
+    }
+    if r.visibility.global_sequence != u16::MAX {
+        let keys = r
+            .visibility
+            .sequences
+            .first()
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if keys
+            .first()
+            .is_some_and(|first| keys.iter().any(|key| key.value != first.value))
+        {
+            return Some("animated global visibility needs a global-clock lane");
+        }
+    }
+    None
+}
+
+fn adapt_ribbon(
+    wrath: &WrathM2,
+    r: &WrathRibbon,
+    dir: &str,
+    skins: &[Option<String>],
+) -> Result<RibbonEmitterDef> {
+    let bone = u16::try_from(r.bone).context("Wrath ribbon bone exceeds u16")?;
+    let texture = r
+        .texture_indices
+        .first()
+        .and_then(|&index| wrath.model().textures.get(index as usize))
+        .and_then(|t| super::wrath::resolve_texture(t, dir, skins).0);
+    let blend_mode = r
+        .material_indices
+        .first()
+        .and_then(|&index| wrath.model().materials.get(index as usize))
+        .map(|m| m.blend_mode.bits());
+    let blend = match blend_mode {
+        Some(3 | 4) | None => ParticleBlend::Add,
+        Some(2) => ParticleBlend::Alpha,
+        Some(1) => ParticleBlend::AlphaKey,
+        _ => ParticleBlend::Opaque,
+    };
+    let visible = if r.visibility.global_sequence == u16::MAX {
+        let rows = r
+            .visibility
+            .sequences
             .iter()
-            .any(|&&mode| mode > 1)
-            {
-                bail!("cubic Wrath ribbon tracks are not representable by ValueTrack");
-            }
-            let bone = u16::try_from(r.bone).context("Wrath ribbon bone exceeds u16")?;
-            let texture = r
-                .texture_indices
-                .first()
-                .and_then(|&index| wrath.model().textures.get(index as usize))
-                .and_then(|t| super::wrath::resolve_texture(t, dir, skins).0);
-            let blend_mode = r
-                .material_indices
-                .first()
-                .and_then(|&index| wrath.model().materials.get(index as usize))
-                .map(|m| m.blend_mode.bits());
-            let blend = match blend_mode {
-                Some(3 | 4) | None => ParticleBlend::Add,
-                Some(2) => ParticleBlend::Alpha,
-                Some(1) => ParticleBlend::AlphaKey,
-                _ => ParticleBlend::Opaque,
-            };
-            let visible = if r.visibility.global_sequence == u16::MAX {
-                let rows = r
-                    .visibility
-                    .sequences
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, keys)| {
-                        let animation = wrath.animations().get(i)?;
-                        (!keys.is_empty()).then(|| {
-                            (
-                                animation.id,
-                                keys.iter()
-                                    .map(|k| (k.timestamp_ms as f32 / 1000.0, k.value != 0))
-                                    .collect(),
-                            )
-                        })
-                    })
-                    .collect();
-                Some(RibbonVisibility::from_native(rows))
-            } else {
-                None
-            };
-            Ok(RibbonEmitterDef {
-                bone,
-                position: r.position,
-                texture,
-                blend,
-                blend_mode,
-                color: value_track(&r.color, [1.0; 3], |v| v),
-                alpha: value_track(&r.alpha, 1.0, |v| f32::from(v) / 32767.0),
-                height_above: value_track(&r.height_above, 0.0, |v| v),
-                height_below: value_track(&r.height_below, 0.0, |v| v),
-                edges_per_second: r.edges_per_second,
-                edge_lifetime: r.edge_lifetime.max(0.25),
-                gravity: r.gravity,
-                tile_rows: r.tile_rows.max(1),
-                tile_cols: r.tile_cols.max(1),
-                tex_slot: first(&r.texture_slot, 0),
-                visible,
+            .enumerate()
+            .filter_map(|(i, keys)| {
+                let animation = wrath.animations().get(i)?;
+                (!keys.is_empty()).then(|| {
+                    (
+                        animation.id,
+                        keys.iter()
+                            .map(|k| (k.timestamp_ms as f32 / 1000.0, k.value != 0))
+                            .collect(),
+                    )
+                })
             })
-        })
-        .collect()
+            .collect();
+        Some(RibbonVisibility::from_native(rows))
+    } else {
+        Some(RibbonVisibility::from_native(
+            std::collections::HashMap::from([(0, vec![(0.0, first(&r.visibility, 1) != 0)])]),
+        ))
+    };
+    Ok(RibbonEmitterDef {
+        bone,
+        position: r.position,
+        texture,
+        blend,
+        blend_mode,
+        color: value_track(&r.color, [1.0; 3], |v| v),
+        alpha: value_track(&r.alpha, 1.0, |v| f32::from(v) / 32767.0),
+        height_above: value_track(&r.height_above, 0.0, |v| v),
+        height_below: value_track(&r.height_below, 0.0, |v| v),
+        edges_per_second: r.edges_per_second,
+        edge_lifetime: r.edge_lifetime.max(0.25),
+        gravity: r.gravity,
+        tile_rows: r.tile_rows.max(1),
+        tile_cols: r.tile_cols.max(1),
+        tex_slot: first(&r.texture_slot, 0),
+        visible,
+    })
 }
 
 #[cfg(test)]
