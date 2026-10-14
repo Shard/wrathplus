@@ -23,7 +23,7 @@ use benilla_protocol::messages::BAG_PLAYER_INVENTORY;
 /// A vendor row's unlimited `current_count` (vmangos `ItemHandler.cpp:795`), `-1` to Lua.
 const STOCK_UNLIMITED: u32 = 0xFFFF_FFFF;
 
-/// `UNIT_NPC_FLAG_REPAIR`, the bit `CanMerchantRepair` tests (`0x4fadb0`).
+#[cfg(test)]
 const NPC_FLAG_REPAIR: u32 = 0x4000;
 
 /// The first absolute buyback slot (`BUYBACK_SLOT_START`, slots 69-80).
@@ -387,12 +387,16 @@ fn vendor_store<'a>(
         .map(|(_, store)| store)
 }
 
-/// The open vendor's `UNIT_NPC_FLAGS`, 0 with none open or its unit not streamed.
-fn vendor_npc_flags(
+fn can_repair_store(store: &ObjectStore) -> bool {
+    store.0.unit_npc_services().can_repair()
+}
+
+/// The open vendor's repair service, false with none open or its unit not streamed.
+fn vendor_can_repair(
     open: &MerchantOpen,
     units: &Query<(&Guid, &ObjectStore), Without<SelfPlayer>>,
-) -> u32 {
-    vendor_store(open, units).map_or(0, |store| store.0.unit_npc_flags())
+) -> bool {
+    vendor_store(open, units).is_some_and(can_repair_store)
 }
 
 /// What the purse test before a repair's send reads: the items' costs, the open vendor for its
@@ -486,7 +490,7 @@ fn feed_repair_costs(
             player,
         )
     });
-    let repairer = vendor.is_some_and(|store| store.0.unit_npc_flags() & NPC_FLAG_REPAIR != 0);
+    let repairer = vendor.is_some_and(can_repair_store);
     let objects_moved = inv.changes.moved();
     let self_changed = !inv.self_changed.is_empty();
     let templates_moved = memo.templates.moved(items.template_epoch());
@@ -540,7 +544,7 @@ fn snapshot(
     icons: Option<&ItemDisplays>,
     commands: &NetCommands,
     player: Option<&benilla_protocol::ObjectFields>,
-    vendor_npc_flags: u32,
+    can_repair: bool,
 ) -> Option<MerchantState> {
     open.vendor?;
     let buyback = player
@@ -558,7 +562,7 @@ fn snapshot(
             .map(|it| resolve_item(it, items, icons, commands))
             .collect(),
         buyback,
-        can_repair: vendor_npc_flags & NPC_FLAG_REPAIR != 0,
+        can_repair,
     })
 }
 
@@ -623,7 +627,7 @@ fn feed_merchant(
         icons.as_deref(),
         &commands,
         player,
-        vendor_npc_flags(&open, &units),
+        vendor_can_repair(&open, &units),
     );
     // The vendor's name rides `MERCHANT_SHOW` and `MERCHANT_UPDATE` as arg1, and its landing alone
     // re-fires `MERCHANT_UPDATE`; the reference fires both bare (`0x4fad92`, `0x4facaa`), and
@@ -1555,5 +1559,31 @@ mod tests {
         open.clear();
         assert!(!open.is_open());
         assert!(open.items.is_empty());
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn repair_service_uses_native_flags_in_each_layout() {
+    use benilla_protocol::messages::{Field, FieldLayout};
+    for (layout, repair, unrelated) in [
+        (FieldLayout::Vanilla5875, 0x4000, 0x1000),
+        (FieldLayout::Wrath12340, 0x1000, 0x4000),
+    ] {
+        let span = layout
+            .resolve(Field::UnitNpcFlags)
+            .expect("NPC flags exist in both layouts");
+        for (bits, expected) in [
+            (0, false),
+            (repair, true),
+            (unrelated, false),
+            (repair | unrelated, true),
+        ] {
+            let store = ObjectStore(benilla_protocol::ObjectFields::from_native_pairs(
+                layout,
+                &[(span.index, bits)],
+            ));
+            assert_eq!(can_repair_store(&store), expected);
+        }
     }
 }
