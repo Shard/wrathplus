@@ -19,6 +19,7 @@ use benilla_world::schedule::WorldStage;
 
 /// The per-display model cache: a display id's [`DisplayModel`] and its spawn parts.
 pub(crate) mod display;
+pub(crate) mod showcase;
 use display::{
     build_parts, empty_display, empty_shell, new_creature_display, new_gameobject_display,
     DisplayModel, EntityPart, ModelHandle,
@@ -941,11 +942,15 @@ fn update_display_models(
     glue_preview: Option<Res<crate::portrait::GluePreview>>,
     char_create: Option<Res<CharCreate>>,
     // The stable pane's pet (`SetPetStablePaperdoll`, `0x4cb870`), with no wire entity.
-    stable_booth: Option<Res<crate::portrait::StableBooth>>,
+    offline: (
+        Option<Res<crate::portrait::StableBooth>>,
+        Option<Res<showcase::RequestedDisplays>>,
+    ),
 ) {
     if !mats.ready() {
         return; // no lighting yet → no materials to build
     }
+    let (stable_booth, showcase) = offline;
     let (m2s, wmos) = (&model_assets.0, &model_assets.1);
     // Shared per display, so the materials belong to the batch; a GameObject that needs its own
     // clones them at spawn (`attach::dress`).
@@ -995,6 +1000,10 @@ fn update_display_models(
     // The stable window's selected pet, a plain creature display too; a repeat is free.
     if let Some(display) = stable_booth.as_deref().and_then(|b| b.display_id) {
         actives.push((EntityKind::Unit, display));
+    }
+
+    if let Some(requests) = showcase {
+        actives.extend(requests.0.iter().map(|&id| (EntityKind::Unit, id)));
     }
 
     for (kind, disp) in actives {

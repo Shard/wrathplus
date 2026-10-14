@@ -286,3 +286,10 @@ explicitly at startup**: the schema precedes the visual spawner, so no clip can 
 requested models. The next unit will load plain-creature displays, freeze deterministic Stand,
 wait for their assets and pose before frame zero, and fail on missing data. No actor sample route
 is claimed usable yet; humanoid customization/equipment is deferred.
+
+The app-side display cache now has a narrow recorder request/readiness seam (not yet activated by
+capture). It validates installed plain-creature rows and deterministic skinned Stand availability,
+rejects unsupported frozen batch/effect channels rather than silently dropping them, and checks
+all material image dependencies. Generated resident images are distinguished from asynchronously
+loaded assets; root/recursive failures are errors. Existing world batch handles remain unchanged.
+The recorder still rejects nonempty actor lists until the visual-spawner integration lands.
