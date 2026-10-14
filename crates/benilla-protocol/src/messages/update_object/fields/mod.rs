@@ -4,9 +4,11 @@ use crate::wire::{capacity_hint, read_u32_le, read_u8, Vector3d};
 
 use super::movement::ObjectType;
 
+mod layout;
+pub use layout::{Field, FieldLayout, FieldSpan};
+
 // Descriptor field indices for build 5875.
 const FIELD_OBJECT_TYPE: u16 = 2;
-const FIELD_OBJECT_SCALE_X: u16 = 4;
 // The creator of a spell-spawned object (bobber, ritual portal); 0 for a world spawn.
 const FIELD_GAMEOBJECT_CREATED_BY: u16 = 6;
 const FIELD_GAMEOBJECT_DISPLAYID: u16 = 8;
@@ -32,29 +34,23 @@ pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 = 36;
 // UNIT fields. The client reads FLAGS, COMBATREACH, DYNAMIC_FLAGS and NPC_FLAGS at unit block
 // bytes 0xa0, 0x1f0, 0x224 and 0x234.
 /// The unit's target; the client turns an idle unit to face it, and no packet carries that facing.
-const FIELD_UNIT_TARGET: u16 = 16;
 /// The unit this one charms (`UpdateFields_1_12_1.h:41`), descriptor byte 0.
-const FIELD_UNIT_CHARM: u16 = 6;
 /// The unit this one summoned (`UpdateFields_1_12_1.h:42`); on us, the `"pet"` unit. The pet bar
 /// reads its guid off `SMSG_PET_SPELLS`, so the two can disagree briefly around a summon.
-const FIELD_UNIT_SUMMON: u16 = 8;
 /// The charmer, 0 for none. The attack-start check `0x612df0` refuses a swing when it is set and
 /// is not us (`ERR_ATTACK_CHARMED`); `0x5ee5a0` and `0x5ff580` prefer it as the owner.
-const FIELD_UNIT_CHARMEDBY: u16 = 10;
 /// The summoner of a pet, guardian or totem; with CREATEDBY, the "owned by me" test of `0x5efea0`.
-const FIELD_UNIT_SUMMONEDBY: u16 = 12;
-const FIELD_UNIT_CREATEDBY: u16 = 14;
 /// The channel's target, possibly the caster (`UpdateFields_1_12_1.h:48`). Public, so another
 /// unit's channel renders from it; `MSG_CHANNEL_START`/`UPDATE` reach only the caster.
-const FIELD_UNIT_CHANNEL_OBJECT: u16 = 20;
 pub const FIELD_UNIT_HEALTH: u16 = 22;
 /// Five power slots: mana, rage, focus, energy, happiness; `MAXPOWER1..5` follow `MAXHEALTH`.
+#[cfg(test)]
 const FIELD_UNIT_POWER1: u16 = 23;
 pub const FIELD_UNIT_MAXHEALTH: u16 = 28;
+#[cfg(test)]
 const FIELD_UNIT_MAXPOWER1: u16 = 29;
 pub const FIELD_UNIT_LEVEL: u16 = 34;
 pub const FIELD_UNIT_FACTIONTEMPLATE: u16 = 35;
-const FIELD_UNIT_BYTES_0: u16 = 36;
 pub const FIELD_UNIT_BYTES_1: u16 = 138;
 pub const FIELD_UNIT_FLAGS: u16 = 46;
 // The aura block: four public parallel arrays (`UpdateFields_1_12_1.h:67-70`), which the client
@@ -68,68 +64,65 @@ const FIELD_UNIT_AURALEVELS: u16 = 101;
 /// Byte-packed, 4 slots per `u32`, holding `stack - 1` (`SpellAuras.cpp:7500-7507`).
 pub const FIELD_UNIT_AURAAPPLICATIONS: u16 = 113;
 /// Aura-state bits, tested as `1 << (state - 1)` by the usable check (client `[unit+0x110]+0x1dc`).
-const FIELD_UNIT_AURASTATE: u16 = 125;
 /// Horizontal bounding radius, in yards.
-const FIELD_UNIT_BOUNDINGRADIUS: u16 = 129;
-const FIELD_UNIT_COMBATREACH: u16 = 130;
-const FIELD_UNIT_BASE_MANA: u16 = 162;
-const FIELD_UNIT_BASE_HEALTH: u16 = 163;
-const FIELD_UNIT_DISPLAYID: u16 = 131;
 /// The unshifted appearance, untouched by forms, morphs and polymorph (`UpdateFields_1_12_1.h:77`).
 /// The client sizes the mover collision box from it (`0x60b270`), so a shapeshift keeps the box.
-const FIELD_UNIT_NATIVEDISPLAYID: u16 = 132;
 /// The ridden mount's `CreatureDisplayInfo` id, 0 when unmounted; this field, not the aura, is the
 /// mounted state (`Unit::IsMounted`; client `[unit+0x110]+0x1fc`).
 pub const FIELD_UNIT_MOUNTDISPLAYID: u16 = 133;
 /// Nonzero on a pet or charm; the rank getter `0x605620` then forces rank 0, so an enslaved mob
 /// shows no elite dragon, tooltip rank word or boss skull.
-const FIELD_UNIT_PETNUMBER: u16 = 139;
 /// Unix time of the pet's last rename (`Pet.cpp:285`). The name itself comes from
 /// `CMSG_PET_NAME_QUERY`, cached by pet number, so a change here invalidates that cache.
-const FIELD_UNIT_PET_NAME_TIMESTAMP: u16 = 140;
 /// With the next field, the `(currXP, nextXP)` pair `GetPetExperience` (`0x4be840`) returns; the
 /// client reads both unsigned.
-const FIELD_UNIT_PETEXPERIENCE: u16 = 141;
-const FIELD_UNIT_PETNEXTLEVELEXP: u16 = 142;
 /// Two `u16`s: `GetPetTrainingPoints` (`0x4be790`) returns the high word first, which
 /// `PetPaperDollFrame.lua` names `totalPoints`, then the low word as `spent`.
-const FIELD_UNIT_TRAINING_POINTS: u16 = 149;
 pub const FIELD_UNIT_DYNAMIC_FLAGS: u16 = 143;
 /// The spell being channeled, 0 for none (`UpdateFields_1_12_1.h:89`).
 pub const FIELD_UNIT_CHANNEL_SPELL: u16 = 144;
 /// The summoning spell, 0 for none; the first gate of the client's feed-pet path `0x6ea1e0`.
-const FIELD_UNIT_CREATED_BY_SPELL: u16 = 146;
 pub const FIELD_UNIT_NPC_FLAGS: u16 = 147;
 /// The looping state emote, an `Emotes.dbc` id or 0; on a player, the server's echo of a
 /// state-class emote (`ChatHandler.cpp:738`).
-const FIELD_UNIT_NPC_EMOTESTATE: u16 = 148;
 /// A creature's weapon display ids (main hand, off hand, ranged), with no item behind them
 /// (`Creature.cpp:4158-4181`).
-const FIELD_UNIT_VIRTUAL_ITEM_SLOT_DISPLAY: u16 = 37;
 /// Two dwords per weapon slot: class, subclass, material and inventory type bytes, then the
 /// sheath byte (`CreatureDefines.h:621-628`).
-const FIELD_UNIT_VIRTUAL_ITEM_INFO: u16 = 40;
 /// Byte 0 is the sheath state (`UnitDefines.h:93`); a player's comes only from `CMSG_SETSHEATHED`.
 /// Not `FIELD_PLAYER_BYTES_2`.
-const FIELD_UNIT_BYTES_2: u16 = 164;
 // UNIT combat and stat block: offset from OBJECT_END, then the wire type.
+#[cfg(test)]
 const FIELD_UNIT_BASEATTACKTIME: u16 = 126; // OBJECT_END+0x78; 2 slots [main, offhand], ms, INT
+#[cfg(test)]
 const FIELD_UNIT_RANGEDATTACKTIME: u16 = 128; // +0x7A, INT
+#[cfg(test)]
 const FIELD_UNIT_MINDAMAGE: u16 = 134; // +0x80, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_MAXDAMAGE: u16 = 135; // +0x81, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_MINOFFHANDDAMAGE: u16 = 136; // +0x82, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_MAXOFFHANDDAMAGE: u16 = 137; // +0x83, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_STAT0: u16 = 150; // +0x90 ×5, INT
+#[cfg(test)]
 const FIELD_UNIT_RESISTANCES: u16 = 155; // +0x95 ×7, INT; [0] = armor
+#[cfg(test)]
 const FIELD_UNIT_ATTACK_POWER: u16 = 165; // +0x9F, INT
 /// +0xA0, `TWO_SHORT`: signed halves, the low positive, the high already negative or zero
 /// (`StatSystem.cpp:335-336`).
 const FIELD_UNIT_ATTACK_POWER_MODS: u16 = 166;
+#[cfg(test)]
 const FIELD_UNIT_ATTACK_POWER_MULTIPLIER: u16 = 167; // +0xA1, FLOAT: multiplier − 1.0
+#[cfg(test)]
 const FIELD_UNIT_RANGED_ATTACK_POWER: u16 = 168; // +0xA2, INT
 const FIELD_UNIT_RANGED_ATTACK_POWER_MODS: u16 = 169; // +0xA3, TWO_SHORT as above
+#[cfg(test)]
 const FIELD_UNIT_RANGED_ATTACK_POWER_MULTIPLIER: u16 = 170; // +0xA4, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_MINRANGEDDAMAGE: u16 = 171; // +0xA5, FLOAT
+#[cfg(test)]
 const FIELD_UNIT_MAXRANGEDDAMAGE: u16 = 172; // +0xA6, FLOAT
 
 /// Aura slots per unit (vmangos `MAX_AURAS`, `SpellAuraDefines.h:25`).
@@ -346,27 +339,13 @@ pub struct CorpseLook {
 pub struct ObjectFields {
     /// The wire's block mask, verbatim (`index = word * 32 + bit`).
     present: Vec<u32>,
+    layout: FieldLayout,
     /// Always `present.len() * 32` long; an unset slot holds 0 but must be read through the mask.
     values: Vec<u32>,
-    /// The created type's [`descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
+    /// The created type's [`FieldLayout::descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
     descriptor_end: u16,
     /// Profile-native resource delta; never aliases Vanilla descriptor offsets.
     wrath_powers: Option<[(Option<u32>, Option<u32>); 7]>,
-}
-
-/// An object's descriptor length in dwords: the `*_END` of its innermost block, so a Player spans
-/// OBJECT, UNIT and PLAYER.
-fn descriptor_len(object_type: ObjectType) -> u16 {
-    match object_type {
-        ObjectType::Object => 6,         // OBJECT_END = 0x6
-        ObjectType::Item => 48,          // ITEM_END = OBJECT_END + 0x2A
-        ObjectType::Container => 122,    // CONTAINER_END = ITEM_END + 0x4A
-        ObjectType::Unit => 188,         // UNIT_END = OBJECT_END + 0xB6
-        ObjectType::Player => 1282,      // PLAYER_END = UNIT_END + 0x446
-        ObjectType::GameObject => 26,    // GAMEOBJECT_END = OBJECT_END + 0x14
-        ObjectType::DynamicObject => 16, // DYNAMICOBJECT_END = OBJECT_END + 0xA
-        ObjectType::Corpse => 38,        // CORPSE_END = OBJECT_END + 0x20
-    }
 }
 
 /// Mask words of the widest descriptor, `PLAYER_END`; no 1.12 object needs more.
@@ -391,13 +370,14 @@ impl ObjectFields {
             present,
             values,
             descriptor_end: 0,
+            layout: FieldLayout::Vanilla5875,
             wrath_powers: None,
         })
     }
 
     /// Marks a CREATE snapshot of `object_type`, so absent fields in its descriptor read 0.
     pub fn into_created(mut self, object_type: ObjectType) -> Self {
-        self.descriptor_end = descriptor_len(object_type);
+        self.descriptor_end = self.layout.descriptor_len(object_type);
         self
     }
 
@@ -408,6 +388,44 @@ impl ObjectFields {
             this.insert(index, value);
         }
         this
+    }
+
+    /// A fixture/decoded native descriptor. The layout is set before CREATE zero-fill.
+    pub fn from_native_pairs(layout: FieldLayout, pairs: &[(u16, u32)]) -> Self {
+        Self {
+            layout,
+            ..Self::from_pairs(pairs)
+        }
+    }
+
+    pub fn layout(&self) -> FieldLayout {
+        self.layout
+    }
+
+    #[inline]
+    pub fn get(&self, field: Field) -> Option<u32> {
+        self.get_at(field, 0)
+    }
+
+    #[inline]
+    pub fn get_at(&self, field: Field, offset: u16) -> Option<u32> {
+        let span = self.layout.resolve(field)?;
+        (offset < span.width).then(|| self.get_u32(span.index + offset))?
+    }
+
+    pub fn get_float(&self, field: Field, offset: u16) -> Option<f32> {
+        self.get_at(field, offset).map(f32::from_bits)
+    }
+
+    pub fn get_field_guid(&self, field: Field, offset: u16) -> Option<u64> {
+        let hi = offset.checked_add(1)?;
+        Some(u64::from(self.get_at(field, offset)?) | (u64::from(self.get_at(field, hi)?) << 32))
+    }
+
+    pub fn field_present(&self, field: Field, offset: u16) -> bool {
+        self.layout
+            .resolve(field)
+            .is_some_and(|span| offset < span.width && self.contains(span.index + offset))
     }
 
     /// Attach raw build-12340 powers; `None` entries leave a sparse delta unchanged.
@@ -608,6 +626,10 @@ impl ObjectFields {
     /// order, as the client's `CMirrorHandler` pass does (`0x465330`): a resend of the same value
     /// reports nothing, and an absent old value reads 0. A first create is seeded, never merged.
     pub fn merge_diff(&mut self, delta: ObjectFields, mut changed: impl FnMut(u16, u32, u32)) {
+        assert_eq!(
+            self.layout, delta.layout,
+            "cannot merge different descriptor layouts"
+        );
         if delta.descriptor_end != 0 {
             let words = self.present.len().max(delta.present.len());
             for word in 0..words {
@@ -669,7 +691,7 @@ impl ObjectFields {
         (self.descriptor_end != 0)
             .then(|| {
                 ALL.into_iter()
-                    .find(|&t| descriptor_len(t) == self.descriptor_end)
+                    .find(|&t| self.layout.descriptor_len(t) == self.descriptor_end)
             })
             .flatten()
     }

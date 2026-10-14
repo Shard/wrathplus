@@ -129,6 +129,8 @@ Crates `benilla-formats`, `benilla-m2`, `benilla-assets`, `benilla-world`.
 - **Trusted UI**: no taint, no protected frames, no secure-execution emulation.
 - **No server changes**: AzerothCore source is a protocol reference only.
 - **Never commit** Blizzard assets, dumps, or `.azerothbench-test.env`.
+- A unit that adds a `SessionEvent` variant registers a handler for it and passes
+  `cargo test -p benilla-app --lib net::handlers` (every event kind must have exactly one owner).
 - Commit in small, reviewable steps on your branch, with tests. Report to the manager when a
   reviewable unit is ready: the branch, commits, what changed, test results (pasted counts).
 - Follow existing code style: comment density, naming, references to sources (`AzerothCore
