@@ -36,40 +36,43 @@ pub enum OwnerFallback {
 impl ObjectFields {
     /// `OBJECT_FIELD_SCALE_X`: the per-object size multiplier.
     pub fn object_scale_x(&self) -> Option<f32> {
-        self.get_f32(FIELD_OBJECT_SCALE_X)
+        self.get_float(Field::ObjectScaleX, 0)
     }
     /// `UNIT_FIELD_DISPLAYID` (units + players).
     pub fn unit_displayid(&self) -> Option<i32> {
-        self.get_i32(FIELD_UNIT_DISPLAYID)
+        self.get(Field::UnitDisplayId).map(|v| v as i32)
     }
     /// `UNIT_FIELD_NATIVEDISPLAYID`: the appearance no shapeshift touches; the collision prism
     /// comes from it, so a druid in bear form keeps the druid's water lines.
     pub fn unit_native_displayid(&self) -> Option<i32> {
-        self.get_i32(FIELD_UNIT_NATIVEDISPLAYID)
+        self.get(Field::UnitNativeDisplayId).map(|v| v as i32)
     }
     /// `UNIT_FIELD_MOUNTDISPLAYID`: the mount's `CreatureDisplayInfo` id, the only mounted signal.
     pub fn unit_mount_display_id(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_MOUNTDISPLAYID).unwrap_or(0)
+        self.get(Field::UnitMountDisplayId).unwrap_or(0)
     }
     /// `UNIT_FIELD_TARGET`: the guid this unit is attacking or interacting with.
     pub fn unit_target(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_TARGET).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitTarget, 0)
+            .filter(|&g| g != 0)
     }
     /// `UNIT_FIELD_CHANNEL_OBJECT`: what a channel is aimed at, possibly the caster itself.
     pub fn unit_channel_object(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_CHANNEL_OBJECT).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitChannelObject, 0)
+            .filter(|&g| g != 0)
     }
     /// `UNIT_CHANNEL_SPELL`: the spell being channelled, 0 for none.
     pub fn unit_channel_spell(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_CHANNEL_SPELL).unwrap_or(0)
+        self.get(Field::UnitChannelSpell).unwrap_or(0)
     }
     /// `UNIT_FIELD_SUMMON`: the unit this one summoned; on our own descriptor, the `"pet"` unit.
     pub fn unit_summon(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_SUMMON).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitSummon, 0)
+            .filter(|&g| g != 0)
     }
     /// `UNIT_FIELD_CHARM`: the unit this one charms.
     pub fn unit_charm(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_CHARM).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitCharm, 0).filter(|&g| g != 0)
     }
     /// A player's pet as the client reads it off the descriptor: `CHARM` if set, else `SUMMON`
     /// (`partypetN`'s `0x4e8204`-`0x4e821a`, the party snapshot's `0x5f0a25`-`0x5f0a39`).
@@ -78,11 +81,13 @@ impl ObjectFields {
     }
     /// `UNIT_FIELD_SUMMONEDBY`: the summoner of a pet, guardian or totem.
     pub fn unit_summoned_by(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_SUMMONEDBY).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitSummonedby, 0)
+            .filter(|&g| g != 0)
     }
     /// `UNIT_FIELD_CHARMEDBY`: whoever is charming this unit.
     pub fn unit_charmed_by(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_CHARMEDBY).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitCharmedby, 0)
+            .filter(|&g| g != 0)
     }
     /// The owner as the client's owner readers compute it: `CHARMEDBY` if set, else the fallback,
     /// which differs by caller (`0x5ee62f` reads `CREATEDBY`, `0x5ff769` `SUMMONEDBY`).
@@ -94,12 +99,12 @@ impl ObjectFields {
     }
     /// `UNIT_FIELD_CREATEDBY`: the creator of a totem or created object.
     pub fn unit_created_by(&self) -> Option<u64> {
-        self.get_guid(FIELD_UNIT_CREATEDBY).filter(|&g| g != 0)
+        self.get_field_guid(Field::UnitCreatedby, 0)
+            .filter(|&g| g != 0)
     }
     /// `UNIT_CREATED_BY_SPELL`: the summoning spell; `0x6ea1e0` requires it to feed a pet.
     pub fn unit_created_by_spell(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_CREATED_BY_SPELL)
-            .filter(|&s| s != 0)
+        self.get(Field::UnitCreatedBySpell).filter(|&s| s != 0)
     }
     /// `UNIT_FIELD_PETNUMBER` is nonzero: a pet or charm, which the rank getter `0x605620`
     /// reports as rank 0. vmangos writes 0 for guardians and totems (`CharmInfo::SetPetNumber`
@@ -111,19 +116,19 @@ impl ObjectFields {
     /// nonzero. A `HIGHGUID_PET` guid's number is no substitute: a companion's is never filed in
     /// its charm info, so no pet-name query answers it.
     pub fn unit_pet_number(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_PETNUMBER).unwrap_or(0)
+        self.get(Field::UnitPetnumber).unwrap_or(0)
     }
     /// `UNIT_FIELD_PET_NAME_TIMESTAMP`: changes when the pet is renamed, staling the name cache.
     pub fn unit_pet_name_timestamp(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_PET_NAME_TIMESTAMP)
+        self.get(Field::UnitPetNameTimestamp)
     }
     /// `UNIT_FIELD_HEALTH`: current hit points, 0 when dead.
     pub fn unit_health(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_HEALTH)
+        self.get(Field::UnitHealth)
     }
     /// `UNIT_FIELD_MAXHEALTH`: full hit points.
     pub fn unit_max_health(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_MAXHEALTH)
+        self.get(Field::UnitMaxHealth)
     }
     /// Really dead: health 0 with a known maximum, since a dead unit's create sends no health.
     /// For how the unit looks, which a feigning hunter shares, use [`Self::unit_reads_dead`].
@@ -161,12 +166,12 @@ impl ObjectFields {
     }
     /// `UNIT_FIELD_LEVEL`: the unit's level.
     pub fn unit_level(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_LEVEL)
+        self.get(Field::UnitLevel)
     }
     /// One aura slot, live only when its `AURAFLAGS` nibble has an effect bit (`& 0x0E`) as the
     /// client tests it, since a cleared slot can keep a stale spell id.
     pub fn unit_aura(&self, slot: u8) -> Option<UnitAuraSlot> {
-        if slot >= UNIT_AURA_SLOTS {
+        if self.layout == FieldLayout::Wrath12340 || slot >= UNIT_AURA_SLOTS {
             return None;
         }
         let flags = self.get_aura_nibble(slot);
@@ -174,7 +179,7 @@ impl ObjectFields {
             return None;
         }
         let spell_id = self
-            .get_u32(FIELD_UNIT_AURA + u16::from(slot))
+            .get_at(Field::UnitAura, u16::from(slot))
             .filter(|&id| id != 0)?;
         Some(UnitAuraSlot {
             slot,
@@ -196,8 +201,7 @@ impl ObjectFields {
     /// Every `UNIT_FIELD_AURA` slot's raw spell id, zeros and stale ids included, as the cast
     /// validator's crowd-control scan (`0x6e9ca0`) reads them, without `AURAFLAGS`.
     pub fn unit_aura_ids(&self) -> impl Iterator<Item = u32> + '_ {
-        (0..UNIT_AURA_SLOTS)
-            .map(|slot| self.get_u32(FIELD_UNIT_AURA + u16::from(slot)).unwrap_or(0))
+        (0..UNIT_AURA_SLOTS).map(|slot| self.get_at(Field::UnitAura, u16::from(slot)).unwrap_or(0))
     }
 
     /// `UNIT_FIELD_BYTES_0` byte 3: power type, 0 mana, 1 rage, 2 focus, 3 energy, 4 happiness.
@@ -207,92 +211,92 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_1` byte 0: stand state, 0 stand, 1 sit, 2 chair, 3 sleep, 4-6 low,
     /// medium and high chair, 8 kneel; for a player, the echo of `CMSG_STANDSTATECHANGE`.
     pub fn unit_stand_state(&self) -> u8 {
-        (self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) & 0xff) as u8
+        (self.get(Field::UnitBytes1).unwrap_or(0) & 0xff) as u8
     }
     /// `UNIT_FIELD_BYTES_1` byte 1: a hunter pet's loyalty level, 1-8, which `GetPetLoyalty`
     /// (`0x4be700`) indexes `PetLoyalty.dbc` with; 0 is none and answers nil.
     pub fn unit_loyalty_level(&self) -> u8 {
-        ((self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) >> 8) & 0xff) as u8
+        ((self.get(Field::UnitBytes1).unwrap_or(0) >> 8) & 0xff) as u8
     }
     /// `UNIT_FIELD_PETEXPERIENCE` and `UNIT_FIELD_PETNEXTLEVELEXP`: `GetPetExperience`'s
     /// `(currXP, nextXP)`; absent reads 0, the binding's own failure value, never nil.
     pub fn unit_pet_experience(&self) -> (u32, u32) {
         (
-            self.get_u32(FIELD_UNIT_PETEXPERIENCE).unwrap_or(0),
-            self.get_u32(FIELD_UNIT_PETNEXTLEVELEXP).unwrap_or(0),
+            self.get(Field::UnitPetexperience).unwrap_or(0),
+            self.get(Field::UnitPetnextlevelexp).unwrap_or(0),
         )
     }
     /// `UNIT_TRAINING_POINTS`: `(total, spent)`, total in the high half as the client splits it.
     pub fn unit_training_points(&self) -> (u16, u16) {
-        let packed = self.get_u32(FIELD_UNIT_TRAINING_POINTS).unwrap_or(0);
+        let packed = self.get(Field::UnitTrainingPoints).unwrap_or(0);
         ((packed >> 16) as u16, (packed & 0xffff) as u16)
     }
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x2`, `UNIT_VIS_FLAGS_CREEP` (`SpellAuras.cpp:3610`):
     /// stealthed; read by the usable check (`[+0x110]+0x213 & 2`) and the tracker (`0x5ed210`).
     pub fn unit_is_stealthed(&self) -> bool {
-        (self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) >> 24) & 0x2 != 0
+        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x2 != 0
     }
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x1`, `UNIT_VIS_FLAGS_GHOST`, set by the ghost aura: it
     /// only hides names and plates (`byte3 & 0x03`, `0x607101`, `0x60f62e`); the ghostly body is
     /// the aura's own visual kit (spell 8326, kit 989).
     pub fn unit_is_ghost_visual(&self) -> bool {
-        (self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) >> 24) & 0x1 != 0
+        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x1 != 0
     }
 
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x4` (vmangos `UNIT_VIS_FLAGS_UNTRACKABLE`): no minimap
     /// dot at all, quest or tracking (`byte [eax+0x213] & 4`, the byte's only such test).
     pub fn unit_is_untrackable(&self) -> bool {
-        (self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) >> 24) & 0x4 != 0
+        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x4 != 0
     }
 
     /// `UNIT_FIELD_AURASTATE`: the aura-state bits (1 defense, 2 health under 20%, ...), which
     /// the usable check tests as `1 << (state - 1)`.
     pub fn unit_aura_state(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_AURASTATE).unwrap_or(0)
+        self.get(Field::UnitAuraState).unwrap_or(0)
     }
 
     /// `UNIT_FIELD_BYTES_1` byte 2: the shapeshift form, 0 none, 17-19 the warrior stances, the
     /// druid forms low; the creature-type resolver `0x605570` checks it first.
     pub fn unit_shapeshift_form(&self) -> u8 {
-        (self.get_u32(FIELD_UNIT_BYTES_1).unwrap_or(0) >> 16) as u8
+        (self.get(Field::UnitBytes1).unwrap_or(0) >> 16) as u8
     }
     /// `UNIT_FIELD_POWER1..5`: current power of type `ty`, on the wire's raw scale.
     pub fn unit_power(&self, ty: u8) -> Option<u32> {
-        (ty < 5).then(|| self.get_u32(FIELD_UNIT_POWER1 + u16::from(ty)))?
+        self.get_at(Field::UnitPower, u16::from(ty))
     }
     /// `UNIT_FIELD_MAXPOWER1..5`: maximum power of type `ty`, raw.
     pub fn unit_max_power(&self, ty: u8) -> Option<u32> {
-        (ty < 5).then(|| self.get_u32(FIELD_UNIT_MAXPOWER1 + u16::from(ty)))?
+        self.get_at(Field::UnitMaxPower, u16::from(ty))
     }
     /// `UNIT_FIELD_BASE_MANA` (field 162, owner only): what `ManaCostPercentage` costs scale from.
     pub fn unit_base_mana(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_BASE_MANA)
+        self.get(Field::UnitBaseMana)
     }
     /// `UNIT_FIELD_BASE_HEALTH` (field 163, owner only): the basis for percentage health costs.
     pub fn unit_base_health(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_BASE_HEALTH)
+        self.get(Field::UnitBaseHealth)
     }
     /// `UNIT_FIELD_FACTIONTEMPLATE` (public, `+0x74`): the `FactionTemplate.dbc` row reactions use.
     pub fn unit_faction_template(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_FACTIONTEMPLATE)
+        self.get(Field::UnitFactionTemplate)
     }
     /// `UNIT_FIELD_FLAGS` (`+0xa0`): unit state flags; bit `0x0400_0000` is skinnable.
     pub fn unit_flags(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_FLAGS).unwrap_or(0)
+        self.get(Field::UnitFlags).unwrap_or(0)
     }
     /// `UNIT_FIELD_COMBATREACH` (`+0x1f0`): melee reach, summed as `rA + rB + 1.333`, floor 5.0,
     /// by the attack range gate (`0x6e3480`); 1.5, the vanilla default, before it streams.
     pub fn unit_combat_reach(&self) -> f32 {
-        self.get_f32(FIELD_UNIT_COMBATREACH).unwrap_or(1.5)
+        self.get_float(Field::UnitCombatreach, 0).unwrap_or(1.5)
     }
     /// `UNIT_FIELD_BOUNDINGRADIUS`: horizontal radius in yards; the water-foam depth gate takes
     /// `max(2 * radius, 1.0)` (`0x5fa760`), so absent reads 0.
     pub fn unit_bounding_radius(&self) -> f32 {
-        self.get_f32(FIELD_UNIT_BOUNDINGRADIUS).unwrap_or(0.0)
+        self.get_float(Field::UnitBoundingradius, 0).unwrap_or(0.0)
     }
     /// `UNIT_DYNAMIC_FLAGS` (`+0x224`), per viewer: `0x1` lootable, `0x2` tracked, `0x20` dead.
     pub fn unit_dynamic_flags(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_DYNAMIC_FLAGS).unwrap_or(0)
+        self.get(Field::UnitDynamicFlags).unwrap_or(0)
     }
     /// `UNIT_DYNAMIC_FLAGS` bit `0x20` alone: `SetSelection`'s last-enemy stamp gates on
     /// `HEALTH > 0 || dynflag 0x20` (`0x49372f`), not on [`Self::unit_reads_dead`].
@@ -316,25 +320,24 @@ impl ObjectFields {
     /// `UNIT_NPC_FLAGS` (`+0x234`, `UnitDefines.h`): gossip `0x1`, questgiver `0x2`, vendor
     /// `0x4`, flight master `0x8`, trainer `0x10`, ..., repair `0x4000`; cursor: first bit wins.
     pub fn unit_npc_flags(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_NPC_FLAGS).unwrap_or(0)
+        self.get(Field::UnitNpcFlags).unwrap_or(0)
     }
     /// `UNIT_NPC_EMOTESTATE`: the looping `Emotes.dbc` state, which the server keeps while moving.
     pub fn unit_emote_state(&self) -> u32 {
-        self.get_u32(FIELD_UNIT_NPC_EMOTESTATE).unwrap_or(0)
+        self.get(Field::UnitNpcEmotestate).unwrap_or(0)
     }
     /// `UNIT_FIELD_BYTES_0`: race, class, gender and power type, bytes 0 to 3.
     pub fn unit_bytes_0(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_BYTES_0)
+        self.get(Field::UnitBytes0)
     }
     /// `UNIT_VIRTUAL_ITEM_SLOT_DISPLAY + slot`: a creature's weapon `DisplayInfoID` for slot 0
     /// main hand, 1 off hand or 2 ranged, with no item behind it.
     pub fn unit_virtual_item_display(&self, slot: u8) -> Option<u32> {
-        (slot < 3).then(|| self.get_u32(FIELD_UNIT_VIRTUAL_ITEM_SLOT_DISPLAY + u16::from(slot)))?
+        (slot < 3).then(|| self.get_at(Field::UnitVirtualItemSlotDisplay, u16::from(slot)))?
     }
     /// `UNIT_VIRTUAL_ITEM_INFO + 2*slot`: bytes `(class, subclass, material, inventory_type)`.
     pub fn unit_virtual_item_info(&self, slot: u8) -> Option<(u8, u8, u8, u8)> {
-        let v =
-            (slot < 3).then(|| self.get_u32(FIELD_UNIT_VIRTUAL_ITEM_INFO + 2 * u16::from(slot)))?;
+        let v = (slot < 3).then(|| self.get_at(Field::UnitVirtualItemInfo, 2 * u16::from(slot)))?;
         v.map(|v| {
             (
                 (v & 0xff) as u8,
@@ -346,26 +349,39 @@ impl ObjectFields {
     }
     /// `UNIT_VIRTUAL_ITEM_INFO + 2*slot + 1` byte 0: the virtual item's sheath type.
     pub fn unit_virtual_item_sheath(&self, slot: u8) -> Option<u8> {
-        let v = (slot < 3)
-            .then(|| self.get_u32(FIELD_UNIT_VIRTUAL_ITEM_INFO + 2 * u16::from(slot) + 1))?;
+        let v =
+            (slot < 3).then(|| self.get_at(Field::UnitVirtualItemInfo, 2 * u16::from(slot) + 1))?;
         v.map(|v| (v & 0xff) as u8)
     }
     /// `UNIT_FIELD_BYTES_2` byte 0: sheath state, 0 stowed, 1 melee drawn, 2 ranged drawn; for a
     /// player, whatever they last sent in `CMSG_SETSHEATHED`.
     pub fn unit_sheath_state(&self) -> Option<u8> {
-        self.get_u32(FIELD_UNIT_BYTES_2).map(|v| (v & 0xff) as u8)
+        self.get(Field::UnitBytes2).map(|v| (v & 0xff) as u8)
     }
     /// `UNIT_FIELD_STAT0 + i`: primary stat `i` after buffs, 0 Str, 1 Agi, 2 Sta, 3 Int, 4 Spi.
     pub fn unit_stat(&self, i: u8) -> Option<u32> {
-        (i < 5).then(|| self.get_u32(FIELD_UNIT_STAT0 + u16::from(i)))?
+        (i < 5).then(|| {
+            self.get(
+                [
+                    Field::UnitStat0,
+                    Field::UnitStat1,
+                    Field::UnitStat2,
+                    Field::UnitStat3,
+                    Field::UnitStat4,
+                ][usize::from(i)],
+            )
+        })?
     }
     /// `UNIT_FIELD_RESISTANCES + i`: resistance `i`, signed, 0 armor, 1-6 the magic schools.
     pub fn unit_resistance(&self, i: u8) -> Option<i32> {
-        (i < 7).then(|| self.get_i32(FIELD_UNIT_RESISTANCES + u16::from(i)))?
+        (i < 7).then(|| {
+            self.get_at(Field::UnitResistances, u16::from(i))
+                .map(|v| v as i32)
+        })?
     }
     /// `UNIT_FIELD_ATTACK_POWER`: melee attack power before the split pos/neg mods.
     pub fn unit_attack_power(&self) -> Option<i32> {
-        self.get_i32(FIELD_UNIT_ATTACK_POWER)
+        self.get(Field::UnitAttackPower).map(|v| v as i32)
     }
     /// `UNIT_FIELD_ATTACK_POWER_MODS`: flat `(positive, negative)` mods, the low and high i16.
     pub fn unit_attack_power_mods(&self) -> (i16, i16) {
@@ -376,11 +392,11 @@ impl ObjectFields {
     }
     /// `UNIT_FIELD_ATTACK_POWER_MULTIPLIER`: the percent bonus minus 1.0, so 0.0 is no bonus.
     pub fn unit_attack_power_multiplier(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_ATTACK_POWER_MULTIPLIER)
+        self.get_float(Field::UnitAttackPowerMultiplier, 0)
     }
     /// `UNIT_FIELD_RANGED_ATTACK_POWER`: ranged attack power before the split pos/neg mods.
     pub fn unit_ranged_attack_power(&self) -> Option<i32> {
-        self.get_i32(FIELD_UNIT_RANGED_ATTACK_POWER)
+        self.get(Field::UnitRangedAttackPower).map(|v| v as i32)
     }
     /// `UNIT_FIELD_RANGED_ATTACK_POWER_MODS`: the ranged `(positive, negative)` flat mods.
     pub fn unit_ranged_attack_power_mods(&self) -> (i16, i16) {
@@ -391,38 +407,38 @@ impl ObjectFields {
     }
     /// `UNIT_FIELD_RANGED_ATTACK_POWER_MULTIPLIER`: the ranged percent bonus minus 1.0.
     pub fn unit_ranged_attack_power_multiplier(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_RANGED_ATTACK_POWER_MULTIPLIER)
+        self.get_float(Field::UnitRangedAttackPowerMultiplier, 0)
     }
     /// `UNIT_FIELD_MINDAMAGE`: the mainhand weapon's minimum damage.
     pub fn unit_min_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MINDAMAGE)
+        self.get_float(Field::UnitMindamage, 0)
     }
     /// `UNIT_FIELD_MAXDAMAGE`: the mainhand weapon's maximum damage.
     pub fn unit_max_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MAXDAMAGE)
+        self.get_float(Field::UnitMaxdamage, 0)
     }
     /// `UNIT_FIELD_MINOFFHANDDAMAGE`: the offhand minimum damage, sent even with no offhand worn.
     pub fn unit_min_offhand_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MINOFFHANDDAMAGE)
+        self.get_float(Field::UnitMinoffhanddamage, 0)
     }
     /// `UNIT_FIELD_MAXOFFHANDDAMAGE`: the offhand weapon's maximum damage.
     pub fn unit_max_offhand_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MAXOFFHANDDAMAGE)
+        self.get_float(Field::UnitMaxoffhanddamage, 0)
     }
     /// `UNIT_FIELD_MINRANGEDDAMAGE`: the ranged weapon's minimum damage.
     pub fn unit_min_ranged_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MINRANGEDDAMAGE)
+        self.get_float(Field::UnitMinrangeddamage, 0)
     }
     /// `UNIT_FIELD_MAXRANGEDDAMAGE`: the ranged weapon's maximum damage.
     pub fn unit_max_ranged_damage(&self) -> Option<f32> {
-        self.get_f32(FIELD_UNIT_MAXRANGEDDAMAGE)
+        self.get_float(Field::UnitMaxrangeddamage, 0)
     }
     /// `UNIT_FIELD_BASEATTACKTIME + i`: attack speed in ms, 0 mainhand, 1 offhand.
     pub fn unit_base_attack_time(&self, i: u8) -> Option<u32> {
-        (i < 2).then(|| self.get_u32(FIELD_UNIT_BASEATTACKTIME + u16::from(i)))?
+        (i < 2).then(|| self.get_at(Field::UnitBaseattacktime, u16::from(i)))?
     }
     /// `UNIT_FIELD_RANGEDATTACKTIME`: ranged weapon attack speed in ms.
     pub fn unit_ranged_attack_time(&self) -> Option<u32> {
-        self.get_u32(FIELD_UNIT_RANGEDATTACKTIME)
+        self.get(Field::UnitRangedattacktime)
     }
 }
