@@ -84,6 +84,36 @@ fn load_skill_lines(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     }
 }
 
+/// Seed static Spell.dbc metadata before FrameXML executes. No per-frame catalog walk.
+/// Character-specific cost/cast modifiers remain the live action/tooltip feeds' concern.
+pub(crate) fn seed_spell_catalog(world: &World, script: &mut UiScript) {
+    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
+        return;
+    }
+    if let Some(spells) = world.get_resource::<Spells>() {
+        script.set_spell_catalog(spells.catalog.iter().map(|(id, def)| catalog_row(id, def, spells)));
+    }
+}
+
+fn catalog_row(id: u32, def: &benilla_formats::SpellDisplay, spells: &Spells) -> benilla_ui::script::SpellInfoView {
+    let range = spells.ranges.get(def.range_index);
+    benilla_ui::script::SpellInfoView {
+        spell_id: id,
+        name: def.name.clone(),
+        rank: def.rank.clone(),
+        texture: def.icon.clone(),
+        cost: def.mana_cost,
+        funnel: def.tooltip_channeled() && def.mana_per_second != 0,
+        power_type: def.power_type as i32,
+        cast_time_ms: spells.cast_times.get(def.casting_time_index)
+            .map_or(0, |row| row.base_ms.max(0) as u32),
+        min_range: range.map_or(0.0, |r| f64::from(r.min)),
+        max_range: range.map_or(0.0, |r| f64::from(r.max)),
+        passive: def.passive,
+        trade_skill_link: None,
+    }
+}
+
 /// The feed's memory of what it last pushed, for the `SPELLS_CHANGED` diff.
 #[derive(Default)]
 struct FeedMemory {
@@ -470,6 +500,41 @@ mod tests {
     use super::*;
     use benilla_formats::SpellDisplay;
     use std::collections::HashMap;
+
+    #[test]
+    fn wrath_catalog_seed_includes_unlearned_spells_and_replacement_vms() {
+        let mut def = spell("Unlearned", Some("Rank 2"), 0x40);
+        def.icon = Some("Interface\\Icons\\Test".into());
+        def.mana_cost = 27;
+        def.power_type = u32::MAX - 1;
+        def.attributes_ex = 0x4;
+        def.mana_per_second = 3;
+        def.casting_time_index = 2;
+        def.range_index = 3;
+        let spells = Spells {
+            catalog: SpellCatalog::from_displays([(42, def)].into_iter().collect()),
+            cast_times: benilla_formats::SpellCastTimeCatalog::from_rows([(2,
+                benilla_formats::SpellCastTime { base_ms: 1500, per_level_ms: 0, minimum_ms: 0 })]),
+            ranges: benilla_formats::SpellRangeCatalog::from_rows([(3,
+                benilla_formats::SpellRange { min: 5.0, max: 30.0, flags: 0 })].into_iter().collect()),
+            ..Spells::empty_for_tests()
+        };
+        let mut world = World::new();
+        world.insert_resource(spells);
+        for _ in 0..2 {
+            let mut script = UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+            seed_spell_catalog(&world, &mut script);
+            script.run(r#"
+                local n,r,i,c,f,p,t,min,max = GetSpellInfo(42)
+                assert(n == 'Unlearned' and r == 'Rank 2' and i == 'Interface\\Icons\\Test')
+                assert(c == 27 and f and p == -2 and t == 1500 and min == 5 and max == 30)
+                assert(IsPassiveSpell(42) and GetSpellInfo('Unlearned') == nil)
+            "#).unwrap();
+        }
+        let mut vanilla = UiScript::new().unwrap();
+        seed_spell_catalog(&world, &mut vanilla);
+        vanilla.run("assert(GetSpellInfo == nil)").unwrap();
+    }
 
     #[test]
     fn leading_number_scans_the_first_digit_run() {

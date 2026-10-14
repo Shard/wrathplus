@@ -435,6 +435,7 @@ pub(crate) struct Model {
     /// (the reference's `DisplayError` `0x496720`), each a literal from `0xb4b498` (stride `0x14`).
     pub(crate) ui_errors: Vec<&'static str>,
 
+    pub(crate) spell_catalog: std::collections::HashMap<u32, super::spell_info::SpellInfoView>,
     pub(crate) spellbook: spellbook::SpellBookState,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -1203,6 +1204,7 @@ impl Model {
             bonus_bar_offset: 0,
             action_sets: Vec::new(),
             ui_errors: Vec::new(),
+            spell_catalog: Default::default(),
             spellbook: spellbook::SpellBookState::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),

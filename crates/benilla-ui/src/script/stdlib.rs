@@ -78,6 +78,40 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
         }
     }
 
+    if wrath {
+        g.set("debuglocals", lua.create_function(|lua, level: Option<usize>| {
+            // Inspect primitive locals only; never call tostring/metamethods on addon objects.
+            let level = level.unwrap_or(1).min(MAX_DEBUGSTACK_LEVELS);
+            let mut lines = Vec::new();
+            unsafe {
+                lua.exec_raw::<()>((), |state| {
+                    let mut ar = std::mem::zeroed();
+                    if mlua::ffi::lua_getstack(state, (level + 1) as i32, &mut ar) != 0 {
+                        for index in 1..=128 {
+                            let name = mlua::ffi::lua_getlocal(state, &ar, index);
+                            if name.is_null() { break; }
+                            let name = std::ffi::CStr::from_ptr(name).to_string_lossy();
+                            let text = match mlua::ffi::lua_type(state, -1) {
+                                mlua::ffi::LUA_TNIL => "nil".to_owned(),
+                                mlua::ffi::LUA_TBOOLEAN => (mlua::ffi::lua_toboolean(state, -1) != 0).to_string(),
+                                mlua::ffi::LUA_TNUMBER => mlua::ffi::lua_tonumber(state, -1).to_string(),
+                                mlua::ffi::LUA_TSTRING => {
+                                    let mut len = 0;
+                                    let ptr = mlua::ffi::lua_tolstring(state, -1, &mut len);
+                                    String::from_utf8_lossy(std::slice::from_raw_parts(ptr as *const u8, len.min(1024))).into_owned()
+                                },
+                                _ => "<object>".to_owned(),
+                            };
+                            if !name.starts_with('(') { lines.push(format!("{name} = {text}")); }
+                            mlua::ffi::lua_pop(state, 1);
+                        }
+                    }
+                })?;
+            }
+            Ok(lines.join("\n"))
+        })?)?;
+    }
+
     // debugstack([start [, count1 [, count2]]]): the reference's traceback, frames only, in Lua
     // 5.0's wording. There is no `stack traceback:` header and line 1 is the caller's frame:
     // `AceDB-2.0.lua:742` skips one line to read its caller's addon folder, and `AceLibrary.lua:70`

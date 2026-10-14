@@ -204,8 +204,12 @@ fn set_enabled(lua: &Lua, this: &Table, on: bool) -> mlua::Result<()> {
         .arena
         .frame_mut(h)
         .ok_or_else(|| mlua::Error::runtime("stale frame handle"))?;
-    match &mut frame.kind_state {
-        KindState::Button(bs) => bs.set_enabled(on),
+    let changed = match &mut frame.kind_state {
+        KindState::Button(bs) => {
+            let changed = bs.enabled() != on;
+            bs.set_enabled(on);
+            changed
+        },
         _ => return Err(mlua::Error::runtime("not a Button")),
     };
     let bit = 1u8 << DrawLayer::Highlight.index();
@@ -213,6 +217,12 @@ fn set_enabled(lua: &Lua, this: &Table, on: bool) -> mlua::Result<()> {
         frame.disabled_layers &= !bit;
     } else {
         frame.disabled_layers |= bit;
+    }
+    let wrath = model.dialect == super::ScriptDialect::Wrath12340;
+    drop(model);
+    if changed && wrath {
+        event::fire_widget_handler(lua, super::object::decode_id(this)?,
+            if on { "OnEnable" } else { "OnDisable" }, vec![])?;
     }
     Ok(())
 }
@@ -998,10 +1008,13 @@ pub(super) fn click_button(lua: &Lua, id: u32, button: &str, down: bool, scripte
         Ok(s) => Value::String(s),
         Err(_) => return,
     };
-    if let Err(e) = event::fire_widget_handler(lua, id, "OnClick", vec![btn]) {
-        lua.app_data_mut::<Model>()
-            .expect("model app_data")
-            .record_script_error(e.to_string());
+    let wrath = lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Wrath12340;
+    let scripts: &[&str] = if wrath { &["PreClick", "OnClick", "PostClick"] } else { &["OnClick"] };
+    for script in scripts {
+        let args = if wrath { vec![btn.clone(), Value::Boolean(down)] } else { vec![btn.clone()] };
+        if let Err(e) = event::fire_widget_handler(lua, id, script, args) {
+            lua.app_data_mut::<Model>().expect("model app_data").record_script_error(e.to_string());
+        }
     }
     // A nameplate click selects its unit, from the pointer or `Click()` alike (the plate's
     // override `0x7cb910` chains the base), after the handler so an erroring hook cannot eat it. A
