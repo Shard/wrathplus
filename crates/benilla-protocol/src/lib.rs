@@ -280,3 +280,6 @@ mod host_port_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod wrath_native_stream_tests;
