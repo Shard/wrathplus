@@ -723,6 +723,10 @@ fn parse_wrath_m2_impl<'a>(
                 x: v.f32_at(32).ok_or(WrathError::Truncated("vertex UV"))?,
                 y: v.f32_at(36).ok_or(WrathError::Truncated("vertex UV"))?,
             },
+            tex_coords2: C2 {
+                x: v.f32_at(0x28).ok_or(WrathError::Truncated("vertex UV1"))?,
+                y: v.f32_at(0x2c).ok_or(WrathError::Truncated("vertex UV1"))?,
+            },
         });
     }
 

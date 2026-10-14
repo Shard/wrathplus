@@ -99,6 +99,14 @@ impl EntityPart {
     /// The four texture-transform channels as the engine's lanes take them, the one place a spawner
     /// reads them. Ask `UvLoops::animates`: a scale-only transform or a dead slot-0 translation is
     /// `None` on the channel you would check first.
+    pub(super) fn stage2_animates(&self) -> bool {
+        self.geometry.stage2.as_ref().is_some_and(|s| {
+            s.uv_anim.as_ref().is_some_and(|a| a.period > 0.0)
+                || s.uv_seq.is_some()
+                || s.uv_rot_seq.is_some()
+                || s.uv_scale_seq.is_some()
+        })
+    }
     pub(super) fn uv_loops(&self) -> benilla_world::doodad_anim::UvLoops {
         benilla_world::doodad_anim::UvLoops {
             seqs: self.uv_seq.clone(),
@@ -387,7 +395,18 @@ pub(super) fn build_parts(
                     // The authored batch order (index + 1) biases the transparent sort, so coplanar
                     // transparent batches draw in file order instead of flipping a tie each frame.
                     let order = u16::try_from(pi + 1).unwrap_or(u16::MAX);
-                    let v = mats.entity_variants(sub, texture, order, uv);
+                    let mut resolved_sub = sub.clone();
+                    if resolved_sub.texture2.is_none() {
+                        resolved_sub.texture2 = sub
+                            .geometry
+                            .stage2
+                            .as_ref()
+                            .and_then(|stage| stage.skin_slot)
+                            .and_then(|slot| dm.skins.get(slot as usize))
+                            .and_then(|s| s.as_ref())
+                            .map(|name| asset_server.load(skin_url(&dm.dir, name)));
+                    }
+                    let v = mats.entity_variants(&resolved_sub, texture, order, uv);
                     let v = v.expect("light buffer checked at entry");
                     EntityPart {
                         // Index-parallel with the submeshes; a miss draws nothing, never panics.

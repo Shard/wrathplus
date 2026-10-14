@@ -333,8 +333,14 @@ fn host_seq(hosts: &SeqHosts, host: Option<Entity>) -> Option<(usize, f32)> {
     playing_seq(player, anims)
 }
 
+/// Independent texture-transform registries: `.0` is the original stage, `.1` is stage 2.
+/// Keeping the original map intact preserves callers that inspect its material keys.
 #[derive(Resource, Default)]
 pub struct UvAnimMaterials(
+    pub  std::collections::HashMap<
+        bevy::asset::AssetId<benilla_assets::materials::WowModelMaterial>,
+        UvAnimEntry,
+    >,
     pub  std::collections::HashMap<
         bevy::asset::AssetId<benilla_assets::materials::WowModelMaterial>,
         UvAnimEntry,
@@ -499,6 +505,71 @@ pub fn register_entity_uv(
     );
 }
 
+/// Register the second texture transform independently of [`register_entity_uv`].
+/// The caller builds `stage2_seed.xy` at the opening translation (as stage 0 builds
+/// `sun_scale.zw`). Translation and optional affine rows go in `stage2_anim.x` and
+/// `stage2_anim.z`; neither the first-stage slots nor its registry entry is touched.
+/// Repeated registration is a no-op. A full table leaves the unallocated channel at its seed
+/// (translation) or identity (rotation/scale), just like the first-stage lane.
+pub fn register_entity_uv_stage2(
+    reg: &mut UvAnimMaterials,
+    table: &mut crate::mat_anim_table::MatAnimTable,
+    materials: &mut bevy::asset::Assets<benilla_assets::materials::WowModelMaterial>,
+    id: bevy::asset::AssetId<benilla_assets::materials::WowModelMaterial>,
+    loops: &UvLoops,
+    host: Option<Entity>,
+) {
+    if !loops.animates() || reg.1.contains_key(&id) {
+        return;
+    }
+    let Some(slot) = table.alloc() else {
+        bevy::log::warn_once!("mat-anim table full — a stage-2 UV batch stays at its seed");
+        return;
+    };
+    // Parked materials must be reachable here too, before their first visible draw.
+    let Some(seed) = crate::model_render::lazy::with_material_mut(materials, id, |mat| {
+        let seed = [mat.extension.stage2_seed.x, mat.extension.stage2_seed.y];
+        mat.extension.stage2_anim.x = f32::from(slot);
+        seed
+    }) else {
+        bevy::log::warn_once!("mat-anim: no material behind {id} — stage-2 UV stays at its seed");
+        table.free(slot);
+        return;
+    };
+    let anim = match (loops.seqs.clone(), host) {
+        (Some(seqs), Some(host)) => UvLoop::PerSeq { seqs, host },
+        _ => UvLoop::Shared(loops.single.clone().filter(|l| l.period > 0.0)),
+    };
+    let mut entry = UvAnimEntry {
+        anim,
+        slot,
+        seed,
+        affine: None,
+    };
+    if loops.rot.is_some() || loops.scale.is_some() {
+        if let Some(affine_slot) = table.alloc() {
+            if crate::model_render::lazy::with_material_mut(materials, id, |mat| {
+                mat.extension.stage2_anim.z = f32::from(affine_slot);
+            })
+            .is_some()
+            {
+                entry.affine = Some(UvAffine {
+                    rot: loops.rot.clone(),
+                    scale: loops.scale.clone(),
+                    slot: affine_slot,
+                });
+            } else {
+                table.free(affine_slot);
+            }
+        } else {
+            bevy::log::warn_once!(
+                "mat-anim table full — stage-2 UV rotation/scale stays at the identity"
+            );
+        }
+    }
+    reg.1.insert(id, entry);
+}
+
 /// The four baked channels of one batch's texture transform: the translation as a per-slot set or
 /// one loop, and the per-slot rotation and scaling sets.
 #[derive(Default)]
@@ -570,7 +641,7 @@ pub(super) fn tick_anim_materials(
         bevy::platform::collections::HashSet<AssetId<benilla_assets::materials::WowModelMaterial>>,
     >,
 ) {
-    if uv_reg.0.is_empty() && tint_reg.0.is_empty() {
+    if uv_reg.0.is_empty() && uv_reg.1.is_empty() && tint_reg.0.is_empty() {
         // Marked parts beside an empty registry mean this lane is dead, not that nothing animates.
         if parts.iter().next().is_some() {
             bevy::log::warn_once!(
@@ -584,7 +655,13 @@ pub(super) fn tick_anim_materials(
     }
     // A capture freezes the shared-clock lanes at their seed but keeps the effect lane running.
     let frozen = crate::dev_state::deterministic_run() && !matanim_live();
-    if frozen && !uv_reg.0.values().any(UvAnimEntry::instance_lane) {
+    if frozen
+        && !uv_reg
+            .0
+            .values()
+            .chain(uv_reg.1.values())
+            .any(UvAnimEntry::instance_lane)
+    {
         return;
     }
     drawn.clear();
@@ -601,28 +678,31 @@ pub(super) fn tick_anim_materials(
     // Rows are deltas from each entry's seed, so no material changes per frame and its far twin
     // shares the row; quantized (1/4096, 1/255 for tint) so an unchanged row is not re-uploaded.
     let gseq_now = f64::from(now);
-    uv_reg.0.retain(|id, entry| {
-        // Alive means either half holds it: a material parked by `model_render::lazy` is not in
-        // the store, and registration happens once, at spawn.
-        if !crate::model_render::lazy::holds(&materials, *id) {
-            table.free(entry.slot);
-            if let Some(a) = &entry.affine {
-                table.free(a.slot);
+    let UvAnimMaterials(stage0, stage2) = &mut *uv_reg;
+    for registry in [stage0, stage2] {
+        registry.retain(|id, entry| {
+            // Alive means either half holds it: a material parked by `model_render::lazy` is not in
+            // the store, and registration happens once, at spawn.
+            if !crate::model_render::lazy::holds(&materials, *id) {
+                table.free(entry.slot);
+                if let Some(a) = &entry.affine {
+                    table.free(a.slot);
+                }
+                return false;
             }
-            return false;
-        }
-        // The effect lane skips the draw gate: its parts carry no `AnimMatPart`, and an effect
-        // lives about a second, so an undrawn one costs little.
-        let fx = entry.instance_lane();
-        if (fx || drawn.contains(id)) && (!frozen || fx) {
-            let playing = host_seq(&hosts, entry.host());
-            table.set(entry.slot, entry.delta(now, gseq_now, playing));
-            if let Some((slot, row)) = entry.affine(now, gseq_now, playing) {
-                table.set(slot, row);
+            // The effect lane skips the draw gate: its parts carry no `AnimMatPart`, and an effect
+            // lives about a second, so an undrawn one costs little.
+            let fx = entry.instance_lane();
+            if (fx || drawn.contains(id)) && (!frozen || fx) {
+                let playing = host_seq(&hosts, entry.host());
+                table.set(entry.slot, entry.delta(now, gseq_now, playing));
+                if let Some((slot, row)) = entry.affine(now, gseq_now, playing) {
+                    table.set(slot, row);
+                }
             }
-        }
-        true
-    });
+            true
+        });
+    }
     tint_reg.0.retain(|id, entry| {
         if !crate::model_render::lazy::holds(&materials, *id) {
             table.free(entry.slot);
@@ -897,6 +977,32 @@ fn probe_at() -> Option<f32> {
 #[cfg(test)]
 mod delta_tests {
     use super::*;
+
+    #[test]
+    fn second_stage_registry_keeps_independent_seed_and_rows() {
+        let mut reg = UvAnimMaterials::default();
+        let materials = Assets::<benilla_assets::materials::WowModelMaterial>::default();
+        let handle = materials.reserve_handle();
+        let id = handle.id();
+        let mk = |slot, seed| UvAnimEntry {
+            anim: UvLoop::Shared(Some(uv_loop())),
+            slot,
+            seed,
+            affine: None,
+        };
+        reg.0.insert(id, mk(1, [0.25, 0.5]));
+        reg.1.insert(id, mk(2, [0.75, 1.0]));
+        assert_ne!(reg.0[&id].slot, reg.1[&id].slot);
+        for i in 0..2 {
+            assert!(
+                (reg.0[&id].delta(0.5, 0.5, None)[i] + reg.0[&id].seed[i]
+                    - reg.1[&id].delta(0.5, 0.5, None)[i]
+                    - reg.1[&id].seed[i])
+                    .abs()
+                    < 0.001
+            );
+        }
+    }
 
     fn fx_entry(attached_at: f32) -> UvAnimEntry {
         UvAnimEntry {

@@ -12,7 +12,7 @@ use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
 
-use crate::model_render::{model_material, MaterialCache, ShadeSel};
+use crate::model_render::{model_material_stages, MaterialCache, ShadeSel};
 use benilla_assets::materials::WowModelMaterial;
 
 use super::{ChildDraw, ParticleEmitter};
@@ -71,7 +71,7 @@ pub(super) fn update_model_particles(
                 .map(|(pi, sub)| {
                     // A fresh material per instance: the over-life ramp writes its tint.
                     let mut throwaway = MaterialCache::default();
-                    let material = model_material(
+                    let material = model_material_stages(
                         &mut throwaway,
                         &mut materials,
                         sub.texture.clone(),
@@ -97,6 +97,20 @@ pub(super) fn update_model_particles(
                         false, // an effect model is never a skybox
                         &light.0,
                         None, // no animated loop, so no placement key
+                        sub.texture2.clone(),
+                        sub.geometry.stage2.as_ref().map_or(Vec4::ZERO, |stage| {
+                            Vec4::new(
+                                1.0,
+                                stage.op as f32,
+                                stage.coord as f32,
+                                u32::from(stage.first_opaque) as f32,
+                            )
+                        }),
+                        if sub.geometry.stage2.is_some() {
+                            std::sync::Arc::as_ptr(&sub.geometry) as usize
+                        } else {
+                            0
+                        },
                     );
                     // Realized now: the over-life ramp writes it every frame.
                     crate::model_render::lazy::realize(&mut materials, material.id());

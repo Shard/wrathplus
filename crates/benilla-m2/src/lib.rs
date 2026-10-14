@@ -174,6 +174,10 @@ pub fn parse_m2(cursor: &mut Cursor<&[u8]>) -> Result<M2Format> {
                 x: v.f32_at(32).ok_or(Error::Truncated)?,
                 y: v.f32_at(36).ok_or(Error::Truncated)?,
             },
+            tex_coords2: C2 {
+                x: v.f32_at(0x28).ok_or(Error::Truncated)?,
+                y: v.f32_at(0x2c).ok_or(Error::Truncated)?,
+            },
         });
     }
 

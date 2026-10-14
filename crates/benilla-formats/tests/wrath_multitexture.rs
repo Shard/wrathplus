@@ -7,7 +7,7 @@ use benilla_m2::wrath::{parse_wrath_m2, parse_wrath_skin};
 use benilla_m2::M2TextureType;
 
 #[test]
-fn installed_wrath_multitexture_models_admit_stage_zero_geometry() {
+fn installed_wrath_multitexture_models_retain_both_stages() {
     if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
         eprintln!("SKIP installed Wrath multi-texture test: select WOW_CLIENT_PROFILE=wrath");
         return;
@@ -79,13 +79,41 @@ fn installed_wrath_multitexture_models_admit_stage_zero_geometry() {
                 }),
                 "{path}: multi-stage batch must draw stage 0, not its additional layer"
             );
+            let layer_index =
+                raw.raw_data.texture_lookup_table[batch.texture_combo_index as usize + 1];
+            let layer = &raw.textures[layer_index as usize];
+            let layer_path = layer.filename.string.to_string_lossy();
+            let combos = parse_wrath_m2(&mut Cursor::new(bytes.as_slice())).unwrap();
+            let op = combos.texture_combiner_combos()[batch.shader_id as usize + 1];
+            let stage = model
+                .submeshes
+                .iter()
+                .find(|s| {
+                    s.section == Some(batch.skin_section_index)
+                        && s.texture.as_deref() == Some(base.as_ref())
+                })
+                .unwrap()
+                .stage2
+                .as_ref()
+                .unwrap();
+            assert_eq!(stage.texture.as_deref(), Some(layer_path.as_ref()));
+            assert_eq!(
+                (stage.op, stage.coord, stage.wrap_x, stage.wrap_y),
+                (
+                    op,
+                    raw.texture_unit_lookup[batch.texture_coord_combo_index as usize + 1],
+                    layer.wrap_x,
+                    layer.wrap_y
+                )
+            );
+            assert!(!chain.read_file(layer_path.as_ref()).unwrap().is_empty());
             eprintln!(
                 "{path}: section {} draws stage 0 texture {base}",
                 batch.skin_section_index
             );
         }
         eprintln!(
-            "{path}: {} submeshes, {} triangles (stage-zero fallback)",
+            "{path}: {} submeshes, {} triangles (combined stages)",
             model.submeshes.len(),
             model
                 .submeshes

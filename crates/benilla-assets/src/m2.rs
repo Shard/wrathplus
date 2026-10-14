@@ -274,6 +274,7 @@ impl AssetLoader for M2ModelLoader {
                 .map(|t| ctx.load::<Image>(crate::texture_url(t, (sub.wrap_x, sub.wrap_y))));
             submeshes.push(ModelSubmesh {
                 texture,
+                texture2: None,
                 skin_slot: sub.skin_slot,
                 geoset_id: sub.geoset_id,
                 char_slot: sub.char_slot,

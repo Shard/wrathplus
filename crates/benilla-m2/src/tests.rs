@@ -274,6 +274,8 @@ fn one_vertex_decodes_all_fields() {
     vert[28..32].copy_from_slice(&6.0f32.to_le_bytes());
     vert[32..36].copy_from_slice(&0.5f32.to_le_bytes());
     vert[36..40].copy_from_slice(&0.25f32.to_le_bytes());
+    vert[40..44].copy_from_slice(&(-0.75f32).to_le_bytes());
+    vert[44..48].copy_from_slice(&1.5f32.to_le_bytes());
     b.extend(vert);
 
     let fmt = parse(&b).expect("one full vertex record parses");
@@ -283,6 +285,7 @@ fn one_vertex_decodes_all_fields() {
     assert_eq!(v.bone_indices, [1, 2, 3, 4]);
     assert_eq!((v.normal.x, v.normal.y, v.normal.z), (4.0, 5.0, 6.0));
     assert_eq!((v.tex_coords.x, v.tex_coords.y), (0.5, 0.25));
+    assert_eq!((v.tex_coords2.x, v.tex_coords2.y), (-0.75, 1.5));
 }
 
 #[test]

@@ -119,6 +119,16 @@ pub struct WowModelExt {
     /// tint, `z` = the texture-transform affine, `w` = the UI tile's cell clip.
     #[uniform(100)]
     pub anim_slots: Vec4,
+    /// x = enabled, y = native op, z = coordinate lookup, w = first-stage opaque.
+    #[uniform(100)]
+    pub stage2: Vec4,
+    #[uniform(100)]
+    pub stage2_anim: Vec4,
+    #[uniform(100)]
+    pub stage2_seed: Vec4,
+    #[texture(101)]
+    #[sampler(102)]
+    pub texture2: Option<Handle<Image>>,
     /// The shared global light (`lighting::global_light`), updated in place once a frame; the
     /// vertex stage reads its point-light table, since Bevy's clusterable lights are fragment-only.
     #[storage(90, read_only, buffer, visibility(vertex, fragment))]
@@ -524,5 +534,82 @@ mod tests {
         );
         // The tail and the shortfall are deep-end only.
         assert_eq!(at(0), shallow, "row 0 is the shallow endpoint verbatim");
+    }
+}
+
+#[cfg(test)]
+mod two_stage_tests {
+    #[test]
+    fn both_shader_parameter_layouts_match_rust_stage_order() {
+        let forward = include_str!("shaders/wow_model.wgsl");
+        let shadow = include_str!("shaders/wow_shadow.wgsl");
+        let fields = [
+            "clutter_fade",
+            "model_flags",
+            "sun_scale",
+            "tint",
+            "sidn",
+            "anim_slots",
+            "stage2",
+            "stage2_anim",
+            "stage2_seed",
+        ];
+        for source in [forward, shadow] {
+            let abi = source
+                .split("struct ModelParams {")
+                .nth(1)
+                .unwrap()
+                .split("};")
+                .next()
+                .unwrap();
+            let mut last = 0;
+            for field in fields {
+                let at = abi.find(&format!("{field}: vec4<f32>")).unwrap();
+                assert!(at >= last);
+                last = at;
+            }
+            assert_eq!(abi.matches(": vec4<f32>").count(), 9);
+            assert!(source.contains("@binding(101) var second_texture"));
+            assert!(source.contains("@binding(102) var second_sampler"));
+        }
+        assert!(shadow.contains("m.stage2.x > 0.5 && m.stage2.z > 2.0) { discard; }"));
+    }
+
+    // Native texture-derived coverage remains distinct from vertex/material opacity.
+    fn coverage(opaque: bool, op: u32, a0: f32, a1: f32) -> f32 {
+        let first = if opaque { 1.0 } else { a0 };
+        match op {
+            0 | 6 | 7 => first,
+            3 if opaque => 1.0,
+            3 => first + a1,
+            4 => first * a1 * 2.0,
+            _ => first * a1,
+        }
+    }
+    #[test]
+    fn combined_coverage_keeps_zero_opacity_zero_and_cutout_unfaded() {
+        for opaque in [false, true] {
+            for op in 0..8 {
+                for a0 in [0.0, 0.5, 1.0] {
+                    for a1 in [0.0, 0.5, 1.0] {
+                        let tex = coverage(opaque, op, a0, a1);
+                        for opacity in [0.0, 0.25, 1.0] {
+                            let final_alpha = opacity * tex;
+                            if opacity == 0.0 {
+                                assert_eq!(final_alpha, 0.0);
+                            }
+                        }
+                        if opaque && matches!(op, 0 | 3 | 6 | 7) {
+                            assert_eq!(tex, 1.0);
+                        }
+                    }
+                }
+            }
+        }
+        let cutoff = super::VANILLA_ALPHA_KEY_REF;
+        assert!(coverage(false, 1, cutoff, 1.0) >= cutoff);
+        assert!(coverage(false, 1, cutoff - 0.0001, 1.0) < cutoff);
+        assert_eq!(coverage(false, 3, 0.5, 0.5), 1.0);
+        assert_eq!(coverage(false, 6, 0.5, 0.0), 0.5);
     }
 }

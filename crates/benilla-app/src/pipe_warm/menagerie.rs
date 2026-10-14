@@ -709,6 +709,8 @@ fn warm_quad(colors: bool, skinned: bool) -> RenderSubmesh {
         ],
         normals: vec![[0.0, 0.0, 1.0]; n],
         uvs: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        uvs2: Vec::new(),
+        stage2: None,
         indices: vec![0, 1, 2, 0, 2, 3],
         texture: None,
         skin_slot: None,

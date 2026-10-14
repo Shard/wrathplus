@@ -44,6 +44,9 @@ pub struct MatKey {
     /// The bound light buffer: the world, a portrait booth and char select each bind their own.
     light: bevy::render::render_resource::BufferId,
     texture: Option<AssetId<Image>>,
+    texture2: Option<AssetId<Image>>,
+    stage2: [u32; 4],
+    stage2_owner: usize,
     blend: ModelBlend,
     two_sided: bool,
     is_wmo: bool,
@@ -148,9 +151,72 @@ pub fn model_material(
     light: &Buffer,
     instance: Option<Entity>,
 ) -> Handle<WowModelMaterial> {
+    model_material_stages(
+        cache,
+        materials,
+        texture,
+        blend,
+        two_sided,
+        is_wmo,
+        is_interior,
+        is_emissive,
+        is_additive,
+        fade_variant,
+        no_depth_write,
+        no_depth_test,
+        fog_policy,
+        env_map,
+        shade,
+        batch_order,
+        uv_anim,
+        rgb_anim,
+        wmo_class,
+        sidn,
+        window,
+        sky_depth,
+        light,
+        instance,
+        None,
+        Vec4::ZERO,
+        0,
+    )
+}
+
+pub fn model_material_stages(
+    cache: &mut MaterialCache,
+    materials: &mut Assets<WowModelMaterial>,
+    texture: Option<Handle<Image>>,
+    blend: ModelBlend,
+    two_sided: bool,
+    is_wmo: bool,
+    is_interior: bool,
+    is_emissive: bool,
+    is_additive: bool,
+    fade_variant: bool,
+    no_depth_write: bool,
+    no_depth_test: bool,
+    fog_policy: benilla_formats::FogPolicy,
+    env_map: bool,
+    shade: ShadeSel,
+    batch_order: u16,
+    uv_anim: Option<&std::sync::Arc<benilla_formats::UvAnim>>,
+    rgb_anim: Option<&std::sync::Arc<benilla_formats::RgbAnim>>,
+    wmo_class: Option<WmoBatchClass>,
+    sidn: Option<[u8; 3]>,
+    window: bool,
+    sky_depth: bool,
+    light: &Buffer,
+    instance: Option<Entity>,
+    texture2: Option<Handle<Image>>,
+    stage2: Vec4,
+    stage2_owner: usize,
+) -> Handle<WowModelMaterial> {
     let key = MatKey {
         light: light.id(),
         texture: texture.as_ref().map(Handle::id),
+        texture2: texture2.as_ref().map(Handle::id),
+        stage2: stage2.to_array().map(f32::to_bits),
+        stage2_owner,
         blend,
         two_sided,
         is_wmo,
@@ -316,6 +382,10 @@ pub fn model_material(
                 },
                 // Zero until a sampler registers this material and bakes its table slot in once.
                 anim_slots: Vec4::ZERO,
+                stage2_anim: Vec4::ZERO,
+                stage2_seed: Vec4::ZERO,
+                stage2,
+                texture2,
                 light_buf: light.clone(),
             },
         },
@@ -375,9 +445,36 @@ pub fn zfill_material(
     cutout: bool,
     light: &Buffer,
 ) -> Handle<WowModelMaterial> {
+    zfill_material_stages(
+        cache,
+        materials,
+        texture,
+        two_sided,
+        cutout,
+        light,
+        None,
+        Vec4::ZERO,
+        0,
+    )
+}
+
+pub fn zfill_material_stages(
+    cache: &mut MaterialCache,
+    materials: &mut Assets<WowModelMaterial>,
+    texture: Option<Handle<Image>>,
+    two_sided: bool,
+    cutout: bool,
+    light: &Buffer,
+    texture2: Option<Handle<Image>>,
+    stage2: Vec4,
+    stage2_owner: usize,
+) -> Handle<WowModelMaterial> {
     let key = MatKey {
         light: light.id(),
         texture: texture.as_ref().map(Handle::id),
+        texture2: texture2.as_ref().map(Handle::id),
+        stage2: stage2.to_array().map(f32::to_bits),
+        stage2_owner,
         blend: if cutout {
             ModelBlend::AlphaTest
         } else {
@@ -435,6 +532,10 @@ pub fn zfill_material(
                 tint: Vec4::new(1.0, 1.0, 1.0, 0.0),
                 sidn: Vec4::ZERO,
                 anim_slots: Vec4::ZERO,
+                stage2_anim: Vec4::ZERO,
+                stage2_seed: Vec4::ZERO,
+                stage2,
+                texture2,
                 light_buf: light.clone(),
             },
         },
@@ -1053,4 +1154,26 @@ mod tests {
         let all = src | super::FAR_SIDE_MARKER | 0x0f;
         assert_eq!(f32::from(all) as u16, all);
     }
+}
+
+/// Initialize the second-stage seed and expose independent animation channels.
+pub fn second_stage_loops(
+    sub: &benilla_assets::ModelSubmesh,
+    materials: &mut Assets<WowModelMaterial>,
+    id: AssetId<WowModelMaterial>,
+) -> crate::doodad_anim::UvLoops {
+    let Some(stage) = &sub.geometry.stage2 else {
+        return Default::default();
+    };
+    let loops = crate::doodad_anim::UvLoops {
+        single: stage.uv_anim.clone().map(std::sync::Arc::new),
+        seqs: stage.uv_seq.clone().map(std::sync::Arc::new),
+        rot: stage.uv_rot_seq.clone().map(std::sync::Arc::new),
+        scale: stage.uv_scale_seq.clone().map(std::sync::Arc::new),
+    };
+    let seed = loops.open_offset();
+    lazy::with_material_mut(materials, id, |mat| {
+        mat.extension.stage2_seed = Vec4::new(seed[0], seed[1], 0.0, 0.0);
+    });
+    loops
 }

@@ -165,7 +165,9 @@ impl M2BatchMaterials<'_> {
         rig: bool,
     ) -> Handle<WowModelMaterial> {
         let shade = if rig { ShadeSel::Rig } else { ShadeSel::Lit };
-        self.build(sub, texture, order, shade, false, false, rig, light)
+        let h = self.build(sub, texture, order, shade, false, false, rig, light);
+        super::second_stage_loops(sub, &mut self.materials, h.id());
+        h
     }
 
     /// The variant set of any entity part, all lit with one indoor pair: the reference gives every
@@ -244,6 +246,27 @@ impl M2BatchMaterials<'_> {
                 &light,
             )
         };
+        let zfill = self.zfill_for(sub, texture.clone(), &light);
+        for id in [
+            &steady,
+            &interior,
+            &interior_bake,
+            &interior_bake_blend,
+            &fade_blend,
+        ]
+        .into_iter()
+        .chain(zfill.iter())
+        {
+            let loops = super::second_stage_loops(sub, &mut self.materials, id.id());
+            crate::doodad_anim::register_entity_uv_stage2(
+                uv.reg,
+                uv.table,
+                &mut self.materials,
+                id.id(),
+                &loops,
+                uv.instance,
+            );
+        }
         // `register_entity_uv` is idempotent per material, so collapsed variants cost nothing.
         let loops = crate::doodad_anim::UvLoops::of(sub);
         if loops.animates() {
@@ -270,7 +293,7 @@ impl M2BatchMaterials<'_> {
             interior_bake,
             interior_bake_blend,
             fade_blend,
-            zfill: self.zfill_for(sub, texture, &light),
+            zfill,
         })
     }
 
@@ -353,13 +376,27 @@ impl M2BatchMaterials<'_> {
         }
         match sub.blend {
             ModelBlend::Mod | ModelBlend::Mod2x => None,
-            b => Some(zfill_material(
+            b => Some(super::zfill_material_stages(
                 &mut self.cache.0,
                 &mut self.materials,
                 texture,
                 sub.two_sided,
                 b == ModelBlend::AlphaTest,
                 light,
+                sub.texture2.clone(),
+                sub.geometry.stage2.as_ref().map_or(Vec4::ZERO, |s| {
+                    Vec4::new(
+                        1.0,
+                        s.op as f32,
+                        s.coord as f32,
+                        u32::from(s.first_opaque) as f32,
+                    )
+                }),
+                if sub.geometry.stage2.is_some() {
+                    std::sync::Arc::as_ptr(&sub.geometry) as usize
+                } else {
+                    0
+                },
             )),
         }
     }
@@ -376,7 +413,7 @@ impl M2BatchMaterials<'_> {
         play_uv: bool,
         light: &Buffer,
     ) -> Handle<WowModelMaterial> {
-        model_material(
+        super::model_material_stages(
             &mut self.cache.0,
             &mut self.materials,
             texture,
@@ -406,6 +443,20 @@ impl M2BatchMaterials<'_> {
             // Entity batches share one material per batch: an entity resolves its sequence
             // through `MatAnim::host`, so only the world streamer keys one per placement.
             None,
+            sub.texture2.clone(),
+            sub.geometry.stage2.as_ref().map_or(Vec4::ZERO, |stage| {
+                Vec4::new(
+                    1.0,
+                    stage.op as f32,
+                    stage.coord as f32,
+                    u32::from(stage.first_opaque) as f32,
+                )
+            }),
+            if sub.geometry.stage2.is_some() {
+                std::sync::Arc::as_ptr(&sub.geometry) as usize
+            } else {
+                0
+            },
         )
     }
 }

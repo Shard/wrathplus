@@ -114,6 +114,11 @@ impl AssetLoader for WrathM2ModelLoader {
                 });
                 ModelSubmesh {
                     texture,
+                    texture2: sub.stage2.as_ref().and_then(|stage| {
+                        stage.texture.as_deref().map(|t| {
+                            ctx.load::<Image>(crate::texture_url(t, (stage.wrap_x, stage.wrap_y)))
+                        })
+                    }),
                     skin_slot: sub.skin_slot,
                     geoset_id: sub.geoset_id,
                     char_slot: sub.char_slot,

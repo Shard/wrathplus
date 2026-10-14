@@ -33,7 +33,20 @@ struct ModelParams {
     // Rows of `wow_light.matanim`, 0 = identity: x = UV scroll, y = tint, z = texture-transform
     // affine, w = the UI tile's cell clip.
     anim_slots: vec4<f32>,
+    stage2: vec4<f32>,
+    stage2_anim: vec4<f32>,
+    stage2_seed: vec4<f32>,
 };
+fn second_stage_uv(uv: vec2<f32>) -> vec2<f32> {
+    if (m.stage2.z > 2.0) { return uv; }
+    let uv_t = uv + m.stage2_seed.xy + wow_light.matanim[u32(m.stage2_anim.x)].xy;
+    let affine = wow_light.matanim[u32(m.stage2_anim.z)];
+    let d = (uv_t - vec2<f32>(0.5)) * vec2<f32>(1.0 + affine.z,1.0 + affine.w);
+    let c = 1.0 + affine.x;
+    return vec2<f32>(0.5 + d.x*c-d.y*affine.y,0.5+d.x*affine.y+d.y*c);
+}
+@group(#{MATERIAL_BIND_GROUP}) @binding(101) var second_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(102) var second_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> m: ModelParams;
 
 // The shared light buffer (`lighting::global_light`, rows as packed there), updated once per
@@ -286,6 +299,7 @@ fn fragment(in: VertexOutput) -> ShadowOutput {
         discard;
     }
 
+    if (m.stage2.x > 0.5 && m.stage2.z > 2.0) { discard; }
     var alpha = pbr_bindings::material.base_color.a;
 #ifdef VERTEX_COLORS
     // MOCV.a is lighting data (often zero), NOT WMO coverage; never divide it back out.
@@ -300,8 +314,31 @@ fn fragment(in: VertexOutput) -> ShadowOutput {
     uv = (pbr_bindings::material.uv_transform * vec3<f32>(uv, 1.0)).xy;
     if ((flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u) {
         // No light-camera mip bias or distance-dependent dither/fade. Normal implicit LOD.
-        alpha *= textureSample(pbr_bindings::base_color_texture,
-            pbr_bindings::base_color_sampler, uv).a;
+        if (m.stage2.x < 0.5 || m.stage2.w < 0.5) {
+            alpha *= textureSample(pbr_bindings::base_color_texture,
+                pbr_bindings::base_color_sampler, uv).a;
+        }
+    }
+#endif
+#ifdef VERTEX_UVS
+    if (m.stage2.x > 0.5) {
+        let op = u32(m.stage2.y);
+        var second_uv = in.uv;
+#ifdef VERTEX_UVS_B
+        second_uv = in.uv_b;
+#endif
+        let a1 = textureSample(second_texture, second_sampler, second_stage_uv(second_uv)).a;
+        if ((is_mask || source_cutout) && m.stage2.z > 2.0 && op != 0u && op != 6u && op != 7u) { discard; }
+        if (op == 3u && m.stage2.w < 0.5) {
+            var opacity = pbr_bindings::material.base_color.a;
+#ifdef VERTEX_COLORS
+            if (m.model_flags.x <= 0.5) { opacity *= in.color.a; }
+#endif
+            alpha += opacity * a1;
+        }
+        else if (op != 0u && op != 6u && op != 7u) {
+            alpha *= a1 * select(1.0, 2.0, op == 4u);
+        }
     }
 #endif
     if (source_cutout && alpha < 224.0 / 255.0) { discard; }

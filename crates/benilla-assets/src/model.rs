@@ -43,6 +43,7 @@ pub struct ModelSubmesh {
     pub geometry: std::sync::Arc<RenderSubmesh>,
     /// The embedded albedo texture; `None` for a creature skin slot, filled at spawn.
     pub texture: Option<Handle<Image>>,
+    pub texture2: Option<Handle<Image>>,
     /// The creature skin variation this batch draws from (`0/1/2` for `Monster1/2/3`).
     pub skin_slot: Option<u8>,
     /// The geoset id, `group * 100 + variant`, by which the character compositor picks parts.
@@ -109,6 +110,9 @@ fn build_submesh_mesh(sub: &RenderSubmesh, usages: RenderAssetUsages) -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, usages);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, sub.uvs.clone());
+    if sub.uvs2.len() == sub.positions.len() {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, sub.uvs2.clone());
+    }
     mesh.insert_indices(Indices::U32(sub.indices.clone()));
     if sub.vertex_colors.len() == sub.positions.len() {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, sub.vertex_colors.clone());
@@ -656,6 +660,8 @@ fn merged_static_mesh_impl(
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut uvs2: Vec<[f32; 2]> = Vec::new();
+    let any_second = parts.iter().any(|(s, _)| s.stage2.is_some());
     let mut colors: Vec<[f32; 4]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut fade: Vec<[f32; 4]> = Vec::new();
@@ -679,6 +685,15 @@ fn merged_static_mesh_impl(
             normals.extend(std::iter::repeat_n([0.0, 1.0, 0.0], sub.positions.len()));
         }
         uvs.extend(sub.uvs.iter().copied());
+        uvs2.extend(
+            if sub.uvs2.len() == sub.positions.len() {
+                &sub.uvs2
+            } else {
+                &sub.uvs
+            }
+            .iter()
+            .copied(),
+        );
         if any_colors {
             if sub.vertex_colors.len() == sub.positions.len() {
                 colors.extend(sub.vertex_colors.iter().copied());
@@ -706,6 +721,9 @@ fn merged_static_mesh_impl(
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    if any_second {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, uvs2);
+    }
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     if any_colors {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);

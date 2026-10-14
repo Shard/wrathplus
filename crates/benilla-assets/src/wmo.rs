@@ -486,6 +486,7 @@ impl AssetLoader for WmoModelLoader {
                     ))
                 });
                 submeshes.push(ModelSubmesh {
+                    texture2: None,
                     texture,
                     skin_slot: sub.skin_slot,
                     geoset_id: 0,

@@ -14,7 +14,7 @@ use crate::billboard::BillboardCard;
 use crate::doodad_anim::DoodadAnimHost;
 use crate::mesh_tag::alpha_bits;
 use crate::model_fade::DoodadFade;
-use crate::model_render::{model_material, MaterialCache, ShadeSel};
+use crate::model_render::{model_material_stages, MaterialCache, ShadeSel};
 use crate::model_render::{ModelKind, ModelPart};
 use benilla_assets::materials::WowModelMaterial;
 
@@ -163,9 +163,15 @@ pub fn spawn_model_entities(
         // A batch whose UV or tint loop differs by sequence gets a material keyed by this
         // placement's host, since placements re-roll their variations independently. Without a
         // host it shares and stays at the built seed.
-        let per_seq = sub.uv_seq.is_some() || sub.rgb_seq.is_some();
+        let per_seq = sub.uv_seq.is_some()
+            || sub.rgb_seq.is_some()
+            || sub
+                .geometry
+                .stage2
+                .as_ref()
+                .is_some_and(|s| s.uv_seq.is_some());
         let seq_owner = per_seq.then_some(rig_root).flatten();
-        let cutout = model_material(
+        let cutout = model_material_stages(
             mat_cache,
             materials,
             sub.texture.clone(),
@@ -190,6 +196,20 @@ pub fn spawn_model_entities(
             false, // the world streamer never spawns a skybox
             light,
             seq_owner,
+            sub.texture2.clone(),
+            sub.geometry.stage2.as_ref().map_or(Vec4::ZERO, |stage| {
+                Vec4::new(
+                    1.0,
+                    stage.op as f32,
+                    stage.coord as f32,
+                    u32::from(stage.first_opaque) as f32,
+                )
+            }),
+            if sub.geometry.stage2.is_some() {
+                std::sync::Arc::as_ptr(&sub.geometry) as usize
+            } else {
+                0
+            },
         );
         // The fade's blend twin, the cutout itself when already blended or never fading. A multiply
         // batch (Mod, Mod2x) keeps its cutout too: it reads no alpha, so the shader fades its
@@ -202,7 +222,7 @@ pub fn spawn_model_entities(
             cutout.clone()
         } else {
             // The source blend decides the twin's cutout: only AlphaKey alpha-tests while fading.
-            model_material(
+            model_material_stages(
                 mat_cache,
                 materials,
                 sub.texture.clone(),
@@ -227,11 +247,26 @@ pub fn spawn_model_entities(
                 false, // the world streamer never spawns a skybox
                 light,
                 seq_owner,
+                sub.texture2.clone(),
+                sub.geometry.stage2.as_ref().map_or(Vec4::ZERO, |stage| {
+                    Vec4::new(
+                        1.0,
+                        stage.op as f32,
+                        stage.coord as f32,
+                        u32::from(stage.first_opaque) as f32,
+                    )
+                }),
+                if sub.geometry.stage2.is_some() {
+                    std::sync::Arc::as_ptr(&sub.geometry) as usize
+                } else {
+                    0
+                },
             )
         };
         // One classification for the census tally and the diverts, so the two cannot drift.
         let class = crate::static_merge::BatchClass {
-            excluded: animated
+            excluded: sub.geometry.stage2.is_some()
+                || animated
                 || sub.billboard.is_some()
                 || sub.alpha_anim.is_some()
                 || seq_owner.is_some()
@@ -409,6 +444,12 @@ pub fn spawn_model_entities(
                 continue;
             }
         }
+        for id in [cutout.id(), blend.id()] {
+            let loops = crate::model_render::second_stage_loops(sub, materials, id);
+            crate::doodad_anim::register_entity_uv_stage2(
+                uv_reg, anim_table, materials, id, &loops, rig_root,
+            );
+        }
         // Register both materials for the UV scroll (idempotent per material). A per-sequence set
         // replaces the shared loop when there is a host to read; a period-0 loop is a constant the
         // seed already wrote, so it stays out.
@@ -563,7 +604,12 @@ pub fn spawn_model_entities(
         // The scan marker, by the registration's own predicate, so `tick_anim_materials` visits
         // only marked parts. A batch whose colour alpha animates or dims gets its own sampler,
         // which the visibility authority composes into the tag and the A ≤ 0 cull.
-        if sub.uv_anim.as_ref().is_some_and(|a| a.period > 0.0)
+        if sub.geometry.stage2.as_ref().is_some_and(|s| {
+            s.uv_anim.as_ref().is_some_and(|a| a.period > 0.0)
+                || s.uv_seq.is_some()
+                || s.uv_rot_seq.is_some()
+                || s.uv_scale_seq.is_some()
+        }) || sub.uv_anim.as_ref().is_some_and(|a| a.period > 0.0)
             || sub.rgb_anim.as_ref().is_some_and(|a| a.period > 0.0)
             || seq_owner.is_some()
         {

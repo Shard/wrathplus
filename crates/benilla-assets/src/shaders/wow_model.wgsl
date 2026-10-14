@@ -48,7 +48,20 @@ struct ModelParams {
     // Rows of `wow_light.matanim`, 0 = identity: x = UV scroll, y = tint, z = texture-transform
     // affine, w = the UI tile's cell clip.
     anim_slots: vec4<f32>,
+    stage2: vec4<f32>,
+    stage2_anim: vec4<f32>,
+    stage2_seed: vec4<f32>,
 };
+fn second_stage_uv(uv: vec2<f32>) -> vec2<f32> {
+    if (m.stage2.z > 2.0) { return uv; }
+    let uv_t = uv + m.stage2_seed.xy + wow_light.matanim[u32(m.stage2_anim.x)].xy;
+    let affine = wow_light.matanim[u32(m.stage2_anim.z)];
+    let d = (uv_t - vec2<f32>(0.5)) * vec2<f32>(1.0 + affine.z,1.0 + affine.w);
+    let c = 1.0 + affine.x;
+    return vec2<f32>(0.5 + d.x*c-d.y*affine.y,0.5+d.x*affine.y+d.y*c);
+}
+@group(#{MATERIAL_BIND_GROUP}) @binding(101) var second_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(102) var second_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> m: ModelParams;
 
 // The shared light buffer (`lighting::global_light`, rows as packed there), updated once per
@@ -396,6 +409,16 @@ fn vertex(vertex: WowVertex) -> WowVsOut {
 #endif
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
+#ifdef VERTEX_POSITIONS
+#ifdef VERTEX_NORMALS
+    if (m.stage2.x > 0.5 && m.stage2.z > 2.0) {
+        let p_view = view_rot * p_cam;
+        let n_view = normalize(view_rot * out.world_normal);
+        let refl = normalize(p_view - 2.0 * dot(p_view, n_view) * n_view);
+        out.uv_b = refl.xy * 0.5 + vec2<f32>(0.5);
+    }
+#endif
+#endif
 #endif
 
 #ifdef VERTEX_COLORS
@@ -484,6 +507,36 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
 #endif
     var pbr_input = pbr_input_from_standard_material(vo, is_front);
     var base_color = pbr_input.material.base_color;
+    var stage_add = vec3<f32>(0.0);
+#ifdef VERTEX_UVS_B
+    if (m.stage2.x > 0.5) {
+        let t = textureSampleBias(second_texture, second_sampler, second_stage_uv(in.uv_b), view.mip_bias);
+        let op = u32(m.stage2.y);
+        // Opaque stage zero contributes no texture alpha. Vertex/material opacity still applies.
+        if (m.stage2.w > 0.5) {
+#ifdef VERTEX_UVS_A
+            base_color.a = pbr_bindings::material.base_color.a;
+#ifdef VERTEX_COLORS
+            base_color.a *= in.color.a;
+#endif
+#endif
+        }
+        if (op == 3u || op == 7u) {
+            stage_add = t.rgb * select(1.0,t.a,m.stage2.w > 0.5);
+            if (op == 3u && m.stage2.w < 0.5) {
+                var opacity = pbr_bindings::material.base_color.a;
+#ifdef VERTEX_COLORS
+                opacity *= in.color.a;
+#endif
+                base_color.a += opacity * t.a;
+            }
+        } else {
+            let scale = select(1.0, 2.0, op == 4u || op == 6u);
+            base_color = vec4<f32>(base_color.rgb * t.rgb * scale, base_color.a);
+            if (op != 0u && op != 6u) { base_color.a *= t.a * scale; }
+        }
+    }
+#endif
     // WMO MOCV alpha is lighting data (the TRANS lerp, the INT glow mask), and the reference's WMO
     // output alpha is tex.a alone. Bevy folds the vertex alpha into base_color, so re-sample the
     // texel alpha: dividing the fold back out loses everything where MOCV.a ≈ 0.
@@ -779,7 +832,11 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
         let unlit_sum = unlit_c * inst_tint + highlight;
         unlit_rgb = unlit_tex * clamp(unlit_sum, vec3<f32>(0.0), vec3<f32>(1.0));
     }
-    var rgb = select(lit_rgb, unlit_rgb, is_emissive);
+    stage_add *= anim_tint * inst_tint;
+#ifdef VERTEX_COLORS
+    stage_add *= in.color.rgb;
+#endif
+    var rgb = select(lit_rgb, unlit_rgb, is_emissive) + stage_add;
     // An M2 Mod or Mod2x batch draws the bare texel: the reference zeroes its tint·M2Color term and
     // forces the primary colour to the blend identity (`0x70c507`/`0x70c5b8`), so neither the
     // animated M2Color nor the body tint reaches it. Its alpha still does, through the lerp below.
