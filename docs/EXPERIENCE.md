@@ -225,3 +225,20 @@ ffmpeg -framerate 60 -start_number 0 -i /tmp/plus-clip/frame%06d.png \
 Use the same path and `WOW_EXPERIENCE=classic` with a different empty output directory for a
 matched comparison. Headless tests establish gating, sampler/state/clock contracts only; manager
 runs must still verify actual streaming, screenshots, shadow appearance and Classic pixel equality.
+
+### Plus highlight bloom (c5)
+
+The existing world-only `bloom` toggle now uses a smooth linear-light knee (threshold 0.35,
+width 0.15), with hue-preserving RGB scaling and a bounded 0.25–0.40 zone-dependent gain.
+Dark blurred values below 0.20 contribute nothing. This softens the cutoff on saturated bright
+water/spell highlights without changing exposure, tone mapping or colour grading. It is a
+screen-colour effect, not an emissive/material mask: bright terrain or sky can bloom too. The
+threshold runs after the existing blur, preserving the shared underwater haze input and adding
+no render passes or targets. Classic uses the unchanged stock FFX shader; UI and portrait/glue
+views do not opt in. Manager clips must verify the actual highlight range and appearance.
+
+Ambient occlusion remains pending the Assets two-layer texture integration. The agreed design
+uses MSAA-off cameras only, never switches sample counts live, and logs an unsupported request
+once. A Plus AO request at startup will select MSAA off plus SMAA; Classic and AO-disabled Plus
+will retain their existing startup selection. This describes the planned integration, not a
+currently implemented AO feature.
