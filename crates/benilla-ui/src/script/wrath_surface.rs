@@ -360,6 +360,18 @@ mod tests {
     use super::super::{ScriptDialect, UiScript};
 
     #[test]
+    fn wrath_format_supports_localized_positional_conversions_in_both_aliases() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run(r#"
+            assert(format('%2$s hit %1$s for %3$02d (%%)', 'target', 'source', 7) == 'source hit target for 07 (%)')
+            assert(string.format('%2$s %2$s %1$d', 3, 'repeat') == 'repeat repeat 3')
+            assert(format('%s %d', 'plain', 4) == 'plain 4')
+            assert(format('%2$s', nil, 'second') == 'second')
+            assert(not pcall(format, '%1$s %s', 'mixed', 'bad'))
+        "#).unwrap();
+    }
+
+    #[test]
     fn wrath_dynamic_fontstring_labels_clear_until_updated_without_calling_functions() {
         let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("local f = CreateFrame('Frame'):CreateFontString() f:SetText('old') f:SetText(function() error('must not invoke') end) assert(f:GetText() == nil) f:SetText(42) assert(f:GetText() == '42') f:SetText({}) assert(f:GetText() == nil)").unwrap();
