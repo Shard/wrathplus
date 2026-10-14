@@ -1,0 +1,18 @@
+# Map 0 / Azeroth, WoW yards (+X north, +Y west, +Z up).
+# Landmark seed checked against installed Wrath enUS ADT terrain (101 samples along eye XY).
+# Maximum sampled ground Z: 37.32; eye height is deliberately elevated.
+# Terrain clearance does not certify WMO/tree clearance; manager must inspect the clip.
+map = 0
+minute = 1020.0
+
+[[keyframes]]
+at = 0.0
+eye = [-10200, 1120, 65]
+target = [-10160, 1160, 42]
+fov_degrees = 60.0
+
+[[keyframes]]
+at = 12.0
+eye = [-10110, 1210, 65]
+target = [-10160, 1160, 42]
+fov_degrees = 60.0

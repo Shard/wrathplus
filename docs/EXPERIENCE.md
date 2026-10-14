@@ -242,3 +242,35 @@ uses MSAA-off cameras only, never switches sample counts live, and logs an unsup
 once. A Plus AO request at startup will select MSAA off plus SMAA; Classic and AO-disabled Plus
 will retain their existing startup selection. This describes the planned integration, not a
 currently implemented AO feature.
+
+### Curated comparison routes (c6)
+
+`docs/showcase/` contains five 12-second map-0 scenery routes: Northshire Abbey sweep,
+Goldshire dusk, Stormwind gate approach, Elwynn lake sunrise, and Westfall farm. Coordinates
+are WoW yards, not map percentages. Landmark seeds were checked against the installed Wrath
+enUS Azeroth ADTs using `Chain::open_wrath`, `load_tiles_around` and `terrain_height_at` at
+101 equally spaced points along each straight eye-XY segment. The cubic sampler follows that
+same segment without overshoot. Sampled ground ranges were respectively 79.12–86.94,
+55.84–59.02, 74.11–90.97, 52.14–59.57 and 35.32–37.32 yards; eyes use fixed heights of
+115, 85, 120, 85 and 65 yards. Underlying MCNK area IDs at the endpoints were respectively
+9, 87, 12, 12 and 107. No installed assets or extracted tables are committed.
+
+These are first-pass authored framings, not live-approved clips. Terrain samples do not prove
+clearance from trees, WMO roofs or walls, nor certify lake surface visibility. The elevated eyes
+leave generous terrain clearance; the manager must inspect landmark framing and occlusion.
+The production schema regression validates all five routes and every sampled pose without
+installed data. Fixed minutes are authored lighting choices, not observations of sunrise timing.
+
+Manager-only, from the repo root, using an **already-built dev-enabled** binary:
+
+```sh
+scripts/showcase-pair.sh /absolute/path/to/benilla \
+  docs/showcase/northshire-abbey.toml /tmp/northshire-pair
+```
+
+The script renders Classic then Plus into separate sequence directories under a **new** root,
+clears `WOW_CAPTURE`, preserves the caller's data/locale and other renderer settings, and writes
+`encode-side-by-side.sh`. Run that command separately with ffmpeg to produce a 3840×1080,
+60-fps hstack (Classic left, Plus right). It does not build, encode, overwrite old output, or
+contact a server; a rendering failure stops before the second run/encoder command. Workers do
+not execute this script with the client. Plus feature settings still come from the usual config.
