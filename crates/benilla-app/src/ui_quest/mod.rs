@@ -326,15 +326,25 @@ fn snapshot(
 ) -> Option<QuestState> {
     // The wire sends quest text unexpanded; the client substitutes `$N`, `$B` and `$G`.
     let sub = |t: &str| crate::npc_text::substitute(t, macros);
-    Some(match giver.view.as_ref()? {
+    let view = giver.view.as_ref()?;
+    let mut state = match view {
         QuestView::Greeting(l) => {
             let mut active_titles = Vec::new();
             let mut available_titles = Vec::new();
+            let mut active_info = Vec::new();
+            let mut available_info = Vec::new();
             for q in &l.quests {
+                let info = benilla_ui::script::QuestGreetingInfo {
+                    daily: q.wrath.as_ref().is_some_and(|w| w.flags & 0x1000 != 0),
+                    repeatable: q.wrath.as_ref().is_some_and(|w| w.repeatable),
+                    trivial: false,
+                };
                 if row_is_active(q.icon) {
                     active_titles.push(q.title.clone());
+                    active_info.push(info);
                 } else {
                     available_titles.push(q.title.clone());
+                    available_info.push(info);
                 }
             }
             QuestState {
@@ -342,6 +352,8 @@ fn snapshot(
                 greeting: sub(&l.greeting),
                 active_titles,
                 available_titles,
+                active_info,
+                available_info,
                 ..Default::default()
             }
         }
@@ -375,7 +387,22 @@ fn snapshot(
             reward_spell: reward_spell_view(o.reward_spell, spells),
             ..Default::default()
         },
-    })
+    };
+    let native = match view {
+        QuestView::Detail(q) => q.wrath.as_ref(),
+        QuestView::Progress(q) => q.wrath.as_ref(),
+        QuestView::Reward(q) => q.wrath.as_ref(),
+        QuestView::Greeting(_) => None,
+    };
+    if let Some(q) = native {
+        state.auto_accept = q.auto_accept;
+        state.suggested_group_num = q.suggested_players;
+        state.reward_xp = q.reward_xp;
+        state.reward_honor = q.reward_honor / 10;
+        state.reward_talents = q.bonus_talents;
+        state.reward_arena_points = q.arena_points;
+    }
+    Some(state)
 }
 
 fn panel_event(panel: QuestPanel) -> &'static str {
@@ -730,6 +757,7 @@ mod tests {
         let creature = 0xF130_0000_00C5_0001_u64; // HIGHGUID_UNIT
         let detail = |npc: u64| {
             QuestView::Detail(QuestDetails {
+                wrath: None,
                 npc,
                 quest_id: 373,
                 title: "The Unsent Letter".into(),
@@ -756,6 +784,7 @@ mod tests {
         giver.open(
             0x42,
             QuestView::Detail(QuestDetails {
+                wrath: None,
                 npc: 0x42,
                 quest_id: 100,
                 title: "A Threat Within".into(),
@@ -797,6 +826,45 @@ mod tests {
         assert_eq!(snap.choices.len(), 1);
         assert_eq!(snap.rewards.len(), 1);
         assert_eq!(snap.reward_money, 1234);
+        assert!(!snap.auto_accept);
+        assert_eq!(
+            (snap.reward_xp, snap.reward_honor, snap.suggested_group_num),
+            (0, 0, 0)
+        );
+        if let Some(QuestView::Detail(d)) = giver.view.as_mut() {
+            d.wrath = Some(benilla_protocol::messages::WrathQuestInfo {
+                auto_accept: true,
+                reward_xp: 900,
+                reward_honor: 250,
+                bonus_talents: 2,
+                arena_points: 8,
+                suggested_players: 5,
+                ..Default::default()
+            });
+        }
+        let native = snapshot(
+            &giver,
+            &items,
+            None,
+            &commands,
+            &crate::npc_text::MacroContext {
+                subject: None,
+                states: &crate::world_state::WorldStates::default(),
+            },
+            None,
+        )
+        .unwrap();
+        assert!(native.auto_accept);
+        assert_eq!(
+            (
+                native.reward_xp,
+                native.reward_honor,
+                native.reward_talents,
+                native.reward_arena_points,
+                native.suggested_group_num
+            ),
+            (900, 25, 2, 8, 5)
+        );
         // No template yet: no name, and white.
         assert!(snap.rewards[0].name.is_none());
         assert_eq!(snap.rewards[0].quality, 1);
@@ -808,6 +876,7 @@ mod tests {
         giver.open(
             0x42,
             QuestView::Progress(QuestRequestItems {
+                wrath: None,
                 npc: 0x42,
                 quest_id: 100,
                 title: "A Threat Within".into(),
@@ -897,6 +966,7 @@ mod tests {
         giver.open(
             0x42,
             QuestView::Detail(QuestDetails {
+                wrath: None,
                 npc: 0x42,
                 quest_id: 100,
                 title: "A Threat Within".into(),
@@ -993,6 +1063,7 @@ mod tests {
         quest.open(
             giver,
             QuestView::Detail(QuestDetails {
+                wrath: None,
                 npc: giver,
                 quest_id: 1,
                 title: "A Threat Within".into(),

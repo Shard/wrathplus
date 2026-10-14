@@ -360,6 +360,14 @@ fn build_detail(
         objectives_text: crate::npc_text::substitute(&template.objectives_text, macros),
         required_money,
         reward_money,
+        // Query honor addition/multiplier are retained; the level-dependent award needs
+        // the honor table, so do not present the raw addition as a resolved reward.
+        reward_talents: template.wrath.as_ref().map_or(0, |w| w.bonus_talents),
+        reward_arena_points: template.wrath.as_ref().map_or(0, |w| w.arena_points),
+        completion_text: template.wrath.as_ref().and_then(|_| {
+            (!template.end_text.is_empty())
+                .then(|| crate::npc_text::substitute(&template.end_text, macros))
+        }),
         choices,
         rewards,
         reward_spell: crate::ui_quest::reward_spell_view(template.reward_spell, spells),
@@ -642,6 +650,13 @@ pub(crate) fn feed_quest_log(
                 0
             };
             entries.push(QuestLogEntryView {
+                suggested_group: quest_log
+                    .template(r.quest_id, &commands)
+                    .and_then(|t| t.wrath.as_ref())
+                    .map_or(0, |w| w.suggested_players),
+                daily: quest_log
+                    .template(r.quest_id, &commands)
+                    .is_some_and(|t| t.wrath.is_some() && t.flags & 0x1000 != 0),
                 quest_id: r.quest_id,
                 title,
                 level,
@@ -1193,6 +1208,7 @@ mod tests {
 
     fn quest_template(objectives: [QuestObjective; 4]) -> QuestTemplate {
         QuestTemplate {
+            wrath: None,
             quest_id: 1,
             method: 0,
             level: 1,

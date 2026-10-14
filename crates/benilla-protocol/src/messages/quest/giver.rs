@@ -33,9 +33,29 @@ pub struct QuestRewardItem {
 /// A required item on the progress panel, the same triple (vmangos `Quest.cpp:376-381`).
 pub type QuestRequiredItem = QuestRewardItem;
 
+/// Native 3.3.5 quest columns (AzerothCore GossipDef.cpp); absent on vanilla packets.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WrathQuestInfo {
+    pub flags: u32,
+    pub repeatable: bool,
+    pub suggested_players: u32,
+    pub auto_accept: bool,
+    pub finished: bool,
+    pub reward_xp: u32,
+    /// Query response's QuestXP.dbc column index, not a concrete XP award.
+    pub reward_xp_id: u32,
+    /// Panels carry honor times ten; query responses carry unscaled honor addition.
+    pub reward_honor: u32,
+    pub honor_multiplier: f32,
+    pub title_id: u32,
+    pub bonus_talents: u32,
+    pub arena_points: u32,
+}
+
 /// One greeting-panel quest row; `icon` is a [`dialog_status`] value, a `u32` (`Quest.h:270`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QuestListEntry {
+    pub wrath: Option<WrathQuestInfo>,
     pub quest_id: u32,
     pub icon: u32,
     pub level: u32,
@@ -43,7 +63,7 @@ pub struct QuestListEntry {
 }
 
 /// `SMSG_QUESTGIVER_QUEST_LIST` (vmangos `Quest.cpp:159-203`): the multi-quest greeting panel.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QuestGiverList {
     pub npc: u64,
     pub greeting: String,
@@ -54,8 +74,9 @@ pub struct QuestGiverList {
 
 /// `SMSG_QUESTGIVER_QUEST_DETAILS` (vmangos `Quest.cpp:205-273`): the accept panel. `money` is
 /// signed, negative for a quest that costs money (`GetRewOrReqMoney`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QuestDetails {
+    pub wrath: Option<WrathQuestInfo>,
     pub npc: u64,
     pub quest_id: u32,
     pub title: String,
@@ -69,8 +90,9 @@ pub struct QuestDetails {
 }
 
 /// `SMSG_QUESTGIVER_OFFER_REWARD` (vmangos `Quest.cpp:275-339`): the reward panel.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QuestOfferReward {
+    pub wrath: Option<WrathQuestInfo>,
     pub npc: u64,
     pub quest_id: u32,
     pub title: String,
@@ -85,8 +107,9 @@ pub struct QuestOfferReward {
 
 /// `SMSG_QUESTGIVER_REQUEST_ITEMS` (vmangos `Quest.cpp:341-391`): the progress panel. The client
 /// ANDs four flag words to enable Continue; `is_complete` comes from the second (`Quest.cpp:388`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QuestRequestItems {
+    pub wrath: Option<WrathQuestInfo>,
     pub npc: u64,
     pub quest_id: u32,
     pub title: String,
@@ -201,6 +224,7 @@ pub(in crate::messages) fn read_questgiver_quest_list(r: &mut &[u8]) -> io::Resu
     let mut quests = Vec::with_capacity(capacity_hint(count, 32));
     for _ in 0..count {
         quests.push(QuestListEntry {
+            wrath: None,
             quest_id: read_u32_le(r)?,
             icon: read_u32_le(r)?,
             level: read_u32_le(r)?,
@@ -239,6 +263,7 @@ pub(in crate::messages) fn read_questgiver_quest_details(
         let _delay = read_u32_le(r)?;
     }
     Ok(QuestDetails {
+        wrath: None,
         npc,
         quest_id,
         title,
@@ -274,6 +299,7 @@ pub(in crate::messages) fn read_questgiver_offer_reward(
     let quest_flags = read_u32_le(r)?;
     let reward_spell = read_u32_le(r)?;
     Ok(QuestOfferReward {
+        wrath: None,
         npc,
         quest_id,
         title,
@@ -307,6 +333,7 @@ pub(in crate::messages) fn read_questgiver_request_items(
     let _flag2 = read_u32_le(r)?; // 0x04
     let _flag3 = read_u32_le(r)?; // 0x08
     Ok(QuestRequestItems {
+        wrath: None,
         npc,
         quest_id,
         title,

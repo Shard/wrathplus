@@ -92,6 +92,7 @@ fn gossip_message_wire() {
             text_id,
             options,
             quests,
+            ..
         } => {
             assert_eq!((npc, text_id), (0xAA, 100));
             assert_eq!(
@@ -123,6 +124,7 @@ fn gossip_message_wire() {
             text_id,
             options,
             quests,
+            ..
         } => {
             assert_eq!((npc, text_id, options.len()), (0xAA, 100, 2));
             assert!(quests.is_empty());

@@ -319,6 +319,7 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             options,
             quests,
         } => vec![SessionEvent::GossipMenu {
+            quest_info: Vec::new(),
             npc,
             text_id,
             options,

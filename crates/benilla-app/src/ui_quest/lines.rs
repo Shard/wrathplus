@@ -183,6 +183,7 @@ mod tests {
             text: String::new(),
         };
         QuestTemplate {
+            wrath: None,
             quest_id,
             method: 2,
             level: 1,

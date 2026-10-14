@@ -13,7 +13,7 @@ use crate::events::{decode as session_decode, SessionEvent};
 use crate::messages::parse_server_with_tail;
 use crate::messages::{
     GossipOption, QuestComplete, QuestDetails, QuestGiverList, QuestListEntry, QuestObjective,
-    QuestOfferReward, QuestRequestItems, QuestRewardItem, QuestTemplate,
+    QuestOfferReward, QuestRequestItems, QuestRewardItem, QuestTemplate, WrathQuestInfo,
 };
 use crate::wrath_session::{cstring, f32_le, u32_le, u64_le, u8_le};
 
@@ -97,14 +97,20 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
         SMSG_GOSSIP_MESSAGE => gossip_message(&mut r)?,
         SMSG_QUESTGIVER_STATUS => {
             let npc = u64_le(&mut r)?;
-            vec![SessionEvent::QuestGiverStatus { npc, status: dialog_status(u8_le(&mut r)?) }]
+            vec![SessionEvent::QuestGiverStatus {
+                npc,
+                status: dialog_status(u8_le(&mut r)?),
+            }]
         }
         SMSG_QUESTGIVER_STATUS_MULTIPLE => {
             let count = u32_le(&mut r)?;
             let mut out = Vec::new();
             for _ in 0..count {
                 let npc = u64_le(&mut r)?;
-                out.push(SessionEvent::QuestGiverStatus { npc, status: dialog_status(u8_le(&mut r)?) });
+                out.push(SessionEvent::QuestGiverStatus {
+                    npc,
+                    status: dialog_status(u8_le(&mut r)?),
+                });
             }
             out
         }
@@ -119,7 +125,9 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             items: Vec::new(),
         })],
         SMSG_QUEST_QUERY_RESPONSE => {
-            vec![SessionEvent::QuestTemplate(Box::new(quest_template(&mut r)?))]
+            vec![SessionEvent::QuestTemplate(Box::new(quest_template(
+                &mut r,
+            )?))]
         }
         // Unchanged since 1.12.
         _ => session_decode(parse_server_with_tail(opcode, body)?.0),
@@ -157,18 +165,35 @@ fn gossip_message(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         let _box_money = u32_le(r)?;
         let message = cstring(r)?;
         let _box_text = cstring(r)?;
-        options.push(GossipOption { index, icon, coded, message });
+        options.push(GossipOption {
+            index,
+            icon,
+            coded,
+            message,
+        });
     }
     let mut quests = Vec::new();
+    let mut quest_info = Vec::new();
     for _ in 0..u32_le(r)? {
         let quest = u32_le(r)?;
         let icon = u32_le(r)?;
         let level = u32_le(r)?;
-        let _flags = u32_le(r)?;
-        let _repeatable = u8_le(r)?;
+        let flags = u32_le(r)?;
+        let repeatable = u8_le(r)? != 0;
+        quest_info.push(WrathQuestInfo {
+            flags,
+            repeatable,
+            ..Default::default()
+        });
         quests.push((quest, icon, level, cstring(r)?));
     }
-    Ok(vec![SessionEvent::GossipMenu { npc, text_id, options, quests }])
+    Ok(vec![SessionEvent::GossipMenu {
+        npc,
+        text_id,
+        options,
+        quests,
+        quest_info,
+    }])
 }
 
 /// `u64 npc, greeting, u32 emoteDelay, u32 emote, u8 count` of `{u32 quest, u32 icon,
@@ -183,11 +208,27 @@ fn quest_list(r: &mut Cursor<&[u8]>) -> io::Result<QuestGiverList> {
         let quest_id = u32_le(r)?;
         let icon = u32_le(r)?;
         let level = u32_le(r)?;
-        let _flags = u32_le(r)?;
-        let _repeatable = u8_le(r)?;
-        quests.push(QuestListEntry { quest_id, icon, level, title: cstring(r)? });
+        let flags = u32_le(r)?;
+        let repeatable = u8_le(r)? != 0;
+        quests.push(QuestListEntry {
+            wrath: Some(WrathQuestInfo {
+                flags,
+                repeatable,
+                ..Default::default()
+            }),
+            quest_id,
+            icon,
+            level,
+            title: cstring(r)?,
+        });
     }
-    Ok(QuestGiverList { npc, greeting, emote_delay, emote, quests })
+    Ok(QuestGiverList {
+        npc,
+        greeting,
+        emote_delay,
+        emote,
+        quests,
+    })
 }
 
 /// A counted `{u32 item, u32 count, u32 displayId}` block.
@@ -209,22 +250,29 @@ fn item_block(r: &mut Cursor<&[u8]>) -> io::Result<Vec<QuestRewardItem>> {
 fn quest_details(r: &mut Cursor<&[u8]>) -> io::Result<QuestDetails> {
     let npc = u64_le(r)?;
     let _sharer = u64_le(r)?;
+    let mut native = WrathQuestInfo::default();
     let quest_id = u32_le(r)?;
     let title = cstring(r)?;
     let details = cstring(r)?;
     let objectives = cstring(r)?;
-    let auto_finish = u32::from(u8_le(r)?);
-    let _flags = u32_le(r)?;
-    let _suggested = u32_le(r)?;
-    let _finished = u8_le(r)?;
+    native.auto_accept = u8_le(r)? != 0;
+    let auto_finish = 0;
+    native.flags = u32_le(r)?;
+    native.suggested_players = u32_le(r)?;
+    native.finished = u8_le(r)? != 0;
     let choices = item_block(r)?;
     let rewards = item_block(r)?;
     let money = u32_le(r)? as i32;
-    let _xp = u32_le(r)?;
-    let _honor = u32_le(r)?;
-    let _honor_multiplier = f32_le(r)?;
+    native.reward_xp = u32_le(r)?;
+    native.reward_honor = u32_le(r)?;
+    native.honor_multiplier = f32_le(r)?;
     let reward_spell = u32_le(r)?;
+    let _spell_cast = u32_le(r)?;
+    native.title_id = u32_le(r)?;
+    native.bonus_talents = u32_le(r)?;
+    native.arena_points = u32_le(r)?;
     Ok(QuestDetails {
+        wrath: Some(native),
         npc,
         quest_id,
         title,
@@ -243,12 +291,14 @@ fn quest_details(r: &mut Cursor<&[u8]>) -> io::Result<QuestDetails> {
 /// u32 honor, f32, u32 0x08, u32 spell`, then more 3.3.5 reward columns.
 fn offer_reward(r: &mut Cursor<&[u8]>) -> io::Result<QuestOfferReward> {
     let npc = u64_le(r)?;
+    let mut native = WrathQuestInfo::default();
     let quest_id = u32_le(r)?;
     let title = cstring(r)?;
     let offer_text = cstring(r)?;
     let auto_finish = u32::from(u8_le(r)?);
     let quest_flags = u32_le(r)?;
-    let _suggested = u32_le(r)?;
+    native.flags = quest_flags;
+    native.suggested_players = u32_le(r)?;
     for _ in 0..u32_le(r)? {
         let _delay = u32_le(r)?;
         let _emote = u32_le(r)?;
@@ -256,12 +306,17 @@ fn offer_reward(r: &mut Cursor<&[u8]>) -> io::Result<QuestOfferReward> {
     let choices = item_block(r)?;
     let rewards = item_block(r)?;
     let money = u32_le(r)? as i32;
-    let _xp = u32_le(r)?;
-    let _honor = u32_le(r)?;
-    let _honor_multiplier = f32_le(r)?;
+    native.reward_xp = u32_le(r)?;
+    native.reward_honor = u32_le(r)?;
+    native.honor_multiplier = f32_le(r)?;
     let _unused = u32_le(r)?;
     let reward_spell = u32_le(r)?;
+    let _spell_cast = u32_le(r)?;
+    native.title_id = u32_le(r)?;
+    native.bonus_talents = u32_le(r)?;
+    native.arena_points = u32_le(r)?;
     Ok(QuestOfferReward {
+        wrath: Some(native),
         npc,
         quest_id,
         title,
@@ -280,18 +335,20 @@ fn offer_reward(r: &mut Cursor<&[u8]>) -> io::Result<QuestOfferReward> {
 /// constant words.
 fn request_items(r: &mut Cursor<&[u8]>) -> io::Result<QuestRequestItems> {
     let npc = u64_le(r)?;
+    let mut native = WrathQuestInfo::default();
     let quest_id = u32_le(r)?;
     let title = cstring(r)?;
     let request_text = cstring(r)?;
     let _emote_delay = u32_le(r)?;
     let emote = u32_le(r)?;
     let close_on_cancel = u32_le(r)?;
-    let _flags = u32_le(r)?;
-    let _suggested = u32_le(r)?;
+    native.flags = u32_le(r)?;
+    native.suggested_players = u32_le(r)?;
     let required_money = u32_le(r)?;
     let required_items = item_block(r)?;
     let is_complete = u32_le(r)? != 0;
     Ok(QuestRequestItems {
+        wrath: Some(native),
         npc,
         quest_id,
         title,
@@ -307,31 +364,33 @@ fn request_items(r: &mut Cursor<&[u8]>) -> io::Result<QuestRequestItems> {
 /// `SMSG_QUEST_QUERY_RESPONSE`, AzerothCore `SendQuestQueryResponse`. 3.3.5 carries six required
 /// items where 1.12's objectives carry four, one per objective row.
 fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
+    let mut native = WrathQuestInfo::default();
     let quest_id = u32_le(r)?;
     let method = u32_le(r)?;
     let level = u32_le(r)?;
     let _min_level = u32_le(r)?;
     let zone_or_sort = u32_le(r)? as i32;
     let quest_type = u32_le(r)?;
-    let _suggested = u32_le(r)?;
+    native.suggested_players = u32_le(r)?;
     let rep_objective_faction = u32_le(r)?;
     let rep_objective_value = u32_le(r)?;
     let _rep_objective_faction2 = u32_le(r)?;
     let _rep_objective_value2 = u32_le(r)?;
     let next_quest_in_chain = u32_le(r)?;
-    let _xp_id = u32_le(r)?;
+    native.reward_xp_id = u32_le(r)?;
     let money = u32_le(r)? as i32;
     let money_max_level = u32_le(r)?;
     let reward_spell = u32_le(r)?;
     let _reward_spell_cast = u32_le(r)?;
-    let _honor = u32_le(r)?;
-    let _honor_multiplier = f32_le(r)?;
+    native.reward_honor = u32_le(r)?;
+    native.honor_multiplier = f32_le(r)?;
     let src_item_id = u32_le(r)?;
     let flags = u32_le(r)?;
-    let _title_id = u32_le(r)?;
+    native.flags = flags;
+    native.title_id = u32_le(r)?;
     let _players_slain = u32_le(r)?;
-    let _talents = u32_le(r)?;
-    let _arena = u32_le(r)?;
+    native.bonus_talents = u32_le(r)?;
+    native.arena_points = u32_le(r)?;
     let _rep_show_mask = u32_le(r)?;
     let mut rewards = [(0, 0); 4];
     for slot in &mut rewards {
@@ -377,6 +436,7 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
         objective.text = cstring(r)?;
     }
     Ok(QuestTemplate {
+        wrath: Some(native),
         quest_id,
         method,
         level,
@@ -480,11 +540,20 @@ mod tests {
         b.push(0);
         cstr(&mut b, "A Threat Within");
         let events = decode(SMSG_GOSSIP_MESSAGE, &b).unwrap();
-        let [SessionEvent::GossipMenu { npc, text_id, options, quests }] = &events[..] else {
+        let [SessionEvent::GossipMenu {
+            npc,
+            text_id,
+            options,
+            quests,
+            quest_info,
+        }] = &events[..]
+        else {
             panic!("{events:?}")
         };
         assert_eq!((*npc, *text_id), (0x42, 100));
         assert_eq!(options[0].message, "Train me.");
+        assert_eq!(quest_info.len(), 1);
+        assert_eq!(quest_info[0].flags, 0);
         assert_eq!(quests[0], (783, 2, 1, "A Threat Within".to_string()));
         let select = encode_gossip_select_option(0x42, 0);
         assert_eq!(&select[8..12], &7u32.to_le_bytes());
@@ -499,8 +568,12 @@ mod tests {
         b.extend(2u64.to_le_bytes());
         b.push(10);
         let events = decode(SMSG_QUESTGIVER_STATUS_MULTIPLE, &b).unwrap();
-        assert!(matches!(events[0], SessionEvent::QuestGiverStatus { npc: 1, status } if status == d::AVAILABLE));
-        assert!(matches!(events[1], SessionEvent::QuestGiverStatus { npc: 2, status } if status == d::REWARD2));
+        assert!(
+            matches!(events[0], SessionEvent::QuestGiverStatus { npc: 1, status } if status == d::AVAILABLE)
+        );
+        assert!(
+            matches!(events[1], SessionEvent::QuestGiverStatus { npc: 2, status } if status == d::REWARD2)
+        );
     }
 
     #[test]
@@ -523,9 +596,125 @@ mod tests {
         b.extend(0u32.to_le_bytes()); // honor
         b.extend(0f32.to_le_bytes());
         b.extend(0u32.to_le_bytes()); // spell
+        b.extend([0u32, 12, 3, 5].iter().flat_map(|v| v.to_le_bytes()));
         let events = decode(SMSG_QUESTGIVER_QUEST_DETAILS, &b).unwrap();
-        let [SessionEvent::QuestDetail(d)] = &events[..] else { panic!("{events:?}") };
+        let [SessionEvent::QuestDetail(d)] = &events[..] else {
+            panic!("{events:?}")
+        };
         assert_eq!((d.quest_id, d.money, d.rewards[0].item_id), (783, 25, 11));
         assert_eq!(d.objectives, "objectives");
+        let native = d.wrath.as_ref().unwrap();
+        assert_eq!(
+            (
+                native.reward_xp,
+                native.title_id,
+                native.bonus_talents,
+                native.arena_points
+            ),
+            (40, 12, 3, 5)
+        );
+        for cut in 0..b.len() {
+            assert!(decode(SMSG_QUESTGIVER_QUEST_DETAILS, &b[..cut]).is_err());
+        }
+    }
+    #[test]
+    fn greeting_retains_flags_repeatable_and_details_auto_accept_is_not_auto_finish() {
+        let mut b = 1u64.to_le_bytes().to_vec();
+        cstr(&mut b, "hello");
+        b.extend([0u32, 0].iter().flat_map(|v| v.to_le_bytes()));
+        b.push(1);
+        b.extend([7u32, 4, 80, 0x1000].iter().flat_map(|v| v.to_le_bytes()));
+        b.push(1);
+        cstr(&mut b, "daily");
+        let [SessionEvent::QuestGreeting(list)] =
+            &decode(SMSG_QUESTGIVER_QUEST_LIST, &b).unwrap()[..]
+        else {
+            panic!()
+        };
+        let q = list.quests[0].wrath.as_ref().unwrap();
+        assert_eq!(q.flags, 0x1000);
+        assert!(q.repeatable);
+
+        let mut b = 1u64.to_le_bytes().to_vec();
+        b.extend(0u64.to_le_bytes());
+        b.extend(7u32.to_le_bytes());
+        for text in ["quest", "details", "objectives"] {
+            cstr(&mut b, text);
+        }
+        b.push(1);
+        b.extend([0x1000u32, 5].iter().flat_map(|v| v.to_le_bytes()));
+        b.push(1);
+        b.extend([0u32, 0, 10, 100, 250].iter().flat_map(|v| v.to_le_bytes()));
+        b.extend(0.5f32.to_le_bytes());
+        b.extend([12u32, 0, 13, 2, 3].iter().flat_map(|v| v.to_le_bytes()));
+        let [SessionEvent::QuestDetail(d)] =
+            &decode(SMSG_QUESTGIVER_QUEST_DETAILS, &b).unwrap()[..]
+        else {
+            panic!()
+        };
+        assert_eq!(d.auto_finish, 0);
+        let q = d.wrath.as_ref().unwrap();
+        assert!(q.auto_accept && q.finished);
+        assert_eq!(
+            (q.suggested_players, q.reward_honor, q.honor_multiplier),
+            (5, 250, 0.5)
+        );
+    }
+    #[test]
+    fn offer_and_progress_retain_native_columns_at_their_own_offsets() {
+        let mut b = 1u64.to_le_bytes().to_vec();
+        b.extend(7u32.to_le_bytes());
+        cstr(&mut b, "quest");
+        cstr(&mut b, "reward");
+        b.push(1);
+        b.extend(
+            [0x1000u32, 5, 1, 25, 4, 0, 0, 100, 900, 250]
+                .iter()
+                .flat_map(|v| v.to_le_bytes()),
+        );
+        b.extend(0.5f32.to_le_bytes());
+        b.extend([8u32, 12, 0, 13, 2, 3].iter().flat_map(|v| v.to_le_bytes()));
+        let [SessionEvent::QuestOffer(o)] = &decode(SMSG_QUESTGIVER_OFFER_REWARD, &b).unwrap()[..]
+        else {
+            panic!()
+        };
+        let q = o.wrath.as_ref().unwrap();
+        assert_eq!(o.auto_finish, 1);
+        assert_eq!(
+            (o.money, o.reward_spell, q.flags, q.suggested_players),
+            (100, 12, 0x1000, 5)
+        );
+        assert_eq!(
+            (
+                q.reward_xp,
+                q.reward_honor,
+                q.title_id,
+                q.bonus_talents,
+                q.arena_points
+            ),
+            (900, 250, 13, 2, 3)
+        );
+        for cut in 0..b.len() {
+            assert!(decode(SMSG_QUESTGIVER_OFFER_REWARD, &b[..cut]).is_err());
+        }
+
+        let mut b = 1u64.to_le_bytes().to_vec();
+        b.extend(7u32.to_le_bytes());
+        cstr(&mut b, "quest");
+        cstr(&mut b, "progress");
+        b.extend(
+            [0u32, 4, 1, 0x1000, 5, 100, 0, 3]
+                .iter()
+                .flat_map(|v| v.to_le_bytes()),
+        );
+        let [SessionEvent::QuestProgress(p)] =
+            &decode(SMSG_QUESTGIVER_REQUEST_ITEMS, &b).unwrap()[..]
+        else {
+            panic!()
+        };
+        assert!(p.is_complete);
+        assert_eq!(p.required_money, 100);
+        let q = p.wrath.as_ref().unwrap();
+        assert_eq!((q.flags, q.suggested_players), (0x1000, 5));
     }
 }
