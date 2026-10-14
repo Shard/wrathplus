@@ -102,9 +102,15 @@ fn combine_body(uv: vec2<f32>, frag_coord: vec2<f32>) -> vec4<f32> {
     let blur = max(textureSample(blur_tex, in_samp, uv).rgb, vec3<f32>(0.0));
     var colour = mix(source, blur, ffx.lane.z);
 #ifdef PLUS_BLOOM
-    // Soft bright-region extraction on the linear blur; bounded strength independent of zone
-    // gamma glow. The stock zone weight retains its spatial character in the Plus bloom.
-    colour += max(blur - vec3<f32>(0.45), vec3<f32>(0.0)) * (0.25 + 0.2 * ffx.lane.x);
+    // A soft knee avoids the old hard per-channel cutoff bleaching saturated spell/water
+    // highlights. Scale all channels together: bloom retains the blurred highlight's hue.
+    // Extraction remains after blur so the same RGB buffer still serves underwater haze;
+    // no new full-screen pass/target, and this is not an emissive/material-selective effect.
+    let brightness = max(blur.r, max(blur.g, blur.b));
+    let knee = clamp(brightness - 0.35 + 0.15, 0.0, 0.30);
+    let soft = knee * knee / 0.60;
+    let contribution = max(brightness - 0.35, soft) / max(brightness, 0.0001);
+    colour += blur * contribution * (0.25 + 0.15 * clamp(ffx.lane.x, 0.0, 1.0));
 #endif
 #ifdef PLUS_TONE_MAPPING
     colour = filmic(colour);
