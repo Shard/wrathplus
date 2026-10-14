@@ -125,3 +125,45 @@ fn curated_showcase_paths_pass_the_production_schema() {
         }
     }
 }
+
+#[test]
+fn optional_visual_actor_defaults_do_not_change_camera_samples() {
+    let empty = ShowcasePath::parse(PATH).unwrap();
+    assert!(empty.actors.is_empty());
+    let populated = ShowcasePath::parse(&format!(
+        "{PATH}\n[[actors]]\ndisplay_id = 42\nposition = [1.0, 2.0, 3.0]\n"
+    ))
+    .unwrap();
+    assert_eq!(populated.actors[0].yaw, 0.0);
+    assert_eq!(populated.actors[0].scale, 1.0);
+    for frame in 0..empty.frame_count() {
+        assert_eq!(
+            empty.sample_frame(frame).unwrap(),
+            populated.sample_frame(frame).unwrap()
+        );
+    }
+}
+
+#[test]
+fn visual_actor_bounds_and_unknown_fields_are_rejected() {
+    let actor = "\n[[actors]]\ndisplay_id = 42\nposition = [1.0, 2.0, 3.0]\n";
+    for invalid in [
+        actor.replace("42", "0"),
+        actor.replace("1.0", "nan"),
+        actor.replace("1.0", "100001.0"),
+        format!("{actor}yaw = inf\n"),
+        format!("{actor}yaw = 7.0\n"),
+        format!("{actor}scale = 0.0\n"),
+        format!("{actor}scale = 4.1\n"),
+        format!("{actor}scale = nan\n"),
+        format!("{actor}guid = 42\n"),
+        format!("{actor}creature_entry = 42\n"),
+        actor.repeat(17),
+    ] {
+        assert!(
+            ShowcasePath::parse(&format!("{PATH}{invalid}")).is_err(),
+            "{invalid}"
+        );
+    }
+    assert!(ShowcasePath::parse(&format!("{PATH}{}", actor.repeat(16))).is_ok());
+}
