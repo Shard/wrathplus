@@ -56,6 +56,7 @@ fn wire(spell: u32, state: u8, cost: u32, req_level: u8, req_skill: u32) -> Trai
         cost,
         can_learn_primary_prof: false,
         is_primary_prof_first_rank: false,
+        wrath_point_cost: None,
         req_level,
         req_skill,
         req_skill_value: if req_skill != 0 { 100 } else { 0 },
@@ -1059,4 +1060,32 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
         let text = vm.lua().globals().get::<String>(key).unwrap_or_default();
         assert!(!text.is_empty(), "{key} missing");
     }
+}
+
+#[test]
+fn wrath_profession_eligibility_reads_free_descriptor_slots_not_vanilla_flag() {
+    let mut service = wire(2018, trainer_spell_state::GREEN, 100, 5, 0);
+    service.is_primary_prof_first_rank = true;
+    service.wrath_point_cost = Some([0, 1]);
+    assert!(!service.can_learn_primary_prof);
+    let layout = benilla_protocol::messages::FieldLayout::Wrath12340;
+    let index = layout
+        .resolve(benilla_protocol::messages::Field::PlayerCharacterPoints2)
+        .unwrap()
+        .index;
+    for (free, eligible) in [(0, false), (1, true), (2, true)] {
+        let store = benilla_protocol::ObjectFields::from_native_pairs(layout, &[(index, free)]);
+        assert_eq!(
+            profession_slot_available(&service, store.player_free_professions()),
+            eligible
+        );
+    }
+    assert!(profession_slot_available(&service, None));
+    service.wrath_point_cost = Some([0, 0]);
+    assert!(profession_slot_available(&service, Some(0)));
+    service.wrath_point_cost = None;
+    assert!(
+        profession_slot_available(&service, Some(0)),
+        "vanilla behaviour unchanged"
+    );
 }

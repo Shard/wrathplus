@@ -92,7 +92,7 @@ fn track_first_vec3(bytes: &[u8], track: usize) -> Option<[f32; 3]> {
 }
 
 /// Hamilton product `a·b` of two `[x, y, z, w]` quaternions (the vanilla M2 key layout).
-fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+pub(super) fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     [
         a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
         a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
@@ -102,7 +102,7 @@ fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
 }
 
 /// `q · (0,0,1) · q⁻¹`, the +Z axis rotated by `q`, in closed form.
-fn quat_rotate_z(q: [f32; 4]) -> [f32; 3] {
+pub(super) fn quat_rotate_z(q: [f32; 4]) -> [f32; 3] {
     let [x, y, z, w] = q;
     [
         2.0 * (x * z + w * y),

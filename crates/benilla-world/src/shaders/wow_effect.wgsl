@@ -20,7 +20,7 @@ struct WowLight {
     light_sun: vec4<f32>,
     light_spec: vec4<f32>,
     fog_color: vec4<f32>,  // rgb row-7 fog (gamma); w = enable (>0.5)
-    fog_params: vec4<f32>, // x=start y=end z=linear-lighting A/B flag w=farclip wall
+    fog_params: vec4<f32>, // x=start y=end z=Plus fog enable (Classic 0) w=farclip wall
     sh_c10_r: vec4<f32>,
     sh_c10_g: vec4<f32>,
     sh_c10_b: vec4<f32>,
@@ -30,6 +30,8 @@ struct WowLight {
     sh_c16: vec4<f32>,
     _water: array<vec4<f32>, 4>,
     grade: vec4<f32>,
+    wmo_fog_color: vec4<f32>,
+    wmo_fog_params: vec4<f32>, // zw Plus height base/falloff; Classic zero
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -141,7 +143,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // the blend; only its colour follows the per-blend policy in `wow_params.fog.x`.
     if (wow_light.fog_color.w > 0.5 && wow_params.fog.x > 0.5) {
         let denom = max(wow_light.fog_params.y - wow_light.fog_params.x, 0.001);
-        let factor = clamp((wow_light.fog_params.y - in.view_z) / denom, 0.0, 1.0);
+        var factor = clamp((wow_light.fog_params.y - in.view_z) / denom, 0.0, 1.0);
+        if (wow_light.fog_params.z > 0.5) {
+            let uv = (in.clip_position.xy - view.viewport.xy) / view.viewport.zw;
+            let ndc = vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, in.clip_position.z, 1.0);
+            let homogeneous = view.world_from_clip * ndc;
+            let position = homogeneous.xyz / homogeneous.w;
+            let distance = length(position - view.world_position.xyz);
+            let midpoint_y = 0.5 * (position.y + view.world_position.y);
+            let density = exp(clamp(-wow_light.wmo_fog_params.w * (midpoint_y - wow_light.wmo_fog_params.z), -4.0, 4.0));
+            factor = exp(-max(distance - wow_light.fog_params.x, 0.0) * 3.0 / denom * density);
+        }
         var fog_rgb = wow_light.fog_color.xyz;
         if (wow_params.fog.x > 1.5 && wow_params.fog.x < 2.5) { fog_rgb = vec3<f32>(0.0); }
         else if (wow_params.fog.x > 2.5 && wow_params.fog.x < 3.5) { fog_rgb = vec3<f32>(1.0); }

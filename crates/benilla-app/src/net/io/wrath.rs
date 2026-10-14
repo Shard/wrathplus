@@ -1021,7 +1021,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::BuyItemInSlot { .. }
         | ClientCommand::SellItem { .. }
         | ClientCommand::BuybackItem { .. }
-        | ClientCommand::RepairItem { .. } => WrathRoute::NativeSession,
+        | ClientCommand::RepairItem { .. }
+        | ClientCommand::TrainerList { .. }
+        | ClientCommand::TrainerBuySpell { .. } => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
@@ -1310,6 +1312,7 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_npc as n;
     use benilla_protocol::wrath_vendor as v;
+    use benilla_protocol::wrath_trainer as t;
     use benilla_protocol::wrath_session::{self as s, CastTarget};
     // The client's cast counter, echoed by the server's cast results.
     static CAST_COUNT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
@@ -1409,6 +1412,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         }
         ClientCommand::RepairItem { vendor, item_guid } => {
             (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid))
+        }
+        ClientCommand::TrainerList { trainer } => (t::CMSG_TRAINER_LIST, t::encode_list(trainer)),
+        ClientCommand::TrainerBuySpell { trainer, spell_id } => {
+            (t::CMSG_TRAINER_BUY_SPELL, t::encode_buy(trainer, spell_id))
         }
         other => unreachable!("not a Wrath session command: {other:?}"),
     }
@@ -1948,6 +1955,33 @@ mod tests {
         }
         assert!(melee_packet(ClientCommand::SetSheathed { state: 3 }).is_err());
         assert!(melee_packet(ClientCommand::StandStateChange { state: 2 }).is_err());
+    }
+
+    #[test]
+    fn trainer_commands_route_native_with_full_guid() {
+        let trainer = 0xf130000000001234;
+        for (command, opcode, body) in [
+            (
+                ClientCommand::TrainerList { trainer },
+                0x1b0,
+                trainer.to_le_bytes().to_vec(),
+            ),
+            (
+                ClientCommand::TrainerBuySpell {
+                    trainer,
+                    spell_id: 2018,
+                },
+                0x1b2,
+                [
+                    trainer.to_le_bytes().as_slice(),
+                    2018u32.to_le_bytes().as_slice(),
+                ]
+                .concat(),
+            ),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeSession);
+            assert_eq!(session_packet(command), (opcode, body));
+        }
     }
 
     #[test]

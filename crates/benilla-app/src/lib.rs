@@ -158,6 +158,7 @@ mod ui_pet;
 mod ui_pet_book;
 mod ui_pet_doll;
 mod ui_pet_stats;
+mod ui_paperdoll;
 mod ui_petition;
 mod ui_quest;
 mod ui_quest_log;
@@ -260,6 +261,11 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     ui_script::initialize_asset_overrides(overrides.clone());
     app.insert_resource(benilla_assets::AssetOverridePolicy(overrides.clone()));
     app.insert_resource(experience);
+    app.init_resource::<benilla_world::modern_lighting::ModernLighting>();
+    app.add_systems(
+        PostUpdate,
+        experience::sync_lighting.before(bevy::transform::TransformSystems::Propagate),
+    );
     // Static-scene transform tracking pinned on: the default threshold re-decides every frame with
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It
     // costs more only when most rows move in one frame (a load burst into a near-empty world).

@@ -599,6 +599,7 @@ dependencies = [
  "clap",
  "glam 0.31.1",
  "image",
+ "tracing",
 ]
 
 [[package]]
@@ -676,7 +677,9 @@ dependencies = [
  "benilla-wmo",
  "bevy",
  "bytemuck",
+ "futures-lite",
  "image",
+ "naga",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",

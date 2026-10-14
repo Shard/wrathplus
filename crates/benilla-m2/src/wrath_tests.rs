@@ -446,3 +446,67 @@ fn external_skin_checks_header_tables_ranges_and_references() {
 }
 
 use benilla_bytes::ByteExt;
+
+#[test]
+fn wrath_combiner_combos_are_flag_gated_and_bounded() {
+    let mut bytes = header();
+    // Without the flag, bytes after the base header are ordinary payload, not a descriptor.
+    bytes.extend_from_slice(&[0xff; 8]);
+    let parsed = parse_wrath_m2(&mut Cursor::new(bytes.as_slice())).unwrap();
+    assert!(parsed.texture_combiner_combos().is_empty());
+
+    set_u32(&mut bytes, 0x10, 0x08);
+    set_arr(&mut bytes, HEADER_LEN, 3, (HEADER_LEN + 8) as u32);
+    for value in [0_u16, 4, 6] {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    let parsed = parse_wrath_m2(&mut Cursor::new(bytes.as_slice())).unwrap();
+    assert_eq!(parsed.texture_combiner_combos(), &[0, 4, 6]);
+
+    bytes.pop();
+    assert!(matches!(
+        parse_wrath_m2(&mut Cursor::new(bytes.as_slice())),
+        Err(WrathError::Truncated("texture combiner combos"))
+    ));
+    bytes.truncate(HEADER_LEN);
+    assert!(matches!(
+        parse_wrath_m2(&mut Cursor::new(bytes.as_slice())),
+        Err(WrathError::Truncated("texture combiner combos descriptor"))
+    ));
+}
+
+#[test]
+fn wrath_native_light_and_ribbon_offsets_and_bounds() {
+    let mut b = header();
+    let light = b.len();
+    b.resize(light + 156, 0);
+    set_arr(&mut b, 0x108, 1, light as u32);
+    set_u16(&mut b, light, 1);
+    set_u16(&mut b, light + 2, u16::MAX);
+    set_f32(&mut b, light + 4, 3.0);
+    let ribbon = b.len();
+    b.resize(ribbon + 176, 0);
+    set_arr(&mut b, 0x120, 1, ribbon as u32);
+    set_u32(&mut b, ribbon, 71);
+    set_u32(&mut b, ribbon + 4, 2);
+    set_f32(&mut b, ribbon + 8, 4.0);
+    set_f32(&mut b, ribbon + 116, 25.0);
+    set_f32(&mut b, ribbon + 120, 1.5);
+    set_u16(&mut b, ribbon + 128, 2);
+    set_u16(&mut b, ribbon + 130, 3);
+    set_u16(&mut b, ribbon + 172, 0xfffe);
+    let m = parse_wrath_m2(&mut Cursor::new(&b)).unwrap();
+    assert_eq!(m.lights()[0].light_type, 1);
+    assert_eq!(m.lights()[0].bone, -1);
+    assert_eq!(m.lights()[0].position, [3.0, 0.0, 0.0]);
+    assert_eq!(m.ribbons()[0].id, 71);
+    assert_eq!(m.ribbons()[0].bone, 2);
+    assert_eq!(m.ribbons()[0].position, [4.0, 0.0, 0.0]);
+    assert_eq!(m.ribbons()[0].edges_per_second, 25.0);
+    assert_eq!(m.ribbons()[0].edge_lifetime, 1.5);
+    assert_eq!(m.ribbons()[0].tile_cols, 3);
+    assert_eq!(m.ribbons()[0].priority_plane, -2);
+    assert!(parse_wrath_m2(&mut Cursor::new(&b[..b.len() - 1])).is_err());
+    set_arr(&mut b, ribbon + 20, 1, u32::MAX);
+    assert!(parse_wrath_m2(&mut Cursor::new(&b)).is_err());
+}

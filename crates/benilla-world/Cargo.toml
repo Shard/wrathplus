@@ -44,3 +44,8 @@ objc2-app-kit = { version = "0.2", features = [
 objc2-foundation = "0.2"
 # `sel!`, for the two selectors `mac_quit` swaps; the objc2 that objc2-app-kit 0.2 builds against.
 objc2 = "0.5"
+
+[dev-dependencies]
+# Match Bevy 0.18's Naga module type for CPU-only shader validation.
+naga = { version = "27", features = ["wgsl-in"] }
+futures-lite = "2"

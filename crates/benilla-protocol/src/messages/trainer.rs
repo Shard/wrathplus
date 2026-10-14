@@ -20,6 +20,8 @@ pub struct TrainerSpell {
     pub can_learn_primary_prof: bool,
     /// Taking it spends a profession slot, so the client asks for confirmation.
     pub is_primary_prof_first_rank: bool,
+    /// Native Wrath talent/profession point costs, not Vanilla profession eligibility flags.
+    pub wrath_point_cost: Option<[u32; 2]>,
     pub req_level: u8,
     /// A `SkillLine.dbc` id, 0 for none.
     pub req_skill: u32,
@@ -78,6 +80,7 @@ pub(super) fn read_trainer_list(
             cost: read_u32_le(r)?,
             can_learn_primary_prof: read_u32_le(r)? != 0,
             is_primary_prof_first_rank: read_u32_le(r)? != 0,
+            wrath_point_cost: None,
             req_level: read_u8(r)?,
             req_skill: read_u32_le(r)?,
             req_skill_value: read_u32_le(r)?,
