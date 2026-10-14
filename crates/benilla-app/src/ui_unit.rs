@@ -1700,11 +1700,26 @@ mod tests {
     #[test]
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
         use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::messages::{Field, FieldLayout};
         use benilla_ui::script::ScriptDialect;
-        let raw = std::array::from_fn(|slot| (Some(100 + slot as u32), Some(1000 + slot as u32)));
-        let store = ObjectStore(ObjectFields::from_pairs(&[(36, 6 << 24)]).with_wrath_powers(raw));
+        let layout = FieldLayout::Wrath12340;
+        let power = layout.resolve(Field::UnitPower).unwrap();
+        let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
+        let bytes = layout.resolve(Field::UnitBytes0).unwrap();
+        let mut pairs = vec![(bytes.index, 6 << 24)];
+        pairs.extend((0..7u16).flat_map(|slot| {
+            [
+                (power.index + slot, 100 + u32::from(slot)),
+                (maximum.index + slot, 1000 + u32::from(slot)),
+            ]
+        }));
+        let store = ObjectStore(ObjectFields::from_native_pairs(layout, &pairs));
         let previous = snapshot(&store, 1, None, 0, None, Default::default());
         assert_eq!(previous.power_type, 6);
+        for (slot, value) in previous.powers.unwrap().iter().enumerate() {
+            assert_eq!(value.current, 100 + slot as u32);
+            assert_eq!(value.maximum, 1000 + slot as u32);
+        }
         assert_eq!(previous.powers.unwrap()[6].current, 106);
         let mut current = previous.clone();
         current.powers.as_mut().unwrap()[0].current = 731;
