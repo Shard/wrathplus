@@ -813,7 +813,7 @@ fn open_bed(chain: &Mutex<Chain>, path: &str) -> anyhow::Result<StreamingSoundDa
         .override_path(path)
         .map(std::path::Path::to_path_buf);
     if let Some(loose) = loose {
-        eprintln!("asset override stream: {path} <- {}", loose.display());
+        info!("asset override stream: {path} <- {}", loose.display());
         let file = std::fs::File::open(&loose)?;
         let len = file.metadata()?.len();
         return Ok(mixer::stream_from_source(file, len)?.loop_region(..));

@@ -298,7 +298,7 @@ impl Chain {
     /// Read a file by internal path (`/` or `\`) from its winning archive.
     pub fn read(&self, name: &str) -> Result<Vec<u8>> {
         if let Some(entry) = self.overrides.resolve(name) {
-            eprintln!("asset override: {name} <- {}", entry.path.display());
+            tracing::info!(path = name, source = %entry.path.display(), "asset override");
             return std::fs::read(&entry.path)
                 .with_context(|| format!("reading override {}", entry.path.display()));
         }

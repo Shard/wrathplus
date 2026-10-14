@@ -286,7 +286,7 @@ pub fn within_farclip(
 
 /// Marks the world camera, the one the scene renders through. Viewer consumers filter on this, not
 /// on `Camera3d`: the portrait booths add off-screen `Camera3d`s.
-#[derive(Component)]
+#[derive(Component, Clone, Copy, bevy::render::extract_component::ExtractComponent)]
 pub struct WorldCamera;
 
 /// The `$WOW_MSAA` knob as a Bevy `Msaa` level, 4x when unset. `8` falls back to 4x:

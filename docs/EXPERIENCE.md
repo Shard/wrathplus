@@ -74,3 +74,32 @@ restart after changing pack configuration.
 Live replacement captures (texture/model and Classic before/after) are performed by the manager;
 the worker does not launch the client. Synthetic tests cover policy resolution and the full Bevy
 texture-loading pipeline without installed Blizzard assets.
+
+## Plus lighting (first stage)
+
+`fog`, `bloom`, `tone_mapping` and `colour_grading` are independent runtime switches. The app
+publishes their resolved policy to the renderer each frame; the renderer used without the app
+starts with every switch off. Classic masks all four, including saved explicit overrides.
+`shadows` is reserved for the next stage: no real shadow rendering is claimed by this stage.
+
+The Plus postprocess is a separate shader/pipeline family. It runs on the world image before UI
+composition, both for a direct world camera and the backdrop behind the UI. Only `WorldCamera`
+views opt in; portrait and glue/character panes retain the original FFX shader. Cache keys include
+the three postprocess switches so runtime changes cannot reuse a previous look. Plus filters work
+in linear colour, bloom adds a bounded bright-region blur, the filmic curve applies restrained
+exposure, and grading cools shadows/desaturates the scene. The final result is encoded for the UI
+backdrop or decoded for sRGB presentation as appropriate. Stock death-state colour remains last.
+The original Classic FFX shader is unchanged.
+
+Plus fog adds radial extinction with exponential height density to terrain, animated and static
+models, liquids and world effects. It respects the existing fog toggle, interior fog span/colour
+and material fog policy. Height density is relative to the camera (base eight world units below
+it, falloff 0.025), not an assumed continent sea level. WDL's distant hull deliberately retains its
+full-fog endpoint to avoid exposing the far seam. Existing light-buffer spare lanes carry the
+policy: row 5.z enables it, row 19.z/w supply height base/falloff. Under Classic those lanes remain
+zero and the original planar fog arithmetic is taken; new calculations occur only inside the
+zero-disabled branch. No light layout or portrait/glue buffer changes are required.
+
+Headless policy/packing and shader checks complement the full app suite; they cannot certify
+Classic pixel equality or Plus appearance. The manager performs runtime switches and side-by-side
+captures, including portrait/glue isolation, before accepting the rendering result.
