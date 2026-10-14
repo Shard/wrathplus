@@ -282,6 +282,20 @@ pub(crate) fn aura_lines(
     }
 }
 
+/// Loyalty was removed in Wrath; its Bytes1 byte 1 holds pet talent points instead.
+fn loyalty_levels(edge: &FieldChanged) -> Option<(u8, u8)> {
+    use benilla_protocol::messages::{Field, FieldLayout};
+    if edge.layout != FieldLayout::Vanilla5875
+        || !edge.is_unit()
+        || !edge.named_field(Field::UnitBytes1)
+    {
+        return None;
+    }
+    let before = ((edge.old >> 8) & 0xff) as u8;
+    let level = ((edge.new >> 8) & 0xff) as u8;
+    (level != before && level != 0 && before != 0).then_some((before, level))
+}
+
 /// The pet-loyalty line (`0x5ff860` → `0x62d440`) on `UNIT_FIELD_BYTES_1` byte 1 moving, for your
 /// own pet only, at chat type `0x19` `COMBAT_MISC_INFO`. The reference prints the text through a
 /// bare `"%s"`, which a family with no slots matches.
@@ -292,14 +306,9 @@ pub(crate) fn pet_loyalty_lines(
     mut log: ResMut<ChatLog>,
 ) {
     for e in edges.read() {
-        if !e.unit_field(benilla_protocol::field::FIELD_UNIT_BYTES_1) {
+        let Some((before, level)) = loyalty_levels(e) else {
             continue;
-        }
-        // Byte 1, as `ObjectFields::unit_loyalty_level` reads it.
-        let (before, level) = (((e.old >> 8) & 0xff) as u8, ((e.new >> 8) & 0xff) as u8);
-        if level == before || level == 0 || before == 0 {
-            continue;
-        }
+        };
         if ctx.classify(e.guid, &stores) != UnitClass::MyPet {
             continue;
         }
@@ -355,6 +364,50 @@ mod native_death_tests {
                 let span = layout.resolve(Field::UnitMaxHealth).unwrap();
                 (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
                 assert!(!is_death_edge(&edge));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod loyalty_tests {
+    use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+
+    #[test]
+    fn loyalty_edges_are_vanilla_only_not_wrath_pet_talent_points() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for kind in [ObjectType::Unit, ObjectType::Player] {
+                let span = layout.resolve(Field::UnitBytes1).unwrap();
+                let (field, offset) = layout.field_at(kind, span.index).unwrap();
+                let mut edge = FieldChanged {
+                    entity: Entity::PLACEHOLDER,
+                    guid: 42,
+                    kind,
+                    layout,
+                    field,
+                    offset,
+                    old: 2 << 8,
+                    new: 3 << 8,
+                };
+                let vanilla = layout == FieldLayout::Vanilla5875;
+                assert_eq!(loyalty_levels(&edge), vanilla.then_some((2, 3)));
+                edge.old = 3 << 8;
+                edge.new = 2 << 8;
+                assert_eq!(loyalty_levels(&edge), vanilla.then_some((3, 2)));
+                for (old, new) in [(0, 2 << 8), (2 << 8, 0), (2 << 8, (2 << 8) | 1)] {
+                    edge.old = old;
+                    edge.new = new;
+                    assert_eq!(loyalty_levels(&edge), None);
+                }
+                edge.old = 2 << 8;
+                edge.new = 3 << 8;
+                edge.kind = ObjectType::Corpse;
+                assert_eq!(loyalty_levels(&edge), None);
+                edge.kind = kind;
+                let span = layout.resolve(Field::UnitBytes2).unwrap();
+                (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
+                assert_eq!(loyalty_levels(&edge), None);
             }
         }
     }
