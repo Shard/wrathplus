@@ -1,6 +1,9 @@
 //! The per-frame feeds into the VM: the container snapshots built from the player's descriptor,
 //! and the item-tooltip views every window reads.
 
+#[cfg(test)]
+mod descriptor_tests;
+
 use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
@@ -661,7 +664,8 @@ fn resolve_slot(
     let Some(t) = template else {
         // Asked (or a cached negative); show the slot occupied while the answer is in flight.
         return Some(ContainerSlot {
-            durability: None,
+            // Durability belongs to the instance; a pending template only hides its icon/name.
+            durability,
             item_id: entry,
             count,
             readable,
