@@ -293,6 +293,7 @@ pub struct SpellVisualCatalog {
     /// client resolves by name at boot against 14 baked strings (`0x61f5b0`).
     hardcoded: HashMap<String, (u32, String)>,
     chain_effects: HashMap<u32, ChainEffect>,
+    chain_raw: HashMap<u32, Vec<u8>>,
 }
 
 impl SpellVisualCatalog {
@@ -312,6 +313,7 @@ impl SpellVisualCatalog {
             effect_paths,
             hardcoded: HashMap::new(),
             chain_effects: HashMap::new(),
+            chain_raw: HashMap::new(),
         }
     }
 
@@ -391,6 +393,12 @@ impl SpellVisualCatalog {
     /// A `SpellChainEffects` row by id; `None` is the client's null-row no-op.
     pub fn chain_effect(&self, id: u32) -> Option<&ChainEffect> {
         self.chain_effects.get(&id)
+    }
+
+    /// Verbatim build-12340 packed row (177 bytes), including unsupported extensions.
+    /// Absent for Vanilla or explicitly seeded effects; never synthesize native fields.
+    pub fn chain_effect_raw(&self, id: u32) -> Option<&[u8]> {
+        self.chain_raw.get(&id).map(Vec::as_slice)
     }
 
     pub fn chain_effect_len(&self) -> usize {
@@ -545,20 +553,15 @@ pub fn load_spell_visual_catalog(chain: &mut Chain) -> Result<SpellVisualCatalog
         }
     }
 
-    // Beams (`SpellChainEffects`) are not mapped for 3.3.5, whose rows grew; a Wrath data set
-    // loads every other stage without them.
-    let chain_effects = match chain_effects::load(chain) {
-        Ok(effects) => effects,
-        Err(_) if matches!(chain.profile(), crate::DataProfile::Wrath { .. }) => Default::default(),
-        Err(e) => return Err(e).context("reading SpellChainEffects.dbc"),
-    };
+    let chains = chain_effects::load(chain).context("reading SpellChainEffects.dbc")?;
 
     Ok(SpellVisualCatalog {
         visuals,
         kits,
         effect_paths,
         hardcoded,
-        chain_effects,
+        chain_effects: chains.effects,
+        chain_raw: chains.raw,
     })
 }
 

@@ -75,11 +75,14 @@ pub(crate) fn columns(
             m.same(0, 3);
         }),
         "SpellVisual" => (16, 32, |m| {
-            m.same(0, 16);
+            // StateDoneKit inserted before ChannelKit; native area kits are NOT the
+            // removed Vanilla area predicate/effect-name fields. Leave those absent.
+            m.same(0, 5).run(5, 6, 6).run(14, 12, 1);
         }),
-        // 1.12's kit type (1) is 3.3.5's start animation, a different column; flags appended.
+        // StartAnim replaces kit type; SpecialEffect expands from one to three,
+        // shifting WorldEffect, Sound, Shake and the four parallel CharProc arrays.
         "SpellVisualKit" => (35, 38, |m| {
-            m.run(0, 0, 1).run(2, 2, 33);
+            m.same(0, 1).same(2, 10).run(12, 14, 23);
         }),
         // Min and max allowed scale appended.
         "SpellVisualEffectName" => (5, 7, |m| {
@@ -273,6 +276,34 @@ mod tests {
         }
         assert!(columns("Spell.dbc", 173, 234).is_some());
         assert!(columns("Spell", 173, 173).is_none());
+    }
+
+    #[test]
+    fn native_visual_and_kit_beam_columns() {
+        let visual = columns("SpellVisual", 16, 32).unwrap();
+        assert_eq!(
+            &visual[5..11],
+            &[Some(6), Some(7), Some(8), Some(9), Some(10), Some(11)]
+        );
+        assert_eq!(&visual[11..14], &[None, None, None]);
+        assert_eq!(visual[14], Some(12));
+        let kit = columns("SpellVisualKit", 35, 38).unwrap();
+        assert_eq!(kit[1], None);
+        assert_eq!(
+            &kit[12..19],
+            &[
+                Some(14),
+                Some(15),
+                Some(16),
+                Some(17),
+                Some(18),
+                Some(19),
+                Some(20)
+            ]
+        );
+        for field in 19..35 {
+            assert_eq!(kit[field], Some(field + 2));
+        }
     }
 
     #[test]
