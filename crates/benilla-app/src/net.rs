@@ -30,6 +30,8 @@ mod session;
 mod world;
 pub(crate) mod wrath_auras;
 mod wrath_notices;
+#[cfg(test)]
+mod wrath_stream_tests;
 mod wrath_threat;
 
 pub(crate) use apply::apply_net_updates;
