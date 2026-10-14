@@ -2,6 +2,8 @@
 //! the same constructors. State is private engine-owned Lua tables, not compatibility globals.
 use super::{Model, ScriptDialect};
 use mlua::{Function, Lua, MultiValue, ObjectLike, Table, Value};
+#[path = "animation/lifecycle.rs"]
+mod lifecycle;
 const GROUPS: &str = "__benilla_animation_groups";
 
 fn fire(object: &Table, script: &str) -> mlua::Result<()> {
@@ -186,6 +188,7 @@ fn install_controls(lua: &Lua, t: &Table) -> mlua::Result<()> {
                     "Play" => {
                         if !g.raw_get::<bool>("_paused")? {
                             g.raw_set("_elapsed", 0.0)?;
+                            g.raw_set("_fresh", true)?;
                         }
                         g.raw_set("_playing", true)?;
                         g.raw_set("_paused", false)?;
@@ -199,6 +202,11 @@ fn install_controls(lua: &Lua, t: &Table) -> mlua::Result<()> {
                         g.raw_set("_paused", false)?;
                         restore(&g)?;
                     }
+                }
+                // Child OnPlay is dispatched when its scheduled interval begins, not twice
+                // (once for the control call and again for the first tick).
+                if verb == "Play" && t.raw_get::<String>("_kind")? != "AnimationGroup" {
+                    return Ok(());
                 }
                 fire(
                     &t,
@@ -360,11 +368,9 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
                 phase = duration - phase;
             }
         }
-        if duration > 0.0
-            && looping != "NONE"
-            && (time / duration).floor() > (previous / duration).floor()
-        {
-            fire(&g, "OnLoop")?;
+        lifecycle::advance(&g, &animations, &slots, duration, previous, time, &looping)?;
+        if !g.raw_get::<bool>("_playing")? {
+            continue;
         }
         if let Some(f) = g
             .raw_get::<Table>("_scripts")?
@@ -450,9 +456,6 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
         if time >= duration && looping == "NONE" {
             g.raw_set("_playing", false)?;
             restore(&g)?;
-            for a in &animations {
-                fire(a, "OnFinished")?;
-            }
             fire(&g, "OnFinished")?;
         }
     }
