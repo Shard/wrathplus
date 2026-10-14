@@ -6,69 +6,78 @@ impl ObjectFields {
     /// `OBJECT_FIELD_ENTRY` (3): the template entry. The only route to a pet's template: its guid
     /// holds a pet number instead, but vmangos writes the entry here (`Creature.cpp:376`).
     pub fn object_entry(&self) -> Option<u32> {
-        self.get_u32(3)
+        self.get(Field::ObjectEntry)
     }
     /// `ITEM_FIELD_STACK_COUNT`: an item object's stack size.
     pub fn item_stack_count(&self) -> Option<u32> {
-        self.get_u32(FIELD_ITEM_STACK_COUNT)
+        self.get(Field::ItemStackCount)
     }
     /// `ITEM_FIELD_SPELL_CHARGES + i` (field `16 + i`, the client's `[item+0x114]+0x28`):
     /// charges left on spell `i`, signed; negative is consumed when empty, 0 is spent.
     pub fn item_spell_charges(&self, i: u8) -> Option<i32> {
         (i < 5)
-            .then(|| self.get_u32(FIELD_ITEM_STACK_COUNT + 2 + u16::from(i)))?
+            .then(|| self.get_at(Field::ItemSpellCharges, u16::from(i)))?
             .map(|v| v as i32)
     }
     /// `ITEM_FIELD_FLAGS` (field 21): `0x08` wrapped, never alerts; `0x10` forces red status 4.
     pub fn item_flags(&self) -> Option<u32> {
-        self.get_u32(21)
+        self.get(Field::ItemFlags)
     }
     /// `ITEM_FIELD_CREATOR` (field 10): crafter, or letter sender (`HandleMailCreateTextItem`).
     pub fn item_creator(&self) -> Option<u64> {
-        self.get_guid(10).filter(|&g| g != 0)
+        self.get_field_guid(Field::ItemCreator, 0)
+            .filter(|&g| g != 0)
     }
     /// `ITEM_FIELD_ITEM_TEXT_ID` (field 45, owner only): a mailed letter copy's text; nonzero
     /// makes a right-click read it (`CMSG_ITEM_TEXT_QUERY`) instead of using the item.
     pub fn item_text_id(&self) -> Option<u32> {
-        self.get_u32(45)
+        self.get(Field::ItemItemTextId)
     }
     /// `ITEM_FIELD_ENCHANTMENT + 3*slot` (field `22 + 3*slot`): the enchant id in one of 7 slots
     /// (0 permanent, 1 temporary, 2-6 random properties), each an id, duration and charges
     /// (`Item.h:117-119`). Signed: the tooltip looks up `abs(id)` and paints a negative one red.
     pub fn item_enchant(&self, slot: u8) -> Option<i32> {
-        (slot < 7)
-            .then(|| self.get_u32(FIELD_ITEM_ENCHANTMENT + 3 * u16::from(slot)))?
-            .map(|id| id as i32)
-            .filter(|&id| id != 0)
+        (u16::from(slot)
+            < self
+                .layout
+                .resolve(Field::ItemEnchantment)
+                .map_or(0, |s| s.width / 3))
+        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
+        .map(|id| id as i32)
+        .filter(|&id| id != 0)
     }
     /// `ITEM_FIELD_ENCHANTMENT + 3*slot + 2`: charges left, shown as `" (N Charges)"` if nonzero.
     /// The tooltip skips the duration; a countdown comes from `SMSG_ITEM_ENCHANT_TIME_UPDATE`.
     pub fn item_enchant_charges(&self, slot: u8) -> u32 {
-        (slot < 7)
-            .then(|| self.get_u32(FIELD_ITEM_ENCHANTMENT + 3 * u16::from(slot) + 2))
-            .flatten()
-            .unwrap_or(0)
+        (u16::from(slot)
+            < self
+                .layout
+                .resolve(Field::ItemEnchantment)
+                .map_or(0, |s| s.width / 3))
+        .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
+        .flatten()
+        .unwrap_or(0)
     }
     /// `ITEM_FIELD_RANDOM_PROPERTIES_ID` (field 44): the `ItemRandomProperties.dbc` suffix, 0 if
     /// none; only the name uses it (`0x5d8b00`), the roll's enchants fill enchant slots 2-6.
     pub fn item_random_properties_id(&self) -> u32 {
-        self.get_u32(44).unwrap_or(0)
+        self.get(Field::ItemRandomPropertiesId).unwrap_or(0)
     }
     /// `ITEM_FIELD_DURABILITY` (field 46): current durability.
     pub fn item_durability(&self) -> Option<u32> {
-        self.get_u32(46)
+        self.get(Field::ItemDurability)
     }
     /// `ITEM_FIELD_MAXDURABILITY`: the durability ceiling, 0 for an item without durability.
     pub fn item_max_durability(&self) -> Option<u32> {
-        self.get_u32(47)
+        self.get(Field::ItemMaxdurability)
     }
     /// `CONTAINER_FIELD_NUM_SLOTS`: a bag object's capacity.
     pub fn container_num_slots(&self) -> Option<u32> {
-        self.get_u32(FIELD_CONTAINER_NUM_SLOTS)
+        self.get(Field::ContainerNumSlots)
     }
     /// `CONTAINER_FIELD_SLOT_1 + 2i`: the item guid in bag slot `i`, `Some(0)` when empty.
     pub fn container_slot(&self, i: u8) -> Option<u64> {
-        (i < 36).then(|| self.get_guid(FIELD_CONTAINER_SLOT_1 + 2 * u16::from(i)))?
+        (i < 36).then(|| self.get_field_guid(Field::ContainerSlot1, 2 * u16::from(i)))?
     }
     /// `PLAYER_VISIBLE_ITEM_<slot>_0`: the public entry worn in equipment slot `i`, which other
     /// clients render from; each slot is 12 dwords, the entry after a 2-dword creator.
