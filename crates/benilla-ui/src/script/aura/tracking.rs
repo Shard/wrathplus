@@ -4,6 +4,10 @@ use crate::script::{model::Model, ScriptDialect};
 use mlua::{Lua, MultiValue, Value};
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    // Wrath-only API names must not extend the Vanilla global surface.
+    if lua.app_data_ref::<Model>().expect("model app_data").dialect != ScriptDialect::Wrath12340 {
+        return Ok(());
+    }
     let g = lua.globals();
     g.set(
         "GetNumTrackingTypes",
@@ -66,7 +70,7 @@ mod tests {
     fn trivial_tracking_is_wrath_only_and_can_be_cleared() {
         let s = crate::script::UiScript::new().unwrap();
         s.lua()
-            .load("assert(GetNumTrackingTypes()==0); SetTracking(1)")
+            .load("assert(GetNumTrackingTypes==nil); assert(GetTrackingInfo==nil); assert(SetTracking==nil)")
             .exec()
             .unwrap();
         assert!(!s.track_trivial_quests());
