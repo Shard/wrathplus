@@ -22,7 +22,7 @@ tone_mapping = true
 colour_grading = true
 ```
 
-All registered features default on in Plus; each can be disabled separately. These are seams:
+Graphics features default on in Plus except `ambient_occlusion`; `readable_text` is also opt-in. Each can be disabled separately. These are seams:
 a registered feature only has an effect once its consumer is implemented. Unknown feature names
 are rejected rather than silently misspelling a toggle. CVar saves preserve the experience table.
 Capture runs ignore persistent player configuration, as they do for CVars; an explicit
@@ -297,3 +297,34 @@ Manifest actor entries record normalized requested model/skin paths, authored pl
 installed/effective scale and frozen pose. These paths are **not winning-archive provenance**;
 actual override consumption remains in existing reader tracing (`asset override` with path/source).
 No actor route is claimed live-verified; the manager owns framing/render checks and client runs.
+
+### Ambient occlusion: first staged slice
+
+`[experience.features] ambient_occlusion = true` opts Plus into Bevy screen-space ambient
+occlusion (SSAO). It is **off by default**, and Classic always masks it. Configure before launch:
+the boot policy selects **MSAA Off + SMAA High** for the world camera. Disabled Plus and Classic
+retain their existing configured AA, including `gxMultisample`/`WOW_MSAA`; no config/CVar is
+rewritten. AA is latched until restart. Disabling AO or switching to Classic removes SSAO and
+its owned depth/normal prepasses but leaves that boot AA choice latched. Enabling AO at runtime
+on a multisampled camera is a logged no-op, not a live MSAA switch. Unsupported GPUs (fewer than
+five storage textures per shader stage) and headless renderers likewise do not enable SSAO.
+Portraits, glue views and UI cameras are not opted in.
+
+The first slice covers terrain and Bevy-rendered exterior M2 models. SSAO attenuates the separated
+ambient contribution before light clamping, not sun, point lights, specular or unlit output.
+Indoor lighting is untouched: interior probes contain mixed ambient/direct DC terms that cannot
+safely be darkened wholesale. No shared-light or two-stage material ABI is expanded. SSAO uses
+Bevy mesh-view binding 16. Camera model depth/normals reuse the visible model shader's transforms,
+UV animation, two-stage source cutout, clutter and merged-placement coverage independently of
+shadow-caster exclusions. Non-depth, additive/multiply, sky and far-side lanes are excluded.
+
+**Retained static-GX geometry (including most buildings) gets no AO in this slice.** Its custom
+pass remains after SSAO, absent from the AO depth/normal inputs, and its colour shader never
+samples AO. Its silhouette therefore cannot generate an AO halo or receive one; underlying
+terrain/model AO is not a claim of building occlusion. WMO model-lane fallbacks also do not receive AO. The retained pass is not rerouted or
+changed, and there is no boot or runtime renderer substitution. A dedicated building
+camera-depth/normal pass is a separate follow-up unit. Transparent and other non-prepass lanes
+are likewise not certified as AO occluders.
+
+Headless shader composition and policy tests establish wiring, not appearance or Classic pixel
+equality. The manager must verify captures, silhouettes and AA/post-pass compatibility live.

@@ -22,6 +22,10 @@
     mesh_functions,
 }
 
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+#import bevy_pbr::mesh_view_bindings::screen_space_ambient_occlusion_texture
+#endif
+
 // bevy_pbr 0.18.1's `forward_io::FragmentOutput`. No depth output: a fragment depth write costs
 // the pipeline early-Z, so the sky lane pins its depth in the vertex stage.
 struct WowFragOut {
@@ -645,9 +649,21 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
             }
         }
     }
-    var lit_nl = clamp(wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl, vec3<f32>(0.0), vec3<f32>(1.0));
+    var ao = 1.0;
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+    // Indoor lighting is authored/MOCV or a probe mixing ambient and direct lobes.
+    // Do not darken it until those terms can be separated without ABI changes.
+    if (m.model_flags.z < 0.5 && m.model_flags.x < 0.5) {
+        ao = textureLoad(screen_space_ambient_occlusion_texture, vec2<i32>(in.position.xy), 0).r;
+    }
+#endif
+    var ambient_nl = wow_light.light_ambient.rgb;
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+    ambient_nl *= ao;
+#endif
+    var lit_nl = clamp(ambient_nl + wow_light.light_diffuse.rgb * ndotl, vec3<f32>(0.0), vec3<f32>(1.0));
     if (wow_light.sh_c16.w > 0.5 && m.model_flags.z < 0.5) {
-        lit_nl = clamp(wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl * sun_visibility, vec3<f32>(0.0), vec3<f32>(1.0));
+        lit_nl = clamp(ambient_nl + wow_light.light_diffuse.rgb * ndotl * sun_visibility, vec3<f32>(0.0), vec3<f32>(1.0));
     }
     // The order-2 SH basis, shared by the exterior lobe and the interior probes.
     let quad = vec4<f32>(n_lit.x * n_lit.y, n_lit.y * n_lit.z, n_lit.z * n_lit.z, n_lit.x * n_lit.z);
@@ -689,6 +705,9 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
         let ambient = vec3<f32>(wow_light.sh_c10_r.w, wow_light.sh_c10_g.w, wow_light.sh_c10_b.w);
         sun_lobe = ambient + (sun_lobe - ambient) * sun_visibility;
     }
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+    sun_lobe -= vec3<f32>(wow_light.sh_c10_r.w, wow_light.sh_c10_g.w, wow_light.sh_c10_b.w) * (1.0 - ao);
+#endif
     // Clamp the sum, never a term: the lobe's own ringing dips to −0.037·C near μ ≈ −0.53, and a
     // per-term clamp would erase it.
     let lit_doodad = clamp(sun_lobe, vec3<f32>(0.0), vec3<f32>(1.0));
@@ -880,6 +899,9 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     }
 
 
+#ifdef WOW_CAMERA_EXCLUDE
+    discard;
+#endif
     var out: WowFragOut;
     // Output alpha is tex × fade. Opaque intent (`clutter_fade.z` bit 3) pins it to 1: a no-op
     // under correct pipeline state, and a guard for macOS/Metal with an extra camera, where an
@@ -902,6 +924,10 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     }
     // Raw gamma out: blending happens in gamma like the reference's byte framebuffer; the frame
     // decodes once, in the FFXGlow combine.
+#ifdef WOW_CAMERA_NORMAL
+    out.color = vec4<f32>(wow_normalize(in.world_normal) * 0.5 + vec3<f32>(0.5), 1.0);
+#else
     out.color = vec4<f32>(out_rgb, select(faded_alpha, 1.0, opaque_intent));
+#endif
     return out;
 }
