@@ -968,3 +968,30 @@ fn merge_rejects_cross_layout_delta() {
         &[],
     ));
 }
+
+#[test]
+fn unit_accessors_read_native_wrath_without_vanilla_aliases() {
+    let fields = ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[
+            (22, 999), // Wrath channel object: not vanilla health.
+            (24, 81),
+            (25, 14),
+            (32, 100),
+            (33, 70),
+            (54, 22),
+            (64, 1.25f32.to_bits()),
+            (65, 2.5f32.to_bits()),
+            (67, 1234),
+        ],
+    )
+    .into_created(ObjectType::Unit);
+    assert_eq!(fields.unit_health(), Some(81));
+    assert_eq!(fields.unit_max_health(), Some(100));
+    assert_eq!(fields.unit_power(0), Some(14));
+    assert_eq!(fields.unit_max_power(0), Some(70));
+    assert_eq!(fields.unit_power(7), None);
+    assert_eq!(fields.unit_level(), Some(22));
+    assert_eq!(fields.unit_displayid(), Some(1234));
+    assert_eq!(fields.unit_aura(0), None);
+}
