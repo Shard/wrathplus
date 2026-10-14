@@ -1492,6 +1492,10 @@ impl ServerPacket {
                 (MoveMode::Hover, false) => "SMSG_MOVE_UNSET_HOVER".into(),
             },
             ServerPacket::SplineMoveMode { mode, apply, .. } => match (mode, apply) {
+                (SplineMode::CanFly, true) => "SMSG_SPLINE_MOVE_SET_FLYING".into(),
+                (SplineMode::CanFly, false) => "SMSG_SPLINE_MOVE_UNSET_FLYING".into(),
+                (SplineMode::DisableGravity, true) => "SMSG_SPLINE_MOVE_GRAVITY_DISABLE".into(),
+                (SplineMode::DisableGravity, false) => "SMSG_SPLINE_MOVE_GRAVITY_ENABLE".into(),
                 (SplineMode::Root, true) => "SMSG_SPLINE_MOVE_ROOT".into(),
                 (SplineMode::Root, false) => "SMSG_SPLINE_MOVE_UNROOT".into(),
                 (SplineMode::WaterWalk, true) => "SMSG_SPLINE_MOVE_WATER_WALK".into(),
