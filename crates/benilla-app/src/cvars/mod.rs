@@ -37,6 +37,9 @@ pub(crate) use table::{registered_pairs, REGISTERED};
 struct LocalConfig {
     #[serde(default)]
     cvars: BTreeMap<String, String>,
+    // Preserve non-CVar tables (including experience) verbatim through CVar saves.
+    #[serde(flatten)]
+    other: BTreeMap<String, toml::Value>,
 }
 
 // ─── The registry ────────────────────────────────────────────────────────────────────────────
@@ -832,6 +835,14 @@ fn save_config_on_exit(mut cvars: ResMut<Cvars>) {
     }
 }
 
+fn preserved_config_tables(path: &std::path::Path) -> BTreeMap<String, toml::Value> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| toml::from_str::<LocalConfig>(&text).ok())
+        .map(|config| config.other)
+        .unwrap_or_default()
+}
+
 /// Rewrite `config.toml` atomically from the registry, so a session with no VM saves what it
 /// changed.
 fn write_config(cvars: &mut Cvars) {
@@ -842,6 +853,7 @@ fn write_config(cvars: &mut Cvars) {
     let file = cvars.compose();
     let body = toml::to_string(&LocalConfig {
         cvars: file.clone(),
+        other: preserved_config_tables(&path),
     })
     .expect("string map serializes");
     match crate::local_state::write_atomic(&path, &format!("{HEADER}{body}")) {
@@ -1956,9 +1968,27 @@ mod tests {
     }
 
     #[test]
+    fn experience_table_survives_cvar_serialization() {
+        let text = "[cvars]\nMusicVolume = '0.7'\n[experience]\nprofile = 'plus'\npacks = ['art', 'models']\n[experience.features]\nbloom = false\n";
+        let path =
+            std::env::temp_dir().join(format!("azb-experience-save-{}.toml", std::process::id()));
+        std::fs::write(&path, text).unwrap();
+        let preserved = preserved_config_tables(&path);
+        std::fs::remove_file(&path).unwrap();
+        let mut cfg: LocalConfig = toml::from_str(text).unwrap();
+        assert_eq!(preserved, cfg.other);
+        cfg.cvars.insert("MusicVolume".into(), "0.5".into());
+        let saved = toml::to_string(&cfg).unwrap();
+        let back: LocalConfig = toml::from_str(&saved).unwrap();
+        assert_eq!(back.other, cfg.other);
+        assert_eq!(back.cvars["MusicVolume"], "0.5");
+    }
+
+    #[test]
     fn the_toml_round_trips() {
         let cfg = LocalConfig {
             cvars: [("MusicVolume".to_string(), "0.7".to_string())].into(),
+            other: BTreeMap::new(),
         };
         let text = format!("{HEADER}{}", toml::to_string(&cfg).unwrap());
         let back: LocalConfig = toml::from_str(&text).unwrap();

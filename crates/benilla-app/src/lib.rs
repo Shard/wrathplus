@@ -53,6 +53,7 @@ mod debug_panel;
 mod dev;
 mod doodad_events;
 mod entities;
+pub mod experience;
 mod fishing_line;
 mod footprints;
 mod game_plugins;
@@ -252,6 +253,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     let mut app = App::new();
     // The panel footer and the build banner read the stamp back.
     app.insert_resource(build);
+    app.insert_resource(experience::boot());
     // Static-scene transform tracking pinned on: the default threshold re-decides every frame with
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It
     // costs more only when most rows move in one frame (a load burst into a near-empty world).
