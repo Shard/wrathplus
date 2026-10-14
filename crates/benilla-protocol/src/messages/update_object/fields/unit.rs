@@ -185,10 +185,10 @@ impl ObjectFields {
             slot,
             spell_id,
             flags,
-            level: self.get_aura_byte(FIELD_UNIT_AURALEVELS, slot),
+            level: self.get_aura_byte(Field::UnitAuraLevels, slot),
             // The wire byte is `stack - 1` and saturates at 254, so an occupied slot is always ≥ 1.
             stacks: self
-                .get_aura_byte(FIELD_UNIT_AURAAPPLICATIONS, slot)
+                .get_aura_byte(Field::UnitAuraApplications, slot)
                 .saturating_add(1),
         })
     }
@@ -201,7 +201,12 @@ impl ObjectFields {
     /// Every `UNIT_FIELD_AURA` slot's raw spell id, zeros and stale ids included, as the cast
     /// validator's crowd-control scan (`0x6e9ca0`) reads them, without `AURAFLAGS`.
     pub fn unit_aura_ids(&self) -> impl Iterator<Item = u32> + '_ {
-        (0..UNIT_AURA_SLOTS).map(|slot| self.get_at(Field::UnitAura, u16::from(slot)).unwrap_or(0))
+        (0..if self.layout == FieldLayout::Vanilla5875 {
+            UNIT_AURA_SLOTS
+        } else {
+            0
+        })
+            .map(|slot| self.get_at(Field::UnitAura, u16::from(slot)).unwrap_or(0))
     }
 
     /// `UNIT_FIELD_BYTES_0` byte 3: power type, 0 mana, 1 rage, 2 focus, 3 energy, 4 happiness.
@@ -216,6 +221,10 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_1` byte 1: a hunter pet's loyalty level, 1-8, which `GetPetLoyalty`
     /// (`0x4be700`) indexes `PetLoyalty.dbc` with; 0 is none and answers nil.
     pub fn unit_loyalty_level(&self) -> u8 {
+        // Wrath byte 1 is free pet talent points, not loyalty (UnitDefines.h).
+        if self.layout == FieldLayout::Wrath12340 {
+            return 0;
+        }
         ((self.get(Field::UnitBytes1).unwrap_or(0) >> 8) & 0xff) as u8
     }
     /// `UNIT_FIELD_PETEXPERIENCE` and `UNIT_FIELD_PETNEXTLEVELEXP`: `GetPetExperience`'s
@@ -234,19 +243,28 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x2`, `UNIT_VIS_FLAGS_CREEP` (`SpellAuras.cpp:3610`):
     /// stealthed; read by the usable check (`[+0x110]+0x213 & 2`) and the tracker (`0x5ed210`).
     pub fn unit_is_stealthed(&self) -> bool {
-        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x2 != 0
+        self.unit_visual_flags() & 0x2 != 0
     }
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x1`, `UNIT_VIS_FLAGS_GHOST`, set by the ghost aura: it
     /// only hides names and plates (`byte3 & 0x03`, `0x607101`, `0x60f62e`); the ghostly body is
     /// the aura's own visual kit (spell 8326, kit 989).
     pub fn unit_is_ghost_visual(&self) -> bool {
-        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x1 != 0
+        self.layout == FieldLayout::Vanilla5875 && self.unit_visual_flags() & 0x1 != 0
     }
 
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x4` (vmangos `UNIT_VIS_FLAGS_UNTRACKABLE`): no minimap
     /// dot at all, quest or tracking (`byte [eax+0x213] & 4`, the byte's only such test).
     pub fn unit_is_untrackable(&self) -> bool {
-        (self.get(Field::UnitBytes1).unwrap_or(0) >> 24) & 0x4 != 0
+        self.unit_visual_flags() & 0x4 != 0
+    }
+
+    // AC UnitDefines.h: visibility flags moved from byte 3 to byte 2; byte 3 is anim tier.
+    fn unit_visual_flags(&self) -> u8 {
+        let shift = match self.layout {
+            FieldLayout::Vanilla5875 => 24,
+            FieldLayout::Wrath12340 => 16,
+        };
+        (self.get(Field::UnitBytes1).unwrap_or(0) >> shift) as u8
     }
 
     /// `UNIT_FIELD_AURASTATE`: the aura-state bits (1 defense, 2 health under 20%, ...), which
@@ -258,7 +276,10 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_1` byte 2: the shapeshift form, 0 none, 17-19 the warrior stances, the
     /// druid forms low; the creature-type resolver `0x605570` checks it first.
     pub fn unit_shapeshift_form(&self) -> u8 {
-        (self.get(Field::UnitBytes1).unwrap_or(0) >> 16) as u8
+        match self.layout {
+            FieldLayout::Vanilla5875 => (self.get(Field::UnitBytes1).unwrap_or(0) >> 16) as u8,
+            FieldLayout::Wrath12340 => (self.get(Field::UnitBytes2).unwrap_or(0) >> 24) as u8,
+        }
     }
     /// Number of native descriptor resources: five in build 5875, seven in build 12340.
     pub fn unit_power_slots(&self) -> u8 {
@@ -390,7 +411,8 @@ impl ObjectFields {
     /// `UNIT_FIELD_ATTACK_POWER_MODS`: flat `(positive, negative)` mods, the low and high i16.
     pub fn unit_attack_power_mods(&self) -> (i16, i16) {
         let (lo, hi) = self
-            .get_u16_pair(FIELD_UNIT_ATTACK_POWER_MODS)
+            .get(Field::UnitAttackPowerMods)
+            .map(|v| (v as u16, (v >> 16) as u16))
             .unwrap_or((0, 0));
         (lo as i16, hi as i16)
     }
@@ -405,7 +427,8 @@ impl ObjectFields {
     /// `UNIT_FIELD_RANGED_ATTACK_POWER_MODS`: the ranged `(positive, negative)` flat mods.
     pub fn unit_ranged_attack_power_mods(&self) -> (i16, i16) {
         let (lo, hi) = self
-            .get_u16_pair(FIELD_UNIT_RANGED_ATTACK_POWER_MODS)
+            .get(Field::UnitRangedAttackPowerMods)
+            .map(|v| (v as u16, (v >> 16) as u16))
             .unwrap_or((0, 0));
         (lo as i16, hi as i16)
     }
