@@ -22,6 +22,8 @@ pub mod wrath_relay;
 pub mod wrath_session;
 pub mod wrath_vendor;
 pub mod wrath_world;
+pub mod wrath_misc;
+pub mod wrath_progress;
 pub use auth::AuthReject;
 pub use events::{
     decode, CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,

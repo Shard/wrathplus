@@ -207,6 +207,18 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            opcode if crate::wrath_misc::handles(opcode) => {
+                Ok(match crate::wrath_misc::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            opcode if crate::wrath_progress::handles(opcode) => {
+                Ok(match crate::wrath_progress::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             SMSG_WARDEN_DATA => Err(WrathEventError::WardenRequired),
             wrath_loot::SMSG_LOOT_RESPONSE
             | wrath_loot::SMSG_LOOT_RELEASE_RESPONSE

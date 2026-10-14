@@ -17,6 +17,13 @@ use crate::messages::{
     TradeStatusExtended, TrainerSpell, TransportPose, VendorItem, WhoResults, XpGain,
 };
 
+/// One native talent spec; talent ranks are zero-based, glyphs are GlyphProperties.dbc IDs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TalentGroup {
+    pub talents: Vec<(u32, u8)>,
+    pub glyphs: Vec<u16>,
+}
+
 /// Coarse entity classification, free of wire types, carried on [`SessionEvent::ObjectCreate`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EntityKind {
@@ -373,6 +380,19 @@ pub enum SessionEvent {
     PlayerBound { binder: u64, area: u32 },
     /// One item class's subclass mask (`SMSG_SET_PROFICIENCY`), the reference's `0xc4d4a0[class]`.
     Proficiency { item_class: u32, subclass_mask: u32 },
+    /// Build 12340 power notification; `power_type` is the native Powers enum.
+    PowerUpdate { guid: u64, power_type: u8, value: u32 },
+    /// Threat values in hundredths, as sent by AzerothCore ThreatManager.
+    ThreatUpdate { guid: u64, highest: Option<u64>, threats: Vec<(u64, u32)> },
+    ThreatClear { guid: u64 },
+    TalentsInfo { pet: bool, unspent: u32, active: u8, groups: Vec<TalentGroup> },
+    LootOwners { guid: u64, master: u64, looter: u64 },
+    /// Achievement progress: `packed_time` uses the client calendar bit encoding.
+    CriteriaUpdate {
+        criteria: u32, counter: u64, player: u64, flags: u32,
+        packed_time: u32, elapsed: u32, creation_elapsed: u32,
+    },
+    ThreatRemove { guid: u64, victim: u64 },
     /// `SMSG_INITIALIZE_FACTIONS` at login: `(flags, standing)` per `Faction.dbc`
     /// `reputationIndex`. The standing excludes the DBC race/class base; add it before ranking.
     Reputations { standings: Vec<(u8, i32)> },
