@@ -234,6 +234,20 @@ fn resolve(prev: Option<u32>, cur: u32) -> Option<Play> {
     }
 }
 
+/// Wrath folds state into BYTES_1; the other bytes must not drive lids or collision.
+fn go_state_edge(edge: &crate::net::FieldChanged) -> Option<u32> {
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    if edge.kind != ObjectType::GameObject {
+        return None;
+    }
+    match edge.layout {
+        FieldLayout::Vanilla5875 => edge.named_field(Field::GameobjectState).then_some(edge.new),
+        FieldLayout::Wrath12340 => (edge.named_field(Field::GameobjectBytes1)
+            && (edge.old & 0xff) != (edge.new & 0xff))
+            .then_some(edge.new & 0xff),
+    }
+}
+
 /// Caller 1, the wire (`0x5f89e0`): seeds the state at first sight, then follows the
 /// `GAMEOBJECT_STATE` edge, so an unrelated field change never re-closes a looted chest.
 #[allow(clippy::type_complexity)]
@@ -251,13 +265,11 @@ fn sync_wire_go_state(
     }
     let mut live = gos.p1();
     for e in edges.read() {
-        if e.kind != benilla_protocol::messages::ObjectType::GameObject
-            || e.raw_index_compat() != benilla_protocol::field::FIELD_GAMEOBJECT_STATE
-        {
+        let Some(state) = go_state_edge(e) else {
             continue;
-        }
+        };
         if let Ok(mut anim) = live.get_mut(e.entity) {
-            anim.state = Some(e.new);
+            anim.state = Some(state);
         }
     }
 }
@@ -573,10 +585,7 @@ fn drive_go_collision(
     arrived: Query<Entity, Added<Collider>>,
     mut edges: MessageReader<crate::net::FieldChanged>,
 ) {
-    let state_edges = edges.read().filter(|e| {
-        e.kind == benilla_protocol::messages::ObjectType::GameObject
-            && e.raw_index_compat() == benilla_protocol::field::FIELD_GAMEOBJECT_STATE
-    });
+    let state_edges = edges.read().filter(|e| go_state_edge(e).is_some());
     let mut due: bevy::ecs::entity::EntityHashSet = arrived.iter().collect();
     due.extend(state_edges.map(|e| e.entity));
     for entity in due {
@@ -711,6 +720,65 @@ pub(crate) fn plugin(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn state_edges_use_real_layout_fields_and_normalize_wrath_bytes() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let native_field = match layout {
+                FieldLayout::Vanilla5875 => Field::GameobjectState,
+                FieldLayout::Wrath12340 => Field::GameobjectBytes1,
+            };
+            let span = layout
+                .resolve(native_field)
+                .expect("native state dependency exists");
+            let (field, offset) = layout.field_at(ObjectType::GameObject, span.index).unwrap();
+            assert_eq!((field, offset), (native_field, 0));
+            let packed = if layout == FieldLayout::Wrath12340 {
+                0x87654300
+            } else {
+                0
+            };
+            let mut edge = crate::net::FieldChanged {
+                entity: bevy::prelude::Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::GameObject,
+                field,
+                offset,
+                layout,
+                old: packed | 1,
+                new: packed,
+            };
+            assert_eq!(super::go_state_edge(&edge), Some(0));
+            edge.old = packed;
+            edge.new = packed | 1;
+            assert_eq!(super::go_state_edge(&edge), Some(1));
+            if layout == FieldLayout::Wrath12340 {
+                for mask in [0x100, 0x10000, 0x1000000] {
+                    edge.old = packed | 1;
+                    edge.new = edge.old ^ mask;
+                    assert_eq!(
+                        super::go_state_edge(&edge),
+                        None,
+                        "upper bytes aren't state"
+                    );
+                }
+            }
+            edge.kind = ObjectType::Unit;
+            assert_eq!(super::go_state_edge(&edge), None);
+            edge.kind = ObjectType::GameObject;
+            edge.offset = 1;
+            assert_eq!(super::go_state_edge(&edge), None);
+            let span = layout.resolve(Field::GameobjectFlags).unwrap();
+            (edge.field, edge.offset) =
+                layout.field_at(ObjectType::GameObject, span.index).unwrap();
+            assert_eq!(
+                super::go_state_edge(&edge),
+                None,
+                "unrelated fields don't re-close chests"
+            );
+        }
+    }
+
     use super::*;
     use benilla_world::model_fade::DespawnFade;
 
