@@ -14,6 +14,8 @@
 //! other object falls through to tracking: a GameObject passing `0x5ed2b0` draws gold cell 0, a
 //! unit passing `0x5ed210` red cell 1, against the `PLAYER_TRACK_CREATURES`/`RESOURCES` masks.
 //! Party members are blue cell 4. Dots cull at the view radius in 3-D distance and draw last.
+//! Wrath ObjectIcons uses an 8x2 grid instead; the dimension-selected ObjectIconAtlas maps
+//! tracking, party and yellow ? icon together, leaving the Vanilla classifier unchanged.
 //!
 //! Blip sizes are frozen once by the CGMinimapFrame ctor (`0x4edbc0`) against a 140.8-px basis.
 //!
@@ -31,7 +33,9 @@
 
 mod dots;
 
-pub(super) use dots::{emit_party_dots, emit_quest_dots, emit_tracking_dots, SelfTracking};
+pub(super) use dots::{
+    emit_party_dots, emit_quest_dots, emit_tracking_dots, ObjectIconAtlas, SelfTracking,
+};
 
 use bevy::ecs::system::NonSendMut;
 use bevy::math::Rect;

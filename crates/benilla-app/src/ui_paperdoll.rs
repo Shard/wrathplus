@@ -1,13 +1,101 @@
 //! Wrath character-sheet values from semantic player fields, not reconstructed stats.
 use crate::net::{ObjectStore, SelfPlayer};
+use benilla_assets::{AssetSet, ClientDataProfile, LockRecover, WorldAssets};
+use benilla_formats::{GameTable, WrathGameTables};
 use benilla_protocol::messages::{Field, ObjectFields};
-use benilla_ui::script::{UiScript, WrathPaperDollStats};
+use benilla_ui::script::{UiScript, WrathPaperDollStats, WrathStatConversions};
 use bevy::prelude::*;
 
 pub(crate) struct UiPaperDollPlugin;
 impl Plugin for UiPaperDollPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, feed.in_set(crate::ui_unit::UnitFeed));
+        app.add_systems(Startup, load_tables.after(AssetSet::Open))
+            .add_systems(Update, feed.in_set(crate::ui_unit::UnitFeed));
+    }
+}
+
+#[derive(Resource)]
+struct PaperDollTables(WrathGameTables);
+
+fn load_tables(
+    mut commands: Commands,
+    assets: Option<Res<WorldAssets>>,
+    profile: Option<Res<ClientDataProfile>>,
+) {
+    let Some(assets) = assets else { return };
+    if !profile.is_some_and(|p| matches!(p.0, benilla_formats::DataProfile::Wrath { .. })) {
+        return;
+    }
+    let loaded = benilla_formats::load_wrath_game_tables(&mut assets.chain.lock_recover());
+    match loaded {
+        Ok(tables) => {
+            commands.insert_resource(PaperDollTables(tables));
+        }
+        Err(e) => warn!("paperdoll: GameTables unavailable, conversions remain zero: {e:#}"),
+    }
+}
+
+// Player.cpp:5393/5416. Health is per tick (2s); mana is per second, and the
+// stock PaperDollFrame.lua multiplies mana by five for its spirit tooltip.
+fn spirit_regen(
+    spirit: f32,
+    hp_base: Option<f32>,
+    hp_more: Option<f32>,
+    mp: Option<f32>,
+) -> (f32, f32) {
+    let hp = hp_base
+        .zip(hp_more)
+        .map(|(base, more)| {
+            let first = spirit.min(50.0);
+            (first * base + (spirit - first) * more) * 2.0
+        })
+        .unwrap_or(0.0);
+    (hp, mp.map(|ratio| spirit * ratio).unwrap_or(0.0))
+}
+
+// Player.cpp:5358. Do not use its server-side 1.0 fallback when a client row
+// is unavailable; that would claim a conversion we cannot support.
+fn rating_bonus(rating: u32, scalar: Option<f32>, divisor: Option<f32>) -> f32 {
+    scalar
+        .zip(divisor)
+        .filter(|(s, d)| s.is_finite() && d.is_finite() && *d > 0.0)
+        .map(|(s, d)| rating as f32 * s / d)
+        .unwrap_or(0.0)
+}
+
+fn conversions(f: &ObjectFields, tables: &WrathGameTables) -> WrathStatConversions {
+    let class = f.unit_class().unwrap_or(0);
+    let level = f.unit_level().unwrap_or(0);
+    let row = |table| tables.class_level(table, class, level);
+    let stat = |index| f.unit_stat(index).unwrap_or(0) as f32;
+    let (health_from_spirit, mana_from_spirit) = spirit_regen(
+        stat(4),
+        row(GameTable::OctRegenHp),
+        row(GameTable::RegenHpPerSpirit),
+        row(GameTable::RegenMpPerSpirit),
+    );
+    let rating_bonus = std::array::from_fn(|i| {
+        rating_bonus(
+            f.get_at(Field::PlayerCombatRating1, i as u16).unwrap_or(0),
+            tables.class_combat_rating_scalar(class, i as u8),
+            tables.combat_rating(i as u8, level),
+        )
+    });
+    // These APIs expose only the stat contribution, not Player.cpp's base intercept.
+    WrathStatConversions {
+        crit_from_agility: row(GameTable::MeleeCrit)
+            .map(|ratio| stat(1) * ratio * 100.0)
+            .unwrap_or(0.0),
+        spell_crit_from_intellect: row(GameTable::SpellCrit)
+            .map(|ratio| stat(3) * ratio * 100.0)
+            .unwrap_or(0.0),
+        health_from_spirit,
+        mana_from_spirit,
+        rating_bonus,
+        // Native CR_ARMOR_PENETRATION is 24 (Lua 25).
+        armor_penetration: rating_bonus[24],
+        // Caps and defense skill remain unavailable rather than inferred from ratings.
+        ..Default::default()
     }
 }
 
@@ -54,7 +142,11 @@ fn snapshot(f: &ObjectFields) -> WrathPaperDollStats {
     }
 }
 
-fn feed(script: Option<NonSendMut<UiScript>>, player: Query<&ObjectStore, With<SelfPlayer>>) {
+fn feed(
+    script: Option<NonSendMut<UiScript>>,
+    player: Query<&ObjectStore, With<SelfPlayer>>,
+    tables: Option<Res<PaperDollTables>>,
+) {
     let Some(mut script) = script else { return };
     if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
         return;
@@ -63,7 +155,13 @@ fn feed(script: Option<NonSendMut<UiScript>>, player: Query<&ObjectStore, With<S
         player
             .iter()
             .next()
-            .map(|p| snapshot(&p.0))
+            .map(|p| {
+                let mut stats = snapshot(&p.0);
+                if let Some(tables) = tables.as_ref() {
+                    stats.conversions = conversions(&p.0, &tables.0);
+                }
+                stats
+            })
             .unwrap_or_default(),
     );
 }
@@ -159,5 +257,26 @@ mod tests {
                 .unwrap(),
             0.0
         );
+    }
+    #[test]
+    fn spirit_tick_split_and_missing_rows_are_not_fabricated() {
+        assert_eq!(
+            spirit_regen(40.0, Some(0.5), Some(0.2), Some(0.1)),
+            (40.0, 4.0)
+        );
+        assert_eq!(
+            spirit_regen(60.0, Some(0.5), Some(0.2), Some(0.1)),
+            (54.0, 6.0)
+        );
+        assert_eq!(spirit_regen(60.0, None, Some(0.2), Some(0.1)), (0.0, 6.0));
+        assert_eq!(spirit_regen(60.0, Some(0.5), None, None), (0.0, 0.0));
+    }
+    #[test]
+    fn rating_conversion_requires_both_verified_rows_and_positive_divisor() {
+        assert_eq!(rating_bonus(100, Some(0.5), Some(20.0)), 2.5);
+        assert_eq!(rating_bonus(100, None, Some(20.0)), 0.0);
+        assert_eq!(rating_bonus(100, Some(1.0), None), 0.0);
+        assert_eq!(rating_bonus(100, Some(1.0), Some(0.0)), 0.0);
+        assert_eq!(rating_bonus(100, Some(1.0), Some(f32::NAN)), 0.0);
     }
 }

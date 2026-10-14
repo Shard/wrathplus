@@ -194,7 +194,7 @@ pub(crate) fn questgiver_failed_key(reason: u32) -> &'static str {
 }
 
 mod lines;
-mod net;
+pub(crate) mod net;
 
 pub(crate) use lines::{QuestLine, QuestLines};
 
