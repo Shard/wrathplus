@@ -105,3 +105,23 @@ fn f32_camera_conversion_cannot_collapse_a_validated_direction() {
         );
     assert!(ShowcasePath::parse(&collapsed).is_err());
 }
+
+#[test]
+fn curated_showcase_paths_pass_the_production_schema() {
+    let paths = [
+        include_str!("../../../../docs/showcase/northshire-abbey.toml"),
+        include_str!("../../../../docs/showcase/goldshire-dusk.toml"),
+        include_str!("../../../../docs/showcase/stormwind-gate.toml"),
+        include_str!("../../../../docs/showcase/elwynn-lake-sunrise.toml"),
+        include_str!("../../../../docs/showcase/westfall-farm.toml"),
+    ];
+    for text in paths {
+        let path = ShowcasePath::parse(text).expect("curated route schema");
+        assert_eq!(path.map, 0);
+        assert_eq!(path.frame_count(), 12 * FPS);
+        for frame in 0..path.frame_count() {
+            let pose = path.sample_frame(frame).unwrap();
+            assert!(pose.eye[2] > pose.target[2]);
+        }
+    }
+}
