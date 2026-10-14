@@ -17,6 +17,7 @@ dev = []
 
 [dependencies]
 anyhow.workspace = true
+tracing = "0.1"
 clap.workspace = true
 benilla-adt = { path = "../benilla-adt" }
 benilla-bytes = { path = "../benilla-bytes" }

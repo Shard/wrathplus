@@ -41,7 +41,8 @@ struct WowLight {
     sh_c16: vec4<f32>,        // row 12: xyz = the models' c16 quad band; w free.
     _water: array<vec4<f32>, 4>, // rows 13-16: liquid swatches, unread by terrain.
     grade: vec4<f32>,         // row 17: reserved, layout only.
-    _wmo_fog: array<vec4<f32>, 2>, // rows 18-19: interior fog, unread by terrain.
+    _wmo_fog_color: vec4<f32>, // row 18: interior fog, unread by terrain.
+    wmo_fog_params: vec4<f32>, // row 19: xy interior span; zw Plus height base/falloff.
     // The dynamic point-light table (`global_light::build_light_data`): row 20 `.x` = live count,
     // then two rows per light, `[pos.xyz, range]` and `[rgb, 0]`.
     point_count: vec4<f32>,
@@ -230,7 +231,17 @@ fn fragment(in: TerrainVsOut) -> @location(0) vec4<f32> {
     if (wow_light.fog_color.w > 0.5) {
         let eye_z = -(view.view_from_world * vec4<f32>(in.world_position.xyz, 1.0)).z;
         let denom = max(wow_light.fog_params.y - wow_light.fog_params.x, 0.001);
-        let factor = clamp((wow_light.fog_params.y - eye_z) / denom, 0.0, 1.0);
+        var factor = clamp((wow_light.fog_params.y - eye_z) / denom, 0.0, 1.0);
+        // Plus only: radial extinction with an exponential height density. No new fog
+        // arithmetic runs under Classic; the old planar factor above is unchanged.
+        if (wow_light.fog_params.z > 0.5) {
+            let ray = in.world_position.xyz - view.world_position.xyz;
+            let distance = length(ray);
+            let midpoint_y = 0.5 * (in.world_position.xyz.y + view.world_position.y);
+            let density = exp(clamp(-(wow_light.wmo_fog_params.w) * (midpoint_y - wow_light.wmo_fog_params.z), -4.0, 4.0));
+            let optical_depth = max(distance - wow_light.fog_params.xy.x, 0.0) * 3.0 / denom * density;
+            factor = exp(-optical_depth);
+        }
         tuned = mix(wow_light.fog_color.xyz, tuned, factor);
     }
 

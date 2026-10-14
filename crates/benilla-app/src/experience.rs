@@ -221,3 +221,41 @@ mod tests {
         assert!(config_from_text("[experience.features]\nboloom = true\n").is_err());
     }
 }
+
+/// Publish after runtime profile setters and before the renderer's PostUpdate light pack.
+pub(crate) fn sync_lighting(
+    experience: Res<Experience>,
+    mut lighting: ResMut<benilla_world::modern_lighting::ModernLighting>,
+) {
+    let resolved = lighting_policy(&experience);
+    if *lighting != resolved {
+        *lighting = resolved;
+    }
+}
+
+fn lighting_policy(experience: &Experience) -> benilla_world::modern_lighting::ModernLighting {
+    benilla_world::modern_lighting::ModernLighting {
+        fog: experience.enabled(Feature::Fog),
+        bloom: experience.enabled(Feature::Bloom),
+        tone_mapping: experience.enabled(Feature::ToneMapping),
+        colour_grading: experience.enabled(Feature::ColourGrading),
+    }
+}
+
+#[cfg(test)]
+mod lighting_tests {
+    use super::*;
+    #[test]
+    fn runtime_profile_switch_restores_classic_renderer_policy() {
+        let mut experience = Experience::default();
+        assert_eq!(lighting_policy(&experience), Default::default());
+        experience.set_profile(Profile::Plus);
+        assert!(lighting_policy(&experience).post_process());
+        assert!(lighting_policy(&experience).fog);
+        experience.set_feature(Feature::Bloom, false);
+        assert!(!lighting_policy(&experience).bloom);
+        assert!(lighting_policy(&experience).tone_mapping);
+        experience.set_profile(Profile::Classic);
+        assert_eq!(lighting_policy(&experience), Default::default());
+    }
+}

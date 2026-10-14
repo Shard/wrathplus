@@ -70,6 +70,8 @@ fn fragment(in: WdlVsOut) -> WdlFsOut {
 
     // White vertex diffuse under the hull's own fog pair, saturated beyond one yard: the flat fog
     // colour, never the scene fog distances. With fog off the reference shows the bare white hull.
+    // Plus keeps this horizon endpoint fully fogged too: applying radial extinction to the
+    // otherwise white hull would reveal a pale far-band seam behind the detailed world.
     var rgb = vec3<f32>(1.0);
     if (w.fog_color.w > 0.5) {
         rgb = w.fog_color.xyz;

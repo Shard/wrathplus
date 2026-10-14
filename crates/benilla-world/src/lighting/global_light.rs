@@ -22,10 +22,10 @@ use crate::view::WorldCamera;
 /// `static_gx`) mirrors this row order as a prefix; keep them in sync.
 ///   0 light_ambient (w=Mod2x 1.0) · 1 light_diffuse (w=clamp on) · 2 light_sun (w=dir/SH enable) ·
 ///   3 light_spec (w=terrain shininess 20) · 4 fog_color (w=enable) ·
-///   5 fog_params (x=start y=end w=farclip) · 6-8 sh_c10_{r,g,b} · 9-11 sh_c13_{r,g,b} ·
+///   5 fog_params (x=start y=end z=Plus fog enable, zero in Classic w=farclip) · 6-8 sh_c10_{r,g,b} · 9-11 sh_c13_{r,g,b} ·
 ///   12 sh_c16 · 13-14 water river {shallow,deep} (w=alpha) · 15-16 water ocean (the same) ·
 ///   17 grade: `.x` the SIDN night fraction, `.yzw` the sun's SH DC at intensity 1 ·
-///   18 wmo_fog_color · 19 wmo_fog_params (x=start y=end): the interior fog triple, read by
+///   18 wmo_fog_color · 19 wmo_fog_params (x=start y=end z=Plus height base w=height falloff, zw zero in Classic): the interior fog triple, read by
 ///      interior-tagged content in place of 4-5 ·
 ///   20 point_count (x = live entries) · 21+ the point-light table, two rows per light,
 ///      `[pos.xyz, range]` and `[rgb, 0]`, here because Bevy's clusterable buffer is
@@ -192,6 +192,7 @@ pub(super) fn per_frame_blob_bytes() -> u64 {
 #[allow(clippy::type_complexity)]
 fn build_light_data(
     light: Res<WowLighting>,
+    modern: Option<Res<crate::modern_lighting::ModernLighting>>,
     debug: Res<DebugState>,
     view: Res<ViewDistance>,
     cam: Query<&GlobalTransform, With<WorldCamera>>,
@@ -237,6 +238,11 @@ fn build_light_data(
     // by 4π undoes the spawn's premultiply, so the colour is the authored `colour × intensity`,
     // committed raw. Entries past the count stay stale; the count row guards every reader.
     let cam_pos = cam.single().map(|t| t.translation()).unwrap_or(Vec3::ZERO);
+    crate::modern_lighting::pack_fog(
+        rows,
+        modern.as_deref().copied().unwrap_or_default(),
+        cam_pos.y,
+    );
     let mut pts: Vec<(f32, Vec3, f32, [f32; 3])> = lights_q
         .iter()
         .filter(|(_, _, rooms)| {

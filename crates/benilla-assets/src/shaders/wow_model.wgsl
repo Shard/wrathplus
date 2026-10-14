@@ -782,7 +782,17 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     if (fog_color.w > 0.5 && fog_policy != 4u) {
         let eye_z = -(view.view_from_world * vec4<f32>(in.world_position.xyz, 1.0)).z;
         let denom = max(fog_span.y - fog_span.x, 0.001);
-        let factor = clamp((fog_span.y - eye_z) / denom, 0.0, 1.0);
+        var factor = clamp((fog_span.y - eye_z) / denom, 0.0, 1.0);
+        // Plus only: radial extinction with an exponential height density. No new fog
+        // arithmetic runs under Classic; the old planar factor above is unchanged.
+        if (wow_light.fog_params.z > 0.5) {
+            let ray = in.world_position.xyz - view.world_position.xyz;
+            let distance = length(ray);
+            let midpoint_y = 0.5 * (in.world_position.xyz.y + view.world_position.y);
+            let density = exp(clamp(-(wow_light.wmo_fog_params.w) * (midpoint_y - wow_light.wmo_fog_params.z), -4.0, 4.0));
+            let optical_depth = max(distance - fog_span.x, 0.0) * 3.0 / denom * density;
+            factor = exp(-optical_depth);
+        }
         var fog_rgb = fog_color.xyz;
         if (fog_policy == 1u) { fog_rgb = vec3<f32>(0.0); }
         else if (fog_policy == 2u) { fog_rgb = vec3<f32>(1.0); }
