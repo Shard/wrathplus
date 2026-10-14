@@ -160,6 +160,7 @@ mod ui_pet_doll;
 mod ui_pet_stats;
 mod ui_paperdoll;
 mod ui_petition;
+mod quest_rewards;
 mod ui_quest;
 mod ui_quest_log;
 mod ui_quest_share;
