@@ -1117,7 +1117,7 @@ pub(super) fn arm_loot_fx(
                         || e.unit_field(FIELD_UNIT_HEALTH)
                         || e.unit_field(FIELD_UNIT_MAXHEALTH)
                         || (e.kind == benilla_protocol::messages::ObjectType::Corpse
-                            && e.index == FIELD_CORPSE_DYNAMIC_FLAGS)
+                            && e.raw_index_compat() == FIELD_CORPSE_DYNAMIC_FLAGS)
                 })
                 .map(|e| e.entity),
         );
