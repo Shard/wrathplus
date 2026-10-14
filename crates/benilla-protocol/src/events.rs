@@ -732,6 +732,8 @@ pub enum SessionEvent {
     },
     /// An NPC's `!`/`?` marker (`SMSG_QUESTGIVER_STATUS`), a [`crate::messages::dialog_status`].
     QuestGiverStatus { npc: u64, status: u32 },
+    /// Build 12340 dialog status, retained before the legacy world-marker projection.
+    WrathQuestGiverStatus { npc: u64, status: u8 },
     /// The greeting panel: an NPC's offered/active quest rows (`SMSG_QUESTGIVER_QUEST_LIST`).
     QuestGreeting(QuestGiverList),
     /// The accept panel: quest text and rewards on offer (`SMSG_QUESTGIVER_QUEST_DETAILS`).

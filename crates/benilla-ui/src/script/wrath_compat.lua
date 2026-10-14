@@ -195,8 +195,6 @@ function GetInstanceInfo()
     if IsInInstance then inInstance, kind = IsInInstance() end
     return name, kind or "none", 1, "", 0, 0, false
 end
-GetNumTrackingTypes = GetNumTrackingTypes or zero
-GetTrackingInfo = GetTrackingInfo or none
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none

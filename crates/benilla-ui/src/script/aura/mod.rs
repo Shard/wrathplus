@@ -13,6 +13,8 @@
 //! `source` is always nil, and only the player's auras carry a duration: the 1.12 wire has no aura
 //! caster and sends durations for the player alone, so the stock target frame shows no timers.
 
+mod tracking;
+
 use mlua::{Lua, MultiValue, Value};
 
 use super::Model;
@@ -164,7 +166,12 @@ impl super::UiScript {
     pub fn set_unit_guids(&mut self, guids: &super::UnitGuids) {
         let mut model = self.model_mut();
         let wrath = model.unit_guids.wrath;
-        if model.unit_guids != (super::UnitGuids { wrath, ..guids.clone() }) {
+        if model.unit_guids
+            != (super::UnitGuids {
+                wrath,
+                ..guids.clone()
+            })
+        {
             model.unit_guids.clone_from(guids);
             model.unit_guids.wrath = wrath;
         }
@@ -226,6 +233,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     player_buff::install(lua)?;
+    tracking::install(lua)?;
 
     // GetTrackingTexture() (`0x4e4a20`): the tracking spell's icon or nil, which shows or hides
     // the stock `MiniMapTrackingFrame` (`Minimap.xml:150-159`).
@@ -233,7 +241,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetTrackingTexture",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(model.tracking.as_ref().and_then(|t| t.icon.clone()))
+            Ok(
+                if model.dialect == crate::script::ScriptDialect::Wrath12340
+                    && model.wrath_tracking_selection == Some(1)
+                {
+                    Some("Interface\\Minimap\\Tracking\\TrivialQuests".into())
+                } else {
+                    model.tracking.as_ref().and_then(|t| t.icon.clone())
+                },
+            )
         })?,
     )?;
 

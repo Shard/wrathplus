@@ -374,6 +374,7 @@ fn emit_minimap(
     *blip_hover = blips::MinimapBlipHover::None;
     // Drain the `Minimap:PingLocation` click before any early return: it is spent in the frame it
     // was made, and a click on a frame the map does not draw is not a ping.
+    let trivial_quests = script.as_ref().is_some_and(|s| s.track_trivial_quests());
     let click = script.and_then(|mut s| s.take_minimap_ping_request());
     let (Some(slot), Some(assets), Some(map), Some(catalog)) =
         (widget.0.as_ref(), assets, map, catalog)
@@ -715,7 +716,10 @@ fn emit_minimap(
                 ctx,
                 tracking,
                 &tracked,
-                quest.statuses(),
+                match assets.object_icon_atlas {
+                    blips::ObjectIconAtlas::Wrath => quest.wrath_statuses(),
+                    _ => quest.statuses(),
+                },
                 self_guid,
                 &names,
                 &go_templates,
@@ -723,6 +727,7 @@ fn emit_minimap(
                 assets.forms.as_ref(),
                 icons,
                 assets.object_icon_atlas,
+                trivial_quests,
                 player_indoors,
                 |feet| world.indoors_at(feet),
                 &mut quads,
@@ -730,11 +735,15 @@ fn emit_minimap(
             );
             blips::emit_quest_dots(
                 ctx,
-                quest.statuses(),
+                match assets.object_icon_atlas {
+                    blips::ObjectIconAtlas::Wrath => quest.wrath_statuses(),
+                    _ => quest.statuses(),
+                },
                 &tracked,
                 self_guid,
                 icons,
                 assets.object_icon_atlas,
+                trivial_quests,
                 player_indoors,
                 // A dot NPC's own containment, the faces-only down-ray the entity lights use.
                 |feet| world.indoors_at(feet),

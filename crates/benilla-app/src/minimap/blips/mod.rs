@@ -15,7 +15,8 @@
 //! unit passing `0x5ed210` red cell 1, against the `PLAYER_TRACK_CREATURES`/`RESOURCES` masks.
 //! Party members are blue cell 4. Dots cull at the view radius in 3-D distance and draw last.
 //! Wrath ObjectIcons uses an 8x2 grid instead; the dimension-selected ObjectIconAtlas maps
-//! tracking, party and yellow ? icon together, leaving the Vanilla classifier unchanged.
+//! tracking/party cells and raw native quest-status !/? cells (0x57f7f0). Low-level
+//! offers require type-3 tracking; Vanilla keeps its status-7 gold dot classifier.
 //!
 //! Blip sizes are frozen once by the CGMinimapFrame ctor (`0x4edbc0`) against a 140.8-px basis.
 //!

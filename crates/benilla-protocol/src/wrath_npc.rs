@@ -97,20 +97,14 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
         SMSG_GOSSIP_MESSAGE => gossip_message(&mut r)?,
         SMSG_QUESTGIVER_STATUS => {
             let npc = u64_le(&mut r)?;
-            vec![SessionEvent::QuestGiverStatus {
-                npc,
-                status: dialog_status(u8_le(&mut r)?),
-            }]
+            status_events(npc, u8_le(&mut r)?)
         }
         SMSG_QUESTGIVER_STATUS_MULTIPLE => {
             let count = u32_le(&mut r)?;
             let mut out = Vec::new();
             for _ in 0..count {
                 let npc = u64_le(&mut r)?;
-                out.push(SessionEvent::QuestGiverStatus {
-                    npc,
-                    status: dialog_status(u8_le(&mut r)?),
-                });
+                out.extend(status_events(npc, u8_le(&mut r)?));
             }
             out
         }
@@ -137,6 +131,16 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
 /// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::messages::dialog_status`] values. 3.3.5
 /// adds low-level and repeatable tiers: a low-level offer shows no marker (1.12's `CHAT`), a
 /// repeatable reward is the yellow `?`.
+fn status_events(npc: u64, status: u8) -> Vec<SessionEvent> {
+    vec![
+        SessionEvent::QuestGiverStatus {
+            npc,
+            status: dialog_status(status),
+        },
+        SessionEvent::WrathQuestGiverStatus { npc, status },
+    ]
+}
+
 fn dialog_status(status: u8) -> u32 {
     use crate::messages::dialog_status as d;
     match status {
@@ -605,7 +609,7 @@ mod tests {
             matches!(events[0], SessionEvent::QuestGiverStatus { npc: 1, status } if status == d::AVAILABLE)
         );
         assert!(
-            matches!(events[1], SessionEvent::QuestGiverStatus { npc: 2, status } if status == d::REWARD2)
+            matches!(events[2], SessionEvent::QuestGiverStatus { npc: 2, status } if status == d::REWARD2)
         );
     }
 
