@@ -34,6 +34,10 @@ pub struct GossipQuestRow {
     /// and `GossipFrame.lua:66` strides by 2 over them.
     pub level: u32,
     pub active: bool,
+    pub trivial: bool,
+    pub daily: bool,
+    pub repeatable: bool,
+    pub complete: bool,
 }
 
 /// One open gossip menu, pushed whole by the app.
@@ -132,20 +136,29 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // The reference splits the quest rows by wire icon, 3 and 4 active and the rest available,
     // behind two vararg verbs (`0x4e2430`, `0x4e2580`); the app splits them at parse time.
     fn quest_rows(lua: &Lua, active: bool) -> mlua::Result<MultiValue> {
-        let rows: Vec<(String, u32)> = {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            model.gossip.as_ref().map_or_else(Vec::new, |m| {
-                m.quests
-                    .iter()
-                    .filter(|q| q.active == active)
-                    .map(|q| (q.title.clone(), q.level))
-                    .collect()
-            })
-        };
-        let mut out = Vec::with_capacity(rows.len() * 2);
-        for (title, level) in rows {
-            out.push(Value::String(lua.create_string(&title)?));
-            out.push(Value::Integer(i64::from(level)));
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        let wrath = model.dialect == super::ScriptDialect::Wrath12340;
+        let rows: Vec<GossipQuestRow> = model.gossip.as_ref().map_or_else(Vec::new, |m| {
+            m.quests
+                .iter()
+                .filter(|q| q.active == active)
+                .cloned()
+                .collect()
+        });
+        drop(model);
+        let mut out = Vec::new();
+        for q in rows {
+            out.push(Value::String(lua.create_string(&q.title)?));
+            out.push(Value::Integer(i64::from(q.level)));
+            if wrath {
+                out.push(Value::Boolean(q.trivial));
+                if active {
+                    out.push(Value::Boolean(q.complete));
+                } else {
+                    out.push(Value::Boolean(q.daily));
+                    out.push(Value::Boolean(q.repeatable));
+                }
+            }
         }
         Ok(MultiValue::from_vec(out))
     }
@@ -158,6 +171,32 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetGossipActiveQuests",
         lua.create_function(|lua, ()| quest_rows(lua, true))?,
     )?;
+
+    if lua.app_data_ref::<Model>().expect("model app_data").dialect
+        == super::ScriptDialect::Wrath12340
+    {
+        for (name, active) in [
+            ("GetNumGossipAvailableQuests", false),
+            ("GetNumGossipActiveQuests", true),
+        ] {
+            g.set(
+                name,
+                lua.create_function(move |lua, ()| {
+                    let model = lua.app_data_ref::<Model>().expect("model app_data");
+                    Ok(model.gossip.as_ref().map_or(0, |m| {
+                        m.quests.iter().filter(|q| q.active == active).count()
+                    }))
+                })?,
+            )?;
+        }
+        g.set(
+            "GetNumGossipOptions",
+            lua.create_function(|lua, ()| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(model.gossip.as_ref().map_or(0, |m| m.options.len()))
+            })?,
+        )?;
+    }
 
     // A select's index is 1-based within its own list, as `GossipFrame.lua:73` numbers the
     // buttons; it maps back to the whole-menu position the app's queue holds.
@@ -271,16 +310,19 @@ mod tests {
                 title: "Report to Goldshire".into(),
                 level: 5,
                 active: true,
+                ..Default::default()
             },
             GossipQuestRow {
                 title: "A Threat Within".into(),
                 level: 7,
                 active: false,
+                ..Default::default()
             },
             GossipQuestRow {
                 title: "Kobold Camp Cleanup".into(),
                 level: 9,
                 active: false,
+                ..Default::default()
             },
         ];
         s.set_gossip(Some(m));
@@ -310,6 +352,47 @@ mod tests {
         s.run("SelectGossipAvailableQuest(9) SelectGossipActiveQuest(0)")
             .unwrap();
         assert!(s.take_gossip_quest_selects().is_empty(), "drained");
+    }
+
+    #[test]
+    fn wrath_gossip_rows_are_native_and_keep_all_columns() {
+        use crate::script::ScriptDialect;
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut m = menu();
+        m.quests = vec![
+            super::GossipQuestRow {
+                title: "Daily".into(),
+                level: 80,
+                daily: true,
+                repeatable: true,
+                ..Default::default()
+            },
+            super::GossipQuestRow {
+                title: "Done".into(),
+                level: 70,
+                active: true,
+                trivial: true,
+                complete: true,
+                ..Default::default()
+            },
+            super::GossipQuestRow {
+                title: "Other".into(),
+                level: 80,
+                ..Default::default()
+            },
+        ];
+        s.set_gossip(Some(m));
+        assert_eq!(s.arity("GetGossipAvailableQuests()").unwrap(), 10);
+        assert_eq!(s.arity("GetGossipActiveQuests()").unwrap(), 4);
+        assert!(s.eval::<bool>("local t,l,tr,d,r,t2,l2,tr2,d2,r2 = GetGossipAvailableQuests(); return t == 'Daily' and l == 80 and tr == false and d and r and t2 == 'Other' and not tr2 and not d2 and not r2").unwrap());
+        assert!(s.eval::<bool>("local t,l,tr,c = GetGossipActiveQuests(); return t == 'Done' and l == 70 and tr and c").unwrap());
+        assert_eq!(s.eval::<(u32,u32,u32)>("return GetNumGossipAvailableQuests(), GetNumGossipActiveQuests(), GetNumGossipOptions()").unwrap(), (2,1,2));
+        s.set_gossip(None);
+        assert_eq!(s.arity("GetGossipAvailableQuests()").unwrap(), 0);
+        assert_eq!(
+            s.eval::<u32>("return GetNumGossipActiveQuests()").unwrap(),
+            0
+        );
     }
 
     #[test]

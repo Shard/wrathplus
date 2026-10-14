@@ -206,6 +206,7 @@ fn snapshot(state: &GossipState) -> Option<GossipMenu> {
                 title: title.clone(),
                 level: *level,
                 active: row_is_active(*icon),
+                ..Default::default()
             })
             .collect(),
         options: state
