@@ -4,6 +4,9 @@ use crate::wire::{capacity_hint, read_u32_le, read_u8, Vector3d};
 
 use super::movement::ObjectType;
 
+mod layout;
+pub use layout::{Field, FieldLayout, FieldSpan};
+
 // Descriptor field indices for build 5875.
 const FIELD_OBJECT_TYPE: u16 = 2;
 const FIELD_OBJECT_SCALE_X: u16 = 4;
@@ -346,27 +349,13 @@ pub struct CorpseLook {
 pub struct ObjectFields {
     /// The wire's block mask, verbatim (`index = word * 32 + bit`).
     present: Vec<u32>,
+    layout: FieldLayout,
     /// Always `present.len() * 32` long; an unset slot holds 0 but must be read through the mask.
     values: Vec<u32>,
-    /// The created type's [`descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
+    /// The created type's [`FieldLayout::descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
     descriptor_end: u16,
     /// Profile-native resource delta; never aliases Vanilla descriptor offsets.
     wrath_powers: Option<[(Option<u32>, Option<u32>); 7]>,
-}
-
-/// An object's descriptor length in dwords: the `*_END` of its innermost block, so a Player spans
-/// OBJECT, UNIT and PLAYER.
-fn descriptor_len(object_type: ObjectType) -> u16 {
-    match object_type {
-        ObjectType::Object => 6,         // OBJECT_END = 0x6
-        ObjectType::Item => 48,          // ITEM_END = OBJECT_END + 0x2A
-        ObjectType::Container => 122,    // CONTAINER_END = ITEM_END + 0x4A
-        ObjectType::Unit => 188,         // UNIT_END = OBJECT_END + 0xB6
-        ObjectType::Player => 1282,      // PLAYER_END = UNIT_END + 0x446
-        ObjectType::GameObject => 26,    // GAMEOBJECT_END = OBJECT_END + 0x14
-        ObjectType::DynamicObject => 16, // DYNAMICOBJECT_END = OBJECT_END + 0xA
-        ObjectType::Corpse => 38,        // CORPSE_END = OBJECT_END + 0x20
-    }
 }
 
 /// Mask words of the widest descriptor, `PLAYER_END`; no 1.12 object needs more.
@@ -391,13 +380,14 @@ impl ObjectFields {
             present,
             values,
             descriptor_end: 0,
+            layout: FieldLayout::Vanilla5875,
             wrath_powers: None,
         })
     }
 
     /// Marks a CREATE snapshot of `object_type`, so absent fields in its descriptor read 0.
     pub fn into_created(mut self, object_type: ObjectType) -> Self {
-        self.descriptor_end = descriptor_len(object_type);
+        self.descriptor_end = self.layout.descriptor_len(object_type);
         self
     }
 
@@ -408,6 +398,44 @@ impl ObjectFields {
             this.insert(index, value);
         }
         this
+    }
+
+    /// A fixture/decoded native descriptor. The layout is set before CREATE zero-fill.
+    pub fn from_native_pairs(layout: FieldLayout, pairs: &[(u16, u32)]) -> Self {
+        Self {
+            layout,
+            ..Self::from_pairs(pairs)
+        }
+    }
+
+    pub fn layout(&self) -> FieldLayout {
+        self.layout
+    }
+
+    #[inline]
+    pub fn get(&self, field: Field) -> Option<u32> {
+        self.get_at(field, 0)
+    }
+
+    #[inline]
+    pub fn get_at(&self, field: Field, offset: u16) -> Option<u32> {
+        let span = self.layout.resolve(field)?;
+        (offset < span.width).then(|| self.get_u32(span.index + offset))?
+    }
+
+    pub fn get_float(&self, field: Field, offset: u16) -> Option<f32> {
+        self.get_at(field, offset).map(f32::from_bits)
+    }
+
+    pub fn get_field_guid(&self, field: Field, offset: u16) -> Option<u64> {
+        let hi = offset.checked_add(1)?;
+        Some(u64::from(self.get_at(field, offset)?) | (u64::from(self.get_at(field, hi)?) << 32))
+    }
+
+    pub fn field_present(&self, field: Field, offset: u16) -> bool {
+        self.layout
+            .resolve(field)
+            .is_some_and(|span| offset < span.width && self.contains(span.index + offset))
     }
 
     /// Attach raw build-12340 powers; `None` entries leave a sparse delta unchanged.
@@ -608,6 +636,10 @@ impl ObjectFields {
     /// order, as the client's `CMirrorHandler` pass does (`0x465330`): a resend of the same value
     /// reports nothing, and an absent old value reads 0. A first create is seeded, never merged.
     pub fn merge_diff(&mut self, delta: ObjectFields, mut changed: impl FnMut(u16, u32, u32)) {
+        assert_eq!(
+            self.layout, delta.layout,
+            "cannot merge different descriptor layouts"
+        );
         if delta.descriptor_end != 0 {
             let words = self.present.len().max(delta.present.len());
             for word in 0..words {
@@ -669,7 +701,7 @@ impl ObjectFields {
         (self.descriptor_end != 0)
             .then(|| {
                 ALL.into_iter()
-                    .find(|&t| descriptor_len(t) == self.descriptor_end)
+                    .find(|&t| self.layout.descriptor_len(t) == self.descriptor_end)
             })
             .flatten()
     }

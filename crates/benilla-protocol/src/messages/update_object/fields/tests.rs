@@ -920,3 +920,51 @@ fn base_mana_and_base_health_read_fields_162_and_163() {
     assert_eq!(unit.unit_base_mana(), Some(1500));
     assert_eq!(unit.unit_base_health(), Some(1689));
 }
+
+#[test]
+fn native_semantic_reads_keep_sparse_and_create_zero_fill() {
+    for (layout, health) in [
+        (FieldLayout::Vanilla5875, 22),
+        (FieldLayout::Wrath12340, 24),
+    ] {
+        let mut fields = ObjectFields::from_native_pairs(layout, &[(health, 73)]);
+        assert_eq!(fields.get(Field::UnitHealth), Some(73));
+        assert_eq!(fields.get(Field::UnitMaxHealth), None);
+        assert!(!fields.field_present(Field::UnitMaxHealth, 0));
+        fields = fields.into_created(ObjectType::Unit);
+        assert_eq!(fields.get(Field::UnitMaxHealth), Some(0));
+        fields.merge(ObjectFields::from_native_pairs(layout, &[(health, 0)]));
+        assert_eq!(fields.get(Field::UnitHealth), Some(0));
+        assert_eq!(fields.layout(), layout);
+        assert_eq!(fields.created_as(), Some(ObjectType::Unit));
+    }
+    let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[])
+        .into_created(ObjectType::Unit);
+    assert_eq!(fields.get(Field::UnitAura), None);
+    assert_eq!(fields.get_at(Field::UnitPower, 7), None);
+}
+
+#[test]
+fn semantic_guid_and_float_reads_obey_span_boundaries() {
+    let fields = ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[(0, 7), (1, 3), (4, 1.5f32.to_bits())],
+    );
+    assert_eq!(
+        fields.get_field_guid(Field::ObjectGuid, 0),
+        Some((3u64 << 32) | 7)
+    );
+    assert_eq!(fields.get_field_guid(Field::ObjectGuid, 1), None);
+    assert_eq!(fields.get_float(Field::ObjectScaleX, 0), Some(1.5));
+    assert_eq!(fields.get_float(Field::ObjectScaleX, 1), None);
+}
+
+#[test]
+#[should_panic(expected = "cannot merge different descriptor layouts")]
+fn merge_rejects_cross_layout_delta() {
+    let mut fields = ObjectFields::from_pairs(&[]);
+    fields.merge(ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[],
+    ));
+}
