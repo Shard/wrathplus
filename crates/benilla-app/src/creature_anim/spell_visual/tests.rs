@@ -1799,3 +1799,151 @@ fn vanilla_state_aura_watch_uses_real_id_and_flag_spans_only() {
         .resolve(Field::UnitAuraFlags)
         .is_none());
 }
+
+#[test]
+fn morph_descriptor_watch_is_only_the_real_vanilla_aura_id_span() {
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    let layout = FieldLayout::Vanilla5875;
+    for (field, expected) in [(Field::UnitAura, true), (Field::UnitAuraFlags, false)] {
+        let span = layout.resolve(field).unwrap();
+        for offset in [0, span.width - 1] {
+            let (field, offset) = layout
+                .field_at(ObjectType::Unit, span.index + offset)
+                .unwrap();
+            let mut edge = crate::net::FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::Unit,
+                layout,
+                field,
+                offset,
+                old: 123,
+                new: 456,
+            };
+            assert_eq!(super::is_descriptor_morph_edge(&edge), expected);
+            edge.kind = ObjectType::Player;
+            assert_eq!(super::is_descriptor_morph_edge(&edge), expected);
+            edge.kind = ObjectType::Corpse;
+            assert!(!super::is_descriptor_morph_edge(&edge));
+        }
+    }
+    assert!(FieldLayout::Wrath12340.resolve(Field::UnitAura).is_none());
+}
+
+#[test]
+fn packet_morph_latch_seeds_first_sight_then_arms_swaps_and_removals_only() {
+    use benilla_protocol::{
+        messages::{Field, FieldLayout, ObjectFields, ObjectType},
+        wrath_auras::NativeAura,
+    };
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_message::<crate::net::FieldChanged>();
+    app.init_resource::<super::MorphLatch>();
+    app.init_resource::<crate::net::wrath_auras::PacketAuras>();
+    app.insert_resource(crate::ui_action::Spells {
+        catalog: SpellCatalog::from_displays(HashMap::from([
+            (
+                123,
+                SpellDisplay {
+                    effects: [6, 0, 0],
+                    effect_apply_aura: [36, 0, 0],
+                    ..Default::default()
+                },
+            ),
+            (
+                456,
+                SpellDisplay {
+                    effects: [6, 0, 0],
+                    effect_apply_aura: [56, 0, 0],
+                    ..Default::default()
+                },
+            ),
+        ])),
+        ..crate::ui_action::Spells::empty_for_tests()
+    });
+    app.add_systems(Update, super::arm_morph_latch);
+    let layout = FieldLayout::Wrath12340;
+    let health = layout.resolve(Field::UnitHealth).unwrap().index;
+    let object_type = layout.resolve(Field::ObjectType).unwrap().index;
+    let unit = app
+        .world_mut()
+        .spawn((
+            crate::net::Guid(42),
+            crate::net::ObjectStore(
+                ObjectFields::from_native_pairs(layout, &[(object_type, 0x09), (health, 1)])
+                    .into_created(ObjectType::Unit),
+            ),
+        ))
+        .id();
+    assert!(app
+        .world()
+        .get::<crate::net::ObjectStore>(unit)
+        .unwrap()
+        .is_unit());
+    for spell in [123, 456] {
+        assert!(super::is_morph_spell(
+            app.world().resource::<crate::ui_action::Spells>(),
+            spell
+        ));
+    }
+    let aura = |slot, spell_id, stacks| crate::net::wrath_auras::StampedAura {
+        aura: NativeAura {
+            slot,
+            spell_id,
+            stacks,
+            flags: 0x10,
+            level: 80,
+            caster_guid: None,
+            max_duration_ms: None,
+            remaining_ms: None,
+        },
+        received_at: 0.0,
+    };
+    let snapshot = |app: &mut App, auras| {
+        app.world_mut()
+            .resource_mut::<crate::net::wrath_auras::PacketAuras>()
+            .by_guid
+            .insert(42, auras);
+        app.update();
+    };
+    snapshot(&mut app, vec![aura(63, 123, 1)]);
+    assert!(
+        app.world().resource::<super::MorphLatch>().0.is_empty(),
+        "first sight is not an edge"
+    );
+    snapshot(&mut app, vec![aura(63, 123, 2)]);
+    assert!(
+        app.world().resource::<super::MorphLatch>().0.is_empty(),
+        "stack changes are not morph edges"
+    );
+    snapshot(&mut app, vec![aura(0, 456, 1)]);
+    assert_eq!(
+        app.world_mut()
+            .resource_mut::<super::MorphLatch>()
+            .0
+            .remove(&unit),
+        Some(456),
+        "entered form wins across slots"
+    );
+    snapshot(&mut app, vec![]);
+    assert_eq!(
+        app.world_mut()
+            .resource_mut::<super::MorphLatch>()
+            .0
+            .remove(&unit),
+        Some(456),
+        "authoritative empty arms shift-out"
+    );
+    snapshot(&mut app, vec![aura(63, 123, 1)]);
+    assert_eq!(
+        app.world().resource::<super::MorphLatch>().0.get(&unit),
+        Some(&123)
+    );
+    app.world_mut().despawn(unit);
+    app.update();
+    assert!(
+        app.world().resource::<super::MorphLatch>().0.is_empty(),
+        "despawn clears pending replay"
+    );
+}
