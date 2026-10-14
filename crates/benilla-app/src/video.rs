@@ -750,6 +750,9 @@ mod tests {
     /// hands `gxResolution` back rather than the monitor's size.
     #[test]
     fn the_fullscreen_round_trip_keeps_the_monitor_out_of_the_windowed_size() {
+        use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _path = EnvGuard::unset("WOW_SHOWCASE_PATH");
         let mut app = App::new();
         app.insert_resource(VideoConfig {
             vsync: true,
@@ -830,6 +833,9 @@ mod tests {
     /// windowed size back.
     #[test]
     fn the_restart_rebuild_applies_a_committed_maximize() {
+        use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _path = EnvGuard::unset("WOW_SHOWCASE_PATH");
         let mut app = App::new();
         app.insert_resource(VideoConfig {
             vsync: true,

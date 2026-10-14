@@ -16,3 +16,16 @@ at = 12.0
 eye = [-8900, -80, 115]
 target = [-8915, -130, 105]
 fov_degrees = 60.0
+
+# Installed Wrath enUS plain Deer/Rabbit display rows passed frozen-Stand coverage,
+# model/skin/external-animation reads and BLP decoding. Z is ADT-interpolated ground,
+# not guessed camera height; WMO/tree clearance and visibility remain manager live checks.
+[[actors]]
+display_id = 347 # Deer
+position = [-8940.0, -170.0, 80.48242]
+yaw = 0.6
+
+[[actors]]
+display_id = 328 # Rabbit
+position = [-8936.0, -163.0, 80.8403]
+yaw = -0.4
