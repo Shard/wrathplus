@@ -18,7 +18,8 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::ObjectDestroyed, on_threat)
         .net_handler(K::ObjectsRemoved, on_threat)
         .net_handler(K::Connected, on_threat)
-        .add_systems(Update, feed.after(crate::ui_script::UiInput));
+        // Packet handlers run in WorldStage::Net; publish before this frame's Lua tick.
+        .add_systems(Update, feed.in_set(crate::ui_script::UiFeed));
 }
 
 impl ThreatStore {
@@ -86,7 +87,8 @@ fn on_threat(In(event): In<SessionEvent>, mut state: ResMut<ThreatStore>) {
 fn feed(
     state: Res<ThreatStore>,
     index: Res<super::GuidIndex>,
-    units: Query<(&Transform, &super::ObjectStore)>,
+    // Threat distances belong to streamed units, never off-screen portrait cameras.
+    units: Query<(&Transform, &super::ObjectStore), Without<crate::portrait::BoothCam>>,
     script: Option<NonSendMut<UiScript>>,
 ) {
     let Some(mut script) = script else { return };
@@ -116,6 +118,46 @@ fn feed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn threat_feed_publishes_packets_before_the_same_frames_lua_tick() {
+        use crate::ui_script::{UiFeed, UiInput};
+        use benilla_ui::script::{ScriptDialect, UnitGuids};
+        use benilla_world::schedule::WorldStage;
+
+        fn packet(world: &mut World) {
+            super::super::handlers::dispatch(
+                world,
+                vec![SessionEvent::ThreatUpdate {
+                    guid: 2,
+                    highest: Some(1),
+                    threats: vec![(1, 100)],
+                }],
+            );
+        }
+        fn tick(script: NonSend<UiScript>) {
+            assert_eq!(
+                script
+                    .eval::<u8>("return UnitThreatSituation('player','target')")
+                    .unwrap(),
+                3
+            );
+        }
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.set_unit_guids(&UnitGuids {
+            player: 1,
+            target: 2,
+            ..Default::default()
+        });
+        let mut app = App::new();
+        app.insert_non_send_resource(script)
+            .init_resource::<super::super::GuidIndex>()
+            .configure_sets(Update, (WorldStage::Net, UiFeed, UiInput).chain());
+        register(&mut app);
+        app.add_systems(Update, packet.in_set(WorldStage::Net))
+            .add_systems(Update, tick.in_set(UiInput));
+        app.update();
+    }
+
     #[test]
     fn incremental_updates_and_removal_keep_server_aggro_target() {
         let mut state = ThreatStore::default();
