@@ -263,6 +263,24 @@ pub enum FogPolicy {
 }
 
 /// One render batch: self-contained geometry and its material.
+/// Resolved second stage of a native Wrath combined material. Both stages draw in one pass.
+#[derive(Clone, Debug)]
+pub struct ModelTextureStage {
+    pub texture: Option<String>,
+    pub skin_slot: Option<u8>,
+    pub wrap_x: bool,
+    pub wrap_y: bool,
+    /// Texture-coordinate lookup value: 0 UV0, 1 UV1, >2 sphere map.
+    pub coord: u16,
+    /// Native stage combiner, before environment-coordinate bits.
+    pub op: u16,
+    pub first_opaque: bool,
+    pub uv_anim: Option<UvAnim>,
+    pub uv_seq: Option<SeqLoops<[f32; 2]>>,
+    pub uv_rot_seq: Option<SeqLoops<[f32; 4]>>,
+    pub uv_scale_seq: Option<SeqLoops<[f32; 2]>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderSubmesh {
     pub positions: Vec<[f32; 3]>,
@@ -270,6 +288,8 @@ pub struct RenderSubmesh {
     /// canopies harshly. Empty if the source has none, and the renderer computes them.
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
+    pub uvs2: Vec<[f32; 2]>,
+    pub stage2: Option<ModelTextureStage>,
     pub indices: Vec<u32>,
     /// `None` for an unfilled creature skin slot ([`Self::skin_slot`]).
     pub texture: Option<String>,
@@ -383,6 +403,8 @@ impl Default for RenderSubmesh {
             positions: Vec::new(),
             normals: Vec::new(),
             uvs: Vec::new(),
+            uvs2: Vec::new(),
+            stage2: None,
             indices: Vec::new(),
             texture: None,
             skin_slot: None,

@@ -189,7 +189,7 @@ fn mark_mat_anim(
     part: &EntityPart,
     owned: &Option<OwnedMaterials>,
 ) {
-    if part.uv_loops().animates() || owned.is_some() {
+    if part.uv_loops().animates() || part.stage2_animates() || owned.is_some() {
         child.insert(benilla_world::doodad_anim::AnimMatPart);
     }
 }

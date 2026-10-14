@@ -242,6 +242,13 @@ mod tests {
                 defs,
             );
         }
+        let mut uv0_only = mesh_defs();
+        uv0_only.retain(|def| !matches!(def,ShaderDefVal::Bool(name,_) if name == "VERTEX_UVS_B"));
+        check(
+            "wow_model_uv0_only.wgsl",
+            include_str!("../../benilla-assets/src/shaders/wow_model.wgsl"),
+            uv0_only,
+        );
         // Shadow-only production IO, including the emulated unclipped-depth backend.
         for rig in [false, true] {
             for emulated in [false, true] {

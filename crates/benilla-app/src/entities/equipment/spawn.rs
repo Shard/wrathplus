@@ -475,7 +475,7 @@ fn spawn_slot(
                     benilla_world::doodad_anim::MatAnim::resting(anim.clone())
                 });
             }
-            if part.uv_loops().animates() {
+            if part.uv_loops().animates() || part.stage2_animates() {
                 child.insert(benilla_world::doodad_anim::AnimMatPart);
             }
             effective.dress(&mut child, &set);
@@ -533,7 +533,7 @@ fn spawn_slot(
         if let Some(anim) = &part.alpha_anim {
             card.insert(benilla_world::doodad_anim::MatAnim::resting(anim.clone()));
         }
-        if part.uv_loops().animates() {
+        if part.uv_loops().animates() || part.stage2_animates() {
             card.insert(benilla_world::doodad_anim::AnimMatPart);
         }
         effective.dress(&mut card, &set);

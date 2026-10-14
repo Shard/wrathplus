@@ -83,8 +83,7 @@ pub fn wrath_render_animation_dependencies(
 ///
 /// `dir` resolves hardcoded and creature-variation texture names and `skins` supplies the optional
 /// `Monster1/2/3` basenames, matching [`super::parse_m2_render_submeshes`]. Multi-texture
-/// batches currently use stage zero, matching the vanilla adapter. This admits the geometry but
-/// omits the additional material layers until the renderer supports native texture combiners.
+/// batches preserve both stages in one draw, including their native combiner and coordinate lookup.
 pub fn parse_wrath_render_model(
     m2_bytes: &[u8],
     skin_bytes: &[u8],
@@ -531,8 +530,13 @@ fn render_submeshes(
 
     let mut out = Vec::new();
     for batch in skin.batches() {
-        // Temporary stage-zero fallback, as in the vanilla adapter. Do not split combined
-        // shaders into independent passes: their equations are not generally equivalent.
+        // Combined stages remain one batch; a separate blended pass is not equivalent.
+        if batch.texture_count > 2 {
+            bail!(
+                "unsupported Wrath batch with {} texture stages",
+                batch.texture_count
+            );
+        }
         let section = skin
             .submeshes()
             .get(usize::from(batch.skin_section_index))
@@ -627,6 +631,106 @@ fn render_submeshes(
             false,
             material.flags.bits() & 0x01 != 0,
         );
+        if batch.texture_count == 2 {
+            let combos = wrath.texture_combiner_combos();
+            let op = if combos.is_empty() {
+                0
+            } else {
+                *combos
+                    .get(usize::from(batch.shader_id) + 1)
+                    .context("Wrath second-stage combiner override missing")?
+            };
+            if op > 7 {
+                bail!("unsupported Wrath stage combiner {op}");
+            }
+            if !combos.is_empty() {
+                let first_op = if material.blend_mode.bits() == 0 {
+                    0
+                } else {
+                    *combos
+                        .get(usize::from(batch.shader_id))
+                        .context("Wrath first-stage combiner override missing")?
+                };
+                if first_op > 1 {
+                    bail!("unsupported Wrath first-stage combiner {first_op}");
+                }
+            }
+            if model
+                .texture_unit_lookup
+                .get(usize::from(batch.texture_coord_combo_index) + 1)
+                == Some(&2)
+            {
+                bail!("unsupported Wrath second-stage coordinate lookup 2");
+            }
+            let texture2 = model
+                .raw_data
+                .texture_lookup_table
+                .get(usize::from(batch.texture_combo_index) + 1)
+                .and_then(|&i| model.textures.get(usize::from(i)))
+                .context("Wrath second-stage texture lookup missing")?;
+            let (path, skin, char2, icon2) = resolve_texture(texture2, dir, skins);
+            if char2.is_some() || icon2 {
+                bail!("unsupported Wrath second-stage character/icon texture");
+            }
+            submesh.stage2 = Some(super::ModelTextureStage {
+                texture: path,
+                skin_slot: skin,
+                wrap_x: texture2.wrap_x,
+                wrap_y: texture2.wrap_y,
+                coord: *model
+                    .texture_unit_lookup
+                    .get(usize::from(batch.texture_coord_combo_index) + 1)
+                    .context("Wrath second-stage coordinate lookup missing")?,
+                op,
+                first_opaque: material.blend_mode.bits() == 0,
+                uv_anim: tex_anim::bake_uv_anim(
+                    model,
+                    batch.texture_transform_combo_index.saturating_add(1),
+                    seq0,
+                ),
+                uv_seq: tex_anim::bake_uv_seqs(
+                    model,
+                    batch.texture_transform_combo_index.saturating_add(1),
+                    &seq_slots,
+                ),
+                uv_rot_seq: tex_anim::bake_uv_rot_seqs(
+                    model,
+                    batch.texture_transform_combo_index.saturating_add(1),
+                    &seq_slots,
+                ),
+                uv_scale_seq: tex_anim::bake_uv_scale_seqs(
+                    model,
+                    batch.texture_transform_combo_index.saturating_add(1),
+                    &seq_slots,
+                ),
+            });
+        }
+        let second_coord = submesh.stage2.as_ref().map_or(1, |s| s.coord);
+        submesh.uvs2 = remapped_globals
+            .iter()
+            .map(|&i| {
+                let v = &model.vertices[i as usize];
+                let uv = if second_coord == 1 {
+                    v.tex_coords2
+                } else {
+                    v.tex_coords
+                };
+                [uv.x, uv.y]
+            })
+            .collect();
+        if model
+            .texture_unit_lookup
+            .get(usize::from(batch.texture_coord_combo_index))
+            == Some(&1)
+        {
+            submesh.uvs = remapped_globals
+                .iter()
+                .map(|&i| {
+                    let uv = model.vertices[i as usize].tex_coords2;
+                    [uv.x, uv.y]
+                })
+                .collect();
+        }
         submesh.skin_slot = skin_slot;
         submesh.char_slot = char_slot;
         submesh.icon_slot = icon_slot;
@@ -987,21 +1091,21 @@ mod tests {
         bytes.resize(offset + 3 * 176, 0);
         put_array(&mut bytes, 0x120, 3, offset as u32);
         for i in 0..3 {
-            put_u32(&mut bytes, offset+i*176, i as u32);
-            put_u16(&mut bytes, offset+i*176+154, u16::MAX);
+            put_u32(&mut bytes, offset + i * 176, i as u32);
+            put_u16(&mut bytes, offset + i * 176 + 154, u16::MAX);
         }
         // Second ribbon authors a cubic appearance track.
-        put_u16(&mut bytes, offset+176+36, 2);
+        put_u16(&mut bytes, offset + 176 + 36, 2);
         // Third authors animated visibility on a global clock.
-        let track = offset+2*176+152;
-        put_u16(&mut bytes, track+2, 0);
+        let track = offset + 2 * 176 + 152;
+        put_u16(&mut bytes, track + 2, 0);
         let descriptors = bytes.len();
-        bytes.resize(descriptors+26, 0);
-        put_array(&mut bytes, track+4, 1, descriptors as u32);
-        put_array(&mut bytes, track+12, 1, (descriptors+8) as u32);
-        put_array(&mut bytes, descriptors, 2, (descriptors+16) as u32);
-        put_array(&mut bytes, descriptors+8, 2, (descriptors+24) as u32);
-        bytes[descriptors+25] = 1;
+        bytes.resize(descriptors + 26, 0);
+        put_array(&mut bytes, track + 4, 1, descriptors as u32);
+        put_array(&mut bytes, track + 12, 1, (descriptors + 8) as u32);
+        put_array(&mut bytes, descriptors, 2, (descriptors + 16) as u32);
+        put_array(&mut bytes, descriptors + 8, 2, (descriptors + 24) as u32);
+        bytes[descriptors + 25] = 1;
         let model = parse_wrath_render_model(&bytes, &synthetic_skin(0), "", &[]).unwrap();
         assert!(!model.submeshes.is_empty(), "geometry survives");
         assert_eq!(model.ribbons.len(), 1, "only unsupported ribbons dropped");
@@ -1106,7 +1210,7 @@ mod tests {
     }
 
     #[test]
-    fn adapter_multitexture_fallback_keeps_stage_zero_and_geometry() {
+    fn adapter_multitexture_retains_both_stages_and_geometry() {
         let mut bytes = synthetic_m2();
         let textures = bytes.len() as u32;
         for texture_type in [11_u32, 12] {
@@ -1119,15 +1223,22 @@ mod tests {
         bytes.extend_from_slice(&0_u16.to_le_bytes());
         bytes.extend_from_slice(&1_u16.to_le_bytes());
         put_array(&mut bytes, 0x80, 2, lookup);
+        let coord = bytes.len() as u32;
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        put_array(&mut bytes, 0x88, 2, coord);
         let skins = [Some("Base".into()), Some("Layer".into())];
         let model = parse_wrath_render_model(&bytes, &synthetic_skin(2), "Synthetic", &skins)
-            .expect("stage-zero fallback admits multi-texture geometry");
+            .expect("combined stages admit geometry");
         assert_eq!(model.submeshes.len(), 1);
         assert_eq!(
             model.submeshes[0].texture.as_deref(),
             Some("Synthetic\\Base.blp")
         );
         assert_eq!(model.submeshes[0].skin_slot, Some(0));
+        let stage = model.submeshes[0].stage2.as_ref().unwrap();
+        assert_eq!(stage.texture.as_deref(), Some("Synthetic\\Layer.blp"));
+        assert_eq!((stage.skin_slot, stage.coord, stage.op), (Some(1), 1, 0));
         assert_eq!(model.submeshes[0].indices, [0, 1, 2]);
         assert_eq!(model.submeshes[0].positions.len(), 3);
     }

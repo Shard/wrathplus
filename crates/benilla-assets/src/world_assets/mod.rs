@@ -564,6 +564,10 @@ impl WorldAssets {
                 tint: Vec4::ONE, // clutter has no animated M2Color tint and is not a WMO batch
                 sidn: Vec4::ZERO, // clutter is never SIDN/WINDOW glass (WMO-only)
                 anim_slots: Vec4::ZERO,
+                stage2_anim: Vec4::ZERO,
+                stage2_seed: Vec4::ZERO,
+                stage2: Vec4::ZERO,
+                texture2: None,
                 light_buf: self.shared_light.clone(),
             },
         });
