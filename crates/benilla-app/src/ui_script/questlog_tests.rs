@@ -41,6 +41,12 @@ thread_local! {
                 link: Some(HAMMER_LINK.into()),
             }],
             reward_spell: None,
+            reward_xp: 0,
+            reward_honor: 0,
+            reward_talents: 0,
+            reward_arena_points: 0,
+            reward_title: None,
+            completion_text: None,
         };
 }
 
@@ -828,6 +834,7 @@ fn reward_rows_follow_the_refs_two_per_row_layout() {
             ..Default::default()
         }],
         reward_spell: None,
+        ..Default::default()
     };
     for e in &mut state.entries {
         e.detail = Some(detail.clone());
@@ -945,6 +952,7 @@ fn overflowing_entry() -> QuestLogState {
                     ..Default::default()
                 }],
                 reward_spell: None,
+                ..Default::default()
             }),
             ..Default::default()
         }],
