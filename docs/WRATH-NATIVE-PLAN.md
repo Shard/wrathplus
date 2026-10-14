@@ -170,3 +170,12 @@ new or changed code meets the bar in full, the baseline may only shrink, and the
 burns it down crate by crate (split oversized files by responsibility, cover or simplify
 high-CRAP functions). CRAP on the whole Bevy app is too slow per commit, so the hook scores only
 the crates a commit touches; a full run is a manual gate before merges.
+
+### Split the app crate
+`benilla-app` is ~393k lines (over half the codebase): game systems, net handling, UI glue and
+capture/probe tooling in one crate. As part of the tidy-up (after the rename, so the new crates are
+born `wrathplus-*`), split it along its existing seams into a few crates with one-way dependencies,
+e.g. net/session handling, gameplay systems (spells, combat, units, items, quests), UI script
+glue (`ui_*`), and dev/capture tooling (`capture/`, `addon_harness/`, probes), keeping the binary
+crate thin. Goals: faster incremental builds and per-crate gates, clearer ownership. Plan the
+seams from the actual module dependency graph first; no behaviour change, suites green per step.
