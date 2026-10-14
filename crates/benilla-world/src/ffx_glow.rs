@@ -26,8 +26,10 @@ use bevy::render::sync_world::MainEntity;
 use bevy::render::texture::{CachedTexture, TextureCache};
 use bevy::render::view::{ExtractedView, ViewDepthTexture, ViewTarget};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::shader::ShaderDefVal;
 
 use crate::final_pass::FinalPassTarget;
+use crate::modern_lighting::ModernLighting;
 use crate::view::WorldCamera;
 
 /// A camera running the FFXGlow pass: the frame's one gamma→linear decode, plus the glow add.
@@ -359,6 +361,9 @@ struct FfxGlowPipelines {
     downsample: CachedRenderPipelineId,
     gauss_h: CachedRenderPipelineId,
     gauss_v: CachedRenderPipelineId,
+    plus_downsample: CachedRenderPipelineId,
+    plus_gauss_h: CachedRenderPipelineId,
+    plus_gauss_v: CachedRenderPipelineId,
     combine: FfxCombinePipeline,
 }
 
@@ -367,6 +372,7 @@ struct FfxGlowPipelines {
 struct FfxCombinePipeline {
     layout: BindGroupLayoutDescriptor,
     shader: Handle<Shader>,
+    plus_shader: Handle<Shader>,
     fullscreen: FullscreenShader,
 }
 
@@ -381,6 +387,7 @@ struct FfxCombineKey {
     inside_2d: Option<u32>,
     /// The underwater entry (`fs_combine_wave`), its own pipeline so a dry frame pays nothing.
     wave: bool,
+    plus: [bool; 3],
 }
 
 impl SpecializedRenderPipeline for FfxCombinePipeline {
@@ -392,17 +399,32 @@ impl SpecializedRenderPipeline for FfxCombinePipeline {
         } else {
             ("ffx_glow_combine", "fs_combine")
         };
+        let modern = key.plus.iter().any(|enabled| *enabled);
+        let mut defs: Vec<ShaderDefVal> = if key.gamma_out {
+            vec!["GAMMA_OUT".into()]
+        } else {
+            vec![]
+        };
+        for (enabled, name) in
+            key.plus
+                .into_iter()
+                .zip(["PLUS_BLOOM", "PLUS_TONE_MAPPING", "PLUS_COLOUR_GRADING"])
+        {
+            if enabled {
+                defs.push(name.into());
+            }
+        }
         RenderPipelineDescriptor {
             label: Some(label.into()),
             layout: vec![self.layout.clone()],
             vertex: self.fullscreen.to_vertex_state(),
             fragment: Some(FragmentState {
-                shader: self.shader.clone(),
-                shader_defs: if key.gamma_out {
-                    vec!["GAMMA_OUT".into()]
+                shader: if modern {
+                    self.plus_shader.clone()
                 } else {
-                    vec![]
+                    self.shader.clone()
                 },
+                shader_defs: defs,
                 entry_point: Some(entry.into()),
                 targets: vec![Some(ColorTargetState {
                     format: key.format,
@@ -530,9 +552,20 @@ fn init_pipelines(
         pipeline_cache.queue_render_pipeline(pipeline("ffx_glow_h", &layout_filter, "fs_gauss_h"));
     let gauss_v =
         pipeline_cache.queue_render_pipeline(pipeline("ffx_glow_v", &layout_filter, "fs_gauss_v"));
+    let plus_shader: Handle<Shader> =
+        asset_server.load("embedded://benilla_world/shaders/ffx_plus.wgsl");
+    let plus_filter = |label, entry| {
+        let mut descriptor = pipeline(label, &layout_filter, entry);
+        descriptor.fragment.as_mut().unwrap().shader = plus_shader.clone();
+        pipeline_cache.queue_render_pipeline(descriptor)
+    };
+    let plus_downsample = plus_filter("ffx_plus_downsample", "fs_downsample");
+    let plus_gauss_h = plus_filter("ffx_plus_h", "fs_gauss_h");
+    let plus_gauss_v = plus_filter("ffx_plus_v", "fs_gauss_v");
     let combine = FfxCombinePipeline {
         layout: layout_combine.clone(),
         shader,
+        plus_shader,
         fullscreen: fullscreen_shader.clone(),
     };
     commands.insert_resource(FfxGlowPipelines {
@@ -544,6 +577,9 @@ fn init_pipelines(
         downsample,
         gauss_h,
         gauss_v,
+        plus_downsample,
+        plus_gauss_h,
+        plus_gauss_v,
         combine,
     });
 }
@@ -564,6 +600,7 @@ struct FfxGlowTextures {
     /// This view's combine pair, keyed on its camera's output (`FinalPassTarget::format`), or
     /// `None` while an [`FfxBackdrop`] claims the view.
     combine: Option<FfxCombinePair>,
+    plus: [bool; 3],
 }
 
 /// One view's dry and underwater combine pipelines, and the key they were specialised on.
@@ -574,6 +611,7 @@ struct FfxCombinePair {
     format: TextureFormat,
     /// 1 for the combine's own pass, the view's count for a backdrop draw inside a 2D main pass.
     samples: u32,
+    plus: [bool; 3],
 }
 
 impl FfxCombinePair {
@@ -597,13 +635,18 @@ struct CombineSpecializer<'w> {
 
 impl CombineSpecializer<'_> {
     /// The combine's own pass: colour only, the decode at its exit.
-    fn pair(&mut self, format: TextureFormat) -> FfxCombinePair {
-        self.pair_for(format, false, None)
+    fn pair(&mut self, format: TextureFormat, plus: [bool; 3]) -> FfxCombinePair {
+        self.pair_for(format, false, None, plus)
     }
 
     /// The backdrop draw inside a 2D main pass: the gamma-lane exit, the depth attachment declared.
-    fn backdrop_pair(&mut self, format: TextureFormat, samples: u32) -> FfxCombinePair {
-        self.pair_for(format, true, Some(samples))
+    fn backdrop_pair(
+        &mut self,
+        format: TextureFormat,
+        samples: u32,
+        plus: [bool; 3],
+    ) -> FfxCombinePair {
+        self.pair_for(format, true, Some(samples), plus)
     }
 
     fn pair_for(
@@ -611,6 +654,7 @@ impl CombineSpecializer<'_> {
         format: TextureFormat,
         gamma_out: bool,
         inside_2d: Option<u32>,
+        plus: [bool; 3],
     ) -> FfxCombinePair {
         let mut key = |wave| {
             self.cache.specialize(
@@ -621,6 +665,7 @@ impl CombineSpecializer<'_> {
                     wave,
                     gamma_out,
                     inside_2d,
+                    plus,
                 },
             )
         };
@@ -629,6 +674,7 @@ impl CombineSpecializer<'_> {
             wave: key(true),
             format,
             samples: inside_2d.unwrap_or(1),
+            plus,
         }
     }
 }
@@ -639,24 +685,27 @@ fn prepare_textures(
     render_device: Res<RenderDevice>,
     mut specializer: CombineSpecializer,
     claims: Res<FfxBackdropClaims>,
+    modern: Res<ModernLighting>,
     views: Query<
         (
             Entity,
             &ExtractedCamera,
             &ViewTarget,
             Option<&FfxGlowTextures>,
+            Option<&WorldCamera>,
         ),
         With<FfxGlow>,
     >,
 ) {
-    for (entity, camera, target, existing) in &views {
+    for (entity, camera, target, existing, world_camera) in &views {
         let Some(vp) = camera.physical_viewport_size else {
             continue;
         };
         // Specialised even while claimed: a claim is per frame and drops whenever the UI camera
         // loses its `ViewTarget` (a minimize, a surface reconfigure), when a cold pair would
         // compile synchronously on the render thread. Keeping it warm is a cached lookup.
-        let own = specializer.pair(FinalPassTarget::format(&camera.output_mode, target));
+        let plus = postprocess_key(*modern, world_camera.is_some());
+        let own = specializer.pair(FinalPassTarget::format(&camera.output_mode, target), plus);
         let combine = (!claims.0.contains(&entity)).then_some(own);
         // ¼ of the viewport, each side at least 8, as the reference sizes its targets (`0x6cdb40`).
         let mut tex = |label: &'static str, w: u32, h: u32| {
@@ -682,7 +731,8 @@ fn prepare_textures(
         let quarter_b = tex("ffx_glow_quarter_b", vp.x / 4, vp.y / 4);
         // The cache returns the same textures while the viewport holds: rebuild only on a change.
         if existing.is_some_and(|t| {
-            t.quarter_a.texture.id() == quarter_a.texture.id()
+            t.plus == plus
+                && t.quarter_a.texture.id() == quarter_a.texture.id()
                 && t.quarter_b.texture.id() == quarter_b.texture.id()
                 && t.combine.as_ref().map(|c| c.format) == combine.as_ref().map(|c| c.format)
         }) {
@@ -715,6 +765,7 @@ fn prepare_textures(
             gauss_h_bind,
             gauss_v_bind,
             combine,
+            plus,
         });
     }
 }
@@ -829,10 +880,20 @@ impl ViewNode for FfxGlowNode {
         let pipelines = world.resource::<FfxGlowPipelines>();
         let pipeline_cache = world.resource::<PipelineCache>();
         let (uniform, wave) = live_combine(world, glow);
+        let plus = textures.plus.iter().any(|enabled| *enabled);
+        let filters = if plus {
+            [
+                pipelines.plus_downsample,
+                pipelines.plus_gauss_h,
+                pipelines.plus_gauss_v,
+            ]
+        } else {
+            [pipelines.downsample, pipelines.gauss_h, pipelines.gauss_v]
+        };
         let (Some(downsample), Some(gauss_h), Some(gauss_v)) = (
-            pipeline_cache.get_render_pipeline(pipelines.downsample),
-            pipeline_cache.get_render_pipeline(pipelines.gauss_h),
-            pipeline_cache.get_render_pipeline(pipelines.gauss_v),
+            pipeline_cache.get_render_pipeline(filters[0]),
+            pipeline_cache.get_render_pipeline(filters[1]),
+            pipeline_cache.get_render_pipeline(filters[2]),
         ) else {
             return Ok(()); // pipelines still compiling: the frame draws un-glowed
         };
@@ -856,7 +917,7 @@ impl ViewNode for FfxGlowNode {
 
         // With both zero the filter passes are skipped, and the stale, finite ¼-res target is
         // multiplied by zero.
-        if blur_read(&uniform) {
+        if blur_read(&uniform) || textures.plus[0] {
             let layout_filter = pipeline_cache.get_bind_group_layout(&pipelines.layout_filter);
             // Per frame: a `Write` view flips its main texture per call ([`FfxGlowTextures`]).
             let down_bind = render_device.create_bind_group(
@@ -994,8 +1055,12 @@ struct FfxBackdropView {
 }
 
 /// The world views bevy prepared a `ViewTarget` for this frame, by main-world entity.
-type RenderedWorldViews<'w, 's> =
-    Query<'w, 's, (Entity, &'static MainEntity), (With<FfxGlow>, Changed<ViewTarget>)>;
+type RenderedWorldViews<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static MainEntity, Option<&'static WorldCamera>),
+    (With<FfxGlow>, Changed<ViewTarget>),
+>;
 
 /// Resolves every [`FfxBackdrop`]: the claims, and each claiming view's pair and source. A source
 /// must have rendered this frame (`Changed<ViewTarget>`, re-inserted by `prepare_view_targets` for
@@ -1012,22 +1077,26 @@ fn prepare_backdrops(
         Option<&FfxBackdropView>,
     )>,
     rendered: RenderedWorldViews,
+    modern: Res<ModernLighting>,
 ) {
     claims.0.clear();
     for (entity, backdrop, target, msaa, existing) in &views {
-        let source = backdrop.source.and_then(|main| {
-            rendered
-                .iter()
-                .find(|(_, m)| m.id() == main)
-                .map(|(view, _)| view)
-        });
+        let matched = backdrop
+            .source
+            .and_then(|main| rendered.iter().find(|(_, m, _)| m.id() == main));
+        let source = matched.map(|(view, _, _)| view);
+        let plus = postprocess_key(
+            *modern,
+            matched.is_some_and(|(_, _, camera)| camera.is_some()),
+        );
         claims.0.extend(source);
         let (format, samples) = (target.main_texture_format(), msaa.samples());
-        let fresh =
-            |view: &FfxBackdropView| view.pair.format == format && view.pair.samples == samples;
+        let fresh = |view: &FfxBackdropView| {
+            view.pair.format == format && view.pair.samples == samples && view.pair.plus == plus
+        };
         let pair = match existing {
             Some(view) if fresh(view) => view.pair,
-            _ => specializer.backdrop_pair(format, samples),
+            _ => specializer.backdrop_pair(format, samples, plus),
         };
         if existing.is_some_and(|view| view.source == source && fresh(view)) {
             continue;
@@ -1163,6 +1232,7 @@ impl Plugin for FfxGlowPlugin {
             .init_resource::<FfxHazeMix>()
             .init_resource::<FfxWave>()
             .init_resource::<FfxSwitches>()
+            .init_resource::<ModernLighting>()
             .add_plugins((
                 ExtractComponentPlugin::<FfxGlow>::default(),
                 ExtractComponentPlugin::<FfxBackdrop>::default(),
@@ -1172,6 +1242,8 @@ impl Plugin for FfxGlowPlugin {
                 ExtractResourcePlugin::<FfxHazeMix>::default(),
                 ExtractResourcePlugin::<FfxWave>::default(),
                 ExtractResourcePlugin::<FfxSwitches>::default(),
+                ExtractResourcePlugin::<ModernLighting>::default(),
+                ExtractComponentPlugin::<WorldCamera>::default(),
             ))
             .add_systems(
                 Update,
@@ -1619,5 +1691,41 @@ mod tests {
         let alpha_byte = |glow: f32| ((glow * 255.0 + 512.0).to_bits() >> 14) & 0xff;
         assert_eq!(alpha_byte(GlueFfx::SelectGhost.glow()), 38);
         assert_eq!(alpha_byte(GlueFfx::SelectLiving.glow()), 102);
+    }
+}
+
+/// Explicit view identity, never inferred from player state (WOW_NO_FFX clears that state).
+fn postprocess_key(policy: ModernLighting, world: bool) -> [bool; 3] {
+    if world {
+        [policy.bloom, policy.tone_mapping, policy.colour_grading]
+    } else {
+        [false; 3]
+    }
+}
+
+#[cfg(test)]
+mod modern_tests {
+    use super::*;
+
+    #[test]
+    fn all_plus_switches_are_independent_and_booths_never_opt_in() {
+        for bits in 0..8 {
+            let policy = ModernLighting {
+                fog: true,
+                bloom: bits & 1 != 0,
+                tone_mapping: bits & 2 != 0,
+                colour_grading: bits & 4 != 0,
+            };
+            assert_eq!(postprocess_key(policy, false), [false; 3]);
+            assert_eq!(
+                postprocess_key(policy, true),
+                [policy.bloom, policy.tone_mapping, policy.colour_grading]
+            );
+        }
+    }
+
+    #[test]
+    fn classic_postprocess_key_is_the_original_variant() {
+        assert_eq!(postprocess_key(ModernLighting::default(), true), [false; 3]);
     }
 }

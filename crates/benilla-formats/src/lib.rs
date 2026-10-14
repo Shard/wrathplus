@@ -154,6 +154,13 @@ mod anim_data;
 pub use anim_data::{load_anim_data_catalog, AnimDataCatalog, AnimEntry};
 mod quest_headers;
 pub use quest_headers::{load_quest_header_names, QuestHeaderNames};
+mod game_tables;
+pub use game_tables::{load_wrath_game_tables, GameTable, WrathGameTables, GAME_TABLE_MAX_LEVEL};
+mod quest_rewards;
+pub use quest_rewards::{
+    load_char_titles, load_quest_xp, load_team_contribution_points, CharTitle, CharTitlesCatalog,
+    QuestXpCatalog, TeamContributionPointsCatalog,
+};
 mod quest_info;
 pub use quest_info::{load_quest_tag_names, QuestTagNames};
 mod area_trigger;

@@ -56,6 +56,7 @@ fn wire(spell: u32, state: u8, cost: u32, req_level: u8, req_skill: u32) -> Trai
         cost,
         can_learn_primary_prof: false,
         is_primary_prof_first_rank: false,
+        wrath_point_cost: None,
         req_level,
         req_skill,
         req_skill_value: if req_skill != 0 { 100 } else { 0 },
