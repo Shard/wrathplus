@@ -29,6 +29,8 @@ pub struct QuestLogEntryView {
     /// `QuestInfo.dbc`; the stock row adds the parentheses (`QuestLogFrame.lua:195`). `None`,
     /// never `Some("")`, for no tag: the row branches on its presence (`QuestLogFrame.lua:194`).
     pub tag: Option<String>,
+    pub suggested_group: u32,
+    pub daily: bool,
     /// A zone header row, which the app builds from each quest's `ZoneOrSort`.
     pub is_header: bool,
     /// `GetQuestLogPushable`: the template's `QUEST_FLAGS_SHARABLE` (`0x8`), false until the
@@ -79,6 +81,12 @@ pub struct QuestLogDetail {
     pub required_money: u32,
     /// `GetQuestLogRewardMoney`, in copper.
     pub reward_money: u32,
+    pub reward_xp: u32,
+    pub reward_honor: u32,
+    pub reward_talents: u32,
+    pub reward_arena_points: u32,
+    pub reward_title: Option<String>,
+    pub completion_text: Option<String>,
     /// `GetNumQuestLogChoices`/`GetQuestLogChoiceInfo`.
     pub choices: Vec<QuestItemView>,
     /// `GetNumQuestLogRewards`/`GetQuestLogRewardInfo`.
@@ -248,12 +256,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     Value::String(lua.create_string(&e.title)?),
                     Value::Integer(i64::from(e.level)),
                     tag,
-                    Value::Integer(0),
+                    Value::Integer(i64::from(e.suggested_group)),
                     flag(e.is_header),
                     flag(e.is_header && e.collapsed),
                     complete,
-                    Value::Nil,
-                    if e.is_header { Value::Nil } else { Value::Integer(i64::from(e.quest_id)) },
+                    flag(e.daily),
+                    if e.is_header {
+                        Value::Nil
+                    } else {
+                        Value::Integer(i64::from(e.quest_id))
+                    },
                 ]));
             }
             Ok(MultiValue::from_vec(vec![
@@ -361,6 +373,57 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_detail_count(lua, "GetQuestLogRequiredMoney", |d| {
         i64::from(d.required_money)
     })?;
+
+    if lua.app_data_ref::<Model>().expect("model app_data").dialect
+        == super::ScriptDialect::Wrath12340
+    {
+        install_detail_count(lua, "GetQuestLogRewardXP", |d| i64::from(d.reward_xp))?;
+        install_detail_count(lua, "GetQuestLogRewardHonor", |d| i64::from(d.reward_honor))?;
+        install_detail_count(lua, "GetQuestLogRewardTalents", |d| {
+            i64::from(d.reward_talents)
+        })?;
+        install_detail_count(lua, "GetQuestLogRewardArenaPoints", |d| {
+            i64::from(d.reward_arena_points)
+        })?;
+        g.set(
+            "GetQuestLogGroupNum",
+            lua.create_function(|lua, ()| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(selected_quest(&model).map_or(0, |e| e.suggested_group))
+            })?,
+        )?;
+        for (name, title) in [
+            ("GetQuestLogRewardTitle", true),
+            ("GetQuestLogCompletionText", false),
+        ] {
+            g.set(
+                name,
+                lua.create_function(move |lua, ()| {
+                    let model = lua.app_data_ref::<Model>().expect("model app_data");
+                    Ok(model.selected_quest_detail().and_then(|d| {
+                        if title {
+                            d.reward_title.clone()
+                        } else {
+                            d.completion_text.clone()
+                        }
+                    }))
+                })?,
+            )?;
+        }
+        g.set(
+            "GetQuestWatchIndex",
+            lua.create_function(|lua, index: u32| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(watch_id_at(&model, index).and_then(|id| {
+                    model
+                        .quest_log_watched
+                        .iter()
+                        .position(|w| *w == id)
+                        .map(|i| i + 1)
+                }))
+            })?,
+        )?;
+    }
 
     // `name, texture, numItems, quality, isUsable`, the giver panels' shape, as one stock routine
     // lays out both (`QuestFrameItems_Update`, `QuestFrame.lua:311`): five values, `isUsable` 1 or
@@ -768,6 +831,7 @@ mod tests {
                             link: Some("|cffffffff|Hitem:2024:0:0:0|h[Militia Hammer]|h|r".into()),
                         }],
                         reward_spell: None,
+                        ..Default::default()
                     }),
                     ..Default::default()
                 },
@@ -791,11 +855,54 @@ mod tests {
                         choices: vec![],
                         rewards: vec![],
                         reward_spell: None,
+                        ..Default::default()
                     }),
                     ..Default::default()
                 },
             ],
         }
+    }
+
+    #[test]
+    fn wrath_log_rewards_and_watch_index_follow_selection() {
+        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        s.set_quest_log(QuestLogState {
+            entries: vec![QuestLogEntryView {
+                quest_id: 55,
+                title: "Daily".into(),
+                suggested_group: 3,
+                daily: true,
+                detail: Some(QuestLogDetail {
+                    reward_xp: 1200,
+                    reward_honor: 20,
+                    reward_talents: 1,
+                    reward_arena_points: 5,
+                    reward_title: Some("Hero".into()),
+                    completion_text: Some("Done".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        s.eval::<()>("SelectQuestLogEntry(1); AddQuestWatch(1)")
+            .unwrap();
+        assert_eq!(s.eval::<(u32, u32, u32, u32, u32, String, String, u32)>(
+            "return GetQuestLogGroupNum(), GetQuestLogRewardXP(), GetQuestLogRewardHonor(), GetQuestLogRewardTalents(), GetQuestLogRewardArenaPoints(), GetQuestLogRewardTitle(), GetQuestLogCompletionText(), GetQuestWatchIndex(1)"
+        ).unwrap(), (3, 1200, 20, 1, 5, "Hero".into(), "Done".into(), 1));
+        assert_eq!(
+            s.eval::<(u32, bool, u32)>(
+                "local _,_,_,g,_,_,_,d,id = GetQuestLogTitle(1); return g,d,id"
+            )
+            .unwrap(),
+            (3, true, 55)
+        );
+        s.eval::<()>("SelectQuestLogEntry(0); RemoveQuestWatch(1)")
+            .unwrap();
+        assert_eq!(s.eval::<u32>("return GetQuestLogRewardXP()").unwrap(), 0);
+        assert!(s
+            .eval::<bool>("return GetQuestLogRewardTitle() == nil and GetQuestWatchIndex(1) == nil")
+            .unwrap());
     }
 
     #[test]
