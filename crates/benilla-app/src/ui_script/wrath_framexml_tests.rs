@@ -81,14 +81,16 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
         .unwrap_or_else(|e| e.to_string());
     eprintln!("Blizzard_CombatLog loads: {combat_log}");
     script.set_screen_size(1600.0, 1000.0);
-    for i in 1..=24 {
+    // Enumerate the installed registry, not a guessed upper bound that raises API errors.
+    let addon_count = script.eval::<usize>("return GetNumAddOns()").unwrap();
+    for i in 1..=addon_count {
         let started = std::time::Instant::now();
         let row = script
             .eval::<String>(&format!(
                 "local name = GetAddOnInfo({i}) local ok, why = LoadAddOn({i}) \
                  return tostring(name) .. ' ' .. tostring(ok) .. ' ' .. tostring(why)"
             ))
-            .unwrap_or_else(|e| e.to_string());
+            .unwrap_or_else(|e| panic!("installed addon {i}/{addon_count} load raised: {e}"));
         eprintln!("LOAD {:>8.1} ms  {row}", started.elapsed().as_secs_f64() * 1000.0);
     }
     missing_surface(&script);
