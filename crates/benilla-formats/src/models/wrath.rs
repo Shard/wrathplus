@@ -80,9 +80,9 @@ pub fn wrath_render_animation_dependencies(
 /// Parse and adapt an `MD20` v264 model together with one external `SKIN` profile.
 ///
 /// `dir` resolves hardcoded and creature-variation texture names and `skins` supplies the optional
-/// `Monster1/2/3` basenames, matching [`super::parse_m2_render_submeshes`]. The function rejects
-/// multi-texture batches because [`RenderSubmesh`] has one texture/material stage; accepting one
-/// would render a materially different result.
+/// `Monster1/2/3` basenames, matching [`super::parse_m2_render_submeshes`]. Multi-texture
+/// batches currently use stage zero, matching the vanilla adapter. This admits the geometry but
+/// omits the additional material layers until the renderer supports native texture combiners.
 pub fn parse_wrath_render_model(
     m2_bytes: &[u8],
     skin_bytes: &[u8],
@@ -527,13 +527,8 @@ fn render_submeshes(
 
     let mut out = Vec::new();
     for batch in skin.batches() {
-        if batch.texture_count > 1 {
-            bail!(
-                "Wrath skin batch on section {} uses {} texture stages; RenderSubmesh supports one",
-                batch.skin_section_index,
-                batch.texture_count
-            );
-        }
+        // Temporary stage-zero fallback, as in the vanilla adapter. Do not split combined
+        // shaders into independent passes: their equations are not generally equivalent.
         let section = skin
             .submeshes()
             .get(usize::from(batch.skin_section_index))
@@ -547,7 +542,7 @@ fn render_submeshes(
             .texture_lookup_table
             .get(usize::from(batch.texture_combo_index))
             .and_then(|&index| model.textures.get(usize::from(index)));
-        if batch.texture_count == 1 && texture_record.is_none() {
+        if batch.texture_count != 0 && texture_record.is_none() {
             bail!("Wrath batch texture lookup is missing");
         }
         let (texture, skin_slot, char_slot, icon_slot) = texture_record
@@ -1080,11 +1075,41 @@ mod tests {
     }
 
     #[test]
-    fn adapter_rejects_material_semantics_the_renderer_cannot_represent() {
+    fn adapter_multitexture_fallback_keeps_stage_zero_and_geometry() {
+        let mut bytes = synthetic_m2();
+        let textures = bytes.len() as u32;
+        for texture_type in [11_u32, 12] {
+            let mut record = vec![0; 16];
+            put_u32(&mut record, 0, texture_type);
+            bytes.extend(record);
+        }
+        put_array(&mut bytes, 0x50, 2, textures);
+        let lookup = bytes.len() as u32;
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        put_array(&mut bytes, 0x80, 2, lookup);
+        let skins = [Some("Base".into()), Some("Layer".into())];
+        let model = parse_wrath_render_model(&bytes, &synthetic_skin(2), "Synthetic", &skins)
+            .expect("stage-zero fallback admits multi-texture geometry");
+        assert_eq!(model.submeshes.len(), 1);
+        assert_eq!(
+            model.submeshes[0].texture.as_deref(),
+            Some("Synthetic\\Base.blp")
+        );
+        assert_eq!(model.submeshes[0].skin_slot, Some(0));
+        assert_eq!(model.submeshes[0].indices, [0, 1, 2]);
+        assert_eq!(model.submeshes[0].positions.len(), 3);
+    }
+
+    #[test]
+    fn adapter_multitexture_fallback_still_rejects_missing_stage_zero() {
         let error = parse_wrath_render_model(&synthetic_m2(), &synthetic_skin(2), "", &[])
             .err()
-            .expect("two texture stages must fail");
-        assert!(error.to_string().contains("supports one"), "{error:#}");
+            .expect("a missing base texture is malformed, not a stage-zero fallback");
+        assert!(
+            error.to_string().contains("texture lookup is missing"),
+            "{error:#}"
+        );
     }
 
     #[test]
