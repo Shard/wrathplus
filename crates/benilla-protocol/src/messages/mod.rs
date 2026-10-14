@@ -250,10 +250,10 @@ pub use tutorial::{tutorial_flag, TutorialFlags};
 pub use update_object::field;
 pub use update_object::{
     power_display_scale, quest_slot_state, CorpseLook, CreateSpline, Field, FieldLayout, FieldSpan,
-    MovementBlock, MoverState, Object, ObjectFields, ObjectType, OwnerFallback, PlayerSkillSlot,
-    QuestLogSlot, UnitAuraSlot, AURA_FLAG_CANCELABLE, AURA_FLAG_EFF_INDEX_MASK,
-    FIELD_PLAYER_SKILL_INFO_1_1, PLAYER_EXPLORED_ZONES_SLOTS, PLAYER_QUEST_LOG_SLOTS,
-    PLAYER_SKILL_SLOTS, UNIT_AURA_POSITIVE_SLOTS, UNIT_AURA_SLOTS,
+    MovementBlock, MoverState, NpcFlags, NpcService, Object, ObjectFields, ObjectType,
+    OwnerFallback, PlayerSkillSlot, QuestLogSlot, UnitAuraSlot, AURA_FLAG_CANCELABLE,
+    AURA_FLAG_EFF_INDEX_MASK, FIELD_PLAYER_SKILL_INFO_1_1, PLAYER_EXPLORED_ZONES_SLOTS,
+    PLAYER_QUEST_LOG_SLOTS, PLAYER_SKILL_SLOTS, UNIT_AURA_POSITIVE_SLOTS, UNIT_AURA_SLOTS,
 };
 pub use vendor::{
     buy_item, buy_item_in_slot, buy_result, buyback_item, list_inventory, repair_item, sell_item,
