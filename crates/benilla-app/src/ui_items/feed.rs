@@ -232,6 +232,7 @@ fn template_view(
             .filter(|s| s.spell_id != 0)
             .filter_map(|s| spell_text(s.spell_id).map(|n| (s.trigger, s.spell_id, n)))
             .collect(),
+        item_spells: Vec::new(),
         charges: charges_count(&t.spells),
         description: t.description.clone(),
         page_text: t.page_text,
