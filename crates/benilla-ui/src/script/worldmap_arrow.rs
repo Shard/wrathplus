@@ -131,6 +131,14 @@ fn create(lua: &Lua, which: Arrow, parent: Value) -> mlua::Result<()> {
         lua,
         ("Model".to_string(), None, Some(Value::Table(t)), None),
     )?;
+    if matches!(which, Arrow::World)
+        && lua.app_data_ref::<Model>().expect("model app_data").dialect == super::ScriptDialect::Wrath12340
+    {
+        // CWorldMap::CreatePlayerArrowFrame also exposes its effect child to Wrath
+        // WorldMapFrame_OnLoad (WorldMapFrame.lua:108) before alpha/level are set.
+        create_frame(lua, ("Frame".to_string(), Some(Value::String(lua.create_string("PlayerArrowEffectFrame")?)),
+            Some(Value::Table(wrapper.clone())), None))?;
+    }
     let id = decode_id(&wrapper)?;
     let scale = {
         let model = lua.app_data_ref::<Model>().expect("model app_data");

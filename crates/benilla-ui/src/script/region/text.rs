@@ -14,7 +14,16 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         "SetText",
         lua.create_function(|lua, (this, text): (Table, Option<mlua::Value>)| {
             // `text_arg`, since a Lua string is bytes and a slice of one need not be valid UTF-8.
-            let text = crate::script::binding_abi::text_arg(lua, text)?;
+            // Wrath's lua_tostring gate treats non-string/non-number values as no text.
+            // Stock ChatConfig initially passes a dynamic-label function, then writes its
+            // evaluated result during UpdateCheckboxes; the sink must not invoke it.
+            let wrath = lua.app_data_ref::<Model>().expect("model").dialect
+                == crate::script::ScriptDialect::Wrath12340;
+            let text = if wrath && !matches!(text, None | Some(Value::Nil | Value::String(_) | Value::Integer(_) | Value::Number(_))) {
+                None
+            } else {
+                crate::script::binding_abi::text_arg(lua, text)?
+            };
             let rh = region_handle_of(lua, &this)?;
             let mut model = lua.app_data_mut::<Model>().expect("model");
             let data = model.region_data.entry(rh).or_default();
