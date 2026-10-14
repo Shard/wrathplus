@@ -207,6 +207,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            opcode if crate::wrath_bind::handles(opcode) => {
+                Ok(match crate::wrath_bind::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_misc::handles(opcode) => {
                 Ok(match crate::wrath_misc::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

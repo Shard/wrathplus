@@ -1022,6 +1022,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SellItem { .. }
         | ClientCommand::BuybackItem { .. }
         | ClientCommand::RepairItem { .. }
+        | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
         | ClientCommand::TrainerBuySpell { .. } => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
@@ -1413,6 +1414,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::RepairItem { vendor, item_guid } => {
             (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid))
         }
+        ClientCommand::BinderActivate { binder } => (
+            benilla_protocol::wrath_bind::CMSG_BINDER_ACTIVATE,
+            benilla_protocol::wrath_bind::encode_activate(binder),
+        ),
         ClientCommand::TrainerList { trainer } => (t::CMSG_TRAINER_LIST, t::encode_list(trainer)),
         ClientCommand::TrainerBuySpell { trainer, spell_id } => {
             (t::CMSG_TRAINER_BUY_SPELL, t::encode_buy(trainer, spell_id))
@@ -2747,3 +2752,7 @@ mod tests {
         assert!(authority.with_movement_send(|| ()).is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "wrath/bind_tests.rs"]
+mod bind_tests;
