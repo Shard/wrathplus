@@ -889,6 +889,34 @@ fn drain_quest_log_abandons(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout, PLAYER_QUEST_LOG_SLOTS};
+
+    /// Quest-id dword in a Vanilla fixture; production reads packed slots through ObjectFields.
+    fn quest_id_field(slot: u8) -> u16 {
+        let span = FieldLayout::Vanilla5875
+            .resolve(Field::PlayerQuestLog)
+            .unwrap();
+        let stride = span.width / u16::from(PLAYER_QUEST_LOG_SLOTS);
+        assert!(slot < PLAYER_QUEST_LOG_SLOTS);
+        span.index + stride * u16::from(slot)
+    }
+
+    #[test]
+    fn semantic_quest_fixture_preserves_empty_slots_and_last_slot() {
+        let fields = ObjectFields::from_pairs(&[
+            (quest_id_field(0), 783),
+            (quest_id_field(PLAYER_QUEST_LOG_SLOTS - 1), 7),
+        ]);
+        assert_eq!(fields.player_quest_log(0).unwrap().quest_id, 783);
+        assert!(fields.player_quest_log(1).is_none());
+        assert_eq!(
+            fields
+                .player_quest_log(PLAYER_QUEST_LOG_SLOTS - 1)
+                .unwrap()
+                .quest_id,
+            7
+        );
+    }
 
     // ── order_groups ────────────────────────────────────────────────────────────────────────────
 
@@ -1427,8 +1455,6 @@ mod tests {
     /// row in `0xbb71c0` again, so a fold while the popup is up cannot retarget the abandon.
     #[test]
     fn a_fold_between_mark_and_confirm_does_not_retarget_the_abandon() {
-        use benilla_protocol::messages::field::FIELD_PLAYER_QUEST_LOG_1_1;
-
         // Z1 = zone 0 ("Missing header!", forced first) holding A; Z2 = zone 7 holding B and C.
         // Entries: [Z1, A, Z2, B, C]; B is row 4.
         const A: u32 = 101;
@@ -1454,7 +1480,7 @@ mod tests {
             t.zone_or_sort = zos;
             t.title = title.into();
             log.insert_template(t);
-            pairs.push((FIELD_PLAYER_QUEST_LOG_1_1 + 3 * u16::from(slot), id));
+            pairs.push((quest_id_field(slot), id));
         }
         app.insert_resource(log);
         app.world_mut().spawn((
@@ -1524,7 +1550,6 @@ mod tests {
     #[test]
     fn a_quest_entering_the_log_queues_its_accept_line() {
         use crate::ui_quest::{QuestLine, QuestLines};
-        use benilla_protocol::messages::field::FIELD_PLAYER_QUEST_LOG_1_1;
 
         let (tx, _rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
@@ -1540,7 +1565,7 @@ mod tests {
         let player = app
             .world_mut()
             .spawn((
-                ObjectStore(ObjectFields::from_pairs(&[(FIELD_PLAYER_QUEST_LOG_1_1, 7)])),
+                ObjectStore(ObjectFields::from_pairs(&[(quest_id_field(0), 7)])),
                 Guid(0x2A),
                 SelfPlayer,
             ))
@@ -1557,8 +1582,8 @@ mod tests {
         app.world_mut()
             .entity_mut(player)
             .insert(ObjectStore(ObjectFields::from_pairs(&[
-                (FIELD_PLAYER_QUEST_LOG_1_1, 7),
-                (FIELD_PLAYER_QUEST_LOG_1_1 + 3, 783),
+                (quest_id_field(0), 7),
+                (quest_id_field(1), 783),
             ])));
         app.update();
         assert_eq!(
