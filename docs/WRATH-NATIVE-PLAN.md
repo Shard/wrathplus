@@ -148,7 +148,9 @@ Build the seams now; features land on them later.
 - **Disk**: the disk is shared and filled up on 2026-10-14 (build folders grew to 225 GB). Keep
   your `CARGO_TARGET_DIR` under 40 GB: check with `du -sh` before a heavy build (free space: `df -h /System/Volumes/Data`; `df /` is the sealed system volume and always looks full), and when it is over,
   `rm -rf <your target>/debug/incremental` (or the whole folder) first. Never delete another
-  worker's folder.
+  worker's folder. Since the second squeeze the same evening (30 GB free, about 85 GB of it in
+  incremental caches), every build sets `CARGO_INCREMENTAL=0`; delete your `debug/incremental`
+  whenever none of your jobs is running.
 - **Unit tests** must run with `env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA=` (otherwise
   vanilla tests read Wrath data). Installed-data tests: `WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS
   WOW_DATA=/Users/shannon/Games/Client/Data`.
