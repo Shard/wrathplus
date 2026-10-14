@@ -145,7 +145,10 @@ fn dialog_status(status: u8) -> u32 {
         3 | 6 => d::REWARD_REP,
         5 => d::INCOMPLETE,
         7 | 8 => d::AVAILABLE,
-        9 | 10 => d::REWARD2,
+        // AC QuestDef.h: REWARD2 (9) has no minimap dot; REWARD (10) does.
+        // Both retain the yellow world question mark, but only Vanilla REWARD2 dots.
+        9 => d::REWARD_OLD,
+        10 => d::REWARD2,
         _ => d::NONE,
     }
 }
@@ -347,6 +350,10 @@ fn request_items(r: &mut Cursor<&[u8]>) -> io::Result<QuestRequestItems> {
     let required_money = u32_le(r)?;
     let required_items = item_block(r)?;
     let is_complete = u32_le(r)? != 0;
+    // AC GossipDef.cpp writes three required status words after completion.
+    for _ in 0..3 {
+        let _status = u32_le(r)?;
+    }
     Ok(QuestRequestItems {
         wrath: Some(native),
         npc,
@@ -560,6 +567,32 @@ mod tests {
     }
 
     #[test]
+    fn reward_statuses_keep_native_minimap_dot_distinction() {
+        use crate::messages::dialog_status as d;
+        let guid = 0xf130_0001_2300_4567u64;
+        for (native, expected) in [(9, d::REWARD_OLD), (10, d::REWARD2)] {
+            let mut single = guid.to_le_bytes().to_vec();
+            single.push(native);
+            assert!(
+                matches!(decode(SMSG_QUESTGIVER_STATUS, &single).unwrap()[0],
+                SessionEvent::QuestGiverStatus { npc, status } if npc == guid && status == expected)
+            );
+            let mut multiple = 1u32.to_le_bytes().to_vec();
+            multiple.extend(&single);
+            assert!(
+                matches!(decode(SMSG_QUESTGIVER_STATUS_MULTIPLE, &multiple).unwrap()[0],
+                SessionEvent::QuestGiverStatus { npc, status } if npc == guid && status == expected)
+            );
+            for cut in 0..single.len() {
+                assert!(decode(SMSG_QUESTGIVER_STATUS, &single[..cut]).is_err());
+            }
+            for cut in 0..multiple.len() {
+                assert!(decode(SMSG_QUESTGIVER_STATUS_MULTIPLE, &multiple[..cut]).is_err());
+            }
+        }
+    }
+
+    #[test]
     fn giver_markers_map_onto_the_1_12_statuses() {
         use crate::messages::dialog_status as d;
         let mut b = 2u32.to_le_bytes().to_vec();
@@ -703,7 +736,7 @@ mod tests {
         cstr(&mut b, "quest");
         cstr(&mut b, "progress");
         b.extend(
-            [0u32, 4, 1, 0x1000, 5, 100, 0, 3]
+            [0u32, 4, 1, 0x1000, 5, 100, 0, 3, 4, 8, 16]
                 .iter()
                 .flat_map(|v| v.to_le_bytes()),
         );
@@ -716,5 +749,8 @@ mod tests {
         assert_eq!(p.required_money, 100);
         let q = p.wrath.as_ref().unwrap();
         assert_eq!((q.flags, q.suggested_players), (0x1000, 5));
+        for cut in 0..b.len() {
+            assert!(decode(SMSG_QUESTGIVER_REQUEST_ITEMS, &b[..cut]).is_err());
+        }
     }
 }

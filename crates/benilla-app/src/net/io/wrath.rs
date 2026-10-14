@@ -1908,6 +1908,23 @@ mod tests {
     }
 
     #[test]
+    fn quest_turn_in_and_abandon_route_exact_native_commands() {
+        let npc = 0xf130_0001_2300_4567u64;
+        let quest = 783u32;
+        let guid_quest = [npc.to_le_bytes().as_slice(), quest.to_le_bytes().as_slice()].concat();
+        for (command, opcode, body) in [
+            (ClientCommand::QuestgiverComplete { npc, quest }, 0x18a, guid_quest.clone()),
+            (ClientCommand::QuestgiverRequestReward { npc, quest }, 0x18c, guid_quest.clone()),
+            (ClientCommand::QuestgiverChooseReward { npc, quest, choice: 2 }, 0x18e,
+                [guid_quest.as_slice(), 2u32.to_le_bytes().as_slice()].concat()),
+            (ClientCommand::QuestlogRemove { slot: 24 }, 0x194, vec![24]),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeSession);
+            assert_eq!(session_packet(command), (opcode, body));
+        }
+    }
+
+    #[test]
     fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
         for command in [
             ClientCommand::QueryNextMailTime,

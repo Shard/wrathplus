@@ -220,6 +220,7 @@ struct MinimapAssets {
     rim_arrows: blips::RimArrowArt,
     /// The unit-blip atlas (`Interface\Minimap\ObjectIcons`, five 32-px dot cells).
     object_icons: Option<Handle<Image>>,
+    object_icon_atlas: blips::ObjectIconAtlas,
     /// `SpellShapeshiftForm.dbc`, the tracking dots' creature-type override (a cat-form druid is a
     /// Beast).
     forms: Option<HashMap<u32, benilla_formats::ShapeshiftForm>>,
@@ -260,6 +261,11 @@ fn setup_minimap(
             }
             let object_icons =
                 assets.sprite_texture("Interface\\Minimap\\ObjectIcons", &mut images);
+            let object_icon_atlas = object_icons
+                .as_ref()
+                .and_then(|h| images.get(h))
+                .map(|image| blips::ObjectIconAtlas::from_size(image.width(), image.height()))
+                .unwrap_or_default();
             if mask.is_none() {
                 warn!("minimap: MinimapMask.blp missing — the map will draw square");
             }
@@ -280,6 +286,7 @@ fn setup_minimap(
                 poi,
                 rim_arrows,
                 object_icons,
+                object_icon_atlas,
                 forms,
             });
         }
@@ -715,6 +722,7 @@ fn emit_minimap(
                 locks.as_deref().map(|l| &l.0),
                 assets.forms.as_ref(),
                 icons,
+                assets.object_icon_atlas,
                 player_indoors,
                 |feet| world.indoors_at(feet),
                 &mut quads,
@@ -726,6 +734,7 @@ fn emit_minimap(
                 &tracked,
                 self_guid,
                 icons,
+                assets.object_icon_atlas,
                 player_indoors,
                 // A dot NPC's own containment, the faces-only down-ray the entity lights use.
                 |feet| world.indoors_at(feet),
@@ -733,7 +742,15 @@ fn emit_minimap(
                 &mut hover,
             );
             // The in-range party dots (blue cell 4, 1.3×), last.
-            blips::emit_party_dots(ctx, &group, &guids, &unit_pos, icons, &mut quads);
+            blips::emit_party_dots(
+                ctx,
+                &group,
+                &guids,
+                &unit_pos,
+                icons,
+                assets.object_icon_atlas,
+                &mut quads,
+            );
         }
     }
     *blip_hover = hover;
