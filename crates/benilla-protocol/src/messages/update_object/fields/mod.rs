@@ -197,9 +197,9 @@ pub const PLAYER_QUEST_LOG_SLOTS: u8 = 20;
 pub struct QuestLogSlot {
     /// 0 for an empty slot.
     pub quest_id: u32,
-    /// Four 6-bit kill, cast and interact counters at bits `6i..6i+6` (`Player.h:1100-1106`); the
+    /// Four objective counters: Vanilla packs 6 bits each; Wrath packs four u16s. The
     /// client counts item objectives from the bags itself.
-    pub counters: [u8; 4],
+    pub counters: [u16; 4],
     /// Byte 3 of the counter field (`Player.h:1107`): a [`quest_slot_state`] bit, 0 in progress.
     pub state: u8,
     /// The absolute end time of a timed quest, else 0.

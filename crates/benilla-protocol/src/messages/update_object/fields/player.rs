@@ -193,23 +193,55 @@ impl ObjectFields {
     /// `PLAYER_QUEST_LOG_<slot+1>_*`: one quest-log slot, `quest_id == 0` when the server cleared
     /// it; the count-state and timer are written with the id (`Player.h:1094-1099`).
     pub fn player_quest_log(&self, slot: u8) -> Option<QuestLogSlot> {
-        if slot >= PLAYER_QUEST_LOG_SLOTS {
+        let stride = match self.layout {
+            FieldLayout::Vanilla5875 => 3,
+            FieldLayout::Wrath12340 => 5,
+        };
+        if slot >= self.player_quest_log_slots() {
             return None;
         }
-        let base = FIELD_PLAYER_QUEST_LOG_1_1 + 3 * u16::from(slot);
-        let quest_id = self.get_u32(base)?;
-        let count_state = self.get_u32(base + 1).unwrap_or(0);
-        let timer = self.get_u32(base + 2).unwrap_or(0);
-        let mut counters = [0u8; 4];
-        for (i, c) in counters.iter_mut().enumerate() {
-            *c = ((count_state >> (6 * i)) & 0x3F) as u8;
-        }
+        let base = stride * u16::from(slot);
+        let quest_id = self.get_at(Field::PlayerQuestLog, base)?;
+        let state_word = self.get_at(Field::PlayerQuestLog, base + 1).unwrap_or(0);
+        let mut counters = [0u16; 4];
+        let (state, timer) = match self.layout {
+            FieldLayout::Vanilla5875 => {
+                for (i, c) in counters.iter_mut().enumerate() {
+                    *c = ((state_word >> (6 * i)) & 0x3f) as u16;
+                }
+                (
+                    (state_word >> 24) as u8,
+                    self.get_at(Field::PlayerQuestLog, base + 2).unwrap_or(0),
+                )
+            }
+            FieldLayout::Wrath12340 => {
+                // AzerothCore UpdateFields.h: id, state, two TWO_SHORT words, timer.
+                for (i, c) in counters.iter_mut().enumerate() {
+                    let word = self
+                        .get_at(Field::PlayerQuestLog, base + 2 + (i / 2) as u16)
+                        .unwrap_or(0);
+                    *c = (word >> (16 * (i % 2))) as u16;
+                }
+                (
+                    state_word as u8,
+                    self.get_at(Field::PlayerQuestLog, base + 4).unwrap_or(0),
+                )
+            }
+        };
         Some(QuestLogSlot {
             quest_id,
             counters,
-            state: (count_state >> 24) as u8,
+            state,
             timer,
         })
+    }
+
+    /// Native quest capacity, without truncating Wrath's final five slots.
+    pub fn player_quest_log_slots(&self) -> u8 {
+        match self.layout {
+            FieldLayout::Vanilla5875 => 20,
+            FieldLayout::Wrath12340 => 25,
+        }
     }
     /// `PLAYER_EXPLORED_ZONES_1 + i`: bitset dword `i`; bit `n` is `AreaTable` explore flag `n`.
     pub fn player_explored_zone_slot(&self, i: u16) -> u32 {

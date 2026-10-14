@@ -1054,3 +1054,29 @@ fn native_item_container_and_corpse_readers_use_their_layout() {
     assert_eq!(corpse.corpse_race(), 1);
     assert!(corpse.corpse_hides_helm());
 }
+
+#[test]
+fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
+    // AzerothCore UpdateFields.h: PLAYER_QUEST_LOG_1 starts at158, five dwords per slot.
+    let fields = ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[
+            (278, 987),
+            (279, 1),
+            (280, 300 | (65535 << 16)),
+            (281, 64 | (1024 << 16)),
+            (282, 12345),
+        ],
+    );
+    assert_eq!(fields.player_quest_log_slots(), 25);
+    let quest = fields.player_quest_log(24).unwrap();
+    assert_eq!(quest.quest_id, 987);
+    assert_eq!(quest.counters, [300, 65535, 64, 1024]);
+    assert_eq!(quest.state, quest_slot_state::COMPLETE);
+    assert_eq!(quest.timer, 12345);
+    assert_eq!(fields.player_quest_log(25), None);
+    assert_eq!(fields.player_quest_log(0), None);
+    let sparse = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(158, 42)]);
+    assert_eq!(sparse.player_quest_log(0).unwrap().counters, [0; 4]);
+    assert_eq!(ObjectFields::default().player_quest_log_slots(), 20);
+}
