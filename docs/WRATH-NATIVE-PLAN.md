@@ -142,6 +142,10 @@ Build the seams now; features land on them later.
 - **Build/test**: own target dir `CARGO_TARGET_DIR=/tmp/azb-target-<ws>`, `CARGO_BUILD_JOBS=4`,
   `nice -n 15`, tests with `--test-threads 4`. Only one heavy build at a time across workers when
   possible: if another worker's cargo is running (`pgrep -fl cargo`), wait for it.
+- **Disk**: the disk is shared and filled up on 2026-10-14 (build folders grew to 225 GB). Keep
+  your `CARGO_TARGET_DIR` under 40 GB: check with `du -sh` before a heavy build, and when it is over,
+  `rm -rf <your target>/debug/incremental` (or the whole folder) first. Never delete another
+  worker's folder.
 - **Unit tests** must run with `env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA=` (otherwise
   vanilla tests read Wrath data). Installed-data tests: `WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS
   WOW_DATA=/Users/shannon/Games/Client/Data`.
