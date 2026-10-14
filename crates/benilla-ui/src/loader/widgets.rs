@@ -170,6 +170,8 @@ impl Loader<'_> {
                         .errors
                         .push(format!("{dbg}: implicit anchor: {e}"));
                 }
+                // Wrath's `parentKey="normalText"` (`QuestLogFrame.xml`'s title button).
+                self.apply_parent_key(bt, wrapper, &region);
                 // Published both ways, like a named state texture.
                 if let Some(rname) = bt_name {
                     crate::script::region::publish_region_name(self.lua(), &rname, &region);
@@ -218,8 +220,16 @@ impl Loader<'_> {
         ] {
             for f in children_named_any(el, &children) {
                 // `<Font>`-typed elements (`0x778bf4` → `0x783c30`): `inherits=` and `font=` land
-                // in one slot and `font=` wins (`0x783d22`). `style=` is not 1.12 and is not read.
-                for attr in ["inherits", "font"] {
+                // in one slot and `font=` wins (`0x783d22`). `style=` is 2.0's spelling of the
+                // font object (`<NormalFont style="GameFontNormalLeft"/>`), read for Wrath only.
+                let wrath = self.lua().app_data_ref::<crate::script::Model>().expect("model").dialect
+                    == crate::script::ScriptDialect::Wrath12340;
+                let attrs: &[&str] = if wrath {
+                    &["style", "inherits", "font"]
+                } else {
+                    &["inherits", "font"]
+                };
+                for &attr in attrs {
                     if let Some(name) = f.attr(attr) {
                         self.call(wrapper, method, name.to_string(), dbg);
                     }

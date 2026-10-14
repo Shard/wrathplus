@@ -137,6 +137,7 @@ fn base_of(token: &[u8]) -> Option<(Base, usize)> {
 /// recognised and answers nil, and only a token none of its nine compares match raises.
 pub(crate) fn token_recognised(token: &str, wrath: bool) -> bool {
     token.eq_ignore_ascii_case("npc")
+        || (wrath && token.eq_ignore_ascii_case("questnpc"))
         || base_of(token.as_bytes()).is_some()
         || (wrath && wrath_base_of(token.as_bytes()).is_some())
 }
@@ -172,6 +173,14 @@ pub fn parse_unit_token_in(token: &str, wrath: bool) -> UnitTokenParse {
     let bytes = token.as_bytes();
     if bytes.is_empty() {
         return UnitTokenParse::Nobody;
+    }
+    // 2.0's quest frame names the conversation NPC `questnpc` (`QuestFrame.lua`), the unit 1.12
+    // calls `npc`.
+    if wrath && token.eq_ignore_ascii_case("questnpc") {
+        return UnitTokenParse::Unit {
+            base: UnitBase::Npc,
+            hops: 0,
+        };
     }
     if wrath && base_of(bytes).is_none() {
         if let Some((base, len)) = wrath_base_of(bytes) {
