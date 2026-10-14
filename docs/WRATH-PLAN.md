@@ -54,6 +54,12 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
    durations and casters (target debuff timers, `PLAYER` filter). `GetSpellInfo` and the other
    2.0+ spell readers (the VM has no spell catalog). `SMSG_GAMEOBJECT_QUERY_RESPONSE` (0x5F).
    The Wrath M2 loader rejects models with lights or particle emitters (campfires, elevators).
+   Unhandled server messages seen in a melee session (2026-10-14), by frequency:
+   `SMSG_GAMEOBJECT_QUERY_RESPONSE`, `SMSG_POWER_UPDATE`, `SMSG_CRITERIA_UPDATE`,
+   `SMSG_UPDATE_WORLD_STATE`, `SMSG_SET_PROFICIENCY`, `SMSG_THREAT_UPDATE`/`HIGHEST_THREAT_UPDATE`/
+   `THREAT_CLEAR`, `SMSG_TALENTS_INFO`, `SMSG_QUESTGIVER_STATUS_MULTIPLE`, `SMSG_LOOT_LIST`,
+   `SMSG_PARTYKILLLOG`, `SMSG_LOG_XPGAIN`, `SMSG_SPELLNONMELEEDAMAGELOG` (spell damage in the
+   combat log and floating text), spline hover/gravity toggles. `WOW_CAST_TRACE=1` lists them.
 3. **Remaining DBCs** listed above.
 4. **Remaining UI surface:** animations (`AnimationGroup`), cooldown sweep, `OnEnable`/`OnDisable`,
    `PreClick`/`PostClick`, `OnTooltipSet*`, quest POI blobs, chat dock order.

@@ -58,3 +58,23 @@ fn vanilla_keeps_flat_script_acceptance_and_has_no_hookscript() {
         )
         .unwrap());
 }
+
+#[test]
+fn get_attribute_resolves_the_secure_templates_modified_lookup() {
+    let script = wrath();
+    assert!(script
+        .eval::<bool>(
+            r#"
+            local b = CreateFrame("Button")
+            b:SetAttribute("type", "action")
+            b:SetAttribute("*unit2", "focus")
+            b:SetAttribute("shift-type1", "macro")
+            return b:GetAttribute("", "type", "1") == "action"
+                and b:GetAttribute("shift-", "type", "1") == "macro"
+                and b:GetAttribute("", "unit", "2") == "focus"
+                and b:GetAttribute("ctrl-", "unit", "1") == nil
+                and b:GetAttribute("type") == "action"
+            "#,
+        )
+        .unwrap());
+}

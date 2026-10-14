@@ -157,9 +157,20 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                 local handler = self:GetScript("OnAttributeChanged")
                 if handler then handler(self, name, value) end
             end
-            function methods.GetAttribute(self, name)
+            -- `GetAttribute(prefix, name, suffix)`, the secure templates' modified lookup
+            -- (`SecureButton_GetModifiedAttribute`): `prefix..name..suffix`, then each side
+            -- wildcarded with "*", then the bare name.
+            function methods.GetAttribute(self, prefix, name, suffix)
                 local own = attributes[self]
-                return own and own[name]
+                if not own then return nil end
+                if name == nil then return own[prefix] end
+                prefix, suffix = prefix or "", suffix or ""
+                local value = own[prefix .. name .. suffix]
+                if value == nil then value = own["*" .. name .. suffix] end
+                if value == nil then value = own[prefix .. name .. "*"] end
+                if value == nil then value = own["*" .. name .. "*"] end
+                if value == nil then value = own[name] end
+                return value
             end
             function methods.HookScript(self, kind, hook)
                 local original = self:GetScript(kind)
