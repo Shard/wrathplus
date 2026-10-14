@@ -1,5 +1,5 @@
-//! The `ObjectIcons.blp` dots of the classifier `0x4eaa90`: quest gold cell 3, tracking gold and
-//! red cells 0 and 1, party blue cell 4.
+//! ObjectIcons: Vanilla classifier 0x4eaa90; Wrath classifier 0x57f7f0. Native quest
+//! cells are yellow ! 9, yellow ? 10, blue ! 11 (UV constructor 0x583718).
 
 use std::collections::HashMap;
 
@@ -33,7 +33,7 @@ fn quest_dot_cell(status: u32) -> Option<[f32; 4]> {
 }
 
 /// The installed Wrath atlas is 256x64, 8x2 32px cells, versus Vanilla's 128x128.
-/// Cell identities agree with the installed pixels: blue=0, red=2, gold=6, ?=10.
+/// Installed pixels and 0x57f7f0 agree: party=0, red=2, gold=6, !=9, ?=10, blue !=11.
 /// No grey '!' or skull exists in this Wrath atlas; the corpse uses POIIcons separately.
 #[derive(Clone, Copy, Default)]
 pub(in crate::minimap) enum ObjectIconAtlas {
@@ -48,6 +48,8 @@ enum ObjectIcon {
     TrackedUnit,
     Party,
     CompleteQuest,
+    AvailableQuest,
+    RepeatableQuest,
 }
 
 impl ObjectIconAtlas {
@@ -67,6 +69,7 @@ impl ObjectIconAtlas {
                     TrackedUnit => 1,
                     Party => 4,
                     CompleteQuest => 3,
+                    AvailableQuest | RepeatableQuest => return None,
                 },
                 4,
                 4,
@@ -77,6 +80,8 @@ impl ObjectIconAtlas {
                     TrackedUnit => 2,
                     Party => 0,
                     CompleteQuest => 10,
+                    AvailableQuest => 9,
+                    RepeatableQuest => 11,
                 },
                 8,
                 2,
@@ -91,11 +96,29 @@ impl ObjectIconAtlas {
             (row + 1.0) / rows as f32,
         ])
     }
+    #[cfg(test)]
     fn cell(self, status: u32) -> Option<[f32; 4]> {
-        match status {
-            7 => self.icon(ObjectIcon::CompleteQuest),
-            _ => None,
-        }
+        self.quest_cell(status, false)
+    }
+
+    /// Wow.exe 12340: unit classifier 0x57f9e1..0x57fa23 and GO 0x57f8d6..0x57f918.
+    /// AC QuestDef.h:110-124. Status 3/6/9 do not produce quest blips; ordinary tracking may.
+    /// Trivial offers (2/4) use the same ! cells, only with type-3 tracking (0x57bf30).
+    fn quest_cell(self, status: u32, trivial: bool) -> Option<[f32; 4]> {
+        use ObjectIcon::*;
+        let icon = match self {
+            Self::Vanilla if status == 7 => CompleteQuest,
+            Self::Wrath => match status {
+                10 => CompleteQuest,
+                8 => AvailableQuest,
+                7 => RepeatableQuest,
+                2 if trivial => AvailableQuest,
+                4 if trivial => RepeatableQuest,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        self.icon(icon)
     }
 }
 
@@ -132,6 +155,7 @@ pub(in crate::minimap) fn emit_quest_dots(
     self_guid: Option<u64>,
     icons: &Handle<Image>,
     atlas: ObjectIconAtlas,
+    trivial: bool,
     player_indoors: bool,
     unit_indoors: impl Fn(Vec3) -> bool,
     quads: &mut UiQuads,
@@ -139,13 +163,19 @@ pub(in crate::minimap) fn emit_quest_dots(
 ) {
     for (guid, net, tf, store) in candidates.iter() {
         let npc = guid.0;
-        if !matches!(net.kind, EntityKind::Unit | EntityKind::Player) {
-            continue; // the GameObject leg (`0x4eab43`) never reaches the status-7 compare
+        if !matches!(net.kind, EntityKind::Unit | EntityKind::Player)
+            && !(matches!(atlas, ObjectIconAtlas::Wrath) && net.kind == EntityKind::GameObject)
+        {
+            continue;
         }
-        let Some(cell) = statuses.get(&npc).copied().and_then(|s| atlas.cell(s)) else {
+        let Some(cell) = statuses
+            .get(&npc)
+            .copied()
+            .and_then(|s| atlas.quest_cell(s, trivial))
+        else {
             continue;
         };
-        if !unit_dot_eligible(store, self_guid) {
+        if net.kind != EntityKind::GameObject && !unit_dot_eligible(store, self_guid) {
             continue;
         }
         let w = bevy_to_wow(tf.translation());
@@ -237,6 +267,7 @@ pub(in crate::minimap) fn emit_tracking_dots(
     forms: Option<&HashMap<u32, ShapeshiftForm>>,
     icons: &Handle<Image>,
     atlas: ObjectIconAtlas,
+    trivial: bool,
     player_indoors: bool,
     unit_indoors: impl Fn(Vec3) -> bool,
     quads: &mut UiQuads,
@@ -310,7 +341,7 @@ pub(in crate::minimap) fn emit_tracking_dots(
         if statuses
             .get(&guid.0)
             .copied()
-            .and_then(|s| atlas.cell(s))
+            .and_then(|s| atlas.quest_cell(s, trivial))
             .is_some()
         {
             continue; // the quest branch already drew this status icon
@@ -481,95 +512,6 @@ mod tests {
     }
 
     #[test]
-    fn native_status_packets_emit_a_wrath_question_mark_quad() {
-        use benilla_protocol::messages::{FieldLayout, ObjectType};
-        use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
-        use benilla_protocol::{wrath_npc as n, ObjectFields};
-        use bevy::ecs::system::SystemState;
-        let npc = 0xf130_0001_2300_4567u64;
-        for opcode in [
-            n::SMSG_QUESTGIVER_STATUS,
-            n::SMSG_QUESTGIVER_STATUS_MULTIPLE,
-        ] {
-            let mut body = Vec::new();
-            if opcode == n::SMSG_QUESTGIVER_STATUS_MULTIPLE {
-                body.extend(1u32.to_le_bytes());
-            }
-            body.extend(npc.to_le_bytes());
-            body.push(10);
-            let WrathDispatch::Handled { session_events, .. } =
-                WrathEventAdapter::new().dispatch(opcode, &body, 0).unwrap()
-            else {
-                panic!()
-            };
-            let mut app = App::new();
-            app.init_resource::<crate::ui_quest::QuestGiver>();
-            crate::ui_quest::net::register(&mut app);
-            crate::net::handlers::dispatch(app.world_mut(), session_events);
-            // Native UNIT_FIELD_HEALTH=24, no Vanilla flags or projected descriptor.
-            app.world_mut().spawn((
-                crate::net::Guid(npc),
-                crate::net::NetEntity {
-                    kind: EntityKind::Unit,
-                    display_id: None,
-                    scale: 1.0,
-                },
-                GlobalTransform::IDENTITY,
-                ObjectStore(
-                    ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(24, 100)])
-                        .into_created(ObjectType::Unit),
-                ),
-            ));
-            let ctx = BlipCtx {
-                center: Vec2::splat(100.0),
-                side: 140.8,
-                px_per_yd: 1.0,
-                radius_yd: 70.4,
-                z: 9,
-                alpha: 1.0,
-                wx: 0.0,
-                wy: 0.0,
-                wz: 0.0,
-                cursor: None,
-                cursor_ui: None,
-                seam: 1.0,
-            };
-            let statuses = app
-                .world()
-                .resource::<crate::ui_quest::QuestGiver>()
-                .statuses()
-                .clone();
-            let mut state = SystemState::<TrackedCandidates>::new(app.world_mut());
-            let candidates = state.get(app.world());
-            let mut quads = UiQuads::default();
-            let mut hover = MinimapBlipHover::default();
-            let icons = Handle::default();
-            emit_quest_dots(
-                &ctx,
-                &statuses,
-                &candidates,
-                None,
-                &icons,
-                ObjectIconAtlas::from_size(256, 64),
-                false,
-                |_| false,
-                &mut quads,
-                &mut hover,
-            );
-            assert_eq!(quads.overlays.len(), 1);
-            let quad = &quads.overlays[0];
-            assert_eq!(quad.rect.center(), ctx.center);
-            assert!(quad.uv == UvRect::from_tex_coords([0.25, 0.375, 0.5, 1.0]));
-            assert_eq!(quad.texture, Some(icons));
-            assert_eq!(quad.color, [1.0; 4]);
-        }
-        assert_eq!(
-            ObjectIconAtlas::from_size(128, 128).cell(7),
-            quest_dot_cell(7)
-        );
-    }
-
-    #[test]
     fn all_object_icons_use_the_selected_grid() {
         use ObjectIcon::*;
         let vanilla = ObjectIconAtlas::from_size(128, 128);
@@ -593,95 +535,9 @@ mod tests {
         }
         assert_eq!(vanilla.cell(5), None);
         assert_eq!(wrath.cell(5), None);
-        for status in [0, 1, 2, 3, 4, 6] {
+        for status in [0, 1, 2, 3, 4, 6, 9] {
             assert_eq!(wrath.cell(status), None);
         }
-    }
-
-    #[test]
-    #[ignore = "requires installed Wrath data"]
-    fn installed_wrath_question_mark_cell_is_nonempty() {
-        let data = std::env::var("WOW_DATA").expect("WOW_DATA");
-        let mut chain = benilla_formats::Chain::open_profile(
-            std::path::Path::new(&data),
-            &benilla_formats::DataProfile::Wrath {
-                locale: "enUS".into(),
-            },
-        )
-        .unwrap();
-        let (width, height, rgba) = benilla_formats::blp_to_rgba(
-            &chain
-                .read_file("Interface\\Minimap\\ObjectIcons.blp")
-                .unwrap(),
-        )
-        .unwrap();
-        assert_eq!((width, height), (256, 64));
-        let atlas = ObjectIconAtlas::from_size(width, height);
-        let mut crops = Vec::new();
-        let mut cells = Vec::new();
-        for icon in [
-            ObjectIcon::TrackedResource,
-            ObjectIcon::TrackedUnit,
-            ObjectIcon::Party,
-            ObjectIcon::CompleteQuest,
-        ] {
-            let cell = atlas.icon(icon).unwrap();
-            assert!(
-                !cells.contains(&cell),
-                "every semantic cell must be distinct"
-            );
-            cells.push(cell);
-            let mut crop = Vec::new();
-            for y in (cell[2] * height as f32) as u32..(cell[3] * height as f32) as u32 {
-                for x in (cell[0] * width as f32) as u32..(cell[1] * width as f32) as u32 {
-                    crop.extend_from_slice(&rgba[((y * width + x) * 4) as usize..][..4]);
-                }
-            }
-            assert!(crop.chunks_exact(4).filter(|p| p[3] > 0).count() > 100);
-            assert!(
-                !crops.contains(&crop),
-                "each cell must contain distinct installed art"
-            );
-            // Identify top-row cells by their installed colors, not just nonempty pixels.
-            let rgb = crop
-                .chunks_exact(4)
-                .filter(|p| p[3] > 0)
-                .fold([0u64; 3], |mut sum, p| {
-                    for i in 0..3 {
-                        sum[i] += u64::from(p[i]);
-                    }
-                    sum
-                });
-            match icon {
-                ObjectIcon::Party => assert!(rgb[2] > rgb[0] && rgb[2] > rgb[1], "blue party art"),
-                ObjectIcon::TrackedUnit => {
-                    assert!(rgb[0] > rgb[1] && rgb[0] > rgb[2], "red unit art")
-                }
-                ObjectIcon::TrackedResource | ObjectIcon::CompleteQuest => {
-                    assert!(
-                        rgb[0] > rgb[2] * 3 && rgb[1] > rgb[2] * 3,
-                        "gold resource/quest art"
-                    );
-                }
-            }
-            crops.push(crop);
-        }
-        assert_eq!(atlas.cell(7), Some([0.25, 0.375, 0.5, 1.0]));
-        assert_eq!(atlas.cell(5), None);
-        // Corpse is POIIcons cell 7 on an 8x8 32px grid, not an ObjectIcons cell.
-        let (width, height, rgba) = benilla_formats::blp_to_rgba(
-            &chain.read_file("Interface\\Minimap\\POIIcons.blp").unwrap(),
-        )
-        .unwrap();
-        assert_eq!((width, height), (256, 256));
-        let visible = (0..32)
-            .flat_map(|y| (224..256).map(move |x| (y, x)))
-            .filter(|&(y, x)| rgba[((y * width + x) * 4 + 3) as usize] > 0)
-            .count();
-        assert!(
-            visible > 100,
-            "existing corpse skull UV [0.875,1,0,0.125] is nonempty"
-        );
     }
 
     /// Bit `1 << (n − 1)`, `n` the lock's skill-slot `LockType` or the creature type.
@@ -824,3 +680,7 @@ mod tests {
         assert!(tracked_creature(beasts, cat, 0, false));
     }
 }
+
+#[cfg(test)]
+#[path = "quest_status_tests.rs"]
+mod quest_status_tests;

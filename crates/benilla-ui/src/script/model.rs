@@ -255,6 +255,7 @@ pub(crate) struct Model {
     pub(crate) cancel_aura_requests: Vec<u32>,
     /// The player's active tracking aura, behind `GetTrackingTexture`.
     pub(crate) tracking: Option<super::aura::TrackingState>,
+    pub(crate) wrath_tracking_selection: Option<usize>,
     /// The calls that touch the selection, the cast or the targeting cursor, in call order.
     pub(crate) script_calls: Vec<super::calls::ScriptCall>,
     /// The binding functions' queue, gate depth and mouselook state.
@@ -1126,6 +1127,7 @@ impl Model {
             },
             cancel_aura_requests: Vec::new(),
             tracking: None,
+            wrath_tracking_selection: None,
             script_calls: Vec::new(),
             input: Default::default(),
             drop_item_on_unit: Vec::new(),

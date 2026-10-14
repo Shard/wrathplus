@@ -52,6 +52,7 @@ pub(crate) struct QuestGiver {
     pub(crate) chosen_reward: u32,
     /// Per-guid dialog status from `SMSG_QUESTGIVER_STATUS`, the `!`/`?` marker's value.
     statuses: HashMap<u64, u32>,
+    wrath_statuses: HashMap<u64, u32>,
     /// Messages queued for [`feed_quest`], each a GlobalStrings key and its fills.
     messages: Vec<UiError>,
     reask: u32,
@@ -91,6 +92,14 @@ impl QuestGiver {
         self.statuses.insert(npc, status);
     }
 
+    pub(crate) fn set_wrath_status(&mut self, npc: u64, status: u8) {
+        self.wrath_statuses.insert(npc, u32::from(status));
+    }
+
+    pub(crate) fn wrath_statuses(&self) -> &HashMap<u64, u32> {
+        &self.wrath_statuses
+    }
+
     /// Every stored dialog status, which [`crate::quest_markers`] renders.
     pub(crate) fn statuses(&self) -> &HashMap<u64, u32> {
         &self.statuses
@@ -100,6 +109,7 @@ impl QuestGiver {
     /// (`unit+0xcb8`), so it dies with the object, and a map needs the prune.
     pub(crate) fn retain_statuses(&mut self, live: impl Fn(u64) -> bool) {
         self.statuses.retain(|&npc, _| live(npc));
+        self.wrath_statuses.retain(|&npc, _| live(npc));
         // The refusals follow the same lifetime.
         self.refused.retain(|&npc, _| live(npc));
     }
@@ -107,6 +117,7 @@ impl QuestGiver {
     /// Drop one guid's status when it stops being a questgiver, as the reference's teardown does.
     pub(crate) fn clear_status(&mut self, npc: u64) {
         self.statuses.remove(&npc);
+        self.wrath_statuses.remove(&npc);
     }
 
     /// Re-ask every visible questgiver's status, as the reference does after
@@ -161,6 +172,7 @@ impl QuestGiver {
     pub(crate) fn clear_session(&mut self) {
         self.clear();
         self.statuses.clear();
+        self.wrath_statuses.clear();
         self.messages.clear();
         self.close_on_cancel = 0;
         self.acted = false;

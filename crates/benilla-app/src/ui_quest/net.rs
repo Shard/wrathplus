@@ -16,6 +16,7 @@ use crate::ui_quest_log::QuestLog;
 pub(crate) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.net_handler(K::QuestGiverStatus, on_giver_status)
+        .net_handler(K::WrathQuestGiverStatus, on_wrath_giver_status)
         .net_handler(K::QuestGreeting, on_greeting)
         .net_handler(K::QuestDetail, on_detail)
         .net_handler(K::QuestProgress, on_progress)
@@ -57,6 +58,12 @@ fn world_enter_reset(quest: &mut QuestGiver) {
 fn on_giver_status(In(ev): In<SessionEvent>, mut quest: ResMut<QuestGiver>) {
     if let SessionEvent::QuestGiverStatus { npc, status } = ev {
         quest_giver_status(npc, status, &mut quest);
+    }
+}
+
+fn on_wrath_giver_status(In(ev): In<SessionEvent>, mut quest: ResMut<QuestGiver>) {
+    if let SessionEvent::WrathQuestGiverStatus { npc, status } = ev {
+        quest.set_wrath_status(npc, status);
     }
 }
 
