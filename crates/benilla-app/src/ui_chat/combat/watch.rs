@@ -161,6 +161,45 @@ fn descriptor_aura_slot(edge: &FieldChanged, applications: bool) -> Option<u16> 
     }
 }
 
+/// Native packet slots are not Vanilla buff/debuff indices. Only spell/stack changes word
+/// lines; duration refreshes, flags and caster metadata alone are quiet.
+#[derive(Debug, PartialEq, Eq)]
+enum PacketAuraChange {
+    Added(u32, bool),
+    Removed(u32),
+    Stacked(u32, bool, u8),
+}
+
+fn packet_aura_changes(
+    old: &[benilla_protocol::wrath_auras::NativeAura],
+    now: &[benilla_protocol::wrath_auras::NativeAura],
+) -> Vec<PacketAuraChange> {
+    let mut changes = Vec::new();
+    // Arrival precedes removal on a same-slot replacement, like the descriptor callback.
+    let slots: std::collections::BTreeSet<_> = old.iter().chain(now).map(|a| a.slot).collect();
+    for slot in slots {
+        let before = old.iter().find(|a| a.slot == slot);
+        let after = now.iter().find(|a| a.slot == slot);
+        if before.map(|a| a.spell_id) != after.map(|a| a.spell_id) {
+            if let Some(a) = after {
+                changes.push(PacketAuraChange::Added(a.spell_id, a.is_helpful()));
+            }
+            if let Some(a) = before {
+                changes.push(PacketAuraChange::Removed(a.spell_id));
+            }
+        } else if let (Some(before), Some(after)) = (before, after) {
+            if after.stacks > before.stacks && after.stacks > 1 {
+                changes.push(PacketAuraChange::Stacked(
+                    after.spell_id,
+                    after.is_helpful(),
+                    after.stacks,
+                ));
+            }
+        }
+    }
+    changes
+}
+
 /// The aura lines (`0x62b480`, `0x62b800`), one per field edge:
 ///
 /// - a `UNIT_FIELD_AURA` slot gaining a spell words `AURAADDED*` at the periodic chat types
@@ -177,15 +216,100 @@ pub(crate) fn aura_lines(
     stores: Query<(Entity, &ObjectStore)>,
     mut edges: MessageReader<FieldChanged>,
     poses: Query<&Transform>,
+    packets: Option<Res<crate::net::wrath_auras::PacketAuras>>,
+    mut shadow: Local<
+        std::collections::HashMap<u64, Vec<benilla_protocol::wrath_auras::NativeAura>>,
+    >,
     mut log: ResMut<ChatLog>,
 ) {
+    if let Some(packets) = packets.as_deref() {
+        // Despawn/disconnect drops the shadow silently, never inventing aura removals.
+        shadow.retain(|guid, _| packets.by_guid.contains_key(guid));
+        for (&guid, snapshot) in &packets.by_guid {
+            let Some(&entity) = ctx.index.0.get(&guid) else {
+                continue;
+            };
+            let Ok((_, store)) = stores.get(entity) else {
+                continue;
+            };
+            if !matches!(
+                store.0.created_as(),
+                Some(
+                    benilla_protocol::messages::ObjectType::Unit
+                        | benilla_protocol::messages::ObjectType::Player
+                )
+            ) {
+                continue;
+            }
+            let next: Vec<_> = snapshot.iter().map(|a| a.aura.clone()).collect();
+            // First snapshot compares against empty, matching the former synthesized add edges.
+            let previous = shadow.insert(guid, next.clone()).unwrap_or_default();
+            let class = ctx.classify(guid, &stores);
+            for change in packet_aura_changes(&previous, &next) {
+                let (spell_id, kind, family, amount) = match change {
+                    PacketAuraChange::Added(spell, helpful) => (
+                        spell,
+                        periodic_kind(class, helpful),
+                        if helpful {
+                            super::AURAADDED_HELPFUL
+                        } else {
+                            super::AURAADDED_HARMFUL
+                        },
+                        0,
+                    ),
+                    PacketAuraChange::Removed(spell) => {
+                        (spell, Some(aura_gone_kind(class)), super::AURAREMOVED, 0)
+                    }
+                    PacketAuraChange::Stacked(spell, helpful, count) => (
+                        spell,
+                        periodic_kind(class, helpful),
+                        if helpful {
+                            super::AURAAPPLICATIONADDED_HELPFUL
+                        } else {
+                            super::AURAAPPLICATIONADDED_HARMFUL
+                        },
+                        i64::from(count),
+                    ),
+                };
+                let (Some(spell), Some(kind)) = (ctx.spell_name(spell_id), kind) else {
+                    continue;
+                };
+                queue_one(
+                    &mut log,
+                    &ctx,
+                    &poses,
+                    kind,
+                    family,
+                    (guid, class),
+                    ctx.ranges.class(class),
+                    Fills {
+                        spell,
+                        amount,
+                        ..Default::default()
+                    },
+                    Named::Ready,
+                );
+            }
+        }
+    } else {
+        shadow.clear();
+    }
     /// Slots below it are helpful (`0x61238e`).
     const FIRST_HARMFUL_SLOT: u16 = 0x20;
     let harmful = |slot: u16| slot >= FIRST_HARMFUL_SLOT;
 
     // The whole batch first: the applications leg skips slots whose `AURA` dword moved in the
     // same block.
-    let batch: Vec<FieldChanged> = edges.read().copied().collect();
+    let batch: Vec<FieldChanged> = edges
+        .read()
+        .copied()
+        // An authoritative packet snapshot, even empty, supersedes transitional synthesis.
+        .filter(|e| {
+            !packets
+                .as_deref()
+                .is_some_and(|p| p.by_guid.contains_key(&e.guid))
+        })
+        .collect();
     let slot_edges: Vec<&FieldChanged> = batch
         .iter()
         .filter(|e| descriptor_aura_slot(e, false).is_some())
@@ -474,5 +598,223 @@ mod descriptor_aura_tests {
             assert_eq!(descriptor_aura_slot(&edge, false), None);
             assert_eq!(descriptor_aura_slot(&edge, true), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod packet_aura_tests {
+    use super::*;
+    use benilla_protocol::wrath_auras::NativeAura;
+
+    fn aura(slot: u8, spell_id: u32, stacks: u8) -> NativeAura {
+        NativeAura {
+            slot,
+            spell_id,
+            stacks,
+            flags: 0x10,
+            level: 80,
+            caster_guid: None,
+            max_duration_ms: Some(1000),
+            remaining_ms: Some(900),
+        }
+    }
+
+    #[test]
+    fn native_slots_add_replace_remove_and_stack_without_vanilla_slot_limits() {
+        use PacketAuraChange::*;
+        let a = aura(200, 42, 1);
+        assert_eq!(
+            packet_aura_changes(&[], &[a.clone()]),
+            vec![Added(42, true)]
+        );
+        let mut stacked = a.clone();
+        stacked.stacks = 3;
+        assert_eq!(
+            packet_aura_changes(&[a.clone()], &[stacked.clone()]),
+            vec![Stacked(42, true, 3)]
+        );
+        assert!(packet_aura_changes(&[stacked], &[a.clone()]).is_empty());
+        let mut replacement = aura(200, 99, 4);
+        replacement.flags = 0x80;
+        assert_eq!(
+            packet_aura_changes(&[a.clone()], &[replacement]),
+            vec![Added(99, false), Removed(42)]
+        );
+        assert_eq!(packet_aura_changes(&[a], &[]), vec![Removed(42)]);
+        assert!(packet_aura_changes(&[], &[]).is_empty());
+    }
+
+    #[test]
+    fn refreshes_and_metadata_do_not_repeat_lines_and_polarity_comes_from_flags() {
+        use PacketAuraChange::*;
+        let a = aura(0, 42, 1);
+        let mut refresh = a.clone();
+        refresh.remaining_ms = Some(1000);
+        refresh.caster_guid = Some(77);
+        refresh.flags = 0x80;
+        refresh.level = 79;
+        assert!(packet_aura_changes(&[a], &[refresh.clone()]).is_empty());
+        refresh.stacks = 2;
+        assert_eq!(packet_aura_changes(&[], &[refresh]), vec![Added(42, false)]);
+    }
+}
+
+#[cfg(test)]
+mod packet_aura_system_tests {
+    use super::*;
+    use crate::net::wrath_auras::{PacketAuras, StampedAura};
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectFields, ObjectType};
+    use benilla_protocol::wrath_auras::NativeAura;
+
+    fn app() -> (App, Entity) {
+        let mut app = App::new();
+        app.insert_resource(SelfGuid(Some(42)))
+            .init_resource::<GroupState>()
+            .init_resource::<GuidIndex>()
+            .init_resource::<Reputations>()
+            .init_resource::<CombatLogRanges>()
+            .init_resource::<ChatLog>()
+            .init_resource::<PacketAuras>()
+            .add_message::<FieldChanged>()
+            .add_systems(Update, aura_lines);
+        let entity = app
+            .world_mut()
+            .spawn(ObjectStore(
+                ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[])
+                    .into_created(ObjectType::Player),
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<GuidIndex>()
+            .0
+            .insert(42, entity);
+        (app, entity)
+    }
+
+    fn set(app: &mut App, stacks: Option<u8>) {
+        let auras = stacks
+            .map(|stacks| StampedAura {
+                received_at: 1.0,
+                aura: NativeAura {
+                    slot: 200,
+                    spell_id: 77,
+                    flags: 0x10,
+                    level: 80,
+                    stacks,
+                    caster_guid: None,
+                    max_duration_ms: None,
+                    remaining_ms: None,
+                },
+            })
+            .into_iter()
+            .collect();
+        app.world_mut()
+            .resource_mut::<PacketAuras>()
+            .by_guid
+            .insert(42, auras);
+    }
+
+    fn take(app: &mut App) -> usize {
+        app.update();
+        let mut log = app.world_mut().resource_mut::<ChatLog>();
+        let count = log.pending_len();
+        log.clear_session();
+        count
+    }
+
+    #[test]
+    fn authoritative_packets_suppress_projected_duplicates_even_when_empty() {
+        let (mut app, entity) = app();
+        let edge = |old, new| FieldChanged {
+            entity,
+            guid: 42,
+            kind: ObjectType::Player,
+            layout: FieldLayout::Vanilla5875,
+            field: Field::UnitAura,
+            offset: 0,
+            old,
+            new,
+        };
+        set(&mut app, Some(1));
+        app.world_mut()
+            .resource_mut::<Messages<FieldChanged>>()
+            .write(edge(0, 77));
+        assert_eq!(
+            take(&mut app),
+            1,
+            "first packet adds once, not again via synthesis"
+        );
+        assert_eq!(take(&mut app), 0, "held snapshot is quiet");
+        set(&mut app, Some(3));
+        assert_eq!(take(&mut app), 1, "native stacks rise");
+        set(&mut app, None);
+        app.world_mut()
+            .resource_mut::<Messages<FieldChanged>>()
+            .write(edge(77, 0));
+        assert_eq!(take(&mut app), 1, "authoritative empty removes once");
+        assert_eq!(take(&mut app), 0);
+    }
+
+    #[test]
+    fn packet_lines_keep_spell_name_attribute_classification_and_range_gates() {
+        for (name, attributes, range, expected) in [
+            ("Visible", 0, 100_000.0, 1),
+            ("", 0, 100_000.0, 0),
+            ("Hidden", 0x80, 100_000.0, 0),
+            ("Hidden", 0x100, 100_000.0, 0),
+            ("Visible", 0, 0.0, 0),
+        ] {
+            let (mut app, _) = app();
+            let mut spells = crate::ui_action::Spells::empty_for_tests();
+            spells.catalog = benilla_formats::SpellCatalog::from_displays(
+                [(
+                    77,
+                    benilla_formats::SpellDisplay {
+                        name: name.into(),
+                        attributes,
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            );
+            app.insert_resource(spells);
+            app.world_mut().resource_mut::<CombatLogRanges>().class[UnitClass::Me as usize] = range;
+            set(&mut app, Some(1));
+            assert_eq!(take(&mut app), expected, "{name}/{attributes:#x}/{range}");
+        }
+        let (mut app, _) = app();
+        app.world_mut().resource_mut::<SelfGuid>().0 = None;
+        set(&mut app, Some(1));
+        assert_eq!(
+            take(&mut app),
+            0,
+            "unknown classification has no periodic line"
+        );
+    }
+
+    #[test]
+    fn missing_objects_non_units_and_despawn_are_quiet() {
+        let (mut app, entity) = app();
+        app.world_mut().entity_mut(entity).insert(ObjectStore(
+            ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[])
+                .into_created(ObjectType::GameObject),
+        ));
+        set(&mut app, Some(1));
+        assert_eq!(take(&mut app), 0, "non-unit gate");
+        app.world_mut().entity_mut(entity).insert(ObjectStore(
+            ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[])
+                .into_created(ObjectType::Player),
+        ));
+        assert_eq!(take(&mut app), 1);
+        app.world_mut()
+            .resource_mut::<PacketAuras>()
+            .by_guid
+            .clear();
+        app.world_mut().despawn(entity);
+        app.world_mut().resource_mut::<GuidIndex>().0.clear();
+        assert_eq!(take(&mut app), 0, "despawn is not an aura-removal line");
+        set(&mut app, Some(1));
+        assert_eq!(take(&mut app), 0, "missing object");
     }
 }
