@@ -3,6 +3,8 @@
 //! This backend keeps the build-12340 cipher writer on one thread. Adapter replies and app
 //! commands share that thread, so a time-sync response can never race a ping or lifecycle packet.
 
+mod recorder;
+
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -387,6 +389,7 @@ fn run(
         )?;
         reader.set_read_timeout(Some(READ_SLICE))?;
         let mut adapter = WrathEventAdapter::new();
+        let mut packet_recorder = recorder::Recorder::from_env();
         loop {
             if let Ok(failure) = fatal.try_recv() {
                 if failure.epoch == epoch {
@@ -398,6 +401,7 @@ fn run(
                 Err(error) if retryable_timeout(&error) => continue,
                 Err(error) => return Err(error),
             };
+            recorder::record(&mut packet_recorder, &packet);
             note_inbound();
             match packet.opcode {
                 SMSG_CHARACTER_LOGIN_FAILED => {
