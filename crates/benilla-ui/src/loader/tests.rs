@@ -6,6 +6,31 @@ mod loader_tests {
     use crate::order::ZTarget;
     use crate::script::{QuadContent, UiScript};
 
+    #[test]
+    fn wrath_xml_attributes_are_typed_inherited_and_ready_before_onload() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let doc = parse(r#"<Ui>
+            <Frame name="Offsets" virtual="true"><Attributes>
+                <Attribute name="width" type="number" value="384"/>
+                <Attribute name="enabled" type="boolean" value="true"/>
+                <Attribute name="label" type="string" value="panel"/>
+            </Attributes></Frame>
+            <Frame name="Panel" inherits="Offsets"><Attributes>
+                <Attribute name="width" type="number" value="768"/>
+                <Attribute name="disabled" type="boolean" value="false"/>
+            </Attributes><Scripts><OnLoad>
+                assert(self:GetAttribute('width') == 768)
+                assert(self:GetAttribute('enabled') == true)
+                assert(self:GetAttribute('disabled') == false)
+                assert(self:GetAttribute('label') == 'panel')
+                ATTRIBUTES_LOADED = true
+            </OnLoad></Scripts></Frame>
+        </Ui>"#);
+        let report = load(&s, &doc, &no_files);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert!(s.eval::<bool>("return ATTRIBUTES_LOADED").unwrap());
+    }
+
     fn no_files(_: &str) -> Option<Vec<u8>> {
         None
     }

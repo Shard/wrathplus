@@ -23,6 +23,11 @@ fn census(script: &mut UiScript, failures: &[String]) -> usize {
 fn installed_wrath_framexml_builds_the_stock_hud() {
     let _ = benilla_formats::wow_data_or_skip!();
     let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    // A live VM receives its display modes before FrameXML; UIParent uses their aspect ratio.
+    script.set_screen_size(1600.0, 1000.0);
+    script.set_screen_resolutions(vec![], Some(benilla_ui::script::ScreenResolution {
+        width: 1600, height: 1000,
+    }));
     script.set_unit(
         "player",
         Some(UnitState {
