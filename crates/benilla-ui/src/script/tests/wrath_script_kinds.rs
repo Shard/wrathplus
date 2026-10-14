@@ -78,3 +78,29 @@ fn get_attribute_resolves_the_secure_templates_modified_lookup() {
         )
         .unwrap());
 }
+
+/// `RegisterForClicks("AnyUp")` (`ActionButton.lua:90`): every button's release clicks, no press.
+#[test]
+fn any_up_registers_every_buttons_release() {
+    let mut s = wrath();
+    s.run(
+        r#"
+        clicks = {}
+        local b = CreateFrame("Button", "AnyUpButton", UIParent)
+        b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(200); b:SetHeight(200); b:EnableMouse(true)
+        b:RegisterForClicks("AnyUp")
+        b:SetScript("OnClick", function(self, button, down) clicks[#clicks + 1] = button end)
+        "#,
+    )
+    .unwrap();
+    s.resolve();
+    s.mouse_button(50.0, 50.0, "LeftButton", true);
+    assert_eq!(s.eval::<i64>("return #clicks").unwrap(), 0, "a press is not a click");
+    s.mouse_button(50.0, 50.0, "LeftButton", false);
+    s.mouse_button(50.0, 50.0, "RightButton", true);
+    s.mouse_button(50.0, 50.0, "RightButton", false);
+    assert_eq!(
+        s.eval::<String>("return table.concat(clicks, ',')").unwrap(),
+        "LeftButton,RightButton"
+    );
+}

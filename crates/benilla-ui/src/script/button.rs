@@ -909,13 +909,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 }
 
 /// Whether `h` fires `OnClick` for the transition `name` (e.g. `"RightButtonDown"`): a Button
-/// checks its `RegisterForClicks` set, ignoring case; any other kind fires on release only.
+/// checks its `RegisterForClicks` set, ignoring case, where `AnyUp`/`AnyDown` (2.0+) cover every
+/// button; any other kind fires on release only.
 pub(super) fn wants_click(model: &Model, h: FrameHandle, name: &str) -> bool {
     match model.arena.frame(h).map(|f| &f.kind_state) {
-        Some(KindState::Button(bs)) => bs
-            .registered_clicks
-            .iter()
-            .any(|s| s.eq_ignore_ascii_case(name)),
+        Some(KindState::Button(bs)) => bs.registered_clicks.iter().any(|s| {
+            s.eq_ignore_ascii_case(name)
+                || (s.eq_ignore_ascii_case("AnyUp") && name.ends_with("Up"))
+                || (s.eq_ignore_ascii_case("AnyDown") && name.ends_with("Down"))
+        }),
         _ => name.ends_with("Up"),
     }
 }
@@ -926,10 +928,11 @@ pub(super) fn wants_click(model: &Model, h: FrameHandle, name: &str) -> bool {
 /// that button pushes the art, click or not.
 pub(super) fn wants_press_visual(model: &Model, h: FrameHandle, button: &str) -> bool {
     match model.arena.frame(h).map(|f| &f.kind_state) {
+        // `AnyUp`/`AnyDown` (2.0+, `ActionButton.lua:90`) register every button.
         Some(KindState::Button(bs)) => bs.registered_clicks.iter().any(|s| {
             s.strip_suffix("Up")
                 .or_else(|| s.strip_suffix("Down"))
-                .is_some_and(|b| b.eq_ignore_ascii_case(button))
+                .is_some_and(|b| b.eq_ignore_ascii_case(button) || b.eq_ignore_ascii_case("Any"))
         }),
         _ => false,
     }
