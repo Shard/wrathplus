@@ -500,7 +500,7 @@ mod tests {
         assert_eq!(resolved[sh_idx].cost, 110);
 
         // Every node known: the Horde-only stops (Grom'gol, Kargath) have no route from Stormwind.
-        let all_known = TaxiMask([u32::MAX; 8]);
+        let all_known = TaxiMask([u32::MAX; 14]);
         let open = TaxiOpen {
             flightmaster: 0x42,
             nearest_node: 2,

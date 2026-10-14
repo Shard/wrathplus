@@ -17,11 +17,15 @@ use bevy::render::render_resource::{
 };
 use bevy::shader::ShaderRef;
 
+#[path = "shadow_material.rs"]
+mod shadow_material;
+
 /// Compile the four WGSL files into the binary under `embedded://benilla_assets/shaders/…`. Call
 /// after Bevy's `AssetPlugin`, whose registry this fills; [`crate::register_asset_loaders`] does.
 pub fn register_shaders(app: &mut App) {
     bevy::asset::embedded_asset!(app, "shaders/terrain.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/wow_model.wgsl");
+    bevy::asset::embedded_asset!(app, "shaders/wow_shadow.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/wdl.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/liquid.wgsl");
 }
@@ -131,6 +135,14 @@ impl MaterialExtension for WowModelExt {
         "embedded://benilla_assets/shaders/wow_model.wgsl".into()
     }
 
+    fn prepass_vertex_shader() -> ShaderRef {
+        "embedded://benilla_assets/shaders/wow_shadow.wgsl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "embedded://benilla_assets/shaders/wow_shadow.wgsl".into()
+    }
+
     /// The reference writes depth for every M2 batch, transparent ones too, and tests `LEQUAL`,
     /// unless render flag 0x10 (no write) or 0x08 (no test) clears it (`0x70c190`).
     fn specialize(
@@ -139,6 +151,12 @@ impl MaterialExtension for WowModelExt {
         layout: &MeshVertexBufferLayoutRef,
         key: MaterialExtensionKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
+        // Shadow IO differs from forward IO. Never borrow forward depth/blend mutations.
+        if descriptor.vertex.shader_defs.iter().any(|def| {
+            matches!(def, bevy::shader::ShaderDefVal::Bool(name, true) if name == "PREPASS_PIPELINE")
+        }) {
+            return shadow_material::specialize(descriptor, layout, key.bind_group_data);
+        }
         // `WOW_RIG_SKIN` skins from the shared buffer's palette. The base layout lacks our joint
         // attributes: rebuild it with Bevy's conditionals (mesh.rs, locations 0-5) plus 10/11.
         if layout.0.contains(crate::ATTRIBUTE_WOW_JOINT_INDEX) {

@@ -6,12 +6,13 @@ use std::io;
 use crate::wire::{read_u32_le, read_u64_le, read_u8};
 
 /// The known-node bitmask (vmangos `PlayerTaxi::AppendTaximaskTo`, `PlayerTaxi.cpp:53-65`). Node
+/// Wrath retains fourteen words; the Vanilla reader fills only the first eight. Node
 /// ids are 1-based: node `id` is bit `(id-1) % 32` of word `(id-1) / 32` (`PlayerTaxi.h:37-49`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct TaxiMask(pub [u32; 8]);
+pub struct TaxiMask(pub [u32; 14]);
 
 impl TaxiMask {
-    /// Whether `node_id` is known; 0 and ids past 256 read unknown (1.12 ships 85 nodes).
+    /// Whether `node_id` is known; 0 and ids past 448 read unknown (1.12 ships 85 nodes).
     pub fn is_known(&self, node_id: u32) -> bool {
         node_id != 0
             && self
@@ -85,8 +86,8 @@ pub(super) fn read_show_taxi_nodes(r: &mut &[u8]) -> io::Result<(u32, u64, u32, 
     }
     let flightmaster = read_u64_le(r)?;
     let nearest_node = read_u32_le(r)?;
-    let mut mask = [0u32; 8];
-    for word in &mut mask {
+    let mut mask = [0u32; 14];
+    for word in &mut mask[..8] {
         *word = read_u32_le(r)?;
     }
     Ok((window, flightmaster, nearest_node, TaxiMask(mask)))

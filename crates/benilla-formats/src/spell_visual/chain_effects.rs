@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
 use crate::dbc::{f32_at, parse, str_at, u32_at};
@@ -77,10 +77,18 @@ fn chain_effects_schema() -> Schema {
 
 /// Read `SpellChainEffects.dbc`; a textureless row stays, as the client's constructor never reads
 /// the texture.
-pub(super) fn load(chain: &mut Chain) -> Result<HashMap<u32, ChainEffect>> {
+pub(super) struct LoadedChains {
+    pub effects: HashMap<u32, ChainEffect>,
+    pub raw: HashMap<u32, Vec<u8>>,
+}
+
+pub(super) fn load(chain: &mut Chain) -> Result<LoadedChains> {
     let bytes = chain
         .read_file(SPELL_CHAIN_EFFECTS)
         .with_context(|| format!("reading {SPELL_CHAIN_EFFECTS}"))?;
+    if matches!(chain.profile(), crate::DataProfile::Wrath { .. }) {
+        return wrath_packed(&bytes);
+    }
     let set = parse(&bytes, chain_effects_schema(), "SpellChainEffects.dbc")?;
     let mut rows = HashMap::with_capacity(set.records().len());
     for r in set.records() {
@@ -98,5 +106,151 @@ pub(super) fn load(chain: &mut Chain) -> Result<HashMap<u32, ChainEffect>> {
             },
         );
     }
-    Ok(rows)
+    Ok(LoadedChains {
+        effects: rows,
+        raw: HashMap::new(),
+    })
+}
+
+/// WoWDBDefs build 12340: 48 logical fields, 177 bytes, NOT 48 four-byte words.
+/// Fields 0..38 are words; Alpha/R/G/B/BlendMode are bytes 156..160, then four
+/// unaligned words at 161..176. Only the original eight fields feed our renderer;
+/// keep the entire packed row verbatim instead of inventing meanings for extensions.
+fn wrath_packed(bytes: &[u8]) -> Result<LoadedChains> {
+    const SIZE: usize = 177;
+    ensure!(
+        bytes.len() >= 20 && &bytes[..4] == b"WDBC",
+        "invalid SpellChainEffects header"
+    );
+    let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    ensure!(
+        word(8) == 48 && word(12) == SIZE as u32,
+        "expected build-12340 SpellChainEffects 48 fields/177 bytes"
+    );
+    let count = word(4) as usize;
+    let strings_at = count
+        .checked_mul(SIZE)
+        .and_then(|v| v.checked_add(20))
+        .context("SpellChainEffects record size overflow")?;
+    let end = strings_at
+        .checked_add(word(16) as usize)
+        .context("SpellChainEffects string size overflow")?;
+    ensure!(
+        end == bytes.len(),
+        "truncated or trailing SpellChainEffects data"
+    );
+    let strings = &bytes[strings_at..end];
+    let mut loaded = LoadedChains {
+        effects: HashMap::with_capacity(count),
+        raw: HashMap::with_capacity(count),
+    };
+    for row in bytes[20..strings_at].chunks_exact(SIZE) {
+        let w = |at: usize| u32::from_le_bytes(row[at..at + 4].try_into().unwrap());
+        let f = |at| f32::from_bits(w(at));
+        let offset = w(28) as usize;
+        let tail = strings
+            .get(offset..)
+            .context("SpellChainEffects texture offset outside string block")?;
+        let len = tail
+            .iter()
+            .position(|&b| b == 0)
+            .context("unterminated SpellChainEffects texture")?;
+        let texture = std::str::from_utf8(&tail[..len])
+            .context("invalid SpellChainEffects texture UTF-8")?
+            .to_owned();
+        let id = w(0);
+        ensure!(
+            !loaded.effects.contains_key(&id),
+            "duplicate SpellChainEffects id {id}"
+        );
+        loaded.effects.insert(
+            id,
+            ChainEffect {
+                avg_seg_len: f(4),
+                half_width: f(8),
+                noise_scale: f(12),
+                scroll_period_s: f(16),
+                bolt_life_ms: w(20),
+                bolt_stagger_ms: w(24),
+                texture,
+            },
+        );
+        loaded.raw.insert(id, row.to_vec());
+    }
+    Ok(loaded)
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+    fn fixture() -> Vec<u8> {
+        let mut bytes = b"WDBC".to_vec();
+        for value in [2u32, 48, 177, 5] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        for id in [8u32, 1] {
+            let mut row = [0xa5u8; 177];
+            for (i, value) in [
+                id,
+                2.78f32.to_bits(),
+                0.5f32.to_bits(),
+                0.04f32.to_bits(),
+                (-0.5f32).to_bits(),
+                1000,
+                300,
+                1,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                row[i * 4..i * 4 + 4].copy_from_slice(&value.to_le_bytes());
+            }
+            row[156..161].copy_from_slice(&[11, 22, 33, 44, 55]);
+            row[161..165].copy_from_slice(&17.5f32.to_le_bytes());
+            bytes.extend_from_slice(&row);
+        }
+        bytes.extend_from_slice(b"\0abc\0");
+        bytes
+    }
+    #[test]
+    fn packed_stride_and_raw_extensions_are_lossless() {
+        let loaded = wrath_packed(&fixture()).unwrap();
+        assert_eq!(loaded.effects.len(), 2);
+        let row = &loaded.effects[&1];
+        assert_eq!(
+            (
+                row.avg_seg_len,
+                row.half_width,
+                row.noise_scale,
+                row.scroll_period_s
+            ),
+            (2.78, 0.5, 0.04, -0.5)
+        );
+        assert_eq!(
+            (row.bolt_life_ms, row.bolt_stagger_ms, row.texture.as_str()),
+            (1000, 300, "abc")
+        );
+        assert_eq!(&loaded.raw[&8][156..161], &[11, 22, 33, 44, 55]);
+        assert_eq!(&loaded.raw[&1][161..165], &17.5f32.to_le_bytes());
+        assert_eq!(&loaded.raw[&1][165..], &[0xa5; 12]);
+    }
+    #[test]
+    fn bad_native_shapes_offsets_and_truncation_fail() {
+        let b = fixture();
+        for len in [0, 19, 20, b.len() - 1] {
+            assert!(wrath_packed(&b[..len]).is_err());
+        }
+        let mut bad = b.clone();
+        bad[12..16].copy_from_slice(&192u32.to_le_bytes());
+        assert!(wrath_packed(&bad).is_err());
+        let mut bad = b.clone();
+        bad[48..52].copy_from_slice(&5u32.to_le_bytes());
+        assert!(wrath_packed(&bad).is_err());
+        let mut bad = b.clone();
+        *bad.last_mut().unwrap() = b'x';
+        assert!(wrath_packed(&bad).is_err());
+        let mut bad = b;
+        bad[197..201].copy_from_slice(&8u32.to_le_bytes());
+        assert!(wrath_packed(&bad).is_err());
+    }
 }
