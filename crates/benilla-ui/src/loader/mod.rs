@@ -16,6 +16,7 @@ use crate::framexml::{self, Element, ParsedDocument, ScriptRef, TopLevel};
 use crate::script::{FontObject, JustifyH, JustifyV, Outline, UiScript};
 use crate::status;
 
+mod animations;
 mod backdrop;
 mod geometry;
 mod regions;
@@ -777,6 +778,7 @@ impl Loader<'_> {
         self.apply_messageframe(el, wrapper, dbg_name);
         self.apply_simplehtml(el, wrapper, dbg_name);
         self.apply_minimap(el, wrapper, dbg_name);
+        self.apply_animations(el, wrapper, self_name, dbg_name);
         // 6 · <Scripts> handlers (`0x769ef0`); OnLoad is captured to fire bottom-up below.
         let onload = self.apply_scripts(el, wrapper, dbg_name);
 

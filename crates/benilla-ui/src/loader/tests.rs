@@ -9,7 +9,8 @@ mod loader_tests {
     #[test]
     fn wrath_xml_attributes_are_typed_inherited_and_ready_before_onload() {
         let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
-        let doc = parse(r#"<Ui>
+        let doc = parse(
+            r#"<Ui>
             <Frame name="Offsets" virtual="true"><Attributes>
                 <Attribute name="width" type="number" value="384"/>
                 <Attribute name="enabled" type="boolean" value="true"/>
@@ -25,7 +26,8 @@ mod loader_tests {
                 assert(self:GetAttribute('label') == 'panel')
                 ATTRIBUTES_LOADED = true
             </OnLoad></Scripts></Frame>
-        </Ui>"#);
+        </Ui>"#,
+        );
         let report = load(&s, &doc, &no_files);
         assert!(report.errors.is_empty(), "{:?}", report.errors);
         assert!(s.eval::<bool>("return ATTRIBUTES_LOADED").unwrap());
@@ -2603,4 +2605,21 @@ fn join_ref_resolves_relative_framexml_paths() {
     assert_eq!(join_ref("", "../secret"), "../secret");
     // A leading `/` re-roots rather than meaning the filesystem root.
     assert_eq!(join_ref("a/b", "/c.xml"), "c.xml");
+}
+
+#[test]
+fn wrath_animations_exist_before_owner_onload_and_timer_finishes() {
+    use super::load;
+    use crate::script::UiScript;
+    let parse = |text: &str| crate::framexml::parse(text).unwrap();
+    let no_files = |_: &str| None;
+    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let doc = parse(
+        r#"<Ui><Frame name="AnimFixture"><Animations><AnimationGroup parentKey="pulse" looping="BOUNCE"><Alpha name="$parentPulser" change="-.7" duration=".75"/></AnimationGroup><AnimationGroup parentKey="timer"><Animation duration="1"><Scripts><OnFinished>FINISHED = self:GetParent():GetParent() == AnimFixture</OnFinished></Scripts></Animation></AnimationGroup></Animations><Scripts><OnLoad>AnimFixturePulser:Stop(); self.timer:Play(); READY = self.pulse:GetLooping()</OnLoad></Scripts></Frame></Ui>"#,
+    );
+    let report = load(&s, &doc, &no_files);
+    assert!(report.errors.is_empty(), "{report:?}");
+    assert_eq!(s.eval::<String>("return READY").unwrap(), "BOUNCE");
+    s.tick(1.0);
+    assert!(s.eval::<bool>("return FINISHED").unwrap());
 }
