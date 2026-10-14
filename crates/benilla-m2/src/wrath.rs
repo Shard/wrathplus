@@ -16,6 +16,10 @@ use crate::{
     C3,
 };
 
+#[path = "wrath_effects.rs"]
+mod effects;
+pub use effects::{WrathLight, WrathRibbon};
+
 const VERSION: u32 = 264;
 const HEADER_LEN: usize = 0x130;
 
@@ -95,6 +99,9 @@ pub struct WrathM2 {
     bone_tracks: Vec<WrathBoneTracks>,
     cameras: Vec<WrathCamera>,
     camera_lookup: Vec<u16>,
+    texture_combiner_combos: Vec<u16>,
+    lights: Vec<WrathLight>,
+    ribbons: Vec<WrathRibbon>,
 }
 
 /// A decoded external Wrath skin profile. Its records reuse the established skin semantics; the
@@ -140,12 +147,26 @@ impl WrathM2 {
         &self.bone_tracks
     }
 
+    pub fn lights(&self) -> &[WrathLight] {
+        &self.lights
+    }
+
+    pub fn ribbons(&self) -> &[WrathRibbon] {
+        &self.ribbons
+    }
+
     pub fn cameras(&self) -> &[WrathCamera] {
         &self.cameras
     }
 
     pub fn camera_lookup(&self) -> &[u16] {
         &self.camera_lookup
+    }
+
+    /// Optional second-stage material overrides (global flag 0x08), indexed by the
+    /// skin batch shader selector. Kept outside the vanilla model: these are Wrath semantics.
+    pub fn texture_combiner_combos(&self) -> &[u16] {
+        &self.texture_combiner_combos
     }
 
     pub fn into_format(self) -> M2Format {
@@ -671,15 +692,23 @@ fn parse_wrath_m2_impl<'a>(
     let attachments_arr = array(b, 0xf0, "attachments")?;
     let attachment_lookup_arr = array(b, 0xf8, "attachment lookup")?;
     let events_arr = array(b, 0x100, "events")?;
-    // Lights, ribbon and particle emitters, and the optional blend-map overrides (global flag
-    // 0x08, an array after the base header) are not read yet: the model loads without its
-    // flames, glows and trails, where rejecting it would drop the whole model (a kobold carries a
-    // candle, a brazier its fire).
-    let _lights = array(b, 0x108, "lights")?;
+    let lights_arr = array(b, 0x108, "lights")?;
     let cameras_arr = array(b, 0x110, "cameras")?;
     let camera_lookup_arr = array(b, 0x118, "camera lookup")?;
-    let _ribbon_emitters = array(b, 0x120, "ribbon emitters")?;
+    let ribbons_arr = array(b, 0x120, "ribbon emitters")?;
     let _particle_emitters = array(b, 0x128, "particle emitters")?;
+
+    // wowdev M2 header: flag_use_texture_combiner_combos adds an M2Array<uint16> at 0x130.
+    // Do not touch those bytes without the flag: unextended files can start payload there.
+    let texture_combiner_combos = if b.u32_at(0x10).unwrap_or(0) & 0x08 != 0 {
+        u16_table(
+            b,
+            array(b, HEADER_LEN, "texture combiner combos descriptor")?,
+            "texture combiner combos",
+        )?
+    } else {
+        Vec::new()
+    };
 
     let vertices_raw = table(b, vertices_arr, 48, "vertex table")?;
     let mut vertices = Vec::with_capacity(vertices_arr.0);
@@ -736,6 +765,8 @@ fn parse_wrath_m2_impl<'a>(
         external: external_animations,
         require_external,
     };
+    let lights = effects::lights(b, lights_arr, &sources)?;
+    let ribbons = effects::ribbons(b, ribbons_arr, &sources)?;
     let bones_raw = table(b, bones_arr, 88, "bone table")?;
     let mut bones = Vec::with_capacity(bones_arr.0);
     let mut bone_tracks = Vec::with_capacity(bones_arr.0);
@@ -931,6 +962,9 @@ fn parse_wrath_m2_impl<'a>(
         bone_tracks,
         cameras: parsed_cameras,
         camera_lookup,
+        texture_combiner_combos,
+        lights,
+        ribbons,
     })
 }
 
