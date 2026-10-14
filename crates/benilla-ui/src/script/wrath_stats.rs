@@ -5,6 +5,13 @@ use mlua::Lua;
 use super::super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    // PaperDollFrame.lua:280 uses this as a display multiplier. The server already
+    // folds max-health auras into the descriptor's maximum health; this client has
+    // no separate local health modifier to apply a second time (for any unit).
+    lua.globals().set(
+        "GetUnitMaxHealthModifier",
+        lua.create_function(|_, _unit: Option<String>| Ok(1.0))?,
+    )?;
     lua.globals().set(
         "GetAttackPowerForStat",
         lua.create_function(|lua, (stat, amount): (u32, f64)| {
@@ -72,6 +79,16 @@ mod tests {
         }
         let vanilla = UiScript::new().unwrap();
         vanilla.run("assert(GetAttackPowerForStat == nil)").unwrap();
+    }
+
+    #[test]
+    fn wrath_max_health_display_multiplier_is_neutral_for_every_unit() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("for _, unit in ipairs({'player', 'target', 'pet', 'party1', 'unknown'}) do assert(GetUnitMaxHealthModifier(unit) == 1) end assert(GetUnitMaxHealthModifier() == 1)").unwrap();
+        UiScript::new()
+            .unwrap()
+            .run("assert(GetUnitMaxHealthModifier == nil)")
+            .unwrap();
     }
 
     #[test]
