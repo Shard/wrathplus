@@ -62,6 +62,7 @@ impl<T: Copy> IdMap<T> {
 /// The Rust-side model behind the Lua VM, in `lua.app_data`. It holds no mlua handles, whose
 /// persistent count the vendored `LUAI_MAXCSTACK` caps.
 pub(crate) struct Model {
+    pub(crate) threat: super::ThreatTable,
     /// The client script ABI this VM was constructed for; immutable for the VM's lifetime.
     pub(crate) dialect: ScriptDialect,
     /// Every discovered addon in load order: the AddOn API's registry, filled at world entry.
@@ -1043,6 +1044,7 @@ impl Model {
     pub(crate) fn new(dialect: ScriptDialect) -> Model {
         Model {
             dialect,
+            threat: Default::default(),
             addons: Vec::new(),
             addon_index: Vec::new(),
             addon_info_hidden: None,
