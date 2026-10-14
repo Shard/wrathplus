@@ -143,7 +143,7 @@ Build the seams now; features land on them later.
   `nice -n 15`, tests with `--test-threads 4`. Only one heavy build at a time across workers when
   possible: if another worker's cargo is running (`pgrep -fl cargo`), wait for it.
 - **Disk**: the disk is shared and filled up on 2026-10-14 (build folders grew to 225 GB). Keep
-  your `CARGO_TARGET_DIR` under 40 GB: check with `du -sh` before a heavy build, and when it is over,
+  your `CARGO_TARGET_DIR` under 40 GB: check with `du -sh` before a heavy build (free space: `df -h /System/Volumes/Data`; `df /` is the sealed system volume and always looks full), and when it is over,
   `rm -rf <your target>/debug/incremental` (or the whole folder) first. Never delete another
   worker's folder.
 - **Unit tests** must run with `env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA=` (otherwise
