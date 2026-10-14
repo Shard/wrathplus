@@ -439,6 +439,19 @@ fn publish_display_modes(
     let Ok(window) = windows.single() else {
         return;
     };
+    let (offered, current) = display_modes(window, monitors.iter());
+    // Keyed by VM: a `ReloadUI` VM has been pushed nothing, so a plain `Local` would skip it.
+    let memo = last.get(&script);
+    if memo.as_ref() == Some(&(offered.clone(), current)) {
+        return;
+    }
+    *memo = Some((offered.clone(), current));
+    script.set_screen_resolutions(offered, current);
+}
+
+// Shared by the load-time seed and the update feed: FrameXML reads the list in OnLoad.
+fn display_modes<'a>(window: &Window, monitors: impl IntoIterator<Item = &'a bevy::window::Monitor>)
+    -> (Vec<ScreenResolution>, Option<ScreenResolution>) {
     let res = &window.resolution;
     let current = Some(ScreenResolution {
         width: res.width() as u32,
@@ -446,7 +459,7 @@ fn publish_display_modes(
     })
     .filter(|r| r.width > 0 && r.height > 0);
     let mut offered: Vec<ScreenResolution> = Vec::new();
-    for m in &monitors {
+    for m in monitors {
         // The monitor's own scale, not the window's: these rows describe the panel.
         let scale = if m.scale_factor > 0.0 {
             m.scale_factor
@@ -466,12 +479,15 @@ fn publish_display_modes(
     }
     offered.sort_by_key(|r| (u64::from(r.width) * u64::from(r.height), r.width, r.height));
     offered.dedup();
-    // Keyed by VM: a `ReloadUI` VM has been pushed nothing, so a plain `Local` would skip it.
-    let memo = last.get(&script);
-    if memo.as_ref() == Some(&(offered.clone(), current)) {
-        return;
-    }
-    *memo = Some((offered.clone(), current));
+    (offered, current)
+}
+
+pub(crate) fn seed_display_modes(world: &mut World, script: &mut benilla_ui::script::UiScript) {
+    let mut windows = world.query_filtered::<&Window, With<PrimaryWindow>>();
+    let Ok(window) = windows.single(world) else { return };
+    let window = window.clone();
+    let mut monitors = world.query::<&bevy::window::Monitor>();
+    let (offered, current) = display_modes(&window, monitors.iter(world));
     script.set_screen_resolutions(offered, current);
 }
 
@@ -650,6 +666,17 @@ fn apply_window_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_modes_are_seeded_before_framexml_and_on_replacement_vms() {
+        let mut world = World::new();
+        world.spawn((Window { resolution: WindowResolution::new(1600, 1000), ..Default::default() }, PrimaryWindow));
+        for _ in 0..2 {
+            let mut script = benilla_ui::script::UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+            seed_display_modes(&mut world, &mut script);
+            script.run("local r = ({GetScreenResolutions()})[GetCurrentResolution()] assert(r == '1600x1000')").unwrap();
+        }
+    }
 
     /// Synced is `Fifo`, not `AutoVsync` (`FifoRelaxed`, which tears on a late frame).
     #[test]

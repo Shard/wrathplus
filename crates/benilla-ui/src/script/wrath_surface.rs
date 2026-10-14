@@ -251,6 +251,8 @@ fn install_trusted_secure_environment(lua: &Lua) -> mlua::Result<()> {
 }
 
 fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
+    // UIParent.lua:1927 positions the stock arena frames; no opponents outside an arena.
+    lua.globals().set("GetNumArenaOpponents", lua.create_function(|_, ()| Ok(0))?)?;
     let globals = lua.globals();
 
     // `IsMouseButtonDown([button])`: a named button ("LeftButton", or 1-5), else any button.
@@ -354,6 +356,14 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::super::{ScriptDialect, UiScript};
+
+    #[test]
+    fn arena_opponent_count_is_zero_without_an_arena() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(s.eval::<i64>("return GetNumArenaOpponents()").unwrap(), 0);
+        let vanilla = UiScript::new().unwrap();
+        assert!(vanilla.eval::<bool>("return GetNumArenaOpponents == nil").unwrap());
+    }
 
     #[test]
     fn wrath_keeps_the_full_engine_api() {

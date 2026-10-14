@@ -395,6 +395,7 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
     // seats either, and the load measures text (the stock tab template's `OnLoad` sizes from its
     // text width, `UIPanelTemplates.xml:370-373`), which answers 0 with no measurer.
     seat_raster_seam_for_load(world, &mut script);
+    crate::video::seed_display_modes(world, &mut script);
     // Read out of the world first: the bracket below borrows `world` for the chat-cache restore.
     let zoom = {
         let z = world.resource::<crate::minimap::MinimapZoom>();
