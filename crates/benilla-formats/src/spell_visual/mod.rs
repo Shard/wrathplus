@@ -545,7 +545,13 @@ pub fn load_spell_visual_catalog(chain: &mut Chain) -> Result<SpellVisualCatalog
         }
     }
 
-    let chain_effects = chain_effects::load(chain).context("reading SpellChainEffects.dbc")?;
+    // Beams (`SpellChainEffects`) are not mapped for 3.3.5, whose rows grew; a Wrath data set
+    // loads every other stage without them.
+    let chain_effects = match chain_effects::load(chain) {
+        Ok(effects) => effects,
+        Err(_) if matches!(chain.profile(), crate::DataProfile::Wrath { .. }) => Default::default(),
+        Err(e) => return Err(e).context("reading SpellChainEffects.dbc"),
+    };
 
     Ok(SpellVisualCatalog {
         visuals,

@@ -92,10 +92,19 @@ fn missing_surface(script: &UiScript) {
     if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
         for table in [
             "Languages", "ItemBagFamily", "TaxiNodes", "GMTicketCategory", "EmotesTextData",
-            "GroundEffectDoodad", "GroundEffectTexture",
+            "GroundEffectDoodad", "GroundEffectTexture", "SpellVisualKit", "SpellVisual",
         ] {
             if let Some(bytes) = super::reference_ui::read(&format!(r"DBFilesClient\{table}.dbc")) {
                 let _ = std::fs::write(std::path::Path::new(&dir).join(format!("{table}.dbc")), bytes);
+            }
+        }
+        for (path, file) in [
+            (r"Creature\Kobold\Kobold.m2", "Kobold.m2"),
+            (r"World\Generic\Orc\Passive Doodads\Braziers\SmallBrazierPurple01.m2", "Brazier.m2"),
+            (r"World\Azeroth\Elwynn\PassiveDoodads\Campfire\ElwynnCampfire.m2", "Campfire.m2"),
+        ] {
+            if let Some(bytes) = super::reference_ui::read(path) {
+                let _ = std::fs::write(std::path::Path::new(&dir).join(file), bytes);
             }
         }
         for name in ["Blizzard_TimeManager"] {

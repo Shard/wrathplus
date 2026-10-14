@@ -194,7 +194,7 @@ fn idle_pose_differs(anim: &benilla_formats::ModelAnimation) -> bool {
 }
 
 /// A model path inside an M2 record (`.mdx`/`.mdl`, backslashes) as its `mpq://….m2` URL.
-fn m2_dep_url(raw: &str) -> String {
+pub(crate) fn m2_dep_url(raw: &str) -> String {
     let p = raw.to_ascii_lowercase().replace('\\', "/");
     let stem = p
         .strip_suffix(".mdx")

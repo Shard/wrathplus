@@ -52,3 +52,32 @@ fn installed_wrath_human_reaction_to_a_diseased_young_wolf() {
     eprintln!("human {human:?}\nwolf {wolf:?}\nwolf→human {:?} human→wolf {:?}",
         wolf.reaction_toward(human), human.reaction_toward(wolf));
 }
+
+#[test]
+fn installed_wrath_spell_visuals_load() {
+    let Some(mut chain) = chain() else { return };
+    let cat = crate::load_spell_visual_catalog(&mut chain).expect("SpellVisual/SpellVisualKit");
+    eprintln!("spell visual kits: {}", cat.kit_len());
+    assert!(cat.kit_len() > 8000);
+}
+
+#[test]
+fn installed_wrath_particle_emitters_read() {
+    let Some(mut chain) = chain() else { return };
+    let bytes = chain
+        .read_file("World\\Azeroth\\Elwynn\\PassiveDoodads\\Campfire\\ElwynnCampfire.m2")
+        .expect("campfire");
+    let emitters = crate::parse_m2_particle_emitters(&bytes).expect("emitters");
+    for e in &emitters {
+        eprintln!(
+            "campfire emitter: blend={:?} tex={:?} rate={:?} color0={:?} scale={:?}",
+            e.blend, e.texture, e.timing.constant_rate(), e.over_life.color[0], e.over_life.scale
+        );
+    }
+    assert_eq!(emitters.len(), 2);
+    assert!(emitters.iter().all(|e| e.blend == crate::ParticleBlend::Add && e.texture.is_some()));
+    assert!(emitters.iter().all(|e| e.timing.peak_rate() > 0.0));
+    let kobold = crate::parse_m2_particle_emitters(&chain.read_file("Creature\\Kobold\\Kobold.m2").unwrap())
+        .expect("kobold");
+    assert_eq!(kobold.len(), 1, "the candle");
+}

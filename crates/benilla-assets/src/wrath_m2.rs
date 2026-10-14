@@ -171,12 +171,14 @@ impl AssetLoader for WrathM2ModelLoader {
             .map(|sequence| sequence.duration)
             .filter(|duration| *duration > 0.0);
 
+        let emitters = build_emitters(ctx, &bytes, &semantic, animations.as_ref());
+
         Ok(M2Model {
             submeshes,
             bounds,
             collision,
-            // The strict v264 parser rejects these effect tables instead of dropping them.
-            emitters: Vec::new(),
+            emitters,
+            // Ribbons and lights are not read from v264 files yet.
             ribbons: Vec::new(),
             lights: Vec::new(),
             skeleton,
@@ -275,6 +277,66 @@ fn build_cameras(
         .and_then(|&index| raw.get(usize::from(index)))
         .map(|camera| camera.still);
     Ok(BuiltCameras { portrait, raw })
+}
+
+/// The model's particle emitters ([`benilla_formats::parse_m2_particle_emitters`] reads v264), as
+/// the Vanilla loader places them: texture, bone pivot, billboard host, child models, the owner's
+/// draw-order rung and water sphere, and its idle slot.
+fn build_emitters(
+    ctx: &mut LoadContext<'_>,
+    bytes: &[u8],
+    semantic: &benilla_formats::WrathRenderModel,
+    animations: Option<&ModelAnimations>,
+) -> Vec<super::ModelEmitter> {
+    let owner_reach = benilla_formats::m2_owner_reach(&semantic.submeshes);
+    let b = &semantic.bounds;
+    let water_bound = (
+        wow_to_bevy([
+            (b.bbox_min[0] + b.bbox_max[0]) * 0.5,
+            (b.bbox_min[1] + b.bbox_max[1]) * 0.5,
+            (b.bbox_min[2] + b.bbox_max[2]) * 0.5,
+        ]),
+        b.sphere_radius,
+    );
+    let idle_seq = animations.and_then(ModelAnimations::idle_seq).unwrap_or(0);
+    let skeleton = &semantic.skeleton;
+    benilla_formats::parse_m2_particle_emitters(bytes)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|def| {
+            let texture = def.texture.as_deref().map(|t| {
+                ctx.load::<Image>(format!("mpq://{}", t.replace('\\', "/").to_ascii_lowercase()))
+            });
+            let bone_pivot = skeleton.bones.get(def.bone as usize).map_or([0.0; 3], |b| b.pivot);
+            let recursion = def
+                .recursion_model
+                .as_deref()
+                .map(|p| ctx.load::<M2Model>(super::m2_dep_url(p)));
+            let geometry = def
+                .geometry_model
+                .as_deref()
+                .map(|p| ctx.load::<M2Model>(super::m2_dep_url(p)));
+            let billboard = skeleton.billboard_host(def.bone).and_then(|h| {
+                let b = skeleton.bones.get(h)?;
+                Some(super::EmitterBillboard {
+                    kind: b.billboard?,
+                    pivot: b.pivot,
+                    bone: u16::try_from(h).ok()?,
+                })
+            });
+            super::ModelEmitter {
+                def,
+                texture,
+                bone_pivot,
+                billboard,
+                recursion,
+                geometry,
+                owner_reach,
+                water_bound,
+                idle_seq,
+            }
+        })
+        .collect()
 }
 
 fn build_animations(

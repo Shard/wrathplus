@@ -36,6 +36,10 @@ pub(crate) fn columns(table: &str, schema_len: usize, file_fields: usize) -> Opt
         "SoundEntries" => (29, 30, |m| { m.same(0, 29); }),
         "Material" => (3, 5, |m| { m.same(0, 3); }),
         "SpellVisual" => (16, 32, |m| { m.same(0, 16); }),
+        // 1.12's kit type (1) is 3.3.5's start animation, a different column; flags appended.
+        "SpellVisualKit" => (35, 38, |m| { m.run(0, 0, 1).run(2, 2, 33); }),
+        // Min and max allowed scale appended.
+        "SpellVisualEffectName" => (5, 7, |m| { m.same(0, 5); }),
         // Four doodad weights between the doodads and the density.
         "GroundEffectTexture" => (7, 11, |m| { m.same(0, 5).run(5, 9, 2); }),
         _ => return None,
@@ -211,6 +215,8 @@ mod tests {
             ("Material", 3, 5),
             ("SpellVisual", 16, 32),
             ("GroundEffectTexture", 7, 11),
+            ("SpellVisualKit", 35, 38),
+            ("SpellVisualEffectName", 5, 7),
         ] {
             let map = columns(table, v, w).unwrap();
             let mut seen = std::collections::HashSet::new();

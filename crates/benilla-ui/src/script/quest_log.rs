@@ -240,6 +240,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             // Returns 4 and 5 are 1 or nil, never booleans; `isCollapsed` is 1 only on a header
             // whose bit in `[0xbb748c]` is clear.
             let flag = |b: bool| if b { Value::Integer(1) } else { Value::Nil };
+            // 2.0+ puts `suggestedGroup` fourth and appends `isDaily, questID`.
+            if lua.app_data_ref::<Model>().expect("model app_data").dialect
+                == super::ScriptDialect::Wrath12340
+            {
+                return Ok(MultiValue::from_vec(vec![
+                    Value::String(lua.create_string(&e.title)?),
+                    Value::Integer(i64::from(e.level)),
+                    tag,
+                    Value::Integer(0),
+                    flag(e.is_header),
+                    flag(e.is_header && e.collapsed),
+                    complete,
+                    Value::Nil,
+                    if e.is_header { Value::Nil } else { Value::Integer(i64::from(e.quest_id)) },
+                ]));
+            }
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&e.title)?),
                 Value::Integer(i64::from(e.level)),
