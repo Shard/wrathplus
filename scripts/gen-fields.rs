@@ -50,7 +50,17 @@ fn parse(path: &str) -> (BTreeMap<String, Entry>, BTreeMap<String, u16>) {
         } else {
             &class
         };
-        let name = name.replace("_FIELD_", "_");
+        // Public PLAYER_BYTES[_2] and private PLAYER_FIELD_BYTES[2] are distinct.
+        let name = match name {
+            "PLAYER_FIELD_BYTES" => "PlayerFieldBytes".to_owned(),
+            "PLAYER_FIELD_BYTES2" => "PlayerFieldBytes2".to_owned(),
+            _ => name.replace("_FIELD_", "_"),
+        };
+        assert!(
+            !fields.contains_key(&name),
+            "duplicate normalized field: {}",
+            name
+        );
         fields.insert(
             name,
             Entry {

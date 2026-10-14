@@ -188,7 +188,7 @@ impl ObjectFields {
     /// `PLAYER_FIELD_BYTES` byte 0 bit `0x2` (private): set by aura type 151, track stealthed;
     /// every creep-flagged unit then gets a minimap dot (`0x5ed210`, the `+0x1028` read).
     pub fn player_track_stealthed(&self) -> bool {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES).unwrap_or(0) & 0x2 != 0
+        self.get(Field::PlayerFieldBytes).unwrap_or(0) & 0x2 != 0
     }
     /// `PLAYER_QUEST_LOG_<slot+1>_*`: one quest-log slot, `quest_id == 0` when the server cleared
     /// it; the count-state and timer are written with the id (`Player.h:1094-1099`).
@@ -331,11 +331,11 @@ impl ObjectFields {
     }
     /// `PLAYER_BYTES`: skinColor, faceType, hairStyle and hairColor, bytes 0 to 3.
     pub fn player_bytes(&self) -> Option<u32> {
-        self.get_u32(FIELD_PLAYER_BYTES)
+        self.get(Field::PlayerBytes)
     }
     /// `PLAYER_BYTES_2`: facialHair, unknown, bank bag slots and rest state, bytes 0 to 3.
     pub fn player_bytes_2(&self) -> Option<u32> {
-        self.get_u32(FIELD_PLAYER_BYTES_2)
+        self.get(Field::PlayerBytes2)
     }
     /// `PLAYER_BYTES_2` byte 3: rest state, 1 rested, 2 normal (`Player.h:673`), set with
     /// hysteresis on the pool (`SetRestBonus`). Absent reads 0, which `GetRestState()` answers
@@ -351,7 +351,7 @@ impl ObjectFields {
     /// `PLAYER_BYTES_3` byte 1: drunkenness, the high byte of `drunk & 0xFFFE` in the low half
     /// (`SetDrunkValue`); the reference clamps it to 100 and scales by 0.01 (`0x5e2a90`).
     pub fn player_drunk_byte(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_BYTES_3).map(|v| (v >> 8) as u8)
+        self.get(Field::PlayerBytes3).map(|v| (v >> 8) as u8)
     }
     /// `PLAYER_FLAGS` (field 190): the player state flags.
     pub fn player_flags(&self) -> u32 {
@@ -407,13 +407,13 @@ impl ObjectFields {
     /// outside instances, where the server releases the spirit after 6 minutes; the client arms
     /// its own `now + 360000` ms, and with the bit clear `GetReleaseTimeRemaining()` is -1.
     pub fn player_release_timer_running(&self) -> bool {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES).unwrap_or(0) & 0x08 != 0
+        self.get(Field::PlayerFieldBytes).unwrap_or(0) & 0x08 != 0
     }
     /// `PLAYER_FIELD_BYTES` byte 1 (private): combo points, 0-5, read at `[player+0xe68]+0x1029`.
     /// vmangos also sets one when a warrior's target dodges (the 4 s Overpower window): the usable
     /// check reads it for any class, `GetComboPoints` (`0x51a190`) only for rogues and druids.
     pub fn player_combo_points(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES)
+        self.get(Field::PlayerFieldBytes)
             .map(|b| ((b >> 8) & 0xff) as u8)
     }
     /// `PLAYER_FIELD_COMBO_TARGET` (field 714, guid, private): the unit the combo points sit on;
@@ -426,27 +426,27 @@ impl ObjectFields {
     /// `[[player+0xe68]+0x102a]`. The client never writes it and no event fires when it moves.
     /// vmangos's `// 0x4C0` beside the field is stale; `UNIT_END + 0x40A` is right.
     pub fn player_action_bar_toggles(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES)
+        self.get(Field::PlayerFieldBytes)
             .map(|b| ((b >> 16) & 0xff) as u8)
     }
     /// `PLAYER_FIELD_BYTES` byte 3 (private): the highest honor rank held, 0 never ranked, which
     /// `RequiredHonorRank` checks (`0x5ea930`); only ever raised (`HonorMgr.cpp:894-895`), so it
     /// outlives a demotion, unlike [`Self::player_pvp_rank`].
     pub fn player_honor_rank(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES)
+        self.get(Field::PlayerFieldBytes)
             .map(|b| ((b >> 24) & 0xff) as u8)
     }
     /// `PLAYER_BYTES_3` byte 3 (public, `UpdateFields_1_12_1.h:125`): the current internal rank
     /// (`HonorMgr.cpp:900`), 0 unranked, 1-4 negative, 5 up positive, indexing `PVP_RANK_*`;
     /// the drawn rank is `rank > 4 ? rank - 4 : -rank` (`HonorMgr.cpp:991`).
     pub fn player_pvp_rank(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_BYTES_3)
+        self.get(Field::PlayerBytes3)
             .map(|b| ((b >> 24) & 0xff) as u8)
     }
     /// `PLAYER_BYTES_3` byte 2 (public): the city-protector title, a race id (`Player.h:354`);
     /// `UnitPVPName` (`0x609370`) appends `PVP_MEDAL<n>` when nonzero. vmangos never writes it.
     pub fn player_pvp_medal(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_BYTES_3)
+        self.get(Field::PlayerBytes3)
             .map(|b| ((b >> 16) & 0xff) as u8)
     }
     /// `PLAYER_FIELD_SESSION_KILLS` (private): today's honorable and dishonorable kills, both
@@ -501,8 +501,7 @@ impl ObjectFields {
     /// `PLAYER_FIELD_BYTES2` byte 0 (private): progress through the current rank, 0-255
     /// (`HonorMgr.cpp:905-909`); a negative rank's `-255` scale wraps in the `uint8` cast.
     pub fn player_honor_rank_bar(&self) -> Option<u8> {
-        self.get_u32(FIELD_PLAYER_FIELD_BYTES2)
-            .map(|b| (b & 0xff) as u8)
+        self.get(Field::PlayerFieldBytes2).map(|b| (b & 0xff) as u8)
     }
     /// `UNIT_FIELD_BYTES_0` byte 0: race.
     pub fn unit_race(&self) -> Option<u8> {
