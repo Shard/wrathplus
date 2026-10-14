@@ -97,6 +97,8 @@ fn wrath_vertex_texture_material_animation_and_nested_bone_track_decode() {
         (28, 6.0),
         (32, 0.5),
         (36, 0.25),
+        (40, -0.75),
+        (44, 1.5),
     ] {
         set_f32(&mut vertex, at, value);
     }
@@ -168,6 +170,9 @@ fn wrath_vertex_texture_material_animation_and_nested_bone_track_decode() {
     let model = wrath.model();
     assert_eq!(model.vertices[0].bone_weights, [10, 20, 30, 40]);
     assert_eq!(model.vertices[0].position.x, 1.0);
+    let v = &model.vertices[0];
+    assert_eq!((v.tex_coords.x, v.tex_coords.y), (0.5, 0.25));
+    assert_eq!((v.tex_coords2.x, v.tex_coords2.y), (-0.75, 1.5));
     assert_eq!(
         model.textures[0].filename.string.to_str().unwrap(),
         "Synthetic.blp"
