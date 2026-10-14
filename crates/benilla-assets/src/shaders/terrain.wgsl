@@ -13,7 +13,11 @@
     mesh_functions,
     forward_io::Vertex,
     view_transformations::position_world_to_clip,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, lights},
+    shadows::fetch_directional_shadow,
+    mesh_bindings::mesh,
+    mesh_types::MESH_FLAGS_SHADOW_RECEIVER_BIT,
+    mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var layer_array: texture_2d_array<f32>;
@@ -62,6 +66,10 @@ struct TerrainVsOut {
     // carried torch is (1.4, 0.87, 0.40)) saturates one vertex and falls off linearly from it,
     // where clamping per pixel would pin a wide plateau at white.
     @location(6) primary: vec3<f32>,
+    @location(7) world_normal: vec3<f32>,
+    @location(8) sun: vec3<f32>,
+    @location(9) non_sun: vec3<f32>,
+    @location(10) @interpolate(flat) instance_index: u32,
 }
 
 // Terrain's point-light candidacy half-width (yd): `w + 10`, `w` being the chunk's bounding-sphere
@@ -157,6 +165,11 @@ fn vertex(in: Vertex) -> TerrainVsOut {
     // chunk's three nearest point lights with their over-gamut colours raw.
     let ndotl = max(dot(n, l), 0.0);
     let points = point_light_sum(out.world_position.xyz, n, mcnk_cell_anchor(out.world_position.xyz));
+    // Only Plus reads these separated terms; Classic retains its original clamp/interpolation.
+    out.instance_index = in.instance_index;
+    out.world_normal = n;
+    out.sun = wow_light.light_diffuse.rgb * ndotl;
+    out.non_sun = wow_light.light_ambient.rgb + points;
     out.primary = clamp(
         wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl + points,
         vec3<f32>(0.0),
@@ -206,7 +219,17 @@ fn fragment(in: TerrainVsOut) -> @location(0) vec4<f32> {
     specmask = mix(specmask, s2.a, a.g);
     specmask = mix(specmask, s3.a, a.b);
 
-    let primary = in.primary;
+    var primary = in.primary;
+    var sun_visibility = 1.0;
+    if (wow_light.sh_c16.w > 0.5 && (mesh[in.instance_index].flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u) {
+        let view_z = (view.view_from_world * in.world_position).z;
+        for (var i = 0u; i < lights.n_directional_lights; i += 1u) {
+            if ((lights.directional_lights[i].flags & DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
+                sun_visibility *= fetch_directional_shadow(i, in.world_position, normalize(in.world_normal), view_z);
+            }
+        }
+        primary = clamp(in.non_sun + in.sun * sun_visibility, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
 
     // MCSH baked shadow. With `pixelShaders` and `specular` on, terrain is one pass through
     // `terrainp_s.bls`, which reads the MCSH bit from the blend texture's alpha (1 lit, 0 shadowed)
@@ -223,7 +246,10 @@ fn fragment(in: TerrainVsOut) -> @location(0) vec4<f32> {
     //   diffuse  = tex · primary · (0.3·shadow + 0.7)   (a flat −30% in shadow, no tint)
     //   specular = sheen · mask · shadow                 (none in shadow)
     let diffuse_term = color * primary * (0.3 * shadow_lit + 0.7);
-    let spec_term = in.specular * specmask * shadow_lit;
+    var spec_term = in.specular * specmask * shadow_lit;
+    if (wow_light.sh_c16.w > 0.5 && (mesh[in.instance_index].flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u) {
+        spec_term *= sun_visibility;
+    }
     var tuned = clamp(diffuse_term + spec_term, vec3<f32>(0.0), vec3<f32>(1.0));
 
     // Gamma-space GL_LINEAR fog on planar eye-Z, as the reference computes `fogcoord`, not radial

@@ -6,6 +6,7 @@ use bevy::render::extract_resource::ExtractResource;
 
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq, ExtractResource)]
 pub struct ModernLighting {
+    pub shadows: bool,
     pub fog: bool,
     pub bloom: bool,
     pub tone_mapping: bool,
@@ -19,8 +20,12 @@ impl ModernLighting {
 }
 
 /// Occupies only previously zero spare lanes. Classic is a byte-identical no-op.
+/// Also packs the shadow opt-in into row 12.w; all disabled lanes stay untouched.
 /// Height is relative to the eye, avoiding a sea-level assumption on elevated continents.
 pub(crate) fn pack_fog(rows: &mut [[f32; 4]; 21], policy: ModernLighting, eye_y: f32) {
+    if policy.shadows {
+        rows[12][3] = 1.0;
+    }
     if policy.fog {
         rows[5][2] = 1.0;
         rows[19][2] = eye_y - 8.0;
@@ -39,6 +44,24 @@ mod tests {
         pack_fog(&mut rows, ModernLighting::default(), 100.0);
         assert_eq!(rows, before);
         assert!(!ModernLighting::default().post_process());
+    }
+
+    #[test]
+    fn shadows_touch_only_row_12_w_and_do_not_enable_postprocess() {
+        let mut rows = [[3.0; 4]; 21];
+        let mut expected = rows;
+        expected[12][3] = 1.0;
+        let policy = ModernLighting {
+            shadows: true,
+            ..default()
+        };
+        pack_fog(&mut rows, policy, 100.0);
+        assert_eq!(rows, expected);
+        assert!(!policy.post_process());
+        // The world pack starts from zero each frame, so disabling clears the lane.
+        let mut fresh = [[0.0; 4]; 21];
+        pack_fog(&mut fresh, ModernLighting::default(), 100.0);
+        assert_eq!(fresh[12][3], 0.0);
     }
 
     #[test]

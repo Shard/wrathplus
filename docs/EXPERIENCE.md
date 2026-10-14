@@ -103,3 +103,31 @@ zero-disabled branch. No light layout or portrait/glue buffer changes are requir
 Headless policy/packing and shader checks complement the full app suite; they cannot certify
 Classic pixel equality or Plus appearance. The manager performs runtime switches and side-by-side
 captures, including portrait/glue isolation, before accepting the rendering result.
+
+### Plus shadow implementation / material extension seam
+
+The world-only shadow sun exists only while the Shadows feature is effective and a world camera
+exists. It adds no illumination (illuminance zero), uses layer 0 and two bounded cascades at 30/120
+yards. Classic never spawns it. `ModernLighting` writes the receiver gate in shared light row 12.w;
+row 12.xyz and all other existing field offsets remain unchanged. Booth buffers leave this gate zero.
+Terrain and exterior model receivers attenuate sunlight, not ambient, point lights, emission or
+interior probes. Classic retains its original lighting expressions in the zero-gate branch.
+
+`benilla-assets/src/materials.rs` dispatches PREPASS_PIPELINE before forward specialization and
+uses `shaders/wow_shadow.wgsl`, with the child helper `shadow_material.rs`. Forward attribute and
+blend/depth logic must never run on this shadow path. The caster duplicates the complete
+WowLight/ModelParams ABI: future two-stage material fields must be mirrored there. Palette skinning,
+rig origins and animated UV affine match the visible model. Prepass inputs are position 0, UV 1/2,
+color 7 and custom joints/weights 10/11 (not forward UV 2/3 and color 5).
+
+Caster scope is canonical opaque/mask geometry plus source-cutout fade twins (marker bit 10,
+224/255). Unknown opaque-source Blend twins are conservatively excluded: a future caller may
+supply WOW_SHADOW_SOURCE_OPAQUE only with authored provenance included in its cache key.
+Excluded keys: clutter, additive, no-depth-write/test, modulate/modulate2x, zfill, far-side, sky;
+excluded mesh lanes: merged fade sphere and merged probe slot. Uniform exclusions are marker
+mask 0x3b87 (bits 0/1 no depth, 2 glow, 7/8 multiply, 9 zfill, 11 far-side, 12 env-map, 13 sky),
+clutter_fade.w and UI clip anim_slots.w. Authored translucent geometry does not cast. WMO MOCV
+alpha is lighting data, not coverage. Shadow coverage never uses player-distance or MeshTag fade.
+Merged geometry, clutter and unsupported translucent/effect casters remain outside this first
+bounded shadow implementation. Runtime visual/bias quality and Classic pixel equality require
+manager-run live captures; worker headless tests do not establish those results.

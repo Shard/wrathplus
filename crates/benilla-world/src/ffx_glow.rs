@@ -1711,6 +1711,7 @@ mod modern_tests {
     fn all_plus_switches_are_independent_and_booths_never_opt_in() {
         for bits in 0..8 {
             let policy = ModernLighting {
+                shadows: true,
                 fog: true,
                 bloom: bits & 1 != 0,
                 tone_mapping: bits & 2 != 0,

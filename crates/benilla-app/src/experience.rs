@@ -235,6 +235,7 @@ pub(crate) fn sync_lighting(
 
 fn lighting_policy(experience: &Experience) -> benilla_world::modern_lighting::ModernLighting {
     benilla_world::modern_lighting::ModernLighting {
+        shadows: experience.enabled(Feature::Shadows),
         fog: experience.enabled(Feature::Fog),
         bloom: experience.enabled(Feature::Bloom),
         tone_mapping: experience.enabled(Feature::ToneMapping),
@@ -252,6 +253,11 @@ mod lighting_tests {
         experience.set_profile(Profile::Plus);
         assert!(lighting_policy(&experience).post_process());
         assert!(lighting_policy(&experience).fog);
+        assert!(lighting_policy(&experience).shadows);
+        experience.set_feature(Feature::Shadows, false);
+        assert!(!lighting_policy(&experience).shadows);
+        assert!(lighting_policy(&experience).fog);
+        experience.set_feature(Feature::Shadows, true);
         experience.set_feature(Feature::Bloom, false);
         assert!(!lighting_policy(&experience).bloom);
         assert!(lighting_policy(&experience).tone_mapping);
