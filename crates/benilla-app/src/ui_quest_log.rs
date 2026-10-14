@@ -129,7 +129,11 @@ impl Plugin for UiQuestLogPlugin {
         app.init_resource::<QuestLog>()
             .add_systems(
                 Startup,
-                (load_quest_header_names, load_quest_tag_names)
+                (
+                    load_quest_header_names,
+                    load_quest_tag_names,
+                    crate::quest_rewards::load,
+                )
                     .after(benilla_assets::AssetSet::Open),
             )
             .add_systems(
@@ -471,7 +475,10 @@ pub(crate) fn feed_quest_log(
     header_names: Option<Res<QuestHeaderNamesRes>>,
     tag_names: Option<Res<QuestTagNamesRes>>,
     states: Res<crate::world_state::WorldStates>,
-    spells: Option<Res<Spells>>,
+    (spells, rewards): (
+        Option<Res<Spells>>,
+        Option<Res<crate::quest_rewards::QuestRewardTables>>,
+    ),
     // The completion toast is a message-catalog row, whose surface and sound the sink reads.
     mut sink: crate::ui_action::MessageSink,
     mut last: Local<crate::ui_script::VmMemo<QuestLogState>>,
@@ -630,14 +637,26 @@ pub(crate) fn feed_quest_log(
                             &get,
                         ),
                         // Every row's: the bindings resolve the selection per call.
-                        Some(build_detail(
-                            t,
-                            &items,
-                            icons.as_deref(),
-                            &commands,
-                            &macros,
-                            spells.as_deref(),
-                        )),
+                        Some({
+                            let mut detail = build_detail(
+                                t,
+                                &items,
+                                icons.as_deref(),
+                                &commands,
+                                &macros,
+                                spells.as_deref(),
+                            );
+                            if let (Some(w), Some(tables)) = (&t.wrath, rewards.as_deref()) {
+                                tables.fill_log(
+                                    &mut detail,
+                                    w,
+                                    t.level,
+                                    store.0.unit_level(),
+                                    macros.subject,
+                                );
+                            }
+                            detail
+                        }),
                     ),
                     // The in-flight filter above kept only cached rows.
                     None => unreachable!("the in-flight gate leaves only cached rows"),

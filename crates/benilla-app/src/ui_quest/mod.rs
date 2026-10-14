@@ -426,7 +426,10 @@ pub(crate) fn feed_quest(
     names: Res<NameCache>,
     states: Res<crate::world_state::WorldStates>,
     self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
-    spells: Option<Res<Spells>>,
+    (spells, rewards): (
+        Option<Res<Spells>>,
+        Option<Res<crate::quest_rewards::QuestRewardTables>>,
+    ),
     go_templates: Res<crate::go_templates::GameObjectTemplates>,
     materials: Option<Res<crate::ui_item_text::PageMaterials>>,
     mut sink: MessageSink,
@@ -454,7 +457,7 @@ pub(crate) fn feed_quest(
         .collect();
     show_messages(&mut script, &mut sink, "ui_quest", lines);
     let player = crate::npc_text::player_identity(&self_q, &names, &commands);
-    let fresh = snapshot(
+    let mut fresh = snapshot(
         &giver,
         &items,
         icons.as_deref(),
@@ -465,6 +468,17 @@ pub(crate) fn feed_quest(
         },
         spells.as_deref(),
     );
+    if let (Some(state), Some(tables)) = (&mut fresh, rewards.as_deref()) {
+        let native = match giver.view.as_ref() {
+            Some(QuestView::Detail(q)) => q.wrath.as_ref(),
+            Some(QuestView::Reward(q)) => q.wrath.as_ref(),
+            Some(QuestView::Progress(q)) => q.wrath.as_ref(),
+            _ => None,
+        };
+        if let Some(native) = native {
+            state.reward_title = tables.title(native.title_id, player.as_ref());
+        }
+    }
     // The background is the source object's material, never a creature's and never on the wire
     // (`GetQuestBackgroundMaterial`, `0x502230`); the reader window's binding shares its body.
     let fresh = fresh.map(|mut st| {

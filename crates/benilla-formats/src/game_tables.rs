@@ -25,6 +25,7 @@ pub enum GameTable {
     SpellCrit,
     SpellCritBase,
     CombatRatings,
+    ClassCombatRatingScalar,
 }
 impl GameTable {
     fn name(self) -> &'static str {
@@ -38,16 +39,20 @@ impl GameTable {
             Self::SpellCrit => "gtChanceToSpellCrit",
             Self::SpellCritBase => "gtChanceToSpellCritBase",
             Self::CombatRatings => "gtCombatRatings",
+            Self::ClassCombatRatingScalar => "gtOCTClassCombatRatingScalar",
         }
     }
     fn class_level(self) -> bool {
         !matches!(
             self,
-            Self::MeleeCritBase | Self::SpellCritBase | Self::CombatRatings
+            Self::MeleeCritBase
+                | Self::SpellCritBase
+                | Self::CombatRatings
+                | Self::ClassCombatRatingScalar
         )
     }
 }
-const TABLES: [GameTable; 9] = [
+const TABLES: [GameTable; 10] = [
     GameTable::RegenHpPerSpirit,
     GameTable::OctRegenHp,
     GameTable::RegenMpPerSpirit,
@@ -57,6 +62,7 @@ const TABLES: [GameTable; 9] = [
     GameTable::SpellCrit,
     GameTable::SpellCritBase,
     GameTable::CombatRatings,
+    GameTable::ClassCombatRatingScalar,
 ];
 
 #[derive(Debug, Default)]
@@ -82,6 +88,18 @@ impl WrathGameTables {
         }
         self.get(table, u32::from(class) - 1)
     }
+    /// Native zero-based rating and 1-based class. This store has explicit ONE-based ids:
+    /// AzerothCore Player.cpp: `(class-1)*GT_MAX_RATING + cr + 1`, GT_MAX_RATING=32.
+    pub fn class_combat_rating_scalar(&self, class: u8, rating: u8) -> Option<f32> {
+        if class == 0 || rating >= 32 {
+            return None;
+        }
+        self.get(
+            GameTable::ClassCombatRatingScalar,
+            (u32::from(class) - 1) * 32 + u32::from(rating) + 1,
+        )
+    }
+
     /// Native zero-based combat-rating enum, not the Lua CR1..25 index.
     pub fn combat_rating(&self, rating: u8, level: u32) -> Option<f32> {
         if level == 0 {
@@ -127,7 +145,7 @@ fn scalar_table(bytes: &[u8], table: GameTable) -> Result<BTreeMap<u32, f32>> {
     Ok(rows)
 }
 
-/// Load all nine required native tables; missing files are errors, never invented zero tables.
+/// Load all ten required native tables; missing files are errors, never invented zero tables.
 pub fn load_wrath_game_tables(chain: &mut Chain) -> Result<WrathGameTables> {
     let mut tables = BTreeMap::new();
     for table in TABLES {
@@ -209,6 +227,32 @@ mod tests {
     }
 
     #[test]
+    fn class_rating_uses_one_based_ids_and_native_zero_based_ratings() {
+        let rows = scalar_table(
+            &dbc(&[
+                [1, 1.0f32.to_bits()],
+                [32, 2.0f32.to_bits()],
+                [33, 3.0f32.to_bits()],
+                [352, 4.0f32.to_bits()],
+            ]),
+            GameTable::ClassCombatRatingScalar,
+        )
+        .unwrap();
+        let t = WrathGameTables(BTreeMap::from([(GameTable::ClassCombatRatingScalar, rows)]));
+        assert_eq!(t.class_combat_rating_scalar(1, 0), Some(1.0));
+        assert_eq!(t.class_combat_rating_scalar(1, 31), Some(2.0));
+        assert_eq!(t.class_combat_rating_scalar(2, 0), Some(3.0));
+        assert_eq!(t.class_combat_rating_scalar(11, 31), Some(4.0));
+        assert_eq!(t.class_combat_rating_scalar(0, 0), None);
+        assert_eq!(t.class_combat_rating_scalar(1, 32), None);
+        assert_eq!(t.class_combat_rating_scalar(12, 0), None);
+        assert_eq!(
+            t.class_level(GameTable::ClassCombatRatingScalar, 1, 1),
+            None
+        );
+    }
+
+    #[test]
     fn duplicate_indices_and_truncation_fail_closed() {
         let b = dbc(&[[0, 1.0f32.to_bits()], [0, 2.0f32.to_bits()]]);
         assert!(scalar_table(&b, GameTable::MeleeCrit).is_err());
@@ -222,6 +266,17 @@ mod tests {
         let data = std::env::var("WOW_DATA").expect("WOW_DATA");
         let mut chain = Chain::open_wrath(std::path::Path::new(&data), "enUS").unwrap();
         let t = load_wrath_game_tables(&mut chain).unwrap();
+        eprintln!(
+            "class scaling count={} first={:?} warrior0={:?} mage9={:?}",
+            t.0[&GameTable::ClassCombatRatingScalar].len(),
+            t.0[&GameTable::ClassCombatRatingScalar].first_key_value(),
+            t.class_combat_rating_scalar(1, 0),
+            t.class_combat_rating_scalar(8, 9)
+        );
+        assert_eq!(t.0[&GameTable::ClassCombatRatingScalar].len(), 352);
+        assert_eq!(t.get(GameTable::ClassCombatRatingScalar, 0), None);
+        assert_eq!(t.class_combat_rating_scalar(1, 0), Some(1.0));
+        assert_eq!(t.class_combat_rating_scalar(8, 9), Some(1.0));
         for table in TABLES {
             eprintln!(
                 "{}: count={} index0={:?} index79={:?}",
@@ -240,6 +295,7 @@ mod tests {
                 GameTable::MeleeCrit => 0.002587,
                 GameTable::MeleeCritBase => 0.031891,
                 GameTable::CombatRatings => 0.096154,
+                GameTable::ClassCombatRatingScalar => continue,
             };
             assert!(
                 (t.get(table, 0).unwrap() - expected).abs() < 0.0000001,
@@ -251,6 +307,7 @@ mod tests {
                 match table {
                     GameTable::MeleeCritBase | GameTable::SpellCritBase => 11,
                     GameTable::CombatRatings => 3200,
+                    GameTable::ClassCombatRatingScalar => unreachable!(),
                     _ => 1100,
                 }
             );
