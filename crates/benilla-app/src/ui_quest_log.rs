@@ -588,6 +588,7 @@ pub(crate) fn feed_quest_log(
             pushable: false,
             objectives: Vec::new(),
             detail: None,
+            ..Default::default()
         });
         header_keys.push(Some(name.clone()));
         for &ri in row_idxs {
@@ -654,6 +655,7 @@ pub(crate) fn feed_quest_log(
                 timer: r.log_slot.timer,
                 objectives,
                 detail,
+                ..Default::default()
             });
             header_keys.push(None);
         }
@@ -970,6 +972,7 @@ mod tests {
             timer: 0,
             pushable: false,
             objectives: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -986,6 +989,7 @@ mod tests {
             timer: 0,
             pushable: false,
             objectives: Vec::new(),
+            ..Default::default()
         }
     }
 
