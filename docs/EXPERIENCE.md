@@ -131,3 +131,19 @@ alpha is lighting data, not coverage. Shadow coverage never uses player-distance
 Merged geometry, clutter and unsupported translucent/effect casters remain outside this first
 bounded shadow implementation. Runtime visual/bias quality and Classic pixel equality require
 manager-run live captures; worker headless tests do not establish those results.
+
+### Readable chat text (Plus UI proof)
+
+`[experience.features] readable_text = true` opts Plus into a 16-unit minimum font height
+on the ten named stock chat windows. It is off by default, including in Plus. Classic masks
+it even when explicitly requested. Existing font faces, outlines, shared Font objects, quest
+text and unrelated message frames are untouched. Runtime feature/profile setters use the same
+registry as graphics. Disabling the feature or returning to Classic restores authored heights.
+
+The engine value changes before the UI tick, not through render-only scaling: Lua `GetFont`,
+layout and painting agree. Addon font setters remain immediately authoritative; their raw size
+may be visible until the next per-frame policy sync, which adopts it as the new baseline and
+never stacks sizes. A setter after the last sync wins when disabling. The bounded check only
+looks up ChatFrame1..10, only writes changed sizes, and never creates missing font regions.
+On an untouched Classic VM it allocates no policy state and performs no font lookups or writes.
+The first proof is chat-only; quest-log overrides await verification of isolated region ownership.
