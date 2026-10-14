@@ -28,6 +28,8 @@ pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
 mod session;
 mod world;
+mod wrath_notices;
+mod wrath_threat;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
@@ -114,6 +116,8 @@ impl Plugin for NetPlugin {
         );
         session::register(app);
         objects::register(app);
+        wrath_notices::register(app);
+        wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
             .insert_resource(NetEvents(handles.events))

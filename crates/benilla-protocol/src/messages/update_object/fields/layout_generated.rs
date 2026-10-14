@@ -101,6 +101,8 @@ pub enum Field {
     PlayerExploredZones1,
     PlayerFakeInebriation,
     PlayerFarsight,
+    PlayerFieldBytes,
+    PlayerFieldBytes2,
     PlayerFlags,
     PlayerGlyphSlots1,
     PlayerGlyphs1,
@@ -260,7 +262,7 @@ pub enum Field {
     UnitVirtualItemSlotId,
 }
 impl Field {
-    pub const ALL: [Self; 251] = [
+    pub const ALL: [Self; 253] = [
         Self::ContainerAlignPad,
         Self::ContainerNumSlots,
         Self::ContainerSlot1,
@@ -355,6 +357,8 @@ impl Field {
         Self::PlayerExploredZones1,
         Self::PlayerFakeInebriation,
         Self::PlayerFarsight,
+        Self::PlayerFieldBytes,
+        Self::PlayerFieldBytes2,
         Self::PlayerFlags,
         Self::PlayerGlyphSlots1,
         Self::PlayerGlyphs1,
@@ -514,7 +518,7 @@ impl Field {
         Self::UnitVirtualItemSlotId,
     ];
 }
-pub(super) const VANILLA: [Option<FieldSpan>; 251] = [
+pub(super) const VANILLA: [Option<FieldSpan>; 253] = [
     Some(FieldSpan {
         index: 49,
         width: 1,
@@ -855,7 +859,7 @@ pub(super) const VANILLA: [Option<FieldSpan>; 251] = [
         object_type: ObjectType::Player,
     }), // PlayerBuybackTimestamp1
     Some(FieldSpan {
-        index: 1222,
+        index: 193,
         width: 1,
         object_type: ObjectType::Player,
     }), // PlayerBytes
@@ -929,6 +933,16 @@ pub(super) const VANILLA: [Option<FieldSpan>; 251] = [
         width: 2,
         object_type: ObjectType::Player,
     }), // PlayerFarsight
+    Some(FieldSpan {
+        index: 1222,
+        width: 1,
+        object_type: ObjectType::Player,
+    }), // PlayerFieldBytes
+    Some(FieldSpan {
+        index: 1260,
+        width: 1,
+        object_type: ObjectType::Player,
+    }), // PlayerFieldBytes2
     Some(FieldSpan {
         index: 190,
         width: 1,
@@ -1536,7 +1550,7 @@ pub(super) const VANILLA: [Option<FieldSpan>; 251] = [
     None, // UnitVirtualItemSlotId
 ];
 pub(super) const VANILLA_ENDS: [u16; 8] = [6, 48, 122, 188, 1282, 26, 16, 38];
-pub(super) const WRATH: [Option<FieldSpan>; 251] = [
+pub(super) const WRATH: [Option<FieldSpan>; 253] = [
     Some(FieldSpan {
         index: 65,
         width: 1,
@@ -1829,7 +1843,7 @@ pub(super) const WRATH: [Option<FieldSpan>; 251] = [
         object_type: ObjectType::Player,
     }), // PlayerBuybackTimestamp1
     Some(FieldSpan {
-        index: 1197,
+        index: 153,
         width: 1,
         object_type: ObjectType::Player,
     }), // PlayerBytes
@@ -1919,6 +1933,16 @@ pub(super) const WRATH: [Option<FieldSpan>; 251] = [
         width: 2,
         object_type: ObjectType::Player,
     }), // PlayerFarsight
+    Some(FieldSpan {
+        index: 1197,
+        width: 1,
+        object_type: ObjectType::Player,
+    }), // PlayerFieldBytes
+    Some(FieldSpan {
+        index: 1229,
+        width: 1,
+        object_type: ObjectType::Player,
+    }), // PlayerFieldBytes2
     Some(FieldSpan {
         index: 150,
         width: 1,
