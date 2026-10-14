@@ -1015,7 +1015,13 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::QuestQuery { .. }
         | ClientCommand::QuestlogRemove { .. }
         | ClientCommand::PushQuestToParty { .. }
-        | ClientCommand::QuestConfirmAccept { .. } => WrathRoute::NativeSession,
+        | ClientCommand::QuestConfirmAccept { .. }
+        | ClientCommand::ListInventory { .. }
+        | ClientCommand::BuyItem { .. }
+        | ClientCommand::BuyItemInSlot { .. }
+        | ClientCommand::SellItem { .. }
+        | ClientCommand::BuybackItem { .. }
+        | ClientCommand::RepairItem { .. } => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
@@ -1303,6 +1309,7 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
 /// Queries, the action bar and casting, in build 12340's layouts.
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_npc as n;
+    use benilla_protocol::wrath_vendor as v;
     use benilla_protocol::wrath_session::{self as s, CastTarget};
     // The client's cast counter, echoed by the server's cast results.
     static CAST_COUNT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
@@ -1385,6 +1392,23 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         }
         ClientCommand::QuestConfirmAccept { quest } => {
             (n::CMSG_QUEST_CONFIRM_ACCEPT, quest.to_le_bytes().to_vec())
+        }
+        ClientCommand::ListInventory { guid } => (v::CMSG_LIST_INVENTORY, guid.to_le_bytes().to_vec()),
+        ClientCommand::BuyItem { vendor, entry, count } => {
+            (v::CMSG_BUY_ITEM, v::encode_buy_item(vendor, entry, count))
+        }
+        ClientCommand::BuyItemInSlot { vendor, entry, bag_guid, bag_slot, count } => (
+            v::CMSG_BUY_ITEM_IN_SLOT,
+            v::encode_buy_item_in_slot(vendor, entry, bag_guid, bag_slot, count),
+        ),
+        ClientCommand::SellItem { vendor, item_guid, count } => {
+            (v::CMSG_SELL_ITEM, v::encode_sell_item(vendor, item_guid, count))
+        }
+        ClientCommand::BuybackItem { vendor, slot } => {
+            (v::CMSG_BUYBACK_ITEM, v::encode_buyback_item(vendor, slot))
+        }
+        ClientCommand::RepairItem { vendor, item_guid } => {
+            (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid))
         }
         other => unreachable!("not a Wrath session command: {other:?}"),
     }

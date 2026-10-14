@@ -410,6 +410,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_vendor::handles(opcode) => {
+                Ok(match crate::wrath_vendor::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_npc::handles(opcode) => {
                 Ok(match crate::wrath_npc::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

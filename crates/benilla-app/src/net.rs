@@ -591,6 +591,13 @@ impl NetCommands {
                         | ClientCommand::QuestlogRemove { .. }
                         | ClientCommand::PushQuestToParty { .. }
                         | ClientCommand::QuestConfirmAccept { .. }
+                        // `benilla_protocol::wrath_vendor`.
+                        | ClientCommand::ListInventory { .. }
+                        | ClientCommand::BuyItem { .. }
+                        | ClientCommand::BuyItemInSlot { .. }
+                        | ClientCommand::SellItem { .. }
+                        | ClientCommand::BuybackItem { .. }
+                        | ClientCommand::RepairItem { .. }
                 ) || matches!(
                     command,
                     ClientCommand::AutostoreLootItem { slot: 0..=17 }

@@ -104,3 +104,21 @@ fn any_up_registers_every_buttons_release() {
         "LeftButton,RightButton"
     );
 }
+
+/// 3.3.5's quest log moves its shown detail pane from a hidden window under the open log.
+#[test]
+fn a_shown_frame_moved_under_a_visible_parent_becomes_visible() {
+    let script = wrath();
+    assert!(script
+        .eval::<bool>(
+            r#"
+            local hidden = CreateFrame("Frame", nil, UIParent) hidden:Hide()
+            local open = CreateFrame("Frame", nil, UIParent)
+            local pane = CreateFrame("Frame", nil, hidden)
+            local before = pane:IsVisible()
+            pane:SetParent(open)
+            return not before and pane:IsVisible() == 1
+            "#,
+        )
+        .unwrap());
+}

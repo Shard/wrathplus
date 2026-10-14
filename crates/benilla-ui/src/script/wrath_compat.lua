@@ -708,3 +708,10 @@ GetRewardXP, GetRewardHonor = GetRewardXP or zero, GetRewardHonor or zero
 GetRewardTalents, GetRewardArenaPoints = GetRewardTalents or zero, GetRewardArenaPoints or zero
 GetRewardTitle = GetRewardTitle or none
 GetSuggestedGroupNum = GetSuggestedGroupNum or zero
+
+-- ── 3.x movement binding names ────────────────────────────────────────────────────────────────
+-- `Bindings.xml` calls the flying-era names; on the ground they are 1.12's jump and sit.
+JumpOrAscendStart = JumpOrAscendStart or Jump
+AscendStop = AscendStop or none
+SitStandOrDescendStart = SitStandOrDescendStart or SitOrStand
+DescendStop = DescendStop or none

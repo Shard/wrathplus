@@ -20,6 +20,7 @@ pub mod wrath_movement;
 pub mod wrath_npc;
 pub mod wrath_relay;
 pub mod wrath_session;
+pub mod wrath_vendor;
 pub mod wrath_world;
 pub use auth::AuthReject;
 pub use events::{

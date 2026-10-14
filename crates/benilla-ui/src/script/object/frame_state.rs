@@ -336,7 +336,13 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             };
             // None: the same parent, a total no-op (`0x76ab20`), not even a layout touch.
             let Some(hidden) = hidden else { return Ok(()) };
-            let was_visible = !hidden.is_empty();
+            // 1.12 runs the show half only when the move hid something, so a shown frame moved
+            // from a hidden parent under a visible one stays invisible. 3.3.5 re-evaluates it:
+            // `QuestLogDetailFrame_AttachToQuestLog` moves the shown detail pane under the open
+            // log and relies on it appearing.
+            let wrath = lua.app_data_ref::<Model>().expect("model").dialect
+                == crate::script::ScriptDialect::Wrath12340;
+            let was_visible = !hidden.is_empty() || wrath;
             event::fire_visibility_changes(lua, hidden);
             let shown = {
                 let mut model = lua.app_data_mut::<Model>().expect("model");
