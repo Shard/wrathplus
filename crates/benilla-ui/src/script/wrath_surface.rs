@@ -360,6 +360,20 @@ mod tests {
     use super::super::{ScriptDialect, UiScript};
 
     #[test]
+    fn wrath_dynamic_fontstring_labels_clear_until_updated_without_calling_functions() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("local f = CreateFrame('Frame'):CreateFontString() f:SetText('old') f:SetText(function() error('must not invoke') end) assert(f:GetText() == nil) f:SetText(42) assert(f:GetText() == '42') f:SetText({}) assert(f:GetText() == nil)").unwrap();
+    }
+
+    #[test]
+    fn wrath_world_arrow_creates_one_effect_child_before_onload_uses_it() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("local parent = CreateFrame('Frame') CreateWorldMapArrowFrame(parent) assert(PlayerArrowEffectFrame ~= nil) PlayerArrowEffectFrame:SetAlpha(.65) PlayerArrowEffectFrame:SetFrameLevel(110) local effect = PlayerArrowEffectFrame CreateWorldMapArrowFrame(parent) assert(effect == PlayerArrowEffectFrame)").unwrap();
+        let vanilla = UiScript::new().unwrap();
+        vanilla.run("CreateWorldMapArrowFrame(CreateFrame('Frame')) assert(PlayerArrowEffectFrame == nil)").unwrap();
+    }
+
+    #[test]
     fn wrath_alarm_time_has_a_numeric_default_and_is_writable() {
         let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
         s.run("assert(tonumber(GetCVar('timeMgrAlarmTime')) == 0) SetCVar('timeMgrAlarmTime', '420') assert(tonumber(GetCVar('timeMgrAlarmTime')) == 420)").unwrap();
