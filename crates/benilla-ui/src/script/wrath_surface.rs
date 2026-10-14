@@ -14,6 +14,8 @@ mod wrath_power;
 use super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    // Blizzard_TimeManager.lua:91 reads minutes since midnight during OnLoad.
+    super::cvars::install_wrath_clock_cvars(lua)?;
     install_truthful_readers(lua)?;
     wrath_loot::install(lua)?;
     wrath_power::install(lua)?;
@@ -356,6 +358,12 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::super::{ScriptDialect, UiScript};
+
+    #[test]
+    fn wrath_alarm_time_has_a_numeric_default_and_is_writable() {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        s.run("assert(tonumber(GetCVar('timeMgrAlarmTime')) == 0) SetCVar('timeMgrAlarmTime', '420') assert(tonumber(GetCVar('timeMgrAlarmTime')) == 420)").unwrap();
+    }
 
     #[test]
     fn arena_opponent_count_is_zero_without_an_arena() {

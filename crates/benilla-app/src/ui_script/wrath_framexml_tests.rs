@@ -28,12 +28,22 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     script.set_screen_resolutions(vec![], Some(benilla_ui::script::ScreenResolution {
         width: 1600, height: 1000,
     }));
+    script.set_player_record(benilla_ui::script::PlayerRecord {
+        name: "Benchone".into(), race: Some(("Human".into(), "Human".into())),
+        class: Some(("Warrior".into(), "WARRIOR".into())), sex: 2,
+    });
     script.set_unit(
         "player",
         Some(UnitState {
             exists: true,
             name: Some("Benchone".into()),
             level: 1,
+            race: Some("Human".into()),
+            race_file: Some("Human".into()),
+            class: Some("Warrior".into()),
+            class_file: Some("WARRIOR".into()),
+            faction_group: Some("Alliance".into()),
+            faction_group_localized: Some("Alliance".into()),
             health: 60,
             max_health: 60,
             ..Default::default()
@@ -47,6 +57,8 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     // the archive's Blizzard addons registered.
     script.note_addon_info_reply(&[]);
     let failures = super::manifest::load_wrath_ui(&mut script, None, &[], true);
+    let labels = script.eval::<String>("local bad = {} for _, name in ipairs({'CHAT_CONFIG_CHAT_LEFT','CHAT_CONFIG_OTHER_COMBAT','CHAT_CONFIG_OTHER_PVP','CHAT_CONFIG_OTHER_SYSTEM','CHAT_CONFIG_CHAT_CREATURE_LEFT'}) do for _, v in ipairs(_G[name] or {}) do local label = v.text or _G[v.type] if type(label) ~= 'string' then table.insert(bad, tostring(v.type)..'='..type(label)) end end end return table.concat(bad, ', ')").unwrap();
+    eprintln!("non-string chat config labels: {labels}");
     for event in ["VARIABLES_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD"] {
         script.fire_event(event, vec![]);
     }

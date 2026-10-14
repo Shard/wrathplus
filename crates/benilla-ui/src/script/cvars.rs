@@ -593,6 +593,10 @@ pub const VIDEO_DEFAULT_CVARS: &[&str] = &[
 /// `Getanisotropic`, `GetspellEffectLevel`, `GetweatherDensity` and their setters.
 /// `GetFarclip`/`SetFarclip` (`0x488f00`/`0x488f30`, in [`super::video_pairs`]) do exist;
 /// `getglobal` is case-sensitive.
+pub(super) fn install_wrath_clock_cvars(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().get::<mlua::Function>("RegisterCVar")?.call::<()>(("timeMgrAlarmTime", "0"))
+}
+
 fn install_video_verbs(lua: &Lua) -> mlua::Result<()> {
     // ── GetScreenResolutions ─────────────────────────────────────────────────────────────────
     // A vararg of `"WxH"` strings, the spelling `ScreenResolution` pins.
