@@ -1,6 +1,11 @@
 # Opt-in quality ratchets (not enabled)
 
 Nothing here installs a hook, changes CI, modifies Rust, or rewrites a baseline automatically.
+Activation after cutover must integrate these ratchets into the existing `scripts/gates.sh`
+chain (fmt/clippy/test/doc-links/etc.), not establish a parallel gate system. CI already mirrors
+part of that chain; update its applicable bare-runner checks together when activating. Keep CRAP
+on demand/pre-merge and out of the fast hook. This unit does **not** change gates.sh or CI.
+
 After cutover/rename the manager can install `scripts/quality/pre-commit`; until then run checks
 explicitly from the repository root. Python 3, Rust tools matching the project toolchain and
 Git are required. Optional standalone tools: `cargo machete`, `typos`, `cargo llvm-cov`,
