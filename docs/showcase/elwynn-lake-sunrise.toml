@@ -16,3 +16,21 @@ at = 12.0
 eye = [-9430, -1020, 85]
 target = [-9390, -1070, 60]
 fov_degrees = 60.0
+
+# Installed Wrath enUS plain Wolf/Boar display rows passed frozen-Stand coverage,
+# model/skin/external-animation reads and BLP decoding. Z is ADT-interpolated ground.
+# Placement is beside the lake approach, not a claim of water/WMO/tree clearance or framing.
+[[actors]]
+display_id = 161 # Wolf
+position = [-9460.0, -1080.0, 52.375523]
+yaw = 1.1
+
+[[actors]]
+display_id = 193 # Boar
+position = [-9456.0, -1076.0, 52.833508]
+yaw = -0.8
+
+[[actors]]
+display_id = 193 # Boar
+position = [-9452.0, -1083.0, 50.63925]
+yaw = 0.2

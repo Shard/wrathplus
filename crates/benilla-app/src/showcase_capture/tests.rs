@@ -167,3 +167,46 @@ fn visual_actor_bounds_and_unknown_fields_are_rejected() {
     }
     assert!(ShowcasePath::parse(&format!("{PATH}{}", actor.repeat(16))).is_ok());
 }
+
+#[test]
+fn two_curated_routes_have_bounded_plain_wildlife_and_other_routes_stay_scenery_only() {
+    let northshire = ShowcasePath::parse(include_str!(
+        "../../../../docs/showcase/northshire-abbey.toml"
+    ))
+    .unwrap();
+    let elwynn = ShowcasePath::parse(include_str!(
+        "../../../../docs/showcase/elwynn-lake-sunrise.toml"
+    ))
+    .unwrap();
+    assert_eq!(
+        northshire
+            .actors
+            .iter()
+            .map(|a| a.display_id)
+            .collect::<Vec<_>>(),
+        [347, 328]
+    );
+    assert_eq!(
+        elwynn
+            .actors
+            .iter()
+            .map(|a| a.display_id)
+            .collect::<Vec<_>>(),
+        [161, 193, 193]
+    );
+    for path in [&northshire, &elwynn] {
+        for actor in &path.actors {
+            assert_eq!(actor.scale, 1.0);
+            assert!(
+                actor.position[2] > 0.0 && actor.position[2] < path.sample_frame(0).unwrap().eye[2]
+            );
+        }
+    }
+    for text in [
+        include_str!("../../../../docs/showcase/goldshire-dusk.toml"),
+        include_str!("../../../../docs/showcase/stormwind-gate.toml"),
+        include_str!("../../../../docs/showcase/westfall-farm.toml"),
+    ] {
+        assert!(ShowcasePath::parse(text).unwrap().actors.is_empty());
+    }
+}
