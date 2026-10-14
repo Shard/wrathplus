@@ -141,16 +141,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn power_update_preserves_other_resources_and_maxima() {
-        let mut store = ObjectFields::default().with_wrath_powers(std::array::from_fn(|slot| {
-            (Some(slot as u32 + 10), Some(slot as u32 + 100))
-        }));
-        write_power(&mut store, 6, 439);
-        let powers = store.wrath_powers().unwrap();
-        assert_eq!(powers[6], (439, 106));
-        assert_eq!(powers[0], (10, 100));
-        write_power(&mut store, 255, 1);
-        assert_eq!(store.wrath_powers().unwrap(), powers);
+    fn power_updates_preserve_all_seven_native_resources_and_maxima() {
+        use benilla_protocol::messages::{Field, FieldLayout};
+        let layout = FieldLayout::Wrath12340;
+        let power = layout.resolve(Field::UnitPower).unwrap();
+        let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
+        let pairs: Vec<_> = (0..7u16)
+            .flat_map(|slot| {
+                [
+                    (power.index + slot, u32::from(slot) + 10),
+                    (maximum.index + slot, u32::from(slot) + 100),
+                ]
+            })
+            .collect();
+        for changed in 0..7u8 {
+            let mut store = ObjectFields::from_native_pairs(layout, &pairs);
+            write_power(&mut store, changed, 439);
+            for slot in 0..7u8 {
+                assert_eq!(
+                    store.unit_power(slot),
+                    Some(if slot == changed {
+                        439
+                    } else {
+                        u32::from(slot) + 10
+                    })
+                );
+                assert_eq!(store.unit_max_power(slot), Some(u32::from(slot) + 100));
+            }
+            let before = store.wrath_powers();
+            for invalid in [7, 255] {
+                write_power(&mut store, invalid, 1);
+                assert_eq!(store.wrath_powers(), before);
+            }
+        }
     }
 
     #[test]
