@@ -199,6 +199,10 @@ fn strip_sampler_marker(path: &str) -> Option<String> {
 #[derive(Resource, Clone, Default)]
 pub struct ClientDataProfile(pub benilla_formats::DataProfile);
 
+/// Explicit boot policy shared by the asset source and the world's independent chain.
+#[derive(Resource, Clone, Default)]
+pub struct AssetOverridePolicy(pub benilla_formats::AssetOverrides);
+
 /// Register the `mpq://` source on `app`, backed by the patch chain at `data_dir`. Call it before
 /// `AssetPlugin` builds (before `DefaultPlugins`), which reads the sources.
 pub fn register_mpq_source(app: &mut App, data_dir: &Path) -> Result<()> {
@@ -211,7 +215,24 @@ pub fn register_mpq_source_profile(
     data_dir: &Path,
     profile: &benilla_formats::DataProfile,
 ) -> Result<()> {
-    let reader = MpqAssetReader::open_profile(data_dir, profile)?;
+    register_mpq_source_overrides(
+        app,
+        data_dir,
+        profile,
+        benilla_formats::AssetOverrides::default(),
+    )
+}
+
+/// Register a source with the same explicit policy used by direct world readers.
+pub fn register_mpq_source_overrides(
+    app: &mut App,
+    data_dir: &Path,
+    profile: &benilla_formats::DataProfile,
+    overrides: benilla_formats::AssetOverrides,
+) -> Result<()> {
+    let reader = MpqAssetReader {
+        chain: Arc::new(Chain::open_profile(data_dir, profile)?.with_overrides(overrides)),
+    };
     app.insert_resource(ClientDataProfile(profile.clone()));
     app.register_asset_source(
         MPQ_SOURCE,
@@ -280,6 +301,102 @@ mod tests {
         assert_eq!(strip_sampler_marker("world/foo.blp"), None);
         assert_eq!(strip_sampler_marker("world/foo@bar.blp"), None);
         assert_eq!(sampler_mode_of("world/foo@bar.blp"), (true, true));
+    }
+
+    #[test]
+    fn pack_texture_reaches_streamed_tile_and_doodad_consumers() {
+        let root = std::env::temp_dir().join(format!("benilla-pack-image-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("World")).unwrap();
+        // One 4x4 DXT1 block, solid red, in a synthetic BLP2 envelope.
+        let mut bytes = vec![0u8; 148 + 1024];
+        bytes[..4].copy_from_slice(b"BLP2");
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8] = 2;
+        bytes[12..16].copy_from_slice(&4u32.to_le_bytes());
+        bytes[16..20].copy_from_slice(&4u32.to_le_bytes());
+        bytes[20..24].copy_from_slice(&1172u32.to_le_bytes());
+        bytes[84..88].copy_from_slice(&8u32.to_le_bytes());
+        bytes.extend_from_slice(&[0, 248, 0, 0, 0, 0, 0, 0]);
+        std::fs::write(root.join("World/Doodad.blp"), bytes).unwrap();
+        // A real ADT loader consumer, not merely another direct byte read.
+        fn chunk(magic: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+            let mut bytes = magic.to_vec();
+            bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(payload);
+            bytes
+        }
+        let mut mcnk = vec![0u8; 128];
+        mcnk[0x14..0x18].copy_from_slice(&128u32.to_le_bytes());
+        mcnk[0x1c..0x20].copy_from_slice(&716u32.to_le_bytes());
+        mcnk.extend(chunk(b"TVCM", &[0u8; 145 * 4]));
+        mcnk.extend(chunk(b"YLCM", &[0u8; 16]));
+        let mut tile = chunk(b"XETM", b"World/Doodad.blp\0");
+        tile.extend(chunk(b"KNCM", &mcnk));
+        std::fs::write(root.join("World/Tile.adt"), tile).unwrap();
+        let policy = benilla_formats::AssetOverrides::from_roots([root.clone()]).unwrap();
+        let reader = MpqAssetReader {
+            chain: Arc::new(Chain::from_overrides(
+                policy,
+                benilla_formats::DataProfile::Vanilla,
+            )),
+        };
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.register_asset_source(
+            MPQ_SOURCE,
+            AssetSourceBuilder::new(move || -> Box<dyn ErasedAssetReader> {
+                Box::new(reader.clone())
+            }),
+        );
+        app.add_plugins(bevy::asset::AssetPlugin::default());
+        app.init_asset::<Image>();
+        register_asset_loaders(&mut app);
+        app.init_asset::<Mesh>();
+        let tile: Handle<AdtTile> = app
+            .world()
+            .resource::<AssetServer>()
+            .load("mpq://World/Tile.adt");
+        // Exactly the sampler-marked path that streamed M2/WMO doodads request.
+        let handle: Handle<Image> = app
+            .world()
+            .resource::<AssetServer>()
+            .load(texture_url("WORLD\\DOODAD.BLP", (false, false)));
+        for _ in 0..500 {
+            app.update();
+            if app.world().resource::<Assets<Image>>().contains(&handle)
+                && app.world().resource::<Assets<AdtTile>>().contains(&tile)
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let tiles = app.world().resource::<Assets<AdtTile>>();
+        let tile = tiles
+            .get(&tile)
+            .expect("pack-only tile streams through AdtLoader");
+        assert_eq!(
+            tile.shading[0].layers[0], 1,
+            "pack texture wins over fallback layer 0"
+        );
+        let images = app.world().resource::<Assets<Image>>();
+        let layers = images
+            .get(&tile.layer_array)
+            .expect("tile authored layers upload");
+        assert_eq!(layers.texture_descriptor.size.depth_or_array_layers, 2);
+        // Layer zero is the stock green fallback; layer one is our red pack BLP.
+        // With no authored _s variant, ADT packing clears alpha for the matte sheen mask.
+        let layer_stride = layers.data.as_ref().unwrap().len() / 2;
+        assert_eq!(
+            &layers.data.as_ref().unwrap()[layer_stride..layer_stride + 4],
+            &[255, 0, 0, 0]
+        );
+        let image = images
+            .get(&handle)
+            .expect("pack-only doodad texture uploads through AssetServer");
+        assert_eq!(image.width(), 4);
+        assert_eq!(image.height(), 4);
+        assert_eq!(&image.data.as_ref().unwrap()[..4], &[255, 0, 0, 255]);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

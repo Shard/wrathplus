@@ -14,6 +14,8 @@ pub use benilla_blp::BlpTexels;
 mod wrath_layouts;
 #[cfg(test)]
 mod wrath_layouts_installed_tests;
+mod overrides;
+pub use overrides::AssetOverrides;
 mod chain;
 pub use chain::{Chain, ChainEntry};
 mod profile;

@@ -91,6 +91,15 @@ pub(super) fn read(req: &str) -> Option<Vec<u8>> {
 /// The player's patch chain, opened once per process and shared by every VM. Process-local, not
 /// the one [`benilla_assets`] holds: tests, the addon harness and a bare `UiScript` load the
 /// interface with no Bevy world to ask.
+static OVERRIDES: OnceLock<benilla_formats::AssetOverrides> = OnceLock::new();
+
+pub(crate) fn initialize_asset_overrides(overrides: benilla_formats::AssetOverrides) {
+    // App boot precedes UI creation. Bare VMs/tests deliberately keep archive-only defaults.
+    OVERRIDES
+        .set(overrides)
+        .expect("asset policy initialized once before UI creation");
+}
+
 fn chain() -> Option<&'static Chain> {
     static CHAIN: OnceLock<Option<Chain>> = OnceLock::new();
     CHAIN
@@ -104,7 +113,9 @@ fn chain() -> Option<&'static Chain> {
                 return None;
             };
             match benilla_formats::open_configured_chain(&data) {
-                Ok(chain) => Some(chain),
+                Ok(chain) => {
+                    Some(chain.with_overrides(OVERRIDES.get().cloned().unwrap_or_default()))
+                }
                 Err(e) => {
                     error!("ui_script: opening the patch chain to source the reference UI: {e:#}");
                     None

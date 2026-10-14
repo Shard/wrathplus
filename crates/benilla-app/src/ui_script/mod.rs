@@ -27,6 +27,7 @@ mod wrath_native;
 
 /// The stock FrameXML this client runs off the player's own patch chain; its header is the rule.
 mod reference_ui;
+pub(crate) use reference_ui::initialize_asset_overrides;
 
 /// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
 mod session;

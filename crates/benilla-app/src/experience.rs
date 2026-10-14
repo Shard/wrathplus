@@ -100,6 +100,24 @@ impl Experience {
             .unwrap_or(feature.plus_default())
     }
 
+    /// Only boot resolves packs; ordinary archive opens and test harnesses never enable them.
+    pub(crate) fn asset_overrides(&self) -> anyhow::Result<benilla_formats::AssetOverrides> {
+        if !self.enabled(Feature::AssetOverrides) || self.packs().is_empty() {
+            return Ok(Default::default());
+        }
+        let home = crate::local_state::home()
+            .ok_or_else(|| anyhow::anyhow!("packs require a local state home"))?;
+        let mut roots = Vec::new();
+        for pack in self.packs() {
+            anyhow::ensure!(
+                !pack.is_empty() && pack != "." && pack != ".." && !pack.contains(['/', '\\', ':']),
+                "invalid pack name {pack:?}"
+            );
+            roots.push(home.join("mods").join(pack));
+        }
+        benilla_formats::AssetOverrides::from_roots(roots)
+    }
+
     pub fn packs(&self) -> &[String] {
         &self.config.packs
     }
