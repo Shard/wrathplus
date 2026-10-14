@@ -75,3 +75,47 @@ no shared-light uniform expansion.
 - App: 4,439 passed, 0 failed, 12 ignored.
 
 No game client was launched. Visual parity and appearance require manager-run checks.
+
+## Installed gap census (2026-10-14)
+
+Read-only effective-install census: `WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS
+WOW_DATA=/Users/shannon/Games/Client/Data`, using native version-264 M2 records
+and each model's first `00.skin` profile. This is **not** every LOD or a certified
+stock-3.3.5 dataset: the effective archives include `EXPANSION03` paths.
+22,112 native models were found; 30 lacked `00.skin`; remaining model/skin parser
+failures: zero. Multi-stage geometry: 4,355 models / 7,795 batches.
+
+| Structural gap | Models | Batches |
+|---|---:|---:|
+| Two textures, distinct non-sentinel stage-two weight lookup | 602 | 1,946 |
+| High-bit optimized shader selector (all batches) | 0 | 0 |
+| Environment-mapped stage two (conservatively excluded from shadows) | 3,676 | 4,958 |
+| Animated stage-two UV, potentially affected in seed-only lanes | 185 | 567 |
+| Animated stage-two UV assets referenced as particle geometry | 0 | 0 |
+
+Second-stage weight tracks contain nonidentity keys in 1,749 batches. Distinct
+lookup indices are structural evidence, **not proof of native per-stage weight
+application**. Animation means a nonconstant translation, rotation or scaling
+track with multiple keys. A model's runtime lane is not encoded in its M2:
+185/567 are assets affected **if** instantiated through an offworld/particle lane,
+not a claim that all currently appear there. Explicit particle geometry references
+found in native emitter records intersected with those animated assets yield zero;
+no example paths exist for that empty subset or the empty optimized-selector set.
+
+Example paths (five distinct models per nonempty category):
+
+- Independent weights: `Creature\BAND\BandTaurenMale.m2`,
+  `Creature\BAND\BandTrollMale.m2`, `Creature\BAND\bandBloodElfMale.m2`,
+  `Creature\BAND\bandUndeadMale.m2`, `Creature\FrostLord\FrostLord.m2`.
+- Environment stage two: `Creature\BAND\BandTaurenMale.m2`,
+  `Creature\BAND\BandTrollMale.m2`, `Creature\BAND\bandBloodElfMale.m2`,
+  `Creature\BAND\bandOrcMale.m2`, `Creature\BAND\bandUndeadMale.m2`.
+- Animated stage-two UV: `ITEM\OBJECTCOMPONENTS\Shoulder\LShoulder_Leather_RaidRogue_E_01.m2`,
+  `ITEM\OBJECTCOMPONENTS\Shoulder\LShoulder_Robe_D_01.m2`,
+  `ITEM\OBJECTCOMPONENTS\Shoulder\RShoulder_Leather_RaidRogue_E_01.m2`,
+  `ITEM\OBJECTCOMPONENTS\Shoulder\RShoulder_Robe_D_01.m2`,
+  `ITEM\OBJECTCOMPONENTS\WEAPON\Bow_2H_Crossbow_OutlandPVP_D_01.m2`.
+
+Reproduce with the environment above and `cargo test -p benilla-formats --test
+wrath_stage_gap_census -- --ignored --nocapture --test-threads 4`. Latest run:
+1 passed, 0 failed. No proprietary payloads are emitted or committed.
