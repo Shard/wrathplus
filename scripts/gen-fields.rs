@@ -217,6 +217,60 @@ fn main() {
             }
         }
         println!("];");
+        // Reverse tables include inherited blocks and preserve the forward enum's precedence.
+        for class in [
+            "Object",
+            "Item",
+            "Container",
+            "Unit",
+            "Player",
+            "GameObject",
+            "DynamicObject",
+            "Corpse",
+        ] {
+            let len = ends[&format!("{}_END", class.to_ascii_uppercase())];
+            let mut reverse = vec![None; usize::from(len)];
+            for name in &names {
+                let Some(e) = fields.get(name) else { continue };
+                let inherited = e.class == "Object"
+                    || (class == "Player" && e.class == "Unit")
+                    || (class == "Container" && e.class == "Item");
+                if e.class != class && !inherited {
+                    continue;
+                }
+                for offset in 0..e.width {
+                    let entry = &mut reverse[usize::from(e.index + offset)];
+                    if entry.is_none() {
+                        *entry = Some((name, offset));
+                    }
+                }
+            }
+            println!(
+                "pub(super) const {label}_REVERSE_{}: [Option<(Field, u16)>; {len}] = [",
+                class.to_ascii_uppercase()
+            );
+            for entry in reverse {
+                match entry {
+                    Some((name, offset)) => println!("    Some((Field::{name}, {offset})),"),
+                    None => println!("    None,"),
+                }
+            }
+            println!("];");
+        }
+        println!("pub(super) const {label}_REVERSE: [&[Option<(Field, u16)>]; 8] = [");
+        for class in [
+            "OBJECT",
+            "ITEM",
+            "CONTAINER",
+            "UNIT",
+            "PLAYER",
+            "GAMEOBJECT",
+            "DYNAMICOBJECT",
+            "CORPSE",
+        ] {
+            println!("    &{label}_REVERSE_{class},");
+        }
+        println!("];");
         println!("pub(super) const {label}_ENDS: [u16; 8] = [");
         for class in [
             "OBJECT",

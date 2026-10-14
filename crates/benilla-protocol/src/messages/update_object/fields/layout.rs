@@ -30,7 +30,16 @@ impl FieldLayout {
     }
 
     pub fn descriptor_len(self, object_type: ObjectType) -> u16 {
-        let slot = match object_type {
+        let slot = Self::class_slot(object_type);
+        match self {
+            Self::Vanilla5875 => generated::VANILLA_ENDS[slot],
+            Self::Wrath12340 => generated::WRATH_ENDS[slot],
+        }
+    }
+
+    #[inline]
+    fn class_slot(object_type: ObjectType) -> usize {
+        match object_type {
             ObjectType::Object => 0,
             ObjectType::Item => 1,
             ObjectType::Container => 2,
@@ -39,33 +48,74 @@ impl FieldLayout {
             ObjectType::GameObject => 5,
             ObjectType::DynamicObject => 6,
             ObjectType::Corpse => 7,
-        };
-        match self {
-            Self::Vanilla5875 => generated::VANILLA_ENDS[slot],
-            Self::Wrath12340 => generated::WRATH_ENDS[slot],
         }
     }
 
-    /// Reverse mapping for change watchers. Object class disambiguates overlapping blocks;
-    /// the offset identifies a member of an array root. Not on the per-frame read path.
+    /// Constant-time reverse mapping for change watchers, including inherited blocks.
+    /// Object class disambiguates overlapping blocks; the offset is a native dword offset.
+    #[inline]
     pub fn field_at(self, object_type: ObjectType, index: u16) -> Option<(Field, u16)> {
-        Field::ALL.into_iter().find_map(|field| {
-            let span = self.resolve(field)?;
-            let inherited = span.object_type == ObjectType::Object
-                || (object_type == ObjectType::Player && span.object_type == ObjectType::Unit)
-                || (object_type == ObjectType::Container && span.object_type == ObjectType::Item);
-            if span.object_type != object_type && !inherited {
-                return None;
-            }
-            let offset = index.checked_sub(span.index)?;
-            (offset < span.width).then_some((field, offset))
-        })
+        self.reverse_table(object_type)
+            .get(usize::from(index))
+            .copied()
+            .flatten()
+    }
+
+    #[inline]
+    fn reverse_table(self, object_type: ObjectType) -> &'static [Option<(Field, u16)>] {
+        let slot = Self::class_slot(object_type);
+        match self {
+            Self::Vanilla5875 => generated::VANILLA_REVERSE[slot],
+            Self::Wrath12340 => generated::WRATH_REVERSE[slot],
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reverse_lookup_is_a_direct_table_index_and_matches_forward_spans() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for class in [
+                ObjectType::Object,
+                ObjectType::Item,
+                ObjectType::Container,
+                ObjectType::Unit,
+                ObjectType::Player,
+                ObjectType::GameObject,
+                ObjectType::DynamicObject,
+                ObjectType::Corpse,
+            ] {
+                let table = layout.reverse_table(class);
+                assert_eq!(table.len(), usize::from(layout.descriptor_len(class)));
+                for index in 0..layout.descriptor_len(class) {
+                    let expected = Field::ALL.into_iter().find_map(|field| {
+                        let span = layout.resolve(field)?;
+                        let inherited = span.object_type == ObjectType::Object
+                            || (class == ObjectType::Player
+                                && span.object_type == ObjectType::Unit)
+                            || (class == ObjectType::Container
+                                && span.object_type == ObjectType::Item);
+                        if span.object_type != class && !inherited {
+                            return None;
+                        }
+                        let offset = index.checked_sub(span.index)?;
+                        (offset < span.width).then_some((field, offset))
+                    });
+                    assert_eq!(layout.field_at(class, index), table[usize::from(index)]);
+                    assert_eq!(
+                        layout.field_at(class, index),
+                        expected,
+                        "{layout:?} {class:?} {index}"
+                    );
+                }
+                assert_eq!(layout.field_at(class, layout.descriptor_len(class)), None);
+                assert_eq!(layout.field_at(class, u16::MAX), None);
+            }
+        }
+    }
+
     #[test]
     fn semantic_fields_resolve_native_indices_and_widths() {
         for (layout, health, quest, quest_width, player_end) in [
