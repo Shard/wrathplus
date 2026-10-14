@@ -10,6 +10,7 @@ use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::prelude::*;
 
 use benilla_formats::{SpellVisualCatalog, VisualKit, VisualStages, MISSILE_ATTACH_TABLE};
+use benilla_protocol::messages::{Field, ObjectType};
 use benilla_protocol::EntityKind;
 
 use crate::aura_visual::AuraProc;
@@ -1083,6 +1084,26 @@ pub(crate) fn arm_aura_state_fx(
     armed.retain(|e, _| units.contains(*e));
 }
 
+fn is_loot_fx_edge(edge: &FieldChanged) -> bool {
+    (edge.is_unit()
+        && [
+            Field::UnitDynamicFlags,
+            Field::UnitHealth,
+            Field::UnitMaxHealth,
+        ]
+        .into_iter()
+        .any(|field| edge.named_field(field)))
+        || (edge.kind == ObjectType::Corpse && edge.named_field(Field::CorpseDynamicFlags))
+}
+
+fn is_level_fx_edge(edge: &FieldChanged) -> bool {
+    edge.is_unit() && edge.named_field(Field::UnitLevel)
+}
+
+fn is_mount_fx_edge(edge: &FieldChanged) -> bool {
+    edge.is_unit() && edge.named_field(Field::UnitMountDisplayId) && edge.new != 0
+}
+
 /// Arm and reap the loot sparkle on a dead lootable unit and on a corpse object with
 /// `CORPSE_FIELD_DYNAMIC_FLAGS` bit 0 (`0x5d6de0`): the `"HARDCODED Loot Art"` row at `0x13`.
 /// Edge-driven (`0x600440`) with no viewer or distance logic, since the server strips the flag per
@@ -1104,21 +1125,11 @@ pub(super) fn arm_loot_fx(
     let scan = if full_sweep {
         units.iter().collect::<Vec<_>>()
     } else {
-        use benilla_protocol::field::{
-            FIELD_CORPSE_DYNAMIC_FLAGS, FIELD_UNIT_DYNAMIC_FLAGS, FIELD_UNIT_HEALTH,
-            FIELD_UNIT_MAXHEALTH,
-        };
         let mut due: EntityHashSet = arrived.iter().collect();
         due.extend(
             edges
                 .read()
-                .filter(|e| {
-                    e.unit_field(FIELD_UNIT_DYNAMIC_FLAGS)
-                        || e.unit_field(FIELD_UNIT_HEALTH)
-                        || e.unit_field(FIELD_UNIT_MAXHEALTH)
-                        || (e.kind == benilla_protocol::messages::ObjectType::Corpse
-                            && e.raw_index_compat() == FIELD_CORPSE_DYNAMIC_FLAGS)
-                })
+                .filter(|e| is_loot_fx_edge(e))
                 .map(|e| e.entity),
         );
         due.into_iter().filter_map(|e| units.get(e).ok()).collect()
@@ -1177,7 +1188,7 @@ pub(super) fn arm_level_up_fx(
     mut fx: MessageWriter<SpellKitFx>,
 ) {
     for e in edges.read() {
-        if !e.unit_field(benilla_protocol::field::FIELD_UNIT_LEVEL) {
+        if !is_level_fx_edge(e) {
             continue;
         }
         let Some((effect, path)) = visuals
@@ -1217,7 +1228,7 @@ pub(super) fn arm_mount_poof_fx(
 ) {
     for e in edges.read() {
         // A dismount spawns nothing; the edge stream skips creation.
-        if !e.unit_field(benilla_protocol::field::FIELD_UNIT_MOUNTDISPLAYID) || e.new == 0 {
+        if !is_mount_fx_edge(e) {
             continue;
         }
         let Some((effect, path)) = visuals

@@ -1652,3 +1652,70 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
         "an anim-only state kit is not nothing — its ADD edge owes a recompute"
     );
 }
+
+#[test]
+fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        for (kind, field, loot, level, mount) in [
+            (
+                ObjectType::Unit,
+                Field::UnitDynamicFlags,
+                true,
+                false,
+                false,
+            ),
+            (ObjectType::Player, Field::UnitHealth, true, false, false),
+            (ObjectType::Unit, Field::UnitMaxHealth, true, false, false),
+            (
+                ObjectType::Corpse,
+                Field::CorpseDynamicFlags,
+                true,
+                false,
+                false,
+            ),
+            (ObjectType::Player, Field::UnitLevel, false, true, false),
+            (
+                ObjectType::Unit,
+                Field::UnitMountDisplayId,
+                false,
+                false,
+                true,
+            ),
+            (ObjectType::Unit, Field::UnitFlags, false, false, false),
+        ] {
+            let span = layout
+                .resolve(field)
+                .expect("FX dependency exists in both layouts");
+            let (resolved, offset) = layout.field_at(kind, span.index).unwrap();
+            assert_eq!((resolved, offset), (field, 0));
+            let mut edge = crate::net::FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind,
+                layout,
+                field: resolved,
+                offset,
+                old: 0,
+                new: 1,
+            };
+            assert_eq!(super::is_loot_fx_edge(&edge), loot);
+            assert_eq!(super::is_level_fx_edge(&edge), level);
+            assert_eq!(super::is_mount_fx_edge(&edge), mount);
+            edge.new = 0;
+            assert!(!super::is_mount_fx_edge(&edge), "dismount spawns no poof");
+            assert_eq!(super::is_loot_fx_edge(&edge), loot);
+            assert_eq!(super::is_level_fx_edge(&edge), level);
+            edge.offset = 1;
+            assert!(!super::is_loot_fx_edge(&edge));
+            assert!(!super::is_level_fx_edge(&edge));
+            assert!(!super::is_mount_fx_edge(&edge));
+            edge.offset = 0;
+            edge.new = 1;
+            edge.kind = ObjectType::GameObject;
+            assert!(!super::is_loot_fx_edge(&edge));
+            assert!(!super::is_level_fx_edge(&edge));
+            assert!(!super::is_mount_fx_edge(&edge));
+        }
+    }
+}
