@@ -673,6 +673,13 @@ pub enum SessionEvent {
     ChannelStart { spell_id: u32, duration_ms: u32 },
     /// A channel's time left (`MSG_CHANNEL_UPDATE`, self-only); 0 is over, natural or interrupted.
     ChannelUpdate { remaining_ms: u32 },
+    /// Authoritative native packet aura snapshot; updated slots restart arrival clocks.
+    UnitAuras {
+        guid: u64,
+        auras: Vec<crate::wrath_auras::NativeAura>,
+        /// Slots refreshed by this packet, so unchanged durations keep their arrival stamp.
+        updated_slots: Vec<u8>,
+    },
     /// Time left on one of our auras by `UNIT_FIELD_AURA` slot (`SMSG_UPDATE_AURA_DURATION`),
     /// never for a permanent one. It arrives before the delta naming the slot's spell.
     AuraDuration { slot: u8, remaining_ms: u32 },

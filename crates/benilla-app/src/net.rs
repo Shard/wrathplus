@@ -28,6 +28,7 @@ pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
 mod session;
 mod world;
+pub(crate) mod wrath_auras;
 mod wrath_notices;
 mod wrath_threat;
 
@@ -116,6 +117,7 @@ impl Plugin for NetPlugin {
         );
         session::register(app);
         objects::register(app);
+        wrath_auras::register(app);
         wrath_notices::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
