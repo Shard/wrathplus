@@ -1,0 +1,225 @@
+//! Generate native descriptor tables from protocol reference headers (no build dependencies).
+//! Usage: rustc scripts/gen-fields.rs -o /tmp/azb-gen-fields && /tmp/azb-gen-fields \
+//!   /tmp/azb-vanilla-UpdateFields.h /path/to/AzerothCore/UpdateFields.h > fields/layout_generated.rs
+//! Vanilla source: https://github.com/vmangos/core/blob/development/src/game/Objects/UpdateFields_1_12_1.h
+//! Wrath source: AzerothCore core/src/server/game/Entities/Object/Updates/UpdateFields.h
+use std::{collections::BTreeMap, env, fs};
+
+#[derive(Clone, Debug)]
+struct Entry {
+    index: u16,
+    width: u16,
+    class: String,
+}
+fn parse(path: &str) -> (BTreeMap<String, Entry>, BTreeMap<String, u16>) {
+    let mut fields = BTreeMap::new();
+    let mut symbols = BTreeMap::<String, u16>::new();
+    let mut class = String::new();
+    for line in fs::read_to_string(path).unwrap().lines() {
+        if let Some(group) = line.trim().strip_prefix("enum E") {
+            class = group.trim_end_matches("Fields").to_owned();
+        }
+        let Some((name, rest)) = line.trim().split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        let expression = rest.split([',', '/']).next().unwrap().trim();
+        let index: u16 = expression
+            .split('+')
+            .map(|s| {
+                let s = s.trim();
+                if let Some(hex) = s.strip_prefix("0x") {
+                    u16::from_str_radix(hex, 16).unwrap()
+                } else {
+                    *symbols.get(s).unwrap()
+                }
+            })
+            .sum();
+        symbols.insert(name.to_owned(), index);
+        let Some(size) = rest.split("Size: ").nth(1) else {
+            continue;
+        };
+        let width = size
+            .split(|c: char| !c.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let field_class = if name.starts_with("PLAYER_") {
+            "Player"
+        } else {
+            &class
+        };
+        let name = name.replace("_FIELD_", "_");
+        fields.insert(
+            name,
+            Entry {
+                index,
+                width,
+                class: field_class.to_owned(),
+            },
+        );
+    }
+    // Repeated descriptor groups have one semantic root. Offsets remain native dwords;
+    // consumers of changed shapes (quest/visible item) use dialect-aware accessors.
+    for (root, prefix, start, end) in [
+        ("UnitPower", "UNIT_POWER", "UNIT_POWER1", "UNIT_MAXHEALTH"),
+        (
+            "UnitMaxPower",
+            "UNIT_MAXPOWER",
+            "UNIT_MAXPOWER1",
+            "UNIT_LEVEL",
+        ),
+        (
+            "PlayerQuestLog",
+            "PLAYER_QUEST_LOG_",
+            "PLAYER_QUEST_LOG_1_1",
+            "PLAYER_VISIBLE_ITEM_1_CREATOR",
+        ),
+        (
+            "PlayerVisibleItems",
+            "PLAYER_VISIBLE_ITEM_",
+            "PLAYER_VISIBLE_ITEM_1_CREATOR",
+            "PLAYER_INV_SLOT_HEAD",
+        ),
+        (
+            "ItemEnchantment",
+            "ITEM_ENCHANTMENT",
+            "ITEM_ENCHANTMENT",
+            "ITEM_PROPERTY_SEED",
+        ),
+    ] {
+        let start = fields
+            .get(start)
+            .or_else(|| {
+                fields.get(match root {
+                    "PlayerVisibleItems" => "PLAYER_VISIBLE_ITEM_1_ENTRYID",
+                    "ItemEnchantment" => "ITEM_ENCHANTMENT_1_1",
+                    _ => start,
+                })
+            })
+            .cloned()
+            .unwrap();
+        let end_index = if root == "PlayerQuestLog" {
+            fields
+                .get(end)
+                .or_else(|| fields.get("PLAYER_VISIBLE_ITEM_1_ENTRYID"))
+                .unwrap()
+                .index
+        } else {
+            fields.get(end).unwrap().index
+        };
+        // Wrath regen fields sit between max-power and level: only the native power slots.
+        let width = if root == "UnitMaxPower" || root == "UnitPower" {
+            fields
+                .keys()
+                .filter(|name| {
+                    name.strip_prefix(prefix)
+                        .is_some_and(|tail| tail.parse::<u8>().is_ok())
+                })
+                .count() as u16
+        } else if root == "PlayerVisibleItems"
+            && fields.contains_key("PLAYER_VISIBLE_ITEM_1_ENTRYID")
+        {
+            19 * 2
+        } else {
+            end_index - start.index
+        };
+        fields.retain(|name, _| {
+            if root == "UnitPower" || root == "UnitMaxPower" {
+                !name
+                    .strip_prefix(prefix)
+                    .is_some_and(|tail| tail.parse::<u8>().is_ok())
+            } else {
+                !name.starts_with(prefix)
+            }
+        });
+        fields.insert(root.to_owned(), Entry { width, ..start });
+    }
+    let fields = fields
+        .into_iter()
+        .map(|(name, value)| {
+            let name = if name.contains('_') {
+                name.split('_')
+                    .filter(|part| !part.is_empty())
+                    .map(|part| {
+                        let mut chars = part.chars();
+                        match part {
+                            "MAXHEALTH" => "MaxHealth".to_owned(),
+                            "FACTIONTEMPLATE" => "FactionTemplate".to_owned(),
+                            "DISPLAYID" => "DisplayId".to_owned(),
+                            "NATIVEDISPLAYID" => "NativeDisplayId".to_owned(),
+                            "MOUNTDISPLAYID" => "MountDisplayId".to_owned(),
+                            "AURAFLAGS" => "AuraFlags".to_owned(),
+                            "AURALEVELS" => "AuraLevels".to_owned(),
+                            "AURAAPPLICATIONS" => "AuraApplications".to_owned(),
+                            "AURASTATE" => "AuraState".to_owned(),
+                            _ => format!(
+                                "{}{}",
+                                chars.next().unwrap(),
+                                chars.as_str().to_ascii_lowercase()
+                            ),
+                        }
+                    })
+                    .collect::<String>()
+            } else {
+                name
+            };
+            (name, value)
+        })
+        .collect();
+    (fields, symbols)
+}
+fn main() {
+    let paths: Vec<_> = env::args().skip(1).collect();
+    assert_eq!(
+        paths.len(),
+        2,
+        "expected vanilla and wrath reference header paths"
+    );
+    let (vanilla, vends) = parse(&paths[0]);
+    let (wrath, wends) = parse(&paths[1]);
+    let mut names: Vec<_> = vanilla.keys().chain(wrath.keys()).cloned().collect();
+    names.sort();
+    names.dedup();
+    println!("// Generated by scripts/gen-fields.rs. Do not edit.\n// Vanilla 5875: https://github.com/vmangos/core/blob/e5f2bc2645bc971e3864cba5b601c1fc0eea8277/src/game/Objects/UpdateFields_1_12_1.h\n// Wrath 12340: AzerothCore core/src/server/game/Entities/Object/Updates/UpdateFields.h\n// Input SHA-256 hashes and regeneration: docs/DESCRIPTOR-SOURCES.md.\nuse super::{{FieldSpan, ObjectType}};\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]\n#[repr(u16)]\npub enum Field {{");
+    for name in &names {
+        println!("    {name},");
+    }
+    println!(
+        "}}\nimpl Field {{\n    pub const ALL: [Self; {}] = [",
+        names.len()
+    );
+    for name in &names {
+        println!("        Self::{name},");
+    }
+    println!("    ];\n}}");
+    for (label, fields, ends) in [("VANILLA", vanilla, vends), ("WRATH", wrath, wends)] {
+        println!(
+            "pub(super) const {label}: [Option<FieldSpan>; {}] = [",
+            names.len()
+        );
+        for name in &names {
+            if let Some(e) = fields.get(name) {
+                println!("    Some(FieldSpan {{ index: {}, width: {}, object_type: ObjectType::{} }}), // {name}", e.index, e.width, e.class);
+            } else {
+                println!("    None, // {name}");
+            }
+        }
+        println!("];");
+        println!("pub(super) const {label}_ENDS: [u16; 8] = [");
+        for class in [
+            "OBJECT",
+            "ITEM",
+            "CONTAINER",
+            "UNIT",
+            "PLAYER",
+            "GAMEOBJECT",
+            "DYNAMICOBJECT",
+            "CORPSE",
+        ] {
+            println!("    {},", ends[&format!("{class}_END")]);
+        }
+        println!("];");
+    }
+}
