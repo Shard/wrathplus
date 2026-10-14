@@ -212,10 +212,6 @@ pub mod quest_slot_state {
     pub const FAIL: u8 = 0x02;
 }
 // Inventory fields. The PLAYER slot arrays are private, and each slot is a 2-field guid.
-const FIELD_ITEM_STACK_COUNT: u16 = 14; // OBJECT_END + 0x8
-const FIELD_ITEM_ENCHANTMENT: u16 = 22; // OBJECT_END + 0x10; 7 slots × 3 (id, duration, charges)
-const FIELD_CONTAINER_NUM_SLOTS: u16 = 48; // ITEM_END = 6 + 0x2A
-const FIELD_CONTAINER_SLOT_1: u16 = 50; // ITEM_END + 0x2; 36 slots × 2
 
 // From the CONTAINER block on, the hex comments in vmangos `UpdateFields_1_12_1.h` run 6 low. The
 // indices here follow its enum arithmetic, which the server compiles: INV_SLOT_HEAD = 188 + 0x12A.
@@ -451,19 +447,20 @@ impl ObjectFields {
 
     /// `CORPSE_FIELD_OWNER` (`UpdateFields_1_12_1.h:339`): the dead player, only on a corpse.
     pub fn corpse_owner(&self) -> Option<u64> {
-        self.get_guid(6).filter(|&g| g != 0)
+        self.get_field_guid(Field::CorpseOwner, 0)
+            .filter(|&g| g != 0)
     }
 
     /// The body's `CreatureDisplayInfo` id, the owner's native display (`Player.cpp:4809`). A bone
     /// pile keeps it, but `0x5d6700` ignores it there and builds the skeleton from race and sex.
     pub fn corpse_display_id(&self) -> Option<u32> {
-        self.get_u32(12).filter(|&d| d != 0)
+        self.get(Field::CorpseDisplayId).filter(|&d| d != 0)
     }
 
     /// The piece in equipment slot `slot` (0..18) as `(ItemDisplayInfo id, InventoryType)`, packed
     /// `display | type << 24` (`Player.cpp:4822`); unlike `PLAYER_VISIBLE_ITEM`, not an item entry.
     pub fn corpse_item(&self, slot: u8) -> Option<(u32, u8)> {
-        let raw = self.get_u32(13 + u16::from(slot))?;
+        let raw = self.get_at(Field::CorpseItem, u16::from(slot))?;
         let display = raw & 0x00ff_ffff;
         (display != 0).then_some((display, (raw >> 24) as u8))
     }
@@ -471,16 +468,16 @@ impl ObjectFields {
     /// The owner's guild id at death, 0 for none; the client builds the corpse's tabard crest from
     /// it (`0x5d6ec0`).
     pub fn corpse_guild(&self) -> u32 {
-        self.get_u32(34).unwrap_or(0)
+        self.get(Field::CorpseGuild).unwrap_or(0)
     }
 
     /// Race, gender and skin in bytes 1..3; byte 0 is unused (`Corpse.cpp:228`).
     fn corpse_bytes_1(&self) -> Option<u32> {
-        self.get_u32(32)
+        self.get(Field::CorpseBytes1)
     }
     /// Face, hair style, hair colour and facial hair (`Corpse.cpp:229`).
     fn corpse_bytes_2(&self) -> Option<u32> {
-        self.get_u32(33)
+        self.get(Field::CorpseBytes2)
     }
     /// The dead player's race, `CORPSE_FIELD_BYTES_1` byte 1, the one corpse field the reaction
     /// gate reads (`0x5d7120`); 0, which no `ChrRaces` row names, when absent.
@@ -503,12 +500,12 @@ impl ObjectFields {
 
     /// `CORPSE_FIELD_FLAGS`, 0 when absent (client `[[corpse+0x110]+0x74]`).
     pub fn corpse_flags(&self) -> u32 {
-        self.get_u32(35).unwrap_or(0)
+        self.get(Field::CorpseFlags).unwrap_or(0)
     }
     /// [`Self::corpse_flags`] keeping absence: untouched flags in a delta are `None`, not all
     /// clear. A reader acting on a change must use this one.
     pub fn corpse_flags_present(&self) -> Option<u32> {
-        self.get_u32(35)
+        self.get(Field::CorpseFlags)
     }
     /// `CORPSE_FLAG_BONES`: a bone pile, which `0x5d6260` tests first; it wears nothing and takes
     /// its model from race and sex.
@@ -527,7 +524,7 @@ impl ObjectFields {
     /// `CORPSE_DYNFLAG_LOOTABLE` (`Map.cpp:3655`): the bone pile has insignia; `0x5d6e20` gates the
     /// loot highlight and the `CMSG_LOOT` click on it.
     pub fn corpse_lootable(&self) -> bool {
-        self.get_u32(FIELD_CORPSE_DYNAMIC_FLAGS).unwrap_or(0) & 0x01 != 0
+        self.get(Field::CorpseDynamicFlags).unwrap_or(0) & 0x01 != 0
     }
 
     /// `CORPSE_FLAG_LOOTABLE`: the battleground insignia is takeable, by spell 22027 "Remove

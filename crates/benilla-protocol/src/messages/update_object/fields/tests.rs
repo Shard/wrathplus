@@ -1012,3 +1012,45 @@ fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
         assert_eq!(fields.unit_charmed_by(), None);
     }
 }
+
+#[test]
+fn native_item_container_and_corpse_readers_use_their_layout() {
+    let item = ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[
+            (14, 3),
+            (16, (-2i32) as u32),
+            (55, 789),
+            (56, 800),
+            (60, 17),
+            (61, 20),
+        ],
+    )
+    .into_created(ObjectType::Item);
+    assert_eq!(item.item_stack_count(), Some(3));
+    assert_eq!(item.item_spell_charges(0), Some(-2));
+    assert_eq!(item.item_enchant(11), Some(789));
+    assert_eq!(item.item_enchant(12), None);
+    assert_eq!(item.item_durability(), Some(17));
+    assert_eq!(item.item_max_durability(), Some(20));
+    assert_eq!(item.item_text_id(), None); // Removed field must not alias native enchants.
+    let bag = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(64, 36), (66, 123)]);
+    assert_eq!(bag.container_num_slots(), Some(36));
+    assert_eq!(bag.container_slot(0), Some(123));
+    let corpse = ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[
+            (6, 123),
+            (10, 456),
+            (11, 99 | (4 << 24)),
+            (30, 1 << 8),
+            (33, 8),
+        ],
+    );
+    assert_eq!(corpse.corpse_owner(), Some(123));
+    assert_eq!(corpse.corpse_display_id(), Some(456));
+    assert_eq!(corpse.corpse_item(0), Some((99, 4)));
+    assert_eq!(corpse.corpse_item(19), None);
+    assert_eq!(corpse.corpse_race(), 1);
+    assert!(corpse.corpse_hides_helm());
+}
