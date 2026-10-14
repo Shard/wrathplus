@@ -119,6 +119,7 @@ mod slider;
 mod social;
 mod sound;
 mod spellbook;
+mod spell_info;
 mod stable;
 mod statusbar;
 mod stdlib;
@@ -245,6 +246,7 @@ pub(crate) use simplehtml::{
 pub use skills::{SkillEntry, SkillsState};
 pub use social::{FriendInfo, SocialRequest, SocialState, WhoInfo};
 pub use sound::{MusicRequest, SoundRequest};
+pub use spell_info::SpellInfoView;
 pub use spellbook::{
     resolve_spell_by_name, PetBookState, SpellBookState, SpellSlotView, SpellTabView,
 };
@@ -656,6 +658,7 @@ impl UiScript {
         container::install(&lua)?;
         cursor::install(&lua)?;
         spellbook::install(&lua)?;
+        spell_info::install(&lua)?;
         macros::install(&lua)?;
         talent::install(&lua)?;
         dialog_verbs::install(&lua)?;
