@@ -147,3 +147,42 @@ never stacks sizes. A setter after the last sync wins when disabling. The bounde
 looks up ChatFrame1..10, only writes changed sizes, and never creates missing font regions.
 On an untouched Classic VM it allocates no policy state and performs no font lookups or writes.
 The first proof is chat-only; quest-log overrides await verification of isolated region ownership.
+
+
+### Offline showcase path (schema / sampler)
+
+The showcase path is separate from the stock server-triggered cinematic player and the eval
+capture harness. This first unit implements data validation and CPU sampling only; it does not
+register a recording plugin, read environment variables, or change any camera or clock.
+The driver and the `WOW_SHOWCASE_PATH` launch knob will follow in a separate unit.
+
+A TOML path fixes `map` and `minute` (light-band minute in `[0, 1440)`) for matched Classic/Plus
+scenery clips. `[[keyframes]]` has `at` in seconds, absolute `eye` and `target` in **WoW coordinates**
+(yards), and optional `fov_degrees` (vertical, default 60, allowed 10..120). Times start at zero
+and increase strictly; the last time is the duration, at most ten minutes and an integral number
+of 1/60-second frames. There must be 2..256 keys. Nonfinite/out-of-bounds coordinates, coincident
+views (including sampled crossings), unknown fields, and invalid times are refused before recording.
+
+Output is fixed at 1920x1080, 60 fps. N frames sample `[0, duration)` at integer `index / 60`,
+not accumulated deltas; the final endpoint is not duplicated. Eye, target and FOV use bounded
+cubic ease-in/out interpolation, continuous with zero velocity at each key and no overshoot.
+Each waypoint deliberately comes to rest; use two keys for a single uninterrupted flight.
+An explicit showcase can record either experience, but ordinary Classic, normal play, and the
+existing eval capture remain unchanged. Offline recording contains scenery only, no network actors.
+
+```toml
+map = 0
+minute = 720.0
+[[keyframes]]
+at = 0.0
+eye = [-9000.0, -100.0, 120.0]
+target = [-8950.0, -100.0, 90.0]
+[[keyframes]]
+at = 10.0
+eye = [-8900.0, -100.0, 120.0]
+target = [-8850.0, -100.0, 90.0]
+fov_degrees = 60.0
+```
+
+This is a schema example, not a manager-verified filming route. No runtime image or Classic
+pixel-equality claim follows from CPU sampler tests.
