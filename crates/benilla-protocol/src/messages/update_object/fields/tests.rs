@@ -995,3 +995,20 @@ fn unit_accessors_read_native_wrath_without_vanilla_aliases() {
     assert_eq!(fields.unit_displayid(), Some(1234));
     assert_eq!(fields.unit_aura(0), None);
 }
+
+#[test]
+fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let owner = layout.resolve(Field::UnitSummonedby).unwrap().index;
+        let fields = ObjectFields::from_native_pairs(layout, &[(owner, 42)]);
+        assert_eq!(fields.unit_summoned_by(), Some(42));
+        assert_eq!(fields.get_field_guid(Field::UnitSummonedby, 1), None);
+        let high_only = ObjectFields::from_native_pairs(layout, &[(owner + 1, 3)])
+            .into_created(ObjectType::Unit);
+        assert_eq!(high_only.unit_summoned_by(), None);
+        assert_eq!(high_only.get_field_guid(Field::UnitSummonedby, 0), None);
+        let fields = fields.into_created(ObjectType::Unit);
+        assert_eq!(fields.unit_summoned_by(), Some(42));
+        assert_eq!(fields.unit_charmed_by(), None);
+    }
+}

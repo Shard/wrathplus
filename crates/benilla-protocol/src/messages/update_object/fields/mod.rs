@@ -418,8 +418,13 @@ impl ObjectFields {
     }
 
     pub fn get_field_guid(&self, field: Field, offset: u16) -> Option<u64> {
+        let span = self.layout.resolve(field)?;
         let hi = offset.checked_add(1)?;
-        Some(u64::from(self.get_at(field, offset)?) | (u64::from(self.get_at(field, hi)?) << 32))
+        if hi >= span.width {
+            return None;
+        }
+        // GUID presence follows its low half; sparse updates may omit an unchanged high half.
+        self.get_guid(span.index + offset)
     }
 
     pub fn field_present(&self, field: Field, offset: u16) -> bool {

@@ -143,3 +143,39 @@ Crates `benilla-formats`, `benilla-m2`, `benilla-assets`, `benilla-world`.
 The manager merges reviewed branches into `azerothbench/wrath-hud` in dependency order (WS1 → WS2;
 others as they land), resolves conflicts, runs the full suites and a live session, and records
 results in `docs/WRATH-PLAN.md`.
+
+## After the native refactor (requested by Shannon, 2026-10-14)
+
+### Rename: `wrathplus`
+The codebase has drifted far from benilla. Once WS1-WS6 are merged (a rename mid-refactor would
+conflict every open branch), rename in one mechanical pass: crates `benilla-*` → `wrathplus-*`,
+the `benilla` binary, module paths, docs, logs/targets that embed the name. `WOW_*` environment
+variables stay (they name the game, not the project). One commit, no behaviour change, full suites
+green before and after.
+
+### Tidy-up and quality gates
+Shannon's usual stack (as in snapdragon: `.githooks/pre-commit`, `scripts/loc-gate.sh`,
+`scripts/crap-gate.sh`, `.cargo-crap.toml`), minus Verus:
+- **rustfmt** `--check` and **clippy** `-D warnings` on the touched crates.
+- **Line-count gate**: no Rust file over 500 lines.
+- **CRAP gate**: complexity² × (1 − coverage)³ + complexity per function, threshold 10, coverage
+  from `cargo llvm-cov`, scored by `cargo crap`.
+- **Unused dependencies** (`cargo machete`) and a **typos** pass.
+- Pre-commit hook checks the staged snapshot, like snapdragon's.
+
+Starting point (2026-10-14): 1,585 Rust files, 740k lines; 516 files over 500 lines (183 over
+1,000, 28 over 2,000; largest 4,847). Hard gates would block every commit, so they start as a
+**ratchet**: a checked-in baseline lists today's violations (file → line count, function → CRAP),
+new or changed code meets the bar in full, the baseline may only shrink, and the tidy-up work
+burns it down crate by crate (split oversized files by responsibility, cover or simplify
+high-CRAP functions). CRAP on the whole Bevy app is too slow per commit, so the hook scores only
+the crates a commit touches; a full run is a manual gate before merges.
+
+### Split the app crate
+`benilla-app` is ~393k lines (over half the codebase): game systems, net handling, UI glue and
+capture/probe tooling in one crate. As part of the tidy-up (after the rename, so the new crates are
+born `wrathplus-*`), split it along its existing seams into a few crates with one-way dependencies,
+e.g. net/session handling, gameplay systems (spells, combat, units, items, quests), UI script
+glue (`ui_*`), and dev/capture tooling (`capture/`, `addon_harness/`, probes), keeping the binary
+crate thin. Goals: faster incremental builds and per-crate gates, clearer ownership. Plan the
+seams from the actual module dependency graph first; no behaviour change, suites green per step.
