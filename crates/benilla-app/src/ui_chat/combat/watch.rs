@@ -148,6 +148,19 @@ pub(crate) fn death_lines(
     }
 }
 
+/// Descriptor aura spans only exist in Vanilla. Wrath aura notifications come from packets.
+fn descriptor_aura_slot(edge: &FieldChanged, applications: bool) -> Option<u16> {
+    use benilla_protocol::messages::{Field, FieldLayout};
+    if edge.layout != FieldLayout::Vanilla5875 {
+        return None;
+    }
+    if applications {
+        edge.unit_slot(Field::UnitAuraApplications, 12)
+    } else {
+        edge.unit_slot(Field::UnitAura, 48)
+    }
+}
+
 /// The aura lines (`0x62b480`, `0x62b800`), one per field edge:
 ///
 /// - a `UNIT_FIELD_AURA` slot gaining a spell words `AURAADDED*` at the periodic chat types
@@ -166,10 +179,8 @@ pub(crate) fn aura_lines(
     poses: Query<&Transform>,
     mut log: ResMut<ChatLog>,
 ) {
-    use benilla_protocol::field::{FIELD_UNIT_AURA, FIELD_UNIT_AURAAPPLICATIONS};
     /// Slots below it are helpful (`0x61238e`).
     const FIRST_HARMFUL_SLOT: u16 = 0x20;
-    const SLOTS: u16 = benilla_protocol::messages::UNIT_AURA_SLOTS as u16;
     let harmful = |slot: u16| slot >= FIRST_HARMFUL_SLOT;
 
     // The whole batch first: the applications leg skips slots whose `AURA` dword moved in the
@@ -177,16 +188,16 @@ pub(crate) fn aura_lines(
     let batch: Vec<FieldChanged> = edges.read().copied().collect();
     let slot_edges: Vec<&FieldChanged> = batch
         .iter()
-        .filter(|e| e.unit_array_slot(FIELD_UNIT_AURA, SLOTS).is_some())
+        .filter(|e| descriptor_aura_slot(e, false).is_some())
         .collect();
     let slot_moved = |entity: Entity, slot: u16| {
         slot_edges
             .iter()
-            .any(|e| e.entity == entity && e.raw_index_compat() - FIELD_UNIT_AURA == slot)
+            .any(|e| e.entity == entity && descriptor_aura_slot(e, false) == Some(slot))
     };
 
     for e in &slot_edges {
-        let slot = e.raw_index_compat() - FIELD_UNIT_AURA;
+        let slot = descriptor_aura_slot(e, false).unwrap();
         let class = ctx.classify(e.guid, &stores);
         // Arrival first, so a replace words the new aura before the old one's removal.
         if e.new != 0 {
@@ -234,11 +245,11 @@ pub(crate) fn aura_lines(
     }
 
     // Stack counts: four slots per dword, one byte each, holding `stack - 1`.
-    for e in batch.iter().filter(|e| {
-        e.unit_array_slot(FIELD_UNIT_AURAAPPLICATIONS, SLOTS / 4)
-            .is_some()
-    }) {
-        let word = e.raw_index_compat() - FIELD_UNIT_AURAAPPLICATIONS;
+    for e in batch
+        .iter()
+        .filter(|e| descriptor_aura_slot(e, true).is_some())
+    {
+        let word = descriptor_aura_slot(e, true).unwrap();
         let Ok((_, store)) = stores.get(e.entity) else {
             continue; // gone in the same drain
         };
@@ -409,6 +420,59 @@ mod loyalty_tests {
                 (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
                 assert_eq!(loyalty_levels(&edge), None);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod descriptor_aura_tests {
+    use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+
+    #[test]
+    fn aura_watch_uses_real_vanilla_spans_and_class_gates() {
+        let layout = FieldLayout::Vanilla5875;
+        for (field, applications) in [
+            (Field::UnitAura, false),
+            (Field::UnitAuraApplications, true),
+        ] {
+            let span = layout.resolve(field).unwrap();
+            for offset in 0..span.width {
+                for kind in [ObjectType::Unit, ObjectType::Player] {
+                    let (field, offset) = layout.field_at(kind, span.index + offset).unwrap();
+                    let mut edge = FieldChanged {
+                        entity: Entity::PLACEHOLDER,
+                        guid: 42,
+                        kind,
+                        layout,
+                        field,
+                        offset,
+                        old: 0,
+                        new: 1,
+                    };
+                    assert_eq!(descriptor_aura_slot(&edge, applications), Some(offset));
+                    assert_eq!(descriptor_aura_slot(&edge, !applications), None);
+                    edge.kind = ObjectType::Corpse;
+                    assert_eq!(descriptor_aura_slot(&edge, applications), None);
+                }
+            }
+            assert!(FieldLayout::Wrath12340.resolve(field).is_none());
+        }
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let span = layout.resolve(Field::UnitHealth).unwrap();
+            let (field, offset) = layout.field_at(ObjectType::Unit, span.index).unwrap();
+            let edge = FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::Unit,
+                layout,
+                field,
+                offset,
+                old: 1,
+                new: 0,
+            };
+            assert_eq!(descriptor_aura_slot(&edge, false), None);
+            assert_eq!(descriptor_aura_slot(&edge, true), None);
         }
     }
 }
