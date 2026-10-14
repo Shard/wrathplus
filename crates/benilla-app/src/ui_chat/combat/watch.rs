@@ -92,6 +92,13 @@ fn queue_one(
 /// as "destroyed", `0x62c320`'s byte table: totems, summoned objects, guardians.
 const DESTROYED_EFFECTS: [u32; 10] = [50, 74, 87, 88, 89, 90, 104, 105, 106, 107];
 
+fn is_death_edge(edge: &FieldChanged) -> bool {
+    edge.is_unit()
+        && edge.named_field(benilla_protocol::messages::Field::UnitHealth)
+        && edge.old > 0
+        && edge.new == 0
+}
+
 /// The unit-death line (`0x625190` → `0x62c160`), off the `UNIT_FIELD_HEALTH` edge as the
 /// reference's watcher `0x6046f0` takes it (alive to dead at `0x6047a3`); a unit that streams in
 /// dead prints nothing.
@@ -107,7 +114,7 @@ pub(crate) fn death_lines(
     mut log: ResMut<ChatLog>,
 ) {
     for e in edges.read() {
-        if !(e.unit_field(benilla_protocol::field::FIELD_UNIT_HEALTH) && e.old > 0 && e.new == 0) {
+        if !is_death_edge(e) {
             continue;
         }
         let Ok((_, store)) = stores.get(e.entity) else {
@@ -310,5 +317,45 @@ pub(crate) fn pet_loyalty_lines(
             named: Named::Ready,
             tries: 0,
         });
+    }
+}
+
+#[cfg(test)]
+mod native_death_tests {
+    use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+
+    #[test]
+    fn death_watch_resolves_native_health_and_preserves_alive_to_dead_gate() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for kind in [ObjectType::Unit, ObjectType::Player] {
+                let span = layout.resolve(Field::UnitHealth).unwrap();
+                let (field, offset) = layout.field_at(kind, span.index).unwrap();
+                let mut edge = FieldChanged {
+                    entity: Entity::PLACEHOLDER,
+                    guid: 42,
+                    kind,
+                    layout,
+                    field,
+                    offset,
+                    old: 1,
+                    new: 0,
+                };
+                assert!(is_death_edge(&edge));
+                for (old, new) in [(0, 0), (0, 1), (2, 1)] {
+                    edge.old = old;
+                    edge.new = new;
+                    assert!(!is_death_edge(&edge));
+                }
+                edge.old = 1;
+                edge.new = 0;
+                edge.kind = ObjectType::Corpse;
+                assert!(!is_death_edge(&edge));
+                edge.kind = kind;
+                let span = layout.resolve(Field::UnitMaxHealth).unwrap();
+                (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
+                assert!(!is_death_edge(&edge));
+            }
+        }
     }
 }
