@@ -30,8 +30,12 @@ fn world_camera_output() -> Camera {
     }
 }
 
-fn spawn_fallback_camera(commands: &mut Commands, msaa: Msaa) {
-    commands.spawn((
+fn spawn_fallback_camera(
+    commands: &mut Commands,
+    msaa: Msaa,
+    ao: crate::experience_ao::AoBootPolicy,
+) {
+    let mut camera = commands.spawn((
         Camera3d::default(),
         WorldCamera,
         // The player's level: `Camera` requires `Msaa`, which would default to `Sample4`.
@@ -47,6 +51,7 @@ fn spawn_fallback_camera(commands: &mut Commands, msaa: Msaa) {
             speed: 40.0,
         },
     ));
+    ao.insert_aa(&mut camera);
 }
 
 /// Inserts the move speed and avatar state and spawns the world camera above the spawn, or a plain
@@ -57,6 +62,7 @@ pub(super) fn setup_player(
     world_assets: Option<Res<WorldAssets>>,
     // `gxMultisample` with `config.toml` folded in: this runs after [`crate::cvars::CvarLoad`].
     msaa: Res<benilla_world::view::MsaaSetting>,
+    ao: Res<crate::experience_ao::AoBootPolicy>,
 ) {
     let env_speed = std::env::var("WOW_MOVE_SPEED")
         .ok()
@@ -82,7 +88,7 @@ pub(super) fn setup_player(
 
     // No client data: free-fly an empty scene.
     let (Some(_), Some(_)) = (config, world_assets) else {
-        spawn_fallback_camera(&mut commands, msaa.level());
+        spawn_fallback_camera(&mut commands, ao.camera_msaa(msaa.level()), *ao);
         return;
     };
 
@@ -96,7 +102,7 @@ pub(super) fn setup_player(
         WorldCamera,
         // `gxMultisample` is read once: the reference latches it, pending until the next launch,
         // and a live swap would mismatch our post passes. `$WOW_MSAA` overrides it for a session.
-        msaa.level(),
+        ao.camera_msaa(msaa.level()),
         Projection::from(PerspectiveProjection {
             far: cam_far,
             // Frame zero only: `view::stamp_near_clip` re-stamps the live `nearclip` every frame,
@@ -120,6 +126,7 @@ pub(super) fn setup_player(
             speed: 100.0,
         },
     ));
+    ao.insert_aa(&mut world_cam);
     // `WOW_NO_INDIRECT=1` opts out of indirect draws and GPU culling for an A/B; it rides the
     // spawn, as the phase cache latches the preprocessing mode on first sight of the view.
     if std::env::var_os("WOW_NO_INDIRECT").is_some() {

@@ -1,3 +1,7 @@
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+#import bevy_pbr::mesh_view_bindings::screen_space_ambient_occlusion_texture
+#endif
+
 // Terrain splat shader: a custom vertex and fragment stage on Bevy's StandardMaterial. Blends up to
 // four tiled layers by a per-chunk alpha map, lit as the reference's fixed-function terrain:
 //   diffuse  = clamp(ambient (row 1) + diffuse (row 0)·max(N·L, 0) + Σ point·att·N·L), evaluated
@@ -230,6 +234,13 @@ fn fragment(in: TerrainVsOut) -> @location(0) vec4<f32> {
         }
         primary = clamp(in.non_sun + in.sun * sun_visibility, vec3<f32>(0.0), vec3<f32>(1.0));
     }
+
+#ifdef SCREEN_SPACE_AMBIENT_OCCLUSION
+    // Rebuild before the clamp; point lights and sunlight remain unoccluded.
+    let ao = textureLoad(screen_space_ambient_occlusion_texture, vec2<i32>(in.clip_position.xy), 0).r;
+    primary = clamp(in.non_sun + in.sun * sun_visibility - wow_light.light_ambient.rgb * (1.0 - ao),
+        vec3<f32>(0.0), vec3<f32>(1.0));
+#endif
 
     // MCSH baked shadow. With `pixelShaders` and `specular` on, terrain is one pass through
     // `terrainp_s.bls`, which reads the MCSH bit from the blend texture's alpha (1 lit, 0 shadowed)

@@ -55,6 +55,7 @@ mod doodad_events;
 mod entities;
 pub mod experience;
 mod experience_ui;
+mod experience_ao;
 mod fishing_line;
 mod footprints;
 mod game_plugins;
@@ -264,7 +265,9 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         .expect("valid enabled asset packs");
     ui_script::initialize_asset_overrides(overrides.clone());
     app.insert_resource(benilla_assets::AssetOverridePolicy(overrides.clone()));
+    app.insert_resource(experience_ao::AoBootPolicy::from_experience(&experience));
     app.insert_resource(experience);
+    app.add_systems(PostUpdate, experience_ao::sync_camera);
     app.init_resource::<benilla_world::modern_lighting::ModernLighting>();
     app.add_systems(
         PostUpdate,
