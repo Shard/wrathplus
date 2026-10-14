@@ -149,6 +149,8 @@ mod worldmap;
 mod worldstate;
 mod worn_display;
 mod wrath_surface;
+mod wrath_paperdoll;
+pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
 
 pub use action::{ActionSlot, ActionState, ActionUse};
@@ -718,6 +720,7 @@ impl UiScript {
         if dialect == ScriptDialect::Wrath12340 {
             // The mature implementation above, with the Wrath ABI and trusted secure environment.
             wrath_surface::install(&lua)?;
+            wrath_paperdoll::install(&lua)?;
         }
 
         let s = UiScript {

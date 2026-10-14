@@ -857,6 +857,7 @@ pub(crate) struct Model {
     pub(crate) exhaustion: HashMap<u8, (String, f64)>,
 
     /// The paper doll's combat stats, `None` until the first push.
+    pub(crate) wrath_paperdoll_stats: super::WrathPaperDollStats,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
     pub(crate) pet_combat_stats: Option<char_stats::UnitCombatStats>,
@@ -1461,6 +1462,7 @@ impl Model {
             ]
             .into_iter()
             .collect(),
+            wrath_paperdoll_stats: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,
             inventory_slots: Default::default(),
