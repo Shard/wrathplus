@@ -173,7 +173,7 @@ impl ObjectFields {
     }
     /// `PLAYER_CHARACTER_POINTS2` (private): free professions, second of `UnitCharacterPoints`.
     pub fn player_free_professions(&self) -> Option<u32> {
-        self.get_u32(FIELD_PLAYER_CHARACTER_POINTS2)
+        self.get(Field::PlayerCharacterPoints2)
     }
     /// `PLAYER_TRACK_CREATURES` (private): bit `1 << (creatureType - 1)` per creature tracking
     /// aura, the mask the minimap's red dots test.
