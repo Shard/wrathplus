@@ -1035,9 +1035,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ActivateTaxiExpress { .. }
         | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
-        | ClientCommand::TrainerBuySpell { .. } => WrathRoute::NativeSession,
+        | ClientCommand::TrainerBuySpell { .. }
+        | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
-        ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
+        ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
         }
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
@@ -1444,6 +1445,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::TrainerBuySpell { trainer, spell_id } => {
             (t::CMSG_TRAINER_BUY_SPELL, t::encode_buy(trainer, spell_id))
         }
+        ClientCommand::QueryNextMailTime => (
+            benilla_protocol::wrath_mail::MSG_QUERY_NEXT_MAIL_TIME as u32,
+            benilla_protocol::wrath_mail::encode_query_next_mail_time(),
+        ),
         other => unreachable!("not a Wrath session command: {other:?}"),
     }
 }
@@ -1962,7 +1967,6 @@ mod tests {
     #[test]
     fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
         for command in [
-            ClientCommand::QueryNextMailTime,
             ClientCommand::BattlefieldStatusRequest,
         ] {
             assert_eq!(route(&command), WrathRoute::DeferredReadOnlyQuery);
@@ -2793,3 +2797,7 @@ mod taxi_tests;
 
 #[path = "wrath/taxi_authority.rs"]
 mod taxi_authority;
+
+#[cfg(test)]
+#[path = "wrath/mail_tests.rs"]
+mod mail_tests;
