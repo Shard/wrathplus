@@ -158,6 +158,7 @@ mod ui_pet;
 mod ui_pet_book;
 mod ui_pet_doll;
 mod ui_pet_stats;
+mod ui_paperdoll;
 mod ui_petition;
 mod ui_quest;
 mod ui_quest_log;

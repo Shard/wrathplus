@@ -217,6 +217,7 @@ impl PluginGroup for GamePlugins {
             .add(ChrClassesPlugin)
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
+            .add(crate::ui_paperdoll::UiPaperDollPlugin)
             .add(UiPetDollPlugin)
             .add(UiNetPlugin)
             .add(UiCastPlugin)

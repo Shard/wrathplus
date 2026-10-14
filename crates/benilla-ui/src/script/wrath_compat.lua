@@ -160,16 +160,6 @@ function GetNumLanguages()
     return n
 end
 
--- ── combat ratings and derived stats ───────────────────────────────────────────────────────────
-GetCombatRating, GetCombatRatingBonus = zero, zero
-GetCritChance = GetCritChance or zero
-GetRangedCritChance = GetRangedCritChance or zero
-GetSpellCritChance, GetCritChanceFromAgility, GetSpellCritChanceFromIntellect = zero, zero, zero
-GetSpellBonusDamage, GetSpellBonusHealing = zero, zero
-GetExpertise, GetExpertisePercent, GetArmorPenetration = zero, zero, zero
-GetShieldBlock = GetShieldBlock or zero
-GetManaRegen = GetManaRegen or function() return 0, 0 end
-
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
 GetActiveTalentGroup = GetActiveTalentGroup or function() return 1 end
 GetNumTalentGroups = GetNumTalentGroups or function() return 1 end
