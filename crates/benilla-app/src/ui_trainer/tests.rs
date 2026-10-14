@@ -1113,3 +1113,31 @@ fn trainer_rederive_edges_preserve_skill_halves_and_class_gates_in_both_layouts(
         assert!(!rederive_edge(&edge));
     }
 }
+
+#[test]
+fn wrath_profession_eligibility_reads_free_descriptor_slots_not_vanilla_flag() {
+    let mut service = wire(2018, trainer_spell_state::GREEN, 100, 5, 0);
+    service.is_primary_prof_first_rank = true;
+    service.wrath_point_cost = Some([0, 1]);
+    assert!(!service.can_learn_primary_prof);
+    let layout = benilla_protocol::messages::FieldLayout::Wrath12340;
+    let index = layout
+        .resolve(benilla_protocol::messages::Field::PlayerCharacterPoints2)
+        .unwrap()
+        .index;
+    for (free, eligible) in [(0, false), (1, true), (2, true)] {
+        let store = benilla_protocol::ObjectFields::from_native_pairs(layout, &[(index, free)]);
+        assert_eq!(
+            profession_slot_available(&service, store.player_free_professions()),
+            eligible
+        );
+    }
+    assert!(profession_slot_available(&service, None));
+    service.wrath_point_cost = Some([0, 0]);
+    assert!(profession_slot_available(&service, Some(0)));
+    service.wrath_point_cost = None;
+    assert!(
+        profession_slot_available(&service, Some(0)),
+        "vanilla behaviour unchanged"
+    );
+}

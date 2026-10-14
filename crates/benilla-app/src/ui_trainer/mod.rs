@@ -275,6 +275,15 @@ fn snapshot(
     })
 }
 
+/// Native profession eligibility comes from the player's descriptor, never the Vanilla flag.
+fn profession_slot_available(wire: &TrainerSpell, free: Option<u32>) -> bool {
+    match (wire.wrath_point_cost, free) {
+        (Some(cost), Some(free)) => free >= cost[1],
+        // Vanilla retains its existing handling; an unseen native descriptor retains wire state.
+        _ => true,
+    }
+}
+
 /// The re-evaluator's inputs and its descriptor triggers: the player's descriptor and its field
 /// edges (money, level, a skill slot), the pet bar, and the stores that resolve the pet.
 #[derive(SystemParam)]
@@ -403,7 +412,7 @@ pub(crate) fn feed_trainer(
             &player,
         );
     }
-    let fresh = snapshot(
+    let mut fresh = snapshot(
         &open,
         &spells.catalog,
         Some(&skill_lines.catalog),
@@ -420,6 +429,19 @@ pub(crate) fn feed_trainer(
                 .filter(|t| !t.is_empty())
         },
     );
+    // NPCPackets.cpp's Wrath PointCost[1] is a cost, not Vanilla's eligibility flag.
+    // Read PLAYER_CHARACTER_POINTS2 every frame: a spent or restored slot updates the row
+    // without waiting for another trainer list. Missing descriptor data is not a real zero.
+    let free_professions = self_player.and_then(|(_, store)| store.0.player_free_professions());
+    if let Some(state) = &mut fresh {
+        for (service, wire) in state.services.iter_mut().zip(&open.services) {
+            if !profession_slot_available(wire, free_professions)
+                && service.category == TrainerServiceCategory::Available
+            {
+                service.category = TrainerServiceCategory::Unavailable;
+            }
+        }
+    }
     // A spell subject's view must be in the store before the detail icon is hovered.
     let mut fresh_tooltip_subjects = TrainerTooltipSubjects::default();
     for service in fresh.iter().flat_map(|state| &state.services) {

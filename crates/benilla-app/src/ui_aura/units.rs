@@ -98,6 +98,8 @@ pub(super) struct Inputs<'g, 'a, H, V> {
     pub(super) catalog: Option<&'a SpellCatalog>,
     /// The spell catalog was replaced, so every list is rebuilt.
     pub(super) catalog_moved: bool,
+    pub(super) packets: Option<&'g crate::net::wrath_auras::PacketAuras>,
+    pub(super) clocks: (f64, f64),
 }
 
 /// One guid's list, shared by every token naming it.
@@ -105,6 +107,7 @@ struct GuidList {
     /// What the list was built from; the list is rebuilt only when these move.
     inputs: Vec<AuraInput>,
     list: Vec<AuraState>,
+    native: Option<Vec<crate::net::wrath_auras::StampedAura>>,
     /// Taken from [`UnitAuras::versions`] each time the list changes.
     version: u64,
     /// The frame that last read it; an entry no token can name this frame is dropped.
@@ -157,6 +160,8 @@ impl UnitAuras {
             buffs_visible,
             catalog,
             catalog_moved,
+            packets,
+            clocks,
         } = inputs;
         self.frame += 1;
         if catalog_moved || catalog.is_some() != self.catalog_present {
@@ -191,7 +196,11 @@ impl UnitAuras {
                 walk.push((next, false));
             }
             if guid != me {
-                self.refresh(guid, store, record_ok, group, &buffs_visible, catalog);
+                if let Some(auras) = packets.and_then(|p| p.by_guid.get(&guid)) {
+                    self.refresh_native(guid, auras, catalog, clocks);
+                } else {
+                    self.refresh(guid, store, record_ok, group, &buffs_visible, catalog);
+                }
             }
         }
         script.set_unit_guids(&g);
@@ -229,6 +238,32 @@ impl UnitAuras {
             self.fired[i] = cur;
         }
         fire
+    }
+
+    fn refresh_native(
+        &mut self,
+        guid: u64,
+        auras: &[crate::net::wrath_auras::StampedAura],
+        catalog: Option<&SpellCatalog>,
+        clocks: (f64, f64),
+    ) {
+        if let Some(e) = self.by_guid.get_mut(&guid) {
+            e.frame = self.frame;
+            if e.native.as_deref() == Some(auras) {
+                return;
+            }
+        }
+        self.versions += 1;
+        self.by_guid.insert(
+            guid,
+            GuidList {
+                inputs: Vec::new(),
+                native: Some(auras.to_vec()),
+                list: super::native::list(catalog, auras, clocks.0, clocks.1),
+                version: self.versions,
+                frame: self.frame,
+            },
+        );
     }
 
     /// `guid`'s list as last built, `None` for a unit with none.
@@ -275,7 +310,7 @@ impl UnitAuras {
             Entry::Occupied(mut e) => {
                 let e = e.get_mut();
                 e.frame = self.frame;
-                if e.inputs != self.scratch {
+                if e.native.take().is_some() || e.inputs != self.scratch {
                     std::mem::swap(&mut e.inputs, &mut self.scratch);
                     let list = aura_list(catalog, &e.inputs);
                     if list != e.list {
@@ -291,6 +326,7 @@ impl UnitAuras {
                 let list = aura_list(catalog, &inputs);
                 e.insert(GuidList {
                     inputs,
+                    native: None,
                     list,
                     version: self.versions,
                     frame: self.frame,
@@ -369,6 +405,45 @@ mod tests {
             Some(ME),
         );
         app
+    }
+
+    #[test]
+    fn packet_snapshots_override_projected_fields_for_player_and_party_and_clear() {
+        use crate::net::wrath_auras::{PacketAuras, StampedAura};
+        use benilla_protocol::wrath_auras::NativeAura;
+        let mut app = party_app();
+        stream(&mut app, MEMBER, &[(AURA, 999), (AURAFLAGS, 3)]);
+        let aura = StampedAura {
+            received_at: 0.0,
+            aura: NativeAura {
+                slot: 63,
+                spell_id: 123,
+                flags: 0x10,
+                level: 80,
+                stacks: 2,
+                caster_guid: Some(ME),
+                max_duration_ms: Some(30000),
+                remaining_ms: Some(29000),
+            },
+        };
+        let mut packets = PacketAuras::default();
+        packets.by_guid.insert(ME, vec![aura.clone()]);
+        packets.by_guid.insert(MEMBER, vec![aura]);
+        app.insert_resource(packets);
+        app.update();
+        assert_eq!(listed(&mut app, "player", false), [123]);
+        assert_eq!(listed(&mut app, "party1", false), [123]);
+        app.world_mut()
+            .resource_mut::<PacketAuras>()
+            .by_guid
+            .insert(ME, vec![]);
+        app.world_mut()
+            .resource_mut::<PacketAuras>()
+            .by_guid
+            .insert(MEMBER, vec![]);
+        app.update();
+        assert!(listed(&mut app, "player", false).is_empty());
+        assert!(listed(&mut app, "party1", false).is_empty());
     }
 
     /// Stream `guid` in with these fields, as the object manager holds it.

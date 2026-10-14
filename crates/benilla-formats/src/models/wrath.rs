@@ -25,7 +25,7 @@ use super::{BoneKeys, SeqSlot, DEGENERATE_RING_FOOTPRINT};
 
 /// All renderer-facing semantics currently representable from a v264 M2 and one external skin.
 ///
-/// Particle, ribbon and light records are rejected by `benilla-m2` rather than silently omitted.
+/// Native lights and ribbons are adapted separately from the particle byte reader.
 /// Animation-event positions are retained in [`Self::event_markers`], but v264 event timelines are
 /// not exposed by that parser and therefore are not invented in [`Self::animations`].
 pub struct WrathRenderModel {
@@ -36,6 +36,8 @@ pub struct WrathRenderModel {
     pub animation_interpolation: Vec<Vec<WrathBoneInterpolation>>,
     pub global_sequence_bones: Vec<GlobalSeqBone>,
     pub cameras: Vec<WrathCamera>,
+    pub lights: Vec<super::M2Light>,
+    pub ribbons: Vec<crate::RibbonEmitterDef>,
     pub camera_lookup: Vec<u16>,
     pub attachments: Vec<M2Attachment>,
     pub event_markers: Vec<EventMarker>,
@@ -158,6 +160,8 @@ fn adapt_wrath_render_model(
         animation_interpolation,
         global_sequence_bones,
         cameras: wrath.cameras().to_vec(),
+        lights: super::wrath_effects::lights(&wrath),
+        ribbons: super::wrath_effects::ribbons(&wrath, dir, skins)?,
         camera_lookup: wrath.camera_lookup().to_vec(),
         attachments,
         event_markers,
@@ -676,7 +680,7 @@ fn render_submeshes(
     Ok(out)
 }
 
-fn resolve_texture(
+pub(super) fn resolve_texture(
     texture: &M2Texture,
     dir: &str,
     skins: &[Option<String>],
@@ -974,6 +978,33 @@ mod tests {
         bytes.extend(bone);
         put_array(&mut bytes, 0x2c, 1, bone_offset);
         bytes
+    }
+
+    #[test]
+    fn unsupported_ribbon_does_not_drop_model_or_supported_sibling() {
+        let mut bytes = synthetic_m2();
+        let offset = bytes.len();
+        bytes.resize(offset + 3 * 176, 0);
+        put_array(&mut bytes, 0x120, 3, offset as u32);
+        for i in 0..3 {
+            put_u32(&mut bytes, offset+i*176, i as u32);
+            put_u16(&mut bytes, offset+i*176+154, u16::MAX);
+        }
+        // Second ribbon authors a cubic appearance track.
+        put_u16(&mut bytes, offset+176+36, 2);
+        // Third authors animated visibility on a global clock.
+        let track = offset+2*176+152;
+        put_u16(&mut bytes, track+2, 0);
+        let descriptors = bytes.len();
+        bytes.resize(descriptors+26, 0);
+        put_array(&mut bytes, track+4, 1, descriptors as u32);
+        put_array(&mut bytes, track+12, 1, (descriptors+8) as u32);
+        put_array(&mut bytes, descriptors, 2, (descriptors+16) as u32);
+        put_array(&mut bytes, descriptors+8, 2, (descriptors+24) as u32);
+        bytes[descriptors+25] = 1;
+        let model = parse_wrath_render_model(&bytes, &synthetic_skin(0), "", &[]).unwrap();
+        assert!(!model.submeshes.is_empty(), "geometry survives");
+        assert_eq!(model.ribbons.len(), 1, "only unsupported ribbons dropped");
     }
 
     fn synthetic_skin(texture_count: u16) -> Vec<u8> {

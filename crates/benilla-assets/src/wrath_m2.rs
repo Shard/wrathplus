@@ -172,15 +172,61 @@ impl AssetLoader for WrathM2ModelLoader {
             .filter(|duration| *duration > 0.0);
 
         let emitters = build_emitters(ctx, &bytes, &semantic, animations.as_ref());
+        let owner_reach = benilla_formats::m2_owner_reach(&semantic.submeshes);
+        let b = &semantic.bounds;
+        let water_bound = (
+            wow_to_bevy([
+                (b.bbox_min[0] + b.bbox_max[0]) * 0.5,
+                (b.bbox_min[1] + b.bbox_max[1]) * 0.5,
+                (b.bbox_min[2] + b.bbox_max[2]) * 0.5,
+            ]),
+            b.sphere_radius,
+        );
+        let ribbons = semantic
+            .ribbons
+            .iter()
+            .cloned()
+            .map(|def| {
+                let texture = def.texture.as_deref().map(|t| {
+                    ctx.load::<Image>(format!(
+                        "mpq://{}",
+                        t.replace('\\', "/").to_ascii_lowercase()
+                    ))
+                });
+                let bone_pivot = semantic
+                    .skeleton
+                    .bones
+                    .get(def.bone as usize)
+                    .map_or([0.0; 3], |b| b.pivot);
+                super::ModelRibbon {
+                    def,
+                    texture,
+                    bone_pivot,
+                    owner_reach,
+                    water_bound,
+                }
+            })
+            .collect();
+        let lights = semantic
+            .lights
+            .iter()
+            .copied()
+            .map(|def| {
+                let bone_pivot = usize::try_from(def.bone)
+                    .ok()
+                    .and_then(|bone| semantic.skeleton.bones.get(bone))
+                    .map_or([0.0; 3], |b| b.pivot);
+                super::ModelLight { def, bone_pivot }
+            })
+            .collect();
 
         Ok(M2Model {
             submeshes,
             bounds,
             collision,
             emitters,
-            // Ribbons and lights are not read from v264 files yet.
-            ribbons: Vec::new(),
-            lights: Vec::new(),
+            ribbons,
+            lights,
             skeleton,
             inverse_bindposes,
             animations,
@@ -305,9 +351,15 @@ fn build_emitters(
         .into_iter()
         .map(|def| {
             let texture = def.texture.as_deref().map(|t| {
-                ctx.load::<Image>(format!("mpq://{}", t.replace('\\', "/").to_ascii_lowercase()))
+                ctx.load::<Image>(format!(
+                    "mpq://{}",
+                    t.replace('\\', "/").to_ascii_lowercase()
+                ))
             });
-            let bone_pivot = skeleton.bones.get(def.bone as usize).map_or([0.0; 3], |b| b.pivot);
+            let bone_pivot = skeleton
+                .bones
+                .get(def.bone as usize)
+                .map_or([0.0; 3], |b| b.pivot);
             let recursion = def
                 .recursion_model
                 .as_deref()

@@ -20,6 +20,7 @@ mod tex_anim;
 mod types;
 mod wmo;
 pub mod wrath;
+mod wrath_effects;
 pub use anim::*;
 pub use anim_summary::*;
 pub use art_extent::*;

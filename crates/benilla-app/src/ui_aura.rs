@@ -5,6 +5,7 @@
 //! 0x4e4170`); any other unit's reads its descriptor by ascending slot, or, for a group member or
 //! pet with no live object, its roster record.
 
+mod native;
 mod units;
 
 use std::collections::HashMap;
@@ -151,6 +152,7 @@ struct AuraFeedMemo {
     last: Vec<AuraProjection>,
     /// The tracking spell: a tracking switch changes no list, but the minimap needs the event.
     tracking_last: Option<u32>,
+    native_last: Option<Vec<crate::net::wrath_auras::StampedAura>>,
     /// Every other unit's list, by guid, the resolver's inputs and their pushes.
     units: units::UnitAuras,
 }
@@ -388,6 +390,7 @@ struct AuraUnits<'w> {
     hovered: Option<Res<'w, crate::target::Hovered>>,
     hovered_go: Option<Res<'w, crate::target::HoveredObject>>,
     interact: Option<Res<'w, crate::ui_session::InteractNpc>>,
+    packets: Option<Res<'w, crate::net::wrath_auras::PacketAuras>>,
 }
 
 fn feed_auras(
@@ -433,7 +436,7 @@ fn feed_auras(
 
     let script_now = script.now();
 
-    let list: Vec<AuraState> = cache
+    let mut list: Vec<AuraState> = cache
         .auras
         .iter()
         .map(|c| {
@@ -469,8 +472,28 @@ fn feed_auras(
         })
         .collect();
 
+    let packet_player = units
+        .packets
+        .as_deref()
+        .and_then(|p| p.by_guid.get(&self_guid.0));
+    if let Some(auras) = packet_player {
+        list = native::list(catalog, auras, bevy_now, script_now);
+    }
+
     // Before the memory update, so a tracking change joins the edge key.
-    let tracking = tracking_state_of(catalog, &occupied);
+    let tracking = if let Some(auras) = packet_player {
+        auras.iter().rev().find_map(|s| {
+            let d = catalog.and_then(|c| c.get(s.aura.spell_id))?;
+            (!d.hidden_from_aura_bar() && d.tracking_aura()).then(|| TrackingState {
+                spell_id: s.aura.spell_id,
+                name: Some(d.name.clone()),
+                icon: d.icon.clone(),
+                cancelable: s.aura.is_helpful(),
+            })
+        })
+    } else {
+        tracking_state_of(catalog, &occupied)
+    };
     let tracking_spell = tracking.as_ref().map(|t| t.spell_id);
 
     if let Some(period) = trace_period() {
@@ -485,7 +508,12 @@ fn feed_auras(
 
     // Fire on a discrete change, never on the countdown; a tracking switch counts.
     let projection = projection_of(&list);
-    let changed = !memo.present || projection != memo.last || tracking_spell != memo.tracking_last;
+    let native_changed = memo.native_last.as_deref() != packet_player.map(Vec::as_slice);
+    memo.native_last = packet_player.cloned();
+    let changed = !memo.present
+        || native_changed
+        || projection != memo.last
+        || tracking_spell != memo.tracking_last;
     memo.last = projection;
     memo.tracking_last = tracking_spell;
     memo.present = true;
@@ -551,6 +579,8 @@ fn feed_auras(
             buffs_visible,
             catalog,
             catalog_moved,
+            packets: units.packets.as_deref(),
+            clocks: (bevy_now, script_now),
         },
     );
 
