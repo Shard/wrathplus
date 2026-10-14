@@ -1290,35 +1290,73 @@ fn is_morph_spell(spells: &crate::ui_action::Spells, spell_id: u32) -> bool {
     })
 }
 
-/// Arm [`MorphLatch`] from aura-slot edges, as the add watcher and the remove tail (`0x6123ad`)
-/// both call `0x5ff0c0`: old spell first, new second, so a form swap latches the form entered.
-/// First sight emits no edge, as the reference's watchers fire on deltas only.
+fn is_descriptor_morph_edge(edge: &FieldChanged) -> bool {
+    edge.layout == benilla_protocol::messages::FieldLayout::Vanilla5875
+        && edge.unit_slot(Field::UnitAura, 48).is_some()
+}
+
+/// Removed spells first, entered spells last: a swap latches the form entered, even when its
+/// native packet slot precedes the removed slot. Stack, flag and clock updates are not edges.
+fn packet_morph_edges(previous: &[(u8, u32)], current: &[(u8, u32)]) -> Vec<u32> {
+    previous
+        .iter()
+        .filter(|a| !current.contains(a))
+        .map(|a| a.1)
+        .chain(
+            current
+                .iter()
+                .filter(|a| !previous.contains(a))
+                .map(|a| a.1),
+        )
+        .collect()
+}
+
+/// Arm from Vanilla aura-id edges or native packet-slot diffs. First sight only seeds the
+/// packet shadow, matching descriptor creation (no edge); old spell precedes new on swaps.
 pub(super) fn arm_morph_latch(
-    units: Query<(), With<ObjectStore>>,
+    units: Query<(Entity, &ObjectStore, Option<&crate::net::Guid>)>,
     mut edges: MessageReader<FieldChanged>,
+    packets: Option<Res<crate::net::wrath_auras::PacketAuras>>,
+    mut shadow: Local<EntityHashMap<Vec<(u8, u32)>>>,
     spells: Option<Res<crate::ui_action::Spells>>,
     mut latch: ResMut<MorphLatch>,
 ) {
     if let Some(spells) = spells.as_deref() {
-        for e in edges.read() {
-            if e.unit_array_slot(
-                benilla_protocol::field::FIELD_UNIT_AURA,
-                u16::from(benilla_protocol::messages::UNIT_AURA_SLOTS),
-            )
-            .is_none()
-            {
-                continue;
+        let mut arm = |entity, spell_id| {
+            if spell_id != 0 && is_morph_spell(spells, spell_id) {
+                debug!("anim: morph latch armed ({entity}, spell {spell_id})");
+                latch.0.insert(entity, spell_id);
             }
+        };
+        for e in edges.read().filter(|e| is_descriptor_morph_edge(e)) {
             for spell_id in [e.old, e.new] {
-                if spell_id != 0 && is_morph_spell(spells, spell_id) {
-                    debug!("anim: morph latch armed ({}, spell {spell_id})", e.entity);
-                    latch.0.insert(e.entity, spell_id);
+                arm(e.entity, spell_id);
+            }
+        }
+        if let Some(packets) = packets.as_deref() {
+            for (entity, store, guid) in &units {
+                if !store.is_unit() {
+                    continue;
                 }
+                let Some(snapshot) = guid.and_then(|g| packets.by_guid.get(&g.0)) else {
+                    continue;
+                };
+                let current: Vec<_> = snapshot
+                    .iter()
+                    .map(|a| (a.aura.slot, a.aura.spell_id))
+                    .collect();
+                if let Some(previous) = shadow.get(&entity) {
+                    for spell_id in packet_morph_edges(previous, &current) {
+                        arm(entity, spell_id);
+                    }
+                }
+                shadow.insert(entity, current);
             }
         }
     }
-    // The latch dies with a despawned unit.
+    // Both latch and packet shadow die with a despawned unit.
     latch.0.retain(|e, _| units.contains(*e));
+    shadow.retain(|e, _| units.contains(*e));
 }
 
 /// The rebuild's impact-kit replay (the tail of `0x60abe0`): a display swap with the latch armed
