@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Not installed. Check staged bytes only; no builds, coverage, or index mutation."""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+root = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).decode().strip())
+paths = [p for p in subprocess.check_output(
+    ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']
+).decode().split('\0') if p]
+if not paths:
+    raise SystemExit(0)
+with tempfile.TemporaryDirectory(prefix='azb-quality-index-') as directory:
+    # Entire staged snapshot supplies the staged gate and baselines, but only changed paths
+    # are checked. Unstaged fixes cannot hide a staged failure; no cargo command is run.
+    subprocess.run(['git', 'checkout-index', '--all', '--prefix', directory + '/'], check=True)
+    os.chdir(directory)
+    subprocess.run(['python3', 'scripts/quality/gate.py', 'fast', *paths], check=True)
+    text = [p for p in paths if Path(p).is_file() and Path(p).suffix in
+            ('.rs', '.md', '.toml', '.sh', '.py', '.wgsl')]
+    if text:
+        subprocess.run(['typos', '--', *text], check=True)
