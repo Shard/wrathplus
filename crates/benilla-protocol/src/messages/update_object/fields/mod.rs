@@ -346,8 +346,6 @@ pub struct ObjectFields {
     values: Vec<u32>,
     /// The created type's [`FieldLayout::descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
     descriptor_end: u16,
-    /// Profile-native resource delta; never aliases Vanilla descriptor offsets.
-    wrath_powers: Option<[(Option<u32>, Option<u32>); 7]>,
 }
 
 /// Mask words of the widest descriptor, `PLAYER_END`; no 1.12 object needs more.
@@ -373,7 +371,6 @@ impl ObjectFields {
             values,
             descriptor_end: 0,
             layout: FieldLayout::Vanilla5875,
-            wrath_powers: None,
         })
     }
 
@@ -435,12 +432,6 @@ impl ObjectFields {
             .is_some_and(|span| offset < span.width && self.contains(span.index + offset))
     }
 
-    /// Attach raw build-12340 powers; `None` entries leave a sparse delta unchanged.
-    pub fn with_wrath_powers(mut self, powers: [(Option<u32>, Option<u32>); 7]) -> Self {
-        self.wrath_powers = Some(powers);
-        self
-    }
-
     /// A complete profile-native resource snapshot, unavailable on Vanilla descriptors/deltas.
     pub fn wrath_powers(&self) -> Option<[(u32, u32); 7]> {
         if self.layout == FieldLayout::Wrath12340 {
@@ -453,13 +444,7 @@ impl ObjectFields {
             }
             return Some(result);
         }
-        // Temporary fallback for the adapter's Vanilla-shaped projection, removed at cutover.
-        let powers = self.wrath_powers?;
-        let mut result = [(0, 0); 7];
-        for (slot, (current, maximum)) in powers.into_iter().enumerate() {
-            result[slot] = (current?, maximum?);
-        }
-        Some(result)
+        None
     }
 
     /// `CORPSE_FIELD_OWNER` (`UpdateFields_1_12_1.h:339`): the dead player, only on a corpse.
@@ -668,17 +653,6 @@ impl ObjectFields {
             }
             *self = delta;
         } else {
-            if let Some(powers) = delta.wrath_powers {
-                let target = self.wrath_powers.get_or_insert([(None, None); 7]);
-                for (slot, (current, maximum)) in powers.into_iter().enumerate() {
-                    if current.is_some() {
-                        target[slot].0 = current;
-                    }
-                    if maximum.is_some() {
-                        target[slot].1 = maximum;
-                    }
-                }
-            }
             for (index, value) in delta.raw_fields() {
                 let old = self.get_raw(index).unwrap_or(0);
                 if old != value {
@@ -713,11 +687,6 @@ impl ObjectFields {
     /// No fields carried; the codec skips an empty `Values` delta.
     pub fn is_empty(&self) -> bool {
         self.present.iter().all(|&w| w == 0)
-            && self.wrath_powers.as_ref().is_none_or(|powers| {
-                powers
-                    .iter()
-                    .all(|(current, maximum)| current.is_none() && maximum.is_none())
-            })
     }
     /// Every carried `(index, value)` pair in ascending order, for debugging and probes.
     pub fn raw_fields(&self) -> impl Iterator<Item = (u16, u32)> + '_ {
