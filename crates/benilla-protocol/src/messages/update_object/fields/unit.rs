@@ -156,7 +156,7 @@ impl ObjectFields {
     /// byte with -2, so it never matches and is left out.
     pub fn unit_shown_power(&self, ty: u8) -> Option<u32> {
         if self.unit_dynamic_flags() & UNIT_DYNFLAG_DEAD != 0 {
-            return (ty < 5).then_some(0);
+            return (ty < self.unit_power_slots()).then_some(0);
         }
         Some(self.unit_power(ty)? / power_display_scale(u32::from(ty)))
     }
@@ -259,6 +259,10 @@ impl ObjectFields {
     /// druid forms low; the creature-type resolver `0x605570` checks it first.
     pub fn unit_shapeshift_form(&self) -> u8 {
         (self.get(Field::UnitBytes1).unwrap_or(0) >> 16) as u8
+    }
+    /// Number of native descriptor resources: five in build 5875, seven in build 12340.
+    pub fn unit_power_slots(&self) -> u8 {
+        self.layout.resolve(Field::UnitPower).unwrap().width as u8
     }
     /// `UNIT_FIELD_POWER1..5`: current power of type `ty`, on the wire's raw scale.
     pub fn unit_power(&self, ty: u8) -> Option<u32> {

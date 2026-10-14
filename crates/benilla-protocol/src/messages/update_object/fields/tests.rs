@@ -1113,3 +1113,53 @@ fn player_public_and_private_bytes_do_not_collide() {
         );
     }
 }
+
+#[test]
+fn native_power_arrays_preserve_all_slots_and_ignore_projected_side_channel() {
+    for (layout, slots) in [(FieldLayout::Vanilla5875, 5), (FieldLayout::Wrath12340, 7)] {
+        let current = layout.resolve(Field::UnitPower).unwrap();
+        let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
+        let mut pairs = Vec::new();
+        for slot in 0..slots {
+            pairs.push((current.index + slot, 100 + u32::from(slot)));
+            pairs.push((maximum.index + slot, 1000 + u32::from(slot)));
+        }
+        let mut fields = ObjectFields::from_native_pairs(layout, &pairs)
+            .with_wrath_powers([(Some(9999), Some(9999)); 7]);
+        assert_eq!(fields.unit_power_slots(), slots as u8);
+        for slot in 0..slots as u8 {
+            assert_eq!(fields.unit_power(slot), Some(100 + u32::from(slot)));
+            assert_eq!(fields.unit_max_power(slot), Some(1000 + u32::from(slot)));
+        }
+        assert_eq!(fields.unit_power(slots as u8), None);
+        assert_eq!(fields.unit_max_power(slots as u8), None);
+        if layout == FieldLayout::Wrath12340 {
+            assert_eq!(fields.wrath_powers().unwrap()[6], (106, 1006));
+            fields.merge(ObjectFields::from_native_pairs(
+                layout,
+                &[(current.index + 6, 0)],
+            ));
+            assert_eq!(fields.wrath_powers().unwrap()[6], (0, 1006));
+            assert_eq!(fields.wrath_powers().unwrap()[0], (100, 1000));
+        }
+        let flags = layout.resolve(Field::UnitDynamicFlags).unwrap();
+        fields.merge(ObjectFields::from_native_pairs(
+            layout,
+            &[(flags.index, unit::UNIT_DYNFLAG_DEAD)],
+        ));
+        assert_eq!(fields.unit_shown_power((slots - 1) as u8), Some(0));
+        assert_eq!(fields.unit_shown_power(slots as u8), None);
+    }
+    assert!(ObjectFields::from_native_pairs(
+        FieldLayout::Wrath12340,
+        &[(
+            FieldLayout::Wrath12340
+                .resolve(Field::UnitPower)
+                .unwrap()
+                .index,
+            1
+        )]
+    )
+    .wrath_powers()
+    .is_none());
+}

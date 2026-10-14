@@ -438,6 +438,17 @@ impl ObjectFields {
 
     /// A complete profile-native resource snapshot, unavailable on Vanilla descriptors/deltas.
     pub fn wrath_powers(&self) -> Option<[(u32, u32); 7]> {
+        if self.layout == FieldLayout::Wrath12340 {
+            let mut result = [(0, 0); 7];
+            for (slot, pair) in result.iter_mut().enumerate() {
+                *pair = (
+                    self.unit_power(slot as u8)?,
+                    self.unit_max_power(slot as u8)?,
+                );
+            }
+            return Some(result);
+        }
+        // Temporary fallback for the adapter's Vanilla-shaped projection, removed at cutover.
         let powers = self.wrath_powers?;
         let mut result = [(0, 0); 7];
         for (slot, (current, maximum)) in powers.into_iter().enumerate() {
