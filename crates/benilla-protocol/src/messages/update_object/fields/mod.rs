@@ -4,6 +4,9 @@ use crate::wire::{capacity_hint, read_u32_le, read_u8, Vector3d};
 
 use super::movement::ObjectType;
 
+mod npc;
+pub use npc::{NpcFlags, NpcService};
+
 mod layout;
 pub use layout::{Field, FieldLayout, FieldSpan};
 
