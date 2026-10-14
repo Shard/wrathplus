@@ -16,6 +16,12 @@ use super::{AudioListener, SoundConfig, SoundOutput};
 /// The client's fixed dismount kit by SoundEntries `Name`, the constant at `0x8627bc`.
 const DISMOUNT_KIT: &str = "SpiritWolf (DONOTRENAME)";
 
+fn is_dismount(edge: &FieldChanged) -> bool {
+    edge.is_unit()
+        && edge.named_field(benilla_protocol::messages::Field::UnitMountDisplayId)
+        && edge.new == 0
+}
+
 /// Play the dismount kit on any streamed unit's `UNIT_FIELD_MOUNTDISPLAYID` edge to zero. The edge
 /// stream skips creates, so streaming in unmounted is not a dismount.
 fn dismount_sounds(
@@ -32,7 +38,7 @@ fn dismount_sounds(
     };
     let listener = listener.pos;
     for e in edges.read() {
-        if !e.unit_field(benilla_protocol::field::FIELD_UNIT_MOUNTDISPLAYID) || e.new != 0 {
+        if !is_dismount(e) {
             continue;
         }
         let Ok(transform) = poses.get(e.entity) else {
@@ -57,4 +63,40 @@ fn dismount_sounds(
 /// Registration hook for [`super::SoundPlugin`].
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Update, dismount_sounds.in_set(WorldStage::Present));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+
+    #[test]
+    fn dismount_edges_keep_class_field_and_zero_transition_rules_in_both_layouts() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let mut edge = FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::Unit,
+                field: Field::UnitMountDisplayId,
+                offset: 0,
+                layout,
+                old: 123,
+                new: 0,
+            };
+            assert!(is_dismount(&edge));
+            edge.kind = ObjectType::Player;
+            assert!(is_dismount(&edge));
+            edge.new = 456;
+            assert!(!is_dismount(&edge), "remount is silent");
+            edge.new = 0;
+            edge.kind = ObjectType::Corpse;
+            assert!(!is_dismount(&edge));
+            edge.kind = ObjectType::Unit;
+            edge.field = Field::UnitHealth;
+            assert!(!is_dismount(&edge));
+            edge.field = Field::UnitMountDisplayId;
+            edge.offset = 1;
+            assert!(!is_dismount(&edge));
+        }
+    }
 }

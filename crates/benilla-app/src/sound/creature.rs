@@ -123,6 +123,15 @@ fn play_bark(
     }
 }
 
+fn is_death_edge(edge: &FieldChanged) -> bool {
+    use benilla_protocol::{field::UNIT_DYNFLAG_DEAD, messages::Field};
+    edge.is_unit()
+        && ((edge.named_field(Field::UnitHealth) && edge.old > 0 && edge.new == 0)
+            || (edge.named_field(Field::UnitDynamicFlags)
+                && edge.old & UNIT_DYNFLAG_DEAD == 0
+                && edge.new & UNIT_DYNFLAG_DEAD != 0))
+}
+
 /// The death cry `0x623a40(4)` on either edge: health falling to 0 (`0x6046f0` at `0x6047a3`, the
 /// death handler `0x605860`) or `UNIT_DYNFLAG_DEAD` set (`0x600543`), so a feign cries too. A
 /// unit that streams in dead cries nothing: create edges are suppressed.
@@ -136,17 +145,12 @@ fn death_vocals(
     config: Res<SoundConfig>,
     listener: Res<AudioListener>,
 ) {
-    use benilla_protocol::field::{FIELD_UNIT_DYNAMIC_FLAGS, FIELD_UNIT_HEALTH, UNIT_DYNFLAG_DEAD};
     let (Some(voices), Some(mut kits), Some(assets)) = (voices, kits, assets) else {
         return;
     };
     let listener = listener.pos;
     for e in edges.read() {
-        let died = (e.unit_field(FIELD_UNIT_HEALTH) && e.old > 0 && e.new == 0)
-            || (e.unit_field(FIELD_UNIT_DYNAMIC_FLAGS)
-                && e.old & UNIT_DYNFLAG_DEAD == 0
-                && e.new & UNIT_DYNFLAG_DEAD != 0);
-        if !died {
+        if !is_death_edge(e) {
             continue;
         }
         let Ok((net, transform)) = units.get(e.entity) else {
@@ -679,6 +683,46 @@ mod tests {
         }
         // The order bark does not interrupt an attack bark.
         assert!(!bark_admitted(Some(BARK_PET_ATTACK), BARK_PET_ORDER));
+    }
+
+    #[test]
+    fn death_edges_preserve_health_and_feign_transitions_in_both_layouts() {
+        use benilla_protocol::{
+            field::UNIT_DYNFLAG_DEAD,
+            messages::{Field, FieldLayout, ObjectType},
+        };
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let mut edge = FieldChanged {
+                entity: Entity::PLACEHOLDER,
+                guid: 42,
+                kind: ObjectType::Unit,
+                field: Field::UnitHealth,
+                offset: 0,
+                layout,
+                old: 100,
+                new: 0,
+            };
+            assert!(is_death_edge(&edge));
+            edge.old = 0;
+            assert!(!is_death_edge(&edge));
+            edge.old = 100;
+            edge.new = 50;
+            assert!(!is_death_edge(&edge));
+            edge.field = Field::UnitDynamicFlags;
+            edge.old = 0;
+            edge.new = UNIT_DYNFLAG_DEAD;
+            assert!(is_death_edge(&edge));
+            edge.kind = ObjectType::Player;
+            assert!(is_death_edge(&edge));
+            edge.old = UNIT_DYNFLAG_DEAD;
+            assert!(!is_death_edge(&edge), "already dead does not cry again");
+            edge.old = 0;
+            edge.kind = ObjectType::Corpse;
+            assert!(!is_death_edge(&edge));
+            edge.kind = ObjectType::Unit;
+            edge.field = Field::UnitFlags;
+            assert!(!is_death_edge(&edge));
+        }
     }
 
     /// The five-arm jump table, column for column, and its two silences.
