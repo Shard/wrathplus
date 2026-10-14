@@ -148,6 +148,10 @@ impl MoveMode {
 /// only for units no player moves, and walk/run always. Walk mode and swimming have no acked form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SplineMode {
+    /// Build 12340 `MOVEMENTFLAG_CAN_FLY`.
+    CanFly,
+    /// Build 12340 `MOVEMENTFLAG_DISABLE_GRAVITY`.
+    DisableGravity,
     Root,
     WaterWalk,
     FeatherFall,
@@ -164,6 +168,8 @@ impl SplineMode {
     /// This mode's `MOVEMENTFLAGS` bit, in the same word as [`MoveMode::flag`].
     pub fn flag(self) -> u32 {
         match self {
+            SplineMode::CanFly => 0x0100_0000,
+            SplineMode::DisableGravity => 0x0000_0200,
             SplineMode::Root => 0x0000_1000,
             SplineMode::WaterWalk => 0x1000_0000,
             SplineMode::FeatherFall => 0x2000_0000,

@@ -16,12 +16,16 @@ pub mod wrath_gameplay;
 pub mod wrath_ground;
 pub mod wrath_items;
 pub mod wrath_loot;
+pub mod wrath_logs;
 pub mod wrath_movement;
 pub mod wrath_npc;
 pub mod wrath_relay;
 pub mod wrath_session;
+pub mod wrath_spline;
 pub mod wrath_vendor;
 pub mod wrath_world;
+pub mod wrath_misc;
+pub mod wrath_progress;
 pub use auth::AuthReject;
 pub use events::{
     decode, CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
