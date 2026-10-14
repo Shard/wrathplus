@@ -1022,6 +1022,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SellItem { .. }
         | ClientCommand::BuybackItem { .. }
         | ClientCommand::RepairItem { .. }
+        | ClientCommand::TaxiNodeStatusQuery { .. }
+        | ClientCommand::TaxiQueryNodes { .. }
+        | ClientCommand::ActivateTaxi { .. }
+        | ClientCommand::ActivateTaxiExpress { .. }
         | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
         | ClientCommand::TrainerBuySpell { .. } => WrathRoute::NativeSession,
@@ -1414,6 +1418,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::RepairItem { vendor, item_guid } => {
             (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid))
         }
+        ClientCommand::TaxiNodeStatusQuery { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXINODE_STATUS_QUERY, benilla_protocol::wrath_taxi::encode_query(guid)),
+        ClientCommand::TaxiQueryNodes { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXIQUERYAVAILABLENODES, benilla_protocol::wrath_taxi::encode_query(guid)),
+        ClientCommand::ActivateTaxi { guid, source_node, dest_node } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXI, benilla_protocol::wrath_taxi::encode_activate(guid, source_node, dest_node)),
+        ClientCommand::ActivateTaxiExpress { guid, nodes, .. } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXIEXPRESS, benilla_protocol::wrath_taxi::encode_express(guid, &nodes)),
         ClientCommand::BinderActivate { binder } => (
             benilla_protocol::wrath_bind::CMSG_BINDER_ACTIVATE,
             benilla_protocol::wrath_bind::encode_activate(binder),
@@ -2756,3 +2764,7 @@ mod tests {
 #[cfg(test)]
 #[path = "wrath/bind_tests.rs"]
 mod bind_tests;
+
+#[cfg(test)]
+#[path = "wrath/taxi_tests.rs"]
+mod taxi_tests;
