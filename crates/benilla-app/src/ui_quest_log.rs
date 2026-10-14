@@ -10,7 +10,6 @@ use bevy::prelude::*;
 
 use benilla_protocol::messages::{
     quest_flags, quest_slot_state, QuestLogSlot, QuestObjective, QuestTemplate,
-    PLAYER_QUEST_LOG_SLOTS,
 };
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::{
@@ -173,11 +172,11 @@ fn leaderboard_text(
 }
 
 /// One creature or GameObject line, for `ReqCreatureOrGOId[i] != 0` (`0x4e00c0`, `0x4e02d7`);
-/// `counter` is the slot's 6-bit counter for index i. A non-empty `text` is the name and takes
+/// `counter` is the slot's native objective counter for index i. A non-empty `text` is the name and takes
 /// `QUEST_OBJECTS_FOUND` (`0x4e03da`), while `type` stays `"monster"` (`0x4e04ca`).
 fn creature_line(
     obj: &QuestObjective,
-    counter: u8,
+    counter: u16,
     creature_name: Option<&str>,
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Option<QuestLogObjectiveView> {
@@ -482,8 +481,8 @@ pub(crate) fn feed_quest_log(
     };
 
     let mut rows = Vec::new();
-    let mut slots = Vec::with_capacity(usize::from(PLAYER_QUEST_LOG_SLOTS));
-    for slot in 0..PLAYER_QUEST_LOG_SLOTS {
+    let mut slots = Vec::with_capacity(usize::from(store.0.player_quest_log_slots()));
+    for slot in 0..store.0.player_quest_log_slots() {
         let Some(log_slot) = store.0.player_quest_log(slot) else {
             slots.push((0, 0));
             continue;
