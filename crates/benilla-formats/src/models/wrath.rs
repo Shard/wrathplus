@@ -25,7 +25,7 @@ use super::{BoneKeys, SeqSlot, DEGENERATE_RING_FOOTPRINT};
 
 /// All renderer-facing semantics currently representable from a v264 M2 and one external skin.
 ///
-/// Particle, ribbon and light records are rejected by `benilla-m2` rather than silently omitted.
+/// Native lights and ribbons are adapted separately from the particle byte reader.
 /// Animation-event positions are retained in [`Self::event_markers`], but v264 event timelines are
 /// not exposed by that parser and therefore are not invented in [`Self::animations`].
 pub struct WrathRenderModel {
@@ -36,6 +36,8 @@ pub struct WrathRenderModel {
     pub animation_interpolation: Vec<Vec<WrathBoneInterpolation>>,
     pub global_sequence_bones: Vec<GlobalSeqBone>,
     pub cameras: Vec<WrathCamera>,
+    pub lights: Vec<super::M2Light>,
+    pub ribbons: Vec<crate::RibbonEmitterDef>,
     pub camera_lookup: Vec<u16>,
     pub attachments: Vec<M2Attachment>,
     pub event_markers: Vec<EventMarker>,
@@ -158,6 +160,8 @@ fn adapt_wrath_render_model(
         animation_interpolation,
         global_sequence_bones,
         cameras: wrath.cameras().to_vec(),
+        lights: super::wrath_effects::lights(&wrath),
+        ribbons: super::wrath_effects::ribbons(&wrath, dir, skins)?,
         camera_lookup: wrath.camera_lookup().to_vec(),
         attachments,
         event_markers,
@@ -676,7 +680,7 @@ fn render_submeshes(
     Ok(out)
 }
 
-fn resolve_texture(
+pub(super) fn resolve_texture(
     texture: &M2Texture,
     dir: &str,
     skins: &[Option<String>],

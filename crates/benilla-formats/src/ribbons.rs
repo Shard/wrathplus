@@ -109,6 +109,10 @@ pub struct RibbonVisibility {
 }
 
 impl RibbonVisibility {
+    pub(crate) fn from_native(by_anim: std::collections::HashMap<u16, Vec<(f32, bool)>>) -> Self {
+        Self { by_anim }
+    }
+
     /// Whether the trail emits `t` seconds into `anim`, stepped. An unauthored sequence takes
     /// Stand's answer, and without one the load default, on (`0x70f80e`).
     pub fn at(&self, anim: u16, t: f32) -> bool {
