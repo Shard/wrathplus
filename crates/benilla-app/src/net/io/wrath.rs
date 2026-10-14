@@ -472,13 +472,7 @@ fn run(
                         .map_err(|_| anyhow!("Wrath writer stopped"))?;
                 }
                 _ => {
-                    if mandatory_movement_order(packet.opcode) {
-                        authority.revoke();
-                        bail!(
-                            "unsupported mandatory Wrath movement/control order {:#05x}",
-                            packet.opcode
-                        );
-                    }
+                    reject_unsupported_movement(&authority, packet.opcode)?;
                     dispatch_packet(
                         events,
                         control,
@@ -536,6 +530,7 @@ fn dispatch_packet(
             }
             // The adapter's vectors preserve packet/block order. Replies use the sole cipher writer.
             for event in session_events {
+                authority.observe_taxi_spline(&event);
                 if *crate::net::CAST_TRACE {
                     bevy::log::info!("net(wrath) RECV {event:?}");
                 }
@@ -650,6 +645,7 @@ struct MovementAuthorityState {
     pending_orders: std::collections::VecDeque<PendingAuthorityOrder>,
     last_order_counter: Option<u32>,
     rooted: bool,
+    taxi_spline: Option<(u32, bool)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -678,6 +674,7 @@ impl MovementAuthority {
             pending_orders: std::collections::VecDeque::new(),
             last_order_counter: None,
             rooted: false,
+            taxi_spline: None,
         };
         MovementAuthorityHandle {
             shared: Arc::clone(self),
@@ -757,7 +754,12 @@ impl MovementAuthorityHandle {
     }
 
     fn revoke(&self) {
-        let _ = self.observe_control(self.self_guid, false);
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch == self.epoch && state.self_guid == self.self_guid {
+            state.self_control = false;
+            state.control_decided = true;
+            state.taxi_spline = None;
+        }
     }
 
     fn with_movement_send<T>(&self, send: impl FnOnce() -> T) -> Option<T> {
@@ -965,6 +967,7 @@ enum UnsetAckResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WrathRoute {
     GroundMovement,
+    TaxiSplineDone,
     SetActiveMover,
     Logout,
     NativeItemQuery,
@@ -1033,8 +1036,8 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::QueryNextMailTime | ClientCommand::BattlefieldStatusRequest => {
             WrathRoute::DeferredReadOnlyQuery
         }
-        ClientCommand::MoveSplineDone { .. }
-        | ClientCommand::MoveTimeSkipped { .. }
+        ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
+        ClientCommand::MoveTimeSkipped { .. }
         | ClientCommand::ForceSpeedAck { .. }
         | ClientCommand::NotActiveMover { .. }
         | ClientCommand::TeleportAck { .. }
@@ -1205,10 +1208,17 @@ fn writer_loop(
                         }).unwrap_or(Ok(()))
                     }
                     WrathRoute::Logout => {
-                        let (opcode, body) = logout_packet();
-                        active.writer.send_raw(opcode, &body)
+                        let authority = active.authority.clone();
+                        authority.send_logout(|| {
+                            let (opcode, body) = logout_packet();
+                            active.writer.send_raw(opcode, &body)
+                        })
                     }
                     WrathRoute::GroundMovement => send_ground_movement(active, command),
+                    WrathRoute::TaxiSplineDone => {
+                        let ClientCommand::MoveSplineDone { flags, pos, orientation, spline_id } = command else { unreachable!() };
+                        active.authority.send_taxi_done(flags, pos, orientation, spline_id, active.clock.now_ms(), |opcode, body| active.writer.send_raw(opcode, body))
+                    }
                     WrathRoute::NativeItemQuery => {
                         let ClientCommand::ItemQuery { entry, guid } = command else {
                             unreachable!()
@@ -1577,6 +1587,14 @@ fn send_force_root(
     authority.send_root_ack(order, rooted, timestamp, |opcode, body| {
         active.writer.send_raw(opcode, body)
     })
+}
+
+fn reject_unsupported_movement(authority: &MovementAuthorityHandle, opcode: u16) -> Result<()> {
+    if mandatory_movement_order(opcode) {
+        authority.revoke();
+        bail!("unsupported mandatory Wrath movement/control order {opcode:#05x}");
+    }
+    Ok(())
 }
 
 fn mandatory_movement_order(opcode: u16) -> bool {
@@ -2768,3 +2786,6 @@ mod bind_tests;
 #[cfg(test)]
 #[path = "wrath/taxi_tests.rs"]
 mod taxi_tests;
+
+#[path = "wrath/taxi_authority.rs"]
+mod taxi_authority;
