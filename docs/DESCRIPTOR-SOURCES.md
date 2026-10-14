@@ -18,7 +18,9 @@ rustc scripts/gen-fields.rs -o /tmp/azb-gen-fields
 rustfmt --edition 2021 crates/benilla-protocol/src/messages/update_object/fields/layout_generated.rs
 ```
 
-Common names remove `FIELD` and use Rust casing; power, quest, visible-item and
+Common names remove `FIELD` and use Rust casing, except `PlayerFieldBytes` and
+`PlayerFieldBytes2`: these private words must remain distinct from the public
+`PlayerBytes` and `PlayerBytes2` appearance words. Power, quest, visible-item and
 enchantment groups have one semantic root with native dword offsets. Missing fields
 remain `None`. Offsets within groups are **not** portable between dialects: for
 example Wrath quest slots have five dwords and four 16-bit counters, whereas vanilla

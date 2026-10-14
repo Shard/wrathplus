@@ -165,11 +165,10 @@ impl UnitAuraSlot {
 }
 
 // PLAYER fields start at UNIT_END (188); the client decodes appearance bytes at `0x5fb200`.
-const FIELD_PLAYER_BYTES: u16 = 193;
-const FIELD_PLAYER_BYTES_2: u16 = 194;
 // The low u16 is `gender | (drunk & 0xFFFE)`, so byte 1 is the drunk level the client reads at
 // `[[unit+0xe68]+0x1d]`; byte 2 is the city-protector race, byte 3 the current honor rank
 // (`Player.h:351-356`). Public: the one honor value that streams for every visible player.
+#[cfg(test)]
 const FIELD_PLAYER_BYTES_3: u16 = 195;
 // 20 slots of 3 fields (`Player.h:439-444`): the quest id (group-only), then the counters and
 // state byte, and the timer (both private).
@@ -276,6 +275,7 @@ const FIELD_PLAYER_GUILDID: u16 = 191;
 const FIELD_PLAYER_GUILDRANK: u16 = 192;
 // `GetComboPoints` (`0x51a190`) reads the target at block +0x838 and the count byte at +0x1029.
 const FIELD_PLAYER_FIELD_COMBO_TARGET: u16 = 714;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_BYTES: u16 = 1222; // UNIT_END+0x40A: flags, combo points, action bars,
                                             // highest honor rank; not the appearance PLAYER_BYTES
 
@@ -293,6 +293,7 @@ const FIELD_PLAYER_FIELD_LIFETIME_DISHONORABLE_KILLS: u16 = 1256;
 const FIELD_PLAYER_FIELD_YESTERDAY_CONTRIBUTION: u16 = 1257;
 const FIELD_PLAYER_FIELD_LAST_WEEK_CONTRIBUTION: u16 = 1258;
 const FIELD_PLAYER_FIELD_LAST_WEEK_RANK: u16 = 1259;
+#[cfg(test)]
 const FIELD_PLAYER_FIELD_BYTES2: u16 = 1260;
 
 /// `PLAYER_SKILL_INFO` slots on the wire, 3 fields each; vmangos fills only 127 (`Player.h:69`).

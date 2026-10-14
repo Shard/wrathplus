@@ -1080,3 +1080,36 @@ fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
     assert_eq!(sparse.player_quest_log(0).unwrap().counters, [0; 4]);
     assert_eq!(ObjectFields::default().player_quest_log_slots(), 20);
 }
+
+#[test]
+fn player_public_and_private_bytes_do_not_collide() {
+    for (layout, public, private, private2) in [
+        (FieldLayout::Vanilla5875, 193, 1222, 1260),
+        (FieldLayout::Wrath12340, 153, 1197, 1229),
+    ] {
+        assert_eq!(layout.resolve(Field::PlayerBytes).unwrap().index, public);
+        assert_eq!(
+            layout.resolve(Field::PlayerFieldBytes).unwrap().index,
+            private
+        );
+        assert_eq!(
+            layout.resolve(Field::PlayerFieldBytes2).unwrap().index,
+            private2
+        );
+        let fields = ObjectFields::from_native_pairs(
+            layout,
+            &[(public, 0x04030201), (private, 0x09080706), (private2, 42)],
+        );
+        assert_eq!(fields.player_bytes(), Some(0x04030201));
+        assert_eq!(fields.get(Field::PlayerFieldBytes), Some(0x09080706));
+        assert_eq!(fields.get(Field::PlayerFieldBytes2), Some(42));
+        assert_eq!(
+            layout.field_at(ObjectType::Player, public),
+            Some((Field::PlayerBytes, 0))
+        );
+        assert_eq!(
+            layout.field_at(ObjectType::Player, private),
+            Some((Field::PlayerFieldBytes, 0))
+        );
+    }
+}
