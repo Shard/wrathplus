@@ -409,7 +409,7 @@ mod tests {
         app.world_mut().resource_mut::<TaxiState>().open(
             MASTER,
             2,
-            TaxiMask([0b1010_1010, 0, 0, 0, 0, 0, 0, 0]),
+            TaxiMask([0b1010_1010, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
         );
 
         let node = |app: &mut App, name: &str| -> (i64, i64) {
@@ -465,7 +465,7 @@ mod tests {
         let mut state = TaxiState::default();
         assert_eq!(state.npc(), None);
 
-        state.open(0x42, 2, TaxiMask([0xA, 0, 0, 0, 0, 0, 0, 0]));
+        state.open(0x42, 2, TaxiMask([0xA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
         assert_eq!(state.npc(), Some(0x42));
         assert_eq!(state.open.as_ref().unwrap().nearest_node, 2);
 

@@ -55,7 +55,7 @@ fn taxi_send_bodies_golden() {
 #[test]
 fn taxi_mask_bit_law() {
     // Node ids are 1-based: field (id-1)/32, bit (id-1)%32 (vmangos `PlayerTaxi.h`).
-    let mask = TaxiMask([0x0000_000A, 0x0000_0001, 0, 0, 0, 0, 0, 0]);
+    let mask = TaxiMask([0x0000_000A, 0x0000_0001, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     assert!(mask.is_known(2));
     assert!(mask.is_known(4));
     assert!(mask.is_known(33));
@@ -84,7 +84,11 @@ fn show_taxi_nodes_wire() {
             known,
         } => {
             assert_eq!((window, flightmaster, nearest_node), (1, 0xCC, 2));
-            assert_eq!(known, TaxiMask(mask_words));
+            assert_eq!(known, {
+                let mut padded = TaxiMask::default();
+                padded.0[..8].copy_from_slice(&mask_words);
+                padded
+            });
             assert!(known.is_known(2));
             assert!(known.is_known(33));
             assert!(!known.is_known(3));
@@ -100,7 +104,11 @@ fn show_taxi_nodes_wire() {
             known_mask,
         } => {
             assert_eq!((flightmaster, nearest_node), (0xCC, 2));
-            assert_eq!(known_mask, TaxiMask(mask_words));
+            assert_eq!(known_mask, {
+                let mut padded = TaxiMask::default();
+                padded.0[..8].copy_from_slice(&mask_words);
+                padded
+            });
         }
         other => panic!("taxi nodes shown event, got {other:?}"),
     }
