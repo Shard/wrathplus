@@ -120,6 +120,8 @@ mod social;
 mod sound;
 mod spellbook;
 mod spell_info;
+#[cfg(test)]
+mod wrath_widget;
 mod stable;
 mod statusbar;
 mod stdlib;
@@ -462,7 +464,12 @@ const SCRIPT_KINDS: [&str; 39] = [
 ];
 
 /// Script kinds only the Wrath dialect has: `OnAttributeChanged` is fired by its `SetAttribute`.
-const WRATH_SCRIPT_KINDS: [&str; 1] = ["OnAttributeChanged"];
+const WRATH_SCRIPT_KINDS: [&str; 14] = [
+    "OnAttributeChanged", "OnEnable", "OnDisable", "PreClick", "PostClick",
+    "OnTooltipSetUnit", "OnTooltipSetItem", "OnTooltipSetSpell", "OnMinMaxChanged",
+    "OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle",
+    "OnHyperlinkEnter", "OnHyperlinkLeave",
+];
 
 /// The canonical spelling of script kind `name` in `lua`'s dialect, or `None` if it has no slot.
 fn script_kind(lua: &Lua, name: &str) -> Option<&'static str> {

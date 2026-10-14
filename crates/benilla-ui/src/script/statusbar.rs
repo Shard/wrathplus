@@ -98,10 +98,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, (this, min, max): (Table, f32, f32)| {
             // A reversed pair is swapped, as `LoadXML` does; the held value re-clamps, and a move
             // fires `OnValueChanged`.
-            let changed = with_bar(lua, &this, |sb| {
-                (sb.min, sb.max) = if min <= max { (min, max) } else { (max, min) };
-                store_value(sb, sb.value)
+            let (range_changed, changed, min, max) = with_bar(lua, &this, |sb| {
+                let range = if min <= max { (min, max) } else { (max, min) };
+                let range_changed = (sb.min, sb.max) != range;
+                (sb.min, sb.max) = range;
+                (range_changed, store_value(sb, sb.value), sb.min, sb.max)
             })?;
+            let wrath = lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Wrath12340;
+            if range_changed && wrath {
+                event::fire_widget_handler(lua, super::object::decode_id(&this)?, "OnMinMaxChanged",
+                    vec![Value::Number(min as f64), Value::Number(max as f64)])?;
+            }
             fire_value_changed(lua, &this, changed)
         })?,
     )?;
