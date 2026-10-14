@@ -14,7 +14,11 @@
     pbr_functions::alpha_discard,
     pbr_bindings,
     forward_io::VertexOutput,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, lights},
+    shadows::fetch_directional_shadow,
+    mesh_bindings::mesh,
+    mesh_types::MESH_FLAGS_SHADOW_RECEIVER_BIT,
+    mesh_view_types::DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT,
     mesh_functions,
 }
 
@@ -577,7 +581,21 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     // face); the reference never enables GL_LIGHT_MODEL_TWO_SIDE (`0x59ce30`), so undo it.
     let n_lit = select(-n_m2, n_m2, is_front);
     let ndotl = max(dot(n_lit, L), 0.0);
-    let lit_nl = clamp(wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl, vec3<f32>(0.0), vec3<f32>(1.0));
+    var sun_visibility = 1.0;
+    // World buffer only. Booth buffers keep this spare lane zero; interior probes remain intact.
+    if (wow_light.sh_c16.w > 0.5 && m.model_flags.z < 0.5 &&
+        (mesh[in.instance_index].flags & MESH_FLAGS_SHADOW_RECEIVER_BIT) != 0u) {
+        let view_z = (view.view_from_world * in.world_position).z;
+        for (var i = 0u; i < lights.n_directional_lights; i += 1u) {
+            if ((lights.directional_lights[i].flags & DIRECTIONAL_LIGHT_FLAGS_SHADOWS_ENABLED_BIT) != 0u) {
+                sun_visibility *= fetch_directional_shadow(i, in.world_position, n_lit, view_z);
+            }
+        }
+    }
+    var lit_nl = clamp(wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl, vec3<f32>(0.0), vec3<f32>(1.0));
+    if (wow_light.sh_c16.w > 0.5 && m.model_flags.z < 0.5) {
+        lit_nl = clamp(wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl * sun_visibility, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
     // The order-2 SH basis, shared by the exterior lobe and the interior probes.
     let quad = vec4<f32>(n_lit.x * n_lit.y, n_lit.y * n_lit.z, n_lit.z * n_lit.z, n_lit.x * n_lit.z);
     let n1 = vec4<f32>(n_lit, 1.0);
@@ -600,7 +618,7 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
     // One `intensity` multiply covers every sun band (never I²); the c10 `.w` ambient does not
     // scale. `pack_model_core_rows` packs the same closed form.
     let sun_dc = wow_light.grade.yzw * intensity;
-    let sun_lobe = vec3<f32>(
+    var sun_lobe = vec3<f32>(
         wow_light.sh_c10_r.w + sun_dc.x
             + intensity
                 * (dot(wow_light.sh_c10_r.xyz, n_lit) + dot(wow_light.sh_c13_r, quad)
@@ -614,6 +632,10 @@ fn fragment(in: WowVsOut, @builtin(front_facing) is_front: bool) -> WowFragOut {
                 * (dot(wow_light.sh_c10_b.xyz, n_lit) + dot(wow_light.sh_c13_b, quad)
                     + wow_light.sh_c16.z * x2y2),
     );
+    if (wow_light.sh_c16.w > 0.5 && m.model_flags.z < 0.5) {
+        let ambient = vec3<f32>(wow_light.sh_c10_r.w, wow_light.sh_c10_g.w, wow_light.sh_c10_b.w);
+        sun_lobe = ambient + (sun_lobe - ambient) * sun_visibility;
+    }
     // Clamp the sum, never a term: the lobe's own ringing dips to −0.037·C near μ ≈ −0.53, and a
     // per-term clamp would erase it.
     let lit_doodad = clamp(sun_lobe, vec3<f32>(0.0), vec3<f32>(1.0));

@@ -242,6 +242,40 @@ mod tests {
                 defs,
             );
         }
+        // Shadow-only production IO, including the emulated unclipped-depth backend.
+        for rig in [false, true] {
+            for emulated in [false, true] {
+                for excluded in [false, true] {
+                    let mut defs = mesh_defs();
+                    defs.retain(|def| !matches!(def, ShaderDefVal::Bool(name, _) if name == "VIEW_PROJECTION_PERSPECTIVE"));
+                    defs.extend(
+                        [
+                            "PREPASS_PIPELINE",
+                            "DEPTH_PREPASS",
+                            "WOW_SHADOW_FRAGMENT",
+                            "MAY_DISCARD",
+                            "VIEW_PROJECTION_ORTHOGRAPHIC",
+                        ]
+                        .into_iter()
+                        .map(ShaderDefVal::from),
+                    );
+                    if rig {
+                        defs.push("WOW_RIG_SKIN".into());
+                    }
+                    if emulated {
+                        defs.push("UNCLIPPED_DEPTH_ORTHO_EMULATION".into());
+                    }
+                    if excluded {
+                        defs.push("WOW_SHADOW_EXCLUDE".into());
+                    }
+                    check(
+                        "wow_shadow.wgsl",
+                        include_str!("../../benilla-assets/src/shaders/wow_shadow.wgsl"),
+                        defs,
+                    );
+                }
+            }
+        }
         for cutout in [false, true] {
             check(
                 "static_gx.wgsl",

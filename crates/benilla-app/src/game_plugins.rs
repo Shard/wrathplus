@@ -775,6 +775,19 @@ pub(crate) mod schedule_tests {
             UPDATE_ACTIONABLE_CEILING,
             UPDATE_ACTIONABLE_SLACK,
         );
+        if std::env::var_os("WOW_AMBIGUITY_DUMP").is_some() {
+            for (a, b, what) in &post.conflicts {
+                eprintln!(
+                    "PostUpdate: {} <-> {} on {}",
+                    post.name(*a),
+                    post.name(*b),
+                    what.iter()
+                        .map(|id| post.component(*id))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
         ratchet(
             "PostUpdate",
             post.conflicts.len(),

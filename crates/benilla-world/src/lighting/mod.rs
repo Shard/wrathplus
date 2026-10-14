@@ -303,6 +303,10 @@ mod ordering_tests {
                 "the celestial follows: PostUpdate, BillboardPlace",
             ),
             ("weather/precip/mod.rs", "push_precip: PostUpdate"),
+            (
+                "modern_shadows.rs",
+                "sync_shadow_sun: PostUpdate after Update lighting resolve",
+            ),
         ];
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut offenders = Vec::new();

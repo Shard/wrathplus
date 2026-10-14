@@ -263,7 +263,9 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     app.init_resource::<benilla_world::modern_lighting::ModernLighting>();
     app.add_systems(
         PostUpdate,
-        experience::sync_lighting.before(bevy::transform::TransformSystems::Propagate),
+        experience::sync_lighting
+            .before(benilla_world::modern_shadows::ShadowSyncSet)
+            .before(bevy::transform::TransformSystems::Propagate),
     );
     // Static-scene transform tracking pinned on: the default threshold re-decides every frame with
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It
