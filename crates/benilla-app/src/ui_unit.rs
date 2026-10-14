@@ -1682,6 +1682,21 @@ pub(crate) fn add_unit_feed(app: &mut App) {
 mod tests {
     use super::*;
 
+    /// Derive watcher keys from both dialects' actual native descriptor positions.
+    fn native_test_edges(guid: u64, field: benilla_protocol::messages::Field) -> FieldEdges {
+        use benilla_protocol::messages::{FieldLayout, ObjectType};
+        let keys: Vec<_> = [FieldLayout::Vanilla5875, FieldLayout::Wrath12340]
+            .into_iter()
+            .map(|layout| {
+                let span = layout.resolve(field).expect("native watched field");
+                let (resolved, offset) = layout.field_at(ObjectType::Player, span.index).unwrap();
+                assert_eq!(resolved, field);
+                (guid, resolved, offset)
+            })
+            .collect();
+        FieldEdges::semantic_of(&keys)
+    }
+
     #[test]
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
         use benilla_protocol::messages::ObjectFields;
@@ -2640,7 +2655,7 @@ mod tests {
             flags: 0x8,
             ..Default::default()
         };
-        let moved = FieldEdges::of(&[(PET, benilla_protocol::field::FIELD_UNIT_FLAGS)]);
+        let moved = native_test_edges(PET, benilla_protocol::messages::Field::UnitFlags);
         assert_eq!(
             fired(
                 Some(base.clone()),
@@ -2670,7 +2685,7 @@ mod tests {
             fired(
                 Some(base.clone()),
                 base.clone(),
-                &FieldEdges::of(&[(PET + 1, benilla_protocol::field::FIELD_UNIT_FLAGS)]),
+                &native_test_edges(PET + 1, benilla_protocol::messages::Field::UnitFlags),
             ),
             Vec::<String>::new()
         );
@@ -2846,7 +2861,7 @@ mod tests {
             ghost: flags & 0x10 != 0,
             ..base.clone()
         };
-        let moved = FieldEdges::of(&[(THEM, benilla_protocol::field::FIELD_PLAYER_FLAGS)]);
+        let moved = native_test_edges(THEM, benilla_protocol::messages::Field::PlayerFlags);
         let still = FieldEdges::default();
 
         // `PLAYER_FLAGS_GROUP_LEADER`, the bit the 1.12 target frame reads.
@@ -2895,7 +2910,7 @@ mod tests {
             s.eval::<Vec<String>>("return SEEN").unwrap()
         };
         const MOB: u64 = 0xF130_0000_0000_0007;
-        let moved = FieldEdges::of(&[(MOB, benilla_protocol::field::FIELD_UNIT_DYNAMIC_FLAGS)]);
+        let moved = native_test_edges(MOB, benilla_protocol::messages::Field::UnitDynamicFlags);
         let still = FieldEdges::default();
         let with = |dyn_flags: u32| UnitState {
             exists: true,
