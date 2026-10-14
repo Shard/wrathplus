@@ -38,6 +38,12 @@ pub(crate) fn prepare(app: &mut App) -> Result<(), String> {
         return Err("WOW_SHOWCASE_PATH and WOW_CAPTURE are mutually exclusive".into());
     }
     let path = ShowcasePath::parse(&std::fs::read_to_string(&file).map_err(|e| e.to_string())?)?;
+    // c7 schema lands before the visual spawner: never silently record missing actors.
+    if !path.actors.is_empty() {
+        return Err(
+            "showcase actors are validated but the visual spawner is not available yet".into(),
+        );
+    }
     let out = PathBuf::from(
         std::env::var_os("WOW_SHOWCASE_OUT").unwrap_or_else(|| "target/showcase".into()),
     );

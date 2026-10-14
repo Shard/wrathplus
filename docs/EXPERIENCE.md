@@ -274,3 +274,15 @@ clears `WOW_CAPTURE`, preserves the caller's data/locale and other renderer sett
 60-fps hstack (Classic left, Plus right). It does not build, encode, overwrite old output, or
 contact a server; a rendering failure stops before the second run/encoder command. Workers do
 not execute this script with the client. Plus feature settings still come from the usual config.
+
+### Planned optional showcase actors (c7 schema only)
+
+The path schema now accepts up to 16 optional `[[actors]]` entries with a nonzero installed
+`CreatureDisplayInfo` `display_id`, finite bounded WoW `position = [x, y, z]`, optional `yaw`
+(radians, ±one turn, default 0), and `scale` (0.1–4, default 1; multiplier on installed scale).
+These are visual placements, not server creature-entry IDs, GUIDs or network units. Empty/absent
+actors preserve the existing camera sequence. **Recording a nonempty actor list currently fails
+explicitly at startup**: the schema precedes the visual spawner, so no clip can silently omit
+requested models. The next unit will load plain-creature displays, freeze deterministic Stand,
+wait for their assets and pose before frame zero, and fail on missing data. No actor sample route
+is claimed usable yet; humanoid customization/equipment is deferred.

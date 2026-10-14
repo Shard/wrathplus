@@ -10,6 +10,8 @@ struct PathFile {
     /// Fixed light-band minute, not elapsed simulation time.
     minute: f32,
     keyframes: Vec<Keyframe>,
+    #[serde(default)]
+    actors: Vec<ShowcaseActor>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -21,6 +23,24 @@ struct Keyframe {
     target: [f64; 3],
     #[serde(default = "default_fov")]
     fov_degrees: f64,
+}
+
+/// Visual-only installed CreatureDisplayInfo id, never a server creature entry or GUID.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ShowcaseActor {
+    pub(crate) display_id: u32,
+    pub(crate) position: [f64; 3],
+    /// WoW heading radians, bounded to one turn; the visual spawner owns coordinate conversion.
+    #[serde(default)]
+    pub(crate) yaw: f64,
+    /// Multiplier on the display's installed model scale, not an absolute game unit size.
+    #[serde(default = "default_actor_scale")]
+    pub(crate) scale: f64,
+}
+
+fn default_actor_scale() -> f64 {
+    1.0
 }
 
 fn default_fov() -> f64 {
@@ -38,6 +58,7 @@ const MAX_COORD: f64 = 100_000.0;
 pub(crate) struct ShowcasePath {
     pub(crate) map: u32,
     pub(crate) minute: f32,
+    pub(crate) actors: Vec<ShowcaseActor>,
     keys: Vec<Keyframe>,
     frames: u32,
 }
@@ -72,6 +93,26 @@ impl ShowcasePath {
         }
         if !(2..=256).contains(&file.keyframes.len()) {
             return Err("a path needs 2..256 keyframes".into());
+        }
+        if file.actors.len() > 16 {
+            return Err("a showcase supports at most 16 visual actors".into());
+        }
+        for actor in &file.actors {
+            if actor.display_id == 0
+                || !actor
+                    .position
+                    .into_iter()
+                    .all(|v| v.is_finite() && v.abs() <= MAX_COORD)
+                || !actor.yaw.is_finite()
+                || actor.yaw.abs() > std::f64::consts::TAU
+                || !actor.scale.is_finite()
+                || !(0.1..=4.0).contains(&actor.scale)
+            {
+                return Err(
+                    "actor needs nonzero display_id, bounded finite position/yaw and scale 0.1..4"
+                        .into(),
+                );
+            }
         }
         let mut previous = -1.0;
         for (index, key) in file.keyframes.iter().enumerate() {
@@ -108,6 +149,7 @@ impl ShowcasePath {
         let path = Self {
             map: file.map,
             minute: file.minute,
+            actors: file.actors,
             keys: file.keyframes,
             frames: frame_span.round() as u32,
         };
