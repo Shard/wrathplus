@@ -671,27 +671,15 @@ fn parse_wrath_m2_impl<'a>(
     let attachments_arr = array(b, 0xf0, "attachments")?;
     let attachment_lookup_arr = array(b, 0xf8, "attachment lookup")?;
     let events_arr = array(b, 0x100, "events")?;
-    if array(b, 0x108, "lights")?.0 != 0 {
-        return Err(WrathError::UnsupportedField("lights"));
-    }
+    // Lights, ribbon and particle emitters, and the optional blend-map overrides (global flag
+    // 0x08, an array after the base header) are not read yet: the model loads without its
+    // flames, glows and trails, where rejecting it would drop the whole model (a kobold carries a
+    // candle, a brazier its fire).
+    let _lights = array(b, 0x108, "lights")?;
     let cameras_arr = array(b, 0x110, "cameras")?;
     let camera_lookup_arr = array(b, 0x118, "camera lookup")?;
-    if array(b, 0x120, "ribbon emitters")?.0 != 0 {
-        return Err(WrathError::UnsupportedField("ribbon emitters"));
-    }
-    if array(b, 0x128, "particle emitters")?.0 != 0 {
-        return Err(WrathError::UnsupportedField("particle emitters"));
-    }
-    let flags = b
-        .u32_at(0x10)
-        .ok_or(WrathError::Truncated("global flags"))?;
-    if flags & 0x08 != 0 {
-        // The optional blend-map array follows the base header. It is not yet carried semantically.
-        let blend_map = array(b, 0x130, "blend map")?;
-        if blend_map.0 != 0 {
-            return Err(WrathError::UnsupportedField("blend-map overrides"));
-        }
-    }
+    let _ribbon_emitters = array(b, 0x120, "ribbon emitters")?;
+    let _particle_emitters = array(b, 0x128, "particle emitters")?;
 
     let vertices_raw = table(b, vertices_arr, 48, "vertex table")?;
     let mut vertices = Vec::with_capacity(vertices_arr.0);

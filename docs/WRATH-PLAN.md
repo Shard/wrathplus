@@ -53,7 +53,11 @@ agent bench (observation/control contract in `AZEROTHBENCH.md`).
 2. **Unit data.** Power bars, casting info (`UnitCastingInfo`), threat, focus. Other units' aura
    durations and casters (target debuff timers, `PLAYER` filter). `GetSpellInfo` and the other
    2.0+ spell readers (the VM has no spell catalog). `SMSG_GAMEOBJECT_QUERY_RESPONSE` (0x5F).
-   The Wrath M2 loader rejects models with lights or particle emitters (campfires, elevators).
+   Wrath M2s load without their lights, ribbon and particle emitters and blend-map overrides
+   (no candle flames, brazier fire or trails yet); a few still fail on a skin-batch section check
+   (`generalweaponrack01`, the zeppelin). Melee spells: no player swing animation on a
+   next-swing spell's `SPELL_GO`, and no damage/miss text for it (`SMSG_SPELLNONMELEEDAMAGELOG`,
+   `SPELL_GO` misses), so a Heroic Strike swing reads as a dropped swing.
    Unhandled server messages seen in a melee session (2026-10-14), by frequency:
    `SMSG_GAMEOBJECT_QUERY_RESPONSE`, `SMSG_POWER_UPDATE`, `SMSG_CRITERIA_UPDATE`,
    `SMSG_UPDATE_WORLD_STATE`, `SMSG_SET_PROFICIENCY`, `SMSG_THREAT_UPDATE`/`HIGHEST_THREAT_UPDATE`/

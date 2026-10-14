@@ -90,7 +90,10 @@ fn missing_surface(script: &UiScript) {
     let mut sources = Vec::new();
     let mut queue: Vec<String> = core.toc.files.clone();
     if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
-        for table in ["Languages", "ItemBagFamily", "TaxiNodes", "GMTicketCategory", "EmotesTextData"] {
+        for table in [
+            "Languages", "ItemBagFamily", "TaxiNodes", "GMTicketCategory", "EmotesTextData",
+            "GroundEffectDoodad", "GroundEffectTexture",
+        ] {
             if let Some(bytes) = super::reference_ui::read(&format!(r"DBFilesClient\{table}.dbc")) {
                 let _ = std::fs::write(std::path::Path::new(&dir).join(format!("{table}.dbc")), bytes);
             }

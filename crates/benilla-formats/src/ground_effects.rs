@@ -306,6 +306,14 @@ fn doodad_schema() -> Schema {
     s
 }
 
+fn wrath_doodad_schema() -> Schema {
+    let mut s = Schema::new("GroundEffectDoodad");
+    s.add_field(SchemaField::new("ID", FieldType::UInt32));
+    s.add_field(SchemaField::new("ModelPath", FieldType::String));
+    s.add_field(SchemaField::new("Flags", FieldType::UInt32));
+    s
+}
+
 /// A DBC doodad name, a bare `ElwGra01.mdl`, to its model `World\NoDXT\Detail\ElwGra01.m2`.
 fn resolve_model(dbc_name: &str) -> String {
     let file = dbc_name.rsplit(['\\', '/']).next().unwrap_or(dbc_name);
@@ -320,15 +328,23 @@ pub fn load_ground_effect_catalog(
     chain: &mut Chain,
     key_by_internal_id: bool,
 ) -> Result<GroundEffectCatalog> {
-    let key_field = if key_by_internal_id { 1 } else { 0 };
+    // 3.3.5 dropped `internalId`: a row is `(ID, ModelPath, flags)`, a texture's doodad slot
+    // names the row `ID`, and an empty slot is 0 rather than -1.
+    let wrath = matches!(chain.profile(), crate::DataProfile::Wrath { .. });
+    let (key_field, name_field) = match (wrath, key_by_internal_id) {
+        (true, _) => (0, 1),
+        (false, true) => (1, 2),
+        (false, false) => (0, 2),
+    };
     let doodads = {
         let bytes = chain
             .read_file(GROUND_EFFECT_DOODAD)
             .with_context(|| format!("reading {GROUND_EFFECT_DOODAD}"))?;
-        let rs = parse(&bytes, doodad_schema(), "GroundEffectDoodad")?;
+        let schema = if wrath { wrath_doodad_schema() } else { doodad_schema() };
+        let rs = parse(&bytes, schema, "GroundEffectDoodad")?;
         let mut m = HashMap::with_capacity(rs.records().len());
         for r in rs.records() {
-            if let (Some(id), Some(name)) = (u32_at(r, key_field), str_at(&rs, r, 2)) {
+            if let (Some(id), Some(name)) = (u32_at(r, key_field), str_at(&rs, r, name_field)) {
                 m.insert(id, resolve_model(&name));
             }
         }
@@ -345,7 +361,7 @@ pub fn load_ground_effect_catalog(
         let mut slots: [Option<String>; 4] = Default::default();
         for (i, slot) in slots.iter_mut().enumerate() {
             let d = u32_at(r, 1 + i).unwrap_or(0);
-            if !is_no_doodad(d) {
+            if !is_no_doodad(d) && !(wrath && d == 0) {
                 *slot = doodads.get(&d).cloned();
             }
         }
