@@ -56,6 +56,12 @@ fn usable_view(eye: [f64; 3], target: [f64; 3]) -> bool {
         .map(|(a, b)| (a - b).powi(2))
         .sum::<f64>()
         > 1e-8
+        && eye
+            .into_iter()
+            .zip(target)
+            .map(|(a, b)| ((a as f32) - (b as f32)).powi(2))
+            .sum::<f32>()
+            > 1e-8
 }
 
 impl ShowcasePath {
@@ -154,3 +160,5 @@ impl ShowcasePath {
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) mod driver;

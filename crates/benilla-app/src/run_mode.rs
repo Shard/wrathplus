@@ -25,6 +25,15 @@ pub(crate) fn scenario_active() -> bool {
     std::env::var("WOW_CAPTURE").is_ok()
 }
 
+/// Explicit offline showcase selection; distinct from the eval scenario harness.
+pub(crate) fn showcase_active() -> bool {
+    cfg!(feature = "dev") && std::env::var_os("WOW_SHOWCASE_PATH").is_some()
+}
+
+pub(crate) fn offline_active() -> bool {
+    scenario_active() || showcase_active()
+}
+
 /// Is the player UI opted into this capture? Forwards [`crate::capture::ui_opted_in`] for readers
 /// outside the harness; `false` in a player build, which has no capture to opt into.
 #[cfg(feature = "dev")]
@@ -56,9 +65,14 @@ pub(crate) fn env_login() -> bool {
 /// Read by what acts instead of a person: [`crate::net::DisconnectedMessage::new`] (the
 /// lost-session verdict, taken once at the wire edge) and the `FATAL` exits.
 pub(crate) fn unattended() -> bool {
-    ["WOW_UNATTENDED", "WOW_CAPTURE", "WOW_RIG"]
-        .iter()
-        .any(|k| std::env::var_os(k).is_some())
+    [
+        "WOW_UNATTENDED",
+        "WOW_CAPTURE",
+        "WOW_RIG",
+        "WOW_SHOWCASE_PATH",
+    ]
+    .iter()
+    .any(|k| std::env::var_os(k).is_some())
 }
 
 /// A run stuck on a dialog: `true` (exit) only when the run is [`unattended`], logging the `FATAL`
@@ -86,7 +100,11 @@ pub(crate) fn fatal_when_driverless(why: &str) -> bool {
 pub(crate) fn start_state() -> crate::char_select::ClientState {
     #[cfg(feature = "dev")]
     {
-        crate::capture::start_state()
+        if showcase_active() {
+            crate::char_select::ClientState::InWorld
+        } else {
+            crate::capture::start_state()
+        }
     }
     #[cfg(not(feature = "dev"))]
     {
@@ -219,6 +237,32 @@ fn suffix_of(character: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn showcase_selection_is_separate_from_eval_and_absent_is_unchanged() {
+        use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _path = EnvGuard::unset("WOW_SHOWCASE_PATH");
+        let _capture = EnvGuard::unset("WOW_CAPTURE");
+        assert!(!showcase_active());
+        assert!(!offline_active());
+        assert_eq!(start_state(), crate::char_select::ClientState::Login);
+        {
+            let _eval = EnvGuard::set("WOW_CAPTURE", "northshire");
+            assert!(scenario_active());
+            assert!(offline_active());
+            assert!(!showcase_active());
+        }
+        {
+            let _showcase = EnvGuard::set("WOW_SHOWCASE_PATH", "path.toml");
+            assert_eq!(showcase_active(), cfg!(feature = "dev"));
+            assert!(!scenario_active());
+            if cfg!(feature = "dev") {
+                assert!(offline_active());
+                assert_eq!(start_state(), crate::char_select::ClientState::InWorld);
+            }
+        }
+    }
+
     /// Outside the dev roots, only [`super::dev_chord`] may call the engine's `dev_chord`, and no
     /// file may name the `dev` feature: the player build gate cannot see either. The display
     /// string [`benilla_world::modkeys::DEV_CHORD`] is exempt.
@@ -315,7 +359,12 @@ mod tests {
             "credentials in the environment are not an empty chair",
         );
         // The declaration, and the two runs that are automated by construction.
-        for key in ["WOW_UNATTENDED", "WOW_CAPTURE", "WOW_RIG"] {
+        for key in [
+            "WOW_UNATTENDED",
+            "WOW_CAPTURE",
+            "WOW_RIG",
+            "WOW_SHOWCASE_PATH",
+        ] {
             let _d = EnvGuard::set(key, "1");
             assert!(unattended(), "{key} declares the run driverless");
         }

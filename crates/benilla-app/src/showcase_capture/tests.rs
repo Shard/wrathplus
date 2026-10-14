@@ -1,6 +1,6 @@
 use super::*;
 
-const PATH: &str = r#"
+pub(super) const PATH: &str = r#"
 map = 0
 minute = 720.0
 [[keyframes]]
@@ -93,4 +93,15 @@ fn multiple_waypoints_are_continuous_with_no_overshoot() {
     let right = path.sample_time(1.0 + 1e-6).unwrap().eye[0];
     assert!((left - right).abs() < 1e-8);
     assert_eq!(path.sample_frame(90).unwrap().eye[0], 75.0);
+}
+
+#[test]
+fn f32_camera_conversion_cannot_collapse_a_validated_direction() {
+    let collapsed = PATH
+        .replace("eye = [0.0, 0.0, 10.0]", "eye = [99999.0, 0.0, 10.0]")
+        .replace(
+            "target = [0.0, 10.0, 10.0]",
+            "target = [99999.001, 0.0, 10.0]",
+        );
+    assert!(ShowcasePath::parse(&collapsed).is_err());
 }

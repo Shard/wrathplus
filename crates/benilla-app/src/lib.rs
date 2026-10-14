@@ -102,6 +102,7 @@ mod opaque2d;
 /// Where "the client is going down" is observed, in `Last`; every system that persists state on the
 /// way out registers through it.
 mod shutdown;
+#[cfg(feature = "dev")]
 mod showcase_capture;
 mod smart_rect;
 mod sound;
@@ -306,6 +307,11 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
 
     // With `$WOW_CAPTURE` set the app runs a deterministic, server-less capture (net off, so no
     // NPCs stream in) and exits.
+    #[cfg(feature = "dev")]
+    if let Err(error) = showcase_capture::driver::prepare(&mut app) {
+        eprintln!("showcase: {error}");
+        return AppExit::error();
+    }
     let capturing = run_mode::scenario_active();
     // Every instrumented run, captures and live probes, opens in the background so it never takes
     // over a person's screen; `WOW_BG` overrides.
@@ -363,7 +369,10 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
         // plus 128 px end caps get a wide, short window, and vplates pins 1024×768, where one gx
         // unit is 1280 px and the plate lands at the border texture's native 128×32, diffable
         // against the BLP.
-        resolution: video::at_requested_dpi(
+        resolution: if run_mode::showcase_active() {
+            bevy::window::WindowResolution::new(1920, 1080)
+                .with_scale_factor_override(1.0)
+        } else { video::at_requested_dpi(
             // Same opt-in as the UI load (`ui_script::lifecycle::ui_wanted`); the two must agree,
             // or the right content is captured at the wrong size.
             if capturing && crate::run_mode::capture_ui_opted_in() {
@@ -403,7 +412,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
                     })
                     .into()
             },
-        ),
+        ) },
         // `$WOW_NOVSYNC=1` uncaps presentation from boot so a headless FPS-journal run measures
         // frame cost, not the vsync ceiling; otherwise the player's `gxVSync` takes over from
         // `Startup` ([`crate::video`]).
@@ -440,7 +449,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     // The game as one group on top of the engine; `game_plugins.rs` has its members, its
     // load-bearing ordering edges and the test that builds it headless.
     .add_plugins(game_plugins::GamePlugins {
-        connect: !capturing,
+        connect: !run_mode::offline_active(),
         start: run_mode::start_state(),
     });
 
