@@ -110,6 +110,30 @@ Crates `benilla-formats`, `benilla-m2`, `benilla-assets`, `benilla-world`.
 - Done when: no asset load failure in a Northshire→Goldshire→Stormwind run; installed-data tests
   cover each mapped table.
 
+### WS7: experience profile and asset overrides (parallel; client-side only)
+Shannon (2026-10-14): the client should switch cleanly between the **classic** experience and a
+**plus** experience with optional extras (modern graphics, UI and QoL improvements, party play
+with agents). Client-side only for now; new lands, races and mechanics (server-side) come later.
+Build the seams now; features land on them later.
+- **Experience profile**, orthogonal to the data/protocol dialect: `Classic` (faithful stock
+  3.3.5, the eval default, pinned for reproducibility) or `Plus`, with named feature toggles in one
+  typed registry (config `[experience]`, `WOW_EXPERIENCE=classic|plus`, per-feature overrides),
+  queried through one resource, never scattered string checks. Classic must render and behave
+  exactly as today; tests assert every Plus feature is off under Classic.
+- **Asset override layer**: loose files and mod packs (`<home>/mods/<pack>/` mirroring archive
+  paths) take priority over the MPQ chain, per-pack enable list and order, clean fallback, logged
+  provenance per overridden file; Classic ignores overrides unless explicitly allowed. Works for
+  textures, models, DBCs, sounds and UI files alike (one choke point where the chain resolves a
+  path).
+- **First Plus feature (the visible payoff)**: a "modern" lighting preset, no new art: real-time
+  shadows, height/distance fog, bloom, filmic tone mapping and colour grading toward a darker
+  fantasy look, all behind Plus toggles. Must not change Classic's frames.
+- Not in WS7: new art (high-detail models, cloth-simulated cloaks), movement/combat mechanics
+  (server-side), party-command UI (builds on the agent bench contract).
+- Done when: profile switch works end to end; an override pack replaces a texture and a model in a
+  live session; Classic screenshots are pixel-identical to before; the Plus lighting preset can be
+  toggled at runtime for a side-by-side capture.
+
 ## Rules for every worker
 
 - **Repo**: `~/Workspace/artivus/azerothbench-client`. Create your worktree:
