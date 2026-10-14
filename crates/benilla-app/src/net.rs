@@ -291,7 +291,9 @@ pub(crate) struct FieldChanged {
     pub entity: Entity,
     pub guid: u64,
     pub kind: benilla_protocol::messages::ObjectType,
-    pub index: u16,
+    pub field: benilla_protocol::messages::Field,
+    pub offset: u16,
+    pub layout: benilla_protocol::messages::FieldLayout,
     pub old: u32,
     pub new: u32,
 }
@@ -302,30 +304,80 @@ impl FieldChanged {
         use benilla_protocol::messages::ObjectType;
         matches!(self.kind, ObjectType::Unit | ObjectType::Player)
     }
-    /// The edge on one named unit field.
-    pub fn unit_field(&self, index: u16) -> bool {
-        self.is_unit() && self.index == index
+    /// Match a semantic scalar (the first dword of a field).
+    pub fn named_field(&self, field: benilla_protocol::messages::Field) -> bool {
+        self.field == field && self.offset == 0
     }
-    /// The edge's slot in a unit-block array of `len` dwords at `base` (`UNIT_FIELD_AURA[48]`).
+    /// The dword offset in a semantic unit array, bounded by the caller's watch length.
+    pub fn unit_slot(&self, field: benilla_protocol::messages::Field, len: u16) -> Option<u16> {
+        (self.is_unit() && self.field == field && self.offset < len).then_some(self.offset)
+    }
+    /// Transitional reconstruction only; canonical edge storage is semantic from creation.
+    #[deprecated(note = "WS2 staging only: migrate to field + offset")]
+    pub fn raw_index_compat(&self) -> u16 {
+        self.layout
+            .resolve(self.field)
+            .expect("edge field belongs to its layout")
+            .index
+            + self.offset
+    }
+    #[deprecated(note = "WS2 staging only: migrate to named_field")]
+    pub fn unit_field(&self, index: u16) -> bool {
+        self.is_unit() && self.layout.field_at(self.kind, index) == Some((self.field, self.offset))
+    }
+    #[deprecated(note = "WS2 staging only: migrate to unit_slot")]
     pub fn unit_array_slot(&self, base: u16, len: u16) -> Option<u16> {
-        (self.is_unit() && (base..base + len).contains(&self.index)).then(|| self.index - base)
+        let index = self.layout.resolve(self.field)?.index + self.offset;
+        (self.is_unit() && index >= base && index - base < len).then(|| index - base)
     }
 }
 
-/// The field edges one feed saw this run, by guid and index: the reference fans a moved field out
-/// to every unit token naming the unit (`0x515e50`).
+/// The field edges one feed saw this run, by guid and semantic array member: the reference fans
+/// a moved field out to every unit token naming the unit (`0x515e50`).
 #[derive(Default)]
-pub(crate) struct FieldEdges(HashSet<(u64, u16)>);
+pub(crate) struct FieldEdges(HashSet<(u64, benilla_protocol::messages::Field, u16)>);
 
 impl FieldEdges {
     pub fn collect(reader: &mut MessageReader<FieldChanged>) -> Self {
-        Self(reader.read().map(|e| (e.guid, e.index)).collect())
+        Self(reader.read().map(|e| (e.guid, e.field, e.offset)).collect())
     }
+    pub fn moved_field(
+        &self,
+        guid: u64,
+        field: benilla_protocol::messages::Field,
+        offset: u16,
+    ) -> bool {
+        self.0.contains(&(guid, field, offset))
+    }
+    #[deprecated(note = "WS2 staging only: migrate Vanilla callers to moved_field")]
     pub fn moved(&self, guid: u64, index: u16) -> bool {
-        self.0.contains(&(guid, index))
+        // Existing callers pass Vanilla positions, even while projected Wrath is enabled.
+        use benilla_protocol::messages::{FieldLayout, ObjectType};
+        [ObjectType::Unit, ObjectType::Player]
+            .into_iter()
+            .any(|kind| {
+                FieldLayout::Vanilla5875
+                    .field_at(kind, index)
+                    .is_some_and(|(field, offset)| self.moved_field(guid, field, offset))
+            })
     }
     #[cfg(test)]
+    #[deprecated(note = "WS2 staging only: migrate fixtures to semantic_of")]
     pub fn of(edges: &[(u64, u16)]) -> Self {
+        use benilla_protocol::messages::{FieldLayout, ObjectType};
+        Self(
+            edges
+                .iter()
+                .filter_map(|&(guid, index)| {
+                    FieldLayout::Vanilla5875
+                        .field_at(ObjectType::Player, index)
+                        .map(|(field, offset)| (guid, field, offset))
+                })
+                .collect(),
+        )
+    }
+    #[cfg(test)]
+    pub fn semantic_of(edges: &[(u64, benilla_protocol::messages::Field, u16)]) -> Self {
         Self(edges.iter().copied().collect())
     }
 }
@@ -344,12 +396,18 @@ pub(crate) fn merge_store_fields(
         store.merge(delta);
         return;
     };
+    let layout = store.layout();
     store.merge_diff(delta, |index, old, new| {
+        let Some((field, offset)) = layout.field_at(kind, index) else {
+            return; // Unknown native dwords have no semantic watcher.
+        };
         emit(FieldChanged {
             entity,
             guid,
             kind,
-            index,
+            field,
+            offset,
+            layout,
             old,
             new,
         });
@@ -2496,7 +2554,10 @@ mod tests {
             ClientCommand::LootMoney,
             ClientCommand::LootRelease { guid: 7 },
             ClientCommand::CancelCast { spell_id: 78 },
-            ClientCommand::CastSpell { spell_id: 78, target: Some(7) },
+            ClientCommand::CastSpell {
+                spell_id: 78,
+                target: Some(7),
+            },
             ClientCommand::CreatureQuery { entry: 69, guid: 7 },
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
@@ -2663,7 +2724,9 @@ mod tests {
                 entity: unit,
                 guid: 0xF130_0000_0000_0042,
                 kind: ObjectType::Unit,
-                index: FIELD_UNIT_HEALTH,
+                field: benilla_protocol::messages::Field::UnitHealth,
+                offset: 0,
+                layout: benilla_protocol::messages::FieldLayout::Vanilla5875,
                 old: 100,
                 new: 0,
             }],
@@ -2683,6 +2746,101 @@ mod tests {
             world.get::<ObjectStore>(unit).unwrap().0.unit_level(),
             Some(10)
         );
+    }
+
+    /// All existing watcher roots retain their class and member after native reverse lookup.
+    #[test]
+    #[allow(deprecated)]
+    fn semantic_edges_preserve_existing_scalar_and_array_watchers() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        let unit_fields = [
+            Field::UnitHealth,
+            Field::UnitMaxHealth,
+            Field::UnitLevel,
+            Field::UnitDynamicFlags,
+            Field::UnitMountDisplayId,
+            Field::UnitBytes1,
+            Field::UnitFlags,
+        ];
+        let player_fields = [
+            Field::PlayerFlags,
+            Field::PlayerCoinage,
+            Field::PlayerSkillInfo11,
+        ];
+        let entity = Entity::PLACEHOLDER;
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for (kind, fields) in [
+                (ObjectType::Unit, unit_fields.as_slice()),
+                (ObjectType::Player, player_fields.as_slice()),
+                (ObjectType::GameObject, [Field::GameobjectState].as_slice()),
+                (ObjectType::Corpse, [Field::CorpseDynamicFlags].as_slice()),
+            ] {
+                for &field in fields {
+                    let Some(span) = layout.resolve(field) else {
+                        continue;
+                    };
+                    let mut store = ObjectFields::from_native_pairs(layout, &[(span.index, 1)])
+                        .into_created(kind);
+                    let delta = ObjectFields::from_native_pairs(layout, &[(span.index, 2)]);
+                    let mut edges = Vec::new();
+                    merge_store_fields(&mut store, delta, entity, 42, |edge| edges.push(edge));
+                    assert_eq!(edges.len(), 1, "{layout:?}/{field:?}");
+                    let edge = edges[0];
+                    assert!(edge.named_field(field));
+                    assert_eq!(edge.raw_index_compat(), span.index);
+                    assert_eq!(edge.unit_field(span.index), edge.is_unit());
+                    assert_eq!((edge.old, edge.new), (1, 2));
+                    assert!(FieldEdges::semantic_of(&[(42, field, 0)]).moved_field(42, field, 0));
+                }
+            }
+            for field in [
+                Field::UnitAura,
+                Field::UnitAuraFlags,
+                Field::UnitAuraApplications,
+            ] {
+                let Some(span) = layout.resolve(field) else {
+                    continue;
+                };
+                for offset in [0, span.width - 1] {
+                    let (resolved, member) = layout
+                        .field_at(ObjectType::Player, span.index + offset)
+                        .unwrap();
+                    let edge = FieldChanged {
+                        entity,
+                        guid: 42,
+                        kind: ObjectType::Player,
+                        field: resolved,
+                        offset: member,
+                        layout,
+                        old: 1,
+                        new: 2,
+                    };
+                    assert_eq!(edge.unit_slot(field, span.width), Some(offset));
+                    assert_eq!(edge.unit_array_slot(span.index, span.width), Some(offset));
+                    assert_eq!(edge.unit_slot(field, offset), None);
+                    assert!(!edge.named_field(Field::UnitHealth));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn semantic_edge_keys_disambiguate_overlapping_classes_and_array_members() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        // Vanilla corpse flags overlap a unit word: semantic keys must not alias them.
+        let layout = FieldLayout::Vanilla5875;
+        let index = layout.resolve(Field::CorpseDynamicFlags).unwrap().index;
+        let (unit_field, _) = layout.field_at(ObjectType::Unit, index).unwrap();
+        assert_ne!(unit_field, Field::CorpseDynamicFlags);
+        let edges = FieldEdges::semantic_of(&[
+            (42, Field::CorpseDynamicFlags, 0),
+            (42, Field::UnitAura, 47),
+        ]);
+        assert!(!edges.moved_field(42, unit_field, 0));
+        assert!(!edges.moved_field(43, Field::CorpseDynamicFlags, 0));
+        assert!(edges.moved_field(42, Field::UnitAura, 47));
+        assert!(!edges.moved_field(42, Field::UnitAura, 46));
+        assert!(!edges.moved_field(42, Field::UnitAuraFlags, 0));
     }
 
     /// Login env vars alone do not make a run unattended: a person's launch line sets them too.

@@ -175,11 +175,11 @@ pub(crate) fn aura_lines(
     let slot_moved = |entity: Entity, slot: u16| {
         slot_edges
             .iter()
-            .any(|e| e.entity == entity && e.index - FIELD_UNIT_AURA == slot)
+            .any(|e| e.entity == entity && e.raw_index_compat() - FIELD_UNIT_AURA == slot)
     };
 
     for e in &slot_edges {
-        let slot = e.index - FIELD_UNIT_AURA;
+        let slot = e.raw_index_compat() - FIELD_UNIT_AURA;
         let class = ctx.classify(e.guid, &stores);
         // Arrival first, so a replace words the new aura before the old one's removal.
         if e.new != 0 {
@@ -231,7 +231,7 @@ pub(crate) fn aura_lines(
         e.unit_array_slot(FIELD_UNIT_AURAAPPLICATIONS, SLOTS / 4)
             .is_some()
     }) {
-        let word = e.index - FIELD_UNIT_AURAAPPLICATIONS;
+        let word = e.raw_index_compat() - FIELD_UNIT_AURAAPPLICATIONS;
         let Ok((_, store)) = stores.get(e.entity) else {
             continue; // gone in the same drain
         };
