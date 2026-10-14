@@ -13,7 +13,7 @@ use crate::ui_action::UiError;
 use crate::ui_quest_log::QuestLog;
 
 /// One handler per kind, plus the session-end and world-enter listeners.
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.net_handler(K::QuestGiverStatus, on_giver_status)
         .net_handler(K::QuestGreeting, on_greeting)
