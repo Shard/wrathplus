@@ -27,8 +27,8 @@ mod bind_confirm;
 mod binder;
 mod binding_abi;
 mod dialog_verbs;
-mod tutorial;
 mod threat;
+mod tutorial;
 pub use threat::{MobThreat, ThreatTable};
 mod worldmap_arrow;
 // `camera_view`: the five camera views and `FlipCameraYaw`, the reference's `UIUtil\Camera.cpp`.
@@ -100,6 +100,7 @@ mod modelframe;
 mod net_stats;
 pub(crate) mod object;
 pub use object::frame_kind_from_tag;
+mod animation;
 mod party;
 mod pet;
 mod petition;
@@ -120,10 +121,8 @@ mod slash;
 mod slider;
 mod social;
 mod sound;
-mod spellbook;
 mod spell_info;
-#[cfg(test)]
-mod wrath_widget;
+mod spellbook;
 mod stable;
 mod statusbar;
 mod stdlib;
@@ -136,6 +135,8 @@ mod tooltip_item;
 mod tooltip_spell;
 mod tooltip_unit;
 mod ui_errors;
+#[cfg(test)]
+mod wrath_widget;
 pub use tooltip_unit::TooltipTint;
 mod trade;
 mod tradeskill;
@@ -148,8 +149,8 @@ mod who_sort;
 mod worldmap;
 mod worldstate;
 mod worn_display;
-mod wrath_surface;
 mod wrath_paperdoll;
+mod wrath_surface;
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
 
@@ -238,7 +239,8 @@ pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, Saved
 pub use pet::{PetActionView, PetStats};
 pub use pvp::{HonorState, InspectHonorData};
 pub use quest::{
-    QuestAction, QuestGreetingInfo, QuestItemView, QuestPanel, QuestRewardSpell, QuestSelect, QuestState,
+    QuestAction, QuestGreetingInfo, QuestItemView, QuestPanel, QuestRewardSpell, QuestSelect,
+    QuestState,
 };
 pub use quest_log::{QuestLogDetail, QuestLogEntryView, QuestLogObjectiveView, QuestLogState};
 pub(crate) use region::{apply_font_parts, implicit_creation_anchor_lua};
@@ -469,10 +471,20 @@ const SCRIPT_KINDS: [&str; 39] = [
 
 /// Script kinds only the Wrath dialect has: `OnAttributeChanged` is fired by its `SetAttribute`.
 const WRATH_SCRIPT_KINDS: [&str; 14] = [
-    "OnAttributeChanged", "OnEnable", "OnDisable", "PreClick", "PostClick",
-    "OnTooltipSetUnit", "OnTooltipSetItem", "OnTooltipSetSpell", "OnMinMaxChanged",
-    "OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle",
-    "OnHyperlinkEnter", "OnHyperlinkLeave",
+    "OnAttributeChanged",
+    "OnEnable",
+    "OnDisable",
+    "PreClick",
+    "PostClick",
+    "OnTooltipSetUnit",
+    "OnTooltipSetItem",
+    "OnTooltipSetSpell",
+    "OnMinMaxChanged",
+    "OnMovieFinished",
+    "OnMovieShowSubtitle",
+    "OnMovieHideSubtitle",
+    "OnHyperlinkEnter",
+    "OnHyperlinkLeave",
 ];
 
 /// The canonical spelling of script kind `name` in `lua`'s dialect, or `None` if it has no slot.
@@ -480,7 +492,11 @@ fn script_kind(lua: &Lua, name: &str) -> Option<&'static str> {
     let wrath = lua.app_data_ref::<Model>().expect("model").dialect == ScriptDialect::Wrath12340;
     SCRIPT_KINDS
         .iter()
-        .chain(if wrath { WRATH_SCRIPT_KINDS.iter() } else { [].iter() })
+        .chain(if wrath {
+            WRATH_SCRIPT_KINDS.iter()
+        } else {
+            [].iter()
+        })
         .copied()
         .find(|k| k.eq_ignore_ascii_case(name))
 }

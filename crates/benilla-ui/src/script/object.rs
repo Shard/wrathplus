@@ -642,6 +642,7 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
     events_regions::install(lua, &m)?;
     movable::install(lua, &m)?;
     toplevel::install(lua, &m)?;
+    super::animation::install(lua, &m)?;
     lua.set_named_registry_value(REG_FRAME_METHODS, m)?;
     Ok(())
 }

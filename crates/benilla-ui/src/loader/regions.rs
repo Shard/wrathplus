@@ -81,6 +81,7 @@ impl Loader<'_> {
                         self.apply_fontstring_font(region, &region_wrapper, dbg);
                     }
                     self.apply_region_visual(region, &region_wrapper, is_texture, dbg);
+                    self.apply_animations(region, &region_wrapper, parent_name, dbg);
                     // The implicit creation anchor, run after the region's LoadXML as the
                     // reference does (`0x7701c0`, `0x771480`); an anchored region is left alone.
                     if let Err(e) =

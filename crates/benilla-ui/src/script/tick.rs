@@ -76,6 +76,9 @@ impl super::UiScript {
     /// hover.
     pub fn tick(&mut self, elapsed: f32) {
         self.model_mut().now += f64::from(elapsed);
+        if let Err(e) = super::animation::tick(&self.lua, elapsed) {
+            eprintln!("animation: {e}");
+        }
         // Events queued since the last tick fire before this tick's OnUpdate.
         let pending = std::mem::take(&mut self.model_mut().pending_events);
         for (event, args) in pending {

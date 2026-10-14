@@ -363,6 +363,7 @@ fn install_region_methods(lua: &Lua) -> mlua::Result<()> {
     paint::install(lua, &m)?;
     text::install(lua, &m)?;
     layout::install(lua, &m)?;
+    super::animation::install(lua, &m)?;
 
     // ── The title region's table ─────────────────────────────────────────────────────────────
     //
@@ -392,6 +393,7 @@ fn install_region_methods(lua: &Lua) -> mlua::Result<()> {
             let f: Value = m.get(*name)?;
             leaf.set(*name, f)?;
         }
+        super::animation::install(lua, &leaf)?;
         lua.set_named_registry_value(key, leaf)?;
     }
     for (meta_key, methods_key) in [
