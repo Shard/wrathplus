@@ -808,6 +808,16 @@ fn poll_bed_open(zone: &mut ZoneAudio) -> Option<OpenedBed> {
 /// loop bit, and loop count −1 (`0x458900` → `0x7a5620` → `0x7a54d0`, `0x7a5592`), reading
 /// through its MPQ file callbacks. The chain's lock covers the archive lookup alone.
 fn open_bed(chain: &Mutex<Chain>, path: &str) -> anyhow::Result<StreamingSoundData<FromFileError>> {
+    let loose = chain
+        .lock_recover()
+        .override_path(path)
+        .map(std::path::Path::to_path_buf);
+    if let Some(loose) = loose {
+        eprintln!("asset override stream: {path} <- {}", loose.display());
+        let file = std::fs::File::open(&loose)?;
+        let len = file.metadata()?.len();
+        return Ok(mixer::stream_from_source(file, len)?.loop_region(..));
+    }
     let archive = chain.lock_recover().archive_for(path)?;
     let file = archive
         .open_file(path)

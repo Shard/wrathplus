@@ -253,7 +253,13 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     let mut app = App::new();
     // The panel footer and the build banner read the stamp back.
     app.insert_resource(build);
-    app.insert_resource(experience::boot());
+    let experience = experience::boot();
+    let overrides = experience
+        .asset_overrides()
+        .expect("valid enabled asset packs");
+    ui_script::initialize_asset_overrides(overrides.clone());
+    app.insert_resource(benilla_assets::AssetOverridePolicy(overrides.clone()));
+    app.insert_resource(experience);
     // Static-scene transform tracking pinned on: the default threshold re-decides every frame with
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It
     // costs more only when most rows move in one frame (a load burst into a near-empty world).
@@ -311,9 +317,12 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     app.insert_resource(benilla_assets::ClientDataProfile(data_profile.clone()));
     match benilla_formats::wow_data() {
         Some(data_dir) => {
-            if let Err(e) =
-                benilla_assets::register_mpq_source_profile(&mut app, &data_dir, &data_profile)
-            {
+            if let Err(e) = benilla_assets::register_mpq_source_overrides(
+                &mut app,
+                &data_dir,
+                &data_profile,
+                overrides,
+            ) {
                 eprintln!("benilla-assets: mpq:// source unavailable ({e:#})");
             }
         }

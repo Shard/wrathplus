@@ -20,6 +20,7 @@ pub struct ChainEntry {
 pub struct Chain {
     /// Ascending priority: later archives win.
     archives: Vec<Archive>,
+    overrides: crate::AssetOverrides,
     profile: crate::DataProfile,
 }
 
@@ -210,6 +211,7 @@ impl Chain {
         }
         Ok(Self {
             archives,
+            overrides: crate::AssetOverrides::default(),
             profile: crate::DataProfile::Vanilla,
         })
     }
@@ -220,6 +222,28 @@ impl Chain {
             crate::DataProfile::Vanilla => Self::open(path),
             crate::DataProfile::Wrath { locale } => Self::open_wrath(path, locale),
         }
+    }
+
+    /// Explicit loose-only chain, useful for tools and hermetic pack consumers without an install.
+    pub fn from_overrides(overrides: crate::AssetOverrides, profile: crate::DataProfile) -> Self {
+        Self {
+            archives: Vec::new(),
+            overrides,
+            profile,
+        }
+    }
+
+    /// Attach an explicitly resolved loose-pack policy; ordinary opens remain archive-only.
+    pub fn with_overrides(mut self, overrides: crate::AssetOverrides) -> Self {
+        self.overrides = overrides;
+        self
+    }
+
+    /// Winning loose path, for consumers that must stream rather than buffer the file.
+    pub fn override_path(&self, name: &str) -> Option<&Path> {
+        self.overrides
+            .resolve(name)
+            .map(|entry| entry.path.as_path())
     }
 
     /// The schema dialect of this chain.
@@ -245,6 +269,7 @@ impl Chain {
             .collect::<Result<Vec<_>>>()?;
         Ok(Self {
             archives,
+            overrides: crate::AssetOverrides::default(),
             profile: crate::DataProfile::Wrath {
                 locale: locale.into(),
             },
@@ -259,8 +284,10 @@ impl Chain {
 
     /// Whether `name` (`/` or `\`, any case) is a readable file, not a delete marker.
     pub fn contains(&self, name: &str) -> bool {
-        self.resolve(name)
-            .is_some_and(|a| !a.is_delete_marker(name))
+        self.overrides.resolve(name).is_some()
+            || self
+                .resolve(name)
+                .is_some_and(|a| !a.is_delete_marker(name))
     }
 
     /// The path of the archive `name` resolves to, for debugging and extraction.
@@ -270,6 +297,11 @@ impl Chain {
 
     /// Read a file by internal path (`/` or `\`) from its winning archive.
     pub fn read(&self, name: &str) -> Result<Vec<u8>> {
+        if let Some(entry) = self.overrides.resolve(name) {
+            eprintln!("asset override: {name} <- {}", entry.path.display());
+            return std::fs::read(&entry.path)
+                .with_context(|| format!("reading override {}", entry.path.display()));
+        }
         let archive = self.archive_for(name)?;
         archive
             .read_file(name)
@@ -310,6 +342,15 @@ impl Chain {
     ) -> Result<Vec<ChainEntry>> {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
+        for (key, entry) in &self.overrides.entries {
+            seen.insert(key.replace('/', "\\"));
+            if predicate(&entry.name) {
+                out.push(ChainEntry {
+                    name: entry.name.clone(),
+                    size: entry.size,
+                });
+            }
+        }
         for archive in &self.archives {
             let Ok(listfile) = archive.read_file("(listfile)") else {
                 continue;

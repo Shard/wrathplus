@@ -196,12 +196,12 @@ fn work(plan: CompositePlan, chain: Arc<Mutex<Chain>>) -> Work {
     })
 }
 
-/// Read and decode one BLP off `chain`, locked only to find its archive.
+/// Read and decode one BLP through the same pack-aware chain as streamed world art.
 fn read_texture(chain: &Mutex<Chain>, path: &str) -> anyhow::Result<BlpMipChain> {
     let name = path.replace('/', "\\");
-    let archive = chain.lock_recover().archive_for(&name)?;
-    let bytes = archive
-        .read_file(&name)
+    let bytes = chain
+        .lock_recover()
+        .read(&name)
         .with_context(|| format!("reading texture '{name}'"))?;
     blp_bytes_to_mip_chain(&bytes).with_context(|| format!("decoding texture '{name}'"))
 }
