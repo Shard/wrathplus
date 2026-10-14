@@ -165,7 +165,9 @@ Build the seams now; features land on them later.
 - **Every unit passes `cargo test -p benilla-app --lib` before it is reported** (heavy; take your
   turn), with the counts pasted. Library-only runs miss what the app builds and asserts: struct
   literals, event ownership (`net::handlers`: every `SessionEvent` kind needs exactly one owner),
-  and behaviour tests on top of descriptor accessors.
+  and behaviour tests on top of descriptor accessors. A unit that touches another crate also runs
+  that crate's full `--lib` suite (benilla-ui especially: its reference-surface test rejects any
+  global the 1.12 dialect gains; Wrath-only Lua API is installed for the Wrath dialect only).
 - Commit in small, reviewable steps on your branch, with tests. Report to the manager when a
   reviewable unit is ready: the branch, commits, what changed, test results (pasted counts).
 - Follow existing code style: comment density, naming, references to sources (`AzerothCore
