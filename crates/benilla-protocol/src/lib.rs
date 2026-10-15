@@ -316,3 +316,5 @@ pub mod wrath_transfer;
 pub mod wrath_logout;
 
 pub mod wrath_pet_name;
+
+pub mod wrath_quests_completed;
