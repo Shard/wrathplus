@@ -597,10 +597,68 @@ pub(super) fn deliver(
     }
 }
 
+/// Pair self-notice metadata with its shared delivery, not a frame-end snapshot: a
+/// single receive batch may contain join/leave/join for the same slot.
+fn deliver_native(
+    script: &mut benilla_ui::script::UiScript,
+    windows: &mut ChatWindows,
+    channels: &mut ChannelState,
+    event: &mut ChatEvent,
+    membership: Option<&mut super::native_membership::NativeMembership>,
+    notices: Option<&mut super::native_roster::NativeChannelNotices>,
+) {
+    use benilla_protocol::wrath_channel::NotifyKind;
+    let native = if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        match (membership, notices) {
+            (Some(ledger), Some(notices)) => {
+                let expected = event.notice_byte();
+                let matches = notices.0.front().is_some_and(|notice| {
+                    notice.channel.eq_ignore_ascii_case(&event.channel)
+                        && matches!(
+                            (&notice.kind, expected),
+                            (
+                                NotifyKind::YouJoined { .. },
+                                Some(channel_notice::YOU_JOINED)
+                            ) | (NotifyKind::YouLeft { .. }, Some(channel_notice::YOU_LEFT))
+                        )
+                });
+                matches.then(|| (ledger, notices.0.pop_front().unwrap()))
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+    if let Some((ledger, notice)) = native {
+        let name = notice.channel;
+        match notice.kind {
+            NotifyKind::YouJoined { channel_id, .. } => {
+                deliver(script, windows, channels, event);
+                ledger.joined(&name, channel_id, channels.number_of(&name));
+            }
+            NotifyKind::YouLeft { is_constant, .. } => {
+                ledger.left(&name, is_constant);
+                // Raw native suspension preserves the actual record, even when the
+                // Vanilla approximation had not marked this slot suspended locally.
+                if ledger.retains(&name) {
+                    channels.suspend_slot(&name);
+                } else {
+                    channels.confirm_slot(&name);
+                }
+                deliver(script, windows, channels, event);
+            }
+        }
+    } else {
+        deliver(script, windows, channels, event);
+    }
+}
+
 /// The speaker's bubble and gesture, bundled for Bevy's sixteen-parameter limit on
 /// [`feed_chat`]; the bubble has a 20 yd range test and two CVars, the gesture neither.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct SpeakerEffects<'w> {
+    native_membership: Option<ResMut<'w, super::native_membership::NativeMembership>>,
+    native_notices: Option<ResMut<'w, super::native_roster::NativeChannelNotices>>,
     bubbles: ResMut<'w, crate::chat_bubble::BubbleQueue>,
     bubble_cfg: Res<'w, crate::chat_bubble::BubbleConfig>,
     gestures: ResMut<'w, crate::creature_anim::GestureQueue>,
@@ -658,7 +716,14 @@ pub(super) fn feed_chat(
                         "Wrath raw pending chat event has no ChatFrame; preserving it in the host log"
                     );
                 }
-                deliver(&mut script, &mut windows, &mut channels, &mut event);
+                deliver_native(
+                    &mut script,
+                    &mut windows,
+                    &mut channels,
+                    &mut event,
+                    speaker.native_membership.as_deref_mut(),
+                    speaker.native_notices.as_deref_mut(),
+                );
             }
             Pending::Wire { msg, tries } => {
                 let kind = kind_of_wire(msg.chat_type);
@@ -840,7 +905,14 @@ pub(super) fn feed_chat(
                     Some(a.unwrap_or_else(|| "Unknown".into())),
                     b,
                 ) {
-                    deliver(&mut script, &mut windows, &mut channels, &mut event);
+                    deliver_native(
+                        &mut script,
+                        &mut windows,
+                        &mut channels,
+                        &mut event,
+                        speaker.native_membership.as_deref_mut(),
+                        speaker.native_notices.as_deref_mut(),
+                    );
                 }
             }
             Pending::Addon {
@@ -1174,5 +1246,63 @@ pub(crate) fn played_time_bridge(
                 benilla_ui::script::ScriptValue::Int(i64::from(level)),
             ],
         );
+    }
+}
+
+#[cfg(test)]
+mod native_delivery_tests {
+    use super::*;
+    use benilla_protocol::wrath_channel::{Notify, NotifyKind};
+
+    #[test]
+    fn ordered_native_self_notices_keep_suspension_and_explicit_leave_distinct() {
+        let mut script = benilla_ui::script::UiScript::new_with_dialect(
+            benilla_ui::script::ScriptDialect::Wrath12340,
+        )
+        .unwrap();
+        let mut windows = ChatWindows::default();
+        let mut channels = ChannelState::default();
+        let mut ledger = super::super::native_membership::NativeMembership::default();
+        let mut notices = super::super::native_roster::NativeChannelNotices::default();
+        let mut apply =
+            |kind: NotifyKind, ledger: &mut super::super::native_membership::NativeMembership| {
+                let byte = match kind {
+                    NotifyKind::YouJoined { .. } => channel_notice::YOU_JOINED,
+                    _ => channel_notice::YOU_LEFT,
+                };
+                notices.0.push_back(Notify {
+                    channel: "custom".into(),
+                    kind,
+                });
+                let mut event = notice_event(byte, "custom".into(), None, None).unwrap();
+                deliver_native(
+                    &mut script,
+                    &mut windows,
+                    &mut channels,
+                    &mut event,
+                    Some(ledger),
+                    Some(&mut notices),
+                );
+                channels.number_of("custom")
+            };
+        let joined = || NotifyKind::YouJoined {
+            flags: 0x83,
+            channel_id: 0,
+            reserved: u32::MAX,
+        };
+        let left = || NotifyKind::YouLeft {
+            channel_id: 0,
+            is_constant: 0x83,
+        };
+        let slot = apply(joined(), &mut ledger).unwrap();
+        assert_eq!(apply(left(), &mut ledger), Some(slot));
+        assert!(!ledger.snapshot(|_| Some(slot))[0].active);
+        assert_eq!(apply(joined(), &mut ledger), Some(slot));
+        ledger.explicit_leave("custom");
+        apply(joined(), &mut ledger);
+        assert_eq!(ledger.snapshot(|_| Some(slot))[0].custom_state, 1);
+        assert_eq!(apply(left(), &mut ledger), None);
+        assert!(!ledger.retains("custom"));
+        assert!(notices.0.is_empty());
     }
 }

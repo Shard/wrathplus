@@ -95,6 +95,8 @@ pub(super) struct ChatOut<'w, 's> {
     follow: MessageWriter<'w, crate::player::FollowRequest>,
     /// `/wave <name>`'s player search, which selects nothing.
     players: crate::target::PlayerLookup<'w, 's>,
+    /// Native explicit-leave visibility is separate from Vanilla's combined slot state.
+    native_channels: Option<ResMut<'w, super::native_membership::NativeMembership>>,
     /// `/partytest ping` seats a group member's ping through the wire arm's `seat`.
     ping: ResMut<'w, crate::minimap::MinimapPing>,
     /// The red error line by GlobalStrings key. The system's only `UiErrorKeys` access: a second
@@ -901,6 +903,13 @@ pub(super) fn drain_chat_input(
                         manual_join_or_leave(&channels, &mut script, &name);
                         channels.note_zone_channel_left(&name);
                         channels.note_custom_channel_left(&name);
+                        // Wrath 0x5093f0 writes +0xa0=1 on the explicit local intent,
+                        // before its acknowledgment. Automatic walk leaves do not use this path.
+                        if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+                            if let Some(native) = chat_out.native_channels.as_deref_mut() {
+                                native.explicit_leave(&name);
+                            }
+                        }
                         ClientCommand::LeaveChannel { name }
                     }
                     C::List { name } => ClientCommand::ChannelList { name },
