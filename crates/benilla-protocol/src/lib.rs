@@ -308,3 +308,5 @@ mod wrath_native_stream_tests;
 pub mod wrath_pet;
 
 pub mod wrath_chat;
+
+pub mod wrath_trade;
