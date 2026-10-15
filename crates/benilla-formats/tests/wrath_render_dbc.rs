@@ -22,7 +22,16 @@ fn installed_wrath_renderer_tables_resolve_benchone_human_male_and_nearby_displa
     let creatures = load_creature_catalog(&mut chain).expect("Wrath creature display tables");
     let creation = CharCreateCatalog::load(&mut chain).expect("Wrath character creation tables");
     let sections = CharSections::load(&mut chain).expect("Wrath character body textures");
-    CharacterGeosets::load(&mut chain).expect("Wrath character geosets");
+    let geosets = CharacterGeosets::load(&mut chain).expect("Wrath character geosets");
+    // Installed Human/Male hair style 1 maps to geoset 2; facial style 1 selects
+    // variations [1, 2, 1]. Check the projection, not merely successful parsing.
+    let visible = geosets.visible_geosets(1, 0, 1, 1, &Default::default());
+    assert_eq!(
+        (0..=1700)
+            .filter(|id| visible.contains(id))
+            .collect::<Vec<_>>(),
+        [0, 2, 101, 201, 302, 401, 501, 601, 702, 801, 901, 1001, 1101, 1201, 1301, 1401, 1501]
+    );
     let items = load_item_display_catalog(&mut chain).expect("Wrath item displays");
     let gameobjects = load_gameobject_catalog(&mut chain).expect("Wrath gameobject displays");
 

@@ -180,11 +180,31 @@ fn installed_wrath_human_reaction_to_a_diseased_young_wolf() {
     let factions = crate::load_faction_catalog(&mut chain).expect("factions");
     let human = factions.race_template(1).expect("human template");
     let wolf = factions.template(32).expect("template 32");
-    eprintln!(
-        "human {human:?}\nwolf {wolf:?}\nwolf→human {:?} human→wolf {:?}",
-        wolf.reaction_toward(human),
-        human.reaction_toward(wolf)
+    assert_eq!(
+        (
+            human.faction,
+            human.group_mask,
+            human.friend_group_mask,
+            human.enemy_group_mask
+        ),
+        (1, 3, 2, 12)
     );
+    assert_eq!(
+        (wolf.faction, wolf.group_mask, wolf.enemies),
+        (29, 0, [28, 0, 0, 0])
+    );
+    assert_eq!(wolf.reaction_toward(human), crate::Reaction::Neutral);
+    assert_eq!(human.reaction_toward(wolf), crate::Reaction::Neutral);
+    // Faction's wider name/description blocks must not read the spillover columns.
+    assert_eq!(factions.faction_name(72), Some("Stormwind"));
+    assert_eq!(factions.faction_description(72), Some("One of the last bastions of human power, this Alliance capital is ruled by the prodigal king, Varian Wrynn."));
+    let stormwind = factions
+        .reputation_faction(72)
+        .expect("Stormwind reputation");
+    assert_eq!((stormwind.rep_index, stormwind.team), (19, 469));
+    assert_eq!(stormwind.base_for(1, 1), 4000);
+    assert_eq!(stormwind.base_for(2, 1), -42000);
+    assert_eq!(stormwind.default_flags_for(1, 1), 17);
 }
 
 #[test]
