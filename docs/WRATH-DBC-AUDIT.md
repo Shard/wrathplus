@@ -1,6 +1,6 @@
 # Mapped Wrath DBC audit inventory
 
-Snapshot: `native/assets-dbc-audit`, through `4563c192` (2026-10-15).
+Snapshot: `native/assets-dbc-audit`, including the TaxiPathNode known-row audit (2026-10-15).
 Scope is the 29 table entries in `src/wrath_layouts.rs` in `benilla-formats`,
 not every table accepted by the generic DBC parser. This is a coverage inventory,
 **not certification of every column or native runtime behavior**.
@@ -31,6 +31,8 @@ Paths below are relative to `crates/benilla-formats`.
 | ChrRaces, CreatureDisplayInfo | `tests/wrath_render_dbc.rs`: Human male display/model path join | Indirect selected fields; not full race/display layout coverage |
 | AreaTable | `src/area_table.rs::tests::installed_wrath_area_table_schema_loads`: Elwynn/Northshire names and parent | Despite its name this is more than a parse smoke test |
 | SpellVisual, SpellVisualKit, SpellVisualEffectName | `tests/wrath_spell_visuals.rs`: common spell stage/attachment/effect/path routes | Weak kit-count smoke in mapped-layout tests is not the primary evidence |
+| SpellDispelType | `src/wrath_layouts_installed_tests.rs`: four native aura tokens, withheld combined category and empty Frenzy token | `1a355d64` fixes ImmunityPossible column 19 and uses InternalName column 20; Vanilla unchanged |
+| TaxiPathNode | Same: Stormwind/Sentinel Hill routes 6/7, transport routes 285/302, exact endpoints/order/map/stop flags/delay | Arrival/departure event columns remain unexposed; not a live-flight certification |
 
 Character geoset tables are not entries in `wrath_layouts.rs`; their dedicated
 Wrath readers are additionally checked in `tests/wrath_render_dbc.rs` using exact
@@ -48,11 +50,9 @@ expected row, generic parse success, or an in-range/injective map as certificati
 
 | Table | Existing reader/test location to extend |
 | --- | --- |
-| SpellDispelType | `src/spells/dispel_types.rs` |
 | SpellItemEnchantment | Existing enchantment reader and its real-data tests |
 | WorldMapArea | `src/world_map_area.rs` |
 | WorldMapContinent | `src/world_map_continent.rs` |
-| TaxiPathNode | `src/taxi.rs` |
 | SpellRange | `src/spells/ranges.rs` |
 | AnimationData | `src/anim_data.rs` |
 | SoundEntries | `src/sound_entries.rs` |

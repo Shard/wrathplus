@@ -286,3 +286,75 @@ fn installed_wrath_dispel_tokens_follow_native_aura_gate() {
     }
     assert_eq!(types.len(), 4);
 }
+
+#[test]
+fn installed_wrath_taxi_flights_and_cross_map_transport_nodes() {
+    let Some(mut chain) = chain() else { return };
+    // Build-12340 TaxiPathNode: ID, path, index, map, XYZ, flags, delay,
+    // arrival/departure events. The latter two are not exposed by this reader.
+    let nodes = crate::load_taxi_path_nodes(&mut chain).expect("TaxiPathNode");
+    let close = |actual: [f32; 3], expected: [f32; 3]| {
+        for (a, b) in actual.into_iter().zip(expected) {
+            assert!((a - b).abs() < 0.002, "{a} != {b}");
+        }
+    };
+    // TaxiPath 6 joins node 2 (Stormwind) to node 4 (Sentinel Hill),
+    // while 7 is the reverse route. IDs are not contiguous along either route.
+    for (id, len, first_id, last_id, first, last) in [
+        (
+            6,
+            28,
+            35,
+            2931,
+            [-8851.658, 498.55176, 111.25602],
+            [-10629.065, 1039.4456, 37.954334],
+        ),
+        (
+            7,
+            27,
+            68,
+            2935,
+            [-10628.539, 1040.069, 35.094147],
+            [-8833.164, 479.76254, 112.09562],
+        ),
+    ] {
+        let path = nodes.path(id).expect("ordinary flight");
+        assert_eq!(path.len(), len);
+        assert_eq!((path[0].id, path[len - 1].id), (first_id, last_id));
+        for (i, node) in path.iter().enumerate() {
+            assert_eq!(
+                (
+                    node.path_id,
+                    node.node_index,
+                    node.map_id,
+                    node.flags,
+                    node.delay
+                ),
+                (id, i as u32, 0, 0, 0)
+            );
+        }
+        close(path[0].pos, first);
+        close(path[len - 1].pos, last);
+    }
+    for (id, len, stops) in [
+        (302, 22, [(6744, 4, 1), (6758, 18, 0)]),
+        (285, 18, [(6266, 3, 0), (6277, 14, 1)]),
+    ] {
+        let path = nodes.path(id).expect("cross-map transport");
+        assert_eq!(path.len(), len);
+        for (i, node) in path.iter().enumerate() {
+            assert_eq!((node.path_id, node.node_index), (id, i as u32));
+        }
+        assert_eq!(
+            path.iter()
+                .filter(|n| n.flags & 2 != 0)
+                .map(|n| (n.id, n.node_index, n.map_id, n.flags, n.delay))
+                .collect::<Vec<_>>(),
+            stops.map(|(row, index, map)| (row, index, map, 2, 60))
+        );
+    }
+    close(
+        nodes.path(302).unwrap()[4].pos,
+        [1318.1068, -4658.047, 71.86043],
+    );
+}
