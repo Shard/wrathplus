@@ -31,6 +31,8 @@ mod input;
 mod language;
 /// `LoggingChat`/`LoggingCombat`: the two log files `/chatlog` and `/combatlog` toggle.
 pub(crate) mod logging;
+mod native_feed;
+mod native_membership;
 pub(crate) mod native_roster;
 mod net;
 #[cfg(test)]
@@ -72,6 +74,8 @@ impl Plugin for UiChatPlugin {
         native_roster::register(app);
         app.add_observer(combat::on_cvar);
         app.init_resource::<ChatLog>()
+            .init_resource::<native_membership::NativeMembership>()
+            .init_resource::<native_feed::NativeRosterFeed>()
             .init_resource::<away::AfkMirror>()
             .init_resource::<away::AfkMirrorMemo>()
             .init_resource::<idle::LastInput>()
@@ -148,6 +152,21 @@ impl Plugin for UiChatPlugin {
                     .in_set(crate::ui_script::UiFeed)
                     .before(feed::feed_chat),
             )
+            .add_systems(
+                Update,
+                native_feed::feed.in_set(UiFeed).after(feed::feed_chat),
+            )
+            .add_systems(
+                Update,
+                native_feed::disconnect
+                    .after(UiInput)
+                    .after(native_feed::drain_requests)
+                    .before(channels::end_session_channels_on_disconnect),
+            )
+            .add_systems(
+                OnExit(crate::char_select::ClientState::InWorld),
+                native_feed::reset,
+            )
             // `RequestTimePlayed()` -> `CMSG_PLAYED_TIME`; `SMSG_PLAYED_TIME` -> `TIME_PLAYED_MSG`.
             .add_systems(Update, feed::played_time_bridge.in_set(UiFeed))
             .add_systems(
@@ -164,6 +183,9 @@ impl Plugin for UiChatPlugin {
                     // slash handler it just ran goes out this frame.
                     input::drain_addon_chat_sends,
                     input::drain_addon_message_sends,
+                    // Drain after streaming's exclusive collider attachment; it cannot inspect
+                    // its accesses, and native channel intents need no pre-stream work.
+                    native_feed::drain_requests.after(benilla_world::schedule::WorldStage::Stream),
                 )
                     .chain()
                     .after(UiInput)

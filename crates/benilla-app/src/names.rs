@@ -236,6 +236,15 @@ impl NameCache {
         self.dialect = dialect;
     }
 
+    /// A completed player-name query, preserving an empty/unknown answer as `Some("")`.
+    /// Callback-driven consumers must distinguish it from `None` (no answer yet), otherwise
+    /// one negative answer leaves an entire name-gated roster pending forever. Never asks.
+    pub(crate) fn answered_player_name(&self, guid: u64) -> Option<&str> {
+        self.players
+            .answered(guid)
+            .then(|| self.players.get(guid).map_or("", String::as_str))
+    }
+
     /// The cached name for `guid`, with no query on a miss.
     pub(crate) fn peek(&self, guid_val: u64) -> Option<&str> {
         self.peek_unit(guid_val, None)
@@ -637,7 +646,10 @@ mod tests {
         let asked: Vec<_> = rx.try_iter().collect();
         assert!(matches!(
             &asked[..],
-            [ClientCommand::NameQuery { .. }, ClientCommand::CreatureQuery { entry: 69, .. }]
+            [
+                ClientCommand::NameQuery { .. },
+                ClientCommand::CreatureQuery { entry: 69, .. }
+            ]
         ));
         assert!(cache.players.is_pending(player));
         assert!(cache.creatures.is_pending(69));
@@ -967,9 +979,19 @@ mod tests {
             rx.try_recv(),
             Ok(ClientCommand::NameQuery { guid }) if guid == g
         ));
+        assert_eq!(cache.answered_player_name(g), None, "still pending");
         cache.insert_player(g, String::new(), None); // server: unknown guid
         assert_eq!(cache.resolve(g, &cmds), None);
+        assert_eq!(
+            cache.answered_player_name(g),
+            Some(""),
+            "completed negative"
+        );
         assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+        cache.insert_player(g, "Known".into(), None);
+        assert_eq!(cache.answered_player_name(g), Some("Known"));
+        cache.clear_world_session();
+        assert_eq!(cache.answered_player_name(g), None);
     }
 
     #[test]
