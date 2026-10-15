@@ -7,6 +7,9 @@
 #import bevy_render::view::View
 
 @group(0) @binding(0) var<uniform> view: View;
+#ifdef GX_AO
+@group(2) @binding(0) var gx_ambient_occlusion: texture_2d<f32>;
+#endif
 
 // Prefix of lighting::global_light's buffer; field order in sync with it and wow_model.wgsl.
 struct WowLight {
@@ -177,8 +180,9 @@ fn vertex(v: GxVertex) -> GxVsOut {
     return out;
 }
 
-@fragment
-fn fragment(in: GxVsOut) -> @location(0) vec4<f32> {
+// Camera coverage is shared by the colour and normal passes: same far plane, wrap,
+// alpha key and vertex path (including kills and the authored coplanar order nudge).
+fn camera_base(in: GxVsOut) -> vec4<f32> {
     // The hard farclip wall: per-pixel planar eye-Z, the same plane as the entity path.
     let eye_z = -(view.view_from_world * vec4<f32>(in.world_position.xyz, 1.0)).z;
     if (wow_light.fog_params.w > 0.0 && eye_z > wow_light.fog_params.w) {
@@ -217,13 +221,35 @@ fn fragment(in: GxVsOut) -> @location(0) vec4<f32> {
         discard;
     }
 #endif
+    return base;
+}
+
+@fragment
+fn camera_normal(in: GxVsOut) -> @location(0) vec4<f32> {
+    let base = camera_base(in);
+    return vec4<f32>(wow_normalize(in.world_normal) * 0.5 + vec3<f32>(0.5), 1.0);
+}
+
+@fragment
+fn fragment(in: GxVsOut) -> @location(0) vec4<f32> {
+    let base = camera_base(in);
+    let eye_z = -(view.view_from_world * vec4<f32>(in.world_position.xyz, 1.0)).z;
+    var ambient = wow_light.light_ambient.rgb;
+    var ao = 1.0;
+#ifdef GX_AO
+    // Indoor MOCV/probe lobes mix ambient and direct light; do not darken those.
+    if ((in.word & WORD_INTERIOR) == 0u) {
+        ao = textureLoad(gx_ambient_occlusion, vec2<i32>(in.position.xy), 0).r;
+        ambient *= ao;
+    }
+#endif
     // Both faces light from the submitted normal (no GL_LIGHT_MODEL_TWO_SIDE in the reference);
     // this pipeline never negates back faces, so it has no front-face select like wow_model.wgsl.
     let n_lit = wow_normalize(in.world_normal);
     let L = -normalize(wow_light.light_sun.xyz);
     let ndotl = max(dot(n_lit, L), 0.0);
     let lit_nl = clamp(
-        wow_light.light_ambient.rgb + wow_light.light_diffuse.rgb * ndotl,
+        ambient + wow_light.light_diffuse.rgb * ndotl,
         vec3<f32>(0.0),
         vec3<f32>(1.0),
     );
@@ -330,7 +356,7 @@ fn fragment(in: GxVsOut) -> @location(0) vec4<f32> {
             1.0,
         );
         let sun_dc = wow_light.grade.yzw * intensity;
-        let sun_lobe = vec3<f32>(
+        var sun_lobe = vec3<f32>(
             wow_light.sh_c10_r.w + sun_dc.x
                 + intensity
                     * (dot(wow_light.sh_c10_r.xyz, n_lit) + dot(wow_light.sh_c13_r, quad)
@@ -344,6 +370,9 @@ fn fragment(in: GxVsOut) -> @location(0) vec4<f32> {
                     * (dot(wow_light.sh_c10_b.xyz, n_lit) + dot(wow_light.sh_c13_b, quad)
                         + wow_light.sh_c16.z * x2y2),
         );
+#ifdef GX_AO
+        sun_lobe -= vec3<f32>(wow_light.sh_c10_r.w, wow_light.sh_c10_g.w, wow_light.sh_c10_b.w) * (1.0 - ao);
+#endif
         let lit_doodad = clamp(sun_lobe, vec3<f32>(0.0), vec3<f32>(1.0));
         // Sun disabled (light_sun.w) falls back to the FFP matte, like the entity path.
         let lit = select(lit_nl, lit_doodad, wow_light.light_sun.w > 0.5);

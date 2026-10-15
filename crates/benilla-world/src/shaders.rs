@@ -177,17 +177,23 @@ mod tests {
     }
 
     #[test]
-    fn ao_does_not_make_retained_gx_a_receiver_or_occluder() {
-        let gx_shader = include_str!("shaders/static_gx.wgsl");
-        assert!(!gx_shader.contains("screen_space_ambient_occlusion"));
+    fn retained_gx_camera_coverage_is_separate_and_ao_only() {
+        let gx = include_str!("shaders/static_gx.wgsl");
+        assert!(gx.contains("fn camera_base("));
+        assert_eq!(gx.matches("let base = camera_base(in);").count(), 2);
+        assert!(gx.contains("wow_normalize(in.world_normal) * 0.5"));
+        assert!(gx.contains("#ifdef GX_AO"));
+        assert!(gx.contains("(in.word & WORD_INTERIOR) == 0u"));
         let renderer = include_str!("static_gx/render.rs");
         assert!(renderer.contains("(Node3d::StartMainPass, StaticGxLabel, Node3d::MainOpaquePass)"));
-        assert!(!renderer.contains("Node3d::EndPrepasses"));
-        assert!(!renderer.contains("NormalPrepass"));
-        assert!(!renderer.contains("ViewPrepassTextures"));
-        assert!(renderer.contains("depth.get_attachment(StoreOp::Store)"));
-        // SSAO runs EndPrepasses -> Ssao -> StartMainPass (Bevy's core graph).
-        // GX only writes the main depth attachment afterwards, never the AO input copies.
+        let ao = include_str!("static_gx/render/ao.rs");
+        assert!(ao.contains("*msaa == Msaa::Off"));
+        assert!(ao.contains("ScreenSpaceAmbientOcclusionResources"));
+        assert!(ao.contains("copy_texture_to_texture("));
+        assert!(ao.contains("prepass_depth.texture.texture.as_image_copy()"));
+        assert!(ao.contains("resolve_regions(gx, cache)"));
+        assert!(ao.contains("draw_regions(&mut pass"));
+        assert!(renderer.contains("sel.drawn.get"));
     }
 
     #[test]
@@ -326,6 +332,16 @@ mod tests {
                 } else {
                     vec![]
                 },
+            );
+        }
+        for defs in [
+            vec!["GX_AO".into()],
+            vec!["GX_AO".into(), "GX_CUTOUT".into()],
+        ] {
+            check(
+                "static_gx_ao.wgsl",
+                include_str!("shaders/static_gx.wgsl"),
+                defs,
             );
         }
         for blend in [
