@@ -47,12 +47,13 @@ pub struct PartyMemberLocks {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
+    Queue(queue::Packet),
     PlayerInfo(PlayerInfo),
     PartyInfo(Vec<PartyMemberLocks>),
 }
 
 pub const fn handles(opcode: u16) -> bool {
-    matches!(opcode, SMSG_LFG_PLAYER_INFO | SMSG_LFG_PARTY_INFO)
+    queue::handles(opcode) || matches!(opcode, SMSG_LFG_PLAYER_INFO | SMSG_LFG_PARTY_INFO)
 }
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
@@ -78,6 +79,9 @@ fn locks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<DungeonLock>> {
 }
 /// Decode an entire body transactionally. Unknown opcodes and trailing bytes fail.
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
+    if queue::handles(opcode) {
+        return queue::decode(opcode, body).map(Packet::Queue);
+    }
     let mut r = Cursor::new(body);
     let packet = match opcode {
         SMSG_LFG_PLAYER_INFO => {
@@ -153,3 +157,5 @@ impl Command {
 
 #[cfg(test)]
 mod tests;
+
+pub mod queue;
