@@ -27,7 +27,13 @@ impl MovementAuthorityHandle {
             return;
         }
         // Preserve the consumed marker for a duplicate delivery of the same server spline.
-        if *flying && !stop && !cyclic && transport.is_none() {
+        if !state.transfer_waiting
+            && !state.transfer_transport
+            && *flying
+            && !stop
+            && !cyclic
+            && transport.is_none()
+        {
             if state.taxi_spline.map(|(id, _)| id) != Some(*spline_id) {
                 state.taxi_spline = Some((*spline_id, false));
             }

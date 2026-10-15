@@ -1142,6 +1142,7 @@ pub(crate) enum ClientCommand {
     },
     /// `MSG_MOVE_WORLDPORT_ACK`: unblocks the new map's stream.
     WorldportAck,
+    NativeWorldportAck(benilla_protocol::wrath_transfer::Token),
     /// `CMSG_SET_SELECTION`; `guid == 0` clears.
     SetSelection {
         guid: u64,
@@ -2478,6 +2479,7 @@ pub(crate) struct WorldportMessage {
     pub(crate) position: [f32; 3],
     pub(crate) orientation: f32,
     pub(crate) needs_ack: bool,
+    pub(crate) native_token: Option<benilla_protocol::wrath_transfer::Token>,
     /// The transport carrying us, from `SMSG_TRANSFER_PENDING` ([`PendingTransfer`]). `None`
     /// means the server detached us and any ride is stale.
     pub(crate) transport_entry: Option<u32>,

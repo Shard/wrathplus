@@ -5,6 +5,9 @@
 
 mod recorder;
 
+#[path = "wrath/transfer_authority.rs"]
+mod transfer_authority;
+
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -436,6 +439,13 @@ fn run(
                         .unwrap_or_else(|p| p.into_inner())
                         .record_pong(sequence);
                 }
+                0x003e | 0x003f | 0x0040 => {
+                    let packet = match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body) {
+                        Ok(packet) => packet,
+                        Err(error) => { authority.revoke(); return Err(error.into()); }
+                    };
+                    authority.publish_transfer(packet, |event| send(events, event))?;
+                }
                 SMSG_CLIENT_CONTROL_UPDATE => {
                     let (mover, allow_move) = client_control_update(&packet.body)?;
                     authority.observe_control(mover, allow_move)?;
@@ -651,6 +661,10 @@ struct MovementAuthorityState {
     last_order_counter: Option<u32>,
     rooted: bool,
     taxi_spline: Option<(u32, bool)>,
+    transfer_sequence: u64,
+    transfer_ack: Option<benilla_protocol::wrath_transfer::Token>,
+    transfer_waiting: bool,
+    transfer_transport: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -680,6 +694,10 @@ impl MovementAuthority {
             last_order_counter: None,
             rooted: false,
             taxi_spline: None,
+            transfer_sequence: 0,
+            transfer_ack: None,
+            transfer_waiting: false,
+            transfer_transport: false,
         };
         MovementAuthorityHandle {
             shared: Arc::clone(self),
@@ -693,6 +711,9 @@ impl MovementAuthorityHandle {
     fn observe_self_create(&self, guid: u64, movement: &MovementPosition) -> Result<()> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(());
+        }
+        if state.transfer_waiting || state.transfer_transport {
             return Ok(());
         }
         if guid != self.self_guid {
@@ -764,6 +785,7 @@ impl MovementAuthorityHandle {
             state.self_control = false;
             state.control_decided = true;
             state.taxi_spline = None;
+            state.transfer_ack = None;
         }
     }
 
@@ -982,6 +1004,7 @@ enum WrathRoute {
     NativeLfg,
     NativeGuild,
     NativeChat,
+    NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -995,6 +1018,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
+        ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
@@ -1273,6 +1297,10 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeWorldportAck => {
+                        let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
+                        active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
                     WrathRoute::NativeChat => {
                         let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
                         match benilla_protocol::wrath_chat::encode(&command) {
