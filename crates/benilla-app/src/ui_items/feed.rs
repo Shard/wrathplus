@@ -3,6 +3,8 @@
 
 #[cfg(test)]
 mod descriptor_tests;
+#[cfg(test)]
+mod item_spell_tests;
 
 use std::collections::{HashMap, HashSet};
 
@@ -231,7 +233,14 @@ fn template_view(
             .filter(|s| s.spell_id != 0)
             .filter_map(|s| spell_text(s.spell_id).map(|n| (s.trigger, s.spell_id, n)))
             .collect(),
-        item_spells: Vec::new(),
+        // Raw template order, not tooltip descriptions: unnamed and undescribed spells
+        // remain available to Wrath item APIs; selection belongs to the UI binding.
+        item_spells: t
+            .spells
+            .iter()
+            .filter(|s| s.spell_id != 0)
+            .map(|s| (s.trigger, s.spell_id, spell_name(s.spell_id)))
+            .collect(),
         charges: charges_count(&t.spells),
         description: t.description.clone(),
         page_text: t.page_text,
