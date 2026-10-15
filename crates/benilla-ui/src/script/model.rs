@@ -717,6 +717,7 @@ pub(crate) struct Model {
     pub(crate) item_text_page_turns: Vec<i32>,
     /// The open inbox and mail calls, rows 1-based: `mail_opens` are rows `GetInboxText` read.
     pub(crate) mail: Option<mail::MailState>,
+    pub(crate) wrath_mail: Option<mail::wrath::Inbox>,
     pub(crate) mail_check_inbox: bool,
     pub(crate) mail_opens: Vec<u32>,
     pub(crate) mail_take_items: Vec<u32>,
@@ -1355,6 +1356,7 @@ impl Model {
             item_text_close: false,
             item_text_page_turns: Vec::new(),
             mail: None,
+            wrath_mail: None,
             mail_check_inbox: false,
             mail_opens: Vec::new(),
             mail_take_items: Vec::new(),
