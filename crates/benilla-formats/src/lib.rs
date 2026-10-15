@@ -936,3 +936,6 @@ mod tests {
         let _ = std::fs::remove_file(&out);
     }
 }
+
+/// Native Wrath liquid metadata catalogs.
+pub mod wrath_liquid;

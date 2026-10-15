@@ -126,3 +126,30 @@ tests; this worker never launches the game client.
 Shader changes require prior Experience coordination. Preserve stage binding
 100's nine-vec4 ABI, second-image bindings 101/102, shared-light ABI and Classic
 disabled-path bytes; do not change model/terrain lighting while adding parsing.
+
+## Liquid metadata catalog evidence (build 12340)
+
+`benilla_formats::wrath_liquid::load_liquid_catalogs(&mut Chain)` reads the
+required tables through the caller's resolved Wrath chain. It preserves all
+45/3 serialized words, source row order and duplicate rows. ID lookup follows
+native last-duplicate-wins behavior; absent IDs/joins remain `None`. This is
+separate from the existing Vanilla MCLQ geometry module `liquid`.
+
+LiquidType raw loader `0x65d9b0` calls `0x8b2720` at 180-byte stride;
+LiquidMaterial loader `0x65b780` calls `0x8b2aa0` at 12-byte stride. Both construct
+a zero-filled ID index, overwriting earlier duplicate pointers. The latter
+loader is shared; its liquid binding comes from vtable `0xa28280`, not stride
+alone. Type decoder preserves word order and rebases string words 1 and 15–20;
+Material decoder reads three words directly. Static primary-vtable references
+bind Type object `0xad4064` to `0xa28258`, Material `0xad4088` to `0xa28280`.
+The routines `0x665930`/`0x665980` and `0x9d8830`/`0x9d8870` are cleanup, not
+constructors/initializers. Functions `0x65ffc0`/`0x65e370` copy by ordinal, not ID.
+
+Terrain consumer `0x7c5690` and WMO consumer `0x793d20` join Type `+0x38`
+(column 14) to Material ID, then use Material `+4` (column 1) as a render
+selector. `0x79b870` accepts selectors 0/2 and uses Type `+0xa4` to index a
+pointer table. Type `+8` is consumed as flags (for example `0x793d20` tests
+`0x200`). These observations do **not** establish numeric water/lava labels,
+MH2O vertex-format policy, texture animation equations or complete rendering
+parity. Catalog accessors expose the verified join, raw flags and raw selector;
+remaining words stay uninterpreted. Required read/string/decode errors propagate.
