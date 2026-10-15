@@ -197,10 +197,35 @@ triangle offsets `(0,S,S+1)` and `(0,S+1,1)` for row stride S. The new surface
 uses these triangles for admitted cells without the native outcode clipping.
 Malformed public layers/nonfinite positions fail closed as a safety policy.
 
-UV consumer `0x7ce390` branches on the **material render selector**, not the MH2O
-vertex selector: render selector 1 fetches unsigned u16 pairs through provider
-vtable +0xC and multiplies by 3/256 (`0xa40414`); otherwise transformed XY is
-multiplied by approximately 0.06 (`0xa40410`). These facts do not justify selecting
-materials from vertex formats; this unit deliberately leaves UV words raw.
+UV consumer `0x7ce390` branches on the **MH2O vertex selector**, not the joined
+LiquidMaterial render selector. Producer `0x7c5690` copies instance u16 at +2
+to surface +8 (`liquid-build.log`); `0x7ce390` tests that field against 1.
+Selector 1 fetches unsigned u16 pairs through provider vtable +0xC and multiplies
+by 3/256 (`0xa40414`); otherwise the first two coordinates produced by transform
+`0x4c21b0` are multiplied by approximately 0.06 (`0xa40410`). Experience's
+separate renderer audit owns the full Classic batch-matrix closure and verified
+native-world UV equation; this loader unit retains raw provenance only and does
+not reconstruct that transform or claim header/native rounding equivalence.
+This corrects an earlier audit description that conflated the surface selector
+with the catalog material selector. The geometry unit leaves UV words raw and
+never used that mistaken interpretation for production behavior.
 Native local-coordinate arithmetic/rounding is not reproduced by the explicit
-placement API. Renderer integration must supply and verify placement separately.
+placement API. Owner-origin helper `0x7c64b0` reconstructs coordinates as
+`17066.666015625 - global_chunk_index * 33.33333206176758`, rather than reading
+MCNK header XY; the handoff deliberately retains header-based placement and
+must not claim native rounding parity. Renderer integration must supply and
+verify placement separately.
+
+Loader handoff builds `TileMesh.wrath_liquids` from original MCNK headers before
+terrain filtering: no-MCVT chunks still contribute liquids. Native `0x8a3070`
+indexes entries as `index_y * 16 + index_x`; vector ordinal is not a substitute.
+Positions use unsnapped header XY and signed `CHUNK_SIZE/8` spacing, retaining
+absolute liquid heights independently of header Z. `AdtTile.wrath_liquids`
+forwards these surfaces without changing source override precedence, provenance,
+MCLQ geometry, catalogs, materials or lighting. Raw `mh2o` remains available.
+
+Tile-built surfaces also retain `parent: Some(WrathLiquidParent)` with tile-local
+`[index_x, index_y]` and exact original header XYZ. Generic explicit-placement
+surfaces have `parent: None`. This is raw provenance, not native-origin or UV
+phase reconstruction; positions and topology remain unchanged. It lets consumers
+recover parent grouping without relying on filtered terrain chunks.
