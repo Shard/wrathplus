@@ -58,10 +58,12 @@ impl UiScript {
 }
 
 mod choices;
+mod order;
 pub use choices::WrathLfgGroup;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     choices::install(lua)?;
+    order::install(lua)?;
     lua.globals().set(
         "GetLFGDungeonInfo",
         lua.create_function(|lua, id: Value| {
