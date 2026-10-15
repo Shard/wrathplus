@@ -22,10 +22,154 @@ impl UiScript {
     }
 }
 
+/// 0x5551e0: clear/reuse the optional result table, then expose the LFD/LFR union.
+/// These are catalog choice filters, not player eligibility or server queue state.
+pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "GetLFDChoiceInfo",
+        lua.create_function(|lua, value: mlua::Value| {
+            let output = match value {
+                mlua::Value::Nil => lua.create_table()?,
+                mlua::Value::Table(table) => {
+                    table.clear()?;
+                    table
+                }
+                _ => {
+                    return Err(mlua::Error::RuntimeError(
+                        "Usage: GetLFDChoiceInfo([table])".into(),
+                    ))
+                }
+            };
+            let model = lua.app_data_ref::<super::Model>().expect("model app_data");
+            let state = &model.wrath_lfg;
+            // 0x558350/0x558520: LFD qualifying dungeons plus nonzero-type headers;
+            // LFR type-2 dungeons plus all headers. LFR fills only keys absent from LFD.
+            for raid in [false, true] {
+                for row in &state.catalog.dungeons {
+                    let included = if raid {
+                        row.dungeon_type == 2
+                    } else {
+                        row.flags & 2 != 0 && row.flags & 4 == 0 && row.dungeon_type != 6
+                    };
+                    let key = row.id as i32;
+                    if !included
+                        || (raid
+                            && !matches!(output.raw_get::<mlua::Value>(key)?, mlua::Value::Nil))
+                    {
+                        continue;
+                    }
+                    // Native builders resolve choice IDs through the runtime lookup table.
+                    let row = state
+                        .catalog
+                        .dungeons
+                        .iter()
+                        .find(|r| r.id == row.id)
+                        .unwrap();
+                    let values = super::dungeon_info(lua, state, row)?;
+                    let info = lua.create_table()?;
+                    for (index, value) in values.into_iter().enumerate() {
+                        info.raw_set(index + 1, value)?;
+                    }
+                    output.raw_set(key, info)?;
+                }
+                for row in state.groups.iter() {
+                    if !raid && row.dungeon_type == 0 {
+                        continue;
+                    }
+                    let key = (row.id as i32).wrapping_neg();
+                    if raid && !matches!(output.raw_get::<mlua::Value>(key)?, mlua::Value::Nil) {
+                        continue;
+                    }
+                    let row = state.groups.iter().find(|r| r.id == row.id).unwrap();
+                    let info = lua.create_table()?;
+                    info.raw_set(1, row.name.as_str())?;
+                    info.raw_set(2, row.dungeon_type)?;
+                    output.raw_set(key, info)?;
+                }
+            }
+            Ok(output)
+        })?,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::script::{ScriptDialect, WrathLfgCatalog};
+
+    #[test]
+    fn choice_union_reuses_table_and_preserves_tuple_holes() {
+        use crate::script::WrathLfgDungeon;
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.set_wrath_lfg_catalog(
+            Arc::new(WrathLfgCatalog {
+                dungeons: vec![
+                    WrathLfgDungeon {
+                        id: 1,
+                        name: "LFD".into(),
+                        flags: 2,
+                        dungeon_type: 1,
+                        ..Default::default()
+                    },
+                    WrathLfgDungeon {
+                        id: 2,
+                        name: "Raid".into(),
+                        flags: 4,
+                        dungeon_type: 2,
+                        ..Default::default()
+                    },
+                    WrathLfgDungeon {
+                        id: 3,
+                        flags: 6,
+                        dungeon_type: 1,
+                        ..Default::default()
+                    },
+                    WrathLfgDungeon {
+                        id: 4,
+                        flags: 2,
+                        dungeon_type: 6,
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }),
+            None,
+        );
+        script.set_wrath_lfg_groups(Arc::new(vec![
+            WrathLfgGroup {
+                id: 5,
+                name: "Header".into(),
+                dungeon_type: 1,
+                ..Default::default()
+            },
+            WrathLfgGroup {
+                id: 6,
+                name: "Raid header".into(),
+                ..Default::default()
+            },
+        ]));
+        script
+            .eval::<()>(
+                r#"
+            local t = {old=true, [42]=1}
+            assert(GetLFDChoiceInfo(t) == t)
+            assert(t.old == nil and t[42] == nil)
+            assert(t[1][1] == "LFD" and t[1][2] == 1)
+            assert(t[1][12] == nil and t[1][13] == "" and t[1][14] == false)
+            assert(t[2][1] == "Raid" and t[2][14] == true)
+            assert(t[3] == nil and t[4] == nil)
+            assert(t[-5][1] == "Header" and t[-5][2] == 1 and t[-5][3] == nil)
+            assert(t[-6][1] == "Raid header" and t[-6][2] == 0)
+            assert(not pcall(GetLFDChoiceInfo, false))
+            assert(not pcall(GetLFDChoiceInfo, "1"))
+        "#,
+            )
+            .unwrap();
+        let vanilla = UiScript::new().unwrap();
+        assert!(vanilla
+            .eval::<bool>("return GetLFDChoiceInfo == nil")
+            .unwrap());
+    }
 
     #[test]
     fn independent_metadata_setters_preserve_shared_inputs() {

@@ -61,6 +61,7 @@ mod choices;
 pub use choices::WrathLfgGroup;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    choices::install(lua)?;
     lua.globals().set(
         "GetLFGDungeonInfo",
         lua.create_function(|lua, id: Value| {
@@ -71,66 +72,72 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some(row) = state.catalog.dungeons.iter().find(|row| row.id == id) else {
                 return Ok(MultiValue::new());
             };
-            let mut bounds = [
-                row.min_level,
-                row.max_level,
-                row.target_min_level,
-                row.target_max_level,
-            ];
-            // 0x6349f0: stop when the matching dungeon's contiguous group ends; first expansion
-            // match wins. Never sort this table, or substitute a different expansion's row.
-            let mut found_group = false;
-            for entry in &state.catalog.expansions {
-                if entry[1] != id {
-                    if found_group {
-                        break;
-                    }
-                    continue;
-                }
-                found_group = true;
-                if state
-                    .expansion
-                    .is_some_and(|expansion| entry[2] == u32::from(expansion))
-                {
-                    bounds = [
-                        entry[4] as i32,
-                        entry[5] as i32,
-                        entry[6] as i32,
-                        entry[7] as i32,
-                    ];
-                    break;
-                }
-            }
-            // 0x634950: exact map/difficulty lookup, no fallback. The getter exposes nil on miss.
-            let maximum = state
-                .catalog
-                .map_difficulties
-                .iter()
-                .skip_while(|&&(map, _, _)| map != row.map_id)
-                .take_while(|&&(map, _, _)| map == row.map_id)
-                .find(|&&(_, difficulty, _)| difficulty == row.difficulty)
-                .map(|&(_, _, maximum)| Value::Integer(maximum as i64))
-                .unwrap_or(Value::Nil);
-            let text = |s: &str| lua.create_string(s).map(Value::String);
-            let number = |n: i32| Value::Integer(n as i64);
-            Ok(MultiValue::from_vec(vec![
-                text(&row.name)?,
-                number(row.dungeon_type),
-                number(bounds[0]),
-                number(bounds[1]),
-                number(row.target_level),
-                number(bounds[2]),
-                number(bounds[3]),
-                number(row.expansion),
-                number(row.group_id),
-                text(&row.texture)?,
-                number(row.difficulty),
-                maximum,
-                text(&row.description)?,
-                Value::Boolean(row.flags & 4 != 0),
-            ]))
+            dungeon_info(lua, state, row)
         })?,
     )
+}
+
+// Shared by the scalar getter and choice-info array builder (0x554e60).
+fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result<MultiValue> {
+    let id = row.id;
+    let mut bounds = [
+        row.min_level,
+        row.max_level,
+        row.target_min_level,
+        row.target_max_level,
+    ];
+    // 0x6349f0: stop when the matching dungeon's contiguous group ends; first expansion
+    // match wins. Never sort this table, or substitute a different expansion's row.
+    let mut found_group = false;
+    for entry in &state.catalog.expansions {
+        if entry[1] != id {
+            if found_group {
+                break;
+            }
+            continue;
+        }
+        found_group = true;
+        if state
+            .expansion
+            .is_some_and(|expansion| entry[2] == u32::from(expansion))
+        {
+            bounds = [
+                entry[4] as i32,
+                entry[5] as i32,
+                entry[6] as i32,
+                entry[7] as i32,
+            ];
+            break;
+        }
+    }
+    // 0x634950: exact map/difficulty lookup, no fallback. The getter exposes nil on miss.
+    let maximum = state
+        .catalog
+        .map_difficulties
+        .iter()
+        .skip_while(|&&(map, _, _)| map != row.map_id)
+        .take_while(|&&(map, _, _)| map == row.map_id)
+        .find(|&&(_, difficulty, _)| difficulty == row.difficulty)
+        .map(|&(_, _, maximum)| Value::Integer(maximum as i64))
+        .unwrap_or(Value::Nil);
+    let text = |s: &str| lua.create_string(s).map(Value::String);
+    let number = |n: i32| Value::Integer(n as i64);
+    Ok(MultiValue::from_vec(vec![
+        text(&row.name)?,
+        number(row.dungeon_type),
+        number(bounds[0]),
+        number(bounds[1]),
+        number(row.target_level),
+        number(bounds[2]),
+        number(bounds[3]),
+        number(row.expansion),
+        number(row.group_id),
+        text(&row.texture)?,
+        number(row.difficulty),
+        maximum,
+        text(&row.description)?,
+        Value::Boolean(row.flags & 4 != 0),
+    ]))
 }
 
 #[cfg(test)]
