@@ -1546,3 +1546,46 @@ fn public_accessor_fixture_census_has_no_unreviewed_reader() {
         }
     }
 }
+
+#[test]
+fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let absent = fixture(layout, &[]);
+        assert!(!absent.unit_pet_can_be_renamed());
+        assert!(!absent.unit_pet_can_be_abandoned());
+        for field in [Field::UnitFlags, Field::UnitBytes2] {
+            for bit in 0..32 {
+                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+                let (source, rename_bit, abandon_bit) = match layout {
+                    FieldLayout::Vanilla5875 => (Field::UnitFlags, 4, 5),
+                    FieldLayout::Wrath12340 => (Field::UnitBytes2, 16, 17),
+                };
+                assert_eq!(
+                    fields.unit_pet_can_be_renamed(),
+                    field == source && bit == rename_bit,
+                    "rename {layout:?} {field:?} bit {bit}"
+                );
+                assert_eq!(
+                    fields.unit_pet_can_be_abandoned(),
+                    field == source && bit == abandon_bit,
+                    "abandon {layout:?} {field:?} bit {bit}"
+                );
+            }
+        }
+        let both = fixture(
+            layout,
+            &[
+                (Field::UnitFlags, 0, u32::MAX),
+                (Field::UnitBytes2, 0, u32::MAX),
+            ],
+        );
+        assert!(both.unit_pet_can_be_renamed());
+        assert!(both.unit_pet_can_be_abandoned());
+        let zero = fixture(
+            layout,
+            &[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
+        );
+        assert!(!zero.unit_pet_can_be_renamed());
+        assert!(!zero.unit_pet_can_be_abandoned());
+    }
+}
