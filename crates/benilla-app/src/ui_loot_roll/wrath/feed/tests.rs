@@ -338,3 +338,5 @@ fn stale_or_expired_queued_native_vote_cannot_send() {
         assert!(rx.is_empty());
     }
 }
+
+mod interactions;
