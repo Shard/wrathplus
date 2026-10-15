@@ -303,3 +303,5 @@ mod host_port_tests {
 mod wrath_native_stream_tests;
 
 pub mod wrath_pet;
+
+pub mod wrath_chat;
