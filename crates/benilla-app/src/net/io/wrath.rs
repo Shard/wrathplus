@@ -981,6 +981,7 @@ enum WrathRoute {
     NativeSession,
     NativeLfg,
     NativeGuild,
+    NativeChat,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -993,6 +994,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
@@ -1271,6 +1273,16 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeChat => {
+                        let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
+                        match benilla_protocol::wrath_chat::encode(&command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid native chat rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
                     WrathRoute::NativeArenaTeam => {
                         let ClientCommand::ArenaTeamCommand(command) = command else { unreachable!() };
                         match arena_team_packet(&command) {
@@ -3103,3 +3115,7 @@ fn arena_team_packet(command: &benilla_protocol::wrath_arena_team::Command) -> s
 #[cfg(test)]
 #[path = "wrath/arena_team_tests.rs"]
 mod arena_team_tests;
+
+#[cfg(test)]
+#[path = "wrath/chat_tests.rs"]
+mod chat_tests;
