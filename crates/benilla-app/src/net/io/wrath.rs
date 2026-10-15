@@ -980,6 +980,7 @@ enum WrathRoute {
     NativeLoot,
     NativeSession,
     NativeLfg,
+    NativeGuild,
     DisabledMovement,
     DisabledGameAction,
     DeferredReadOnlyQuery,
@@ -987,6 +988,10 @@ enum WrathRoute {
 
 fn route(command: &ClientCommand) -> WrathRoute {
     match command {
+        ClientCommand::GuildQuery { .. } | ClientCommand::GuildInfoRequest | ClientCommand::GuildRosterRequest
+        | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
+        | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
+        | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
@@ -1264,6 +1269,15 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeGuild => {
+                        match guild_packet(command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid guild command rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
                     WrathRoute::NativeLfg => {
                         let ClientCommand::LfgCommand(command) = command else { unreachable!() };
                         match lfg_packet(&command) {
@@ -3049,3 +3063,24 @@ fn stable_packet(command: benilla_protocol::wrath_stable::Command) -> (u32, Vec<
 #[cfg(test)]
 #[path = "wrath/stable_tests.rs"]
 mod stable_tests;
+
+fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_guild_commands::Command as G;
+    let command = match command {
+        ClientCommand::GuildQuery { guild_id } => G::Query { guild_id },
+        ClientCommand::GuildInfoRequest => G::Info,
+        ClientCommand::GuildRosterRequest => G::Roster,
+        ClientCommand::GuildInvite { name } => G::Invite { name: name.into_bytes() },
+        ClientCommand::GuildAccept => G::Accept,
+        ClientCommand::GuildDecline => G::Decline,
+        ClientCommand::GuildPromote { name } => G::Promote { name: name.into_bytes() },
+        ClientCommand::GuildDemote { name } => G::Demote { name: name.into_bytes() },
+        ClientCommand::GuildRemove { name } => G::Remove { name: name.into_bytes() },
+        ClientCommand::GuildMotd { motd } => G::Motd { text: motd.into_bytes() },
+        _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a native core guild command")),
+    };
+    Ok((command.opcode(), command.encode()?))
+}
+#[cfg(test)]
+#[path = "wrath/guild_tests.rs"]
+mod guild_tests;
