@@ -149,12 +149,16 @@ fn wire_string(r: &mut Cursor<&[u8]>) -> io::Result<Vec<u8>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
     Contents(Contents),
+    Log(crate::wrath_guild_bank_log::Log),
     Permissions(Permissions),
     RemainingMoney { remaining: i32 },
 }
 
 /// Decode a complete reply. No event or state mutation occurs here.
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
+    if opcode == crate::wrath_guild_bank_log::MSG_GUILD_BANK_LOG_QUERY {
+        return crate::wrath_guild_bank_log::decode(body).map(Packet::Log);
+    }
     let mut r = Cursor::new(body);
     let packet = match opcode {
         SMSG_GUILD_BANK_LIST => Packet::Contents(contents(&mut r)?),
