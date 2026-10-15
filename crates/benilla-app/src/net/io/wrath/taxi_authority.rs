@@ -1,8 +1,24 @@
 use super::*;
 
 impl MovementAuthorityHandle {
-    pub(super) fn send_logout<T>(&self, send: impl FnOnce() -> T) -> T {
-        self.revoke();
+    // Native 006b1930 only sets the pending flag. Server root/unroot owns freezing;
+    // neither request nor cancel may revoke or recreate ground/taxi authority.
+    pub(super) fn send_logout(&self, send: impl FnOnce() -> Result<()>) -> Result<()> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || state.logout_pending {
+            return Ok(());
+        }
+        state.logout_pending = true;
+        send()
+    }
+
+    pub(super) fn send_logout_cancel(&self, send: impl FnOnce() -> Result<()>) -> Result<()> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(());
+        }
+        // Native 006b18c0 clears immediately, not upon receipt of the untagged ACK.
+        state.logout_pending = false;
         send()
     }
 
