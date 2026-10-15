@@ -509,3 +509,32 @@ fn on_cursor_changed_reports_the_first_row_at_plus_zero() {
     );
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
+
+/// Wrath SetCursorPosition (0x9769a0 -> 0x963350) is a byte-offset setter which
+/// dirties the caret even at the same position. DebugTools uses it after SetText;
+/// its named OnCursorChanged handler must run before the following scroll update.
+#[test]
+fn wrath_debugtools_cursor_setter_drives_scrolling_edit_geometry() {
+    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    s.set_text_measurer(Box::new(Mono));
+    s.set_screen_size(800.0, 600.0);
+    s.run(r#"
+        E = CreateFrame('EditBox'); E:SetAutoFocus(false); E:SetMultiLine(true)
+        E:SetSize(300, 194); E:SetPoint('BOTTOMLEFT', 0, 0)
+        calls = 0
+        E:SetScript('OnCursorChanged', function(self,x,y,w,h)
+            self.cursorOffset = y; self.cursorHeight = h; calls = calls + 1
+        end)
+        E:SetText('error\nstack'); E:HighlightText(0); E:SetCursorPosition(0)
+        assert(calls == 0) -- native setter does not flush
+    "#).unwrap();
+    s.resolve(); s.tick(0.016);
+    s.run("assert(calls == 1); assert(-E.cursorOffset == 0); assert(E.cursorHeight == 14); E:SetCursorPosition(999)").unwrap();
+    s.tick(0.016);
+    s.run("assert(calls == 2 and E.cursorOffset == -14); E:SetCursorPosition('999')").unwrap();
+    s.tick(0.016);
+    s.run("assert(calls == 3); E:SetCursorPosition(-10)").unwrap();
+    s.tick(0.016);
+    s.run("assert(calls == 4 and E.cursorOffset == 0); assert(not pcall(E.SetCursorPosition,E,true))").unwrap();
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+}
