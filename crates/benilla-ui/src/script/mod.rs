@@ -153,6 +153,8 @@ mod worn_display;
 mod wrath_currency;
 mod wrath_equipment;
 mod wrath_modifiers;
+mod wrath_achievements;
+pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
 mod wrath_tutorial;
 pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
@@ -755,6 +757,7 @@ impl UiScript {
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;
+            wrath_achievements::install(&lua)?;
             wrath_tutorial::install(&lua)?;
         }
 
