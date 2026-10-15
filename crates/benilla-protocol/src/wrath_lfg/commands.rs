@@ -4,6 +4,7 @@
 //! HandleLfgSetRolesOpcode,HandleLfgSetCommentOpcode}.
 use std::io;
 
+pub const CMSG_LFG_PROPOSAL_RESULT: u32 = 0x0362;
 pub const CMSG_LFG_JOIN: u32 = 0x035c;
 pub const CMSG_LFG_LEAVE: u32 = 0x035d;
 pub const CMSG_LFG_GET_STATUS: u32 = 0x0296;
@@ -43,6 +44,14 @@ fn comment_bytes(comment: &str) -> io::Result<Vec<u8>> {
 /// Raw role bits are preserved; the reducer decides which choices to send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// Reply to the active proposal ID, never the dungeon entry.
+    /// Native sender 0x00554450 writes u32 ID + canonical accept byte;
+    /// bindings 0x005545e0/0x00554600 supply true/false respectively.
+    /// Active-ID selection, guards and lifecycle remain App/UI policy.
+    ProposalResult {
+        proposal_id: u32,
+        accept: bool,
+    },
     Join(Join),
     Leave,
     GetStatus,
@@ -52,6 +61,7 @@ pub enum Command {
 impl Command {
     pub const fn opcode(&self) -> u32 {
         match self {
+            Self::ProposalResult { .. } => CMSG_LFG_PROPOSAL_RESULT,
             Self::Join(_) => CMSG_LFG_JOIN,
             Self::Leave => CMSG_LFG_LEAVE,
             Self::GetStatus => CMSG_LFG_GET_STATUS,
@@ -63,6 +73,14 @@ impl Command {
     /// Comments are UTF-8 C strings; an embedded NUL cannot be represented.
     pub fn encode(&self) -> io::Result<Vec<u8>> {
         match self {
+            Self::ProposalResult {
+                proposal_id,
+                accept,
+            } => {
+                let mut bytes = proposal_id.to_le_bytes().to_vec();
+                bytes.push(u8::from(*accept));
+                Ok(bytes)
+            }
             Self::Leave | Self::GetStatus => Ok(Vec::new()),
             Self::SetRoles(roles) => Ok(vec![*roles]),
             Self::SetComment(comment) => comment_bytes(comment),
@@ -217,5 +235,26 @@ mod join_tests {
             Command::Join(value).encode().unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+}
+
+#[cfg(test)]
+mod proposal_result_tests {
+    use super::*;
+    #[test]
+    fn independent_accept_reject_fixtures_use_proposal_identity_and_bool_width() {
+        for (id, accept, body) in [
+            (0x80abcdef, true, vec![0xef, 0xcd, 0xab, 0x80, 1]),
+            (0x01020304, false, vec![4, 3, 2, 1, 0]),
+            (0, false, vec![0; 5]),
+            (u32::MAX, true, vec![0xff, 0xff, 0xff, 0xff, 1]),
+        ] {
+            let command = Command::ProposalResult {
+                proposal_id: id,
+                accept,
+            };
+            assert_eq!(command.opcode(), 0x0362);
+            assert_eq!(command.encode().unwrap(), body);
+        }
     }
 }
