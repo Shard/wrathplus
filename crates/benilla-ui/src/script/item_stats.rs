@@ -76,6 +76,11 @@ pub struct ItemTemplateView {
     /// Green trigger-spell lines `(trigger, spell id, text)` in wire order: 0 and 5 "Use:",
     /// 1 "Equip:", 2 "Chance on hit:", 6 a taught spell (no line, only the "Already known" red).
     pub spell_triggers: Vec<(u32, u32, String)>,
+    /// Raw template spells `(trigger, nonzero spell id, localized name)` in wire order.
+    /// Unlike tooltip descriptions, an unavailable name remains `None`; entries are not
+    /// filtered by trigger or description availability. This is input data, not GetItemSpell's
+    /// return contract (the installed Wrath binding returns name and rank, not spell id).
+    pub item_spells: Vec<(u32, u32, Option<String>)>,
     pub lock_id: u32,
     /// "N Charge(s)" for the first spell slot past the builder's gate (`0x52db51`: 0 and -1
     /// print nothing, else the absolute value); 0 prints no line.
