@@ -295,3 +295,141 @@ mod tests {
         }
     }
 }
+
+/// Native actions are independently checked again by the authoritative App lifecycle on drain.
+pub(in crate::script) fn install_actions(lua: &mlua::Lua) -> mlua::Result<()> {
+    for (name, confirm) in [("RollOnLoot", false), ("ConfirmLootRoll", true)] {
+        lua.globals().set(
+            name,
+            lua.create_function(move |lua, (id, vote): (u32, u8)| {
+                let mut model = lua
+                    .app_data_mut::<super::super::Model>()
+                    .expect("model app_data");
+                let Some(entry) = model
+                    .wrath_loot_rolls
+                    .rolls
+                    .iter()
+                    .find(|e| e.roll_id == id)
+                else {
+                    return Ok(());
+                };
+                if vote > 3 || entry.time_left_ms == 0 {
+                    return Ok(());
+                }
+                // Build 12340 0x6fbc70 prompts before testing the server mask.
+                let prompt = vote != 0
+                    && if vote == 3 {
+                        entry.quality.is_some_and(|q| (q as i32) > 2)
+                    } else {
+                        entry.bind_on_pickup
+                    };
+                if !confirm && prompt {
+                    model.loot_roll_confirms.push((id, vote));
+                } else if entry.permits(vote) {
+                    model.loot_roll_votes.push((id, vote));
+                }
+                Ok(())
+            })?,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod action_tests {
+    use super::*;
+    use crate::script::{ScriptDialect, UiScript};
+    #[test]
+    fn native_actions_never_grant_votes_outside_any_server_mask() {
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        for mask in 0..=u8::MAX {
+            script.set_wrath_loot_rolls(State {
+                rolls: vec![Entry {
+                    roll_id: 7,
+                    vote_mask: mask,
+                    time_left_ms: 1000,
+                    ..Default::default()
+                }],
+            });
+            for vote in 0..=u8::MAX {
+                script
+                    .run(&format!("RollOnLoot(7,{vote}); ConfirmLootRoll(7,{vote})"))
+                    .unwrap();
+                let votes = script.take_loot_roll_votes();
+                let expected = vote <= 3 && mask & (1 << vote) != 0;
+                assert_eq!(votes, if expected { vec![(7, vote); 2] } else { vec![] });
+                assert!(script.take_loot_roll_confirms().is_empty());
+            }
+        }
+    }
+    #[test]
+    fn native_bop_confirmation_and_expiry_do_not_fall_through_to_vanilla() {
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.set_wrath_loot_rolls(State {
+            rolls: vec![Entry {
+                roll_id: 7,
+                vote_mask: 15,
+                time_left_ms: 1000,
+                bind_on_pickup: true,
+                quality: Some(3),
+                ..Default::default()
+            }],
+        });
+        script
+            .run("RollOnLoot(7,3); RollOnLoot(7,0); ConfirmLootRoll(7,3); RollOnLoot(8,1)")
+            .unwrap();
+        assert_eq!(script.take_loot_roll_confirms(), vec![(7, 3)]);
+        assert_eq!(script.take_loot_roll_votes(), vec![(7, 0), (7, 3)]);
+        script.set_wrath_loot_rolls(State {
+            rolls: vec![Entry {
+                roll_id: 7,
+                vote_mask: 15,
+                time_left_ms: 0,
+                ..Default::default()
+            }],
+        });
+        script.run("RollOnLoot(7,1); ConfirmLootRoll(7,1)").unwrap();
+        assert!(script.take_loot_roll_votes().is_empty());
+        assert!(script.take_loot_roll_confirms().is_empty());
+    }
+    #[test]
+    fn native_disenchant_prompt_is_signed_quality_not_bonding_and_mask_only_gates_send() {
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        for quality in [0, 2, 3, 4, u32::MAX] {
+            for bop in [false, true] {
+                script.set_wrath_loot_rolls(State {
+                    rolls: vec![Entry {
+                        roll_id: 7,
+                        vote_mask: 8,
+                        time_left_ms: 1000,
+                        quality: Some(quality),
+                        bind_on_pickup: bop,
+                        ..Default::default()
+                    }],
+                });
+                script.run("RollOnLoot(7,3)").unwrap();
+                let prompt = (quality as i32) > 2;
+                assert_eq!(
+                    script.take_loot_roll_confirms(),
+                    if prompt { vec![(7, 3)] } else { vec![] }
+                );
+                assert_eq!(
+                    script.take_loot_roll_votes(),
+                    if prompt { vec![] } else { vec![(7, 3)] }
+                );
+            }
+        }
+        script.set_wrath_loot_rolls(State {
+            rolls: vec![Entry {
+                roll_id: 7,
+                vote_mask: 0,
+                time_left_ms: 1000,
+                quality: Some(4),
+                ..Default::default()
+            }],
+        });
+        script.run("RollOnLoot(7,3); ConfirmLootRoll(7,3)").unwrap();
+        assert_eq!(script.take_loot_roll_confirms(), vec![(7, 3)]);
+        assert!(script.take_loot_roll_votes().is_empty());
+    }
+}

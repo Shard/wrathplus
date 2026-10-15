@@ -563,11 +563,16 @@ fn feed_loot_rolls(
 fn drain_loot_rolls(
     script: Option<NonSendMut<UiScript>>,
     mut rolls: ResMut<LootRolls>,
+    mut native: ResMut<wrath::feed::Presentation>,
     commands: Res<NetCommands>,
 ) {
     let Some(mut script) = script else {
         return;
     };
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        wrath::feed::drain(&mut script, &mut native, &commands);
+        return;
+    }
     // A bind-on-pickup Need or Greed sends nothing yet and its frame stays up:
     // `UIParent_OnEvent` turns `CONFIRM_LOOT_ROLL` into its popup.
     for (roll_id, roll_type) in script.take_loot_roll_confirms() {

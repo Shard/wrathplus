@@ -11,9 +11,10 @@ use benilla_ui::script::{
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
-pub(super) struct Presentation {
+pub(crate) struct Presentation {
     lifecycle: Lifecycle,
     published: std::collections::HashMap<u32, Entry>,
+    lines: Vec<(benilla_protocol::wrath_roll::Roll, u16)>,
 }
 
 #[derive(Resource)]
@@ -72,6 +73,9 @@ pub(super) fn feed(
     icons: Option<Res<crate::entities::ItemDisplays>>,
     limits: Option<Res<CategoryLimits>>,
     time: Res<Time>,
+    names: Res<crate::names::NameCache>,
+    mut chat: ResMut<crate::ui_chat::ChatLog>,
+    loot: Res<crate::ui_loot::LootConfig>,
     mut memo: Local<crate::ui_script::VmMemo<State>>,
 ) {
     if *dialect != SessionDialect::Wrath12340 {
@@ -80,12 +84,25 @@ pub(super) fn feed(
     let Presentation {
         lifecycle,
         published,
+        lines,
     } = &mut *presentation;
     templates.receipts.clear();
     lifecycle.tick(time.delta().as_millis().min(u128::from(u32::MAX)) as u32);
     for roll in inbox.updates.drain(..) {
+        if !matches!(roll, benilla_protocol::wrath_roll::Roll::Start { .. }) {
+            lines.push((roll.clone(), 0));
+        }
         lifecycle.receive(roll);
     }
+    super::outcomes::drain(
+        lines,
+        &items,
+        &names,
+        &commands,
+        own.0,
+        &mut chat,
+        loot.show_loot_spam,
+    );
     // Queries also progress while no VM exists; negative answers drop rather than resurrect.
     let mut ready = std::collections::HashMap::new();
     for roll in &lifecycle.entries {
@@ -229,3 +246,64 @@ pub(super) fn feed(
 
 #[cfg(test)]
 mod tests;
+
+/// Resolve client-only IDs against the current native lifecycle, never against the 1.12 model.
+pub(crate) fn drain(
+    script: &mut UiScript,
+    presentation: &mut Presentation,
+    commands: &NetCommands,
+) {
+    for (id, vote) in script.take_loot_roll_confirms() {
+        let live = presentation
+            .lifecycle
+            .entries
+            .iter()
+            .any(|e| e.id == id && e.announced && e.remaining_ms != 0);
+        if live && vote <= 3 {
+            let Some(entry) = presentation.published.get(&id) else {
+                continue;
+            };
+            let event = if vote == 3 && entry.quality.is_some_and(|q| (q as i32) > 2) {
+                "CONFIRM_DISENCHANT_ROLL"
+            } else if vote != 0 && vote != 3 && entry.bind_on_pickup {
+                "CONFIRM_LOOT_ROLL"
+            } else {
+                continue;
+            };
+            script.fire_event(
+                event,
+                vec![ScriptValue::Int(id.into()), ScriptValue::Int(vote.into())],
+            );
+        }
+    }
+    for (id, vote) in script.take_loot_roll_votes() {
+        let Some(row) = presentation
+            .lifecycle
+            .entries
+            .iter()
+            .find(|e| e.id == id && e.announced && e.remaining_ms != 0)
+        else {
+            continue;
+        };
+        if !presentation
+            .published
+            .get(&id)
+            .is_some_and(|e| e.permits(vote))
+        {
+            continue;
+        }
+        if commands
+            .0
+            .send(crate::net::ClientCommand::LootRoll {
+                looted_target: row.item.guid,
+                item_slot: row.item.slot,
+                roll_type: vote,
+            })
+            .is_ok()
+        {
+            presentation.lifecycle.entries.retain(|e| e.id != id);
+            presentation.lifecycle.cancelled.push(id);
+            presentation.published.remove(&id);
+        }
+    }
+}
