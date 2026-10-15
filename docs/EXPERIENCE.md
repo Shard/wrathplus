@@ -370,3 +370,16 @@ GX lane; their camera coverage uses the existing model path.
 
 Headless shader composition and policy tests establish wiring, not appearance or Classic pixel
 equality. The manager must verify captures, silhouettes and AA/post-pass compatibility live.
+
+An ignored, on-demand GPU smoke test also validates retained-GX camera-normal and AO-forward
+entry points against the production bind-group and vertex layouts on a real device. It submits a
+4×4 synthetic triangle for every cutout/two-sided combination, without a window, game client,
+network, archives or world plugins. Ordinary test runs leave it ignored, so GPU-less CI is unchanged.
+Run explicitly (under the shared heavy-build lock and usual worker build limits):
+
+```sh
+cargo test -p benilla-world --lib retained_gx_gpu_smoke -- --ignored --nocapture --test-threads 1
+```
+
+The explicit run requires a working graphics adapter and fails rather than silently skipping when
+none is available. It checks shader/pipeline/binding/draw validation, not image fidelity or AO strength.
