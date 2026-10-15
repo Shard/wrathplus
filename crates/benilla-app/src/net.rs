@@ -1904,6 +1904,10 @@ pub(crate) enum ClientCommand {
     ChannelList {
         name: String,
     },
+    /// Native Wrath `CMSG_SET_CHANNEL_WATCH`; empty name clears the watch.
+    SetChannelWatch { name: String },
+    /// Native Wrath `CMSG_CHANNEL_DISPLAY_LIST`, distinct from the ordinary chat list.
+    ChannelDisplayList { name: String },
     /// `/random [min] [max]` (`MSG_RANDOM_ROLL`).
     RandomRoll {
         min: u32,

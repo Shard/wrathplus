@@ -121,6 +121,16 @@ pub fn decode_notify(body: &[u8]) -> io::Result<Notify> {
     Ok(Notify { channel, kind })
 }
 
+/// Opcodes.h:1009/1038; ChannelHandler.cpp:292/321. Both read a cstring name.
+pub const CMSG_CHANNEL_DISPLAY_LIST: u32 = 0x3d2;
+pub const CMSG_SET_CHANNEL_WATCH: u32 = 0x3ef;
+/// Empty names are meaningful (WATCH clears the watch); preserve UTF-8 bytes unchanged.
+pub fn encode_channel_name(name: &str) -> Vec<u8> {
+    let mut body = name.as_bytes().to_vec();
+    body.push(0);
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,7 +184,9 @@ mod tests {
             else {
                 panic!("unhandled");
             };
-            assert!(matches!(&session_events[0], SessionEvent::ChannelNotify { channel, .. } if channel == &expected.channel));
+            assert!(
+                matches!(&session_events[0], SessionEvent::ChannelNotify { channel, .. } if channel == &expected.channel)
+            );
             assert!(
                 matches!(&session_events[1], SessionEvent::WrathChannelNotify { notify } if notify == &expected)
             );
@@ -189,6 +201,17 @@ mod tests {
             ));
         }
         assert!(decode_notify(b"\x00General\0").is_err());
+    }
+    #[test]
+    fn outbound_name_is_exact_cstring_including_empty_watch() {
+        assert_eq!(CMSG_SET_CHANNEL_WATCH, 0x3ef);
+        assert_eq!(CMSG_CHANNEL_DISPLAY_LIST, 0x3d2);
+        assert_eq!(encode_channel_name(""), vec![0]);
+        assert_eq!(
+            encode_channel_name("General - Elwynn Forest"),
+            b"General - Elwynn Forest\0"
+        );
+        assert_eq!(encode_channel_name("Général"), "Général\0".as_bytes());
     }
     fn packet() -> Vec<u8> {
         let mut b = b"\x07General\0\x81".to_vec();
