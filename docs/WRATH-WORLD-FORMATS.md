@@ -153,3 +153,29 @@ pointer table. Type `+8` is consumed as flags (for example `0x793d20` tests
 MH2O vertex-format policy, texture animation equations or complete rendering
 parity. Catalog accessors expose the verified join, raw flags and raw selector;
 remaining words stay uninterpreted. Required read/string/decode errors propagate.
+
+### MH2O accessor contract correction
+
+Build-12340 MH2O vtable `0xa594b8` dispatches height/depth/UV accessors
+`0x8a3130`, `0x8a3160`, `0x8a31b0`. With payload base B, vertex offset O,
+vertex count N and index i: selectors 0/1 read height at B+O+4i;
+selector 2 returns height zero. Selector 0 reads depth at B+O+4N+i;
+selector 2 reads B+O+i, explicitly returning 255 when O=0. Selector 1
+returns UV storage B+O+4(N+i); other selectors return static zero UVs.
+These bodies establish four UV bytes per vertex, not component normalization.
+
+The parser now accepts only selectors 0–2, rejecting the later combined layout
+3 rather than inventing unsupported native behavior. Selector 2 with no payload
+retains explicit depth 255 and zero heights. Selectors 0/1 with O=0 fail closed:
+the native height accessor has no missing-offset guard, so a `min_height` plane
+was an unsupported invention. Rejection is a bounded safety policy, not a claim
+that the native client rejects malformed files identically. No rendering changes
+are included in this correction.
+
+A bounded effective-enUS sample of 16 ADTs across Northrend, Azeroth, Kalimdor
+and Expansion01 contains 1,683 layers in nine tiles: selector 0/nonzero offset
+147; selector 2/nonzero offset 93; selector 2/zero offset 1,443. Seven tiles have
+no MH2O layers. No selector 1, selector 3, or selector 0/zero-offset example was
+observed; this is not a complete installed-chain census. The installed regression
+walks raw chunk headers independently and compares every sampled height/depth
+against the production parser, including all 1,443 default-depth layers.
