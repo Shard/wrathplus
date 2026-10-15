@@ -548,6 +548,8 @@ pub enum SessionEvent {
     WrathChannelNotify { notify: crate::wrath_channel::Notify },
     /// Lossless native dungeon finder reply; app owns ordered capture and lifecycle.
     WrathLfg { packet: crate::wrath_lfg::Packet },
+    /// Raw authenticated server account expansion; absence is not expansion zero.
+    WrathAccountExpansion { expansion: Option<u8> },
     WrathChannelList { roster: crate::wrath_channel::ChannelList },
     ChannelList {
         channel: String,

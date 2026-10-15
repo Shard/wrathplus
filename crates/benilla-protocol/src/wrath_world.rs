@@ -262,6 +262,7 @@ impl std::error::Error for WrathPartialFrameRead {}
 
 /// An authenticated Wrath world connection with bounded character-select and login observation.
 pub struct WrathWorldSession {
+    account_expansion: Option<u8>,
     stream: TcpStream,
     crypto: HeaderCrypto,
     read_failed: bool,
@@ -322,6 +323,7 @@ impl WrathWorldSession {
 
         let crypto = HeaderCrypto::from_session_key(session_key);
         let mut session = Self {
+            account_expansion: None,
             stream,
             crypto,
             read_failed: false,
@@ -336,6 +338,7 @@ impl WrathWorldSession {
                         .body
                         .first()
                         .ok_or_else(|| anyhow!("empty SMSG_AUTH_RESPONSE"))?;
+                    session.account_expansion = auth_response_expansion(&packet.body).or(session.account_expansion);
                     match result {
                         AUTH_OK => {
                             if packet.body.len() != 11 {
@@ -362,6 +365,11 @@ impl WrathWorldSession {
             }
         }
         bail!("no SMSG_AUTH_RESPONSE within {MAX_STARTUP_PACKETS} startup packets")
+    }
+
+    /// Raw authenticated account expansion; not inferred from client build or character level.
+    pub fn account_expansion(&self) -> Option<u8> {
+        self.account_expansion
     }
 
     /// Request and parse one bounded Wrath character roster.
@@ -1087,6 +1095,16 @@ fn decode_server_header(
     Ok((size, u16::from_le_bytes([first[3], last[0]])))
 }
 
+/// AzerothCore AuthHandler.cpp::SendAuthResponse: result + billing u32/u8/u32 + expansion.
+/// Short queue updates do not carry billing/expansion; retain absence rather than zero.
+fn auth_response_expansion(body: &[u8]) -> Option<u8> {
+    match body.first().copied()? {
+        AUTH_OK if body.len() >= 11 => body.get(10).copied(),
+        AUTH_WAIT_QUEUE if body.len() >= 16 => body.get(10).copied(),
+        _ => None,
+    }
+}
+
 fn parse_queue_position(body: &[u8]) -> Result<u32> {
     // Full AUTH_WAIT_QUEUE: result, billing remaining/flags/rested/expansion, position, migration.
     if body.len() < 16 {
@@ -1217,6 +1235,25 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
 
+    #[test]
+    fn auth_expansion_keeps_absence_zero_and_unknown_server_values() {
+        assert_eq!(auth_response_expansion(&[]), None);
+        for code in [AUTH_OK, AUTH_WAIT_QUEUE] {
+            let len = if code == AUTH_OK { 11 } else { 16 };
+            let mut body = vec![0; len]; body[0] = code;
+            for byte in [0, 1, 2, 255] {
+                body[10] = byte;
+                assert_eq!(auth_response_expansion(&body), Some(byte));
+            }
+            for end in 0..len {
+                assert_eq!(auth_response_expansion(&body[..end]), None);
+            }
+            body[0] = 0x0d;
+            assert_eq!(auth_response_expansion(&body), None);
+        }
+        assert_eq!(loopback_session().0.account_expansion(), None);
+    }
+
     const TRANSPORT_KEY: [u8; SESSION_KEY_LENGTH] = [0x5a; SESSION_KEY_LENGTH];
 
     fn loopback_session() -> (WrathWorldSession, TcpStream) {
@@ -1227,6 +1264,7 @@ mod tests {
         client.set_write_timeout(Some(IO_TIMEOUT)).unwrap();
         (
             WrathWorldSession {
+                account_expansion: None,
                 stream: client,
                 crypto: HeaderCrypto::from_session_key(TRANSPORT_KEY),
                 read_failed: false,
