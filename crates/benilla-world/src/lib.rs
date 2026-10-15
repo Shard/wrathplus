@@ -171,3 +171,6 @@ pub mod worldview;
 pub mod zfill;
 
 pub mod material_specialization;
+
+#[cfg(test)]
+mod shadow_gpu_smoke;
