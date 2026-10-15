@@ -22,6 +22,7 @@ pub mod wrath_guild_bank_commands;
 pub mod wrath_guild_bank_log;
 pub mod wrath_guild_bank_query;
 pub mod wrath_guild_bank_text;
+pub mod wrath_guild_bank_swap;
 pub mod wrath_guild_rank;
 pub mod wrath_lfg;
 pub mod wrath_instance;
