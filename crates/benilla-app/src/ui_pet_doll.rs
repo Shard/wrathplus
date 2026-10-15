@@ -40,7 +40,7 @@ fn feed_pet_doll(
     // not snap to a stale one.
     booth.yaw = script.model_pane_facing("PetModelFrame");
 
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     let store = (pet_guid != 0).then(|| pet.store(pet_guid)).flatten();
     // A guid whose object never streamed is no pet: `None` empties the booth.
     booth.unit = (pet_guid != 0).then(|| pet.entity(pet_guid)).flatten();

@@ -640,7 +640,7 @@ impl UnitTokens<'_, '_> {
                 .mouseover(&self.hovered_go.as_deref().copied().unwrap_or_default()),
             // Off the pet bar's cached guid, as the `"pet"` snapshot reads it.
             UnitBase::Pet => {
-                let guid = self.pet.as_ref()?.spells.pet_guid;
+                let guid = self.pet.as_ref()?.guid();
                 (guid != 0).then(|| self.held(guid)).flatten()
             }
             UnitBase::PartyPet(row) => self

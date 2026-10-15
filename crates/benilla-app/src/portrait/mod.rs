@@ -1324,7 +1324,7 @@ fn sync_portraits(
                 })
                 .flatten(),
             "pet" => {
-                let guid = party.pet_bar.spells.pet_guid;
+                let guid = party.pet_bar.guid();
                 let entity = (guid != 0)
                     .then(|| party.index.0.get(&guid))
                     .flatten()

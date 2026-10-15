@@ -42,10 +42,27 @@ fn on_spells(In(ev): In<SessionEvent>, catalog: Option<Res<Spells>>, mut bar: Re
     }
 }
 
-/// Capture only, without projecting native words into the Vanilla bar or publishing a UI feed.
-fn on_native_spells(In(ev): In<SessionEvent>, mut bar: ResMut<PetBar>) {
+/// Retain native words and seed the native pet cooldown list without a Vanilla projection.
+fn on_native_spells(
+    In(ev): In<SessionEvent>,
+    catalog: Option<Res<Spells>>,
+    mut bar: ResMut<PetBar>,
+) {
     if let SessionEvent::WrathPetSpells { spells } = ev {
         native_pet_spells(*spells, &mut bar);
+        let now = Instant::now();
+        if let Some(native) = &bar.native {
+            let duration = native.duration_ms;
+            let cooldowns = native.cooldowns.clone();
+            bar.expires = (duration != 0)
+                .then(|| now + std::time::Duration::from_millis(u64::from(duration)));
+            bar.cooldowns.clear_silent();
+            for cd in cooldowns {
+                let display = catalog.as_ref().and_then(|c| c.catalog.get(cd.spell));
+                bar.cooldowns.seed_wrath_pet(&cd, display, now);
+            }
+            bar.bar_signals = bar.bar_signals.wrapping_add(1);
+        }
     }
 }
 
@@ -295,10 +312,20 @@ mod tests {
         pet_spells(a_bar(42), None, &mut bar);
         bar.attacking = true;
         let packet = Native {
-            guid: 43, family: 0xfedc, duration_ms: 123, react: 2, command: 1, flags: 0xfffe,
-            actions: [Action(0xc1abcdef); 10], spells: vec![Action(0x81012345)],
-            cooldowns: vec![Cooldown { spell: 0xabcdef, category: 5,
-                cooldown_ms: 1, category_cooldown_ms: 0x80000000 }],
+            guid: 43,
+            family: 0xfedc,
+            duration_ms: 123,
+            react: 2,
+            command: 1,
+            flags: 0xfffe,
+            actions: [Action(0xc1abcdef); 10],
+            spells: vec![Action(0x81012345)],
+            cooldowns: vec![Cooldown {
+                spell: 0xabcdef,
+                category: 5,
+                cooldown_ms: 1,
+                category_cooldown_ms: 0x80000000,
+            }],
         };
         native_pet_spells(packet.clone(), &mut bar);
         assert_eq!(bar.native, Some(packet.clone()));
@@ -307,7 +334,8 @@ mod tests {
         bar.attacking = true;
         native_pet_spells(packet.clone(), &mut bar);
         assert!(bar.attacking);
-        let mut other = packet.clone(); other.guid = 44;
+        let mut other = packet.clone();
+        other.guid = 44;
         native_pet_spells(other.clone(), &mut bar);
         assert_eq!(bar.native, Some(other));
         assert!(!bar.attacking);

@@ -458,7 +458,7 @@ fn addressed_store<'a>(
 ) -> Option<&'a mut crate::spell::Cooldowns> {
     if self_guid.0 == Some(caster) {
         Some(player)
-    } else if pet.has_bar() && pet.spells.pet_guid == caster {
+    } else if pet.has_bar() && pet.guid() == caster {
         Some(&mut pet.cooldowns)
     } else {
         None

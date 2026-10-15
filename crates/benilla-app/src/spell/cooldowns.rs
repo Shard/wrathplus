@@ -450,7 +450,12 @@ impl Cooldowns {
 
     /// A 3.3.5 cast of ours went off: its `Spell.dbc` recovery and category recovery start now,
     /// or an on-event spell parks. The GCD is the cast send's ([`Self::start_gcd`]), so none here.
-    pub(crate) fn start_cast_recovery(&mut self, spell_id: u32, spell: &SpellDisplay, now: Instant) {
+    pub(crate) fn start_cast_recovery(
+        &mut self,
+        spell_id: u32,
+        spell: &SpellDisplay,
+        now: Instant,
+    ) {
         let on_hold = spell.cooldown_on_event();
         self.add(
             now,
@@ -558,6 +563,59 @@ impl Cooldowns {
             Timer::none(now),
         );
         self.generation = generation;
+    }
+
+    /// Build 12340 PET receive 0x5d6b90 -> setter 0x805b10: category bit 31
+    /// is the held byte, not Vanilla's permanent marker. Keep the packet unchanged.
+    pub(crate) fn seed_wrath_pet(
+        &mut self,
+        cd: &benilla_protocol::wrath_pet::Cooldown,
+        spell: Option<&SpellDisplay>,
+        now: Instant,
+    ) {
+        let generation = self.generation;
+        self.add(
+            now,
+            cd.spell,
+            0,
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(cd.cooldown_ms)),
+            },
+            u32::from(cd.category),
+            spell.is_some_and(|s| s.category_wildcard),
+            Timer {
+                start: now,
+                duration: Duration::from_millis(u64::from(cd.category_cooldown_ms & 0x7fff_ffff)),
+            },
+            cd.category_cooldown_ms & 0x8000_0000 != 0,
+            0,
+            Timer::none(now),
+        );
+        self.generation = generation;
+    }
+
+    /// Native getter 0x807980: a held matching spell reads NOW, 1ms, disabled,
+    /// independent of its stored duration. This must not change Vanilla reads.
+    pub(crate) fn wrath_pet_info(
+        &self,
+        spell_id: u32,
+        spell: Option<&SpellDisplay>,
+        now: Instant,
+    ) -> CooldownInfo {
+        if self
+            .records
+            .iter()
+            .any(|r| r.spell_id == spell_id && r.item_id == 0 && r.on_hold)
+        {
+            return CooldownInfo {
+                start: now,
+                remaining_ms: 1,
+                duration_ms: 1,
+                enabled: false,
+            };
+        }
+        self.info(spell_id, 0, spell, now)
     }
 
     /// The client's `IsSpellOnCooldown 0x6e1690`, which despite its name is true only for an
@@ -1317,5 +1375,97 @@ mod tests {
             !cds.not_ready(75, 0, Some(&auto_shot), mid),
             "no local refusal either"
         );
+    }
+}
+
+#[cfg(test)]
+mod wrath_pet_tests {
+    use super::*;
+    use benilla_protocol::wrath_pet::Cooldown;
+
+    #[test]
+    fn native_infinity_is_held_and_reads_current_time_without_losing_raw_marker() {
+        let t0 = Instant::now();
+        let raw = Cooldown {
+            spell: 0x12abcd,
+            category: 7,
+            cooldown_ms: 1,
+            category_cooldown_ms: 0x80000000,
+        };
+        let mut cds = Cooldowns::default();
+        cds.seed_wrath_pet(&raw, None, t0);
+        let later = t0 + Duration::from_secs(30);
+        cds.prune(later);
+        let info = cds.wrath_pet_info(raw.spell, None, later);
+        assert_eq!(info.start, later);
+        assert_eq!(
+            (info.remaining_ms, info.duration_ms, info.enabled),
+            (1, 1, false)
+        );
+        assert_eq!(raw.category_cooldown_ms, 0x80000000);
+        assert_eq!(cds.generation, 0);
+    }
+
+    #[test]
+    fn any_native_category_high_bit_is_held_and_lower_bits_survive() {
+        let now = Instant::now();
+        let mut cds = Cooldowns::default();
+        cds.seed_wrath_pet(
+            &Cooldown {
+                spell: 123,
+                category: 8,
+                cooldown_ms: 0,
+                category_cooldown_ms: 0x80000042,
+            },
+            None,
+            now,
+        );
+        assert_eq!(cds.records[0].category_recovery.duration.as_millis(), 0x42);
+        assert!(
+            !cds.wrath_pet_info(123, None, now + Duration::from_secs(300))
+                .enabled
+        );
+    }
+
+    #[test]
+    fn native_normal_category_keeps_bit27_and_expires_normally() {
+        let now = Instant::now();
+        let mut cds = Cooldowns::default();
+        cds.seed_wrath_pet(
+            &Cooldown {
+                spell: 0x12abcd,
+                category: 0,
+                cooldown_ms: 3000,
+                category_cooldown_ms: 0,
+            },
+            None,
+            now,
+        );
+        assert_eq!(cds.wrath_pet_info(0x12abcd, None, now).duration_ms, 3000);
+        assert_eq!(
+            cds.wrath_pet_info(0x12abcd, None, now + Duration::from_secs(4))
+                .remaining_ms,
+            0
+        );
+        cds.seed_wrath_pet(
+            &Cooldown {
+                spell: 99,
+                category: 8,
+                cooldown_ms: 0,
+                category_cooldown_ms: 0x08000000,
+            },
+            None,
+            now,
+        );
+        assert_eq!(
+            cds.records
+                .last()
+                .unwrap()
+                .category_recovery
+                .duration
+                .as_millis(),
+            0x08000000
+        );
+        assert!(!cds.records.last().unwrap().on_hold);
     }
 }

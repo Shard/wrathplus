@@ -39,6 +39,16 @@ pub(crate) struct PetPress<'w, 's> {
 impl PetPress<'_, '_> {
     /// `CastPetAction(slot)`, a 1-based bar slot.
     pub(crate) fn press_slot(&mut self, slot: u32) {
+        if let Some(native) = &self.bar.native {
+            if let Some(entry) = slot
+                .checked_sub(1)
+                .and_then(|i| native.actions.get(i as usize))
+                .copied()
+            {
+                self.press_native(entry);
+            }
+            return;
+        }
         if let Some(entry) = slot_entry(&self.bar, slot) {
             self.press(slot, entry);
         }
@@ -56,7 +66,87 @@ impl PetPress<'_, '_> {
     /// an order are one press: both reach the reference's one dispatcher (`0x4bd1d0`). The slot
     /// number only labels logs.
     pub(crate) fn order(&mut self, packed: u32) {
-        self.press(0, PetActionEntry::from(packed));
+        if self.bar.native.is_some() {
+            self.press_native(benilla_protocol::wrath_pet::Action(packed));
+        } else {
+            self.press(0, PetActionEntry::from(packed));
+        }
+    }
+
+    /// Native action dispatch never narrows a spell ID through the Vanilla entry helper.
+    fn press_native(&mut self, entry: benilla_protocol::wrath_pet::Action) {
+        let Some(store) = self.pet.usable_pet(&self.bar) else {
+            return;
+        };
+        let kind = entry.raw_type() & 0x3f;
+        let id = entry.id();
+        let is_spell = kind == 1 || (8..=17).contains(&kind);
+        let display = self.spells.as_ref().and_then(|s| s.catalog.get(id));
+        if is_spell && (id == 0 || display.is_none()) {
+            return;
+        }
+        if !is_spell && kind != 6 && kind != 7 {
+            return;
+        }
+        let pet_guid = self.bar.guid();
+        if is_spell
+            && display.is_some_and(|d| crate::ui_action::toggle::active_action_toggle(id, d, store))
+        {
+            let _ = self.commands.0.send(ClientCommand::PetCancelAura {
+                pet_guid,
+                spell_id: id,
+            });
+            return;
+        }
+        let possessing = possessing(Some(store), self.pet.self_guid.0);
+        let mut target_guid = self.selection.guid.unwrap_or(0);
+        if kind == 7 && id == PET_COMMAND_ATTACK {
+            if crate::ui_action::attack_actor_refusal(
+                Some(store),
+                self.pet.self_guid.0,
+                &mut self.ui_errors,
+            ) {
+                return;
+            }
+            let Some(guid) = self.pick.target(
+                None,
+                &mut self.selection,
+                &mut self.seam,
+                &mut self.ui_errors,
+            ) else {
+                return;
+            };
+            target_guid = guid;
+        }
+        if let Some(native) = self.bar.native.as_mut() {
+            if kind == 6 {
+                native.react = id as u8;
+            }
+            if kind == 7 && (id == PET_COMMAND_STAY || id == PET_COMMAND_FOLLOW) {
+                native.command = id as u8;
+            }
+        }
+        if kind == 6 || (kind == 7 && id <= PET_COMMAND_FOLLOW) {
+            self.bar.bar_signals = self.bar.bar_signals.wrapping_add(1);
+        }
+        if kind == 7 && id == PET_COMMAND_ATTACK && possessing {
+            self.bar.attacking = true;
+        }
+        if let Some(display) = display.filter(|_| is_spell) {
+            arm_pet_gcd(
+                &mut self.bar,
+                id,
+                display,
+                possessing,
+                &self.spell_mods,
+                Instant::now(),
+            );
+        }
+        let _ = self.commands.0.send(ClientCommand::PetAction {
+            pet_guid,
+            packed: entry.0,
+            target_guid,
+        });
     }
 
     /// Send under [`PetBar`]'s pet guid, never one from the VM, so a press queued as the pet
@@ -80,7 +170,7 @@ impl PetPress<'_, '_> {
             debug!("ui_pet: slot {slot} refused, the pet's actions are not usable — no packet");
             return;
         };
-        let pet_guid = bar.spells.pet_guid;
+        let pet_guid = bar.guid();
         let possessing = possessing(Some(pet_store), pet.self_guid.0);
         // A press on a spell the pet is running cancels its aura and sends no `CMSG_PET_ACTION`
         // (`0x4bd240`-`0x4bd2ad`); nothing latches, the icon follows the pet's aura field.
@@ -201,7 +291,7 @@ pub(super) fn drain_pet_actions(
     if toggles.is_empty() && stops == 0 && writes.is_empty() {
         return;
     }
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     if pet_guid == 0 {
         debug!("ui_pet: dropping queued pet intents — the bar is gone");
         return;
@@ -214,6 +304,30 @@ pub(super) fn drain_pet_actions(
             debug!(
                 "ui_pet: autocast toggle on slot {slot} refused, the pet's actions are not usable"
             );
+            continue;
+        }
+        if let Some(native) = bar.native.as_mut() {
+            let Some(entry) = slot
+                .checked_sub(1)
+                .and_then(|i| native.actions.get_mut(i as usize))
+            else {
+                continue;
+            };
+            if entry.0 & 0x8000_0000 == 0 {
+                continue;
+            }
+            entry.0 ^= 0x4000_0000;
+            let word = entry.0;
+            let id = entry.id();
+            for spell in &mut native.spells {
+                if spell.id() == id {
+                    spell.0 = (spell.0 & !0x4000_0000) | (word & 0x4000_0000);
+                }
+            }
+            let _ = commands.0.send(ClientCommand::PetSetAction {
+                pet_guid,
+                entries: vec![(slot - 1, word)],
+            });
             continue;
         }
         let Some(flipped) = toggle_slot_autocast(&mut bar, slot) else {
@@ -239,7 +353,11 @@ pub(super) fn drain_pet_actions(
     // server tells one pair from two by body size.
     for entries in writes {
         for &(position, packed) in &entries {
-            if let Some(e) = bar.spells.bar.get_mut(position as usize) {
+            if let Some(native) = bar.native.as_mut() {
+                if let Some(e) = native.actions.get_mut(position as usize) {
+                    e.0 = packed;
+                }
+            } else if let Some(e) = bar.spells.bar.get_mut(position as usize) {
                 *e = PetActionEntry::from(packed);
             }
         }
@@ -276,7 +394,7 @@ pub(super) fn toggle_slot_autocast(bar: &mut PetBar, slot: u32) -> Option<PetAct
 /// `PetStopAttack`'s core (`0x4bd650`): send `CMSG_PET_STOP_ATTACK` and lower the latch, or do
 /// nothing when it is already down (`0x4bd65e`). Returns whether it sent.
 pub(super) fn stop_pet_attack(bar: &mut PetBar, commands: &NetCommands) -> bool {
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     if !bar.attacking || pet_guid == 0 {
         return false;
     }

@@ -541,7 +541,7 @@ fn feed_auras(
     }
 
     let held = |guid: u64| index.0.get(&guid).and_then(|&e| stores.get(e).ok());
-    let pet_guid = units.pet.spells.pet_guid;
+    let pet_guid = units.pet.guid();
     // `UnitBuff`'s unit gate on a live unit. `unit` is never `store`, the player's, which is the
     // gate's second argument. The pet is ungated; the reference gates a pet too, but `CanAssist`'s
     // player-controlled arm (`0x60673e`-`0x60679f`, the controlling players' duel and FFA-PvP

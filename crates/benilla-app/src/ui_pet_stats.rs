@@ -169,7 +169,7 @@ fn feed_pet_stats(
         return;
     };
     let last = last.get(&script);
-    let store = pet.store(bar.spells.pet_guid);
+    let store = pet.store(bar.guid());
     let family = family_for(store, &names, &commands, family_tables.as_deref());
     let fresh = stats_for(store, self_store.iter().next(), tables.as_deref(), family);
     if last.as_ref() == Some(&fresh) {
