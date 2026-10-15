@@ -453,7 +453,17 @@ impl GroupState {
         } = self;
         *wrath_roster = None;
         wrath_stats.clear();
+        // Preserve ordered presentation edges across leave/rejoin in one tick.
+        // Otherwise a new journal of equal length would look already forwarded.
+        let mut ready_events = std::mem::take(&mut wrath_raid.ready_events);
+        if !matches!(
+            ready_events.last(),
+            None | Some(benilla_protocol::wrath_group::raid::Packet::ReadyFinished)
+        ) {
+            ready_events.push(benilla_protocol::wrath_group::raid::Packet::ReadyFinished);
+        }
         *wrath_raid = Default::default();
+        wrath_raid.ready_events = ready_events;
         *in_group = false;
         *group_type = 0;
         *own_flags = 0;

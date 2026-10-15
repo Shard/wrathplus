@@ -215,6 +215,14 @@ fn every_event_we_fire_carries_the_reference_s_arguments() {
     let mut checked = 0usize;
     let mut wrong: Vec<String> = Vec::new();
     for (name, kinds, at) in &sites {
+        // The 1.12 producer is argumentless; build 12340 stock ReadyCheck.lua
+        // consumes (initiator,timeLeft). Scope this exception to its dedicated
+        // Wrath-only module and assert that native shape instead of skipping it.
+        if at.ends_with("/script/wrath_ready_check.rs") && name == "READY_CHECK" {
+            assert_eq!(kinds, &vec!['?', 'n'], "Wrath READY_CHECK ABI changed");
+            checked += 1;
+            continue;
+        }
         let Some(row) = table.get(name) else { continue };
         checked += 1;
         let fits = row.shapes.iter().any(|want| {

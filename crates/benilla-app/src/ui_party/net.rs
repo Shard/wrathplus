@@ -91,6 +91,12 @@ fn apply_wrath_raid(
     packet: benilla_protocol::wrath_group::raid::Packet,
 ) {
     use benilla_protocol::wrath_group::raid::Packet;
+    if matches!(
+        &packet,
+        Packet::ReadyStart { .. } | Packet::ReadyConfirm { .. } | Packet::ReadyFinished
+    ) {
+        group.wrath_raid.ready_events.push(packet.clone());
+    }
     match packet {
         Packet::CommandResult { operation, member, result, value } => {
             command_result(group, errors, operation, &member, result);

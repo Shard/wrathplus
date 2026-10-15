@@ -276,6 +276,7 @@ pub(crate) struct Model {
     pub(crate) party_requests: Vec<party::PartyRequest>,
     /// The ready-check deadline and the unanswered flags the timeout tick reads.
     pub(crate) ready_check: party::ReadyCheckState,
+    pub(crate) wrath_ready_check: super::wrath_ready_check::State,
     /// Saved raid lockouts from `SMSG_RAID_INSTANCE_INFO`, which outlive any roster change.
     pub(crate) saved_instances: Vec<party::SavedInstanceInfo>,
     /// `SetRaidRosterSelection`'s raid row index, client-side only.
@@ -1150,6 +1151,7 @@ impl Model {
             assignment_sent_at: None,
             party_requests: Vec::new(),
             ready_check: party::ReadyCheckState::default(),
+            wrath_ready_check: super::wrath_ready_check::State::default(),
             saved_instances: Vec::new(),
             raid_selection: 0,
             now: 0.0,
