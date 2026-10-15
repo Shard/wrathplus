@@ -633,6 +633,7 @@ impl NetCommands {
                         | ClientCommand::GroupInvite { .. }
                         | ClientCommand::GroupAccept
                         | ClientCommand::GroupDecline
+                        | ClientCommand::PartyAssignment { .. }
                         | ClientCommand::GroupLeave
                         | ClientCommand::RequestPartyMemberStats { .. }
                         // `benilla_protocol::wrath_session`: queries, action bar, casting.
@@ -2035,6 +2036,8 @@ pub(crate) enum ClientCommand {
     },
     /// `CMSG_GROUP_DISBAND`: leave the group, despite the name.
     GroupLeave,
+    /// Wrath MSG_PARTY_ASSIGNMENT, full guid; never translated to a Vanilla packet.
+    PartyAssignment { assignment: u8, apply: bool, guid: u64 },
     /// `CMSG_GROUP_RAID_CONVERT`, leader only.
     GroupRaidConvert,
     /// `CMSG_REQUEST_PARTY_MEMBER_STATS`, only on the reference's two edges: a member's object

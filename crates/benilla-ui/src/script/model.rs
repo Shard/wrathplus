@@ -270,6 +270,7 @@ pub(crate) struct Model {
     pub(crate) party: party::PartyState,
     pub(crate) wrath_group: super::wrath_surface::wrath_group::Group,
     /// Party and loot-method calls (`AcceptGroup`, `InviteToParty`, `SetLootMethod`, …) queued.
+    pub(crate) assignment_sent_at: Option<f64>,
     pub(crate) party_requests: Vec<party::PartyRequest>,
     /// The ready-check deadline and the unanswered flags the timeout tick reads.
     pub(crate) ready_check: party::ReadyCheckState,
@@ -1140,6 +1141,7 @@ impl Model {
             joined_channels: Vec::new(),
             party: party::PartyState::default(),
             wrath_group: Default::default(),
+            assignment_sent_at: None,
             party_requests: Vec::new(),
             ready_check: party::ReadyCheckState::default(),
             saved_instances: Vec::new(),
