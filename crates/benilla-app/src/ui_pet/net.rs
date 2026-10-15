@@ -19,6 +19,7 @@ use crate::ui_action::{CastErrors, PetTameFailures, Spells, UiError, UiErrorKeys
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.net_handler(K::PetSpells, on_spells)
+        .net_handler(K::WrathPetSpells, on_native_spells)
         .net_handler(K::PetMode, on_mode)
         .net_handler(K::PetActionFeedback, on_action_feedback)
         .net_handler(K::PetCastFailed, on_cast_failed)
@@ -39,6 +40,26 @@ fn on_spells(In(ev): In<SessionEvent>, catalog: Option<Res<Spells>>, mut bar: Re
     if let SessionEvent::PetSpells(spells) = ev {
         pet_spells(*spells, catalog.as_deref(), &mut bar);
     }
+}
+
+/// Capture only, without projecting native words into the Vanilla bar or publishing a UI feed.
+fn on_native_spells(In(ev): In<SessionEvent>, mut bar: ResMut<PetBar>) {
+    if let SessionEvent::WrathPetSpells { spells } = ev {
+        native_pet_spells(*spells, &mut bar);
+    }
+}
+
+fn native_pet_spells(spells: benilla_protocol::wrath_pet::PetSpells, bar: &mut PetBar) {
+    if spells.guid == 0 {
+        bar.clear();
+        return;
+    }
+    // Switching profiles/owners must not leave a usable legacy bar or its cooldowns behind.
+    // Same-native-GUID resends retain local latches; changing the GUID resets them.
+    if bar.native.as_ref().map(|old| old.guid) != Some(spells.guid) {
+        bar.clear();
+    }
+    bar.native = Some(spells);
 }
 
 fn on_mode(In(ev): In<SessionEvent>, mut bar: ResMut<PetBar>) {
@@ -266,6 +287,37 @@ fn pet_cast_failed(spell_id: u32, reason: Option<u8>, errors: &mut CastErrors) {
 mod tests {
     use super::*;
     use benilla_protocol::messages::{PetActionEntry, PET_ACT_COMMAND, PET_COMMAND_ATTACK};
+
+    #[test]
+    fn native_capture_is_lossless_replacement_and_session_scoped() {
+        use benilla_protocol::wrath_pet::{Action, Cooldown, PetSpells as Native};
+        let mut bar = PetBar::default();
+        pet_spells(a_bar(42), None, &mut bar);
+        bar.attacking = true;
+        let packet = Native {
+            guid: 43, family: 0xfedc, duration_ms: 123, react: 2, command: 1, flags: 0xfffe,
+            actions: [Action(0xc1abcdef); 10], spells: vec![Action(0x81012345)],
+            cooldowns: vec![Cooldown { spell: 0xabcdef, category: 5,
+                cooldown_ms: 1, category_cooldown_ms: 0x80000000 }],
+        };
+        native_pet_spells(packet.clone(), &mut bar);
+        assert_eq!(bar.native, Some(packet.clone()));
+        assert_eq!(bar.spells, PetSpells::default());
+        assert!(!bar.attacking);
+        bar.attacking = true;
+        native_pet_spells(packet.clone(), &mut bar);
+        assert!(bar.attacking);
+        let mut other = packet.clone(); other.guid = 44;
+        native_pet_spells(other.clone(), &mut bar);
+        assert_eq!(bar.native, Some(other));
+        assert!(!bar.attacking);
+        native_pet_spells(Native::default(), &mut bar);
+        assert!(bar.native.is_none());
+        native_pet_spells(packet, &mut bar);
+        // The actual disconnect handler uses the same complete reset.
+        bar.clear();
+        assert!(bar.native.is_none());
+    }
 
     fn a_bar(guid: u64) -> PetSpells {
         let mut s = PetSpells {

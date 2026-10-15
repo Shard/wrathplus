@@ -288,3 +288,5 @@ mod host_port_tests {
 
 #[cfg(test)]
 mod wrath_native_stream_tests;
+
+pub mod wrath_pet;
