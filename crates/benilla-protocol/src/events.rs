@@ -550,6 +550,8 @@ pub enum SessionEvent {
     WrathRaidInstanceInfo { info: crate::wrath_instance::RaidInstanceInfo },
     /// Lossless native dungeon finder reply; app owns ordered capture and lifecycle.
     WrathLfg { packet: crate::wrath_lfg::Packet },
+    /// Lossless native guild-bank reply; App owns capture and lifecycle.
+    WrathGuildBank { packet: crate::wrath_guild_bank::Packet },
     /// Raw authenticated server account expansion; absence is not expansion zero.
     WrathAccountExpansion { expansion: Option<u8> },
     WrathChannelList { roster: crate::wrath_channel::ChannelList },

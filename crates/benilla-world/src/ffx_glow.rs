@@ -1767,3 +1767,6 @@ mod modern_tests {
         assert_eq!(postprocess_key(ModernLighting::default(), true), [false; 3]);
     }
 }
+
+#[cfg(test)]
+mod gpu_smoke;

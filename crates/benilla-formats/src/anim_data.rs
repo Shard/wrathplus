@@ -1,4 +1,4 @@
-//! `AnimationData.dbc`, the per-animation policy: 208 rows of `ID`, `Name`, `WeaponFlags`,
+//! `AnimationData.dbc`, the per-animation policy: Vanilla has 208 rows of `ID`, `Name`, `WeaponFlags`,
 //! `BodyFlags`, two unidentified columns and `Fallback`. The reference's sheath reconcile
 //! (`0x5fdf80`, on every `PlayAnimation`) reads `WeaponFlags` at row `+0x8` of the `0xc0e070` cache
 //! for the requested id, not a model's substitute: `4` and `0x10` stow, `0x20` draws melee, and
@@ -85,7 +85,11 @@ pub fn load_anim_data_catalog(chain: &mut Chain) -> Result<AnimDataCatalog> {
     let bytes = chain
         .read_file("DBFilesClient\\AnimationData.dbc")
         .context("reading AnimationData.dbc")?;
-    let rs = parse(&bytes, schema(), "AnimationData")?;
+    parse_catalog(&bytes)
+}
+
+fn parse_catalog(bytes: &[u8]) -> Result<AnimDataCatalog> {
+    let rs = parse(bytes, schema(), "AnimationData")?;
     let mut rows = HashMap::with_capacity(rs.records().len());
     let mut names = HashMap::with_capacity(rs.records().len());
     for r in rs.records() {
@@ -107,6 +111,29 @@ pub fn load_anim_data_catalog(chain: &mut Chain) -> Result<AnimDataCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Deliberately different fallback and neighboring words catch a shape-only identity map.
+    #[test]
+    fn fallback_column_is_dialect_specific() {
+        for (fields, words) in [
+            (7u32, vec![18, 1, 32, 296, 3, 999, 17]),
+            (8u32, vec![18, 1, 32, 296, 3, 17, 18, 0]),
+        ] {
+            let strings = b"\0Attack2H\0";
+            let mut bytes = b"WDBC".to_vec();
+            for v in [1, fields, fields * 4, strings.len() as u32] {
+                bytes.extend(v.to_le_bytes());
+            }
+            for v in words {
+                bytes.extend(u32::to_le_bytes(v));
+            }
+            bytes.extend(strings);
+            let c = parse_catalog(&bytes).unwrap();
+            assert_eq!(c.name(18), Some("Attack2H"));
+            assert_eq!(c.weapon_flags(18), 32);
+            assert_eq!(c.fallback(18), Some(17));
+        }
+    }
 
     /// The 5875 table: WeaponFlags within the reconcile's three bits, spot rows, fallback chains.
     #[test]

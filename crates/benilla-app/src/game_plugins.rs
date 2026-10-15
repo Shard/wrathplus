@@ -251,6 +251,7 @@ impl PluginGroup for GamePlugins {
             .add(QuestSharePlugin)
             .add(UiChatPlugin)
             .add(crate::ui_lfg::UiLfgPlugin)
+            .add(crate::ui_guild_bank::UiGuildBankPlugin)
             .add(UiLayoutPlugin)
             .add(crate::screenshot::ScreenshotPlugin)
     }
