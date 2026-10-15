@@ -28,26 +28,19 @@ fn is_token(packed: u32) -> bool {
     matches!(kind(packed), 6 | 7)
 }
 
-/// The word as a payload, if it can be one: `0x494e20`'s jump table (`0x494f40`) takes types 1-7
-/// only, so displacing an empty slot carries nothing.
-fn payload_word(packed: u32) -> Option<u32> {
-    (1..=7).contains(&kind(packed)).then_some(packed)
+/// Payload types: Vanilla `0x494e20` accepts 1–7; Wrath `0x520a80` accepts
+/// spell types 1/8–17 and reaction/command types 6/7. Empty slots carry nothing.
+pub(crate) fn accepts_payload(packed: u32, wrath: bool) -> bool {
+    if wrath {
+        matches!(kind(packed), 1 | 6 | 7 | 8..=17)
+    } else {
+        (1..=7).contains(&kind(packed))
+    }
 }
 
 /// The duplicate scan's compare (`0x4bca44`, `0x4bca57`): all but the autocast bits, any type.
 fn same_action(a: u32, b: u32) -> bool {
     a & 0x3FFF_FFFF == b & 0x3FFF_FFFF
-}
-
-/// The word a spell pickup leaves in its slot: type 1, id 0. The duplicate scan skips this
-/// source (`0x4bca34`), which would otherwise match every other blanked slot.
-fn is_blanked_spell(packed: u32) -> bool {
-    kind(packed) == 1 && packed & 0xFFFF == 0
-}
-
-/// A slot a token occupant may move to (`0x4bca8b`), such as an empty or blanked-spell slot.
-fn is_relocation_candidate(packed: u32) -> bool {
-    !is_token(packed) && packed & 0xFFFF == 0
 }
 
 /// What one accepted assignment did.
@@ -63,7 +56,20 @@ struct Assigned {
 /// a duplicate's slot takes the occupant, which makes a drag a swap (`0x4bca78`), else a token
 /// occupant needs a candidate slot or the drop aborts. The reference's return (`0x4bcb92`), 1
 /// only when nothing was relocated, cannot tell an abort from a relocation; this one can.
+#[cfg(test)]
 fn assign(slots: &mut [u32], target: usize, source: u32, passive: bool) -> Option<Assigned> {
+    assign_native(slots, target, source, passive, false)
+}
+
+fn assign_native(
+    slots: &mut [u32],
+    target: usize,
+    source: u32,
+    passive: bool,
+    wrath: bool,
+) -> Option<Assigned> {
+    // Wrath assign `0x5d5ad0` tests all 24 ID bits for blank spells/relocation slots.
+    let id_mask = if wrath { 0x00ff_ffff } else { 0xffff };
     let occupant = *slots.get(target)?;
     if occupant == source {
         return None;
@@ -73,12 +79,12 @@ fn assign(slots: &mut [u32], target: usize, source: u32, passive: bool) -> Optio
     }
 
     let mut reloc = None;
-    if !is_blanked_spell(source) {
+    if !(kind(source) == 1 && source & id_mask == 0) {
         reloc = (0..slots.len()).find(|&i| i != target && same_action(slots[i], source));
     }
     if reloc.is_none() && is_token(occupant) {
         // No `j != target` guard, as in the reference: the target's token is never a candidate.
-        reloc = (0..slots.len()).find(|&j| is_relocation_candidate(slots[j]));
+        reloc = (0..slots.len()).find(|&j| !is_token(slots[j]) && slots[j] & id_mask == 0);
         reloc?; // the abort: a token with nowhere to go writes and sends nothing
     }
 
@@ -88,7 +94,10 @@ fn assign(slots: &mut [u32], target: usize, source: u32, passive: bool) -> Optio
     slots[target] = source;
     Some(Assigned {
         reloc,
-        displaced: reloc.is_none().then(|| payload_word(occupant)).flatten(),
+        displaced: reloc
+            .is_none()
+            .then(|| accepts_payload(occupant, wrath).then_some(occupant))
+            .flatten(),
     })
 }
 
@@ -110,7 +119,8 @@ pub(super) fn pickup_pet_action(model: &mut Model, slot: u32) -> bool {
         return false;
     };
     let view = model.pet_bar.slots[index].view.clone();
-    let Some(packed) = payload_word(view.packed) else {
+    let wrath = model.dialect == crate::script::ScriptDialect::Wrath12340;
+    let Some(packed) = accepts_payload(view.packed, wrath).then_some(view.packed) else {
         return false;
     };
 
@@ -123,7 +133,12 @@ pub(super) fn pickup_pet_action(model: &mut Model, slot: u32) -> bool {
     // A spell slot keeps its type and autocast bits with id 0, and the server is told. `false` is
     // right: the passive gate reads the source's spell record, and id 0 has none.
     if kind(packed) == 1 {
-        write_slot(model, index, packed & 0xFFFF_0000, false);
+        write_slot(
+            model,
+            index,
+            packed & if wrath { 0xff00_0000 } else { 0xffff_0000 },
+            false,
+        );
     }
     queue_cursor_update(model);
     true
@@ -179,7 +194,13 @@ fn write_slot(model: &mut Model, target: usize, source: u32, passive: bool) -> O
         return None;
     }
     let mut words: Vec<u32> = model.pet_bar.slots.iter().map(|s| s.view.packed).collect();
-    let assigned = assign(&mut words, target, source, passive)?;
+    let assigned = assign_native(
+        &mut words,
+        target,
+        source,
+        passive,
+        model.dialect == crate::script::ScriptDialect::Wrath12340,
+    )?;
 
     // One `CMSG_PET_SET_ACTION`: the relocation pair first whenever there was one, changed or
     // not, then the target pair (`0x4bcad4`).
@@ -567,5 +588,69 @@ mod tests {
             s.take_action_sets().is_empty(),
             "and writes nothing to the action bar"
         );
+    }
+}
+
+#[cfg(test)]
+mod wrath_words {
+    use super::*;
+    #[test]
+    fn native_pickup_and_book_keep_full_word_and_getter_arity() {
+        use crate::script::{PetActionView, PetBookState, ScriptDialect, SpellSlotView, UiScript};
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(
+            script
+                .eval::<u32>("return select('#', GetPetActionInfo(1))")
+                .unwrap(),
+            7
+        );
+        script.set_pet_actions(
+            true,
+            true,
+            true,
+            vec![PetActionView {
+                packed: 0xc101_0001,
+                name: Some("Spell".into()),
+                ..Default::default()
+            }],
+        );
+        assert!(script.eval::<bool>("return PickupPetAction(1)").unwrap());
+        assert!(
+            matches!(script.cursor_payload(), Some(CursorPayload::PetAction(p)) if p.packed == 0xc101_0001)
+        );
+        assert_eq!(script.take_pet_set_actions(), vec![vec![(0, 0xc100_0000)]]);
+        script.run("ClearCursor()").unwrap();
+        script.set_pet_book(PetBookState {
+            token: Some("PET".into()),
+            slots: vec![SpellSlotView {
+                spell_id: 0x010001,
+                packed: 0x9101_0001,
+                ..Default::default()
+            }],
+        });
+        script.run("PickupSpell(1, 'pet')").unwrap();
+        assert!(
+            matches!(script.cursor_payload(), Some(CursorPayload::PetAction(p)) if p.packed == 0x9101_0001)
+        );
+        assert!(script.take_pet_set_actions().is_empty());
+    }
+    #[test]
+    fn full_ids_are_not_empty_relocation_slots() {
+        let mut slots = [0x07000002, 0x01010000];
+        assert!(assign_native(&mut slots, 0, 0x01020000, false, true).is_none());
+        assert_eq!(slots, [0x07000002, 0x01010000]);
+    }
+    #[test]
+    fn native_payload_types_and_duplicate_swap_preserve_low24() {
+        for kind in 0..64 {
+            assert_eq!(
+                accepts_payload(kind << 24 | 0x010001, true),
+                matches!(kind, 1 | 6 | 7 | 8..=17)
+            );
+        }
+        let mut slots = [0xc1010001, 0x01020001];
+        let assigned = assign_native(&mut slots, 1, 0x81010001, false, true).unwrap();
+        assert_eq!(assigned.reloc, Some(0));
+        assert_eq!(slots, [0x01020001, 0x81010001]);
     }
 }
