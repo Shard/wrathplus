@@ -1010,6 +1010,7 @@ enum WrathRoute {
     NativeWho,
     NativeChat,
     NativeMailMutation,
+    NativeQuestsCompletedQuery,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1023,6 +1024,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
         ClientCommand::NativeWhoCommand(_) => WrathRoute::NativeWho,
         ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
@@ -1317,6 +1319,10 @@ fn writer_loop(
                     WrathRoute::NativeWorldportAck => {
                         let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
                         active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativeQuestsCompletedQuery => {
+                        let (opcode, body) = benilla_protocol::wrath_quests_completed::encode_query();
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeMailMutation => {
                         let ClientCommand::NativeMailMutation(command) = command else { unreachable!() };
@@ -3276,3 +3282,10 @@ mod pet_name_tests;
 #[cfg(test)]
 #[path = "wrath/who_tests.rs"]
 mod who_tests;
+
+#[cfg(test)]
+#[test]
+fn completed_quest_query_is_native_and_empty() {
+    assert_eq!(route(&ClientCommand::NativeQuestsCompletedQuery), WrathRoute::NativeQuestsCompletedQuery);
+    assert_eq!(benilla_protocol::wrath_quests_completed::encode_query(), (0x500, vec![]));
+}

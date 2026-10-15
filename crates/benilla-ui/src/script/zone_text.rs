@@ -67,6 +67,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Some(s) => lua.create_string(s).map(Value::String),
                 None => Ok(Value::Nil),
             };
+            // Wrath 0x51ba50 returns no values without territory context; special
+            // areas return (type, isSubZone), ordinary territory returns
+            // (type, nil, factionName). Vanilla's tuple below is deliberately unchanged.
+            if model.dialect == super::ScriptDialect::Wrath12340 {
+                let Some(kind) = z.pvp_type.as_deref() else {
+                    return Ok(MultiValue::new());
+                };
+                let mut values = vec![Value::String(lua.create_string(kind)?)];
+                values.push(Value::Nil);
+                if !matches!(kind, "sanctuary" | "arena" | "combat") {
+                    values.push(Value::String(
+                        lua.create_string(z.pvp_faction.as_deref().unwrap_or(""))?,
+                    ));
+                }
+                return Ok(MultiValue::from_vec(values));
+            }
             Ok(MultiValue::from_vec(vec![
                 string(&z.pvp_type)?,
                 string(&z.pvp_faction)?,

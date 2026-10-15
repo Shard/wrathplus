@@ -214,6 +214,10 @@ impl WrathEventAdapter {
                 Ok(packet) => handled(vec![SessionEvent::WrathWho { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            0x0501 => Ok(match crate::wrath_quests_completed::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathQuestsCompleted { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x0239 | 0x0297 => {
                 Ok(match crate::wrath_mail_mutations::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathMailMutation { packet }], Vec::new(), Vec::new()),
