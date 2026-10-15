@@ -57,7 +57,7 @@ pub(crate) struct NameCache {
     player_traits: HashMap<u64, (u8, u8, u8)>,
     /// A `None` answer is an entry the server flagged unknown.
     creatures: QueryCache<u32, CreatureRecord>,
-    /// No negative entry: the server answers for a live pet or says nothing.
+    /// No negative entry: Vanilla says nothing for missing pets; Wrath empty replies evict.
     pets: QueryCache<u32, String>,
     /// Bumped by every landed answer and the pet-rename eviction, never by an ask: the gated
     /// feeds re-run when it moves.
@@ -478,10 +478,38 @@ pub(crate) mod net {
     pub(crate) fn register(app: &mut App) {
         use SessionEventKind as K;
         app.add_systems(PreStartup, configure_query_dialects)
+            .add_systems(
+                Update,
+                drain_native_pet_names
+                    .after(benilla_world::schedule::WorldStage::Net)
+                    .before(crate::ui_script::UiFeed),
+            )
             .net_handler(K::PlayerName, on_player_name)
             .net_handler(K::PetName, on_pet_name)
             .net_handler(K::CreatureName, on_creature_name)
             .net_handler(K::InvalidatePlayer, on_invalidate_player);
+    }
+
+    // Base-name display only: the lossless DTO carries timestamp/declensions, but this
+    // cache does not model them or infer timestamp-driven refresh. Match native player
+    // and creature display conversion (wrath_session::cstring), not transport decoding.
+    pub(super) fn drain_native_pet_names(
+        packets: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
+        mut names: ResMut<NameCache>,
+    ) {
+        let Some(mut packets) = packets else {
+            return;
+        };
+        for response in packets.0.drain(..) {
+            if response.name.is_empty() {
+                names.forget_pet(response.pet_number);
+            } else {
+                names.insert_pet(
+                    response.pet_number,
+                    String::from_utf8_lossy(&response.name).into_owned(),
+                );
+            }
+        }
     }
 
     fn configure_query_dialects(
@@ -1106,3 +1134,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "names_native_pet_tests.rs"]
+mod native_pet_tests;

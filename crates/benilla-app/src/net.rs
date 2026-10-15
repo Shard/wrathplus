@@ -633,6 +633,7 @@ impl NetCommands {
                         // `benilla_protocol::wrath_session`: queries, action bar, casting.
                         | ClientCommand::NameQuery { .. }
                         | ClientCommand::CreatureQuery { .. }
+                        | ClientCommand::PetNameQuery { .. }
                         | ClientCommand::GameObjectQuery { .. }
                         | ClientCommand::SetActionButton { .. }
                         | ClientCommand::CastSpell { .. }
