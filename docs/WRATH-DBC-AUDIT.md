@@ -53,7 +53,6 @@ expected row, generic parse success, or an in-range/injective map as certificati
 
 | Table | Existing reader/test location to extend |
 | --- | --- |
-| AnimationData | `src/anim_data.rs` |
 | SoundEntries | `src/sound_entries.rs` |
 | Material | `src/material.rs` |
 | GroundEffectTexture | `src/ground_effects.rs` |
@@ -159,3 +158,25 @@ not pristine stock-table or live eligibility certification.
 ItemLimitCategory unit validation: formats library **534 passed / 0 failed**;
 installed known-row regression **1 passed / 0 failed**; app library **4,487
 passed / 0 failed / 12 ignored**. Rustfmt and diff whitespace checks passed.
+
+## AnimationData fallback audit
+
+Native filename accessor `0x8a93d0`, vtable `0xa27130` and object `0xad30c8`
+bind loader `0x637550` (8 fields / 32 bytes) and raw loader `0x6590c0`.
+Decoder `0x8a93e0` reads each disk word into the same runtime offset (name
+is relocated at +4). The fallback walk at `0x7177d5..0x717823` resolves
+an ID through that object's pointer index, then follows row `+0x14` at
+`0x717814` when the requested clip cannot be used, with a visited/self guard.
+The distinct lookup at `0x7176b0` returns `+0x18`; it is not the fallback.
+
+Correct the Wrath mapping of the reader's legacy fallback slot 6 to disk
+column 5. Vanilla column 6 is unchanged. The unused legacy slot 5 is absent
+rather than aliased. Previously ordinary Wrath fallbacks read their own ID
+and were suppressed; fly variants could incorrectly fall back to ground IDs.
+`tests/wrath_animation_data.rs` asserts independently inspected raw words and
+production names, weapon flags and fallback chains (including FlyAttack2H
+247 → 246, not column-6 value 18). Synthetic 7/8-column fixtures protect both
+dialects. Effective installed chain: 506 rows; not live animation parity.
+
+AnimationData unit gates: formats **535 passed, 0 failed**; installed **1 passed,
+0 failed**; app **4487 passed, 0 failed, 12 ignored**. Rustfmt and diff checks pass.
