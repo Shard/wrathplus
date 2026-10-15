@@ -31,6 +31,54 @@ mod tests {
     use benilla_protocol::wrath_lfg::{DungeonLock, PlayerInfo, RandomDungeonReward};
 
     #[test]
+    fn queue_capture_keeps_signed_waits_and_absent_versus_empty_join_blocks() {
+        use benilla_protocol::wrath_lfg::queue;
+        let packets = vec![
+            Packet::Queue(queue::Packet::JoinResult {
+                result: 6,
+                state: 7,
+                locks: None,
+            }),
+            Packet::Queue(queue::Packet::JoinResult {
+                result: 6,
+                state: 7,
+                locks: Some(vec![]),
+            }),
+            Packet::Queue(queue::Packet::QueueStatus {
+                dungeon: 0xfe000007,
+                average_wait: -1,
+                wait: i32::MIN,
+                tank_wait: i32::MAX,
+                healer_wait: -7,
+                dps_wait: 0,
+                tanks: 255,
+                healers: 2,
+                dps: 3,
+                queued_time: u32::MAX,
+            }),
+        ];
+        let mut app = App::new();
+        app.add_plugins(UiLfgPlugin);
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            packets
+                .iter()
+                .cloned()
+                .map(|packet| SessionEvent::WrathLfg { packet })
+                .collect(),
+        );
+        assert_eq!(
+            app.world()
+                .resource::<NativeLfgPackets>()
+                .0
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            packets
+        );
+    }
+
+    #[test]
     fn sole_capture_preserves_order_raw_values_duplicates_empties_and_disconnect_scope() {
         let mut app = App::new();
         app.add_plugins(UiLfgPlugin);
