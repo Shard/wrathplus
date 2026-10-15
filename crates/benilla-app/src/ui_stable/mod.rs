@@ -210,7 +210,7 @@ fn feed_stable(
         .unwrap_or(0);
 
     // The reference's live-pet test, `[0xb714a0]|[0xb714a4]`; a dismissed pet fails it.
-    let has_live_pet = bar.spells.pet_guid != 0;
+    let has_live_pet = bar.guid() != 0;
     let fresh = snapshot(
         &open,
         &names,
@@ -304,7 +304,7 @@ fn feed_stable_booth(
     // pet the latest list no longer holds.
     let slot = script.stable_selection();
 
-    let live_pet = bar.spells.pet_guid;
+    let live_pet = bar.guid();
     let (unit, display_id) = stable_subject(
         slot,
         (live_pet != 0).then(|| pet.entity(live_pet)).flatten(),

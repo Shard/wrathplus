@@ -36,7 +36,7 @@ pub(super) fn actions_usable(
     if player
         .0
         .player_farsight()
-        .is_some_and(|held| held != bar.spells.pet_guid)
+        .is_some_and(|held| held != bar.guid())
     {
         return false;
     }
@@ -55,7 +55,7 @@ pub(super) fn actions_usable(
         return false;
     }
     // `0x4bd08d`: bit 27 of the bar state `[0xb71468]`, which only the server writes.
-    !bar.spells.bar_disabled()
+    !bar.bar_disabled()
 }
 
 impl PetUnit<'_, '_> {
@@ -63,7 +63,7 @@ impl PetUnit<'_, '_> {
     /// `None` when it does not. A caller past the gate holds the pet the predicate resolved, which
     /// the dispatcher's own later lookups of the same guid find again (`0x4bd346`, `0x4bd403`).
     pub(crate) fn usable_pet(&self, bar: &PetBar) -> Option<&ObjectStore> {
-        let pet = self.store(bar.spells.pet_guid);
+        let pet = self.store(bar.guid());
         pet.filter(|_| actions_usable(bar, self.self_guid.0, self.player_store(), pet))
     }
 

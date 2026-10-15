@@ -41,8 +41,8 @@ pub(super) fn feed_pet_menu(script: Option<NonSendMut<UiScript>>, bar: Res<PetBa
     let Some(mut script) = script else {
         return;
     };
-    let flags = (bar.spells.pet_guid != 0)
-        .then(|| pet.store(bar.spells.pet_guid))
+    let flags = (bar.guid() != 0)
+        .then(|| pet.store(bar.guid()))
         .flatten()
         .filter(|store| store.0.unit_summoned_by() == pet.self_guid.0)
         .map_or(0, |store| store.0.unit_flags());
@@ -67,7 +67,7 @@ pub(super) fn drain_pet_menu(
     if abandons == 0 && dismisses == 0 && renames.is_empty() {
         return;
     }
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     if pet_guid == 0 {
         debug!("ui_pet: dropping a queued menu verb — there is no pet");
         return;

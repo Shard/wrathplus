@@ -75,7 +75,7 @@ pub(super) fn feed_pet_unit(
     if gate.skip() {
         return;
     }
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     watch_name_timestamp(pet_guid, &mut script, &pet, &mut names, memory);
     // An unstreamed pet pushes nothing: `UnitExists("pet")` reads false and the frame hides.
     let fresh = (pet_guid != 0)

@@ -383,8 +383,8 @@ pub(crate) fn feed_trainer(
                         .collect()
                 })
                 .unwrap_or_default(),
-            pet: (re_eval.pet_bar.spells.pet_guid != 0)
-                .then(|| re_eval.index.0.get(&re_eval.pet_bar.spells.pet_guid))
+            pet: (re_eval.pet_bar.guid() != 0)
+                .then(|| re_eval.index.0.get(&re_eval.pet_bar.guid()))
                 .flatten()
                 .and_then(|&e| re_eval.stores.get(e).ok())
                 .map(|store| reeval::PetView {

@@ -75,10 +75,7 @@ pub(crate) fn feed_pet_book(
     };
     let now = Instant::now();
     let (anchor, ui_now) = (clock.anchor, clock.ui_now);
-    let pet_store = index
-        .0
-        .get(&bar.spells.pet_guid)
-        .and_then(|&e| stores.get(e).ok());
+    let pet_store = index.0.get(&bar.guid()).and_then(|&e| stores.get(e).ok());
 
     let mut fresh = PetBookState {
         // `HasPetSpells`'s token is the player's class, not the pet's (`0x4b4463` reads
@@ -92,18 +89,45 @@ pub(crate) fn feed_pet_book(
         slots: Vec::new(),
     };
     if bar.has_bar() {
-        for &entry in &bar.spells.spells {
-            let spell_id = entry.action();
-            let Some(d) = spells.catalog.get(spell_id) else {
-                // `0x4b2f90`'s first gate: no `Spell.dbc` record, no book slot.
-                continue;
-            };
-            if !d.in_pet_book() {
-                continue;
+        if let Some(native) = &bar.native {
+            for &entry in &native.spells {
+                let Some(d) = spells.catalog.get(entry.id()) else {
+                    continue;
+                };
+                if !d.in_pet_book() {
+                    continue;
+                }
+                fresh.slots.push(SpellSlotView {
+                    spell_id: entry.id(),
+                    name: d.name.clone(),
+                    rank: d.rank.clone(),
+                    texture: d.icon.clone(),
+                    passive: d.passive,
+                    current: pet_store.is_some_and(|s| {
+                        crate::ui_action::toggle::active_action_toggle(entry.id(), d, s)
+                    }),
+                    cooldown: bar
+                        .cooldowns
+                        .wrath_pet_info(entry.id(), Some(d), now)
+                        .ui_triple(anchor, ui_now),
+                    autocast: Some((entry.0 & 0x8000_0000 != 0, entry.0 & 0x4000_0000 != 0)),
+                    packed: entry.0,
+                });
             }
-            fresh
-                .slots
-                .push(slot_view(entry, d, &bar, pet_store, now, anchor, ui_now));
+        } else {
+            for &entry in &bar.spells.spells {
+                let spell_id = entry.action();
+                let Some(d) = spells.catalog.get(spell_id) else {
+                    // `0x4b2f90`'s first gate: no `Spell.dbc` record, no book slot.
+                    continue;
+                };
+                if !d.in_pet_book() {
+                    continue;
+                }
+                fresh
+                    .slots
+                    .push(slot_view(entry, d, &bar, pet_store, now, anchor, ui_now));
+            }
         }
         // `0x4b2fd0`'s re-sort, with the player book's own comparator.
         fresh
@@ -176,7 +200,7 @@ fn slot_view(
 /// player. Unlike the bar's press it asks no usability predicate: no call site of `0x4bcf70` is
 /// in this path.
 pub(crate) fn cast_pet_spell(p: &mut crate::ui_pet::PetPress, spell_id: u32, on_self: bool) {
-    let pet_guid = p.bar.spells.pet_guid;
+    let pet_guid = p.bar.guid();
     if pet_guid == 0 {
         debug!("ui_pet_book: dropping a queued pet book cast — the bar is gone");
         return;
@@ -195,7 +219,7 @@ pub(crate) fn cast_pet_spell(p: &mut crate::ui_pet::PetPress, spell_id: u32, on_
     }
     // The word built for the send (`0x4b350a`-`0x4b3516`): type 1, the spell branch, autocast
     // bits clear; with no target passed it aims at the selection (`0x4b34af`).
-    let packed = 0x0100_0000 | (spell_id & 0xFFFF);
+    let packed = book_cast_word(spell_id, p.bar.native.is_some());
     debug!("ui_pet_book: cast {spell_id} (target {target_guid:#x})");
     let _ = p.commands.0.send(ClientCommand::PetAction {
         pet_guid,
@@ -220,7 +244,7 @@ pub(crate) fn drain_pet_book(
     if autocasts.is_empty() {
         return;
     }
-    let pet_guid = bar.spells.pet_guid;
+    let pet_guid = bar.guid();
     if pet_guid == 0 {
         debug!("ui_pet_book: dropping queued pet book intents — the bar is gone");
         return;
@@ -230,7 +254,12 @@ pub(crate) fn drain_pet_book(
             debug!("ui_pet_book: autocast {spell_id} refused, the pet's actions are not usable");
             continue;
         }
-        let Some(on) = flip_autocast(&mut bar.spells, spell_id) else {
+        let on = if let Some(native) = &mut bar.native {
+            flip_native_autocast(native, spell_id)
+        } else {
+            flip_autocast(&mut bar.spells, spell_id)
+        };
+        let Some(on) = on else {
             continue;
         };
         // `0x4bcdc6`'s `SignalEvent(0x161)`: the bar repaints before the packet leaves, and the
@@ -243,6 +272,29 @@ pub(crate) fn drain_pet_book(
             enabled: on,
         });
     }
+}
+
+fn book_cast_word(spell_id: u32, native: bool) -> u32 {
+    0x0100_0000 | (spell_id & if native { 0x00ff_ffff } else { 0xffff })
+}
+
+fn flip_native_autocast(
+    spells: &mut benilla_protocol::wrath_pet::PetSpells,
+    spell_id: u32,
+) -> Option<bool> {
+    let word = spells
+        .spells
+        .iter_mut()
+        .find(|w| w.id() == spell_id && w.0 & 0x8000_0000 != 0)?;
+    word.0 ^= 0x4000_0000;
+    let on = word.0 & 0x4000_0000 != 0;
+    let key = word.0 & 0x3fff_ffff;
+    for slot in &mut spells.actions {
+        if slot.0 & 0x3fff_ffff == key {
+            slot.0 = (slot.0 & !0x4000_0000) | (word.0 & 0x4000_0000);
+        }
+    }
+    Some(on)
 }
 
 /// `0x4bccb0`'s local half: flip bit 30 of the spell's raw word, then copy it onto every bar slot
@@ -274,6 +326,28 @@ mod tests {
     use benilla_protocol::messages::{
         PetSpells, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
     };
+
+    #[test]
+    fn native_book_cast_and_toggle_preserve_full_ids_and_raw_words() {
+        use benilla_protocol::wrath_pet::{Action, PetSpells as Native};
+        let id = 0x12abcd;
+        assert_eq!(book_cast_word(id, true), 0x0112abcd);
+        assert_eq!(book_cast_word(id, false), 0x0100abcd);
+        let mut native = Native {
+            guid: 7,
+            spells: vec![Action(0x8112abcd), Action(0x0100abcd)],
+            ..Default::default()
+        };
+        native.actions[3] = Action(0x8112abcd);
+        native.actions[4] = Action(0x8100abcd);
+        assert_eq!(flip_native_autocast(&mut native, id), Some(true));
+        assert_eq!(native.spells[0].0, 0xc112abcd);
+        assert_eq!(native.actions[3].0, 0xc112abcd);
+        assert_eq!(native.actions[4].0, 0x8100abcd);
+        assert_eq!(flip_native_autocast(&mut native, 0xabcd), None);
+        assert_eq!(flip_native_autocast(&mut native, id), Some(false));
+        assert_eq!(native.actions[3].0, 0x8112abcd);
+    }
 
     fn word(kind: u8, spell_id: u32) -> PetActionEntry {
         PetActionEntry::from((u32::from(kind) << 24) | spell_id)
