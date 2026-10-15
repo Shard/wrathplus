@@ -53,7 +53,6 @@ expected row, generic parse success, or an in-range/injective map as certificati
 
 | Table | Existing reader/test location to extend |
 | --- | --- |
-| SoundEntries | `src/sound_entries.rs` |
 | Material | `src/material.rs` |
 | GroundEffectTexture | `src/ground_effects.rs` |
 
@@ -179,4 +178,29 @@ production names, weapon flags and fallback chains (including FlyAttack2H
 dialects. Effective installed chain: 506 rows; not live animation parity.
 
 AnimationData unit gates: formats **535 passed, 0 failed**; installed **1 passed,
+0 failed**; app **4487 passed, 0 failed, 12 ignored**. Rustfmt and diff checks pass.
+
+## SoundEntries native layout audit
+
+Filename accessor `0x8b69b0` binds loader `0x64d630` through vtable
+`0xa288e8` (object `0xad4670`); loader validates 30 columns / 120-byte
+records. Slot +12 raw loader `0x65fa50` invokes decoder `0x8b69c0`, which
+preserves serialized offsets: name at +8, ten filename offsets +12..+48,
+ten frequency words +52..+88, directory +92, then six words +96..+116.
+Strings are relocated through the loaded string block. Scalar semantic names
+come from the conventional schema, not names recovered from the decoder.
+The dense ID index is last-duplicate-wins. Existing mapping of the first 29
+columns is correct; the final advanced-entry reference remains unexposed.
+No production mapping change is needed.
+
+`tests/wrath_sound_entries.rs` checks independently inspected effective-chain
+rows: UI kit 850, forced ambience beds 4160/4209, six Blizzard variations 7,
+and ten Ashbringer variations 8940 (retaining the leading directory separator).
+It covers paths, weights, names, types, scalar playback metadata, case-insensitive
+lookup, forced-bed IDs and missing lookups. Raw-word assertions distinguish
+volume, EAX and the appended field. Installed shape is 12,941 rows; neither
+this row count nor decoding certifies stock completeness, flag semantics,
+advanced sound support, native playback or archive availability of each path.
+
+SoundEntries unit gates: formats **535 passed, 0 failed**; installed **1 passed,
 0 failed**; app **4487 passed, 0 failed, 12 ignored**. Rustfmt and diff checks pass.
