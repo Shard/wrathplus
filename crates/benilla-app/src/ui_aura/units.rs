@@ -81,7 +81,7 @@ fn fill_group<'a>(
 }
 
 /// What [`UnitAuras::feed`] reads this frame.
-pub(super) struct Inputs<'g, 'a, H, V> {
+pub(super) struct Inputs<'g, 'a, H, V, N> {
     pub(super) group: Option<&'g GroupState>,
     /// Our guid, and whether the player's list moved this frame: a token naming us reads the
     /// player's list, which the caller pushes.
@@ -95,6 +95,7 @@ pub(super) struct Inputs<'g, 'a, H, V> {
     pub(super) held: H,
     /// `UnitBuff`'s unit gate on a live unit, by guid.
     pub(super) buffs_visible: V,
+    pub(super) native_visible: N,
     pub(super) catalog: Option<&'a SpellCatalog>,
     /// The spell catalog was replaced, so every list is rebuilt.
     pub(super) catalog_moved: bool,
@@ -108,6 +109,7 @@ struct GuidList {
     inputs: Vec<AuraInput>,
     list: Vec<AuraState>,
     native: Option<Vec<crate::net::wrath_auras::StampedAura>>,
+    native_all_visible: bool,
     /// Taken from [`UnitAuras::versions`] each time the list changes.
     version: u64,
     /// The frame that last read it; an entry no token can name this frame is dropped.
@@ -140,14 +142,15 @@ impl UnitAuras {
     /// Build the resolver's inputs and every nameable guid's list, push what moved, and return
     /// the tokens `UNIT_AURA` fires for: every event token naming a unit whose list moved
     /// (`0x515e50`), or that names a new unit. A token clearing fires nothing.
-    pub(super) fn feed<'a, H, V>(
+    pub(super) fn feed<'a, H, V, N>(
         &mut self,
         script: &mut UiScript,
-        inputs: Inputs<'_, 'a, H, V>,
+        inputs: Inputs<'_, 'a, H, V, N>,
     ) -> Vec<&'static str>
     where
         H: Fn(u64) -> Option<&'a ObjectStore>,
         V: Fn(u64, &ObjectStore) -> bool,
+        N: Fn(u64, Option<&ObjectStore>, &[crate::net::wrath_auras::StampedAura]) -> bool,
     {
         let Inputs {
             group,
@@ -158,6 +161,7 @@ impl UnitAuras {
             npc,
             held,
             buffs_visible,
+            native_visible,
             catalog,
             catalog_moved,
             packets,
@@ -198,18 +202,42 @@ impl UnitAuras {
             if guid != me {
                 if store.is_none() && record_ok {
                     if let Some(native) = group.and_then(|g| g.wrath_aura_slots(guid)) {
-                        let stamps = native.into_iter().map(|(slot, spell_id, _, flags)| crate::net::wrath_auras::StampedAura {
-                            aura: benilla_protocol::wrath_auras::NativeAura {
-                                slot, spell_id, flags, level: 0, stacks: 1, caster_guid: None,
-                                max_duration_ms: None, remaining_ms: None,
-                            }, received_at: 0.0,
-                        }).collect::<Vec<_>>();
-                        self.refresh_native(guid, &stamps, catalog, clocks);
+                        let stamps = native
+                            .into_iter()
+                            .map(|(slot, spell_id, _, flags)| {
+                                crate::net::wrath_auras::StampedAura {
+                                    aura: benilla_protocol::wrath_auras::NativeAura {
+                                        slot,
+                                        spell_id,
+                                        flags,
+                                        level: 0,
+                                        stacks: 1,
+                                        caster_guid: None,
+                                        max_duration_ms: None,
+                                        remaining_ms: None,
+                                    },
+                                    received_at: 0.0,
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        self.refresh_native(
+                            guid,
+                            &stamps,
+                            native_visible(guid, store, &stamps),
+                            catalog,
+                            clocks,
+                        );
                         continue;
                     }
                 }
                 if let Some(auras) = packets.and_then(|p| p.by_guid.get(&guid)) {
-                    self.refresh_native(guid, auras, catalog, clocks);
+                    self.refresh_native(
+                        guid,
+                        auras,
+                        native_visible(guid, store, auras),
+                        catalog,
+                        clocks,
+                    );
                 } else {
                     self.refresh(guid, store, record_ok, group, &buffs_visible, catalog);
                 }
@@ -256,12 +284,13 @@ impl UnitAuras {
         &mut self,
         guid: u64,
         auras: &[crate::net::wrath_auras::StampedAura],
+        all_visible: bool,
         catalog: Option<&SpellCatalog>,
         clocks: (f64, f64),
     ) {
         if let Some(e) = self.by_guid.get_mut(&guid) {
             e.frame = self.frame;
-            if e.native.as_deref() == Some(auras) {
+            if e.native.as_deref() == Some(auras) && e.native_all_visible == all_visible {
                 return;
             }
         }
@@ -271,7 +300,8 @@ impl UnitAuras {
             GuidList {
                 inputs: Vec::new(),
                 native: Some(auras.to_vec()),
-                list: super::native::list(catalog, auras, clocks.0, clocks.1),
+                native_all_visible: all_visible,
+                list: super::native::list(catalog, auras, all_visible, clocks.0, clocks.1),
                 version: self.versions,
                 frame: self.frame,
             },
@@ -343,6 +373,7 @@ impl UnitAuras {
                 e.insert(GuidList {
                     inputs,
                     native: None,
+                    native_all_visible: true,
                     list,
                     version: self.versions,
                     frame: self.frame,
@@ -363,6 +394,103 @@ mod tests {
     use crate::char_select::ClientState;
     use crate::net::{Guid, GuidIndex, NetCommands, ObjectStore, Reputations, SelfPlayer};
     use crate::ui_party::GroupState;
+
+    #[test]
+    fn unchanged_native_snapshot_rebuilds_when_visibility_changes() {
+        let mut cache = super::UnitAuras::default();
+        let aura = crate::net::wrath_auras::StampedAura {
+            aura: benilla_protocol::wrath_auras::NativeAura {
+                slot: 0,
+                spell_id: 123,
+                flags: 1,
+                level: 80,
+                stacks: 1,
+                caster_guid: None,
+                max_duration_ms: None,
+                remaining_ms: None,
+            },
+            received_at: 0.0,
+        };
+        let snapshot = [aura];
+        cache.refresh_native(7, &snapshot, true, None, (0.0, 0.0));
+        assert_eq!(cache.list(7).unwrap().len(), 1);
+        let version = cache.versions;
+        cache.refresh_native(7, &snapshot, true, None, (1.0, 1.0));
+        assert_eq!(cache.versions, version);
+        cache.refresh_native(7, &snapshot, false, None, (1.0, 1.0));
+        assert!(cache.list(7).unwrap().is_empty());
+        cache.refresh_native(7, &snapshot, true, None, (2.0, 2.0));
+        assert_eq!(cache.list(7).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn native_feed_rechecks_catalog_and_context_without_packet_changes() {
+        use crate::net::wrath_auras::{PacketAuras, StampedAura};
+        let mut cache = super::UnitAuras::default();
+        let mut script = UiScript::new().unwrap();
+        let packets = PacketAuras {
+            by_guid: std::collections::HashMap::from([(
+                MEMBER,
+                vec![StampedAura {
+                    aura: benilla_protocol::wrath_auras::NativeAura {
+                        slot: 0,
+                        spell_id: 123,
+                        flags: 1,
+                        level: 80,
+                        stacks: 1,
+                        caster_guid: None,
+                        max_duration_ms: None,
+                        remaining_ms: None,
+                    },
+                    received_at: 0.0,
+                }],
+            )]),
+            ..Default::default()
+        };
+        let catalog =
+            benilla_formats::SpellCatalog::from_displays(std::collections::HashMap::from([(
+                123,
+                benilla_formats::SpellDisplay {
+                    effect_apply_aura: [295, 0, 0],
+                    ..Default::default()
+                },
+            )]));
+        let mut feed =
+            |catalog: Option<&benilla_formats::SpellCatalog>, moved, reaction, local, flags| {
+                cache.feed(
+                    &mut script,
+                    super::Inputs {
+                        group: None,
+                        me: (ME, false),
+                        pet: 0,
+                        target: MEMBER,
+                        mouseover: 0,
+                        npc: 0,
+                        held: |_| None,
+                        buffs_visible: |_, _: &ObjectStore| true,
+                        native_visible: |_, _: Option<&ObjectStore>, auras: &[StampedAura]| {
+                            super::super::native::all_visible(
+                                super::super::native::has_active_aura_295(catalog, auras),
+                                local,
+                                reaction,
+                                flags,
+                            )
+                        },
+                        catalog,
+                        catalog_moved: moved,
+                        packets: Some(&packets),
+                        clocks: (0.0, 0.0),
+                    },
+                );
+                cache.list(MEMBER).unwrap().len()
+            };
+        assert_eq!(feed(None, false, 3, ME, 0), 1); // availability fallback
+        assert_eq!(feed(Some(&catalog), true, 3, ME, 0), 0); // same packet, catalog arrives
+        assert_eq!(feed(Some(&catalog), false, 4, ME, 0), 1);
+        assert_eq!(feed(Some(&catalog), false, 3, ME, 0), 0);
+        assert_eq!(feed(Some(&catalog), false, 3, ME, 0x04000000), 1);
+        assert_eq!(feed(Some(&catalog), false, 3, 0, 0), 1);
+    }
 
     const ME: u64 = 0x10;
     const MEMBER: u64 = 0x1234;

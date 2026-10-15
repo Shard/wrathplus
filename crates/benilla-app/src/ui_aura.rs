@@ -303,6 +303,11 @@ fn buffs_visible_on(
     reputations: &Reputations,
     owner_store: impl FnOnce(u64) -> Option<ObjectStore>,
 ) -> bool {
+    if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        // Native packet/roster lists apply their own whole-unit gate. No native snapshot
+        // establishes type 295 here; never reinterpret Wrath MOUNT as AURAS_VISIBLE.
+        return true;
+    }
     if store.0.unit_flags() & UNIT_FLAG_AURAS_VISIBLE != 0 {
         return true;
     }
@@ -391,6 +396,40 @@ struct AuraUnits<'w> {
     hovered_go: Option<Res<'w, crate::target::HoveredObject>>,
     interact: Option<Res<'w, crate::ui_session::InteractNpc>>,
     packets: Option<Res<'w, crate::net::wrath_auras::PacketAuras>>,
+    names: Option<Res<'w, crate::names::NameCache>>,
+    commands: Res<'w, NetCommands>,
+}
+
+/// Resolve template metadata through descriptor entry, including permanent pets whose
+/// name resolution otherwise uses a pet cache. Context is reconsidered every feed.
+fn native_visible(
+    catalog: Option<&SpellCatalog>,
+    auras: &[crate::net::wrath_auras::StampedAura],
+    local_guid: u64,
+    guid: u64,
+    target: Option<&ObjectStore>,
+    player: &ObjectStore,
+    factions: Option<&Factions>,
+    reputations: &Reputations,
+    names: Option<&crate::names::NameCache>,
+    commands: &NetCommands,
+) -> bool {
+    let type_flags = target
+        .and_then(|s| s.0.object_entry())
+        .filter(|&e| e != 0)
+        .and_then(|entry| {
+            names.map(|names| {
+                names.resolve_creature(entry, guid, commands);
+                names.creature_record(entry).map_or(0, |r| r.type_flags)
+            })
+        })
+        .unwrap_or(0);
+    native::all_visible(
+        native::has_active_aura_295(catalog, auras),
+        local_guid,
+        crate::target::ring_reaction(factions, reputations, target, Some(player)),
+        type_flags,
+    )
 }
 
 fn feed_auras(
@@ -477,7 +516,19 @@ fn feed_auras(
         .as_deref()
         .and_then(|p| p.by_guid.get(&self_guid.0));
     if let Some(auras) = packet_player {
-        list = native::list(catalog, auras, bevy_now, script_now);
+        let visible = native_visible(
+            catalog,
+            auras,
+            self_guid.0,
+            self_guid.0,
+            Some(store),
+            store,
+            factions.as_deref(),
+            &reputations,
+            units.names.as_deref(),
+            &units.commands,
+        );
+        list = native::list(catalog, auras, visible, bevy_now, script_now);
     }
 
     // Before the memory update, so a tracking change joins the edge key.
@@ -577,6 +628,23 @@ fn feed_auras(
             npc: units.interact.as_deref().and_then(|i| i.1).unwrap_or(0),
             held,
             buffs_visible,
+            native_visible:
+                |guid,
+                 target: Option<&ObjectStore>,
+                 auras: &[crate::net::wrath_auras::StampedAura]| {
+                    native_visible(
+                        catalog,
+                        auras,
+                        self_guid.0,
+                        guid,
+                        target,
+                        store,
+                        factions.as_deref(),
+                        &reputations,
+                        units.names.as_deref(),
+                        &units.commands,
+                    )
+                },
             catalog,
             catalog_moved,
             packets: units.packets.as_deref(),
