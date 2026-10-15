@@ -12,7 +12,7 @@ mod bar;
 mod doll;
 mod drag;
 pub(crate) mod money;
-mod pet;
+pub(crate) mod pet;
 
 pub(crate) use bar::place_action;
 pub(crate) use drag::{

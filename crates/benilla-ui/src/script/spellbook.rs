@@ -296,7 +296,10 @@ fn pickup_spell(model: &mut Model, id: u32, book_type: &str) -> bool {
     let payload = if is_pet_book(book_type) {
         // `0x494e20` refuses type 0 and types 8 and up.
         let packed = slot.packed;
-        if !(1..=7).contains(&((packed >> 24) & 0x3F)) {
+        if !super::cursor::pet::accepts_payload(
+            packed,
+            model.dialect == crate::script::ScriptDialect::Wrath12340,
+        ) {
             return false;
         }
         CursorPayload::PetAction(super::cursor::CursorPetAction {
