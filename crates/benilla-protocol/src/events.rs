@@ -165,6 +165,8 @@ pub enum SessionEvent {
     },
     /// `SMSG_CHAR_CREATE`/`_DELETE`'s raw `WorldResult`; on success a fresh roster comes first.
     CharActionResult { action: CharAction, code: u8 },
+    /// Build-12340 character mutation result. Raw codes are NOT Vanilla WorldResult values.
+    WrathCharActionResult { action: CharAction, code: u8 },
     /// We are in the world; the IO thread emits this before any object update.
     Connected {
         self_guid: u64,

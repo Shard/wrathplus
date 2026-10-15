@@ -31,6 +31,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::RealmList, on_login_edge)
         .net_handler(K::CharacterList, on_character_list)
         .net_handler(K::CharActionResult, on_login_edge)
+        .net_handler(K::WrathCharActionResult, on_login_edge)
         .net_handler(K::CharacterLoginFailed, on_login_edge)
         .net_handler(K::CinematicTriggered, on_login_edge)
         .net_handler(K::Connected, on_connected)
@@ -62,6 +63,7 @@ pub(crate) struct Edges<'w> {
     char_lists: MessageWriter<'w, CharListMessage>,
     realm_lists: MessageWriter<'w, RealmListMessage>,
     char_actions: MessageWriter<'w, CharActionResultMessage>,
+    native_char_actions: MessageWriter<'w, super::WrathCharActionResultMessage>,
     char_login_failures: MessageWriter<'w, CharacterLoginFailedMessage>,
     entered_world: MessageWriter<'w, EnteredWorldMessage>,
     addon_reply: ResMut<'w, super::AddonInfoReply>,
@@ -115,6 +117,9 @@ fn on_login_edge(In(ev): In<SessionEvent>, mut e: Edges) {
         }
         SessionEvent::CharActionResult { action, code } => {
             char_action_result(action, code, &mut e.char_actions)
+        }
+        SessionEvent::WrathCharActionResult { action, code } => {
+            e.native_char_actions.write(super::WrathCharActionResultMessage { action, code });
         }
         SessionEvent::CharacterLoginFailed { result } => {
             character_login_failed(result, &mut e.char_login_failures)
