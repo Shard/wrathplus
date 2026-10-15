@@ -11,7 +11,8 @@ use crate::ui_items::{EquipError, EquipErrors};
 
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
-    app.net_handler(K::MailList, on_mail_list)
+    app.net_handler(K::WrathMailList, on_wrath_mail_list)
+        .net_handler(K::MailList, on_mail_list)
         .net_handler(K::SendMailResult, on_send_mail_result)
         .net_handler(K::MailItemText, on_mail_item_text)
         .net_handler(K::ReceivedMail, on_received_mail)
@@ -267,6 +268,20 @@ mod tests {
             vec![SessionEvent::NextMailTime { seconds: 0.0 }],
         );
         assert!(app.world().resource::<MailPending>().has_new_mail());
+        let inbox = benilla_protocol::wrath_mail::Inbox {
+            total_count: 70,
+            mails: vec![],
+        };
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![SessionEvent::WrathMailList {
+                inbox: inbox.clone(),
+            }],
+        );
+        assert_eq!(
+            app.world().resource::<MailOpen>().wrath_inbox.as_ref(),
+            Some(&inbox)
+        );
 
         crate::net::handlers::dispatch(
             app.world_mut(),
@@ -277,5 +292,12 @@ mod tests {
         );
         assert!(!app.world().resource::<MailPending>().has_new_mail());
         assert_eq!(app.world().resource::<MailOpen>().mailbox, None);
+        assert!(app.world().resource::<MailOpen>().wrath_inbox.is_none());
+    }
+}
+
+fn on_wrath_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
+    if let SessionEvent::WrathMailList { inbox } = ev {
+        mail.wrath_inbox = Some(inbox);
     }
 }
