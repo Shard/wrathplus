@@ -20,11 +20,14 @@ use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession
 
 mod net;
 
+mod wrath;
+
 pub(crate) struct UiStablePlugin;
 
 impl Plugin for UiStablePlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        wrath::register(app);
         app.init_resource::<StableOpen>()
             .init_resource::<StableErrors>()
             .add_systems(
