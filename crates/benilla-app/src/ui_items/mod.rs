@@ -87,25 +87,90 @@ pub(crate) fn keyring_size(level: u32) -> u32 {
 /// move between them is `CMSG_SWAP_INV_ITEM`; an equipped or bank bag is addressed by its own
 /// player-array slot, with a 0-based inner slot. The keyring spans the wire's 16 positions, not
 /// [`keyring_size`]: a click past the unlocked count is the server's to refuse.
-pub(crate) fn wire_pos(bag: i64, slot1: u32) -> Option<(u8, u8)> {
+/// Storage geometry follows the descriptor dialect. AzerothCore `Player.h:698-718`
+/// defines bank 39..67, bags 67..74 and keyring 86..118 (exclusive ends);
+/// `Player.h:1379` exposes all 32 keyring slots. Vanilla retains vmangos geometry.
+#[derive(Clone, Copy)]
+pub(super) struct StorageSlots {
+    pub bank_slots: u8,
+    pub bank_bags: u8,
+    pub bank_bag_first: u8,
+    pub keyring_first: u8,
+    pub keyring_slots: u8,
+}
+
+impl StorageSlots {
+    pub fn for_layout(layout: benilla_protocol::messages::FieldLayout) -> Self {
+        if layout == benilla_protocol::messages::FieldLayout::Wrath12340 {
+            Self {
+                bank_slots: 28,
+                bank_bags: 7,
+                bank_bag_first: 67,
+                keyring_first: 86,
+                keyring_slots: 32,
+            }
+        } else {
+            Self {
+                bank_slots: BANK_SLOTS,
+                bank_bags: BANK_BAGS,
+                bank_bag_first: BANK_BAG_SLOT_FIRST,
+                keyring_first: KEYRING_SLOT_FIRST,
+                keyring_slots: KEYRING_SLOTS,
+            }
+        }
+    }
+
+    pub fn keyring_size(self, level: u32) -> u32 {
+        if self.keyring_slots == 32 {
+            32
+        } else {
+            keyring_size(level)
+        }
+    }
+
+    pub fn last_bag(self) -> i64 {
+        BANK_BAG_ID_FIRST + i64::from(self.bank_bags) - 1
+    }
+}
+
+pub(crate) fn wire_pos_for(
+    layout: benilla_protocol::messages::FieldLayout,
+    bag: i64,
+    slot1: u32,
+) -> Option<(u8, u8)> {
+    let storage = StorageSlots::for_layout(layout);
     let slot0 = u8::try_from(slot1.checked_sub(1)?).ok()?;
     match bag {
         0 if slot0 < PACK_SLOTS => Some((BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST + slot0)),
         1..=4 if slot0 < 36 => Some((SLOT_BAG_FIRST + (bag as u8 - 1), slot0)),
-        BANK_CONTAINER if slot0 < BANK_SLOTS => {
+        BANK_CONTAINER if slot0 < storage.bank_slots => {
             Some((BAG_PLAYER_INVENTORY, BANK_SLOT_FIRST + slot0))
         }
-        5..=10 if slot0 < 36 => {
-            Some((BANK_BAG_SLOT_FIRST + (bag - BANK_BAG_ID_FIRST) as u8, slot0))
+        b if (BANK_BAG_ID_FIRST..=storage.last_bag()).contains(&b) && slot0 < 36 => Some((
+            storage.bank_bag_first + (b - BANK_BAG_ID_FIRST) as u8,
+            slot0,
+        )),
+        KEYRING_CONTAINER if slot0 < storage.keyring_slots => {
+            Some((BAG_PLAYER_INVENTORY, storage.keyring_first + slot0))
         }
-        KEYRING_CONTAINER if slot0 < KEYRING_SLOTS => {
-            Some((BAG_PLAYER_INVENTORY, KEYRING_SLOT_FIRST + slot0))
-        }
-        EQUIPMENT_BAG if (1..=23).contains(&slot1) || (64..=69).contains(&slot1) => {
+        EQUIPMENT_BAG
+            if (1..=23).contains(&slot1)
+                || (storage.bank_bag_first..storage.bank_bag_first + storage.bank_bags)
+                    .contains(&slot0) =>
+        {
             Some((BAG_PLAYER_INVENTORY, slot0))
         }
         _ => None,
     }
+}
+
+#[cfg(test)]
+fn wire_pos(bag: i64, slot1: u32) -> Option<(u8, u8)> {
+    wire_pos_for(
+        benilla_protocol::messages::FieldLayout::Vanilla5875,
+        bag,
+        slot1,
+    )
 }
 
 /// One inventory refusal off the wire, with the fills of the only two reasons that format one.
@@ -145,7 +210,9 @@ pub(crate) fn slot_guid(
         }
         BANK_CONTAINER => store.player_bank_slot(slot0).filter(|g| *g != 0),
         KEYRING_CONTAINER => store.player_keyring_slot(slot0).filter(|g| *g != 0),
-        5..=10 => {
+        b if (BANK_BAG_ID_FIRST..=StorageSlots::for_layout(store.layout()).last_bag())
+            .contains(&b) =>
+        {
             let bag_guid = store
                 .player_bank_bag_slot((bag - BANK_BAG_ID_FIRST) as u8)
                 .filter(|g| *g != 0)?;
@@ -157,10 +224,15 @@ pub(crate) fn slot_guid(
         // The doll: the bank-bag buttons (wire 63..68) read their own array, since the INV
         // array's accessor caps at 23.
         EQUIPMENT_BAG
-            if (BANK_BAG_SLOT_FIRST..BANK_BAG_SLOT_FIRST + BANK_BAGS).contains(&slot0) =>
+            if (StorageSlots::for_layout(store.layout()).bank_bag_first
+                ..StorageSlots::for_layout(store.layout()).bank_bag_first
+                    + StorageSlots::for_layout(store.layout()).bank_bags)
+                .contains(&slot0) =>
         {
             store
-                .player_bank_bag_slot(slot0 - BANK_BAG_SLOT_FIRST)
+                .player_bank_bag_slot(
+                    slot0 - StorageSlots::for_layout(store.layout()).bank_bag_first,
+                )
                 .filter(|g| *g != 0)
         }
         EQUIPMENT_BAG => store.player_inv_slot(slot0).filter(|g| *g != 0),
@@ -318,7 +390,7 @@ fn walk_inventory<T>(
         }
     }
     if scope.bank {
-        for i in 0..BANK_SLOTS {
+        for i in 0..StorageSlots::for_layout(store.layout()).bank_slots {
             let guid = store.player_bank_slot(i).unwrap_or(0);
             if guid != 0 {
                 if let Some(hit) = visit(BAG_PLAYER_INVENTORY, BANK_SLOT_FIRST + i, guid) {
@@ -326,8 +398,8 @@ fn walk_inventory<T>(
                 }
             }
         }
-        for bag in 0..BANK_BAGS {
-            let bag_slot = BANK_BAG_SLOT_FIRST + bag;
+        for bag in 0..StorageSlots::for_layout(store.layout()).bank_bags {
+            let bag_slot = StorageSlots::for_layout(store.layout()).bank_bag_first + bag;
             let bag_guid = store.player_bank_bag_slot(bag).unwrap_or(0);
             if bag_guid == 0 {
                 continue;
@@ -342,10 +414,14 @@ fn walk_inventory<T>(
     }
     if scope.keyring {
         // The addressable 16; the reference walks all 32, but the rest are always empty.
-        for i in 0..KEYRING_SLOTS {
+        for i in 0..StorageSlots::for_layout(store.layout()).keyring_slots {
             let guid = store.player_keyring_slot(i).unwrap_or(0);
             if guid != 0 {
-                if let Some(hit) = visit(BAG_PLAYER_INVENTORY, KEYRING_SLOT_FIRST + i, guid) {
+                if let Some(hit) = visit(
+                    BAG_PLAYER_INVENTORY,
+                    StorageSlots::for_layout(store.layout()).keyring_first + i,
+                    guid,
+                ) {
                     return Some(hit);
                 }
             }
@@ -481,15 +557,15 @@ pub(crate) fn has_key(
     for i in 0..PACK_SLOTS {
         guids.push(store.player_pack_slot(i).unwrap_or(0));
     }
-    for i in 0..BANK_SLOTS {
+    for i in 0..StorageSlots::for_layout(store.layout()).bank_slots {
         guids.push(store.player_bank_slot(i).unwrap_or(0));
     }
-    for bag in 0..BANK_BAGS {
+    for bag in 0..StorageSlots::for_layout(store.layout()).bank_bags {
         let bag_guid = store.player_bank_bag_slot(bag).unwrap_or(0);
         guids.push(bag_guid);
         contents(bag_guid, objects, &mut guids);
     }
-    for i in 0..KEYRING_SLOTS {
+    for i in 0..StorageSlots::for_layout(store.layout()).keyring_slots {
         guids.push(store.player_keyring_slot(i).unwrap_or(0));
     }
     guids.into_iter().any(|guid| {
@@ -1662,5 +1738,77 @@ mod count_of_tests {
             2,
             "last backpack slot + last bank bag, with buyback between them untouched"
         );
+    }
+}
+
+#[cfg(test)]
+mod storage_tests {
+    use super::*;
+    use benilla_protocol::messages::FieldLayout;
+
+    #[test]
+    fn storage_boundaries_and_native_positions_preserve_vanilla() {
+        for (layout, bank, bags, first, key, keys) in [
+            (FieldLayout::Vanilla5875, 24, 6, 63, 81, 16),
+            (FieldLayout::Wrath12340, 28, 7, 67, 86, 32),
+        ] {
+            let geometry = StorageSlots::for_layout(layout);
+            assert_eq!(
+                (
+                    geometry.bank_slots,
+                    geometry.bank_bags,
+                    geometry.bank_bag_first,
+                    geometry.keyring_first,
+                    geometry.keyring_slots
+                ),
+                (bank, bags, first, key, keys)
+            );
+            for (bag, count, wire_bag, wire_first) in [
+                (0, 16, 255, 23),
+                (1, 36, 19, 0),
+                (4, 36, 22, 0),
+                (BANK_CONTAINER, bank, 255, 39),
+                (KEYRING_CONTAINER, keys, 255, key),
+                (5, 36, first, 0),
+                (4 + i64::from(bags), 36, first + bags - 1, 0),
+            ] {
+                for slot in [1, u32::from(count)] {
+                    let position = wire_pos_for(layout, bag, slot).unwrap();
+                    assert_eq!(position, (wire_bag, wire_first + slot as u8 - 1));
+                    // Independently decode the server position into the snapshot container.
+                    let snapshot_bag = if position.0 == 255 {
+                        match position.1 {
+                            23..=38 => 0,
+                            39..=66 => BANK_CONTAINER,
+                            _ => KEYRING_CONTAINER,
+                        }
+                    } else if (19..=22).contains(&position.0) {
+                        i64::from(position.0 - 19) + 1
+                    } else {
+                        i64::from(position.0 - first) + 5
+                    };
+                    assert_eq!(snapshot_bag, bag);
+                    // Independently invert this container's byte position into its Lua slot.
+                    assert_eq!(u32::from(position.1 - wire_first) + 1, slot);
+                    assert_eq!(
+                        wire_pos_for(layout, bag, u32::from(position.1 - wire_first) + 1),
+                        Some(position)
+                    );
+                }
+                assert_eq!(wire_pos_for(layout, bag, 0), None);
+                assert_eq!(wire_pos_for(layout, bag, u32::from(count) + 1), None);
+            }
+            assert_eq!(wire_pos_for(layout, geometry.last_bag() + 1, 1), None);
+        }
+        for level in [1, 39, 40, 49, 50, 60, 61, 80] {
+            assert_eq!(
+                StorageSlots::for_layout(FieldLayout::Wrath12340).keyring_size(level),
+                32
+            );
+            assert_eq!(
+                StorageSlots::for_layout(FieldLayout::Vanilla5875).keyring_size(level),
+                keyring_size(level)
+            );
+        }
     }
 }
