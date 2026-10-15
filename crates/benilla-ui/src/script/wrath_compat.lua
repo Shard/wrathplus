@@ -227,7 +227,7 @@ Sound_GameSystem_GetNumOutputDrivers = Sound_GameSystem_GetNumOutputDrivers or z
 Sound_GameSystem_GetOutputDriverNameByIndex = none
 
 -- ── dungeon finder, achievements, calendar, companions, vehicles ───────────────────────────────
-GetLFGProposal, GetLFGMode, GetLFGRoleUpdate, GetLFGDungeonInfo = none, none, none, none
+GetLFGProposal, GetLFGMode, GetLFGRoleUpdate = none, none, none
 GetLFGQueuedList, GetLFGInfoServer, GetLFGDungeonRewards = none, none, zero
 GetLFGRoles = function() return false, false, false, false end
 HasLFGRestrictions, IsPartyLFG, IsLFGDungeonJoinable = none, none, none
