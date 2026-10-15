@@ -75,9 +75,163 @@ impl super::super::UiScript {
     }
 }
 
+/// Native `GetLootRollItemInfo` (`0x5889d0`) returns zero values for an unknown roll or
+/// unavailable template; it never falls through to the six-value Vanilla snapshot. The app
+/// publishes START only after the template callback succeeds (`0x6fb1f0`).
+pub(in crate::script) fn install_readers(lua: &mlua::Lua) -> mlua::Result<()> {
+    use mlua::{MultiValue, Value};
+    let globals = lua.globals();
+    globals.set(
+        "GetLootRollItemInfo",
+        lua.create_function(|lua, roll_id: u32| {
+            let model = lua
+                .app_data_ref::<super::super::Model>()
+                .expect("model app_data");
+            let Some(roll) = model
+                .wrath_loot_rolls
+                .rolls
+                .iter()
+                .find(|r| r.roll_id == roll_id)
+            else {
+                return Ok(MultiValue::new());
+            };
+            let (Some(name), Some(quality), Some(skill), [Some(need), Some(greed), Some(de)]) = (
+                &roll.name,
+                roll.quality,
+                roll.disenchant_skill_required,
+                roll.reasons,
+            ) else {
+                return Ok(MultiValue::new());
+            };
+            let flag = |enabled| {
+                if enabled {
+                    Value::Integer(1)
+                } else {
+                    Value::Nil
+                }
+            };
+            let texture = match &roll.texture {
+                Some(path) => Value::String(lua.create_string(path)?),
+                None => Value::Nil,
+            };
+            Ok(MultiValue::from_vec(vec![
+                texture,
+                Value::String(lua.create_string(name)?),
+                Value::Integer(roll.count.into()),
+                Value::Integer(quality.into()),
+                flag(roll.bind_on_pickup),
+                flag(roll.permits(1)),
+                flag(roll.permits(2)),
+                flag(roll.permits(3)),
+                Value::Integer(need.into()),
+                Value::Integer(greed.into()),
+                Value::Integer(de.into()),
+                Value::Integer(skill.into()),
+            ]))
+        })?,
+    )?;
+    globals.set(
+        "GetLootRollItemLink",
+        lua.create_function(|lua, roll_id: u32| {
+            let model = lua
+                .app_data_ref::<super::super::Model>()
+                .expect("model app_data");
+            Ok(model
+                .wrath_loot_rolls
+                .rolls
+                .iter()
+                .find(|r| r.roll_id == roll_id)
+                .and_then(|r| r.link.clone()))
+        })?,
+    )?;
+    globals.set(
+        "GetLootRollTimeLeft",
+        lua.create_function(|lua, roll_id: u32| {
+            let model = lua
+                .app_data_ref::<super::super::Model>()
+                .expect("model app_data");
+            Ok(model
+                .wrath_loot_rolls
+                .rolls
+                .iter()
+                .find(|r| r.roll_id == roll_id)
+                .map_or(0, |r| r.time_left_ms))
+        })?,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wrath_readers_have_native_arity_flags_and_signed_skill_without_legacy_fallback() {
+        use crate::script::{LootRollEntry, LootRollsState, ScriptDialect, UiScript};
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.run("function count(...) return arg.n end").unwrap();
+        script.set_loot_rolls(LootRollsState {
+            rolls: vec![LootRollEntry {
+                roll_id: 7,
+                name: Some("legacy must not leak".into()),
+                ..Default::default()
+            }],
+        });
+        assert_eq!(
+            script
+                .eval::<usize>("return count(GetLootRollItemInfo(7))")
+                .unwrap(),
+            0
+        );
+        let mut roll = Entry {
+            roll_id: 7,
+            name: Some("Native".into()),
+            quality: Some(4),
+            count: 999,
+            vote_mask: 5,
+            time_left_ms: 1234,
+            link: Some("native-link".into()),
+            reasons: native_reasons(5, 0x100, -1, Some(true)),
+            disenchant_skill_required: Some(-1),
+            ..Default::default()
+        };
+        script.set_wrath_loot_rolls(State {
+            rolls: vec![roll.clone()],
+        });
+        assert!(script.eval::<bool>("local t,n,c,q,b,need,greed,de,rn,rg,rd,skill=GetLootRollItemInfo(7); return count(GetLootRollItemInfo(7))==12 and t==nil and n=='Native' and c==999 and q==4 and b==nil and need==nil and greed==1 and de==nil and rn==5 and rg==0 and rd==3 and skill==-1").unwrap());
+        assert_eq!(
+            script
+                .eval::<String>("return GetLootRollItemLink(7)")
+                .unwrap(),
+            "native-link"
+        );
+        assert_eq!(
+            script.eval::<u32>("return GetLootRollTimeLeft(7)").unwrap(),
+            1234
+        );
+        assert_eq!(
+            script
+                .eval::<u32>("return GetLootRollTimeLeft(999)")
+                .unwrap(),
+            0
+        );
+        roll.reasons[0] = None;
+        script.set_wrath_loot_rolls(State { rolls: vec![roll] });
+        assert_eq!(
+            script
+                .eval::<usize>("return count(GetLootRollItemInfo(7))")
+                .unwrap(),
+            0
+        );
+        let mut vanilla = UiScript::new().unwrap();
+        vanilla.run("function count(...) return arg.n end").unwrap();
+        assert_eq!(
+            vanilla
+                .eval::<usize>("return count(GetLootRollItemInfo(999))")
+                .unwrap(),
+            6
+        );
+    }
+
     #[test]
     fn native_reason_branches_preserve_signed_skill_and_unknown_ownership() {
         for mask in 0..=u8::MAX {
