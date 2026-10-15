@@ -1132,6 +1132,8 @@ pub enum SessionEvent {
     /// `SMSG_NEW_TAXI_PATH`, empty, sent with [`Self::TaxiNodeStatus`] on a first visit.
     NewTaxiPath,
     /// The inbox (`SMSG_MAIL_LIST_RESULT`), answering `CMSG_GET_MAIL_LIST`.
+    /// Native completed-quest reply, including explicit empty replies.
+    WrathQuestsCompleted { packet: crate::wrath_quests_completed::Packet },
     WrathMailList { inbox: crate::wrath_mail::Inbox },
     /// Ordered native mail mutation receipt or mailbox-open notice; capture only.
     WrathMailMutation { packet: crate::wrath_mail_mutations::Packet },
