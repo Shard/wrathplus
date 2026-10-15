@@ -569,7 +569,18 @@ fn feed_mail(
     let closed = last_mailbox.is_some() && mail.mailbox.is_none();
     let show_requested = std::mem::take(&mut mail.show_requested);
     let changed = if *dialect == SessionDialect::Wrath12340 {
-        let native = wrath::snapshot(&mail, &items, icons.as_deref(), &names, &commands, rolls);
+        let native = wrath::snapshot(
+            &mail,
+            &items,
+            icons.as_deref(),
+            &names,
+            &commands,
+            rolls,
+            self_q
+                .single()
+                .ok()
+                .and_then(|(store, _)| store.0.unit_level()),
+        );
         let changed = native != *last_wrath;
         if changed {
             script.set_wrath_mail(native.clone());
