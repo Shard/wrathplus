@@ -36,6 +36,7 @@ pub(super) fn snapshot(
                             name: template.map(|t| rolls.name(&t.name, a.random_property as u32)),
                             texture,
                             quality: template.map(|t| t.quality),
+                            link: None,
                         }
                     })
                     .collect();
