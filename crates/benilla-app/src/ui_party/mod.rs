@@ -18,6 +18,7 @@ mod feed;
 pub(crate) mod net;
 mod pets;
 mod records;
+mod wrath;
 pub(crate) use feed::{
     raid_row_guid, raid_row_guids, synthetic_raid, synthetic_roster, GROUPTYPE_RAID,
     GROUP_MEMBER_SUBGROUP, PARTY_PET_TOKENS, PARTY_TOKENS, RAID_PET_TOKENS, RAID_TOKENS,
@@ -44,6 +45,9 @@ impl Plugin for UiPartyPlugin {
 /// The group session mirror: `SMSG_GROUP_LIST` as sent plus its side state, reset on disconnect.
 #[derive(Resource, Default)]
 pub struct GroupState {
+    /// Authoritative native Wrath state, separate from the shared roster presentation.
+    pub wrath_roster: Option<benilla_protocol::wrath_group::Roster>,
+    pub wrath_stats: HashMap<u64, benilla_protocol::wrath_group::Stats>,
     /// True from any `SMSG_GROUP_LIST` naming a leader until the all-zero "you left" list.
     pub in_group: bool,
     /// 0 party, 1 raid (vmangos `GroupType`, `Group/Group.h:116-120`).
@@ -420,6 +424,8 @@ impl GroupState {
     /// not compile until it is sorted onto one side.
     pub(super) fn leave_group(&mut self) {
         let GroupState {
+            wrath_roster,
+            wrath_stats,
             // Group facts.
             in_group,
             group_type,
@@ -443,6 +449,8 @@ impl GroupState {
             ready_check_requests: _,
             ready_check_answers: _,
         } = self;
+        *wrath_roster = None;
+        wrath_stats.clear();
         *in_group = false;
         *group_type = 0;
         *own_flags = 0;

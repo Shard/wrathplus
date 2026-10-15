@@ -287,6 +287,7 @@ pub use worldmap::{
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
+pub use wrath_surface::wrath_group::{Group as WrathGroup, Member as WrathGroupMember};
 pub use zone_text::ZoneTexts;
 
 use mlua::Lua;
