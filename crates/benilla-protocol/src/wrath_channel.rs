@@ -50,10 +50,146 @@ pub fn decode(body: &[u8]) -> io::Result<ChannelList> {
     })
 }
 
+/// AzerothCore Channel.cpp:971/979, self join/leave notices only.
+pub const SMSG_CHANNEL_NOTIFY: u16 = 0x0099;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notify {
+    pub channel: String,
+    pub kind: NotifyKind,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotifyKind {
+    YouJoined {
+        flags: u8,
+        channel_id: u32,
+        reserved: u32,
+    },
+    YouLeft {
+        channel_id: u32,
+        /// Raw AC IsConstant() producer byte. The native client can interpret nonzero as
+        /// suspension of an existing channel, not unconditional removal. Do not normalize.
+        is_constant: u8,
+    },
+}
+impl Notify {
+    /// Compatibility lifecycle projection only; native metadata consumers use this struct.
+    pub fn session_event(&self) -> SessionEvent {
+        use crate::messages::ChannelNoticeTail;
+        let (notice, tail) = match self.kind {
+            NotifyKind::YouJoined { flags, .. } => (
+                2,
+                ChannelNoticeTail::YouJoined {
+                    flags: flags as u32,
+                },
+            ),
+            NotifyKind::YouLeft { .. } => (3, ChannelNoticeTail::Empty),
+        };
+        SessionEvent::ChannelNotify {
+            notice,
+            channel: self.channel.clone(),
+            tail,
+        }
+    }
+}
+pub fn decode_notify(body: &[u8]) -> io::Result<Notify> {
+    let mut r = Cursor::new(body);
+    let notice = u8_le(&mut r)?;
+    let channel = cstring(&mut r)?;
+    let kind = match notice {
+        2 => NotifyKind::YouJoined {
+            flags: u8_le(&mut r)?,
+            channel_id: u32_le(&mut r)?,
+            reserved: u32_le(&mut r)?,
+        },
+        3 => NotifyKind::YouLeft {
+            channel_id: u32_le(&mut r)?,
+            is_constant: u8_le(&mut r)?,
+        },
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a Wrath self channel notice",
+            ))
+        }
+    };
+    if r.position() as usize != body.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Wrath self channel notice trailing bytes",
+        ));
+    }
+    Ok(Notify { channel, kind })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::wrath_events::{WrathDispatch, WrathEvent, WrathEventAdapter};
+    #[test]
+    fn self_notice_fields_and_strict_dispatch() {
+        let joined = Notify {
+            channel: "General".into(),
+            kind: NotifyKind::YouJoined {
+                flags: 0x81,
+                channel_id: 0x12345678,
+                reserved: 0xfedcba98,
+            },
+        };
+        let left = Notify {
+            channel: "Custom".into(),
+            kind: NotifyKind::YouLeft {
+                channel_id: 0,
+                is_constant: 0x83,
+            },
+        };
+        for expected in [joined, left] {
+            let mut body = vec![match expected.kind {
+                NotifyKind::YouJoined { .. } => 2,
+                _ => 3,
+            }];
+            body.extend(expected.channel.as_bytes());
+            body.push(0);
+            match expected.kind {
+                NotifyKind::YouJoined {
+                    flags,
+                    channel_id,
+                    reserved,
+                } => {
+                    body.push(flags);
+                    body.extend(channel_id.to_le_bytes());
+                    body.extend(reserved.to_le_bytes());
+                }
+                NotifyKind::YouLeft {
+                    channel_id,
+                    is_constant,
+                } => {
+                    body.extend(channel_id.to_le_bytes());
+                    body.push(is_constant);
+                }
+            }
+            assert_eq!(decode_notify(&body).unwrap(), expected);
+            let mut adapter = WrathEventAdapter::new();
+            let WrathDispatch::Handled { session_events, .. } =
+                adapter.dispatch(SMSG_CHANNEL_NOTIFY, &body, 0).unwrap()
+            else {
+                panic!("unhandled");
+            };
+            assert!(matches!(&session_events[0], SessionEvent::ChannelNotify { channel, .. } if channel == &expected.channel));
+            assert!(
+                matches!(&session_events[1], SessionEvent::WrathChannelNotify { notify } if notify == &expected)
+            );
+            for n in 0..body.len() {
+                assert!(decode_notify(&body[..n]).is_err(), "prefix {n}");
+            }
+            body.push(0);
+            assert!(decode_notify(&body).is_err());
+            assert!(matches!(
+                adapter.dispatch(SMSG_CHANNEL_NOTIFY, &body, 0).unwrap(),
+                WrathDispatch::Unhandled { .. }
+            ));
+        }
+        assert!(decode_notify(b"\x00General\0").is_err());
+    }
     fn packet() -> Vec<u8> {
         let mut b = b"\x07General\0\x81".to_vec();
         b.extend(2u32.to_le_bytes());
