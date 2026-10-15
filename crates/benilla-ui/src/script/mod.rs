@@ -36,6 +36,9 @@ mod button;
 mod calls;
 mod camera_view;
 mod channel;
+mod wrath_channel_roster;
+mod wrath_channel_display;
+mod wrath_channel_bindings;
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -178,6 +181,8 @@ pub use battlefield_score::{BattlefieldScoreRow, BattlefieldScores, BattlefieldS
 pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
+pub use wrath_channel_display::WrathDisplayChannel;
+pub use wrath_channel_roster::{WrathChannelRosterMember, WrathChannelRosterRequest};
 pub use channel::{ChannelCommand, ZoneChannelRow};
 pub use char_stats::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, UnitCombatStats,
