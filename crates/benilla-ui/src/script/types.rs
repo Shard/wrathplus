@@ -11,6 +11,8 @@ pub enum ScriptValue {
     Int(i64),
     Number(f64),
     Str(String),
+    /// A Lua byte string, without UTF-8 decoding or NUL termination (e.g. addon payloads).
+    Bytes(Vec<u8>),
 }
 
 impl ScriptValue {
@@ -21,6 +23,7 @@ impl ScriptValue {
             ScriptValue::Int(i) => Value::Integer(i),
             ScriptValue::Number(n) => Value::Number(n),
             ScriptValue::Str(s) => Value::String(lua.create_string(&s)?),
+            ScriptValue::Bytes(bytes) => Value::String(lua.create_string(&bytes)?),
         })
     }
 }

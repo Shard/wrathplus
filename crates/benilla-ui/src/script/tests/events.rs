@@ -330,3 +330,42 @@ fn an_all_events_listener_runs_after_the_events_own() {
     assert_eq!(s.eval::<String>("return order[2]").unwrap(), "all");
     assert_eq!(s.eval::<i64>("return table.getn(order)").unwrap(), 2);
 }
+
+#[test]
+fn host_byte_strings_reach_event_handlers_losslessly_in_both_dialects() {
+    for dialect in [ScriptDialect::Vanilla, ScriptDialect::Wrath12340] {
+        let mut s = UiScript::new_with_dialect(dialect).unwrap();
+        let handler = if dialect == ScriptDialect::Vanilla {
+            "function() received = arg2; prefix = arg1; suffix = arg3 end"
+        } else {
+            "function(self, event, a, b, c) received = b; prefix = a; suffix = c end"
+        };
+        s.run(&format!(
+            "local f = CreateFrame('Frame'); f:RegisterEvent('CHAT_MSG_ADDON'); \
+             f:SetScript('OnEvent', {handler})"
+        ))
+        .unwrap();
+        // Includes every byte, invalid UTF-8, and embedded NUL: none is text-decoded.
+        for bytes in [Vec::new(), (0..=255).collect::<Vec<u8>>()] {
+            s.fire_event(
+                "CHAT_MSG_ADDON",
+                vec![
+                    ScriptValue::Str("PREFIX".into()),
+                    ScriptValue::Bytes(bytes.clone()),
+                    ScriptValue::Str("PARTY".into()),
+                ],
+            );
+            assert!(s.errors().is_empty(), "{:?}", s.errors());
+            let actual: mlua::String = s.eval("return received").unwrap();
+            assert_eq!(actual.as_bytes().as_ref(), bytes.as_slice());
+            assert_eq!(
+                s.eval::<usize>("return string.len(received)").unwrap(),
+                bytes.len()
+            );
+            assert_eq!(
+                s.eval::<String>("return prefix .. ':' .. suffix").unwrap(),
+                "PREFIX:PARTY"
+            );
+        }
+    }
+}
