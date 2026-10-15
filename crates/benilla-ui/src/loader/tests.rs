@@ -2632,3 +2632,14 @@ fn wrath_scale_rotation_xml_loaded_before_onload() {
     assert!(report.errors.is_empty(),"{report:?}");
     assert!(s.eval::<bool>("return XMLTRANSFORM and XMLORIGIN").unwrap());
 }
+
+/// Native Wrath script lookup 0x9628f0 compiles x/y/w/h as named locals.
+/// MailFrame's inline body uses them, while DebugTools uses function=.
+#[test]
+fn wrath_inline_cursor_script_binds_native_geometry_names() {
+    let s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let doc = crate::framexml::parse(r#"<Ui><EditBox name="CursorXml" autoFocus="false"><Scripts><OnCursorChanged>self.cursorOffset = y-10; self.cursorHeight = h; X=x; W=w;</OnCursorChanged></Scripts></EditBox></Ui>"#).unwrap();
+    let report = super::load(&s, &doc, &|_: &str| None);
+    assert!(report.errors.is_empty(), "{report:?}");
+    s.run("CursorXml:GetScript('OnCursorChanged')(CursorXml, 7, -14, 4, 14); assert(CursorXml.cursorOffset == -24 and CursorXml.cursorHeight == 14 and X == 7 and W == 4)").unwrap();
+}

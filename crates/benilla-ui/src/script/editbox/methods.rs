@@ -35,6 +35,29 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
+    if lua
+        .app_data_ref::<crate::script::Model>()
+        .expect("model")
+        .dialect
+        == crate::script::ScriptDialect::Wrath12340
+    {
+        // Wrath 0x9769a0 -> 0x963350 clamps to the byte length and raises
+        // the caret dirty bit even when the position is unchanged. It does not flush.
+        m.set(
+            "SetCursorPosition",
+            lua.create_function(|lua, (this, position): (Table, Value)| {
+                let position = crate::script::binding_abi::number_arg(
+                    lua,
+                    position,
+                    "Usage: EditBox:SetCursorPosition(position)",
+                )?;
+                with_editbox(lua, &this, |eb| {
+                    eb.cursor = (position.max(0) as usize).min(eb.text.len());
+                    eb.dirty |= EditBoxState::DIRTY_CURSOR;
+                })
+            })?,
+        )?;
+    }
     m.set(
         "GetText",
         lua.create_function(|lua, this: Table| with_editbox(lua, &this, |eb| eb.text.clone()))?,
