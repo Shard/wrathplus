@@ -18,6 +18,7 @@ pub mod wrath_ground;
 pub mod wrath_items;
 pub mod wrath_group;
 pub mod wrath_guild_bank;
+pub mod wrath_guild_bank_commands;
 pub mod wrath_lfg;
 pub mod wrath_instance;
 pub mod wrath_loot;
