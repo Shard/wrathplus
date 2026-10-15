@@ -40,6 +40,7 @@ pub struct WrathLfgCatalog {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct State {
+    groups: Arc<Vec<WrathLfgGroup>>,
     catalog: Arc<WrathLfgCatalog>,
     expansion: Option<u8>,
 }
@@ -50,9 +51,14 @@ impl UiScript {
     /// App owns startup/reload
     /// restoration; replacing metadata does not send requests or mutate queue state.
     pub fn set_wrath_lfg_catalog(&mut self, catalog: Arc<WrathLfgCatalog>, expansion: Option<u8>) {
-        self.model_mut().wrath_lfg = State { catalog, expansion };
+        let mut model = self.model_mut();
+        model.wrath_lfg.catalog = catalog;
+        model.wrath_lfg.expansion = expansion;
     }
 }
+
+mod choices;
+pub use choices::WrathLfgGroup;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     lua.globals().set(
