@@ -32,6 +32,7 @@ pub(crate) mod wrath_auras;
 mod wrath_notices;
 mod wrath_mail_capture;
 mod wrath_quests_completed_capture;
+mod wrath_ui_timer_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -125,6 +126,7 @@ impl Plugin for NetPlugin {
         wrath_notices::register(app);
         wrath_mail_capture::register(app);
         wrath_quests_completed_capture::register(app);
+        wrath_ui_timer_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -2042,6 +2044,7 @@ pub(crate) enum ClientCommand {
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
+    NativeUiTimerQuery,
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
