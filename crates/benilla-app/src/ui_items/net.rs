@@ -62,7 +62,7 @@ pub(super) fn container_of(
         .find(|i| store.player_inv_slot(BAG_SLOT_FIRST + i) == Some(item))
         .map(|i| i64::from(i) + 1)
         .or_else(|| {
-            (0..6u8)
+            (0..super::StorageSlots::for_layout(store.layout()).bank_bags)
                 .find(|j| store.player_bank_bag_slot(*j) == Some(item))
                 .map(|j| BANK_BAG_ID_FIRST + i64::from(j))
         })
