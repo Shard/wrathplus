@@ -19,7 +19,9 @@ claim of complete native selector support or runtime visual parity.
   nonempty texture bytes. These fixtures do not prove every native combination.
 - Independent second-stage transparency-weight tracks are not represented: the
   existing batch alpha lane remains authoritative. This is an explicit remaining
-  native-coverage gap, not a claim that all stage weights are identical.
+  native-coverage question, not proof that another per-stage multiply is required.
+  The native batch factor uses the first weight; later draw consumption remains
+  unproven (see `WRATH-A2B-NATIVE-EVIDENCE.md`).
 
 ## Material and readiness contract
 
@@ -95,7 +97,10 @@ failures: zero. Multi-stage geometry: 4,355 models / 7,795 batches.
 
 Second-stage weight tracks contain nonidentity keys in 1,749 batches. Distinct
 lookup indices are structural evidence, **not proof of native per-stage weight
-application**. Animation means a nonconstant translation, rotation or scaling
+application**. Zero source-file optimized selectors is also not evidence of zero
+runtime optimized draws: native shared initialization can fuse batches and rewrite
+selectors. See `WRATH-A2B-NATIVE-EVIDENCE.md` for verified addresses and the remaining
+weight/environment-coordinate proof boundary. Animation means a nonconstant translation, rotation or scaling
 track with multiple keys. A model's runtime lane is not encoded in its M2:
 185/567 are assets affected **if** instantiated through an offworld/particle lane,
 not a claim that all currently appear there. Explicit particle geometry references
