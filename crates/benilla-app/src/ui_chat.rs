@@ -31,6 +31,7 @@ mod input;
 mod language;
 /// `LoggingChat`/`LoggingCombat`: the two log files `/chatlog` and `/combatlog` toggle.
 pub(crate) mod logging;
+pub(crate) mod native_roster;
 mod net;
 #[cfg(test)]
 mod notice_tests;
@@ -68,6 +69,7 @@ pub(crate) struct ChatDrain;
 impl Plugin for UiChatPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        native_roster::register(app);
         app.add_observer(combat::on_cvar);
         app.init_resource::<ChatLog>()
             .init_resource::<away::AfkMirror>()

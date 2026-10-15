@@ -55,6 +55,8 @@ pub struct WrathReply {
 /// Wrath information that has no lossless [`SessionEvent`] representation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum WrathEvent {
+    /// Channel roster retains the leading native type absent from the shared roster event.
+    ChannelList(crate::wrath_channel::ChannelList),
     /// The original ordered object block. This retains flags2, nine speeds, seats, vehicles,
     /// packed rotations, Wrath spline details, create-vs-create2, Near, and destroy metadata.
     Object(Box<ObjectUpdate>),
@@ -207,6 +209,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            crate::wrath_channel::SMSG_CHANNEL_LIST => {
+                Ok(match crate::wrath_channel::decode(body) {
+                    Ok(list) => handled(vec![list.session_event(), SessionEvent::WrathChannelList { roster: list.clone() }], vec![WrathEvent::ChannelList(list)], Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_roll::handles(opcode) => {
                 Ok(match crate::wrath_roll::decode(opcode, body) {
                     Ok(roll) => handled(vec![SessionEvent::WrathLootRoll(roll)], Vec::new(), Vec::new()),
