@@ -103,6 +103,8 @@ pub struct PartyState {
 /// the matching send.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PartyRequest {
+    /// Wrath assignment intent, resolved by the VM; roster flags await the server echo.
+    Assignment { assignment: u8, apply: bool, guid: u64 },
     /// `AcceptGroup()`.
     Accept,
     /// `DeclineGroup()`.

@@ -1001,6 +1001,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::GroupInvite { .. }
         | ClientCommand::GroupAccept
         | ClientCommand::GroupDecline
+        | ClientCommand::PartyAssignment { .. }
         | ClientCommand::GroupLeave
         | ClientCommand::RequestPartyMemberStats { .. }
         | ClientCommand::NameQuery { .. }
@@ -1450,6 +1451,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ),
         ClientCommand::GroupAccept => (g::CMSG_GROUP_ACCEPT, g::encode_accept()),
         ClientCommand::GroupDecline => (g::CMSG_GROUP_DECLINE, g::encode_decline()),
+        ClientCommand::PartyAssignment { assignment, apply, guid } => (g::MSG_PARTY_ASSIGNMENT, g::encode_assignment(assignment, apply, guid)),
         ClientCommand::GroupLeave => (g::CMSG_GROUP_DISBAND, g::encode_leave()),
         ClientCommand::RequestPartyMemberStats { guid } => (
             g::CMSG_REQUEST_PARTY_MEMBER_STATS,
@@ -2830,6 +2832,8 @@ mod group_tests {
             (ClientCommand::GroupAccept, 0x72, vec![0; 4]),
             (ClientCommand::GroupDecline, 0x73, vec![]),
             (ClientCommand::GroupLeave, 0x7b, vec![]),
+            (ClientCommand::PartyAssignment { assignment: 1, apply: true, guid: 0x8877665544332211 }, 0x38e, vec![1,1,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88]),
+            (ClientCommand::PartyAssignment { assignment: 0, apply: false, guid: 0 }, 0x38e, vec![0;10]),
             (ClientCommand::RequestPartyMemberStats { guid: 7 }, 0x27f, vec![7,0,0,0,0,0,0,0]),
         ] {
             assert_eq!(route(&command), WrathRoute::NativeSession);

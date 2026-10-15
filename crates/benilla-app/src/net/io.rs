@@ -1416,6 +1416,7 @@ fn writer_loop(
                     ClientCommand::GroupDecline => w.group_decline(),
                     ClientCommand::GroupUninvite { name } => w.group_uninvite(&name),
                     ClientCommand::GroupSetLeader { guid } => w.group_set_leader(guid),
+                    ClientCommand::PartyAssignment { .. } => Ok(()), // Wrath-only; no Vanilla packet.
                     ClientCommand::GroupLeave => w.group_disband(),
                     ClientCommand::GroupRaidConvert => w.group_raid_convert(),
                     ClientCommand::RequestPartyMemberStats { guid } => {
