@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x0055 | 0x0083 | 0x0088 | 0x008a | 0x0092 | 0x0093 => {
+                Ok(match crate::wrath_guild::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathGuild { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             crate::wrath_stable::MSG_LIST_STABLED_PETS | crate::wrath_stable::SMSG_STABLE_RESULT => {
                 Ok(match crate::wrath_stable::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathStable { packet }], Vec::new(), Vec::new()),
