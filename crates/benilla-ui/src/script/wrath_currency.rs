@@ -26,12 +26,14 @@ pub struct WrathCurrencyEntry {
 }
 
 /// Ordered headers followed by their entries, including children of collapsed headers.
-/// Names/icons/item ids must come from the installed data; counts and caps from host state.
+/// Names/icons/item ids must come from the installed data; counts from host state; honor/arena caps are fixed native-client constants.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WrathCurrencySnapshot {
     pub entries: Vec<WrathCurrencyEntry>,
-    pub honor: (u32, u32),
-    pub arena: (u32, u32),
+    /// Unavailable descriptor state remains explicit in the host snapshot.
+    /// Native getters project a missing Player to numeric zero, not nil.
+    pub honor_current: Option<u32>,
+    pub arena_current: Option<u32>,
 }
 
 impl WrathCurrencySnapshot {
@@ -218,15 +220,18 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    // Build 12340: 0x60FC40/0x60FCC0 push current (or FLDZ without Player),
+    // then fixed image doubles at 0xA23358 (75000) / 0xA1AD58 (10000).
+    // Neither getter reads a server-supplied maximum; both return two numbers.
     for (name, honor) in [("GetHonorCurrency", true), ("GetArenaCurrency", false)] {
         lua.globals().set(
             name,
             lua.create_function(move |lua, ()| {
                 let model = lua.app_data_ref::<Model>().expect("model");
                 Ok(if honor {
-                    model.wrath_currency.honor
+                    (model.wrath_currency.honor_current.unwrap_or(0), 75_000u32)
                 } else {
-                    model.wrath_currency.arena
+                    (model.wrath_currency.arena_current.unwrap_or(0), 10_000u32)
                 })
             })?,
         )?;

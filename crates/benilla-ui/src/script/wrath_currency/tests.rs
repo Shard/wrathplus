@@ -16,8 +16,8 @@ fn empty_defaults_and_vanilla_surface() {
             assert(GetBackpackCurrencyInfo(i) == nil)
             ExpandCurrencyList(i, 1); SetCurrencyUnused(i, 1); SetCurrencyBackpack(i, 1)
         end
-        local a,b = GetHonorCurrency(); assert(a == 0 and b == 0)
-        a,b = GetArenaCurrency(); assert(a == 0 and b == 0)
+        local a,b = GetHonorCurrency(); assert(a == 0 and b == 75000)
+        a,b = GetArenaCurrency(); assert(a == 0 and b == 10000)
         assert(select('#', GetHonorCurrency()) == 2)
         assert(select('#', GetArenaCurrency()) == 2)
     "#,
@@ -57,8 +57,8 @@ fn snapshot() -> WrathCurrencySnapshot {
     }
     WrathCurrencySnapshot {
         entries,
-        honor: (42, 100),
-        arena: (12, 50),
+        honor_current: Some(42),
+        arena_current: Some(12),
     }
 }
 
@@ -79,13 +79,13 @@ fn supplied_snapshot_shapes_and_clear() {
         name,count,kind,icon,id = GetBackpackCurrencyInfo(1)
         assert(name == 'Test token 1' and count == 10 and kind == 0)
         assert(icon == 'test-icon-1' and id == 101)
-        local a,b = GetHonorCurrency(); assert(a == 42 and b == 100)
-        a,b = GetArenaCurrency(); assert(a == 12 and b == 50)
+        local a,b = GetHonorCurrency(); assert(a == 42 and b == 75000)
+        a,b = GetArenaCurrency(); assert(a == 12 and b == 10000)
     "#,
     )
     .unwrap();
     s.set_wrath_currency_snapshot(Default::default());
-    s.run("assert(GetCurrencyListSize()==0 and GetBackpackCurrencyInfo(1)==nil) local a,b=GetHonorCurrency() assert(a==0 and b==0)").unwrap();
+    s.run("assert(GetCurrencyListSize()==0 and GetBackpackCurrencyInfo(1)==nil) local a,b=GetHonorCurrency() assert(a==0 and b==75000)").unwrap();
 }
 
 #[test]
@@ -209,4 +209,23 @@ fn pending_metadata_projects_empty_strings_until_query_resolves() {
     s.set_wrath_currency_snapshot(snapshot());
     s.run("assert(GetBackpackCurrencyInfo(1)=='Test token 1')")
         .unwrap();
+}
+
+#[test]
+fn balance_currents_are_independent_optional_unsigned_values_with_fixed_caps() {
+    let mut s = script();
+    s.set_wrath_currency_snapshot(WrathCurrencySnapshot {
+        honor_current: Some(u32::MAX),
+        arena_current: None,
+        ..Default::default()
+    });
+    s.run("local c,m=GetHonorCurrency(); assert(c==4294967295 and m==75000) local a,b=GetArenaCurrency(); assert(a==0 and b==10000)").unwrap();
+    s.set_wrath_currency_snapshot(WrathCurrencySnapshot {
+        honor_current: None,
+        arena_current: Some(0),
+        ..Default::default()
+    });
+    assert_eq!(s.model_ref().wrath_currency.honor_current, None);
+    assert_eq!(s.model_ref().wrath_currency.arena_current, Some(0));
+    s.run("local c,m=GetHonorCurrency(); assert(c==0 and m==75000) local a,b=GetArenaCurrency(); assert(a==0 and b==10000) assert(select('#',GetHonorCurrency())==2 and select('#',GetArenaCurrency())==2)").unwrap();
 }
