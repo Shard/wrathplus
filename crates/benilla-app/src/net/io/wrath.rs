@@ -38,11 +38,8 @@ use crate::net::{
 };
 
 // AzerothCore 3.3.5a Opcodes.h, also used by the validated `wrath_objects` probe.
-const CMSG_LOGOUT_REQUEST: u32 = 0x04b;
 const CMSG_ITEM_QUERY_SINGLE: u32 = 0x056;
 const SMSG_CHARACTER_LOGIN_FAILED: u16 = 0x041;
-const SMSG_LOGOUT_RESPONSE: u16 = 0x04c;
-const SMSG_LOGOUT_COMPLETE: u16 = 0x04d;
 const CMSG_PING: u32 = 0x01dc;
 const SMSG_PONG: u16 = 0x01dd;
 const CMSG_SET_ACTIVE_MOVER: u32 = 0x026a;
@@ -426,24 +423,13 @@ fn run(
                     send(events, SessionEvent::CharacterLoginFailed { result })?;
                     return Ok(WrathCycle::LoggedOut);
                 }
-                SMSG_LOGOUT_RESPONSE => {
-                    if packet.body.len() != 5 {
-                        bail!(
-                            "Wrath SMSG_LOGOUT_RESPONSE has {} bytes, expected 5",
-                            packet.body.len()
-                        );
+                opcode if benilla_protocol::wrath_logout::handles(opcode) => {
+                    let Some(event) = authority.logout_event(opcode, &packet.body)? else { continue; };
+                    let complete = matches!(event, SessionEvent::LoggedOut);
+                    send(events, event)?;
+                    if complete {
+                        return Ok(WrathCycle::LoggedOut);
                     }
-                    send(
-                        events,
-                        SessionEvent::LogoutResponse {
-                            reason: u32::from_le_bytes(packet.body[..4].try_into().unwrap()),
-                            instant: packet.body[4] != 0,
-                        },
-                    )?;
-                }
-                SMSG_LOGOUT_COMPLETE => {
-                    send(events, SessionEvent::LoggedOut)?;
-                    return Ok(WrathCycle::LoggedOut);
                 }
                 SMSG_PONG => {
                     let sequence = le_u32_exact(&packet.body, "SMSG_PONG")?;
@@ -674,6 +660,7 @@ struct MovementAuthorityState {
     last_order_counter: Option<u32>,
     rooted: bool,
     taxi_spline: Option<(u32, bool)>,
+    logout_pending: bool,
     transfer_sequence: u64,
     transfer_ack: Option<benilla_protocol::wrath_transfer::Token>,
     transfer_waiting: bool,
@@ -707,6 +694,7 @@ impl MovementAuthority {
             last_order_counter: None,
             rooted: false,
             taxi_spline: None,
+            logout_pending: false,
             transfer_sequence: 0,
             transfer_ack: None,
             transfer_waiting: false,
@@ -795,6 +783,7 @@ impl MovementAuthorityHandle {
     fn revoke(&self) {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch == self.epoch && state.self_guid == self.self_guid {
+            state.logout_pending = false;
             state.self_control = false;
             state.control_decided = true;
             state.taxi_spline = None;
@@ -1010,6 +999,7 @@ enum WrathRoute {
     TaxiSplineDone,
     SetActiveMover,
     Logout,
+    LogoutCancel,
     NativeItemQuery,
     NativeMelee,
     NativeLoot,
@@ -1037,6 +1027,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
         ClientCommand::Logout | ClientCommand::ForceLogout => WrathRoute::Logout,
+        ClientCommand::LogoutCancel => WrathRoute::LogoutCancel,
         ClientCommand::Move { .. } => WrathRoute::GroundMovement,
         ClientCommand::ItemQuery { .. } => WrathRoute::NativeItemQuery,
         ClientCommand::Loot { .. }
@@ -1293,6 +1284,13 @@ fn writer_loop(
                         let authority = active.authority.clone();
                         authority.send_logout(|| {
                             let (opcode, body) = logout_packet();
+                            active.writer.send_raw(opcode, &body)
+                        })
+                    }
+                    WrathRoute::LogoutCancel => {
+                        let authority = active.authority.clone();
+                        authority.send_logout_cancel(|| {
+                            let (opcode, body) = benilla_protocol::wrath_logout::encode_cancel();
                             active.writer.send_raw(opcode, &body)
                         })
                     }
@@ -1852,7 +1850,7 @@ pub(crate) fn ping_packet(sequence: u32, last_rtt_ms: u32) -> (u32, Vec<u8>) {
 }
 
 pub(crate) fn logout_packet() -> (u32, Vec<u8>) {
-    (CMSG_LOGOUT_REQUEST, Vec::new())
+    benilla_protocol::wrath_logout::encode_request()
 }
 
 pub(crate) fn item_query_packet(entry: u32, guid: u64) -> (u32, Vec<u8>) {
@@ -1967,7 +1965,7 @@ mod tests {
     use super::*;
     use benilla_protocol::wrath_world::WrathCharEnumItem;
 
-    fn test_self_position() -> MovementPosition {
+    pub(super) fn test_self_position() -> MovementPosition {
         MovementPosition::Stationary(benilla_protocol::wrath_gameplay::Position {
             x: 1.0,
             y: 2.0,
@@ -3199,3 +3197,36 @@ fn publish_character_action(
 #[cfg(test)]
 #[path = "wrath/character_tests.rs"]
 mod character_tests;
+
+impl MovementAuthorityHandle {
+    fn logout_event(&self, opcode: u16, body: &[u8]) -> io::Result<Option<SessionEvent>> {
+        use benilla_protocol::wrath_logout::{decode, Packet};
+        let packet = decode(opcode, body)?;
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(None);
+        }
+        Ok(match packet {
+            Packet::Response { reason, instant } => {
+                if reason != 0 { state.logout_pending = false; }
+                Some(SessionEvent::LogoutResponse { reason, instant: instant != 0 })
+            }
+            Packet::Complete => {
+                state.logout_pending = false;
+                state.self_control = false;
+                state.control_decided = true;
+                state.taxi_spline = None;
+                state.transfer_ack = None;
+                Some(SessionEvent::LoggedOut)
+            }
+            Packet::CancelAck => {
+                let pending = std::mem::take(&mut state.logout_pending);
+                pending.then_some(SessionEvent::LogoutCancelled)
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "wrath/logout_tests.rs"]
+mod logout_tests;
