@@ -15,38 +15,37 @@ use crate::ui_action::{UiError, UiErrorKeys};
 
 use super::{PetBar, PetUnit};
 
-/// `UNIT_FLAG_PET_RENAME`, `0x4be5c4`'s mask: set on a tamed pet not yet renamed. No client code
-/// writes it; the server clears it after a rename (the sender re-checks it at `0x4bd8b5`).
-const UNIT_FLAG_PET_RENAME: u32 = 0x0000_0010;
-/// `UNIT_FLAG_PET_ABANDON`, `0x4be544`'s mask: set on a hunter pet, clear on a summon.
-const UNIT_FLAG_PET_ABANDON: u32 = 0x0000_0020;
-
 /// The rename sender's silent truncation, `0x64a7f0(dst, 0x50, "%s", name)` at `0x4bd840`: 79
 /// plus the NUL. The popup's 12-letter cap is FrameXML's, a layer above.
 const PET_NAME_MAX: usize = 79;
 
-/// `(PetCanBeAbandoned, PetCanBeRenamed)` (`0x4be500`, `0x4be580`), read off `UNIT_FIELD_FLAGS`
-/// (dword 46), not the TBC's `UNIT_FIELD_BYTES_2`, which this server leaves zero.
-pub(super) fn menu_predicates(pet_flags: u32) -> (bool, bool) {
-    (
-        pet_flags & UNIT_FLAG_PET_ABANDON != 0,
-        pet_flags & UNIT_FLAG_PET_RENAME != 0,
-    )
+/// `(PetCanBeAbandoned, PetCanBeRenamed)` for the active pet owned by this player.
+/// Permission storage differs by dialect; ownership remains SUMMONEDBY alone.
+/// A missing, zero-guid or charmed-only pet has neither menu permission.
+pub(super) fn menu_predicates(
+    pet_guid: u64,
+    pet: Option<&benilla_protocol::ObjectFields>,
+    self_guid: Option<u64>,
+) -> (bool, bool) {
+    pet.filter(|fields| pet_guid != 0 && fields.unit_summoned_by() == self_guid)
+        .map_or((false, false), |fields| {
+            (
+                fields.unit_pet_can_be_abandoned(),
+                fields.unit_pet_can_be_renamed(),
+            )
+        })
 }
 
-/// Push the menu's predicates. Their owner test is `UNIT_FIELD_SUMMONEDBY` alone, with no
-/// `CHARMEDBY` leg (`0x4be500`), so a charmed unit gets every row off, and `UnitPopup_ShowMenu`
-/// opens no menu holding only Cancel.
+/// Push the menu predicates each frame so native packed permission updates take effect.
 pub(super) fn feed_pet_menu(script: Option<NonSendMut<UiScript>>, bar: Res<PetBar>, pet: PetUnit) {
     let Some(mut script) = script else {
         return;
     };
-    let flags = (bar.guid() != 0)
-        .then(|| pet.store(bar.guid()))
-        .flatten()
-        .filter(|store| store.0.unit_summoned_by() == pet.self_guid.0)
-        .map_or(0, |store| store.0.unit_flags());
-    let (can_be_abandoned, can_be_renamed) = menu_predicates(flags);
+    let (can_be_abandoned, can_be_renamed) = menu_predicates(
+        bar.guid(),
+        pet.store(bar.guid()).map(|store| &store.0),
+        pet.self_guid.0,
+    );
     script.set_pet_menu(can_be_abandoned, can_be_renamed);
 }
 

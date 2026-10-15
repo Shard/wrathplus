@@ -702,16 +702,40 @@ fn an_unresolvable_active_icon_hides_rather_than_falling_back() {
 }
 
 #[test]
-fn the_menu_fork_reads_abandon_and_rename_off_the_right_bits() {
-    // A freshly tamed hunter pet carries both.
-    assert_eq!(menu_predicates(0x30), (true, true));
-    // After its first rename the server clears the rename bit.
-    assert_eq!(menu_predicates(0x20), (true, false));
-    // A warlock's demon carries neither.
-    assert_eq!(menu_predicates(0), (false, false));
-    assert_eq!(menu_predicates(0x10), (false, true));
-    // 0x8 is PLAYER_CONTROLLED, on every pet; 0x40 is PLUS_MOB.
-    assert_eq!(menu_predicates(0x8 | 0x40), (false, false));
+fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
+    use benilla_protocol::{
+        messages::{Field, FieldLayout},
+        ObjectFields,
+    };
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let make = |flags, bytes, owner| {
+            let pairs = [
+                (Field::UnitFlags, flags),
+                (Field::UnitBytes2, bytes),
+                (Field::UnitSummonedby, owner),
+                (Field::UnitCharmedby, 7),
+            ]
+            .map(|(field, value)| (layout.resolve(field).unwrap().index, value));
+            ObjectFields::from_native_pairs(layout, &pairs)
+        };
+        for (rename, abandon) in [(false, false), (true, false), (false, true), (true, true)] {
+            let permissions = u32::from(rename) | (u32::from(abandon) << 1);
+            let (flags, bytes) = match layout {
+                FieldLayout::Vanilla5875 => (permissions << 4, 0),
+                FieldLayout::Wrath12340 => (0x30, permissions << 16),
+            };
+            let pet = make(flags, bytes, 7);
+            assert_eq!(menu_predicates(42, Some(&pet), Some(7)), (abandon, rename));
+            assert_eq!(menu_predicates(0, Some(&pet), Some(7)), (false, false));
+            assert_eq!(menu_predicates(42, Some(&pet), Some(8)), (false, false));
+            let charmed_only = make(flags, bytes, 0);
+            assert_eq!(
+                menu_predicates(42, Some(&charmed_only), Some(7)),
+                (false, false)
+            );
+        }
+        assert_eq!(menu_predicates(42, None, Some(7)), (false, false));
+    }
 }
 
 #[test]
