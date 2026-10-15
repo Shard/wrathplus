@@ -30,6 +30,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     super::cvars::install_wrath_clock_cvars(lua)?;
     install_truthful_readers(lua)?;
     super::mail::wrath::install(lua)?;
+    super::wrath_lfg::install(lua)?;
     wrath_spell_queries::install(lua)?;
     wrath_stats::install(lua)?;
     wrath_loot::install(lua)?;

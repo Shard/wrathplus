@@ -166,6 +166,8 @@ mod wrath_item_spell;
 mod wrath_items;
 mod wrath_paperdoll;
 mod wrath_surface;
+mod wrath_lfg;
+pub use wrath_lfg::{WrathLfgCatalog, WrathLfgDungeon};
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
 
