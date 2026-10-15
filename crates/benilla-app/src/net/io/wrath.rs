@@ -1053,6 +1053,11 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ActivateTaxiExpress { .. }
         | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
+        | ClientCommand::ListStabledPets { .. }
+        | ClientCommand::StablePet { .. }
+        | ClientCommand::UnstablePet { .. }
+        | ClientCommand::StableSwapPet { .. }
+        | ClientCommand::BuyStableSlot { .. }
         | ClientCommand::TrainerBuySpell { .. }
         | ClientCommand::LootRoll { .. }
         | ClientCommand::GetMailList { .. }
@@ -1534,6 +1539,11 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_roll::encode_vote(looted_target, item_slot, roll_type)
                 .expect("validated native roll vote"),
         ),
+        ClientCommand::ListStabledPets { npc } => stable_packet(benilla_protocol::wrath_stable::Command::List { npc }),
+        ClientCommand::StablePet { npc } => stable_packet(benilla_protocol::wrath_stable::Command::Stable { npc }),
+        ClientCommand::UnstablePet { npc, pet_number } => stable_packet(benilla_protocol::wrath_stable::Command::Unstable { npc, pet_number }),
+        ClientCommand::StableSwapPet { npc, pet_number } => stable_packet(benilla_protocol::wrath_stable::Command::Swap { npc, pet_number }),
+        ClientCommand::BuyStableSlot { npc } => stable_packet(benilla_protocol::wrath_stable::Command::BuySlot { npc }),
         ClientCommand::GuildBankQuery(query) => (query.opcode(), query.encode()),
         ClientCommand::RequestRaidInfo => (
             benilla_protocol::wrath_instance::CMSG_REQUEST_RAID_INFO,
@@ -3032,3 +3042,10 @@ mod repair_funding_tests {
         }
     }
 }
+
+fn stable_packet(command: benilla_protocol::wrath_stable::Command) -> (u32, Vec<u8>) {
+    (command.opcode(), command.encode())
+}
+#[cfg(test)]
+#[path = "wrath/stable_tests.rs"]
+mod stable_tests;

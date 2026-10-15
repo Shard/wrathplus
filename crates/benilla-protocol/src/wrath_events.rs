@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            crate::wrath_stable::MSG_LIST_STABLED_PETS | crate::wrath_stable::SMSG_STABLE_RESULT => {
+                Ok(match crate::wrath_stable::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathStable { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             crate::wrath_guild_bank::MSG_GUILD_PERMISSIONS
             | crate::wrath_guild_bank::MSG_GUILD_BANK_MONEY_WITHDRAWN => {
                 Ok(match crate::wrath_guild_bank::decode(opcode, body) {
