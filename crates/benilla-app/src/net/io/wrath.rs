@@ -5,6 +5,9 @@
 
 mod recorder;
 
+#[path = "wrath/transfer_authority.rs"]
+mod transfer_authority;
+
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -295,7 +298,7 @@ fn run(
             return Ok(WrathCycle::Repark);
         }
         send(events, SessionEvent::WrathAccountExpansion { expansion: session.account_expansion() })?;
-        let characters = normalize_characters(session.char_enum().context("Wrath roster")?);
+        let mut characters = normalize_characters(session.char_enum().context("Wrath roster")?);
         if canceled() {
             return Ok(WrathCycle::Repark);
         }
@@ -330,8 +333,21 @@ fn run(
                     Err(_) => return Ok(WrathCycle::Exit),
                     Ok(CharRequest::Enter(guid)) => break guid,
                     Ok(CharRequest::Abandon) => return Ok(WrathCycle::Repark),
-                    Ok(CharRequest::Create(_)) | Ok(CharRequest::Delete(_)) => {
-                        bail!("Wrath character mutation is not integrated; reconnecting without sending a Vanilla packet")
+                    Ok(CharRequest::Create(request)) => {
+                        let native = benilla_protocol::wrath_world::WrathCreateCharacter {
+                            name: request.name, race: request.race, class: request.class,
+                            gender: request.gender, skin: request.skin, face: request.face,
+                            hair_style: request.hair_style, hair_color: request.hair_color,
+                            facial_hair: request.facial_hair, outfit_id: 0,
+                        };
+                        let code = session.create_character_result(&native)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Create, code, |event| send(events, event))?;
+                    }
+                    Ok(CharRequest::Delete(guid)) => {
+                        let code = session.delete_character_result(guid)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Delete, code, |event| send(events, event))?;
                     }
                 }
             }
@@ -435,6 +451,13 @@ fn run(
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
                         .record_pong(sequence);
+                }
+                0x003e | 0x003f | 0x0040 => {
+                    let packet = match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body) {
+                        Ok(packet) => packet,
+                        Err(error) => { authority.revoke(); return Err(error.into()); }
+                    };
+                    authority.publish_transfer(packet, |event| send(events, event))?;
                 }
                 SMSG_CLIENT_CONTROL_UPDATE => {
                     let (mover, allow_move) = client_control_update(&packet.body)?;
@@ -651,6 +674,10 @@ struct MovementAuthorityState {
     last_order_counter: Option<u32>,
     rooted: bool,
     taxi_spline: Option<(u32, bool)>,
+    transfer_sequence: u64,
+    transfer_ack: Option<benilla_protocol::wrath_transfer::Token>,
+    transfer_waiting: bool,
+    transfer_transport: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -680,6 +707,10 @@ impl MovementAuthority {
             last_order_counter: None,
             rooted: false,
             taxi_spline: None,
+            transfer_sequence: 0,
+            transfer_ack: None,
+            transfer_waiting: false,
+            transfer_transport: false,
         };
         MovementAuthorityHandle {
             shared: Arc::clone(self),
@@ -693,6 +724,9 @@ impl MovementAuthorityHandle {
     fn observe_self_create(&self, guid: u64, movement: &MovementPosition) -> Result<()> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(());
+        }
+        if state.transfer_waiting || state.transfer_transport {
             return Ok(());
         }
         if guid != self.self_guid {
@@ -764,6 +798,7 @@ impl MovementAuthorityHandle {
             state.self_control = false;
             state.control_decided = true;
             state.taxi_spline = None;
+            state.transfer_ack = None;
         }
     }
 
@@ -982,6 +1017,7 @@ enum WrathRoute {
     NativeLfg,
     NativeGuild,
     NativeChat,
+    NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -995,6 +1031,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
+        ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
@@ -1273,6 +1310,10 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeWorldportAck => {
+                        let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
+                        active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
                     WrathRoute::NativeChat => {
                         let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
                         match benilla_protocol::wrath_chat::encode(&command) {
@@ -3119,3 +3160,42 @@ mod arena_team_tests;
 #[cfg(test)]
 #[path = "wrath/chat_tests.rs"]
 mod chat_tests;
+
+fn native_character_action_succeeded(action: benilla_protocol::CharAction, code: u8) -> bool {
+    use benilla_protocol::wrath_world::{CHAR_CREATE_SUCCESS, CHAR_DELETE_SUCCESS};
+    match action {
+        benilla_protocol::CharAction::Create => code == CHAR_CREATE_SUCCESS,
+        benilla_protocol::CharAction::Delete => code == CHAR_DELETE_SUCCESS,
+    }
+}
+
+fn finish_character_action(
+    session: &mut WrathWorldSession,
+    characters: &mut Vec<Character>,
+    realm: Option<benilla_protocol::RealmInfo>,
+    action: benilla_protocol::CharAction,
+    code: u8,
+    publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    publish_character_action(action, code, || {
+        *characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+        Ok(SessionEvent::CharacterList { characters: characters.clone(), realm })
+    }, publish)
+}
+
+// Refresh must complete and publish before success. A transport failure never fabricates a result.
+fn publish_character_action(
+    action: benilla_protocol::CharAction,
+    code: u8,
+    refresh: impl FnOnce() -> Result<SessionEvent>,
+    mut publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    if native_character_action_succeeded(action, code) {
+        publish(refresh()?)?;
+    }
+    publish(SessionEvent::WrathCharActionResult { action, code })
+}
+
+#[cfg(test)]
+#[path = "wrath/character_tests.rs"]
+mod character_tests;

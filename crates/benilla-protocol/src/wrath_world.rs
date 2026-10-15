@@ -28,6 +28,8 @@ const CMSG_CHAR_ENUM: u32 = 0x037;
 const SMSG_CHAR_ENUM: u16 = 0x03b;
 const CMSG_CHAR_CREATE: u32 = 0x036;
 const SMSG_CHAR_CREATE: u16 = 0x03a;
+const CMSG_CHAR_DELETE: u32 = 0x038;
+const SMSG_CHAR_DELETE: u16 = 0x03c;
 const CMSG_PLAYER_LOGIN: u32 = 0x03d;
 const SMSG_CHARACTER_LOGIN_FAILED: u16 = 0x041;
 const SMSG_LOGIN_SETTIMESPEED: u16 = 0x042;
@@ -36,7 +38,8 @@ const SMSG_ACCOUNT_DATA_TIMES: u16 = 0x209;
 const SMSG_LOGIN_VERIFY_WORLD: u16 = 0x236;
 const AUTH_OK: u8 = 0x0c;
 const AUTH_WAIT_QUEUE: u8 = 0x1b;
-const CHAR_CREATE_SUCCESS: u8 = 0x2f;
+pub const CHAR_CREATE_SUCCESS: u8 = 0x2f;
+pub const CHAR_DELETE_SUCCESS: u8 = 0x47;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DIAL_ENDPOINTS: usize = 16;
@@ -87,8 +90,8 @@ impl std::error::Error for WrathWorldAuthReject {}
 /// A normal 3.3.5a `CMSG_CHAR_CREATE` request.
 ///
 /// Appearance values and the race/class combination remain server-authoritative. This layer only
-/// rejects values that cannot name a playable Wrath race/class and the deliberately basic ASCII
-/// name subset used by the probe API.
+/// rejects unencodable names (empty or embedded NUL), and invalid playable IDs. Name policy
+/// belongs to the server: Unicode, punctuation and length are not locally restricted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrathCreateCharacter {
     pub name: String,
@@ -338,7 +341,8 @@ impl WrathWorldSession {
                         .body
                         .first()
                         .ok_or_else(|| anyhow!("empty SMSG_AUTH_RESPONSE"))?;
-                    session.account_expansion = auth_response_expansion(&packet.body).or(session.account_expansion);
+                    session.account_expansion =
+                        auth_response_expansion(&packet.body).or(session.account_expansion);
                     match result {
                         AUTH_OK => {
                             if packet.body.len() != 11 {
@@ -398,19 +402,36 @@ impl WrathWorldSession {
 
     /// Validate and submit a normal character-create request, waiting for its one-byte result.
     pub fn create_character(&mut self, request: &WrathCreateCharacter) -> Result<()> {
-        let body = create_character_body(request)?;
-        self.send_raw(CMSG_CHAR_CREATE, &body)
-            .context("sending CMSG_CHAR_CREATE")?;
+        let code = self.create_character_result(request)?;
+        parse_create_character_result(&[code])
+    }
 
+    /// General select-screen operation: server refusals are raw results, not transport errors.
+    pub fn create_character_result(&mut self, request: &WrathCreateCharacter) -> Result<u8> {
+        self.send_raw(CMSG_CHAR_CREATE, &create_character_body(request)?)
+            .context("sending CMSG_CHAR_CREATE")?;
+        self.character_action_result(SMSG_CHAR_CREATE)
+    }
+
+    /// Delete uses a full little-endian GUID (AzerothCore CharacterHandler.cpp).
+    pub fn delete_character_result(&mut self, guid: u64) -> Result<u8> {
+        self.send_raw(CMSG_CHAR_DELETE, &delete_character_body(guid))
+            .context("sending CMSG_CHAR_DELETE")?;
+        self.character_action_result(SMSG_CHAR_DELETE)
+    }
+
+    fn character_action_result(&mut self, opcode: u16) -> Result<u8> {
         for _ in 0..MAX_CREATE_PACKETS {
             let packet = self.recv_raw()?;
             match packet.opcode {
-                SMSG_CHAR_CREATE => return parse_create_character_result(&packet.body),
+                op if op == opcode => {
+                    return parse_single_result(&packet.body, "character action result")
+                }
                 SMSG_WARDEN_DATA => return Err(WrathWardenRequired.into()),
                 _ => {}
             }
         }
-        bail!("no SMSG_CHAR_CREATE within {MAX_CREATE_PACKETS} packets")
+        bail!("no character action result {opcode:#x} within {MAX_CREATE_PACKETS} packets")
     }
 
     /// Send `CMSG_PLAYER_LOGIN` and observe the bounded initial packet sequence.
@@ -675,15 +696,11 @@ impl WrathInitialLoginObservation {
 
 fn create_character_body(request: &WrathCreateCharacter) -> Result<Vec<u8>> {
     let name = request.name.as_bytes();
-    if !(2..=12).contains(&name.len()) {
+    // Previously a probe-only ASCII 2..12 policy. The general screen must let the server
+    // report CHAR_NAME_* failures; only C-string encoding constraints belong here.
+    if name.is_empty() || name.contains(&0) {
         return Err(WrathCreateValidationError {
-            reason: "name must contain 2 through 12 ASCII letters",
-        }
-        .into());
-    }
-    if !name.iter().all(u8::is_ascii_alphabetic) {
-        return Err(WrathCreateValidationError {
-            reason: "name must contain only ASCII letters",
+            reason: "name must be nonempty and contain no NUL",
         }
         .into());
     }
@@ -727,6 +744,10 @@ fn create_character_body(request: &WrathCreateCharacter) -> Result<Vec<u8>> {
         request.outfit_id,
     ]);
     Ok(body)
+}
+
+fn delete_character_body(guid: u64) -> [u8; 8] {
+    guid.to_le_bytes()
 }
 
 fn parse_single_result(body: &[u8], packet_name: &str) -> Result<u8> {
@@ -1240,7 +1261,8 @@ mod tests {
         assert_eq!(auth_response_expansion(&[]), None);
         for code in [AUTH_OK, AUTH_WAIT_QUEUE] {
             let len = if code == AUTH_OK { 11 } else { 16 };
-            let mut body = vec![0; len]; body[0] = code;
+            let mut body = vec![0; len];
+            body[0] = code;
             for byte in [0, 1, 2, 255] {
                 body[10] = byte;
                 assert_eq!(auth_response_expansion(&body), Some(byte));
@@ -1468,7 +1490,7 @@ mod tests {
 
     #[test]
     fn character_create_validation_rejects_bad_names_ids_gender_and_outfit() {
-        for name in ["A", "ThirteenChars", "Bad-name", "Åke"] {
+        for name in ["", "Bad\0name"] {
             let mut request = create_fixture();
             request.name = name.into();
             let error = create_character_body(&request).unwrap_err();
@@ -1488,6 +1510,66 @@ mod tests {
                 "accepted {field}={value}"
             );
         }
+    }
+
+    #[test]
+    fn character_names_are_server_policy_and_delete_is_full_guid() {
+        for name in [
+            "A".to_string(),
+            "Åke".into(),
+            "Bad-name".into(),
+            "X".repeat(256),
+        ] {
+            let mut request = create_fixture();
+            request.name = name.clone();
+            let body = create_character_body(&request).unwrap();
+            assert_eq!(&body[..name.len()], name.as_bytes());
+            assert_eq!(body[name.len()], 0);
+        }
+        assert_eq!(
+            delete_character_body(0x0807060504030201),
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        for code in 0..=255 {
+            assert_eq!(parse_single_result(&[code], "result").unwrap(), code);
+        }
+        assert!(parse_single_result(&[], "result").is_err());
+        assert!(parse_single_result(&[0x47, 0], "result").is_err());
+        assert_ne!(CHAR_CREATE_SUCCESS, crate::messages::CHAR_CREATE_SUCCESS);
+        assert_ne!(CHAR_DELETE_SUCCESS, crate::messages::CHAR_DELETE_SUCCESS);
+    }
+
+    #[test]
+    fn character_mutations_use_native_opcodes_and_keep_refusals_as_results() {
+        let (mut session, mut server) = loopback_session();
+        let thread = thread::spawn(move || {
+            let (mut enc, mut dec) = HeaderCrypto::from_session_key(TRANSPORT_KEY).split();
+            assert_eq!(
+                recv_client_packet(&mut server, &mut enc),
+                (
+                    CMSG_CHAR_CREATE,
+                    create_character_body(&create_fixture()).unwrap()
+                )
+            );
+            send_server_packet(&mut server, &mut dec, SMSG_CHAR_CREATE, &[0x59]);
+            assert_eq!(
+                recv_client_packet(&mut server, &mut enc),
+                (
+                    CMSG_CHAR_DELETE,
+                    0x0102030405060708u64.to_le_bytes().to_vec()
+                )
+            );
+            send_server_packet(&mut server, &mut dec, SMSG_CHAR_DELETE, &[0x48]);
+        });
+        assert_eq!(
+            session.create_character_result(&create_fixture()).unwrap(),
+            0x59
+        );
+        assert_eq!(
+            session.delete_character_result(0x0102030405060708).unwrap(),
+            0x48
+        );
+        thread.join().unwrap();
     }
 
     #[test]

@@ -311,3 +311,4 @@ pub mod wrath_pet;
 pub mod wrath_chat;
 
 pub mod wrath_trade;
+pub mod wrath_transfer;

@@ -3860,6 +3860,7 @@ mod tests {
             position: [0.0; 3],
             orientation: 0.0,
             needs_ack,
+            native_token: None,
             transport_entry: None,
         };
 
