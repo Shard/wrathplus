@@ -266,6 +266,8 @@ pub(crate) struct Model {
 
     /// Channels the server confirmed, in join order: the numbers `GetChannelName` answers.
     pub(crate) joined_channels: Vec<Option<String>>,
+    pub(crate) wrath_channel_display: super::wrath_channel_display::Display,
+    pub(crate) wrath_channel_roster: super::wrath_channel_roster::WrathChannelRoster,
     /// The party or raid roster the app pushes; the default is not in a group.
     pub(crate) party: party::PartyState,
     pub(crate) wrath_group: super::wrath_surface::wrath_group::Group,
@@ -1140,6 +1142,8 @@ impl Model {
             input: Default::default(),
             drop_item_on_unit: Vec::new(),
             joined_channels: Vec::new(),
+            wrath_channel_roster: Default::default(),
+            wrath_channel_display: Default::default(),
             party: party::PartyState::default(),
             wrath_group: Default::default(),
             assignment_sent_at: None,

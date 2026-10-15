@@ -31,6 +31,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     wrath_power::install(lua)?;
     wrath_group::install(lua)?;
     wrath_party_assignment::install(lua)?;
+    super::wrath_channel_bindings::install(lua)?;
     super::aura::wrath::install(lua)?;
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;
