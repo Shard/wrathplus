@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            crate::wrath_instance::SMSG_RAID_INSTANCE_INFO => {
+                Ok(match crate::wrath_instance::decode(body) {
+                    Ok(info) => handled(vec![SessionEvent::WrathRaidInstanceInfo { info }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_lfg::handles(opcode) => {
                 Ok(match crate::wrath_lfg::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathLfg { packet }], Vec::new(), Vec::new()),
