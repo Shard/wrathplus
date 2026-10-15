@@ -294,6 +294,7 @@ fn run(
         if canceled() {
             return Ok(WrathCycle::Repark);
         }
+        send(events, SessionEvent::WrathAccountExpansion { expansion: session.account_expansion() })?;
         let characters = normalize_characters(session.char_enum().context("Wrath roster")?);
         if canceled() {
             return Ok(WrathCycle::Repark);
