@@ -312,3 +312,7 @@ pub mod wrath_chat;
 
 pub mod wrath_trade;
 pub mod wrath_transfer;
+
+pub mod wrath_logout;
+
+pub mod wrath_pet_name;
