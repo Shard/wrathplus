@@ -168,3 +168,136 @@ fn malformed_dungeon_notifications_are_unhandled_without_fifo_publication() {
     }
     assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
 }
+
+fn boot_fixture(active: u8, reason: &str) -> (u16, Vec<u8>, Packet) {
+    use benilla_protocol::wrath_lfg::boot::Boot;
+    let mut body = vec![active, 128, 255];
+    body.extend(0xf102030405060708u64.to_le_bytes());
+    for word in [u32::MAX, 0x80000000, 0, 0x11223344] {
+        body.extend(word.to_le_bytes());
+    }
+    body.extend(reason.as_bytes());
+    body.push(0);
+    (
+        0x036d,
+        body,
+        Packet::Boot(Boot {
+            in_progress: active,
+            did_vote: 128,
+            agree: 255,
+            victim: 0xf102030405060708,
+            votes: u32::MAX,
+            agrees: 0x80000000,
+            seconds_left: 0,
+            votes_needed: 0x11223344,
+            reason: reason.into(),
+        }),
+    )
+}
+
+fn completion_fixture(count: u8) -> (u16, Vec<u8>, Packet) {
+    use benilla_protocol::wrath_lfg::{completion::Reward, RewardItem};
+    let mut body = vec![0x56, 0x34, 0x12, 0xab, 0xef, 0xcd, 0xab, 0xfe, 255];
+    for word in [0x80000000u32, u32::MAX, 0, 0x11223344, 0x55667788] {
+        body.extend(word.to_le_bytes());
+    }
+    body.push(count);
+    let mut items = Vec::new();
+    for n in 0..u32::from(count) {
+        for word in [0x80000000 | n, u32::MAX - n, n] {
+            body.extend(word.to_le_bytes());
+        }
+        items.push(RewardItem {
+            item: 0x80000000 | n,
+            display: u32::MAX - n,
+            count: n,
+        });
+    }
+    (
+        0x01ff,
+        body,
+        Packet::Completion(Reward {
+            random_entry: 0xab123456,
+            actual_entry: 0xfeabcdef,
+            done: 255,
+            extra: 0x80000000,
+            money: u32::MAX,
+            xp: 0,
+            variable_money: 0x11223344,
+            variable_xp: 0x55667788,
+            items,
+        }),
+    )
+}
+
+#[test]
+fn boot_and_completion_reach_sole_fifo_losslessly_without_lifecycle_inference() {
+    let mut app = App::new();
+    app.add_plugins(UiLfgPlugin);
+    let mut adapter = WrathEventAdapter::new();
+    let fixtures = [
+        boot_fixture(128, "raison é"),
+        completion_fixture(6),
+        boot_fixture(0, &"x".repeat(1024)),
+        completion_fixture(255),
+        completion_fixture(0),
+        boot_fixture(0, ""),
+    ];
+    for _ in 0..2 {
+        for (opcode, body, _) in &fixtures {
+            let packet = WrathServerPacket {
+                opcode: *opcode,
+                body: body.clone(),
+            };
+            let WrathDispatch::Handled { session_events, .. } =
+                adapter.dispatch_packet(&packet, 1).unwrap()
+            else {
+                panic!("L4b receipt unhandled")
+            };
+            assert_eq!(session_events.len(), 1);
+            crate::net::handlers::dispatch(app.world_mut(), session_events);
+        }
+    }
+    let queue = &app.world().resource::<NativeLfgPackets>().0;
+    assert_eq!(queue.len(), 12);
+    for (actual, (_, _, expected)) in queue.iter().zip(fixtures.iter().cycle()) {
+        assert_eq!(actual, expected);
+    }
+    crate::net::handlers::dispatch(
+        app.world_mut(),
+        vec![SessionEvent::Disconnected {
+            reason: "test".into(),
+            end: benilla_protocol::SessionEnd::Lost,
+        }],
+    );
+    assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
+}
+
+#[test]
+fn malformed_boot_and_completion_never_publish_partial_receipts() {
+    let mut app = App::new();
+    app.add_plugins(UiLfgPlugin);
+    let mut adapter = WrathEventAdapter::new();
+    for (opcode, body, _) in [boot_fixture(0, "raison é"), completion_fixture(6)] {
+        let mut invalid: Vec<Vec<u8>> = (0..body.len()).map(|cut| body[..cut].to_vec()).collect();
+        let mut trailing = body;
+        trailing.push(0);
+        invalid.push(trailing);
+        for body in invalid {
+            let packet = WrathServerPacket { opcode, body };
+            assert!(
+                matches!(adapter.dispatch_packet(&packet, 1).unwrap(), WrathDispatch::Unhandled { opcode: actual } if actual == opcode)
+            );
+        }
+    }
+    // Count says seven rows but only six complete rows are present.
+    let (opcode, mut body, _) = completion_fixture(6);
+    body[29] = 7;
+    assert!(matches!(
+        adapter
+            .dispatch_packet(&WrathServerPacket { opcode, body }, 1)
+            .unwrap(),
+        WrathDispatch::Unhandled { .. }
+    ));
+    assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
+}
