@@ -100,16 +100,31 @@ pub fn encode_buyback_item(vendor: u64, slot: u32) -> Vec<u8> {
 }
 
 /// `CMSG_REPAIR_ITEM`: `u64 vendor, u64 item (0 is everything), u8 guildBank`.
-pub fn encode_repair_item(vendor: u64, item: u64) -> Vec<u8> {
+/// AzerothCore `Handlers/NPCHandler.cpp::HandleRepairItemOpcode` reads these in order.
+/// This codec grants no authority to spend guild funds; callers must validate that context.
+pub fn encode_repair_item(vendor: u64, item: u64, guild_bank: bool) -> Vec<u8> {
     let mut out = vendor.to_le_bytes().to_vec();
     out.extend(item.to_le_bytes());
-    out.push(0);
+    out.push(u8::from(guild_bank));
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repair_encodes_both_funding_bytes_without_changing_guids() {
+        for item in [0u64, 0x8877665544332211] {
+            for guild_bank in [false, true] {
+                let body = encode_repair_item(0x0102030405060708, item, guild_bank);
+                assert_eq!(body.len(), 17);
+                assert_eq!(&body[..8], &[8, 7, 6, 5, 4, 3, 2, 1]);
+                assert_eq!(&body[8..16], &item.to_le_bytes());
+                assert_eq!(body[16], u8::from(guild_bank));
+            }
+        }
+    }
 
     #[test]
     fn a_vendor_list_reads_through_extended_cost_and_buying_names_the_slot() {
