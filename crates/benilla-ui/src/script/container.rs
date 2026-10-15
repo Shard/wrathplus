@@ -431,12 +431,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 "Usage: ContainerIDToInventoryID(containerID)",
             )?;
             // The reference's steps and signed compare (`0x4f9524 jl`), wrapping at the `i32` edge.
-            let t = id.wrapping_sub(1);
-            Ok(i64::from(if t < 4 {
-                t.wrapping_add(20)
-            } else {
-                t.wrapping_add(60)
-            }))
+            Ok(i64::from(
+                lua.app_data_ref::<Model>()
+                    .expect("model")
+                    .container_inventory_slot(id),
+            ))
         })?,
     )?;
 
@@ -446,7 +445,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     lua.globals().set(
         "SetBagPortaitTexture",
         lua.create_function(|lua, (region, container): (Table, i64)| {
-            if container >= 11 {
+            if container
+                >= if lua.app_data_ref::<Model>().expect("model").dialect
+                    == super::ScriptDialect::Wrath12340
+                {
+                    12
+                } else {
+                    11
+                }
+            {
                 return Err(mlua::Error::runtime("Invalid slot in SetBagPortaitTexture"));
             }
             if container <= 0 {
@@ -454,12 +461,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             }
             // `ContainerIDToInventoryID`'s arithmetic, inlined: an addon may replace that global,
             // and the reference's portrait read does not go through Lua.
-            let t = container.wrapping_sub(1);
-            let inv = if t < 4 {
-                t.wrapping_add(20)
-            } else {
-                t.wrapping_add(60)
-            };
+            let inv = lua
+                .app_data_ref::<Model>()
+                .expect("model")
+                .container_inventory_slot(container as i32);
             let path = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
                 usize::try_from(inv)

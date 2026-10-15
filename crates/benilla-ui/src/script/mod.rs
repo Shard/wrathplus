@@ -122,6 +122,7 @@ mod slider;
 mod social;
 mod sound;
 mod spell_info;
+mod storage_slots;
 mod spellbook;
 mod stable;
 mod statusbar;
