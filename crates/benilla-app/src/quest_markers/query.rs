@@ -84,6 +84,15 @@ pub(super) fn query_statuses(
     if store.is_changed() {
         state.fields = self_generation(&store.0);
     }
+    let wrath = store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340;
+    // Deliberate conservative superset, authorised for Wrath: the native refresh body
+    // 00729f40 is proven, but its descriptor-watch chain is not. TODO trace the native
+    // BYTES_2 watch registration. Coalesce own PvP/FFA edges at most once per second;
+    // retain pending work even if no further descriptor update arrives.
+    let pvp_refresh = state.pvp_refresh.poll(
+        wrath.then(|| (store.0.unit_is_pvp(), store.0.unit_is_ffa_pvp())),
+        std::time::Instant::now(),
+    );
     let generation = state.fields ^ (u64::from(quest.reask_epoch()) << 32);
     // The full sweep's triggers (`0x5eb3c0`): your revive, the `≤0 → >0` crossing (`0x6046f0`),
     // and your own reaction inputs moving (`0x606e20`). Edges, since death is a light sweep.
@@ -112,7 +121,7 @@ pub(super) fn query_statuses(
     let catalogs_moved =
         reputations.is_changed() || factions.as_ref().is_some_and(|f| f.is_changed());
     for (entity, guid, net, obj, fm) in &objects {
-        if !swept && !full && !catalogs_moved && !obj.is_changed() {
+        if !pvp_refresh && !swept && !full && !catalogs_moved && !obj.is_changed() {
             continue;
         }
         // `0x6073f0` zeroes the marker (`+0xb2c`, the green `!` too) and the status (`+0xcb8`)
@@ -136,7 +145,9 @@ pub(super) fn query_statuses(
                     Some(&*obj),
                     Some(&store),
                 );
-                if reaction <= 1 {
+                // Wrath refresh 00729f40 clears below internal rank 3; Vanilla
+                // 005eb143 only clears Hated/Hostile. Neutral fallback stays visible.
+                if reaction < if wrath { 3 } else { 2 } {
                     // The sweep's one teardown (`0x5eb143`), questgiver or not. Dropping the ask
                     // key brings the marker back through a `0x607380` when the reaction recovers.
                     state.asked.remove(&guid.0);
@@ -156,14 +167,16 @@ pub(super) fn query_statuses(
                 // (`0x6073cd`) and from the light sweep (`0x5eb159`), so every sweep re-asks;
                 // `0x1aa` has one sender, `0x607380` (`0x6073e8`), so never on a light sweep.
                 let flags = obj.0.unit_npc_services();
-                if (per_unit || swept)
+                if (per_unit || swept || pvp_refresh)
                     && flags.has(benilla_protocol::messages::NpcService::QuestGiver)
                 {
                     let _ = commands
                         .0
                         .send(ClientCommand::QuestgiverStatusQuery { npc: guid.0 });
                 }
-                if per_unit && flags.has(benilla_protocol::messages::NpcService::FlightMaster) {
+                if (per_unit || pvp_refresh)
+                    && flags.has(benilla_protocol::messages::NpcService::FlightMaster)
+                {
                     let _ = commands
                         .0
                         .send(ClientCommand::TaxiNodeStatusQuery { guid: guid.0 });
@@ -241,9 +254,41 @@ fn self_generation(fields: &benilla_protocol::ObjectFields) -> u64 {
     h
 }
 
+/// A session-local monotonic throttle; initial observation is a baseline, not an edge.
+#[derive(Default)]
+struct PvpRefresh {
+    previous: Option<(bool, bool)>,
+    pending: bool,
+    last: Option<std::time::Instant>,
+}
+
+impl PvpRefresh {
+    fn poll(&mut self, current: Option<(bool, bool)>, now: std::time::Instant) -> bool {
+        let Some(current) = current else {
+            *self = Self::default();
+            return false;
+        };
+        if self.previous.is_some_and(|previous| previous != current) {
+            self.pending = true;
+        }
+        self.previous = Some(current);
+        if self.pending
+            && self
+                .last
+                .is_none_or(|last| now.duration_since(last) >= std::time::Duration::from_secs(1))
+        {
+            self.pending = false;
+            self.last = Some(now);
+            return true;
+        }
+        false
+    }
+}
+
 /// [`query_statuses`]'s memory across frames.
 #[derive(Default)]
 pub(super) struct QueryState {
+    pvp_refresh: PvpRefresh,
     /// The last [`self_generation`], kept so the walk runs only when our store changes.
     fields: u64,
     /// `fields` combined with the packet epoch; a change here is the sweep.
@@ -259,6 +304,111 @@ pub(super) struct QueryState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pvp_refresh_coalesces_edges_and_retains_pending_work() {
+        use std::time::{Duration, Instant};
+        let now = Instant::now();
+        let mut state = PvpRefresh::default();
+        assert!(!state.poll(Some((false, false)), now));
+        assert!(state.poll(Some((true, false)), now));
+        assert!(!state.poll(Some((true, true)), now + Duration::from_millis(100)));
+        assert!(!state.poll(Some((false, false)), now + Duration::from_millis(200)));
+        assert!(!state.poll(Some((false, false)), now + Duration::from_millis(999)));
+        assert!(state.poll(Some((false, false)), now + Duration::from_secs(1)));
+        assert!(!state.poll(Some((false, false)), now + Duration::from_secs(2)));
+        assert!(!state.poll(None, now + Duration::from_secs(2)));
+        assert!(!state.poll(Some((true, true)), now + Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn wrath_own_pvp_edges_refresh_unchanged_markers_with_native_taxi_gate() {
+        use crate::net::Guid;
+        use crate::ui_taxi::FlightMasterStatus;
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        // Separate worlds avoid coupling the fixture to wall-clock throttle timing.
+        for own_bit in [0x100, 0x400, 0x200, 0x10000] {
+            for target_ffa in [false, true] {
+                let fields = |flags, bytes, services| {
+                    let layout = FieldLayout::Wrath12340;
+                    ObjectFields::from_native_pairs(
+                        layout,
+                        &[
+                            (layout.resolve(Field::UnitFlags).unwrap().index, flags),
+                            (layout.resolve(Field::UnitBytes2).unwrap().index, bytes),
+                            (layout.resolve(Field::UnitNpcFlags).unwrap().index, services),
+                        ],
+                    )
+                };
+                let (tx, rx) = crossbeam_channel::unbounded();
+                let mut app = App::new();
+                app.insert_resource(NetCommands(tx))
+                    .init_resource::<GuidIndex>()
+                    .init_resource::<QuestGiver>()
+                    .init_resource::<crate::net::Reputations>()
+                    .add_systems(Update, query_statuses);
+                let me = app
+                    .world_mut()
+                    .spawn((SelfPlayer, ObjectStore(fields(8, 0, 0))))
+                    .id();
+                let spawn = |app: &mut App, guid, services| {
+                    let entity = app
+                        .world_mut()
+                        .spawn((
+                            Guid(guid),
+                            NetEntity {
+                                kind: EntityKind::Unit,
+                                display_id: None,
+                                scale: 1.0,
+                            },
+                            ObjectStore(fields(8, if target_ffa { 0x400 } else { 0 }, services)),
+                        ))
+                        .id();
+                    app.world_mut()
+                        .resource_mut::<GuidIndex>()
+                        .0
+                        .insert(guid, entity);
+                    entity
+                };
+                let npc = spawn(&mut app, 10, 0x2002);
+                // Vanilla taxi bit is a collision, not a Wrath flight-master service.
+                spawn(&mut app, 11, 0x8);
+                app.update();
+                let initial: Vec<_> = rx.try_iter().collect();
+                assert_eq!(initial.len(), 2);
+                assert!(initial
+                    .iter()
+                    .any(|c| matches!(c, ClientCommand::TaxiNodeStatusQuery { guid: 10 })));
+                app.world_mut()
+                    .resource_mut::<QuestGiver>()
+                    .set_status(10, 5);
+                app.world_mut()
+                    .entity_mut(npc)
+                    .insert(FlightMasterStatus { known: false });
+                app.update();
+                assert_eq!(rx.try_iter().count(), 0);
+                *app.world_mut()
+                    .entity_mut(me)
+                    .get_mut::<ObjectStore>()
+                    .unwrap() = ObjectStore(fields(8, own_bit, 0));
+                app.update();
+                let commands: Vec<_> = rx.try_iter().collect();
+                let changed = own_bit == 0x100 || own_bit == 0x400;
+                let hostile = own_bit == 0x400 && target_ffa;
+                assert_eq!(commands.len(), if changed && !hostile { 2 } else { 0 });
+                assert_eq!(
+                    app.world().resource::<QuestGiver>().status(10),
+                    if hostile { None } else { Some(5) }
+                );
+                assert_eq!(
+                    app.world().entity(npc).contains::<FlightMasterStatus>(),
+                    !hostile
+                );
+                app.update();
+                assert_eq!(rx.try_iter().count(), 0);
+            }
+        }
+    }
 
     #[test]
     fn the_status_is_re_asked_on_a_ding_on_re_entry_and_dropped_with_the_flag() {

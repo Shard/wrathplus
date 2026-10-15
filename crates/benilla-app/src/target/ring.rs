@@ -469,19 +469,20 @@ fn duel_reaction(
 }
 
 /// The both-FFA rung of `UnitReaction` (`0x60632c`): two player-controlled units both flagged
-/// free-for-all (`PLAYER_FLAGS` bit 7, vmangos `Player.h:322`) are hostile whatever their factions.
+/// free-for-all are hostile whatever their factions. Vanilla uses PLAYER_FLAGS bit 7;
+/// Wrath `007251c0` reads BYTES_2 byte 1 bit 2 after the duel rung. This source
+/// correction does not implement the omitted native controller/group/reputation branches.
 /// A plain PvP flag has no such rung: a same-faction player flagged for PvP stays friendly.
 fn ffa_reaction(
     target: &benilla_protocol::ObjectFields,
     own: &benilla_protocol::ObjectFields,
 ) -> bool {
-    const PLAYER_FLAGS_FFA_PVP: u32 = 0x80;
     let player_controlled =
         |u: &benilla_protocol::ObjectFields| u.unit_flags() & UNIT_FLAG_PVP_ATTACKABLE != 0;
     player_controlled(target)
         && player_controlled(own)
-        && target.player_flags() & PLAYER_FLAGS_FFA_PVP != 0
-        && own.player_flags() & PLAYER_FLAGS_FFA_PVP != 0
+        && target.unit_is_ffa_pvp()
+        && own.unit_is_ffa_pvp()
 }
 
 /// Target `UNIT_FIELD_FLAGS` bits, any one of which makes `CanAttack` refuse
@@ -763,6 +764,64 @@ mod tests {
         can_attack_from_player, can_cooperate_with_player, plate_is_friendly, ring_reaction,
         ring_variant, Factions, RingVariant, UNIT_FLAG_PVP_ATTACKABLE,
     };
+
+    #[test]
+    fn ffa_reaction_uses_native_source_and_keeps_control_and_duel_precedence() {
+        use crate::net::{ObjectStore, Reputations};
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
+                let mut pairs = Vec::new();
+                let mut set =
+                    |field, value| pairs.push((layout.resolve(field).unwrap().index, value));
+                set(Field::UnitFlags, if pc { 8 } else { 0 });
+                set(Field::PlayerFlags, if old_ffa { 0x80 } else { 0 });
+                set(Field::UnitBytes2, if ffa { 0x400 } else { 0 });
+                set(Field::PlayerDuelTeam, team);
+                let arbiter = layout.resolve(Field::PlayerDuelArbiter).unwrap().index;
+                pairs.extend([(arbiter, 17), (arbiter + 1, 9)]);
+                ObjectStore(ObjectFields::from_native_pairs(layout, &pairs))
+            };
+            let native = |pc, ffa, team| make(pc, ffa, ffa, team);
+            for own_pc in [false, true] {
+                for target_pc in [false, true] {
+                    for own_ffa in [false, true] {
+                        for target_ffa in [false, true] {
+                            let own = native(own_pc, own_ffa, 0);
+                            let target = native(target_pc, target_ffa, 0);
+                            assert_eq!(
+                                super::ffa_reaction(&target.0, &own.0),
+                                own_pc && target_pc && own_ffa && target_ffa
+                            );
+                        }
+                    }
+                }
+            }
+            for (packed, old) in [(true, false), (false, true)] {
+                let unit = make(true, packed, old, 0);
+                assert_eq!(
+                    super::ffa_reaction(&unit.0, &unit.0),
+                    match layout {
+                        FieldLayout::Vanilla5875 => old,
+                        FieldLayout::Wrath12340 => packed,
+                    }
+                );
+            }
+            let reps = Reputations::default();
+            let own = native(true, true, 1);
+            for (team, expected) in [(1, 4), (2, 1)] {
+                let target = native(true, true, team);
+                assert_eq!(
+                    ring_reaction(None, &reps, Some(&target), Some(&own)),
+                    expected
+                );
+                assert_eq!(
+                    super::reaction_from_player(None, &reps, Some(&target), Some(&own)),
+                    expected
+                );
+            }
+        }
+    }
 
     #[test]
     fn player_ring_party_and_pvp_split() {
