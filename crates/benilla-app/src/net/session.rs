@@ -137,7 +137,12 @@ fn on_character_list(In(ev): In<SessionEvent>, mut e: Edges, mut b: Bridge) {
     }
 }
 
-fn on_connected(In(ev): In<SessionEvent>, mut e: Edges, mut b: Bridge) {
+fn on_connected(
+    In(ev): In<SessionEvent>,
+    mut e: Edges,
+    mut b: Bridge,
+    native_pet_names: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
+) {
     if let SessionEvent::Connected {
         self_guid: guid,
         name,
@@ -146,6 +151,10 @@ fn on_connected(In(ev): In<SessionEvent>, mut e: Edges, mut b: Bridge) {
         addon_info,
     } = ev
     {
+        // Discard replies queued before this world entry, before seeding the new cache.
+        if let Some(mut packets) = native_pet_names {
+            packets.0.clear();
+        }
         connected(
             guid,
             name,
