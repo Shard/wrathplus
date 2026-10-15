@@ -34,6 +34,7 @@ Paths below are relative to `crates/benilla-formats`.
 | SpellDispelType | `src/wrath_layouts_installed_tests.rs`: four native aura tokens, withheld combined category and empty Frenzy token | `1a355d64` fixes ImmunityPossible column 19 and uses InternalName column 20; Vanilla unchanged |
 | TaxiPathNode | Same: Stormwind/Sentinel Hill routes 6/7, transport routes 285/302, exact endpoints/order/map/stop flags/delay | Arrival/departure event columns remain unexposed; not a live-flight certification |
 | WorldMapArea, WorldMapContinent | `src/wrath_layouts_installed_tests.rs`: four-continent order, Elwynn/Stormwind/Hellfire/Borean rects; all four continent sheet/taxi bounds | Area display-map/floor/parent and continent WorldMapID remain unexposed; no live projection certification |
+| SpellItemEnchantment | `tests/wrath_enchantments.rs`: Rockbiter, Fiery Weapon, Crusader, Mongoose, Berserking and selected stat enchants; names/visuals/bind flags | Selected rows only; effect/skill/gem columns and live glow rendering not certified |
 
 Character geoset tables are not entries in `wrath_layouts.rs`; their dedicated
 Wrath readers are additionally checked in `tests/wrath_render_dbc.rs` using exact
@@ -51,7 +52,6 @@ expected row, generic parse success, or an in-range/injective map as certificati
 
 | Table | Existing reader/test location to extend |
 | --- | --- |
-| SpellItemEnchantment | Existing enchantment reader and its real-data tests |
 | SpellRange | `src/spells/ranges.rs` |
 | AnimationData | `src/anim_data.rs` |
 | SoundEntries | `src/sound_entries.rs` |
