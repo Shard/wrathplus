@@ -169,3 +169,5 @@ pub mod world_point;
 pub mod world_unit;
 pub mod worldview;
 pub mod zfill;
+
+pub mod material_specialization;
