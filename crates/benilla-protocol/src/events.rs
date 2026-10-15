@@ -292,8 +292,12 @@ pub enum SessionEvent {
         position: [f32; 3],
         orientation: f32,
     },
-    /// `SMSG_NEW_WORLD` (acked) or the login `SMSG_LOGIN_VERIFY_WORLD`. After a transfer that
-    /// named a transport the pose is boat-local (vmangos `SendNewWorld` sends `GetTransportPos()`).
+    /// Lossless Wrath far-transfer packet plus local single-use acknowledgement capability.
+    WrathTransfer {
+        packet: crate::wrath_transfer::Packet,
+        token: Option<crate::wrath_transfer::Token>,
+    },
+    /// Legacy worldport or initial login pose; Wrath transfers use `WrathTransfer`.
     Worldport {
         map_id: u32,
         position: [f32; 3],

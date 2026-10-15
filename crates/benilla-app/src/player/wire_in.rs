@@ -150,6 +150,11 @@ pub(super) fn apply_server_moves(
     }
     // Cross-map worldport: snap, bump `CurrentMap` for the terrain streamer, ack if required.
     for w in worldports.read() {
+        // Native destinations supersede delayed native ACKs without changing Vanilla's bool.
+        if w.native_token.is_some() {
+            player.owes_worldport_ack = false;
+        }
+        player.native_worldport_ack = None;
         let riding = w.transport_entry.is_some() && player.ride.is_some();
         if riding {
             // Riding through: the pose is deck-local (`Player.cpp:2114`) and the boat survived the
@@ -189,7 +194,11 @@ pub(super) fn apply_server_moves(
         if w.needs_ack {
             if riding {
                 // A riding crossing never settles, so it acks now.
-                let _ = net_cmds.0.send(ClientCommand::WorldportAck);
+                let command = w
+                    .native_token
+                    .map(ClientCommand::NativeWorldportAck)
+                    .unwrap_or(ClientCommand::WorldportAck);
+                let _ = net_cmds.0.send(command);
                 info!(
                     "worldport: mapId {} @ {:?} (riding, boat-local pose, acked)",
                     w.map_id, w.position
@@ -197,7 +206,11 @@ pub(super) fn apply_server_moves(
             } else {
                 // The ack waits for the settle release: the reference acks after its blocking
                 // load, and vmangos keeps us out of world until the ack, with no timeout.
-                player.owes_worldport_ack = true;
+                if let Some(token) = w.native_token {
+                    player.native_worldport_ack = Some(token);
+                } else {
+                    player.owes_worldport_ack = true;
+                }
                 info!(
                     "worldport: mapId {} @ {:?} (world pose, ack deferred to release)",
                     w.map_id, w.position

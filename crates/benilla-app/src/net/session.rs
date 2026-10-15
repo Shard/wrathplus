@@ -40,6 +40,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::KnockBack, on_mover_edge)
         .net_handler(K::ClientControl, on_mover_edge)
         .net_handler(K::Worldport, on_worldport)
+        .net_handler(K::WrathTransfer, on_worldport)
         .net_handler(K::TransferPending, on_transfer)
         .net_handler(K::TransferAborted, on_transfer)
         .net_handler(K::TimeSpeed, on_clock)
@@ -215,18 +216,85 @@ fn on_mover_edge(In(ev): In<SessionEvent>, mut e: Edges, b: Bridge) {
     }
 }
 
+/// Defense in depth for typed events: reject before roster/object purge or legacy ACK fallback.
+fn admitted_native_destination(
+    token: Option<benilla_protocol::wrath_transfer::Token>,
+    position: [f32; 3],
+    orientation: f32,
+) -> Option<benilla_protocol::wrath_transfer::Token> {
+    token.filter(|_| {
+        position
+            .iter()
+            .chain(std::iter::once(&orientation))
+            .all(|v| v.is_finite())
+    })
+}
+
+#[cfg(test)]
+mod transfer_tests {
+    use super::*;
+    #[test]
+    fn native_destination_requires_token_and_finite_pose() {
+        let token = benilla_protocol::wrath_transfer::Token {
+            epoch: 4,
+            sequence: 8,
+        };
+        assert_eq!(admitted_native_destination(None, [0.0; 3], 0.0), None);
+        assert_eq!(
+            admitted_native_destination(Some(token), [0.0; 3], 0.0),
+            Some(token)
+        );
+        for component in 0..4 {
+            for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let mut pose = [0.0; 4];
+                pose[component] = value;
+                assert_eq!(
+                    admitted_native_destination(Some(token), [pose[0], pose[1], pose[2]], pose[3]),
+                    None
+                );
+            }
+        }
+    }
+}
+
 fn on_worldport(
     In(ev): In<SessionEvent>,
     mut e: Edges,
     mut b: Bridge,
     mut group: ResMut<crate::ui_party::GroupState>,
 ) {
-    if let SessionEvent::Worldport {
-        map_id,
-        position,
-        orientation,
-        needs_ack,
-    } = ev
+    let (map_id, position, orientation, needs_ack, native_token) = match ev {
+        SessionEvent::Worldport {
+            map_id,
+            position,
+            orientation,
+            needs_ack,
+        } => (map_id, position, orientation, needs_ack, None),
+        SessionEvent::WrathTransfer { packet, token } => match packet {
+            benilla_protocol::wrath_transfer::Packet::Pending { map_id, transport } => {
+                // Writer-side revocation is authoritative. A delayed App ACK slot may still
+                // enqueue, but its retired token cannot reach the socket or grant authority.
+                transfer_pending(map_id, transport.map(|t| t.entry), &mut e.transfer);
+                return;
+            }
+            benilla_protocol::wrath_transfer::Packet::Aborted { reason, .. } => {
+                transfer_aborted(reason, &mut e.transfer);
+                return;
+            }
+            benilla_protocol::wrath_transfer::Packet::NewWorld {
+                map_id,
+                position,
+                orientation,
+            } => {
+                let Some(token) = admitted_native_destination(token, position, orientation) else {
+                    warn!("rejecting Wrath NEW_WORLD without a token or finite pose");
+                    return;
+                };
+                (map_id, position, orientation, true, Some(token))
+            }
+        },
+        _ => return,
+    };
     {
         // Every streamed roster member is about to be purged; the reference deactivates each.
         crate::ui_party::net::roster_deactivated(
@@ -237,6 +305,7 @@ fn on_worldport(
             position,
             orientation,
             needs_ack,
+            native_token,
             &mut b.commands,
             &mut b.index,
             &mut e.transfer,
@@ -560,6 +629,7 @@ fn worldport(
     position: [f32; 3],
     orientation: f32,
     needs_ack: bool,
+    native_token: Option<benilla_protocol::wrath_transfer::Token>,
     commands: &mut Commands,
     index: &mut GuidIndex,
     pending: &mut PendingTransfer,
@@ -591,6 +661,7 @@ fn worldport(
         position,
         orientation,
         needs_ack,
+        native_token,
         transport_entry,
     });
 }
