@@ -36,6 +36,9 @@ mod button;
 mod calls;
 mod camera_view;
 mod channel;
+mod wrath_channel_roster;
+mod wrath_channel_display;
+mod wrath_channel_bindings;
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -153,6 +156,10 @@ mod worn_display;
 mod wrath_currency;
 mod wrath_equipment;
 mod wrath_modifiers;
+mod wrath_achievements;
+pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
+mod wrath_tutorial;
+pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
@@ -178,6 +185,8 @@ pub use battlefield_score::{BattlefieldScoreRow, BattlefieldScores, BattlefieldS
 pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
+pub use wrath_channel_display::WrathDisplayChannel;
+pub use wrath_channel_roster::{WrathChannelRosterMember, WrathChannelRosterRequest};
 pub use channel::{ChannelCommand, ZoneChannelRow};
 pub use char_stats::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, UnitCombatStats,
@@ -754,6 +763,8 @@ impl UiScript {
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;
+            wrath_achievements::install(&lua)?;
+            wrath_tutorial::install(&lua)?;
         }
 
         let s = UiScript {

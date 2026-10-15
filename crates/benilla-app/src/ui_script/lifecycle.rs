@@ -49,6 +49,7 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
     };
     seed_vm_clock(world, &mut script);
     crate::ui_spellbook::seed_spell_catalog(world, &mut script);
+    crate::ui_achievements::seed(world, &mut script);
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
     Some(script)
@@ -626,7 +627,18 @@ pub(crate) fn end_ui_session(world: &mut World) {
             }
         }
     }
-    // Wrath VMs expose no CVar mutation/chat persistence surface; only addon saved variables write.
+    // Only tutorial history is persisted from Wrath; generic CVar folding remains disabled.
+    if wrath {
+        let history = world
+            .get_non_send_resource_mut::<UiScript>()
+            .and_then(|mut script| script.persist_wrath_tutorial_history());
+        if let (Some(history), Some(mut cvars)) =
+            (history, world.get_resource_mut::<crate::cvars::Cvars>())
+        {
+            cvars.set("flaggedTutorials", &history);
+        }
+    }
+    // Vanilla retains its general CVar/chat shutdown fold.
     if !wrath {
         crate::cvars::fold_dying_vm_cvars(world);
         crate::ui_chat::settings::fold_dying_vm_chat_cache(world);

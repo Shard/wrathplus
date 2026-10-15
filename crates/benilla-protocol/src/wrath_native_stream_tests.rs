@@ -4,7 +4,12 @@ use crate::messages::{FieldLayout, ObjectFields};
 use crate::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_UPDATE_OBJECT};
 
 fn guid(out: &mut Vec<u8>, value: u8) {
-    out.extend([1, value]);
+    match value {
+        8 => out.extend([0xc1, value, 0x30, 0xf1]),
+        9 => out.extend([0x81, value, 0x40]),
+        10 => out.extend([0xc1, value, 0x10, 0xf1]),
+        _ => out.extend([1, value]),
+    }
 }
 fn descriptors(out: &mut Vec<u8>, pairs: &[(usize, u32)]) {
     let count = pairs.last().map_or(0, |p| p.0 / 32 + 1);
@@ -25,7 +30,14 @@ fn create(id: u8, kind: u8, pairs: &[(usize, u32)]) -> Vec<u8> {
     out.push(2);
     guid(&mut out, id);
     out.push(kind);
-    out.extend(0u16.to_le_bytes());
+    if kind == 1 || kind == 2 {
+        out.extend(0u16.to_le_bytes());
+    } else {
+        out.extend(0x40u16.to_le_bytes());
+        for value in [1.0f32, 2.0, 3.0, 4.0] {
+            out.extend(value.to_le_bytes());
+        }
+    }
     descriptors(&mut out, pairs);
     out
 }
@@ -52,7 +64,6 @@ fn created(events: &[SessionEvent]) -> ObjectFields {
 }
 
 #[test]
-#[ignore = "Target contract: enable in atomic Wrath descriptor + aura-synthesis cutover"]
 fn byte_stream_native_create_values_aura_remove_recreate() {
     let mut adapter = WrathEventAdapter::new();
     let mut player = created(&dispatch(

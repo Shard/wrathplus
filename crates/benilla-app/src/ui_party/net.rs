@@ -80,6 +80,40 @@ fn on_wrath_group(
             }
         }
         Packet::Stats(stats) => group.apply_wrath_stats(stats),
+        Packet::Raid(packet) => apply_wrath_raid(&mut group, &mut errors, &self_guid, packet),
+    }
+}
+
+fn apply_wrath_raid(
+    group: &mut GroupState,
+    errors: &mut UiErrorKeys,
+    me: &SelfGuid,
+    packet: benilla_protocol::wrath_group::raid::Packet,
+) {
+    use benilla_protocol::wrath_group::raid::Packet;
+    match packet {
+        Packet::CommandResult { operation, member, result, value } => {
+            command_result(group, errors, operation, &member, result);
+            group.wrath_raid.command_result = Some((operation, member, result, value));
+        }
+        Packet::TargetSet { setter, icon, target } => {
+            group.wrath_raid.target_setter = Some(setter);
+            group.apply_raid_target(icon, target);
+        }
+        Packet::TargetList { entries } => group.apply_raid_target_list(&entries),
+        Packet::ReadyStart { initiator } => {
+            group.wrath_raid.ready_initiator = Some(initiator);
+            group.wrath_raid.ready_answers.clear();
+            // Wrath carries the actual initiator: an assistant may start the check.
+            push_group_lines(errors, group.apply_ready_check_request(me.0 == Some(initiator)));
+        }
+        Packet::ReadyConfirm { guid, state } => {
+            group.wrath_raid.ready_answers.push((guid, state));
+            group.apply_ready_check_answer(guid, state != 0);
+        }
+        Packet::ReadyFinished => {
+            group.wrath_raid.ready_finished = group.wrath_raid.ready_finished.wrapping_add(1);
+        }
     }
 }
 
@@ -998,5 +1032,75 @@ mod tests {
 
         send(&mut group, member_status::ONLINE);
         assert!(group.stats[&far].is_online());
+    }
+}
+
+#[cfg(test)]
+mod wrath_raid_tests {
+    use super::*;
+    use benilla_protocol::wrath_group::raid::{decode, Packet};
+    #[test]
+    fn native_raid_bytes_reach_registered_owner_and_reset_on_uninvite() {
+        use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
+        use benilla_protocol::wrath_world::WrathServerPacket;
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        app.world_mut().resource_mut::<SelfGuid>().0 = Some(7);
+        app.world_mut().resource_mut::<GroupState>().leader = 99;
+        let mut adapter = WrathEventAdapter::new();
+        for (opcode, body) in [
+            (0x322, vec![7,0,0,0,0,0,0,0]),
+            (0x3ae, vec![8,0,0,0,0,0,0,0,2]),
+            (0x321, vec![0,7,0,0,0,0,0,0,0,3,8,0,0,0,0,0,0,0]),
+            (0x07f, vec![255,255,255,255,b'A',0,255,255,255,255,1,2,3,4]),
+            (0x3c6, vec![]),
+        ] {
+            let WrathDispatch::Handled { session_events, .. } = adapter
+                .dispatch_packet(&WrathServerPacket { opcode, body }, 1).unwrap()
+            else { panic!("native raid opcode not handled"); };
+            assert_eq!(session_events.len(), 1);
+            crate::net::handlers::dispatch(app.world_mut(), session_events);
+        }
+        let group = app.world().resource::<GroupState>();
+        assert_eq!((group.ready_check_requests, group.ready_check), (1,0));
+        assert_eq!(group.wrath_raid.ready_initiator, Some(7));
+        assert_eq!(group.wrath_raid.ready_answers, [(8,2)]);
+        assert_eq!(group.wrath_raid.target_setter, Some(7));
+        assert_eq!(group.raid_targets[3], 8);
+        assert_eq!(group.wrath_raid.command_result, Some((u32::MAX,"A".into(),u32::MAX,0x04030201)));
+        assert_eq!(group.wrath_raid.ready_finished, 1);
+        crate::net::handlers::dispatch(app.world_mut(), vec![SessionEvent::WrathGroup {
+            packet: Box::new(benilla_protocol::wrath_group::Packet::Uninvite),
+        }]);
+        let group = app.world().resource::<GroupState>();
+        assert!(group.wrath_raid.ready_initiator.is_none());
+        assert!(group.wrath_raid.ready_answers.is_empty());
+        assert!(group.wrath_raid.command_result.is_none());
+        assert_eq!(group.raid_targets, [0;8]);
+    }
+
+    #[test]
+    fn native_raid_responses_retain_fields_and_apply_shared_presentation() {
+        let mut group = GroupState::default();
+        let mut errors = UiErrorKeys::default();
+        let me = SelfGuid(Some(7));
+        group.leader = 99; // An assistant, rather than the leader, starts this check.
+        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x322, &[7,0,0,0,0,0,0,0]).unwrap());
+        assert_eq!(group.wrath_raid.ready_initiator, Some(7));
+        assert_eq!((group.ready_check_requests, group.ready_check), (1,0));
+        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x3ae, &[8,0,0,0,0,0,0,0,255]).unwrap());
+        assert_eq!(group.wrath_raid.ready_answers, [(8,255)]);
+        assert_eq!(group.ready_check_answers, [(8,true)]);
+        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x3c6, &[]).unwrap());
+        assert_eq!(group.wrath_raid.ready_finished, 1);
+        apply_wrath_raid(&mut group, &mut errors, &me, Packet::TargetSet { setter:u64::MAX, icon:7, target:8 });
+        assert_eq!(group.wrath_raid.target_setter, Some(u64::MAX));
+        assert_eq!(group.raid_targets[7], 8);
+        apply_wrath_raid(&mut group, &mut errors, &me, Packet::TargetList { entries:vec![] });
+        assert_eq!(group.raid_targets, [0;8]);
+        apply_wrath_raid(&mut group, &mut errors, &me, Packet::CommandResult { operation:u32::MAX, member:"Ally".into(), result:u32::MAX, value:u32::MAX });
+        assert_eq!(group.wrath_raid.command_result, Some((u32::MAX,"Ally".into(),u32::MAX,u32::MAX)));
+        group.clear_session();
+        assert!(group.wrath_raid.ready_initiator.is_none());
+        assert!(group.wrath_raid.command_result.is_none());
     }
 }

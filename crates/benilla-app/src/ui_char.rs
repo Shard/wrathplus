@@ -702,7 +702,7 @@ fn inventory_slots(
     inv
 }
 
-/// The six bank-bag slots' views (live ids 64..=69). They are inventory slots, streamed whether
+/// Bank-bag views (Vanilla live ids 64..=69, Wrath 68..=74). They are streamed whether
 /// or not a banker is open, and the stock bank reads them through `BankButtonIDToInvSlotID(i, 1)`
 /// (`BankFrame.lua:28-35, 199-204`), so they ride this feed rather than the bank window's state.
 fn bank_bag_slots(
@@ -717,7 +717,12 @@ fn bank_bag_slots(
     sub_classes: Option<&crate::ui_items::ItemSubClasses>,
 ) -> BankBagSlots {
     let mut bags: BankBagSlots = Default::default();
-    for (i, bag) in bags.iter_mut().enumerate() {
+    let storage = crate::ui_items::StorageSlots::for_layout(store.0.layout());
+    for (i, bag) in bags
+        .iter_mut()
+        .take(usize::from(storage.bank_bags))
+        .enumerate()
+    {
         let Some(guid) = store.0.player_bank_bag_slot(i as u8).filter(|g| *g != 0) else {
             continue;
         };
@@ -733,14 +738,11 @@ fn bank_bag_slots(
             // A bank bag slot holds a bag; the relic flag decides INVSLOT 17 alone.
             false,
             guid,
-            BANK_BAG_LIVE_FIRST + i as u32,
+            u32::from(storage.bank_bag_first) + 1 + i as u32,
         );
     }
     bags
 }
-
-/// `BankButtonIDToInvSlotID(1, isBag)`: the first of the six bank-bag slots' live ids.
-const BANK_BAG_LIVE_FIRST: u32 = 64;
 
 /// Fire the paper doll's repaint events for one unit's snapshot transition, `arg1 = token`: the
 /// eight unit-stat events both pages register (`PaperDollFrame.lua:14-28`,
@@ -1067,6 +1069,8 @@ mod tests {
     use benilla_protocol::messages::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 
+    const BANK_BAG_LIVE_FIRST: u32 = 64;
+
     /// The reference's split (`0x5ea460`); a value-0 line skips the permanent add (`0x5ea4b4`).
     #[test]
     fn a_skill_pair_folds_the_permanent_bonus_into_the_base() {
@@ -1177,6 +1181,65 @@ mod tests {
             .unwrap();
         app.insert_non_send_resource(script);
         app
+    }
+
+    /// Lock identity is the live inventory ID, not the Vanilla bank item's ID on Wrath.
+    #[test]
+    fn bank_bag_lock_identity_follows_descriptor_geometry() {
+        use benilla_protocol::messages::{Field, FieldLayout};
+        for (layout, live, slot) in [
+            (FieldLayout::Vanilla5875, 64, 0),
+            (FieldLayout::Vanilla5875, 69, 5),
+            (FieldLayout::Wrath12340, 68, 0),
+            (FieldLayout::Wrath12340, 74, 6),
+        ] {
+            let mut app = world_with_bank_bag(Some(BAG));
+            if layout == FieldLayout::Wrath12340 {
+                app.insert_non_send_resource(
+                    UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
+                        .unwrap(),
+                );
+            }
+            let first = layout.resolve(Field::PlayerBankbagSlot1).unwrap().index + 2 * slot as u16;
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
+            q.single_mut(app.world_mut()).unwrap().0 = ObjectFields::from_native_pairs(
+                layout,
+                &[(first, BAG as u32), (first + 1, (BAG >> 32) as u32)],
+            );
+            app.world_mut()
+                .resource_mut::<PendingItemOps>()
+                .add([(EQUIPMENT_BAG, live, BAG, 1)]);
+            app.world_mut().run_system_once(feed_char).unwrap();
+            app.world_mut()
+                .resource_scope(|world, mut state: Mut<CharFeedState>| {
+                    let memo = state.vm.get(world.non_send_resource::<UiScript>());
+                    let bags = memo.last_bank_bags.as_ref().unwrap();
+                    assert!(bags[slot].as_ref().unwrap().locked);
+                    if layout == FieldLayout::Vanilla5875 {
+                        assert!(bags[6].is_none());
+                    }
+                });
+            assert!(app
+                .world()
+                .non_send_resource::<UiScript>()
+                .eval::<bool>(&format!(
+                    "return IsInventoryItemLocked({live}) and true or false"
+                ))
+                .unwrap());
+            app.world_mut()
+                .resource_mut::<PendingItemOps>()
+                .clear_by_failure(BAG);
+            app.world_mut().run_system_once(feed_char).unwrap();
+            assert!(!app
+                .world()
+                .non_send_resource::<UiScript>()
+                .eval::<bool>(&format!(
+                    "return IsInventoryItemLocked({live}) and true or false"
+                ))
+                .unwrap());
+        }
     }
 
     fn seen(app: &mut App) -> Vec<String> {

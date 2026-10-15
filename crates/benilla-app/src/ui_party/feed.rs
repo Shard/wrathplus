@@ -899,6 +899,9 @@ pub(super) fn drain_party(
             continue;
         }
         match req {
+            PartyRequest::Assignment { assignment, apply, guid } => {
+                let _ = commands.0.send(ClientCommand::PartyAssignment { assignment, apply, guid });
+            }
             PartyRequest::Accept => {
                 let _ = commands.0.send(ClientCommand::GroupAccept);
                 group.pending_invite = None;

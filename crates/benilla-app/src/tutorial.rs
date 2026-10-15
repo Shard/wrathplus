@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
-use benilla_ui::script::{ScriptValue, UiScript};
+use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript, WrathTutorialRequest};
 
 use crate::char_select::ClientState;
 use crate::net::{ClientCommand, EnteredWorldMessage, NetCommands, ObjectStore, SelfPlayer};
@@ -132,11 +132,15 @@ pub(crate) struct Tutorials {
     sends: Vec<TutorialSend>,
     /// Item pushes for us since the last feed (`0x491a60`'s sites): `(entry, bag, slot)`.
     pushes: Vec<(u32, u8, u32)>,
+    /// Packet generation distinguishes an authoritative identical resend from a local echo.
+    packet_generation: u64,
+    history_appends: Vec<u32>,
 }
 
 impl Tutorials {
     /// `SMSG_TUTORIAL_FLAGS`: both banks copied from the payload.
     pub(crate) fn apply_flags(&mut self, bytes: &[u8]) {
+        self.packet_generation = self.packet_generation.wrapping_add(1);
         self.fire_once = Some(bytes.to_vec());
         self.acknowledged = Some(bytes.to_vec());
     }
@@ -189,6 +193,7 @@ impl Tutorials {
             set_bank_bit(bank_a, id);
         }
         self.sends.push(TutorialSend::Flag(id));
+        self.history_appends.push(id);
     }
 
     /// `ClearTutorials()`: the timers flushed, every bit of both banks set, the empty clear sent.
@@ -212,6 +217,7 @@ impl Tutorials {
             bank.iter_mut().for_each(|b| *b = 0);
         }
         self.sends.push(TutorialSend::Reset);
+        self.history_appends.clear();
     }
 
     /// `ProcessTutorialTimers`: every due node fires the same cue and event.
@@ -273,6 +279,9 @@ fn feed_tutorials(
     items: Res<crate::items::Items>,
     mut sounds: ResMut<crate::sound::MessageSounds>,
     mut told: Local<crate::ui_script::VmMemo<Option<Vec<u8>>>>,
+    mut wrath_told: Local<
+        crate::ui_script::VmMemo<Option<(u64, Option<Vec<u8>>, Option<Vec<u8>>)>>,
+    >,
 ) {
     let now = Instant::now();
     for ask in asks.read() {
@@ -310,19 +319,47 @@ fn feed_tutorials(
     let Some(mut script) = script else {
         return;
     };
-    for published in std::mem::take(&mut tutorials.fired) {
-        sounds.push_cue(TUTORIAL_POPUP_SOUND);
-        script.fire_event(
-            "TUTORIAL_TRIGGER",
-            vec![ScriptValue::Int(i64::from(published))],
-        );
+    if script.dialect() != ScriptDialect::Wrath12340 {
+        for published in std::mem::take(&mut tutorials.fired) {
+            sounds.push_cue(TUTORIAL_POPUP_SOUND);
+            script.fire_event(
+                "TUTORIAL_TRIGGER",
+                vec![ScriptValue::Int(i64::from(published))],
+            );
+        }
     }
     // The bank is owed to every VM: what it has been told is per VM, so a `/reload`'s fresh VM
     // is told again.
-    let told = told.get(&script);
-    if *told != tutorials.acknowledged {
-        told.clone_from(&tutorials.acknowledged);
-        script.set_tutorial_bank(tutorials.acknowledged.clone());
+    if script.dialect() == ScriptDialect::Wrath12340 {
+        let snapshot = (
+            tutorials.packet_generation,
+            tutorials.fire_once.clone(),
+            tutorials.acknowledged.clone(),
+        );
+        let told = wrath_told.get(&script);
+        if told.as_ref() != Some(&snapshot) {
+            script.set_wrath_tutorial_banks(snapshot.1.clone(), snapshot.2.clone());
+            *told = Some(snapshot);
+        }
+    } else {
+        tutorials.history_appends.clear();
+        let told = told.get(&script);
+        if *told != tutorials.acknowledged {
+            told.clone_from(&tutorials.acknowledged);
+            script.set_tutorial_bank(tutorials.acknowledged.clone());
+        }
+    }
+    if script.dialect() == ScriptDialect::Wrath12340 {
+        for id in std::mem::take(&mut tutorials.history_appends) {
+            script.append_wrath_tutorial_history(id);
+        }
+        for published in std::mem::take(&mut tutorials.fired) {
+            sounds.push_cue(TUTORIAL_POPUP_SOUND);
+            script.fire_event(
+                "TUTORIAL_TRIGGER",
+                vec![ScriptValue::Int(i64::from(published))],
+            );
+        }
     }
 }
 
@@ -395,6 +432,20 @@ fn drain_tutorials(
     commands: Res<NetCommands>,
 ) {
     if let Some(mut script) = script {
+        if script.dialect() == ScriptDialect::Wrath12340 {
+            for request in script.take_wrath_tutorial_requests() {
+                match request {
+                    WrathTutorialRequest::Flag(id) => {
+                        tutorials.acknowledge(id);
+                        // Already appended synchronously in this VM; never re-append after a
+                        // later Reset in the same ordered batch.
+                        tutorials.history_appends.retain(|&pending| pending != id);
+                    }
+                    WrathTutorialRequest::Clear => tutorials.clear(),
+                    WrathTutorialRequest::Reset => tutorials.reset(),
+                }
+            }
+        }
         for id in script.take_tutorial_flag_requests() {
             tutorials.acknowledge(id);
         }
@@ -693,6 +744,83 @@ mod tests {
                 TutorialSend::Reset
             ]
         );
+    }
+
+    #[test]
+    fn wrath_ordered_drain_identical_resend_and_fresh_vm() {
+        let mut app = feeder();
+        let (tx, rx) = crossbeam_channel::unbounded();
+        app.insert_resource(NetCommands(tx));
+        app.add_systems(Update, drain_tutorials.after(feed_tutorials));
+        app.world_mut()
+            .resource_mut::<Tutorials>()
+            .apply_flags(&[0; 32]);
+        app.insert_non_send_resource(
+            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
+        );
+        app.update();
+        app.world()
+            .non_send_resource::<UiScript>()
+            .run("FlagTutorial(3); ClearTutorials(); ResetTutorials(); FlagTutorial(17)")
+            .unwrap();
+        app.update();
+        let commands: Vec<_> = rx.try_iter().collect();
+        assert_eq!(commands.len(), 4);
+        assert!(matches!(commands[0], ClientCommand::TutorialFlag { id: 2 }));
+        assert!(matches!(commands[1], ClientCommand::TutorialClear));
+        assert!(matches!(commands[2], ClientCommand::TutorialReset));
+        assert!(matches!(
+            commands[3],
+            ClientCommand::TutorialFlag { id: 16 }
+        ));
+        app.update();
+        app.world()
+            .non_send_resource::<UiScript>()
+            .run("assert(IsTutorialFlagged(17)==1)")
+            .unwrap();
+        // Identical authoritative payloads still replace a VM-only optimistic mutation.
+        app.world_mut()
+            .resource_mut::<Tutorials>()
+            .apply_flags(&[0; 32]);
+        app.update();
+        app.world()
+            .non_send_resource::<UiScript>()
+            .run("assert(IsTutorialFlagged(17)==nil)")
+            .unwrap();
+        app.insert_non_send_resource(
+            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
+        );
+        app.update();
+        app.world().non_send_resource::<UiScript>().run("assert(IsTutorialFlagged(17)==nil); FlagTutorial(1); assert(IsTutorialFlagged(1)==1)").unwrap();
+    }
+
+    #[test]
+    fn wrath_session_end_restores_history_order_without_generic_cvar_fold() {
+        let mut world = World::new();
+        world.insert_resource(benilla_assets::ClientDataProfile(
+            benilla_formats::DataProfile::Wrath {
+                locale: "enUS".into(),
+            },
+        ));
+        let mut cvars = crate::cvars::Cvars::default();
+        cvars.register_wrath_tutorial_history();
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.seed_cvars(cvars.vm_seed());
+        script.set_wrath_tutorial_banks(Some(vec![0; 32]), Some(vec![0; 32]));
+        script.run("FlagTutorial(42); FlagTutorial(3)").unwrap();
+        assert_eq!(cvars.get("flaggedTutorials"), Some(""));
+        world.insert_resource(cvars);
+        world.insert_non_send_resource(script);
+        crate::ui_script::end_ui_session(&mut world);
+        let saved = world
+            .resource::<crate::cvars::Cvars>()
+            .get("flaggedTutorials")
+            .unwrap();
+        assert!(saved.starts_with("v\x01"));
+        let seed = world.resource::<crate::cvars::Cvars>().vm_seed();
+        let fresh = world.non_send_resource_mut::<UiScript>();
+        fresh.seed_cvars(seed);
+        fresh.run("assert(GetNextCompleatedTutorial(42)==3); assert(GetPrevCompleatedTutorial(3)==42)").unwrap();
     }
 
     /// World enter zeroes present banks and keeps their size; the packet fills both.

@@ -270,11 +270,10 @@ threshold runs after the existing blur, preserving the shared underwater haze in
 no render passes or targets. Classic uses the unchanged stock FFX shader; UI and portrait/glue
 views do not opt in. Manager clips must verify the actual highlight range and appearance.
 
-Ambient occlusion remains pending the Assets two-layer texture integration. The agreed design
-uses MSAA-off cameras only, never switches sample counts live, and logs an unsupported request
-once. A Plus AO request at startup will select MSAA off plus SMAA; Classic and AO-disabled Plus
-will retain their existing startup selection. This describes the planned integration, not a
-currently implemented AO feature.
+Ambient occlusion is opt-in and uses MSAA-off cameras only, never switches sample counts live,
+and logs an unsupported request once. A Plus AO request at startup selects MSAA off plus SMAA;
+Classic and AO-disabled Plus retain their existing startup selection. See the staged AO scope
+and remaining manager-owned visual checks below.
 
 ### Curated comparison routes (c6)
 
@@ -351,13 +350,36 @@ Bevy mesh-view binding 16. Camera model depth/normals reuse the visible model sh
 UV animation, two-stage source cutout, clutter and merged-placement coverage independently of
 shadow-caster exclusions. Non-depth, additive/multiply, sky and far-side lanes are excluded.
 
-**Retained static-GX geometry (including most buildings) gets no AO in this slice.** Its custom
-pass remains after SSAO, absent from the AO depth/normal inputs, and its colour shader never
-samples AO. Its silhouette therefore cannot generate an AO halo or receive one; underlying
-terrain/model AO is not a claim of building occlusion. WMO model-lane fallbacks also do not receive AO. The retained pass is not rerouted or
-changed, and there is no boot or runtime renderer substitution. A dedicated building
-camera-depth/normal pass is a separate follow-up unit. Transparent and other non-prepass lanes
-are likewise not certified as AO occluders.
+**Retained static-GX geometry (including buildings) has a dedicated AO camera pass.**
+When an MSAA-Off world view has active SSAO resources, it writes camera normals and depth
+between Bevy's late prepass and end-prepasses, then refreshes the depth copy SSAO reads.
+Colour and camera passes share retained region selection, portal/group admission, live runs,
+mesh allocator ranges, vertex kills, authored coplanar order, far clipping, texture wrapping
+and source alpha-key coverage. All matching normal and AO-forward pipelines must be ready
+before the camera pass contributes occluders. The ordinary forward pass remains in its original
+position; there is no renderer substitution. With AO inactive, its original pipeline and binding
+layouts remain selected.
+
+Exterior retained WMO surfaces and static M2 models receive ambient-only AO via a separate,
+optional texture group; mesh-view binding 16, shared-light and material layouts are unchanged.
+Indoor authored/MOCV lighting, interior SH probes, direct sunlight, point lights, emissive and
+unlit output are not attenuated. Interior opaque geometry still contributes camera coverage.
+WMO model-lane fallbacks do not receive AO. Transparent and other non-prepass lanes are likewise
+not certified as AO occluders. Two-stage materials remain outside the first-texture-only retained
+GX lane; their camera coverage uses the existing model path.
 
 Headless shader composition and policy tests establish wiring, not appearance or Classic pixel
 equality. The manager must verify captures, silhouettes and AA/post-pass compatibility live.
+
+An ignored, on-demand GPU smoke test also validates retained-GX camera-normal and AO-forward
+entry points against the production bind-group and vertex layouts on a real device. It submits a
+4×4 synthetic triangle for every cutout/two-sided combination, without a window, game client,
+network, archives or world plugins. Ordinary test runs leave it ignored, so GPU-less CI is unchanged.
+Run explicitly (under the shared heavy-build lock and usual worker build limits):
+
+```sh
+cargo test -p benilla-world --lib retained_gx_gpu_smoke -- --ignored --nocapture --test-threads 1
+```
+
+The explicit run requires a working graphics adapter and fails rather than silently skipping when
+none is available. It checks shader/pipeline/binding/draw validation, not image fidelity or AO strength.

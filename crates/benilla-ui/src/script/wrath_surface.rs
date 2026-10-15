@@ -17,6 +17,9 @@ mod wrath_stats;
 #[path = "wrath_group.rs"]
 pub(crate) mod wrath_group;
 
+#[path = "wrath_party_assignment.rs"]
+mod wrath_party_assignment;
+
 use super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -27,6 +30,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     wrath_loot::install(lua)?;
     wrath_power::install(lua)?;
     wrath_group::install(lua)?;
+    wrath_party_assignment::install(lua)?;
+    super::wrath_channel_bindings::install(lua)?;
     super::aura::wrath::install(lua)?;
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;

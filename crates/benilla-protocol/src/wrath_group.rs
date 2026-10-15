@@ -15,6 +15,7 @@ pub const SMSG_GROUP_UNINVITE: u16 = 0x0077;
 pub const SMSG_GROUP_LIST: u16 = 0x007d;
 pub const SMSG_PARTY_MEMBER_STATS: u16 = 0x007e;
 pub const SMSG_PARTY_MEMBER_STATS_FULL: u16 = 0x02f2;
+pub const MSG_PARTY_ASSIGNMENT: u32 = 0x038e;
 pub const CMSG_GROUP_INVITE: u32 = 0x006e;
 pub const CMSG_GROUP_ACCEPT: u32 = 0x0072;
 pub const CMSG_GROUP_DECLINE: u32 = 0x0073;
@@ -123,12 +124,13 @@ pub enum Packet {
     Uninvite,
     List(Roster),
     Stats(Stats),
+    Raid(raid::Packet),
 }
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 pub const fn handles(opcode: u16) -> bool {
-    matches!(
+    raid::handles(opcode) || matches!(
         opcode,
         SMSG_GROUP_INVITE
             | SMSG_GROUP_DECLINE
@@ -139,6 +141,9 @@ pub const fn handles(opcode: u16) -> bool {
     )
 }
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
+    if raid::handles(opcode) {
+        return raid::decode(opcode, body).map(Packet::Raid);
+    }
     let mut r = Cursor::new(body);
     let packet = match opcode {
         SMSG_GROUP_INVITE => {
@@ -337,10 +342,29 @@ pub fn encode_decline() -> Vec<u8> {
 pub fn encode_leave() -> Vec<u8> {
     Vec::new()
 }
+/// AC GroupHandler.cpp::HandlePartyAssignmentOpcode (reference commit above) reads
+/// u8 assignment, bool apply, then a full ObjectGuid. Group.h::GroupAssign uses
+/// 0 for main tank and 1 for main assist; zero guid clears the unique assignment.
+/// Native build 12340: 0x6d7200 (set), 0x6d7290 (clear).
+pub fn encode_assignment(assignment: u8, apply: bool, guid: u64) -> Vec<u8> {
+    let mut body = vec![assignment, u8::from(apply)];
+    body.extend(guid.to_le_bytes());
+    body
+}
+
 pub fn encode_request_stats(guid: u64) -> Vec<u8> {
     guid.to_le_bytes().to_vec()
 }
 
+/// Additional build-12340 raid management commands. Layouts: AzerothCore
+/// GroupHandler.cpp Handle{LootMethod,GroupRaidConvert,GroupChangeSubGroup,
+/// GroupSwapSubGroup,GroupAssistantLeader,RaidTargetUpdate,RaidReadyCheck}Opcode.
+#[path = "wrath_group/commands.rs"]
+pub mod commands;
+
 #[cfg(test)]
 #[path = "wrath_group/tests.rs"]
 mod tests;
+
+#[path = "wrath_group/raid.rs"]
+pub mod raid;

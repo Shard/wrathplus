@@ -266,10 +266,13 @@ pub(crate) struct Model {
 
     /// Channels the server confirmed, in join order: the numbers `GetChannelName` answers.
     pub(crate) joined_channels: Vec<Option<String>>,
+    pub(crate) wrath_channel_display: super::wrath_channel_display::Display,
+    pub(crate) wrath_channel_roster: super::wrath_channel_roster::WrathChannelRoster,
     /// The party or raid roster the app pushes; the default is not in a group.
     pub(crate) party: party::PartyState,
     pub(crate) wrath_group: super::wrath_surface::wrath_group::Group,
     /// Party and loot-method calls (`AcceptGroup`, `InviteToParty`, `SetLootMethod`, …) queued.
+    pub(crate) assignment_sent_at: Option<f64>,
     pub(crate) party_requests: Vec<party::PartyRequest>,
     /// The ready-check deadline and the unanswered flags the timeout tick reads.
     pub(crate) ready_check: party::ReadyCheckState,
@@ -525,6 +528,8 @@ pub(crate) struct Model {
     pub(crate) tutorial_flag_requests: Vec<u32>,
     pub(crate) tutorial_clears: u32,
     pub(crate) tutorial_resets: u32,
+    pub(crate) wrath_tutorial: super::wrath_tutorial::State,
+    pub(crate) wrath_achievements: Option<super::wrath_achievements::WrathAchievementMetadata>,
 
     /// The stance bar's forms, in bar order.
     pub(crate) shapeshift_forms: Vec<super::shapeshift::StoredShapeshiftForm>,
@@ -1138,8 +1143,11 @@ impl Model {
             input: Default::default(),
             drop_item_on_unit: Vec::new(),
             joined_channels: Vec::new(),
+            wrath_channel_roster: Default::default(),
+            wrath_channel_display: Default::default(),
             party: party::PartyState::default(),
             wrath_group: Default::default(),
+            assignment_sent_at: None,
             party_requests: Vec::new(),
             ready_check: party::ReadyCheckState::default(),
             saved_instances: Vec::new(),
@@ -1268,6 +1276,8 @@ impl Model {
             tutorial_flag_requests: Vec::new(),
             tutorial_clears: 0,
             tutorial_resets: 0,
+            wrath_tutorial: super::wrath_tutorial::State::default(),
+            wrath_achievements: None,
             shapeshift_forms: Vec::new(),
             pet_bar: super::pet::PetBarState::default(),
             pet_autocast_toggles: Vec::new(),

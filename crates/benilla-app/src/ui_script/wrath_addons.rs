@@ -17,7 +17,12 @@ pub(super) fn build(app: &mut App) {
         "Reload the interface.",
         super::console_reload_ui,
     );
-    crate::shutdown::on_app_exit(app, shutdown_on_exit.into_configs());
+    crate::shutdown::on_app_exit(
+        app,
+        shutdown_on_exit
+            .before(crate::cvars::save_config_on_exit)
+            .into_configs(),
+    );
     app.init_resource::<super::AddOnIdentity>()
         .init_resource::<super::LeavingWorldArmed>()
         .add_systems(
@@ -80,6 +85,7 @@ fn shutdown_on_exit(
     pending_entry: Option<Res<super::PendingEntryUiLoad>>,
     mut armed: ResMut<super::LeavingWorldArmed>,
     mut exits: MessageReader<AppExit>,
+    mut cvars: Option<ResMut<crate::cvars::Cvars>>,
 ) {
     if exits.read().next().is_none() || pending_entry.is_some() {
         return;
@@ -87,6 +93,11 @@ fn shutdown_on_exit(
     let leaving_world = armed.spend();
     if let Some(mut script) = script {
         shutdown(&mut script, identity.0.as_ref(), leaving_world);
+        if let (Some(value), Some(cvars)) =
+            (script.persist_wrath_tutorial_history(), cvars.as_mut())
+        {
+            cvars.set("flaggedTutorials", &value);
+        }
     }
 }
 

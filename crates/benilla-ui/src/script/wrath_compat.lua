@@ -220,7 +220,6 @@ IsVoiceChatEnabled, IsVoiceChatAllowed, IsVoiceChatAllowedByServer = none, none,
 VoiceIsDisabledByClient = function() return 1 end
 GetNumVoiceSessions = zero
 GetVoiceCurrentSessionID, GetVoiceSessionInfo, GetVoiceStatus = none, none, none
-GetSelectedDisplayChannel = none
 Sound_ChatSystem_GetNumInputDrivers, Sound_ChatSystem_GetNumOutputDrivers = zero, zero
 Sound_ChatSystem_GetInputDriverNameByIndex = none
 Sound_ChatSystem_GetOutputDriverNameByIndex = none
@@ -523,7 +522,6 @@ IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
 GetReadyCheckStatus = GetReadyCheckStatus or none
-GetNumDisplayChannels = GetNumDisplayChannels or zero
 GetPreviousArenaSeason = GetPreviousArenaSeason or zero
 GetAvailableRoles = GetAvailableRoles or function() return true, true, true end
 do
@@ -544,7 +542,6 @@ end
 RegisterStaticConstants = RegisterStaticConstants or none
 GetMultiCastBarOffset = GetMultiCastBarOffset or zero
 HasCompletedAnyAchievement = HasCompletedAnyAchievement or none
-GetChannelDisplayInfo = GetChannelDisplayInfo or none
 IsZoomOutAvailable = IsZoomOutAvailable or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 CanPartyLFGBackfill = CanPartyLFGBackfill or none

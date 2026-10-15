@@ -30,17 +30,44 @@ impl Replay {
         else {
             panic!("unhandled replay packet {opcode:x}")
         };
+        for event in &session_events {
+            match event {
+                SessionEvent::ObjectCreate { fields, .. }
+                | SessionEvent::ItemCreate { fields, .. }
+                | SessionEvent::ObjectValues { fields, .. } => {
+                    assert_eq!(
+                        fields.layout(),
+                        benilla_protocol::messages::FieldLayout::Wrath12340
+                    );
+                }
+                _ => {}
+            }
+        }
+        if matches!(opcode, 0x495 | 0x496) {
+            assert!(
+                !session_events
+                    .iter()
+                    .any(|event| matches!(event, SessionEvent::ObjectValues { .. })),
+                "packet auras must not synthesize descriptor values"
+            );
+        }
         super::handlers::dispatch(self.app.world_mut(), session_events.clone());
         session_events
     }
     fn fields(&self, guid: u64) -> ObjectFields {
         let entity = self.app.world().resource::<GuidIndex>().0[&guid];
-        self.app
+        let fields = self
+            .app
             .world()
             .get::<ObjectStore>(entity)
             .unwrap()
             .0
-            .clone()
+            .clone();
+        assert_eq!(
+            fields.layout(),
+            benilla_protocol::messages::FieldLayout::Wrath12340
+        );
+        fields
     }
 }
 
@@ -216,7 +243,6 @@ fn ordered_wrath_packets_reach_real_object_and_aura_handlers() {
     replay.packet(SMSG_UPDATE_OBJECT, create(7, 4, &[(24, 88)]));
     assert_eq!(replay.fields(7).unit_health(), Some(88));
     assert_eq!(replay.fields(7).player_money(), Some(0));
-    // Atomic cutover adds strict native-layout and no-synthesized-values assertions here.
 }
 
 /// Read only reviewed/sanitized decrypted captures. No capture file ships in this unit.

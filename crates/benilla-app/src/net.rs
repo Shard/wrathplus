@@ -316,15 +316,6 @@ impl FieldChanged {
     pub fn unit_slot(&self, field: benilla_protocol::messages::Field, len: u16) -> Option<u16> {
         (self.is_unit() && self.field == field && self.offset < len).then_some(self.offset)
     }
-    /// Transitional reconstruction only; canonical edge storage is semantic from creation.
-    #[deprecated(note = "WS2 staging only: migrate to field + offset")]
-    pub fn raw_index_compat(&self) -> u16 {
-        self.layout
-            .resolve(self.field)
-            .expect("edge field belongs to its layout")
-            .index
-            + self.offset
-    }
     #[deprecated(note = "WS2 staging only: migrate to named_field")]
     pub fn unit_field(&self, index: u16) -> bool {
         self.is_unit() && self.layout.field_at(self.kind, index) == Some((self.field, self.offset))
@@ -633,6 +624,7 @@ impl NetCommands {
                         | ClientCommand::GroupInvite { .. }
                         | ClientCommand::GroupAccept
                         | ClientCommand::GroupDecline
+                        | ClientCommand::PartyAssignment { .. }
                         | ClientCommand::GroupLeave
                         | ClientCommand::RequestPartyMemberStats { .. }
                         // `benilla_protocol::wrath_session`: queries, action bar, casting.
@@ -2039,6 +2031,8 @@ pub(crate) enum ClientCommand {
     },
     /// `CMSG_GROUP_DISBAND`: leave the group, despite the name.
     GroupLeave,
+    /// Wrath MSG_PARTY_ASSIGNMENT, full guid; never translated to a Vanilla packet.
+    PartyAssignment { assignment: u8, apply: bool, guid: u64 },
     /// `CMSG_GROUP_RAID_CONVERT`, leader only.
     GroupRaidConvert,
     /// `CMSG_REQUEST_PARTY_MEMBER_STATS`, only on the reference's two edges: a member's object
@@ -2800,7 +2794,7 @@ mod tests {
                     assert_eq!(edges.len(), 1, "{layout:?}/{field:?}");
                     let edge = edges[0];
                     assert!(edge.named_field(field));
-                    assert_eq!(edge.raw_index_compat(), span.index);
+                    assert_eq!((edge.field, edge.offset), (field, 0));
                     assert_eq!(edge.unit_field(span.index), edge.is_unit());
                     assert_eq!((edge.old, edge.new), (1, 2));
                     assert!(FieldEdges::semantic_of(&[(42, field, 0)]).moved_field(42, field, 0));
