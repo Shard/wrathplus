@@ -1,7 +1,7 @@
 //! Native NPC service flags. Bits stay in their wire dialect; only predicates are portable.
 use super::{FieldLayout, ObjectFields};
 
-/// Services shared by both client dialects.
+/// Native NPC services; dialect-specific services are absent in other layouts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NpcService {
     Gossip,
@@ -19,6 +19,11 @@ pub enum NpcService {
     Auctioneer,
     StableMaster,
     Repair,
+    GuildBanker,
+    /// Flag presence only; interaction also requires FLAGS2 and GUID eligibility.
+    SpellClick,
+    /// Flag presence only; does not establish interaction eligibility.
+    Mailbox,
 }
 
 /// A native `UNIT_NPC_FLAGS` word with its dialect, including unknown bits.
@@ -39,7 +44,9 @@ impl NpcFlags {
         self.layout
     }
 
-    /// Semantic service test; vendor/trainer specialization bits count as their service.
+    /// Flag-presence test, not permission to interact or send an action. Vendor/trainer
+    /// specialization bits count as their service. SpellClick eligibility additionally
+    /// depends on FLAGS2 and GUID checks outside this descriptor accessor.
     /// vmangos UnitDefines.h and AzerothCore SharedDefines.h (`enum NPCFlags`).
     pub fn has(self, service: NpcService) -> bool {
         use NpcService::*;
@@ -59,6 +66,12 @@ impl NpcFlags {
             Auctioneer => (0x1000, 0x200000),
             StableMaster => (0x2000, 0x400000),
             Repair => (0x4000, 0x1000),
+            // Build 12340 click FUN_006ddbb0 and cursor FUN_004f7a50 test bit 23.
+            GuildBanker => (0, 0x800000),
+            // Build 12340 FUN_0071c570 and cursor FUN_004f7a50 test bit 24.
+            SpellClick => (0, 0x1000000),
+            // Build 12340 click FUN_006ddbb0 tests distinct bit 26.
+            Mailbox => (0, 0x4000000),
         };
         self.bits
             & match self.layout {
@@ -106,6 +119,51 @@ impl ObjectFields {
 mod tests {
     use super::*;
     use crate::messages::Field;
+
+    #[test]
+    fn guild_banker_is_exact_wrath_bit_and_absent_in_vanilla() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for bit in 0..32 {
+                let bits = 1u32 << bit;
+                let flags = NpcFlags::from_bits(layout, bits);
+                assert_eq!(
+                    flags.has(NpcService::GuildBanker),
+                    layout == FieldLayout::Wrath12340 && bits == 0x800000
+                );
+                assert_eq!(flags.bits(), bits);
+            }
+            assert!(!NpcFlags::from_bits(layout, 0).has(NpcService::GuildBanker));
+            assert_eq!(
+                NpcFlags::from_bits(layout, u32::MAX).has(NpcService::GuildBanker),
+                layout == FieldLayout::Wrath12340
+            );
+        }
+    }
+
+    #[test]
+    fn spellclick_and_mailbox_are_distinct_wrath_only_presence_flags() {
+        for (service, mask) in [
+            (NpcService::SpellClick, 0x1000000),
+            (NpcService::Mailbox, 0x4000000),
+        ] {
+            for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+                for bit in 0..32 {
+                    let bits = 1u32 << bit;
+                    let flags = NpcFlags::from_bits(layout, bits);
+                    assert_eq!(
+                        flags.has(service),
+                        layout == FieldLayout::Wrath12340 && bits == mask
+                    );
+                    assert_eq!(flags.bits(), bits);
+                }
+                assert!(!NpcFlags::from_bits(layout, 0).has(service));
+                assert_eq!(
+                    NpcFlags::from_bits(layout, u32::MAX).has(service),
+                    layout == FieldLayout::Wrath12340
+                );
+            }
+        }
+    }
 
     #[test]
     fn exact_base_predicates_do_not_promote_wrath_specializations() {
