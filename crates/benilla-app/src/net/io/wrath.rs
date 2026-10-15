@@ -1058,6 +1058,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GetMailList { .. }
         | ClientCommand::SetChannelWatch { .. }
         | ClientCommand::RequestRaidInfo
+        | ClientCommand::GuildBankQuery(_)
         | ClientCommand::LfgRequestPlayerLockInfo
         | ClientCommand::LfgRequestPartyLockInfo
         | ClientCommand::ChannelDisplayList { .. }
@@ -1533,6 +1534,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_roll::encode_vote(looted_target, item_slot, roll_type)
                 .expect("validated native roll vote"),
         ),
+        ClientCommand::GuildBankQuery(query) => (query.opcode(), query.encode()),
         ClientCommand::RequestRaidInfo => (
             benilla_protocol::wrath_instance::CMSG_REQUEST_RAID_INFO,
             Vec::new(),
@@ -3007,3 +3009,7 @@ mod saved_instance_command_tests {
 #[cfg(test)]
 #[path = "wrath/lfg_outbound_tests.rs"]
 mod lfg_outbound_tests;
+
+#[cfg(test)]
+#[path = "wrath/guild_bank_tests.rs"]
+mod guild_bank_tests;

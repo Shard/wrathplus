@@ -2084,6 +2084,8 @@ pub(crate) enum ClientCommand {
     ReadyCheckAnswer {
         ready: bool,
     },
+    /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
+    GuildBankQuery(benilla_protocol::wrath_guild_bank_query::Query),
     /// `CMSG_REQUEST_RAID_INFO`.
     RequestRaidInfo,
     /// `CMSG_RESET_INSTANCES`; answered per instance, `SMSG_INSTANCE_RESET` or `_FAILED`.
