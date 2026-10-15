@@ -298,7 +298,7 @@ fn run(
             return Ok(WrathCycle::Repark);
         }
         send(events, SessionEvent::WrathAccountExpansion { expansion: session.account_expansion() })?;
-        let characters = normalize_characters(session.char_enum().context("Wrath roster")?);
+        let mut characters = normalize_characters(session.char_enum().context("Wrath roster")?);
         if canceled() {
             return Ok(WrathCycle::Repark);
         }
@@ -333,8 +333,21 @@ fn run(
                     Err(_) => return Ok(WrathCycle::Exit),
                     Ok(CharRequest::Enter(guid)) => break guid,
                     Ok(CharRequest::Abandon) => return Ok(WrathCycle::Repark),
-                    Ok(CharRequest::Create(_)) | Ok(CharRequest::Delete(_)) => {
-                        bail!("Wrath character mutation is not integrated; reconnecting without sending a Vanilla packet")
+                    Ok(CharRequest::Create(request)) => {
+                        let native = benilla_protocol::wrath_world::WrathCreateCharacter {
+                            name: request.name, race: request.race, class: request.class,
+                            gender: request.gender, skin: request.skin, face: request.face,
+                            hair_style: request.hair_style, hair_color: request.hair_color,
+                            facial_hair: request.facial_hair, outfit_id: 0,
+                        };
+                        let code = session.create_character_result(&native)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Create, code, |event| send(events, event))?;
+                    }
+                    Ok(CharRequest::Delete(guid)) => {
+                        let code = session.delete_character_result(guid)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Delete, code, |event| send(events, event))?;
                     }
                 }
             }
@@ -3147,3 +3160,42 @@ mod arena_team_tests;
 #[cfg(test)]
 #[path = "wrath/chat_tests.rs"]
 mod chat_tests;
+
+fn native_character_action_succeeded(action: benilla_protocol::CharAction, code: u8) -> bool {
+    use benilla_protocol::wrath_world::{CHAR_CREATE_SUCCESS, CHAR_DELETE_SUCCESS};
+    match action {
+        benilla_protocol::CharAction::Create => code == CHAR_CREATE_SUCCESS,
+        benilla_protocol::CharAction::Delete => code == CHAR_DELETE_SUCCESS,
+    }
+}
+
+fn finish_character_action(
+    session: &mut WrathWorldSession,
+    characters: &mut Vec<Character>,
+    realm: Option<benilla_protocol::RealmInfo>,
+    action: benilla_protocol::CharAction,
+    code: u8,
+    publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    publish_character_action(action, code, || {
+        *characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+        Ok(SessionEvent::CharacterList { characters: characters.clone(), realm })
+    }, publish)
+}
+
+// Refresh must complete and publish before success. A transport failure never fabricates a result.
+fn publish_character_action(
+    action: benilla_protocol::CharAction,
+    code: u8,
+    refresh: impl FnOnce() -> Result<SessionEvent>,
+    mut publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    if native_character_action_succeeded(action, code) {
+        publish(refresh()?)?;
+    }
+    publish(SessionEvent::WrathCharActionResult { action, code })
+}
+
+#[cfg(test)]
+#[path = "wrath/character_tests.rs"]
+mod character_tests;
