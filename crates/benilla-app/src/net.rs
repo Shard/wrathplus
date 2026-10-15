@@ -1900,6 +1900,9 @@ pub(crate) enum ClientCommand {
     SetChannelWatch { name: String },
     /// Native Wrath `CMSG_CHANNEL_DISPLAY_LIST`, distinct from the ordinary chat list.
     ChannelDisplayList { name: String },
+    /// Native LFD lock queries; never emitted automatically by capture.
+    LfgRequestPlayerLockInfo,
+    LfgRequestPartyLockInfo,
     /// `/random [min] [max]` (`MSG_RANDOM_ROLL`).
     RandomRoll {
         min: u32,
