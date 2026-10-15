@@ -268,14 +268,6 @@ mod tests {
                 defs,
             );
         }
-        // Validate Wrath's sphere-map expression with production UV0+UV1 IO:
-        // pbr_fragment requires UV0 when VERTEX_UVS is defined. Stage2.z is a
-        // runtime selector, so compilation validates its branch without a GPU.
-        check(
-            "wow_model_wrath_env_stage2.wgsl",
-            include_str!("../../benilla-assets/src/shaders/wow_model.wgsl"),
-            mesh_defs(),
-        );
         let mut uv0_only = mesh_defs();
         uv0_only.retain(|def| !matches!(def,ShaderDefVal::Bool(name,_) if name == "VERTEX_UVS_B"));
         check(

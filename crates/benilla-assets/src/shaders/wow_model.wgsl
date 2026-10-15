@@ -418,10 +418,8 @@ fn vertex(vertex: WowVertex) -> WowVsOut {
     if (m.stage2.x > 0.5 && m.stage2.z > 2.0) {
         let p_view = view_rot * p_cam;
         let n_view = normalize(view_rot * out.world_normal);
-        // Wrath Diffuse_T1_Env / Env_T2 / Env_Env: GL sphere map in the
-        // right-handed, -Z-forward view basis. Leave the Vanilla UV0 path above alone.
-        let refl = reflect(-normalize(p_view), n_view);
-        out.uv_b = vec2<f32>(0.5) + 0.5 * refl.xy / length(refl + vec3<f32>(0.0, 0.0, 1.0));
+        let refl = normalize(p_view - 2.0 * dot(p_view, n_view) * n_view);
+        out.uv_b = refl.xy * 0.5 + vec2<f32>(0.5);
     }
 #endif
 #endif
