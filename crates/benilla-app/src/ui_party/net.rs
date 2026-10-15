@@ -36,6 +36,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::RaidTargetList, on_raid_target)
         .net_handler(K::ReadyCheckRequest, on_ready_check_request)
         .net_handler(K::ReadyCheckAnswer, on_ready_check_answer)
+        .net_handler(K::WrathRaidInstanceInfo, on_wrath_raid_instance_info)
         .net_handler(K::RaidInstanceInfo, on_raid_instance_info)
         .net_handler(K::Disconnected, on_session_end);
 }
@@ -265,6 +266,12 @@ fn on_ready_check_request(
 fn on_ready_check_answer(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
     if let SessionEvent::ReadyCheckAnswer { guid, ready } = ev {
         group.apply_ready_check_answer(guid, ready != 0);
+    }
+}
+
+fn on_wrath_raid_instance_info(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    if let SessionEvent::WrathRaidInstanceInfo { info } = ev {
+        group.wrath_saved_instances.receive(info);
     }
 }
 

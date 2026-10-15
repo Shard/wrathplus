@@ -546,6 +546,8 @@ pub enum SessionEvent {
     /// A channel roster (`SMSG_CHANNEL_LIST`), member flags per vmangos `Chat/Channel.h:119-130`.
     /// Native roster discriminator distinguishes display updates from ordinary chat lists.
     WrathChannelNotify { notify: crate::wrath_channel::Notify },
+    /// Lossless native saved-instance snapshot; app owns capture and world reset.
+    WrathRaidInstanceInfo { info: crate::wrath_instance::RaidInstanceInfo },
     /// Lossless native dungeon finder reply; app owns ordered capture and lifecycle.
     WrathLfg { packet: crate::wrath_lfg::Packet },
     /// Raw authenticated server account expansion; absence is not expansion zero.

@@ -18,6 +18,7 @@ mod feed;
 pub(crate) mod net;
 mod pets;
 mod records;
+mod saved_instances;
 mod wrath;
 pub(crate) use feed::{
     raid_row_guid, raid_row_guids, synthetic_raid, synthetic_roster, GROUPTYPE_RAID,
@@ -85,6 +86,8 @@ pub struct GroupState {
     pub test: bool,
     /// Our raid lockouts, the character's rather than the group's: leaving the group keeps them.
     pub saved_instances: Vec<benilla_protocol::messages::RaidInstanceEntry>,
+    /// Lossless Wrath lockouts and ordered receipts; never projected into Vanilla entries.
+    pub(crate) wrath_saved_instances: saved_instances::NativeSavedInstances,
     /// How many `SMSG_RAID_INSTANCE_INFO` answers arrived, empty ones included. The reference fires
     /// `UPDATE_INSTANCE_INFO` once per packet (`0x49e1a7`, straight from `0x49e0d8` when empty)
     /// and `RaidFrame.lua:43` ignores the first, so the Raid Info button is decided on the second.
@@ -446,6 +449,7 @@ impl GroupState {
             lists_applied: _,
             roster_updates: _,
             saved_instances: _,
+            wrath_saved_instances: _,
             saved_instances_answers: _,
             ready_check: _,
             ready_check_requests: _,

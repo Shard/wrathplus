@@ -1055,6 +1055,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::LootRoll { .. }
         | ClientCommand::GetMailList { .. }
         | ClientCommand::SetChannelWatch { .. }
+        | ClientCommand::RequestRaidInfo
         | ClientCommand::LfgRequestPlayerLockInfo
         | ClientCommand::LfgRequestPartyLockInfo
         | ClientCommand::ChannelDisplayList { .. }
@@ -1511,6 +1512,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_roll::CMSG_LOOT_ROLL,
             benilla_protocol::wrath_roll::encode_vote(looted_target, item_slot, roll_type)
                 .expect("validated native roll vote"),
+        ),
+        ClientCommand::RequestRaidInfo => (
+            benilla_protocol::wrath_instance::CMSG_REQUEST_RAID_INFO,
+            Vec::new(),
         ),
         ClientCommand::LfgRequestPlayerLockInfo => {
             let command = benilla_protocol::wrath_lfg::Command::RequestPlayerLockInfo;
@@ -2960,5 +2965,21 @@ mod native_loot_vote_command_tests {
                 WrathRoute::DisabledGameAction
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod saved_instance_command_tests {
+    use super::*;
+    #[test]
+    fn native_request_raid_info_is_empty_and_not_a_legacy_packet() {
+        assert_eq!(
+            route(&ClientCommand::RequestRaidInfo),
+            WrathRoute::NativeSession
+        );
+        assert_eq!(
+            session_packet(ClientCommand::RequestRaidInfo),
+            (0x02cd, Vec::new())
+        );
     }
 }
