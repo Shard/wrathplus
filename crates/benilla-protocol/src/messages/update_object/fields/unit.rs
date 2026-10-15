@@ -309,6 +309,25 @@ impl ObjectFields {
     pub fn unit_flags(&self) -> u32 {
         self.get(Field::UnitFlags).unwrap_or(0)
     }
+    /// Direct replicated PvP state, not a reaction, attack/assist, or pricing policy.
+    /// Build 5875 uses UNIT_FLAGS 0x1000; build 12340 uses UNIT_FIELD_BYTES_2
+    /// byte 1 mask 0x01 (AzerothCore Unit.h::IsPvP). Missing fields are false.
+    pub fn unit_is_pvp(&self) -> bool {
+        match self.layout {
+            FieldLayout::Vanilla5875 => self.unit_flags() & 0x1000 != 0,
+            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0100 != 0,
+        }
+    }
+    /// Direct replicated free-for-all PvP state, not effective combat eligibility.
+    /// Build 5875 uses PLAYER_FLAGS 0x80; build 12340 uses UNIT_FIELD_BYTES_2
+    /// byte 1 mask 0x04 (AzerothCore Unit.h::IsFFAPvP). Missing fields are false;
+    /// controlled-unit inheritance and reaction policy belong to callers.
+    pub fn unit_is_ffa_pvp(&self) -> bool {
+        match self.layout {
+            FieldLayout::Vanilla5875 => self.get(Field::PlayerFlags).unwrap_or(0) & 0x80 != 0,
+            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0400 != 0,
+        }
+    }
     /// Pet rename permission flag. Build 5875 uses UNIT_FLAGS 0x10;
     /// build 12340 uses UNIT_FIELD_BYTES_2 byte 2 mask 0x01.
     /// Missing fields are false; ownership and action policy are caller concerns.
