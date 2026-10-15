@@ -20,6 +20,7 @@ use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
+mod currency;
 mod drain;
 mod equip_error;
 pub(crate) mod feed;
@@ -1004,7 +1005,7 @@ impl Plugin for UiItemsPlugin {
             // After the chain opens: unordered, it can run first and skip every item DBC.
             .add_systems(
                 Startup,
-                load_item_dbcs.after(benilla_assets::AssetSet::Open),
+                (load_item_dbcs, currency::load).after(benilla_assets::AssetSet::Open),
             )
             .add_systems(
                 Update,
@@ -1021,6 +1022,7 @@ impl Plugin for UiItemsPlugin {
                     // The item-tooltip store answers before the input pass, so a re-hover the
                     // next frame sees the answer.
                     feed_item_stats.in_set(UnitFeed),
+                    currency::feed.in_set(UnitFeed),
                     feed_item_sets.in_set(UnitFeed),
                     // The roll table, pushed whole once per VM, before the first hover.
                     feed_random_properties.in_set(UnitFeed),
