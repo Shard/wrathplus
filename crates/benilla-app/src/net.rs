@@ -1903,6 +1903,8 @@ pub(crate) enum ClientCommand {
     /// Native LFD lock queries; never emitted automatically by capture.
     LfgRequestPlayerLockInfo,
     LfgRequestPartyLockInfo,
+    /// Raw Wrath L2/L3 transport. No UI producer until App owns the guarded lifecycle.
+    LfgCommand(benilla_protocol::wrath_lfg::commands::Command),
     /// `/random [min] [max]` (`MSG_RANDOM_ROLL`).
     RandomRoll {
         min: u32,
