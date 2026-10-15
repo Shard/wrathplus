@@ -4,6 +4,8 @@
 //! HandleLfgSetRolesOpcode,HandleLfgSetCommentOpcode}.
 use std::io;
 
+pub const CMSG_LFG_SET_BOOT_VOTE: u32 = 0x036c;
+pub const CMSG_LFG_TELEPORT: u32 = 0x0370;
 pub const CMSG_LFG_PROPOSAL_RESULT: u32 = 0x0362;
 pub const CMSG_LFG_JOIN: u32 = 0x035c;
 pub const CMSG_LFG_LEAVE: u32 = 0x035d;
@@ -44,6 +46,16 @@ fn comment_bytes(comment: &str) -> io::Result<Vec<u8>> {
 /// Raw role bits are preserved; the reducer decides which choices to send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// Native 0x00554a50 -> 0x00554960: canonical one-byte vote.
+    /// Active-boot guards and rate limits belong to App/UI policy.
+    SetBootVote {
+        agree: bool,
+    },
+    /// Native 0x00556bc0: canonical one-byte direction (true means out).
+    /// Local-player eligibility and rate limits belong to App/UI policy.
+    Teleport {
+        out: bool,
+    },
     /// Reply to the active proposal ID, never the dungeon entry.
     /// Native sender 0x00554450 writes u32 ID + canonical accept byte;
     /// bindings 0x005545e0/0x00554600 supply true/false respectively.
@@ -61,6 +73,8 @@ pub enum Command {
 impl Command {
     pub const fn opcode(&self) -> u32 {
         match self {
+            Self::SetBootVote { .. } => CMSG_LFG_SET_BOOT_VOTE,
+            Self::Teleport { .. } => CMSG_LFG_TELEPORT,
             Self::ProposalResult { .. } => CMSG_LFG_PROPOSAL_RESULT,
             Self::Join(_) => CMSG_LFG_JOIN,
             Self::Leave => CMSG_LFG_LEAVE,
@@ -73,6 +87,8 @@ impl Command {
     /// Comments are UTF-8 C strings; an embedded NUL cannot be represented.
     pub fn encode(&self) -> io::Result<Vec<u8>> {
         match self {
+            Self::SetBootVote { agree } => Ok(vec![u8::from(*agree)]),
+            Self::Teleport { out } => Ok(vec![u8::from(*out)]),
             Self::ProposalResult {
                 proposal_id,
                 accept,
@@ -254,6 +270,23 @@ mod proposal_result_tests {
                 accept,
             };
             assert_eq!(command.opcode(), 0x0362);
+            assert_eq!(command.encode().unwrap(), body);
+        }
+    }
+}
+
+#[cfg(test)]
+mod dungeon_command_tests {
+    use super::*;
+    #[test]
+    fn boot_vote_and_teleport_are_independent_single_bool_bodies() {
+        for (command, opcode, body) in [
+            (Command::SetBootVote { agree: false }, 0x036c, vec![0]),
+            (Command::SetBootVote { agree: true }, 0x036c, vec![1]),
+            (Command::Teleport { out: false }, 0x0370, vec![0]),
+            (Command::Teleport { out: true }, 0x0370, vec![1]),
+        ] {
+            assert_eq!(command.opcode(), opcode);
             assert_eq!(command.encode().unwrap(), body);
         }
     }
