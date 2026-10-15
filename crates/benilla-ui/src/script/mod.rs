@@ -150,6 +150,7 @@ mod worldmap;
 mod worldstate;
 mod worn_display;
 mod wrath_currency;
+mod wrath_equipment;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_items;
 mod wrath_paperdoll;
@@ -742,6 +743,7 @@ impl UiScript {
             wrath_paperdoll::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_currency::install(&lua)?;
+            wrath_equipment::install(&lua)?;
         }
 
         let s = UiScript {
