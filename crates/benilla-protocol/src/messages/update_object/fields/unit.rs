@@ -309,6 +309,22 @@ impl ObjectFields {
     pub fn unit_flags(&self) -> u32 {
         self.get(Field::UnitFlags).unwrap_or(0)
     }
+    /// Lossless build-12340 UNIT_FIELD_BYTES_2 byte 1, including unknown bits.
+    /// Native attack/assist inspect this byte (0x00729740/0x007293d0).
+    /// Vanilla has no equivalent packed state byte: returns None, not a projection
+    /// of its separate flags. Missing is None; an explicitly zero byte is Some(0).
+    pub fn unit_pvp_state_flags(&self) -> Option<u8> {
+        match self.layout {
+            FieldLayout::Vanilla5875 => None,
+            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).map(|word| (word >> 8) as u8),
+        }
+    }
+    /// Direct Wrath sanctuary flag (byte 1 mask 0x08), not combat eligibility.
+    /// AzerothCore Unit.h::IsInSanctuary; Vanilla and absent fields return false.
+    pub fn unit_is_in_sanctuary(&self) -> bool {
+        self.unit_pvp_state_flags()
+            .is_some_and(|flags| flags & 0x08 != 0)
+    }
     /// Direct replicated PvP state, not a reaction, attack/assist, or pricing policy.
     /// Build 5875 uses UNIT_FLAGS 0x1000; build 12340 uses UNIT_FIELD_BYTES_2
     /// byte 1 mask 0x01 (AzerothCore Unit.h::IsPvP). Missing fields are false.

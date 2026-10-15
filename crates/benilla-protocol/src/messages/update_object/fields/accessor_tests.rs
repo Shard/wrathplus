@@ -1629,3 +1629,38 @@ fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
         }
     }
 }
+
+#[test]
+fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let absent = fixture(layout, &[]);
+        assert_eq!(absent.unit_pvp_state_flags(), None);
+        assert!(!absent.unit_is_in_sanctuary());
+        for byte in 0..=255u32 {
+            // Nonzero neighboring bytes must not leak into the returned byte.
+            let fields = fixture(layout, &[(Field::UnitBytes2, 0, 0xffff_00ff | (byte << 8))]);
+            let expected = (layout == FieldLayout::Wrath12340).then_some(byte as u8);
+            assert_eq!(fields.unit_pvp_state_flags(), expected);
+            assert_eq!(
+                fields.unit_is_in_sanctuary(),
+                expected.is_some_and(|b| b & 8 != 0)
+            );
+        }
+        for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
+            for bit in 0..32 {
+                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+                assert_eq!(
+                    fields.unit_is_in_sanctuary(),
+                    layout == FieldLayout::Wrath12340 && field == Field::UnitBytes2 && bit == 11,
+                    "sanctuary {layout:?} {field:?} bit {bit}"
+                );
+            }
+        }
+        let zero = fixture(layout, &[(Field::UnitBytes2, 0, 0)]);
+        assert_eq!(
+            zero.unit_pvp_state_flags(),
+            (layout == FieldLayout::Wrath12340).then_some(0)
+        );
+        assert!(!zero.unit_is_in_sanctuary());
+    }
+}
