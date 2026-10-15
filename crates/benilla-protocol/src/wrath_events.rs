@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            crate::wrath_pet::SMSG_PET_SPELLS => {
+                Ok(match crate::wrath_pet::decode(body) {
+                    Ok(spells) => handled(vec![SessionEvent::WrathPetSpells { spells: Box::new(spells) }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             crate::wrath_channel::SMSG_CHANNEL_NOTIFY if matches!(body.first(), Some(2 | 3)) => {
                 Ok(match crate::wrath_channel::decode_notify(body) {
                     Ok(notify) => handled(vec![notify.session_event(), SessionEvent::WrathChannelNotify { notify }], Vec::new(), Vec::new()),

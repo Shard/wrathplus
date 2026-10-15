@@ -505,6 +505,8 @@ pub enum SessionEvent {
     },
     /// The whole pet bar (`SMSG_PET_SPELLS`), never a delta; a zero `pet_guid` tears it down.
     PetSpells(Box<PetSpells>),
+    /// Native 12340 pet initialization; preserves family, all packed action bits and cooldowns.
+    WrathPetSpells { spells: Box<crate::wrath_pet::PetSpells> },
     /// The pet's react/command state alone (`SMSG_PET_MODE`), with no bar edit.
     PetMode(PetMode),
     /// A refused pet order (`SMSG_PET_ACTION_FEEDBACK`): one reason code for the red error line.

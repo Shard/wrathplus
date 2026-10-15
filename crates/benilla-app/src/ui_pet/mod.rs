@@ -43,6 +43,9 @@ mod usable_tests;
 /// only that guid.
 #[derive(Resource, Default)]
 pub(crate) struct PetBar {
+    /// Lossless native 12340 initialization. Capture only: the native visible feed is separate;
+    /// `None` means unavailable, not a known empty spellbook. Never use Vanilla action helpers.
+    pub(crate) native: Option<benilla_protocol::wrath_pet::PetSpells>,
     /// The last `SMSG_PET_SPELLS`, with `SMSG_PET_MODE` and local presses folded in.
     pub(crate) spells: PetSpells,
     /// The pet's own cooldowns, the list at `0xcecb04`. Seeded from `SMSG_PET_SPELLS`, topped up
