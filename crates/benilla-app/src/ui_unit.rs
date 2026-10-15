@@ -919,8 +919,8 @@ pub(crate) fn snapshot(
             Some(1) => 3,
             _ => 0,
         },
-        // `UNIT_FIELD_FLAGS` PvP `0x1000` and Skinnable `0x04000000` (vmangos `UnitDefines.h`).
-        pvp: store.0.unit_flags() & 0x1000 != 0,
+        // Direct replicated state only; reaction/ownership policy is evaluated separately.
+        pvp: store.0.unit_is_pvp(),
         skinnable: store.0.unit_flags() & 0x0400_0000 != 0,
         // `UnitPlayerControlled`: bit `0x8`, set by pets and charmed creatures as well as players.
         player_controlled: store.0.unit_flags() & 0x8 != 0,
@@ -935,8 +935,8 @@ pub(crate) fn snapshot(
             .unwrap_or(0),
         // `UnitAffectingCombat` (`0x517e10`): bit 19, the one combat bit for every token.
         in_combat: store.0.unit_flags() & crate::player::UNIT_FLAG_IN_COMBAT != 0,
-        // Free-for-all PvP, `PLAYER_FLAGS` bit 7 (vmangos `Player.h:322`); false on a creature.
-        is_pvp_ffa: store.0.player_flags() & 0x80 != 0,
+        // Direct replicated state, with the descriptor dialect selecting the packed field.
+        is_pvp_ffa: store.0.unit_is_ffa_pvp(),
         // The honor rank, `PLAYER_BYTES_3` byte 3 (0..=18), public for every player in view.
         pvp_rank: store.0.player_pvp_rank().unwrap_or(0),
         // The team digit of `PVP_RANK_<rank>_<team>`, from the race ([`race_pvp_team`]).
@@ -1695,6 +1695,41 @@ mod tests {
             })
             .collect();
         FieldEdges::semantic_of(&keys)
+    }
+
+    #[test]
+    fn snapshot_pvp_booleans_use_only_their_dialects_replicated_bits() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
+                for bit in 0..32 {
+                    let index = layout.resolve(field).unwrap().index;
+                    let store = ObjectStore(ObjectFields::from_native_pairs(
+                        layout,
+                        &[(index, 1u32 << bit)],
+                    ));
+                    let state = snapshot(&store, 1, None, 0, None, Default::default());
+                    let expected = match layout {
+                        FieldLayout::Vanilla5875 => (
+                            field == Field::UnitFlags && bit == 12,
+                            field == Field::PlayerFlags && bit == 7,
+                        ),
+                        FieldLayout::Wrath12340 => (
+                            field == Field::UnitBytes2 && bit == 8,
+                            field == Field::UnitBytes2 && bit == 10,
+                        ),
+                    };
+                    assert_eq!(
+                        (state.pvp, state.is_pvp_ffa),
+                        expected,
+                        "{layout:?} {field:?} bit {bit}"
+                    );
+                }
+            }
+            let store = ObjectStore(ObjectFields::from_native_pairs(layout, &[]));
+            let state = snapshot(&store, 1, None, 0, None, Default::default());
+            assert!(!state.pvp && !state.is_pvp_ffa);
+        }
     }
 
     #[test]
