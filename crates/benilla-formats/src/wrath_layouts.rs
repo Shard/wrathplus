@@ -63,10 +63,10 @@ pub(crate) fn columns(
             m.same(0, 14);
         }),
         "SpellRange" => (22, 40, spell_range),
-        // Columns appended: behavior tier; the advanced-sound id; sheathe sounds; missile and
-        // kit extras.
+        // Native 0x8a93e0 retains raw word order; fallback walker 0x717814 reads +0x14,
+        // not +0x18 (the separate animation/variation lookup). Slot 5 is unused by our reader.
         "AnimationData" => (7, 8, |m| {
-            m.same(0, 7);
+            m.same(0, 5).run(6, 5, 1);
         }),
         "SoundEntries" => (29, 30, |m| {
             m.same(0, 29);
