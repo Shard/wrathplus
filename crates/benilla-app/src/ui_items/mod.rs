@@ -25,6 +25,8 @@ mod drain;
 mod equip_error;
 pub(crate) mod feed;
 mod net;
+mod owned;
+pub(crate) use owned::{owned_category_count, owned_entry_count};
 
 pub(crate) use drain::send_auto_equip;
 use drain::{
