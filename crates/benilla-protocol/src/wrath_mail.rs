@@ -4,11 +4,17 @@ use crate::events::SessionEvent;
 use crate::wrath_session::{f32_le, u32_le, u64_le};
 use std::io::{self, Cursor};
 
+pub const SMSG_MAIL_LIST_RESULT: u16 = 0x23b;
+pub const CMSG_GET_MAIL_LIST: u32 = 0x23a;
+
 pub const MSG_QUERY_NEXT_MAIL_TIME: u16 = 0x284;
 pub const SMSG_RECEIVED_MAIL: u16 = 0x285;
 
 pub const fn handles(opcode: u16) -> bool {
-    matches!(opcode, MSG_QUERY_NEXT_MAIL_TIME | SMSG_RECEIVED_MAIL)
+    matches!(
+        opcode,
+        MSG_QUERY_NEXT_MAIL_TIME | SMSG_RECEIVED_MAIL | SMSG_MAIL_LIST_RESULT
+    )
 }
 
 /// The request on this bidirectional opcode has no payload.
@@ -17,6 +23,11 @@ pub fn encode_query_next_mail_time() -> Vec<u8> {
 }
 
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
+    if opcode == SMSG_MAIL_LIST_RESULT {
+        return Ok(vec![SessionEvent::WrathMailList {
+            inbox: decode_inbox(body)?,
+        }]);
+    }
     let mut r = Cursor::new(body);
     let seconds = f32_le(&mut r)?;
     if !seconds.is_finite() {
@@ -65,3 +76,10 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
 #[cfg(test)]
 #[path = "wrath_mail/tests.rs"]
 mod tests;
+
+mod inbox;
+pub use inbox::{decode_inbox, Attachment, Inbox, Mail};
+
+#[cfg(test)]
+#[path = "wrath_mail/inbox_tests.rs"]
+mod inbox_tests;
