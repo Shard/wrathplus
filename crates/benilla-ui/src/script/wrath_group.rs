@@ -1,0 +1,147 @@
+//! Build-12340 group-only ABI. Source: AC Group.h flags/roles and Group.cpp
+//! SendUpdateToPlayer; stock RaidFrame consumes the extended roster tuple.
+use super::super::Model;
+use mlua::{Function, Lua, MultiValue, Value};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Member {
+    pub guid: u64,
+    pub flags: u8,
+    pub roles: u8,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Group {
+    pub members: Vec<Member>,
+    pub dungeon_difficulty: Option<u8>,
+    pub raid_difficulty: Option<u8>,
+}
+impl super::super::UiScript {
+    pub fn set_wrath_group(&mut self, group: Group) {
+        self.model_mut().wrath_group = group;
+    }
+}
+fn role(bits: u8) -> &'static str {
+    if bits & 2 != 0 {
+        "TANK"
+    } else if bits & 4 != 0 {
+        "HEALER"
+    } else if bits & 8 != 0 {
+        "DAMAGER"
+    } else {
+        "NONE"
+    }
+}
+pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    let g = lua.globals();
+    let roster: Function = g.get("GetRaidRosterInfo")?;
+    g.set(
+        "GetRaidRosterInfo",
+        lua.create_function(move |lua, index: Value| {
+            let mut values: MultiValue = roster.call(index.clone())?;
+            let n = super::super::binding_abi::number_arg(
+                lua,
+                index,
+                "Usage: GetRaidRosterInfo(index)",
+            )?;
+            let member = {
+                let model = lua.app_data_ref::<Model>().expect("model");
+                usize::try_from(n.wrapping_sub(1))
+                    .ok()
+                    .and_then(|i| model.party.raid.get(i))
+                    .and_then(|r| model.wrath_group.members.iter().find(|m| m.guid == r.guid))
+                    .cloned()
+            };
+            // Return 10: main-tank/main-assist assignment; 11: master looter.
+            let assignment = member.as_ref().and_then(|m| {
+                if m.flags & 2 != 0 {
+                    Some("MAINTANK")
+                } else if m.flags & 4 != 0 {
+                    Some("MAINASSIST")
+                } else {
+                    None
+                }
+            });
+            values.push_back(match assignment {
+                Some(a) => Value::String(lua.create_string(a)?),
+                None => Value::Nil,
+            });
+            let master = {
+                let model = lua.app_data_ref::<Model>().expect("model");
+                model.party.master_looter.is_some_and(|i| i == n as u32)
+            };
+            values.push_back(Value::Boolean(master));
+            Ok(values)
+        })?,
+    )?;
+    g.set(
+        "UnitGroupRolesAssigned",
+        lua.create_function(|lua, token: Option<String>| {
+            super::super::unit::check_unit_token(lua, &token)?;
+            let model = lua.app_data_ref::<Model>().expect("model");
+            let guid = token.as_ref().and_then(|t| model.unit(t)).map(|u| u.guid);
+            Ok(role(
+                guid.and_then(|g| model.wrath_group.members.iter().find(|m| m.guid == g))
+                    .map_or(0, |m| m.roles),
+            ))
+        })?,
+    )?;
+    for (name, raid) in [("GetDungeonDifficulty", false), ("GetRaidDifficulty", true)] {
+        g.set(
+            name,
+            lua.create_function(move |lua, ()| {
+                let m = lua.app_data_ref::<Model>().expect("model");
+                Ok(if raid {
+                    m.wrath_group.raid_difficulty
+                } else {
+                    m.wrath_group.dungeon_difficulty
+                })
+            })?,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::script::{
+        PartyState, RaidMemberInfo, ScriptDialect, UiScript, UnitState, WrathGroup,
+        WrathGroupMember,
+    };
+    #[test]
+    fn wrath_group_tuple_roles_and_difficulty_use_pushed_native_data() {
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.set_party(PartyState {
+            raid: vec![RaidMemberInfo {
+                guid: 7,
+                name: "Ally".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        s.set_unit(
+            "raid1",
+            Some(UnitState {
+                guid: 7,
+                exists: true,
+                ..Default::default()
+            }),
+        );
+        s.set_wrath_group(WrathGroup {
+            members: vec![WrathGroupMember {
+                guid: 7,
+                flags: 2,
+                roles: 2,
+            }],
+            dungeon_difficulty: Some(2),
+            raid_difficulty: Some(4),
+        });
+        assert!(s.eval::<bool>("local a,b,c,d,e,f,g,h,i,j,k=GetRaidRosterInfo(1); return a=='Ally' and j=='MAINTANK' and k==false and UnitGroupRolesAssigned('raid1')=='TANK' and GetDungeonDifficulty()==2 and GetRaidDifficulty()==4").unwrap());
+        assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 11);
+        s.set_wrath_group(Default::default());
+        assert!(s
+            .eval::<bool>(
+                "return GetDungeonDifficulty()==nil and UnitGroupRolesAssigned('raid1')=='NONE'"
+            )
+            .unwrap());
+    }
+}

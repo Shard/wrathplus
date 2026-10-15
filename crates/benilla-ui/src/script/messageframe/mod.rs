@@ -405,6 +405,7 @@ impl UiScript {
                 continue; // faded: holds its rows, draws nothing
             }
             out.push(ExtractedQuad {
+                animation_transform: None,
                 target: ZTarget::Frame(fh),
                 z,
                 rect: Some(Rect::new(bottom, fr.left, top, fr.right)),

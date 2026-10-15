@@ -943,6 +943,10 @@ pub enum SessionEvent {
     },
     /// Someone invited us to their group (`SMSG_GROUP_INVITE`): the invite popup.
     GroupInvite { inviter: String },
+    /// Lossless build-12340 group packet; never narrowed into Vanilla records.
+    WrathGroup {
+        packet: Box<crate::wrath_group::Packet>,
+    },
     /// An invite we sent was declined (`SMSG_GROUP_DECLINE`).
     GroupDecline { name: String },
     /// We were removed from our group (`SMSG_GROUP_UNINVITE`, empty body), kicked or left.
@@ -1092,6 +1096,7 @@ pub enum SessionEvent {
     /// `SMSG_NEW_TAXI_PATH`, empty, sent with [`Self::TaxiNodeStatus`] on a first visit.
     NewTaxiPath,
     /// The inbox (`SMSG_MAIL_LIST_RESULT`), answering `CMSG_GET_MAIL_LIST`.
+    WrathMailList { inbox: crate::wrath_mail::Inbox },
     MailList { mails: Vec<MailListEntry> },
     /// A mail action's verdict (`SMSG_SEND_MAIL_RESULT`); `equip_error`/`item` are exclusive tails.
     SendMailResult {

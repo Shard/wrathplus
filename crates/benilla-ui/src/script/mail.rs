@@ -2,6 +2,8 @@
 //! (`UiScript::set_mail`), and the Lua verbs queue intents the app drains and sends. Indices are
 //! 1-based, as `MailFrame.lua` uses them.
 
+pub mod wrath;
+
 use mlua::{Lua, MultiValue, Value};
 
 use super::binding_abi::flag;
@@ -151,6 +153,13 @@ impl super::UiScript {
     /// Push (or clear, with `None`) the open mailbox's inbox snapshot.
     pub fn set_mail(&mut self, state: Option<MailState>) {
         self.model_mut().mail = state;
+        self.model_mut().wrath_mail = None;
+    }
+
+    /// Push the lossless multi-attachment Wrath inbox; Vanilla state is not projected.
+    pub fn set_wrath_mail(&mut self, state: Option<wrath::Inbox>) {
+        self.model_mut().wrath_mail = state;
+        self.model_mut().mail = None;
     }
 
     /// Take the `CheckInbox` flag; the app answers it with `CMSG_GET_MAIL_LIST`.
@@ -268,6 +277,13 @@ impl super::UiScript {
 
 /// A clone of the inbox row at a 1-based index.
 fn row_at(model: &Model, index: usize) -> Option<MailInboxRow> {
+    if model.dialect == super::ScriptDialect::Wrath12340 {
+        return model
+            .wrath_mail
+            .as_ref()
+            .and_then(|m| index.checked_sub(1).and_then(|i| m.rows.get(i)))
+            .map(|row| row.header.clone());
+    }
     model
         .mail
         .as_ref()
@@ -283,7 +299,19 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetInboxNumItems",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(model.mail.as_ref().map_or(0, |m| m.inbox.len()) as i64)
+            if model.dialect == super::ScriptDialect::Wrath12340 {
+                let (shown, total) = model
+                    .wrath_mail
+                    .as_ref()
+                    .map_or((0, 0), |m| (m.rows.len() as i64, i64::from(m.total_count)));
+                return Ok(MultiValue::from_vec(vec![
+                    Value::Integer(shown),
+                    Value::Integer(total),
+                ]));
+            }
+            Ok(MultiValue::from_vec(vec![Value::Integer(
+                model.mail.as_ref().map_or(0, |m| m.inbox.len()) as i64,
+            )]))
         })?,
     )?;
 
@@ -304,13 +332,26 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     None => Value::Nil,
                 })
             };
-            // packageIcon only for a non-GM mail with an item (`MailFrame.lua:108`).
-            let package_icon = if r.item_id != 0 && !r.is_gm {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let native = model.dialect == super::ScriptDialect::Wrath12340;
+            let first_quantity = model
+                .wrath_mail
+                .as_ref()
+                .and_then(|m| index.checked_sub(1).and_then(|i| m.rows.get(i)))
+                .and_then(|r| r.attachments.first())
+                .map_or(0, |a| a.count);
+            // Stock Wrath MailFrame.lua:154 consumes attachment count and first stack separately.
+            let package_icon = if (if native {
+                r.item_count != 0
+            } else {
+                r.item_id != 0
+            }) && !r.is_gm
+            {
                 opt_str(&r.package_icon)?
             } else {
                 Value::Nil
             };
-            Ok(MultiValue::from_vec(vec![
+            let mut values = vec![
                 package_icon,
                 opt_str(&r.stationery_icon)?,
                 opt_str(&r.sender)?,
@@ -328,7 +369,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 flag(r.text_created),
                 flag(r.can_reply),
                 flag(r.is_gm),
-            ]))
+            ];
+            if native {
+                values.push(Value::Integer(i64::from(first_quantity)));
+            }
+            Ok(MultiValue::from_vec(values))
         })?,
     )?;
 
@@ -407,7 +452,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // the shared item-usable gate, true while the template is in flight.
     g.set(
         "GetInboxItem",
-        lua.create_function(|lua, index: usize| {
+        lua.create_function(|lua, (index, attachment): (usize, Option<usize>)| {
+            {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                if model.dialect == super::ScriptDialect::Wrath12340 {
+                    return wrath::item(lua, &model, index, attachment.unwrap_or(1));
+                }
+            }
             let (row, usable) = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
                 let row = row_at(&model, index);

@@ -428,7 +428,7 @@ fn init_white_texture(mut commands: Commands, mut images: ResMut<Assets<Image>>)
 }
 
 /// Clip `rect` to `clip`, reprojecting the UVs to the clipped edges; `None` when nothing is left.
-fn clip_quad(rect: Rect, uv: UvRect, clip: Rect) -> Option<(Rect, UvRect)> {
+pub(crate) fn clip_quad(rect: Rect, uv: UvRect, clip: Rect) -> Option<(Rect, UvRect)> {
     let clipped = rect.intersect(clip);
     if clipped.is_empty() {
         return None;

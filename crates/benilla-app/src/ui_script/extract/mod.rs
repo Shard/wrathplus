@@ -2,6 +2,8 @@
 //! [`UiScript::extract`]'s output into [`UiQuads`]. The held payload's icon is the hardware cursor
 //! ([`crate::cursor`]); a capture, which cannot show that cursor, draws [`cursor_icon_quad`].
 
+mod animation_transform;
+
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -1064,6 +1066,35 @@ pub(super) fn paint_script(
 /// the minimap slot, booth pane aspects and tile requests. The full pass and the splice both call
 /// this; keep [`splice_simple`] in step with each arm's side effects.
 fn convert_entry(
+    eq: benilla_ui::script::ExtractedQuad,
+    s: f32,
+    // The window in logical px: `h` flips y, `w` gives model tiles the screen diagonal.
+    w: f32,
+    h: f32,
+    // The device scale, for the nameplate border resampled to physical pixels.
+    dpi: f32,
+    assets: &mut Option<ResMut<WorldAssets>>,
+    images: &mut Assets<Image>,
+    font_atlas: &mut Option<ResMut<UiFontAtlas>>,
+    booths: &mut crate::portrait::BoothBridge,
+    text_ui: Option<&benilla_ui::script::EditBoxTextUi>,
+    caret_pinned: bool,
+    out: &mut Vec<UiQuad>,
+    link_spans: &mut Vec<(
+        benilla_ui::widget::FrameHandle,
+        benilla_ui::layout::Rect,
+        String,
+        String,
+    )>,
+    minimap_slot: &mut Option<crate::minimap::MinimapSlot>,
+) {
+    let transform = eq.animation_transform;
+    let start = out.len();
+    convert_entry_inner(eq, s, w, h, dpi, assets, images, font_atlas, booths, text_ui, caret_pinned, out, link_spans, minimap_slot);
+    animation_transform::apply(&mut out[start..], transform, s, h);
+}
+
+fn convert_entry_inner(
     eq: benilla_ui::script::ExtractedQuad,
     s: f32,
     // The window in logical px: `h` flips y, `w` gives model tiles the screen diagonal.

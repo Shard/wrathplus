@@ -167,6 +167,7 @@ pub(crate) struct Model {
     /// `0x7838c7`); read them only through `font_object`, where the fold lives.
     pub(crate) font_objects_by_lower: HashMap<String, FontObject>,
     /// Anchored regions' owner-relative rects from the last resolve; anchor-less ones are absent.
+    pub(crate) animation_transforms: std::collections::BTreeMap<usize, (crate::order::ZTarget, Vec<super::animation::transforms::Transform>)>,
     pub(crate) region_resolved: HashMap<RegionHandle, Rect>,
 
     /// The next object id to mint; ids start at 1, since 0 is `SCREEN`.
@@ -267,6 +268,7 @@ pub(crate) struct Model {
     pub(crate) joined_channels: Vec<Option<String>>,
     /// The party or raid roster the app pushes; the default is not in a group.
     pub(crate) party: party::PartyState,
+    pub(crate) wrath_group: super::wrath_surface::wrath_group::Group,
     /// Party and loot-method calls (`AcceptGroup`, `InviteToParty`, `SetLootMethod`, …) queued.
     pub(crate) party_requests: Vec<party::PartyRequest>,
     /// The ready-check deadline and the unanswered flags the timeout tick reads.
@@ -717,6 +719,7 @@ pub(crate) struct Model {
     pub(crate) item_text_page_turns: Vec<i32>,
     /// The open inbox and mail calls, rows 1-based: `mail_opens` are rows `GetInboxText` read.
     pub(crate) mail: Option<mail::MailState>,
+    pub(crate) wrath_mail: Option<mail::wrath::Inbox>,
     pub(crate) mail_check_inbox: bool,
     pub(crate) mail_opens: Vec<u32>,
     pub(crate) mail_take_items: Vec<u32>,
@@ -1090,6 +1093,7 @@ impl Model {
             backdrops: HashMap::new(),
             simple_html: simplehtml::SimpleHtmlStates::new(),
             font_objects_by_lower: HashMap::new(),
+            animation_transforms: Default::default(),
             region_resolved: HashMap::new(),
             next_id: 1,
             id_to_frame: IdMap::default(),
@@ -1135,6 +1139,7 @@ impl Model {
             drop_item_on_unit: Vec::new(),
             joined_channels: Vec::new(),
             party: party::PartyState::default(),
+            wrath_group: Default::default(),
             party_requests: Vec::new(),
             ready_check: party::ReadyCheckState::default(),
             saved_instances: Vec::new(),
@@ -1355,6 +1360,7 @@ impl Model {
             item_text_close: false,
             item_text_page_turns: Vec::new(),
             mail: None,
+            wrath_mail: None,
             mail_check_inbox: false,
             mail_opens: Vec::new(),
             mail_take_items: Vec::new(),

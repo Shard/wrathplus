@@ -122,6 +122,7 @@ mod slider;
 mod social;
 mod sound;
 mod spell_info;
+mod storage_slots;
 mod spellbook;
 mod stable;
 mod statusbar;
@@ -155,6 +156,7 @@ mod wrath_modifiers;
 mod wrath_tutorial;
 pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
+mod wrath_item_spell;
 mod wrath_items;
 mod wrath_paperdoll;
 mod wrath_surface;
@@ -234,6 +236,9 @@ pub use layout_cache::{FrameLayout, LayoutPoint};
 pub use loot::{LootRow, LootState, LOOT_PORTRAIT_UNIT};
 pub use loot_roll::{LootRollEntry, LootRollsState};
 pub use macros::{MacroBinding, MacroState, MacroView, MAX_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME};
+pub use mail::wrath::{
+    Attachment as WrathMailAttachment, Inbox as WrathMailInbox, Row as WrathMailRow,
+};
 pub use mail::{
     MailInboxRow, MailInvoice, MailSendRequest, MailState, PackageView, StationeryView,
 };
@@ -294,6 +299,7 @@ pub use worldmap::{
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
+pub use wrath_surface::wrath_group::{Group as WrathGroup, Member as WrathGroupMember};
 pub use zone_text::ZoneTexts;
 
 use mlua::Lua;
@@ -745,6 +751,7 @@ impl UiScript {
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
             wrath_items::install(&lua)?;
+            wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;
