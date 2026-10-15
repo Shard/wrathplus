@@ -2,23 +2,26 @@ use super::*;
 
 #[test]
 fn wrath_resources_preserve_sparse_updates_zero_and_recreate_without_vanilla_aliases() {
-    let mut created = ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 123)])
-        .with_wrath_powers(std::array::from_fn(|slot| {
-            (Some(100 + slot as u32), Some(1000 + slot as u32))
-        }))
-        .into_created(ObjectType::Unit);
-    let mut powers = [(None, None); 7];
-    powers[1].0 = Some(437);
-    powers[6] = (Some(0), Some(1250));
-    created.merge(ObjectFields::default().with_wrath_powers(powers));
+    let layout = FieldLayout::Wrath12340;
+    let mut pairs = vec![(24, 123)];
+    for slot in 0..7 {
+        pairs.push((25 + slot, 100 + u32::from(slot)));
+        pairs.push((33 + slot, 1000 + u32::from(slot)));
+    }
+    let mut created =
+        ObjectFields::from_native_pairs(layout, &pairs).into_created(ObjectType::Unit);
+    created.merge(ObjectFields::from_native_pairs(
+        layout,
+        &[(26, 437), (31, 0), (39, 1250)],
+    ));
     let result = created.wrath_powers().unwrap();
     assert_eq!(result[0], (100, 1000));
     assert_eq!(result[1], (437, 1001));
     assert_eq!(result[6], (0, 1250));
     assert_eq!(created.unit_health(), Some(123));
-    assert_eq!(created.unit_power(1), Some(0));
-    created.merge(ObjectFields::default().into_created(ObjectType::Unit));
-    assert!(created.wrath_powers().is_none());
+    assert_eq!(created.unit_power(1), Some(437));
+    created.merge(ObjectFields::from_native_pairs(layout, &[]).into_created(ObjectType::Unit));
+    assert_eq!(created.wrath_powers(), Some([(0, 0); 7]));
     assert!(ObjectFields::default().wrath_powers().is_none());
 }
 
@@ -1115,7 +1118,7 @@ fn player_public_and_private_bytes_do_not_collide() {
 }
 
 #[test]
-fn native_power_arrays_preserve_all_slots_and_ignore_projected_side_channel() {
+fn native_power_arrays_preserve_all_slots() {
     for (layout, slots) in [(FieldLayout::Vanilla5875, 5), (FieldLayout::Wrath12340, 7)] {
         let current = layout.resolve(Field::UnitPower).unwrap();
         let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
@@ -1124,8 +1127,7 @@ fn native_power_arrays_preserve_all_slots_and_ignore_projected_side_channel() {
             pairs.push((current.index + slot, 100 + u32::from(slot)));
             pairs.push((maximum.index + slot, 1000 + u32::from(slot)));
         }
-        let mut fields = ObjectFields::from_native_pairs(layout, &pairs)
-            .with_wrath_powers([(Some(9999), Some(9999)); 7]);
+        let mut fields = ObjectFields::from_native_pairs(layout, &pairs);
         assert_eq!(fields.unit_power_slots(), slots as u8);
         for slot in 0..slots as u8 {
             assert_eq!(fields.unit_power(slot), Some(100 + u32::from(slot)));

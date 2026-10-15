@@ -1,12 +1,13 @@
 //! Stateful semantic adapter from Wrath build-12340 packets to expansion-neutral session events.
 //!
 //! The wire codecs stay in profile-native modules. This module owns the state required by sparse
-//! values updates and projects only fields whose meaning matches the expansion-neutral events.
+//! values updates. Descriptors retain their native Wrath12340 layout without projection.
 
 use std::collections::HashMap;
 use std::fmt;
 
 use crate::events::{EntityKind, MoveSpeeds, SessionEvent};
+use crate::messages::FieldLayout;
 use crate::messages::{
     AttackSwingError, CreateSpline, MoverState, ObjectFields, ObjectType as VanillaObjectType,
     TransportPose,
@@ -496,10 +497,12 @@ impl WrathEventAdapter {
             }
             opcode if crate::wrath_session::handles(opcode) => {
                 // A message that does not decode is dropped, never fatal to the session.
-                Ok(match crate::wrath_session::decode(opcode, body, self.self_guid) {
-                    Ok(events) => handled(events, Vec::new(), Vec::new()),
-                    Err(_) => WrathDispatch::Unhandled { opcode },
-                })
+                Ok(
+                    match crate::wrath_session::decode(opcode, body, self.self_guid) {
+                        Ok(events) => handled(events, Vec::new(), Vec::new()),
+                        Err(_) => WrathDispatch::Unhandled { opcode },
+                    },
+                )
             }
             _ => Ok(WrathDispatch::Unhandled { opcode }),
         }
@@ -523,17 +526,17 @@ impl WrathEventAdapter {
                     }
                     self.auras.forget(guid);
                     let state = TrackedObject::from_create(object_type, &fields);
-                    let projected = project_fields(&state, true);
+                    let native = native_fields(&state, true);
                     self.objects.insert(guid, state);
                     if matches!(object_type, ObjectType::Item | ObjectType::Container) {
                         session_events.push(SessionEvent::ItemCreate {
                             guid,
                             container: object_type == ObjectType::Container,
-                            fields: projected,
+                            fields: native,
                         });
                     } else if let Some((position, orientation)) = placement(&movement) {
-                        let display_id = projected_display(object_type, &projected);
-                        let scale = projected
+                        let display_id = native_display(object_type, &native);
+                        let scale = native
                             .object_scale_x()
                             .filter(|value| *value > 0.0)
                             .unwrap_or(1.0);
@@ -549,13 +552,13 @@ impl WrathEventAdapter {
                             transport_progress: movement.transport_progress,
                             transport: project_transport(&movement),
                             spline: project_spline(&movement),
-                            fields: projected,
+                            fields: native,
                         });
                     }
                 }
                 ObjectUpdate::Values { guid, fields } => {
                     if let Some(state) = self.objects.get_mut(&guid) {
-                        let delta = project_delta(state, &fields);
+                        let delta = native_delta(state, &fields);
                         state.apply(&fields);
                         if !delta.is_empty() {
                             session_events.push(SessionEvent::ObjectValues {
@@ -710,14 +713,16 @@ fn vanilla_type(object_type: ObjectType) -> VanillaObjectType {
     }
 }
 
-fn project_fields(state: &TrackedObject, created: bool) -> ObjectFields {
-    let pairs = projected_pairs(state.object_type, |index| Some(state.get(index)));
-    let mut fields = ObjectFields::from_pairs(&pairs);
-    if matches!(state.object_type, ObjectType::Unit | ObjectType::Player) {
-        fields = fields.with_wrath_powers(std::array::from_fn(|slot| {
-            (Some(state.get(25 + slot)), Some(state.get(33 + slot)))
-        }));
-    }
+/// Native descriptors retain every wire word; create-zero semantics are class/layout bounded.
+fn native_fields(state: &TrackedObject, created: bool) -> ObjectFields {
+    let pairs: Vec<_> = state
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| **value != 0)
+        .map(|(index, value)| (index as u16, *value))
+        .collect();
+    let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs);
     if created {
         fields.into_created(vanilla_type(state.object_type))
     } else {
@@ -725,260 +730,15 @@ fn project_fields(state: &TrackedObject, created: bool) -> ObjectFields {
     }
 }
 
-fn project_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
-    let before = projected_pairs(state.object_type, |index| Some(state.get(index)));
-    let mut after_state = state.clone();
-    after_state.apply(fields);
-    let mut after = projected_pairs(state.object_type, |index| Some(after_state.get(index)));
-    after.retain(|pair| !before.contains(pair));
-    let mut projected = ObjectFields::from_pairs(&after);
-    if matches!(state.object_type, ObjectType::Unit | ObjectType::Player) {
-        projected = projected.with_wrath_powers(std::array::from_fn(|slot| {
-            let current = after_state.get(25 + slot);
-            let maximum = after_state.get(33 + slot);
-            (
-                (current != state.get(25 + slot)).then_some(current),
-                (maximum != state.get(33 + slot)).then_some(maximum),
-            )
-        }));
-    }
-    projected
-}
-
-/// `UNIT_NPC_FLAGS` from build 12340's bits (AzerothCore `UnitDefines.h`) to 1.12's: 2.0 split
-/// trainers and vendors by kind and moved every service bit up. Bits 1.12 has no meaning for
-/// (spell click, vehicles, guild bank, mailbox) are dropped.
-fn npc_flags_1_12(flags: u32) -> u32 {
-    const MAP: [(u32, u32); 17] = [
-        (0x0000_0001, 0x0001), // gossip
-        (0x0000_0002, 0x0002), // quest giver
-        (0x0000_0010, 0x0010), // trainer
-        (0x0000_0020, 0x0010), // class trainer
-        (0x0000_0040, 0x0010), // profession trainer
-        (0x0000_0f80, 0x0004), // vendor: generic, ammo, food, poison, reagent
-        (0x0000_1000, 0x4000), // repair
-        (0x0000_2000, 0x0008), // flight master
-        (0x0000_4000, 0x0020), // spirit healer
-        (0x0000_8000, 0x0040), // spirit guide
-        (0x0001_0000, 0x0080), // innkeeper
-        (0x0002_0000, 0x0100), // banker
-        (0x0004_0000, 0x0200), // petitioner
-        (0x0008_0000, 0x0400), // tabard designer
-        (0x0010_0000, 0x0800), // battlemaster
-        (0x0020_0000, 0x1000), // auctioneer
-        (0x0040_0000, 0x2000), // stable master
-    ];
-    MAP.iter()
-        .filter(|(wrath, _)| flags & wrath != 0)
-        .fold(0, |acc, (_, vanilla)| acc | vanilla)
-}
-
-fn projected_pairs(
-    object_type: ObjectType,
-    mut get: impl FnMut(usize) -> Option<u32>,
-) -> Vec<(u16, u32)> {
-    fn copy(out: &mut Vec<(u16, u32)>, value: Option<u32>, dst: u16) {
-        if let Some(value) = value {
-            out.push((dst, value));
-        }
-    }
-    let mut out = Vec::new();
-    for index in 0..=4 {
-        copy(&mut out, get(index), index as u16);
-    }
-    match object_type {
-        ObjectType::Unit | ObjectType::Player => {
-            for (src, dst) in [
-                (6, 6),
-                (7, 7),
-                (8, 8),
-                (9, 9),
-                (12, 10),
-                (13, 11),
-                (14, 12),
-                (15, 13),
-                (16, 14),
-                (17, 15),
-                (18, 16),
-                (19, 17),
-                (20, 20),
-                (21, 21),
-                (22, 144),
-                (23, 36),
-                (24, 22),
-                (25, 23),
-                (26, 24),
-                (27, 25),
-                (28, 26),
-                (29, 27),
-                (32, 28),
-                (33, 29),
-                (34, 30),
-                (35, 31),
-                (36, 32),
-                (37, 33),
-                (54, 34),
-                (55, 35),
-                (59, 46),
-                (61, 125),
-                (62, 126),
-                (63, 127),
-                (64, 128),
-                (65, 129),
-                (66, 130),
-                (67, 131),
-                (68, 132),
-                (69, 133),
-                (75, 139),
-                (76, 140),
-                (77, 141),
-                (78, 142),
-                (79, 143),
-                (81, 146),
-                (83, 148),
-            ] {
-                copy(&mut out, get(src), dst);
-            }
-            if let Some(flags) = get(82) {
-                out.push((147, npc_flags_1_12(flags)));
-            }
-            let bytes1 = get(74);
-            let bytes2 = get(122);
-            if bytes1.is_some() || bytes2.is_some() {
-                let b1 = bytes1.unwrap_or(0);
-                let b2 = bytes2.unwrap_or(0);
-                out.push((
-                    138,
-                    (b1 & 0xff) | (((b2 >> 24) & 0xff) << 16) | (((b1 >> 16) & 0x06) << 24),
-                ));
-            }
-            if let Some(value) = bytes2 {
-                out.push((164, value & 0xff));
-            }
-            if object_type == ObjectType::Player {
-                for (src, dst) in [(150, 190), (151, 191), (152, 192), (153, 193), (154, 194)] {
-                    copy(&mut out, get(src), dst);
-                }
-                for slot in 0..19usize {
-                    copy(&mut out, get(283 + slot * 2), 260 + slot as u16 * 12);
-                    if let Some(v) = get(284 + slot * 2) {
-                        out.push((261 + slot as u16 * 12, v & 0xffff));
-                        out.push((262 + slot as u16 * 12, v >> 16));
-                    }
-                }
-                // Wrath has the same inventory GUID groups, but two extra bank slots and one
-                // extra bank-bag slot; project only the groups the neutral descriptor can hold.
-                for (src, dst, words) in [
-                    (324usize, 486u16, 46usize),
-                    (370, 532, 32),
-                    (402, 564, 48),
-                    (458, 612, 12),
-                    (496, 648, 64),
-                ] {
-                    for offset in 0..words {
-                        copy(&mut out, get(src + offset), dst + offset as u16);
-                    }
-                }
-                copy(&mut out, get(1170), 1176);
-                // The private player block (AzerothCore `UpdateFields.h`, `UNIT_END` 148), as
-                // runs of build-12340 source → 1.12 destination.
-                for (src, dst, words) in [
-                    (148usize, 188u16, 2usize), // duel arbiter
-                    (155, 195, 3),              // bytes 3, duel team, guild timestamp
-                    (634, 716, 2),              // XP, next-level XP
-                    (636, 718, 384),            // skill info
-                    (1020, 1102, 7),            // character points 1-2, tracking, block/dodge/parry
-                    (1029, 1109, 2),            // melee and ranged crit
-                    (1041, 1111, 64),           // explored zones (1.12 holds 64 of 128)
-                    (1169, 1175, 1),            // rested XP
-                    (1171, 1201, 21),           // damage done pos/neg/pct
-                    (1197, 1222, 3),            // field bytes, ammo, self-res spell
-                    (1201, 1226, 24),           // buyback prices and timestamps
-                    (1229, 1260, 2),            // field bytes 2, watched faction
-                ] {
-                    for offset in 0..words {
-                        copy(&mut out, get(src + offset), dst + offset as u16);
-                    }
-                }
-                // The quest log: 3.3.5's slot (from 158) is `id, state, counters 0-1 and 2-3 as
-                // u16 pairs, timer`; 1.12's (from 198) is `id, four 6-bit counters with the
-                // state byte at bit 24, timer`. 1.12 holds 20 of the 25 slots.
-                for slot in 0..20usize {
-                    let src = 158 + slot * 5;
-                    let dst = 198 + slot as u16 * 3;
-                    copy(&mut out, get(src), dst);
-                    let (state, low, high) = (get(src + 1), get(src + 2), get(src + 3));
-                    if state.is_some() || low.is_some() || high.is_some() {
-                        let (low, high) = (low.unwrap_or(0), high.unwrap_or(0));
-                        let counter = |v: u32| (v & 0xffff).min(0x3f);
-                        out.push((
-                            dst + 1,
-                            counter(low)
-                                | counter(low >> 16) << 6
-                                | counter(high) << 12
-                                | counter(high >> 16) << 18
-                                | (state.unwrap_or(0) & 0xff) << 24,
-                        ));
-                    }
-                    copy(&mut out, get(src + 4), dst + 2);
-                }
-            }
-        }
-        ObjectType::GameObject => {
-            for (src, dst) in [(6, 6), (7, 7), (8, 8), (9, 9), (15, 20), (16, 22)] {
-                copy(&mut out, get(src), dst);
-            }
-            if let Some(v) = get(14) {
-                out.push((19, v & 0xffff));
-            }
-            if let Some(v) = get(17) {
-                out.push((14, v & 0xff));
-                out.push((21, (v >> 8) & 0xff));
-            }
-        }
-        ObjectType::DynamicObject => {
-            for (src, dst) in [(6, 6), (7, 7), (8, 8), (9, 9), (10, 10)] {
-                copy(&mut out, get(src), dst);
-            }
-        }
-        ObjectType::Corpse => {
-            for (src, dst) in [
-                (6, 6),
-                (7, 7),
-                (10, 12),
-                (30, 32),
-                (31, 33),
-                (32, 34),
-                (33, 35),
-                (34, 36),
-            ] {
-                copy(&mut out, get(src), dst);
-            }
-            for slot in 0..19usize {
-                copy(&mut out, get(11 + slot), 13 + slot as u16);
-            }
-        }
-        ObjectType::Item | ObjectType::Container => {
-            for index in 6..=21 {
-                copy(&mut out, get(index), index as u16);
-            }
-            for (src, dst) in [(59, 44), (60, 46), (61, 47)] {
-                copy(&mut out, get(src), dst);
-            }
-            if object_type == ObjectType::Container {
-                copy(&mut out, get(64), 48);
-                // Both descriptors expose 36 container GUIDs; Wrath starts them at 66 rather
-                // than the neutral descriptor's 50.
-                for offset in 0..72usize {
-                    copy(&mut out, get(66 + offset), 50 + offset as u16);
-                }
-            }
-        }
-        ObjectType::Object => {}
-    }
-    out.sort_by_key(|pair| pair.0);
-    out.dedup_by_key(|pair| pair.0);
-    out
+/// Sparse deltas preserve explicit zeros, and never manufacture neighboring descriptor words.
+fn native_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
+    let pairs: Vec<_> = fields
+        .values
+        .iter()
+        .filter(|field| state.get(field.index) != field.value)
+        .map(|field| (field.index as u16, field.value))
+        .collect();
+    ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs)
 }
 
 fn entity_kind(object_type: ObjectType) -> EntityKind {
@@ -992,7 +752,7 @@ fn entity_kind(object_type: ObjectType) -> EntityKind {
     }
 }
 
-fn projected_display(object_type: ObjectType, fields: &ObjectFields) -> Option<u32> {
+fn native_display(object_type: ObjectType, fields: &ObjectFields) -> Option<u32> {
     match object_type {
         ObjectType::Unit | ObjectType::Player => fields
             .unit_displayid()
@@ -1129,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_resources_project_all_seven_slots_and_sparse_raw_precision() {
+    fn wrath_resources_preserve_all_seven_slots_and_sparse_raw_precision() {
         let initial = fields(
             ObjectType::Player,
             &[
@@ -1142,19 +902,19 @@ mod tests {
             ],
         );
         let mut state = TrackedObject::from_create(ObjectType::Player, &initial);
-        let mut store = project_fields(&state, true);
+        let mut store = native_fields(&state, true);
         let powers = store.wrath_powers().unwrap();
         assert_eq!(powers[0], (721, 1000));
         assert_eq!(powers[1], (437, 1000));
         assert_eq!(powers[5], (0, 0));
         assert_eq!(powers[6], (659, 1250));
         let delta = fields(ObjectType::Player, &[(26, 439), (31, 0)]);
-        store.merge(project_delta(&state, &delta));
+        store.merge(native_delta(&state, &delta));
         state.apply(&delta);
         assert_eq!(store.wrath_powers().unwrap()[1], (439, 1000));
         assert_eq!(store.wrath_powers().unwrap()[6], (0, 1250));
         assert_eq!(store.wrath_powers().unwrap()[0], (721, 1000));
-        store.merge(project_fields(
+        store.merge(native_fields(
             &TrackedObject::from_create(ObjectType::Player, &fields(ObjectType::Player, &[])),
             true,
         ));
@@ -1406,7 +1166,7 @@ mod tests {
     }
 
     #[test]
-    fn player_create_projects_renderer_fields_and_nine_speeds() {
+    fn player_create_retains_native_renderer_fields_and_nine_speeds() {
         let guid = 0x42;
         let update = UpdateObject {
             objects: vec![ObjectUpdate::Create {
@@ -1479,7 +1239,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_resources_sidecar_only_wire_deltas_are_delivered_and_zero_retained() {
+    fn wrath_resource_wire_deltas_are_delivered_and_zero_retained() {
         for index in [30, 31, 38, 39] {
             let guid = 42;
             let mut adapter = WrathEventAdapter::new();
@@ -1490,7 +1250,7 @@ mod tests {
                     0,
                 )
                 .unwrap();
-            let mut store = project_fields(adapter.objects.get(&guid).unwrap(), true);
+            let mut store = native_fields(adapter.objects.get(&guid).unwrap(), true);
             for value in [439, 0] {
                 let WrathDispatch::Handled { session_events, .. } = adapter
                     .dispatch(SMSG_UPDATE_OBJECT, &raw_delta(guid, &[(index, value)]), 0)
@@ -1515,13 +1275,11 @@ mod tests {
                 assert!(session_events.is_empty());
             }
         }
-        assert!(ObjectFields::default()
-            .with_wrath_powers([(None, None); 7])
-            .is_empty());
+        assert!(ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[]).is_empty());
     }
 
     #[test]
-    fn raw_item_and_container_descriptors_project_supported_neutral_fields_and_clears() {
+    fn raw_item_and_container_descriptors_retain_native_fields_and_clears() {
         let item_guid = 0x4000_0000_0000_0042;
         let mut adapter = WrathEventAdapter::new();
         let create = raw_create(
@@ -1583,7 +1341,7 @@ mod tests {
     }
 
     #[test]
-    fn raw_player_inventory_groups_and_coinage_project_without_spilling_wrath_extras() {
+    fn raw_player_inventory_groups_and_coinage_retain_wrath_extras() {
         let guid = 0x42;
         let mut adapter = WrathEventAdapter::new();
         let create = raw_create(
@@ -1627,8 +1385,10 @@ mod tests {
         assert_eq!(fields.player_keyring_slot(0), Some(0x4142_4344_4546_4748));
         assert_eq!(fields.player_keyring_slot(31), Some(0x5152_5354_5556_5758));
         assert_eq!(fields.player_money(), Some(123_456));
-        assert_eq!(fields.player_bank_slot(24), None);
-        assert_eq!(fields.player_bank_bag_slot(6), None);
+        assert_eq!(fields.player_bank_slot(27), Some(0x0000_bbbb_0000_aaaa));
+        assert_eq!(fields.player_bank_slot(28), None);
+        assert_eq!(fields.player_bank_bag_slot(6), Some(0x0000_dddd_0000_cccc));
+        assert_eq!(fields.player_bank_bag_slot(7), None);
 
         let clear = raw_delta(guid, &[(324, 0), (325, 0), (370, 0), (371, 0)]);
         let WrathDispatch::Handled { session_events, .. } =
@@ -1644,7 +1404,7 @@ mod tests {
     }
 
     #[test]
-    fn sparse_value_zero_is_projected_and_type_state_is_removed() {
+    fn sparse_value_zero_is_native_and_type_state_is_removed() {
         let guid = 0xf130_0001_0000_0001;
         let mut adapter = WrathEventAdapter::new();
         let create = UpdateObject {
@@ -1795,32 +1555,32 @@ mod tests {
 }
 
 #[cfg(test)]
-mod quest_log_projection_tests {
+mod native_descriptor_tests {
     use super::*;
 
     #[test]
-    fn npc_flags_translate_to_the_1_12_bits() {
-        // Godric Rothgar: gossip, vendor, repair (3.3.5 0x1081) → 1.12 0x4005.
-        let pairs = projected_pairs(ObjectType::Unit, |i| Some(if i == 82 { 0x1081 } else { 0 }));
-        assert!(pairs.contains(&(147, 0x4005)));
-        assert_eq!(npc_flags_1_12(0x0001_0003), 0x0083); // innkeeper quest giver
+    fn npc_flags_retain_services_absent_from_vanilla() {
+        let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(82, 0x1100_1081)]);
+        assert_eq!(fields.unit_npc_flags(), 0x1100_1081);
     }
 
     #[test]
-    fn a_quest_slot_packs_its_counters_and_state_into_the_1_12_slot() {
-        let mut fields = std::collections::HashMap::new();
-        // Slot 1: quest 783, complete, counters 3, 1, 0, 70 (clamped to 63), timer 0.
-        fields.insert(158 + 5, 783u32);
-        fields.insert(159 + 5, 1);
-        fields.insert(160 + 5, 3 | 1 << 16);
-        fields.insert(161 + 5, 70 << 16);
-        let pairs = projected_pairs(ObjectType::Player, |i| fields.get(&i).copied().or(Some(0)));
-        let at = |dst: u16| pairs.iter().find(|(d, _)| *d == dst).map(|(_, v)| *v);
-        assert_eq!(at(201), Some(783));
-        let packed = at(202).unwrap();
-        assert_eq!(packed & 0x3f, 3);
-        assert_eq!((packed >> 6) & 0x3f, 1);
-        assert_eq!((packed >> 18) & 0x3f, 63);
-        assert_eq!(packed >> 24, 1);
+    fn final_quest_slot_preserves_unclamped_counters_and_timer() {
+        let fields = ObjectFields::from_native_pairs(
+            FieldLayout::Wrath12340,
+            &[
+                (278, 783),
+                (279, 1),
+                (280, 3 | (65535 << 16)),
+                (281, 70 << 16),
+                (282, 12345),
+            ],
+        );
+        let quest = fields.player_quest_log(24).unwrap();
+        assert_eq!(quest.quest_id, 783);
+        assert_eq!(quest.counters, [3, 65535, 0, 70]);
+        assert_eq!(quest.state, 1);
+        assert_eq!(quest.timer, 12345);
+        assert_eq!(fields.player_quest_log(25), None);
     }
 }

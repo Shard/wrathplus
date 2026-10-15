@@ -73,13 +73,6 @@ fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
         }
         return;
     }
-    // Transitional projection path, removed together with the Vanilla-shaped Wrath store.
-    let mut powers = [(None, None); 7];
-    let Some(slot) = powers.get_mut(usize::from(power_type)) else {
-        return;
-    };
-    slot.0 = Some(value);
-    store.merge(ObjectFields::default().with_wrath_powers(powers));
 }
 
 fn on_progress(In(event): In<SessionEvent>, mut state: ResMut<WrathProgress>) {
