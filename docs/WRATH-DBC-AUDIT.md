@@ -53,7 +53,6 @@ expected row, generic parse success, or an in-range/injective map as certificati
 
 | Table | Existing reader/test location to extend |
 | --- | --- |
-| Material | `src/material.rs` |
 | GroundEffectTexture | `src/ground_effects.rs` |
 
 Next bounded units should independently inspect native rows and layout sources,
@@ -204,3 +203,35 @@ advanced sound support, native playback or archive availability of each path.
 
 SoundEntries unit gates: formats **535 passed, 0 failed**; installed **1 passed,
 0 failed**; app **4487 passed, 0 failed, 12 ignored**. Rustfmt and diff checks pass.
+
+
+## Material native layout and installed regression
+
+Filename accessor `0x8b47d0` returns `DBFilesClient\Material.dbc`. Header
+loader `0x6489c0` validates WDBC, five columns and 20-byte records. Vtable
+`0xa283c0` (object `0xad41a8`) binds that loader at `+4` and raw loader
+`0x65e240` at `+0x0c`. The raw loader allocates 20 bytes per record, calls
+decoder `0x8b8ba0`, and builds a dense first-word ID index; missing IDs are
+null and duplicate IDs overwrite earlier entries. Decoder `0x8b8ba0` reads
+five consecutive four-byte words at offsets 0, 4, 8, 12 and 16 without
+reordering. This proves offsets, not semantic names or scalar types.
+
+The current three-column projection (ID, flags, foley) retains raw columns
+0–2 correctly; no production mapping change was required. Appended columns
+3–4 remain unexposed and no new semantics are assigned here. Existing
+metal/armor-slot bit interpretation is tested as reader behavior, not newly
+certified Wrath runtime impact routing.
+
+`tests/wrath_material.rs` asserts the effective enUS table's eight records,
+selected raw plate words `[6, 3, 1004, 696, 701]`, all eight public foley,
+metal and armor-slot results, and missing-ID defaults. Plate/chain/leather
+foley kits are 1004/1005/1003; cloth remains silent despite nonzero appended
+words. Expected raw values were independently inspected from installed data,
+not copied from the production reader. This closes Material's explicit
+known-row gap only: no claim of complete stock coverage, sound availability,
+live playback, or native impact/foley parity is intended.
+
+Material unit gates: formats **535 passed, 0 failed**; installed
+`wrath_material` **1 passed, 0 failed**; app **4487 passed, 0 failed,
+12 ignored**. Rustfmt and diff checks pass. An initial gate-script target typo
+prevented installed tests from running; the corrected full gate run passed.
