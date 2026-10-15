@@ -1476,7 +1476,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             (v::CMSG_BUYBACK_ITEM, v::encode_buyback_item(vendor, slot))
         }
         ClientCommand::RepairItem { vendor, item_guid } => {
-            (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid))
+            (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid, false))
         }
         ClientCommand::TaxiNodeStatusQuery { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXINODE_STATUS_QUERY, benilla_protocol::wrath_taxi::encode_query(guid)),
         ClientCommand::TaxiQueryNodes { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXIQUERYAVAILABLENODES, benilla_protocol::wrath_taxi::encode_query(guid)),
@@ -3013,3 +3013,22 @@ mod lfg_outbound_tests;
 #[cfg(test)]
 #[path = "wrath/guild_bank_tests.rs"]
 mod guild_bank_tests;
+
+#[cfg(test)]
+mod repair_funding_tests {
+    use super::*;
+
+    #[test]
+    fn existing_vendor_repairs_use_personal_money_only() {
+        for item_guid in [0, 0x8877665544332211] {
+            let command = ClientCommand::RepairItem { vendor: 0x0102030405060708, item_guid };
+            assert_eq!(route(&command), WrathRoute::NativeSession);
+            let (opcode, body) = session_packet(command);
+            assert_eq!(opcode, benilla_protocol::wrath_vendor::CMSG_REPAIR_ITEM);
+            let mut expected = 0x0102030405060708u64.to_le_bytes().to_vec();
+            expected.extend(item_guid.to_le_bytes());
+            expected.push(0);
+            assert_eq!(body, expected);
+        }
+    }
+}
