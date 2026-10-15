@@ -121,6 +121,8 @@ pub(crate) struct GxWorld {
 
 use super::pool::GxTexturePool;
 
+mod ao;
+
 /// Record column w, bit 14: the item's interior fog lane, read by `static_gx.wgsl`. Bit 0 is the
 /// kill bit and bits 1..=13 the probe slot.
 const RECORD_FOG_BIT: u32 = 1 << 14;
@@ -171,6 +173,9 @@ struct GxPipelines {
     /// Keyed `(cutout, two_sided)`, re-specialized if the world view's (samples, format) changes.
     pipelines: HashMap<(bool, bool), CachedRenderPipelineId>,
     specialized_for: Option<(u32, TextureFormat)>,
+    ao_layout: BindGroupLayoutDescriptor,
+    ao_pipelines: HashMap<(bool, bool), CachedRenderPipelineId>,
+    normal_pipelines: HashMap<(bool, bool), CachedRenderPipelineId>,
 }
 
 fn init_pipelines(mut commands: Commands, render_device: Res<RenderDevice>) {
@@ -224,6 +229,17 @@ fn init_pipelines(mut commands: Commands, render_device: Res<RenderDevice>) {
         sampler_clamp: make("static_gx_clamp", AddressMode::ClampToEdge),
         pipelines: HashMap::default(),
         specialized_for: None,
+        ao_layout: BindGroupLayoutDescriptor::new(
+            "static_gx_ao_layout",
+            &BindGroupLayoutEntries::single(
+                ShaderStages::FRAGMENT,
+                bevy::render::render_resource::binding_types::texture_2d(
+                    TextureSampleType::Float { filterable: false },
+                ),
+            ),
+        ),
+        ao_pipelines: HashMap::default(),
+        normal_pipelines: HashMap::default(),
     });
 }
 
@@ -304,6 +320,8 @@ fn prepare_static_gx(
         let shader: Handle<Shader> =
             asset_server.load("embedded://benilla_world/shaders/static_gx.wgsl");
         pipes.pipelines.clear();
+        pipes.ao_pipelines.clear();
+        pipes.normal_pipelines.clear();
         for cutout in [false, true] {
             for two_sided in [false, true] {
                 let mut defs = vec![];
@@ -644,6 +662,78 @@ fn prepare_view_bind(
     )));
 }
 
+// Colour and AO coverage consume exactly the same retained selection and allocator ranges.
+fn resolve_regions<'a>(
+    gx: &'a GxWorld,
+    cache: &'a GxGpuCache,
+) -> Vec<(&'a GxCellGpu, &'a GxCellDraw, Option<&'a GxSel>)> {
+    // WMO regions first, then the doodad phase near-first, the 1.12 client's WMO-then-doodad
+    // drain order. Cells draw whole; a region draws only its admitted runs.
+    let mut resolved: Vec<(&GxCellGpu, &GxCellDraw, Option<&GxSel>)> = Vec::new();
+    for (entity, sel) in &gx.visible_wmos {
+        if let (Some(gpu), Some(draw)) = (cache.wmos.get(entity), gx.wmos.get(entity)) {
+            resolved.push((gpu, draw, Some(sel)));
+        }
+    }
+    for vis in &gx.visible {
+        match vis {
+            GxDoodadVis::Cell(cell) => {
+                if let (Some(gpu), Some(draw)) = (cache.cells.get(cell), gx.cells.get(cell)) {
+                    resolved.push((gpu, draw, None));
+                }
+            }
+            GxDoodadVis::Prop(entity, sel) => {
+                if let (Some(gpu), Some(draw)) = (cache.props.get(entity), gx.props.get(entity)) {
+                    resolved.push((gpu, draw, Some(sel)));
+                }
+            }
+        }
+    }
+    resolved
+}
+
+fn draw_regions<'w>(
+    pass: &mut bevy::render::render_phase::TrackedRenderPass<'w>,
+    resolved: &[(&'w GxCellGpu, &'w GxCellDraw, Option<&'w GxSel>)],
+    ready: &HashMap<(bool, bool), &'w RenderPipeline>,
+    meshes: &'w RenderAssets<RenderMesh>,
+    allocator: &'w MeshAllocator,
+) {
+    for (gpu, draw, sel) in resolved {
+        let Some(mesh) = meshes.get(draw.mesh.id()) else {
+            continue;
+        };
+        let (Some(vslice), Some(islice)) = (
+            allocator.mesh_vertex_slice(&draw.mesh.id()),
+            allocator.mesh_index_slice(&draw.mesh.id()),
+        ) else {
+            continue;
+        };
+        let index_format = match &mesh.buffer_info {
+            bevy::render::mesh::RenderMeshBufferInfo::Indexed { index_format, .. } => *index_format,
+            bevy::render::mesh::RenderMeshBufferInfo::NonIndexed => continue,
+        };
+        pass.set_vertex_buffer(0, vslice.buffer.slice(..));
+        pass.set_index_buffer(islice.buffer.slice(..), index_format);
+        for run in &gpu.runs {
+            // A region's run draws only if its selection key is admitted; a cell run always.
+            if let (Some(sel), Some(group)) = (sel, run.group) {
+                if !sel.drawn.get(usize::from(group)).copied().unwrap_or(false) {
+                    continue;
+                }
+            }
+            pass.set_render_pipeline(ready[&(run.cutout, run.two_sided)]);
+            pass.set_bind_group(1, &gpu.bind_groups[run.slot].1, &[]);
+            pass.draw_indexed(
+                (islice.range.start + run.index_range.start)
+                    ..(islice.range.start + run.index_range.end),
+                i32::try_from(vslice.range.start).unwrap_or(0),
+                0..1,
+            );
+        }
+    }
+}
+
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 struct StaticGxLabel;
 
@@ -656,13 +746,14 @@ impl ViewNode for StaticGxNode {
         &'static ViewDepthTexture,
         &'static ViewUniformOffset,
         &'static StaticGxView,
+        Option<&'static ao::GxAoBind>,
     );
 
     fn run<'w>(
         &self,
         _graph: &mut RenderGraphContext,
         render_context: &mut RenderContext<'w>,
-        (target, depth, view_offset, _marker): QueryItem<'w, '_, Self::ViewQuery>,
+        (target, depth, view_offset, _marker, ao_bind): QueryItem<'w, '_, Self::ViewQuery>,
         world: &'w World,
     ) -> Result<(), NodeRunError> {
         let _t = super::gx_perf_guard(4);
@@ -678,36 +769,22 @@ impl ViewNode for StaticGxNode {
         };
         let meshes = world.resource::<RenderAssets<RenderMesh>>();
         let allocator = world.resource::<MeshAllocator>();
-        // WMO regions first, then the doodad phase near-first, the 1.12 client's WMO-then-doodad
-        // drain order. Cells draw whole; a region draws only its admitted runs.
-        let mut resolved: Vec<(&GxCellGpu, &GxCellDraw, Option<&GxSel>)> = Vec::new();
-        for (entity, sel) in &gx.visible_wmos {
-            if let (Some(gpu), Some(draw)) = (cache.wmos.get(entity), gx.wmos.get(entity)) {
-                resolved.push((gpu, draw, Some(sel)));
-            }
-        }
-        for vis in &gx.visible {
-            match vis {
-                GxDoodadVis::Cell(cell) => {
-                    if let (Some(gpu), Some(draw)) = (cache.cells.get(cell), gx.cells.get(cell)) {
-                        resolved.push((gpu, draw, None));
-                    }
-                }
-                GxDoodadVis::Prop(entity, sel) => {
-                    if let (Some(gpu), Some(draw)) = (cache.props.get(entity), gx.props.get(entity))
-                    {
-                        resolved.push((gpu, draw, Some(sel)));
-                    }
-                }
-            }
-        }
+        let resolved = resolve_regions(gx, cache);
         if resolved.is_empty() {
             return Ok(());
         }
         // All four pipelines or none: a region drawing only its opaque half would flash its
         // cutout content off for a frame.
         let mut ready: HashMap<(bool, bool), &RenderPipeline> = HashMap::default();
-        for (k, id) in &pipes.pipelines {
+        let selected_pipelines = if ao_bind.is_some() {
+            &pipes.ao_pipelines
+        } else {
+            &pipes.pipelines
+        };
+        if selected_pipelines.len() != 4 {
+            return Ok(());
+        }
+        for (k, id) in selected_pipelines {
             match pipeline_cache.get_render_pipeline(*id) {
                 Some(p) => {
                     ready.insert(*k, p);
@@ -728,41 +805,10 @@ impl ViewNode for StaticGxNode {
         });
         let span = diagnostics.pass_span(&mut pass, "static_gx");
         pass.set_bind_group(0, &view_bind.0, &[view_offset.offset]);
-        for (gpu, draw, sel) in &resolved {
-            let Some(mesh) = meshes.get(draw.mesh.id()) else {
-                continue;
-            };
-            let (Some(vslice), Some(islice)) = (
-                allocator.mesh_vertex_slice(&draw.mesh.id()),
-                allocator.mesh_index_slice(&draw.mesh.id()),
-            ) else {
-                continue;
-            };
-            let index_format = match &mesh.buffer_info {
-                bevy::render::mesh::RenderMeshBufferInfo::Indexed { index_format, .. } => {
-                    *index_format
-                }
-                bevy::render::mesh::RenderMeshBufferInfo::NonIndexed => continue,
-            };
-            pass.set_vertex_buffer(0, vslice.buffer.slice(..));
-            pass.set_index_buffer(islice.buffer.slice(..), index_format);
-            for run in &gpu.runs {
-                // A region's run draws only if its selection key is admitted; a cell run always.
-                if let (Some(sel), Some(group)) = (sel, run.group) {
-                    if !sel.drawn.get(usize::from(group)).copied().unwrap_or(false) {
-                        continue;
-                    }
-                }
-                pass.set_render_pipeline(ready[&(run.cutout, run.two_sided)]);
-                pass.set_bind_group(1, &gpu.bind_groups[run.slot].1, &[]);
-                pass.draw_indexed(
-                    (islice.range.start + run.index_range.start)
-                        ..(islice.range.start + run.index_range.end),
-                    i32::try_from(vslice.range.start).unwrap_or(0),
-                    0..1,
-                );
-            }
+        if let Some(ao_bind) = ao_bind {
+            pass.set_bind_group(2, &ao_bind.0, &[]);
         }
+        draw_regions(&mut pass, &resolved, &ready, meshes, allocator);
         span.end(&mut pass);
         Ok(())
     }
@@ -790,7 +836,16 @@ pub(super) fn build(app: &mut App) {
             (
                 prepare_static_gx.in_set(RenderSystems::PrepareResources),
                 prepare_view_bind.in_set(RenderSystems::PrepareBindGroups),
+                ao::prepare_pipelines
+                    .in_set(RenderSystems::PrepareResources)
+                    .after(prepare_static_gx),
+                ao::prepare_bind_groups.in_set(RenderSystems::PrepareBindGroups),
             ),
+        )
+        .add_render_graph_node::<ViewNodeRunner<ao::GxNormalNode>>(Core3d, ao::GxNormalLabel)
+        .add_render_graph_edges(
+            Core3d,
+            (Node3d::LatePrepass, ao::GxNormalLabel, Node3d::EndPrepasses),
         )
         .add_render_graph_node::<ViewNodeRunner<StaticGxNode>>(Core3d, StaticGxLabel)
         // Before bevy's opaque pass, as early-z occluders for terrain. This pass takes the depth
