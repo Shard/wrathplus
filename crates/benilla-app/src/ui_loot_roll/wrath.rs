@@ -1,4 +1,7 @@
 //! Lossless native roll inbox. Presentation drains updates separately from the 1.12 roll model.
+#[path = "wrath_lifecycle.rs"]
+mod lifecycle;
+
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_roll::Roll, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
