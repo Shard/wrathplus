@@ -50,18 +50,33 @@ pub fn encode_item_query(entry: u32, guid: u64) -> Vec<u8> {
     body
 }
 
-/// Decode one complete `SMSG_ITEM_QUERY_SINGLE_RESPONSE` body.
-///
-/// A negative lookup is represented only by `entry | 0x8000_0000` and returns `None`; no item is
-/// fabricated. Positive responses are projected into the existing expansion-neutral
-/// [`ItemInfo`]. The complete Wrath body is nevertheless traversed and trailing bytes are
-/// rejected. Projection deliberately discards fields with no `ItemInfo` slot: sound override
-/// subclass, `Flags2`, scaling-stat distribution/value, random suffix, totem category, sockets,
-/// socket bonus, gem properties, disenchant skill, armor-damage modifier, duration, item-limit
-/// category, and holiday id. Wrath `BagFamily` is a bit mask, unlike the Vanilla field's enum
-/// semantics; [`ItemInfo::bag_family`] preserves the raw word and callers must interpret it for
-/// the active expansion.
+/// Native template metadata used by build-12340 loot-roll reason computation (`0x6fa7a0`).
+/// Keep this separate from the expansion-neutral `ItemInfo` projection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollMetadata {
+    pub flags2: u32,
+    /// Signed template +0x1e0: negative means this item cannot be disenchanted.
+    pub required_disenchant_skill: i32,
+    pub item_limit_category: u32,
+}
+
+/// A lossless roll-metadata seam alongside the existing item projection.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeItemTemplate {
+    pub info: ItemInfo,
+    pub roll: RollMetadata,
+}
+
+/// Decode the expansion-neutral projection without changing legacy callers.
 pub fn decode_item_query_response(body: &[u8]) -> Result<(u32, Option<ItemInfo>)> {
+    let (entry, template) = decode_native_item_query_response(body)?;
+    Ok((entry, template.map(|template| template.info)))
+}
+
+/// Decode the complete native response, retaining fields needed by `0x6fa7a0` and ownership
+/// helper `0x754dd0`. Negative lookup returns `None`; truncation and trailing bytes are rejected.
+/// The wire layout follows AzerothCore `ItemHandler.cpp::HandleItemQuerySingleOpcode`.
+pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<NativeItemTemplate>)> {
     let mut input = Input::new(body);
     let wire_entry = input.u32()?;
     if wire_entry & 0x8000_0000 != 0 {
@@ -79,7 +94,7 @@ pub fn decode_item_query_response(body: &[u8]) -> Result<(u32, Option<ItemInfo>)
     let display_info_id = input.u32()?;
     let quality = input.u32()?;
     let flags = input.u32()?;
-    let _flags2 = input.u32()?;
+    let flags2 = input.u32()?;
     let buy_price = input.u32()?;
     let sell_price = input.u32()?;
     let inventory_type = input.u32()?;
@@ -198,68 +213,75 @@ pub fn decode_item_query_response(body: &[u8]) -> Result<(u32, Option<ItemInfo>)
     }
     let _socket_bonus = input.u32()?;
     let _gem_properties = input.u32()?;
-    let _required_disenchant_skill = input.u32()?;
+    let required_disenchant_skill = input.i32()?;
     let _armor_damage_modifier = input.f32()?;
     let _duration = input.u32()?;
-    let _item_limit_category = input.u32()?;
+    let item_limit_category = input.u32()?;
     let _holiday_id = input.u32()?;
     input.finish()?;
 
     Ok((
         wire_entry,
-        Some(ItemInfo {
-            class,
-            subclass,
-            name,
-            display_info_id,
-            quality,
-            flags,
-            buy_price,
-            sell_price,
-            inventory_type,
-            allowable_class,
-            allowable_race,
-            item_level,
-            required_level,
-            required_skill,
-            required_skill_rank,
-            required_spell,
-            required_honor_rank,
-            required_city_rank,
-            required_rep_faction,
-            required_rep_rank,
-            max_count,
-            stackable,
-            container_slots,
-            stats,
-            damages,
-            dmg_min,
-            dmg_max,
-            dmg_type,
-            armor,
-            resistances,
-            delay_ms,
-            ammo_type,
-            ranged_mod_range,
-            spells,
-            spell_charges_0,
-            use_spell,
-            bonding,
-            description,
-            page_text,
-            language_id,
-            page_material,
-            start_quest,
-            lock_id,
-            material,
-            sheath,
-            random_property,
-            block,
-            item_set,
-            max_durability,
-            area,
-            map,
-            bag_family,
+        Some(NativeItemTemplate {
+            roll: RollMetadata {
+                flags2,
+                required_disenchant_skill,
+                item_limit_category,
+            },
+            info: ItemInfo {
+                class,
+                subclass,
+                name,
+                display_info_id,
+                quality,
+                flags,
+                buy_price,
+                sell_price,
+                inventory_type,
+                allowable_class,
+                allowable_race,
+                item_level,
+                required_level,
+                required_skill,
+                required_skill_rank,
+                required_spell,
+                required_honor_rank,
+                required_city_rank,
+                required_rep_faction,
+                required_rep_rank,
+                max_count,
+                stackable,
+                container_slots,
+                stats,
+                damages,
+                dmg_min,
+                dmg_max,
+                dmg_type,
+                armor,
+                resistances,
+                delay_ms,
+                ammo_type,
+                ranged_mod_range,
+                spells,
+                spell_charges_0,
+                use_spell,
+                bonding,
+                description,
+                page_text,
+                language_id,
+                page_material,
+                start_quest,
+                lock_id,
+                material,
+                sheath,
+                random_property,
+                block,
+                item_set,
+                max_durability,
+                area,
+                map,
+                bag_family,
+            },
         }),
     ))
 }
@@ -457,6 +479,42 @@ mod tests {
         word(&mut out, 1901);
         word(&mut out, 2001);
         out
+    }
+
+    #[test]
+    fn native_roll_metadata_retains_flags_category_and_signed_skill() {
+        let mut body = dense_positive();
+        let skill_offset = body.len() - 20;
+        for skill in [i32::MIN, -1, 0, 450, i32::MAX] {
+            body[skill_offset..skill_offset + 4].copy_from_slice(&skill.to_le_bytes());
+            let (entry, template) = decode_native_item_query_response(&body).unwrap();
+            let template = template.unwrap();
+            assert_eq!(entry, 0x0102_0304);
+            assert_eq!(
+                template.roll,
+                RollMetadata {
+                    flags2: 0x1020_3040,
+                    required_disenchant_skill: skill,
+                    item_limit_category: 1901,
+                }
+            );
+            assert_eq!(
+                decode_item_query_response(&body).unwrap(),
+                (entry, Some(template.info))
+            );
+        }
+        assert_eq!(
+            decode_native_item_query_response(&0x8000_0123u32.to_le_bytes()).unwrap(),
+            (0x123, None)
+        );
+        for end in 0..body.len() {
+            assert!(decode_native_item_query_response(&body[..end]).is_err());
+        }
+        body.push(0);
+        assert!(matches!(
+            decode_native_item_query_response(&body),
+            Err(ItemCodecError::TrailingBytes(1))
+        ));
     }
 
     #[test]
