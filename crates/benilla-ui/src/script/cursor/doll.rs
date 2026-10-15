@@ -15,7 +15,7 @@ use super::{queue_cursor_update, queue_lock_changed, CursorItem, CursorPayload, 
 pub(super) fn pickup_inventory_item(model: &mut Model, id: u32) -> bool {
     // Head 1 to Tabard 19, the bag slots 20-23, and the bank bag slots, which only `PutItemInBag`
     // reaches (`0x4c7c00` calls `0x4c7300`). Ammo (0) is refused; its leg is not built.
-    if !(1..=23).contains(&id) && !super::bag_verbs::BANK_BAG_INV_SLOTS.contains(&id) {
+    if !(1..=23).contains(&id) && !model.bank_bag_inventory_slots().contains(&(id as usize)) {
         return false;
     }
     // Only a held item (`0x4c769a`) or vendor row (`0x4c76a5`) takes the click first. Past them
@@ -71,7 +71,7 @@ pub(super) fn pickup_inventory_item(model: &mut Model, id: u32) -> bool {
         }
         Some(CursorPayload::Item(held)) => {
             // A split or a misfit stays held, with no event: nothing changed.
-            if held.count.is_some() || !super::bag_verbs::fits_slot(&held, id) {
+            if held.count.is_some() || !super::bag_verbs::fits_slot(model, &held, id) {
                 model.cursor = Some(CursorPayload::Item(held));
                 return false;
             }
@@ -131,7 +131,7 @@ pub(super) fn equip_cursor_item(model: &mut Model, id: u32) -> bool {
 /// `InventoryType`.
 pub(super) fn cursor_can_go_in_slot(model: &Model, id: u32) -> bool {
     match &model.cursor {
-        Some(CursorPayload::Item(item)) => super::bag_verbs::fits_slot(item, id),
+        Some(CursorPayload::Item(item)) => super::bag_verbs::fits_slot(model, item, id),
         _ => false,
     }
 }
