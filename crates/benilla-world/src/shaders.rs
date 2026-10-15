@@ -21,7 +21,7 @@ pub(crate) fn plugin(app: &mut App) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use bevy::asset::io::AssetSourceId;
     use bevy::prelude::*;
 
@@ -82,9 +82,19 @@ mod tests {
     /// DefaultPlugins embed Bevy's shader libraries even with rendering disabled. Read that
     /// virtual source, not a developer's Cargo registry: this also works in CI/offline installs.
     fn validation_cache() -> (bevy::shader::ShaderCache<(), ()>, Assets<Shader>) {
+        library_cache(bevy::shader::ShaderCache::new(
+            bevy::render::render_resource::WgpuFeatures::empty(),
+            bevy::render::render_resource::DownlevelFlags::all(),
+            validate_module,
+        ))
+    }
+
+    // CPU composition and the opt-in GPU smoke use exactly the same embedded imports.
+    pub(crate) fn library_cache<M, D>(
+        mut cache: bevy::shader::ShaderCache<M, D>,
+    ) -> (bevy::shader::ShaderCache<M, D>, Assets<Shader>) {
         use bevy::asset::io::Reader;
         use bevy::render::{
-            render_resource::{DownlevelFlags, WgpuFeatures},
             settings::{RenderCreation, WgpuSettings},
             RenderPlugin,
         };
@@ -114,11 +124,6 @@ mod tests {
 
         let server = app.world().resource::<AssetServer>();
         let source = server.get_source(AssetSourceId::from("embedded")).unwrap();
-        let mut cache = bevy::shader::ShaderCache::new(
-            WgpuFeatures::empty(),
-            DownlevelFlags::all(),
-            validate_module,
-        );
         let mut assets = Assets::<Shader>::default();
         bevy::tasks::block_on(async {
             let mut directories = vec![std::path::PathBuf::new()];

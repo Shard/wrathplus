@@ -122,6 +122,8 @@ pub(crate) struct GxWorld {
 use super::pool::GxTexturePool;
 
 mod ao;
+#[cfg(test)]
+mod gpu_smoke;
 
 /// Record column w, bit 14: the item's interior fog lane, read by `static_gx.wgsl`. Bit 0 is the
 /// kill bit and bits 1..=13 the probe slot.
