@@ -126,13 +126,13 @@ pub struct MclqChunk {
     pub tile_flags: [u8; 64],
 }
 
-/// Wrath MH2O vertex payload layout (`SMLiquidInstance::LVF`).
+/// Build-12340 MH2O payload layouts (native accessors 0x8a3130/60/b0).
+/// Later combined height/UV/depth layouts are not supported by this client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mh2oVertexFormat {
     HeightDepth,
     HeightTextureCoordinates,
     Depth,
-    HeightTextureCoordinatesDepth,
 }
 
 impl Mh2oVertexFormat {
@@ -141,7 +141,6 @@ impl Mh2oVertexFormat {
             0 => Some(Self::HeightDepth),
             1 => Some(Self::HeightTextureCoordinates),
             2 => Some(Self::Depth),
-            3 => Some(Self::HeightTextureCoordinatesDepth),
             _ => None,
         }
     }
@@ -161,8 +160,8 @@ pub struct Mh2oLayer {
     pub width: u8,
     pub height: u8,
     pub exists: Vec<bool>,
-    /// Absolute liquid heights. LVF 2 is defined at zero; a missing height payload uses
-    /// `min_height` for the formats which carry heights.
+    /// Absolute liquid heights. Selector 2 is zero; selectors 0/1 require a payload.
+    /// Missing height data is rejected rather than synthesizing `min_height`.
     pub heights: Vec<f32>,
     pub depths: Option<Vec<u8>>,
     pub texture_coordinates: Option<Vec<[u16; 2]>>,
@@ -708,31 +707,24 @@ fn read_mh2o_layer(data: &[u8], raw: &[u8; MH2O_INSTANCE_SIZE]) -> Result<Mh2oLa
             .collect()
     };
 
-    let mut heights = vec![
-        if vertex_format == Mh2oVertexFormat::Depth {
-            0.0
-        } else {
-            min_height
-        };
-        vertex_count
-    ];
-    let mut depths = None;
+    // Native height accessor has no offset-zero fallback for selectors 0/1.
+    // Fail closed instead of reading the MH2O header as floats or inventing a plane.
+    if vertex_offset == 0 && vertex_format != Mh2oVertexFormat::Depth {
+        return Err(Error::Invalid("MH2O missing height payload"));
+    }
+    let mut heights = vec![0.0; vertex_count];
+    // Native 0x8a3160 explicitly returns 255 for selector 2 with offset zero.
+    let mut depths = (vertex_format == Mh2oVertexFormat::Depth).then(|| vec![255; vertex_count]);
     let mut texture_coordinates = None;
     if vertex_offset != 0 {
         let block_len = vertex_count
             .checked_mul(4)
             .ok_or(Error::Invalid("MH2O vertex data overflow"))?;
         let has_heights = vertex_format != Mh2oVertexFormat::Depth;
-        let has_uvs = matches!(
-            vertex_format,
-            Mh2oVertexFormat::HeightTextureCoordinates
-                | Mh2oVertexFormat::HeightTextureCoordinatesDepth
-        );
+        let has_uvs = vertex_format == Mh2oVertexFormat::HeightTextureCoordinates;
         let has_depths = matches!(
             vertex_format,
-            Mh2oVertexFormat::HeightDepth
-                | Mh2oVertexFormat::Depth
-                | Mh2oVertexFormat::HeightTextureCoordinatesDepth
+            Mh2oVertexFormat::HeightDepth | Mh2oVertexFormat::Depth
         );
         let total_len = (if has_heights { block_len } else { 0usize })
             .checked_add(if has_uvs { block_len } else { 0 })
@@ -973,7 +965,7 @@ mod tests {
 
     #[test]
     fn mh2o_reads_masks_and_all_wrath_vertex_formats() {
-        for format in 0..=3u16 {
+        for format in 0..=2u16 {
             let vertex_count = 6usize; // width 2, height 1
             let mut vertex_data = Vec::new();
             if format != 2 {
@@ -981,13 +973,13 @@ mod tests {
                     vertex_data.extend_from_slice(&(20.0 + n as f32).to_le_bytes());
                 }
             }
-            if format == 1 || format == 3 {
+            if format == 1 {
                 for n in 0..vertex_count as u16 {
                     vertex_data.extend_from_slice(&(n + 100).to_le_bytes());
                     vertex_data.extend_from_slice(&(n + 200).to_le_bytes());
                 }
             }
-            if format == 0 || format == 2 || format == 3 {
+            if format == 0 || format == 2 {
                 vertex_data.extend(10..10 + vertex_count as u8);
             }
             let ParsedAdt::Root(root) =
@@ -996,8 +988,40 @@ mod tests {
             assert_eq!(layer.exists, [false, true]);
             assert_eq!(layer.heights.len(), vertex_count);
             assert_eq!(layer.heights[0], if format == 2 { 0.0 } else { 20.0 });
-            assert_eq!(layer.depths.is_some(), matches!(format, 0 | 2 | 3));
-            assert_eq!(layer.texture_coordinates.is_some(), matches!(format, 1 | 3));
+            assert_eq!(layer.depths.is_some(), matches!(format, 0 | 2));
+            assert_eq!(layer.texture_coordinates.is_some(), format == 1);
+        }
+    }
+
+    #[test]
+    fn mh2o_zero_payload_defaults_only_for_depth() {
+        for format in 0..=2 {
+            let mut bytes = mh2o_with_layer(format, 2, 1, &[]);
+            let instance = 8 + MH2O_ENTRY_COUNT * MH2O_HEADER_SIZE;
+            bytes[instance + 16..instance + 24].fill(0);
+            if format < 2 {
+                assert!(matches!(
+                    parse(&bytes),
+                    Err(Error::Invalid("MH2O missing height payload"))
+                ));
+            } else {
+                let ParsedAdt::Root(root) = parse(&bytes).unwrap();
+                let layer = &root.mh2o.unwrap().entries[0].layers[0];
+                assert_eq!(layer.heights, [0.0; 6]);
+                assert_eq!(layer.depths.as_deref(), Some([255; 6].as_slice()));
+                assert_eq!(layer.exists, [true; 2]);
+                assert!(layer.texture_coordinates.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn mh2o_rejects_later_vertex_layouts() {
+        for format in [3, 4, u16::MAX] {
+            assert!(matches!(
+                parse(&mh2o_with_layer(format, 2, 1, &[0; 54])),
+                Err(Error::Invalid("MH2O vertex format"))
+            ));
         }
     }
 
