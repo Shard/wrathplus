@@ -67,6 +67,20 @@ impl NpcFlags {
             }
             != 0
     }
+    /// Exact base vendor flag, excluding vendor-specialization flags. Use for
+    /// client branches that test the base bit, not the broader service union.
+    pub fn has_vendor_base(self) -> bool {
+        self.bits
+            & match self.layout {
+                FieldLayout::Vanilla5875 => 0x4,
+                FieldLayout::Wrath12340 => 0x80,
+            }
+            != 0
+    }
+    /// Exact base trainer flag, excluding class/profession trainer flags.
+    pub fn has_trainer_base(self) -> bool {
+        self.bits & 0x10 != 0
+    }
     pub fn is_vendor(self) -> bool {
         self.has(NpcService::Vendor)
     }
@@ -92,6 +106,47 @@ impl ObjectFields {
 mod tests {
     use super::*;
     use crate::messages::Field;
+
+    #[test]
+    fn exact_base_predicates_do_not_promote_wrath_specializations() {
+        for bit in [0x100, 0x200, 0x400, 0x800] {
+            let flags = NpcFlags::from_bits(FieldLayout::Wrath12340, bit | 0x80000000);
+            assert!(flags.is_vendor());
+            assert!(!flags.has_vendor_base());
+            assert!(NpcFlags::from_bits(FieldLayout::Wrath12340, bit | 0x80).has_vendor_base());
+        }
+        for bit in [0x20, 0x40] {
+            let flags = NpcFlags::from_bits(FieldLayout::Wrath12340, bit | 0x80000000);
+            assert!(flags.is_trainer());
+            assert!(!flags.has_trainer_base());
+            assert!(NpcFlags::from_bits(FieldLayout::Wrath12340, bit | 0x10).has_trainer_base());
+        }
+    }
+
+    #[test]
+    fn exact_base_predicates_respect_native_dialect_and_preserve_all_bits() {
+        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+            let vendor_bit = if layout == FieldLayout::Vanilla5875 {
+                0x4
+            } else {
+                0x80
+            };
+            for bit in 0..32 {
+                let bits = 1u32 << bit;
+                let flags = NpcFlags::from_bits(layout, bits);
+                assert_eq!(flags.has_vendor_base(), bits == vendor_bit);
+                assert_eq!(flags.has_trainer_base(), bits == 0x10);
+                assert_eq!(flags.bits(), bits);
+                assert_eq!(flags.layout(), layout);
+            }
+            let empty = NpcFlags::from_bits(layout, 0);
+            assert!(!empty.has_vendor_base());
+            assert!(!empty.has_trainer_base());
+            let all = NpcFlags::from_bits(layout, u32::MAX);
+            assert!(all.has_vendor_base());
+            assert!(all.has_trainer_base());
+        }
+    }
 
     #[test]
     fn services_match_both_native_dialects_without_renumbering() {
