@@ -300,6 +300,8 @@ pub struct TileMesh {
     /// Raw, bounded Wrath MH2O layers. These cannot enter [`ChunkMesh::liquids`] until the parent
     /// loader resolves each `liquid_type` through `LiquidType.dbc` to a render/sound class.
     pub mh2o: Option<Mh2oChunk>,
+    /// Raw Wrath liquid geometry, independent of skipped terrain chunks and MCLQ.
+    pub wrath_liquids: Vec<crate::wrath_liquid_surface::WrathLiquidSurface>,
 }
 
 impl TileMesh {
@@ -335,6 +337,7 @@ pub fn adt_to_tile_mesh_with_options(
     // A vanilla ADT is always one monolithic root.
     let ParsedAdt::Root(root) = parsed;
 
+    let wrath_liquids = crate::wrath_liquid_surface::build_wrath_tile_surfaces(&root)?;
     let mut chunks = Vec::new();
     for mcnk in &root.mcnk_chunks {
         let Some(mcvt) = &mcnk.heights else {
@@ -548,6 +551,7 @@ pub fn adt_to_tile_mesh_with_options(
         doodads,
         wmos,
         mh2o,
+        wrath_liquids,
     })
 }
 

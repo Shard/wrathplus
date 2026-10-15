@@ -52,6 +52,32 @@ fn installed_wrath_mh2o_selector_sample() {
                 assert!(root.mh2o.is_none());
                 continue;
             };
+            let surfaces =
+                benilla_formats::wrath_liquid_surface::build_wrath_tile_surfaces(&root).unwrap();
+            let mut surface_index = 0;
+            for chunk in &root.mcnk_chunks {
+                let h = &chunk.header;
+                let e = &root.mh2o.as_ref().unwrap().entries[(h.index_y * 16 + h.index_x) as usize];
+                for layer in &e.layers {
+                    let surface = &surfaces[surface_index];
+                    surface_index += 1;
+                    let step = benilla_formats::CHUNK_SIZE / 8.0;
+                    assert_eq!(
+                        surface.positions[0],
+                        [
+                            h.position[0] - f32::from(layer.offset_y) * step,
+                            h.position[1] - f32::from(layer.offset_x) * step,
+                            layer.heights[0],
+                        ]
+                    );
+                    let parent = surface.parent.expect("tile surface parent provenance");
+                    assert_eq!(parent.index, [h.index_x, h.index_y]);
+                    assert_eq!(parent.origin, h.position);
+                    assert_eq!(surface.layer.liquid_type, layer.liquid_type);
+                    assert_eq!(surface.attributes, e.attributes);
+                }
+            }
+            assert_eq!(surface_index, surfaces.len());
             let parsed = root.mh2o.as_ref().unwrap();
             for entry in 0..256 {
                 let offset = word(raw, entry * 12);

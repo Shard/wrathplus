@@ -7,9 +7,20 @@
 use anyhow::{ensure, Result};
 use benilla_adt::{Mh2oAttributes, Mh2oLayer, Mh2oVertexFormat};
 
+/// Original parent MCNK provenance, not a reconstructed native renderer origin.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WrathLiquidParent {
+    /// Tile-local `[index_x, index_y]`, independent of source-vector order.
+    pub index: [u32; 2],
+    /// Exact original header XYZ, without snapping or native-origin reconstruction.
+    pub origin: [f32; 3],
+}
+
 /// A single layer, not merged with overlapping layers or coerced to Vanilla LiquidKind.
 #[derive(Debug, Clone)]
 pub struct WrathLiquidSurface {
+    /// Present for tile-built surfaces; explicit-placement generic surfaces have none.
+    pub parent: Option<WrathLiquidParent>,
     /// Complete source metadata, including raw DBC ID, selector, mask, depth bytes and UV words.
     pub layer: Mh2oLayer,
     /// Full 8×8 parent-MCNK bitmaps, not rectangle-local or normalized values.
@@ -94,11 +105,47 @@ pub fn build_wrath_liquid_surface(
         }
     }
     Ok(WrathLiquidSurface {
+        parent: None,
         layer: layer.clone(),
         attributes,
         positions,
         indices,
     })
+}
+
+/// Build from original MCNK headers, not the filtered/snapped terrain-mesh vector.
+/// Entry lookup is `index_y * 16 + index_x` (native `0x8a3070`). A chunk
+/// without MCVT still contributes liquids. No MH2O means no Wrath surfaces.
+pub fn build_wrath_tile_surfaces(root: &benilla_adt::RootAdt) -> Result<Vec<WrathLiquidSurface>> {
+    let Some(mh2o) = &root.mh2o else {
+        return Ok(Vec::new());
+    };
+    let mut surfaces = Vec::new();
+    for chunk in &root.mcnk_chunks {
+        let h = &chunk.header;
+        ensure!(
+            h.index_x < 16 && h.index_y < 16,
+            "MH2O MCNK index outside tile"
+        );
+        let entry = mh2o
+            .entries
+            .get((h.index_y * 16 + h.index_x) as usize)
+            .ok_or_else(|| anyhow::anyhow!("MH2O missing MCNK entry"))?;
+        for layer in &entry.layers {
+            let mut surface = build_wrath_liquid_surface(
+                layer,
+                entry.attributes,
+                [h.position[0], h.position[1]],
+                [-crate::terrain::UNIT_SIZE; 2],
+            )?;
+            surface.parent = Some(WrathLiquidParent {
+                index: [h.index_x, h.index_y],
+                origin: h.position,
+            });
+            surfaces.push(surface);
+        }
+    }
+    Ok(surfaces)
 }
 
 #[cfg(test)]
@@ -119,6 +166,76 @@ mod tests {
             depths: Some(vec![0, 1, 127, 128, 254, 255]),
             texture_coordinates: None,
         }
+    }
+    fn sparse_root() -> Box<benilla_adt::RootAdt> {
+        let mut bytes = Vec::new();
+        for (x, y, origin) in [(7u32, 2u32, 100.125f32), (1, 9, -50.25)] {
+            let mut header = vec![0u8; 128];
+            header[4..8].copy_from_slice(&x.to_le_bytes());
+            header[8..12].copy_from_slice(&y.to_le_bytes());
+            header[0x68..0x6c].copy_from_slice(&origin.to_le_bytes());
+            header[0x6c..0x70].copy_from_slice(&(origin + 5.).to_le_bytes());
+            header[0x70..0x74].copy_from_slice(&999f32.to_le_bytes());
+            bytes.extend_from_slice(b"KNCM");
+            bytes.extend_from_slice(&128u32.to_le_bytes());
+            bytes.extend(header);
+        }
+        let benilla_adt::ParsedAdt::Root(root) =
+            benilla_adt::parse_adt(&mut std::io::Cursor::new(bytes.as_slice())).unwrap();
+        root
+    }
+    #[test]
+    fn tile_uses_header_indices_and_unsnapped_origins_without_mcvt() {
+        let mut root = sparse_root();
+        let mut entries = vec![benilla_adt::Mh2oEntry::default(); 256];
+        entries[2 * 16 + 7].layers.push(layer());
+        let mut second = layer();
+        second.liquid_type = 123;
+        entries[9 * 16 + 1].layers.push(second);
+        root.mh2o = Some(benilla_adt::Mh2oChunk { entries });
+        let s = build_wrath_tile_surfaces(&root).unwrap();
+        assert_eq!(s.len(), 2);
+        assert_eq!(
+            s[0].parent,
+            Some(WrathLiquidParent {
+                index: [7, 2],
+                origin: [100.125, 105.125, 999.],
+            })
+        );
+        assert_eq!(
+            s[1].parent,
+            Some(WrathLiquidParent {
+                index: [1, 9],
+                origin: [-50.25, -45.25, 999.],
+            })
+        );
+        for (i, origin) in [100.125f32, -50.25].into_iter().enumerate() {
+            assert_eq!(
+                s[i].positions[0],
+                [
+                    origin - 3. * crate::terrain::UNIT_SIZE,
+                    origin + 5. - 2. * crate::terrain::UNIT_SIZE,
+                    10.
+                ]
+            );
+        }
+        assert_eq!(s[1].layer.liquid_type, 123);
+        root.mcnk_chunks.reverse();
+        assert_eq!(
+            build_wrath_tile_surfaces(&root).unwrap()[0]
+                .layer
+                .liquid_type,
+            123
+        );
+        assert_eq!(
+            build_wrath_tile_surfaces(&root).unwrap()[0]
+                .parent
+                .unwrap()
+                .index,
+            [1, 9]
+        );
+        root.mh2o = None;
+        assert!(build_wrath_tile_surfaces(&root).unwrap().is_empty());
     }
     #[test]
     fn asymmetric_rectangle_mask_diagonal_winding_and_raw_values() {
@@ -147,6 +264,7 @@ mod tests {
         assert_eq!(s.layer.depths, l.depths);
         assert_eq!(s.layer.exists, l.exists);
         assert_eq!(s.attributes, Some(attrs));
+        assert_eq!(s.parent, None);
     }
     #[test]
     fn authored_uv_words_and_zero_height_depth_defaults_are_not_normalized() {

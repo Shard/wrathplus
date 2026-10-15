@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use benilla_formats::wrath_liquid_surface::WrathLiquidSurface;
 use benilla_formats::{
     adt_to_tile_mesh, adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad,
     Mh2oChunk, TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
@@ -44,6 +45,8 @@ pub struct AdtTile {
     /// Parsed Wrath MH2O layers. They are retained for renderer integration but are not yet
     /// rendered; unlike legacy MCLQ, their liquid type still needs `LiquidType.dbc` resolution.
     pub mh2o: Option<Mh2oChunk>,
+    /// Raw WoW-space MH2O surfaces; separate from the unchanged MCLQ path.
+    pub wrath_liquids: Vec<WrathLiquidSurface>,
 }
 
 /// One drawn chunk's array indices, uniform over its vertices.
@@ -344,6 +347,7 @@ async fn finish_tile(tile: TileMesh, ctx: &mut LoadContext<'_>) -> Result<AdtTil
         wmos: tile.wmos,
         chunks: tile.chunks,
         mh2o: tile.mh2o,
+        wrath_liquids: tile.wrath_liquids,
     })
 }
 
