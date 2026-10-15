@@ -1127,6 +1127,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
     }
 }
 
+/// Only implemented wire routes grant command admission. Deferred queries have no writer.
+/// Shape/value validation and epoch/capability checks remain at their existing boundaries.
+pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
+    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery)
+}
+
 fn writer_loop(
     commands: &Receiver<SessionCommand>,
     control: Receiver<WrathWriterControl>,
@@ -3273,3 +3279,7 @@ fn completed_quest_query_is_native_and_empty() {
     assert_eq!(route(&ClientCommand::NativeQuestsCompletedQuery), WrathRoute::NativeQuestsCompletedQuery);
     assert_eq!(benilla_protocol::wrath_quests_completed::encode_query(), (0x500, vec![]));
 }
+
+#[cfg(test)]
+#[path = "wrath_admission_tests.rs"]
+mod admission_tests;

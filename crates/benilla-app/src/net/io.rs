@@ -27,7 +27,7 @@ use crossbeam_channel::{Receiver, Sender};
 
 use super::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
 
-mod wrath;
+pub(super) mod wrath;
 
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::net::motion`]).
