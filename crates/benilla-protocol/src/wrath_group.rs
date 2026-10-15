@@ -123,12 +123,13 @@ pub enum Packet {
     Uninvite,
     List(Roster),
     Stats(Stats),
+    Raid(raid::Packet),
 }
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 pub const fn handles(opcode: u16) -> bool {
-    matches!(
+    raid::handles(opcode) || matches!(
         opcode,
         SMSG_GROUP_INVITE
             | SMSG_GROUP_DECLINE
@@ -139,6 +140,9 @@ pub const fn handles(opcode: u16) -> bool {
     )
 }
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
+    if raid::handles(opcode) {
+        return raid::decode(opcode, body).map(Packet::Raid);
+    }
     let mut r = Cursor::new(body);
     let packet = match opcode {
         SMSG_GROUP_INVITE => {
@@ -350,3 +354,6 @@ pub mod commands;
 #[cfg(test)]
 #[path = "wrath_group/tests.rs"]
 mod tests;
+
+#[path = "wrath_group/raid.rs"]
+pub mod raid;

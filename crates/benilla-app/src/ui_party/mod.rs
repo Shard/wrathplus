@@ -48,6 +48,7 @@ pub struct GroupState {
     /// Authoritative native Wrath state, separate from the shared roster presentation.
     pub wrath_roster: Option<benilla_protocol::wrath_group::Roster>,
     pub wrath_stats: HashMap<u64, benilla_protocol::wrath_group::Stats>,
+    pub wrath_raid: wrath::RaidState,
     /// True from any `SMSG_GROUP_LIST` naming a leader until the all-zero "you left" list.
     pub in_group: bool,
     /// 0 party, 1 raid (vmangos `GroupType`, `Group/Group.h:116-120`).
@@ -426,6 +427,7 @@ impl GroupState {
         let GroupState {
             wrath_roster,
             wrath_stats,
+            wrath_raid,
             // Group facts.
             in_group,
             group_type,
@@ -451,6 +453,7 @@ impl GroupState {
         } = self;
         *wrath_roster = None;
         wrath_stats.clear();
+        *wrath_raid = Default::default();
         *in_group = false;
         *group_type = 0;
         *own_flags = 0;

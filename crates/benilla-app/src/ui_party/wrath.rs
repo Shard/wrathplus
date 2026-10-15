@@ -296,3 +296,13 @@ mod tests {
         assert!(state.wrath_stats.is_empty());
     }
 }
+
+/// Native response fields that the shared presentation does not represent.
+#[derive(Default)]
+pub struct RaidState {
+    pub command_result: Option<(u32, String, u32, u32)>,
+    pub target_setter: Option<u64>,
+    pub ready_initiator: Option<u64>,
+    pub ready_answers: Vec<(u64, u8)>,
+    pub ready_finished: u32,
+}
