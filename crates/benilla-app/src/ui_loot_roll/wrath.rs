@@ -2,6 +2,16 @@
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_roll::Roll, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
+use benilla_protocol::wrath_items::RollMetadata;
+
+/// Native query outcomes are cached across rolls, with ordered receipts for pending starts.
+/// A negative response is explicit: presentation drops the pending roll (`0x6fb1f0`).
+#[derive(Resource, Default)]
+pub(super) struct NativeRollTemplates {
+    pub metadata: std::collections::HashMap<u32, Option<RollMetadata>>,
+    pub receipts: std::collections::VecDeque<(u32, Option<RollMetadata>)>,
+}
+
 
 #[derive(Resource, Default)]
 pub(super) struct NativeRolls {
@@ -39,6 +49,8 @@ impl NativeRolls {
 
 pub(super) fn register(app: &mut App) {
     app.init_resource::<NativeRolls>()
+        .init_resource::<NativeRollTemplates>()
+        .net_handler(SessionEventKind::WrathItemRollMetadata, on_template)
         .net_handler(SessionEventKind::WrathLootRoll, on_roll)
         .net_handler(SessionEventKind::Disconnected, on_reset);
 }
@@ -47,14 +59,54 @@ fn on_roll(In(event): In<SessionEvent>, mut rolls: ResMut<NativeRolls>) {
         rolls.receive(roll);
     }
 }
-fn on_reset(In(_): In<SessionEvent>, mut rolls: ResMut<NativeRolls>) {
+fn on_template(In(event): In<SessionEvent>, mut templates: ResMut<NativeRollTemplates>) {
+    if let SessionEvent::WrathItemRollMetadata { entry, metadata } = event {
+        templates.metadata.insert(entry, metadata.clone());
+        templates.receipts.push_back((entry, metadata));
+    }
+}
+fn on_reset(
+    In(_): In<SessionEvent>,
+    mut rolls: ResMut<NativeRolls>,
+    mut templates: ResMut<NativeRollTemplates>,
+) {
     *rolls = NativeRolls::default();
+    *templates = NativeRollTemplates::default();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use benilla_protocol::wrath_roll::Item;
+    #[test]
+    fn native_template_outcomes_are_ordered_lossless_and_disconnect_scoped() {
+        let mut app = App::new();
+        register(&mut app);
+        let metadata = RollMetadata {
+            flags2: u32::MAX,
+            required_disenchant_skill: -1,
+            item_limit_category: 123,
+        };
+        crate::net::handlers::dispatch(app.world_mut(), vec![
+            SessionEvent::WrathItemRollMetadata { entry: 42, metadata: Some(metadata.clone()) },
+            SessionEvent::WrathItemRollMetadata { entry: 42, metadata: None },
+            SessionEvent::WrathItemRollMetadata { entry: 43, metadata: Some(metadata.clone()) },
+        ]);
+        let mut templates = app.world_mut().resource_mut::<NativeRollTemplates>();
+        assert_eq!(templates.metadata.get(&42), Some(&None));
+        assert_eq!(templates.metadata.get(&43), Some(&Some(metadata.clone())));
+        assert_eq!(templates.receipts.pop_front(), Some((42, Some(metadata.clone()))));
+        assert_eq!(templates.receipts.pop_front(), Some((42, None)));
+        assert_eq!(templates.receipts.pop_front(), Some((43, Some(metadata))));
+        assert!(templates.receipts.is_empty());
+        crate::net::handlers::dispatch(app.world_mut(), vec![SessionEvent::Disconnected {
+            reason: "test".into(), end: benilla_protocol::SessionEnd::Lost,
+        }]);
+        let templates = app.world().resource::<NativeRollTemplates>();
+        assert!(templates.metadata.is_empty());
+        assert!(templates.receipts.is_empty());
+    }
+
     fn item() -> Item {
         Item {
             guid: 42,

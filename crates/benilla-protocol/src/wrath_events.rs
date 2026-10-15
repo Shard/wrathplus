@@ -25,7 +25,7 @@ use crate::wrath_gameplay::{
     UpdateFields, UpdateObject, MOVEMENT_FLAG_ON_TRANSPORT, MOVEMENT_FLAG_SPLINE_ENABLED,
     UPDATE_FLAG_SELF,
 };
-use crate::wrath_items::{decode_item_query_response, ItemCodecError};
+use crate::wrath_items::{decode_native_item_query_response, ItemCodecError};
 use crate::wrath_loot::{
     self, InventoryChangeFailure, LootCodecError, LootMoneyNotify, LootResponse, ServerLootPacket,
     WrathItemPushResult, WrathLootItem,
@@ -375,13 +375,17 @@ impl WrathEventAdapter {
                 ))
             }
             SMSG_ITEM_QUERY_SINGLE_RESPONSE => {
-                let (entry, info) = decode_item_query_response(body)
+                let (entry, template) = decode_native_item_query_response(body)
                     .map_err(|source| WrathEventError::ItemCodec { opcode, source })?;
+                let (info, metadata) = match template {
+                    Some(template) => (Some(Box::new(template.info)), Some(template.roll)),
+                    None => (None, None),
+                };
                 Ok(handled(
-                    vec![SessionEvent::ItemTemplate {
-                        entry,
-                        info: info.map(Box::new),
-                    }],
+                    vec![
+                        SessionEvent::ItemTemplate { entry, info },
+                        SessionEvent::WrathItemRollMetadata { entry, metadata },
+                    ],
                     Vec::new(),
                     Vec::new(),
                 ))
@@ -1134,7 +1138,10 @@ mod tests {
         };
         assert!(matches!(
             &session_events[..],
-            [SessionEvent::ItemTemplate { entry: 117, info: Some(info) }] if info.name.is_empty()
+            [SessionEvent::ItemTemplate { entry: 117, info: Some(info) },
+             SessionEvent::WrathItemRollMetadata { entry: 117, metadata: Some(metadata) }]
+                if info.name.is_empty() && metadata.flags2 == 0
+                    && metadata.required_disenchant_skill == 0 && metadata.item_limit_category == 0
         ));
 
         let WrathDispatch::Handled { session_events, .. } = adapter
@@ -1152,7 +1159,7 @@ mod tests {
             [SessionEvent::ItemTemplate {
                 entry: 9999,
                 info: None
-            }]
+            }, SessionEvent::WrathItemRollMetadata { entry: 9999, metadata: None }]
         ));
     }
 
