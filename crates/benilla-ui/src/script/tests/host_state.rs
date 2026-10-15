@@ -256,3 +256,18 @@ fn the_engine_reads_the_handler_slot_not_the_geterrorhandler_global() {
         (1, 0)
     );
 }
+
+/// Wrath 0x51ba50 supplies factionName in slot 3, as Minimap.lua and ZoneText.lua read it.
+#[test]
+fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
+    use crate::script::{ScriptDialect, ZoneTexts};
+    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 0);
+    for kind in ["friendly", "hostile", "contested"] {
+        s.set_zone_texts(ZoneTexts { pvp_type: Some(kind.into()), pvp_faction: Some("Alliance".into()), ..Default::default() });
+        s.run("local pvpType, isSubZonePvP, factionName = GetZonePVPInfo(); assert(isSubZonePvP == nil); assert(format('%s Territory', factionName) == 'Alliance Territory')").unwrap();
+        assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 3);
+    }
+    s.set_zone_texts(ZoneTexts { pvp_type: Some("friendly".into()), ..Default::default() });
+    assert_eq!(s.eval::<String>("local _,_,f = GetZonePVPInfo(); return f").unwrap(), "");
+}

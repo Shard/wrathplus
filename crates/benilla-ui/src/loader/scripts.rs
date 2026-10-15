@@ -146,6 +146,10 @@ impl Loader<'_> {
                     "self, motion"
                 } else if name.eq_ignore_ascii_case("OnDoubleClick") {
                     "self, button"
+                } else if name.eq_ignore_ascii_case("OnCursorChanged") {
+                    // Wrath EditBox script lookup 0x9628f0 supplies named locals;
+                    // stock ScrollingEdit scripts reference x/y/w/h directly.
+                    "self, x, y, w, h"
                 } else if name.eq_ignore_ascii_case("OnTextChanged") {
                     "self, userInput"
                 } else if name.eq_ignore_ascii_case("OnTooltipAddMoney") {
