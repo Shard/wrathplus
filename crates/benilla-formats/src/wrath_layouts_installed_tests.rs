@@ -222,3 +222,34 @@ fn installed_wrath_particle_emitters_read() {
             .expect("kobold");
     assert_eq!(kobold.len(), 1, "the candle");
 }
+
+// Wrath UnitHasRelicSlot (0x6113a9) tests Flags bit 0x8, not nonzero Flags.
+#[test]
+fn installed_wrath_class_flags_family_and_pet_token() {
+    let Some(mut chain) = chain() else { return };
+    let classes = crate::load_chr_classes(&mut chain).expect("ChrClasses");
+    for (id, family, relic) in [
+        (1, 4, false),
+        (2, 10, true),
+        (3, 9, false),
+        (4, 8, false),
+        (5, 6, false),
+        (6, 15, true),
+        (7, 11, true),
+        (8, 3, false),
+        (9, 5, false),
+        (11, 7, true),
+    ] {
+        assert_eq!(classes.spell_family(id), family, "class {id}");
+        assert_eq!(classes.has_relic_slot(id), relic, "class {id}");
+        assert_eq!(
+            classes.pet_name_token(id),
+            if id == 9 { "DEMON" } else { "PET" }
+        );
+    }
+    assert_eq!(classes.damage_bonus_stat(3), Some(1));
+    assert_eq!(classes.damage_bonus_stat(1), Some(0));
+    // Preserve the native enum value, not a guessed Strength fallback.
+    assert_eq!(classes.damage_bonus_stat(6), Some(9));
+    assert!(!classes.has_relic_slot(0));
+}
