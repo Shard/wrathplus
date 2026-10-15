@@ -537,6 +537,7 @@ pub enum SessionEvent {
     },
     /// A channel roster (`SMSG_CHANNEL_LIST`), member flags per vmangos `Chat/Channel.h:119-130`.
     /// Native roster discriminator distinguishes display updates from ordinary chat lists.
+    WrathChannelNotify { notify: crate::wrath_channel::Notify },
     WrathChannelList { roster: crate::wrath_channel::ChannelList },
     ChannelList {
         channel: String,
