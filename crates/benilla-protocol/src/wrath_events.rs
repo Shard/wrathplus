@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x034c | 0x034e | 0x0350 | 0x035b => {
+                Ok(match crate::wrath_arena_team::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathArenaTeam { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             0x0055 | 0x0083 | 0x0088 | 0x008a | 0x0092 | 0x0093 => {
                 Ok(match crate::wrath_guild::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathGuild { packet }], Vec::new(), Vec::new()),
