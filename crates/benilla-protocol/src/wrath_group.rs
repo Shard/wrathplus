@@ -341,6 +341,12 @@ pub fn encode_request_stats(guid: u64) -> Vec<u8> {
     guid.to_le_bytes().to_vec()
 }
 
+/// Additional build-12340 raid management commands. Layouts: AzerothCore
+/// GroupHandler.cpp Handle{LootMethod,GroupRaidConvert,GroupChangeSubGroup,
+/// GroupSwapSubGroup,GroupAssistantLeader,RaidTargetUpdate,RaidReadyCheck}Opcode.
+#[path = "wrath_group/commands.rs"]
+pub mod commands;
+
 #[cfg(test)]
 #[path = "wrath_group/tests.rs"]
 mod tests;
