@@ -152,6 +152,7 @@ mod worn_display;
 mod wrath_currency;
 mod wrath_equipment;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
+mod wrath_item_spell;
 mod wrath_items;
 mod wrath_paperdoll;
 mod wrath_surface;
@@ -742,6 +743,7 @@ impl UiScript {
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
             wrath_items::install(&lua)?;
+            wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
         }
