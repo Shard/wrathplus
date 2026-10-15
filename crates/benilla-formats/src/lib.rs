@@ -53,6 +53,7 @@ mod macro_icons;
 pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
 pub mod currencies;
+pub mod item_limit_category;
 pub mod lfg;
 mod itemsets;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};

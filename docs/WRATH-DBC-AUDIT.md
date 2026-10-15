@@ -130,3 +130,32 @@ completeness, native Lua behavior, or live dungeon finder operation.
 LFG catalog unit gates: formats **531 passed, 0 failed**; installed LFG
 **1 passed, 0 failed**; app **4487 passed, 0 failed, 12 ignored**.
 All exit codes zero. These counts certify this bounded metadata unit only.
+
+## ItemLimitCategory native reader
+
+Native build-12340 binding: object `0xad3e48` primary vtable `0xa28000`,
+loader `0x6451c0` validates WDBC **20 columns / 80-byte rows**, name accessor
+`0x8b0430` identifies `ItemLimitCategory.dbc`. Vtable slot +12 invokes raw
+loader `0x6617c0`, which calls decoder `0x8ba2d0`: file column 0 is ID,
+1–16 localized name, 17 locale mask, 18 quantity, 19 flags/raw mode word.
+The compact runtime row is ID/name/quantity/flags at +0/+4/+8/+12, **not**
+the file layout. Raw loader writes the ID pointer index in source order,
+so duplicate-ID lookup is last-row-wins; all source rows remain available.
+
+Roll consumer `0x754dd0` indexes this object (`0x754e49`–`0x754e65`), reads
+quantity at `0x754e93` and name at `0x754ea2`; it does not inspect flags.
+The formats reader gives flags no inventory/equipped-mode meaning. Missing
+category lookup stays `None`, not zero. Loading uses the supplied resolved
+Chain only, requires Wrath, and propagates read/decode failures. All words,
+locale offsets/mask and selected-locale text are retained, without language
+fallback. No App resource, inventory traversal, roll policy or live check
+is included in this unit.
+
+Read-only effective installed enUS inspection: **83 rows / 20 fields / 80
+bytes**. Known rows: 2 Jeweler's Gems quantity 3 flags 1; 3 Healthstone 1/0;
+4 Mana Gem 1/0; 6 Stormjewel 1/1. These checks are effective-chain examples,
+not pristine stock-table or live eligibility certification.
+
+ItemLimitCategory unit validation: formats library **534 passed / 0 failed**;
+installed known-row regression **1 passed / 0 failed**; app library **4,487
+passed / 0 failed / 12 ignored**. Rustfmt and diff whitespace checks passed.
