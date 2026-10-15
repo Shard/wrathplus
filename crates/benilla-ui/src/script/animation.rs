@@ -4,6 +4,7 @@ use super::{Model, ScriptDialect};
 use mlua::{Function, Lua, MultiValue, ObjectLike, Table, Value};
 #[path = "animation/lifecycle.rs"]
 mod lifecycle;
+pub(crate) mod transforms;
 const GROUPS: &str = "__benilla_animation_groups";
 
 fn fire(object: &Table, script: &str) -> mlua::Result<()> {
@@ -178,7 +179,7 @@ fn install_controls(lua: &Lua, t: &Table) -> mlua::Result<()> {
     for verb in ["Play", "Pause", "Stop", "Finish"] {
         t.set(
             verb,
-            lua.create_function(move |_, t: Table| {
+            lua.create_function(move |lua, t: Table| {
                 let g = if t.raw_get::<String>("_kind")? == "AnimationGroup" {
                     t.clone()
                 } else {
@@ -200,7 +201,7 @@ fn install_controls(lua: &Lua, t: &Table) -> mlua::Result<()> {
                     _ => {
                         g.raw_set("_playing", false)?;
                         g.raw_set("_paused", false)?;
-                        restore(&g)?;
+                        restore(lua, &g)?;
                     }
                 }
                 // Child OnPlay is dispatched when its scheduled interval begins, not twice
@@ -280,12 +281,14 @@ fn animation(lua: &Lua, parent: Table, kind: String, name: Option<String>) -> ml
             })?,
         )?;
     }
+    transforms::install(lua, &t, &kind)?;
     install_controls(lua, &t)?;
     let children: Table = parent.raw_get("_animations")?;
     children.raw_set(children.raw_len() + 1, t.clone())?;
     Ok(t)
 }
-fn restore(g: &Table) -> mlua::Result<()> {
+fn restore(lua: &Lua, g: &Table) -> mlua::Result<()> {
+    transforms::clear(lua, g);
     if let Some(alpha) = g.raw_get::<Option<f64>>("_base_alpha")? {
         g.raw_get::<Table>("_parent")?
             .call_method::<()>("SetAlpha", alpha)?;
@@ -416,6 +419,7 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
                 alpha += a.raw_get::<f64>("_change")? * p;
             }
         }
+        transforms::apply(lua, &g, &animations)?;
         owner.call_method::<()>("SetAlpha", alpha.clamp(0.0, 1.0))?;
         if animations.iter().any(|a| {
             a.raw_get::<String>("_kind")
@@ -455,7 +459,7 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
 
         if time >= duration && looping == "NONE" {
             g.raw_set("_playing", false)?;
-            restore(&g)?;
+            restore(lua, &g)?;
             fire(&g, "OnFinished")?;
         }
     }
