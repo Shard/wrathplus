@@ -1017,6 +1017,7 @@ enum WrathRoute {
     NativeLfg,
     NativeGuild,
     NativeChat,
+    NativeMailMutation,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1030,6 +1031,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
         ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
@@ -1313,6 +1315,16 @@ fn writer_loop(
                     WrathRoute::NativeWorldportAck => {
                         let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
                         active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativeMailMutation => {
+                        let ClientCommand::NativeMailMutation(command) = command else { unreachable!() };
+                        match native_mail_packet(&command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid native mail rejected before send: {error}");
+                                continue;
+                            }
+                        }
                     }
                     WrathRoute::NativeChat => {
                         let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
@@ -3199,3 +3211,11 @@ fn publish_character_action(
 #[cfg(test)]
 #[path = "wrath/character_tests.rs"]
 mod character_tests;
+
+fn native_mail_packet(command: &benilla_protocol::wrath_mail_mutations::Command) -> std::io::Result<(u32, Vec<u8>)> {
+    Ok((command.opcode(), command.encode()?))
+}
+
+#[cfg(test)]
+#[path = "wrath/mail_mutation_tests.rs"]
+mod mail_mutation_tests;
