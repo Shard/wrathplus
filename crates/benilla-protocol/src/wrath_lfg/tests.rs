@@ -120,3 +120,39 @@ fn request_commands_have_exact_native_opcodes_and_empty_bodies() {
     assert!(!handles(0x036e));
     assert!(decode(0xffff, &[]).is_err());
 }
+
+#[test]
+fn adapter_delivers_one_lossless_reply_or_none_on_invalid_body() {
+    use crate::{
+        wrath_events::{WrathDispatch, WrathEventAdapter},
+        SessionEvent,
+    };
+    let mut adapter = WrathEventAdapter::new();
+    for (opcode, body) in [
+        (SMSG_LFG_PLAYER_INFO, PLAYER),
+        (SMSG_LFG_PARTY_INFO, PARTY),
+        (SMSG_LFG_PLAYER_INFO, &[0, 0, 0, 0, 0][..]),
+        (SMSG_LFG_PARTY_INFO, &[0][..]),
+    ] {
+        let WrathDispatch::Handled { session_events, .. } =
+            adapter.dispatch(opcode, body, 0).unwrap()
+        else {
+            panic!()
+        };
+        assert!(
+            matches!(&session_events[..], [SessionEvent::WrathLfg { packet }] if *packet == decode(opcode, body).unwrap())
+        );
+        for end in 0..body.len() {
+            assert!(matches!(
+                adapter.dispatch(opcode, &body[..end], 0).unwrap(),
+                WrathDispatch::Unhandled { .. }
+            ));
+        }
+        let mut trailing = body.to_vec();
+        trailing.push(0);
+        assert!(matches!(
+            adapter.dispatch(opcode, &trailing, 0).unwrap(),
+            WrathDispatch::Unhandled { .. }
+        ));
+    }
+}

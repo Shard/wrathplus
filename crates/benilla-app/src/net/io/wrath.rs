@@ -1052,6 +1052,8 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::TrainerBuySpell { .. }
         | ClientCommand::GetMailList { .. }
         | ClientCommand::SetChannelWatch { .. }
+        | ClientCommand::LfgRequestPlayerLockInfo
+        | ClientCommand::LfgRequestPartyLockInfo
         | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
@@ -1497,6 +1499,14 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_mail::MSG_QUERY_NEXT_MAIL_TIME as u32,
             benilla_protocol::wrath_mail::encode_query_next_mail_time(),
         ),
+        ClientCommand::LfgRequestPlayerLockInfo => {
+            let command = benilla_protocol::wrath_lfg::Command::RequestPlayerLockInfo;
+            (command.opcode(), command.encode())
+        }
+        ClientCommand::LfgRequestPartyLockInfo => {
+            let command = benilla_protocol::wrath_lfg::Command::RequestPartyLockInfo;
+            (command.opcode(), command.encode())
+        }
         ClientCommand::SetChannelWatch { name } => (
             benilla_protocol::wrath_channel::CMSG_SET_CHANNEL_WATCH,
             benilla_protocol::wrath_channel::encode_channel_name(&name),
@@ -2893,3 +2903,16 @@ mod channel_command_tests {
 #[cfg(test)]
 #[path = "wrath/raid_command_tests.rs"]
 mod raid_command_tests;
+
+#[cfg(test)]
+mod lfg_command_tests {
+    use super::*;
+    #[test]
+    fn native_lock_queries_route_to_exact_empty_packets() {
+        for (command, opcode) in [(ClientCommand::LfgRequestPlayerLockInfo, 0x036e),
+            (ClientCommand::LfgRequestPartyLockInfo, 0x0371)] {
+            assert_eq!(route(&command), WrathRoute::NativeSession);
+            assert_eq!(session_packet(command), (opcode, Vec::new()));
+        }
+    }
+}
