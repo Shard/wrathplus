@@ -308,6 +308,34 @@ pub(super) fn feed_party(
         master_looter,
         loot_threshold,
     };
+    let native = group
+        .wrath_roster
+        .as_ref()
+        .map(|r| {
+            let mut members = r
+                .members
+                .iter()
+                .map(|m| benilla_ui::script::WrathGroupMember {
+                    guid: m.guid,
+                    flags: m.flags,
+                    roles: m.roles,
+                })
+                .collect::<Vec<_>>();
+            if let Some(guid) = self_guid {
+                members.push(benilla_ui::script::WrathGroupMember {
+                    guid,
+                    flags: r.flags,
+                    roles: r.roles,
+                });
+            }
+            benilla_ui::script::WrathGroup {
+                members,
+                dungeon_difficulty: r.loot.as_ref().map(|l| l.dungeon_difficulty + 1),
+                raid_difficulty: r.loot.as_ref().map(|l| l.raid_difficulty + 1),
+            }
+        })
+        .unwrap_or_default();
+    script.set_wrath_group(native);
     if fed.pushed_party.as_ref() != Some(&fresh) {
         gate.audit("feed_party", "the roster snapshot");
         script.set_party(fresh.clone());
@@ -737,9 +765,15 @@ fn raid_roster(
             m.guid,
             m.name.clone(),
             m.flags,
-            stats.and_then(|s| s.level).map_or(0, u32::from),
-            stats
+            group
+                .wrath_record(m.guid)
+                .and_then(|s| s.level)
+                .or_else(|| stats.and_then(|s| s.level))
+                .map_or(0, u32::from),
+            group
+                .wrath_record(m.guid)
                 .and_then(|s| s.zone)
+                .or_else(|| stats.and_then(|s| s.zone))
                 .and_then(|z| zone_name(u32::from(z))),
             online,
             // Return 9's cached arm needs both `0x4` and `0x1` in `[edi+0x18]`, vmangos's `DEAD`
@@ -780,7 +814,11 @@ fn member_unit_state(
             name: Some(m.name.clone()),
             health: stats.and_then(|s| s.cur_hp).map_or(0, u32::from),
             max_health: stats.and_then(|s| s.max_hp).map_or(0, u32::from),
-            level: stats.and_then(|s| s.level).map_or(0, u32::from),
+            level: group
+                .wrath_record(m.guid)
+                .and_then(|s| s.level)
+                .or_else(|| stats.and_then(|s| s.level))
+                .map_or(0, u32::from),
             power_type: stats.map_or(0, PartyMemberStatsInfo::shown_power_type),
             // Divided as on the live leg (`UnitMana`'s record path, `0x517744`-`0x51775e`).
             power: stats.map_or(0, PartyMemberStatsInfo::shown_power),
@@ -798,12 +836,31 @@ fn member_unit_state(
             ..Default::default()
         },
     };
+    if store.is_none() {
+        if let Some(native) = group.wrath_record(m.guid) {
+            s.health = native.cur_hp.unwrap_or(0);
+            s.max_health = native.max_hp.unwrap_or(0);
+            s.level = u32::from(native.level.unwrap_or(0));
+            s.power_type = native.power_type.unwrap_or(0);
+            let scale = super::wrath::power_scale(u32::from(native.power_type.unwrap_or(0)));
+            s.power = u32::from(native.cur_power.unwrap_or(0)) / scale;
+            s.max_power = u32::from(native.max_power.unwrap_or(0)) / scale;
+            let status = native.status.unwrap_or(0);
+            s.is_connected = status & 1 != 0;
+            s.dead = status & 4 != 0;
+            s.ghost = status & 8 != 0;
+            s.pvp = status & 2 != 0;
+            s.is_pvp_ffa = status & 16 != 0;
+        }
+    }
     s.is_player = true;
     // A party member is always a same-faction friendly player: the popup's `UnitCanCooperate`
     // gate reads the reaction, which neither leg resolves for a party token.
     s.raid_target = group.raid_target_index(m.guid);
     s.reaction = 5;
     s.faction_group = own_group;
+    // Native status is authoritative for the unstreamed record, including explicit clears.
+    if store.is_none() && group.wrath_record(m.guid).is_some() { return s; }
     // The roster status byte overlays both legs, but for `is_connected`, which is the record leg's.
     s.is_pvp_ffa = m.status & member_status::PVP_FFA != 0;
     s.pvp = s.pvp || m.status & member_status::PVP != 0;
@@ -2336,5 +2393,23 @@ mod tests {
             None
         ));
         assert_eq!(group.members.len(), n - 1);
+    }
+}
+
+#[cfg(test)]
+mod wrath_tests {
+    use super::*;
+    #[test]
+    fn native_unstreamed_member_snapshot_keeps_large_health_and_runic_power() {
+        use benilla_protocol::wrath_group::{Roster, Member, Stats};
+        let mut g = GroupState::default();
+        g.apply_wrath_list(Roster { group_type: 0, subgroup: 0, flags: 0, roles: 0,
+            lfg: None, group_guid: 3, counter: 1, leader: 7, loot: None,
+            members: vec![Member { guid: 7, name: "Ally".into(), status: 1, subgroup: 0, flags: 0, roles: 0 }] }, Some(1));
+        g.apply_wrath_stats(Stats { guid: 7, cur_hp: Some(500000), max_hp: Some(900000),
+            power_type: Some(6), cur_power: Some(439), max_power: Some(1000), status: Some(1), ..Default::default() });
+        let s = member_unit_state(&g.members[0], None, None, &g, None, None, Default::default());
+        assert_eq!((s.health, s.max_health, s.power, s.max_power), (500000, 900000, 43, 100));
+        assert!(s.is_connected);
     }
 }

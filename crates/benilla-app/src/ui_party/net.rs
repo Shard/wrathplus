@@ -23,7 +23,8 @@ const INVITE_ACCEPT_SOUND: &str = "igPlayerInviteAccept";
 /// One handler per group kind, plus the session-end listener.
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
-    app.net_handler(K::GroupInvite, on_invite)
+    app.net_handler(K::WrathGroup, on_wrath_group)
+        .net_handler(K::GroupInvite, on_invite)
         .net_handler(K::GroupDecline, on_decline)
         .net_handler(K::GroupUninvited, on_uninvited)
         .net_handler(K::GroupLeaderChanged, on_leader_changed)
@@ -37,6 +38,49 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::ReadyCheckAnswer, on_ready_check_answer)
         .net_handler(K::RaidInstanceInfo, on_raid_instance_info)
         .net_handler(K::Disconnected, on_session_end);
+}
+
+fn on_wrath_group(
+    In(ev): In<SessionEvent>,
+    mut group: ResMut<GroupState>,
+    mut errors: ResMut<UiErrorKeys>,
+    commands: Res<NetCommands>,
+    index: Res<GuidIndex>,
+    self_guid: Res<SelfGuid>,
+    names: Res<NameCache>,
+    mut sounds: ResMut<MessageSounds>,
+    mut quest: ResMut<QuestGiver>,
+) {
+    use benilla_protocol::wrath_group::Packet;
+    let SessionEvent::WrathGroup { packet } = ev else {
+        return;
+    };
+    match *packet {
+        Packet::Invite {
+            invited: true,
+            inviter,
+            ..
+        } => invited(&mut group, &mut errors, &inviter),
+        Packet::Invite { invited: false, .. } => {}
+        Packet::Decline { name } => declined(&mut group, &mut errors, &name),
+        Packet::Uninvite => { uninvited(&mut group, &mut errors); group.leave_group(); }
+        Packet::List(roster) => {
+            let fresh = roster.members.iter().filter(|m| !group.wrath_stats.contains_key(&m.guid)).map(|m| m.guid).collect::<Vec<_>>();
+            for m in &roster.members { names.resolve(m.guid, &commands); }
+            let lines = group.apply_wrath_list(roster, self_guid.0);
+            if lines.invite_accept { sounds.push_cue(INVITE_ACCEPT_SOUND); }
+            quest.bump_reask();
+            push_group_lines(&mut errors, lines.lines);
+            for member in &group.members {
+                if fresh.contains(&member.guid) && !index.0.contains_key(&member.guid) {
+                    let _ = commands
+                        .0
+                        .send(ClientCommand::RequestPartyMemberStats { guid: member.guid });
+                }
+            }
+        }
+        Packet::Stats(stats) => group.apply_wrath_stats(stats),
+    }
 }
 
 fn on_invite(
@@ -615,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_automatic_party_stats_requests_are_fenced_without_losing_records() {
+    fn wrath_automatic_party_stats_requests_are_supported_without_losing_records() {
         let (tx, rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let guid = 0x1234;
@@ -633,8 +677,8 @@ mod tests {
             "the UI record is still seated"
         );
         assert!(
-            asked(&rx).is_empty(),
-            "the unsupported automatic ask is not sent"
+            asked(&rx) == [guid],
+            "native stats requests are now supported"
         );
 
         group.members = vec![member(guid, "Brisca")];
@@ -656,8 +700,8 @@ mod tests {
             "the purge snapshot still applies"
         );
         assert!(
-            asked(&rx).is_empty(),
-            "the purge's unsupported ask is also fenced"
+            asked(&rx) == [guid],
+            "the purge requests a fresh native stats packet"
         );
     }
 

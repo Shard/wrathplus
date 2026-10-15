@@ -14,6 +14,9 @@ mod wrath_power;
 #[path = "wrath_stats.rs"]
 mod wrath_stats;
 
+#[path = "wrath_group.rs"]
+pub(crate) mod wrath_group;
+
 use super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -23,6 +26,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     wrath_stats::install(lua)?;
     wrath_loot::install(lua)?;
     wrath_power::install(lua)?;
+    wrath_group::install(lua)?;
     super::aura::wrath::install(lua)?;
     install_trusted_secure_environment(lua)?;
     install_frame_methods(lua)?;

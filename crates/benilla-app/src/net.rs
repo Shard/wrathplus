@@ -630,6 +630,11 @@ impl NetCommands {
                         | ClientCommand::Loot { .. }
                         | ClientCommand::LootMoney
                         | ClientCommand::LootRelease { .. }
+                        | ClientCommand::GroupInvite { .. }
+                        | ClientCommand::GroupAccept
+                        | ClientCommand::GroupDecline
+                        | ClientCommand::GroupLeave
+                        | ClientCommand::RequestPartyMemberStats { .. }
                         // `benilla_protocol::wrath_session`: queries, action bar, casting.
                         | ClientCommand::NameQuery { .. }
                         | ClientCommand::CreatureQuery { .. }

@@ -998,7 +998,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AttackStop
         | ClientCommand::StandStateChange { .. }
         | ClientCommand::SetSheathed { .. } => WrathRoute::NativeMelee,
-        ClientCommand::NameQuery { .. }
+        ClientCommand::GroupInvite { .. }
+        | ClientCommand::GroupAccept
+        | ClientCommand::GroupDecline
+        | ClientCommand::GroupLeave
+        | ClientCommand::RequestPartyMemberStats { .. }
+        | ClientCommand::NameQuery { .. }
         | ClientCommand::CreatureQuery { .. }
         | ClientCommand::GameObjectQuery { .. }
         | ClientCommand::SetActionButton { .. }
@@ -1331,6 +1336,7 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
 
 /// Queries, the action bar and casting, in build 12340's layouts.
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_group as g;
     use benilla_protocol::wrath_npc as n;
     use benilla_protocol::wrath_vendor as v;
     use benilla_protocol::wrath_trainer as t;
@@ -1438,6 +1444,17 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::TaxiQueryNodes { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXIQUERYAVAILABLENODES, benilla_protocol::wrath_taxi::encode_query(guid)),
         ClientCommand::ActivateTaxi { guid, source_node, dest_node } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXI, benilla_protocol::wrath_taxi::encode_activate(guid, source_node, dest_node)),
         ClientCommand::ActivateTaxiExpress { guid, nodes, .. } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXIEXPRESS, benilla_protocol::wrath_taxi::encode_express(guid, &nodes)),
+        ClientCommand::GroupInvite { name } => (
+            g::CMSG_GROUP_INVITE,
+            g::encode_invite(name.split('\0').next().unwrap_or("")).expect("NUL-free name"),
+        ),
+        ClientCommand::GroupAccept => (g::CMSG_GROUP_ACCEPT, g::encode_accept()),
+        ClientCommand::GroupDecline => (g::CMSG_GROUP_DECLINE, g::encode_decline()),
+        ClientCommand::GroupLeave => (g::CMSG_GROUP_DISBAND, g::encode_leave()),
+        ClientCommand::RequestPartyMemberStats { guid } => (
+            g::CMSG_REQUEST_PARTY_MEMBER_STATS,
+            g::encode_request_stats(guid),
+        ),
         ClientCommand::BinderActivate { binder } => (
             benilla_protocol::wrath_bind::CMSG_BINDER_ACTIVATE,
             benilla_protocol::wrath_bind::encode_activate(binder),
@@ -2802,6 +2819,24 @@ mod taxi_tests;
 
 #[path = "wrath/taxi_authority.rs"]
 mod taxi_authority;
+
+#[cfg(test)]
+mod group_tests {
+    use super::*;
+    #[test]
+    fn group_commands_route_and_encode_native_bodies() {
+        for (command, opcode, body) in [
+            (ClientCommand::GroupInvite { name: "Ally".into() }, 0x6e, b"Ally\0\0\0\0\0".to_vec()),
+            (ClientCommand::GroupAccept, 0x72, vec![0; 4]),
+            (ClientCommand::GroupDecline, 0x73, vec![]),
+            (ClientCommand::GroupLeave, 0x7b, vec![]),
+            (ClientCommand::RequestPartyMemberStats { guid: 7 }, 0x27f, vec![7,0,0,0,0,0,0,0]),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeSession);
+            assert_eq!(session_packet(command), (opcode, body));
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "wrath/mail_tests.rs"]
