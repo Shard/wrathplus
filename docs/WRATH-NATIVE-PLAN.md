@@ -168,6 +168,8 @@ Build the seams now; features land on them later.
   and behaviour tests on top of descriptor accessors. A unit that touches another crate also runs
   that crate's full `--lib` suite (benilla-ui especially: its reference-surface test rejects any
   global the 1.12 dialect gains; Wrath-only Lua API is installed for the Wrath dialect only).
+- **Run gates in the foreground** (blocking under `lockf`) inside your turn. A background job or
+  watcher that finishes does not wake you, and work then sits uncommitted while you are idle.
 - Commit in small, reviewable steps on your branch, with tests. Report to the manager when a
   reviewable unit is ready: the branch, commits, what changed, test results (pasted counts).
 - Follow existing code style: comment density, naming, references to sources (`AzerothCore
