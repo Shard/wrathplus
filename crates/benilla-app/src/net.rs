@@ -633,6 +633,7 @@ impl NetCommands {
                         // `benilla_protocol::wrath_session`: queries, action bar, casting.
                         | ClientCommand::NameQuery { .. }
                         | ClientCommand::CreatureQuery { .. }
+                        | ClientCommand::NativeWhoCommand(_)
                         | ClientCommand::PetNameQuery { .. }
                         | ClientCommand::GameObjectQuery { .. }
                         | ClientCommand::SetActionButton { .. }
@@ -2091,6 +2092,8 @@ pub(crate) enum ClientCommand {
     },
     /// Native arena-team transport only; no UI producer or inferred authority.
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
+    /// Explicit transport only; no shared WHO UI producer or permission inference.
+    NativeWhoCommand(benilla_protocol::wrath_who::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),

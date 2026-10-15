@@ -545,7 +545,7 @@ fn dispatch_packet(
             // The adapter's vectors preserve packet/block order. Replies use the sole cipher writer.
             for event in session_events {
                 authority.observe_taxi_spline(&event);
-                if *crate::net::CAST_TRACE {
+                if *crate::net::CAST_TRACE && !matches!(&event, SessionEvent::WrathWho { packet: benilla_protocol::wrath_who::Packet::Whois { .. } }) {
                     bevy::log::info!("net(wrath) RECV {event:?}");
                 }
                 send(events, event)?;
@@ -1007,6 +1007,7 @@ enum WrathRoute {
     NativeLfg,
     NativeGuild,
     NativePetNameQuery,
+    NativeWho,
     NativeChat,
     NativeMailMutation,
     NativeWorldportAck,
@@ -1023,6 +1024,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
+        ClientCommand::NativeWhoCommand(_) => WrathRoute::NativeWho,
         ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
         ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
@@ -1322,6 +1324,16 @@ fn writer_loop(
                             Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
                             Err(error) => {
                                 bevy::log::warn!("net(wrath): invalid native mail rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
+                    WrathRoute::NativeWho => {
+                        let ClientCommand::NativeWhoCommand(command) = command else { unreachable!() };
+                        match command.encode() {
+                            Ok(body) => active.writer.send_raw(command.opcode(), &body),
+                            Err(_) => {
+                                bevy::log::warn!("net(wrath): invalid native WHO command rejected before send");
                                 continue;
                             }
                         }
@@ -3260,3 +3272,7 @@ mod logout_tests;
 #[cfg(test)]
 #[path = "wrath/pet_name_tests.rs"]
 mod pet_name_tests;
+
+#[cfg(test)]
+#[path = "wrath/who_tests.rs"]
+mod who_tests;
