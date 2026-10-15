@@ -45,15 +45,12 @@ in that test still establish existence/joins rather than exact all-field parity.
 
 ## Remaining explicit Wrath known-row gaps
 
-These mapped entries have no dedicated explicit installed-Wrath known-row
-assertions identified by this audit. Existing `real_*` tests using the shared
+No mapped entries remain without dedicated explicit installed-Wrath known-row
+assertions identified by this audit. This closes the enumerated known-row gaps,
+not full schema or runtime certification. Existing `real_*` tests using the shared
 `wow_data_or_skip!` helper and synthetic map/algorithm tests are useful but were
 not run as a complete Wrath-installed suite here. Do not count a vanilla-derived
 expected row, generic parse success, or an in-range/injective map as certification.
-
-| Table | Existing reader/test location to extend |
-| --- | --- |
-| GroundEffectTexture | `src/ground_effects.rs` |
 
 Next bounded units should independently inspect native rows and layout sources,
 then assert values through the production reader; do not simply copy current
@@ -204,7 +201,6 @@ advanced sound support, native playback or archive availability of each path.
 SoundEntries unit gates: formats **535 passed, 0 failed**; installed **1 passed,
 0 failed**; app **4487 passed, 0 failed, 12 ignored**. Rustfmt and diff checks pass.
 
-
 ## Material native layout and installed regression
 
 Filename accessor `0x8b47d0` returns `DBFilesClient\Material.dbc`. Header
@@ -235,3 +231,36 @@ Material unit gates: formats **535 passed, 0 failed**; installed
 `wrath_material` **1 passed, 0 failed**; app **4487 passed, 0 failed,
 12 ignored**. Rustfmt and diff checks pass. An initial gate-script target typo
 prevented installed tests from running; the corrected full gate run passed.
+
+## GroundEffectTexture native layout and installed regression
+
+Filename accessor `0x8afec0` returns `DBFilesClient\GroundEffectTexture.dbc`.
+Header loader `0x641a30` validates WDBC, 11 columns and 44-byte records.
+Vtable `0xa27c48` (object `0xad3ae8`) binds that loader at `+4` and raw loader
+`0x659590` at `+0x0c`. The raw loader uses a 44-byte stride and decoder
+`0x8afed0`, then builds a dense first-word ID index: missing IDs are null,
+duplicate IDs overwrite earlier record pointers. The decoder reads contiguous
+spans at `+0` (4 bytes), `+4` (16), `+0x14` (16), `+0x24` (4) and
+`+0x28` (4), without reordering. This establishes offsets and widths, not
+native weighting, density interpretation or scatter behavior.
+
+The existing projection keeps columns 0–4 and maps raw columns 9–10 to
+legacy slots 5–6. No production mapping change was needed. Raw columns 5–8
+remain unexposed; unequal values in row 72982 must not shift density from
+column 9. Their conventional weight interpretation is not newly certified by
+this decoder trace, and the catalog does not preserve or implement them.
+
+`tests/wrath_ground_effects.rs` checks the effective enUS table shape
+(24981 rows × 11 columns × 44 bytes), independently inspected raw rows
+948/760/72982/11939, and the public catalog's ordered model paths and densities.
+The separate installed doodad rows name `DunBus01`/`DunGra01`/`DunGra02`/
+`DunGra03`, `ElwRoc02`, and `rsflo01`/`rsgra01`/`rsgra02`/`rsbra01`.
+This verifies the existing ID join, partial zero slots, empty-row omission,
+missing IDs, `.mdl`/`.mdx` to detail `.m2` normalization and independence
+from the Vanilla-only internal-ID switch. It does not certify the companion
+doodad table's full native schema, model archive availability, full stock
+coverage, flags, terrain type consumers or native clutter placement parity.
+
+GroundEffectTexture unit gates: formats **535 passed, 0 failed**; installed
+`wrath_ground_effects` **1 passed, 0 failed**; app **4487 passed, 0 failed,
+12 ignored**. Rustfmt and diff checks pass. No production mapping changed.
