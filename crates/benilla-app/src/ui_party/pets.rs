@@ -180,6 +180,22 @@ pub(super) fn member_pet(
 /// The roster names the pet's owner with no object, on the terms it answers `UnitExists`: the
 /// party half of `UnitPlayerOrPetInParty` compares guids alone (`0x4e8fa0`).
 fn record_state(group: &GroupState, guid: u64, owner: u64, exists: bool) -> UnitState {
+    if let Some(r) = group.wrath_pet_record(guid) {
+        let scale = super::wrath::power_scale(u32::from(r.pet_power_type.unwrap_or(0)));
+        return UnitState {
+            exists,
+            guid,
+            owner: if exists { owner } else { 0 },
+            name: r.pet_name.clone(),
+            health: r.pet_cur_hp.unwrap_or(0),
+            max_health: r.pet_max_hp.unwrap_or(0),
+            power_type: r.pet_power_type.unwrap_or(0),
+            power: u32::from(r.pet_cur_power.unwrap_or(0)) / scale,
+            max_power: u32::from(r.pet_max_power.unwrap_or(0)) / scale,
+            is_connected: true,
+            ..Default::default()
+        };
+    }
     let record = group.pet_record(guid);
     UnitState {
         exists,

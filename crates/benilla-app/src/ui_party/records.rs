@@ -29,6 +29,9 @@ impl GroupState {
     pub(crate) fn roster_names_pet(&self, member: u64, member_held: bool) -> bool {
         member_held
             || self
+                .wrath_record(member)
+                .is_some_and(|r| r.status.unwrap_or(0) & 1 != 0)
+            || self
                 .member_record(member)
                 .is_some_and(PartyMemberStatsInfo::is_online)
     }
@@ -65,6 +68,11 @@ impl GroupState {
     ) -> Option<u64> {
         match live {
             Some(fields) => fields.unit_pet_guid(),
+            None if self.wrath_roster.is_some() => self
+                .wrath_record(member)
+                .filter(|r| !online_only || r.status.unwrap_or(0) & 1 != 0)
+                .and_then(|r| r.pet_guid)
+                .filter(|&g| g != 0),
             None => self
                 .member_record(member)
                 .filter(|r| !online_only || r.is_online())

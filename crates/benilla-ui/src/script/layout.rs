@@ -1283,6 +1283,7 @@ impl UiScript {
                 bd.border_color
             };
             out.push(ExtractedQuad {
+                animation_transform: None,
                 target: ZTarget::Frame(fh),
                 z,
                 rect: Some(Rect::new(bottom, left, top, right)),

@@ -208,9 +208,9 @@ pub struct InvSlotView {
 pub const INVENTORY_SLOT_COUNT: usize = 24;
 pub type InventorySlots = [Option<InvSlotView>; INVENTORY_SLOT_COUNT];
 
-/// The six bank-bag slots in button order, live-API ids 64..=69; `None` is empty or unbought.
+/// Bank-bag capacity (seven in Wrath, six in Vanilla), in button order; `None` is empty or unbought.
 /// They are player-descriptor slots, present whether or not the bank window is open.
-pub const BANK_BAG_SLOT_COUNT: usize = 6;
+pub const BANK_BAG_SLOT_COUNT: usize = 7;
 pub type BankBagSlots = [Option<InvSlotView>; BANK_BAG_SLOT_COUNT];
 
 /// `PaperDollItemFrame.dbc`'s 36 rows as `(SlotName, SlotID, art suffix)`. The texture column
@@ -393,16 +393,8 @@ fn player_inv_slot(lua: &Lua, token: &Option<String>, slot: i64) -> Option<InvSl
     model.inv_slot(token, idx)
 }
 
-/// The bank's live-API ids, `BankButtonIDToInvSlotID`'s two bands: 24 vault slots, 6 bag slots.
-const BANK_INV_SLOTS: std::ops::RangeInclusive<usize> = 40..=63;
-const BANK_BAG_INV_SLOTS: std::ops::RangeInclusive<usize> = 64..=69;
-
 /// The vault's container id; must match `ui_items::BANK_CONTAINER` in the app.
 const BANK_CONTAINER: i64 = -1;
-
-/// The keyring's live-API ids: `KeyRingButtonIDToInvSlotID` adds `0x51` to a 1-based button id
-/// (`0x4c818b`), and the slot reader takes 0-based 81..=112 (`0x4c8567`).
-pub(super) const KEYRING_INV_SLOTS: std::ops::RangeInclusive<usize> = 82..=113;
 
 /// The keyring's container id (`KEYRING_CONTAINER`, `MainMenuBarBagButtons.lua:1`); must match
 /// `ui_items::KEYRING_CONTAINER` in the app, which feeds the keys as that container.
@@ -418,8 +410,8 @@ impl Model {
             if let Some(view) = self.bank_inv_slot(slot) {
                 return Some(view);
             }
-            if KEYRING_INV_SLOTS.contains(&slot) {
-                let n = (slot - KEYRING_INV_SLOTS.start() + 1) as u32;
+            if self.keyring_inventory_slots().contains(&slot) {
+                let n = (slot - self.keyring_inventory_slots().start() + 1) as u32;
                 let keyring = self.containers.get(&KEYRING_CONTAINER)?;
                 return keyring.slots.get(&n).map(InvSlotView::from_container_slot);
             }
@@ -437,11 +429,11 @@ impl Model {
     /// slots.
     pub(super) fn inv_repair_cost(&self, slot: usize) -> u32 {
         let costs = &self.repair_costs;
-        let cost = if BANK_INV_SLOTS.contains(&slot) {
-            let n = (slot - BANK_INV_SLOTS.start() + 1) as u32;
+        let cost = if self.bank_inventory_slots().contains(&slot) {
+            let n = (slot - self.bank_inventory_slots().start() + 1) as u32;
             costs.bags.get(&(BANK_CONTAINER, n))
-        } else if KEYRING_INV_SLOTS.contains(&slot) {
-            let n = (slot - KEYRING_INV_SLOTS.start() + 1) as u32;
+        } else if self.keyring_inventory_slots().contains(&slot) {
+            let n = (slot - self.keyring_inventory_slots().start() + 1) as u32;
             costs.bags.get(&(KEYRING_CONTAINER, n))
         } else {
             u32::try_from(slot)
@@ -452,30 +444,19 @@ impl Model {
     }
 
     fn bank_inv_slot(&self, slot: usize) -> Option<InvSlotView> {
-        if BANK_INV_SLOTS.contains(&slot) {
+        if self.bank_inventory_slots().contains(&slot) {
             let vault = self.containers.get(&BANK_CONTAINER)?;
-            let n = (slot - BANK_INV_SLOTS.start() + 1) as u32;
+            let n = (slot - self.bank_inventory_slots().start() + 1) as u32;
             return vault.slots.get(&n).map(InvSlotView::from_container_slot);
         }
-        if BANK_BAG_INV_SLOTS.contains(&slot) {
+        if self.bank_bag_inventory_slots().contains(&slot) {
             // A bank bag is a container, not a slot in one, so this band is its own store; stock
             // picks it up and describes it through this API.
-            let i = slot - BANK_BAG_INV_SLOTS.start();
+            let i = slot - self.bank_bag_inventory_slots().start();
             return self.bank_bag_slots.get(i)?.clone();
         }
         None
     }
-}
-
-/// The inventory-slot reader's whitelist (`0x4c8520`) on its 0-based slot (`0x4c8546`); outside
-/// it the binding raises "Invalid inventory slot in …". The backpack's item slots (23..=38) and
-/// buyback (69..=80) are container-API slots, not in it.
-pub(super) fn inventory_slot_reader_accepts(slot0: i32) -> bool {
-    slot0 == -1                            // Lua 0      the ammo leg
-        || (0x00..=0x16).contains(&slot0)  // Lua 1..=23   the doll + the four equipped bags
-        || (0x27..=0x3e).contains(&slot0)  // Lua 40..=63  the bank vault
-        || (0x3f..=0x44).contains(&slot0)  // Lua 64..=69  the bank bag slots
-        || (0x51..=0x70).contains(&slot0) // Lua 82..=113 the keyring
 }
 
 fn link_item_name(link: &str) -> Option<String> {
@@ -807,7 +788,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let slot0 =
                 super::binding_abi::number_arg(lua, slot, INVALID_SLOT_GET_INVENTORY_ITEM_COUNT)?;
             let slot0 = slot0.wrapping_sub(1);
-            if !inventory_slot_reader_accepts(slot0) {
+            if !lua
+                .app_data_ref::<Model>()
+                .expect("model")
+                .inventory_slot_reader_accepts(slot0)
+            {
                 return Err(mlua::Error::RuntimeError(
                     INVALID_SLOT_GET_INVENTORY_ITEM_COUNT.into(),
                 ));
@@ -900,8 +885,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     "Invalid inventory slot in GetInventorySlotInfo",
                 ));
             };
+            let id = if lua.app_data_ref::<Model>().expect("model").dialect
+                == super::ScriptDialect::Wrath12340
+                && *id >= 64
+            {
+                *id + 4
+            } else {
+                *id
+            };
             Ok((
-                *id,
+                id,
                 // The DBC's bytes verbatim, unnormalised (`0x4c825b`): a lowercase directory and
                 // the `.blp` extension, visible to any Lua that compares the string.
                 Value::String(
@@ -910,7 +903,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     ))?,
                 ),
                 // `checkRelic`: the number 1 for `RangedSlot` only (`0x4c8263`), not a boolean.
-                if *id == 18 {
+                if id == 18 {
                     Value::Integer(1)
                 } else {
                     Value::Nil

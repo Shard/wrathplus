@@ -196,6 +196,18 @@ impl UnitAuras {
                 walk.push((next, false));
             }
             if guid != me {
+                if store.is_none() && record_ok {
+                    if let Some(native) = group.and_then(|g| g.wrath_aura_slots(guid)) {
+                        let stamps = native.into_iter().map(|(slot, spell_id, _, flags)| crate::net::wrath_auras::StampedAura {
+                            aura: benilla_protocol::wrath_auras::NativeAura {
+                                slot, spell_id, flags, level: 0, stacks: 1, caster_guid: None,
+                                max_duration_ms: None, remaining_ms: None,
+                            }, received_at: 0.0,
+                        }).collect::<Vec<_>>();
+                        self.refresh_native(guid, &stamps, catalog, clocks);
+                        continue;
+                    }
+                }
                 if let Some(auras) = packets.and_then(|p| p.by_guid.get(&guid)) {
                     self.refresh_native(guid, auras, catalog, clocks);
                 } else {
@@ -300,8 +312,12 @@ impl UnitAuras {
             )),
             None if record_ok => {
                 if let Some(group) = group {
-                    self.scratch
-                        .extend(record_inputs(group.roster_aura_slots(guid), catalog));
+                    if let Some(native) = group.wrath_aura_slots(guid) {
+                        self.scratch.extend(native);
+                    } else {
+                        self.scratch
+                            .extend(record_inputs(group.roster_aura_slots(guid), catalog));
+                    }
                 }
             }
             None => return,

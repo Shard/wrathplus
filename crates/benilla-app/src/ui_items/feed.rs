@@ -1,6 +1,11 @@
 //! The per-frame feeds into the VM: the container snapshots built from the player's descriptor,
 //! and the item-tooltip views every window reads.
 
+#[cfg(test)]
+mod descriptor_tests;
+#[cfg(test)]
+mod item_spell_tests;
+
 use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
@@ -16,9 +21,8 @@ use crate::ui_script::gate;
 
 use super::equip_error::equip_error_key;
 use super::{
-    find_equip_slot, has_key, keyring_size, slot_guid_count, EquipErrors, BAGS, BAG_SLOT_FIRST,
-    BANK_BAGS, BANK_BAG_ID_FIRST, BANK_BAG_SLOT_FIRST, BANK_CONTAINER, BANK_SLOTS,
-    KEYRING_CONTAINER, KEYRING_SLOTS, PACK_SLOTS,
+    find_equip_slot, has_key, slot_guid_count, EquipErrors, BAGS, BAG_SLOT_FIRST,
+    BANK_BAG_ID_FIRST, BANK_CONTAINER, BANK_SLOTS, KEYRING_CONTAINER, PACK_SLOTS,
 };
 
 /// What the container feed last pushed, for per-bag change events.
@@ -34,9 +38,9 @@ pub(crate) struct FeedMemory {
     petition_records: gate::Watch,
     enchant_deadlines: gate::Watch,
     /// The last [`SlotGuids::bags`], diffed for `BAG_CLOSED`.
-    bag_guids: [u64; 10],
+    bag_guids: [u64; 11],
     /// The last [`SlotGuids::vault`], diffed for `PLAYERBANKSLOTS_CHANGED`.
-    vault_guids: [u64; BANK_SLOTS as usize],
+    vault_guids: [u64; 28],
 }
 
 /// The item guids in the player's bag and vault slots, as the reference's watchers read them
@@ -44,10 +48,10 @@ pub(crate) struct FeedMemory {
 /// says what it looks like, so two identical items swapped still register.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub(crate) struct SlotGuids {
-    /// The bag in containers 1..=10 (equipped, then bank bags), indexed `id - 1`.
-    pub bags: [u64; 10],
+    /// The bag in containers 1..=11 (Wrath maximum; equipped, then bank bags), indexed `id - 1`.
+    pub bags: [u64; 11],
     /// The 24 vault slots, indexed `slot - 1`.
-    pub vault: [u64; BANK_SLOTS as usize],
+    pub vault: [u64; 28],
 }
 
 /// A spell's `$`-substituted description, for item trigger and set-bonus lines. An empty one
@@ -228,6 +232,14 @@ fn template_view(
             .iter()
             .filter(|s| s.spell_id != 0)
             .filter_map(|s| spell_text(s.spell_id).map(|n| (s.trigger, s.spell_id, n)))
+            .collect(),
+        // Raw template order, not tooltip descriptions: unnamed and undescribed spells
+        // remain available to Wrath item APIs; selection belongs to the UI binding.
+        item_spells: t
+            .spells
+            .iter()
+            .filter(|s| s.spell_id != 0)
+            .map(|s| (s.trigger, s.spell_id, spell_name(s.spell_id)))
             .collect(),
         charges: charges_count(&t.spells),
         description: t.description.clone(),
@@ -661,7 +673,8 @@ fn resolve_slot(
     let Some(t) = template else {
         // Asked (or a cached negative); show the slot occupied while the answer is in flight.
         return Some(ContainerSlot {
-            durability: None,
+            // Durability belongs to the instance; a pending template only hides its icon/name.
+            durability,
             item_id: entry,
             count,
             readable,
@@ -738,8 +751,14 @@ fn bag_family_name(
     let families = families?;
     let guid = match bag_slot {
         s if (BAG_SLOT_FIRST..BAG_SLOT_FIRST + BAGS).contains(&s) => store.0.player_inv_slot(s),
-        s if (BANK_BAG_SLOT_FIRST..BANK_BAG_SLOT_FIRST + BANK_BAGS).contains(&s) => {
-            store.0.player_bank_bag_slot(s - BANK_BAG_SLOT_FIRST)
+        s if (super::StorageSlots::for_layout(store.0.layout()).bank_bag_first
+            ..super::StorageSlots::for_layout(store.0.layout()).bank_bag_first
+                + super::StorageSlots::for_layout(store.0.layout()).bank_bags)
+            .contains(&s) =>
+        {
+            store.0.player_bank_bag_slot(
+                s - super::StorageSlots::for_layout(store.0.layout()).bank_bag_first,
+            )
         }
         // 255, the player's own array, names no bag.
         _ => None,
@@ -1033,7 +1052,7 @@ pub(crate) fn feed_containers(
         // The bank, container -1 (the vault) and 5..=10 (its bags), fed whether or not the window
         // is open: the descriptor streams at login.
         let mut slots = HashMap::new();
-        for i in 0..BANK_SLOTS {
+        for i in 0..super::StorageSlots::for_layout(store.0.layout()).bank_slots {
             let guid = store.0.player_bank_slot(i).unwrap_or(0);
             if let Some(mut slot) = resolve_slot(
                 guid,
@@ -1058,11 +1077,11 @@ pub(crate) fn feed_containers(
             BANK_CONTAINER,
             ContainerState {
                 name: Some("Bank".into()),
-                num_slots: u32::from(BANK_SLOTS),
+                num_slots: u32::from(super::StorageSlots::for_layout(store.0.layout()).bank_slots),
                 slots,
             },
         );
-        for bank_bag in 0..BANK_BAGS {
+        for bank_bag in 0..super::StorageSlots::for_layout(store.0.layout()).bank_bags {
             let bag_id = BANK_BAG_ID_FIRST + i64::from(bank_bag);
             let bag_guid = store.0.player_bank_bag_slot(bank_bag).unwrap_or(0);
             if bag_guid == 0 {
@@ -1119,9 +1138,10 @@ pub(crate) fn feed_containers(
         // The keyring, container -2: player slots 81.., sized by the level ladder that stock
         // `GetKeyRingSize` (`ContainerFrame.lua:773`) reads off `UnitLevel` and the server shares.
         // Slots past the size, which the server refuses, are not fed.
-        let size = keyring_size(store.0.unit_level().unwrap_or(1));
+        let storage = super::StorageSlots::for_layout(store.0.layout());
+        let size = storage.keyring_size(store.0.unit_level().unwrap_or(1));
         let mut slots = HashMap::new();
-        for i in 0..size.min(u32::from(KEYRING_SLOTS)) as u8 {
+        for i in 0..size.min(u32::from(storage.keyring_slots)) as u8 {
             let guid = store.0.player_keyring_slot(i).unwrap_or(0);
             if let Some(mut slot) = resolve_slot(
                 guid,
@@ -1239,19 +1259,21 @@ pub(crate) fn apply_container_source(
     pushed
 }
 
-/// The item guid in vault slot `i` (0-based; player slots 39..62), 0 when empty. The reference's
+/// The item guid in vault slot `i` (0-based; Vanilla 39..62, Wrath 39..66), 0 when empty. The reference's
 /// band `0x5dd8a0` watches these fields with `0x5ddcf0`.
 fn vault_slot_guid(store: &ObjectStore, i: u8) -> u64 {
     store.0.player_bank_slot(i).unwrap_or(0)
 }
 
-/// The guid of the bag in container `id` (1..=10, equipped then bank bags), 0 when empty or for any
-/// other id. These are the ten slots whose watcher (`0x4f8cc0` installs `0x4f8ec0`) can close a
+/// The guid of the bag in container `id` (Vanilla 1..=10, Wrath 1..=11), 0 when empty or for any
+/// other id. These are the bag slots whose watcher (`0x4f8cc0` installs `0x4f8ec0`) can close a
 /// window; the backpack and keyring loops (`0x4f8db0`) never reach the event.
 fn bag_slot_guid(store: &ObjectStore, id: i64) -> u64 {
     match id {
         1..=4 => store.0.player_inv_slot(BAG_SLOT_FIRST + (id as u8 - 1)),
-        5..=10 => store.0.player_bank_bag_slot(id as u8 - 5),
+        b if (5..=super::StorageSlots::for_layout(store.0.layout()).last_bag()).contains(&b) => {
+            store.0.player_bank_bag_slot(id as u8 - 5)
+        }
         _ => None,
     }
     .unwrap_or(0)
@@ -1267,7 +1289,7 @@ fn diff_and_push(
     // `BAG_CLOSED` (one fire site, `0x4f92b5`) is the only thing that hides a bag window. It fires
     // when the bag's guid changes from nonzero (`0x4f923d`, `0x4f9247`), so a swapped bag closes
     // and then updates; diffed on the guid, as two identical bags swapped leave the states equal.
-    let closed: Vec<i64> = (1..=10)
+    let closed: Vec<i64> = (1..=11)
         .filter(|&id| {
             let (was, now) = (
                 memory.bag_guids[id as usize - 1],
@@ -1298,7 +1320,7 @@ fn diff_and_push(
             .pushed
             .get(&BANK_CONTAINER)
             .map_or(&empty, |c| &c.slots);
-        (1..=u32::from(BANK_SLOTS))
+        (1..=28u32)
             .filter_map(|slot| {
                 let i = slot as usize - 1;
                 if guids.vault[i] != memory.vault_guids[i] {
@@ -1389,8 +1411,8 @@ mod tests {
 
     /// No bags and an empty vault.
     const NO_BAGS: SlotGuids = SlotGuids {
-        bags: [0; 10],
-        vault: [0; BANK_SLOTS as usize],
+        bags: [0; 11],
+        vault: [0; 28],
     };
 
     /// The handler's container ids reach the VM as `BAG_OPEN`'s `arg1`.

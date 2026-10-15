@@ -2623,3 +2623,12 @@ fn wrath_animations_exist_before_owner_onload_and_timer_finishes() {
     s.tick(1.0);
     assert!(s.eval::<bool>("return FINISHED").unwrap());
 }
+
+#[test]
+fn wrath_scale_rotation_xml_loaded_before_onload() {
+    let s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let doc = crate::framexml::parse(r#"<Ui><Frame name="TransformXml"><Animations><AnimationGroup parentKey="group"><Scale parentKey="scale" scaleX="2" scaleY="3" duration="1"><Origin point="TOPLEFT" x="4" y="5"/></Scale><Rotation parentKey="rotation" degrees="90" duration="1"/></AnimationGroup></Animations><Scripts><OnLoad>local x,y=self.group.scale:GetScale(); XMLTRANSFORM=x==2 and y==3 and self.group.rotation:GetDegrees()==90; local p,x,y=self.group.scale:GetOrigin(); XMLORIGIN=p=='TOPLEFT' and x==4 and y==5</OnLoad></Scripts></Frame></Ui>"#).unwrap();
+    let report=super::load(&s,&doc,&|_: &str| None);
+    assert!(report.errors.is_empty(),"{report:?}");
+    assert!(s.eval::<bool>("return XMLTRANSFORM and XMLORIGIN").unwrap());
+}

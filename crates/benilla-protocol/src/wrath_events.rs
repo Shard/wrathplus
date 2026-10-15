@@ -213,6 +213,16 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_group::handles(opcode) => {
+                Ok(match crate::wrath_group::decode(opcode, body) {
+                    Ok(packet) => handled(
+                        vec![SessionEvent::WrathGroup { packet: Box::new(packet) }],
+                        Vec::new(),
+                        Vec::new(),
+                    ),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_mail::handles(opcode) => {
                 Ok(match crate::wrath_mail::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

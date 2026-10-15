@@ -5,12 +5,17 @@ Without configuration, **Classic** is selected: every Plus feature is disabled, 
 entry says `true`. This is the evaluation default. `WOW_EXPERIENCE=classic|plus` overrides only
 the profile; invalid values stop boot rather than silently selecting a different experience.
 
-The existing `BENILLA_HOME/config.toml` supports:
+## Plus: player setup
+
+Close the client and edit `config.toml` in your local settings folder. This is
+`$BENILLA_HOME/config.toml` when `BENILLA_HOME` is set; otherwise use `benilla-config/config.toml`
+beside the shipped executable (development builds use the main project's `benilla-config/`).
+Keep any existing `[cvars]` settings and add or update these tables, rather than duplicating them:
 
 ```toml
 [experience]
 profile = "plus"
-packs = ["base-art", "my-art"] # ascending priority, later packs win
+packs = []                    # optional local mod-pack folder names, later entries win
 allow_classic_overrides = false
 
 [experience.features]
@@ -20,13 +25,41 @@ fog = true
 bloom = true
 tone_mapping = true
 colour_grading = true
+readable_text = false         # opt in for larger stock chat text
+ambient_occlusion = false    # opt in; changes antialiasing at startup
 ```
 
-All registered features default on in Plus; each can be disabled separately. These are seams:
-a registered feature only has an effect once its consumer is implemented. Unknown feature names
-are rejected rather than silently misspelling a toggle. CVar saves preserve the experience table.
+Restart the client to load the settings. Simply setting `profile = "plus"` enables the six
+features shown as `true`; readable text and AO remain off unless requested. Set any feature to
+`false` to keep the rest of Plus without that effect. Use the exact names above (including
+`colour_grading`); unknown names are rejected.
+
+| Feature | What you should expect |
+| --- | --- |
+| `asset_overrides` | Replaces original assets with enabled local packs; no visual change with an empty `packs` list. See [Asset packs](#asset-packs) for installation. |
+| `shadows` | Adds real-time directional sunlight shadows on supported world geometry. Not every translucent object or effect casts. |
+| `fog` | Adds distance/height haze to the world; existing fog settings and interior fog still apply. |
+| `bloom` | Adds a restrained glow around bright world areas. |
+| `tone_mapping` | Uses a filmic exposure/contrast curve for the world image. |
+| `colour_grading` | Cools shadows and slightly desaturates the world for a darker fantasy look. |
+| `readable_text` | Raises smaller text in the ten stock chat windows to a 16-unit minimum; it does not enlarge quest text or the whole UI. |
+| `ambient_occlusion` | Adds ambient contact shading on terrain and exterior models. Buildings/static WMO and indoor lighting are not included yet; sunlight and point lights are not darkened. |
+
+World postprocessing does not apply to portraits or character-selection panes. AO requires a
+supported GPU and MSAA off: enabling it at startup selects MSAA Off plus SMAA High edge smoothing.
+Unsupported devices skip AO with a warning. **Restart after changing AO or pack settings**;
+AO's antialiasing choice and asset mounts are fixed at startup. Config-file edits for other
+features also take effect on the next launch; runtime developer switches do not save changes.
+There is no player-facing in-game Plus toggle yet.
+
+To return to the stock look, set `profile = "classic"` and restart. Classic masks every graphics
+and text feature, even saved `true` entries. Leave `allow_classic_overrides = false` to use only
+original archive assets. A launcher environment setting `WOW_EXPERIENCE=classic|plus` takes
+precedence over the saved profile, so check it if the selected profile seems unchanged.
+
 Capture runs ignore persistent player configuration, as they do for CVars; an explicit
-`WOW_EXPERIENCE=plus` is needed to select Plus for a capture.
+`WOW_EXPERIENCE=plus` is needed to select Plus for a capture. The sections below describe
+implementation limits; live visual quality and Classic pixel equality require manager captures.
 
 `experience::Experience` is the app's Bevy resource and the only feature-query API. Runtime callers
 use `set_profile` and `set_feature`; switching back to Classic masks existing feature overrides.
@@ -297,3 +330,34 @@ Manifest actor entries record normalized requested model/skin paths, authored pl
 installed/effective scale and frozen pose. These paths are **not winning-archive provenance**;
 actual override consumption remains in existing reader tracing (`asset override` with path/source).
 No actor route is claimed live-verified; the manager owns framing/render checks and client runs.
+
+### Ambient occlusion: first staged slice
+
+`[experience.features] ambient_occlusion = true` opts Plus into Bevy screen-space ambient
+occlusion (SSAO). It is **off by default**, and Classic always masks it. Configure before launch:
+the boot policy selects **MSAA Off + SMAA High** for the world camera. Disabled Plus and Classic
+retain their existing configured AA, including `gxMultisample`/`WOW_MSAA`; no config/CVar is
+rewritten. AA is latched until restart. Disabling AO or switching to Classic removes SSAO and
+its owned depth/normal prepasses but leaves that boot AA choice latched. Enabling AO at runtime
+on a multisampled camera is a logged no-op, not a live MSAA switch. Unsupported GPUs (fewer than
+five storage textures per shader stage) and headless renderers likewise do not enable SSAO.
+Portraits, glue views and UI cameras are not opted in.
+
+The first slice covers terrain and Bevy-rendered exterior M2 models. SSAO attenuates the separated
+ambient contribution before light clamping, not sun, point lights, specular or unlit output.
+Indoor lighting is untouched: interior probes contain mixed ambient/direct DC terms that cannot
+safely be darkened wholesale. No shared-light or two-stage material ABI is expanded. SSAO uses
+Bevy mesh-view binding 16. Camera model depth/normals reuse the visible model shader's transforms,
+UV animation, two-stage source cutout, clutter and merged-placement coverage independently of
+shadow-caster exclusions. Non-depth, additive/multiply, sky and far-side lanes are excluded.
+
+**Retained static-GX geometry (including most buildings) gets no AO in this slice.** Its custom
+pass remains after SSAO, absent from the AO depth/normal inputs, and its colour shader never
+samples AO. Its silhouette therefore cannot generate an AO halo or receive one; underlying
+terrain/model AO is not a claim of building occlusion. WMO model-lane fallbacks also do not receive AO. The retained pass is not rerouted or
+changed, and there is no boot or runtime renderer substitution. A dedicated building
+camera-depth/normal pass is a separate follow-up unit. Transparent and other non-prepass lanes
+are likewise not certified as AO occluders.
+
+Headless shader composition and policy tests establish wiring, not appearance or Classic pixel
+equality. The manager must verify captures, silhouettes and AA/post-pass compatibility live.

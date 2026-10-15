@@ -945,6 +945,10 @@ pub enum SessionEvent {
     },
     /// Someone invited us to their group (`SMSG_GROUP_INVITE`): the invite popup.
     GroupInvite { inviter: String },
+    /// Lossless build-12340 group packet; never narrowed into Vanilla records.
+    WrathGroup {
+        packet: Box<crate::wrath_group::Packet>,
+    },
     /// An invite we sent was declined (`SMSG_GROUP_DECLINE`).
     GroupDecline { name: String },
     /// We were removed from our group (`SMSG_GROUP_UNINVITE`, empty body), kicked or left.

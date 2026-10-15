@@ -15,7 +15,7 @@ use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, Objects, SelfPlayer};
-use crate::ui_items::{item_link, slot_guid, wire_pos};
+use crate::ui_items::{item_link, slot_guid, wire_pos_for};
 use crate::ui_script::{gate, UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 use benilla_protocol::messages::BAG_PLAYER_INVENTORY;
@@ -763,7 +763,16 @@ fn drain_merchant(
     // reference's fixed count on all three drop paths.
     for (bag, slot, entry) in script.take_merchant_slot_buys() {
         let Some(vendor) = open.vendor else { continue };
-        let (Some(store), Some((bag_index, bag_slot))) = (self_store, wire_pos(bag, slot)) else {
+        let (Some(store), Some((bag_index, bag_slot))) = (
+            self_store,
+            wire_pos_for(
+                self_store
+                    .map(|s| s.0.layout())
+                    .unwrap_or(benilla_protocol::messages::FieldLayout::Vanilla5875),
+                bag,
+                slot,
+            ),
+        ) else {
             debug!("ui_merchant: slot buy to an unaddressable slot ({bag}, {slot}) — ignored");
             continue;
         };
@@ -771,6 +780,11 @@ fn drain_merchant(
         // array (`BAG_PLAYER_INVENTORY`), the bag's for a real bag.
         let bag_guid = if bag_index == BAG_PLAYER_INVENTORY {
             self_pair.map(|(_, g)| g.0)
+        } else if bag >= crate::ui_items::BANK_BAG_ID_FIRST {
+            store
+                .0
+                .player_bank_bag_slot((bag - crate::ui_items::BANK_BAG_ID_FIRST) as u8)
+                .filter(|g| *g != 0)
         } else {
             store.0.player_inv_slot(bag_index).filter(|g| *g != 0)
         };

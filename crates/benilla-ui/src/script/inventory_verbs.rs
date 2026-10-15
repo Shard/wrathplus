@@ -5,7 +5,7 @@
 use mlua::{Lua, MultiValue, Value};
 
 use super::binding_abi::number_arg;
-use super::char_stats::{inventory_slot_reader_accepts, recompute_inventory_alerts};
+use super::char_stats::recompute_inventory_alerts;
 use super::container::UiCursorMode;
 use super::region::{clear_texture, this_texture};
 use super::Model;
@@ -15,7 +15,11 @@ use super::Model;
 /// 0-based slot, `-1` for Lua 0, the ammo leg.
 fn inventory_slot_arg(lua: &Lua, v: Value, message: &'static str) -> mlua::Result<i32> {
     let slot0 = number_arg(lua, v, message)?.wrapping_sub(1);
-    if !inventory_slot_reader_accepts(slot0) {
+    if !lua
+        .app_data_ref::<Model>()
+        .expect("model")
+        .inventory_slot_reader_accepts(slot0)
+    {
         return Err(mlua::Error::RuntimeError(message.into()));
     }
     Ok(slot0)
@@ -31,7 +35,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "KeyRingButtonIDToInvSlotID",
         lua.create_function(|lua, id: Value| {
             let id = number_arg(lua, id, "Usage: KeyRingButtonIDToInvSlotID(buttonID)")?;
-            Ok(i64::from(id.wrapping_add(0x51)))
+            Ok(i64::from(
+                id.wrapping_add(
+                    *lua.app_data_ref::<Model>()
+                        .expect("model")
+                        .keyring_inventory_slots()
+                        .start() as i32
+                        - 1,
+                ),
+            ))
         })?,
     )?;
 

@@ -20,9 +20,19 @@ use bevy::shader::ShaderRef;
 #[path = "shadow_material.rs"]
 mod shadow_material;
 
+const CAMERA_NORMAL_SHADER: Handle<bevy::shader::Shader> =
+    bevy::asset::uuid_handle!("c5a00000-0000-4000-8000-000000000001");
+
 /// Compile the four WGSL files into the binary under `embedded://benilla_assets/shaders/…`. Call
 /// after Bevy's `AssetPlugin`, whose registry this fills; [`crate::register_asset_loaders`] does.
 pub fn register_shaders(app: &mut App) {
+    app.init_resource::<Assets<bevy::shader::Shader>>();
+    bevy::asset::load_internal_asset!(
+        app,
+        CAMERA_NORMAL_SHADER,
+        "shaders/wow_model.wgsl",
+        bevy::shader::Shader::from_wgsl
+    );
     bevy::asset::embedded_asset!(app, "shaders/terrain.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/wow_model.wgsl");
     bevy::asset::embedded_asset!(app, "shaders/wow_shadow.wgsl");
@@ -161,6 +171,43 @@ impl MaterialExtension for WowModelExt {
         layout: &MeshVertexBufferLayoutRef,
         key: MaterialExtensionKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
+        let defined =
+            |name: &str| {
+                descriptor.vertex.shader_defs.iter().any(
+                    |def| matches!(def, bevy::shader::ShaderDefVal::Bool(n, true) if n == name),
+                )
+            };
+        let camera_normal = defined("PREPASS_PIPELINE") && defined("NORMAL_PREPASS");
+        if camera_normal {
+            // Camera depth/normals reuse visible vertex transforms and alpha coverage, not
+            // the light-view caster exclusions. Keep the attachment/depth state from Bevy.
+            descriptor.vertex.shader = CAMERA_NORMAL_SHADER;
+            if let Some(fragment) = descriptor.fragment.as_mut() {
+                fragment.shader = CAMERA_NORMAL_SHADER;
+            }
+            for defs in std::iter::once(&mut descriptor.vertex.shader_defs)
+                .chain(descriptor.fragment.iter_mut().map(|f| &mut f.shader_defs))
+            {
+                defs.retain(|def| !matches!(def, bevy::shader::ShaderDefVal::Bool(name, _) if
+                    matches!(name.as_str(), "PREPASS_PIPELINE" | "PREPASS_FRAGMENT" | "NORMAL_PREPASS" | "NORMAL_PREPASS_OR_DEFERRED_PREPASS" | "SCREEN_SPACE_AMBIENT_OCCLUSION" | "LOAD_PREPASS_NORMALS")));
+                defs.push("WOW_CAMERA_NORMAL".into());
+                defs.push("VERTEX_OUTPUT_INSTANCE_INDEX".into());
+            }
+            let mut attrs = Vec::new();
+            for (attr, location) in [
+                (Mesh::ATTRIBUTE_POSITION, 0),
+                (Mesh::ATTRIBUTE_NORMAL, 1),
+                (Mesh::ATTRIBUTE_UV_0, 2),
+                (Mesh::ATTRIBUTE_UV_1, 3),
+                (Mesh::ATTRIBUTE_TANGENT, 4),
+                (Mesh::ATTRIBUTE_COLOR, 5),
+            ] {
+                if layout.0.contains(attr) {
+                    attrs.push(attr.at_shader_location(location));
+                }
+            }
+            descriptor.vertex.buffers = vec![layout.0.get_layout(&attrs)?];
+        }
         // Shadow IO differs from forward IO. Never borrow forward depth/blend mutations.
         if descriptor.vertex.shader_defs.iter().any(|def| {
             matches!(def, bevy::shader::ShaderDefVal::Bool(name, true) if name == "PREPASS_PIPELINE")
@@ -218,6 +265,21 @@ impl MaterialExtension for WowModelExt {
                 attrs.push(crate::ATTRIBUTE_WOW_MERGED_SLOT.at_shader_location(13));
             }
             descriptor.vertex.buffers = vec![layout.0.get_layout(&attrs)?];
+        }
+        if camera_normal {
+            if key.bind_group_data.no_depth_write
+                || key.bind_group_data.no_depth_test
+                || key.bind_group_data.sky_depth
+                || key.bind_group_data.additive
+                || key.bind_group_data.modulate
+                || key.bind_group_data.modulate2x
+                || key.bind_group_data.far_side
+            {
+                if let Some(fragment) = descriptor.fragment.as_mut() {
+                    fragment.shader_defs.push("WOW_CAMERA_EXCLUDE".into());
+                }
+            }
+            return Ok(());
         }
         if let Some(ds) = descriptor.depth_stencil.as_mut() {
             ds.depth_write_enabled = !key.bind_group_data.no_depth_write;
@@ -455,6 +517,34 @@ impl MaterialExtension for TerrainExtension {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn camera_normal_uses_visible_coverage_not_shadow_exclusions() {
+        let forward = include_str!("shaders/wow_model.wgsl");
+        let specialization = include_str!("materials.rs");
+        assert!(forward.contains("#ifdef WOW_CAMERA_NORMAL"));
+        assert!(forward.contains("out.color = vec4<f32>(wow_normalize(in.world_normal)"));
+        assert!(forward.contains("base_color.a < VANILLA_ALPHA_KEY"));
+        assert!(forward.contains("obj_fade = obj_fade * in.merged_fade"));
+        assert!(forward.contains("if (m.stage2.x > 0.5 && m.stage2.z > 2.0)"));
+        assert!(specialization.contains("descriptor.vertex.shader = CAMERA_NORMAL_SHADER"));
+        assert!(!forward.contains("WOW_SHADOW_EXCLUDE"));
+    }
+
+    #[test]
+    fn ao_attenuates_separated_ambient_not_interior_probe_dc() {
+        let forward = include_str!("shaders/wow_model.wgsl");
+        assert!(forward.contains(
+            "if (m.model_flags.z < 0.5 && m.model_flags.x < 0.5) {\n        ao = textureLoad"
+        ));
+        assert!(forward.contains("ambient_nl *= ao"));
+        assert!(forward.contains("sun_lobe -= vec3<f32>(wow_light.sh_c10_r.w"));
+        assert!(!forward.contains("prop_probes[probe + 0u].w * ao"));
+        let terrain = include_str!("shaders/terrain.wgsl");
+        assert!(terrain.contains(
+            "in.non_sun + in.sun * sun_visibility - wow_light.light_ambient.rgb * (1.0 - ao)"
+        ));
+    }
+
     /// The sky depth law for the WMO skybox, the one sky element on the model lane.
     #[test]
     fn the_sky_lane_pins_the_far_depth_at_the_vertex() {
@@ -539,6 +629,44 @@ mod tests {
 
 #[cfg(test)]
 mod two_stage_tests {
+    // CPU twin of the Wrath-only environment stage in wow_model.wgsl.
+    fn sphere_uv(p: bevy::math::Vec3, n: bevy::math::Vec3) -> bevy::math::Vec2 {
+        let i = p.normalize();
+        let n = n.normalize();
+        let r = i - 2.0 * i.dot(n) * n;
+        bevy::math::Vec2::splat(0.5) + 0.5 * r.truncate() / (r + bevy::math::Vec3::Z).length()
+    }
+
+    #[test]
+    fn wrath_stage_two_sphere_map_known_reflections() {
+        use bevy::math::{Vec2, Vec3};
+        // Visible points have negative view Z. Eye-to-vertex I=-Z reflected
+        // about a camera-facing +Z normal returns +Z: finite sphere centre.
+        let head_on = sphere_uv(-Vec3::Z, Vec3::Z);
+        assert!(head_on.is_finite());
+        assert_eq!(head_on, Vec2::splat(0.5));
+        let q = std::f32::consts::FRAC_1_SQRT_2;
+        for (normal, expected) in [
+            (Vec3::new(q, 0.0, q), Vec2::new(0.5 + 0.5 * q, 0.5)),
+            (Vec3::new(-q, 0.0, q), Vec2::new(0.5 - 0.5 * q, 0.5)),
+            (Vec3::new(0.0, q, q), Vec2::new(0.5, 0.5 + 0.5 * q)),
+        ] {
+            assert!(sphere_uv(-Vec3::Z, normal).abs_diff_eq(expected, 1e-6));
+            assert!(sphere_uv(-3.0 * Vec3::Z, 2.0 * normal).abs_diff_eq(expected, 1e-6));
+        }
+        // R near -Z approaches the rim; exactly -Z is the native singularity.
+        let grazing = sphere_uv(-Vec3::Z, Vec3::new(1.0, 0.0, 0.01));
+        assert!(grazing.is_finite());
+        assert!(grazing.x > 0.99 && grazing.x <= 1.0);
+        assert_eq!(grazing.y, 0.5);
+        let source = include_str!("shaders/wow_model.wgsl");
+        assert!(source.contains("reflect(normalize(p_view), n_view)"));
+        assert!(source.contains("length(refl + vec3<f32>(0.0, 0.0, 1.0))"));
+        assert!(source.contains("if (m.stage2.x > 0.5 && m.stage2.z > 2.0)"));
+        // UV0's Vanilla expression is intentionally unchanged.
+        assert!(source.contains("out.uv = refl.xy * 0.5 + vec2<f32>(0.5, 0.5)"));
+    }
+
     #[test]
     fn both_shader_parameter_layouts_match_rust_stage_order() {
         let forward = include_str!("shaders/wow_model.wgsl");

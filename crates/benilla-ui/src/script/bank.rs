@@ -109,7 +109,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let is_bag = is_bag
                 .and_then(|v| lua.coerce_number(v).ok().flatten())
                 .is_some();
-            let step = if is_bag { 59 } else { 39 };
+            let step = if is_bag {
+                *lua.app_data_ref::<Model>()
+                    .expect("model")
+                    .bank_bag_inventory_slots()
+                    .start() as i32
+                    - 5
+            } else {
+                39
+            };
             Ok(i64::from(n.wrapping_add(step)))
         })?,
     )?;

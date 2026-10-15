@@ -122,6 +122,7 @@ mod slider;
 mod social;
 mod sound;
 mod spell_info;
+mod storage_slots;
 mod spellbook;
 mod stable;
 mod statusbar;
@@ -149,6 +150,12 @@ mod who_sort;
 mod worldmap;
 mod worldstate;
 mod worn_display;
+mod wrath_currency;
+mod wrath_equipment;
+mod wrath_modifiers;
+pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
+mod wrath_item_spell;
+mod wrath_items;
 mod wrath_paperdoll;
 mod wrath_surface;
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
@@ -290,6 +297,7 @@ pub use worldmap::{
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
+pub use wrath_surface::wrath_group::{Group as WrathGroup, Member as WrathGroupMember};
 pub use zone_text::ZoneTexts;
 
 use mlua::Lua;
@@ -740,6 +748,11 @@ impl UiScript {
             // The mature implementation above, with the Wrath ABI and trusted secure environment.
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
+            wrath_items::install(&lua)?;
+            wrath_item_spell::install(&lua)?;
+            wrath_currency::install(&lua)?;
+            wrath_equipment::install(&lua)?;
+            wrath_modifiers::install(&lua)?;
         }
 
         let s = UiScript {
