@@ -1003,6 +1003,14 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GroupDecline
         | ClientCommand::PartyAssignment { .. }
         | ClientCommand::GroupLeave
+        | ClientCommand::GroupRaidConvert
+        | ClientCommand::LootMethod { .. }
+        | ClientCommand::SetRaidTarget { .. }
+        | ClientCommand::GroupChangeSubGroup { .. }
+        | ClientCommand::GroupSwapSubGroup { .. }
+        | ClientCommand::GroupAssistantLeader { .. }
+        | ClientCommand::ReadyCheckStart
+        | ClientCommand::ReadyCheckAnswer { .. }
         | ClientCommand::RequestPartyMemberStats { .. }
         | ClientCommand::NameQuery { .. }
         | ClientCommand::CreatureQuery { .. }
@@ -1453,6 +1461,20 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::GroupDecline => (g::CMSG_GROUP_DECLINE, g::encode_decline()),
         ClientCommand::PartyAssignment { assignment, apply, guid } => (g::MSG_PARTY_ASSIGNMENT, g::encode_assignment(assignment, apply, guid)),
         ClientCommand::GroupLeave => (g::CMSG_GROUP_DISBAND, g::encode_leave()),
+        ClientCommand::GroupRaidConvert => (g::commands::CMSG_GROUP_RAID_CONVERT, Vec::new()),
+        ClientCommand::LootMethod { method, master, threshold } =>
+            (g::commands::CMSG_LOOT_METHOD, g::commands::loot_method(method, master, threshold)),
+        ClientCommand::SetRaidTarget { icon, guid } =>
+            (g::commands::MSG_RAID_TARGET_UPDATE, g::commands::raid_target(icon, guid)),
+        ClientCommand::GroupChangeSubGroup { name, group } =>
+            (g::commands::CMSG_GROUP_CHANGE_SUB_GROUP, g::commands::change_subgroup(name.split('\0').next().unwrap_or(""), group).expect("NUL-free name")),
+        ClientCommand::GroupSwapSubGroup { name, other } =>
+            (g::commands::CMSG_GROUP_SWAP_SUB_GROUP, g::commands::swap_subgroup(name.split('\0').next().unwrap_or(""), other.split('\0').next().unwrap_or("")).expect("NUL-free names")),
+        ClientCommand::GroupAssistantLeader { guid, grant } =>
+            (g::commands::CMSG_GROUP_ASSISTANT_LEADER, g::commands::assistant(guid, grant)),
+        ClientCommand::ReadyCheckStart => (g::commands::MSG_RAID_READY_CHECK, Vec::new()),
+        ClientCommand::ReadyCheckAnswer { ready } =>
+            (g::commands::MSG_RAID_READY_CHECK, vec![u8::from(ready)]),
         ClientCommand::RequestPartyMemberStats { guid } => (
             g::CMSG_REQUEST_PARTY_MEMBER_STATS,
             g::encode_request_stats(guid),
@@ -2845,3 +2867,7 @@ mod group_tests {
 #[cfg(test)]
 #[path = "wrath/mail_tests.rs"]
 mod mail_tests;
+
+#[cfg(test)]
+#[path = "wrath/raid_command_tests.rs"]
+mod raid_command_tests;
