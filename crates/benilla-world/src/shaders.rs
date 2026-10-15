@@ -177,6 +177,20 @@ mod tests {
     }
 
     #[test]
+    fn ao_does_not_make_retained_gx_a_receiver_or_occluder() {
+        let gx_shader = include_str!("shaders/static_gx.wgsl");
+        assert!(!gx_shader.contains("screen_space_ambient_occlusion"));
+        let renderer = include_str!("static_gx/render.rs");
+        assert!(renderer.contains("(Node3d::StartMainPass, StaticGxLabel, Node3d::MainOpaquePass)"));
+        assert!(!renderer.contains("Node3d::EndPrepasses"));
+        assert!(!renderer.contains("NormalPrepass"));
+        assert!(!renderer.contains("ViewPrepassTextures"));
+        assert!(renderer.contains("depth.get_attachment(StoreOp::Store)"));
+        // SSAO runs EndPrepasses -> Ssao -> StartMainPass (Bevy's core graph).
+        // GX only writes the main depth attachment afterwards, never the AO input copies.
+    }
+
+    #[test]
     fn world_wgsl_validates_without_a_gpu() {
         use bevy::shader::ShaderDefVal;
         let (mut cache, mut assets) = validation_cache();
@@ -221,6 +235,13 @@ mod tests {
             include_str!("../../benilla-assets/src/shaders/terrain.wgsl"),
             mesh_defs(),
         );
+        let mut ao_defs = mesh_defs();
+        ao_defs.push("SCREEN_SPACE_AMBIENT_OCCLUSION".into());
+        check(
+            "terrain_ao.wgsl",
+            include_str!("../../benilla-assets/src/shaders/terrain.wgsl"),
+            ao_defs,
+        );
         check(
             "liquid.wgsl",
             include_str!("../../benilla-assets/src/shaders/liquid.wgsl"),
@@ -233,6 +254,11 @@ mod tests {
             &["WOW_MERGED_FADE", "WOW_MERGED_SLOT"],
             &["WOW_SKY_DEPTH"],
             &["WOW_WATER_CLIP"],
+            &["SCREEN_SPACE_AMBIENT_OCCLUSION"],
+            &["WOW_CAMERA_NORMAL", "DEPTH_PREPASS"],
+            &["WOW_CAMERA_NORMAL", "WOW_RIG_SKIN"],
+            &["WOW_CAMERA_NORMAL", "WOW_MERGED_FADE", "WOW_MERGED_SLOT"],
+            &["WOW_CAMERA_NORMAL", "WOW_CAMERA_EXCLUDE"],
         ] {
             let mut defs = mesh_defs();
             defs.extend(specialization.iter().map(|name| ShaderDefVal::from(*name)));

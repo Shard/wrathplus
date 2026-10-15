@@ -219,6 +219,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_mail::handles(opcode) => {
+                Ok(match crate::wrath_mail::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_taxi::handles(opcode) => {
                 Ok(match crate::wrath_taxi::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

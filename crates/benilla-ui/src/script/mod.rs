@@ -149,6 +149,9 @@ mod who_sort;
 mod worldmap;
 mod worldstate;
 mod worn_display;
+mod wrath_currency;
+pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
+mod wrath_items;
 mod wrath_paperdoll;
 mod wrath_surface;
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
@@ -738,6 +741,8 @@ impl UiScript {
             // The mature implementation above, with the Wrath ABI and trusted secure environment.
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
+            wrath_items::install(&lua)?;
+            wrath_currency::install(&lua)?;
         }
 
         let s = UiScript {

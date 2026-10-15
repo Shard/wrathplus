@@ -83,6 +83,8 @@ pub(crate) struct MailOpen {
     pub(crate) mailbox: Option<u64>,
     /// Wire order, which is the 1-based display order.
     pub(crate) mails: Vec<MailListEntry>,
+    /// Native inbox retained without projecting twelve attachments into one Vanilla slot.
+    pub(crate) wrath_inbox: Option<benilla_protocol::wrath_mail::Inbox>,
     /// Letter bodies by `item_text_id`, asked once.
     pub(crate) bodies: QueryCache<u32, String>,
     /// `MAIL_SHOW` owed: every mailbox use re-shows the window (`0x4acd10`).
@@ -109,6 +111,7 @@ impl MailOpen {
         if self.mailbox != Some(mailbox) {
             self.mailbox = Some(mailbox);
             self.mails.clear();
+            self.wrath_inbox = None;
             self.last_list_query = None;
         }
         self.show_requested = true;
@@ -135,6 +138,7 @@ impl MailOpen {
     pub(crate) fn clear(&mut self) {
         self.mailbox = None;
         self.mails.clear();
+        self.wrath_inbox = None;
         self.bodies.clear();
         self.show_requested = false;
         self.last_list_query = None;

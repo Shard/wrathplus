@@ -167,6 +167,7 @@ pub(crate) struct Model {
     /// `0x7838c7`); read them only through `font_object`, where the fold lives.
     pub(crate) font_objects_by_lower: HashMap<String, FontObject>,
     /// Anchored regions' owner-relative rects from the last resolve; anchor-less ones are absent.
+    pub(crate) animation_transforms: std::collections::BTreeMap<usize, (crate::order::ZTarget, Vec<super::animation::transforms::Transform>)>,
     pub(crate) region_resolved: HashMap<RegionHandle, Rect>,
 
     /// The next object id to mint; ids start at 1, since 0 is `SCREEN`.
@@ -860,6 +861,7 @@ pub(crate) struct Model {
 
     /// The paper doll's combat stats, `None` until the first push.
     pub(crate) wrath_paperdoll_stats: super::WrathPaperDollStats,
+    pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
     pub(crate) pet_combat_stats: Option<char_stats::UnitCombatStats>,
@@ -1089,6 +1091,7 @@ impl Model {
             backdrops: HashMap::new(),
             simple_html: simplehtml::SimpleHtmlStates::new(),
             font_objects_by_lower: HashMap::new(),
+            animation_transforms: Default::default(),
             region_resolved: HashMap::new(),
             next_id: 1,
             id_to_frame: IdMap::default(),
@@ -1467,6 +1470,7 @@ impl Model {
             .into_iter()
             .collect(),
             wrath_paperdoll_stats: Default::default(),
+            wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,
             inventory_slots: Default::default(),

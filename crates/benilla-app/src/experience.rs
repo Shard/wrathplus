@@ -27,10 +27,11 @@ pub enum Feature {
     ToneMapping,
     ColourGrading,
     ReadableText,
+    AmbientOcclusion,
 }
 
 impl Feature {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::AssetOverrides,
         Self::Shadows,
         Self::Fog,
@@ -38,10 +39,11 @@ impl Feature {
         Self::ToneMapping,
         Self::ColourGrading,
         Self::ReadableText,
+        Self::AmbientOcclusion,
     ];
 
     pub const fn plus_default(self) -> bool {
-        !matches!(self, Self::ReadableText)
+        !matches!(self, Self::ReadableText | Self::AmbientOcclusion)
     }
 }
 

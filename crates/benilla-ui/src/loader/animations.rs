@@ -72,6 +72,38 @@ impl Loader<'_> {
                             .unwrap_or(0.0);
                         self.call(&a, "SetOffset", (x, y), dbg);
                     }
+                    if anim.tag == "Scale" {
+                        let x = anim
+                            .attr("scaleX")
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .unwrap_or(1.0);
+                        let y = anim
+                            .attr("scaleY")
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .unwrap_or(1.0);
+                        self.call(&a, "SetScale", (x, y), dbg);
+                    }
+                    if anim.tag == "Rotation" {
+                        if let Some(v) = anim.attr("degrees").and_then(|v| v.parse::<f64>().ok()) {
+                            self.call(&a, "SetDegrees", v, dbg);
+                        } else if let Some(v) =
+                            anim.attr("radians").and_then(|v| v.parse::<f64>().ok())
+                        {
+                            self.call(&a, "SetRadians", v, dbg);
+                        }
+                    }
+                    for origin in children_named(anim, "Origin") {
+                        let point = origin.attr("point").unwrap_or("CENTER").to_string();
+                        let x = origin
+                            .attr("x")
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .unwrap_or(0.0);
+                        let y = origin
+                            .attr("y")
+                            .and_then(|v| v.parse::<f64>().ok())
+                            .unwrap_or(0.0);
+                        self.call(&a, "SetOrigin", (point, x, y), dbg);
+                    }
                     if let Some(value) = anim.attr("smoothing") {
                         self.call(&a, "SetSmoothing", value.to_string(), dbg);
                     }

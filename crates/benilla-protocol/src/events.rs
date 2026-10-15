@@ -1096,6 +1096,7 @@ pub enum SessionEvent {
     /// `SMSG_NEW_TAXI_PATH`, empty, sent with [`Self::TaxiNodeStatus`] on a first visit.
     NewTaxiPath,
     /// The inbox (`SMSG_MAIL_LIST_RESULT`), answering `CMSG_GET_MAIL_LIST`.
+    WrathMailList { inbox: crate::wrath_mail::Inbox },
     MailList { mails: Vec<MailListEntry> },
     /// A mail action's verdict (`SMSG_SEND_MAIL_RESULT`); `equip_error`/`item` are exclusive tails.
     SendMailResult {
