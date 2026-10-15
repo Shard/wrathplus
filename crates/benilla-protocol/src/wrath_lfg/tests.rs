@@ -156,3 +156,53 @@ fn adapter_delivers_one_lossless_reply_or_none_on_invalid_body() {
         ));
     }
 }
+
+#[test]
+fn queue_adapter_preserves_native_packets_and_optional_join_block() {
+    use crate::{
+        wrath_events::{WrathDispatch, WrathEventAdapter},
+        SessionEvent,
+    };
+    // Independent minimal wire bodies, including nonboolean ready and signed wait sentinels.
+    let cases: &[(u16, &[u8])] = &[
+        (0x367, &[8, 0]),
+        (0x368, &[9, 0]),
+        (
+            0x2bb,
+            &[8, 7, 6, 5, 4, 3, 2, 1, 0xfe, 0xff, 0xff, 0xff, 0xff],
+        ),
+        (0x363, &[9, 0, 0, 0, 0xfe, 0, 0]),
+        (0x364, &[6, 0, 0, 0, 7, 0, 0, 0]),
+        (0x364, &[6, 0, 0, 0, 7, 0, 0, 0, 0]),
+        (
+            0x365,
+            &[
+                4, 3, 2, 0xa1, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 127, 5,
+                0, 0, 0, 1, 2, 3, 255, 255, 255, 255,
+            ],
+        ),
+    ];
+    let mut adapter = WrathEventAdapter::new();
+    for &(opcode, body) in cases {
+        let WrathDispatch::Handled { session_events, .. } =
+            adapter.dispatch(opcode, body, 0).unwrap()
+        else {
+            panic!()
+        };
+        assert!(
+            matches!(&session_events[..], [SessionEvent::WrathLfg { packet: Packet::Queue(packet) }] if *packet == queue::decode(opcode, body).unwrap())
+        );
+        let mut trailing = body.to_vec();
+        trailing.push(255);
+        assert!(matches!(
+            adapter.dispatch(opcode, &trailing, 0).unwrap(),
+            WrathDispatch::Unhandled { .. }
+        ));
+        assert!(matches!(
+            adapter
+                .dispatch(opcode, &body[..body.len() - 2], 0)
+                .unwrap(),
+            WrathDispatch::Unhandled { .. }
+        ));
+    }
+}
