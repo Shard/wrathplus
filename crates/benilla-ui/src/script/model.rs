@@ -713,6 +713,7 @@ pub(crate) struct Model {
 
     /// The open group-loot rolls, and the `RollOnLoot` `(roll_id, roll_type)` votes.
     pub(crate) loot_rolls: loot_roll::LootRollsState,
+    pub(crate) wrath_loot_rolls: loot_roll::wrath::State,
     pub(crate) loot_roll_votes: Vec<(u32, u8)>,
     /// Need or Greed on a bind-on-pickup roll: a `CONFIRM_LOOT_ROLL` popup ask, not a vote.
     pub(crate) loot_roll_confirms: Vec<(u32, u8)>,
@@ -1362,6 +1363,7 @@ impl Model {
             loot_close: false,
             loot_master_gives: Vec::new(),
             loot_rolls: loot_roll::LootRollsState::default(),
+            wrath_loot_rolls: loot_roll::wrath::State::default(),
             loot_roll_votes: Vec::new(),
             loot_roll_confirms: Vec::new(),
             item_text: None,

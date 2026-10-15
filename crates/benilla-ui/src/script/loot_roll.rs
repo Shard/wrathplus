@@ -4,6 +4,8 @@
 //! (`UIParent.lua:513-515`, `LootFrame.lua:279-285`). The `rollID` is client-internal, as
 //! `CMSG_LOOT_ROLL` addresses `(lootedTarget, itemSlot)`, so the app allocates its own.
 
+pub mod wrath;
+
 use mlua::Lua;
 
 use super::Model;

@@ -1051,6 +1051,8 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::TrainerList { .. }
         | ClientCommand::TrainerBuySpell { .. }
         | ClientCommand::GetMailList { .. }
+        | ClientCommand::SetChannelWatch { .. }
+        | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::BattlefieldStatusRequest => {
@@ -1494,6 +1496,14 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::QueryNextMailTime => (
             benilla_protocol::wrath_mail::MSG_QUERY_NEXT_MAIL_TIME as u32,
             benilla_protocol::wrath_mail::encode_query_next_mail_time(),
+        ),
+        ClientCommand::SetChannelWatch { name } => (
+            benilla_protocol::wrath_channel::CMSG_SET_CHANNEL_WATCH,
+            benilla_protocol::wrath_channel::encode_channel_name(&name),
+        ),
+        ClientCommand::ChannelDisplayList { name } => (
+            benilla_protocol::wrath_channel::CMSG_CHANNEL_DISPLAY_LIST,
+            benilla_protocol::wrath_channel::encode_channel_name(&name),
         ),
         other => unreachable!("not a Wrath session command: {other:?}"),
     }
@@ -2867,6 +2877,18 @@ mod group_tests {
 #[cfg(test)]
 #[path = "wrath/mail_tests.rs"]
 mod mail_tests;
+
+#[cfg(test)]
+mod channel_command_tests {
+    use super::*;
+    #[test]
+    fn native_channel_commands_route_and_encode_in_request_order() {
+        let commands = [ClientCommand::SetChannelWatch { name: "General".into() }, ClientCommand::ChannelDisplayList { name: "General".into() }, ClientCommand::SetChannelWatch { name: String::new() }];
+        for command in &commands { assert_eq!(route(command), WrathRoute::NativeSession); }
+        let packets: Vec<_> = commands.into_iter().map(session_packet).collect();
+        assert_eq!(packets, vec![(0x3ef, b"General\0".to_vec()), (0x3d2, b"General\0".to_vec()), (0x3ef, vec![0])]);
+    }
+}
 
 #[cfg(test)]
 #[path = "wrath/raid_command_tests.rs"]
