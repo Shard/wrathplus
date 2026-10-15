@@ -210,6 +210,12 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x0239 | 0x0297 => {
+                Ok(match crate::wrath_mail_mutations::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathMailMutation { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             0x0053 => Ok(match crate::wrath_pet_name::decode(body) {
                 Ok(response) => handled(vec![SessionEvent::WrathPetName { response }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
