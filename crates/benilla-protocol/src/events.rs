@@ -552,6 +552,8 @@ pub enum SessionEvent {
     WrathLfg { packet: crate::wrath_lfg::Packet },
     /// Lossless native guild-bank reply; App owns capture and lifecycle.
     WrathGuildBank { packet: crate::wrath_guild_bank::Packet },
+    /// Lossless arena-team transport; no inferred UI state.
+    WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
     WrathGuild { packet: crate::wrath_guild::Packet },
     /// Raw native stable reply; no Vanilla loyalty or slot projection.

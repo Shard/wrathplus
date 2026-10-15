@@ -252,6 +252,7 @@ impl PluginGroup for GamePlugins {
             .add(UiChatPlugin)
             .add(crate::ui_lfg::UiLfgPlugin)
             .add(crate::ui_guild_bank::UiGuildBankPlugin)
+            .add(crate::ui_arena_team::UiArenaTeamPlugin)
             .add(UiLayoutPlugin)
             .add(crate::screenshot::ScreenshotPlugin)
     }

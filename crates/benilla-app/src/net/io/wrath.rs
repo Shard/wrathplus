@@ -981,6 +981,7 @@ enum WrathRoute {
     NativeSession,
     NativeLfg,
     NativeGuild,
+    NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
     DeferredReadOnlyQuery,
@@ -992,6 +993,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
@@ -1269,6 +1271,16 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeArenaTeam => {
+                        let ClientCommand::ArenaTeamCommand(command) = command else { unreachable!() };
+                        match arena_team_packet(&command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid arena command rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
                     WrathRoute::NativeGuild => {
                         match guild_packet(command) {
                             Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
@@ -3084,3 +3096,10 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 #[cfg(test)]
 #[path = "wrath/guild_tests.rs"]
 mod guild_tests;
+
+fn arena_team_packet(command: &benilla_protocol::wrath_arena_team::Command) -> std::io::Result<(u32, Vec<u8>)> {
+    Ok((command.opcode(), command.encode()?))
+}
+#[cfg(test)]
+#[path = "wrath/arena_team_tests.rs"]
+mod arena_team_tests;

@@ -2084,6 +2084,8 @@ pub(crate) enum ClientCommand {
     ReadyCheckAnswer {
         ready: bool,
     },
+    /// Native arena-team transport only; no UI producer or inferred authority.
+    ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
     GuildBankQuery(benilla_protocol::wrath_guild_bank_query::Query),
     /// `CMSG_REQUEST_RAID_INFO`.
