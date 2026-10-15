@@ -35,6 +35,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     wrath_stats::install(lua)?;
     wrath_loot::install(lua)?;
     super::loot_roll::wrath::install_readers(lua)?;
+    super::loot_roll::wrath::install_actions(lua)?;
     wrath_power::install(lua)?;
     wrath_group::install(lua)?;
     wrath_party_assignment::install(lua)?;

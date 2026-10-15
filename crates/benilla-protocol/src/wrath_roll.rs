@@ -128,7 +128,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Roll> {
     Ok(roll)
 }
 
-/// LootHandler.cpp::HandleLootRoll reads guid, u32 slot, u8 vote (pass/need/greed/disenchant).
+/// GroupHandler.cpp::HandleLootRoll reads guid, u32 slot, u8 vote (pass/need/greed/disenchant).
 pub fn encode_vote(guid: u64, slot: u32, vote: u8) -> io::Result<Vec<u8>> {
     if vote > 3 {
         return Err(invalid());

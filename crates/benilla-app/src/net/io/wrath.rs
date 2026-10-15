@@ -986,6 +986,7 @@ enum WrathRoute {
 
 fn route(command: &ClientCommand) -> WrathRoute {
     match command {
+        ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
         ClientCommand::Logout | ClientCommand::ForceLogout => WrathRoute::Logout,
         ClientCommand::Move { .. } => WrathRoute::GroundMovement,
@@ -1051,6 +1052,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
         | ClientCommand::TrainerBuySpell { .. }
+        | ClientCommand::LootRoll { .. }
         | ClientCommand::GetMailList { .. }
         | ClientCommand::SetChannelWatch { .. }
         | ClientCommand::LfgRequestPlayerLockInfo
@@ -1499,6 +1501,16 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::QueryNextMailTime => (
             benilla_protocol::wrath_mail::MSG_QUERY_NEXT_MAIL_TIME as u32,
             benilla_protocol::wrath_mail::encode_query_next_mail_time(),
+        ),
+        // AzerothCore GroupHandler.cpp::HandleLootRoll: full GUID, u32 slot, u8 vote.
+        ClientCommand::LootRoll {
+            looted_target,
+            item_slot,
+            roll_type,
+        } => (
+            benilla_protocol::wrath_roll::CMSG_LOOT_ROLL,
+            benilla_protocol::wrath_roll::encode_vote(looted_target, item_slot, roll_type)
+                .expect("validated native roll vote"),
         ),
         ClientCommand::LfgRequestPlayerLockInfo => {
             let command = benilla_protocol::wrath_lfg::Command::RequestPlayerLockInfo;
@@ -2914,6 +2926,39 @@ mod lfg_command_tests {
             (ClientCommand::LfgRequestPartyLockInfo, 0x0371)] {
             assert_eq!(route(&command), WrathRoute::NativeSession);
             assert_eq!(session_packet(command), (opcode, Vec::new()));
+        }
+    }
+}
+
+#[cfg(test)]
+mod native_loot_vote_command_tests {
+    use super::*;
+    #[test]
+    fn exact_native_vote_address_and_type() {
+        for vote in 0..=3 {
+            let c = ClientCommand::LootRoll {
+                looted_target: 0x0102030405060708,
+                item_slot: 0xfedcba98,
+                roll_type: vote,
+            };
+            assert_eq!(route(&c), WrathRoute::NativeSession);
+            assert_eq!(
+                session_packet(c),
+                (
+                    0x2a0,
+                    vec![8, 7, 6, 5, 4, 3, 2, 1, 0x98, 0xba, 0xdc, 0xfe, vote]
+                )
+            );
+        }
+        for vote in 4..=255 {
+            assert_eq!(
+                route(&ClientCommand::LootRoll {
+                    looted_target: 1,
+                    item_slot: 2,
+                    roll_type: vote
+                }),
+                WrathRoute::DisabledGameAction
+            );
         }
     }
 }

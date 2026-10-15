@@ -31,6 +31,9 @@ fn app() -> (App, crossbeam_channel::Receiver<crate::net::ClientCommand>) {
         .init_resource::<NativeRolls>()
         .init_resource::<NativeRollTemplates>()
         .init_resource::<Items>()
+        .init_resource::<crate::names::NameCache>()
+        .init_resource::<crate::ui_chat::ChatLog>()
+        .init_resource::<crate::ui_loot::LootConfig>()
         .init_resource::<crate::net::GuidIndex>()
         .init_resource::<SelfGuid>()
         .init_resource::<Time>()
@@ -267,4 +270,71 @@ fn disconnect_clears_presentation_and_replacement_does_not_replay_old_start() {
         .eval::<bool>("return GetLootRollItemInfo(1)==nil")
         .unwrap());
     assert!(rx.is_empty());
+}
+
+#[test]
+fn native_vote_is_mask_checked_single_use_and_preserves_full_wire_address() {
+    let (mut app, rx) = app();
+    start(&mut app, 0, 0);
+    app.update();
+    let id = app.world().resource::<Presentation>().lifecycle.entries[0].id;
+    {
+        let mut p = app.world_mut().resource_mut::<Presentation>();
+        p.lifecycle.entries[0].item.guid = u64::MAX;
+        p.lifecycle.entries[0].item.slot = u32::MAX;
+    }
+    let world = app.world_mut();
+    world.resource_scope(|world, mut p: Mut<Presentation>| {
+        let commands = world.resource::<NetCommands>().clone();
+        let mut script = world.non_send_resource_mut::<UiScript>();
+        // Snapshot permits greed, not need. Duplicate queues are consumed only once.
+        script
+            .run(&format!(
+                "ConfirmLootRoll({id},1); ConfirmLootRoll({id},2); ConfirmLootRoll({id},2)"
+            ))
+            .unwrap();
+        drain(&mut script, &mut p, &commands);
+        assert!(p.lifecycle.entries.is_empty());
+        assert_eq!(p.lifecycle.cancelled, vec![id]);
+    });
+    assert!(matches!(
+        rx.try_recv().unwrap(),
+        crate::net::ClientCommand::LootRoll {
+            looted_target: u64::MAX,
+            item_slot: u32::MAX,
+            roll_type: 2
+        }
+    ));
+    assert!(rx.is_empty());
+}
+
+#[test]
+fn stale_or_expired_queued_native_vote_cannot_send() {
+    for expired in [false, true] {
+        let (mut app, rx) = app();
+        start(&mut app, 0, 0);
+        app.update();
+        app.world()
+            .non_send_resource::<UiScript>()
+            .run("ConfirmLootRoll(1,2)")
+            .unwrap();
+        {
+            let mut p = app.world_mut().resource_mut::<Presentation>();
+            if expired {
+                p.lifecycle.entries[0].remaining_ms = 0;
+            } else {
+                p.lifecycle.entries.clear();
+            }
+        }
+        app.world_mut()
+            .resource_scope(|world, mut p: Mut<Presentation>| {
+                let commands = world.resource::<NetCommands>().clone();
+                drain(
+                    &mut world.non_send_resource_mut::<UiScript>(),
+                    &mut p,
+                    &commands,
+                );
+            });
+        assert!(rx.is_empty());
+    }
 }
