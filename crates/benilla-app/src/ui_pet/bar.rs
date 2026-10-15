@@ -173,6 +173,7 @@ pub(super) fn active_aura_press(
 pub(super) fn feed_pet_bar(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
+    actions: Option<Res<crate::ui_action::PlayerActions>>,
     spells: Option<Res<Spells>>,
     clock: Res<crate::ui_script::UiClock>,
     pet: PetUnit,
@@ -181,12 +182,30 @@ pub(super) fn feed_pet_bar(
     let Some(mut script) = script else {
         return;
     };
+    // Full learned sets, never the filtered visible spellbook. Re-push into a replacement VM
+    // and on every pet/player mutation, including teardown; no packet receipt is replayed.
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        script.set_wrath_known_spells(
+            actions
+                .as_ref()
+                .into_iter()
+                .flat_map(|a| a.spells.iter().copied()),
+            bar.native
+                .as_ref()
+                .into_iter()
+                .flat_map(|p| p.spells.iter().map(|a| a.id())),
+            bar.native
+                .as_ref()
+                .into_iter()
+                .flat_map(|p| p.actions.iter().map(|a| a.0)),
+        );
+    }
     let memory = memory.get(&script);
     let now = Instant::now();
     let (anchor, ui_now) = (clock.anchor, clock.ui_now);
     let has_bar = bar.has_bar();
     // An unstreamed pet is not usable (`0x4bd034`), and no slot shows active.
-    let pet_store = pet.store(bar.spells.pet_guid);
+    let pet_store = pet.store(bar.guid());
     let pet_flags = pet_store.map(|s| s.0.unit_flags());
     let usable = pet.actions_usable(&bar);
     // `PickupPetAction`'s gate alone: the pet's object must resolve (`0x4be1f7`) and not be
@@ -200,7 +219,21 @@ pub(super) fn feed_pet_bar(
         None => ui_now - anchor.duration_since(t).as_secs_f64(),
     }));
 
-    let fresh: Vec<PetActionView> = if has_bar {
+    let fresh: Vec<PetActionView> = if let Some(native) = &bar.native {
+        native
+            .actions
+            .iter()
+            .map(|&entry| {
+                let display = spells.as_ref().and_then(|s| s.catalog.get(entry.id()));
+                let cooldown = display.and_then(|d| {
+                    bar.cooldowns
+                        .wrath_pet_info(entry.id(), Some(d), now)
+                        .ui_triple(anchor, ui_now)
+                });
+                native_slot_view(entry, native, display, cooldown, pet_attacking, pet_store)
+            })
+            .collect()
+    } else if has_bar {
         bar.spells
             .bar
             .iter()
@@ -287,4 +320,104 @@ pub(super) fn fire_pet_cooldown_events(
     script.fire_event("ACTIONBAR_UPDATE_COOLDOWN", vec![]);
     script.fire_event("SPELL_UPDATE_COOLDOWN", vec![]);
     script.fire_event("PET_BAR_UPDATE_COOLDOWN", vec![]);
+}
+
+/// Native words retain all 24 ID bits. Do not route through `PetActionEntry::action()`.
+fn native_slot_view(
+    entry: benilla_protocol::wrath_pet::Action,
+    pet: &benilla_protocol::wrath_pet::PetSpells,
+    spell: Option<&benilla_formats::SpellDisplay>,
+    cooldown: Option<(i64, u32, bool)>,
+    attacking: bool,
+    store: Option<&ObjectStore>,
+) -> PetActionView {
+    let kind = entry.raw_type() & 0x3f;
+    let id = entry.id();
+    let mut view = PetActionView {
+        packed: entry.0,
+        ..Default::default()
+    };
+    if kind == 7 {
+        if let Some((name, texture)) = command_token(id) {
+            view.name = Some(name.into());
+            view.texture = Some(texture.into());
+            view.is_token = true;
+            view.attack_active = attacking && id == PET_COMMAND_ATTACK;
+            view.active =
+                (pet.flags & 0x0800 == 0 && u32::from(pet.command) == id) || view.attack_active;
+        }
+        return view;
+    }
+    if kind == 6 {
+        if let Some((name, texture)) = reaction_token(id) {
+            view.name = Some(name.into());
+            view.texture = Some(texture.into());
+            view.is_token = true;
+            let react = if pet.flags & 0x0800 != 0 {
+                0
+            } else {
+                pet.react
+            };
+            view.active = u32::from(react) == id;
+        }
+        return view;
+    }
+    if id == 0 || !(kind == 1 || (8..=17).contains(&kind)) {
+        return view;
+    }
+    let Some(spell) = spell else {
+        return view;
+    };
+    let active =
+        store.is_some_and(|s| crate::ui_action::toggle::active_action_toggle(id, spell, s));
+    view.name = Some(spell.name.clone());
+    view.subtext = spell.rank.clone();
+    view.texture = if active {
+        spell.active_icon.clone()
+    } else {
+        spell.icon.clone()
+    };
+    view.spell_id = Some(id);
+    view.passive = spell.passive;
+    view.autocast_allowed = entry.0 & 0x8000_0000 != 0;
+    view.autocast_enabled = entry.0 & 0x4000_0000 != 0;
+    view.cooldown = cooldown;
+    view
+}
+
+#[cfg(test)]
+mod native_view_tests {
+    use super::*;
+    use benilla_protocol::wrath_pet::{Action, PetSpells};
+
+    #[test]
+    fn native_view_keeps_full_id_and_raw_word() {
+        let word = 0xc112_abcd;
+        let display = benilla_formats::SpellDisplay {
+            name: "Native".into(),
+            ..Default::default()
+        };
+        let view = native_slot_view(
+            Action(word),
+            &PetSpells::default(),
+            Some(&display),
+            None,
+            false,
+            None,
+        );
+        assert_eq!(view.packed, word);
+        assert_eq!(view.spell_id, Some(0x12_abcd));
+        assert!(view.autocast_allowed && view.autocast_enabled);
+    }
+
+    #[test]
+    fn missing_catalog_and_unknown_types_keep_raw_word_without_fabricating_spell() {
+        for word in [0x8112_abcd, 0x0512_abcd, 0x8100_0000] {
+            let view =
+                native_slot_view(Action(word), &PetSpells::default(), None, None, false, None);
+            assert_eq!(view.packed, word);
+            assert!(view.name.is_none());
+            assert!(view.spell_id.is_none());
+        }
+    }
 }

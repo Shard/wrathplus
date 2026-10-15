@@ -49,8 +49,8 @@ pub(crate) fn drop_item_on_unit(
     // The world entry: a click whose press-time pick is the pet. That is the pick the click
     // selects from; the live hover can differ after a drag.
     let clicked_pet = clicks.read().count() > 0
-        && pet_bar.spells.pet_guid != 0
-        && hovered.guid == Some(pet_bar.spells.pet_guid);
+        && pet_bar.guid() != 0
+        && hovered.guid == Some(pet_bar.guid());
     if clicked_pet {
         tokens.push("pet".to_string());
     }
@@ -66,8 +66,8 @@ pub(crate) fn drop_item_on_unit(
             debug!("DropItemOnUnit({token}) — only the pet leg is modelled; refused, payload kept");
             continue;
         }
-        let Some(pet_fields) = (pet_bar.spells.pet_guid != 0)
-            .then(|| index.0.get(&pet_bar.spells.pet_guid))
+        let Some(pet_fields) = (pet_bar.guid() != 0)
+            .then(|| index.0.get(&pet_bar.guid()))
             .flatten()
             .and_then(|&e| stores.get(e).ok())
         else {

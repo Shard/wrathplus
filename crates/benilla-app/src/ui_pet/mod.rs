@@ -70,7 +70,20 @@ pub(crate) struct PetBar {
 impl PetBar {
     /// `PetHasActionBar()`: a nonzero cached guid, with no alive or control check (`0x4bdc20`).
     pub(crate) fn has_bar(&self) -> bool {
-        self.spells.pet_guid != 0
+        self.guid() != 0
+    }
+
+    /// The authoritative packet owner's GUID; native state is never copied into the legacy bar.
+    pub(crate) fn guid(&self) -> u64 {
+        self.native
+            .as_ref()
+            .map_or(self.spells.pet_guid, |pet| pet.guid)
+    }
+
+    pub(super) fn bar_disabled(&self) -> bool {
+        self.native
+            .as_ref()
+            .map_or_else(|| self.spells.bar_disabled(), |pet| pet.flags & 0x0800 != 0)
     }
 
     /// No pet: every field back to its default, the cooldown list emptied with its counters kept
@@ -153,5 +166,27 @@ impl PetUnit<'_, '_> {
     pub(crate) fn entity(&self, pet_guid: u64) -> Option<Entity> {
         let e = *self.index.0.get(&pet_guid)?;
         self.stores.contains(e).then_some(e)
+    }
+}
+
+#[cfg(test)]
+mod native_guid_tests {
+    use super::*;
+
+    #[test]
+    fn native_owner_guid_precedes_legacy_and_clear_removes_both() {
+        let mut bar = PetBar::default();
+        bar.spells.pet_guid = 7;
+        assert_eq!(bar.guid(), 7);
+        bar.native = Some(benilla_protocol::wrath_pet::PetSpells {
+            guid: 0xf000_0000_0000_0042,
+            ..Default::default()
+        });
+        assert_eq!(bar.guid(), 0xf000_0000_0000_0042);
+        assert!(bar.has_bar());
+        bar.clear();
+        assert_eq!(bar.guid(), 0);
+        assert!(!bar.has_bar());
+        assert!(bar.native.is_none());
     }
 }
