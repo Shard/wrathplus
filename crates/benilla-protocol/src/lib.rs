@@ -35,6 +35,7 @@ pub mod wrath_relay;
 pub mod wrath_session;
 pub mod wrath_social;
 pub mod wrath_who;
+pub mod wrath_duel;
 pub mod wrath_spline;
 pub mod wrath_arena_team;
 pub mod wrath_guild;
