@@ -38,17 +38,19 @@ fn empty_defaults_and_vanilla_surface() {
 
 fn snapshot() -> WrathCurrencySnapshot {
     let mut entries = vec![WrathCurrencyEntry {
-        name: "Test category".into(),
+        name: Some("Test category".into()),
+        category_id: 22,
         is_header: true,
         is_expanded: true,
         ..Default::default()
     }];
     for i in 1..=4 {
         entries.push(WrathCurrencyEntry {
-            name: format!("Test token {i}"),
+            name: Some(format!("Test token {i}")),
+            category_id: 22,
             count: i * 10,
             item_id: 100 + i,
-            icon: format!("test-icon-{i}"),
+            icon: Some(format!("test-icon-{i}")),
             extra_currency_type: 0,
             ..Default::default()
         });
@@ -123,4 +125,88 @@ fn supplied_watch_flags_are_bounded_and_headers_cannot_be_watched() {
     }
     s.set_wrath_currency_snapshot(data);
     s.run("assert(not select(5,GetCurrencyListInfo(1))) assert(not select(5,GetCurrencyListInfo(5))) assert(GetBackpackCurrencyInfo(3)=='Test token 3') assert(GetBackpackCurrencyInfo(4)==nil)").unwrap();
+}
+
+#[test]
+fn refresh_preserves_identity_flags_but_updates_authoritative_metadata() {
+    let mut s = script();
+    s.set_wrath_currency_snapshot(snapshot());
+    s.run("SetCurrencyUnused(2,1); SetCurrencyBackpack(2,1); ExpandCurrencyList(1,0)")
+        .unwrap();
+    let mut next = snapshot();
+    next.entries[0].name = Some("Renamed category".into());
+    next.entries[1].name = Some("Resolved name".into());
+    next.entries[1].icon = Some("resolved-icon".into());
+    next.entries[1].count = 0;
+    next.entries.swap(1, 4);
+    s.set_wrath_currency_snapshot(next);
+    s.run(
+        r#"
+        assert(GetCurrencyListSize()==1)
+        assert(GetCurrencyListInfo(1)=='Renamed category')
+        local n,c,k,icon,id=GetBackpackCurrencyInfo(1)
+        assert(n=='Resolved name' and c==0 and icon=='resolved-icon' and id==101)
+        ExpandCurrencyList(1,1)
+        assert(select(4,GetCurrencyListInfo(5)))
+        assert(select(5,GetCurrencyListInfo(5)))
+    "#,
+    )
+    .unwrap();
+    let mut removed = snapshot();
+    removed.entries.retain(|r| r.item_id != 101);
+    s.set_wrath_currency_snapshot(removed);
+    s.set_wrath_currency_snapshot(snapshot());
+    s.run("assert(GetBackpackCurrencyInfo(1)==nil); assert(not select(4,GetCurrencyListInfo(2)))")
+        .unwrap();
+}
+
+#[test]
+fn unknown_category_ids_remain_distinct_and_clear_forgets_expansion() {
+    let mut s = script();
+    let mut data = snapshot();
+    data.entries.push(WrathCurrencyEntry {
+        category_id: 2089878896,
+        name: Some("Unknown".into()),
+        is_header: true,
+        is_expanded: true,
+        ..Default::default()
+    });
+    data.entries.push(WrathCurrencyEntry {
+        category_id: 24,
+        name: Some("Unknown".into()),
+        is_header: true,
+        is_expanded: true,
+        ..Default::default()
+    });
+    s.set_wrath_currency_snapshot(data.clone());
+    s.run("ExpandCurrencyList(6,0)").unwrap();
+    data.entries.swap(5, 6);
+    s.set_wrath_currency_snapshot(data);
+    s.run("assert(select(3,GetCurrencyListInfo(6))); assert(not select(3,GetCurrencyListInfo(7)))")
+        .unwrap();
+    s.set_wrath_currency_snapshot(Default::default());
+    s.set_wrath_currency_snapshot(snapshot());
+    s.run("assert(GetCurrencyListSize()==5)").unwrap();
+}
+
+#[test]
+fn pending_metadata_projects_empty_strings_until_query_resolves() {
+    let mut s = script();
+    let mut data = snapshot();
+    data.entries[1].name = None;
+    data.entries[1].icon = None;
+    data.entries[1].is_watched = true;
+    s.set_wrath_currency_snapshot(data);
+    s.run(
+        r#"
+        local n,h,e,u,w,c,k,icon,id=GetCurrencyListInfo(2)
+        assert(n=='' and icon=='' and id==101 and c==10)
+        assert(select('#',GetCurrencyListInfo(2))==9)
+        assert(GetBackpackCurrencyInfo(1)=='')
+    "#,
+    )
+    .unwrap();
+    s.set_wrath_currency_snapshot(snapshot());
+    s.run("assert(GetBackpackCurrencyInfo(1)=='Test token 1')")
+        .unwrap();
 }

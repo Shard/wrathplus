@@ -4,10 +4,15 @@
 
 use super::{Model, UiScript};
 use mlua::{Lua, MultiValue, Value};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WrathCurrencyEntry {
-    pub name: String,
+    /// Missing while the host item query is pending; Lua sees an empty string.
+    /// Installed TokenUI.lua:68-73 hides rows with absent/empty names.
+    pub name: Option<String>,
+    /// Raw category identity, including IDs absent from CurrencyCategory.dbc.
+    pub category_id: u32,
     pub is_header: bool,
     pub is_expanded: bool,
     pub is_unused: bool,
@@ -15,7 +20,8 @@ pub struct WrathCurrencyEntry {
     pub count: u32,
     /// TokenUI: 1 = arena, 2 = honor, 0 = ordinary item currency.
     pub extra_currency_type: u32,
-    pub icon: String,
+    /// Pending item icon projects an empty texture path, never an invented texture.
+    pub icon: Option<String>,
     pub item_id: u32,
 }
 
@@ -54,14 +60,39 @@ impl WrathCurrencySnapshot {
 }
 
 impl UiScript {
-    /// Replace the complete authoritative display snapshot; an empty push clears logout state.
+    /// Refresh authoritative values, preserving local flags by category/item identity.
+    /// Removed identities are forgotten; an empty push clears logout state.
     /// No network request is emitted. Watch slots are bounded by TokenUI's MAX_WATCHED_TOKENS=3.
     pub fn set_wrath_currency_snapshot(&mut self, mut snapshot: WrathCurrencySnapshot) {
+        let model = self.model_ref();
+        let old = &model.wrath_currency;
+        let headers: HashMap<_, _> = old
+            .entries
+            .iter()
+            .filter(|r| r.is_header)
+            .map(|r| (r.category_id, r.is_expanded))
+            .collect();
+        let tokens: HashMap<_, _> = old
+            .entries
+            .iter()
+            .filter(|r| !r.is_header && r.item_id != 0)
+            .map(|r| (r.item_id, (r.is_unused, r.is_watched)))
+            .collect();
+        drop(model);
         let mut watched = 0;
         for row in &mut snapshot.entries {
             if row.is_header {
+                if let Some(expanded) = headers.get(&row.category_id) {
+                    row.is_expanded = *expanded;
+                }
                 row.is_watched = false;
-            } else if row.is_watched {
+            } else {
+                if let Some((unused, watched)) = tokens.get(&row.item_id) {
+                    row.is_unused = *unused;
+                    row.is_watched = *watched;
+                }
+            }
+            if !row.is_header && row.is_watched {
                 watched += 1;
                 row.is_watched = watched <= 3;
             }
@@ -87,7 +118,9 @@ fn info(lua: &Lua, row: Option<&WrathCurrencyEntry>, backpack: bool) -> mlua::Re
     let Some(row) = row else {
         return Ok(MultiValue::from_vec(vec![Value::Nil]));
     };
-    let mut out = vec![Value::String(lua.create_string(&row.name)?)];
+    let mut out = vec![Value::String(
+        lua.create_string(row.name.as_deref().unwrap_or_default())?,
+    )];
     if !backpack {
         out.extend([
             Value::Boolean(row.is_header),
@@ -99,7 +132,7 @@ fn info(lua: &Lua, row: Option<&WrathCurrencyEntry>, backpack: bool) -> mlua::Re
     out.extend([
         Value::Integer(row.count.into()),
         Value::Integer(row.extra_currency_type.into()),
-        Value::String(lua.create_string(&row.icon)?),
+        Value::String(lua.create_string(row.icon.as_deref().unwrap_or_default())?),
         Value::Integer(row.item_id.into()),
     ]);
     Ok(MultiValue::from_vec(out))
