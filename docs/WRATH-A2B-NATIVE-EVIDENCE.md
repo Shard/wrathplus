@@ -2,12 +2,27 @@
 
 ## Decision
 
-Do **not** add independent second-stage transparency modulation or change Classic
-texgen in this unit. Native evidence establishes selector preparation and a batch
-opacity factor, and exposes a difference between an installed Wrath shader and our
-current expression. It does not yet establish an end-to-end replacement across
-render backends and coordinate conventions. This is an evidence-only conclusion,
-not a parity certification or a finding that the remaining implementation is correct.
+Correction after review: Bevy visible points have negative view Z. Use the
+eye-to-vertex incident vector `normalize(P_view)`, not its negation; the latter
+produces a singularity for a head-on camera-facing surface. CPU vectors now use
+visible points (z < 0), including finite head-on and grazing cases. Native shader
+expressions require a view-convention transfer, not a literal sign copy.
+
+Follow-up manager decision: implement the standard GL sphere-map equation below
+for Wrath's environment-mapped second stage only. The manager confirms the shared
+right-handed, camera-down-minus-Z view convention; live appearance remains a
+manager-run check. UV0 / Vanilla behavior is unchanged. CPU known-reflection tests
+and headless shader validation cover this bounded transfer. Exactly reflected -Z
+remains the native sphere-map singularity; no invented denominator clamp is added.
+The investigative limitations below remain historical evidence boundaries, not a
+claim that the implementation has been visually certified.
+
+Do **not** add independent second-stage transparency modulation. The initial
+investigation deferred Classic texgen changes. Native evidence establishes selector
+preparation and a batch opacity factor, and exposed the sphere-map difference now
+corrected in the bounded stage-two path. It does not establish complete end-to-end
+parity across render backends. The initial conclusion below describes that proof
+boundary, not a parity certification of the remaining implementation.
 
 Reference: read-only installed build-12340 `Wow.exe` and the effective Wrath archive
 chain. Effective installed archives include expansion content; this is not a stock
