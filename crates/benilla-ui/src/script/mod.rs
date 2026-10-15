@@ -156,6 +156,7 @@ mod wrath_modifiers;
 mod wrath_achievements;
 pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
 mod wrath_tutorial;
+mod wrath_ready_check;
 pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
@@ -759,6 +760,7 @@ impl UiScript {
             wrath_modifiers::install(&lua)?;
             wrath_achievements::install(&lua)?;
             wrath_tutorial::install(&lua)?;
+            wrath_ready_check::install(&lua)?;
         }
 
         let s = UiScript {

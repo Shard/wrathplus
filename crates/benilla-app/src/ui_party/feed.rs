@@ -54,7 +54,31 @@ pub(super) struct FedParty {
     ready_check: u32,
     ready_check_requests: u32,
     answers_forwarded: usize,
+    native_ready_forwarded: usize,
     raid_targets: [u64; 8],
+}
+
+/// Ordered packet edges survive multiple checks in a single frame. VM replacement
+/// intentionally skips old notifications rather than popping an ended check.
+fn forward_native_ready(
+    script: &mut UiScript,
+    events: &[benilla_protocol::wrath_group::raid::Packet],
+    cursor: &mut usize,
+    vm_reset: bool,
+) {
+    use benilla_protocol::wrath_group::raid::Packet;
+    if vm_reset || events.len() < *cursor {
+        *cursor = events.len();
+    }
+    for event in events.iter().skip(*cursor) {
+        match event {
+            Packet::ReadyStart { initiator } => script.wrath_ready_check_start(*initiator),
+            Packet::ReadyConfirm { guid, state } => script.wrath_ready_check_confirm(*guid, *state),
+            Packet::ReadyFinished => script.wrath_ready_check_finish(),
+            _ => unreachable!("only ready-check packets enter native journal"),
+        }
+    }
+    *cursor = events.len();
 }
 
 pub(crate) const PARTY_TOKENS: [&str; 4] = ["party1", "party2", "party3", "party4"];
@@ -541,32 +565,41 @@ pub(super) fn feed_party(
         script.fire_event("RAID_TARGET_UPDATE", vec![]);
     }
 
-    // ── READY_CHECK ─────────────────────────────────────────────────────────
-    //
-    // Fired by the reference's open handler `0x4ba360` (at `0x4ba53a`), which also arms the 30 s
-    // deadline (`0xb713f4`). `UIParent.lua:571` shows the popup on it, and UIParent's OnUpdate
-    // ticks the deadline through `CheckReadyCheckTime` (`UIParent.xml:24`): no clock here.
-    if group.ready_check != fed.ready_check {
-        gate.audit("feed_party", "the ready-check edge");
-        fed.ready_check = group.ready_check;
-        // Not on the first look after a VM reset, which would pop a check that has ended.
-        if !vm_reset {
-            script.fire_event("READY_CHECK", vec![]);
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        forward_native_ready(
+            &mut script,
+            &group.wrath_raid.ready_events,
+            &mut fed.native_ready_forwarded,
+            vm_reset,
+        );
+    } else {
+        // ── READY_CHECK ─────────────────────────────────────────────────────────
+        //
+        // Fired by the reference's open handler `0x4ba360` (at `0x4ba53a`), which also arms the 30 s
+        // deadline (`0xb713f4`). `UIParent.lua:571` shows the popup on it, and UIParent's OnUpdate
+        // ticks the deadline through `CheckReadyCheckTime` (`UIParent.xml:24`): no clock here.
+        if group.ready_check != fed.ready_check {
+            gate.audit("feed_party", "the ready-check edge");
+            fed.ready_check = group.ready_check;
+            // Not on the first look after a VM reset, which would pop a check that has ended.
+            if !vm_reset {
+                script.fire_event("READY_CHECK", vec![]);
+            }
         }
-    }
-    // Each request arms the engine's side (the leader's close, a member's 30 s deadline); the
-    // answer log then replays from this memo's cursor.
-    if group.ready_check_requests != fed.ready_check_requests {
-        fed.ready_check_requests = group.ready_check_requests;
-        fed.answers_forwarded = 0;
-        if !vm_reset {
-            script.ready_check_request(Some(group.leader) == self_guid);
+        // Each request arms the engine's side (the leader's close, a member's 30 s deadline); the
+        // answer log then replays from this memo's cursor.
+        if group.ready_check_requests != fed.ready_check_requests {
+            fed.ready_check_requests = group.ready_check_requests;
+            fed.answers_forwarded = 0;
+            if !vm_reset {
+                script.ready_check_request(Some(group.leader) == self_guid);
+            }
         }
+        for &(guid, ready) in group.ready_check_answers.iter().skip(fed.answers_forwarded) {
+            script.ready_check_answered(guid, ready);
+        }
+        fed.answers_forwarded = group.ready_check_answers.len();
     }
-    for &(guid, ready) in group.ready_check_answers.iter().skip(fed.answers_forwarded) {
-        script.ready_check_answered(guid, ready);
-    }
-    fed.answers_forwarded = group.ready_check_answers.len();
 
     // ── UPDATE_INSTANCE_INFO ────────────────────────────────────────────────
     //
@@ -2414,5 +2447,78 @@ mod wrath_tests {
         let s = member_unit_state(&g.members[0], None, None, &g, None, None, Default::default());
         assert_eq!((s.health, s.max_health, s.power, s.max_power), (500000, 900000, 43, 100));
         assert!(s.is_connected);
+    }
+}
+
+#[cfg(test)]
+mod native_ready_lifecycle_tests {
+    use super::*;
+    use benilla_protocol::wrath_group::{raid::Packet, Packet as GroupPacket};
+    use benilla_protocol::SessionEvent;
+    use benilla_ui::script::ScriptDialect;
+    #[test]
+    fn registered_packets_forward_in_order_once_and_leave_rejoin_does_not_lose_edges() {
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script.set_party(PartyState {
+            own_guid: 7,
+            leader_guid: 99,
+            ..Default::default()
+        });
+        script.run("events={}; local f=CreateFrame('Frame'); f:RegisterEvent('READY_CHECK'); f:RegisterEvent('READY_CHECK_FINISHED'); f:SetScript('OnEvent', function(_,e,...) table.insert(events,{e,...}) end)").unwrap();
+        let mut cursor = 0;
+        let send = |app: &mut bevy::prelude::App, packet| {
+            crate::net::handlers::dispatch(
+                app.world_mut(),
+                vec![SessionEvent::WrathGroup {
+                    packet: Box::new(packet),
+                }],
+            )
+        };
+        send(
+            &mut app,
+            GroupPacket::Raid(Packet::ReadyStart { initiator: 7 }),
+        );
+        send(
+            &mut app,
+            GroupPacket::Raid(Packet::ReadyConfirm { guid: 7, state: 1 }),
+        );
+        send(&mut app, GroupPacket::Raid(Packet::ReadyFinished));
+        forward_native_ready(
+            &mut script,
+            &app.world().resource::<GroupState>().wrath_raid.ready_events,
+            &mut cursor,
+            false,
+        );
+        script.run("assert(#events==2 and events[1][2]=='player' and events[2][1]=='READY_CHECK_FINISHED')").unwrap();
+        forward_native_ready(
+            &mut script,
+            &app.world().resource::<GroupState>().wrath_raid.ready_events,
+            &mut cursor,
+            false,
+        );
+        script.run("assert(#events==2)").unwrap();
+        send(&mut app, GroupPacket::Uninvite);
+        send(
+            &mut app,
+            GroupPacket::Raid(Packet::ReadyStart { initiator: 7 }),
+        );
+        forward_native_ready(
+            &mut script,
+            &app.world().resource::<GroupState>().wrath_raid.ready_events,
+            &mut cursor,
+            false,
+        );
+        script
+            .run("assert(events[#events][1]=='READY_CHECK' and events[#events][2]=='player')")
+            .unwrap();
+        let mut reset_cursor = 0;
+        forward_native_ready(
+            &mut script,
+            &app.world().resource::<GroupState>().wrath_raid.ready_events,
+            &mut reset_cursor,
+            true,
+        );
+        assert_eq!(reset_cursor, cursor);
     }
 }

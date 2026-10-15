@@ -305,4 +305,8 @@ pub struct RaidState {
     pub ready_initiator: Option<u64>,
     pub ready_answers: Vec<(u64, u8)>,
     pub ready_finished: u32,
+    // Session-scoped ordered edges, like the shared ready_check_answers log.
+    // Retained across group leave so same-frame leave/rejoin cannot reuse a cursor;
+    // clear_session releases the history. Do not truncate without a sequence cursor.
+    pub ready_events: Vec<benilla_protocol::wrath_group::raid::Packet>,
 }
