@@ -86,3 +86,47 @@ preserved, not silently normalized to a guessed Strength enum.
 These counts are for these exact units, not later integration or live validation.
 The manager owns live checks. Second-stage transparency-weight work remains
 parked; no shader/material changes are part of this audit.
+
+## LFG catalog native evidence (build 12340)
+
+The four LFG metadata readers are separate from the mapped Vanilla projections.
+They preserve source order, duplicate rows, every raw file word, and selected
+archive-locale text without substituting another language. They implement no
+queue state, eligibility, choice ordering, reward, or enabled-state policy.
+
+| Table | Native loader / raw decoder | File shape and mapping |
+| --- | --- | --- |
+| LFGDungeons | `0x647240` / `0x8b1ff0` via `0x65d8a0` | 49 words / 196 bytes: ID 0; name 1–16, mask 17; min/max/target/target-min/target-max 18–22; map 23; difficulty 24; flags 25; type 26; faction 27; texture 28; expansion 29; order 30; group 31; description 32–47, mask 48. |
+| LFGDungeonGroup | `0x646ff0` / `0x8b1d00` via `0x65d790` | 21 words / 84 bytes: ID 0; name 1–16, mask 17; signed group sort priority 18; unlabeled header word 19; type 20. |
+| LFGDungeonExpansion | `0x646da0` / `0x8bcfa0` via `0x65c760` | Eight sequential words / 32 bytes. ID 0, dungeon 1, expansion 2; preserve unlabeled 3; min/max/target-min/target-max 4–7. |
+| MapDifficulty | `0x648770` / `0x8b44a0` via `0x65e130` | 23 words / 92 bytes: ID 0, map 1, difficulty 2, message 3–18, mask 19, unlabeled 20, maximum players 21, unlabeled string 22. Name accessor `0x8b4490`. |
+
+Dependency identity is established by initialized executable globals, not a guessed
+constructor: Expansion object `0xad3ff8` contains primary vtable `0xa281e0`
+(loader slot `0x646da0`) and secondary `0xa281d8`; MapDifficulty object
+`0xad4184` contains primary `0xa28398` (loader slot `0x648770`) and secondary
+`0xa28390`. Their counts/storage at object +8/+0x1c match the globals used by
+`0x6349f0` and `0x634950`. These helpers scan only the first contiguous run
+matching dungeon or map respectively, then return the first matching secondary
+key; an absent match remains absent. No default player count is synthesized.
+
+Native UI evidence (`0x558350`, comparator `0x5536a0`) establishes signed group
+priority and dungeon order. Group column 19 is copied into a header but ignored
+by that comparator for negative header IDs; it remains deliberately unlabeled.
+The bounded Group lookup consumers (`0x5536a0`, `0x554e60`, `0x556ad0`)
+do not establish another meaning, so that unknown does not block a lossless DTO.
+Signed accessors are bit-preserving views, not eligibility rules. All Expansion
+words remain available even when a consumer does not use them.
+
+`lfg::load_lfg_catalogs(&mut Chain)` uses only the supplied, boot-resolved chain;
+all four tables are required and all read/decode failures propagate. No alternate
+filesystem lookup, independent archive handle, or process-global cache is added.
+App owns the Startup-after-Open immutable resource and per-VM feed. Byte readers
+validate exact WDBC shape/length and every referenced string (including inactive
+locale offsets); malformed overrides do not cause silent lower-priority fallback.
+Installed known-row tests certify only the effective enUS chain, not stock-table
+completeness, native Lua behavior, or live dungeon finder operation.
+
+LFG catalog unit gates: formats **531 passed, 0 failed**; installed LFG
+**1 passed, 0 failed**; app **4487 passed, 0 failed, 12 ignored**.
+All exit codes zero. These counts certify this bounded metadata unit only.
