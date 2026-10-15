@@ -1,4 +1,5 @@
-//! Every inbound chat source becomes one [`ChatEvent`] here, its names resolved ask-once through
+//! Vanilla inbound sources become [`ChatEvent`] here; native Wrath MESSAGECHAT dispatches
+//! stock events separately. Names resolve ask-once through
 //! [`crate::names::NameCache`] with bounded re-checks, then routed by [`super::frames::route`].
 
 use bevy::prelude::*;
@@ -55,6 +56,10 @@ pub(super) fn load_emote_texts(mut commands: Commands, assets: Option<Res<WorldA
 
 /// One queued item awaiting its turn through [`feed_chat`].
 enum Pending {
+    Native {
+        msg: benilla_protocol::wrath_chat::Message,
+        tries: u16,
+    },
     /// A decoded `SMSG_MESSAGECHAT`; the player types wait on the sender's name.
     Wire { msg: ChatMessage, tries: u16 },
     /// A channel notice with guids to name (`b_guid` is a kick's or ban's actor, 0 when absent).
@@ -657,6 +662,9 @@ fn deliver_native(
 /// [`feed_chat`]; the bubble has a 20 yd range test and two CVars, the gesture neither.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct SpeakerEffects<'w> {
+    native_state: Option<ResMut<'w, super::native_message::NativeChatFeed>>,
+    social: Option<Res<'w, crate::ui_social::SocialState>>,
+    native_chat: Option<ResMut<'w, crate::ui_native_chat::NativeChatPackets>>,
     native_membership: Option<ResMut<'w, super::native_membership::NativeMembership>>,
     native_notices: Option<ResMut<'w, super::native_roster::NativeChannelNotices>>,
     bubbles: ResMut<'w, crate::chat_bubble::BubbleQueue>,
@@ -701,6 +709,15 @@ pub(super) fn feed_chat(
     let Some(mut script) = script else {
         return;
     };
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        if let Some(packets) = speaker.native_chat.as_deref_mut() {
+            log.pending.extend(
+                super::native_message::take_visible(&mut packets.0)
+                    .into_iter()
+                    .map(|msg| Pending::Native { msg, tries: 0 }),
+            );
+        }
+    }
     if log.pending.is_empty() {
         return;
     }
@@ -708,6 +725,27 @@ pub(super) fn feed_chat(
     let mut still = Vec::new();
     for item in pending {
         match item {
+            Pending::Native { msg, tries } => {
+                let Some(state) = speaker.native_state.as_deref_mut() else {
+                    continue;
+                };
+                if !super::native_message::deliver(
+                    &mut script,
+                    &mut windows,
+                    &mut channels,
+                    &names,
+                    &commands,
+                    speaker.social.as_deref(),
+                    state,
+                    &msg,
+                    tries >= NAME_MAX_TRIES,
+                ) {
+                    still.push(Pending::Native {
+                        msg,
+                        tries: tries.saturating_add(1),
+                    });
+                }
+            }
             Pending::Event(mut event) => {
                 if wrath_needs_raw_event_host_log(&script) {
                     warn!(

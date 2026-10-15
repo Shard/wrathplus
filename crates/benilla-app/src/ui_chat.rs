@@ -32,6 +32,7 @@ mod language;
 /// `LoggingChat`/`LoggingCombat`: the two log files `/chatlog` and `/combatlog` toggle.
 pub(crate) mod logging;
 mod native_feed;
+mod native_message;
 mod native_membership;
 pub(crate) mod native_roster;
 mod net;
@@ -74,6 +75,7 @@ impl Plugin for UiChatPlugin {
         native_roster::register(app);
         app.add_observer(combat::on_cvar);
         app.init_resource::<ChatLog>()
+            .init_resource::<native_message::NativeChatFeed>()
             .init_resource::<native_membership::NativeMembership>()
             .init_resource::<native_feed::NativeRosterFeed>()
             .init_resource::<away::AfkMirror>()
