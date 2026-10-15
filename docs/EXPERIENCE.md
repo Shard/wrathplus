@@ -383,3 +383,25 @@ cargo test -p benilla-world --lib retained_gx_gpu_smoke -- --ignored --nocapture
 
 The explicit run requires a working graphics adapter and fails rather than silently skipping when
 none is available. It checks shader/pipeline/binding/draw validation, not image fidelity or AO strength.
+
+### On-demand Plus postprocess GPU validation
+
+The ignored `ffx_plus_gpu_smoke` test initializes a real device without a window, game,
+archives, or network. It uses production FFX initialization/layouts and combine specialization:
+three Plus filter passes and all seven nonempty bloom/tone-map/colour-grade feature subsets,
+each dry/underwater and gamma-output on/off (31 submitted 4×4 fullscreen draws). It uses the
+embedded shader libraries and production fullscreen vertex shader, not an inferred bind layout.
+
+```sh
+CARGO_TARGET_DIR=/tmp/azb-target-experience CARGO_BUILD_JOBS=4 CARGO_INCREMENTAL=0 \
+  lockf -k /tmp/azb-heavy.lock env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA= \
+  nice -n 15 cargo test -p benilla-world --lib ffx_plus_gpu_smoke -- \
+  --ignored --nocapture --test-threads 1
+```
+
+Validated on Apple M3 Max/Metal. This checks shader composition, production pipeline layouts,
+bindings and draw submission, not visual correctness or Classic pixel equality. Ordinary tests
+never initialize this GPU test. The embedding-only Bevy shader-library loader has no RenderApp;
+its ClearColor-extraction and compressed-format-support diagnostics are expected, not GPU
+validation failures. The test does not exercise the 2D UI combine attachment lane, which Plus
+world postprocessing does not select.
