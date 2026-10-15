@@ -18,6 +18,7 @@ impl PluginGroup for WorldPlugins {
             .add(crate::shaders::plugin)
             .add(MaterialPlugin::<TerrainMaterial>::default())
             .add(MaterialPlugin::<WowModelMaterial>::default())
+            .add(crate::material_specialization::plugin)
             // Physics (avian3d): colliders, their BVH and the shape-casts of controller and picker.
             .add_group(PhysicsPlugins::default())
             // No contact pipeline: nothing reads a contact (the player is a shape-cast controller,
