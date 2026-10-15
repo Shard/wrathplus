@@ -155,10 +155,11 @@ fn spell(m: &mut Map) {
         .run(163, 212, 10); // MaxAffectedTargets..RequiredAuraVision
 }
 
-/// `SpellDispelType.dbc` 12 → 21: id, name, then the mask (the tooltip's name gate) and the
-/// internal name.
+/// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
+/// and the internal name. Native UnitDebuff tests row+0xc at 0x6148b9;
+/// reader 0x8b7a90 stores file columns 18/19 at row+8/+0xc.
 fn spell_dispel_type(m: &mut Map) {
-    m.run(0, 0, 1).loc(1, 1).run(10, 18, 1).run(11, 20, 1);
+    m.run(0, 0, 1).loc(1, 1).run(10, 19, 1).run(11, 20, 1);
 }
 
 /// `SkillLine.dbc` 22 → 56: id, category, costs, name, description, icon.
@@ -276,6 +277,14 @@ mod tests {
         }
         assert!(columns("Spell.dbc", 173, 234).is_some());
         assert!(columns("Spell", 173, 173).is_none());
+    }
+
+    #[test]
+    fn dispel_gate_is_immunity_possible_not_the_combined_mask() {
+        let map = columns("SpellDispelType", 12, 21).unwrap();
+        assert_eq!(map[10], Some(19));
+        assert_eq!(map[11], Some(20));
+        assert_eq!(map[1], Some(1));
     }
 
     #[test]

@@ -273,3 +273,16 @@ fn installed_wrath_class_flags_family_and_pet_token() {
     assert_eq!(classes.damage_bonus_stat(6), Some(9));
     assert!(!classes.has_relic_slot(0));
 }
+
+#[test]
+fn installed_wrath_dispel_tokens_follow_native_aura_gate() {
+    let Some(mut chain) = chain() else { return };
+    let types = crate::load_spell_dispel_types(&mut chain).expect("SpellDispelType");
+    for (id, name) in [(1, "Magic"), (2, "Curse"), (3, "Disease"), (4, "Poison")] {
+        assert_eq!(types.name(id), Some(name));
+    }
+    for id in [0, 5, 6, 7, 8, 9, 10, 11] {
+        assert_eq!(types.name(id), None, "dispel {id}: no native aura token");
+    }
+    assert_eq!(types.len(), 4);
+}
