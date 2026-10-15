@@ -179,3 +179,28 @@ no MH2O layers. No selector 1, selector 3, or selector 0/zero-offset example was
 observed; this is not a complete installed-chain census. The installed regression
 walks raw chunk headers independently and compares every sampled height/depth
 against the production parser, including all 1,443 default-depth layers.
+
+### Raw MH2O surface geometry (formats-only)
+
+`wrath_liquid_surface::build_wrath_liquid_surface` is an explicit-placement seam,
+not renderer integration. It keeps the complete layer and full parent attributes,
+including raw liquid ID, vertex selector, UV words and depth bytes. The caller
+supplies parent XY and signed row-X/column-Y steps; absolute source heights are
+retained. No DBC classification, UV/depth normalization, Z offset, lattice snap,
+layer merging, clipping, material selection or asset loading is performed.
+
+Native `0x7cdf80` iterates rows outside columns with inclusive rectangle bounds;
+its local spacing is the negative chunk-coordinate difference times 0.125,
+and its Z is accessor height minus owner Z. Native `0x7ce1f0` flattens rectangle
+cells row-major; `0x95da20` tests LSB-first bits. Assembly at `0x7ce5d0` establishes
+triangle offsets `(0,S,S+1)` and `(0,S+1,1)` for row stride S. The new surface
+uses these triangles for admitted cells without the native outcode clipping.
+Malformed public layers/nonfinite positions fail closed as a safety policy.
+
+UV consumer `0x7ce390` branches on the **material render selector**, not the MH2O
+vertex selector: render selector 1 fetches unsigned u16 pairs through provider
+vtable +0xC and multiplies by 3/256 (`0xa40414`); otherwise transformed XY is
+multiplied by approximately 0.06 (`0xa40410`). These facts do not justify selecting
+materials from vertex formats; this unit deliberately leaves UV words raw.
+Native local-coordinate arithmetic/rounding is not reproduced by the explicit
+placement API. Renderer integration must supply and verify placement separately.

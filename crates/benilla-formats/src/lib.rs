@@ -939,3 +939,4 @@ mod tests {
 
 /// Native Wrath liquid metadata catalogs.
 pub mod wrath_liquid;
+pub mod wrath_liquid_surface;

@@ -64,6 +64,41 @@ fn installed_wrath_mh2o_selector_sample() {
                     *counts.entry((selector, o == 0)).or_insert(0usize) += 1;
                     let layer = &parsed.entries[entry].layers[i];
                     let n = (raw[h + 14] as usize + 1) * (raw[h + 15] as usize + 1);
+                    let surface =
+                        benilla_formats::wrath_liquid_surface::build_wrath_liquid_surface(
+                            layer,
+                            parsed.entries[entry].attributes,
+                            [0.0; 2],
+                            [-1.0; 2],
+                        )
+                        .unwrap();
+                    assert_eq!(surface.positions.len(), n);
+                    let w = raw[h + 14] as usize;
+                    let height = raw[h + 15] as usize;
+                    let mask = word(raw, h + 16);
+                    let mut expected_indices = Vec::new();
+                    for cell in 0..w * height {
+                        let present = mask == 0 || raw[mask + cell / 8] & (1 << (cell % 8)) != 0;
+                        if present {
+                            let base = ((cell / w) * (w + 1) + cell % w) as u32;
+                            let stride = w as u32 + 1;
+                            expected_indices.extend_from_slice(&[
+                                base,
+                                base + stride,
+                                base + stride + 1,
+                                base,
+                                base + stride + 1,
+                                base + 1,
+                            ]);
+                        }
+                    }
+                    assert_eq!(surface.indices, expected_indices);
+                    for (j, p) in surface.positions.iter().enumerate() {
+                        assert_eq!(p[0], -((raw[h + 13] as usize + j / (w + 1)) as f32));
+                        assert_eq!(p[1], -((raw[h + 12] as usize + j % (w + 1)) as f32));
+                        assert_eq!(p[2].to_bits(), layer.heights[j].to_bits());
+                    }
+
                     assert!(layer.texture_coordinates.is_none()); // no S1 in this sample
                     if selector == 2 {
                         assert_eq!(layer.vertex_format, Mh2oVertexFormat::Depth);
