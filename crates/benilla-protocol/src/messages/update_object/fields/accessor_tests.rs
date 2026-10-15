@@ -1589,3 +1589,43 @@ fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
         assert!(!zero.unit_pet_can_be_abandoned());
     }
 }
+
+#[test]
+fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
+    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let absent = fixture(layout, &[]);
+        assert!(!absent.unit_is_pvp());
+        assert!(!absent.unit_is_ffa_pvp());
+        for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
+            for bit in 0..32 {
+                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+                let (pvp_source, pvp_bit, ffa_source, ffa_bit) = match layout {
+                    FieldLayout::Vanilla5875 => (Field::UnitFlags, 12, Field::PlayerFlags, 7),
+                    FieldLayout::Wrath12340 => (Field::UnitBytes2, 8, Field::UnitBytes2, 10),
+                };
+                assert_eq!(
+                    fields.unit_is_pvp(),
+                    field == pvp_source && bit == pvp_bit,
+                    "PvP {layout:?} {field:?} bit {bit}"
+                );
+                assert_eq!(
+                    fields.unit_is_ffa_pvp(),
+                    field == ffa_source && bit == ffa_bit,
+                    "FFA {layout:?} {field:?} bit {bit}"
+                );
+            }
+        }
+        for (word, expected) in [(0, false), (u32::MAX, true)] {
+            let fields = fixture(
+                layout,
+                &[
+                    (Field::UnitFlags, 0, word),
+                    (Field::PlayerFlags, 0, word),
+                    (Field::UnitBytes2, 0, word),
+                ],
+            );
+            assert_eq!(fields.unit_is_pvp(), expected);
+            assert_eq!(fields.unit_is_ffa_pvp(), expected);
+        }
+    }
+}
