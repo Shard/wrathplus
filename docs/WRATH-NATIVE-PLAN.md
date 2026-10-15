@@ -168,6 +168,9 @@ Build the seams now; features land on them later.
   and behaviour tests on top of descriptor accessors. A unit that touches another crate also runs
   that crate's full `--lib` suite (benilla-ui especially: its reference-surface test rejects any
   global the 1.12 dialect gains; Wrath-only Lua API is installed for the Wrath dialect only).
+- **Bound everything under the heavy lock**: wrap on-demand GPU/probe/installed-data runs in
+  `timeout 900` (and give in-test GPU polls a deadline). A hung test once held the lock for 48 minutes
+  and stalled every worker (2026-10-16).
 - **Waiting on a gate**: run it in the background and set a `schedule` watcher that reports into
   your chat when it finishes (that wakes you). Never end a turn with no watcher armed and no next
   unit started: after a report or an acknowledgement, start the next item in your queue.
