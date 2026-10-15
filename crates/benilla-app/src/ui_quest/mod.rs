@@ -577,7 +577,12 @@ enum DeclineLeg {
 /// 4. a GameObject: its interact virtual `[vtbl+0x60]` (`0x5014d0`), whose override is untraced,
 ///    so it takes the teardown here;
 /// 5. any other unit: `CMSG_QUESTGIVER_HELLO`.
-fn decline_leg(npc: u64, acted: bool, close_on_cancel: u32, npc_flags: Option<u32>) -> DeclineLeg {
+fn decline_leg_native(
+    npc: u64,
+    acted: bool,
+    close_on_cancel: u32,
+    npc_flags: Option<benilla_protocol::messages::NpcFlags>,
+) -> DeclineLeg {
     use benilla_protocol::guid;
     if acted {
         return DeclineLeg::Nothing;
@@ -589,13 +594,28 @@ fn decline_leg(npc: u64, acted: bool, close_on_cancel: u32, npc_flags: Option<u3
         return DeclineLeg::Nothing;
     };
     let unit = guid::is_creature_or_pet(npc);
-    if unit && flags & crate::target::cursor_mode::npc_flags::GOSSIP != 0 {
+    if unit && flags.has(benilla_protocol::messages::NpcService::Gossip) {
         return DeclineLeg::GossipHello;
     }
     if close_on_cancel != 0 || !unit {
         return DeclineLeg::Teardown;
     }
     DeclineLeg::QuestgiverHello
+}
+
+#[cfg(test)]
+fn decline_leg(npc: u64, acted: bool, close_on_cancel: u32, flags: Option<u32>) -> DeclineLeg {
+    decline_leg_native(
+        npc,
+        acted,
+        close_on_cancel,
+        flags.map(|bits| {
+            benilla_protocol::messages::NpcFlags::from_bits(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                bits,
+            )
+        }),
+    )
 }
 
 /// Drain the Lua intents: greeting-row selects and the panel buttons, each to its `CMSG`.
@@ -621,7 +641,7 @@ fn drain_quest(
         .0
         .get(&npc)
         .and_then(|e| stores.get(*e).ok())
-        .map(|s| s.0.unit_npc_flags());
+        .map(|s| s.0.unit_npc_services());
 
     for sel in script.take_quest_selects() {
         let Some(QuestView::Greeting(list)) = giver.view.as_ref() else {
@@ -665,7 +685,7 @@ fn drain_quest(
                 giver.clear();
             }
             QuestAction::Decline => {
-                let leg = decline_leg(npc, giver.acted, giver.close_on_cancel, npc_flags);
+                let leg = decline_leg_native(npc, giver.acted, giver.close_on_cancel, npc_flags);
                 debug!("ui_quest: decline on {npc:#x} — {leg:?}");
                 match leg {
                     DeclineLeg::Nothing => {}

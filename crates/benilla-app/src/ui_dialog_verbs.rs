@@ -86,7 +86,6 @@ impl InstanceBoot {
 }
 
 /// `UNIT_NPC_FLAGS` bit 6, `SPIRITGUIDE`, which the acquire callback `0x4924c0` tests (`0x4924fc`).
-const NPC_FLAG_SPIRITGUIDE: u32 = 1 << 6;
 
 /// The area spirit healer's aura, cancelled by `0x4921c0` and `CancelAreaSpiritHeal`; `0x6e7040`
 /// fires `AREA_SPIRIT_HEALER_OUT_OF_RANGE` for this spell id alone (`0x6e70b6`).
@@ -866,7 +865,11 @@ fn poll_area_spirit_healer(
         if kind.kind != benilla_protocol::EntityKind::Unit {
             continue;
         }
-        if store.0.unit_npc_flags() & NPC_FLAG_SPIRITGUIDE == 0 {
+        if !store
+            .0
+            .unit_npc_services()
+            .has(benilla_protocol::messages::NpcService::SpiritGuide)
+        {
             continue;
         }
         if tf.translation.distance_squared(here) > SPIRIT_GUIDE_ACQUIRE_YD * SPIRIT_GUIDE_ACQUIRE_YD

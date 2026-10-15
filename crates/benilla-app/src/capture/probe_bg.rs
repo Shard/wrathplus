@@ -35,7 +35,6 @@ use crate::net::{
     ChatKind, ClientCommand, DroppedOpcodes, Guid, NetCommands, NetEntity, ObjectStore, SelfPlayer,
 };
 use crate::player::Player;
-use crate::target::cursor_mode::npc_flags;
 use crate::ui_battlefield::Battlefield;
 use crate::ui_dialog_verbs::BattlefieldQueue;
 use crate::world_state::WorldStates;
@@ -141,10 +140,6 @@ const GHOST_SAMPLES: u32 = 11;
 
 /// How many 3 s samples the flag leg takes after the use.
 const FLAG_SAMPLES: u32 = 5;
-
-/// `SPIRITGUIDE`, `UNIT_NPC_FLAGS` bit 6: the flag the reference's area-spirit-healer scan
-/// `0x4924c0` keys on.
-const NPC_FLAG_SPIRITGUIDE: u32 = 1 << 6;
 
 /// A Lua frame that records every battleground event the stock interface listens for, with its
 /// `arg1`: a chat kind that reaches the VM logs nothing, so only a tap shows the countdown's
@@ -509,7 +504,10 @@ fn bg_probe(
             // By entry, not nearness: all three stand in one alcove.
             let master = units.iter().find(|(guid, kind, store, tf)| {
                 kind.kind == benilla_protocol::EntityKind::Unit
-                    && store.0.unit_npc_flags() & npc_flags::BATTLEMASTER != 0
+                    && store
+                        .0
+                        .unit_npc_services()
+                        .has(benilla_protocol::messages::NpcService::BattleMaster)
                     && benilla_protocol::guid::entry(guid.0) == Some(arena.npc_entry)
                     && tf.translation.distance(here) < NEAR_YD
             });
@@ -847,7 +845,10 @@ fn bg_probe(
                 .iter()
                 .filter(|(_, k, st, _)| {
                     k.kind == benilla_protocol::EntityKind::Unit
-                        && st.0.unit_npc_flags() & NPC_FLAG_SPIRITGUIDE != 0
+                        && st
+                            .0
+                            .unit_npc_services()
+                            .has(benilla_protocol::messages::NpcService::SpiritGuide)
                 })
                 .map(|(g, _, _, tf)| (g.0, tf.translation.distance(player.pos)))
                 .min_by(|a, b| a.1.total_cmp(&b.1));
@@ -977,7 +978,11 @@ fn census(
         match kind.kind {
             K::Unit => {
                 u += 1;
-                if store.0.unit_npc_flags() & NPC_FLAG_SPIRITGUIDE != 0 {
+                if store
+                    .0
+                    .unit_npc_services()
+                    .has(benilla_protocol::messages::NpcService::SpiritGuide)
+                {
                     let d = tf.translation.distance(p);
                     if nearest_guide.is_none_or(|(_, best)| d < best) {
                         nearest_guide = Some((guid.0, d));

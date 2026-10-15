@@ -18,7 +18,6 @@ use bevy::prelude::*;
 use super::probes::ProbeClock;
 use crate::net::{ClientCommand, Guid, NetEntity, ObjectStore, SelfPlayer};
 use crate::player::Player;
-use crate::target::cursor_mode::npc_flags;
 use crate::ui_battlefield::Battlefield;
 use crate::ui_dialog_verbs::BattlefieldQueue;
 
@@ -117,7 +116,10 @@ fn bg_queue_probe(
             let here = player.pos;
             let master = units.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == benilla_protocol::EntityKind::Unit
-                    && store.0.unit_npc_flags() & npc_flags::BATTLEMASTER != 0
+                    && store
+                        .0
+                        .unit_npc_services()
+                        .has(benilla_protocol::messages::NpcService::BattleMaster)
                     && tf.translation.distance(here) < NEAR_YD
             });
             if let Some((guid, ..)) = master {

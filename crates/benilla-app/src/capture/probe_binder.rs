@@ -35,8 +35,6 @@ const INNKEEPER_AT: [f32; 3] = [9802.21, 982.608, 1313.98];
 const INNKEEPER_MAP: u32 = 1;
 /// Her creature template entry, the primary identity check.
 const INNKEEPER_ENTRY: u32 = 6736;
-/// `UNIT_NPC_FLAG_INNKEEPER` on 1.12, the scan's fallback identity check.
-const NPC_FLAG_INNKEEPER: u32 = 0x80;
 /// The wire `GOSSIP_ICON` byte every `GOSSIP_OPTION_INNKEEPER` row sends.
 const ICON_INNKEEPER: u8 = 5;
 /// The type string [`crate::ui_gossip`]'s table must produce for [`ICON_INNKEEPER`].
@@ -247,7 +245,10 @@ fn binder_probe(
             let found = units.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == EntityKind::Unit
                     && (store.0.object_entry() == Some(INNKEEPER_ENTRY)
-                        || store.0.unit_npc_flags() & NPC_FLAG_INNKEEPER != 0)
+                        || store
+                            .0
+                            .unit_npc_services()
+                            .has(benilla_protocol::messages::NpcService::Innkeeper))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = found {

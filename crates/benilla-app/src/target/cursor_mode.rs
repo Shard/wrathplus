@@ -31,8 +31,8 @@ pub(crate) enum CursorKind {
     Trainer,
     Taxi,
     Skin,
-    /// Repair(17): never set by the world classifier; the UI's repair-mode base cursor
-    /// (`ShowRepairCursor 0x4fbcc0`).
+    /// Repair(17): UI repair mode in Vanilla (`ShowRepairCursor 0x4fbcc0`), also the
+    /// existing repair asset used for Wrath repair-service NPCs.
     Repair,
     /// Mail(15): a MAILBOX(19) or type-28 GameObject (`0x5f6840`, `0x5f6e30`).
     Mail,
@@ -437,32 +437,70 @@ pub(crate) fn questgiver_has_quest(quest_status: Option<u32>) -> bool {
 
 /// The service ladder (`0x482336..0x4824e3`, unrolled): lowest set bit wins. `None` when no tested
 /// bit is set, repair-only units included: bit 14 is never tested.
-fn service_cursor(service: u32, quest_status: Option<u32>) -> Option<CursorKind> {
-    use npc_flags::*;
-    // Bits 0 and 1 both give Speak, so they fold into one test; only bit 1 is gated.
-    if service & GOSSIP != 0 || (service & QUESTGIVER != 0 && questgiver_has_quest(quest_status)) {
-        Some(CursorKind::Speak)
-    } else if service & VENDOR != 0 {
-        Some(CursorKind::Pickup)
-    } else if service & FLIGHTMASTER != 0 {
-        Some(CursorKind::Taxi)
-    } else if service & TRAINER != 0 {
-        Some(CursorKind::Trainer)
-    } else if service & (SPIRITHEALER | SPIRITGUIDE) != 0 {
-        Some(CursorKind::Speak)
-    } else if service & INNKEEPER != 0 {
-        Some(CursorKind::Interact)
-    } else if service & BANKER != 0 {
-        Some(CursorKind::Buy)
-    } else if service & (PETITIONER | TABARDDESIGNER | BATTLEMASTER) != 0 {
-        Some(CursorKind::Speak)
-    } else if service & AUCTIONEER != 0 {
-        Some(CursorKind::Buy)
-    } else if service & STABLEMASTER != 0 {
-        Some(CursorKind::Speak)
-    } else {
-        None
+fn service_cursor_native(
+    flags: benilla_protocol::messages::NpcFlags,
+    status: Option<u32>,
+) -> Option<CursorKind> {
+    use super::click::ServiceArm;
+    use benilla_protocol::messages::{FieldLayout, NpcService as f};
+    if flags.layout() == FieldLayout::Wrath12340 {
+        // FUN_004f7a50: cursor priority is independent of the click ladder.
+        // Quest/custom cursor artwork is not represented here yet; retain Speak for quests.
+        let bit = |service| flags.has(service);
+        return Some(if flags.bits() != 0 && matches!(status, Some(2..=10)) {
+            CursorKind::Speak
+        } else if bit(f::Repair) {
+            CursorKind::Repair
+        } else if bit(f::Innkeeper) {
+            CursorKind::Interact
+        } else if bit(f::FlightMaster) {
+            CursorKind::Taxi
+        } else if flags.has_trainer_base() {
+            CursorKind::Trainer
+        } else if bit(f::SpiritHealer) || bit(f::SpiritGuide) {
+            CursorKind::Speak
+        } else if bit(f::Banker) {
+            CursorKind::Buy
+        } else if bit(f::Petitioner) || bit(f::TabardDesigner) || bit(f::BattleMaster) {
+            CursorKind::Speak
+        } else if bit(f::Auctioneer) {
+            CursorKind::Buy
+        } else if bit(f::StableMaster) {
+            CursorKind::Speak
+        } else if flags.has_vendor_base() {
+            CursorKind::Pickup
+        } else if bit(f::Gossip) {
+            CursorKind::Speak
+        } else {
+            return None;
+        });
     }
+    Some(match super::click::service_arm_native(flags, status)? {
+        ServiceArm::Gossip
+        | ServiceArm::Questgiver
+        | ServiceArm::SpiritHealer
+        | ServiceArm::SpiritGuide
+        | ServiceArm::Petitioner
+        | ServiceArm::TabardDesigner
+        | ServiceArm::Battlemaster
+        | ServiceArm::StableMaster => CursorKind::Speak,
+        ServiceArm::Vendor => CursorKind::Pickup,
+        ServiceArm::FlightMaster => CursorKind::Taxi,
+        ServiceArm::Trainer => CursorKind::Trainer,
+        ServiceArm::Innkeeper => CursorKind::Interact,
+        ServiceArm::Banker | ServiceArm::Auctioneer => CursorKind::Buy,
+    })
+}
+
+#[cfg(test)]
+fn service_cursor(bits: u32, status: Option<u32>) -> Option<CursorKind> {
+    service_cursor_native(
+        benilla_protocol::messages::NpcFlags::from_bits(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            bits,
+        ),
+        status,
+    )
 }
 
 /// The loot leg's mode, `8 + (keyDown(0) ? 8 : 0)` in the reference (`0x48252c`): LootAll while
@@ -688,10 +726,15 @@ pub(super) fn classify(
             reputations,
             Some(self_store),
         ) {
-            let status = hovered.guid.and_then(|g| quest.status(g));
+            let status = hovered.guid.and_then(|g| match store.0.layout() {
+                benilla_protocol::messages::FieldLayout::Wrath12340 => {
+                    quest.wrath_statuses().get(&g).copied()
+                }
+                benilla_protocol::messages::FieldLayout::Vanilla5875 => quest.status(g),
+            });
             // No matching bit clears the cursor (`je 0x4826cb`) without reaching the attack leg:
             // Point, never the sword.
-            return service_cursor(store.0.unit_npc_flags(), status)
+            return service_cursor_native(store.0.unit_npc_services(), status)
                 .map(|kind| (kind, dist_sq > SERVICE_RANGE_SQ));
         }
         // `CanAttack 0x606980` (`0x482680`), the predicate TAB, the combat flash and
@@ -743,6 +786,96 @@ mod tests {
 
     /// `CanLootNow 0x5ec110` skips its range under `CanAutoInteract` (`0x5ec11b`), so the click
     /// that walks there finds a lit pouch.
+    #[test]
+    fn wrath_cursor_priority_is_not_the_click_priority() {
+        use super::super::click::{service_arm_native, ServiceArm};
+        use benilla_protocol::messages::{FieldLayout, NpcFlags};
+        for (bits, click, cursor) in [
+            (
+                0x2080,
+                Some(ServiceArm::FlightMaster),
+                Some(CursorKind::Taxi),
+            ),
+            (
+                0x10080,
+                Some(ServiceArm::Vendor),
+                Some(CursorKind::Interact),
+            ),
+            (0x1080, Some(ServiceArm::Vendor), Some(CursorKind::Repair)),
+            (0x81, Some(ServiceArm::Gossip), Some(CursorKind::Pickup)),
+            (0x90, Some(ServiceArm::Vendor), Some(CursorKind::Trainer)),
+            (0x100, None, None), // Vendor specialization is not the base-bit branch.
+            (0x20, None, None),  // Neither is a trainer specialization.
+        ] {
+            let flags = NpcFlags::from_bits(FieldLayout::Wrath12340, bits);
+            assert_eq!(service_arm_native(flags, None), click, "click {bits:#x}");
+            assert_eq!(
+                service_cursor_native(flags, None),
+                cursor,
+                "cursor {bits:#x}"
+            );
+        }
+        let vendor = NpcFlags::from_bits(FieldLayout::Wrath12340, 0x80);
+        // Native quest cursor precedes services without requiring the QuestGiver bit.
+        for status in 2..=10 {
+            assert_eq!(
+                service_cursor_native(vendor, Some(status)),
+                Some(CursorKind::Speak)
+            );
+        }
+        assert_eq!(
+            service_cursor_native(vendor, Some(11)),
+            Some(CursorKind::Pickup)
+        );
+        let quest = NpcFlags::from_bits(FieldLayout::Wrath12340, 0x1082);
+        assert_eq!(
+            service_cursor_native(quest, Some(8)),
+            Some(CursorKind::Speak)
+        );
+        assert_eq!(
+            service_arm_native(quest, Some(8)),
+            Some(ServiceArm::Questgiver)
+        );
+        assert_eq!(
+            service_cursor_native(quest, Some(1)),
+            Some(CursorKind::Repair)
+        );
+    }
+
+    #[test]
+    fn native_wrath_services_never_use_vanilla_bit_positions() {
+        use super::super::click::{service_arm_native, ServiceArm};
+        use benilla_protocol::messages::{Field, FieldLayout};
+        for (bits, arm, cursor) in [
+            (0x80, Some(ServiceArm::Vendor), Some(CursorKind::Pickup)),
+            (
+                0x10000,
+                Some(ServiceArm::Innkeeper),
+                Some(CursorKind::Interact),
+            ),
+            (0x10, Some(ServiceArm::Trainer), Some(CursorKind::Trainer)),
+            (0x1000, None, Some(CursorKind::Repair)),
+            (
+                0x2000,
+                Some(ServiceArm::FlightMaster),
+                Some(CursorKind::Taxi),
+            ),
+            (0x20000, Some(ServiceArm::Banker), Some(CursorKind::Buy)),
+        ] {
+            let layout = FieldLayout::Wrath12340;
+            let index = layout.resolve(Field::UnitNpcFlags).unwrap().index;
+            let fields =
+                benilla_protocol::ObjectFields::from_native_pairs(layout, &[(index, bits)]);
+            let flags = fields.unit_npc_services();
+            assert_eq!(service_arm_native(flags, None), arm, "native {bits:#x}");
+            assert_eq!(
+                service_cursor_native(flags, None),
+                cursor,
+                "native {bits:#x}"
+            );
+        }
+    }
+
     #[test]
     fn click_to_move_lights_a_far_corpses_pouch() {
         let far = CorpseFacts {

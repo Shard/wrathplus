@@ -320,7 +320,19 @@ pub(crate) mod net {
                 .0
                 .get(&list.npc)
                 .and_then(|e| stores.get(*e).ok())
-                .map(|s| s.0.unit_npc_flags());
+                .map(|s| {
+                    let flags = s.0.unit_npc_services();
+                    // Legacy registrar model requires both services; decode native bits first.
+                    (if flags.has(benilla_protocol::messages::NpcService::Petitioner) {
+                        crate::target::cursor_mode::npc_flags::PETITIONER
+                    } else {
+                        0
+                    }) | (if flags.has(benilla_protocol::messages::NpcService::TabardDesigner) {
+                        crate::target::cursor_mode::npc_flags::TABARDDESIGNER
+                    } else {
+                        0
+                    })
+                });
             show_list(&mut registrar, list, flags);
         }
     }

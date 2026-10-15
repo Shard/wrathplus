@@ -36,8 +36,6 @@ const AUCTIONEER_AT: [f32; 3] = [-8821.53, 659.886, 97.4645];
 /// Her creature template entry, reported only; her `npc_flags` is 4096, auctioneer only, so the
 /// right-click route sends `AuctionHello` with no gossip in between.
 const AUCTIONEER_ENTRY: u32 = 8719;
-/// `UNIT_NPC_FLAG_AUCTIONEER` (bit 12).
-const NPC_FLAG_AUCTIONEER: u32 = 0x1000;
 /// Wider than the interact range, so a slightly-off `.go` landing still finds one; the nearest is
 /// greeted, as several auctioneers stand a few yards apart.
 const SCAN_RANGE: f32 = 12.0;
@@ -445,7 +443,10 @@ fn auction_probe(
                 .iter()
                 .filter(|(_, net_e, store, tf)| {
                     net_e.kind == EntityKind::Unit
-                        && store.0.unit_npc_flags() & NPC_FLAG_AUCTIONEER != 0
+                        && store
+                            .0
+                            .unit_npc_services()
+                            .has(benilla_protocol::messages::NpcService::Auctioneer)
                         && tf.translation.distance(me) < SCAN_RANGE
                 })
                 .map(|(guid, _, store, tf)| {

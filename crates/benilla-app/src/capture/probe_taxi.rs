@@ -25,8 +25,6 @@ const TAXI_PATH: u32 = 6;
 /// Dungar Longdrink's spawn (vmangos `creature` guid 79658, entry 352, map 0); the flight master
 /// is then found in the streamed world by his npc flag.
 const FLIGHTMASTER_AT: [f32; 3] = [-8835.8, 490.1, 109.7];
-/// `UNIT_NPC_FLAG_FLIGHTMASTER` (bit 3).
-const NPC_FLAG_FLIGHTMASTER: u32 = 0x8;
 /// vmangos `PLAYER_FLIGHT_SPEED` in yd/s (`WaypointMovementGenerator.cpp:390`).
 const FLIGHT_SPEED: f32 = 32.0;
 
@@ -183,7 +181,10 @@ fn taxi_probe(
             let me = player.pos;
             let fm = units.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == benilla_protocol::EntityKind::Unit
-                    && store.0.unit_npc_flags() & NPC_FLAG_FLIGHTMASTER != 0
+                    && store
+                        .0
+                        .unit_npc_services()
+                        .has(benilla_protocol::messages::NpcService::FlightMaster)
                     && tf.translation.distance(me) < 15.0
             });
             if let Some((guid, ..)) = fm {

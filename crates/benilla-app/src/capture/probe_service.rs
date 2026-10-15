@@ -25,12 +25,13 @@
 
 use bevy::prelude::*;
 
+use benilla_protocol::messages::{FieldLayout, NpcFlags, NpcService};
 use benilla_protocol::EntityKind;
 
 use super::probes::ProbeClock;
 use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectStore, SelfPlayer};
 use crate::player::Player;
-use crate::target::click::{service_action, service_arm, ServiceAction, ServiceArm};
+use crate::target::click::{service_action, service_arm_native, ServiceAction, ServiceArm};
 use crate::target::cursor_mode::npc_flags as f;
 use crate::ui_gossip::GossipState;
 use benilla_ui::script::UiScript;
@@ -231,32 +232,39 @@ fn find_item_slot(script: &UiScript) -> Option<(i64, u32)> {
     Some((b.parse().ok()?, s.parse().ok()?))
 }
 
-/// A flag word as hex plus bit names.
-fn flag_names(flags: u32) -> String {
-    const NAMES: [(u32, &str); 14] = [
-        (f::GOSSIP, "GOSSIP"),
-        (f::QUESTGIVER, "QUESTGIVER"),
-        (f::VENDOR, "VENDOR"),
-        (f::FLIGHTMASTER, "FLIGHTMASTER"),
-        (f::TRAINER, "TRAINER"),
-        (f::SPIRITHEALER, "SPIRITHEALER"),
-        (f::SPIRITGUIDE, "SPIRITGUIDE"),
-        (f::INNKEEPER, "INNKEEPER"),
-        (f::BANKER, "BANKER"),
-        (f::PETITIONER, "PETITIONER"),
-        (f::TABARDDESIGNER, "TABARDDESIGNER"),
-        (f::BATTLEMASTER, "BATTLEMASTER"),
-        (f::AUCTIONEER, "AUCTIONEER"),
-        (f::STABLEMASTER, "STABLEMASTER"),
-    ];
-    let set: Vec<&str> = NAMES
+/// Semantic services and the legacy ladder's Vanilla masks. Never apply these masks to wire bits.
+const SERVICES: [(NpcService, u32, &str); 14] = [
+    (NpcService::Gossip, f::GOSSIP, "GOSSIP"),
+    (NpcService::QuestGiver, f::QUESTGIVER, "QUESTGIVER"),
+    (NpcService::Vendor, f::VENDOR, "VENDOR"),
+    (NpcService::FlightMaster, f::FLIGHTMASTER, "FLIGHTMASTER"),
+    (NpcService::Trainer, f::TRAINER, "TRAINER"),
+    (NpcService::SpiritHealer, f::SPIRITHEALER, "SPIRITHEALER"),
+    (NpcService::SpiritGuide, f::SPIRITGUIDE, "SPIRITGUIDE"),
+    (NpcService::Innkeeper, f::INNKEEPER, "INNKEEPER"),
+    (NpcService::Banker, f::BANKER, "BANKER"),
+    (NpcService::Petitioner, f::PETITIONER, "PETITIONER"),
+    (
+        NpcService::TabardDesigner,
+        f::TABARDDESIGNER,
+        "TABARDDESIGNER",
+    ),
+    (NpcService::BattleMaster, f::BATTLEMASTER, "BATTLEMASTER"),
+    (NpcService::Auctioneer, f::AUCTIONEER, "AUCTIONEER"),
+    (NpcService::StableMaster, f::STABLEMASTER, "STABLEMASTER"),
+];
+
+/// A native flag word as raw hex plus dialect-aware service names.
+fn flag_names(flags: NpcFlags) -> String {
+    let set: Vec<&str> = SERVICES
         .iter()
-        .filter(|(bit, _)| flags & bit != 0)
-        .map(|(_, n)| *n)
+        .filter(|(service, _, _)| flags.has(*service))
+        .map(|(_, _, name)| *name)
         .collect();
+    let bits = flags.bits();
     match set.is_empty() {
-        true => format!("{flags:#x} (none)"),
-        false => format!("{flags:#x} {}", set.join("|")),
+        true => format!("{bits:#x} (none)"),
+        false => format!("{bits:#x} {}", set.join("|")),
     }
 }
 
@@ -325,12 +333,12 @@ fn service_probe(
                 {
                     return false;
                 }
-                let flags = store.0.unit_npc_flags();
+                let flags = store.0.unit_npc_services();
                 match leg.ident {
                     Ident::Entry(entry) => store.0.object_entry() == Some(entry),
                     Ident::PureQuestgiverWithOffer => {
-                        flags & f::QUESTGIVER != 0
-                            && flags & f::GOSSIP == 0
+                        flags.has(NpcService::QuestGiver)
+                            && !flags.has(NpcService::Gossip)
                             && crate::target::cursor_mode::questgiver_has_quest(
                                 giver.status(guid.0),
                             )
@@ -377,17 +385,17 @@ fn service_probe(
                 return;
             };
             let guid = guid.0;
-            let flags = store.0.unit_npc_flags();
+            let flags = store.0.unit_npc_services();
             let entry = store.0.object_entry().unwrap_or(0);
             let status = giver.status(guid);
 
             // The shipped ladder, on the shipped inputs.
-            let arm = service_arm(flags, status);
-            let note = match flags == leg.db_flags {
+            let arm = service_arm_native(flags, status);
+            let note = match flags.bits() == leg.db_flags {
                 true => String::new(),
                 false => format!(
                     " [note: the world DB read {} when this leg was written]",
-                    flag_names(leg.db_flags)
+                    flag_names(NpcFlags::from_bits(FieldLayout::Vanilla5875, leg.db_flags))
                 ),
             };
             let Some(arm) = arm else {
@@ -589,7 +597,7 @@ fn service_probe(
                 return;
             };
             let guid = guid.0;
-            let flags = store.0.unit_npc_flags();
+            let flags = store.0.unit_npc_services();
             gossip.clear();
             giver.clear();
             trainer.clear();
@@ -597,7 +605,7 @@ fn service_probe(
 
             // The empty-cursor leg. The arm is asserted: a vendor with a GOSSIP bit takes the
             // gossip arm.
-            let arm = service_arm(flags, None);
+            let arm = service_arm_native(flags, None);
             if arm != Some(ServiceArm::Vendor) {
                 warn!(
                     "PROBE_SERVICE: SKIP (vendor fork) — entry {VENDOR_ENTRY} reads {} and takes \

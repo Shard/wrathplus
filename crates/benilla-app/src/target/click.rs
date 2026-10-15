@@ -581,8 +581,13 @@ impl Dispatch<'_, '_> {
         let npc_flags = self
             .stores
             .get(entity)
-            .map(|(s, _)| s.0.unit_npc_flags())
-            .unwrap_or(0);
+            .map(|(s, _)| s.0.unit_npc_services())
+            .unwrap_or_else(|_| {
+                benilla_protocol::messages::NpcFlags::from_bits(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    0,
+                )
+            });
         let me = self.me();
         let self_store = self.self_store();
         // Peeked, not taken: the cursor clears only once a sale goes out. The reference sends the
@@ -600,7 +605,13 @@ impl Dispatch<'_, '_> {
                 })
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
-        let Some(arm) = service_arm(npc_flags, self.service.quest.status(guid)) else {
+        let status = match npc_flags.layout() {
+            benilla_protocol::messages::FieldLayout::Wrath12340 => {
+                self.service.quest.wrath_statuses().get(&guid).copied()
+            }
+            benilla_protocol::messages::FieldLayout::Vanilla5875 => self.service.quest.status(guid),
+        };
+        let Some(arm) = service_arm_native(npc_flags, status) else {
             // `0x5f05ca`: no consulted bit does nothing, gesture included.
             debug!("right-click interact: {guid:#x} matches no service bit — nothing sent");
             return;
@@ -1364,41 +1375,65 @@ pub(crate) enum ServiceArm {
 
 /// The ladder; `None` when no consulted bit is set (`0x5f05ca`). REPAIR (bit 14) has no arm, and
 /// the reference's redundant `bits 9 AND 10` test reaches bit 9's handler, so it is omitted.
-pub(crate) fn service_arm(npc_flags: u32, quest_status: Option<u32>) -> Option<ServiceArm> {
-    use cursor_mode::npc_flags as f;
-    let bit = |m: u32| npc_flags & m != 0;
-    Some(if bit(f::GOSSIP) {
+pub(crate) fn service_arm_native(
+    npc_flags: benilla_protocol::messages::NpcFlags,
+    quest_status: Option<u32>,
+) -> Option<ServiceArm> {
+    use benilla_protocol::messages::NpcService as f;
+    let bit = |service| npc_flags.has(service);
+    let wrath = npc_flags.layout() == benilla_protocol::messages::FieldLayout::Wrath12340;
+    // Build 12340 FUN_006ddbb0: taxi precedes the exact vendor base bit.
+    let has_quest = if wrath {
+        // FUN_006d1de0 tests raw status != 0 && != 1, including unknown values.
+        !matches!(quest_status, None | Some(0 | 1))
+    } else {
+        cursor_mode::questgiver_has_quest(quest_status)
+    };
+    Some(if bit(f::Gossip) {
         ServiceArm::Gossip
-    } else if bit(f::QUESTGIVER) && cursor_mode::questgiver_has_quest(quest_status) {
+    } else if bit(f::QuestGiver) && has_quest {
         // The cursor ladder's own predicate (`0x482362`), shared so the two cannot disagree.
         ServiceArm::Questgiver
-    } else if bit(f::VENDOR) {
-        ServiceArm::Vendor
-    } else if bit(f::FLIGHTMASTER) {
+    } else if wrath && bit(f::FlightMaster) {
         ServiceArm::FlightMaster
-    } else if bit(f::TRAINER) {
+    } else if npc_flags.has_vendor_base() {
+        ServiceArm::Vendor
+    } else if bit(f::FlightMaster) {
+        ServiceArm::FlightMaster
+    } else if npc_flags.has_trainer_base() {
         ServiceArm::Trainer
-    } else if bit(f::SPIRITHEALER) {
+    } else if bit(f::SpiritHealer) {
         ServiceArm::SpiritHealer
-    } else if bit(f::SPIRITGUIDE) {
+    } else if bit(f::SpiritGuide) {
         ServiceArm::SpiritGuide
-    } else if bit(f::INNKEEPER) {
+    } else if bit(f::Innkeeper) {
         ServiceArm::Innkeeper
-    } else if bit(f::BANKER) {
+    } else if bit(f::Banker) {
         ServiceArm::Banker
-    } else if bit(f::PETITIONER) {
+    } else if bit(f::Petitioner) {
         ServiceArm::Petitioner
-    } else if bit(f::TABARDDESIGNER) {
+    } else if bit(f::TabardDesigner) {
         ServiceArm::TabardDesigner
-    } else if bit(f::BATTLEMASTER) {
+    } else if bit(f::BattleMaster) {
         ServiceArm::Battlemaster
-    } else if bit(f::AUCTIONEER) {
+    } else if bit(f::Auctioneer) {
         ServiceArm::Auctioneer
-    } else if bit(f::STABLEMASTER) {
+    } else if bit(f::StableMaster) {
         ServiceArm::StableMaster
     } else {
         return None;
     })
+}
+
+#[cfg(test)]
+pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> {
+    service_arm_native(
+        benilla_protocol::messages::NpcFlags::from_bits(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            bits,
+        ),
+        status,
+    )
 }
 
 /// What a taken [`ServiceArm`] does.

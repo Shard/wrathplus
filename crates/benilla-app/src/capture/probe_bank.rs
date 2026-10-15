@@ -25,8 +25,6 @@ use crate::ui_bank::{BankOpen, BankPrices};
 const BANKER_AT: [f32; 3] = [-4895.64, -1004.66, 504.024];
 /// Her creature template entry, one of the two identity checks.
 const BANKER_ENTRY: u32 = 5099;
-/// `UNIT_NPC_FLAG_BANKER` (bit 8), the other identity check.
-const NPC_FLAG_BANKER: u32 = 0x100;
 /// Wider than the server's interact range, so a slightly-off `.go` landing still finds her.
 const SCAN_RANGE: f32 = 12.0;
 /// The deposit/withdraw fixture: Linen Cloth.
@@ -214,7 +212,10 @@ fn bank_probe(
             let banker = units.iter().find(|(_, net_e, u_store, tf)| {
                 net_e.kind == EntityKind::Unit
                     && (u_store.0.object_entry() == Some(BANKER_ENTRY)
-                        || u_store.0.unit_npc_flags() & NPC_FLAG_BANKER != 0)
+                        || u_store
+                            .0
+                            .unit_npc_services()
+                            .has(benilla_protocol::messages::NpcService::Banker))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = banker {

@@ -22,9 +22,11 @@ use crate::target::ring::Factions;
 use crate::ui_quest::QuestGiver;
 
 /// `UNIT_NPC_FLAGS` questgiver service bit.
+#[cfg(test)]
 const NPC_FLAG_QUESTGIVER: u32 = 0x2;
 /// `UNIT_NPC_FLAGS` flightmaster service bit, the other half of `0x607380`'s re-gate (`0x6073de`)
 /// and the gate on the only `0x1aa` sender.
+#[cfg(test)]
 const NPC_FLAG_FLIGHTMASTER: u32 = 0x8;
 /// `GAMEOBJECT_FLAGS` bit 2, the sweep's whole GameObject gate (`0x5eb0ef`..`0x5eb0f5`: shift 2,
 /// so mask `0x4`, not the unit leg's `0x2`). The name is vmangos's (`GameObjectDefines.h:76`).
@@ -153,13 +155,15 @@ pub(super) fn query_statuses(
                 // The re-gate, the reaction being above 1. `0x182` goes out from `0x607380`
                 // (`0x6073cd`) and from the light sweep (`0x5eb159`), so every sweep re-asks;
                 // `0x1aa` has one sender, `0x607380` (`0x6073e8`), so never on a light sweep.
-                let flags = obj.0.unit_npc_flags();
-                if (per_unit || swept) && flags & NPC_FLAG_QUESTGIVER != 0 {
+                let flags = obj.0.unit_npc_services();
+                if (per_unit || swept)
+                    && flags.has(benilla_protocol::messages::NpcService::QuestGiver)
+                {
                     let _ = commands
                         .0
                         .send(ClientCommand::QuestgiverStatusQuery { npc: guid.0 });
                 }
-                if per_unit && flags & NPC_FLAG_FLIGHTMASTER != 0 {
+                if per_unit && flags.has(benilla_protocol::messages::NpcService::FlightMaster) {
                     let _ = commands
                         .0
                         .send(ClientCommand::TaxiNodeStatusQuery { guid: guid.0 });

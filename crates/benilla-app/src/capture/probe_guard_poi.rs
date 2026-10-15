@@ -17,8 +17,6 @@ use crate::ui_gossip::GossipState;
 /// A Stormwind City Guard's spawn (vmangos `creature` guid 79664, entry 68, map 0); the guard is
 /// then found in the streamed world by his gossip flag.
 const GUARD_AT: [f32; 3] = [-8854.14, 541.299, 105.984];
-/// `UNIT_NPC_FLAG_GOSSIP` (bit 0).
-const NPC_FLAG_GOSSIP: u32 = 0x1;
 /// The option clicked, matched by label: gossip menu 435's "Weapons Trainer", `action_poi_id` 808.
 const OPTION_LABEL: &str = "Weapons Trainer";
 /// `points_of_interest` row 808.
@@ -94,7 +92,10 @@ fn guard_poi_probe(
             let me = player.pos;
             let guard = units.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == benilla_protocol::EntityKind::Unit
-                    && store.0.unit_npc_flags() & NPC_FLAG_GOSSIP != 0
+                    && store
+                        .0
+                        .unit_npc_services()
+                        .has(benilla_protocol::messages::NpcService::Gossip)
                     && tf.translation.distance(me) < 15.0
             });
             if let Some((guid, ..)) = guard {

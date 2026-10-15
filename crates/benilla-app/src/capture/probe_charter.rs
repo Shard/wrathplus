@@ -34,7 +34,6 @@ use crate::net::{
     ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectStore, Objects, SelfPlayer,
 };
 use crate::player::Player;
-use crate::target::cursor_mode::npc_flags;
 use crate::ui_gossip::GossipState;
 use crate::ui_items::{find_item, ItemSearch, PACK_SLOTS};
 use crate::ui_petition::GuildRegistrarState;
@@ -459,7 +458,10 @@ fn charter_probe(
             let found = units.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == EntityKind::Unit
                     && (store.0.object_entry() == Some(REGISTRAR_ENTRY)
-                        || store.0.unit_npc_flags() & npc_flags::PETITIONER != 0)
+                        || store
+                            .0
+                            .unit_npc_services()
+                            .has(benilla_protocol::messages::NpcService::Petitioner))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = found {

@@ -45,8 +45,6 @@ const POSTER_AT: [f32; 4] = [-9668.23, 683.39, 36.33, 0.0];
 const GO_TYPE_QUESTGIVER: i32 = 2;
 /// `GAMEOBJECT_FLAGS` bit 2, the reference's GameObject query gate (`0x5eb0f2`).
 const GO_FLAG_INTERACT_COND: u32 = 0x4;
-/// `UNIT_NPC_FLAGS` questgiver bit, how the unit control is found.
-const NPC_FLAG_QUESTGIVER: u32 = 0x2;
 /// The two windows' levels, against quest 176's `MinLevel` 5 and `QuestLevel` 11: below it the
 /// server answers `UNAVAILABLE`, above it `AVAILABLE` (not `CHAT`, which needs
 /// `level > QuestLevel + Quests.LowLevelHideDiff`).
@@ -227,7 +225,10 @@ fn goquest_probe(
             });
             let control = objects.iter().find(|(_, net_e, store, tf)| {
                 net_e.kind == EntityKind::Unit
-                    && store.0.unit_npc_flags() & NPC_FLAG_QUESTGIVER != 0
+                    && store
+                        .0
+                        .unit_npc_services()
+                        .has(benilla_protocol::messages::NpcService::QuestGiver)
                     && in_range(tf)
             });
             let Some((guid, _, store, _)) = poster else {
