@@ -1,6 +1,7 @@
 //! Lossless native roll inbox. Presentation drains updates separately from the 1.12 roll model.
 #[path = "wrath_lifecycle.rs"]
 mod lifecycle;
+mod feed;
 
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_roll::Roll, SessionEvent, SessionEventKind};
@@ -51,7 +52,10 @@ impl NativeRolls {
 }
 
 pub(super) fn register(app: &mut App) {
-    app.init_resource::<NativeRolls>()
+    app.add_systems(Startup, feed::load_limits.after(benilla_assets::AssetSet::Open))
+        .init_resource::<feed::Presentation>()
+        .add_systems(Update, feed::feed.in_set(crate::ui_script::UiFeed).run_if(crate::ui_script::ingame_ui_up))
+        .init_resource::<NativeRolls>()
         .init_resource::<NativeRollTemplates>()
         .net_handler(SessionEventKind::WrathItemRollMetadata, on_template)
         .net_handler(SessionEventKind::WrathLootRoll, on_roll)
@@ -72,7 +76,9 @@ fn on_reset(
     In(_): In<SessionEvent>,
     mut rolls: ResMut<NativeRolls>,
     mut templates: ResMut<NativeRollTemplates>,
+    mut presentation: ResMut<feed::Presentation>,
 ) {
+    *presentation = feed::Presentation::default();
     *rolls = NativeRolls::default();
     *templates = NativeRollTemplates::default();
 }
