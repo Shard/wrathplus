@@ -1,6 +1,7 @@
 //! Sole native dungeon finder capture owner. Packets remain ordered and lossless until
 //! the app lifecycle/reducer is implemented; capture does not infer state or issue requests.
 pub(crate) mod auth;
+mod catalog;
 
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_lfg::Packet, SessionEvent, SessionEventKind};
@@ -16,7 +17,9 @@ impl Plugin for UiLfgPlugin {
         auth::register(app);
         app.init_resource::<NativeLfgPackets>()
             .net_handler(SessionEventKind::WrathLfg, receive)
-            .net_handler(SessionEventKind::Disconnected, clear);
+            .net_handler(SessionEventKind::Disconnected, clear)
+            .add_systems(Startup, catalog::load.after(benilla_assets::AssetSet::Open))
+            .add_systems(Update, catalog::feed.in_set(crate::ui_script::UiFeed));
     }
 }
 fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeLfgPackets>) {
