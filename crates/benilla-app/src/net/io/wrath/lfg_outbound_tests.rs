@@ -77,3 +77,20 @@ fn malformed_commands_fail_before_a_wire_packet_exists() {
         );
     }
 }
+
+#[test]
+fn l4_boot_vote_and_teleport_use_canonical_boolean_bodies() {
+    // Raw transport only: no local boot eligibility or teleport success inferred.
+    for (command, opcode, body) in [
+        (Command::SetBootVote { agree: false }, 0x036c, vec![0]),
+        (Command::SetBootVote { agree: true }, 0x036c, vec![1]),
+        (Command::Teleport { out: false }, 0x0370, vec![0]),
+        (Command::Teleport { out: true }, 0x0370, vec![1]),
+    ] {
+        assert_eq!(
+            route(&ClientCommand::LfgCommand(command.clone())),
+            WrathRoute::NativeLfg
+        );
+        assert_eq!(lfg_packet(&command).unwrap(), (opcode, body));
+    }
+}

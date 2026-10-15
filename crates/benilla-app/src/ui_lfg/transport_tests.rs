@@ -91,3 +91,80 @@ fn malformed_proposal_never_publishes_partial_fifo_entry() {
     assert_eq!(deliver(&mut app, &mut adapter, trailing), 0);
     assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
 }
+
+#[test]
+fn dungeon_notifications_preserve_order_repetition_and_full_words_in_sole_fifo() {
+    use benilla_protocol::wrath_lfg::dungeon::Packet as Dungeon;
+    let mut app = App::new();
+    app.add_plugins(UiLfgPlugin);
+    let mut adapter = WrathEventAdapter::new();
+    let fixtures = [
+        (
+            0x0293,
+            vec![0x56, 0x34, 0x12, 0xab],
+            Dungeon::OfferContinue { entry: 0xab123456 },
+        ),
+        (
+            0x0200,
+            vec![0xef, 0xcd, 0xab, 0x80],
+            Dungeon::TeleportDenied { reason: 0x80abcdef },
+        ),
+        (0x0398, vec![], Dungeon::Disabled),
+        (0x0293, vec![0; 4], Dungeon::OfferContinue { entry: 0 }),
+        (0x0200, vec![0; 4], Dungeon::TeleportDenied { reason: 0 }),
+    ];
+    // Repeated disabled/offer packets are receipts, not an instruction to clear
+    // or deduplicate the capture queue. Only App's later state owner interprets them.
+    for _ in 0..2 {
+        for (opcode, body, _) in &fixtures {
+            let packet = WrathServerPacket {
+                opcode: *opcode,
+                body: body.clone(),
+            };
+            let WrathDispatch::Handled { session_events, .. } =
+                adapter.dispatch_packet(&packet, 1).unwrap()
+            else {
+                panic!("dungeon notification unhandled")
+            };
+            assert_eq!(session_events.len(), 1);
+            crate::net::handlers::dispatch(app.world_mut(), session_events);
+        }
+    }
+    let queue = &app.world().resource::<NativeLfgPackets>().0;
+    assert_eq!(queue.len(), 10);
+    for (actual, (_, _, expected)) in queue.iter().zip(fixtures.iter().cycle()) {
+        assert_eq!(actual, &Packet::Dungeon(expected.clone()));
+    }
+    crate::net::handlers::dispatch(
+        app.world_mut(),
+        vec![SessionEvent::Disconnected {
+            reason: "test".into(),
+            end: benilla_protocol::SessionEnd::Lost,
+        }],
+    );
+    assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
+}
+
+#[test]
+fn malformed_dungeon_notifications_are_unhandled_without_fifo_publication() {
+    let mut app = App::new();
+    app.add_plugins(UiLfgPlugin);
+    let mut adapter = WrathEventAdapter::new();
+    for (opcode, full) in [
+        (0x0293, vec![1, 2, 3, 255]),
+        (0x0200, vec![255; 4]),
+        (0x0398, vec![]),
+    ] {
+        let mut invalid: Vec<Vec<u8>> = (0..full.len()).map(|cut| full[..cut].to_vec()).collect();
+        let mut trailing = full;
+        trailing.push(0);
+        invalid.push(trailing);
+        for body in invalid {
+            let packet = WrathServerPacket { opcode, body };
+            assert!(
+                matches!(adapter.dispatch_packet(&packet, 1).unwrap(), WrathDispatch::Unhandled { opcode: actual } if actual == opcode)
+            );
+        }
+    }
+    assert!(app.world().resource::<NativeLfgPackets>().0.is_empty());
+}
