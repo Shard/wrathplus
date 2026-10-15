@@ -47,6 +47,8 @@ pub struct PartyMemberLocks {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
+    Boot(boot::Boot),
+    Completion(completion::Reward),
     Dungeon(dungeon::Packet),
     Proposal(proposal::Proposal),
     Queue(queue::Packet),
@@ -59,7 +61,11 @@ pub const fn handles(opcode: u16) -> bool {
         || queue::handles(opcode)
         || matches!(
             opcode,
-            proposal::SMSG_LFG_PROPOSAL_UPDATE | SMSG_LFG_PLAYER_INFO | SMSG_LFG_PARTY_INFO
+            boot::SMSG_LFG_BOOT_PROPOSAL_UPDATE
+                | completion::SMSG_LFG_PLAYER_REWARD
+                | proposal::SMSG_LFG_PROPOSAL_UPDATE
+                | SMSG_LFG_PLAYER_INFO
+                | SMSG_LFG_PARTY_INFO
         )
 }
 fn invalid(message: &'static str) -> io::Error {
@@ -86,6 +92,12 @@ fn locks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<DungeonLock>> {
 }
 /// Decode an entire body transactionally. Unknown opcodes and trailing bytes fail.
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
+    if opcode == boot::SMSG_LFG_BOOT_PROPOSAL_UPDATE {
+        return boot::decode(body).map(Packet::Boot);
+    }
+    if opcode == completion::SMSG_LFG_PLAYER_REWARD {
+        return completion::decode(body).map(Packet::Completion);
+    }
     if dungeon::handles(opcode) {
         return dungeon::decode(opcode, body).map(Packet::Dungeon);
     }
@@ -178,3 +190,6 @@ pub mod commands;
 pub mod proposal;
 
 pub mod dungeon;
+
+pub mod boot;
+pub mod completion;
