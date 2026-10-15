@@ -118,6 +118,7 @@ pub fn load_chr_classes(chain: &mut Chain) -> Result<ChrClasses> {
         .read_file(CHR_CLASSES)
         .with_context(|| format!("reading {CHR_CLASSES}"))?;
     let rs = parse(&bytes, schema(), "ChrClasses.dbc")?;
+    let wrath = matches!(chain.profile(), crate::DataProfile::Wrath { .. });
     let mut by_id = HashMap::new();
     for r in rs.records() {
         let Some(id) = u32_at(r, 0) else { continue };
@@ -126,7 +127,7 @@ pub fn load_chr_classes(chain: &mut Chain) -> Result<ChrClasses> {
             ChrClass {
                 damage_bonus_stat: u32_at(r, DAMAGE_BONUS_STAT_FIELD).unwrap_or(0),
                 pet_name_token: str_at(&rs, r, PET_NAME_TOKEN_FIELD),
-                has_relic_slot: u32_at(r, RELIC_SLOT_FIELD).is_some_and(|v| v != 0),
+                has_relic_slot: relic_slot(u32_at(r, RELIC_SLOT_FIELD).unwrap_or(0), wrath),
                 spell_family: u32_at(r, SPELL_FAMILY_FIELD).unwrap_or(0),
             },
         );
@@ -134,9 +135,44 @@ pub fn load_chr_classes(chain: &mut Chain) -> Result<ChrClasses> {
     Ok(ChrClasses(by_id))
 }
 
+/// Wrath UnitHasRelicSlot (0x611330) tests bit 0x8 at native row+0x24
+/// (0x6113a9); WoWDBDefs build-12340 ChrClasses identifies this as Flags,
+/// file column 57, mapped into the old relic slot. Other flags do not imply relics.
+/// Keep the existing Vanilla column contract unchanged.
+fn relic_slot(flags: u32, wrath: bool) -> bool {
+    if wrath {
+        flags & 0x8 != 0
+    } else {
+        flags != 0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrath_relics_use_only_flag_eight_without_changing_vanilla() {
+        for (flags, expected) in [
+            (0, false),
+            (2, false),
+            (6, false),
+            (22, false),
+            (50, false),
+            (8, true),
+            (10, true),
+            (26, true),
+            (58, true),
+            (122, true),
+        ] {
+            assert_eq!(relic_slot(flags, true), expected, "Wrath flags {flags}");
+            assert_eq!(
+                relic_slot(flags, false),
+                flags != 0,
+                "Vanilla flags {flags}"
+            );
+        }
+    }
 
     fn chain() -> Option<crate::chain::Chain> {
         let data = crate::wow_data_or_skip!(None);
