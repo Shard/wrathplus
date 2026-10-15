@@ -523,6 +523,7 @@ pub(crate) struct Model {
     pub(crate) tutorial_flag_requests: Vec<u32>,
     pub(crate) tutorial_clears: u32,
     pub(crate) tutorial_resets: u32,
+    pub(crate) wrath_tutorial: super::wrath_tutorial::State,
 
     /// The stance bar's forms, in bar order.
     pub(crate) shapeshift_forms: Vec<super::shapeshift::StoredShapeshiftForm>,
@@ -1262,6 +1263,7 @@ impl Model {
             tutorial_flag_requests: Vec::new(),
             tutorial_clears: 0,
             tutorial_resets: 0,
+            wrath_tutorial: super::wrath_tutorial::State::default(),
             shapeshift_forms: Vec::new(),
             pet_bar: super::pet::PetBarState::default(),
             pet_autocast_toggles: Vec::new(),

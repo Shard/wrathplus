@@ -164,6 +164,24 @@ impl Default for Cvars {
 }
 
 impl Cvars {
+    /// Wrath build 12340: registration `0x51e04a -> 0x767fc0`, native flags `0x110`
+    /// (not latched), default pointer `0x9e14ff` is the empty string. Source: installed
+    /// client disassembly, `/tmp/tutorial-history-final-edges.log` and
+    /// `/tmp/tutorial-history-default-event.log` (SHA-256 c6f92098…bc289c).
+    /// This internal, non-addon row uses the existing file persistence path unchanged.
+    pub(crate) fn register_wrath_tutorial_history(&mut self) {
+        if self.slot("flaggedTutorials").is_none() {
+            self.insert_row(Row {
+                name: "flaggedTutorials".into(),
+                default: String::new(),
+                value: String::new(),
+                pending: None,
+                latched: false,
+                addon: false,
+            });
+        }
+    }
+
     fn insert_row(&mut self, row: Row) {
         let key = row.name.to_ascii_lowercase();
         debug_assert!(
@@ -614,8 +632,14 @@ fn session_values(world: &World) -> Vec<(&'static str, Option<String>)> {
 fn load_config(world: &mut World) {
     let session = session_values(world);
     let stored = stored_config();
+    let wrath = world
+        .get_resource::<benilla_assets::ClientDataProfile>()
+        .is_some_and(|p| matches!(p.0, benilla_formats::DataProfile::Wrath { .. }));
     let events = {
         let mut cvars = world.resource_mut::<Cvars>();
+        if wrath {
+            cvars.register_wrath_tutorial_history();
+        }
         for (name, value) in session {
             cvars.own_for_session(name, value.as_deref());
         }
@@ -829,7 +853,7 @@ fn save_config_when_quiet(mut cvars: ResMut<Cvars>) {
 }
 
 /// The exit frame: save whatever is still dirty, quiet second or not.
-fn save_config_on_exit(mut cvars: ResMut<Cvars>) {
+pub(crate) fn save_config_on_exit(mut cvars: ResMut<Cvars>) {
     if cvars.dirty {
         write_config(&mut cvars);
     }

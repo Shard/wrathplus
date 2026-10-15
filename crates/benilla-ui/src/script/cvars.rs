@@ -156,6 +156,7 @@ impl super::UiScript {
                 },
             );
         }
+        super::wrath_tutorial::initialize_from_seed(&mut model);
     }
 
     /// Host-side write (a loaded value, a committed latch): sets an admitted existing value and
