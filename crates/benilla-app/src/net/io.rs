@@ -982,7 +982,8 @@ fn writer_loop(
                     ClientCommand::ChannelList { name } => w.channel_list(&name),
                     // Wrath-only display roster commands never leak onto the Vanilla wire.
                     ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
-                    | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo => Ok(()),
+                    | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
+                    | ClientCommand::LfgCommand(_) => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {

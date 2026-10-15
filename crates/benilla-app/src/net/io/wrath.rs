@@ -979,6 +979,7 @@ enum WrathRoute {
     NativeMelee,
     NativeLoot,
     NativeSession,
+    NativeLfg,
     DisabledMovement,
     DisabledGameAction,
     DeferredReadOnlyQuery,
@@ -986,6 +987,7 @@ enum WrathRoute {
 
 fn route(command: &ClientCommand) -> WrathRoute {
     match command {
+        ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
         ClientCommand::Logout | ClientCommand::ForceLogout => WrathRoute::Logout,
@@ -1256,6 +1258,16 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeLfg => {
+                        let ClientCommand::LfgCommand(command) = command else { unreachable!() };
+                        match lfg_packet(&command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid LFG command rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
                     WrathRoute::NativeSession => {
                         let (opcode, body) = session_packet(command);
                         if *crate::net::CAST_TRACE {
@@ -1349,6 +1361,14 @@ fn loot_packet(command: ClientCommand) -> Result<(u32, Vec<u8>)> {
         ),
         _ => bail!("invalid or unsupported native Wrath solo corpse-loot command"),
     })
+}
+
+// TODO(App LFG L3): guard the current proposal ID and session lifecycle before
+// exposing ProposalResult through Lua/UI. This route is raw transport only.
+fn lfg_packet(
+    command: &benilla_protocol::wrath_lfg::commands::Command,
+) -> std::io::Result<(u32, Vec<u8>)> {
+    Ok((command.opcode(), command.encode()?))
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
@@ -2983,3 +3003,7 @@ mod saved_instance_command_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "wrath/lfg_outbound_tests.rs"]
+mod lfg_outbound_tests;
