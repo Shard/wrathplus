@@ -18,6 +18,8 @@
 //! `CONFIRM_LOOT_ROLL` and `ConfirmLootRoll` sends, the reference's C `RollOnLoot` gate; Pass is
 //! never gated.
 
+mod wrath;
+
 use benilla_protocol::messages::{roll_vote, LootAllPassed, LootRoll, LootRollWon, LootStartRoll};
 use bevy::prelude::*;
 
@@ -249,6 +251,7 @@ pub(crate) struct UiLootRollPlugin;
 impl Plugin for UiLootRollPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        wrath::register(app);
         app.init_resource::<LootRolls>().add_systems(
             Update,
             (

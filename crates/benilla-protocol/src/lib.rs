@@ -25,6 +25,7 @@ pub mod wrath_session;
 pub mod wrath_spline;
 pub mod wrath_vendor;
 pub mod wrath_mail;
+pub mod wrath_roll;
 pub mod wrath_taxi;
 pub mod wrath_taxi_ack;
 pub mod wrath_trainer;

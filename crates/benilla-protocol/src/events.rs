@@ -854,6 +854,8 @@ pub enum SessionEvent {
     LootClearMoney,
     /// The loot window closes (`SMSG_LOOT_RELEASE_RESPONSE`), answering our `CMSG_LOOT_RELEASE`.
     LootReleaseResponse { guid: u64 },
+    /// Native build-12340 rolls, including count, mask, suffix and automatic-pass metadata.
+    WrathLootRoll(crate::wrath_roll::Roll),
     /// A group roll opened on one drop (`SMSG_LOOT_START_ROLL`); its `rollID` is client-allocated.
     LootStartRoll(LootStartRoll),
     /// A vote or dice (`SMSG_LOOT_ROLL`); `LootRoll::is_dice`/`vote` split the overloaded pair.
