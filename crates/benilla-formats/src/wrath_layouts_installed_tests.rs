@@ -358,3 +358,131 @@ fn installed_wrath_taxi_flights_and_cross_map_transport_nodes() {
         [1318.1068, -4658.047, 71.86043],
     );
 }
+
+#[test]
+fn installed_wrath_world_map_area_known_rects_and_continent_order() {
+    let Some(mut chain) = chain() else { return };
+    // Raw build-12340 rows: first eight columns retain ID/map/area/art/Y1/Y2/X1/X2.
+    // DisplayMapID, DefaultDungeonFloor and ParentWorldMapID are not exposed here.
+    let areas = crate::load_world_map_area_catalog(&mut chain).expect("WorldMapArea");
+    assert_eq!(
+        areas
+            .iter()
+            .filter(|(_, r)| r.area_id == 0)
+            .map(|(id, r)| (id, r.map_id, r.name.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (13, 1, "Kalimdor"),
+            (14, 0, "Azeroth"),
+            (466, 530, "Expansion01"),
+            (485, 571, "Northrend")
+        ]
+    );
+    for (id, map, area, name, rect) in [
+        (
+            30,
+            0,
+            12,
+            "Elwynn",
+            [1535.4166, -1935.4166, -7939.583, -10254.166],
+        ),
+        (
+            301,
+            0,
+            1519,
+            "Stormwind",
+            [1722.9166, -14.583333, -7995.833, -9154.166],
+        ),
+        (
+            465,
+            530,
+            3483,
+            "Hellfire",
+            [5539.583, 375.0, 1481.25, -1962.4999],
+        ),
+        (
+            486,
+            571,
+            3537,
+            "BoreanTundra",
+            [8570.833, 2806.25, 4897.9165, 1054.1666],
+        ),
+    ] {
+        let row = areas.get(id).expect("zone map");
+        assert_eq!(
+            (row.map_id, row.area_id, row.name.as_str()),
+            (map, area, name)
+        );
+        for (actual, expected) in [row.loc_left, row.loc_right, row.loc_top, row.loc_bottom]
+            .into_iter()
+            .zip(rect)
+        {
+            assert!(
+                (actual - expected).abs() < 0.002,
+                "{name}: {actual} != {expected}"
+            );
+        }
+    }
+    for (map, id) in [(0, 14), (1, 13), (530, 466), (571, 485)] {
+        assert_eq!(areas.continent(map).unwrap().0, id);
+    }
+}
+
+#[test]
+fn installed_wrath_world_map_continent_sheet_and_taxi_bounds() {
+    let Some(mut chain) = chain() else { return };
+    // All four native rows: first thirteen columns retain their layout; column 13
+    // WorldMapID is not exposed. Do not reuse Vanilla's two-row/0.75-scale expectations.
+    let continents =
+        crate::load_world_map_continent_catalog(&mut chain).expect("WorldMapContinent");
+    assert_eq!(continents.len(), 4);
+    for (map, bounds, offsets, scale, taxi_min, taxi_max) in [
+        (
+            0,
+            [26, 44, 8, 60],
+            [16.875, -1.5],
+            0.7,
+            (-16530.0, -16530.0),
+            (12270.0, 12270.0),
+        ),
+        (
+            1,
+            [16, 46, 9, 52],
+            [-20.1875, 3.3125],
+            0.7,
+            (-11870.0, -13370.0),
+            (12470.0, 10970.0),
+        ),
+        (
+            530,
+            [23, 47, 15, 61],
+            [14.5, -7.0],
+            0.75,
+            (-5867.0, -1600.0),
+            (6400.0, 10670.0),
+        ),
+        (
+            571,
+            [16, 45, 12, 33],
+            [1.8125, -6.375],
+            0.7,
+            (-3733.0, -6933.0),
+            (11730.0, 8533.0),
+        ),
+    ] {
+        let row = continents.get(map).expect("continent");
+        assert_eq!(row.map_id, map);
+        assert_eq!(
+            [
+                row.left_boundary,
+                row.right_boundary,
+                row.top_boundary,
+                row.bottom_boundary
+            ],
+            bounds
+        );
+        assert_eq!([row.offset_x, row.offset_y], offsets);
+        assert!((row.scale - scale).abs() < 0.000001);
+        assert_eq!((row.taxi_min, row.taxi_max), (taxi_min, taxi_max));
+    }
+}
