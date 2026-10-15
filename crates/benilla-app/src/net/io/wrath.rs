@@ -1006,6 +1006,7 @@ enum WrathRoute {
     NativeSession,
     NativeLfg,
     NativeGuild,
+    NativePetNameQuery,
     NativeChat,
     NativeWorldportAck,
     NativeArenaTeam,
@@ -1020,6 +1021,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
         ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
@@ -1311,6 +1313,11 @@ fn writer_loop(
                     WrathRoute::NativeWorldportAck => {
                         let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
                         active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativePetNameQuery => {
+                        let ClientCommand::PetNameQuery { pet_number, guid } = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_pet_name::encode_query(pet_number, guid);
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeChat => {
                         let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
@@ -3230,3 +3237,7 @@ impl MovementAuthorityHandle {
 #[cfg(test)]
 #[path = "wrath/logout_tests.rs"]
 mod logout_tests;
+
+#[cfg(test)]
+#[path = "wrath/pet_name_tests.rs"]
+mod pet_name_tests;

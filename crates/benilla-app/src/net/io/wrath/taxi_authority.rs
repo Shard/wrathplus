@@ -17,7 +17,8 @@ impl MovementAuthorityHandle {
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
             return Ok(());
         }
-        // Native 006b18c0 clears immediately, not upon receipt of the untagged ACK.
+        // Native 006b18c0 clears immediately without LOGOUT_CANCEL; 006b0900
+        // emits that event only if pending remains set when the untagged ACK arrives.
         state.logout_pending = false;
         send()
     }
