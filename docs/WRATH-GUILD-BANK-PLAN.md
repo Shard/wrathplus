@@ -244,7 +244,10 @@ stride `0x2144` (icon +`0x40`, text +`0x140`); per-tab slot arrays at
 four-byte values at `0x00c1dc30` and `0x00c1dc34` must not be aliased.
 Active bank GUID is `0x00c1dc10/14`, pending GUID `0x00c1dc18/1c`.
 Reset `0x005a7760` clears allocations/tab count/current tab and marks query
-flags dirty; its callers/reset triggers remain to be proven. These addresses
+flags dirty. Direct callers are the own-player guild-ID field watcher
+`0x006e1bb0` (registered by `0x006e45d0`, type 4, offset `0x0c`, width 4)
+and bank-subsystem teardown `0x005a7830`. No direct map-reset caller was found;
+this does not prove every cross-map lifecycle path. These addresses
 are evidence, not a design requirement to duplicate the native memory layout.
 The dedicated bank binding table contains **29 functions**, a larger scope
 than the 16-name core census, and excludes the cross-family rank-edit bindings.
@@ -257,7 +260,12 @@ These are **separate stores to verify**, not asserted complete lifecycle policy:
    disconnect and reconnect behavior; never leak another session's bank cache.
    Native close `0x005a4500` -> `0x005a4270` clears active/pending banker GUIDs
    and dispatches event ID `0x0219`, with **no wire packet or item-cache clear**.
-   Event-name mapping and other reset triggers require separate proof.
+   Event `0x0219` maps to `GUILDBANKFRAME_CLOSED`. Guild event handler
+   `0x006d92d0` case 8 closes and clears tab metadata; flag watcher
+   `0x0071a0b0` closes a matching active banker on loss of `0x800000`.
+   Neither close path implies the full cache reset. Evidence:
+   `/tmp/azb-wire-guildbank-lifecycle{,-registration,-final}.log` and
+   `/tmp/azb-wire-guildbank-event-{init,asm,table,refs}.log`.
 2. Purchased tab metadata and per-tab slot caches, with known/unavailable
    separate from zero/empty. Native `03e8` clears all 98 slot fields through
    `0x005a4b60` only when full is nonzero **and packet tab is zero**, using the
@@ -279,7 +287,14 @@ These are **separate stores to verify**, not asserted complete lifecycle policy:
    **stored money word multiplied by 10000**, then six ordered rights/slot
    pairs. Preserve this evidenced asymmetric storage/conversion behavior;
    do not normalize it into a hypothetical clean draft or claim server success
-   from local setter mutation. UI pending/cancel logic is a separate layer.
+   from local setter mutation. Installed GuildControl Cancel only hides the
+   popup; OnHide/OnShow call no native restore/reset or pending-table clear.
+   Tab edits are Lua-buffered; Accept invokes money setter, pending tab setters,
+   rank save, Hide, then clears Lua pending tables. Those tables also clear on
+   initial load and changed rank; same-rank cancel/reopen can retain them.
+   Rank-checkbox setters remain immediate and separate. No native rollback
+   follows from Cancel. Consumer evidence:
+   `/tmp/azb-ui-guildbank-consumers/guild-control-cancel.txt`.
    Evidence: `/tmp/azb-wire-guildbank-{rank-table,rank,cache-rank}.log`.
 5. Per-tab text/log snapshots and local selected tab, cursor item/money state;
    do not infer a transfer from cursor pickup or clear cursor on unrelated reply.
@@ -333,14 +348,17 @@ Manager approved committing this documentation unit and beginning **G1 message
 readers**. Remaining uncertainties do not block the bounded lossless codecs;
 no approval is implied for unproven lifecycle, Lua policy or later-stage behavior.
 
-- **G1 integration gate:** trace reset `0x005a7760` callers and cross-map/session/
-  guild transitions before implementing lifecycle policy; map native event IDs
-  to event names and verify ordering before emitting Lua notifications.
+- **G1 integration gate:** direct reset callers and close event name are now
+  proven above. Preserve the distinction between reset, metadata clear and
+  close. Cover session/guild transitions in reducer fixtures; do not invent a
+  standalone map reset. Verify notification ordering before Lua emission.
+  Money pickup event `0x021d` is `GUILDBANK_UPDATE_MONEY`, not `CURSOR_UPDATE`.
 - **G2 gate:** distinguish the proven rights-only repair predicate from repair
   execution contexts, allowance checks and cursor delivery. Do not invent extra
   predicate gates or a successful repair from local eligibility.
-- **G3 gate:** prove cancel behavior before implementing rollback. Direct native
-  setters mutate shared arrays; Lua pending edits do not prove array restoration.
+- **G3 gate:** installed Cancel behavior is now traced above: no native rollback.
+  Direct native setters mutate shared arrays; Lua pending edits do not prove
+  array restoration. Add fixtures for Accept ordering and pending-table lifetime.
   App/UI must agree a sole guild-control/roster rank owner before that integration.
 - **G4 gate:** complete branch-specific sender and getter ABI fixtures before
   slot/log/text behavior lands. Consumer destructuring is not full ABI proof.
