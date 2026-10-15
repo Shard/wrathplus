@@ -444,6 +444,7 @@ pub(crate) struct Model {
 
     pub(crate) spell_catalog: std::collections::HashMap<u32, super::spell_info::SpellInfoView>,
     pub(crate) spellbook: spellbook::SpellBookState,
+    pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
     /// The player's macros, owned here as 1.12 macros have no server side; the app persists them.
@@ -1233,6 +1234,7 @@ impl Model {
             ui_errors: Vec::new(),
             spell_catalog: Default::default(),
             spellbook: spellbook::SpellBookState::default(),
+            wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),
             macros_dirty: false,

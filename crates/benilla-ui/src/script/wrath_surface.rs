@@ -20,6 +20,9 @@ pub(crate) mod wrath_group;
 #[path = "wrath_party_assignment.rs"]
 mod wrath_party_assignment;
 
+#[path = "wrath_spell_queries.rs"]
+pub(crate) mod wrath_spell_queries;
+
 use super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -27,6 +30,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     super::cvars::install_wrath_clock_cvars(lua)?;
     install_truthful_readers(lua)?;
     super::mail::wrath::install(lua)?;
+    wrath_spell_queries::install(lua)?;
     wrath_stats::install(lua)?;
     wrath_loot::install(lua)?;
     wrath_power::install(lua)?;
