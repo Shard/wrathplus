@@ -304,6 +304,8 @@ pub struct FontObject {
 /// painter order ([`crate::order::traversal`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExtractedQuad {
+    /// Render-only affine transform [a,b,c,d,tx,ty] in y-up UI pixels.
+    pub animation_transform: Option<[f32; 6]>,
     /// A frame's own slot, or one of its regions.
     pub target: ZTarget,
     /// The packed draw-order key (`ZKey::raw`); entries are sorted ascending by it.

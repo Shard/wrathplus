@@ -384,6 +384,7 @@ impl UiScript {
                 _ => zkey.raw(),
             };
             out.push(ExtractedQuad {
+                animation_transform: None,
                 target,
                 z,
                 rect,
@@ -410,6 +411,7 @@ impl UiScript {
                 );
             }
         }
+        super::animation::transforms::extract(&model, &mut out);
         out
     }
 }
