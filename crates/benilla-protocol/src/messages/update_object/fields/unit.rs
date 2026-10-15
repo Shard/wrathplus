@@ -309,6 +309,24 @@ impl ObjectFields {
     pub fn unit_flags(&self) -> u32 {
         self.get(Field::UnitFlags).unwrap_or(0)
     }
+    /// Pet rename permission flag. Build 5875 uses UNIT_FLAGS 0x10;
+    /// build 12340 uses UNIT_FIELD_BYTES_2 byte 2 mask 0x01.
+    /// Missing fields are false; ownership and action policy are caller concerns.
+    pub fn unit_pet_can_be_renamed(&self) -> bool {
+        match self.layout {
+            FieldLayout::Vanilla5875 => self.unit_flags() & 0x10 != 0,
+            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0001_0000 != 0,
+        }
+    }
+    /// Pet abandon permission flag. Build 5875 uses UNIT_FLAGS 0x20;
+    /// build 12340 uses UNIT_FIELD_BYTES_2 byte 2 mask 0x02.
+    /// Missing fields are false; ownership and action policy are caller concerns.
+    pub fn unit_pet_can_be_abandoned(&self) -> bool {
+        match self.layout {
+            FieldLayout::Vanilla5875 => self.unit_flags() & 0x20 != 0,
+            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0002_0000 != 0,
+        }
+    }
     /// `UNIT_FIELD_COMBATREACH` (`+0x1f0`): melee reach, summed as `rA + rB + 1.333`, floor 5.0,
     /// by the attack range gate (`0x6e3480`); 1.5, the vanilla default, before it streams.
     pub fn unit_combat_reach(&self) -> f32 {
