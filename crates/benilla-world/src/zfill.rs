@@ -105,11 +105,115 @@ fn trace(what: &str, part: Entity, tag: u32) {
 /// The depth-prime lane's registration.
 pub fn plugin(app: &mut App) {
     // PostUpdate, after every Update-side tag writer, so a twin arms on its episode's first frame.
-    app.add_systems(PostUpdate, sync_zfill_twins);
+    app.add_systems(
+        PostUpdate,
+        sync_zfill_twins
+            // New mesh/material children must reach Bevy's specialization collector in the
+            // same frame as visibility/extraction, including shadow-only visible children.
+            .before(
+                bevy::pbr::check_entities_needing_specialization::<
+                    benilla_assets::materials::WowModelMaterial,
+                >,
+            )
+            .before(bevy::transform::TransformSystems::Propagate),
+    );
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use benilla_assets::materials::WowModelMaterial;
+    use bevy::pbr::{check_entities_needing_specialization, EntitiesNeedingSpecialization};
+
+    fn lifecycle_app(late_producer: bool) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<WowModelMaterial>()
+            .init_resource::<EntitiesNeedingSpecialization<WowModelMaterial>>()
+            .add_systems(
+                PostUpdate,
+                check_entities_needing_specialization::<WowModelMaterial>,
+            );
+        if late_producer {
+            // Force the previously legal ordering: collector, then spawn, then extraction.
+            app.add_systems(
+                PostUpdate,
+                sync_zfill_twins.after(check_entities_needing_specialization::<WowModelMaterial>),
+            );
+        } else {
+            app.add_plugins(plugin);
+        }
+        let handle = Handle::<WowModelMaterial>::default();
+        let part = app
+            .world_mut()
+            .spawn((
+                Mesh3d(Handle::default()),
+                MeshMaterial3d(handle.clone()),
+                MeshTag(crate::mesh_tag::with_alpha(0, 0.5)),
+                FadeMaterials {
+                    cutout: handle.clone(),
+                    blend: handle.clone(),
+                    bake_blend: None,
+                    zfill: Some(handle),
+                },
+            ))
+            .id();
+        (app, part)
+    }
+
+    #[test]
+    fn late_twin_spawn_reproduces_missing_shadow_specialization_tick_source() {
+        let (mut app, part) = lifecycle_app(true);
+        app.update();
+        let twin = app.world().get::<ZfillTwin>(part).unwrap().0;
+        assert!(app
+            .world()
+            .get::<MeshMaterial3d<WowModelMaterial>>(twin)
+            .is_some());
+        assert!(
+            !app.world()
+                .resource::<EntitiesNeedingSpecialization<WowModelMaterial>>()
+                .contains(&twin),
+            "new drawable twin has no tick to extract this frame"
+        );
+    }
+
+    #[test]
+    fn twin_spawn_release_respawn_and_parent_despawn_keep_specialization_order() {
+        let (mut app, part) = lifecycle_app(false);
+        for _ in 0..3 {
+            app.world_mut().get_mut::<MeshTag>(part).unwrap().0 =
+                crate::mesh_tag::with_alpha(0, 0.5);
+            app.update();
+            let twin = app.world().get::<ZfillTwin>(part).unwrap().0;
+            assert!(
+                app.world()
+                    .resource::<EntitiesNeedingSpecialization<WowModelMaterial>>()
+                    .contains(&twin),
+                "new drawable twin must have a tick before extraction"
+            );
+            app.world_mut().get_mut::<MeshTag>(part).unwrap().0 =
+                crate::mesh_tag::with_alpha(0, 1.0);
+            app.update();
+            assert!(app.world().get_entity(twin).is_err());
+            assert!(!app
+                .world()
+                .resource::<EntitiesNeedingSpecialization<WowModelMaterial>>()
+                .contains(&twin));
+        }
+        app.world_mut().get_mut::<MeshTag>(part).unwrap().0 = crate::mesh_tag::with_alpha(0, 0.5);
+        app.update();
+        let twin = app.world().get::<ZfillTwin>(part).unwrap().0;
+        app.world_mut().despawn(part);
+        app.update();
+        assert!(app.world().get_entity(twin).is_err());
+        assert!(!app
+            .world()
+            .resource::<EntitiesNeedingSpecialization<WowModelMaterial>>()
+            .contains(&twin));
+    }
+
     #[test]
     fn the_twin_arms_exactly_on_the_translucent_band() {
         use crate::mesh_tag;

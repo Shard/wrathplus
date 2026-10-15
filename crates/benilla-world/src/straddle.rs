@@ -443,7 +443,10 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            sync_straddle_twins.after(crate::zfill::sync_zfill_twins),
+            sync_straddle_twins
+                .after(crate::zfill::sync_zfill_twins)
+                .before(bevy::pbr::check_entities_needing_specialization::<WowModelMaterial>)
+                .before(bevy::transform::TransformSystems::Propagate),
         );
     if let Some(render) = app.get_sub_app_mut(RenderApp) {
         render.add_systems(
