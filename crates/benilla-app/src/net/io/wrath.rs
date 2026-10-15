@@ -1036,6 +1036,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::BinderActivate { .. }
         | ClientCommand::TrainerList { .. }
         | ClientCommand::TrainerBuySpell { .. }
+        | ClientCommand::GetMailList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
         ClientCommand::BattlefieldStatusRequest => {
@@ -1445,6 +1446,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::TrainerBuySpell { trainer, spell_id } => {
             (t::CMSG_TRAINER_BUY_SPELL, t::encode_buy(trainer, spell_id))
         }
+        ClientCommand::GetMailList { mailbox } => (
+            benilla_protocol::wrath_mail::CMSG_GET_MAIL_LIST,
+            mailbox.to_le_bytes().to_vec(),
+        ),
         ClientCommand::QueryNextMailTime => (
             benilla_protocol::wrath_mail::MSG_QUERY_NEXT_MAIL_TIME as u32,
             benilla_protocol::wrath_mail::encode_query_next_mail_time(),

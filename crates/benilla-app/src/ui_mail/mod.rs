@@ -28,6 +28,7 @@ use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
 mod net;
 mod pending;
+mod wrath;
 
 pub(crate) use pending::MailPending;
 
@@ -458,6 +459,7 @@ fn snapshot(
 #[derive(bevy::ecs::system::SystemParam)]
 struct MailFeedExtras<'w, 's> {
     dialect: Res<'w, SessionDialect>,
+    wrath_snapshot: Local<'s, crate::ui_script::VmMemo<Option<benilla_ui::script::WrathMailInbox>>>,
     props: Option<Res<'w, crate::items::RandomProperties>>,
     enchants: Option<Res<'w, crate::items::Enchants>>,
     sink: crate::ui_action::MessageSink<'w>,
@@ -491,6 +493,7 @@ fn feed_mail(
     };
     let MailFeedExtras {
         dialect,
+        wrath_snapshot: mut last_wrath,
         props,
         enchants,
         mut sink,
@@ -509,6 +512,7 @@ fn feed_mail(
         props: props.as_deref(),
         enchants: enchants.as_deref(),
     };
+    let last_wrath = last_wrath.get(&script);
     let last = last.get(&script);
     let last_mailbox = last_mailbox.get(&script);
     let last_has_new_mail = last_has_new_mail.get(&script);
@@ -564,10 +568,21 @@ fn feed_mail(
     let opened = last_mailbox.is_none() && mail.mailbox.is_some();
     let closed = last_mailbox.is_some() && mail.mailbox.is_none();
     let show_requested = std::mem::take(&mut mail.show_requested);
-    let changed = fresh != *last;
-    if changed {
-        script.set_mail(fresh.clone());
-    }
+    let changed = if *dialect == SessionDialect::Wrath12340 {
+        let native = wrath::snapshot(&mail, &items, icons.as_deref(), &names, &commands, rolls);
+        let changed = native != *last_wrath;
+        if changed {
+            script.set_wrath_mail(native.clone());
+        }
+        *last_wrath = native;
+        changed
+    } else {
+        let changed = fresh != *last;
+        if changed {
+            script.set_mail(fresh.clone());
+        }
+        changed
+    };
     // The usable stationery is asked ahead of any mailbox so the list is whole when
     // `SendMailFrame_Reset` selects row 1 on show; an empty list leaves every send unsent. Only
     // with a player: an ask sent before the socket exists is dropped and never re-asked.
