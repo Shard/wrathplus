@@ -47,6 +47,14 @@ pub fn load_spell_dispel_types(chain: &mut Chain) -> Result<SpellDispelTypes> {
     schema.add_field(SchemaField::new("Named", FieldType::UInt32));
     schema.add_field(SchemaField::new("Unknown11", FieldType::String));
     let set = parse(&bytes, schema, "SpellDispelType.dbc")?;
+    // Wrath UnitDebuff (0x6148b9..0x6148c2) gates on ImmunityPossible,
+    // then returns InternalName (file 20), not the localized display name.
+    // Frenzy has ImmunityPossible but no InternalName: do not invent its token.
+    let name_field = if matches!(chain.profile(), crate::DataProfile::Wrath { .. }) {
+        11
+    } else {
+        1
+    };
     let mut names = HashMap::new();
     for r in set.records() {
         let Some(id) = u32_at(r, 0) else { continue };
@@ -54,7 +62,7 @@ pub fn load_spell_dispel_types(chain: &mut Chain) -> Result<SpellDispelTypes> {
         if u32_at(r, 10).unwrap_or(0) == 0 {
             continue;
         }
-        if let Some(name) = str_at(&set, r, 1).filter(|n| !n.is_empty()) {
+        if let Some(name) = str_at(&set, r, name_field).filter(|n| !n.is_empty()) {
             names.insert(id, name);
         }
     }
