@@ -29,6 +29,8 @@ pub mod wrath_npc;
 pub mod wrath_relay;
 pub mod wrath_session;
 pub mod wrath_spline;
+pub mod wrath_guild;
+pub mod wrath_guild_commands;
 pub mod wrath_stable;
 pub mod wrath_vendor;
 pub mod wrath_channel;

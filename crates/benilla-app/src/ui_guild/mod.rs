@@ -19,6 +19,7 @@ use crate::ui_script::{UiFeed, UiInput};
 mod feed;
 mod lines;
 mod sort;
+mod wrath;
 
 pub(crate) use sort::RosterRow;
 use sort::{SortField, SortStack};
@@ -690,6 +691,7 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut notify: ResMut<Guil
 impl Plugin for UiGuildPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        wrath::register(app);
         app.add_observer(on_cvar);
         crate::query_cache::register::<GuildState>(app);
         app.init_resource::<GuildState>()
