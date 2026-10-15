@@ -527,6 +527,12 @@ pub enum SessionEvent {
         entry: u32,
         info: Option<Box<ItemInfo>>,
     },
+    /// Native item-query metadata omitted by the shared projection. `None` is query failure.
+    /// Delivered after `ItemTemplate` from the same decoded response, never inferred from it.
+    WrathItemRollMetadata {
+        entry: u32,
+        metadata: Option<crate::wrath_items::RollMetadata>,
+    },
     /// One chat line (`SMSG_MESSAGECHAT`); system lines (type `0x0A`) carry GM command feedback.
     Chat(crate::messages::ChatMessage),
     /// A channel notice (`SMSG_CHANNEL_NOTIFY`); `notice` selects the `tail` payload.
