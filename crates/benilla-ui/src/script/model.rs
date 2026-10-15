@@ -526,6 +526,7 @@ pub(crate) struct Model {
     pub(crate) tutorial_clears: u32,
     pub(crate) tutorial_resets: u32,
     pub(crate) wrath_tutorial: super::wrath_tutorial::State,
+    pub(crate) wrath_achievements: Option<super::wrath_achievements::WrathAchievementMetadata>,
 
     /// The stance bar's forms, in bar order.
     pub(crate) shapeshift_forms: Vec<super::shapeshift::StoredShapeshiftForm>,
@@ -1269,6 +1270,7 @@ impl Model {
             tutorial_clears: 0,
             tutorial_resets: 0,
             wrath_tutorial: super::wrath_tutorial::State::default(),
+            wrath_achievements: None,
             shapeshift_forms: Vec::new(),
             pet_bar: super::pet::PetBarState::default(),
             pet_autocast_toggles: Vec::new(),
