@@ -123,25 +123,45 @@ pub struct MailSendRequest {
     pub stationery: u32,
     pub money: u32,
     pub cod: u32,
-    /// The attached item's `(bag, 1-based slot)`; the app resolves its guid when the send fires,
-    /// as the reference re-reads the slot then.
-    pub item: Option<(i64, u32)>,
+    /// The attachments as `(0-based send slot, bag, 1-based bag slot)`, ascending by send slot;
+    /// the app resolves each guid when the send fires, as the reference re-reads them then
+    /// (12340 `0x570910`).
+    pub items: Vec<(u8, i64, u32)>,
     /// The selected `Package.dbc` id, sent only with an attached item (`0x4ae8f3`).
     pub package: u32,
 }
 
-/// `0x4acdc0`'s clears: the attachment, whose lock it lifts (`0x495420`, firing
-/// `ITEM_LOCK_CHANGED`), then money, COD, stationery and package. Returns the lock event to fire.
-fn clear_compose(model: &mut Model) -> Option<(String, Vec<super::ScriptValue>)> {
-    let lock = model.mail_send_item.take().map(|item| {
-        (
-            "ITEM_LOCK_CHANGED".to_string(),
-            vec![
-                super::ScriptValue::Int(item.bag),
-                super::ScriptValue::Int(i64::from(item.slot)),
-            ],
-        )
-    });
+/// Build 12340's send attachment slots (`ATTACHMENTS_MAX_SEND`, MailFrame.lua:6).
+pub const SEND_SLOTS: usize = 12;
+
+/// A send-slot argument as the 12340 getters read it (`0x570750`): none is slot 0, a number is
+/// rounded after subtracting 1; `None` past the slots.
+fn send_slot_arg(lua: &Lua, v: Option<&Value>) -> mlua::Result<Option<usize>> {
+    let Some(n) = lua.coerce_number(v.cloned().unwrap_or(Value::Nil))? else {
+        return Ok(Some(0));
+    };
+    Ok(usize::try_from((n - 1.0).round_ties_even() as i64)
+        .ok()
+        .filter(|i| *i < SEND_SLOTS))
+}
+
+/// `0x4acdc0`'s clears: every attachment, whose lock it lifts (`0x495420`, firing
+/// `ITEM_LOCK_CHANGED`), then money, COD, stationery and package. Returns the lock events to fire.
+fn clear_compose(model: &mut Model) -> Vec<(String, Vec<super::ScriptValue>)> {
+    let lock: Vec<_> = model
+        .mail_send_items
+        .iter_mut()
+        .filter_map(Option::take)
+        .map(|item| {
+            (
+                "ITEM_LOCK_CHANGED".to_string(),
+                vec![
+                    super::ScriptValue::Int(item.bag),
+                    super::ScriptValue::Int(i64::from(item.slot)),
+                ],
+            )
+        })
+        .collect();
     model.mail_send_money = 0;
     model.mail_send_cod = 0;
     model.mail_stationery = 0;
@@ -208,7 +228,12 @@ impl super::UiScript {
     pub fn take_mail_send(&mut self) -> Option<MailSendRequest> {
         let mut model = self.model_mut();
         let (target, subject, body) = model.mail_send.take()?;
-        let item = model.mail_send_item.as_ref().map(|it| (it.bag, it.slot));
+        let items = model
+            .mail_send_items
+            .iter()
+            .enumerate()
+            .filter_map(|(i, it)| it.as_ref().map(|it| (i as u8, it.bag, it.slot)))
+            .collect();
         Some(MailSendRequest {
             target,
             subject,
@@ -216,7 +241,7 @@ impl super::UiScript {
             stationery: model.mail_stationery,
             money: model.mail_send_money,
             cod: model.mail_send_cod,
-            item,
+            items,
             package: model.mail_package,
         })
     }
@@ -230,7 +255,7 @@ impl super::UiScript {
     pub fn reset_compose_tab(&mut self) {
         let lock = clear_compose(&mut self.model_mut());
         // Fired now, not queued: the order against the caller's `MAIL_SHOW`/`MAIL_FAILED` matters.
-        if let Some((event, args)) = lock {
+        for (event, args) in lock {
             self.fire_event(&event, args);
         }
         // One literal call each, as the event census (`ui_script::reference_ui`) reads them.
@@ -243,16 +268,21 @@ impl super::UiScript {
     /// the attachment's `ITEM_LOCK_CHANGED`, which `0x495420` fires on either leg.
     pub fn reset_compose_tab_silently(&mut self) {
         let lock = clear_compose(&mut self.model_mut());
-        if let Some((event, args)) = lock {
+        for (event, args) in lock {
             self.fire_event(&event, args);
         }
     }
 
-    /// `SendMail`'s abort when the attached item left its slot (`ERR_ITEM_NOT_FOUND`, no packet,
-    /// `MAIL_SEND_INFO_UPDATE` at `0x4ae98d`): drop the attachment, keep the money and COD.
-    pub fn drop_send_mail_item(&mut self) {
+    /// `SendMail`'s abort when an attached item left its bag slot (an error, no packet, that send
+    /// slot cleared and `MAIL_SEND_INFO_UPDATE`, 12340 `0x570910`): drop that attachment, keep the
+    /// rest, the money and COD. `slot` is the 0-based send slot.
+    pub fn drop_send_mail_item(&mut self, slot: u8) {
         let mut model = self.model_mut();
-        if model.mail_send_item.take().is_some() {
+        let taken = model
+            .mail_send_items
+            .get_mut(usize::from(slot))
+            .and_then(Option::take);
+        if taken.is_some() {
             model
                 .pending_events
                 .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
@@ -587,7 +617,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             if model.mail_send_money != 0 && model.mail_send_cod != 0 {
                 return Ok(());
             }
-            if model.mail_send_cod != 0 && model.mail_send_item.is_none() {
+            if model.mail_send_cod != 0 && model.mail_send_items.iter().all(Option::is_none) {
                 return Ok(());
             }
             // The same silent abort with no stationery selected (`0x4ae8dd`).
@@ -656,7 +686,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 "Usage: SetSendMailCOD(amount)",
             )? as u32;
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            if model.mail_send_item.is_none() {
+            if model.mail_send_items.iter().all(Option::is_none) {
                 return Ok(());
             }
             model.mail_send_cod = n;
@@ -667,20 +697,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetSendMailItem(): name, texture, stackCount, quality (`MailFrame.lua:511`). The reference
-    // answers `nil, nil, 0, 0` both with nothing attached and before the template loads
-    // (`0x4ae590`). It answers quality -1 for an item whose InventoryType is 0 (`0x4ae6bf`); this
-    // answers the cached quality, or 0.
+    // GetSendMailItem([index]): name, texture, stackCount, quality of a send slot (12340
+    // `0x570750`, MailFrame.lua:822), slot 1 without an index. The reference answers
+    // `nil, nil, 0, 0` with nothing attached and before the template loads, and quality -1 for an
+    // item whose template has none; this answers the cached quality, or 0.
     g.set(
         "GetSendMailItem",
-        lua.create_function(|lua, ()| {
+        lua.create_function(|lua, args: MultiValue| {
+            let slot = send_slot_arg(lua, args.front())?;
             // A whole-stack pickup records no count, so the size comes from the source slot.
             let item = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                model.mail_send_item.clone().map(|it| {
-                    let count = cursor::held_count(&model, &it);
-                    (it, count)
-                })
+                slot.and_then(|i| model.mail_send_items[i].clone())
+                    .map(|it| {
+                        let count = cursor::held_count(&model, &it);
+                        (it, count)
+                    })
             };
             let Some((it, count)) = item else {
                 return Ok(MultiValue::from_vec(vec![
@@ -711,19 +743,52 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetSendMailPrice(): 30 copper, vmangos's fee (`MailHandler.cpp:247`). The reference's is 30
-    // (`0x4ae756`) plus an uncarried stationery's price, the package's and the enclosed money
-    // (`0x4ae7a0`-`0x4ae7d2`); those are not added here.
+    // GetSendMailPrice() (12340 `0x571b00`): 30 copper per attachment, 30 with none, plus the
+    // enclosed money, which MailFrame.lua:871 compares with GetMoney. Labelled: an uncarried
+    // stationery's and the package's prices, which native also adds, are not added here.
     g.set(
         "GetSendMailPrice",
-        lua.create_function(|_, ()| Ok(Value::Integer(30)))?,
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let items = model.mail_send_items.iter().flatten().count().max(1) as i64;
+            Ok(Value::Integer(
+                30 * items + i64::from(model.mail_send_money),
+            ))
+        })?,
     )?;
 
+    // ClickSendMailItemButton([index [, clearItem]]) (12340 `0x570550`): the slot is
+    // `trunc(index - 1)`, the first free slot without an index. clearItem (a true boolean, the
+    // stock right-click) returns the slot's item to its bag: the slot clears, its lock lifts and
+    // MAIL_SEND_INFO_UPDATE fires. Otherwise the slot is a cursor drop target.
     g.set(
         "ClickSendMailItemButton",
-        lua.create_function(|lua, ()| {
+        lua.create_function(|lua, args: MultiValue| {
+            let slot = match lua.coerce_number(args.front().cloned().unwrap_or(Value::Nil))? {
+                Some(n) => usize::try_from((n - 1.0).trunc() as i64).ok(),
+                None => None,
+            };
+            let explicit = args.front().is_some_and(|v| !matches!(v, Value::Nil));
+            let clear = matches!(args.get(1), Some(Value::Boolean(true)));
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            click_send_mail_item(&mut model);
+            if clear {
+                if let Some(item) = slot
+                    .filter(|i| *i < SEND_SLOTS)
+                    .and_then(|i| model.mail_send_items[i].take())
+                {
+                    cursor::queue_lock_changed(&mut model, item.bag, item.slot);
+                    model
+                        .pending_events
+                        .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
+                }
+                return Ok(());
+            }
+            let target = if explicit {
+                slot.filter(|i| *i < SEND_SLOTS)
+            } else {
+                model.mail_send_items.iter().position(Option::is_none)
+            };
+            click_send_mail_item(&mut model, target);
             Ok(())
         })?,
     )?;
@@ -875,24 +940,41 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// `ClickSendMailItemButton`: the send slot as a cursor drop target, firing `CURSOR_UPDATE` and
-/// `ITEM_LOCK_CHANGED` like a bag slot.
-fn click_send_mail_item(model: &mut Model) {
+/// `ClickSendMailItemButton` on send slot `target` as a cursor drop target, firing `CURSOR_UPDATE`
+/// and `ITEM_LOCK_CHANGED` like a bag slot: a held bag item goes in and the slot's previous item
+/// comes up on the cursor; an empty cursor picks the slot's item up; the slot's own item dropped
+/// back on it just releases the cursor. `None` (no free slot, or an index past the slots) keeps
+/// the cursor as it is.
+fn click_send_mail_item(model: &mut Model, target: Option<usize>) {
+    let Some(target) = target else {
+        return;
+    };
     match model.cursor.take() {
-        // A held bag item attaches; it stays in its bag slot until the send.
         Some(CursorPayload::Item(item)) => {
+            let same = model.mail_send_items[target]
+                .as_ref()
+                .is_some_and(|it| it.bag == item.bag && it.slot == item.slot);
+            if same {
+                // `0x519280`: the slot's own item is put back; the cursor empties.
+                cursor::queue_cursor_update(model);
+                return;
+            }
             let (bag, slot) = (item.bag, item.slot);
-            // An earlier attachment is overwritten, as in the reference; its slot has no lock.
-            model.mail_send_item = Some(item);
-            cursor::queue_cursor_update(model);
+            let previous = model.mail_send_items[target].replace(item);
             cursor::queue_lock_changed(model, bag, slot);
-            // `MAIL_SEND_INFO_UPDATE` (`0x4ae0de`): the stock tab re-reads the item and postage.
+            if let Some(prev) = previous {
+                let (pbag, pslot) = (prev.bag, prev.slot);
+                model.cursor = Some(CursorPayload::Item(prev));
+                cursor::queue_lock_changed(model, pbag, pslot);
+            }
+            cursor::queue_cursor_update(model);
+            // `MAIL_SEND_INFO_UPDATE` (`0x570606`): the tab re-reads the items and postage.
             model
                 .pending_events
                 .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
         }
         None => {
-            if let Some(item) = model.mail_send_item.take() {
+            if let Some(item) = model.mail_send_items[target].take() {
                 let (bag, slot) = (item.bag, item.slot);
                 model.cursor = Some(CursorPayload::Item(item));
                 cursor::queue_cursor_update(model);
@@ -1189,9 +1271,13 @@ mod tests {
         assert_eq!(req.subject, "Hi");
         assert_eq!(req.body, "body text");
         assert_eq!((req.money, req.cod), (1234, 0));
-        assert_eq!(req.item, None);
+        assert_eq!(req.items, vec![]);
         assert!(s.take_mail_send().is_none(), "drained");
-        assert_eq!(s.eval::<i64>("return GetSendMailPrice()").unwrap(), 30);
+        assert_eq!(
+            s.eval::<i64>("return GetSendMailPrice()").unwrap(),
+            30 + 1234,
+            "postage plus the enclosed money (0x571b00)"
+        );
         assert!(
             s.run("SetSendMailMoney(nil)").is_err(),
             "a non-number raises"
@@ -1226,14 +1312,76 @@ mod tests {
 
         select_default_stationery(&mut s);
         s.run("SendMail('Alt', 'stuff', '')").unwrap();
-        assert_eq!(s.take_mail_send().unwrap().item, Some((0, 5)));
+        assert_eq!(s.take_mail_send().unwrap().items, vec![(0, 0, 5)]);
 
-        // Clicking with an empty cursor detaches.
+        // An empty cursor dropped nowhere in particular picks nothing up (`0x570550` with -1).
         s.run("ClickSendMailItemButton()").unwrap();
+        assert!(s.eval::<bool>("return not CursorHasItem()").unwrap());
+        // Clicking the slot with an empty cursor detaches it.
+        s.run("ClickSendMailItemButton(1)").unwrap();
         assert!(s.eval::<bool>("return CursorHasItem()").unwrap());
         assert!(s
             .eval::<bool>("local n = GetSendMailItem()\nreturn n == nil")
             .unwrap());
+    }
+
+    /// Build 12340's twelve send slots (`0xbeb038`): a slotless drop takes the first free slot,
+    /// a slot click swaps with the cursor, right-click returns the item to its bag, and the send
+    /// lists every attachment by its slot.
+    #[test]
+    fn twelve_send_slots_drop_swap_clear_and_send() {
+        use crate::script::cursor::{CursorItem, CursorPayload};
+        let mut s = UiScript::new().unwrap();
+        let hold = |s: &UiScript, slot: u32| {
+            s.model_mut().cursor = Some(CursorPayload::Item(CursorItem {
+                bar_placeable: true,
+                bag: 0,
+                slot,
+                item_id: 2589 + slot,
+                texture: None,
+                link: Some(format!("|Hitem:{}|h[Item {slot}]|h", 2589 + slot)),
+                count: Some(1),
+                quality: Some(1),
+                equip_slots: Vec::new(),
+            }));
+        };
+        hold(&s, 5);
+        s.run("ClickSendMailItemButton()").unwrap();
+        hold(&s, 6);
+        s.run("ClickSendMailItemButton()").unwrap();
+        assert_eq!(
+            s.eval::<String>("return GetSendMailItem(2)").unwrap(),
+            "Item 6"
+        );
+        // A slot click with a held item swaps.
+        hold(&s, 7);
+        s.run("ClickSendMailItemButton(2)").unwrap();
+        assert_eq!(
+            s.eval::<String>("return GetSendMailItem(2)").unwrap(),
+            "Item 7"
+        );
+        assert!(
+            s.eval::<bool>("return CursorHasItem()").unwrap(),
+            "item 6 came up"
+        );
+        s.model_mut().cursor = None;
+        // Right-click returns slot 1's item to its bag.
+        s.run("ClickSendMailItemButton(1, true)").unwrap();
+        assert!(s.eval::<bool>("return GetSendMailItem(1) == nil").unwrap());
+        assert!(s.eval::<bool>("return not CursorHasItem()").unwrap());
+        assert_eq!(s.eval::<i64>("return GetSendMailPrice()").unwrap(), 30);
+        hold(&s, 9);
+        s.run("ClickSendMailItemButton(12)").unwrap();
+        assert_eq!(s.eval::<i64>("return GetSendMailPrice()").unwrap(), 60);
+        select_default_stationery(&mut s);
+        s.run("SendMail('Alt', 'stuff', '')").unwrap();
+        assert_eq!(
+            s.take_mail_send().unwrap().items,
+            vec![(1, 0, 7), (11, 0, 9)]
+        );
+        s.drop_send_mail_item(11);
+        assert!(s.eval::<bool>("return GetSendMailItem(12) == nil").unwrap());
+        assert!(s.eval::<bool>("return GetSendMailItem(13) == nil").unwrap());
     }
 
     #[test]
@@ -1257,7 +1405,7 @@ mod tests {
         select_default_stationery(&mut s);
         s.run("SendMail('x','y','z')").unwrap();
         let req = s.take_mail_send().unwrap();
-        assert_eq!((req.money, req.cod, req.item), (0, 0, None));
+        assert_eq!((req.money, req.cod, req.items.len()), (0, 0, 0));
     }
 
     /// `ClearSendMail()` (`0x4adee0`) is the compose reset with its events, the attachment's lock
