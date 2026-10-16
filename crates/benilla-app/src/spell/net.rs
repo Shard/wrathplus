@@ -239,6 +239,7 @@ fn on_spell_start(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
         cast_time_ms,
         target,
         ammo_display_id,
+        ..
     } = ev
     {
         spell_start(
@@ -272,6 +273,7 @@ fn on_spell_go(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
         dest,
         ammo_display_id,
         item_caster,
+        ..
     } = ev
     {
         let engaged = !sc.engaged_self.is_empty();
@@ -327,7 +329,10 @@ fn on_spell_chain_targets(In(ev): In<SessionEvent>, l: Lifecycle, mut sc: Scene)
 }
 
 fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
-    if let SessionEvent::SpellFailedOther { caster, spell_id } = ev {
+    if let SessionEvent::SpellFailedOther {
+        caster, spell_id, ..
+    } = ev
+    {
         spell_failed_other(
             caster,
             spell_id,
@@ -415,15 +420,20 @@ fn on_item_cooldown(In(ev): In<SessionEvent>, mut l: Lifecycle, sc: Scene) {
     }
 }
 
+/// Our own channel bar. Build 12340 sends every caster's channel to the set; only ours (or 1.12's
+/// guid-less self copy) drives it. Other casters' bars are the unit cast-event owner's.
 fn on_channel(In(ev): In<SessionEvent>, mut l: Lifecycle) {
+    let ours = |caster: Option<u64>| caster.is_none_or(|c| l.self_guid.0 == Some(c));
     match ev {
         SessionEvent::ChannelStart {
             spell_id,
             duration_ms,
-        } => channel_start(spell_id, duration_ms, &mut l.channel, &mut l.cast_bar),
-        SessionEvent::ChannelUpdate { remaining_ms } => {
-            channel_update(remaining_ms, &mut l.channel, &mut l.cast_bar)
-        }
+            caster,
+        } if ours(caster) => channel_start(spell_id, duration_ms, &mut l.channel, &mut l.cast_bar),
+        SessionEvent::ChannelUpdate {
+            remaining_ms,
+            caster,
+        } if ours(caster) => channel_update(remaining_ms, &mut l.channel, &mut l.cast_bar),
         _ => {}
     }
 }
