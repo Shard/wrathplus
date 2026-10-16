@@ -37,6 +37,7 @@ pub(crate) mod lock;
 mod price_discount;
 mod relations;
 mod reticle;
+mod wrath_relations;
 // `pub(crate)` for the hover inspector too: its faction catalog feeds `go_highlightable`.
 pub(crate) mod ring;
 mod scan;
@@ -64,6 +65,10 @@ pub(crate) use price_discount::vendor_price_discount;
 pub(crate) use price_discount::{stormwind_fixture, HUMAN_WARRIOR};
 pub(crate) use relations::{
     can_assist, can_attack, can_interact, corpse_friendly, is_possessed_by, UNIT_FLAG_POSSESSED,
+};
+// `CanAttack`/`CanAssist`'s live inputs: the creature template cache and the guid lookup.
+pub(crate) use wrath_relations::{
+    guid_store, ByGuid, Context as RelationContext, GuidStores, RelationInputs, StoreLookup,
 };
 // The attack validator's target half, run in the call that asks, for the player's Attack and the
 // pet bar's; the melee probe's press with nothing selected.

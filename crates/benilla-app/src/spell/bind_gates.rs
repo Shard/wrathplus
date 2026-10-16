@@ -102,6 +102,7 @@ mod tests {
         let rel = TargetRelations {
             target_store: Some(store),
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: None,
             factions: None,
             reputations: &EMPTY,
@@ -135,6 +136,7 @@ mod tests {
         let rel = TargetRelations {
             target_store: None,
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: None,
             factions: None,
             reputations: &Reputations(Vec::new()),
@@ -364,6 +366,7 @@ mod tests {
             let rel = TargetRelations {
                 target_store: Some(target),
                 target_owner_store: None,
+                relations: crate::target::RelationContext::none(),
                 self_store: Some(me),
                 factions: Some(&factions),
                 reputations: &Reputations(Vec::new()),

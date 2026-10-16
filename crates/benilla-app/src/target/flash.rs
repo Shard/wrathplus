@@ -66,6 +66,7 @@ pub(super) fn drive_flash(
     reputations: Res<Reputations>,
     self_store: Query<&ObjectStore, With<SelfPlayer>>,
     units: Query<Option<&ObjectStore>, Without<SelfPlayer>>,
+    relations: super::RelationInputs,
 ) {
     let was = flash.unit;
     flash.unit = (|| {
@@ -82,6 +83,7 @@ pub(super) fn drive_flash(
             factions.as_deref(),
             &reputations,
             self_store.single().ok(),
+            relations.context(),
         )
         .then_some(target)
     })();

@@ -28,13 +28,13 @@ fn ribbon_records_match_real_bytes() {
             r.texture.is_some(),
             "ribbon {i} resolves a trail texture from the M2 textures table"
         );
-        for &(_, a) in &r.alpha.keys {
+        for &(_, a) in &r.alpha.slots[0].keys {
             assert!(
                 (0.0..=1.0).contains(&a),
                 "ribbon {i} fixed16 alpha decodes into 0..1, got {a}"
             );
         }
-        for &(_, c3) in &r.color.keys {
+        for &(_, c3) in &r.color.slots[0].keys {
             for c in c3 {
                 assert!((0.0..=1.5).contains(&c), "ribbon {i} color channel {c}");
             }

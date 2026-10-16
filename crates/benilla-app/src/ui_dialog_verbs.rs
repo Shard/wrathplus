@@ -811,6 +811,7 @@ fn poll_area_spirit_healer(
     reputations: Res<crate::net::Reputations>,
     index: Option<Res<crate::net::GuidIndex>>,
     stores: Query<&ObjectStore>,
+    names: Option<Res<crate::names::NameCache>>,
     commands: Res<NetCommands>,
     mut script: Option<NonSendMut<UiScript>>,
 ) {
@@ -855,11 +856,12 @@ fn poll_area_spirit_healer(
         return;
     }
 
-    // Acquire: `can_assist` is `0x6066f0`; its owner lookup wants a store by guid.
-    let store_of = |guid: u64| -> Option<ObjectStore> {
-        let entity = *index.as_ref()?.0.get(&guid)?;
-        stores.get(entity).ok().cloned()
+    // Acquire: `can_assist` is `0x6066f0`; its controller walk wants a live store by guid.
+    let store_of = crate::target::GuidStores {
+        index: index.as_deref(),
+        stores: &stores,
     };
+    let relations = crate::target::RelationContext::new(names.as_deref(), &store_of);
     let mut adopted = None;
     for (guid, kind, store, tf) in units.iter() {
         if kind.kind != benilla_protocol::EntityKind::Unit {
@@ -881,7 +883,7 @@ fn poll_area_spirit_healer(
             factions.as_deref(),
             &reputations,
             Some(self_store),
-            store_of,
+            relations,
         ) {
             continue;
         }

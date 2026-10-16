@@ -151,6 +151,15 @@ pub(crate) struct PickChecks<'w, 's> {
     guids: Query<'w, 's, &'static Guid>,
     /// The party slots and raid roster as the frame began; a harness without them has no group.
     roster: Option<Res<'w, GroupRoster>>,
+    /// `CanAssist`'s creature metadata (`CAN_ASSIST`, `TreatAsRaidUnit`); a harness without the
+    /// cache reads no flags.
+    names: Option<Res<'w, crate::names::NameCache>>,
+}
+
+impl crate::target::StoreLookup for PickChecks<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        crate::target::guid_store(self.index.as_deref(), &self.stores, guid)
+    }
 }
 
 impl PickChecks<'_, '_> {
@@ -171,6 +180,7 @@ impl PickChecks<'_, '_> {
             // `CanAssist`'s `IsPvP` owner chase: charmer, else creator.
             target_owner_store: owner_store(store, self.index.as_deref(), &self.stores),
             self_store,
+            relations: crate::target::RelationContext::new(self.names.as_deref(), self),
             factions: self.factions.as_deref(),
             reputations: &self.reputations,
             // The pick reads no creature type.
@@ -258,6 +268,7 @@ mod tests {
         let rel = TargetRelations {
             target_store: Some(candidate),
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: Some(&me),
             factions: Some(&factions),
             reputations: &Reputations(Vec::new()),
@@ -362,6 +373,7 @@ mod tests {
         let rel = TargetRelations {
             target_store: Some(&empty),
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: Some(&me),
             factions: Some(&factions),
             reputations: &Reputations(Vec::new()),
