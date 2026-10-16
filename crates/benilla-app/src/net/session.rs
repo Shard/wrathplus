@@ -142,6 +142,7 @@ fn on_connected(
     mut e: Edges,
     mut b: Bridge,
     native_pet_names: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
+    native_who: Option<ResMut<crate::ui_native_who::NativeWhoPackets>>,
 ) {
     if let SessionEvent::Connected {
         self_guid: guid,
@@ -155,6 +156,7 @@ fn on_connected(
         if let Some(mut packets) = native_pet_names {
             packets.0.clear();
         }
+        if let Some(mut packets) = native_who { packets.0.clear(); }
         connected(
             guid,
             name,

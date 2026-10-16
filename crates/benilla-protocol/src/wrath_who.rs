@@ -20,7 +20,7 @@ pub struct Entry {
     pub zone: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Packet {
     Who { total: u32, entries: Vec<Entry> },
     Whois { message: Vec<u8> },
@@ -93,7 +93,7 @@ pub struct Query {
     pub search_terms: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Command {
     Who(Query),
     Whois { name: Vec<u8> },
@@ -155,3 +155,26 @@ fn put_string(body: &mut Vec<u8>, value: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 #[path = "wrath_who_tests.rs"]
 mod tests;
+
+// WHOIS can contain account identifiers; nested SessionEvent/ClientCommand
+// Debug must remain safe even in generic connection/drop diagnostics.
+impl std::fmt::Debug for Packet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Who { total, entries } => f
+                .debug_struct("Who")
+                .field("total", total)
+                .field("entries", entries)
+                .finish(),
+            Self::Whois { .. } => f.write_str("Whois { <redacted> }"),
+        }
+    }
+}
+impl std::fmt::Debug for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Who(query) => f.debug_tuple("Who").field(query).finish(),
+            Self::Whois { .. } => f.write_str("Whois { <redacted> }"),
+        }
+    }
+}

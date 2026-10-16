@@ -1084,6 +1084,8 @@ pub enum SessionEvent {
     FriendStatus(FriendStatusUpdate),
     /// A `/who` answer (`SMSG_WHO`): at most 49 rows, plus the true match total.
     WhoResults(WhoResults),
+    /// Lossless native WHO/WHOIS, never projected into Vanilla social rows.
+    WrathWho { packet: crate::wrath_who::Packet },
     /// A guild's name, ten rank names and tabard (`SMSG_GUILD_QUERY_RESPONSE`), cached by id.
     GuildQueryResponse(GuildQueryResponse),
     /// The whole guild (`SMSG_GUILD_ROSTER`), a complete snapshot that replaces what is held.

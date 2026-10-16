@@ -14,6 +14,7 @@ use bevy::prelude::*;
 use crate::ui_script::{UiFeed, UiInput};
 
 mod feed;
+mod native_who;
 mod query;
 
 pub(crate) use query::parse as who_query;
@@ -35,6 +36,11 @@ pub(crate) struct SocialState {
     /// The last `/who` answer; `who_total` is the server's full match count.
     who: Vec<benilla_protocol::messages::WhoEntry>,
     who_total: u32,
+    /// Native routing compares the uncapped first wire count (006b8720).
+    native_who_count: Option<usize>,
+    pending_native_who: std::collections::VecDeque<(u32, Vec<benilla_protocol::wrath_who::Entry>)>,
+    /// Native rows retained losslessly; shared display rows intentionally omit gender.
+    native_who_rows: Vec<benilla_protocol::wrath_who::Entry>,
     /// The `/who` sort chain (`SortWho`'s seven `{key, dir}` slots at `0xc2817c`), pushed with the
     /// rows so the binding can re-sort synchronously.
     who_sort: benilla_ui::script::WhoSortChain,
@@ -160,6 +166,8 @@ impl SocialState {
 
     /// `SMSG_WHO`: the answer to the last query.
     fn apply_who(&mut self, results: benilla_protocol::messages::WhoResults) {
+        self.native_who_rows.clear();
+        self.native_who_count = None;
         self.who = results.entries;
         self.who_total = results.total;
         self.who_dirty = true;
@@ -231,7 +239,8 @@ pub(crate) mod net {
             .net_handler(K::IgnoreList, on_ignore_list)
             .net_handler(K::FriendStatus, on_friend_status)
             .net_handler(K::WhoResults, on_who)
-            .net_handler(K::Disconnected, on_session_end);
+            .net_handler(K::Disconnected, on_session_end)
+            .net_handler(K::Connected, on_connected);
     }
 
     fn on_friend_list(In(ev): In<SessionEvent>, mut social: ResMut<SocialState>) {
@@ -255,6 +264,18 @@ pub(crate) mod net {
     fn on_who(In(ev): In<SessionEvent>, mut social: ResMut<SocialState>) {
         if let SessionEvent::WhoResults(results) = ev {
             who(&mut social, results);
+        }
+    }
+
+    fn on_connected(
+        In(event): In<SessionEvent>,
+        dialect: Option<Res<crate::net::SessionDialect>>,
+        mut social: ResMut<SocialState>,
+    ) {
+        if matches!(event, SessionEvent::Connected { .. })
+            && dialect.as_deref() == Some(&crate::net::SessionDialect::Wrath12340)
+        {
+            social.clear_session();
         }
     }
 
@@ -294,6 +315,9 @@ impl Plugin for UiSocialPlugin {
         app.init_resource::<SocialState>().add_systems(
             Update,
             (
+                native_who::drain
+                    .after(benilla_world::schedule::WorldStage::Net)
+                    .before(UiFeed),
                 feed::feed_social.in_set(UiFeed),
                 feed::drain_social.after(UiInput),
             ),
