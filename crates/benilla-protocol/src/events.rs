@@ -526,8 +526,14 @@ pub enum SessionEvent {
     /// A refused tame, Call Pet or Revive Pet (`SMSG_PET_TAME_FAILURE`): the reason's
     /// `PETTAME_*` string fills `ERR_TAME_FAILED`.
     PetTameFailure { reason: u8 },
-    /// A refused pet rename (`SMSG_PET_NAME_INVALID`, empty body): `ERR_INVALID_PETNAME`.
-    PetNameInvalid,
+    /// A refused pet rename (`SMSG_PET_NAME_INVALID`): `ERR_INVALID_PETNAME`. Build 12340 adds
+    /// AC's `PetNameInvalidReason`, the refused name and any declined forms; 1.12's body is
+    /// empty (reason 0, no name).
+    PetNameInvalid {
+        reason: u32,
+        name: String,
+        declined: Option<Box<[String; 5]>>,
+    },
     /// The pet ran away at zero loyalty (`SMSG_PET_BROKEN`, empty body): `ERR_PET_BROKEN`.
     PetBroken,
     /// The pet's voice (`SMSG_PET_ACTION_SOUND`): a talk selector into its `CreatureSoundData` row.
@@ -1155,6 +1161,11 @@ pub enum SessionEvent {
     WrathQuest { packet: crate::wrath_quest::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
+    /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
+    WrathSpellControl { packet: crate::wrath_spell_control::Packet },
+    /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:
+    /// the count banked on `target`, 0 for none.
+    ComboPoints { target: u64, points: u8 },
     WrathMirrorImage { packet: crate::wrath_mirror_image::Packet },
     WrathUiTimer { packet: crate::wrath_ui_timer::Packet },
     WrathMailList { inbox: crate::wrath_mail::Inbox },

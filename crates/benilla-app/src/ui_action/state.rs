@@ -86,6 +86,7 @@ pub(super) fn feed_action_state(
         Res<crate::spell::SpellTargeting>,
         Res<crate::ui_macro::MacroBoundSpells>,
         Res<crate::spell::SpellModifiers>,
+        Res<crate::net::wrath_combo_points::NativeComboPoints>,
         // The caster's and the target's reach and motion, which the range compare reads.
         crate::spell::RangeUnits,
         // The usable walk's `CanAttack`/`CanAssist` inputs.
@@ -122,8 +123,17 @@ pub(super) fn feed_action_state(
         memory.last_cd_trace = Some(now);
     }
 
-    let (pending, queued_melee, channel, targeting, bound, spell_mods, range_units, relations) =
-        &cast_state;
+    let (
+        pending,
+        queued_melee,
+        channel,
+        targeting,
+        bound,
+        spell_mods,
+        combo,
+        range_units,
+        relations,
+    ) = &cast_state;
     let me = self_q.iter().next();
     // The bags, walked once per frame for every reagent, totem and item count below.
     let carried = me
@@ -206,6 +216,7 @@ pub(super) fn feed_action_state(
                         cooldowns: &cooldowns,
                         carried: &carried,
                         spell_mods,
+                        combo,
                         relations: relations.context(),
                     };
                     let (u, oom) = usable::spell_usable(
@@ -287,6 +298,7 @@ pub(super) fn feed_action_state(
                         cooldowns: &cooldowns,
                         carried: &carried,
                         spell_mods,
+                        combo,
                         relations: relations.context(),
                     };
                     let (u, oom) = usable::item_usable(
@@ -461,6 +473,7 @@ mod tests {
             .insert_resource(bound)
             .init_resource::<Cooldowns>()
             .init_resource::<crate::spell::SpellModifiers>()
+            .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
             .init_resource::<crate::ui_script::UiClock>()
             .init_resource::<AutoRepeatActive>()
             .init_resource::<crate::spell::PendingCast>()
@@ -551,6 +564,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()
@@ -668,6 +682,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()
@@ -803,6 +818,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()

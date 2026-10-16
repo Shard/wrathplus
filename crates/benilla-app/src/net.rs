@@ -41,6 +41,8 @@ mod wrath_achievement_capture;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_spell_log_capture;
+mod wrath_spell_control_capture;
+pub(crate) mod wrath_combo_points;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -143,6 +145,8 @@ impl Plugin for NetPlugin {
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_spell_log_capture::register(app);
+        wrath_spell_control_capture::register(app);
+        wrath_combo_points::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -2078,6 +2082,9 @@ pub(crate) enum ClientCommand {
     NativeInventory(benilla_protocol::wrath_inventory::Command),
     /// Native auction/loot commands with no Vanilla twin; transport does not claim acceptance.
     NativeExchange(benilla_protocol::wrath_exchange::Command),
+    /// Native spell-control and pet requests with no Vanilla twin (spell click, totem destroy,
+    /// cancel mount or growth aura, pet info, pet talents); transport does not claim acceptance.
+    NativeSpellControl(benilla_protocol::wrath_spell_control::Command),
     /// `CMSG_QUERY_INSPECT_ACHIEVEMENTS`; no UI producer yet, the reply is capture-only.
     NativeInspectAchievements { player: u64 },
     /// Native calendar commands; no UI producer yet, replies are capture-only.
@@ -2590,13 +2597,13 @@ mod tests {
                 bag_index: 255,
                 slot: 0,
             },
+            ClientCommand::CancelAutoRepeat,
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
         for command in [
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
-            ClientCommand::CancelAutoRepeat,
             ClientCommand::QueryTime,
             ClientCommand::MoveTimeSkipped {
                 guid: 1057,

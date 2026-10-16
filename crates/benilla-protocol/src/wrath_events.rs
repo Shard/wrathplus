@@ -393,6 +393,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_spell_control::handles(opcode) => {
+                Ok(match crate::wrath_spell_control::decode(opcode, body, self.self_guid) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_spline::handles(opcode) => {
                 Ok(match crate::wrath_spline::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

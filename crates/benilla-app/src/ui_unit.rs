@@ -813,6 +813,8 @@ pub(crate) struct UnitStores<'w, 's> {
     removed: RemovedComponents<'w, 's, Guid>,
     /// This run's per-field edges, which [`fire_transitions`]' watch-bridge arms fire off.
     edges: MessageReader<'w, 's, FieldChanged>,
+    /// Build 12340's combo points, which no descriptor carries.
+    combo: Option<Res<'w, crate::net::wrath_combo_points::NativeComboPoints>>,
 }
 
 /// The client tables [`snapshot`] reads beside a descriptor, as one parameter for the feeders that
@@ -1282,6 +1284,8 @@ fn feed_units(
     let factions_changed = factions.as_ref().is_some_and(|r| r.is_changed());
     // The interaction NPC moves when nothing else does, and `MERCHANT_SHOW` reads `"npc"`.
     let interact_changed = interact.as_ref().is_some_and(|r| r.is_changed());
+    // Build 12340's combo points arrive outside every descriptor.
+    let combo_changed = stores.combo.as_ref().is_some_and(|r| r.is_changed());
     gate::trace(
         "feed_units",
         &[
@@ -1295,6 +1299,7 @@ fn feed_units(
             ("reputations", reps_changed),
             ("factions", factions_changed),
             ("interact", interact_changed),
+            ("combo", combo_changed),
         ],
     );
     let gate = gate::Gate::new(
@@ -1307,7 +1312,8 @@ fn feed_units(
             || group_changed
             || reps_changed
             || factions_changed
-            || interact_changed,
+            || interact_changed
+            || combo_changed,
     );
     stores.removed.clear();
     if gate.skip() {
@@ -1655,9 +1661,9 @@ fn feed_units(
     // The combo count and its banked target, pushed as a pair since `GetComboPoints` reads both;
     // only the count fires `PLAYER_COMBO_POINTS` (`0x5ddff0`).
     if let Some((store, _)) = self_q.iter().next() {
-        let banked = (
-            store.0.player_combo_points().unwrap_or(0),
-            store.0.player_combo_target(),
+        let banked = crate::net::wrath_combo_points::banked(
+            store,
+            &stores.combo.as_deref().copied().unwrap_or_default(),
         );
         if let Some(fire) = combo_edge(memo.last_combo, banked) {
             gate.audit("feed_units", "the combo-point edge");
