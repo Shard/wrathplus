@@ -1,16 +1,17 @@
-//! The talent spell-modifier tables: two `i32[64][29]` tables (`SPELLMOD_FLAT 0xcead60`,
+//! The talent spell-modifier tables: two `i32[96][29]` tables (build 12340's 96-bit family mask;
+//! the 1.12 reference's were `[64][29]`) (`SPELLMOD_FLAT 0xcead60`,
 //! `SPELLMOD_PCT 0xcecb30`), filled by `HandleSetSpellModifier 0x6e9950` from
 //! `SMSG_SET_FLAT_SPELL_MODIFIER` / `SMSG_SET_PCT_SPELL_MODIFIER` and read by `GetSpellModifiers
 //! 0x6e6b30`.
 //!
 //! The cell index is `mask_bit * 29 + op` on both sides: the first wire byte is the
-//! `SpellFamilyFlags` bit (0..63), the second the SpellModOp (0..28) (writer `0x6e9993`, reader
+//! `SpellFamilyFlags` bit (0..95, AzerothCore `Player::AddSpellMod` walks `flag96`), the second the SpellModOp (0..28) (writer `0x6e9993`, reader
 //! bound `cmp eax,0x40`; vmangos `Player::SendSpellMod`, `Player.cpp:17815`). A transposed index
 //! makes writer and reader touch disjoint cells, silently dropping every modifier. Each packet
 //! carries the absolute total for its cell: nothing accumulates or expires.
 //!
 //! The read gates on `SpellFamilyName` nonzero and equal to the player's class family and on
-//! `AttributesEx3` bit 29 clear, then sums one cell per set bit of all 64 family bits. Trap: the
+//! `AttributesEx3` bit 29 clear, then sums one cell per set bit of all 96 family bits. Trap: the
 //! reference's nothing-matched exit leaves pct 0 and relies on its callers testing the returned
 //! boolean, so a bare `(flat, pct)` pair would zero every unmodified spell; hence
 //! [`SpellModifiers::modifiers`] returns `Option` and [`SpellMod`] is private.
@@ -27,8 +28,9 @@ use crate::net::{ObjectStore, SelfPlayer};
 
 /// SpellModOps per row: the index stride (`imul eax,eax,0x1d`; the reader's `add edx,0x74`).
 const OPS: usize = 29;
-/// `SpellFamilyFlags` bits: the row count (`cmp eax,0x40`).
-const BITS: usize = 64;
+/// `SpellFamilyFlags` bits: the row count. Build 12340's mask is AzerothCore's `flag96`
+/// (`SpellDisplay::has_family_bit`); the 1.12 reference bound it at 64 (`cmp eax,0x40`).
+const BITS: usize = 96;
 /// `0x740` dwords per table (`6e72ba: mov ecx,0x740` before each `rep stosd`).
 const CELLS: usize = BITS * OPS;
 
@@ -104,13 +106,12 @@ impl Default for SpellModifiers {
 
 impl SpellModifiers {
     /// Store one cell absolutely (`HandleSetSpellModifier 0x6e9950`). Deviation: an out-of-range
-    /// byte drops the packet, because the reference's unchecked write overruns the table
-    /// (`(64, 19)` lands on the class family at `0xcecaac`).
+    /// byte drops the packet rather than overrunning the table.
     pub(crate) fn set(&mut self, flat: bool, mask_bit: u8, op: u8, value: i32) {
         if usize::from(mask_bit) >= BITS || usize::from(op) >= OPS {
             warn!(
                 "spell_mods: dropping an out-of-range {} modifier — mask bit {mask_bit} \
-                 (0..=63), op {op} (0..=28), value {value}",
+                 (0..=95), op {op} (0..=28), value {value}",
                 if flat { "flat" } else { "pct" }
             );
             return;
@@ -146,9 +147,9 @@ impl SpellModifiers {
     /// The `SpellFamilyFlags` bits whose cells any read for `d` can sum, whatever the op: its
     /// whole mask past the gates, none before them. A change to another bit's cells cannot move
     /// a value modified for `d`; a change of the class family can, whatever the bit.
-    pub(crate) fn read_bits(&self, d: &SpellDisplay) -> u64 {
+    pub(crate) fn read_bits(&self, d: &SpellDisplay) -> u128 {
         if self.gates_pass(d) {
-            d.spell_family_flags
+            u128::from(d.spell_family_flags) | u128::from(d.spell_family_flags_2) << 64
         } else {
             0
         }
@@ -157,11 +158,11 @@ impl SpellModifiers {
     /// What differs from `prev`: the `SpellFamilyFlags` bits with any changed cell, in either
     /// table and at any op, and whether the class family moved.
     pub(crate) fn diff(&self, prev: &SpellModifiers) -> ModsDiff {
-        let bits = (0..BITS).fold(0u64, |bits, bit| {
+        let bits = (0..BITS).fold(0u128, |bits, bit| {
             let row = bit * OPS..(bit + 1) * OPS;
             let same = self.flat[row.clone()] == prev.flat[row.clone()]
                 && self.pct[row.clone()] == prev.pct[row];
-            bits | u64::from(!same) << bit
+            bits | u128::from(!same) << bit
         });
         ModsDiff {
             bits,
@@ -176,11 +177,11 @@ impl SpellModifiers {
         if !self.gates_pass(d) || usize::from(op) >= OPS {
             return None;
         }
-        // All 64 bits, no early break (`6e6b8f`/`6e6b97`); the accumulators wrap, as the
+        // All 96 bits, no early break (`6e6b8f`/`6e6b97`); the accumulators wrap, as the
         // reference's do.
         let (mut flat, mut pct) = (0i32, 0i32);
         for bit in 0..BITS as u8 {
-            if d.spell_family_flags >> bit & 1 == 0 {
+            if !d.has_family_bit(u32::from(bit)) {
                 continue;
             }
             let cell = index(bit, op);
@@ -252,8 +253,8 @@ impl SpellModifiers {
 /// How one snapshot of the tables differs from an earlier one ([`SpellModifiers::diff`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModsDiff {
-    /// Bit `b` set: a cell of family-flag bit `b` changed, in either table at any op.
-    pub(crate) bits: u64,
+    /// Bit `b` set: a cell of family-flag bit `b` (0..95) changed, in either table at any op.
+    pub(crate) bits: u128,
     pub(crate) class_family: bool,
 }
 
@@ -303,9 +304,11 @@ mod tests {
 
     /// A mage spell (family 3) with the given bits set, against a mage player.
     fn mage(bits: &[u8]) -> SpellDisplay {
+        let mask = bits.iter().fold(0u128, |m, b| m | 1 << b);
         SpellDisplay {
             spell_family: 3,
-            spell_family_flags: bits.iter().fold(0u64, |m, b| m | 1 << b),
+            spell_family_flags: mask as u64,
+            spell_family_flags_2: (mask >> 64) as u32,
             ..Default::default()
         }
     }
@@ -411,13 +414,25 @@ mod tests {
         assert_eq!(mods.apply(&mage(&[5]), OP_COST, 200), 0);
     }
 
+    /// Build 12340's third family word: a modifier on bit 72 (Starfall's, AzerothCore `flag96`) reaches
+    /// the spell, and the diff names the row.
+    #[test]
+    fn the_third_family_word_is_read_and_diffed() {
+        let mut mods = mage_tables();
+        let before = mods.clone();
+        mods.set(false, 72, OP_COST, -50);
+        assert_eq!(mods.apply(&mage(&[72]), OP_COST, 200), 100);
+        assert_eq!(mods.apply(&mage(&[71]), OP_COST, 200), 200);
+        assert_eq!(mods.diff(&before).bits, 1u128 << 72);
+        assert_eq!(mods.read_bits(&mage(&[3, 72])), 1 << 3 | 1u128 << 72);
+    }
+
     #[test]
     fn an_out_of_range_packet_is_dropped() {
         let mut mods = mage_tables();
-        // `(64, 19)` overruns onto the class family in the reference.
-        mods.set(true, 64, 19, 999);
-        // `(65, 23)` lands on PCT element 0 there.
-        mods.set(true, 65, 23, 999);
+        // Past the 96 family bits.
+        mods.set(true, 96, 19, 999);
+        mods.set(true, 97, 23, 999);
         mods.set(true, 0, 29, 999);
         mods.set(true, 255, 255, 999);
 

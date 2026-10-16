@@ -42,7 +42,7 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 291 | 123 | 275 | 689 |
+| S→C | 293 | 123 | 273 | 689 |
 | C→S | 334 | 0 | 390 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 332 admitted numeric opcodes, 77 of them transport-only (no UI producer) and 255 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
@@ -675,8 +675,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0263` | `SMSG_SPELLORDAMAGE_IMMUNE` | S→C | handled | niche | proven_send_site: `game/Entities/Unit/Unit.cpp:6633` | S→C: semantic-consumer — P/wrath_logs.rs (strict AC framing, Wrath fields kept) → P/wrath_events.rs `wrath_logs` arm → A/combat_log/mod.rs `on_spell_outcome_log` (SpellOrDamageImmune). |
 | `0x0264` | `CMSG_AUCTION_LIST_BIDDER_ITEMS` | C→S | handled | common | AC receive: `HandleAuctionListBidderItems` (STATUS_LOGGEDIN). | C→S: Exchange — ACTIVE; A/net/io/wrath.rs NativeExchange/NativeMailMutation route; producer: ui_auction. Server acceptance not claimed; see docs/WRATH-EXCHANGE.md. |
 | `0x0265` | `SMSG_AUCTION_BIDDER_LIST_RESULT` | S→C | handled | common | proven_send_site: `game/AuctionHouse/AuctionHouseSearcher.cpp:241` | S→C: semantic-consumer — P/wrath_exchange.rs → AuctionBidderListResult → ui_auction; strict framing; see docs/WRATH-EXCHANGE.md. |
-| `0x0266` | `SMSG_SET_FLAT_SPELL_MODIFIER` | S→C | missing | core | proven_send_site: `scripts/Commands/cs_modify.cpp:332` | S→C: partial — P/wrath_spell_control.rs (strict AC framing) → P/wrath_events.rs `wrath_spell_control` arm → `SpellModifier` → A/spell/mods.rs. Bits 0..63 apply; build 12340 bits 64..95 are dropped by the 64-row table until benilla-formats reads `SpellFamilyFlags[2]`. |
-| `0x0267` | `SMSG_SET_PCT_SPELL_MODIFIER` | S→C | missing | core | proven_send_site | S→C: partial — as 0x0266 (pct table). |
+| `0x0266` | `SMSG_SET_FLAT_SPELL_MODIFIER` | S→C | handled | core | proven_send_site: `scripts/Commands/cs_modify.cpp:332` | S→C: semantic-consumer — P/wrath_spell_control.rs (strict AC framing: `u8 bit, u8 op, i32 total`) → `SpellModifier` → A/spell/mods.rs, whose tables hold all 96 family bits (`SpellDisplay::has_family_bit`, AzerothCore `flag96`; Assets ba707306). |
+| `0x0267` | `SMSG_SET_PCT_SPELL_MODIFIER` | S→C | handled | core | proven_send_site | S→C: semantic-consumer — P/wrath_spell_control.rs (strict AC framing: `u8 bit, u8 op, i32 total`) → `SpellModifier` → A/spell/mods.rs, whose tables hold all 96 family bits (`SpellDisplay::has_family_bit`, AzerothCore `flag96`; Assets ba707306). |
 | `0x0268` | `CMSG_SET_AMMO` | C→S | handled | niche | AC receive: `HandleSetAmmoOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — ACTIVE; A/net/io/wrath.rs NativeInventory/NativeSession route, P/wrath_inventory.rs encoder; producer: ui_items ammo. Server acceptance not claimed; see docs/WRATH-INVENTORY.md. |
 | `0x0269` | `SMSG_CORPSE_RECLAIM_DELAY` | S→C | handled | core | proven_send_site: `game/Entities/Player/Player.cpp:13287` | S→C: semantic-consumer — P/wrath_death.rs → CorpseReclaimDelay (death/); strict framing; see docs/WRATH-DEATH.md. |
 | `0x026A` | `CMSG_SET_ACTIVE_MOVER` | C→S | handled | core | AC receive: `HandleSetActiveMoverOpcode` (STATUS_LOGGEDIN). | C→S: Bootstrap / timer / lifecycle / automatic ACKs — ACTIVE; A/net/io/wrath.rs:264–347,444–477,1123–1124,1189–1201,1237–1263,1718–1802; P/wrath_world.rs:24–31,321–322,380–381,449–451; P/wrath_events.rs:47,510–524; P/wrath_authority.rs:14–18; P/wrath_taxi_ack.rs:5. Producer status is explained in the family notes above. |
