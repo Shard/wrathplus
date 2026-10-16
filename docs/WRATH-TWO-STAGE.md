@@ -124,3 +124,29 @@ Example paths (five distinct models per nonempty category):
 Reproduce with the environment above and `cargo test -p benilla-formats --test
 wrath_stage_gap_census -- --ignored --nocapture --test-threads 4`. Latest run:
 1 passed, 0 failed. No proprietary payloads are emitted or committed.
+
+## Second weight and off-world lanes (2026-10-16)
+
+**Second texture weight: closed, not applied.** A read-only scan of every function in
+`0x7e0000`–`0x890000` (the M2 module and the render backend, including the shader-family
+selection at `0x872d30`) finds six readers of the evaluated texture-weight array (instance
+`+0xa8`, stride 12): `0x81daf0`, `0x821a20`, `0x827a90`, `0x827e30`, `0x827f70` and `0x834660`.
+Each indexes the weight lookup (shared `+0x94`) at the batch's first combo entry only
+(`batch +0x14`); none reads the adjacent entry. The animate pass `0x82f0f0` samples the weights,
+and the submitted record carries only the folded batch factor (`+0x0c`). So native 3.3.5 does
+not multiply a second-stage weight, and the 1,946 batches with a distinct stage-two weight
+index render with the first weight, as they already do here. Boundary: a reader that receives
+the weight array through a parameter rather than the instance pointer would not match the scan.
+
+**Stage-two UV animation in off-world lanes.** The world lanes (placed models, entity variants)
+already registered stage two. Two lanes left it at its baked seed and now animate it:
+
+- UI model tiles (`ui_models`): a two-stage batch's stage-two transform gets its own table rows
+  (`stage2_anim.x`/`.z`) on the tile's material clone, sampled off the pane's play head like
+  stage one.
+- Glue scenes (`portrait/glue_booth`): stage two registers on the shared lane, as stage one does.
+
+Spell-effect and GameObject per-sequence clones copy the shared material's stage-two row, so
+they follow the shared stage-two clock rather than their host's sequence. No shipped particle
+geometry references an animated stage-two asset (census above), so the particle lane needs none.
+Runtime-fused optimized batches (`0x837680`) remain unmodelled.

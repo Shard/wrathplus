@@ -346,6 +346,16 @@ fn run(
                         finish_character_action(&mut session, &mut characters, realm_record.clone(),
                             benilla_protocol::CharAction::Create, code, |event| send(events, event))?;
                     }
+                    Ok(CharRequest::Service(command)) => {
+                        let reply = session.char_service_result(&command)?;
+                        // A change the server applied re-emits the roster before the result, as
+                        // create and delete do.
+                        if reply.changed_roster() {
+                            characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+                            send(events, SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })?;
+                        }
+                        send(events, SessionEvent::WrathCharServiceResult { reply })?;
+                    }
                     Ok(CharRequest::Delete(guid)) => {
                         let code = session.delete_character_result(guid)?;
                         finish_character_action(&mut session, &mut characters, realm_record.clone(),
@@ -1254,6 +1264,7 @@ enum WrathRoute {
     NativeDeath,
     NativeSessionMeta,
     NativeInspect,
+    NativeFaction,
     NativeWorldportAck,
     NativeTeleportAck,
     NativeMovementMisc,
@@ -1297,6 +1308,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::SetFactionAtWar { .. }
+        | ClientCommand::SetFactionInactive { .. }
+        | ClientCommand::SetWatchedFaction { .. } => WrathRoute::NativeFaction,
         ClientCommand::NativeInspect(_)
         | ClientCommand::Inspect { .. }
         | ClientCommand::LearnTalent { .. }
@@ -1727,6 +1741,16 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeFaction => {
+                        use benilla_protocol::wrath_faction as f;
+                        let (opcode, body) = match command {
+                            ClientCommand::SetFactionAtWar { rep_list_id, at_war } => f::encode_at_war(rep_list_id, at_war),
+                            ClientCommand::SetFactionInactive { rep_list_id, inactive } => f::encode_inactive(rep_list_id, inactive),
+                            ClientCommand::SetWatchedFaction { rep_list_id } => f::encode_watched(rep_list_id),
+                            _ => unreachable!(),
+                        };
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeInspect => {
                         use benilla_protocol::wrath_inspect::{encode, Command as I};
                         let (opcode, body) = encode(&match command {
@@ -2015,10 +2039,15 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
                 text: text.into_bytes(),
             }
         }
-        ClientCommand::AddonMessage { distribution, text } => Command {
+        ClientCommand::AddonMessage {
+            distribution,
+            text,
+            target,
+        } => Command {
             chat_type: crate::net::wrath_addon_chat_type(distribution),
             language: LANGUAGE_ADDON,
-            target: None,
+            // The WHISPER lane's recipient (`0x07` requires one); every other lane has none.
+            target: target.map(String::into_bytes),
             text: text.into_bytes(),
         },
         other => unreachable!("not a chat line: {other:?}"),
@@ -3335,8 +3364,11 @@ mod tests {
             chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1).unwrap().1,
             [7u32.to_le_bytes(), 7u32.to_le_bytes()].concat().into_iter().chain(*b"Bob\0hi\0").collect::<Vec<_>>()
         );
-        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into() };
+        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into(), target: None };
         assert_eq!(chat_line(addon, 1).unwrap().1[..8], [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]);
+        // The 12340 WHISPER lane: chat type 0x07, LANG_ADDON, the target before the text.
+        let whisper = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Whisper, text: "p\tm".into(), target: Some("Bob".into()) };
+        assert_eq!(chat_line(whisper, 1).unwrap().1, [7u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat().into_iter().chain(*b"Bob\0p\tm\0").collect::<Vec<_>>());
         let embedded = ClientCommand::Chat { kind: ChatKind::Say, target: None, text: "a\0b".into(), language: None };
         assert!(chat_line(embedded, 1).is_err(), "an embedded NUL is refused before send");
         assert_eq!(route(&ClientCommand::LeaveChannel { name: "x".into() }), WrathRoute::NativeChannel);

@@ -6,7 +6,14 @@ use benilla_ui::script::{
 use bevy::prelude::*;
 
 #[derive(Resource)]
-struct AchievementMetadata(WrathAchievementMetadata);
+pub(crate) struct AchievementMetadata(WrathAchievementMetadata);
+
+impl AchievementMetadata {
+    /// An `Achievement.dbc` row's name, for the chat's `$a` link.
+    pub(crate) fn name(&self, id: u32) -> Option<&str> {
+        self.0.achievements.get(&id).map(|a| a.name.as_str())
+    }
+}
 
 pub(crate) struct UiAchievementsPlugin;
 impl Plugin for UiAchievementsPlugin {

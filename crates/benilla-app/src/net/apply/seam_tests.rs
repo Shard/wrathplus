@@ -72,7 +72,10 @@ fn updates() -> Vec<SessionEvent> {
 
 /// A packet of another subsystem's; the mailbox's needs no open window.
 fn claimed() -> SessionEvent {
-    SessionEvent::NextMailTime { seconds: -86400.0 }
+    SessionEvent::NextMailTime {
+        seconds: -86400.0,
+        previews: Vec::new(),
+    }
 }
 
 /// One frame of the real drain over `events`; what the unit ended up as.

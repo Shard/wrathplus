@@ -7,6 +7,9 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("SetFactionAtWar", ClientCommand::SetFactionAtWar { rep_list_id: 7, at_war: true }),
+        ("SetFactionInactive", ClientCommand::SetFactionInactive { rep_list_id: 7, inactive: true }),
+        ("SetWatchedFaction", ClientCommand::SetWatchedFaction { rep_list_id: -1 }),
         (
             "NativeInspect",
             ClientCommand::NativeInspect(benilla_protocol::wrath_inspect::Command::LearnPreviewTalents { talents: vec![(1, 0)] }),
@@ -56,7 +59,7 @@ fn every_wrath_writer_route_is_admitted() {
         ),
         (
             "AddonMessage",
-            ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Party, text: "p\tm".into() },
+            ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Party, text: "p\tm".into(), target: None },
         ),
         ("JoinChannel", ClientCommand::JoinChannel { name: "General - Elwynn Forest".into(), password: String::new(), channel_id: 1 }),
         ("LeaveChannel", ClientCommand::LeaveChannel { name: "x".into() }),

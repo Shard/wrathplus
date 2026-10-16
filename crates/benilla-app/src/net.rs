@@ -44,6 +44,8 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_inspect_capture;
+mod wrath_char_service_capture;
+mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
@@ -155,6 +157,8 @@ impl Plugin for NetPlugin {
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
         wrath_inspect_capture::register(app);
+        wrath_char_service_capture::register(app);
+        wrath_faction_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
@@ -642,6 +646,9 @@ pub(crate) enum CharRequest {
     Create(benilla_protocol::CharCreateReq),
     /// Delete a character by guid (`CMSG_CHAR_DELETE`), then stay parked at select.
     Delete(u64),
+    /// A build-12340 character-screen service (rename, customize, faction/race change, declined
+    /// names, realm split), then stay parked at select. 1.12 has none and ignores it.
+    Service(benilla_protocol::wrath_char_services::Command),
     /// Select's Back: drop the session and return to the pre-logon park.
     Abandon,
 }
@@ -877,6 +884,13 @@ impl GameTime {
         }
     }
 
+    /// The packed login date as `(years since 2000, month 1..=12, day 1..=31)`, decoded from
+    /// [`Self::base_day`]'s `year·372 + month·31 + day`. No day rollover is applied.
+    pub(crate) fn date(&self) -> (u32, u32, u32) {
+        let rem = self.base_day % 372;
+        (self.base_day / 372, (rem.max(1) - 1) / 31, (rem.max(1) - 1) % 31 + 1)
+    }
+
     /// Current minute of the game day (`0..1440`).
     pub(crate) fn minute_of_day(&self) -> u32 {
         self.minute_of_day_f32() as u32
@@ -958,6 +972,7 @@ pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistr
         D::Raid => 0x03,
         D::Guild => 0x04,
         D::Battleground => 0x2c,
+        D::Whisper => 0x07,
     }
 }
 
@@ -969,6 +984,8 @@ pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistri
         D::Raid => m::CHAT_TYPE_RAID,
         D::Guild => m::CHAT_TYPE_GUILD,
         D::Battleground => m::CHAT_TYPE_BATTLEGROUND,
+        // Only the 12340 binding produces it; 1.12 has no whispered addon message.
+        D::Whisper => m::CHAT_TYPE_WHISPER,
     }
 }
 
@@ -1143,10 +1160,12 @@ pub(crate) enum ClientCommand {
         language: Option<u32>,
     },
     /// `SendAddonMessage`: a `CMSG_MESSAGECHAT` in `LANG_ADDON` (1.12 has no addon opcode and no
-    /// whispered addon message). `text` is `prefix` TAB `message`.
+    /// whispered addon message). `text` is `prefix` TAB `message`; `target` is the 12340 WHISPER
+    /// lane's recipient, `None` on every other lane.
     AddonMessage {
         distribution: benilla_ui::script::AddonDistribution,
         text: String,
+        target: Option<String>,
     },
     /// `CMSG_NAME_QUERY`, sent only by [`crate::names::NameCache`]'s ask-once resolve.
     NameQuery {

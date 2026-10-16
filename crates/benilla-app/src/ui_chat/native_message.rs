@@ -1,8 +1,7 @@
 //! Build-12340 MESSAGECHAT → stock CHAT_MSG_* events. Never pass native type bytes
 //! to the Vanilla parser, language exemptions, or filter selectors.
 //! Addon lines (`LANG_ADDON`) fire `CHAT_MSG_ADDON` as lossless bytes ([`addon_args`]).
-//! Achievement `$a` link expansion is a separate pending unit; those packets stay lossless in the
-//! sole capture FIFO until supported.
+//! Achievement lines (`0x30`/`0x31`) expand `$a` to the native achievement link ([`expand_achievement`]).
 use super::{
     edit::ChannelState,
     event::{language_name, ChatEvent},
@@ -77,23 +76,45 @@ fn token(kind: u8) -> Option<&'static str> {
     })
 }
 
-/// Drain only the visible unit's supported packets, preserving deferred raw packets and order.
+/// Drain every packet in order: each is delivered here, addon and achievement lines included.
 /// The capture owner clears this FIFO on disconnect; no second capture queue is introduced.
 pub(super) fn take_visible(packets: &mut std::collections::VecDeque<Message>) -> Vec<Message> {
-    let mut ready = Vec::new();
-    for _ in 0..packets.len() {
-        let msg = packets.pop_front().expect("original FIFO length");
-        if deferred(&msg) {
-            packets.push_back(msg);
-        } else {
-            ready.push(msg);
-        }
-    }
-    ready
+    packets.drain(..).collect()
 }
 
-fn deferred(msg: &Message) -> bool {
-    matches!(msg.chat_type, 0x30 | 0x31)
+/// What the achievement link needs besides the packet: a row's name and the game date.
+pub(super) type AchievementLink<'a> = &'a dyn Fn(u32) -> Option<(String, (u32, u32, u32))>;
+
+/// `$a`/`$A` in an achievement line (`0x579590` → `0x578f20` → `0x61bff0`): the achievement's link,
+/// `|cffffff00|Hachievement:id:earnerGuid:1:month:day:year:c1:c2:c3:c4|h[name]|h|r`, dated today,
+/// for a row the catalog holds; an unknown row expands to nothing. The sender's `%s` stays for
+/// `ChatFrame_MessageEventHandler`. Labelled: the four criteria words come from the native date
+/// block (`0xd37f98`) and are written as all-ones, the completed value; the date is the login's
+/// packed date, without a day rollover; a `$` macro inside the row's name is not expanded.
+fn expand_achievement(text: &str, id: u32, earner: u64, link: AchievementLink) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('$') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        match after.chars().next() {
+            Some('a' | 'A') => {
+                if let Some((name, (year, month, day))) = link(id) {
+                    let all = u32::MAX;
+                    out.push_str(&format!(
+                        "|cffffff00|Hachievement:{id}:{earner:016X}:1:{month}:{day}:{year}:{all}:{all}:{all}:{all}|h[{name}]|h|r"
+                    ));
+                }
+                rest = &after[1..];
+            }
+            _ => {
+                out.push('$');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// `LANG_ADDON`, the only mark of addon traffic on the wire.
@@ -165,7 +186,7 @@ fn name(
         .or_else(|| expired.then(|| "Unknown".into()))
 }
 
-/// false parks unresolved names (or guards against accidentally delivering deferred packets).
+/// false parks a line whose names are unresolved; it is retried later.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn deliver(
     script: &mut UiScript,
@@ -177,10 +198,8 @@ pub(super) fn deliver(
     state: &mut NativeChatFeed,
     msg: &Message,
     expired: bool,
+    achievement: AchievementLink,
 ) -> bool {
-    if deferred(msg) {
-        return false;
-    }
     if social.is_some_and(|s| s.is_ignored(msg.sender_guid)) {
         return true;
     }
@@ -220,8 +239,14 @@ pub(super) fn deliver(
     ) else {
         return false;
     };
+    let body = match (msg.chat_type, msg.achievement_id) {
+        (0x30 | 0x31, Some(id)) => {
+            expand_achievement(&text(&msg.text), id, msg.sender_guid, achievement)
+        }
+        _ => text(&msg.text),
+    };
     let mut event = ChatEvent {
-        text: text(&msg.text),
+        text: body,
         sender,
         target: receiver,
         language: match msg.language {
@@ -279,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn visible_drain_preserves_deferred_raw_packets_and_order() {
+    fn the_drain_keeps_every_packet_in_order() {
         let mut addon = message(4);
         addon.language = u32::MAX;
         addon.text = vec![0, 255, b'\t', 128];
@@ -296,17 +321,29 @@ mod tests {
         let visible = take_visible(&mut fifo);
         assert_eq!(
             visible.iter().map(|m| m.chat_type).collect::<Vec<_>>(),
-            vec![4, 1, 6]
+            vec![4, 1, 0x30, 6, 0x31]
         );
+        assert_eq!(visible[0].text, addon.text, "addon lines arrive losslessly");
+        assert_eq!(visible[2].achievement_id, Some(42));
+        assert!(fifo.is_empty());
+    }
+
+    /// `0x578f20`'s `$a`: the earner's dated, completed link for a known row, nothing for an
+    /// unknown one; other `$` text and the sender's `%s` stay.
+    #[test]
+    fn achievement_lines_expand_the_native_link() {
+        let known = |id| (id == 6).then(|| ("Level 10".to_string(), (10, 10, 16)));
         assert_eq!(
-            visible[0].text, addon.text,
-            "addon lines are delivered, losslessly"
+            expand_achievement(
+                "%s has earned the achievement $a!",
+                6,
+                0x0700_0000_0012_3456,
+                &known
+            ),
+            "%s has earned the achievement |cffffff00|Hachievement:6:0700000000123456:1:10:16:10:\
+             4294967295:4294967295:4294967295:4294967295|h[Level 10]|h|r!"
         );
-        assert_eq!(fifo.len(), 2);
-        assert_eq!(fifo[0].text, achievement.text);
-        assert_eq!(fifo[0].achievement_id, Some(42));
-        assert_eq!(fifo[1].chat_type, 0x31);
-        assert!(take_visible(&mut fifo).is_empty());
+        assert_eq!(expand_achievement("got $A, $5", 7, 1, &known), "got , $5");
     }
 
     /// `0x509dd0`: the C string ends at its first NUL, the first TAB splits prefix from body
@@ -341,6 +378,7 @@ mod tests {
                 &mut NativeChatFeed::default(),
                 &msg,
                 false,
+                &|_| None,
             )
         };
         assert!(send(&mut script, 2, b"Pfx\tbo\tdy\0tail", 0));
@@ -399,7 +437,8 @@ mod tests {
                 None,
                 &mut state,
                 &msg,
-                false
+                false,
+                &|_| None
             ));
         }
         let received: Vec<String> = script.eval("return received").unwrap();
@@ -454,7 +493,8 @@ mod tests {
                 None,
                 &mut state,
                 &msg,
-                false
+                false,
+                &|_| None
             ));
         }
         assert!(script
@@ -488,7 +528,8 @@ mod tests {
             None,
             &mut state,
             &msg,
-            false
+            false,
+            &|_| None
         ));
         assert_eq!(state.line, 0);
         assert!(deliver(
@@ -500,7 +541,8 @@ mod tests {
             None,
             &mut state,
             &msg,
-            true
+            true,
+            &|_| None
         ));
         assert_eq!(state.line, 1);
     }
