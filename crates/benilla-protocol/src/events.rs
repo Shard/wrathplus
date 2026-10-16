@@ -167,6 +167,9 @@ pub enum SessionEvent {
     CharActionResult { action: CharAction, code: u8 },
     /// Build-12340 character mutation result. Raw codes are NOT Vanilla WorldResult values.
     WrathCharActionResult { action: CharAction, code: u8 },
+    /// Build-12340 character-screen service reply (rename, customize, faction/race change, declined
+    /// names, realm split); raw codes. A roster change is published first as a `CharacterList`.
+    WrathCharServiceResult { reply: crate::wrath_char_services::Reply },
     /// We are in the world; the IO thread emits this before any object update.
     Connected {
         self_guid: u64,
