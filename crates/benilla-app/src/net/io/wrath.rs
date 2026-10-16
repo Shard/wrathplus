@@ -1035,6 +1035,10 @@ enum WrathRoute {
     NativeInstanceControl,
     NativeInventory,
     NativeExchange,
+    NativeInspectAchievements,
+    NativeCalendar,
+    NativeQuest,
+    NativeParty,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1071,6 +1075,14 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AutoBankItem { .. }
         | ClientCommand::AutoStoreBankItem { .. }
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
+        ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
+        ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
+        ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
+        ClientCommand::NativeParty(_)
+        | ClientCommand::GroupUninvite { .. }
+        | ClientCommand::GroupSetLeader { .. }
+        | ClientCommand::MinimapPing { .. }
+        | ClientCommand::RandomRoll { .. } => WrathRoute::NativeParty,
         ClientCommand::NativeExchange(_)
         | ClientCommand::AuctionHello { .. }
         | ClientCommand::AuctionListItems { .. }
@@ -1408,6 +1420,27 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_inventory::encode(&inventory_command(command));
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeInspectAchievements => {
+                        let ClientCommand::NativeInspectAchievements { player } = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeParty => {
+                        let (opcode, body) = benilla_protocol::wrath_party::encode(&party_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeQuest => match quest_packet(command) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid native quest command rejected before send: {error}");
+                            continue;
+                        }
+                    },
+                    WrathRoute::NativeCalendar => {
+                        let ClientCommand::NativeCalendar(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_calendar::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeExchange => {
                         let (opcode, body) = exchange_packet(command);
                         active.writer.send_raw(opcode, &body)
@@ -1593,6 +1626,29 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// The native party command for a [`WrathRoute::NativeParty`] route.
+fn party_command(command: ClientCommand) -> benilla_protocol::wrath_party::Command {
+    use benilla_protocol::wrath_party::Command as P;
+    match command {
+        ClientCommand::NativeParty(command) => command,
+        ClientCommand::GroupUninvite { name } => P::Uninvite { name },
+        ClientCommand::GroupSetLeader { guid } => P::SetLeader { guid },
+        ClientCommand::MinimapPing { x, y } => P::MinimapPing { x, y },
+        ClientCommand::RandomRoll { min, max } => P::RandomRoll { min, max },
+        other => unreachable!("not a party route: {other:?}"),
+    }
+}
+
+/// The native body for a [`WrathRoute::NativeQuest`] command.
+fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_quest::{encode, encode_push_result};
+    match command {
+        ClientCommand::NativeQuest(command) => encode(&command),
+        ClientCommand::QuestPushResult { sharer, quest, msg } => Ok(encode_push_result(sharer, quest, msg.0)),
+        other => unreachable!("not a quest route: {other:?}"),
+    }
+}
+
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_exchange::{encode, Command as X};

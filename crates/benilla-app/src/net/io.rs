@@ -983,7 +983,7 @@ fn writer_loop(
                     // Wrath-only display roster commands never leak onto the Vanilla wire.
                     ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
                     | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
-                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
+                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeInspectAchievements { .. } | ClientCommand::NativeCalendar(_) | ClientCommand::NativeQuest(_) | ClientCommand::NativeParty(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {
@@ -1272,7 +1272,7 @@ fn writer_loop(
                     ClientCommand::QuestlogRemove { slot } => w.questlog_remove_quest(slot),
                     ClientCommand::PushQuestToParty { quest } => w.push_quest_to_party(quest),
                     ClientCommand::QuestConfirmAccept { quest } => w.quest_confirm_accept(quest),
-                    ClientCommand::QuestPushResult { sharer, msg } => {
+                    ClientCommand::QuestPushResult { sharer, msg, .. } => {
                         w.quest_push_result(sharer, msg)
                     }
                     ClientCommand::GetMailList { mailbox } => w.get_mail_list(mailbox),

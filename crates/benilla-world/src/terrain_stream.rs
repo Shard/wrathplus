@@ -16,7 +16,7 @@ use crate::clutter::{scatter_tile_clutter, ClutterConfig, GroundClutter};
 use crate::collision::{walk_layers, GroundDecalSurface, PickOccluder};
 use crate::interior::WmoResidency;
 use crate::lighting::SharedLightBuffer;
-use crate::liquid::{spawn_liquids, LiquidAssets};
+use crate::liquid::{spawn_liquids, spawn_wrath_liquids, LiquidAssets};
 use crate::model_render::MaterialCache;
 use crate::schedule::WorldStage;
 use crate::view::WorldCamera;
@@ -778,13 +778,23 @@ fn stream_terrain(
         }
 
         let mut liquid_ents = Vec::new();
-        spawn_liquids(
-            &mut commands,
-            adt.chunks.iter().flat_map(|c| c.liquids.iter()),
-            liquid_assets.as_deref(),
-            &mut meshes,
-            &mut liquid_ents,
-        );
+        // A tile's MH2O replaces its MCLQ wholesale; a Wrath tile without MH2O keeps any MCLQ.
+        match liquid_assets.as_deref().and_then(|l| l.wrath()) {
+            Some(wrath) if !adt.wrath_liquids.is_empty() => spawn_wrath_liquids(
+                &mut commands,
+                adt.wrath_liquids.iter(),
+                wrath,
+                &mut meshes,
+                &mut liquid_ents,
+            ),
+            _ => spawn_liquids(
+                &mut commands,
+                adt.chunks.iter().flat_map(|c| c.liquids.iter()),
+                liquid_assets.as_deref(),
+                &mut meshes,
+                &mut liquid_ents,
+            ),
+        }
         tile.liquid = liquid_ents;
 
         // Ground clutter per chunk, meshed lazily within ~70 yd by `stream_chunk_clutter`.

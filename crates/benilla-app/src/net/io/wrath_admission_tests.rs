@@ -7,24 +7,24 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeParty", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::ReadyCheckFinished)),
+        ("PartyUninviteGuid", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::UninviteGuid { guid: 1, reason: String::new() })),
+        ("GroupUninvite", ClientCommand::GroupUninvite { name: "Bob".into() }),
+        ("GroupSetLeader", ClientCommand::GroupSetLeader { guid: 1 }),
+        ("MinimapPing", ClientCommand::MinimapPing { x: 1.0, y: 2.0 }),
+        ("RandomRoll", ClientCommand::RandomRoll { min: 1, max: 100 }),
+        ("NativeQuest", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::StatusMultipleQuery)),
+        ("QuestPoiQuery", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::PoiQuery { quests: vec![783] })),
         (
-            "NativeExchange",
-            ClientCommand::NativeExchange(
-                benilla_protocol::wrath_exchange::Command::OptOutOfLoot { pass: 1 },
-            ),
+            "QuestPushResult",
+            ClientCommand::QuestPushResult { sharer: 1, quest: 783, msg: benilla_protocol::messages::QuestShareMsg::DECLINE_QUEST },
         ),
-        (
-            "ExchangePendingSales",
-            ClientCommand::NativeExchange(
-                benilla_protocol::wrath_exchange::Command::AuctionListPendingSales {
-                    auctioneer: 1,
-                },
-            ),
-        ),
-        (
-            "AuctionHello",
-            ClientCommand::AuctionHello { auctioneer: 1 },
-        ),
+        ("NativeCalendar", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::GetCalendar)),
+        ("CalendarRsvp", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::Rsvp { event_id: 1, invite_id: 2, status: 1 })),
+        ("NativeInspectAchievements", ClientCommand::NativeInspectAchievements { player: 1 }),
+        ("NativeExchange", ClientCommand::NativeExchange(benilla_protocol::wrath_exchange::Command::OptOutOfLoot { pass: 1 })),
+        ("ExchangePendingSales", ClientCommand::NativeExchange(benilla_protocol::wrath_exchange::Command::AuctionListPendingSales { auctioneer: 1 })),
+        ("AuctionHello", ClientCommand::AuctionHello { auctioneer: 1 }),
         (
             "AuctionListItems",
             ClientCommand::AuctionListItems {
@@ -40,55 +40,12 @@ fn every_wrath_writer_route_is_admitted() {
                 usable: 0,
             },
         ),
-        (
-            "AuctionListOwnerItems",
-            ClientCommand::AuctionListOwnerItems {
-                auctioneer: 1,
-                list_from: 0,
-            },
-        ),
-        (
-            "AuctionListBidderItems",
-            ClientCommand::AuctionListBidderItems {
-                auctioneer: 1,
-                list_from: 0,
-                auction_ids: vec![2],
-            },
-        ),
-        (
-            "AuctionSellItem",
-            ClientCommand::AuctionSellItem {
-                auctioneer: 1,
-                item_guid: 2,
-                bid: 3,
-                buyout: 4,
-                etime_minutes: 720,
-                count: 1,
-            },
-        ),
-        (
-            "AuctionPlaceBid",
-            ClientCommand::AuctionPlaceBid {
-                auctioneer: 1,
-                auction_id: 2,
-                price: 3,
-            },
-        ),
-        (
-            "AuctionRemoveItem",
-            ClientCommand::AuctionRemoveItem {
-                auctioneer: 1,
-                auction_id: 2,
-            },
-        ),
-        (
-            "LootMasterGive",
-            ClientCommand::LootMasterGive {
-                guid: 1,
-                slot: 0,
-                target: 2,
-            },
-        ),
+        ("AuctionListOwnerItems", ClientCommand::AuctionListOwnerItems { auctioneer: 1, list_from: 0 }),
+        ("AuctionListBidderItems", ClientCommand::AuctionListBidderItems { auctioneer: 1, list_from: 0, auction_ids: vec![2] }),
+        ("AuctionSellItem", ClientCommand::AuctionSellItem { auctioneer: 1, item_guid: 2, bid: 3, buyout: 4, etime_minutes: 720, count: 1 }),
+        ("AuctionPlaceBid", ClientCommand::AuctionPlaceBid { auctioneer: 1, auction_id: 2, price: 3 }),
+        ("AuctionRemoveItem", ClientCommand::AuctionRemoveItem { auctioneer: 1, auction_id: 2 }),
+        ("LootMasterGive", ClientCommand::LootMasterGive { guid: 1, slot: 0, target: 2 }),
         ("InitiateTrade", ClientCommand::InitiateTrade { target: 1 }),
         ("BeginTrade", ClientCommand::BeginTrade),
         ("BusyTrade", ClientCommand::BusyTrade),
@@ -97,37 +54,11 @@ fn every_wrath_writer_route_is_admitted() {
         ("UnacceptTrade", ClientCommand::UnacceptTrade),
         ("CancelTrade", ClientCommand::CancelTrade),
         ("SetTradeGold", ClientCommand::SetTradeGold { copper: 1 }),
-        (
-            "SetTradeItem",
-            ClientCommand::SetTradeItem {
-                trade_slot: 0,
-                bag: 255,
-                slot: 23,
-            },
-        ),
-        (
-            "ClearTradeItem",
-            ClientCommand::ClearTradeItem { trade_slot: 0 },
-        ),
-        (
-            "NativeInventory",
-            ClientCommand::NativeInventory(benilla_protocol::wrath_inventory::Command::ReadItem {
-                bag: 255,
-                slot: 23,
-            }),
-        ),
-        (
-            "InventoryEquipmentSetDelete",
-            ClientCommand::NativeInventory(
-                benilla_protocol::wrath_inventory::Command::EquipmentSetDelete { set_guid: 1 },
-            ),
-        ),
-        (
-            "InventoryRefund",
-            ClientCommand::NativeInventory(benilla_protocol::wrath_inventory::Command::Refund {
-                item_guid: 1,
-            }),
-        ),
+        ("SetTradeItem", ClientCommand::SetTradeItem { trade_slot: 0, bag: 255, slot: 23 }),
+        ("ClearTradeItem", ClientCommand::ClearTradeItem { trade_slot: 0 }),
+        ("NativeInventory", ClientCommand::NativeInventory(benilla_protocol::wrath_inventory::Command::ReadItem { bag: 255, slot: 23 })),
+        ("InventoryEquipmentSetDelete", ClientCommand::NativeInventory(benilla_protocol::wrath_inventory::Command::EquipmentSetDelete { set_guid: 1 })),
+        ("InventoryRefund", ClientCommand::NativeInventory(benilla_protocol::wrath_inventory::Command::Refund { item_guid: 1 })),
         (
             "UseItem",
             ClientCommand::UseItem {
@@ -139,127 +70,26 @@ fn every_wrath_writer_route_is_admitted() {
                 target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
             },
         ),
-        (
-            "OpenItem",
-            ClientCommand::OpenItem {
-                bag_index: 255,
-                slot: 23,
-            },
-        ),
-        (
-            "WrapItem",
-            ClientCommand::WrapItem {
-                gift_bag: 255,
-                gift_slot: 23,
-                item_bag: 255,
-                item_slot: 24,
-            },
-        ),
-        (
-            "AutoEquipItem",
-            ClientCommand::AutoEquipItem {
-                bag_index: 255,
-                slot: 23,
-            },
-        ),
+        ("OpenItem", ClientCommand::OpenItem { bag_index: 255, slot: 23 }),
+        ("WrapItem", ClientCommand::WrapItem { gift_bag: 255, gift_slot: 23, item_bag: 255, item_slot: 24 }),
+        ("AutoEquipItem", ClientCommand::AutoEquipItem { bag_index: 255, slot: 23 }),
         ("SetAmmo", ClientCommand::SetAmmo { entry: 2512 }),
-        (
-            "SwapInvItem",
-            ClientCommand::SwapInvItem {
-                src_slot: 23,
-                dst_slot: 24,
-            },
-        ),
-        (
-            "SwapItem",
-            ClientCommand::SwapItem {
-                dst_bag: 19,
-                dst_slot: 0,
-                src_bag: 255,
-                src_slot: 23,
-            },
-        ),
-        (
-            "AutoStoreBagItem",
-            ClientCommand::AutoStoreBagItem {
-                src_bag: 255,
-                src_slot: 23,
-                dst_bag: 19,
-            },
-        ),
-        (
-            "SplitItem",
-            ClientCommand::SplitItem {
-                src_bag: 255,
-                src_slot: 23,
-                dst_bag: 255,
-                dst_slot: 24,
-                count: 1,
-            },
-        ),
-        (
-            "DestroyItem",
-            ClientCommand::DestroyItem {
-                bag_index: 255,
-                slot: 23,
-                count: 0,
-            },
-        ),
+        ("SwapInvItem", ClientCommand::SwapInvItem { src_slot: 23, dst_slot: 24 }),
+        ("SwapItem", ClientCommand::SwapItem { dst_bag: 19, dst_slot: 0, src_bag: 255, src_slot: 23 }),
+        ("AutoStoreBagItem", ClientCommand::AutoStoreBagItem { src_bag: 255, src_slot: 23, dst_bag: 19 }),
+        ("SplitItem", ClientCommand::SplitItem { src_bag: 255, src_slot: 23, dst_bag: 255, dst_slot: 24, count: 1 }),
+        ("DestroyItem", ClientCommand::DestroyItem { bag_index: 255, slot: 23, count: 0 }),
         ("BankerActivate", ClientCommand::BankerActivate { guid: 1 }),
         ("BuyBankSlot", ClientCommand::BuyBankSlot { guid: 1 }),
-        (
-            "AutoBankItem",
-            ClientCommand::AutoBankItem { bag: 255, slot: 23 },
-        ),
-        (
-            "AutoStoreBankItem",
-            ClientCommand::AutoStoreBankItem { bag: 255, slot: 39 },
-        ),
-        (
-            "PageTextQuery",
-            ClientCommand::PageTextQuery {
-                page_id: 1,
-                guid: 1,
-            },
-        ),
-        (
-            "NativeInstanceControl",
-            ClientCommand::NativeInstanceControl(
-                benilla_protocol::wrath_instance_control::Command::ResetInstances,
-            ),
-        ),
-        (
-            "InstanceDungeonDifficulty",
-            ClientCommand::NativeInstanceControl(
-                benilla_protocol::wrath_instance_control::Command::SetDungeonDifficulty { mode: 1 },
-            ),
-        ),
-        (
-            "InstanceRaidDifficulty",
-            ClientCommand::NativeInstanceControl(
-                benilla_protocol::wrath_instance_control::Command::SetRaidDifficulty { mode: 3 },
-            ),
-        ),
-        (
-            "InstanceLockResponse",
-            ClientCommand::NativeInstanceControl(
-                benilla_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 },
-            ),
-        ),
-        (
-            "InstanceExtend",
-            ClientCommand::NativeInstanceControl(
-                benilla_protocol::wrath_instance_control::Command::SetSavedInstanceExtend {
-                    map: 1,
-                    difficulty: 3,
-                    raw_extend: 1,
-                },
-            ),
-        ),
-        (
-            "NativeMirrorImageQuery",
-            ClientCommand::NativeMirrorImageQuery { guid: u64::MAX },
-        ),
+        ("AutoBankItem", ClientCommand::AutoBankItem { bag: 255, slot: 23 }),
+        ("AutoStoreBankItem", ClientCommand::AutoStoreBankItem { bag: 255, slot: 39 }),
+        ("PageTextQuery", ClientCommand::PageTextQuery { page_id: 1, guid: 1 }),
+        ("NativeInstanceControl", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::ResetInstances)),
+        ("InstanceDungeonDifficulty", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetDungeonDifficulty { mode: 1 })),
+        ("InstanceRaidDifficulty", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetRaidDifficulty { mode: 3 })),
+        ("InstanceLockResponse", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 })),
+        ("InstanceExtend", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetSavedInstanceExtend { map: 1, difficulty: 3, raw_extend: 1 })),
+        ("NativeMirrorImageQuery", ClientCommand::NativeMirrorImageQuery { guid: u64::MAX }),
         (
             "NativeWhoCommand",
             ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Whois {

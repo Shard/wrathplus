@@ -529,7 +529,13 @@ const CARET_WIDTH: f32 = 4.0;
 
 // The EditBox Lua methods, consulted before the shared frame table for EditBox frames.
 mod methods;
-pub(super) use methods::install;
+
+/// The history line count of EditBox `h`, for tests.
+#[cfg(test)]
+pub(super) fn history_len(lua: &Lua, h: FrameHandle) -> Option<usize> {
+    with_eb(lua, h, |eb| eb.history.len())
+}
+pub(super) use methods::{install, install_wrath};
 
 #[cfg(test)]
 mod flush_tests;

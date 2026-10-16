@@ -319,6 +319,12 @@ pub(crate) struct Model {
     /// Chat-type colours (`0xb4e518`): 94 fixed and 10 `CHANNELn`, overlaid by `chat-cache.txt`.
     pub(crate) chat_colors: Vec<super::chat_types::ChatTypeColor>,
     pub(crate) chat_colors_changed: bool,
+    /// Build 12340's per-chat-type `colorNameByClass` (`+0x48` of each colour row), parallel to
+    /// `chat_colors`; `SetChatColorNameByClass` and `ResetChatWindows` write it.
+    pub(crate) chat_name_by_class: Vec<bool>,
+    /// The `ChatChannels.dbc` rows the client joins by itself (`flags & 1`) as `(Shortcut, id)`,
+    /// which `ResetChatWindows` registers in window 1 (`0x501a70`); the host seeds it.
+    pub(crate) chat_channel_seed: Vec<(String, u32)>,
     /// The languages this character knows, in `Languages.dbc` row order.
     pub(crate) known_languages: Vec<String>,
     /// `Languages.dbc`'s `(ID, Name_lang)` rows in file order, whatever the character knows.
@@ -1184,6 +1190,11 @@ impl Model {
             chat_window_changes: HashSet::new(),
             chat_colors: super::chat_types::seed(),
             chat_colors_changed: false,
+            chat_name_by_class: vec![
+                false;
+                super::chat_types::FIXED_CHAT_TYPES + super::chat_types::EXTRA_CHAT_TYPES
+            ],
+            chat_channel_seed: Vec::new(),
             known_languages: Vec::new(),
             language_table: Vec::new(),
             zone_channel_catalog: Vec::new(),

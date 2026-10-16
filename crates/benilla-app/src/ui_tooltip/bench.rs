@@ -4,6 +4,7 @@
 
 use std::time::{Duration, Instant};
 
+use benilla_protocol::messages::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
@@ -88,25 +89,32 @@ fn feed_cost_per_invalidation() {
 
     // A level-60 mage: unit fields, the four percentages, the skills of its lines.
     let player_fields = |crit: f32, dodge: f32, reach: f32, form: u32, head: u32, skill: u32| {
-        let mut pairs: Vec<(u16, u32)> = vec![
-            (22, 3500),
-            (28, 4000),
-            (34, 60),
-            (162, 1373),
-            (130, reach.to_bits()),
-            (138, form << 16),
-            (486, head),
-            (1106, 5.0f32.to_bits()),
-            (1107, dodge.to_bits()),
-            (1108, 4.0f32.to_bits()),
-            (1109, crit.to_bits()),
+        let mut slots = vec![
+            (Field::UnitHealth, 0, 3500),
+            (Field::UnitMaxHealth, 0, 4000),
+            (Field::UnitLevel, 0, 60),
+            (Field::UnitBaseMana, 0, 1373),
+            (Field::UnitCombatreach, 0, reach.to_bits()),
+            (Field::UnitBytes1, 0, form << 16),
+            (Field::PlayerInvSlotHead, 0, head),
+            (Field::PlayerBlockPercentage, 0, 5.0f32.to_bits()),
+            (Field::PlayerDodgePercentage, 0, dodge.to_bits()),
+            (Field::PlayerParryPercentage, 0, 4.0f32.to_bits()),
+            (Field::PlayerCritPercentage, 0, crit.to_bits()),
         ];
         for (slot, &line) in lines.iter().take(128).enumerate() {
-            let base = 718 + 3 * slot as u16;
-            pairs.push((base, line));
-            pairs.push((base + 1, if slot == 0 { skill } else { 300 } | 300 << 16));
+            let base = 3 * slot as u16;
+            slots.push((Field::PlayerSkillInfo11, base, line));
+            slots.push((
+                Field::PlayerSkillInfo11,
+                base + 1,
+                if slot == 0 { skill } else { 300 } | 300 << 16,
+            ));
         }
-        ObjectStore(ObjectFields::from_pairs(&pairs))
+        ObjectStore(ObjectFields::from_field_slots(
+            FieldLayout::Vanilla5875,
+            &slots,
+        ))
     };
     let player = app
         .world_mut()
