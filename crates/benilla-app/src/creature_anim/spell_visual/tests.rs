@@ -531,8 +531,11 @@ fn aura_state_kit_arms_persistent_and_reaps_on_aura_end() {
 
     // Slot 0: UNIT_FIELD_AURA[0] (field 47) holds the spell id; occupancy is an effect-index bit
     // in the slot's AURAFLAGS nibble (field 95's low nibble).
-    let eating = ObjectFields::from_pairs(&[(47, FOOD), (95, 0x0E)]);
-    let fasted = ObjectFields::from_pairs(&[(95, 0)]);
+    let eating = ObjectFields::from_fields(
+        FieldLayout::Vanilla5875,
+        &[(Field::UnitAura, FOOD), (Field::UnitAuraFlags, 0x0E)],
+    );
+    let fasted = ObjectFields::from_fields(FieldLayout::Vanilla5875, &[(Field::UnitAuraFlags, 0)]);
 
     let unit = app
         .world_mut()
@@ -1193,8 +1196,11 @@ fn a_kit_with_a_chain_char_proc_asks_for_a_beam_from_both_dispatcher_sites() {
     let channeller = app
         .world_mut()
         .spawn(crate::net::ObjectStore(
-            benilla_protocol::ObjectFields::from_pairs(&[(144, BEAM_SPELL)])
-                .into_created(benilla_protocol::messages::ObjectType::Unit),
+            benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitChannelSpell, BEAM_SPELL)],
+            )
+            .into_created(benilla_protocol::messages::ObjectType::Unit),
         ))
         .id();
     app.update();
@@ -1635,8 +1641,11 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
     let unit = app
         .world_mut()
         .spawn(crate::net::ObjectStore(
-            ObjectFields::from_pairs(&[(47, SPELL), (95, 0x0E)])
-                .into_created(benilla_protocol::messages::ObjectType::Unit),
+            ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitAura, SPELL), (Field::UnitAuraFlags, 0x0E)],
+            )
+            .into_created(benilla_protocol::messages::ObjectType::Unit),
         ))
         .id();
     app.update();

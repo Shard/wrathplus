@@ -233,11 +233,14 @@ mod setter_tests {
         app.world_mut().spawn((
             Embodied,
             Transform::default(),
-            ObjectStore(ObjectFields::from_pairs(&[
-                (22, 100),
-                (28, 100),
-                (138, stand_state),
-            ])),
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::UnitHealth, 100),
+                    (benilla_protocol::messages::Field::UnitMaxHealth, 100),
+                    (benilla_protocol::messages::Field::UnitBytes1, stand_state),
+                ],
+            )),
         ));
         (app, rx)
     }

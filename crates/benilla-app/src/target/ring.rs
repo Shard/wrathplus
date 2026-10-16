@@ -893,12 +893,23 @@ mod tests {
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         // Field indices: 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS.
-        let unit = |tpl: u32| ObjectStore(ObjectFields::from_pairs(&[(35, tpl)]));
+        let unit = |tpl: u32| {
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
+            ))
+        };
         // Us: a player-controlled Human, faction template 1.
-        let me = ObjectStore(ObjectFields::from_pairs(&[
-            (35, 1),
-            (46, UNIT_FLAG_PVP_ATTACKABLE),
-        ]));
+        let me = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (
+                    benilla_protocol::messages::Field::UnitFlags,
+                    UNIT_FLAG_PVP_ATTACKABLE,
+                ),
+            ],
+        ));
         let quiet = Reputations::default(); // nothing at war
         let category = |unit: &ObjectStore, reps: &Reputations| {
             plate_is_friendly(
@@ -958,11 +969,12 @@ mod tests {
                 .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
 
-        /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
-        const BYTES_0: u16 = 36;
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let me = ObjectStore(ObjectFields::from_pairs(&[(BYTES_0, HUMAN_WARRIOR)]));
+        let me = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[(benilla_protocol::messages::Field::UnitBytes0, HUMAN_WARRIOR)],
+        ));
         // Both sides of the Honored, Revered and Exalted thresholds, and the wire's own ceiling.
         for (total, want) in [
             (8_999, 4),
@@ -1003,7 +1015,13 @@ mod tests {
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         // 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS, 147 = UNIT_NPC_FLAGS.
         let npc = |tpl: u32, npc_flags: u32| {
-            ObjectStore(ObjectFields::from_pairs(&[(35, tpl), (147, npc_flags)]))
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
+                    (benilla_protocol::messages::Field::UnitNpcFlags, npc_flags),
+                ],
+            ))
         };
         let me = ObjectStore(ObjectFields::from_pairs(&[
             (35, 1), // Human
@@ -1087,10 +1105,16 @@ mod tests {
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         let reps = Reputations::default();
         let player = |tpl: u32| {
-            ObjectStore(ObjectFields::from_pairs(&[
-                (35, tpl),
-                (46, UNIT_FLAG_PVP_ATTACKABLE),
-            ]))
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
+                    (
+                        benilla_protocol::messages::Field::UnitFlags,
+                        UNIT_FLAG_PVP_ATTACKABLE,
+                    ),
+                ],
+            ))
         };
         let category = |subject: &ObjectStore, me: &ObjectStore| {
             plate_is_friendly(
@@ -1136,7 +1160,12 @@ mod tests {
             );
         }
         // …while NPCs keep theirs: `CanCooperate` is never asked for an NPC.
-        let npc = |tpl: u32| ObjectStore(ObjectFields::from_pairs(&[(35, tpl)]));
+        let npc = |tpl: u32| {
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
+            ))
+        };
         let npc_category = |subject: &ObjectStore, me: &ObjectStore| {
             plate_is_friendly(
                 Some(&factions),
@@ -1167,12 +1196,26 @@ mod tests {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
-        let me = ObjectStore(ObjectFields::from_pairs(&[
-            (35, 1),
-            (46, UNIT_FLAG_PVP_ATTACKABLE),
-        ]));
+        let me = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (
+                    benilla_protocol::messages::Field::UnitFlags,
+                    UNIT_FLAG_PVP_ATTACKABLE,
+                ),
+            ],
+        ));
         let reps = Reputations::default();
-        let mob = |flags: u32| ObjectStore(ObjectFields::from_pairs(&[(35, 14), (46, flags)]));
+        let mob = |flags: u32| {
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::UnitFactionTemplate, 14),
+                    (benilla_protocol::messages::Field::UnitFlags, flags),
+                ],
+            ))
+        };
 
         // Template 14, Monster: hostile by the comparator.
         assert_eq!(

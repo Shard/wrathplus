@@ -149,7 +149,10 @@ mod tests {
         let mut pairs = vec![(UNIT_FLAGS, flags), (UNIT_BYTES_1, u32::from(form) << 16)];
         if let Some(class) = hand {
             pairs.push((INV_SLOT_MAINHAND, 0x2a));
-            deps.spawn_item(0x2a, ObjectFields::from_pairs(&[(3, 500)]));
+            deps.spawn_item(
+                0x2a,
+                ObjectFields::from_fields(FieldLayout::Vanilla5875, &[(Field::ObjectEntry, 500)]),
+            );
             deps.items.insert_template(
                 500,
                 Some(ItemInfo {

@@ -545,10 +545,10 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (22, 100),
-                (28, 100),
-            ])),
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+            )),
         ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(FOE, foe);

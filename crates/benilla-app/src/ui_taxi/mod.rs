@@ -365,8 +365,8 @@ mod tests {
         use bevy::ecs::system::RunSystemOnce;
 
         /// `UNIT_FIELD_BYTES_0`, `PLAYER_BYTES_3`: absolute descriptor indices.
-        const BYTES_0: u16 = 36;
-        const PLAYER_BYTES_3: u16 = 195;
+        const PLAYER_BYTES_3: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::PlayerBytes3);
         const MASTER: u64 = 0xF130_0000_0000_0099;
 
         let data = benilla_formats::wow_data_or_skip!();
@@ -389,10 +389,16 @@ mod tests {
             .insert_non_send_resource(UiScript::new().unwrap());
         app.world_mut().spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_pairs(&[
-                (BYTES_0, crate::target::HUMAN_WARRIOR),
-                (PLAYER_BYTES_3, 6 << 24),
-            ])),
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (
+                        benilla_protocol::messages::Field::UnitBytes0,
+                        crate::target::HUMAN_WARRIOR,
+                    ),
+                    (benilla_protocol::messages::Field::PlayerBytes3, 6 << 24),
+                ],
+            )),
         ));
         let master = app
             .world_mut()

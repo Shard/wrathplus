@@ -768,9 +768,10 @@ mod tests {
                     scale: 1.0,
                 },
                 // `UNIT_FIELD_HEALTH` (22) at 0.
-                crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[(
-                    22, 0,
-                )])),
+                crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 0)],
+                )),
             ))
             .id();
         world

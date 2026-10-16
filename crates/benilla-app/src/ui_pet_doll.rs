@@ -139,7 +139,10 @@ mod tests {
 
     #[test]
     fn an_unstreamed_pet_reads_the_absent_shape() {
-        let s = unit_combat_stats(&ObjectStore(ObjectFields::from_pairs(&[])));
+        let s = unit_combat_stats(&ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[],
+        )));
         assert_eq!(s.stats, [0; 5]);
         assert_eq!(s.resistances, [0; 7]);
         assert_eq!(s.damage_percent, 1.0);

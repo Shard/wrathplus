@@ -2228,7 +2228,10 @@ mod tests {
         assert_eq!(go_cooldowns(10, own, None, display, mods()).0, 3000);
         let pet = go_cooldowns(20, owned(SUMMONEDBY, 10), None, display, mods());
         assert_eq!(pet.1, 3000, "the pet leg takes the player's op 11");
-        let item = ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(3, 6948)]));
+        let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::ObjectEntry, 6948)],
+        ));
         let used = go_cooldowns(
             10,
             ObjectStore::default(),

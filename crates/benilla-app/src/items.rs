@@ -939,7 +939,13 @@ mod tests {
                     &mut commands,
                     &mut index,
                     GUID,
-                    ObjectFields::from_pairs(&[(3, 117), (14, 5)]),
+                    ObjectFields::from_fields(
+                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        &[
+                            (benilla_protocol::messages::Field::ObjectEntry, 117),
+                            (benilla_protocol::messages::Field::ItemStackCount, 5),
+                        ],
+                    ),
                     false,
                 );
             })
@@ -972,7 +978,10 @@ mod tests {
             .get_mut::<ObjectStore>(e)
             .unwrap()
             .0
-            .merge(ObjectFields::from_pairs(&[(14, 4)]));
+            .merge(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[(benilla_protocol::messages::Field::UnitCreatedby, 4)],
+            ));
         assert_eq!(world.run_system(read).unwrap(), (Some(117), Some(4), true));
         assert!(!world.run_system(read).unwrap().2);
         // A countdown landing is the item's own change, and its cell joins the step sum.
@@ -1076,7 +1085,13 @@ mod tests {
 
     /// One item object with the given `ITEM_FIELD_FLAGS` and enchant slot 0.
     fn item(flags: u32, slot0: u32) -> ObjectFields {
-        ObjectFields::from_pairs(&[(21, flags), (22, slot0)])
+        ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::ItemFlags, flags),
+                (benilla_protocol::messages::Field::ItemEnchantment, slot0),
+            ],
+        )
     }
 
     /// `0x5da2c0`: the Firestone shape binds and prints no line, so a predicate read off

@@ -34,6 +34,16 @@ fn price_discount(reaction: u8, vendor_unit_flags: u32, pvp_rank: u8) -> f64 {
     d
 }
 
+/// Wrath: 3.3.5 has no honor ranks (`PLAYER_BYTES_3` byte 2 is the PvP title), so only the
+/// reputation term applies, 5% per rank above Neutral, as AzerothCore charges it
+/// (`Player::GetReputationPriceDiscount`, used for repairs and taxi fares). The 12340 client's own
+/// routine is untraced; the vendor's reaction toward the player stands in for the rank, and its
+/// Exalted rung depends on that reaction reaching 7.
+fn wrath_price_discount(reaction: u8) -> f64 {
+    const NEUTRAL: u8 = 3;
+    0.05 * f64::from(reaction.saturating_sub(NEUTRAL))
+}
+
 /// [`price_discount`] for `vendor` and the player: the vendor's reaction toward the player
 /// ([`ring_reaction`], `vendor->UnitReaction(player)` at `0x612b93`), the vendor's own
 /// `UNIT_FIELD_FLAGS` (`[[vendor+0x110]+0xa0]`) and the player's current honor rank,
@@ -44,8 +54,12 @@ pub(crate) fn vendor_price_discount(
     vendor: &ObjectStore,
     player: &ObjectStore,
 ) -> f64 {
+    let reaction = ring_reaction(factions, reputations, Some(vendor), Some(player));
+    if vendor.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        return wrath_price_discount(reaction);
+    }
     price_discount(
-        ring_reaction(factions, reputations, Some(vendor), Some(player)),
+        reaction,
         vendor.0.unit_flags(),
         player.0.player_pvp_rank().unwrap_or(0),
     )
@@ -79,6 +93,17 @@ pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 
 #[cfg(test)]
 mod tests {
+    /// Wrath: 5% per rank above Neutral, never the 1.12 honor steps.
+    #[test]
+    fn the_wrath_discount_is_the_reputation_ladder_only() {
+        let d = super::wrath_price_discount;
+        assert_eq!(d(3), 0.0);
+        assert_eq!(d(1), 0.0);
+        assert!((d(4) - 0.05).abs() < 1e-12);
+        assert!((d(5) - 0.10).abs() < 1e-12);
+        assert!((d(7) - 0.20).abs() < 1e-12);
+    }
+
     use super::*;
     const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
         .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);

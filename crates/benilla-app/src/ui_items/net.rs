@@ -203,7 +203,8 @@ mod open_container_tests {
         .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
 
     /// `PLAYER_FIELD_BANK_BAG_SLOT_1`, field 612 (private to the fields module).
-    const BANK_BAG_SLOT_1: u16 = 612;
+    const BANK_BAG_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerBankbagSlot1);
 
     /// A self descriptor holding the given guids at the given first-dword indices.
     fn store(guids: &[(u16, u64)]) -> ObjectFields {

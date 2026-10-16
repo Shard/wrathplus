@@ -62,7 +62,10 @@ mod tests {
         let uncancelable = store_with_aura(2645, 0x2);
         assert!(!active_action_toggle(2645, &ghost_wolf, &uncancelable));
         assert!(!active_action_toggle(768, &ghost_wolf, &shifted));
-        let bare = ObjectStore(ObjectFields::from_pairs(&[]));
+        let bare = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[],
+        ));
         assert!(!active_action_toggle(2645, &ghost_wolf, &bare));
     }
 

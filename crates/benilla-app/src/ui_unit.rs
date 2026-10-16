@@ -3053,8 +3053,11 @@ mod tests {
                 SelfPlayer,
                 Guid(0x77),
                 ObjectStore(
-                    benilla_protocol::ObjectFields::from_pairs(&[])
-                        .into_created(benilla_protocol::messages::ObjectType::Player),
+                    benilla_protocol::ObjectFields::from_fields(
+                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        &[],
+                    )
+                    .into_created(benilla_protocol::messages::ObjectType::Player),
                 ),
             ))
             .id();
@@ -3392,7 +3395,10 @@ mod tests {
         );
 
         // The record gate: rank 0 until the creature query answers.
-        let store = ObjectStore(ObjectFields::from_pairs(&[]));
+        let store = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[],
+        ));
         let mut s = UnitState::default();
         enrich_unit(&mut s, GUID ^ (1 << 24), &names, &store, None, None);
         assert_eq!(s.rank, 0, "an un-queried creature has no classification");
@@ -3666,13 +3672,23 @@ mod tests {
             .spawn((
                 SelfPlayer,
                 Guid(PLAYER),
-                ObjectStore(ObjectFields::from_pairs(&[]).into_created(ObjectType::Player)),
+                ObjectStore(
+                    ObjectFields::from_fields(
+                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        &[],
+                    )
+                    .into_created(ObjectType::Player),
+                ),
             ))
             .id();
         let other = app
             .world_mut()
             .spawn(ObjectStore(
-                ObjectFields::from_pairs(&[]).into_created(ObjectType::Unit),
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[],
+                )
+                .into_created(ObjectType::Unit),
             ))
             .id();
         let is_nil = |app: &mut App| {

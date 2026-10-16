@@ -1255,9 +1255,10 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
-                    2, kind,
-                )])))
+                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::ObjectType, kind)],
+                )))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

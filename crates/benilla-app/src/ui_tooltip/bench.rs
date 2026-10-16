@@ -114,8 +114,15 @@ fn feed_cost_per_invalidation() {
         .id();
     // An auto-attack target, whose reach a swap moves.
     const TARGET: u64 = 0xF130_0000_0000_0042;
-    let target_fields =
-        |reach: f32| ObjectStore(ObjectFields::from_pairs(&[(130, reach.to_bits())]));
+    let target_fields = |reach: f32| {
+        ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[(
+                benilla_protocol::messages::Field::UnitCombatreach,
+                reach.to_bits(),
+            )],
+        ))
+    };
     let target = app.world_mut().spawn(target_fields(1.5)).id();
     app.world_mut()
         .resource_mut::<GuidIndex>()

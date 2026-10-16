@@ -552,7 +552,12 @@ mod tests {
         ]));
         world.insert_resource(spells);
         // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
-        let live = || ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(22, 100)]));
+        let live = || {
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitHealth, 100)],
+            ))
+        };
         world.spawn((SelfPlayer, Guid(ME), GlobalTransform::default(), live()));
         let ally = world
             .spawn((
@@ -705,11 +710,14 @@ mod tests {
         const PET: u64 = 0xF140_0000_0000_0077;
         // `OBJECT_FIELD_TYPE` and `UNIT_FIELD_TARGET`, the latter a 2-field guid.
         let unit = |kind: u32, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (2, kind),
-                (16, target as u32),
-                (17, (target >> 32) as u32),
-            ]))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
+                FieldLayout::Vanilla5875,
+                &[
+                    (Field::ObjectType, 0, kind),
+                    (Field::UnitTarget, 0, target as u32),
+                    (Field::UnitTarget, 1, (target >> 32) as u32),
+                ],
+            ))
         };
         let seat = |world: &mut World, ally: Entity| {
             // We and our pet target the ally; the ally targets nobody.
@@ -767,12 +775,15 @@ mod tests {
         const PET: u64 = 0xF140_0000_0000_0077;
         // `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH` and `UNIT_FIELD_TARGET`, the last a 2-field guid.
         let unit = |kind: u32, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (2, kind),
-                (22, 100),
-                (16, target as u32),
-                (17, (target >> 32) as u32),
-            ]))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
+                FieldLayout::Vanilla5875,
+                &[
+                    (Field::ObjectType, 0, kind),
+                    (Field::UnitHealth, 0, 100),
+                    (Field::UnitTarget, 0, target as u32),
+                    (Field::UnitTarget, 1, (target >> 32) as u32),
+                ],
+            ))
         };
         let can = |distance: f32, token: &str| {
             let (mut world, _rx, ally) = unit_world(distance);

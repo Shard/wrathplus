@@ -326,13 +326,32 @@ mod tests {
         // `OBJECT_FIELD_TYPE` 2 (a hop is off a unit, typemask 8), `UNIT_FIELD_SUMMON` 8 and
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (2, kind),
-                (8, summon as u32),
-                (9, (summon >> 32) as u32),
-                (16, target as u32),
-                (17, (target >> 32) as u32),
-            ]))
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::ObjectType, 0, kind),
+                    (
+                        benilla_protocol::messages::Field::UnitSummon,
+                        0,
+                        summon as u32,
+                    ),
+                    (
+                        benilla_protocol::messages::Field::UnitSummon,
+                        1,
+                        (summon >> 32) as u32,
+                    ),
+                    (
+                        benilla_protocol::messages::Field::UnitTarget,
+                        0,
+                        target as u32,
+                    ),
+                    (
+                        benilla_protocol::messages::Field::UnitTarget,
+                        1,
+                        (target >> 32) as u32,
+                    ),
+                ],
+            ))
         };
         const PLAYER: u32 = 0x19;
         const CREATURE: u32 = 0x09;

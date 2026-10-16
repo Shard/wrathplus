@@ -548,7 +548,13 @@ mod tests {
                     display_id: None,
                     scale: 1.0,
                 },
-                ObjectStore(ObjectFields::from_pairs(&[(16, 7), (17, 0)])),
+                ObjectStore(ObjectFields::from_field_slots(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[
+                        (benilla_protocol::messages::Field::UnitTarget, 0, 7),
+                        (benilla_protocol::messages::Field::UnitTarget, 1, 0),
+                    ],
+                )),
                 Transform::from_translation(wow_to_bevy([5.0, 0.0, 0.0])),
             ))
             .id();

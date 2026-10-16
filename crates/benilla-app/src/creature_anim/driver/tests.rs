@@ -175,7 +175,10 @@ fn self_sheath_unit(app: &mut App, descriptor: u8) -> Entity {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[(164, u32::from(descriptor))])),
+            crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitBytes2, u32::from(descriptor))],
+            )),
             Wielded {
                 main: Some((2, 0x7)),
                 main_sheath: 3,
@@ -295,7 +298,10 @@ fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[(164, 1)])),
+            crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitBytes2, 1)],
+            )),
             Engaged(0),
             CastHold {
                 ranged: false,
@@ -319,9 +325,10 @@ fn wrath_self_descriptor_sheath_echo_still_applies() {
 
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
-            164, 2,
-        )])));
+        .insert(crate::net::ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitBytes2, 2)],
+        )));
     app.update();
 
     assert_eq!(sheath_state(&app, unit), Some(2));
@@ -1291,7 +1298,10 @@ fn unit_flag_looting_kneels_stationary_units_only() {
             AnimationPlayer::default(),
             AnimationTransitions::new(),
             AnimDriver::default(),
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[(46, 0x400)])),
+            crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitFlags, 0x400)],
+            )),
         ))
         .id();
     let gait = |app: &App| app.world().entity(unit).get::<AnimDriver>().unwrap().gait;
@@ -1310,9 +1320,10 @@ fn unit_flag_looting_kneels_stationary_units_only() {
     app.world_mut().entity_mut(unit).remove::<MovementState>();
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
-            46, 0,
-        )])));
+        .insert(crate::net::ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitFlags, 0)],
+        )));
     app.update();
     assert_eq!(gait(&app), Some(0), "released — back to Stand");
 }
@@ -1343,7 +1354,10 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[(46, 0x400)])),
+            crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitFlags, 0x400)],
+            )),
             MovementState::default(),
         ))
         .id();
@@ -1404,7 +1418,10 @@ fn the_creep_vis_flag_prowls_the_body() {
             AnimationTransitions::new(),
             AnimDriver::default(),
             crate::net::SelfPlayer,
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[(138, 0)])),
+            crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitBytes1, 0)],
+            )),
             MovementState::default(),
         ))
         .id();
@@ -1412,9 +1429,10 @@ fn the_creep_vis_flag_prowls_the_body() {
     let set_flag = |app: &mut App, v: u32| {
         app.world_mut()
             .entity_mut(unit)
-            .insert(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
-                138, v,
-            )])));
+            .insert(crate::net::ObjectStore(ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitBytes1, v)],
+            )));
     };
 
     app.update();

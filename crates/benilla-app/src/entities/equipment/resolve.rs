@@ -932,7 +932,10 @@ mod tests {
             .unwrap()
             .bypass_change_detection()
             .0
-            .merge(ObjectFields::from_pairs(&[(258 + 2, 101)]));
+            .merge(ObjectFields::from_field_slots(
+                FieldLayout::Vanilla5875,
+                &[(Field::PlayerVisibleItems, 2, 101)],
+            ));
         app.update();
         assert_eq!(
             app.world().get::<Equipment>(player).unwrap().helm,

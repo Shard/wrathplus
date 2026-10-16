@@ -583,7 +583,13 @@ mod tests {
             for (i, (field, guid)) in hands.iter().enumerate() {
                 pairs.push((*field, *guid as u32));
                 let entry = 500 + i as u32;
-                deps.spawn_item(*guid, ObjectFields::from_pairs(&[(3, entry)]));
+                deps.spawn_item(
+                    *guid,
+                    ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::ObjectEntry, entry)],
+                    ),
+                );
                 deps.items.insert_template(
                     entry,
                     Some(benilla_protocol::messages::ItemInfo {
@@ -705,7 +711,13 @@ mod tests {
                 let guid = 0x2a + i as u64;
                 pairs.push((*field, guid as u32));
                 let entry = 500 + i as u32;
-                deps.spawn_item(guid, ObjectFields::from_pairs(&[(3, entry)]));
+                deps.spawn_item(
+                    guid,
+                    ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::ObjectEntry, entry)],
+                    ),
+                );
                 deps.items.insert_template(
                     entry,
                     Some(benilla_protocol::messages::ItemInfo {
@@ -849,7 +861,10 @@ mod tests {
             mana_cost: 100,
             ..Default::default()
         };
-        let store = ObjectStore(ObjectFields::from_pairs(&[(23, 80)]));
+        let store = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitPower, 80)],
+        ));
 
         let mut mods = SpellModifiers::default();
         mods.set_class_family(3);
@@ -1003,8 +1018,14 @@ mod tests {
             ..Default::default()
         };
 
-        let healthy = ObjectStore(ObjectFields::from_pairs(&[(22, 100), (125, 0)]));
-        let low = ObjectStore(ObjectFields::from_pairs(&[(22, 10), (125, 0x2)]));
+        let healthy = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
+        ));
+        let low = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
+        ));
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();
         let carried = crate::ui_items::carried_counts(&me.0, &objects);

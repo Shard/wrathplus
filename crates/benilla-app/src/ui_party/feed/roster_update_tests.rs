@@ -214,7 +214,10 @@ fn our_own_row_arriving_fires_raid_roster_update_once() {
 
     app.world_mut().spawn((
         Guid(ME),
-        ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[])),
+        ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[],
+        )),
         SelfPlayer,
     ));
     assert_eq!(fired(&mut app), 1, "our row filled in");

@@ -578,14 +578,20 @@ mod tests {
                 SelfPlayer,
                 Engaged(SWUNG_AT),
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // The selected unit keeps the descriptor's default 1.5 reach.
             let selected = app
                 .world_mut()
                 .spawn((
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
@@ -698,7 +704,10 @@ mod tests {
                 crate::net::Embodied,
                 speeds,
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // A mob at the descriptor's default 1.5 reach; a live spline at 8 yd/s is its run.
             let mob = app
@@ -706,7 +715,10 @@ mod tests {
                 .spawn((
                     speeds,
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             if mob_runs {

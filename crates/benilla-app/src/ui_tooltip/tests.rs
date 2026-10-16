@@ -948,9 +948,6 @@ fn the_mouseover_token_carries_the_hovered_guid() {
 fn the_mouseover_token_names_the_hovered_units_creature_type() {
     use benilla_protocol::ObjectFields;
 
-    /// `UNIT_FIELD_BYTES_0` and `UNIT_FIELD_BYTES_1`, absolute descriptor indices.
-    const BYTES_0: u16 = 36;
-    const BYTES_1: u16 = 138;
     const NIGHT_ELF: u32 = 4;
     const CAT_FORM: u32 = 1;
     const DRUID: u64 = 0x99;
@@ -967,10 +964,16 @@ fn the_mouseover_token_names_the_hovered_units_creature_type() {
     app.insert_resource(spells);
     let druid = app
         .world_mut()
-        .spawn(ObjectStore(ObjectFields::from_pairs(&[
-            (BYTES_0, NIGHT_ELF),
-            (BYTES_1, CAT_FORM << 16),
-        ])))
+        .spawn(ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitBytes0, NIGHT_ELF),
+                (
+                    benilla_protocol::messages::Field::UnitBytes1,
+                    CAT_FORM << 16,
+                ),
+            ],
+        )))
         .id();
     let creature_type = |app: &mut App| {
         app.world_mut()
@@ -986,7 +989,10 @@ fn the_mouseover_token_names_the_hovered_units_creature_type() {
         .get_mut::<ObjectStore>()
         .unwrap()
         .0
-        .merge(ObjectFields::from_pairs(&[(BYTES_1, 0)]));
+        .merge(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[(benilla_protocol::messages::Field::UnitBytes1, 0)],
+        ));
     hover_unit(&mut app, druid, DRUID);
     assert_eq!(creature_type(&mut app).as_deref(), Some("Humanoid"));
 }
@@ -1206,16 +1212,26 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
         .world_mut()
         .spawn((
             SelfPlayer,
-            ObjectStore(ObjectFields::from_pairs(&[
-                (8, IMP as u32),
-                (9, (IMP >> 32) as u32),
-                (34, 60),
-            ])),
+            ObjectStore(ObjectFields::from_field_slots(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::UnitSummon, 0, IMP as u32),
+                    (
+                        benilla_protocol::messages::Field::UnitSummon,
+                        1,
+                        (IMP >> 32) as u32,
+                    ),
+                    (benilla_protocol::messages::Field::UnitLevel, 0, 60),
+                ],
+            )),
         ))
         .id();
     let imp = app
         .world_mut()
-        .spawn(ObjectStore(ObjectFields::from_pairs(&[(34, 14)])))
+        .spawn(ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[(benilla_protocol::messages::Field::UnitLevel, 14)],
+        )))
         .id();
     let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
     index.0.insert(ME, me);
@@ -1283,7 +1299,10 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
     // The imp dings: its views rebuild; the player's does not move.
     app.world_mut()
         .entity_mut(imp)
-        .insert(ObjectStore(ObjectFields::from_pairs(&[(34, 15)])));
+        .insert(ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[(benilla_protocol::messages::Field::UnitLevel, 15)],
+        )));
     app.update();
     assert_eq!(
         descs(&mut app),

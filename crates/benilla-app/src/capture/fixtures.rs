@@ -286,7 +286,13 @@ pub(super) fn seed_ui_fixture(
             const G_STONE: u64 = 0x2004;
             const G_BANKBAG: u64 = 0x2005;
             let obj = |entry: u32, stack: u32| {
-                ObjectFields::from_pairs(&[(3, entry), (14, stack)]) // OBJECT_ENTRY, STACK_COUNT
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[
+                        (benilla_protocol::messages::Field::ObjectEntry, entry),
+                        (benilla_protocol::messages::Field::ItemStackCount, stack),
+                    ],
+                ) // OBJECT_ENTRY, STACK_COUNT
             };
             for (guid, entry, stack, name, disp, quality) in [
                 (G_SHIELD, 94_001, 1, "Small Shield", DISP_SHIELD, 2),
@@ -575,14 +581,21 @@ pub(super) fn seed_ui_fixture(
 
             // Slot 0 is quest 783 (counter 0 at 3), slot 1 quest 7 (counter 0 at 10, state
             // COMPLETE), packed as vmangos's `SetQuestSlotCounter` and `SetQuestSlotState` write.
-            let fields = ObjectFields::from_pairs(&[
-                (198, 783),
-                (199, 3),
-                (200, 0),
-                (201, 7),
-                (202, 10 | (0x01 << 24)),
-                (203, 0),
-            ]);
+            let fields = ObjectFields::from_field_slots(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (benilla_protocol::messages::Field::PlayerQuestLog, 0, 783),
+                    (benilla_protocol::messages::Field::PlayerQuestLog, 1, 3),
+                    (benilla_protocol::messages::Field::PlayerQuestLog, 2, 0),
+                    (benilla_protocol::messages::Field::PlayerQuestLog, 3, 7),
+                    (
+                        benilla_protocol::messages::Field::PlayerQuestLog,
+                        4,
+                        10 | (0x01 << 24),
+                    ),
+                    (benilla_protocol::messages::Field::PlayerQuestLog, 5, 0),
+                ],
+            );
             // A guid and cached name, as the feeds resolve the player through the self query.
             const PLAYER_GUID: u64 = 0x51;
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
@@ -847,7 +860,13 @@ pub(super) fn seed_ui_fixture(
             // The item objects and their templates; the bow borrows the hearthstone display as a
             // stand-in.
             let obj = |entry: u32, stack: u32| {
-                ObjectFields::from_pairs(&[(3, entry), (14, stack)]) // OBJECT_ENTRY, STACK_COUNT
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[
+                        (benilla_protocol::messages::Field::ObjectEntry, entry),
+                        (benilla_protocol::messages::Field::ItemStackCount, stack),
+                    ],
+                ) // OBJECT_ENTRY, STACK_COUNT
             };
             crate::items::spawn_item(&mut commands, &mut index, G_CHEST, obj(93_010, 1), false);
             crate::items::spawn_item(&mut commands, &mut index, G_SWORD, obj(93_011, 1), false);
@@ -1083,7 +1102,13 @@ pub(super) fn seed_ui_fixture(
                 &mut commands,
                 &mut index,
                 G_SWORD,
-                ObjectFields::from_pairs(&[(3, 93_011), (14, 1)]),
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[
+                        (benilla_protocol::messages::Field::ObjectEntry, 93_011),
+                        (benilla_protocol::messages::Field::ItemStackCount, 1),
+                    ],
+                ),
                 false,
             );
             let mut sword = template("Militia Shortsword", 2);

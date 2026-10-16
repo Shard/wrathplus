@@ -184,10 +184,10 @@ mod tests {
                 Guid(guid),
                 Transform::from_xyz(x, 0.0, 0.0),
                 GlobalTransform::from_translation(Vec3::new(x, 0.0, 0.0)),
-                ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                    (22, 100),
-                    (28, 100),
-                ])),
+                ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+                )),
             )
         };
         // We are a player (`OBJECT_FIELD_TYPE` 0x19, `UNIT_FLAG_PVP_ATTACKABLE`), which selects
@@ -195,12 +195,15 @@ mod tests {
         let me = world.spawn((SelfPlayer, unit(ME, 0.0))).id();
         world
             .entity_mut(me)
-            .insert(ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (2, 0x19),
-                (22, 100),
-                (28, 100),
-                (46, 0x8),
-            ])));
+            .insert(ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[
+                    (Field::ObjectType, 0x19),
+                    (Field::UnitHealth, 100),
+                    (Field::UnitMaxHealth, 100),
+                    (Field::UnitFlags, 0x8),
+                ],
+            )));
         let old = world.spawn(unit(OLD, 5.0)).id();
         let new = world.spawn(unit(NEW, 6.0)).id();
         let index = &mut world.resource_mut::<GuidIndex>().0;

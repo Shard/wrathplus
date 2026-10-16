@@ -826,7 +826,13 @@ mod self_res_tests {
             Some(item("Ankh of Reincarnation", vec![block(3026, 0)])),
         );
         for (guid, entry) in [(0xA0_u64, 10_u32), (0xA1, 11), (0xA2, 12)] {
-            objs.spawn(guid, ObjectFields::from_pairs(&[(3, entry)]));
+            objs.spawn(
+                guid,
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::ObjectEntry, entry)],
+                ),
+            );
         }
         let objects = objs.get();
         let spells = catalog([

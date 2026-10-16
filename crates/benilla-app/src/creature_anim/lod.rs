@@ -403,7 +403,10 @@ mod tests {
         app.world_mut()
             .entity_mut(behind)
             .insert(crate::net::ObjectStore(
-                benilla_protocol::ObjectFields::from_pairs(&[(3, ENTRY)]),
+                benilla_protocol::ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::ObjectEntry, ENTRY)],
+                ),
             ));
         app.world_mut()
             .resource_mut::<crate::names::NameCache>()
