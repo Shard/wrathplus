@@ -271,6 +271,7 @@ mod tests {
                 [ClientCommand::QuestPushResult {
                     sharer: SHARER,
                     msg: benilla_protocol::messages::QuestShareMsg::DECLINE_QUEST,
+                    ..
                 }]
             ),
             "walking away from a share still declines it: {sent:?}"

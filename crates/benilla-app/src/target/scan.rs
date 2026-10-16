@@ -224,6 +224,12 @@ pub(crate) struct TargetScan<'w, 's> {
     group: Option<Res<'w, crate::ui_party::GroupState>>,
 }
 
+impl super::StoreLookup for TargetScan<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        self.store_of(guid)
+    }
+}
+
 impl TargetScan<'_, '_> {
     /// The per-candidate filter (`0x493e40`), the one place [`ScanSide`] forks.
     fn is_valid(
@@ -244,6 +250,7 @@ impl TargetScan<'_, '_> {
                     self.factions.as_deref(),
                     &self.reputations,
                     self_store,
+                    self.relations(),
                 )
             }
             // Mode 2 (`0x493eca`): `CanAssist 0x6066f0`, then raw health (no reads-dead triple).
@@ -253,7 +260,7 @@ impl TargetScan<'_, '_> {
                     self.factions.as_deref(),
                     &self.reputations,
                     self_store,
-                    |owner| self.store_of(owner).cloned(),
+                    self.relations(),
                 ) && !store.is_some_and(|s| s.0.unit_is_dead())
             }
             // Modes 3 and 4 open on `cmp esi,ecx`, the candidate is not us, which our own body's
@@ -271,8 +278,12 @@ impl TargetScan<'_, '_> {
 
     /// A guid's descriptor, whichever entity holds it: `CanAssist`'s owner chase.
     fn store_of(&self, guid: u64) -> Option<&ObjectStore> {
-        let entity = *self.index.as_ref()?.0.get(&guid)?;
-        self.stores.get(entity).ok()
+        super::guid_store(self.index.as_deref(), &self.stores, guid)
+    }
+
+    /// `CanAttack`/`CanAssist`'s live inputs: the template cache and this scan's guid lookup.
+    pub(super) fn relations(&self) -> super::RelationContext<'_> {
+        super::RelationContext::new(Some(&self.names), self)
     }
 
     fn self_store(&self) -> Option<&ObjectStore> {
@@ -657,6 +668,7 @@ impl AttackPick<'_, '_> {
             self.scan.factions.as_deref(),
             &self.scan.reputations,
             self.scan.self_store(),
+            self.scan.relations(),
         ) {
             debug!("attack: {guid:#x} fails the final gate (ERR_INVALID_ATTACK_TARGET)");
             errors
@@ -697,11 +709,12 @@ pub(super) fn attack_target_valid(
     factions: Option<&Factions>,
     reputations: &Reputations,
     self_store: Option<&ObjectStore>,
+    ctx: super::RelationContext,
 ) -> bool {
     let alive = store.is_none_or(|s| {
         s.0.unit_health().is_none_or(|h| h > 0) || s.0.unit_dynamic_flags() & (1 << 5) != 0
     });
-    alive && can_attack(store, factions, reputations, self_store)
+    alive && can_attack(store, factions, reputations, self_store, ctx)
 }
 
 /// The melee probe's press with nothing selected: the player's Attack, which acquires.
@@ -725,6 +738,8 @@ pub(super) fn remember_last_enemy(
     self_store: Query<&ObjectStore, With<SelfPlayer>>,
     factions: Option<Res<Factions>>,
     reputations: Res<Reputations>,
+    index: Option<Res<GuidIndex>>,
+    names: Option<Res<NameCache>>,
     mut last: ResMut<LastEnemy>,
 ) {
     let Some((entity, guid)) = selection.target.zip(selection.guid) else {
@@ -745,7 +760,18 @@ pub(super) fn remember_last_enemy(
         return;
     }
     // Conjunct 5: `CanAttack(player, new)`.
-    if can_attack(store, factions.as_deref(), &reputations, Some(me)) {
+    let lookup = super::GuidStores {
+        index: index.as_deref(),
+        stores: &stores,
+    };
+    let relations = super::RelationContext::new(names.as_deref(), &lookup);
+    if can_attack(
+        store,
+        factions.as_deref(),
+        &reputations,
+        Some(me),
+        relations,
+    ) {
         last.0 = Some(guid);
     }
 }
@@ -1241,7 +1267,15 @@ mod tests {
         // With no catalog both reactions are neutral, which `CanAttack`'s mixed arm (< 4) admits,
         // so the legs below decide.
         let me = unit(&[(TPL, 1), (FLAGS, 1 << 3)]);
-        let valid = |s: &ObjectStore| attack_target_valid(Some(s), None, &reps, Some(&me));
+        let valid = |s: &ObjectStore| {
+            attack_target_valid(
+                Some(s),
+                None,
+                &reps,
+                Some(&me),
+                crate::target::RelationContext::none(),
+            )
+        };
 
         assert!(valid(&unit(&[(HEALTH, 120)])), "a live mob");
         assert!(!valid(&unit(&[(HEALTH, 0)])), "a corpse");
@@ -1254,12 +1288,19 @@ mod tests {
             "NOT_SELECTABLE is one of CanAttack's disqualifiers"
         );
         // No descriptor on either side is refused.
-        assert!(!attack_target_valid(None, None, &reps, Some(&me)));
+        assert!(!attack_target_valid(
+            None,
+            None,
+            &reps,
+            Some(&me),
+            crate::target::RelationContext::none()
+        ));
         assert!(!attack_target_valid(
             Some(&unit(&[(HEALTH, 120)])),
             None,
             &reps,
-            None
+            None,
+            crate::target::RelationContext::none(),
         ));
     }
 

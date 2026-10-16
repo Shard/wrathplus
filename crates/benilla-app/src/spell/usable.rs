@@ -22,7 +22,7 @@ use crate::items::Items;
 use crate::net::{NetCommands, ObjectStore, Objects, Reputations};
 use crate::spell::Cooldowns;
 use crate::spell::{SpellModifiers, OP_COST};
-use crate::target::{can_attack, ring_reaction, Factions};
+use crate::target::{can_assist, can_attack, Factions};
 
 use crate::ui_action::Spells;
 
@@ -48,6 +48,8 @@ pub(crate) struct UsableCtx<'a> {
     pub(crate) combo: &'a crate::net::wrath_combo_points::NativeComboPoints,
     /// Every carried entry's count for the frame ([`crate::ui_items::carried_counts`]).
     pub(crate) carried: &'a std::collections::HashMap<u32, u32>,
+    /// `CanAttack`/`CanAssist`'s creature metadata and controller lookup.
+    pub(crate) relations: crate::target::RelationContext<'a>,
 }
 
 /// The search covers equipment indices `0..=22` (`0x5f0c50`'s `cmp ebx,0x17; jl`): the 19 worn
@@ -422,14 +424,25 @@ pub(crate) fn spell_usable(
         match d.implicit_target_a1 {
             // `CanAttack 0x606980`.
             IMPLICIT_TARGET_ENEMY
-                if !can_attack(Some(target), ctx.factions, ctx.reputations, Some(ctx.store)) =>
+                if !can_attack(
+                    Some(target),
+                    ctx.factions,
+                    ctx.reputations,
+                    Some(ctx.store),
+                    ctx.relations,
+                ) =>
             {
                 return (false, false);
             }
-            // Reaction friendly or better, standing in for `CanAssist 0x6066f0`.
+            // `CanAssist 0x6066f0`.
             IMPLICIT_TARGET_FRIEND
-                if ring_reaction(ctx.factions, ctx.reputations, Some(target), Some(ctx.store))
-                    < 4 =>
+                if !can_assist(
+                    Some(target),
+                    ctx.factions,
+                    ctx.reputations,
+                    Some(ctx.store),
+                    ctx.relations,
+                ) =>
             {
                 return (false, false);
             }
@@ -747,6 +760,7 @@ mod tests {
                 points: 0,
                 target: 0,
             },
+            relations: crate::target::RelationContext::none(),
         }
     }
 
@@ -1012,6 +1026,7 @@ mod tests {
                     points: 0,
                     target: 0,
                 },
+                relations: crate::target::RelationContext::none(),
             };
             assert_eq!(
                 spell_usable(5308, &execute, &spells, &ctx, &objects, &items, &commands),

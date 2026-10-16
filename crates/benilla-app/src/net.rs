@@ -37,6 +37,9 @@ mod wrath_mirror_image_capture;
 mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
 mod wrath_exchange_capture;
+mod wrath_achievement_capture;
+mod wrath_calendar_capture;
+mod wrath_quest_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -138,6 +141,9 @@ impl Plugin for NetPlugin {
         wrath_instance_control_capture::register(app);
         wrath_inventory_capture::register(app);
         wrath_exchange_capture::register(app);
+        wrath_achievement_capture::register(app);
+        wrath_calendar_capture::register(app);
+        wrath_quest_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -1693,6 +1699,8 @@ pub(crate) enum ClientCommand {
     /// `MSG_QUEST_PUSH_RESULT`: our decline of a shared quest, to `sharer`.
     QuestPushResult {
         sharer: u64,
+        /// The shared quest; build 12340 sends it and AC ignores it. 0 when no panel shows one.
+        quest: u32,
         msg: benilla_protocol::messages::QuestShareMsg,
     },
     // ── Mail ──
@@ -2077,6 +2085,12 @@ pub(crate) enum ClientCommand {
     /// Native spell-control and pet requests with no Vanilla twin (spell click, totem destroy,
     /// cancel mount or growth aura, pet info, pet talents); transport does not claim acceptance.
     NativeSpellControl(benilla_protocol::wrath_spell_control::Command),
+    /// `CMSG_QUERY_INSPECT_ACHIEVEMENTS`; no UI producer yet, the reply is capture-only.
+    NativeInspectAchievements { player: u64 },
+    /// Native calendar commands; no UI producer yet, replies are capture-only.
+    NativeCalendar(benilla_protocol::wrath_calendar::Command),
+    /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
+    NativeQuest(benilla_protocol::wrath_quest::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

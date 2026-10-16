@@ -151,8 +151,12 @@ fn feed_shapeshift_bar(
     items: Res<Items>,
     commands: Res<NetCommands>,
     clock: Res<crate::ui_script::UiClock>,
-    spell_mods: Res<crate::spell::SpellModifiers>,
-    combo: Res<crate::net::wrath_combo_points::NativeComboPoints>,
+    // One tuple for Bevy's 16-param ceiling: the talent modifiers and build 12340's combo points.
+    (spell_mods, combo): (
+        Res<crate::spell::SpellModifiers>,
+        Res<crate::net::wrath_combo_points::NativeComboPoints>,
+    ),
+    relations: crate::target::RelationInputs,
     mut memory: Local<crate::ui_script::VmMemo<StanceMemory>>,
 ) {
     let Some(mut script) = script else {
@@ -215,6 +219,7 @@ fn feed_shapeshift_bar(
                         carried: &carried,
                         spell_mods: &spell_mods,
                         combo: &combo,
+                        relations: relations.context(),
                     };
                     usable::spell_usable(id, d, &spells, &ctx, &objects, &items, &commands).0
                 });

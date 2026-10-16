@@ -538,8 +538,16 @@ pub(crate) struct SelectCommit<'w, 's> {
     index: Res<'w, GuidIndex>,
     factions: Option<Res<'w, super::Factions>>,
     reputations: Res<'w, crate::net::Reputations>,
+    /// `CanAttack`'s creature metadata; a harness without it reads no template flags.
+    names: Option<Res<'w, NameCache>>,
     /// `assistAttack`, the assist tail's second leg.
     assist_attack: Res<'w, super::AssistAttack>,
+}
+
+impl super::StoreLookup for SelectCommit<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        super::guid_store(Some(&self.index), &self.stores, guid)
+    }
 }
 
 impl SelectCommit<'_, '_> {
@@ -576,6 +584,7 @@ impl SelectCommit<'_, '_> {
             self.factions.as_deref(),
             &self.reputations,
             me.and_then(|(_, store, _)| store),
+            super::RelationContext::new(self.names.as_deref(), self),
         );
         self.commit(entity, guid);
         // The second leg. `0x5ecb70`'s attackability test is the caller's here, so a friendly
@@ -617,6 +626,7 @@ impl SelectCommit<'_, '_> {
             self.factions.as_deref(),
             &self.reputations,
             me.and_then(|(_, store, _)| store),
+            super::RelationContext::new(self.names.as_deref(), self),
         );
         scan::commit(
             &mut self.selection,

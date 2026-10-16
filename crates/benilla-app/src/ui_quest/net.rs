@@ -202,6 +202,7 @@ fn quest_detail(d: QuestDetails, quest: &mut QuestGiver, commands: &NetCommands)
         );
         let _ = commands.0.send(ClientCommand::QuestPushResult {
             sharer: d.npc,
+            quest: d.quest_id,
             msg: QuestShareMsg::BUSY,
         });
         return;
@@ -575,6 +576,7 @@ mod tests {
                 [ClientCommand::QuestPushResult {
                     sharer: SHARER,
                     msg: QuestShareMsg::BUSY,
+                    ..
                 }]
             ),
             "the sharer is told we are busy: {sent:?}"

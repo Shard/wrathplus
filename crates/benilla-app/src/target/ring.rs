@@ -261,9 +261,10 @@ pub(super) fn update_ring(
                     self_store.single().ok(),
                 );
                 let is_player = net.is_some_and(|n| n.kind == EntityKind::Player);
-                // The unit's own PvP flag (`0x1000`); the reference reads its charmer's or
-                // summoner's when it has one.
-                let pvp = store.is_some_and(|s| s.0.unit_flags() & 0x1000 != 0);
+                // The unit's own PvP state (Wrath `UNIT_FIELD_BYTES_2` byte 1 `0x01`, Vanilla
+                // `UNIT_FLAGS 0x1000`); the reference reads its charmer's or summoner's when it
+                // has one.
+                let pvp = store.is_some_and(|s| s.0.unit_is_pvp());
                 let in_party = selection
                     .guid
                     .is_some_and(|g| targets.2.members.iter().any(|m| m.guid == g));
@@ -583,10 +584,21 @@ pub(crate) fn can_attack_from_player(
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
     target_is_player: bool,
+    ctx: super::wrath_relations::Context,
 ) -> bool {
     let (Some(target), Some(own)) = (target_store, self_store) else {
         return false; // fields not streamed yet; the reference's null path refuses too
     };
+    // 12340's `CanAttack 00729740`, on both reaction directions and `ctx`'s live owner lookup.
+    if own.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        return super::wrath_relations::attack(
+            own,
+            target,
+            reaction_from_player(factions, reputations, target_store, self_store),
+            ring_reaction(factions, reputations, target_store, self_store),
+            ctx,
+        );
+    }
     let (tflags, oflags) = (target.0.unit_flags(), own.0.unit_flags());
     // (a) The ghost gate (`0x606987`): only a creature whose type flags carry `0x2` may attack a
     // ghost player, so the local player never can.
@@ -685,6 +697,7 @@ pub(crate) fn plate_is_friendly(
     target_store: Option<&ObjectStore>,
     self_store: Option<&ObjectStore>,
     target_is_player: bool,
+    ctx: super::wrath_relations::Context,
 ) -> bool {
     let attackable = can_attack_from_player(
         factions,
@@ -692,6 +705,7 @@ pub(crate) fn plate_is_friendly(
         target_store,
         self_store,
         target_is_player,
+        ctx,
     );
     if target_is_player {
         can_cooperate_with_player(factions, target_store, self_store) && !attackable
@@ -764,6 +778,7 @@ mod tests {
         can_attack_from_player, can_cooperate_with_player, plate_is_friendly, ring_reaction,
         ring_variant, Factions, RingVariant, UNIT_FLAG_PVP_ATTACKABLE,
     };
+    use crate::target::RelationContext;
 
     #[test]
     fn ffa_reaction_uses_native_source_and_keeps_control_and_duel_precedence() {
@@ -886,7 +901,14 @@ mod tests {
         ]));
         let quiet = Reputations::default(); // nothing at war
         let category = |unit: &ObjectStore, reps: &Reputations| {
-            plate_is_friendly(Some(&factions), reps, Some(unit), Some(&me), false)
+            plate_is_friendly(
+                Some(&factions),
+                reps,
+                Some(unit),
+                Some(&me),
+                false,
+                RelationContext::none(),
+            )
         };
         let rank = |unit: &ObjectStore, reps: &Reputations| {
             ring_reaction(Some(&factions), reps, Some(unit), Some(&me))
@@ -991,7 +1013,14 @@ mod tests {
         let at_war = Reputations(slots);
 
         let attackable = |u: &ObjectStore, r: &Reputations| {
-            can_attack_from_player(Some(&factions), r, Some(u), Some(&me), false)
+            can_attack_from_player(
+                Some(&factions),
+                r,
+                Some(u),
+                Some(&me),
+                false,
+                RelationContext::none(),
+            )
         };
         let interactable = |u: &ObjectStore, r: &Reputations| {
             crate::target::ring::can_interact_from_player(Some(&factions), r, Some(u), Some(&me))
@@ -1062,7 +1091,14 @@ mod tests {
             ]))
         };
         let category = |subject: &ObjectStore, me: &ObjectStore| {
-            plate_is_friendly(Some(&factions), &reps, Some(subject), Some(me), true)
+            plate_is_friendly(
+                Some(&factions),
+                &reps,
+                Some(subject),
+                Some(me),
+                true,
+                RelationContext::none(),
+            )
         };
 
         // Us: a Human, template 1, mask 3.
@@ -1078,7 +1114,14 @@ mod tests {
         // A GM-mode player, template 35, mask 0, matches no one: enemy, though not attackable.
         assert!(!category(&player(35), &me), "a GM-mode player is enemy");
         assert!(
-            !can_attack_from_player(Some(&factions), &reps, Some(&player(35)), Some(&me), true),
+            !can_attack_from_player(
+                Some(&factions),
+                &reps,
+                Some(&player(35)),
+                Some(&me),
+                true,
+                RelationContext::none()
+            ),
             "…and not because we can attack them",
         );
 
@@ -1093,7 +1136,14 @@ mod tests {
         // …while NPCs keep theirs: `CanCooperate` is never asked for an NPC.
         let npc = |tpl: u32| ObjectStore(ObjectFields::from_pairs(&[(35, tpl)]));
         let npc_category = |subject: &ObjectStore, me: &ObjectStore| {
-            plate_is_friendly(Some(&factions), &reps, Some(subject), Some(me), false)
+            plate_is_friendly(
+                Some(&factions),
+                &reps,
+                Some(subject),
+                Some(me),
+                false,
+                RelationContext::none(),
+            )
         };
         assert!(npc_category(&npc(12), &gm), "the guard keeps his bucket");
         assert!(!npc_category(&npc(14), &gm), "and the mob keeps his");
@@ -1128,13 +1178,27 @@ mod tests {
             1
         );
         assert!(
-            !plate_is_friendly(Some(&factions), &reps, Some(&mob(0)), Some(&me), false),
+            !plate_is_friendly(
+                Some(&factions),
+                &reps,
+                Some(&mob(0)),
+                Some(&me),
+                false,
+                RelationContext::none()
+            ),
             "a plain hostile mob is enemy-category"
         );
         // Each of these refusal bits alone flips the category.
         for bit in [0x2u32, 0x80, 0x1_0000, 0x10_0000] {
             assert!(
-                plate_is_friendly(Some(&factions), &reps, Some(&mob(bit)), Some(&me), false),
+                plate_is_friendly(
+                    Some(&factions),
+                    &reps,
+                    Some(&mob(bit)),
+                    Some(&me),
+                    false,
+                    RelationContext::none()
+                ),
                 "flag {bit:#x} refuses the attack → friendly category"
             );
         }
@@ -1144,7 +1208,8 @@ mod tests {
             &reps,
             Some(&mob(0x100)),
             Some(&me),
-            false
+            false,
+            RelationContext::none()
         ));
     }
 

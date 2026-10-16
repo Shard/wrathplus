@@ -27,7 +27,7 @@ use super::group_relation::{GroupInputs, GroupRoster};
 use crate::creature_type::CreatureTypeSources;
 use crate::names::NameCache;
 use crate::net::{GuidIndex, ObjectStore, Reputations, SelfGuid, SelfPlayer};
-use crate::target::{can_assist, can_attack, Factions, Selection};
+use crate::target::{can_assist, can_attack, Factions, RelationContext, Selection};
 use benilla_protocol::messages::OwnerFallback;
 
 /// `TARGET_FLAG_*` bits of the client's targeting flag word (`0xcecac0`).
@@ -120,6 +120,8 @@ pub(crate) struct TargetRelations<'a> {
     /// The target's charmer, creator or summoner store, for `CanAssist`'s `IsPvP` owner chase.
     pub(crate) target_owner_store: Option<&'a ObjectStore>,
     pub(crate) self_store: Option<&'a ObjectStore>,
+    /// `CanAttack`/`CanAssist`'s live inputs: creature metadata and the per-hop guid lookup.
+    pub(crate) relations: RelationContext<'a>,
     pub(crate) factions: Option<&'a Factions>,
     pub(crate) reputations: &'a Reputations,
     /// The creature-type gate's inputs, for the candidate and for the player alike.
@@ -149,7 +151,7 @@ impl TargetRelations<'_> {
                 self.factions,
                 self.reputations,
                 self.self_store,
-                |_| self.target_owner_store.cloned(),
+                self.relations,
             )
     }
 
@@ -162,6 +164,7 @@ impl TargetRelations<'_> {
                 self.factions,
                 self.reputations,
                 self.self_store,
+                self.relations,
             )
     }
 }
@@ -266,6 +269,12 @@ pub(crate) struct CastTargeting<'w, 's> {
     range_units: super::RangeUnits<'w, 's>,
 }
 
+impl crate::target::StoreLookup for CastTargeting<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        crate::target::guid_store(self.index.as_deref(), &self.stores, guid)
+    }
+}
+
 impl CastTargeting<'_, '_> {
     /// This frame's [`CastContext`].
     pub(crate) fn context(&self) -> CastContext<'_> {
@@ -280,6 +289,7 @@ impl CastTargeting<'_, '_> {
                 target_store,
                 target_owner_store: owner_store(target_store),
                 self_store,
+                relations: RelationContext::new(self.names.as_deref(), self),
                 factions: self.factions.as_deref(),
                 reputations: &self.reputations,
                 types: CreatureTypeSources {
@@ -569,6 +579,7 @@ mod tests {
         let rel = TargetRelations {
             target_store: Some(&it),
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: Some(&me),
             factions: None,
             reputations: &Reputations(Vec::new()),
@@ -641,6 +652,7 @@ mod tests {
         let rel = |target| TargetRelations {
             target_store: Some(target),
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: Some(&me),
             factions: Some(&factions),
             reputations: &reputations,
@@ -853,6 +865,7 @@ mod tests {
         TargetRelations {
             target_store: None,
             target_owner_store: None,
+            relations: crate::target::RelationContext::none(),
             self_store: None,
             factions: None,
             reputations: &EMPTY,

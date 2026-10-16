@@ -79,6 +79,12 @@ pub(crate) struct BindChecks<'w, 's> {
     range_units: super::RangeUnits<'w, 's>,
 }
 
+impl crate::target::StoreLookup for BindChecks<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&crate::net::ObjectStore> {
+        crate::target::guid_store(self.index.as_deref(), &self.stores, guid)
+    }
+}
+
 impl BindChecks<'_, '_> {
     fn is_self(&self, entity: Entity) -> bool {
         self.self_q
@@ -100,6 +106,7 @@ impl BindChecks<'_, '_> {
             target_store,
             target_owner_store: owner_store(target_store),
             self_store,
+            relations: crate::target::RelationContext::new(self.names.as_deref(), self),
             factions: self.factions.as_deref(),
             reputations: &self.reputations,
             types: crate::creature_type::CreatureTypeSources {
@@ -1023,6 +1030,7 @@ mod tests {
                 &TargetRelations {
                     target_store: Some(&store),
                     target_owner_store: None,
+                    relations: crate::target::RelationContext::none(),
                     self_store: Some(&store),
                     factions: None,
                     reputations: &crate::net::Reputations(Vec::new()),

@@ -820,6 +820,7 @@ mod tests {
             rel: cast_target::TargetRelations {
                 target_store: None,
                 target_owner_store: None,
+                relations: crate::target::RelationContext::none(),
                 self_store: None,
                 factions: None,
                 reputations: &EMPTY_REPUTATIONS,

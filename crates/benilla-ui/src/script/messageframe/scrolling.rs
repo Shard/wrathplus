@@ -42,17 +42,48 @@ fn is_number(v: &Value) -> bool {
     }
 }
 
-/// A colour argument as f32, 0 for anything but a number.
-fn num_f32(v: &Value) -> f32 {
-    match v {
-        Value::Number(n) => *n as f32,
-        Value::Integer(i) => *i as f32,
-        _ => 0.0,
-    }
+/// A numeric argument as f32, a numeric string included (`lua_tonumber`); 0 otherwise.
+fn num_f32(lua: &Lua, v: &Value) -> f32 {
+    lua.coerce_number(v.clone())
+        .ok()
+        .flatten()
+        .map_or(0.0, |n| n as f32)
 }
 
-/// Run a scroll call with the viewport's row count, which every scroll needs: each re-arms the
-/// fade of the lines on display ([`ScrollingMessageState::reset_all_fade_times`]).
+/// A `lua_isnumber` argument truncated to int (`__ftol`, wrapping past 32 bits); 0 otherwise.
+fn int_arg(lua: &Lua, v: &Value) -> i32 {
+    if !is_number(v) {
+        return 0;
+    }
+    lua.coerce_number(v.clone())
+        .ok()
+        .flatten()
+        .filter(|n| n.is_finite())
+        .map_or(0, |n| n.trunc() as i64 as i32)
+}
+
+/// `lua_tointeger` (`0x84e070`): a number or numeric string rounded to nearest, 0 otherwise.
+fn to_integer(lua: &Lua, v: &Value) -> i32 {
+    lua.coerce_number(v.clone())
+        .ok()
+        .flatten()
+        .filter(|n| n.is_finite())
+        .map_or(0, |n| n.round_ties_even() as i64 as i32)
+}
+
+/// The client's `Usage:` error, naming the receiver by `GetName()` or `<unnamed>`.
+fn usage(this: &Table, call: &str) -> mlua::Error {
+    mlua::Error::runtime(format!("Usage: {}:{call}", receiver_name(this)))
+}
+
+fn receiver_name(this: &Table) -> String {
+    this.get::<mlua::Function>("GetName")
+        .and_then(|f| f.call::<Option<String>>(this.clone()))
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "<unnamed>".to_string())
+}
+
 fn scroll(
     lua: &Lua,
     this: &Table,
@@ -80,35 +111,38 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // The justify quartet, on both classes ([`super::install_justify`]).
     super::install_justify(lua, &m, "ScrollingMessageFrame")?;
 
-    // AddMessage(text [, r, g, b [, id]]) (`0x792900`): white without rgb; the state quantizes
-    // the colour and makes the line opaque. The rgb test is three `lua_isnumber` checks; the id
-    // is stack index 6 when they pass (`0x792b13`) and index 3, `r`'s, when they fail
-    // (`0x792b48`), which makes `AddMessage(text, id)` work and gives
-    // `AddMessage(text, nil, nil, nil, nil, 5)` id 0. A missing id is 0, which `UpdateColorByID`
-    // never matches (`0x788250`). The text gate (`0x79299c`) is the plain class's
-    // ([`super::message_text`]).
+    // AddMessage(text, [r, g, b,] typeID, backFill, accessID, extraData) (`0x972f20`): the rgb
+    // test is three `lua_isnumber` checks (3, 4, 5). With them the colour is clamped to 0..1 and
+    // opaque (`0x61be50`) and the tail starts at index 6; without, the line takes the frame
+    // font's colour (white when it has none) and the tail starts at index 3, which makes
+    // `AddMessage(text, id)` work and gives `AddMessage(text, nil, nil, nil, nil, 5)` typeID 0.
+    // typeID, accessID and extraData are numbers truncated to int, 0 when not numbers; backFill
+    // counts only as a real boolean. A missing typeID is 0, which `UpdateColorByID` never
+    // matches. The text gate is the plain class's ([`super::message_text`]).
     m.set(
         "AddMessage",
-        lua.create_function(
-            |lua, (this, text, r, g, b, id): (Table, Value, Value, Value, Value, Value)| {
-                let Some(text) = super::message_text(lua, &text) else {
-                    return Ok(());
-                };
-                let has_rgb = is_number(&r) && is_number(&g) && is_number(&b);
-                // The chat-type index (`ChatFrame.lua` passes `info.id`), stack index 6 or 3.
-                let id = match if has_rgb { &id } else { &r } {
-                    Value::Integer(i) => u32::try_from(*i).unwrap_or(0),
-                    Value::Number(n) if n.is_finite() && *n >= 0.0 => *n as u32,
-                    _ => 0,
-                };
-                let (r, g, b) = if has_rgb {
-                    (num_f32(&r), num_f32(&g), num_f32(&b))
-                } else {
-                    (1.0, 1.0, 1.0)
-                };
-                with_smf(lua, &this, |smf| smf.add_with_id(text, r, g, b, id))
-            },
-        )?,
+        lua.create_function(|lua, (this, text, rest): (Table, Value, mlua::Variadic<Value>)| {
+            let Some(text) = super::message_text(lua, &text) else {
+                return Ok(());
+            };
+            let arg = |i: usize| rest.get(i).cloned().unwrap_or(Value::Nil);
+            let has_rgb = is_number(&arg(0)) && is_number(&arg(1)) && is_number(&arg(2));
+            let (rgb, tail) = if has_rgb {
+                let c = |i| num_f32(lua, &arg(i)).clamp(0.0, 1.0);
+                ([c(0), c(1), c(2)], 3)
+            } else {
+                let h = frame_handle_of(lua, &this)?;
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                (UiScript::message_frame_text_rgb(&model, h), 0)
+            };
+            let type_id = int_arg(lua, &arg(tail)) as u32;
+            let back_fill = matches!(arg(tail + 1), Value::Boolean(true));
+            let access_id = int_arg(lua, &arg(tail + 2));
+            let extra_data = int_arg(lua, &arg(tail + 3));
+            with_smf(lua, &this, |smf| {
+                smf.add_entry(text, rgb, type_id, back_fill, access_id, extra_data)
+            })
+        })?,
     )?;
 
     // UpdateColorByID(id, r, g, b) (`0x7932b0`) recolours the lines printed under `id`; stock
@@ -122,7 +156,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     Value::Number(n) if n.is_finite() && *n >= 0.0 => *n as u32,
                     _ => return Ok(()),
                 };
-                let (r, g, b) = (num_f32(&r), num_f32(&g), num_f32(&b));
+                let (r, g, b) = (num_f32(lua, &r), num_f32(lua, &g), num_f32(lua, &b));
                 with_smf(lua, &this, |smf| {
                     smf.update_color_by_id(id, r, g, b);
                 })
@@ -188,9 +222,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetMaxLines",
         lua.create_function(|lua, this: Table| with_smf(lua, &this, |smf| smf.max_lines as i64))?,
     )?;
+    // GetNumMessages([accessID]) (`0x973640`): `lua_tointeger`, so nil counts every line.
     m.set(
         "GetNumMessages",
-        lua.create_function(|lua, this: Table| with_smf(lua, &this, |smf| smf.lines.len() as i64))?,
+        lua.create_function(|lua, (this, access): (Table, Value)| {
+            let access = to_integer(lua, &access);
+            with_smf(lua, &this, |smf| smf.count_by_access(access) as i64)
+        })?,
     )?;
 
     m.set(
@@ -248,6 +286,71 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     lua.set_named_registry_value(REG_SCROLLINGMESSAGEFRAME_METHODS, m)?;
 
+    Ok(())
+}
+
+/// The build-12340 methods the 1.12 table lacks, added to the shared table for the Wrath dialect.
+pub(crate) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    let m: Table = lua.named_registry_value(REG_SCROLLINGMESSAGEFRAME_METHODS)?;
+
+    // GetMessageInfo(index [, accessID]) (`0x973150`) → text, accessID, typeID, extraData: the
+    // `index`th line (rounded, 1-based, oldest first) among every line, or among those carrying
+    // a non-zero accessID. FrameXML names the typeID `lineID`. A miss raises.
+    m.set(
+        "GetMessageInfo",
+        lua.create_function(|lua, (this, index, access): (Table, Value, Value)| {
+            if !is_number(&index) {
+                return Err(usage(&this, "GetMessageInfo(index[, accessID])"));
+            }
+            let index = to_integer(lua, &index).wrapping_sub(1);
+            let access = to_integer(lua, &access);
+            let found = with_smf(lua, &this, |smf| {
+                usize::try_from(index)
+                    .ok()
+                    .and_then(|i| smf.line_by_access(i, access))
+                    .map(|l| (l.text.clone(), l.access_id, l.id as i32, l.extra_data))
+            })?;
+            let Some((text, access_id, type_id, extra)) = found else {
+                return Err(mlua::Error::runtime(format!(
+                    "{}:GetMessageInfo - A line with accessID {access} and index {index} does not exist.",
+                    receiver_name(&this)
+                )));
+            };
+            Ok((text, access_id, type_id, extra))
+        })?,
+    )?;
+
+    // RemoveMessagesByAccessID(accessID) (`0x973270`) drops the lines `FCF_SetTemporaryWindowType`
+    // moved to a conversation's own window (FloatingChatFrame.lua:754).
+    m.set(
+        "RemoveMessagesByAccessID",
+        lua.create_function(|lua, (this, access): (Table, Value)| {
+            if !is_number(&access) {
+                return Err(usage(&this, "RemoveMessagesByAccessID(accessID)"));
+            }
+            let access = to_integer(lua, &access);
+            with_smf(lua, &this, |smf| smf.remove_by_access(access))
+        })?,
+    )?;
+
+    // SetHyperlinksEnabled([enable]) (`0x973c40`): the flag coercion `0x815500` with default 1, so
+    // no argument enables and nil disables. Disabling drops the frame's link spans at once, as
+    // the reference frees its hyperlink buttons (`0x9699c0`); the app's next spans are filtered.
+    m.set(
+        "SetHyperlinksEnabled",
+        lua.create_function(|lua, (this, rest): (Table, mlua::Variadic<Value>)| {
+            let on = crate::script::binding_abi::bool_or_default(rest.first(), true);
+            let h = frame_handle_of(lua, &this)?;
+            with_smf(lua, &this, |smf| smf.hyperlinks_enabled = on)?;
+            if !on {
+                lua.app_data_mut::<Model>()
+                    .expect("model app_data")
+                    .link_spans
+                    .remove(&h);
+            }
+            Ok(())
+        })?,
+    )?;
     Ok(())
 }
 
@@ -761,6 +864,138 @@ mod tests {
             vec![5, 0, 7],
             "shorthand id from index 3; AceConsole's nils are id 0; the coloured line's id 7"
         );
+    }
+
+    fn wrath() -> UiScript {
+        UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap()
+    }
+
+    /// FloatingChatFrame.lua:745-754: count a conversation's lines by accessID, read each back,
+    /// re-add them elsewhere with the same typeID/accessID/extraData, then drop them here.
+    #[test]
+    fn the_access_id_store_moves_a_conversation_as_floating_chat_frame_does() {
+        let s = wrath();
+        s.run(
+            "SRC = CreateFrame('ScrollingMessageFrame') DST = CreateFrame('ScrollingMessageFrame') \
+             SRC:SetMaxLines(10) DST:SetMaxLines(10) \
+             SRC:AddMessage('a', 1, 0, 0, 7, false, 3, 30) \
+             SRC:AddMessage('b', 1, 1, 1, 8, false, 4, 40) \
+             SRC:AddMessage('c', 0, 1, 0, 9, false, 3, 31) \
+             N = SRC:GetNumMessages(3) ALL = SRC:GetNumMessages() \
+             for i = 1, SRC:GetNumMessages(3) do \
+               local text, accessID, lineID, extraData = SRC:GetMessageInfo(i, 3) \
+               DST:AddMessage(text, 1, 1, 1, lineID, false, accessID, extraData) \
+             end \
+             SRC:RemoveMessagesByAccessID(3) \
+             T, A, L, X = DST:GetMessageInfo(2, 3) LEFT = {SRC:GetMessageInfo(1)}",
+        )
+        .unwrap();
+        assert_eq!(s.eval::<i64>("return N").unwrap(), 2);
+        assert_eq!(s.eval::<i64>("return ALL").unwrap(), 3);
+        assert_eq!(
+            s.eval::<(String, i64, i64, i64)>("return T, A, L, X").unwrap(),
+            ("c".to_string(), 3, 9, 31)
+        );
+        assert_eq!(s.eval::<i64>("return SRC:GetNumMessages()").unwrap(), 1);
+        assert_eq!(s.eval::<String>("return LEFT[1]").unwrap(), "b");
+        assert_eq!(s.eval::<i64>("return DST:GetNumMessages(3)").unwrap(), 2);
+        let err = s.run("SRC:GetMessageInfo(2)").unwrap_err().to_string();
+        assert!(
+            err.contains("GetMessageInfo - A line with accessID 0 and index 1 does not exist."),
+            "{err}"
+        );
+        assert!(s.run("SRC:GetMessageInfo()").is_err(), "index is required");
+        assert!(s.run("SRC:RemoveMessagesByAccessID()").is_err());
+    }
+
+    /// The tail follows the rgb leg (`0x972f20`): index 6 with rgb, index 3 without; backFill
+    /// counts only as a boolean and puts the line at the oldest end.
+    #[test]
+    fn the_wrath_tail_follows_the_rgb_leg_and_back_fill_goes_oldest() {
+        let s = wrath();
+        s.run(
+            "F = CreateFrame('ScrollingMessageFrame') F:SetMaxLines(3) \
+             F:AddMessage('new') F:AddMessage('short', 5, false, 6, 60) \
+             F:AddMessage('old', 1, 1, 1, 2, true, 6, 61)",
+        )
+        .unwrap();
+        let frame: mlua::Table = s.eval("return F").unwrap();
+        let rows: Vec<(String, u32, i32, i32)> = super::with_smf(s.lua(), &frame, |smf| {
+            smf.lines
+                .iter()
+                .map(|l| (l.text.clone(), l.id, l.access_id, l.extra_data))
+                .collect()
+        })
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                ("old".into(), 2, 6, 61),
+                ("new".into(), 0, 0, 0),
+                ("short".into(), 5, 6, 60),
+            ]
+        );
+        // A full ring: the back-filled line replaces the oldest, the newest end is untouched.
+        s.run("F:AddMessage('older', 1, 1, 1, 0, true)").unwrap();
+        assert_eq!(
+            s.eval::<(String, String)>("return F:GetMessageInfo(1), F:GetMessageInfo(3)")
+                .unwrap(),
+            ("older".to_string(), "short".to_string())
+        );
+    }
+
+    #[test]
+    fn an_uncoloured_wrath_line_takes_the_font_colour() {
+        let s = wrath();
+        s.run(
+            "F = CreateFrame('ScrollingMessageFrame') F:SetTextColor(0, 1, 0) \
+             F:AddMessage('green') F:AddMessage('red', 1, 0, 0)",
+        )
+        .unwrap();
+        let frame: mlua::Table = s.eval("return F").unwrap();
+        let colours: Vec<[u8; 3]> =
+            super::with_smf(s.lua(), &frame, |smf| smf.lines.iter().map(|l| l.color).collect())
+                .unwrap();
+        assert_eq!(colours, vec![[0, 255, 0], [255, 0, 0]]);
+    }
+
+    #[test]
+    fn disabled_hyperlinks_drop_the_frames_link_spans() {
+        let mut s = wrath();
+        s.run("F = CreateFrame('ScrollingMessageFrame', 'BenillaLinks')")
+            .unwrap();
+        let frame: mlua::Table = s.eval("return F").unwrap();
+        let h = crate::script::object::frame_handle_of(s.lua(), &frame).unwrap();
+        let span = || {
+            vec![(
+                h,
+                crate::layout::Rect {
+                    left: 0.0,
+                    right: 10.0,
+                    bottom: 0.0,
+                    top: 10.0,
+                },
+                "item:1".to_string(),
+                "|Hitem:1|h[x]|h".to_string(),
+            )]
+        };
+        s.set_link_spans(span());
+        s.run("F:SetHyperlinksEnabled(nil)").unwrap();
+        assert!(!s.model_ref().link_spans.contains_key(&h));
+        s.set_link_spans(span());
+        assert!(!s.model_ref().link_spans.contains_key(&h), "the next spans are filtered");
+        s.run("F:SetHyperlinksEnabled()").unwrap();
+        s.set_link_spans(span());
+        assert!(s.model_ref().link_spans.contains_key(&h), "no argument enables");
+    }
+
+    #[test]
+    fn vanilla_scrolling_frames_lack_the_wrath_methods() {
+        let s = UiScript::new().unwrap();
+        s.run("F = CreateFrame('ScrollingMessageFrame')").unwrap();
+        for m in ["GetMessageInfo", "RemoveMessagesByAccessID", "SetHyperlinksEnabled"] {
+            assert!(s.eval::<bool>(&format!("return F.{m} == nil")).unwrap(), "{m}");
+        }
     }
 
     #[test]

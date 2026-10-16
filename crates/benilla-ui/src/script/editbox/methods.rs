@@ -20,6 +20,25 @@ fn with_editbox<T>(
     with_eb(lua, h, f).ok_or_else(|| mlua::Error::runtime("not an EditBox"))
 }
 
+/// The build-12340 EditBox methods the 1.12 table lacks, added for the Wrath dialect.
+pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    let m: Table = lua.named_registry_value(super::REG_EDITBOX_METHODS)?;
+    // ClearHistory() (`0x9761a0` → `0x964720`): free every history line and end any browse;
+    // `historyLines` stays. FloatingChatFrame.lua:578 and :734 call it when a window's chat type
+    // changes, so Up no longer recalls the old conversation's lines.
+    m.set(
+        "ClearHistory",
+        lua.create_function(|lua, this: Table| {
+            with_editbox(lua, &this, |eb| {
+                eb.history.clear();
+                eb.history_pos = None;
+                eb.history_draft = None;
+            })
+        })?,
+    )?;
+    Ok(())
+}
+
 pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     let m = lua.create_table()?;
 

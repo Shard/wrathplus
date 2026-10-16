@@ -32,6 +32,8 @@ pub(super) struct HeldUnits<'a> {
     pub(super) self_store: Option<&'a ObjectStore>,
     pub(super) classes: Option<&'a ChrClasses>,
     pub(super) types: CreatureTypeSources<'a>,
+    /// `CanAttack`'s creature metadata and controller lookup.
+    pub(super) relations: crate::target::RelationContext<'a>,
 }
 
 impl HeldUnits<'_> {
@@ -54,6 +56,7 @@ impl HeldUnits<'_> {
             self.factions,
             self.reputations,
             self.self_store,
+            self.relations,
         );
         enrich_unit(
             &mut s,
@@ -134,6 +137,10 @@ pub(super) fn feed_chain_units(
         return;
     }
 
+    let lookup = crate::target::GuidStores {
+        index: index.as_deref(),
+        stores: &stores,
+    };
     let held = HeldUnits {
         names: &names,
         commands: &commands,
@@ -143,6 +150,7 @@ pub(super) fn feed_chain_units(
         self_store: self_q.iter().next(),
         classes: tables.classes(),
         types: tables.types(&names),
+        relations: crate::target::RelationContext::new(Some(&names), &lookup),
     };
     let built: HashMap<u64, UnitState> = ends
         .iter()

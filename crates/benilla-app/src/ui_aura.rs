@@ -20,7 +20,7 @@ use crate::char_select::ClientState;
 use crate::net::{
     ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Reputations, SelfPlayer,
 };
-use crate::target::{can_assist, Factions, Selection};
+use crate::target::{can_assist, Factions, RelationContext, Selection};
 use crate::ui_action::Spells;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
@@ -301,7 +301,7 @@ fn buffs_visible_on(
     self_store: Option<&ObjectStore>,
     factions: Option<&Factions>,
     reputations: &Reputations,
-    owner_store: impl FnOnce(u64) -> Option<ObjectStore>,
+    ctx: RelationContext,
 ) -> bool {
     if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
         // Native packet/roster lists apply their own whole-unit gate. No native snapshot
@@ -315,7 +315,7 @@ fn buffs_visible_on(
     if self_store.is_some_and(|s| s.0.unit_charmed_by().is_some()) {
         return false;
     }
-    can_assist(Some(store), factions, reputations, self_store, owner_store)
+    can_assist(Some(store), factions, reputations, self_store, ctx)
 }
 
 /// `UNIT_FIELD_FLAGS` bit 27, `0x08000000` (`0x5195b6`).
@@ -592,6 +592,7 @@ fn feed_auras(
     }
 
     let held = |guid: u64| index.0.get(&guid).and_then(|&e| stores.get(e).ok());
+    let held_lookup = crate::target::ByGuid::new(held);
     let pet_guid = units.pet.guid();
     // `UnitBuff`'s unit gate on a live unit. `unit` is never `store`, the player's, which is the
     // gate's second argument. The pet is ungated; the reference gates a pet too, but `CanAssist`'s
@@ -605,7 +606,7 @@ fn feed_auras(
                 Some(store),
                 factions.as_deref(),
                 &reputations,
-                |owner| held(owner).cloned(),
+                RelationContext::new(None, &held_lookup),
             )
     };
     let target_guid = units.selection.guid.unwrap_or(0);
@@ -1040,13 +1041,13 @@ mod tests {
         // No factions catalog: the reaction is neutral (3), below the `>= 4` bar.
         let hostile = ridge_stalker_slots(0);
         assert!(
-            !buffs_visible_on(&hostile, None, None, &reputations, |_| None),
+            !buffs_visible_on(&hostile, None, None, &reputations, RelationContext::none()),
             "neutral reaction, not player-controlled, no PvP flag → no buffs"
         );
 
         let detected = ridge_stalker_slots(UNIT_FLAG_AURAS_VISIBLE);
         assert!(
-            buffs_visible_on(&detected, None, None, &reputations, |_| None),
+            buffs_visible_on(&detected, None, None, &reputations, RelationContext::none()),
             "UNIT_FLAG_AURAS_VISIBLE alone opens it, whatever the reaction says"
         );
     }
@@ -1059,7 +1060,7 @@ mod tests {
         // AURAS_VISIBLE is tested before `CanAssist`, so it wins over NOT_SELECTABLE.
         let both = ridge_stalker_slots(UNIT_FLAG_AURAS_VISIBLE | (1 << 25));
         assert!(
-            buffs_visible_on(&both, None, None, &reputations, |_| None),
+            buffs_visible_on(&both, None, None, &reputations, RelationContext::none()),
             "AURAS_VISIBLE is tested FIRST and short-circuits CanAssist entirely"
         );
 
@@ -1075,7 +1076,7 @@ mod tests {
                 Some(&charmed_self),
                 None,
                 &reputations,
-                |_| None
+                RelationContext::none()
             ),
             "activePlayer.CHARMEDBY != 0 → no buffs on anyone"
         );

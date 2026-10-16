@@ -7,6 +7,15 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeQuest", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::StatusMultipleQuery)),
+        ("QuestPoiQuery", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::PoiQuery { quests: vec![783] })),
+        (
+            "QuestPushResult",
+            ClientCommand::QuestPushResult { sharer: 1, quest: 783, msg: benilla_protocol::messages::QuestShareMsg::DECLINE_QUEST },
+        ),
+        ("NativeCalendar", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::GetCalendar)),
+        ("CalendarRsvp", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::Rsvp { event_id: 1, invite_id: 2, status: 1 })),
+        ("NativeInspectAchievements", ClientCommand::NativeInspectAchievements { player: 1 }),
         ("NativeExchange", ClientCommand::NativeExchange(benilla_protocol::wrath_exchange::Command::OptOutOfLoot { pass: 1 })),
         ("ExchangePendingSales", ClientCommand::NativeExchange(benilla_protocol::wrath_exchange::Command::AuctionListPendingSales { auctioneer: 1 })),
         ("AuctionHello", ClientCommand::AuctionHello { auctioneer: 1 }),

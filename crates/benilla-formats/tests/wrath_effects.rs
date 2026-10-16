@@ -132,3 +132,187 @@ fn installed_wrath_unsupported_ribbon_census() {
     eprintln!("CENSUS native_models={models} ribbon_models={ribbon_models} cubic_models={cubic_models} animated_global_visibility_models={global_models} ribbon_parse_errors={parse_errors}");
     assert!(models > 0 && ribbon_models > 0);
 }
+
+/// Installed incidence of the ribbon appearance-track shapes the adapter has to represent.
+#[test]
+fn installed_wrath_ribbon_track_incidence() {
+    if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+        return;
+    }
+    use benilla_m2::wrath::WrathTrack;
+    use std::collections::BTreeMap;
+    fn shape<V: PartialEq + Copy>(t: &WrathTrack<V>) -> &'static str {
+        let animated = |keys: &[benilla_m2::wrath::WrathTrackKey<V>]| {
+            keys.first()
+                .is_some_and(|f| keys.iter().any(|k| k.value != f.value))
+        };
+        if t.global_sequence != u16::MAX {
+            return if t.sequences.iter().any(|k| animated(k)) {
+                "global_animated"
+            } else {
+                "global_constant"
+            };
+        }
+        let first: Vec<V> = t
+            .sequences
+            .first()
+            .map(|k| k.iter().map(|k| k.value).collect())
+            .unwrap_or_default();
+        let differs = t
+            .sequences
+            .iter()
+            .skip(1)
+            .any(|k| !k.is_empty() && k.iter().map(|k| k.value).collect::<Vec<_>>() != first);
+        match (
+            first.is_empty(),
+            t.sequences.first().is_some_and(|k| animated(k)),
+            differs,
+        ) {
+            (true, _, true) => "local_seq0_empty_others_keyed",
+            (_, _, true) => "local_varies_by_sequence",
+            (_, true, false) => "local_seq0_animated",
+            _ => "local_constant",
+        }
+    }
+    let mut chain =
+        Chain::open_wrath(Path::new(&std::env::var("WOW_DATA").unwrap()), "enUS").unwrap();
+    let entries = chain
+        .list_filtered(|p| p.to_ascii_lowercase().ends_with(".m2"))
+        .unwrap();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut examples: BTreeMap<String, String> = BTreeMap::new();
+    let mut bump = |key: String, name: &str| {
+        *counts.entry(key.clone()).or_default() += 1;
+        examples.entry(key).or_insert_with(|| name.to_string());
+    };
+    for entry in entries {
+        let b = chain.read_file(&entry.name).unwrap();
+        if b.get(4..8) != Some(&264u32.to_le_bytes())
+            || u32::from_le_bytes(b[0x120..0x124].try_into().unwrap()) == 0
+        {
+            continue;
+        }
+        let m = parse_wrath_m2(&mut Cursor::new(&b)).unwrap();
+        if m.animations().first().is_some_and(|a| a.id != 0) {
+            bump("model_seq0_not_stand".into(), &entry.name);
+        }
+        for r in m.ribbons() {
+            bump("ribbons".into(), &entry.name);
+            bump(format!("textures={}", r.texture_indices.len()), &entry.name);
+            bump(
+                format!("materials={}", r.material_indices.len()),
+                &entry.name,
+            );
+            for (name, s) in [
+                ("color", shape(&r.color)),
+                ("alpha", shape(&r.alpha)),
+                ("height_above", shape(&r.height_above)),
+                ("height_below", shape(&r.height_below)),
+                ("texture_slot", shape(&r.texture_slot)),
+                ("visibility", shape(&r.visibility)),
+            ] {
+                bump(format!("{name}.{s}"), &entry.name);
+            }
+            let slots: std::collections::BTreeSet<u16> = r
+                .texture_slot
+                .sequences
+                .iter()
+                .flatten()
+                .map(|k| k.value)
+                .collect();
+            if slots.iter().any(|&s| s != 0) {
+                bump("texture_slot_nonzero".into(), &entry.name);
+            }
+            if slots.iter().any(|&s| {
+                u32::from(s) >= u32::from(r.tile_rows.max(1)) * u32::from(r.tile_cols.max(1))
+            }) {
+                bump("texture_slot_out_of_grid".into(), &entry.name);
+            }
+            if r.alpha.sequences.iter().flatten().any(|k| k.value < 0) {
+                bump("alpha_negative".into(), &entry.name);
+            }
+            if r.height_above
+                .sequences
+                .iter()
+                .flatten()
+                .chain(r.height_below.sequences.iter().flatten())
+                .any(|k| k.value < 0.0)
+            {
+                bump("height_negative".into(), &entry.name);
+            }
+            if r.edge_lifetime < 0.25 {
+                bump("edge_lifetime_below_quarter".into(), &entry.name);
+            }
+            if r.priority_plane != 0 {
+                bump("priority_plane_nonzero".into(), &entry.name);
+            }
+        }
+    }
+    for (k, v) in &counts {
+        eprintln!("INCIDENCE {k}={v} e.g. {}", examples[k]);
+    }
+    assert!(counts.get("ribbons").copied().unwrap_or(0) > 0);
+}
+
+/// The adapter keeps a global-sequence look track on its period and a sequence-keyed one per slot:
+/// `ChainsofIce_Low_Base.m2`'s alpha loops on the scene clock; `1HTrollSpear01.m2`'s heights are
+/// keyed only outside sequence 0, so its trail still spawns with width.
+#[test]
+fn installed_wrath_ribbon_look_tracks_keep_their_clocks() {
+    if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+        return;
+    }
+    let mut chain =
+        Chain::open_wrath(Path::new(&std::env::var("WOW_DATA").unwrap()), "enUS").unwrap();
+    let mut adapt = |path: &str| {
+        let bytes = chain.read_file(path).unwrap();
+        let skin = chain
+            .read_file(&format!("{}00.skin", &path[..path.len() - 3]))
+            .unwrap();
+        benilla_formats::parse_wrath_render_model(&bytes, &skin, "", &[])
+            .unwrap_or_else(|e| panic!("{path}: {e:#}"))
+    };
+    let chains = adapt("SPELLS\\ChainsofIce_Low_Base.m2");
+    let global = chains
+        .ribbons
+        .iter()
+        .find(|r| r.alpha.global_period_ms.is_some())
+        .expect("a global-sequence alpha ribbon");
+    let period = global.alpha.global_period_ms.unwrap();
+    assert!(period > 0, "a resolved global period");
+    let at = |scene_ms: f64| benilla_formats::RibbonClock {
+        slot: 0,
+        seq_ms: 0.0,
+        scene_ms,
+    };
+    for phase in [0.0, f64::from(period) * 0.37, f64::from(period) * 0.81] {
+        assert_eq!(
+            global.alpha.sample(at(phase)),
+            global.alpha.sample(at(phase + 7.0 * f64::from(period))),
+            "alpha repeats every period"
+        );
+    }
+
+    let spear = adapt("ITEM\\OBJECTCOMPONENTS\\WEAPON\\1HTrollSpear01.m2");
+    let r = spear
+        .ribbons
+        .iter()
+        .find(|r| {
+            r.height_above
+                .slots
+                .first()
+                .is_some_and(|l| l.keys.is_empty())
+        })
+        .expect("a ribbon unkeyed in sequence 0");
+    assert_eq!(r.sequences.len(), r.height_above.slots.len());
+    assert!(r
+        .height_above
+        .slots
+        .iter()
+        .skip(1)
+        .any(|l| !l.keys.is_empty()));
+    assert!(
+        r.height_above.peak() + r.height_below.peak() > 0.0,
+        "the keyed sequences give the trail width"
+    );
+}
