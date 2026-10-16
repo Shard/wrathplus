@@ -33,7 +33,7 @@ pub(crate) fn columns(
         "PetPersonality" => (19, 24, |m| {
             m.same(0, 1).loc(1, 1).run(10, 18, 6);
         }),
-        "Spell" => (173, 234, spell),
+        "Spell" => (183, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (22, 56, skill_line),
         "TalentTab" => (15, 24, talent_tab),
@@ -129,7 +129,9 @@ impl Map {
 }
 
 /// `Spell.dbc` 173 → 234. 1.12's `School` (1) is an index; 3.3.5 keeps a `SchoolMask` (225),
-/// which the spell loader converts. `CastUI` (3) and the per-effect dice (67-72) are gone.
+/// which the spell loader converts. `CastUI` (3) and the per-effect dice (67-72) are gone. Slots
+/// 173-182 are the loader's 3.3.5-only columns: the family mask's third word and the per-effect
+/// class masks.
 fn spell(m: &mut Map) {
     m.run(0, 0, 1)
         .run(1, 225, 1)
@@ -152,7 +154,9 @@ fn spell(m: &mut Map) {
         .loc(147, 187) // ToolTip
         .run(156, 204, 5) // ManaCostPercentage..SpellFamilyName
         .run(161, 209, 2) // SpellFamilyFlags (low, high)
-        .run(163, 212, 10); // MaxAffectedTargets..RequiredAuraVision
+        .run(163, 212, 10) // MaxAffectedTargets..RequiredAuraVision
+        .run(173, 211, 1) // SpellFamilyFlags[2]
+        .run(174, 122, 9); // EffectSpellClassMask[3], flag96 each
 }
 
 /// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
@@ -242,7 +246,7 @@ mod tests {
             ("CreatureSoundData", 30, 38),
             ("CreatureModelData", 16, 28),
             ("PetPersonality", 19, 24),
-            ("Spell", 173, 234),
+            ("Spell", 183, 234),
             ("SpellDispelType", 12, 21),
             ("SkillLine", 22, 56),
             ("TalentTab", 15, 24),
@@ -275,8 +279,12 @@ mod tests {
                 assert!(seen.insert(*c), "{table}: column {c} mapped twice");
             }
         }
-        assert!(columns("Spell.dbc", 173, 234).is_some());
-        assert!(columns("Spell", 173, 173).is_none());
+        assert!(columns("Spell.dbc", 183, 234).is_some());
+        assert!(
+            columns("Spell.dbc", 173, 234).is_none(),
+            "the 3.3.5-only slots are required"
+        );
+        assert!(columns("Spell", 183, 183).is_none());
     }
 
     #[test]
@@ -338,7 +346,7 @@ mod tests {
 
     #[test]
     fn spell_columns_land_on_the_build_12340_fields() {
-        let m = columns("Spell", 173, 234).unwrap();
+        let m = columns("Spell", 183, 234).unwrap();
         for (vanilla, wrath) in [
             (18, 28),   // CastingTimeIndex
             (36, 46),   // rangeIndex
@@ -349,6 +357,10 @@ mod tests {
             (120, 136), // SpellName enUS
             (156, 204), // ManaCostPercentage
             (165, 214), // PreventionType
+            (161, 209), // SpellFamilyFlags[0]
+            (173, 211), // SpellFamilyFlags[2]
+            (174, 122), // EffectSpellClassMask[0][0]
+            (182, 130), // EffectSpellClassMask[2][2]
         ] {
             assert_eq!(m[vanilla], Some(wrath), "slot {vanilla}");
         }
