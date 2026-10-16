@@ -100,11 +100,21 @@ fn emblem_half(layer: usize) -> Option<&'static str> {
 /// CharSections: (race, sex, sectionType, variation, colorIndex) → the row's `TextureName`s.
 pub struct CharSections {
     sections: HashMap<(u8, u8, u8, u8, u8), [String; 3]>,
+    flags: HashMap<(u8, u8, u8, u8, u8), u32>,
     /// Wrath's body UV partition is the same, but the base atlas can be 512².
     scaled_atlas: bool,
 }
 
 impl CharSections {
+    /// Selected Wrath face row's native `0x4ed900` eye-glow override bit.
+    pub fn face_has_eye_glow(&self, race: u8, sex: u8, face: u8, skin: u8) -> bool {
+        self.scaled_atlas
+            && self
+                .flags
+                .get(&(race, sex, SECTION_FACE, face, skin))
+                .is_some_and(|f| f & 4 != 0)
+    }
+
     /// The 256² base body skin for a skin colour (`sectionType 0`).
     pub fn skin_texture(&self, race: u8, sex: u8, skin_color: u8) -> Option<&str> {
         self.tex(race, sex, SECTION_SKIN, 0, skin_color, 0)
@@ -248,6 +258,7 @@ impl CharSections {
     fn from_records(rs: &RecordSet, profile: &DataProfile) -> Self {
         let columns = char_section_columns(profile);
         let mut sections = HashMap::with_capacity(rs.records().len());
+        let mut flags = HashMap::new();
         for r in rs.records() {
             if let (Some(race), Some(sex), Some(ty), Some(var), Some(color)) = (
                 u32_at(r, 1),
@@ -265,18 +276,26 @@ impl CharSections {
                 let player_flag = u32_at(r, columns.flags).unwrap_or(0) & 0x1 != 0;
                 match profile {
                     DataProfile::Vanilla if player_flag => {
+                        if !sections.contains_key(&key) {
+                            flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
+                        }
                         sections.entry(key).or_insert(texs);
                     }
                     DataProfile::Wrath { .. } if !player_flag => {
+                        if !sections.contains_key(&key) {
+                            flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
+                        }
                         sections.entry(key).or_insert(texs);
                     }
                     DataProfile::Vanilla | DataProfile::Wrath { .. } => {
+                        flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
                         sections.insert(key, texs);
                     }
                 }
             }
         }
         Self {
+            flags,
             sections,
             scaled_atlas: matches!(profile, DataProfile::Wrath { .. }),
         }
@@ -814,6 +833,19 @@ mod tests {
     }
 
     #[test]
+    fn face_eye_glow_uses_selected_row_flags_only_in_wrath() {
+        for wrath in [false, true] {
+            let cs = CharSections {
+                sections: HashMap::new(),
+                flags: HashMap::from([((1, 0, SECTION_FACE, 4, 2), 5)]),
+                scaled_atlas: wrath,
+            };
+            assert_eq!(cs.face_has_eye_glow(1, 0, 4, 2), wrath);
+            assert!(!cs.face_has_eye_glow(1, 0, 0, 2));
+        }
+    }
+
+    #[test]
     fn char_sections_uses_profile_columns_and_prefers_the_profile_player_row() {
         let vanilla = DataProfile::Vanilla;
         let wrath = DataProfile::Wrath {
@@ -857,6 +889,7 @@ mod tests {
             ],
         );
         let cs = CharSections {
+            flags: HashMap::new(),
             sections,
             scaled_atlas: false,
         };
@@ -1591,6 +1624,7 @@ mod tests {
         let equipment = [Some(&garment), None, None, None, None, None, None, None];
         for scaled_atlas in [false, true] {
             let cs = CharSections {
+                flags: HashMap::new(),
                 sections: sections.clone(),
                 scaled_atlas,
             };
