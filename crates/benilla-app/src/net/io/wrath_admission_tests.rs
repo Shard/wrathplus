@@ -7,6 +7,12 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeParty", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::ReadyCheckFinished)),
+        ("PartyUninviteGuid", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::UninviteGuid { guid: 1, reason: String::new() })),
+        ("GroupUninvite", ClientCommand::GroupUninvite { name: "Bob".into() }),
+        ("GroupSetLeader", ClientCommand::GroupSetLeader { guid: 1 }),
+        ("MinimapPing", ClientCommand::MinimapPing { x: 1.0, y: 2.0 }),
+        ("RandomRoll", ClientCommand::RandomRoll { min: 1, max: 100 }),
         ("NativeQuest", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::StatusMultipleQuery)),
         ("QuestPoiQuery", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::PoiQuery { quests: vec![783] })),
         (
