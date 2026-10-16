@@ -1237,6 +1237,7 @@ enum WrathRoute {
     NativeChannel,
     NativeBattleground,
     NativeContacts,
+    NativeDeath,
     NativeWorldportAck,
     NativeTeleportAck,
     AuthorityAcked,
@@ -1279,6 +1280,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeDeath(_)
+        | ClientCommand::RepopRequest
+        | ClientCommand::CorpseQuery
+        | ClientCommand::ReclaimCorpse { .. }
+        | ClientCommand::SummonResponse { .. }
+        | ClientCommand::SelfRes => WrathRoute::NativeDeath,
         ClientCommand::FriendListRequest
         | ClientCommand::AddFriend { .. }
         | ClientCommand::DelFriend { .. }
@@ -1687,6 +1694,10 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeDeath => {
+                        let (opcode, body) = benilla_protocol::wrath_death::encode(&death_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeContacts => match contacts_packet(command) {
                         Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
                         Err(error) => {
@@ -1955,6 +1966,21 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
         other => unreachable!("not a chat line: {other:?}"),
     };
     encode(&command)
+}
+
+/// The native death or summon command for a [`WrathRoute::NativeDeath`] route.
+fn death_command(command: ClientCommand) -> benilla_protocol::wrath_death::Command {
+    use benilla_protocol::wrath_death::Command as D;
+    match command {
+        ClientCommand::NativeDeath(command) => command,
+        ClientCommand::RepopRequest => D::Repop,
+        ClientCommand::CorpseQuery => D::CorpseQuery,
+        ClientCommand::ReclaimCorpse { corpse } => D::ReclaimCorpse { corpse },
+        // The shared command is the accept; a decline sends nothing and lets the summon lapse.
+        ClientCommand::SummonResponse { summoner } => D::SummonResponse { summoner, agree: true },
+        ClientCommand::SelfRes => D::SelfRes,
+        other => unreachable!("not a death route: {other:?}"),
+    }
 }
 
 /// The native contact or duel body for a [`WrathRoute::NativeContacts`] command, through the
