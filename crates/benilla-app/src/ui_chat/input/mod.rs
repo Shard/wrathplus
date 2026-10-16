@@ -1579,6 +1579,12 @@ pub(super) fn drain_addon_message_sends(
                 &format!("-> {} {:?}", send.distribution.token(), send.text),
             );
         }
+        // The WHISPER lane needs its target on the wire; until App's writer carries
+        // `AddonSend::target`, it is held back rather than sent without a recipient.
+        if send.distribution == benilla_ui::script::AddonDistribution::Whisper {
+            info!("chat: addon whisper to {:?} not sent: the writer has no target yet", send.target);
+            continue;
+        }
         let cmd = ClientCommand::AddonMessage {
             distribution: send.distribution,
             text: send.text,
