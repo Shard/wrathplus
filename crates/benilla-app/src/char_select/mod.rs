@@ -509,14 +509,38 @@ fn back_on_logout(
 ///
 /// Native refusals ride the same system (the transport has already published the refreshed roster
 /// on success, `9bab9156`): the 12340 key's text; an unlisted code reads `CHAR_DELETE_FAILED`.
+///
+/// The native character services (rename, customize, faction and race change) answer here too, by
+/// the same table: the transport publishes the refreshed roster before an applied change
+/// (`2163ca6b`), so a success needs nothing and a refusal opens the dialog with its key.
+/// Labelled: a declined-names refusal (a `u32`, outside the table) reads `RESPONSE_FAILURE`; the
+/// realm-split reply has no character-screen surface here.
 fn delete_result(
     mut msgs: MessageReader<CharActionResultMessage>,
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
+    services: Option<
+        ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>,
+    >,
     mut dialog: ResMut<crate::glue::dialog::GlueDialog>,
     strings: Option<Res<GlueStrings>>,
 ) {
+    use benilla_protocol::wrath_char_services::Reply;
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
+    for reply in services.into_iter().flat_map(|mut q| q.0.drain(..).collect::<Vec<_>>()) {
+        let code = match &reply {
+            _ if reply.changed_roster() => continue,
+            Reply::Rename { result, .. }
+            | Reply::Customize { result, .. }
+            | Reply::ChangeRace { result, .. } => *result,
+            Reply::DeclinedNames { result: 0, .. } | Reply::RealmSplit { .. } => continue,
+            Reply::DeclinedNames { .. } => 1,
+        };
+        let key = wrath_char_result_key(code).unwrap_or("RESPONSE_FAILURE");
+        let text = strings.text(key, "Character change failed");
+        info!("char select: character service refused (code {code:#04x}) — {text}");
+        dialog.open_error(text);
+    }
     for msg in native
         .into_iter()
         .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
@@ -548,49 +572,120 @@ fn delete_result(
     }
 }
 
-/// Build 12340's glue status key for a character create or delete result: the `RESPONSE_*` table
-/// at `0xad91f0`, indexed by the result code (`0x6b1100`, `0x6b0f40`; codes as AzerothCore's
-/// `ResponseCodes`). `None` outside the create and delete blocks.
+/// Build 12340's glue status keys, the `RESPONSE_*` table at `0xad91f0` indexed by result code
+/// (AzerothCore `ResponseCodes`), `0x67` long (`0x6b1100`'s bound, `0x6b0f40`).
+const WRATH_RESPONSE_KEYS: [&str; 104] = [
+    "RESPONSE_SUCCESS",
+    "RESPONSE_FAILURE",
+    "RESPONSE_CANCELLED",
+    "RESPONSE_DISCONNECTED",
+    "RESPONSE_FAILED_TO_CONNECT",
+    "RESPONSE_CONNECTED",
+    "RESPONSE_VERSION_MISMATCH",
+    "CSTATUS_CONNECTING",
+    "CSTATUS_NEGOTIATING_SECURITY",
+    "CSTATUS_NEGOTIATION_COMPLETE",
+    "CSTATUS_NEGOTIATION_FAILED",
+    "CSTATUS_AUTHENTICATING",
+    "AUTH_OK",
+    "AUTH_FAILED",
+    "AUTH_REJECT",
+    "AUTH_BAD_SERVER_PROOF",
+    "AUTH_UNAVAILABLE",
+    "AUTH_SYSTEM_ERROR",
+    "AUTH_BILLING_ERROR",
+    "AUTH_BILLING_EXPIRED",
+    "AUTH_VERSION_MISMATCH",
+    "AUTH_UNKNOWN_ACCOUNT",
+    "AUTH_INCORRECT_PASSWORD",
+    "AUTH_SESSION_EXPIRED",
+    "AUTH_SERVER_SHUTTING_DOWN",
+    "AUTH_ALREADY_LOGGING_IN",
+    "AUTH_LOGIN_SERVER_NOT_FOUND",
+    "AUTH_WAIT_QUEUE",
+    "AUTH_BANNED",
+    "AUTH_ALREADY_ONLINE",
+    "AUTH_NO_TIME",
+    "AUTH_DB_BUSY",
+    "AUTH_SUSPENDED",
+    "AUTH_PARENTAL_CONTROL",
+    "AUTH_LOCKED_ENFORCED",
+    "REALM_LIST_IN_PROGRESS",
+    "REALM_LIST_SUCCESS",
+    "REALM_LIST_FAILED",
+    "REALM_LIST_INVALID",
+    "REALM_LIST_REALM_NOT_FOUND",
+    "ACCOUNT_CREATE_IN_PROGRESS",
+    "ACCOUNT_CREATE_SUCCESS",
+    "ACCOUNT_CREATE_FAILED",
+    "CHAR_LIST_RETRIEVING",
+    "CHAR_LIST_RETRIEVED",
+    "CHAR_LIST_FAILED",
+    "CHAR_CREATE_IN_PROGRESS",
+    "CHAR_CREATE_SUCCESS",
+    "CHAR_CREATE_ERROR",
+    "CHAR_CREATE_FAILED",
+    "CHAR_CREATE_NAME_IN_USE",
+    "CHAR_CREATE_DISABLED",
+    "CHAR_CREATE_PVP_TEAMS_VIOLATION",
+    "CHAR_CREATE_SERVER_LIMIT",
+    "CHAR_CREATE_ACCOUNT_LIMIT",
+    "CHAR_CREATE_SERVER_QUEUE",
+    "CHAR_CREATE_ONLY_EXISTING",
+    "CHAR_CREATE_EXPANSION",
+    "CHAR_CREATE_EXPANSION_CLASS",
+    "CHAR_CREATE_LEVEL_REQUIREMENT",
+    "CHAR_CREATE_UNIQUE_CLASS_LIMIT",
+    "CHAR_CREATE_CHARACTER_IN_GUILD",
+    "CHAR_CREATE_RESTRICTED_RACECLASS",
+    "CHAR_CREATE_CHARACTER_CHOOSE_RACE",
+    "CHAR_CREATE_CHARACTER_ARENA_LEADER",
+    "CHAR_CREATE_CHARACTER_DELETE_MAIL",
+    "CHAR_CREATE_CHARACTER_SWAP_FACTION",
+    "CHAR_CREATE_CHARACTER_RACE_ONLY",
+    "CHAR_CREATE_CHARACTER_GOLD_LIMIT",
+    "CHAR_CREATE_FORCE_LOGIN",
+    "CHAR_DELETE_IN_PROGRESS",
+    "CHAR_DELETE_SUCCESS",
+    "CHAR_DELETE_FAILED",
+    "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
+    "CHAR_DELETE_FAILED_GUILD_LEADER",
+    "CHAR_DELETE_FAILED_ARENA_CAPTAIN",
+    "CHAR_LOGIN_IN_PROGRESS",
+    "CHAR_LOGIN_SUCCESS",
+    "CHAR_LOGIN_NO_WORLD",
+    "CHAR_LOGIN_DUPLICATE_CHARACTER",
+    "CHAR_LOGIN_NO_INSTANCES",
+    "CHAR_LOGIN_FAILED",
+    "CHAR_LOGIN_DISABLED",
+    "CHAR_LOGIN_NO_CHARACTER",
+    "CHAR_LOGIN_LOCKED_FOR_TRANSFER",
+    "CHAR_LOGIN_LOCKED_BY_BILLING",
+    "CHAR_LOGIN_LOCKED_BY_MOBILE_AH",
+    "CHAR_NAME_SUCCESS",
+    "CHAR_NAME_FAILURE",
+    "CHAR_NAME_NO_NAME",
+    "CHAR_NAME_TOO_SHORT",
+    "CHAR_NAME_TOO_LONG",
+    "CHAR_NAME_INVALID_CHARACTER",
+    "CHAR_NAME_MIXED_LANGUAGES",
+    "CHAR_NAME_PROFANE",
+    "CHAR_NAME_RESERVED",
+    "CHAR_NAME_INVALID_APOSTROPHE",
+    "CHAR_NAME_MULTIPLE_APOSTROPHES",
+    "CHAR_NAME_THREE_CONSECUTIVE",
+    "CHAR_NAME_INVALID_SPACE",
+    "CHAR_NAME_CONSECUTIVE_SPACES",
+    "CHAR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS",
+    "CHAR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END",
+    "CHAR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME",
+];
+
+/// A native character-screen result code's status key (`0x6b1100`): create, delete, login and the
+/// rename/customize/faction-change `CHAR_NAME_*` and `RESPONSE_*` codes alike; `None` past the
+/// table.
 pub(crate) fn wrath_char_result_key(code: u8) -> Option<&'static str> {
-    const CREATE: [&str; 24] = [
-        "CHAR_CREATE_IN_PROGRESS",
-        "CHAR_CREATE_SUCCESS",
-        "CHAR_CREATE_ERROR",
-        "CHAR_CREATE_FAILED",
-        "CHAR_CREATE_NAME_IN_USE",
-        "CHAR_CREATE_DISABLED",
-        "CHAR_CREATE_PVP_TEAMS_VIOLATION",
-        "CHAR_CREATE_SERVER_LIMIT",
-        "CHAR_CREATE_ACCOUNT_LIMIT",
-        "CHAR_CREATE_SERVER_QUEUE",
-        "CHAR_CREATE_ONLY_EXISTING",
-        "CHAR_CREATE_EXPANSION",
-        "CHAR_CREATE_EXPANSION_CLASS",
-        "CHAR_CREATE_LEVEL_REQUIREMENT",
-        "CHAR_CREATE_UNIQUE_CLASS_LIMIT",
-        "CHAR_CREATE_CHARACTER_IN_GUILD",
-        "CHAR_CREATE_RESTRICTED_RACECLASS",
-        "CHAR_CREATE_CHARACTER_CHOOSE_RACE",
-        "CHAR_CREATE_CHARACTER_ARENA_LEADER",
-        "CHAR_CREATE_CHARACTER_DELETE_MAIL",
-        "CHAR_CREATE_CHARACTER_SWAP_FACTION",
-        "CHAR_CREATE_CHARACTER_RACE_ONLY",
-        "CHAR_CREATE_CHARACTER_GOLD_LIMIT",
-        "CHAR_CREATE_FORCE_LOGIN",
-    ];
-    const DELETE: [&str; 6] = [
-        "CHAR_DELETE_IN_PROGRESS",
-        "CHAR_DELETE_SUCCESS",
-        "CHAR_DELETE_FAILED",
-        "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
-        "CHAR_DELETE_FAILED_GUILD_LEADER",
-        "CHAR_DELETE_FAILED_ARENA_CAPTAIN",
-    ];
-    match code {
-        0x2e..=0x45 => Some(CREATE[usize::from(code - 0x2e)]),
-        0x46..=0x4b => Some(DELETE[usize::from(code - 0x46)]),
-        _ => None,
-    }
+    WRATH_RESPONSE_KEYS.get(usize::from(code)).copied()
 }
 
 /// A `SMSG_CHAR_DELETE` result byte as the refusal sentence, `None` for success (`0x39`). The keys
@@ -1201,8 +1296,10 @@ mod tests {
             wrath_char_result_key(0x4a),
             Some("CHAR_DELETE_FAILED_GUILD_LEADER")
         );
-        assert_eq!(wrath_char_result_key(0x2d), None);
-        assert_eq!(wrath_char_result_key(0x4c), None);
+        assert_eq!(wrath_char_result_key(0x2d), Some("CHAR_LIST_FAILED"));
+        assert_eq!(wrath_char_result_key(0x57), Some("CHAR_NAME_SUCCESS"));
+        assert_eq!(wrath_char_result_key(0), Some("RESPONSE_SUCCESS"));
+        assert_eq!(wrath_char_result_key(0x68), None);
     }
 
     /// A native refused delete opens the dialog with its 12340 key; a native success does not.
