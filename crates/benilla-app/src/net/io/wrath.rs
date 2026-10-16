@@ -1010,6 +1010,7 @@ enum WrathRoute {
     NativeChat,
     NativeMailMutation,
     NativeQuestsCompletedQuery,
+    NativeUiTimerQuery,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1024,6 +1025,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
+        ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
         ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
@@ -1125,6 +1127,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::KnockBackAck { .. } => WrathRoute::DisabledMovement,
         _ => WrathRoute::DisabledGameAction,
     }
+}
+
+/// Only implemented wire routes grant command admission. Deferred queries have no writer.
+/// Shape/value validation and epoch/capability checks remain at their existing boundaries.
+pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
+    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery)
 }
 
 fn writer_loop(
@@ -1317,6 +1325,10 @@ fn writer_loop(
                     WrathRoute::NativeWorldportAck => {
                         let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
                         active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativeUiTimerQuery => {
+                        let (opcode, body) = benilla_protocol::wrath_ui_timer::encode_query();
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeQuestsCompletedQuery => {
                         let (opcode, body) = benilla_protocol::wrath_quests_completed::encode_query();
@@ -3272,4 +3284,15 @@ mod pet_name_tests;
 fn completed_quest_query_is_native_and_empty() {
     assert_eq!(route(&ClientCommand::NativeQuestsCompletedQuery), WrathRoute::NativeQuestsCompletedQuery);
     assert_eq!(benilla_protocol::wrath_quests_completed::encode_query(), (0x500, vec![]));
+}
+
+#[cfg(test)]
+#[path = "wrath_admission_tests.rs"]
+mod admission_tests;
+
+#[cfg(test)]
+#[test]
+fn ui_timer_query_is_native_and_empty() {
+    assert_eq!(route(&ClientCommand::NativeUiTimerQuery), WrathRoute::NativeUiTimerQuery);
+    assert_eq!(benilla_protocol::wrath_ui_timer::encode_query(), (0x4f6, vec![]));
 }

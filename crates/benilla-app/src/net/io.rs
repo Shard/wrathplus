@@ -27,7 +27,7 @@ use crossbeam_channel::{Receiver, Sender};
 
 use super::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
 
-mod wrath;
+pub(super) mod wrath;
 
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
 /// tell a silent server from a dead socket for the runaway watch ([`crate::net::motion`]).
@@ -983,7 +983,7 @@ fn writer_loop(
                     // Wrath-only display roster commands never leak onto the Vanilla wire.
                     ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
                     | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
-                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
+                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {

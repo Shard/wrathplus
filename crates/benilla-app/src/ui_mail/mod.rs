@@ -201,8 +201,7 @@ fn send_query_next_mail_time_on_enter(
     }
 }
 
-/// Temporarily leaves Wrath mail unavailable instead of borrowing Vanilla wire or inventing a
-/// reply. A future native implementation activates this producer through `NetCommands::supports`.
+/// Send only commands backed by the selected dialect's writer; never fabricate a reply.
 fn send_supported(commands: &NetCommands, dialect: SessionDialect, command: ClientCommand) -> bool {
     if !commands.supports(dialect, &command) {
         return false;
@@ -810,12 +809,12 @@ mod tests {
     use benilla_protocol::messages::MailAttachment;
 
     #[test]
-    fn next_mail_query_is_vanilla_only_and_wrath_leaves_pending_untouched() {
+    fn next_mail_query_uses_each_dialects_native_writer_and_updates_pending() {
         use crossbeam_channel::TryRecvError;
 
         for (dialect, expected) in [
             (SessionDialect::Vanilla5875, true),
-            (SessionDialect::Wrath12340, false),
+            (SessionDialect::Wrath12340, true),
         ] {
             let (tx, rx) = crossbeam_channel::unbounded();
             let mut pending = MailPending::default();

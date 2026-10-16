@@ -32,6 +32,7 @@ pub(crate) mod wrath_auras;
 mod wrath_notices;
 mod wrath_mail_capture;
 mod wrath_quests_completed_capture;
+mod wrath_ui_timer_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -125,6 +126,7 @@ impl Plugin for NetPlugin {
         wrath_notices::register(app);
         wrath_mail_capture::register(app);
         wrath_quests_completed_capture::register(app);
+        wrath_ui_timer_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -614,67 +616,14 @@ impl NetCommands {
                         )
                         .is_ok();
                 }
-                matches!(
-                    command,
-                    ClientCommand::SetActiveMover { .. }
-                        | ClientCommand::Logout
-                        | ClientCommand::ForceLogout
-                        | ClientCommand::ItemQuery { .. }
-                        | ClientCommand::SetSelection { .. }
-                        | ClientCommand::AttackSwing { .. }
-                        | ClientCommand::AttackStop
-                        | ClientCommand::Loot { .. }
-                        | ClientCommand::LootMoney
-                        | ClientCommand::LootRelease { .. }
-                        | ClientCommand::GroupInvite { .. }
-                        | ClientCommand::GroupAccept
-                        | ClientCommand::GroupDecline
-                        | ClientCommand::PartyAssignment { .. }
-                        | ClientCommand::GroupLeave
-                        | ClientCommand::RequestPartyMemberStats { .. }
-                        // `benilla_protocol::wrath_session`: queries, action bar, casting.
-                        | ClientCommand::NameQuery { .. }
-                        | ClientCommand::CreatureQuery { .. }
-                        | ClientCommand::PetNameQuery { .. }
-                        | ClientCommand::GameObjectQuery { .. }
-                        | ClientCommand::SetActionButton { .. }
-                        | ClientCommand::CastSpell { .. }
-                        | ClientCommand::CastSpellAtDest { .. }
-                        | ClientCommand::CastSpellAtSource { .. }
-                        | ClientCommand::CastSpellGameObject { .. }
-                        | ClientCommand::CastSpellItem { .. }
-                        | ClientCommand::CancelCast { .. }
-                        | ClientCommand::CancelAura { .. }
-                        // `benilla_protocol::wrath_npc`: gossip and the quest giver.
-                        | ClientCommand::GossipHello { .. }
-                        | ClientCommand::GossipSelectOption { .. }
-                        | ClientCommand::NpcTextQuery { .. }
-                        | ClientCommand::QuestgiverStatusQuery { .. }
-                        | ClientCommand::QuestgiverHello { .. }
-                        | ClientCommand::QuestgiverQuery { .. }
-                        | ClientCommand::QuestgiverAccept { .. }
-                        | ClientCommand::QuestgiverComplete { .. }
-                        | ClientCommand::QuestgiverRequestReward { .. }
-                        | ClientCommand::QuestgiverChooseReward { .. }
-                        | ClientCommand::QuestQuery { .. }
-                        | ClientCommand::QuestlogRemove { .. }
-                        | ClientCommand::PushQuestToParty { .. }
-                        | ClientCommand::QuestConfirmAccept { .. }
-                        // `benilla_protocol::wrath_vendor`.
-                        | ClientCommand::ListInventory { .. }
-                        | ClientCommand::BuyItem { .. }
-                        | ClientCommand::BuyItemInSlot { .. }
-                        | ClientCommand::SellItem { .. }
-                        | ClientCommand::BuybackItem { .. }
-                        | ClientCommand::RepairItem { .. }
-                ) || matches!(
-                    command,
-                    ClientCommand::AutostoreLootItem { slot: 0..=17 }
-                        | ClientCommand::SetSheathed { state: 0..=2 }
-                        | ClientCommand::StandStateChange {
-                            state: 0 | 1 | 3 | 8
-                        }
-                )
+                // Route ownership is the source of truth. Keep value-level validation separate
+                // from admission so adding a native writer cannot silently strand its producer.
+                match command {
+                    ClientCommand::AutostoreLootItem { slot } if *slot > 17 => false,
+                    ClientCommand::SetSheathed { state } if *state > 2 => false,
+                    ClientCommand::StandStateChange { state } if !matches!(state, 0 | 1 | 3 | 8) => false,
+                    _ => io::wrath::has_writer_route(command),
+                }
             }
         }
     }
@@ -2095,6 +2044,7 @@ pub(crate) enum ClientCommand {
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
+    NativeUiTimerQuery,
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

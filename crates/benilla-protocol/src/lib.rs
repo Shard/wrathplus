@@ -318,3 +318,4 @@ pub mod wrath_logout;
 pub mod wrath_pet_name;
 
 pub mod wrath_quests_completed;
+pub mod wrath_ui_timer;
