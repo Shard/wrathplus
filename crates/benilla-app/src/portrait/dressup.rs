@@ -28,6 +28,7 @@ pub(crate) const DRESSUP_SLOT: &str = "dressup";
 /// visible items with the tried-on ones substituted); a change in it re-assembles the booth.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct DressUpLook {
+    pub(crate) class: u8,
     /// The player's own body display id (the reference's `SetUnit("player")`).
     pub(crate) display_id: u32,
     pub(crate) race: u8,

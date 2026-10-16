@@ -144,7 +144,12 @@ pub(in crate::entities) fn redress_player_looks(
         );
         let visible = look.as_ref().and_then(|l| {
             let cg = characters.as_deref()?;
-            Some(cg.0.visible_geosets(l.race, l.sex, l.hair_style, l.facial_hair, &eg))
+            Some(super::char_skin::eye_geosets(
+                &cg.0,
+                l,
+                &eg,
+                sections.as_deref(),
+            ))
         });
         // Cached per (appearance, worn set), so a swap back costs a lookup.
         let char_mats: CharSkinMaterials = match look.as_ref() {

@@ -62,6 +62,7 @@ pub(crate) fn equip_slot(inv_type: u8) -> Option<usize> {
 /// One preview's input: the body display, its appearance, and the worn equipment in the
 /// `SMSG_CHAR_ENUM` slot shape.
 pub(in crate::entities) struct PreviewSpec {
+    pub(in crate::entities) class: u8,
     /// The race and sex body for a glue look, the player's own display for the dressing room.
     pub(in crate::entities) display_id: u32,
     pub(in crate::entities) race: u8,
@@ -181,6 +182,10 @@ pub(in crate::entities) fn build_glue_preview(
     };
 
     let spec = PreviewSpec {
+        class: match look {
+            GlueLook::Create(l) => l.class,
+            GlueLook::Select(l) => l.class,
+        },
         display_id,
         race,
         sex,
@@ -312,6 +317,7 @@ pub(in crate::entities) fn build_dressup_preview(
     };
     let spec = PreviewSpec {
         display_id: look.display_id,
+        class: look.class,
         race: look.race,
         sex: look.sex,
         skin: look.skin,
@@ -499,6 +505,8 @@ fn assemble(spec: &PreviewSpec, ctx: &mut PreviewCtx<'_, '_>) -> Option<Assemble
     let parts = dm.parts.as_deref()?; // asset still loading
 
     let char_look = CharLook {
+        class: spec.class,
+        face: spec.face,
         race,
         sex,
         skin: spec.skin,
@@ -565,9 +573,9 @@ fn assemble(spec: &PreviewSpec, ctx: &mut PreviewCtx<'_, '_>) -> Option<Assemble
 
     // The world path's geoset selection, the helm's hide-mask rows included (`0x4799a0`).
     let eg = equip_geosets(ctx.displays.as_deref(), &bodyslots, cloak, helm, false);
-    let visible = ctx.characters.map(|c| {
-        c.0.visible_geosets(race, sex, char_look.hair_style, char_look.facial_hair, &eg)
-    });
+    let visible = ctx
+        .characters
+        .map(|c| super::char_skin::eye_geosets(&c.0, &char_look, &eg, ctx.sections.as_deref()));
     let body_tex = super::char_skin::forced_body_atlas(
         &char_look,
         super::char_skin::skin_key(&char_look, bodyslots, spec.emblem, false),
@@ -1012,6 +1020,25 @@ pub(in crate::entities) struct DressUpState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_identity_distinguishes_eye_glow_class() {
+        let warrior = crate::portrait::CreateLook {
+            race: 1,
+            sex: 0,
+            class: 1,
+            skin: 0,
+            face: 0,
+            hair_style: 0,
+            hair_color: 0,
+            facial_hair: 0,
+        };
+        let dk = crate::portrait::CreateLook {
+            class: 6,
+            ..warrior
+        };
+        assert!(GlueLook::Create(warrior) != GlueLook::Create(dk));
+    }
 
     /// Against the shipped `SpellVisualKit.dbc`: row 989's `+0x3c` reads
     /// `01 00 00 00  0e 00 00 00  ff ff ff ff  ff ff ff ff  fd b9 0c 4b  00 00 00 3f`, and it fills
