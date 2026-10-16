@@ -914,10 +914,19 @@ mod tests {
                 assert!(switched.swung, "native swing reached the command endpoint");
                 assert_eq!(
                     commands,
-                    ["stop", "select", "swing", "select", "stop", "cancel-cast"]
+                    [
+                        "stop",
+                        "select",
+                        "swing",
+                        "cancel-repeat",
+                        "select",
+                        "stop",
+                        "cancel-cast",
+                    ]
                 );
                 assert_eq!(queued, None);
-                assert_eq!(repeat, Some(75), "unported auto-repeat remains fenced");
+                // The native auto-repeat cancel now ships, as in 1.12.
+                assert_eq!(repeat, None);
                 assert_eq!((stand, sheath), (1, 1));
             } else {
                 assert!(switched.swung);

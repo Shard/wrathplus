@@ -105,7 +105,7 @@ fn on_tame_failure(In(ev): In<SessionEvent>, mut failures: ResMut<PetTameFailure
 
 fn on_refusal_line(In(ev): In<SessionEvent>, mut errors: ResMut<UiErrorKeys>) {
     match ev {
-        SessionEvent::PetNameInvalid => pet_name_invalid(&mut errors),
+        SessionEvent::PetNameInvalid { .. } => pet_name_invalid(&mut errors),
         SessionEvent::PetBroken => pet_broken(&mut errors),
         _ => {}
     }

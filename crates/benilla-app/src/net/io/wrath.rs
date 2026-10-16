@@ -1016,6 +1016,7 @@ enum WrathRoute {
     NativeInstanceControl,
     NativeInventory,
     NativeExchange,
+    NativeSpellControl,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1065,6 +1066,17 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetTradeGold { .. }
         | ClientCommand::SetTradeItem { .. }
         | ClientCommand::ClearTradeItem { .. } => WrathRoute::NativeExchange,
+        ClientCommand::NativeSpellControl(_)
+        | ClientCommand::PetAction { .. }
+        | ClientCommand::PetSetAction { .. }
+        | ClientCommand::PetStopAttack { .. }
+        | ClientCommand::PetCancelAura { .. }
+        | ClientCommand::PetSpellAutocast { .. }
+        | ClientCommand::PetAbandon { .. }
+        | ClientCommand::PetRename { .. }
+        | ClientCommand::CancelAutoRepeat
+        | ClientCommand::CancelChannelling { .. }
+        | ClientCommand::ResurrectResponse { .. } => WrathRoute::NativeSpellControl,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
@@ -1382,6 +1394,15 @@ fn writer_loop(
                         let (opcode, body) = exchange_packet(command);
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeSpellControl => {
+                        match benilla_protocol::wrath_spell_control::encode(&spell_control_command(command)) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid spell-control command rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
                     WrathRoute::NativeMirrorImageQuery => {
                         let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
                         let (opcode, body) = benilla_protocol::wrath_mirror_image::encode_query(guid);
@@ -1564,6 +1585,25 @@ fn lfg_packet(
 
 /// Queries, the action bar and casting, in build 12340's layouts.
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
+/// The native request for a [`WrathRoute::NativeSpellControl`] command.
+fn spell_control_command(command: ClientCommand) -> benilla_protocol::wrath_spell_control::Command {
+    use benilla_protocol::wrath_spell_control::Command as C;
+    match command {
+        ClientCommand::NativeSpellControl(command) => command,
+        ClientCommand::PetAction { pet_guid, packed, target_guid } => C::PetAction { pet: pet_guid, word: packed, target: target_guid },
+        ClientCommand::PetSetAction { pet_guid, entries } => C::PetSetAction { pet: pet_guid, entries },
+        ClientCommand::PetStopAttack { pet_guid } => C::PetStopAttack { pet: pet_guid },
+        ClientCommand::PetCancelAura { pet_guid, spell_id } => C::PetCancelAura { pet: pet_guid, spell_id },
+        ClientCommand::PetSpellAutocast { pet_guid, spell_id, enabled } => C::PetSpellAutocast { pet: pet_guid, spell_id, enabled },
+        ClientCommand::PetAbandon { pet_guid } => C::PetAbandon { pet: pet_guid },
+        ClientCommand::PetRename { pet_guid, name } => C::PetRename { pet: pet_guid, name },
+        ClientCommand::CancelAutoRepeat => C::CancelAutoRepeatSpell,
+        ClientCommand::CancelChannelling { spell_id } => C::CancelChannelling { spell_id },
+        ClientCommand::ResurrectResponse { caster, accept } => C::ResurrectResponse { caster, accept },
+        _ => unreachable!("not a spell-control route"),
+    }
+}
+
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_exchange::{encode, Command as X};
     use benilla_protocol::wrath_trade::Command as T;

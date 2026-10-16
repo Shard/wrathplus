@@ -114,7 +114,11 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             },
         }],
         ServerPacket::PetTameFailure { reason } => vec![SessionEvent::PetTameFailure { reason }],
-        ServerPacket::PetNameInvalid => vec![SessionEvent::PetNameInvalid],
+        ServerPacket::PetNameInvalid => vec![SessionEvent::PetNameInvalid {
+            reason: 0,
+            name: String::new(),
+            declined: None,
+        }],
         ServerPacket::PetBroken => vec![SessionEvent::PetBroken],
         ServerPacket::PetActionSound { pet_guid, talk } => {
             vec![SessionEvent::PetActionSound { pet_guid, talk }]

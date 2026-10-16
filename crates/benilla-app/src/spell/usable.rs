@@ -44,6 +44,8 @@ pub(crate) struct UsableCtx<'a> {
     pub(crate) cooldowns: &'a Cooldowns,
     /// The talent spell-modifier tables leg 12's cost goes through.
     pub(crate) spell_mods: &'a SpellModifiers,
+    /// Build 12340's combo points, which no descriptor carries.
+    pub(crate) combo: &'a crate::net::wrath_combo_points::NativeComboPoints,
     /// Every carried entry's count for the frame ([`crate::ui_items::carried_counts`]).
     pub(crate) carried: &'a std::collections::HashMap<u32, u32>,
 }
@@ -379,7 +381,8 @@ pub(crate) fn spell_usable(
     // test) fails while the caster's combo-point byte (`PLAYER_FIELD_BYTES` byte 1) is 0. It reads
     // no target, so a point banked on another mob leaves the button lit and the server refuses the
     // cast. No class gate, unlike Lua `GetComboPoints 0x51a190`: a warrior's Overpower greys here.
-    if d.needs_combo_points() && ctx.store.0.player_combo_points().unwrap_or(0) == 0 {
+    if d.needs_combo_points() && crate::net::wrath_combo_points::banked(ctx.store, ctx.combo).0 == 0
+    {
         return (false, false);
     }
     // Leg 6 (`0x612480`): the form's `SpellShapeshiftForm.dbc` stance flag decides whether it
@@ -740,6 +743,10 @@ mod tests {
             cooldowns,
             carried,
             spell_mods,
+            combo: &crate::net::wrath_combo_points::NativeComboPoints {
+                points: 0,
+                target: 0,
+            },
         }
     }
 
@@ -1001,6 +1008,10 @@ mod tests {
                 cooldowns: &cooldowns,
                 carried: &carried,
                 spell_mods: &SpellModifiers::default(),
+                combo: &crate::net::wrath_combo_points::NativeComboPoints {
+                    points: 0,
+                    target: 0,
+                },
             };
             assert_eq!(
                 spell_usable(5308, &execute, &spells, &ctx, &objects, &items, &commands),

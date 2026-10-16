@@ -68,6 +68,7 @@ impl Plugin for SpellPlugin {
             .init_resource::<AutoRepeatActive>()
             .init_resource::<Cooldowns>()
             .init_resource::<SpellModifiers>()
+            .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
             .init_resource::<AutoSelfCast>()
             .init_resource::<SpellTargeting>()
             .init_resource::<HeldForPick>()
