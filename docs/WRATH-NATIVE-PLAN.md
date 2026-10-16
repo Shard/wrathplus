@@ -223,3 +223,32 @@ e.g. net/session handling, gameplay systems (spells, combat, units, items, quest
 glue (`ui_*`), and dev/capture tooling (`capture/`, `addon_harness/`, probes), keeping the binary
 crate thin. Goals: faster incremental builds and per-crate gates, clearer ownership. Plan the
 seams from the actual module dependency graph first; no behaviour change, suites green per step.
+
+## Finish mode (Shannon, 2026-10-16)
+
+Goal: finish every workstream as far as headless tests and installed-data checks can prove it, then
+go through live bugs one by one. Until then:
+
+- **No live-bug detours.** Play-test findings go to `docs/WRATH-BUG-BACKLOG.md` (manager-owned),
+  not to workers, unless the client crashes or cannot reach the world. Missing APIs and dropped
+  packets are not bugs; they are the backlog below.
+- **Family-sized units.** One unit = one whole opcode family, one FrameXML file's missing APIs, or
+  one asset feature, gated once. The heavy lock is the bottleneck; amortise it.
+- **Proportionate evidence.** AzerothCore source is sufficient for wire layouts the server writes.
+  Use Ghidra only for client-only behaviour or where AC and the client could differ. One audit
+  round per unit; unresolved semantics ship labelled capture-only rather than blocking.
+- **Self-reserve and go.** Reserve in one line to the manager and start; don't wait for an ack
+  unless the unit crosses another worker's crate.
+
+Done criteria per worker (the existing WS "Done when" lines still apply):
+
+| Worker | Finish backlog | Done when |
+|---|---|---|
+| Wire (WS4) | Player-relevant missing S→C/C→S rows, family by family: spell/aura logs, item & inventory results, quest, movement/teleport, group/raid, loot/trade/mail/auction remainders, channels, BG/arena, achievements, calendar last. GM/debug/dev/voice rows are out of scope. | Every in-scope row is handled or labelled capture-only with a reason. |
+| Descriptor (WS1) | Shares WS4 families with Wire (coordinate by family), then any WS1 leftovers. | As above, for its families. |
+| App Migration (WS2) | Raw 1.12 constants → semantic fields; consumers for capture-only rows; raw-bitfield audit rows. | WS2 rg check clean; audit doc has no pending rows; capture-only rows have consumers where the UI needs them. |
+| Native UI (WS3/5) | The census's missing APIs (494 at 4f9ff373), by FrameXML file, plus WS5 widget rules and the LFG L1 work. | Census reports 0 missing FrameXML-called APIs/methods. |
+| Assets (WS6) | M2 v264 features (ribbons, lights, two-stage batches), remaining DBC layouts. | No asset load failure on a headless Northshire→Goldshire→Stormwind→Northrend route; installed-data tests green. |
+| Experience (WS7) | Northrend water render, Classic/Plus profile switch, override packs, Plus lighting. | WS7 "Done when". |
+
+After all six are done: Vanilla removal, `wrathplus` rename, quality-gate ratchet, app-crate split.
