@@ -153,7 +153,8 @@ fn spawn_weld(commands: &mut Commands, acc: &mut WeldAcc) -> Entity {
     let tris = std::mem::take(&mut acc.tris);
     commands
         .spawn((
-            PendingCollider::new(build_collider_task(verts, tris), None, !doodad_hulls_bare()),
+            PendingCollider::new(build_collider_task(verts, tris), None, !doodad_hulls_bare())
+                .with_source(crate::collision::ColliderSource::M2),
             PickOccluder,
             WorldObject {
                 kind: ModelKind::Doodad,

@@ -250,7 +250,8 @@ pub(super) fn spawn_loaded_placements(
                                             build_collider_task(verts, tris),
                                             None,
                                             !doodad_hulls_bare(),
-                                        ),
+                                        )
+                                        .with_source(crate::collision::ColliderSource::M2),
                                         PickOccluder,
                                     ))
                                     .id(),
@@ -496,7 +497,8 @@ pub(super) fn spawn_loaded_placements(
                                         build_collider_task(verts, tris),
                                         Some(walk_layers()),
                                         true,
-                                    ),
+                                    )
+                                    .with_source(crate::collision::ColliderSource::Wmo),
                                     // The walk faces take the selection ring (floors, steps).
                                     GroundDecalSurface,
                                     // Clamps the mouse pick. The reference's occluder faces are
@@ -511,11 +513,14 @@ pub(super) fn spawn_loaded_placements(
                     {
                         ents.push(
                             commands
-                                .spawn(PendingCollider::new(
-                                    build_collider_task(verts, tris),
-                                    Some(camera_layers()),
-                                    true,
-                                ))
+                                .spawn(
+                                    PendingCollider::new(
+                                        build_collider_task(verts, tris),
+                                        Some(camera_layers()),
+                                        true,
+                                    )
+                                    .with_source(crate::collision::ColliderSource::Wmo),
+                                )
                                 .id(),
                         );
                     }
@@ -720,7 +725,8 @@ pub(super) fn spawn_loaded_placements(
                                     build_collider_task(verts, tris),
                                     None,
                                     !doodad_hulls_bare(),
-                                ),
+                                )
+                                .with_source(crate::collision::ColliderSource::M2),
                                 PickOccluder,
                             ))
                             .id(),
