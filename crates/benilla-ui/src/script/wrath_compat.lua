@@ -574,14 +574,7 @@ end
 UnitIsTalking = UnitIsTalking or none
 GetNumMapDebugObjects = GetNumMapDebugObjects or zero
 
--- ── the combat log: an empty log, and the engine's unit-flag constants ─────────────────────────
-CombatLogResetFilter, CombatLogAddFilter, CombatLogClearEntries = none, none, none
-CombatLogSetCurrentEntry, CombatLogAdvanceEntry, CombatLogSetRetentionTime = none, none, none
-CombatLogGetNumEntries, CombatLogGetCurrentEntry = zero, none
-CombatLogGetRetentionTime = function() return 300 end
-CombatLog_Object_IsA = function(flags, mask)
-    return bit.band(flags or 0, mask or 0) ~= 0 and 1 or nil
-end
+-- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
 GetCurrentCombatTextEventInfo = GetCurrentCombatTextEventInfo or none
 COMBATLOG_OBJECT_AFFILIATION_MINE, COMBATLOG_OBJECT_AFFILIATION_PARTY = 0x1, 0x2
 COMBATLOG_OBJECT_AFFILIATION_RAID, COMBATLOG_OBJECT_AFFILIATION_OUTSIDER = 0x4, 0x8

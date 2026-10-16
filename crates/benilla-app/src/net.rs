@@ -45,6 +45,7 @@ mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
+mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -156,6 +157,7 @@ impl Plugin for NetPlugin {
         wrath_session_meta_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
+        wrath_faction_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
