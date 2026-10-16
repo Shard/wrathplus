@@ -39,7 +39,7 @@ Movement M1, self authority orders (`0x00C7/00DE/00DF/00E2/00E4/00E6/00EF/00F2..
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
 | S→C | 233 | 109 | 347 | 689 |
-| C→S | 298 | 0 | 430 | 728 |
+| C→S | 298 | 0 | 426 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table by the manager at the movement-M1 integration merge. “Handled” outbound does not mean any gate may be removed without owner approval.
 
