@@ -210,6 +210,14 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x01fc => Ok(match crate::wrath_environment::decode_damage(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathEnvironmentalDamage(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x02bd => Ok(match crate::wrath_environment::decode_durability(body) {
+                Ok(()) => handled(vec![SessionEvent::DurabilityDamageDeath], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x0063 | 0x0065 => Ok(match crate::wrath_who::decode(opcode, body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathWho { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },

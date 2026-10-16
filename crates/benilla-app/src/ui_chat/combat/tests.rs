@@ -505,3 +505,32 @@ fn a_set_cvar_moves_the_range_the_gate_compares_against() {
     assert!(!r.set("mousespeed", 10.0));
     assert_eq!(r.class(C::Me), 100_000.0);
 }
+
+#[test]
+fn unsigned_wrath_environment_resistance_never_becomes_vulnerability() {
+    let script = benilla_ui::script::UiScript::new().unwrap();
+    script.lua().load("RESIST_TRAILER='resist %d'; VULNERABLE_TRAILER='vulnerable %d'; ABSORB_TRAILER='absorb %d'").exec().unwrap();
+    let mut line = String::new();
+    append_trailers(
+        &script,
+        &mut line,
+        Trailers {
+            resisted: i64::from(u32::MAX),
+            absorbed: 77,
+            ..Default::default()
+        },
+    );
+    assert!(line.contains("resist 4294967295"));
+    assert!(line.contains("absorb 77"));
+    assert!(!line.contains("vulnerable"));
+    let mut vanilla = String::new();
+    append_trailers(
+        &script,
+        &mut vanilla,
+        Trailers {
+            resisted: i64::from(i32::MIN),
+            ..Default::default()
+        },
+    );
+    assert!(vanilla.contains("vulnerable 2147483648"));
+}

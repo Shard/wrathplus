@@ -7,6 +7,12 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        (
+            "NativeWhoCommand",
+            ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Whois {
+                name: b"Synthetic".to_vec(),
+            }),
+        ),
         ("NativeUiTimerQuery", ClientCommand::NativeUiTimerQuery),
         (
             "GuildQuery",
