@@ -27,81 +27,62 @@ use super::Model;
 /// Wrath's all ten.
 pub(super) const ENGINE_CHAT_WINDOW_SLOTS: usize = 10;
 
-/// `CHATMSGGROUP`, the client's 68-entry message-group table (`0x805fb0`, stride 0xc):
-/// `(name, defaultOn, addedVersion)` in the order of the record's `+0x20` flags. Not the 94-entry
-/// colour table: `CREATURE` is only here, and 27 colour types have no group. The boot init
-/// (`0x4982c0`) enables the `defaultOn` groups in window 2; the loader (`0x498a60`) back-fills by
-/// `addedVersion` for a file older than `ADDEDVERSION 2`.
-pub const MESSAGE_GROUPS: [(&str, bool, u8); 68] = [
+/// `CHATMSGGROUP`, build 12340's 46-entry message-group table (`0x9fb7c0`, stride 0xc):
+/// `(name, defaultOn, addedVersion)` in the order of the record's flags
+/// (`/tmp/azb-ui-chat-tables*.log`). The first 40 are the general window's: ResetChatWindows
+/// (`0x501f00`) enables their `defaultOn` ones in window 1. The last six are the combat log's,
+/// all enabled in window 2. A real 12340 `chat-cache.txt` lists exactly these names.
+pub const MESSAGE_GROUPS: [(&str, bool, u8); 46] = [
     ("SYSTEM", true, 0),
+    ("SYSTEM_NOMENU", true, 5),
     ("SAY", true, 0),
+    ("EMOTE", true, 7),
     ("YELL", true, 0),
     ("WHISPER", true, 0),
     ("PARTY", true, 0),
+    ("PARTY_LEADER", true, 10),
+    ("RAID", true, 7),
+    ("RAID_LEADER", true, 7),
+    ("RAID_WARNING", true, 7),
+    ("BATTLEGROUND", true, 7),
+    ("BATTLEGROUND_LEADER", true, 7),
     ("GUILD", true, 0),
-    ("CREATURE", true, 0),
-    ("CHANNEL", true, 0),
+    ("OFFICER", true, 7),
+    ("MONSTER_SAY", true, 7),
+    ("MONSTER_YELL", true, 7),
+    ("MONSTER_EMOTE", true, 7),
+    ("MONSTER_WHISPER", true, 7),
+    ("MONSTER_BOSS_EMOTE", true, 7),
+    ("MONSTER_BOSS_WHISPER", true, 7),
+    ("ERRORS", true, 7),
+    ("AFK", true, 7),
+    ("DND", true, 7),
+    ("IGNORED", true, 7),
+    ("BG_HORDE", true, 7),
+    ("BG_ALLIANCE", true, 7),
+    ("BG_NEUTRAL", true, 7),
+    ("COMBAT_FACTION_CHANGE", true, 1),
     ("SKILL", true, 0),
     ("LOOT", true, 0),
-    ("COMBAT_MISC_INFO", true, 0),
-    ("COMBAT_SELF_HITS", true, 0),
-    ("COMBAT_SELF_MISSES", true, 0),
-    ("COMBAT_PET_HITS", true, 0),
-    ("COMBAT_PET_MISSES", true, 0),
-    ("COMBAT_PARTY_HITS", false, 0),
-    ("COMBAT_PARTY_MISSES", false, 0),
-    ("COMBAT_FRIENDLYPLAYER_HITS", false, 0),
-    ("COMBAT_FRIENDLYPLAYER_MISSES", false, 0),
-    ("COMBAT_HOSTILEPLAYER_HITS", true, 0),
-    ("COMBAT_HOSTILEPLAYER_MISSES", true, 0),
-    ("COMBAT_CREATURE_VS_SELF_HITS", true, 0),
-    ("COMBAT_CREATURE_VS_SELF_MISSES", true, 0),
-    ("COMBAT_CREATURE_VS_PARTY_HITS", false, 0),
-    ("COMBAT_CREATURE_VS_PARTY_MISSES", false, 0),
-    ("COMBAT_CREATURE_VS_CREATURE_HITS", false, 0),
-    ("COMBAT_CREATURE_VS_CREATURE_MISSES", false, 0),
-    ("COMBAT_FRIENDLY_DEATH", true, 0),
-    ("COMBAT_HOSTILE_DEATH", true, 0),
-    ("COMBAT_XP_GAIN", true, 0),
-    ("SPELL_SELF_DAMAGE", true, 0),
-    ("SPELL_SELF_BUFF", true, 0),
-    ("SPELL_PET_DAMAGE", true, 0),
-    ("SPELL_PET_BUFF", true, 0),
-    ("SPELL_PARTY_DAMAGE", false, 0),
-    ("SPELL_PARTY_BUFF", false, 0),
-    ("SPELL_FRIENDLYPLAYER_DAMAGE", false, 0),
-    ("SPELL_FRIENDLYPLAYER_BUFF", false, 0),
-    ("SPELL_HOSTILEPLAYER_DAMAGE", true, 0),
-    ("SPELL_HOSTILEPLAYER_BUFF", true, 0),
-    ("SPELL_CREATURE_VS_SELF_DAMAGE", true, 0),
-    ("SPELL_CREATURE_VS_SELF_BUFF", true, 0),
-    ("SPELL_CREATURE_VS_PARTY_DAMAGE", false, 0),
-    ("SPELL_CREATURE_VS_PARTY_BUFF", false, 0),
-    ("SPELL_CREATURE_VS_CREATURE_DAMAGE", false, 0),
-    ("SPELL_CREATURE_VS_CREATURE_BUFF", false, 0),
-    ("SPELL_TRADESKILLS", true, 0),
-    ("SPELL_DAMAGESHIELDS_ON_SELF", true, 0),
-    ("SPELL_DAMAGESHIELDS_ON_OTHERS", false, 0),
-    ("SPELL_AURA_GONE_SELF", true, 0),
-    ("SPELL_AURA_GONE_PARTY", false, 0),
-    ("SPELL_AURA_GONE_OTHER", false, 0),
-    ("SPELL_ITEM_ENCHANTMENTS", true, 0),
-    ("SPELL_BREAK_AURA", true, 0),
-    ("SPELL_PERIODIC_SELF_DAMAGE", true, 0),
-    ("SPELL_PERIODIC_SELF_BUFFS", true, 0),
-    ("SPELL_PERIODIC_PARTY_DAMAGE", false, 0),
-    ("SPELL_PERIODIC_PARTY_BUFFS", false, 0),
-    ("SPELL_PERIODIC_FRIENDLYPLAYER_DAMAGE", false, 0),
-    ("SPELL_PERIODIC_FRIENDLYPLAYER_BUFFS", false, 0),
-    ("SPELL_PERIODIC_HOSTILEPLAYER_DAMAGE", true, 0),
-    ("SPELL_PERIODIC_HOSTILEPLAYER_BUFFS", true, 0),
-    ("SPELL_PERIODIC_CREATURE_DAMAGE", true, 0),
-    ("SPELL_PERIODIC_CREATURE_BUFFS", true, 0),
-    ("SPELL_FAILED_LOCALPLAYER", false, 0),
-    ("COMBAT_HONOR_GAIN", true, 0),
-    ("COMBAT_FACTION_CHANGE", true, 1),
     ("MONEY", true, 2),
+    ("CHANNEL", true, 0),
+    ("ACHIEVEMENT", true, 8),
+    ("GUILD_ACHIEVEMENT", true, 8),
+    ("TARGETICONS", false, 11),
+    ("BN_WHISPER", true, 12),
+    ("BN_WHISPER_INFORM", true, 12),
+    ("BN_CONVERSATION", true, 12),
+    ("BN_INLINE_TOAST_ALERT", true, 13),
+    ("OPENING", true, 6),
+    ("TRADESKILLS", true, 6),
+    ("PET_INFO", true, 6),
+    ("COMBAT_XP_GAIN", true, 0),
+    ("COMBAT_HONOR_GAIN", true, 0),
+    ("COMBAT_MISC_INFO", true, 0),
 ];
+
+/// The first combat-log group: groups before it are window 1's, the rest window 2's.
+pub const COMBAT_LOG_GROUPS_START: usize = 40;
 
 /// The flag index of a group name, case-folded as the loader's `SStrCmpI` matches it.
 pub fn message_group_index(name: &str) -> Option<usize> {
@@ -160,12 +141,13 @@ impl ChatWindowLook {
         uninteractable: false,
     };
 
-    /// Window `index`'s (0-based) record at boot (`0x4982c0`), what a client with no
-    /// `chat-cache.txt` runs from: window 1 shown and undocked (FrameXML docks it,
-    /// FloatingChatFrame.xml:835) with groups 1-10; window 2 shown, docked at 1, with the
-    /// `defaultOn` groups of 11-68; the rest hidden with no groups.
+    /// Window `index`'s (0-based) stock record, what ResetChatWindows (`0x501f00`) leaves and a
+    /// client with no `chat-cache.txt` runs from: window 1 shown and docked at 1 with the
+    /// `defaultOn` general groups; window 2 shown and docked at 2 with the six combat-log groups;
+    /// the rest hidden with no groups. Label: 12340's boot init was not audited separately and is
+    /// taken to equal the reset.
     pub fn stock(index: usize) -> Self {
-        let groups = |range: std::ops::Range<usize>, all: bool| -> Vec<String> {
+        let names = |range: std::ops::Range<usize>, all: bool| -> Vec<String> {
             MESSAGE_GROUPS[range]
                 .iter()
                 .filter(|(_, on, _)| all || *on)
@@ -175,13 +157,14 @@ impl ChatWindowLook {
         match index {
             0 => Self {
                 shown: true,
-                messages: groups(0..10, true),
+                docked: Some(1),
+                messages: names(0..COMBAT_LOG_GROUPS_START, false),
                 ..Self::DEFAULT
             },
             1 => Self {
                 shown: true,
-                docked: Some(1),
-                messages: groups(10..68, false),
+                docked: Some(2),
+                messages: names(COMBAT_LOG_GROUPS_START..MESSAGE_GROUPS.len(), true),
                 ..Self::DEFAULT
             },
             _ => Self::DEFAULT,
@@ -714,7 +697,7 @@ mod tests {
                 .unwrap();
             (shown, docked)
         };
-        assert_eq!(probe(1), ("number".into(), "nil".into()));
+        assert_eq!(probe(1), ("number".into(), "number".into()));
         assert_eq!(probe(2), ("number".into(), "number".into()));
         for id in 3..=7 {
             assert_eq!(probe(id), ("nil".into(), "nil".into()), "window {id}");
@@ -731,28 +714,26 @@ mod tests {
     #[test]
     fn wrath_combat_log_docks_after_the_primary_window() {
         let s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
-        assert_eq!(s.eval::<i64>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(2) return d").unwrap(), 2);
-    }
-
-    /// The boot init docks window 2 at 1 (`0x4982c0`: `mov ds:0xb4ff78, 1`).
-    #[test]
-    fn docked_is_a_dock_position_not_a_flag() {
-        let mut s = UiScript::new().unwrap();
-        assert!(s
-            .eval::<bool>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(1) return d == nil")
-            .unwrap());
-        assert_eq!(
-            s.eval::<i64>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(2) return d")
-                .unwrap(),
-            1
-        );
-        s.run("SetChatWindowDocked(1, 1) SetChatWindowDocked(2, 2)")
-            .unwrap();
         assert_eq!(
             s.eval::<i64>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(2) return d")
                 .unwrap(),
             2
         );
+    }
+
+    /// The stock records dock window 1 at 1 and window 2 at 2 (`0x501f00`).
+    #[test]
+    fn docked_is_a_dock_position_not_a_flag() {
+        let mut s = UiScript::new().unwrap();
+        let docked = |s: &UiScript, id: i64| {
+            s.eval::<i64>(&format!(
+                "local _,_,_,_,_,_,_,_,d = GetChatWindowInfo({id}) return d"
+            ))
+            .unwrap()
+        };
+        assert_eq!((docked(&s, 1), docked(&s, 2)), (1, 2));
+        s.run("SetChatWindowDocked(2, 3)").unwrap();
+        assert_eq!(docked(&s, 2), 3);
         let _ = s.take_chat_window_changes();
     }
 
@@ -922,22 +903,29 @@ mod record_tests {
     use super::{ChatWindowLook, MESSAGE_GROUPS};
     use crate::script::{UiScript, ZoneChannelRow};
 
-    /// The boot init (`0x4982c0`); 34 of groups 11 to 68 are `defaultOn`.
+    /// The stock records (`0x501f00`): window 1 has the `defaultOn` general groups (all but
+    /// TARGETICONS), window 2 the six combat-log groups.
     #[test]
-    fn the_stock_records_are_the_boot_init() {
+    fn the_stock_records_are_the_reset_records() {
         let s = UiScript::new().unwrap();
         let looks = s.chat_window_looks();
         assert!(looks[0].shown && looks[1].shown && !looks[2].shown);
-        assert_eq!((looks[0].docked, looks[1].docked), (None, Some(1)));
-        let general: Vec<String> = MESSAGE_GROUPS[..10]
-            .iter()
-            .map(|(n, _, _)| (*n).to_string())
-            .collect();
-        assert_eq!(looks[0].messages, general);
-        assert_eq!(looks[1].messages.len(), 34);
-        assert_eq!(looks[1].messages[0], "COMBAT_MISC_INFO");
-        assert_eq!(looks[1].messages[33], "MONEY");
-        assert!(!looks[1].messages.iter().any(|m| m == "COMBAT_PARTY_HITS"));
+        assert_eq!((looks[0].docked, looks[1].docked), (Some(1), Some(2)));
+        assert_eq!(looks[0].messages.len(), 39);
+        assert_eq!(looks[0].messages[0], "SYSTEM");
+        assert!(looks[0].messages.iter().any(|m| m == "ACHIEVEMENT"));
+        assert!(!looks[0].messages.iter().any(|m| m == "TARGETICONS"));
+        assert_eq!(
+            looks[1].messages,
+            [
+                "OPENING",
+                "TRADESKILLS",
+                "PET_INFO",
+                "COMBAT_XP_GAIN",
+                "COMBAT_HONOR_GAIN",
+                "COMBAT_MISC_INFO"
+            ]
+        );
         assert!(looks[2].messages.is_empty());
         assert!(looks
             .iter()
@@ -945,8 +933,9 @@ mod record_tests {
         assert_eq!(
             s.eval::<Vec<String>>("return {GetChatWindowMessages(1)}")
                 .unwrap(),
-            general
+            looks[0].messages
         );
+        assert_eq!(MESSAGE_GROUPS.len(), 46);
     }
 
     #[test]
@@ -997,7 +986,7 @@ mod record_tests {
         );
         let general = s.chat_window_looks()[0].messages.clone();
         assert!(!general.iter().any(|m| m == "SAY" || m == "LOOT"));
-        assert_eq!(general.len(), 8);
+        assert_eq!(general.len(), 37);
         assert_eq!(s.take_chat_window_changes(), vec![0, 2]);
         s.set_chat_window_looks([(
             4,
