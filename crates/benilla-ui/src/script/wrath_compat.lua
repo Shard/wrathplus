@@ -141,9 +141,7 @@ function SecureCmdOptionParse(options)
     end
 end
 
--- ── casting, mirror timers, runes, totems ──────────────────────────────────────────────────────
-UnitCastingInfo = UnitCastingInfo or none
-UnitChannelInfo = UnitChannelInfo or none
+-- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
 local runeTypes = { 1, 1, 2, 2, 3, 3 }

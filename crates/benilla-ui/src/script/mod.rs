@@ -40,6 +40,8 @@ mod wrath_channel_roster;
 mod wrath_channel_display;
 mod wrath_channel_bindings;
 mod wrath_chat_window;
+mod wrath_unit_casts;
+pub use wrath_unit_casts::WrathUnitCast;
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -783,6 +785,7 @@ impl UiScript {
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
+            wrath_unit_casts::install(&lua)?;
         }
 
         let s = UiScript {
