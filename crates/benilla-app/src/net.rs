@@ -880,6 +880,13 @@ impl GameTime {
         }
     }
 
+    /// The packed login date as `(years since 2000, month 1..=12, day 1..=31)`, decoded from
+    /// [`Self::base_day`]'s `year·372 + month·31 + day`. No day rollover is applied.
+    pub(crate) fn date(&self) -> (u32, u32, u32) {
+        let rem = self.base_day % 372;
+        (self.base_day / 372, (rem.max(1) - 1) / 31, (rem.max(1) - 1) % 31 + 1)
+    }
+
     /// Current minute of the game day (`0..1440`).
     pub(crate) fn minute_of_day(&self) -> u32 {
         self.minute_of_day_f32() as u32
@@ -961,6 +968,7 @@ pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistr
         D::Raid => 0x03,
         D::Guild => 0x04,
         D::Battleground => 0x2c,
+        D::Whisper => 0x07,
     }
 }
 
@@ -972,6 +980,8 @@ pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistri
         D::Raid => m::CHAT_TYPE_RAID,
         D::Guild => m::CHAT_TYPE_GUILD,
         D::Battleground => m::CHAT_TYPE_BATTLEGROUND,
+        // Only the 12340 binding produces it; 1.12 has no whispered addon message.
+        D::Whisper => m::CHAT_TYPE_WHISPER,
     }
 }
 

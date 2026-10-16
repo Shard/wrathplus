@@ -789,6 +789,7 @@ impl UiScript {
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
             wrath_unit_casts::install(&lua)?;
+            addon_message::install_wrath(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 

@@ -506,13 +506,34 @@ fn back_on_logout(
 /// on failure `CGlueMgr::Update` (`0x46c14e`) opens the one-button `OKAY` dialog (`0x46c177`
 /// pushes `"OKAY"`, `0x837084`) with the key table `0x85cae8`'s text. A success needs nothing:
 /// `net::io` re-enumerates first.
+///
+/// Native refusals ride the same system (the transport has already published the refreshed roster
+/// on success, `9bab9156`): the 12340 key's text; an unlisted code reads `CHAR_DELETE_FAILED`.
 fn delete_result(
     mut msgs: MessageReader<CharActionResultMessage>,
+    native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
     mut dialog: ResMut<crate::glue::dialog::GlueDialog>,
     strings: Option<Res<GlueStrings>>,
 ) {
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
+    for msg in native
+        .into_iter()
+        .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
+    {
+        if msg.action != CharAction::Delete
+            || msg.code == benilla_protocol::wrath_world::CHAR_DELETE_SUCCESS
+        {
+            continue;
+        }
+        let key = wrath_char_result_key(msg.code).unwrap_or("CHAR_DELETE_FAILED");
+        let text = strings.text(key, "Character deletion failed");
+        info!(
+            "char select: native delete refused (code {:#04x}) — {text}",
+            msg.code
+        );
+        dialog.open_error(text);
+    }
     for msg in msgs.read() {
         if msg.action != CharAction::Delete {
             continue;
@@ -524,6 +545,51 @@ fn delete_result(
             );
             dialog.open_error(text);
         }
+    }
+}
+
+/// Build 12340's glue status key for a character create or delete result: the `RESPONSE_*` table
+/// at `0xad91f0`, indexed by the result code (`0x6b1100`, `0x6b0f40`; codes as AzerothCore's
+/// `ResponseCodes`). `None` outside the create and delete blocks.
+pub(crate) fn wrath_char_result_key(code: u8) -> Option<&'static str> {
+    const CREATE: [&str; 24] = [
+        "CHAR_CREATE_IN_PROGRESS",
+        "CHAR_CREATE_SUCCESS",
+        "CHAR_CREATE_ERROR",
+        "CHAR_CREATE_FAILED",
+        "CHAR_CREATE_NAME_IN_USE",
+        "CHAR_CREATE_DISABLED",
+        "CHAR_CREATE_PVP_TEAMS_VIOLATION",
+        "CHAR_CREATE_SERVER_LIMIT",
+        "CHAR_CREATE_ACCOUNT_LIMIT",
+        "CHAR_CREATE_SERVER_QUEUE",
+        "CHAR_CREATE_ONLY_EXISTING",
+        "CHAR_CREATE_EXPANSION",
+        "CHAR_CREATE_EXPANSION_CLASS",
+        "CHAR_CREATE_LEVEL_REQUIREMENT",
+        "CHAR_CREATE_UNIQUE_CLASS_LIMIT",
+        "CHAR_CREATE_CHARACTER_IN_GUILD",
+        "CHAR_CREATE_RESTRICTED_RACECLASS",
+        "CHAR_CREATE_CHARACTER_CHOOSE_RACE",
+        "CHAR_CREATE_CHARACTER_ARENA_LEADER",
+        "CHAR_CREATE_CHARACTER_DELETE_MAIL",
+        "CHAR_CREATE_CHARACTER_SWAP_FACTION",
+        "CHAR_CREATE_CHARACTER_RACE_ONLY",
+        "CHAR_CREATE_CHARACTER_GOLD_LIMIT",
+        "CHAR_CREATE_FORCE_LOGIN",
+    ];
+    const DELETE: [&str; 6] = [
+        "CHAR_DELETE_IN_PROGRESS",
+        "CHAR_DELETE_SUCCESS",
+        "CHAR_DELETE_FAILED",
+        "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
+        "CHAR_DELETE_FAILED_GUILD_LEADER",
+        "CHAR_DELETE_FAILED_ARENA_CAPTAIN",
+    ];
+    match code {
+        0x2e..=0x45 => Some(CREATE[usize::from(code - 0x2e)]),
+        0x46..=0x4b => Some(DELETE[usize::from(code - 0x46)]),
+        _ => None,
     }
 }
 
@@ -1122,6 +1188,51 @@ mod tests {
         assert_eq!(dialog.kind, Some(DialogKind::Error), "the OKAY dialog");
         // No GlueStrings here, so the fallback literal; the shipped one is checked below.
         assert_eq!(dialog.text, "Character deletion failed");
+    }
+
+    /// Build 12340's status table (`0xad91f0`): create 0x2e-0x45, delete 0x46-0x4b, by AC code.
+    #[test]
+    fn the_native_result_keys_follow_the_12340_table() {
+        assert_eq!(wrath_char_result_key(0x2f), Some("CHAR_CREATE_SUCCESS"));
+        assert_eq!(wrath_char_result_key(0x32), Some("CHAR_CREATE_NAME_IN_USE"));
+        assert_eq!(wrath_char_result_key(0x45), Some("CHAR_CREATE_FORCE_LOGIN"));
+        assert_eq!(wrath_char_result_key(0x47), Some("CHAR_DELETE_SUCCESS"));
+        assert_eq!(
+            wrath_char_result_key(0x4a),
+            Some("CHAR_DELETE_FAILED_GUILD_LEADER")
+        );
+        assert_eq!(wrath_char_result_key(0x2d), None);
+        assert_eq!(wrath_char_result_key(0x4c), None);
+    }
+
+    /// A native refused delete opens the dialog with its 12340 key; a native success does not.
+    #[test]
+    fn a_native_refused_delete_raises_the_glue_dialog() {
+        use crate::glue::dialog::{DialogKind, GlueDialog};
+        use crate::net::WrathCharActionResultMessage as Native;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<Native>()
+            .add_message::<CharActionResultMessage>()
+            .init_resource::<GlueDialog>()
+            .add_systems(Update, delete_result);
+        app.world_mut().write_message(Native {
+            action: CharAction::Delete,
+            code: benilla_protocol::wrath_world::CHAR_DELETE_SUCCESS,
+        });
+        app.update();
+        assert!(!app.world().resource::<GlueDialog>().is_open());
+        app.world_mut().write_message(Native {
+            action: CharAction::Delete,
+            code: 0x4a,
+        });
+        app.update();
+        let dialog = app.world().resource::<GlueDialog>();
+        assert_eq!(dialog.kind, Some(DialogKind::Error));
+        assert_eq!(
+            dialog.text, "Character deletion failed",
+            "fallback without GlueStrings"
+        );
     }
 
     /// The delete refusals resolve to the sentences 1.12 ships, each off a real key.
