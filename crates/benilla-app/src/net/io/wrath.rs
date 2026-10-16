@@ -1013,6 +1013,7 @@ enum WrathRoute {
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
     NativeMirrorImageQuery,
+    NativeInstanceControl,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1027,6 +1028,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
+        ClientCommand::NativeInstanceControl(_) => WrathRoute::NativeInstanceControl,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
@@ -1329,6 +1331,11 @@ fn writer_loop(
                     WrathRoute::NativeWorldportAck => {
                         let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
                         active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativeInstanceControl => {
+                        let ClientCommand::NativeInstanceControl(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_instance_control::encode(&command);
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeMirrorImageQuery => {
                         let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
