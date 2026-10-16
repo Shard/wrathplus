@@ -189,6 +189,18 @@ pub struct WmoPortalInstance {
 }
 
 impl WmoPortalInstance {
+    /// Bounded build-12340 liquid fix: a zero group field with no MLIQ is dry (NSABBEY).
+    /// The native point query 0x7c8360 rejects resolved LiquidType ID zero before the grid.
+    /// Nonzero raw values retain the existing mapping pending the full MOHD/MOGP decode audit;
+    /// they must not be globally disabled, since native nonzero IDs can flood rooms without grids.
+    /// No MOGP 0x1000 requirement: gridless whole-room liquid is a supported native case.
+    pub fn group_flood(raw: u32, has_mliq: bool) -> Option<benilla_formats::LiquidKind> {
+        if (raw == 0 && !has_mliq) || raw == benilla_formats::NO_GROUP_LIQUID {
+            return None;
+        }
+        benilla_formats::LiquidKind::from_nibble((raw & 0xf) as u8)
+    }
+
     /// The `[0xca7f00]` bit for one group, the grain every consumer asks at: a WMO piece ORs it
     /// over its groups, a unit asks it of the room its light node attached to. A group past the set
     /// reads false.

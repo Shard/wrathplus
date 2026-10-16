@@ -128,3 +128,17 @@ line from the start of the terminal output, your platform and the server you ran
 and ideas are welcome there or on the Discord linked from the README.
 
 Working with an AI agent is expected. The agent reads `AGENTS.md`, and the same rules bind it.
+
+### Abbey dry-room liquid regression
+
+NSABBEY's installed 3.3.5 groups have raw MOGP `groupLiquid = 0` and no MLIQ;
+these must not receive a whole-room liquid override. The native group query
+`0x7c8360` rejects resolved LiquidType ID zero before testing the grid. The bounded
+spawn fix treats raw zero without MLIQ as dry, unconditionally (no experience or
+Vanilla fork). It does not require MOGP `0x1000`: native nonzero resolved IDs can
+legitimately flood rooms without grids. Nonzero raw values and zero with an MLIQ
+retain the existing nibble mapping pending the full MOHD/MOGP-to-LiquidType decode
+audit; this is an explicit residual, not a claim of complete Wrath liquid decoding.
+Headless regressions query the player's actual indoor claim at the Abbey stuck
+anchor in groups 3/5, then check the Wrath ground-controller limit; an explicit
+nonzero gridless flood remains a positive control. Live traversal is manager-only.
