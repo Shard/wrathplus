@@ -40,6 +40,7 @@ mod wrath_achievement_capture;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
+mod wrath_battleground_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -146,6 +147,7 @@ impl Plugin for NetPlugin {
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
+        wrath_battleground_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -2108,6 +2110,8 @@ pub(crate) enum ClientCommand {
     NativeQuest(benilla_protocol::wrath_quest::Command),
     /// Native party commands with no Vanilla twin; transport does not claim leadership.
     NativeParty(benilla_protocol::wrath_party::Command),
+    /// Native battleground/arena/battlefield commands keyed by this build's bg type; no UI producer.
+    NativeBattleground(benilla_protocol::wrath_battleground::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
