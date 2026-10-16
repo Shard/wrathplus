@@ -7,8 +7,8 @@
 //! matching `WorldSession::Handle*` readers for the requests.
 //!
 //! Replies that mean what their 1.12 counterparts mean become the shared events their owners
-//! read. Another unit's channel, a spell impact and a created totem have no shared event and are
-//! capture-only ([`Packet`]). Registry-only opcodes in this family stay undecoded:
+//! read, the channel events now for every caster. A spell impact and a created totem have no shared
+//! event and are capture-only ([`Packet`]). Registry-only opcodes in this family stay undecoded:
 //! [`REGISTRY_ONLY`].
 
 use std::io::{self, Cursor};
@@ -63,14 +63,6 @@ pub const CMSG_PET_LEARN_TALENT: u32 = 0x047A;
 /// Capture-only receipts: no shared event or presentation owns them yet.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Packet {
-    /// `MSG_CHANNEL_START` for a unit other than us (AC sends it to the whole set).
-    ChannelStart {
-        caster: u64,
-        spell_id: u32,
-        duration_ms: u32,
-    },
-    /// `MSG_CHANNEL_UPDATE` for a unit other than us.
-    ChannelUpdate { caster: u64, remaining_ms: u32 },
     /// `SMSG_PLAY_SPELL_IMPACT`: a `SpellVisualKit` id played as an impact on `target`.
     SpellImpact { target: u64, kit_id: u32 },
     /// `SMSG_TOTEM_CREATED`: totem `slot` holds `totem` for `duration_ms`, from `spell_id`.
@@ -170,9 +162,8 @@ fn u64_le(r: &mut Cursor<&[u8]>) -> io::Result<u64> {
     Ok(u64::from(u32_le(r)?) | u64::from(u32_le(r)?) << 32)
 }
 
-/// Decode one of the [`handles`] opcodes. `self_guid` is our player, once its create arrived: the
-/// channel opcodes name their caster, and only ours drives the shared channel bar.
-pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
+/// Decode one of the [`handles`] opcodes.
+pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
     let mut r = Cursor::new(body);
     let event = match opcode {
         SMSG_COOLDOWN_EVENT => SessionEvent::CooldownEvent {
@@ -183,39 +174,17 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
             spell_id: u32_le(&mut r)?,
             caster: u64_le(&mut r)?,
         },
-        MSG_CHANNEL_START => {
-            let caster = read_packed_guid(&mut r)?;
-            let spell_id = u32_le(&mut r)?;
-            let duration_ms = u32_le(&mut r)?;
-            if self_guid == Some(caster) {
-                SessionEvent::ChannelStart {
-                    spell_id,
-                    duration_ms,
-                }
-            } else {
-                SessionEvent::WrathSpellControl {
-                    packet: Packet::ChannelStart {
-                        caster,
-                        spell_id,
-                        duration_ms,
-                    },
-                }
-            }
-        }
-        MSG_CHANNEL_UPDATE => {
-            let caster = read_packed_guid(&mut r)?;
-            let remaining_ms = u32_le(&mut r)?;
-            if self_guid == Some(caster) {
-                SessionEvent::ChannelUpdate { remaining_ms }
-            } else {
-                SessionEvent::WrathSpellControl {
-                    packet: Packet::ChannelUpdate {
-                        caster,
-                        remaining_ms,
-                    },
-                }
-            }
-        }
+        // Build 12340 names the caster and sends to the whole set: every caster's channel reaches
+        // the shared event, and its owner decides whose bar it drives.
+        MSG_CHANNEL_START => SessionEvent::ChannelStart {
+            caster: Some(read_packed_guid(&mut r)?),
+            spell_id: u32_le(&mut r)?,
+            duration_ms: u32_le(&mut r)?,
+        },
+        MSG_CHANNEL_UPDATE => SessionEvent::ChannelUpdate {
+            caster: Some(read_packed_guid(&mut r)?),
+            remaining_ms: u32_le(&mut r)?,
+        },
         SMSG_RESURRECT_REQUEST => resurrect_request(&mut r)?,
         SMSG_PET_TAME_FAILURE => SessionEvent::PetTameFailure {
             reason: u8_le(&mut r)?,

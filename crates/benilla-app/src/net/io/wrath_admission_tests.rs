@@ -7,6 +7,19 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeDeath", ClientCommand::NativeDeath(benilla_protocol::wrath_death::Command::HearthAndResurrect)),
+        ("RepopRequest", ClientCommand::RepopRequest),
+        ("CorpseQuery", ClientCommand::CorpseQuery),
+        ("ReclaimCorpse", ClientCommand::ReclaimCorpse { corpse: 1 }),
+        ("SummonResponse", ClientCommand::SummonResponse { summoner: 1 }),
+        ("SelfRes", ClientCommand::SelfRes),
+        ("FriendListRequest", ClientCommand::FriendListRequest),
+        ("AddFriend", ClientCommand::AddFriend { name: "Bob".into() }),
+        ("DelFriend", ClientCommand::DelFriend { guid: 1 }),
+        ("AddIgnore", ClientCommand::AddIgnore { name: "Bob".into() }),
+        ("DelIgnore", ClientCommand::DelIgnore { guid: 1 }),
+        ("DuelAccepted", ClientCommand::DuelAccepted { arbiter: 1 }),
+        ("DuelCancelled", ClientCommand::DuelCancelled { arbiter: 1 }),
         ("NativeBattleground", ClientCommand::NativeBattleground(benilla_protocol::wrath_battleground::Command::BfExit { battle_id: 1 })),
         (
             "BattlegroundJoin",
@@ -211,6 +224,7 @@ fn every_wrath_writer_route_is_admitted() {
         ("PetAbandon", ClientCommand::PetAbandon { pet_guid: 1 }),
         ("PetRename", ClientCommand::PetRename { pet_guid: 1, name: "Rex".into() }),
         ("CancelAutoRepeat", ClientCommand::CancelAutoRepeat),
+        ("TeleportAck", ClientCommand::TeleportAck { guid: 1, counter: 2 }),
         ("CancelChannelling", ClientCommand::CancelChannelling { spell_id: 5143 }),
         ("ResurrectResponse", ClientCommand::ResurrectResponse { caster: 1, accept: true }),
         ("NativeSpellControl", ClientCommand::NativeSpellControl(benilla_protocol::wrath_spell_control::Command::SpellClick { unit: 1 })),
@@ -785,10 +799,11 @@ fn every_wrath_writer_route_is_admitted() {
         "MoveTimeSkipped",
         "ForceSpeedAck",
         "NotActiveMover",
-        "TeleportAck",
         "WorldportAck",
         "MoveModeAck",
         "KnockBackAck",
+        // ForceSpeedAck, MoveModeAck and KnockBackAck are acknowledged by the writer itself
+        // (`send_mover_ack`); their controller commands are no-ops, not admitted routes.
     ];
     for tail in route_body.split("ClientCommand::").skip(1) {
         let name = tail

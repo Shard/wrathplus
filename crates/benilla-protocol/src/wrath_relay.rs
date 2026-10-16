@@ -13,6 +13,8 @@ const MSG_MOVE_START_FORWARD: u16 = 0x00b5;
 const MSG_MOVE_STOP_TURN: u16 = 0x00be;
 const MSG_MOVE_SET_RUN_MODE: u16 = 0x00c2;
 const MSG_MOVE_SET_WALK_MODE: u16 = 0x00c3;
+/// An observed near-teleport (AzerothCore `Unit::SendTeleportPacket`, sent to the set without us).
+const MSG_MOVE_TELEPORT: u16 = 0x00c5;
 const MSG_MOVE_FALL_LAND: u16 = 0x00c9;
 const MSG_MOVE_SET_FACING: u16 = 0x00da;
 const MSG_MOVE_ROOT: u16 = 0x00ec;
@@ -25,7 +27,9 @@ const WRATH_FALLING_FAR: u32 = 0x0000_2000;
 const SHARED_ROOT: u32 = 0x0000_1000;
 const SHARED_FALLING: u32 = 0x0000_2000;
 const SHARED_FALLING_FAR: u32 = 0x0000_4000;
-const WRATH_ON_FOOT_FLAGS: u32 = 0x0000_013f | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
+/// Water walking and slow fall (`0x1000_0000`, `0x2000_0000`) are on-foot modes with the same bits in
+/// the shared word.
+const WRATH_ON_FOOT_FLAGS: u32 = 0x3000_013f | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
 
 /// Whether `opcode` has a source-verified AzerothCore on-foot relay layout.
 ///
@@ -39,6 +43,7 @@ pub const fn handles(opcode: u16) -> bool {
             ..=MSG_MOVE_STOP_TURN
                 | MSG_MOVE_SET_RUN_MODE
                 | MSG_MOVE_SET_WALK_MODE
+                | MSG_MOVE_TELEPORT
                 | MSG_MOVE_FALL_LAND
                 | MSG_MOVE_SET_FACING
                 | MSG_MOVE_ROOT

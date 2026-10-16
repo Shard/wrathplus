@@ -276,7 +276,14 @@ pub(super) fn spawn_loaded_placements(
                         ents.first().copied(),
                         &fade,
                     );
-                    spawn_lights_for(&mut commands, &m.lights, p.transform, None, &mut ents);
+                    spawn_lights_for(
+                        &mut commands,
+                        &m.lights,
+                        p.transform,
+                        host.as_ref(),
+                        None,
+                        &mut ents,
+                    );
                     tag_world_object(&mut commands, &ents, &object);
                     if let Some((target, r)) = fade_near_target() {
                         let pos = p.transform.translation;
@@ -763,6 +770,7 @@ pub(super) fn spawn_loaded_placements(
                 &mut commands,
                 &m.lights,
                 d.transform,
+                host.as_ref(),
                 fade.room.as_ref(), // the prop's glow rides its rooms like its mesh
                 &mut ents,
             );

@@ -214,6 +214,14 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_death::OPCODES.contains(&opcode) => Ok(match crate::wrath_death::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            opcode if crate::wrath_contacts::OPCODES.contains(&opcode) => Ok(match crate::wrath_contacts::decode(opcode, body) {
+                Ok(events) => handled(events, Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_battleground::OPCODES.contains(&opcode) => Ok(match crate::wrath_battleground::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -417,7 +425,7 @@ impl WrathEventAdapter {
                 })
             }
             opcode if crate::wrath_spell_control::handles(opcode) => {
-                Ok(match crate::wrath_spell_control::decode(opcode, body, self.self_guid) {
+                Ok(match crate::wrath_spell_control::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })

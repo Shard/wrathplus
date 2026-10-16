@@ -33,7 +33,10 @@
 //! so a `MESSAGES` block is the whole set; a window the file omits keeps its stock record
 //! ([`ChatWindowLook::stock`]), and a file older than `ADDEDVERSION 13` gets the `defaultOn` groups
 //! added since: general groups into window 1, combat-log groups into window 2. Label: the 12340
-//! back-fill rule is inferred from the group table's version words, not audited. `LOCKED` is an `i32` (`CHATWINDOW+0x8c`) written
+//! back-fill rule is inferred from the group table's version words, not audited.
+//! A cache benilla wrote under the 1.12 grammar says `ADDEDVERSION 2`, so its first load under
+//! the 12340 tables back-fills every `defaultOn` group newer than version 2 and drops names the
+//! 46-entry table lacks: a one-time migration that can bring back groups a player had switched off. `LOCKED` is an `i32` (`CHATWINDOW+0x8c`) written
 //! through `setne`, so only 0 and 1 round-trip. Deviation: `set_chat_window_looks` drops an
 //! out-of-range window, where the reference's `WINDOW` bound is off by one (`0x498d1c`, `ja` where
 //! the array needs `jae`), because that write would land past the array.

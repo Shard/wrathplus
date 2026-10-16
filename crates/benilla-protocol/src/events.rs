@@ -649,6 +649,8 @@ pub enum SessionEvent {
         target: Option<u64>,
         /// The `CAST_FLAG_AMMO` tail: nocked ammo for any caster (`0x60ba30` from `0x6e78b6`).
         ammo_display_id: Option<u32>,
+        /// Build 12340's cast count byte (the castID `UNIT_SPELLCAST_*` passes); `None` on 1.12.
+        cast_count: Option<u8>,
     },
     /// The cast launched (`SMSG_SPELL_GO`); the server times impact off `Spell.dbc` Speed itself.
     SpellGo {
@@ -666,6 +668,8 @@ pub enum SessionEvent {
         ammo_display_id: Option<u32>,
         /// The cast item when the first guid is not the caster; the item cooldown keys on it.
         item_caster: Option<u64>,
+        /// Build 12340's cast count byte; `None` on 1.12.
+        cast_count: Option<u8>,
     },
     /// A channeled beam's hops (`SMSG_SPELL_UPDATE_CHAIN_TARGETS`), consumed once by the next chain
     /// `CharProc`; the reference fills that `unit+0xd44` array from spell-go hits too (`0x6e800d`).
@@ -675,7 +679,12 @@ pub enum SessionEvent {
         targets: Vec<u64>,
     },
     /// An observed cast was interrupted or cancelled (`SMSG_SPELL_FAILED_OTHER`).
-    SpellFailedOther { caster: u64, spell_id: u32 },
+    /// `cast_count`: build 12340's cast count byte; `None` on 1.12.
+    SpellFailedOther {
+        caster: u64,
+        spell_id: u32,
+        cast_count: Option<u8>,
+    },
     /// Our cast was pushed back by damage (`SMSG_SPELL_DELAYED`); its end moves out by `delay_ms`.
     SpellDelayed { caster: u64, delay_ms: u32 },
     /// Stop our own ranged auto-repeat (`SMSG_CANCEL_AUTO_REPEAT`, self-only).
@@ -713,10 +722,19 @@ pub enum SessionEvent {
     ClearCooldown { spell_id: u32, caster: u64 },
     /// Wipe every cooldown for `caster` (`SMSG_COOLDOWN_CHEAT`, the GM reset).
     CooldownCheat { caster: u64 },
-    /// Our own channel opened (`MSG_CHANNEL_START`, self-only, no guid on the wire).
-    ChannelStart { spell_id: u32, duration_ms: u32 },
-    /// A channel's time left (`MSG_CHANNEL_UPDATE`, self-only); 0 is over, natural or interrupted.
-    ChannelUpdate { remaining_ms: u32 },
+    /// A channel opened (`MSG_CHANNEL_START`). 1.12 sends it to the caster only, with no guid
+    /// (`caster: None`); build 12340 names the caster and sends it to the whole set.
+    ChannelStart {
+        spell_id: u32,
+        duration_ms: u32,
+        caster: Option<u64>,
+    },
+    /// A channel's time left (`MSG_CHANNEL_UPDATE`); 0 is over, natural or interrupted. `caster`
+    /// as for [`Self::ChannelStart`].
+    ChannelUpdate {
+        remaining_ms: u32,
+        caster: Option<u64>,
+    },
     /// Authoritative native packet aura snapshot; updated slots restart arrival clocks.
     UnitAuras {
         guid: u64,
@@ -1163,6 +1181,8 @@ pub enum SessionEvent {
     WrathChatNotice { packet: crate::wrath_chat_notices::Packet },
     /// Capture-only native battleground/arena/battlefield receipts (`wrath_battleground`).
     WrathBattleground { packet: crate::wrath_battleground::Packet },
+    /// Capture-only native death and corpse receipts (`wrath_death`).
+    WrathDeath { packet: crate::wrath_death::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
