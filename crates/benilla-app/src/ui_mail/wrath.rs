@@ -74,6 +74,8 @@ pub(super) fn snapshot(
                 WrathMailRow {
                     header,
                     attachments,
+                    kind: row.kind,
+                    sender_guid: row.sender,
                 }
             })
             .collect(),
@@ -295,7 +297,8 @@ mod tests {
 /// An inbox action a Lua row pick asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Action {
-    TakeItem,
+    /// The 1-based attachment slot `TakeInboxItem` named; `None` takes the first remaining one.
+    TakeItem(Option<u32>),
     TakeMoney,
     Delete,
     Return,
@@ -303,8 +306,9 @@ pub(super) enum Action {
 }
 
 /// Build-12340 inbox actions by native inbox row (1-based): the wire wants the attachment's low
-/// GUID, the sender and the template the legacy commands lack (AC `MailHandler.cpp`). The Lua
-/// binding records no attachment index, so a take names the row's first remaining attachment.
+/// GUID, the sender and the template the legacy commands lack (AC `MailHandler.cpp`). A take names
+/// the attachment in the slot `TakeInboxItem` gave (12340 `0x5711c0`/`0x56d920`, 1-based in Lua,
+/// 0-based on the wire), or the row's first remaining one; an empty named slot sends nothing.
 pub(super) fn native_action(
     inbox: &benilla_protocol::wrath_mail::Inbox,
     mailbox: u64,
@@ -315,10 +319,16 @@ pub(super) fn native_action(
     let row = inbox.mails.get(index_1based.checked_sub(1)? as usize)?;
     let mail_id = row.id;
     Some(ClientCommand::NativeMailMutation(match action {
-        Action::TakeItem => M::TakeItem {
+        Action::TakeItem(slot) => M::TakeItem {
             mailbox,
             mail_id,
-            item_low_guid: row.attachments.first()?.guid_low,
+            item_low_guid: match slot {
+                Some(slot) => {
+                    let slot = u8::try_from(slot.checked_sub(1)?).ok()?;
+                    row.attachments.iter().find(|a| a.slot == slot)?.guid_low
+                }
+                None => row.attachments.iter().min_by_key(|a| a.slot)?.guid_low,
+            },
         },
         Action::TakeMoney => M::TakeMoney { mailbox, mail_id },
         Action::Delete => M::Delete {
@@ -431,12 +441,25 @@ mod action_tests {
             other => panic!("{other:?}"),
         };
         assert_eq!(
-            native(Action::TakeItem),
+            native(Action::TakeItem(None)),
             M::TakeItem {
                 mailbox: 7,
                 mail_id: 5,
                 item_low_guid: 0x99
             }
+        );
+        assert_eq!(
+            native(Action::TakeItem(Some(5))),
+            M::TakeItem {
+                mailbox: 7,
+                mail_id: 5,
+                item_low_guid: 0x99
+            },
+            "Lua slot 5 is wire slot 4"
+        );
+        assert!(
+            native_action(&inbox, 7, 1, Action::TakeItem(Some(1))).is_none(),
+            "an empty named slot sends nothing"
         );
         assert_eq!(
             native(Action::Delete),
@@ -465,7 +488,7 @@ mod action_tests {
         assert!(native_action(&inbox, 7, 0, Action::TakeMoney).is_none());
         let mut empty = inbox.clone();
         empty.mails[0].attachments.clear();
-        assert!(native_action(&empty, 7, 1, Action::TakeItem).is_none());
+        assert!(native_action(&empty, 7, 1, Action::TakeItem(None)).is_none());
     }
 
     #[test]
