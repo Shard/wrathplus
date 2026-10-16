@@ -55,7 +55,7 @@ mod wmo;
 pub use benilla_formats::{WmoPortalInfo, WmoPortalRef};
 pub use wmo::{
     cap96, collision_tri_bounds, collision_tri_grids, floor168, footprint_tri_bounds,
-    footprint_tri_grids, DoodadBase, WmoGroupNav, WmoModel, WmoModelLoader,
+    footprint_tri_grids, DoodadBase, WmoGroupNav, WmoLiquidState, WmoModel, WmoModelLoader,
 };
 
 /// The asset-source id for MPQ-backed assets: load paths look like `mpq://World/Azeroth/foo.adt`.
@@ -195,6 +195,10 @@ fn strip_sampler_marker(path: &str) -> Option<String> {
     matches!(tag, "rc" | "cr" | "cc").then(|| format!("{base}.{ext}"))
 }
 
+/// Immutable liquid metadata shared by WMO loaders, decoded once at source registration.
+#[derive(Resource, Clone)]
+struct WmoLiquidCatalogs(Arc<benilla_formats::wrath_liquid::LiquidCatalogs>);
+
 /// The explicitly selected archive/schema dialect used by the loaders.
 #[derive(Resource, Clone, Default)]
 pub struct ClientDataProfile(pub benilla_formats::DataProfile);
@@ -230,8 +234,15 @@ pub fn register_mpq_source_overrides(
     profile: &benilla_formats::DataProfile,
     overrides: benilla_formats::AssetOverrides,
 ) -> Result<()> {
+    let mut chain = Chain::open_profile(data_dir, profile)?.with_overrides(overrides);
+    // Decode once from the exact boot chain (including explicitly enabled overrides),
+    // never from environment variables or a separately reopened archive chain.
+    if matches!(profile, benilla_formats::DataProfile::Wrath { .. }) {
+        let catalogs = benilla_formats::wrath_liquid::load_liquid_catalogs(&mut chain)?;
+        app.insert_resource(WmoLiquidCatalogs(Arc::new(catalogs)));
+    }
     let reader = MpqAssetReader {
-        chain: Arc::new(Chain::open_profile(data_dir, profile)?.with_overrides(overrides)),
+        chain: Arc::new(chain),
     };
     app.insert_resource(ClientDataProfile(profile.clone()));
     app.register_asset_source(
@@ -265,7 +276,14 @@ pub fn register_asset_loaders(app: &mut App) {
             app.register_asset_loader(WrathAdtLoader);
         }
     }
-    app.register_asset_loader(WmoModelLoader);
+    let catalogs = app
+        .world()
+        .get_resource::<WmoLiquidCatalogs>()
+        .map(|c| c.0.clone());
+    app.register_asset_loader(WmoModelLoader {
+        wrath: matches!(profile.0, benilla_formats::DataProfile::Wrath { .. }),
+        catalogs,
+    });
     app.register_asset_loader(WdtIndexLoader);
     // The materials' WGSL, compiled in; it too needs `AssetPlugin` first.
     materials::register_shaders(app);

@@ -576,7 +576,19 @@ mod tests {
         let mut world = World::new();
         init_world_point_resources(&mut world);
         // NSABBEY groups 3/5: resolved Wrath liquidID 0, no MLIQ. Exercise the production
-        // spawn mapping from the installed raw zero/no-MLIQ fields.
+        // decoder and asset query projection from installed root flags 5 and raw zero/no-MLIQ.
+        let chunk = |tag: &[u8; 4], payload: &[u8]| {
+            let mut bytes = tag.to_vec();
+            bytes.extend((payload.len() as u32).to_le_bytes());
+            bytes.extend(payload);
+            bytes
+        };
+        let mut mohd = vec![0; 64];
+        mohd[60..64].copy_from_slice(&5u32.to_le_bytes());
+        let root = benilla_formats::parse_wmo_root(&chunk(b"DHOM", &mohd)).unwrap();
+        let native =
+            benilla_formats::wmo_group_wrath_liquid(&chunk(b"PGOM", &[0; 68]), &root).unwrap();
+        let state = benilla_assets::WmoLiquidState { native, kind: None };
         let placement = world
             .spawn(WmoPortalInstance {
                 handle: Handle::default(),
@@ -585,7 +597,7 @@ mod tests {
                 visible: vec![true; 14],
                 interior_fog: vec![false; 14],
                 liquid_visited: vec![false; 14],
-                flooded: vec![WmoPortalInstance::group_flood(0, false); 14],
+                flooded: vec![state.flood_kind(); 14],
             })
             .id();
         for group in [3, 5] {

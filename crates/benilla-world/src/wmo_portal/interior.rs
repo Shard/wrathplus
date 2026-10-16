@@ -680,6 +680,7 @@ mod tests {
             group_footprint_grids: Vec::new(),
             group_light_refs: Vec::new(),
             group_liquids: Vec::new(),
+            wrath_liquid_states: None,
             doodad_base: Default::default(),
             doodad_owner: Default::default(),
             doodad_groups: Default::default(),

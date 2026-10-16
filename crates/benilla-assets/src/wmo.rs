@@ -107,6 +107,42 @@ pub struct WmoModel {
     pub group_light_refs: Vec<Vec<u16>>,
     /// Per-group MLIQ liquid surface in WMO model space; `None` for a group without one.
     pub group_liquids: Vec<Option<LiquidMesh>>,
+    /// Native Wrath query metadata, independent of legacy render mesh availability.
+    /// None selects the legacy data-profile path; failed groups remain None entries.
+    pub wrath_liquid_states: Option<Vec<Option<WmoLiquidState>>>,
+}
+
+/// Resolved native query identity and catalog category; neither is a legacy tile nibble.
+#[derive(Clone, Copy, Debug)]
+pub struct WmoLiquidState {
+    pub native: benilla_formats::WrathWmoLiquidState,
+    pub kind: Option<benilla_formats::LiquidKind>,
+}
+impl WmoLiquidState {
+    /// Decode against retained root context and the shared boot catalog.
+    pub fn decode(
+        group: &[u8],
+        root: &benilla_formats::WmoRoot,
+        catalogs: &benilla_formats::wrath_liquid::LiquidCatalogs,
+    ) -> anyhow::Result<Self> {
+        let native = benilla_formats::wmo_group_wrath_liquid(group, root)?;
+        let kind = catalogs
+            .liquid_type(native.resolved_id)
+            .and_then(|t| t.kind());
+        Ok(Self { native, kind })
+    }
+
+    pub fn flood_kind(&self) -> Option<benilla_formats::LiquidKind> {
+        self.native
+            .is_whole_group_flood()
+            .then_some(self.kind)
+            .flatten()
+    }
+    pub fn grid_kind(&self) -> Option<benilla_formats::LiquidKind> {
+        (self.native.mode() == benilla_formats::WrathWmoLiquidMode::Grid)
+            .then_some(self.kind)
+            .flatten()
+    }
 }
 
 /// One MODD doodad's lighting base. The reference fills an interior doodad's words at create from
@@ -352,7 +388,10 @@ fn resolve_doodad_bases(
 
 /// Loads a WMO root and its group files into a [`WmoModel`].
 #[derive(Default, TypePath)]
-pub struct WmoModelLoader;
+pub struct WmoModelLoader {
+    pub(crate) wrath: bool,
+    pub(crate) catalogs: Option<Arc<benilla_formats::wrath_liquid::LiquidCatalogs>>,
+}
 
 impl AssetLoader for WmoModelLoader {
     type Asset = WmoModel;
@@ -365,6 +404,11 @@ impl AssetLoader for WmoModelLoader {
         _settings: &(),
         ctx: &mut LoadContext<'_>,
     ) -> Result<WmoModel, Self::Error> {
+        if self.wrath && self.catalogs.is_none() {
+            return Err(std::io::Error::other(
+                "Wrath WMO loader requires boot liquid catalogs",
+            ));
+        }
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let to_io = |e: anyhow::Error| std::io::Error::other(format!("{e:#}"));
@@ -411,6 +455,7 @@ impl AssetLoader for WmoModelLoader {
         let mut cam_idx: Vec<u32> = Vec::new();
         let mut group_doodad_refs: Vec<Vec<u16>> = vec![Vec::new(); root.group_count() as usize];
         let mut group_light_refs: Vec<Vec<u16>> = vec![Vec::new(); root.group_count() as usize];
+        let mut wrath_liquid_states = self.wrath.then(|| vec![None; root.group_count() as usize]);
         let mut group_liquids: Vec<Option<LiquidMesh>> =
             (0..root.group_count()).map(|_| None).collect();
         let mut group_footprints: Vec<Option<FootprintTris>> =
@@ -420,6 +465,20 @@ impl AssetLoader for WmoModelLoader {
             let Ok(gbytes) = ctx.read_asset_bytes(group_url).await else {
                 continue; // a missing or unreadable group is skipped
             };
+            if let Some(states) = wrath_liquid_states.as_mut() {
+                match WmoLiquidState::decode(&gbytes, &root, self.catalogs.as_ref().unwrap()) {
+                    Ok(state) => {
+                        if state.native.resolved_id != 0 && state.kind.is_none() {
+                            warn!(
+                                "WMO {stem} group {gi}: unsupported liquid ID {}",
+                                state.native.resolved_id
+                            );
+                        }
+                        states[gi as usize] = Some(state);
+                    }
+                    Err(e) => warn!("WMO {stem} group {gi}: invalid native liquid metadata: {e:#}"),
+                }
+            }
             if let (Some(h), Some(nav)) =
                 (wmo_group_header(&gbytes), group_nav.get_mut(gi as usize))
             {
@@ -574,6 +633,7 @@ impl AssetLoader for WmoModelLoader {
             group_footprint_grids,
             group_light_refs,
             group_liquids,
+            wrath_liquid_states,
         })
     }
 
@@ -634,6 +694,66 @@ fn resolve_shared_liquid_cells(group_liquids: &mut [Option<LiquidMesh>]) {
 #[cfg(test)]
 mod doodad_base_tests {
     use super::*;
+
+    fn liquid_chunk(tag: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut out = tag.to_vec();
+        out.extend((payload.len() as u32).to_le_bytes());
+        out.extend(payload);
+        out
+    }
+
+    #[test]
+    fn wrath_liquid_root_catalog_projection_retains_grid_without_render_mesh() {
+        use benilla_formats::{wrath_liquid::parse_liquid_catalogs, LiquidKind};
+        fn dbc(rows: &[Vec<u32>], words: u32) -> Vec<u8> {
+            let mut b = b"WDBC".to_vec();
+            for w in [rows.len() as u32, words, words * 4, 1] {
+                b.extend(w.to_le_bytes());
+            }
+            for row in rows {
+                for w in row {
+                    b.extend(w.to_le_bytes());
+                }
+            }
+            b.push(0);
+            b
+        }
+        let mut row = vec![0; 45];
+        row[0] = 0x1239; // Low nibble deliberately disagrees with category.
+        row[3] = 2;
+        let catalogs = parse_liquid_catalogs(&dbc(&[row], 45), &dbc(&[], 3)).unwrap();
+        let mut mohd = vec![0; 64];
+        mohd[60..64].copy_from_slice(&5u32.to_le_bytes());
+        let root = parse_wmo_root(&liquid_chunk(b"DHOM", &mohd)).unwrap();
+        let group = |id: u32, grid: bool| {
+            let mut h = vec![0; 68];
+            h[52..56].copy_from_slice(&id.to_le_bytes());
+            if grid {
+                h[8..12].copy_from_slice(&0x1000u32.to_le_bytes());
+                let mut m = vec![0; 30 + 4 * 8];
+                for (i, w) in [2u32, 2, 1, 1].into_iter().enumerate() {
+                    m[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+                }
+                m.push(15); // All holes: geometry may be absent, grid must remain bounded.
+                h.extend(liquid_chunk(b"QILM", &m));
+            }
+            liquid_chunk(b"PGOM", &h)
+        };
+        let dry = WmoLiquidState::decode(&group(0, false), &root, &catalogs).unwrap();
+        assert_eq!(dry.flood_kind(), None);
+        assert_eq!(dry.grid_kind(), None);
+        let flood = WmoLiquidState::decode(&group(0x1239, false), &root, &catalogs).unwrap();
+        assert_eq!(flood.flood_kind(), Some(LiquidKind::Magma));
+        assert_eq!(flood.grid_kind(), None);
+        let grid = WmoLiquidState::decode(&group(0x1239, true), &root, &catalogs).unwrap();
+        assert_eq!(grid.flood_kind(), None);
+        assert_eq!(grid.grid_kind(), Some(LiquidKind::Magma));
+        assert_eq!(grid.native.tile_dimensions, [1, 1]);
+        let unknown = WmoLiquidState::decode(&group(999, false), &root, &catalogs).unwrap();
+        assert_eq!(unknown.native.resolved_id, 999);
+        assert_eq!(unknown.flood_kind(), None);
+        assert!(WmoLiquidState::decode(&[], &root, &catalogs).is_err());
+    }
 
     fn grp(interior: bool) -> WmoGroupInfo {
         WmoGroupInfo {

@@ -1,5 +1,6 @@
-//! Transport-only ordered native mail receipts. App owns any future reducer/UI feed.
-//! Do not narrow these into the legacy mail events or mutate mailbox state here.
+//! Transport-only ordered native show-mailbox notices. App owns any future reducer/UI feed.
+//! `SMSG_SEND_MAIL_RESULT` means what 1.12's does and feeds the shared `SendMailResult` through
+//! `wrath_exchange`; do not mutate mailbox state here.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_mail_mutations::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
