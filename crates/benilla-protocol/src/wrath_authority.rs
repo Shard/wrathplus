@@ -43,6 +43,8 @@ pub struct OnFootPose {
     pub orientation: f32,
     pub fall_time: u32,
     pub fall: Option<FallTail>,
+    /// The swimming pitch, present exactly while `MOVE_SWIMMING` is set.
+    pub pitch: Option<f32>,
 }
 
 impl From<GroundPose> for OnFootPose {
@@ -53,6 +55,7 @@ impl From<GroundPose> for OnFootPose {
             orientation: pose.orientation,
             fall_time: 0,
             fall: None,
+            pitch: None,
         }
     }
 }
@@ -61,7 +64,6 @@ impl OnFootPose {
     pub fn from_movement(movement: &MovementInfo) -> Result<Self, AuthorityCodecError> {
         if movement.flags2 != 0
             || movement.transport.is_some()
-            || movement.pitch.is_some()
             || movement.spline_elevation.is_some()
         {
             return Err(AuthorityCodecError::UnsupportedGroundState);
@@ -81,34 +83,47 @@ impl OnFootPose {
                 cos_angle: jump.cos_angle,
                 horizontal_speed: jump.horizontal_speed,
             }),
+            pitch: movement.pitch,
         };
         pose.validate()?;
         Ok(pose)
     }
 
     fn validate(self) -> Result<(), AuthorityCodecError> {
-        wrath_ground::encode_on_foot(
-            wrath_ground::MSG_MOVE_HEARTBEAT,
-            1,
-            self.flags,
-            0,
-            self.position,
-            self.orientation,
-            self.fall_time,
-            self.fall,
-        )
-        .map(|_| ())
-        .map_err(|_| AuthorityCodecError::UnsupportedGroundState)
+        self.encode(wrath_ground::MSG_MOVE_HEARTBEAT, 1, 0)
+            .map(|_| ())
+            .map_err(|_| AuthorityCodecError::UnsupportedGroundState)
     }
 
     /// A server root halts movement at the latest reported XYZ, not at an invented landing.
     /// ROOT cannot coexist with FALLING/FALLING_FAR in AzerothCore's moving-mask validation.
+    /// A rooted swimmer stays in the water: SWIMMING and its pitch survive.
     pub fn halted(self) -> Self {
         Self {
-            flags: 0,
+            flags: self.flags & wrath_ground::MOVE_SWIMMING,
             fall: None,
             ..self
         }
+    }
+
+    /// This pose as `opcode`'s `packed guid + MovementInfo`.
+    pub fn encode(
+        self,
+        opcode: u32,
+        mover_guid: u64,
+        timestamp: u32,
+    ) -> Result<Vec<u8>, wrath_ground::GroundError> {
+        wrath_ground::encode_movement(
+            opcode,
+            mover_guid,
+            self.flags,
+            timestamp,
+            self.position,
+            self.orientation,
+            self.pitch,
+            self.fall_time,
+            self.fall,
+        )
     }
 }
 
@@ -120,17 +135,9 @@ fn encode_on_foot_ack(
     rooted: Option<bool>,
 ) -> Result<Vec<u8>, AuthorityCodecError> {
     pose.validate()?;
-    let mut encoded = wrath_ground::encode_on_foot(
-        wrath_ground::MSG_MOVE_HEARTBEAT,
-        mover_guid,
-        pose.flags,
-        timestamp,
-        pose.position,
-        pose.orientation,
-        pose.fall_time,
-        pose.fall,
-    )
-    .map_err(|_| AuthorityCodecError::UnsupportedGroundState)?;
+    let mut encoded = pose
+        .encode(wrath_ground::MSG_MOVE_HEARTBEAT, mover_guid, timestamp)
+        .map_err(|_| AuthorityCodecError::UnsupportedGroundState)?;
     let mut prefix = encoded.as_slice();
     let _ = read_packed_guid(&mut prefix)?;
     let prefix_len = encoded.len() - prefix.len();
@@ -138,10 +145,12 @@ fn encode_on_foot_ack(
         // The caller supplies the explicitly halted pose for ROOT. Never discard an airborne
         // tail implicitly while encoding an ACK that only changes a movement-authority bit.
         if rooted {
-            if pose.flags != 0 || pose.fall.is_some() {
+            // A rooted swimmer keeps SWIMMING (and its pitch); nothing else may ride with ROOT.
+            if pose.flags & !wrath_ground::MOVE_SWIMMING != 0 || pose.fall.is_some() {
                 return Err(AuthorityCodecError::UnsupportedGroundState);
             }
-            encoded[prefix_len..prefix_len + 4].copy_from_slice(&MOVEMENT_FLAG_ROOT.to_le_bytes());
+            let flags = MOVEMENT_FLAG_ROOT | pose.flags;
+            encoded[prefix_len..prefix_len + 4].copy_from_slice(&flags.to_le_bytes());
         }
     }
     let mut body = Vec::new();
@@ -698,17 +707,9 @@ fn encode_mover_ack_prefix(
     extra: u32,
 ) -> Result<Vec<u8>, AuthorityCodecError> {
     pose.validate()?;
-    let mut encoded = wrath_ground::encode_on_foot(
-        wrath_ground::MSG_MOVE_HEARTBEAT,
-        mover_guid,
-        pose.flags,
-        timestamp,
-        pose.position,
-        pose.orientation,
-        pose.fall_time,
-        pose.fall,
-    )
-    .map_err(|_| AuthorityCodecError::UnsupportedGroundState)?;
+    let mut encoded = pose
+        .encode(wrath_ground::MSG_MOVE_HEARTBEAT, mover_guid, timestamp)
+        .map_err(|_| AuthorityCodecError::UnsupportedGroundState)?;
     let mut prefix = encoded.as_slice();
     let _ = read_packed_guid(&mut prefix)?;
     let prefix_len = encoded.len() - prefix.len();
@@ -778,7 +779,9 @@ pub fn encode_knock_back_ack(
         return Err(AuthorityCodecError::UnsupportedGroundState);
     };
     let launch = OnFootPose {
-        flags: (pose.flags & !wrath_ground::MOVE_FALLING_FAR) | wrath_ground::MOVE_FALLING,
+        flags: (pose.flags & !(wrath_ground::MOVE_FALLING_FAR | wrath_ground::MOVE_SWIMMING))
+            | wrath_ground::MOVE_FALLING,
+        pitch: None,
         fall_time: 0,
         fall: Some(FallTail {
             vertical_speed,
@@ -884,6 +887,7 @@ mod tests {
                 cos_angle: 0.75,
                 horizontal_speed: 7.0,
             }),
+            pitch: None,
         }
     }
 
@@ -956,6 +960,7 @@ mod tests {
             orientation: 0.5,
             fall_time: 0,
             fall: None,
+            pitch: None,
         }
     }
 

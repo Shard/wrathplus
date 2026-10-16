@@ -319,6 +319,7 @@ mod wrath_native_stream_tests;
 
 pub mod wrath_pet;
 pub mod wrath_spell_control;
+pub mod wrath_speed;
 
 pub mod wrath_chat;
 
