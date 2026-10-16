@@ -797,31 +797,46 @@ fn drain_mail(
         }
     }
 
-    // `SendMail`: the attachment's slot is read at send time, as in the reference.
+    // `SendMail`: each attachment's bag slot is read at send time, as in the reference. The first
+    // that no longer holds an item aborts the send: an error, no packet, that send slot cleared
+    // and `MAIL_SEND_INFO_UPDATE` fired (12340 `0x570910`).
     if let Some(req) = script.take_mail_send() {
-        let item_guid = req.item.and_then(|(bag, slot)| {
+        let guid_of = |bag: i64, slot: u32| {
             self_q.iter().next().and_then(|s| {
                 crate::ui_items::slot_guid(&s.0, bag, (slot.max(1) - 1) as u8, &objects)
             })
-        });
-        if req.item.is_some() && item_guid.is_none() {
-            // The item left its slot: `ERR_ITEM_NOT_FOUND`, no packet, the attachment dropped and
-            // `MAIL_SEND_INFO_UPDATE` fired (`0x4ae98d`).
+        };
+        let mut items = Vec::with_capacity(req.items.len());
+        let mut missing = None;
+        for &(send_slot, bag, slot) in &req.items {
+            match guid_of(bag, slot) {
+                Some(guid) => items.push((send_slot, guid)),
+                None => {
+                    missing = Some(send_slot);
+                    break;
+                }
+            }
+        }
+        if let Some(send_slot) = missing {
             mail.errors.push("ERR_ITEM_NOT_FOUND");
-            script.drop_send_mail_item();
+            script.drop_send_mail_item(send_slot);
         } else if *dialect == SessionDialect::Wrath12340 {
+            // The package rides only with an item.
+            let package = if items.is_empty() { 0 } else { req.package };
             let command = wrath::send(
                 mailbox,
                 req.target,
                 req.subject,
                 req.body,
                 req.stationery,
-                item_guid,
+                package,
+                items,
                 req.money,
                 req.cod,
             );
             send_supported(&commands, *dialect, command);
         } else {
+            let item_guid = items.first().map(|&(_, guid)| guid);
             send_supported(
                 &commands,
                 *dialect,
