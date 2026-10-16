@@ -739,7 +739,10 @@ pub(crate) struct Model {
     pub(crate) wrath_mail: Option<mail::wrath::Inbox>,
     pub(crate) mail_check_inbox: bool,
     pub(crate) mail_opens: Vec<u32>,
-    pub(crate) mail_take_items: Vec<u32>,
+    /// `TakeInboxItem(messageIndex, attachIndex)` picks, both 1-based; `None` takes the first.
+    pub(crate) mail_take_items: Vec<(u32, Option<u32>)>,
+    /// Build 12340's mail-family state (`super::mail::wrath`).
+    pub(crate) wrath_mail_family: super::mail::wrath::Family,
     pub(crate) mail_take_money: Vec<u32>,
     pub(crate) mail_deletes: Vec<u32>,
     pub(crate) mail_returns: Vec<u32>,
@@ -1385,6 +1388,7 @@ impl Model {
             mail_check_inbox: false,
             mail_opens: Vec::new(),
             mail_take_items: Vec::new(),
+            wrath_mail_family: Default::default(),
             mail_take_money: Vec::new(),
             mail_deletes: Vec::new(),
             mail_returns: Vec::new(),

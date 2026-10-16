@@ -39,6 +39,8 @@ pub mod wrath_chat_notices;
 pub mod wrath_battleground;
 pub mod wrath_contacts;
 pub mod wrath_death;
+pub mod wrath_session_meta;
+pub mod wrath_inspect;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;

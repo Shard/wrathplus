@@ -209,7 +209,7 @@ fn inbox_action(mail: &MailOpen, mailbox: u64, index: u32, action: wrath::Action
     }
     let mail_id = mail.mail_id_at(index)?;
     Some(match action {
-        wrath::Action::TakeItem => ClientCommand::MailTakeItem { mailbox, mail_id },
+        wrath::Action::TakeItem(_) => ClientCommand::MailTakeItem { mailbox, mail_id },
         wrath::Action::TakeMoney => ClientCommand::MailTakeMoney { mailbox, mail_id },
         wrath::Action::Delete => ClientCommand::MailDelete { mailbox, mail_id },
         wrath::Action::Return => ClientCommand::MailReturnToSender { mailbox, mail_id },
@@ -744,9 +744,36 @@ fn drain_mail(
         }
     }
 
-    for index in script.take_mail_take_items() {
-        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeItem) {
+    for (index, slot) in script.take_mail_take_items() {
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeItem(slot)) {
             send_supported(&commands, *dialect, command);
+        }
+    }
+    // The 12340 mail family's intents. Auto-loot sends the money take and the first item take;
+    // native continues with the next item on each take result (`0x570270`), which is not wired
+    // yet. Complaints are capture-only until a CMSG_COMPLAIN writer exists.
+    for request in script.take_wrath_mail_requests() {
+        match request {
+            benilla_ui::script::WrathMailRequest::AutoLoot { row } => {
+                // `0x570410` sends the money take only when the row holds money.
+                let has_money = mail
+                    .wrath_inbox
+                    .as_ref()
+                    .and_then(|inbox| inbox.mails.get(row.checked_sub(1)? as usize))
+                    .is_some_and(|m| m.money > 0);
+                let actions = [
+                    has_money.then_some(wrath::Action::TakeMoney),
+                    Some(wrath::Action::TakeItem(None)),
+                ];
+                for action in actions.into_iter().flatten() {
+                    if let Some(command) = inbox_action(&mail, mailbox, row, action) {
+                        send_supported(&commands, *dialect, command);
+                    }
+                }
+            }
+            benilla_ui::script::WrathMailRequest::Complain { row, sender } => {
+                info!("mail: complaint about row {row} (sender {sender:#x}) not sent: capture-only");
+            }
         }
     }
     for index in script.take_mail_take_money() {

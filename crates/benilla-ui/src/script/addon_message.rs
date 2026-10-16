@@ -28,6 +28,9 @@ pub enum AddonDistribution {
     Guild,
     /// Chat type `0x5C`.
     Battleground,
+    /// Build 12340 only: chat type `0x07`, sent with [`AddonSend::target`]. The 12340 chat types
+    /// of the other lanes are PARTY `0x02`, RAID `0x03`, GUILD `0x04`, BATTLEGROUND `0x2C`.
+    Whisper,
 }
 
 impl AddonDistribution {
@@ -55,6 +58,7 @@ impl AddonDistribution {
             Self::Raid => "RAID",
             Self::Guild => "GUILD",
             Self::Battleground => "BATTLEGROUND",
+            Self::Whisper => "WHISPER",
         }
     }
 
@@ -79,6 +83,8 @@ pub struct AddonSend {
     pub text: String,
     /// The lane to send on, after the outside-a-raid downgrade.
     pub distribution: AddonDistribution,
+    /// The WHISPER recipient as the binding read it (12340 `0x500560`); `None` on other lanes.
+    pub target: Option<String>,
 }
 
 /// `_snprintf(dst, 0x800, …)` writes at most 2047 bytes plus its NUL (`0x64a861`-`0x64a868`).
@@ -178,10 +184,99 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .push(AddonSend {
                         text,
                         distribution: asked.effective(in_raid),
+                        target: None,
                     });
                 Ok(())
             },
         )?,
+    )?;
+    Ok(())
+}
+
+/// Build 12340's `snprintf(dst, 3000, "%s\t%s", …)` (`0x500608`): at most 2999 bytes.
+const WRATH_ADDON_MESSAGE_CAP: usize = 3000 - 1;
+
+/// `SendAddonMessage(prefix, message [, type [, target]])` for build 12340 (`0x500560`):
+/// - nothing without the player object; prefix and message are `lua_tostring` with NULL as `""`,
+///   and only both empty raises the usage line;
+/// - the composed `prefix TAB message` is cut at 2999 bytes; there is no escape scan in 12340;
+/// - a string or number type is looked up by chat-type name (`0x4fbb20`): PARTY, RAID, GUILD,
+///   BATTLEGROUND and WHISPER pass, any other (known or not) raises `Unknown addon chat type`;
+///   anything else is PARTY;
+/// - RAID outside a raid goes out as PARTY, and PARTY outside a group sends nothing
+///   (`0x500678`, the group guid at `0xbd1948`);
+/// - WHISPER with a missing or empty target raises.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "SendAddonMessage",
+        lua.create_function(|lua, args: mlua::MultiValue| {
+            let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Nil);
+            let (has_player, in_group, in_raid) = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                (
+                    model.unit_guids.player != 0,
+                    !model.party.members.is_empty() || !model.party.raid.is_empty(),
+                    !model.party.raid.is_empty(),
+                )
+            };
+            if !has_player {
+                return Ok(());
+            }
+            let prefix = lua_tostring(lua, &arg(0))?;
+            let message = lua_tostring(lua, &arg(1))?;
+            if prefix.is_empty() && message.is_empty() {
+                return Err(mlua::Error::RuntimeError(
+                    r#"Usage: SendAddonMessage("prefix", "message" [,"type"] [,"target"])"#.into(),
+                ));
+            }
+            let mut text = format!("{prefix}\t{message}");
+            if text.len() > WRATH_ADDON_MESSAGE_CAP {
+                let mut cut = WRATH_ADDON_MESSAGE_CAP;
+                while cut > 0 && !text.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                text.truncate(cut);
+            }
+            let asked = match lua.coerce_string(arg(2))? {
+                Some(token) => {
+                    let token = token.to_string_lossy();
+                    AddonDistribution::from_token(&token)
+                        .or_else(|| {
+                            token
+                                .eq_ignore_ascii_case("WHISPER")
+                                .then_some(AddonDistribution::Whisper)
+                        })
+                        .ok_or_else(|| {
+                            mlua::Error::RuntimeError("Unknown addon chat type".into())
+                        })?
+                }
+                None => AddonDistribution::Party,
+            };
+            let distribution = asked.effective(in_raid);
+            if distribution == AddonDistribution::Party && !in_group {
+                return Ok(());
+            }
+            let target = if distribution == AddonDistribution::Whisper {
+                let target = lua_tostring(lua, &arg(3))?;
+                if target.is_empty() {
+                    return Err(mlua::Error::RuntimeError(
+                        "SendAddonMessage(): Whisper message missing target player!".into(),
+                    ));
+                }
+                Some(target)
+            } else {
+                None
+            };
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .addon_sends
+                .push(AddonSend {
+                    text,
+                    distribution,
+                    target,
+                });
+            Ok(())
+        })?,
     )?;
     Ok(())
 }
@@ -208,6 +303,7 @@ mod tests {
             vec![AddonSend {
                 text: "oRA\thello".into(),
                 distribution: AddonDistribution::Party,
+                target: None,
             }]
         );
         assert!(s.take_addon_sends().is_empty());
@@ -486,5 +582,71 @@ mod tests {
             assert_eq!(dist.token(), token);
             assert_eq!(AddonDistribution::from_token(token), Some(dist));
         }
+    }
+
+    fn wrath(in_party: bool) -> UiScript {
+        let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        s.model_mut().unit_guids.player = 7;
+        if in_party {
+            s.model_mut().party.members.push(Default::default());
+        }
+        s
+    }
+
+    #[test]
+    fn wrath_whisper_carries_its_target_and_requires_one() {
+        let mut s = wrath(false);
+        s.run("SendAddonMessage('P', 'm', 'whisper', 'Bob')")
+            .unwrap();
+        assert_eq!(
+            s.take_addon_sends(),
+            vec![AddonSend {
+                text: "P\tm".into(),
+                distribution: AddonDistribution::Whisper,
+                target: Some("Bob".into()),
+            }]
+        );
+        let err = s
+            .run("SendAddonMessage('P', 'm', 'WHISPER')")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Whisper message missing target player"),
+            "{err}"
+        );
+        assert!(s.run("SendAddonMessage('P', 'm', 'WHISPER', '')").is_err());
+        assert!(
+            s.run("SendAddonMessage('P', 'm', 'SAY')").is_err(),
+            "a chat type outside the five"
+        );
+        assert!(s.run("SendAddonMessage('', '')").is_err());
+    }
+
+    #[test]
+    fn wrath_party_needs_a_group_and_raid_falls_back() {
+        let mut s = wrath(false);
+        s.run("SendAddonMessage('P', 'm') SendAddonMessage('P', 'm', 'RAID')")
+            .unwrap();
+        assert!(
+            s.take_addon_sends().is_empty(),
+            "no group: PARTY sends nothing"
+        );
+        let mut s = wrath(true);
+        s.run("SendAddonMessage('P', 'm', 'RAID') SendAddonMessage('P', '|x', 'GUILD')")
+            .unwrap();
+        let sends = s.take_addon_sends();
+        assert_eq!(sends[0].distribution, AddonDistribution::Party);
+        assert_eq!(sends[1].text, "P\t|x", "12340 has no escape scan");
+        let long = "x".repeat(4000);
+        s.run(&format!("SendAddonMessage('P', '{long}', 'GUILD')"))
+            .unwrap();
+        assert_eq!(s.take_addon_sends()[0].text.len(), 2999);
+    }
+
+    #[test]
+    fn wrath_sends_nothing_without_the_player() {
+        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        s.run("SendAddonMessage('P', 'm', 'GUILD')").unwrap();
+        assert!(s.take_addon_sends().is_empty());
     }
 }

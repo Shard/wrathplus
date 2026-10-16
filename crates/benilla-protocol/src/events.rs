@@ -1183,6 +1183,10 @@ pub enum SessionEvent {
     WrathBattleground { packet: crate::wrath_battleground::Packet },
     /// Capture-only native death and corpse receipts (`wrath_death`).
     WrathDeath { packet: crate::wrath_death::Packet },
+    /// Capture-only native account-data receipts (`wrath_session_meta`).
+    WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
+    /// Capture-only native inspect replies (`wrath_inspect`).
+    WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).

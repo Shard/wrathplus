@@ -42,6 +42,8 @@ mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
 mod wrath_death_capture;
+mod wrath_session_meta_capture;
+mod wrath_inspect_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -150,6 +152,8 @@ impl Plugin for NetPlugin {
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
+        wrath_session_meta_capture::register(app);
+        wrath_inspect_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -959,6 +963,7 @@ pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistr
         D::Raid => 0x03,
         D::Guild => 0x04,
         D::Battleground => 0x2c,
+        D::Whisper => 0x07,
     }
 }
 
@@ -970,6 +975,8 @@ pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistri
         D::Raid => m::CHAT_TYPE_RAID,
         D::Guild => m::CHAT_TYPE_GUILD,
         D::Battleground => m::CHAT_TYPE_BATTLEGROUND,
+        // Only the 12340 binding produces it; 1.12 has no whispered addon message.
+        D::Whisper => m::CHAT_TYPE_WHISPER,
     }
 }
 
@@ -2123,6 +2130,10 @@ pub(crate) enum ClientCommand {
     NativeBattleground(benilla_protocol::wrath_battleground::Command),
     /// Native death/corpse commands with no shared producer (hearth-and-resurrect, map position).
     NativeDeath(benilla_protocol::wrath_death::Command),
+    /// Native zone-update and account-data commands with no shared producer.
+    NativeSessionMeta(benilla_protocol::wrath_session_meta::Command),
+    /// Native preview-talent learning; no UI producer.
+    NativeInspect(benilla_protocol::wrath_inspect::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
