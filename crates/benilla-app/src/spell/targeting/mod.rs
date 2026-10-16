@@ -521,6 +521,7 @@ mod tests {
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::Cooldowns>();
         world.init_resource::<crate::spell::SpellModifiers>();
+        world.init_resource::<crate::net::wrath_combo_points::NativeComboPoints>();
         world.init_resource::<crate::ui_action::CastErrors>();
         world.init_resource::<crate::spell::AutoRepeatActive>();
         world.init_resource::<crate::ui_tradeskill::TradeSkillOpens>();

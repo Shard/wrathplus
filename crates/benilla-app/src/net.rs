@@ -39,7 +39,11 @@ mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
+mod wrath_chat_notice_capture;
+mod wrath_battleground_capture;
 mod wrath_spell_log_capture;
+mod wrath_spell_control_capture;
+pub(crate) mod wrath_combo_points;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -142,7 +146,11 @@ impl Plugin for NetPlugin {
         wrath_achievement_capture::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
+        wrath_chat_notice_capture::register(app);
+        wrath_battleground_capture::register(app);
         wrath_spell_log_capture::register(app);
+        wrath_spell_control_capture::register(app);
+        wrath_combo_points::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -934,6 +942,17 @@ impl MoveKind {
 
 /// The `ChatMsg` type an addon broadcast rides: the client's four-lane whitelist
 /// (`0x49fa3f`-`0x49fa4e`).
+/// [`addon_wire_chat_type`] in build 12340's `ChatMsg` numbering.
+pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
+    use benilla_ui::script::AddonDistribution as D;
+    match distribution {
+        D::Party => 0x02,
+        D::Raid => 0x03,
+        D::Guild => 0x04,
+        D::Battleground => 0x2c,
+    }
+}
+
 pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
     use benilla_protocol::messages as m;
     use benilla_ui::script::AddonDistribution as D;
@@ -982,6 +1001,27 @@ pub(crate) enum ChatKind {
 }
 
 impl ChatKind {
+    /// Build 12340's `CMSG_MESSAGECHAT` `type` (AzerothCore `SharedDefines.h` `ChatMsg`).
+    pub(crate) fn wrath_chat_type(self) -> u32 {
+        match self {
+            Self::Say => 0x01,
+            Self::Party => 0x02,
+            Self::Raid => 0x03,
+            Self::Guild => 0x04,
+            Self::Officer => 0x05,
+            Self::Yell => 0x06,
+            Self::Whisper => 0x07,
+            Self::Emote => 0x0a,
+            Self::Channel => 0x11,
+            Self::Afk => 0x17,
+            Self::Dnd => 0x18,
+            Self::RaidLeader => 0x27,
+            Self::RaidWarning => 0x28,
+            Self::Battleground => 0x2c,
+            Self::BattlegroundLeader => 0x2d,
+        }
+    }
+
     /// The `CMSG_MESSAGECHAT` `type` field.
     pub(crate) fn chat_type(self) -> u32 {
         use benilla_protocol::messages as m;
@@ -1835,6 +1875,9 @@ pub(crate) enum ClientCommand {
     JoinChannel {
         name: String,
         password: String,
+        /// The `ChatChannels.dbc` row of a zone channel, 0 for a custom one; build 12340 sends it
+        /// and AC joins the constant channel by it.
+        channel_id: u32,
     },
     /// `CMSG_LEAVE_CHANNEL`.
     LeaveChannel {
@@ -2056,6 +2099,9 @@ pub(crate) enum ClientCommand {
     NativeInventory(benilla_protocol::wrath_inventory::Command),
     /// Native auction/loot commands with no Vanilla twin; transport does not claim acceptance.
     NativeExchange(benilla_protocol::wrath_exchange::Command),
+    /// Native spell-control and pet requests with no Vanilla twin (spell click, totem destroy,
+    /// cancel mount or growth aura, pet info, pet talents); transport does not claim acceptance.
+    NativeSpellControl(benilla_protocol::wrath_spell_control::Command),
     /// `CMSG_QUERY_INSPECT_ACHIEVEMENTS`; no UI producer yet, the reply is capture-only.
     NativeInspectAchievements { player: u64 },
     /// Native calendar commands; no UI producer yet, replies are capture-only.
@@ -2064,6 +2110,8 @@ pub(crate) enum ClientCommand {
     NativeQuest(benilla_protocol::wrath_quest::Command),
     /// Native party commands with no Vanilla twin; transport does not claim leadership.
     NativeParty(benilla_protocol::wrath_party::Command),
+    /// Native battleground/arena/battlefield commands keyed by this build's bg type; no UI producer.
+    NativeBattleground(benilla_protocol::wrath_battleground::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
@@ -2568,13 +2616,13 @@ mod tests {
                 bag_index: 255,
                 slot: 0,
             },
+            ClientCommand::CancelAutoRepeat,
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
         for command in [
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
-            ClientCommand::CancelAutoRepeat,
             ClientCommand::QueryTime,
             ClientCommand::MoveTimeSkipped {
                 guid: 1057,

@@ -323,9 +323,6 @@ pub(crate) struct Model {
     /// Chat-type colours (`0xb4e518`): 94 fixed and 10 `CHANNELn`, overlaid by `chat-cache.txt`.
     pub(crate) chat_colors: Vec<super::chat_types::ChatTypeColor>,
     pub(crate) chat_colors_changed: bool,
-    /// Build 12340's per-chat-type `colorNameByClass` (`+0x48` of each colour row), parallel to
-    /// `chat_colors`; `SetChatColorNameByClass` and `ResetChatWindows` write it.
-    pub(crate) chat_name_by_class: Vec<bool>,
     /// The `ChatChannels.dbc` rows the client joins by itself (`flags & 1`) as `(Shortcut, id)`,
     /// which `ResetChatWindows` registers in window 1 (`0x501a70`); the host seeds it.
     pub(crate) chat_channel_seed: Vec<(String, u32)>,
@@ -1184,22 +1181,10 @@ impl Model {
             petition: petition::PetitionState::default(),
             petition_requests: Vec::new(),
             // Per window, as the stock dock differs: 1 and 2 are the dock, the rest undocked.
-            chat_window_looks: std::array::from_fn(|index| {
-                let mut look = chat_window::ChatWindowLook::stock(index);
-                // Wrath reserves dock position 1 for the primary window
-                // (FloatingChatFrame.lua:1988); vanilla's combat-log default is 1.
-                if dialect == ScriptDialect::Wrath12340 && index == 1 {
-                    look.docked = Some(2);
-                }
-                look
-            }),
+            chat_window_looks: std::array::from_fn(chat_window::ChatWindowLook::stock),
             chat_window_changes: HashSet::new(),
             chat_colors: super::chat_types::seed(),
             chat_colors_changed: false,
-            chat_name_by_class: vec![
-                false;
-                super::chat_types::FIXED_CHAT_TYPES + super::chat_types::EXTRA_CHAT_TYPES
-            ],
             chat_channel_seed: Vec::new(),
             known_languages: Vec::new(),
             language_table: Vec::new(),

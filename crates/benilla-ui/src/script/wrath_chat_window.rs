@@ -9,11 +9,10 @@
 //! `SetChatColorNameByClass` `0x4fedc0`, `JoinPermanentChannel` `0x50dac0` (the shared join
 //! `0x50d900` with its permanent flag set), `BNLeaveConversation` `0x536030`.
 //!
-//! Unresolved, labelled rather than guessed: the colour and message-group registries are still
-//! the 1.12 tables (`chat_types`, `chat_window::MESSAGE_GROUPS`), not 12340's 62 chat types and its
-//! own group list, so `ResetChatWindows` restores 1.12-shaped defaults; the window helpers
-//! `0x5019d0`/`0x501800` it runs per record were not audited and are taken as the stock record;
-//! the channel seed and `uninteractable`/`colorNameByClass` persistence are host work.
+//! The registries are 12340's: 62 chat types (`chat_types`) and 46 message groups
+//! (`chat_window::MESSAGE_GROUPS`). Unresolved, labelled rather than guessed: the window helpers
+//! `0x5019d0`/`0x501800` ResetChatWindows runs per record were not audited and are taken as the
+//! stock record. The host persists `uninteractable` and colorNameByClass in `chat-cache.txt`.
 
 use mlua::{Lua, MultiValue, Value};
 
@@ -27,7 +26,11 @@ use super::{Model, ScriptValue};
 fn window_slot(lua: &Lua, v: &Value) -> Option<Option<usize>> {
     let n = lua.coerce_number(v.clone()).ok().flatten()?;
     let index = (n.round_ties_even() as i64).wrapping_sub(1);
-    Some(usize::try_from(index).ok().filter(|i| *i < ENGINE_CHAT_WINDOW_SLOTS))
+    Some(
+        usize::try_from(index)
+            .ok()
+            .filter(|i| *i < ENGINE_CHAT_WINDOW_SLOTS),
+    )
 }
 
 /// `byte · (1/255)` in f32 (`[0xa45564]`), as the colour getters push it.
@@ -35,34 +38,11 @@ fn unit(b: u8) -> f64 {
     f64::from(f32::from(b) * (1.0f32 / 255.0f32))
 }
 
-/// The stock record ResetChatWindows (`0x501f00`) leaves in window `index`: the boot record, with
-/// window 1 shown and docked at 1 and window 2 shown and docked at 2.
-fn reset_look(index: usize) -> ChatWindowLook {
-    let mut look = ChatWindowLook::stock(index);
-    match index {
-        0 => look.docked = Some(1),
-        1 => look.docked = Some(2),
-        _ => {}
-    }
-    look
-}
-
 impl super::UiScript {
     /// Seeds the `ChatChannels.dbc` auto-join rows (`flags & 1`) as `(Shortcut, id)`, which
     /// `ResetChatWindows` registers in window 1. No event and no window change.
     pub fn set_chat_channel_seed(&mut self, rows: Vec<(String, u32)>) {
         self.model_mut().chat_channel_seed = rows;
-    }
-
-    /// Every chat type's `colorNameByClass`, registry order, for the host's chat-cache writer.
-    pub fn chat_color_name_by_class(&self) -> Vec<(String, bool)> {
-        let model = self.model_ref();
-        model
-            .chat_colors
-            .iter()
-            .zip(model.chat_name_by_class.iter())
-            .map(|(c, on)| (c.name.clone(), *on))
-            .collect()
     }
 }
 
@@ -82,7 +62,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some(i) = slot else {
                 return Ok(MultiValue::new());
             };
-            let look = lua.app_data_ref::<Model>().expect("model app_data").chat_window_looks[i]
+            let look = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .chat_window_looks[i]
                 .clone();
             let flag = |on: bool| if on { Value::Integer(1) } else { Value::Nil };
             Ok(MultiValue::from_vec(vec![
@@ -94,7 +77,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::Number(unit(look.a)),
                 flag(look.shown),
                 flag(look.locked),
-                look.docked.map_or(Value::Nil, |d| Value::Integer(i64::from(d))),
+                look.docked
+                    .map_or(Value::Nil, |d| Value::Integer(i64::from(d))),
                 flag(look.uninteractable),
             ]))
         })?,
@@ -136,19 +120,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let rows: Vec<(String, [u8; 3], bool)> = {
                 let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                 chat_types::reset(&mut model.chat_colors);
-                model.chat_name_by_class.iter_mut().for_each(|on| *on = false);
+                // Every default row's `+0x48` is 0, the extras' too (copied from CHANNEL's).
+                model
+                    .chat_colors
+                    .iter_mut()
+                    .for_each(|c| c.name_by_class = false);
                 model.chat_colors_changed = true;
                 let seed = model.chat_channel_seed.clone();
                 for i in 0..ENGINE_CHAT_WINDOW_SLOTS {
-                    model.chat_window_looks[i] = reset_look(i);
+                    model.chat_window_looks[i] = ChatWindowLook::stock(i);
                     model.chat_window_changes.insert(i);
                 }
                 model.chat_window_looks[0].channels = seed;
                 model
                     .chat_colors
                     .iter()
-                    .zip(model.chat_name_by_class.iter())
-                    .map(|(c, on)| (c.name.clone(), c.rgb, *on))
+                    .map(|c| (c.name.clone(), c.rgb, c.name_by_class))
                     .collect()
             };
             super::tick::fire_event_into(lua, "UPDATE_CHAT_WINDOWS", Vec::new());
@@ -194,7 +181,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 let Some(i) = chat_types::position(&model.chat_colors, &name) else {
                     return Ok(());
                 };
-                model.chat_name_by_class[i] = on;
+                model.chat_colors[i].name_by_class = on;
                 model.chat_colors_changed = true;
             }
             super::tick::fire_event_into(
@@ -242,7 +229,8 @@ mod tests {
     fn get_chat_window_info_has_the_tenth_uninteractable_value() {
         let mut s = wrath();
         assert_eq!(
-            s.eval::<i64>("return select('#', GetChatWindowInfo(1))").unwrap(),
+            s.eval::<i64>("return select('#', GetChatWindowInfo(1))")
+                .unwrap(),
             10
         );
         assert!(s
@@ -250,7 +238,8 @@ mod tests {
             .unwrap());
         s.run("SetChatWindowUninteractable(3, true)").unwrap();
         assert_eq!(
-            s.eval::<i64>("return select(10, GetChatWindowInfo(3))").unwrap(),
+            s.eval::<i64>("return select(10, GetChatWindowInfo(3))")
+                .unwrap(),
             1
         );
         assert_eq!(s.take_chat_window_changes(), vec![2]);
@@ -260,7 +249,8 @@ mod tests {
             .eval::<bool>("return select(10, GetChatWindowInfo(3)) == nil")
             .unwrap());
         assert_eq!(
-            s.eval::<i64>("return select('#', GetChatWindowInfo(11))").unwrap(),
+            s.eval::<i64>("return select('#', GetChatWindowInfo(11))")
+                .unwrap(),
             0,
             "an index outside the ten records answers nothing"
         );
@@ -292,11 +282,17 @@ mod tests {
             looks[0].channels,
             vec![("General".to_string(), 1), ("Trade".to_string(), 2)]
         );
-        assert_eq!(s.chat_colors()[0].rgb, [255, 255, 255]);
-        assert!(!s.chat_color_name_by_class()[0].1);
-        assert_eq!(s.eval::<String>("return SEEN[1][1]").unwrap(), "UPDATE_CHAT_WINDOWS");
-        assert_eq!(s.eval::<String>("return SEEN[2][1]").unwrap(), "UPDATE_CHAT_COLOR");
-        assert_eq!(s.eval::<String>("return SEEN[2][2]").unwrap(), "SAY");
+        assert_eq!(s.chat_colors()[1].rgb, [255, 255, 255]);
+        assert!(!s.chat_colors()[1].name_by_class);
+        assert_eq!(
+            s.eval::<String>("return SEEN[1][1]").unwrap(),
+            "UPDATE_CHAT_WINDOWS"
+        );
+        assert_eq!(
+            s.eval::<String>("return SEEN[2][1]").unwrap(),
+            "UPDATE_CHAT_COLOR"
+        );
+        assert_eq!(s.eval::<String>("return SEEN[2][2]").unwrap(), "SYSTEM");
         assert_eq!(
             s.eval::<String>("return SEEN[3][1]").unwrap(),
             "UPDATE_CHAT_COLOR_NAME_BY_CLASS"
@@ -321,8 +317,10 @@ mod tests {
         assert_eq!(s.eval::<i64>("return N").unwrap(), 1);
         assert_eq!(s.eval::<String>("return A").unwrap(), "guild");
         assert!(s.eval::<bool>("return B").unwrap());
-        let flags = s.chat_color_name_by_class();
-        assert!(flags.iter().any(|(n, on)| n == "GUILD" && *on));
+        assert!(s
+            .chat_colors()
+            .iter()
+            .any(|c| c.name == "GUILD" && c.name_by_class));
         assert!(s.run("SetChatColorNameByClass()").is_err());
     }
 
@@ -339,18 +337,23 @@ mod tests {
                 password: String::new(),
             }]
         );
-        assert_eq!(s.chat_window_looks()[1].channels, vec![("MyChan".to_string(), 0)]);
+        assert_eq!(
+            s.chat_window_looks()[1].channels,
+            vec![("MyChan".to_string(), 0)]
+        );
     }
 
     #[test]
     fn bn_leave_conversation_is_inert_without_a_battle_net_session() {
         let s = wrath();
         assert_eq!(
-            s.eval::<i64>("return select('#', BNLeaveConversation(1))").unwrap(),
+            s.eval::<i64>("return select('#', BNLeaveConversation(1))")
+                .unwrap(),
             0
         );
         assert_eq!(
-            s.eval::<i64>("return select('#', BNLeaveConversation())").unwrap(),
+            s.eval::<i64>("return select('#', BNLeaveConversation())")
+                .unwrap(),
             0,
             "no usage error without a session"
         );

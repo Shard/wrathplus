@@ -358,6 +358,12 @@ fn run(
             .iter()
             .find(|character| character.guid == guid)
             .map_or_else(String::new, |character| character.name.clone());
+        let chat_language = characters
+            .iter()
+            .find(|character| character.guid == guid)
+            .map_or(benilla_protocol::messages::LANGUAGE_COMMON, |character| {
+                benilla_protocol::messages::faction_language(character.race)
+            });
 
         // Lossless handoff: send login, split immediately, announce the session, then consume every
         // queued packet through the Wrath adapter.
@@ -375,6 +381,7 @@ fn run(
                 epoch,
                 session: Box::new(WrathWriterSwap {
                     writer,
+                    chat_language,
                     clock: Arc::clone(&session_clock),
                     active_mover: guid,
                     authority: authority.clone(),
@@ -657,6 +664,8 @@ struct EpochFatal {
 
 struct WrathWriterSwap {
     writer: WrathWorldWriter,
+    /// The character's own tongue for chat that names none (`faction_language` of its race).
+    chat_language: u32,
     clock: Arc<SessionClock>,
     active_mover: u64,
     authority: MovementAuthorityHandle,
@@ -1035,10 +1044,14 @@ enum WrathRoute {
     NativeInstanceControl,
     NativeInventory,
     NativeExchange,
+    NativeSpellControl,
     NativeInspectAchievements,
     NativeCalendar,
     NativeQuest,
     NativeParty,
+    NativeChatLine,
+    NativeChannel,
+    NativeBattleground,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1078,6 +1091,35 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
+        ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeBattleground(_)
+        | ClientCommand::BattlemasterHello { .. }
+        | ClientCommand::AreaSpiritHealerQuery { .. }
+        | ClientCommand::AreaSpiritHealerQueue { .. }
+        | ClientCommand::SpiritHealerActivate { .. }
+        | ClientCommand::InspectHonorStats { .. }
+        | ClientCommand::TogglePvp
+        | ClientCommand::RequestBattlefieldScoreData
+        | ClientCommand::RequestBattlefieldPositions
+        | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        ClientCommand::JoinChannel { .. }
+        | ClientCommand::LeaveChannel { .. }
+        | ClientCommand::ChannelList { .. }
+        | ClientCommand::ChannelOwner { .. }
+        | ClientCommand::ChannelSetOwner { .. }
+        | ClientCommand::ChannelPassword { .. }
+        | ClientCommand::ChannelModerator { .. }
+        | ClientCommand::ChannelUnmoderator { .. }
+        | ClientCommand::ChannelMute { .. }
+        | ClientCommand::ChannelUnmute { .. }
+        | ClientCommand::ChannelInvite { .. }
+        | ClientCommand::ChannelKick { .. }
+        | ClientCommand::ChannelBan { .. }
+        | ClientCommand::ChannelUnban { .. }
+        | ClientCommand::ChannelAnnouncements { .. }
+        | ClientCommand::ChannelModerate { .. }
+        | ClientCommand::TextEmote { .. }
+        | ClientCommand::ChatIgnored { .. } => WrathRoute::NativeChannel,
         ClientCommand::NativeParty(_)
         | ClientCommand::GroupUninvite { .. }
         | ClientCommand::GroupSetLeader { .. }
@@ -1102,6 +1144,17 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetTradeGold { .. }
         | ClientCommand::SetTradeItem { .. }
         | ClientCommand::ClearTradeItem { .. } => WrathRoute::NativeExchange,
+        ClientCommand::NativeSpellControl(_)
+        | ClientCommand::PetAction { .. }
+        | ClientCommand::PetSetAction { .. }
+        | ClientCommand::PetStopAttack { .. }
+        | ClientCommand::PetCancelAura { .. }
+        | ClientCommand::PetSpellAutocast { .. }
+        | ClientCommand::PetAbandon { .. }
+        | ClientCommand::PetRename { .. }
+        | ClientCommand::CancelAutoRepeat
+        | ClientCommand::CancelChannelling { .. }
+        | ClientCommand::ResurrectResponse { .. } => WrathRoute::NativeSpellControl,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
@@ -1425,6 +1478,21 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeChatLine => match chat_line(command, active.chat_language) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid chat line rejected before send: {error}");
+                            continue;
+                        }
+                    },
+                    WrathRoute::NativeBattleground => {
+                        let (opcode, body) = battleground_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeChannel => {
+                        let (opcode, body) = benilla_protocol::wrath_chat_notices::encode(&channel_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeParty => {
                         let (opcode, body) = benilla_protocol::wrath_party::encode(&party_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -1444,6 +1512,15 @@ fn writer_loop(
                     WrathRoute::NativeExchange => {
                         let (opcode, body) = exchange_packet(command);
                         active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeSpellControl => {
+                        match benilla_protocol::wrath_spell_control::encode(&spell_control_command(command)) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid spell-control command rejected before send: {error}");
+                                continue;
+                            }
+                        }
                     }
                     WrathRoute::NativeMirrorImageQuery => {
                         let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
@@ -1626,6 +1703,83 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// A chat-bar or addon line as build 12340's `CMSG_MESSAGECHAT`; a line naming no language
+/// speaks `own_language`, an addon line `LANG_ADDON`.
+fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_chat::{encode, Command, LANGUAGE_ADDON};
+    let command = match command {
+        ClientCommand::Chat { kind, target, text, language } => {
+            let chat_type = kind.wrath_chat_type();
+            Command {
+                chat_type,
+                language: language.unwrap_or(own_language),
+                // Whisper and channel name their target; the rest send none.
+                target: matches!(chat_type, 0x07 | 0x11).then(|| target.unwrap_or_default().into_bytes()),
+                text: text.into_bytes(),
+            }
+        }
+        ClientCommand::AddonMessage { distribution, text } => Command {
+            chat_type: crate::net::wrath_addon_chat_type(distribution),
+            language: LANGUAGE_ADDON,
+            target: None,
+            text: text.into_bytes(),
+        },
+        other => unreachable!("not a chat line: {other:?}"),
+    };
+    encode(&command)
+}
+
+/// The native body for a [`WrathRoute::NativeBattleground`] command. The shared commands below keep
+/// their 3.3.5 shapes (a GUID or nothing); list, join and port need this build's bg type and are
+/// native-only.
+fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_battleground::{encode, encode_leave};
+    let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
+    match command {
+        ClientCommand::NativeBattleground(command) => encode(&command),
+        ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
+        ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
+        ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
+        ClientCommand::SpiritHealerActivate { npc } => guid(0x021c, npc),
+        ClientCommand::InspectHonorStats { target } => guid(0x02d6, target),
+        // An empty body toggles; AC also takes one byte setting the flag outright.
+        ClientCommand::TogglePvp => (0x0253, Vec::new()),
+        ClientCommand::RequestBattlefieldScoreData => (0x02e0, Vec::new()),
+        ClientCommand::RequestBattlefieldPositions => (0x02e9, Vec::new()),
+        // AC reads none of the body and leaves the current battleground.
+        ClientCommand::LeaveBattlefield { .. } => encode_leave(),
+        other => unreachable!("not a battleground route: {other:?}"),
+    }
+}
+
+/// The native channel, emote and ignore command for a [`WrathRoute::NativeChannel`] route.
+fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notices::Command {
+    use benilla_protocol::wrath_chat_notices::Command as C;
+    let pair = |opcode, name, other| C::NamedPair { opcode, name, other };
+    match command {
+        ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
+        ClientCommand::LeaveChannel { name } => C::Leave { name },
+        ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
+        ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
+        ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
+        ClientCommand::ChannelPassword { name, password } => pair(0x009c, name, password),
+        ClientCommand::ChannelSetOwner { name, player } => pair(0x009d, name, player),
+        ClientCommand::ChannelModerator { name, player } => pair(0x009f, name, player),
+        ClientCommand::ChannelUnmoderator { name, player } => pair(0x00a0, name, player),
+        ClientCommand::ChannelMute { name, player } => pair(0x00a1, name, player),
+        ClientCommand::ChannelUnmute { name, player } => pair(0x00a2, name, player),
+        ClientCommand::ChannelInvite { name, player } => pair(0x00a3, name, player),
+        ClientCommand::ChannelKick { name, player } => pair(0x00a4, name, player),
+        ClientCommand::ChannelBan { name, player } => pair(0x00a5, name, player),
+        ClientCommand::ChannelUnban { name, player } => pair(0x00a6, name, player),
+        // AC echoes the emote number and uses nothing else of it.
+        ClientCommand::TextEmote { text_id, target } => C::TextEmote { text_emote: text_id, emote_num: 0, target },
+        ClientCommand::ChatIgnored { guid } => C::ChatIgnored { guid },
+        other => unreachable!("not a channel route: {other:?}"),
+    }
+}
+
 /// The native party command for a [`WrathRoute::NativeParty`] route.
 fn party_command(command: ClientCommand) -> benilla_protocol::wrath_party::Command {
     use benilla_protocol::wrath_party::Command as P;
@@ -1650,6 +1804,25 @@ fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 }
 
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
+/// The native request for a [`WrathRoute::NativeSpellControl`] command.
+fn spell_control_command(command: ClientCommand) -> benilla_protocol::wrath_spell_control::Command {
+    use benilla_protocol::wrath_spell_control::Command as C;
+    match command {
+        ClientCommand::NativeSpellControl(command) => command,
+        ClientCommand::PetAction { pet_guid, packed, target_guid } => C::PetAction { pet: pet_guid, word: packed, target: target_guid },
+        ClientCommand::PetSetAction { pet_guid, entries } => C::PetSetAction { pet: pet_guid, entries },
+        ClientCommand::PetStopAttack { pet_guid } => C::PetStopAttack { pet: pet_guid },
+        ClientCommand::PetCancelAura { pet_guid, spell_id } => C::PetCancelAura { pet: pet_guid, spell_id },
+        ClientCommand::PetSpellAutocast { pet_guid, spell_id, enabled } => C::PetSpellAutocast { pet: pet_guid, spell_id, enabled },
+        ClientCommand::PetAbandon { pet_guid } => C::PetAbandon { pet: pet_guid },
+        ClientCommand::PetRename { pet_guid, name } => C::PetRename { pet: pet_guid, name },
+        ClientCommand::CancelAutoRepeat => C::CancelAutoRepeatSpell,
+        ClientCommand::CancelChannelling { spell_id } => C::CancelChannelling { spell_id },
+        ClientCommand::ResurrectResponse { caster, accept } => C::ResurrectResponse { caster, accept },
+        _ => unreachable!("not a spell-control route"),
+    }
+}
+
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_exchange::{encode, Command as X};
     use benilla_protocol::wrath_trade::Command as T;
@@ -2748,6 +2921,32 @@ mod tests {
             assert_eq!(route(&command), WrathRoute::NativeExchange);
             assert_eq!(exchange_packet(command), (opcode, body));
         }
+    }
+
+    #[test]
+    fn chat_lines_speak_the_own_language_and_name_only_whisper_and_channel_targets() {
+        use crate::net::ChatKind;
+        let line = |kind, target: Option<&str>, language| ClientCommand::Chat {
+            kind,
+            target: target.map(str::to_string),
+            text: "hi".into(),
+            language,
+        };
+        assert_eq!(route(&line(ChatKind::Say, None, None)), WrathRoute::NativeChatLine);
+        assert_eq!(chat_line(line(ChatKind::Say, None, None), 1).unwrap(), (0x95, [1u32.to_le_bytes(), 1u32.to_le_bytes()].concat().into_iter().chain(*b"hi\0").collect()));
+        assert_eq!(
+            chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1).unwrap().1,
+            [7u32.to_le_bytes(), 7u32.to_le_bytes()].concat().into_iter().chain(*b"Bob\0hi\0").collect::<Vec<_>>()
+        );
+        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into() };
+        assert_eq!(chat_line(addon, 1).unwrap().1[..8], [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]);
+        let embedded = ClientCommand::Chat { kind: ChatKind::Say, target: None, text: "a\0b".into(), language: None };
+        assert!(chat_line(embedded, 1).is_err(), "an embedded NUL is refused before send");
+        assert_eq!(route(&ClientCommand::LeaveChannel { name: "x".into() }), WrathRoute::NativeChannel);
+        assert_eq!(
+            benilla_protocol::wrath_chat_notices::encode(&channel_command(ClientCommand::ChannelKick { name: "x".into(), player: "Bob".into() })),
+            (0xa4, b"x\0Bob\0".to_vec())
+        );
     }
 
     #[test]

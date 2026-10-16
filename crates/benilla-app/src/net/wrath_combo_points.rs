@@ -1,0 +1,48 @@
+//! Build 12340's combo points: no update field carries them, so `SMSG_UPDATE_COMBO_POINTS`
+//! (AC `Unit::SendComboPoints`, sent on every change) is the only source. [`banked`] is the one
+//! read for `GetComboPoints`, the finisher gate and the cast ladder.
+use super::{NetHandlerApp, ObjectStore};
+use benilla_protocol::{SessionEvent, SessionEventKind};
+use bevy::prelude::*;
+
+/// The last `SMSG_UPDATE_COMBO_POINTS`: the count and the unit it is banked on (0 for none).
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NativeComboPoints {
+    pub(crate) points: u8,
+    pub(crate) target: u64,
+}
+
+/// The combo count and its target: the 1.12 descriptor where it carries them, else the native
+/// packet's.
+pub(crate) fn banked(store: &ObjectStore, native: &NativeComboPoints) -> (u8, u64) {
+    match store.0.player_combo_points() {
+        Some(points) => (points, store.0.player_combo_target()),
+        None => (native.points, native.target),
+    }
+}
+
+pub(super) fn register(app: &mut App) {
+    app.init_resource::<NativeComboPoints>()
+        .net_handler(SessionEventKind::ComboPoints, receive)
+        .net_handler(SessionEventKind::Connected, clear)
+        .net_handler(SessionEventKind::Disconnected, clear);
+}
+
+fn receive(In(event): In<SessionEvent>, mut combo: ResMut<NativeComboPoints>) {
+    if let SessionEvent::ComboPoints { target, points } = event {
+        combo.set_if_neq(NativeComboPoints { points, target });
+    }
+}
+
+fn clear(In(event): In<SessionEvent>, mut combo: ResMut<NativeComboPoints>) {
+    if matches!(
+        event,
+        SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
+    ) {
+        combo.set_if_neq(NativeComboPoints::default());
+    }
+}
+
+#[cfg(test)]
+#[path = "wrath_combo_points_tests.rs"]
+mod tests;
