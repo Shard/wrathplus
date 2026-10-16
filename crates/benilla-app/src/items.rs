@@ -361,6 +361,44 @@ impl RollCatalogs<'_> {
     }
 }
 
+/// [`Items::take_answers`]' bound: older answers drop when nothing drains the log.
+const ANSWER_LOG_BOUND: usize = 1024;
+
+/// Build 12340's nine-field item link (`0x61e290`, `0x61e360`):
+/// `item:entry:ench:gem1:gem2:gem3:0:random:suffix:level`, coloured by quality (table `0xad2a84`,
+/// heirlooms sharing artifacts' colour). The mail inbox and the dungeon finder's rewards share it.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn wrath_item_link(
+    entry: u32,
+    name: &str,
+    quality: u32,
+    enchants: [u32; 4],
+    random_property: i32,
+    suffix_factor: u32,
+    level: u32,
+) -> String {
+    let color = match quality {
+        0 => "ff9d9d9d",
+        2 => "ff1eff00",
+        3 => "ff0070dd",
+        4 => "ffa335ee",
+        5 => "ffff8000",
+        6 | 7 => "ffe6cc80",
+        _ => "ffffffff",
+    };
+    format!(
+        "|c{color}|Hitem:{}:{}:{}:{}:{}:0:{}:{}:{}|h[{name}]|h|r",
+        entry as i32,
+        enchants[0] as i32,
+        enchants[1] as i32,
+        enchants[2] as i32,
+        enchants[3] as i32,
+        random_property,
+        suffix_factor as i32,
+        level as i32,
+    )
+}
+
 /// Item templates by entry, asked once, and the enchant times queued for items not yet held.
 #[derive(Resource)]
 pub(crate) struct Items {
@@ -368,6 +406,10 @@ pub(crate) struct Items {
     templates: QueryCache<u32, ItemInfo>,
     /// Landed since the last [`Self::take_fresh`]; pushed to the UI unprompted.
     fresh: Vec<u32>,
+    /// Every answer in arrival order, `(entry, found)`, for the dungeon finder's item-callback
+    /// queue ([`Self::take_answers`]), its one consumer; bounded at [`ANSWER_LOG_BOUND`]. Behind a
+    /// lock so that consumer drains through a shared borrow and orders against no reader.
+    answers: std::sync::Mutex<std::collections::VecDeque<(u32, bool)>>,
     /// The reference's `PlayerPendingItemExpiration` list (`0x5ebd40`, at `CGPlayer_C + 0x1cc8`):
     /// `(guid, slot, seconds)` enchant updates for an item not yet held. `0x5ebde0` applies them
     /// when the item is set up (`0x5d8440`), counting seconds from then; they live as long as the
@@ -382,6 +424,7 @@ impl Default for Items {
         Self {
             templates: QueryCache::default(),
             fresh: Vec::new(),
+            answers: Default::default(),
             pending_enchant_times: Vec::new(),
             dialect: SessionDialect::Vanilla5875,
         }
@@ -462,6 +505,11 @@ impl Items {
         if info.is_some() {
             self.fresh.push(entry);
         }
+        let answers = self.answers.get_mut().unwrap_or_else(|e| e.into_inner());
+        if answers.len() == ANSWER_LOG_BOUND {
+            answers.pop_front();
+        }
+        answers.push_back((entry, info.is_some()));
         // A negative answer moves the generation too: "still asking" to "answered unknown" is a
         // display transition for the cast-fail redisplay.
         self.templates.insert(entry, info);
@@ -479,6 +527,12 @@ impl Items {
             .iter()
             .filter_map(|(&id, t)| t.is_some().then_some(id))
             .collect()
+    }
+
+    /// Drain the answers since the last drain, in arrival order, `(entry, found)`.
+    pub(crate) fn take_answers(&self) -> Vec<(u32, bool)> {
+        let mut answers = self.answers.lock().unwrap_or_else(|e| e.into_inner());
+        answers.drain(..).collect()
     }
 
     /// Drain the entries whose template landed since the last drain.

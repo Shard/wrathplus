@@ -1,7 +1,8 @@
-//! Sole native dungeon finder capture owner. Packets remain ordered and lossless until
-//! the app lifecycle/reducer is implemented; capture does not infer state or issue requests.
+//! Sole native dungeon finder capture owner. Packets stay ordered and lossless; the L1 lock and
+//! preview receipts are reduced by [`l1`], the other families stay queued for their owners.
 pub(crate) mod auth;
 mod catalog;
+mod l1;
 
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_lfg::Packet, SessionEvent, SessionEventKind};
@@ -15,11 +16,27 @@ pub(crate) struct UiLfgPlugin;
 impl Plugin for UiLfgPlugin {
     fn build(&self, app: &mut App) {
         auth::register(app);
+        // The request gates read the OS boot-relative clock, as the reference's `GetTickCount`.
+        benilla_ui::script::set_wrath_lfg_request_clock(std::sync::Arc::new(l1::boot_clock_ms));
+        l1::register(app);
         app.init_resource::<NativeLfgPackets>()
             .net_handler(SessionEventKind::WrathLfg, receive)
             .net_handler(SessionEventKind::Disconnected, clear)
             .add_systems(Startup, catalog::load.after(benilla_assets::AssetSet::Open))
-            .add_systems(Update, catalog::feed.in_set(crate::ui_script::UiFeed));
+            .add_systems(
+                Update,
+                (
+                    catalog::feed.in_set(crate::ui_script::UiFeed),
+                    // After the catalog, and after `feed_item_stats` (`UnitFeed`), so an answered
+                    // template is in the VM before its callback event; not before the in-game UI
+                    // exists, so receipts wait in the queue instead of firing into the boot VM.
+                    l1::feed
+                        .in_set(crate::ui_script::UiFeed)
+                        .after(catalog::feed)
+                        .after(crate::ui_unit::UnitFeed)
+                        .run_if(crate::ui_script::ingame_ui_up),
+                ),
+            );
     }
 }
 fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeLfgPackets>) {

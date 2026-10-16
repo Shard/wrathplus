@@ -13,19 +13,16 @@ fn words(b: &mut Vec<u8>, values: &[u32]) {
 fn strict(opcode: u16, b: &[u8]) {
     for end in 0..b.len() {
         assert!(
-            decode(opcode, &b[..end], Some(ME)).is_err(),
+            decode(opcode, &b[..end]).is_err(),
             "{opcode:#x} prefix {end}"
         );
     }
     let mut extra = b.to_vec();
     extra.push(0);
-    assert!(
-        decode(opcode, &extra, Some(ME)).is_err(),
-        "{opcode:#x} trailing"
-    );
+    assert!(decode(opcode, &extra).is_err(), "{opcode:#x} trailing");
 }
 fn one(opcode: u16, b: &[u8]) -> SessionEvent {
-    let mut events = decode(opcode, b, Some(ME)).unwrap();
+    let mut events = decode(opcode, b).unwrap();
     assert_eq!(events.len(), 1);
     strict(opcode, b);
     events.remove(0)
@@ -56,53 +53,27 @@ fn cooldown_event_and_clear_read_spell_then_raw_guid() {
 }
 
 #[test]
-fn only_our_channel_drives_the_shared_bar_others_are_captured() {
+fn every_casters_channel_reaches_the_shared_event_with_its_guid() {
     let start = |caster| {
         let mut b = Vec::new();
         write_packed_guid(caster, &mut b).unwrap();
         words(&mut b, &[5143, 5000]);
         b
     };
+    for caster in [ME, PET] {
+        assert!(matches!(
+            one(MSG_CHANNEL_START, &start(caster)),
+            SessionEvent::ChannelStart { spell_id: 5143, duration_ms: 5000, caster: Some(c) } if c == caster
+        ));
+    }
+    let mut b = Vec::new();
+    write_packed_guid(PET, &mut b).unwrap();
+    words(&mut b, &[1200]);
     assert!(matches!(
-        one(MSG_CHANNEL_START, &start(ME)),
-        SessionEvent::ChannelStart {
-            spell_id: 5143,
-            duration_ms: 5000
-        }
-    ));
-    let SessionEvent::WrathSpellControl { packet } = one(MSG_CHANNEL_START, &start(PET)) else {
-        panic!()
-    };
-    assert_eq!(
-        packet,
-        Packet::ChannelStart {
-            caster: PET,
-            spell_id: 5143,
-            duration_ms: 5000
-        }
-    );
-    // Before our create arrives nothing is ours.
-    assert!(matches!(
-        decode(MSG_CHANNEL_START, &start(ME), None).unwrap()[..],
-        [SessionEvent::WrathSpellControl { .. }]
-    ));
-    let update = |caster| {
-        let mut b = Vec::new();
-        write_packed_guid(caster, &mut b).unwrap();
-        words(&mut b, &[1200]);
-        b
-    };
-    assert!(matches!(
-        one(MSG_CHANNEL_UPDATE, &update(ME)),
-        SessionEvent::ChannelUpdate { remaining_ms: 1200 }
-    ));
-    assert!(matches!(
-        one(MSG_CHANNEL_UPDATE, &update(PET)),
-        SessionEvent::WrathSpellControl {
-            packet: Packet::ChannelUpdate {
-                caster: PET,
-                remaining_ms: 1200
-            }
+        one(MSG_CHANNEL_UPDATE, &b),
+        SessionEvent::ChannelUpdate {
+            remaining_ms: 1200,
+            caster: Some(PET)
         }
     ));
 }
@@ -137,7 +108,7 @@ fn resurrect_request_frames_both_terminators_and_the_optional_delay() {
         (caster, name.as_str(), sickness, has_timer),
         (PET, "Spirit Healer", true, false)
     );
-    let mut events = decode(SMSG_RESURRECT_REQUEST, &resurrect("", 0, true), Some(ME)).unwrap();
+    let mut events = decode(SMSG_RESURRECT_REQUEST, &resurrect("", 0, true)).unwrap();
     assert!(matches!(
         events.remove(0),
         SessionEvent::ResurrectRequest {
@@ -149,10 +120,10 @@ fn resurrect_request_frames_both_terminators_and_the_optional_delay() {
     // A length that disagrees with the name, or a partial delay word, is rejected.
     let mut bad = resurrect("Abc", 0, false);
     bad[8] = 9;
-    assert!(decode(SMSG_RESURRECT_REQUEST, &bad, Some(ME)).is_err());
+    assert!(decode(SMSG_RESURRECT_REQUEST, &bad).is_err());
     let mut partial = resurrect("", 0, false);
     partial.extend([0, 0]);
-    assert!(decode(SMSG_RESURRECT_REQUEST, &partial, Some(ME)).is_err());
+    assert!(decode(SMSG_RESURRECT_REQUEST, &partial).is_err());
 }
 
 #[test]
