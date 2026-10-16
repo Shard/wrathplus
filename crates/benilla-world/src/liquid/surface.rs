@@ -19,12 +19,17 @@ use benilla_assets::coords::wow_to_bevy;
 use benilla_assets::materials::{LiquidExt, LiquidMaterial};
 use benilla_assets::LockRecover;
 use benilla_assets::{liquid_frame_array, RenderConfig, WorldAssets};
+use benilla_formats::wrath_liquid::load_liquid_catalogs;
 use benilla_formats::{read_texture_mip_chain, BlpMipChain, LiquidKind, LiquidMesh};
+
+use super::wrath_surface::{build_wrath_lanes, WrathLiquidAssets};
 
 /// The shared liquid materials by [`LiquidKey`]; absent without client data.
 #[derive(Resource, Default)]
 pub(crate) struct LiquidAssets {
     materials: HashMap<LiquidKey, LiquidEntry>,
+    /// The MH2O lanes by LiquidType ID, built only under the Wrath data profile.
+    wrath: Option<WrathLiquidAssets>,
 }
 
 /// Which of the reference's three liquid renderers draws a surface: `0x6b62e0` sends the type
@@ -114,6 +119,11 @@ impl LiquidAssets {
             .get(&LiquidKey { kind, path, scroll })
             .map(|e| e.material.clone())
     }
+
+    /// The MH2O lanes; `None` outside the Wrath profile.
+    pub(crate) fn wrath(&self) -> Option<&WrathLiquidAssets> {
+        self.wrath.as_ref()
+    }
 }
 
 /// Marks a spawned liquid surface: one per MCNK liquid layer or WMO group pool.
@@ -194,8 +204,12 @@ pub(crate) fn spawn_liquids<'a>(
 /// The collision trimesh for one [`LiquidMesh`]: the render mesh's own wet-cell triangles, `None`
 /// when every cell is dry. Built inline, as a layer is at most 128 triangles.
 fn liquid_collider(lq: &LiquidMesh) -> Option<Collider> {
-    let tris: Vec<[u32; 3]> = lq
-        .indices
+    trimesh_collider(&lq.positions, &lq.indices)
+}
+
+/// A liquid trimesh from raw WoW positions and a triangle list; `None` without triangles.
+pub(super) fn trimesh_collider(positions: &[[f32; 3]], indices: &[u32]) -> Option<Collider> {
+    let tris: Vec<[u32; 3]> = indices
         .as_chunks::<3>()
         .0
         .iter()
@@ -204,7 +218,7 @@ fn liquid_collider(lq: &LiquidMesh) -> Option<Collider> {
     if tris.is_empty() {
         return None;
     }
-    let verts: Vec<Vec3> = lq.positions.iter().map(|p| wow_to_bevy(*p)).collect();
+    let verts: Vec<Vec3> = positions.iter().map(|p| wow_to_bevy(*p)).collect();
     Some(Collider::trimesh(verts, tris))
 }
 
@@ -328,6 +342,7 @@ pub(super) fn setup_liquid(
     world_assets: Option<ResMut<WorldAssets>>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<LiquidMaterial>>,
+    profile: Option<Res<benilla_assets::ClientDataProfile>>,
 ) {
     let (Some(_config), Some(mut world_assets)) = (config, world_assets) else {
         return; // no client data → no terrain, so no water either
@@ -335,9 +350,18 @@ pub(super) fn setup_liquid(
     // Light, fog and the water swatches come off the shared global-light buffer, as for terrain.
     let mut assets = LiquidAssets::default();
     for &(kind, dir, stem, count) in FRAME_SETS {
-        let Some((frames, frame_count)) =
-            load_frame_array(&mut world_assets, &mut images, kind, dir, stem, count)
-        else {
+        let paths: Vec<String> = (1..=count)
+            .map(|i| format!("XTextures\\{dir}\\{stem}.{i}.blp"))
+            .collect();
+        // Deviation: water frames have their per-frame mean flattened (`flatten_frame_dc`), because
+        // mipping turns the shipped frames' drifting means into a flicker on distant water; magma and
+        // slime keep theirs, the body's intended pulse.
+        let Some((frames, frame_count)) = load_frame_array(
+            &mut world_assets,
+            &mut images,
+            &paths,
+            !kind.is_fullbright(),
+        ) else {
             warn!("liquid: no frames for {stem} — {kind:?} water will not render");
             continue;
         };
@@ -383,32 +407,15 @@ pub(super) fn setup_liquid(
                     },
                     ..default()
                 },
-                extension: LiquidExt {
-                    frames: frames.clone(),
-                    // x = fullbright (the sheet as body, still fogged); y = the ocean swatch;
-                    // z = the interior fog block; w = water's sun-sheen exponent.
-                    kind: Vec4::new(
-                        if kind.is_fullbright() { 1.0 } else { 0.0 },
-                        if kind == LiquidKind::Ocean { 1.0 } else { 0.0 },
-                        if path.interior_fog() { 1.0 } else { 0.0 },
-                        WATER_SHININESS,
-                    ),
-                    // Which of the reference's three liquid renderers `liquid.wgsl` runs.
-                    path: Vec4::new(path.shader_id(), 0.0, 0.0, 0.0),
-                    // x reserved; y = frame count; z = scroll; w = clock enable (0 on a
-                    // deterministic run: frame 0, scroll 0).
-                    anim: Vec4::new(
-                        0.0,
-                        frame_count as f32,
-                        if scroll { 1.0 } else { 0.0 },
-                        if crate::dev_state::deterministic_run() {
-                            0.0
-                        } else {
-                            1.0
-                        },
-                    ),
-                    light_buf: world_assets.shared_light.clone(),
-                },
+                extension: liquid_ext(
+                    frames.clone(),
+                    frame_count,
+                    kind.is_fullbright(),
+                    kind == LiquidKind::Ocean,
+                    path,
+                    scroll,
+                    world_assets.shared_light.clone(),
+                ),
             });
             assets
                 .materials
@@ -423,25 +430,74 @@ pub(super) fn setup_liquid(
             .filter(|(k, ..)| assets.material(*k, LiquidPath::Adt, false).is_some())
             .count()
     );
+    // MH2O's lanes, from the same chain the terrain reads, never a reopened archive.
+    if profile.is_some_and(|p| matches!(p.0, benilla_formats::DataProfile::Wrath { .. })) {
+        let catalogs = load_liquid_catalogs(&mut world_assets.chain.lock_recover());
+        match catalogs {
+            Ok(catalogs) => {
+                assets.wrath = Some(build_wrath_lanes(
+                    &catalogs,
+                    &mut world_assets,
+                    &mut images,
+                    &mut materials,
+                ));
+            }
+            Err(e) => warn!("liquid: no Wrath liquid catalogs ({e:#}) — MH2O will not render"),
+        }
+    }
     commands.insert_resource(assets);
 }
 
-/// Decode frames `1..=count` with their authored mips into one repeating, anisotropic array,
+/// One liquid material's lanes over its frame array.
+pub(super) fn liquid_ext(
+    frames: Handle<Image>,
+    frame_count: u32,
+    fullbright: bool,
+    ocean: bool,
+    path: LiquidPath,
+    scroll: bool,
+    light_buf: bevy::render::render_resource::Buffer,
+) -> LiquidExt {
+    LiquidExt {
+        frames,
+        // x = fullbright (the sheet as body, still fogged); y = the ocean swatch;
+        // z = the interior fog block; w = water's sun-sheen exponent.
+        kind: Vec4::new(
+            if fullbright { 1.0 } else { 0.0 },
+            if ocean { 1.0 } else { 0.0 },
+            if path.interior_fog() { 1.0 } else { 0.0 },
+            WATER_SHININESS,
+        ),
+        // Which of the reference's three liquid renderers `liquid.wgsl` runs.
+        path: Vec4::new(path.shader_id(), 0.0, 0.0, 0.0),
+        // x reserved; y = frame count; z = scroll; w = clock enable (0 on a
+        // deterministic run: frame 0, scroll 0).
+        anim: Vec4::new(
+            0.0,
+            frame_count as f32,
+            if scroll { 1.0 } else { 0.0 },
+            if crate::dev_state::deterministic_run() {
+                0.0
+            } else {
+                1.0
+            },
+        ),
+        light_buf,
+    }
+}
+
+/// Decode `paths` in order with their authored mips into one repeating, anisotropic array,
 /// stopping at the first missing, non-square or mis-sized frame; returns it and the count loaded.
-fn load_frame_array(
+pub(super) fn load_frame_array(
     world_assets: &mut WorldAssets,
     images: &mut Assets<Image>,
-    kind: LiquidKind,
-    dir: &str,
-    stem: &str,
-    count: u32,
+    paths: &[String],
+    normalize_dc: bool,
 ) -> Option<(Handle<Image>, u32)> {
     let mut frames: Vec<BlpMipChain> = Vec::new();
     let mut size = 0u32;
-    for i in 1..=count {
-        let path = format!("XTextures\\{dir}\\{stem}.{i}.blp");
-        let Ok(chain) = read_texture_mip_chain(&mut world_assets.chain.lock_recover(), &path)
-        else {
+    for path in paths {
+        let Ok(chain) = read_texture_mip_chain(&mut world_assets.chain.lock_recover(), path) else {
             break;
         };
         if chain.width != chain.height {
@@ -458,10 +514,6 @@ fn load_frame_array(
         return None;
     }
     let loaded = frames.len() as u32;
-    // Deviation: water frames have their per-frame mean flattened (`flatten_frame_dc`), because
-    // mipping turns the shipped frames' drifting means into a flicker on distant water; magma and
-    // slime keep theirs, the body's intended pulse.
-    let normalize_dc = !kind.is_fullbright();
     Some((images.add(liquid_frame_array(frames, normalize_dc)), loaded))
 }
 
@@ -525,6 +577,25 @@ mod tests {
         }
     }
 
+    /// An MH2O mesh has exactly the MCLQ ADT mesh's vertex layout, so the shared ADT material
+    /// specializes the same pipeline for both: MH2O adds no shader, layout or binding.
+    #[test]
+    fn mh2o_meshes_share_the_mclq_adt_vertex_layout() {
+        use bevy::mesh::MeshVertexBufferLayouts;
+        let inputs = super::super::wrath_inputs::WrathMeshInputs {
+            positions: vec![[0.0; 3]; 3],
+            uvs: vec![[0.0; 2]; 3],
+            depths: vec![0.0; 3],
+            indices: vec![0, 1, 2],
+        };
+        let mut layouts = MeshVertexBufferLayouts::default();
+        let mclq = liquid_bevy_mesh(&one_sheet([0.0; 3]), None)
+            .get_mesh_vertex_buffer_layout(&mut layouts);
+        let mh2o = super::super::wrath_surface::wrath_bevy_mesh(&inputs)
+            .get_mesh_vertex_buffer_layout(&mut layouts);
+        assert_eq!(mclq, mh2o);
+    }
+
     /// Only the ADT still-water material, without which `spawn_liquids` spawns nothing.
     fn adt_assets() -> LiquidAssets {
         LiquidAssets {
@@ -538,6 +609,7 @@ mod tests {
                     material: Handle::default(),
                 },
             )]),
+            wrath: None,
         }
     }
 
