@@ -48,7 +48,24 @@ ignored, since nothing is queued and the authority state is untouched. A malform
 fails closed: its counter may already be owed, so the FIFO would be uncertain. Regression:
 `observer_teleport_tests` shows a foreign `00C5` never touches our authority state.
 
-**Movement M2** (next): observer speed and mode echoes (`MSG_MOVE_SET_*_SPEED`,
-`SMSG_SPLINE_SET_*`, `MSG_MOVE_WATER_WALK`/`HOVER`/`FEATHER_FALL`/`GRAVITY_CHNG`/
-`UPDATE_CAN_FLY`/`SET_COLLISION_HGT`, `MSG_MOVE_KNOCK_BACK`), swimming, flying, pitch and
-ascend relays and C→S, `SMSG_MULTIPLE_MOVES`, mount special anim, dismount, vehicle seat/exit.
+**Movement M2: swimming and speed echoes.** On Wrath the controller used to *hold* the player on
+entering deep water (`WrathGroundLimit::Swimming`), because the outbound codec and the authority
+pose were on-foot only.
+- `wrath_ground::encode_movement` admits `SWIMMING` with its pitch (AzerothCore `ReadMovementInfo`
+  reads pitch for SWIMMING or FLYING). Swimming requires a pitch and a pitch requires swimming; there
+  is no airborne flag or fall tail in the water. `MSG_MOVE_START_SWIM` and `STOP_SWIM` carry the edge.
+  `encode_on_foot` is the no-pitch wrapper.
+- `OnFootPose` carries the pitch, so ACKs sent while swimming report it. A root keeps a still swimmer
+  in the water (ROOT plus SWIMMING, no STOP). A knockback launch leaves the water (FALLING, no
+  pitch).
+- The controller no longer holds a swimmer (`WrathGroundLimit` keeps only Transport and Flight).
+- Relays admit swimmers (SWIMMING, pitch, pitch-key bits) and the swim and pitch opcodes
+  `00BF..00C1`, `00CA`, `00CB` and `00DB`.
+- Observer speeds: `MSG_MOVE_SET_*_SPEED` (`packed guid + MovementInfo + f32`) and
+  `SMSG_SPLINE_SET_*_SPEED` (`packed guid + f32`) for the six 1.12 kinds become `SpeedChanged`
+  (`wrath_speed.rs`).
+
+**Movement M3** (next): flight (CAN_FLY/FLYING, ascend and descend, flight and pitch-rate speeds and
+their echoes, hover/gravity/can-fly echoes), knockback and collision-height echoes, transports
+(`CMSG_MOVE_CHNG_TRANSPORT`), `SMSG_MULTIPLE_MOVES`, time skipped, mount special anim, dismount,
+vehicle seat/exit.

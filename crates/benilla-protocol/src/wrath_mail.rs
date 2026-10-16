@@ -18,6 +18,19 @@ pub const fn handles(opcode: u16) -> bool {
 }
 
 /// The request on this bidirectional opcode has no payload.
+/// One `MSG_QUERY_NEXT_MAIL_TIME` sender preview (AzerothCore `HandleQueryNextMailTime`), in wire
+/// order: the sender (a player GUID, or 0 for a non-player), the sender entry for creature/GO mail,
+/// the mail kind (`MAIL_NORMAL`, `MAIL_AUCTION`, `MAIL_CREATURE`, `MAIL_GAMEOBJECT`, `MAIL_CALENDAR`),
+/// the stationery, and the seconds until delivery (`<= 0` already deliverable).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MailPreview {
+    pub sender: u64,
+    pub entry: u32,
+    pub kind: u32,
+    pub stationery: u32,
+    pub delay: f32,
+}
+
 pub fn encode_query_next_mail_time() -> Vec<u8> {
     Vec::new()
 }
@@ -48,19 +61,24 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                     "mail preview count",
                 ));
             }
+            let mut previews = Vec::new();
             for _ in 0..count {
-                let _player = u64_le(&mut r)?;
-                let _entry = u32_le(&mut r)?;
-                let _kind = u32_le(&mut r)?;
-                let _stationery = u32_le(&mut r)?;
-                if !f32_le(&mut r)?.is_finite() {
+                let preview = MailPreview {
+                    sender: u64_le(&mut r)?,
+                    entry: u32_le(&mut r)?,
+                    kind: u32_le(&mut r)?,
+                    stationery: u32_le(&mut r)?,
+                    delay: f32_le(&mut r)?,
+                };
+                if !preview.delay.is_finite() {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "mail preview delay",
                     ));
                 }
+                previews.push(preview);
             }
-            SessionEvent::NextMailTime { seconds }
+            SessionEvent::NextMailTime { seconds, previews }
         }
         _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "mail opcode")),
     };

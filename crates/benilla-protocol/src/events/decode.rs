@@ -246,6 +246,7 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
                 caster,
                 spell_id,
                 cast_count: None,
+                reason: None,
             }]
         }
         ServerPacket::CancelAutoRepeat => vec![SessionEvent::CancelAutoRepeat],
@@ -1038,7 +1039,10 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
         }
         ServerPacket::ReceivedMail { seconds } => vec![SessionEvent::ReceivedMail { seconds }],
         ServerPacket::NextMailTime { seconds } => {
-            vec![SessionEvent::NextMailTime { seconds }]
+            vec![SessionEvent::NextMailTime {
+                seconds,
+                previews: Vec::new(),
+            }]
         }
         ServerPacket::AuctionHello {
             auctioneer,

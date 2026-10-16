@@ -101,8 +101,14 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
         }],
         SMSG_SPELL_FAILED_OTHER => {
             let caster = read_packed_guid(&mut r)?;
+            // AzerothCore `Spell::SendInterrupted`: packed caster, cast count, spell, result. Strict.
             let cast_count = Some(u8_le(&mut r)?);
-            vec![SessionEvent::SpellFailedOther { caster, spell_id: u32_le(&mut r)?, cast_count }]
+            let spell_id = u32_le(&mut r)?;
+            let reason = Some(u8_le(&mut r)?);
+            if r.position() as usize != body.len() {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "SPELL_FAILED_OTHER trailing bytes"));
+            }
+            vec![SessionEvent::SpellFailedOther { caster, spell_id, cast_count, reason }]
         }
         SMSG_NAME_QUERY_RESPONSE => name_query(&mut r)?,
         SMSG_CREATURE_QUERY_RESPONSE => session_decode(creature_query(&mut r)?),
@@ -573,5 +579,29 @@ mod tests {
         let [SessionEvent::SpellBook { cooldowns, .. }] = &events[..] else { panic!() };
         assert_eq!(cooldowns.len(), 1);
         assert_eq!((cooldowns[0].spell_id, cooldowns[0].spell_cd_ms), (59752, 95_000));
+    }
+
+    #[test]
+    fn spell_failed_other_keeps_cast_count_and_reason_with_strict_framing() {
+        // Packed caster 0x42, cast count 3, spell 133, result 0x28.
+        let body = [0x01, 0x42, 3, 0x85, 0, 0, 0, 0x28];
+        let events = decode(SMSG_SPELL_FAILED_OTHER, &body, None).unwrap();
+        let [SessionEvent::SpellFailedOther {
+            caster,
+            spell_id,
+            cast_count,
+            reason,
+        }] = &events[..]
+        else {
+            panic!()
+        };
+        assert_eq!(
+            (*caster, *spell_id, *cast_count, *reason),
+            (0x42, 133, Some(3), Some(0x28))
+        );
+        for end in 0..body.len() {
+            assert!(decode(SMSG_SPELL_FAILED_OTHER, &body[..end], None).is_err(), "prefix {end}");
+        }
+        assert!(decode(SMSG_SPELL_FAILED_OTHER, &[body.as_slice(), &[0]].concat(), None).is_err());
     }
 }

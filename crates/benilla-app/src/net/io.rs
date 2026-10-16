@@ -609,6 +609,11 @@ fn run(
                     Ok(CharRequest::Delete(target)) => {
                         Parked::Acted(CharAction::Delete, session.delete_character(target)?)
                     }
+                    // Build-12340 services have no 1.12 opcode.
+                    Ok(CharRequest::Service(command)) => {
+                        bevy::log::warn!("char select: {command:?} is a Wrath-only service; ignored");
+                        Parked::StayPut
+                    }
                 },
             };
             let (action, code) = match answer {
