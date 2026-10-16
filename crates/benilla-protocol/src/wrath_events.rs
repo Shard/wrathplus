@@ -214,6 +214,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_calendar::OPCODES.contains(&opcode) => Ok(match crate::wrath_calendar::decode(opcode, body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathCalendar { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_achievement::OPCODES.contains(&opcode) => Ok(match crate::wrath_achievement::decode(opcode, body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathAchievement { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },

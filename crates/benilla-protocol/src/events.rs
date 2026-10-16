@@ -1149,6 +1149,8 @@ pub enum SessionEvent {
     WrathExchange { packet: crate::wrath_exchange::Packet },
     /// Capture-only native achievement receipts (`wrath_achievement`).
     WrathAchievement { packet: crate::wrath_achievement::Packet },
+    /// Capture-only native calendar receipts (`wrath_calendar`).
+    WrathCalendar { packet: crate::wrath_calendar::Packet },
     WrathMirrorImage { packet: crate::wrath_mirror_image::Packet },
     WrathUiTimer { packet: crate::wrath_ui_timer::Packet },
     WrathMailList { inbox: crate::wrath_mail::Inbox },

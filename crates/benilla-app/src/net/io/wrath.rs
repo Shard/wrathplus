@@ -1017,6 +1017,7 @@ enum WrathRoute {
     NativeInventory,
     NativeExchange,
     NativeInspectAchievements,
+    NativeCalendar,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1048,6 +1049,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AutoStoreBankItem { .. }
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
         ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
+        ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeExchange(_)
         | ClientCommand::AuctionHello { .. }
         | ClientCommand::AuctionListItems { .. }
@@ -1383,6 +1385,11 @@ fn writer_loop(
                     WrathRoute::NativeInspectAchievements => {
                         let ClientCommand::NativeInspectAchievements { player } = command else { unreachable!() };
                         let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeCalendar => {
+                        let ClientCommand::NativeCalendar(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_calendar::encode(&command);
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeExchange => {
