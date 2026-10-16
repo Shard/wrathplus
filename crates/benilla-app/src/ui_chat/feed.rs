@@ -667,6 +667,9 @@ pub(super) struct SpeakerEffects<'w> {
     native_chat: Option<ResMut<'w, crate::ui_native_chat::NativeChatPackets>>,
     native_membership: Option<ResMut<'w, super::native_membership::NativeMembership>>,
     native_notices: Option<ResMut<'w, super::native_roster::NativeChannelNotices>>,
+    /// The achievement line's `$a` link: the row names and the game date.
+    achievements: Option<Res<'w, crate::ui_achievements::AchievementMetadata>>,
+    server_time: Option<Res<'w, crate::net::ServerTime>>,
     bubbles: ResMut<'w, crate::chat_bubble::BubbleQueue>,
     bubble_cfg: Res<'w, crate::chat_bubble::BubbleConfig>,
     gestures: ResMut<'w, crate::creature_anim::GestureQueue>,
@@ -739,6 +742,15 @@ pub(super) fn feed_chat(
                     state,
                     &msg,
                     tries >= NAME_MAX_TRIES,
+                    &|id| {
+                        let name = speaker.achievements.as_deref()?.name(id)?.to_string();
+                        let date = speaker
+                            .server_time
+                            .as_deref()
+                            .and_then(|t| t.0.as_ref())
+                            .map_or((0, 1, 1), |t| t.date());
+                        Some((name, date))
+                    },
                 ) {
                     still.push(Pending::Native {
                         msg,

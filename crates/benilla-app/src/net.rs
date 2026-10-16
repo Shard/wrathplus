@@ -871,6 +871,13 @@ impl GameTime {
         }
     }
 
+    /// The packed login date as `(years since 2000, month 1..=12, day 1..=31)`, decoded from
+    /// [`Self::base_day`]'s `year·372 + month·31 + day`. No day rollover is applied.
+    pub(crate) fn date(&self) -> (u32, u32, u32) {
+        let rem = self.base_day % 372;
+        (self.base_day / 372, (rem.max(1) - 1) / 31, (rem.max(1) - 1) % 31 + 1)
+    }
+
     /// Current minute of the game day (`0..1440`).
     pub(crate) fn minute_of_day(&self) -> u32 {
         self.minute_of_day_f32() as u32
