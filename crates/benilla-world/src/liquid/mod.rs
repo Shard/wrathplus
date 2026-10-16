@@ -1,6 +1,8 @@
 //! Liquid: the animated surfaces (`surface`), where the liquid is and whether a subject or the
 //! camera eye is in it (`query`, indexed by `spatial`), and the underwater drift cloud (`drift`).
 //! The MCLQ parse and flat mesh are `benilla_formats::liquid`; the shading is `liquid.wgsl`.
+//! Wrath MH2O layers draw through `wrath_surface` (lanes from LiquidType/LiquidMaterial) on the
+//! same WGSL arms, never through the MCLQ mesh; `wrath_inputs` is their CPU vertex contract.
 //!
 //! The reference has three liquid renderers, each with its own arm in the shader: ADT MCLQ, WMO
 //! MLIQ water (`0x6b62e0` category 0, exterior `0x6b6630` or interior `0x6b6420` by the group's
@@ -36,6 +38,10 @@ mod query;
 mod real_data;
 mod spatial;
 mod surface;
+mod wrath_inputs;
+#[cfg(test)]
+mod wrath_real_data;
+mod wrath_surface;
 
 // The submodules are private: this list is everything the rest of the client may name.
 pub use query::{
@@ -47,6 +53,7 @@ pub(crate) use spatial::{maintain_water_index, WaterIndex};
 pub(crate) use surface::{
     spawn_liquids, spawn_wmo_liquids, LiquidAssets, LiquidSoundSource, LiquidSurface,
 };
+pub(crate) use wrath_surface::spawn_wrath_liquids;
 
 /// `WOW_FORCE_SUB=<frames>`: hold the camera-eye verdict submerged for the first `<frames>` frames,
 /// then release it, so the wet-to-dry crossing lands on a known frame with no water or server.

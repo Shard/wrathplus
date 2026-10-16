@@ -673,6 +673,7 @@ name = "benilla-world"
 version = "0.2.0"
 dependencies = [
  "avian3d",
+ "benilla-adt",
  "benilla-assets",
  "benilla-formats",
  "benilla-wmo",
