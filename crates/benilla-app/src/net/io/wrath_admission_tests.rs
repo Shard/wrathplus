@@ -53,6 +53,12 @@ fn every_wrath_writer_route_is_admitted() {
             ClientCommand::NativeQuestsCompletedQuery,
         ),
         (
+            "NativeWhoCommand",
+            ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Whois {
+                name: b"Benchone".to_vec(),
+            }),
+        ),
+        (
             "NativeMailMutation",
             ClientCommand::NativeMailMutation(
                 benilla_protocol::wrath_mail_mutations::Command::TakeMoney {

@@ -122,6 +122,15 @@ pub(crate) const REGISTERED: &[Registered] = &[
     // the session's realm when addons load. `Ace/AceState.lua:27` trims it at
     // PLAYER_ENTERING_WORLD, so a nil breaks every Ace addon.
     same("realmName", ""),
+    // Wrath 0x51d9b0 -> 0x767fc0: native flags 0x120 for all three
+    // (not latched). The registry retains only the latch bit; normal persistence
+    // owns these local preferences, never a separate LFG store. Defaults verified
+    // at 0x9e14a0 ("0") and 0x9e14ff (empty), Wow.exe SHA256 c6f92098…bc289c.
+    // Intentionally shared registration (manager-approved): Vanilla visibility of
+    // these names is not evidence of a Vanilla native API or registration.
+    same("lfgSelectedRoles", "0"),
+    same("lfdSelectedDungeons", ""),
+    same("lfdCollapsedHeaders", ""),
     // The logon server address (register site `0x5ab6a6`), a string row judged by
     // `realmlist::on_cvar`.
     deviates(
