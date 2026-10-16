@@ -18,10 +18,11 @@ use super::press_tests::{
     FLAGS, ME, PET, SUMMONEDBY,
 };
 use super::PetBar;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 /// `PLAYER_FARSIGHT`, low word: the view's anchor, the guid `0x4bcfbf`-`0x4bd012` holds against the
 /// pet's.
-const FARSIGHT: u16 = 712;
+const FARSIGHT: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFarsight);
 /// Some other guid than ours or the pet's.
 const OTHER: u64 = 0x99;
 /// A foe the Attack order can be aimed at.

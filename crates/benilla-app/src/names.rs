@@ -647,6 +647,7 @@ pub(crate) mod net {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use crossbeam_channel::TryRecvError;
 
     /// Compose a guid the way the server does: `counter | (entry << 24) | (high << 48)`.
@@ -1040,8 +1041,8 @@ mod tests {
     }
 
     /// `OBJECT_FIELD_ENTRY` and `UNIT_FIELD_PETNUMBER`, absolute descriptor indices.
-    const ENTRY: u16 = 3;
-    const PETNUMBER: u16 = 139;
+    const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
+    const PETNUMBER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnumber);
 
     fn unit(fields: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_pairs(fields))

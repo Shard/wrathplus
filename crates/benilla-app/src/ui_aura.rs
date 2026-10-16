@@ -742,6 +742,7 @@ fn drain_aura_cancels(script: Option<NonSendMut<UiScript>>, net: Res<NetCommands
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// [`other_unit_inputs`] as the list.
     fn other_unit_auras(
@@ -998,9 +999,9 @@ mod tests {
     // reference draws only 22766, as `UnitBuff` lists no hostile creature's buffs.
 
     /// `UNIT_FIELD_FLAGS`'s index.
-    const F_FLAGS: u16 = 46;
+    const F_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
     /// `UNIT_FIELD_CHARMEDBY`'s low dword; the high half is the next index.
-    const F_CHARMEDBY: u16 = 10;
+    const F_CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
 
     /// The Ridge Stalker's two slots: 5916 helpful, 22766 harmful.
     fn ridge_stalker_slots(flags: u32) -> ObjectStore {

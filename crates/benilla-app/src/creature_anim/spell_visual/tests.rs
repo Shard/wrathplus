@@ -15,6 +15,7 @@ use super::{
     SpellVisuals,
 };
 use crate::creature_anim::SpellGoTargets;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 /// Demon Armor's shipped chain: visual 130 → precast kit 217 with anim 52, an instant self-buff.
 const SPELL: u32 = 706;
@@ -1006,7 +1007,7 @@ fn the_mount_poof_puffs_on_the_build_leg_only() {
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133).
-    const FIELD_MOUNTDISPLAYID: u16 = 133;
+    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMountDisplayId);
     /// The shipped path of `SpellVisualEffectName` row 1185, the druid-morph cloud.
     const POOF: &str = "Spells\\DruidMorph_Impact_Base.mdx";
     const POOF_FX: u32 = 1185;

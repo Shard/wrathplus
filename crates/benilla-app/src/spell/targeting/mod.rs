@@ -493,6 +493,7 @@ impl ScriptCursor<'_, '_> {
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_ui::script::UiScript;
     use crossbeam_channel::Receiver;
     use std::collections::HashMap;
@@ -836,10 +837,10 @@ mod tests {
         const SPELL: u32 = 3000;
         /// Absolute descriptor indices: `OBJECT_FIELD_ENTRY`, `UNIT_FIELD_HEALTH`,
         /// `UNIT_FIELD_FLAGS` and `UNIT_DYNAMIC_FLAGS`.
-        const ENTRY: u16 = 3;
-        const HEALTH: u16 = 22;
-        const FLAGS: u16 = 46;
-        const DYNAMIC_FLAGS: u16 = 143;
+        const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
+        const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+        const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+        const DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
         const HUMANOID: u32 = 69;
         const BEAST: u32 = 70;
 

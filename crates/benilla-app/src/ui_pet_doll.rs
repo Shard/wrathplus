@@ -70,18 +70,19 @@ fn feed_pet_doll(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::messages::{ObjectFields, ObjectType};
 
     use crate::net::ObjectStore;
 
     // The UNIT-block field indices the core reads (`benilla_protocol`'s `fields::FIELD_UNIT_*`).
-    const BASEATTACKTIME: u16 = 126;
-    const MINDAMAGE: u16 = 134;
-    const MAXDAMAGE: u16 = 135;
-    const STAT0: u16 = 150;
-    const RESISTANCES0: u16 = 155;
-    const ATTACK_POWER: u16 = 165;
-    const ATTACK_POWER_MODS: u16 = 166;
+    const BASEATTACKTIME: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBaseattacktime);
+    const MINDAMAGE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMindamage);
+    const MAXDAMAGE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxdamage);
+    const STAT0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitStat0);
+    const RESISTANCES0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitResistances);
+    const ATTACK_POWER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAttackPower);
+    const ATTACK_POWER_MODS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAttackPowerMods);
 
     /// A boar's descriptor: the UNIT block alone, built as a create block, because a live pet
     /// arrives as one and a create reads an absent field as 0, not unknown.

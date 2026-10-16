@@ -906,7 +906,8 @@ fn flagged_friendly_player_plate_is_green() {
 fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     use crate::net::ObjectStore;
     use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-    use benilla_protocol::field::FIELD_UNIT_FACTIONTEMPLATE;
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.

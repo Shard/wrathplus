@@ -547,6 +547,7 @@ pub(crate) fn can_afford(d: &SpellDisplay, store: &ObjectStore, mods: &SpellModi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     // Field indices, private in the protocol crate: health 22, power1 23, max health 28, flags
@@ -615,8 +616,9 @@ mod tests {
         const INV_MAINHAND: u16 = 486 + 2 * 15;
         const INV_OFFHAND: u16 = 486 + 2 * 16;
         // `ITEM_FIELD_DURABILITY` / `_MAXDURABILITY`, instance fields.
-        const ITEM_DURABILITY: u16 = 46;
-        const ITEM_MAX_DURABILITY: u16 = 47;
+        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
+        const ITEM_MAX_DURABILITY: u16 =
+            FieldLayout::Vanilla5875.index_of(Field::ItemMaxdurability);
 
         let spell = |ex3: u32| SpellDisplay {
             equipped_item_class: 2,

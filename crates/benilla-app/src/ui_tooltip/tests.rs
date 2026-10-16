@@ -236,7 +236,8 @@ fn empty_player() -> ObjectStore {
 /// × 5 (vmangos `Player::UpdateSkillsForLevel`), so levels 1, 11 and 60 read 15, 20 and 20.
 #[test]
 fn battle_shout_description_scales_by_the_skill_level() {
-    use benilla_protocol::messages::FIELD_PLAYER_SKILL_INFO_1_1;
+    const FIELD_PLAYER_SKILL_INFO_1_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerSkillInfo11);
     let data = benilla_formats::wow_data_or_skip!();
     let mut chain = benilla_formats::open_chain(&data).expect("open chain");
     let spells = Spells {

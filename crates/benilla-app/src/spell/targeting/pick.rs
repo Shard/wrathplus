@@ -203,18 +203,19 @@ mod tests {
     use crate::spell::group_relation::publish_group_roster;
     use crate::spell::targeting::corpse_fixture as fx;
     use benilla_protocol::messages::GroupMemberEntry;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH`,
     /// `UNIT_FIELD_FLAGS`, `UNIT_FIELD_CHARMEDBY` and `UNIT_FIELD_CREATEDBY`.
-    const TYPE: u16 = 2;
-    const HEALTH: u16 = 22;
-    const FLAGS: u16 = 46;
-    const CHARMED_BY: u16 = 10;
-    const CREATED_BY: u16 = 14;
+    const TYPE: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectType);
+    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const CHARMED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
+    const CREATED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
     /// `UNIT_FIELD_FACTIONTEMPLATE`, on [`fx::factions`]' rows 1 (Human) and 2 (Orc).
-    const TEMPLATE: u16 = 35;
+    const TEMPLATE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
     const PLAYER_TYPE: u32 = 0x19;
 
     // The words: `TARGET_FLAG_*`.

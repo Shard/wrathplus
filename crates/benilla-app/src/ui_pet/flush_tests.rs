@@ -12,6 +12,7 @@ use benilla_protocol::SessionEvent;
 use super::press_tests::{claw, growl, listen, listening_vm, rig, Rig, CLAW, GROWL, ME, PET};
 use super::PetBar;
 use crate::net::ObjectStore;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 /// The three events, in the reference's order.
 const FLUSH: [&str; 3] = [
@@ -21,7 +22,7 @@ const FLUSH: [&str; 3] = [
 ];
 
 /// `UNIT_FIELD_SUMMONEDBY`, low word, the owner test the GO's pet leg reads (`0x6e859a`).
-const SUMMONEDBY: u16 = 12;
+const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
 
 /// Our own pet by the field the GO's pet leg reads: `SUMMONEDBY` us.
 fn summoned_pet() -> ObjectStore {

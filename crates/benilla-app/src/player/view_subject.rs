@@ -84,6 +84,7 @@ pub(super) fn publish_view_subject(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     #[test]
     fn an_unset_or_unstreamed_far_sight_both_resolve_to_the_body() {
@@ -132,7 +133,7 @@ mod tests {
         assert!(votes(&rx).is_empty(), "no field, no vote");
 
         // Far sight set, the object not streamed: still the body, not the origin.
-        const FARSIGHT: u16 = 712;
+        const FARSIGHT: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFarsight);
         let set = |app: &mut App, lo: u32| {
             *app.world_mut().get_mut::<ObjectStore>(me).unwrap() =
                 ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[

@@ -23,18 +23,19 @@ use crate::ui_action::Spells;
 use super::bar::{feed_pet_bar, fire_pet_cooldown_events};
 use super::drain::PetPress;
 use super::PetBar;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 pub(super) const ME: u64 = 0x10;
 pub(super) const PET: u64 = 0x2A;
 /// `UNIT_FIELD_CHARMEDBY`, `UNIT_FIELD_SUMMONEDBY` and `UNIT_FIELD_CREATEDBY`, low words; the high
 /// words stay 0.
-pub(super) const CHARMEDBY: u16 = 10;
-pub(super) const SUMMONEDBY: u16 = 12;
-pub(super) const CREATEDBY: u16 = 14;
-pub(super) const FLAGS: u16 = 46;
+pub(super) const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
+pub(super) const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
+pub(super) const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+pub(super) const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
 /// `UNIT_FIELD_AURA` slot 0 and `UNIT_FIELD_AURAFLAGS`, a nibble per slot.
-pub(super) const AURA: u16 = 47;
-pub(super) const AURAFLAGS: u16 = 95;
+pub(super) const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
+pub(super) const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
 
 pub(super) const CLAW: u32 = 16829;
 pub(super) const BITE: u32 = 17258;

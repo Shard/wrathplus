@@ -194,7 +194,11 @@ fn on_cast_result(
         // changed it (AzerothCore `Player::AddSpellAndCategoryCooldowns`); the client starts the
         // `Spell.dbc` recovery itself when its cast goes off.
         if success && *dialect == crate::net::SessionDialect::Wrath12340 {
-            if let Some(display) = ladder.spells.as_deref().and_then(|s| s.catalog.get(spell_id)) {
+            if let Some(display) = ladder
+                .spells
+                .as_deref()
+                .and_then(|s| s.catalog.get(spell_id))
+            {
                 ladder
                     .cooldowns
                     .start_cast_recovery(spell_id, display, std::time::Instant::now());
@@ -1371,6 +1375,7 @@ fn spell_chain_targets(
 mod tests {
     use super::*;
     use benilla_protocol::messages::ACTION_KIND_SPELL;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// A catalog holding one row, so the announce tests can name a real `Attributes` value.
     fn catalog_with(id: u32, display: benilla_formats::SpellDisplay) -> Spells {
@@ -1996,9 +2001,9 @@ mod tests {
     }
 
     /// `UNIT_FIELD_CHARMEDBY` / `SUMMONEDBY` / `CREATEDBY`, two dwords each.
-    const CHARMEDBY: u16 = 10;
-    const SUMMONEDBY: u16 = 12;
-    const CREATEDBY: u16 = 14;
+    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
+    const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
+    const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
 
     /// A unit store whose `field` pair names `owner`.
     fn owned(field: u16, owner: u64) -> ObjectStore {

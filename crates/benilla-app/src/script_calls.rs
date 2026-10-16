@@ -142,6 +142,7 @@ mod tests {
     use benilla_protocol::messages::{
         ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
     };
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_ui::script::{PetBookState, SpellBookState, SpellSlotView, SpellTabView};
     use bevy::ecs::system::RunSystemOnce;
     use crossbeam_channel::Receiver;
@@ -156,9 +157,9 @@ mod tests {
     /// A mob the TAB scan can pick: it alone carries a `NetEntity`.
     const MOB: u64 = 0x31;
     /// `UNIT_FIELD_FACTIONTEMPLATE`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FLAGS`.
-    const TEMPLATE: u16 = 35;
-    const HEALTH: u16 = 22;
-    const FLAGS: u16 = 46;
+    const TEMPLATE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
     /// The fixture's templates: ours (group 1, friendly toward group 2, enemy of group 4), a
     /// friendly NPC's (group 2) and a hostile mob's (group 4).
     const OURS: u32 = 1;

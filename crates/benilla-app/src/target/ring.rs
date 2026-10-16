@@ -953,7 +953,9 @@ mod tests {
     fn the_reputation_rank_is_capped_at_revered() {
         use crate::net::ObjectStore;
         use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-        use benilla_protocol::field::FIELD_UNIT_FACTIONTEMPLATE;
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
 
         /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
@@ -1218,9 +1220,14 @@ mod tests {
     /// `0x464920` → `0x5fbb60` → `0x493910`, which clears a matching selection and sends
     /// `CMSG_SET_SELECTION 0` at once, while only the detached model fades on.
     mod teardown {
-        use benilla_protocol::field::{
-            FIELD_UNIT_FLAGS, FIELD_UNIT_HEALTH, FIELD_UNIT_LEVEL, FIELD_UNIT_MAXHEALTH,
-        };
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitFlags);
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitHealth);
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitLevel);
+        const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
         use benilla_protocol::messages::ObjectType;
         use benilla_protocol::{EntityKind, ObjectFields, SessionEvent};
         use bevy::ecs::system::RunSystemOnce;

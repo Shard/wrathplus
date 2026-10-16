@@ -404,6 +404,7 @@ pub(in crate::minimap) fn emit_party_dots(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// Creature type 7, Humanoid: a player's, by race (`ChrRaces.dbc` column 9).
     const CREATURE_TYPE_HUMANOID: u32 = 7;
@@ -414,10 +415,10 @@ mod tests {
         use crate::net::ObjectStore;
         use benilla_protocol::ObjectFields;
 
-        const FIELD_HEALTH: u16 = 22; // UNIT_FIELD_HEALTH
-        const FIELD_SUMMONEDBY: u16 = 12; // UNIT_FIELD_SUMMONEDBY (2 dwords)
-        const FIELD_CHARMEDBY: u16 = 10; // UNIT_FIELD_CHARMEDBY (2 dwords)
-        const FIELD_BYTES_1: u16 = 138;
+        const FIELD_HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth); // UNIT_FIELD_HEALTH
+        const FIELD_SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby); // UNIT_FIELD_SUMMONEDBY (2 dwords)
+        const FIELD_CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby); // UNIT_FIELD_CHARMEDBY (2 dwords)
+        const FIELD_BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
         /// `UNIT_FIELD_BYTES_1` byte 3 bit 2, the `& 4` the classifier tests.
         const UNTRACKABLE: u32 = 0x4 << 24;
         const ME: u64 = 0x0000_0000_0000_0007;

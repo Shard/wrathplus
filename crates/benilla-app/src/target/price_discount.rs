@@ -80,7 +80,11 @@ pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::field::{FIELD_UNIT_FACTIONTEMPLATE, FIELD_UNIT_FLAGS};
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// The five values `0x612b80` can return, as the f64 bits its `st0` holds.
@@ -147,8 +151,8 @@ mod tests {
     }
 
     /// `PLAYER_BYTES_3`, `PLAYER_FIELD_BYTES`: absolute descriptor indices.
-    const PLAYER_BYTES_3: u16 = 195;
-    const PLAYER_FIELD_BYTES: u16 = 1222;
+    const PLAYER_BYTES_3: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerBytes3);
+    const PLAYER_FIELD_BYTES: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFieldBytes);
 
     /// The flag is read off the vendor and the rank off the player's current-rank byte, never the
     /// highest-rank-held byte of `PLAYER_FIELD_BYTES`. With no faction catalog the reaction is
@@ -178,7 +182,7 @@ mod tests {
     }
 
     /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
-    const BYTES_0: u16 = 36;
+    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
 
     /// The reputation term reads the vendor's reaction to the player, the standing rank: Friendly
     /// (8999) earns nothing, Honored (9000) the 0.1. The player's reaction to the vendor would be
