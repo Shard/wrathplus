@@ -72,12 +72,13 @@ const CREATURE_TYPE_HUMANOID: u32 = 7;
 mod tests {
     use super::*;
     use crate::names::CreatureRecord;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_BYTES_1` and `UNIT_FIELD_BYTES_0`, absolute descriptor indices.
-    const BYTES_1: u16 = 138;
-    const BYTES_0: u16 = 36;
-    const OBJECT_FIELD_ENTRY: u16 = 3;
+    const BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
+    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
 
     fn store(entry: u32, race: u32, form: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[

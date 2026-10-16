@@ -815,6 +815,7 @@ fn resolve_trade_target(token: &str, selection: &Selection, group: &GroupState) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::messages::{TradeStatus, TradeStatusExtended};
 
     fn wire_item(entry: u32) -> TradeItem {
@@ -1307,9 +1308,9 @@ mod tests {
     fn a_dead_or_ghost_initiator_is_refused() {
         // The `UNIT_FIELD_HEALTH`, `UNIT_FIELD_MAXHEALTH` and `PLAYER_FLAGS` field ids, and
         // `PLAYER_FLAGS_GHOST`.
-        const HEALTH: u16 = 22;
-        const MAXHEALTH: u16 = 28;
-        const PLAYER_FLAGS: u16 = 190;
+        const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+        const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
+        const PLAYER_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
         const GHOST: u32 = 0x10;
         for (label, fields) in [
             ("dead", vec![(HEALTH, 0u32), (MAXHEALTH, 100)]),

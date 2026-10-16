@@ -1075,6 +1075,7 @@ mod tests {
     use benilla_protocol::messages::GroupMemberEntry;
     use benilla_protocol::messages::ItemInfo;
     use benilla_protocol::messages::ObjectFields;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1083,8 +1084,8 @@ mod tests {
     }
 
     /// Descriptor field indices the predicate-B table reads.
-    const F_GO_TYPE_ID: u16 = 21;
-    const F_UNIT_HEALTH: u16 = 22;
+    const F_GO_TYPE_ID: u16 = FieldLayout::Vanilla5875.index_of(Field::GameobjectTypeId);
+    const F_UNIT_HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
 
     /// Predicate B's answer for one latched object; `None` latches a guid that does not resolve.
     fn kneels_at(object: Option<(EntityKind, &[(u16, u32)])>) -> bool {
@@ -1254,9 +1255,10 @@ mod tests {
             let kind = if unit { 0x9 } else { 0x21 };
             let e = app
                 .world_mut()
-                .spawn(crate::net::ObjectStore(ObjectFields::from_pairs(&[(
-                    2, kind,
-                )])))
+                .spawn(crate::net::ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::ObjectType, kind)],
+                )))
                 .id();
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

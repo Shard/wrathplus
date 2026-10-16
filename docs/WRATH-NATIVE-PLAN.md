@@ -63,8 +63,14 @@ Crates `benilla-app`, `benilla-world`.
 - Replace every raw field index (`const F_*: u16 = 147;`, `FIELD_*` imports, `get_u32(N)`; about 256
   constants) with `Field` reads or the WS1 accessors. Remove duplicated per-module constants.
 - Field-change watchers (`FieldChanged`, `FieldEdges`) key on `Field`, not raw index.
-- Done when: `rg 'const [A-Z_]*: u16 = [0-9]+' crates/benilla-app crates/benilla-world` finds no
-  descriptor indices; both dialects' tests green; a live Wrath session behaves as before.
+- Done when (refined with the manager, 2026-10-16): no production `const`, `FIELD_*` import or
+  `ObjectFields::from_pairs` key in `crates/benilla-app` / `crates/benilla-world` maps to a
+  descriptor field, script-verified against the generated reverse tables
+  (`layout_generated.rs`); fixtures derive indices from `Field` (`FieldLayout::index_of`,
+  `ObjectFields::from_fields`). The original `rg 'const [A-Z_]*: u16 = [0-9]+'` still lists
+  non-descriptor constants (animation ids, attachment points, opcodes, SpellTargetFlags words,
+  retry counts, render markers) and misses names with digits, so it is not the gate. Both
+  dialects' tests green; a live Wrath session behaves as before.
 
 ### WS3: native 3.3.5 Lua API (parallel with WS1/WS2)
 Crate `benilla-ui` (`script/*`), reading data the app pushes into the `Model`.

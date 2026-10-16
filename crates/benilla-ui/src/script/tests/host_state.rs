@@ -180,6 +180,7 @@ fn the_getters_answer_the_pushed_state_in_their_1_12_shapes() {
         pvp_type: Some("friendly".into()),
         pvp_faction: Some("Alliance".into()),
         is_arena: true,
+        pvp_is_subzone: false,
     });
     s.set_game_time(21, 7);
     assert_eq!(
@@ -264,10 +265,54 @@ fn wrath_zone_pvp_tuple_keeps_faction_in_the_stock_consumer_slot() {
     let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 0);
     for kind in ["friendly", "hostile", "contested"] {
-        s.set_zone_texts(ZoneTexts { pvp_type: Some(kind.into()), pvp_faction: Some("Alliance".into()), ..Default::default() });
+        s.set_zone_texts(ZoneTexts {
+            pvp_type: Some(kind.into()),
+            pvp_faction: Some("Alliance".into()),
+            ..Default::default()
+        });
         s.run("local pvpType, isSubZonePvP, factionName = GetZonePVPInfo(); assert(isSubZonePvP == nil); assert(format('%s Territory', factionName) == 'Alliance Territory')").unwrap();
         assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 3);
     }
-    s.set_zone_texts(ZoneTexts { pvp_type: Some("friendly".into()), ..Default::default() });
-    assert_eq!(s.eval::<String>("local _,_,f = GetZonePVPInfo(); return f").unwrap(), "");
+    s.set_zone_texts(ZoneTexts {
+        pvp_type: Some("friendly".into()),
+        ..Default::default()
+    });
+    assert_eq!(
+        s.eval::<String>("local _,_,f = GetZonePVPInfo(); return f")
+            .unwrap(),
+        ""
+    );
+}
+
+/// Wrath 0x51ba50's special areas: two values, isSubZone 1 only when the leaf carried the flag.
+#[test]
+fn wrath_zone_pvp_special_areas_return_type_and_leaf_flag() {
+    use crate::script::{ScriptDialect, ZoneTexts};
+    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    for kind in ["sanctuary", "arena", "combat"] {
+        for leaf in [false, true] {
+            s.set_zone_texts(ZoneTexts {
+                pvp_type: Some(kind.into()),
+                pvp_faction: Some("Alliance".into()),
+                pvp_is_subzone: leaf,
+                ..Default::default()
+            });
+            assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 2);
+            let sub = s
+                .eval::<Option<f64>>("local _, sub = GetZonePVPInfo(); return sub")
+                .unwrap();
+            assert_eq!(sub, leaf.then_some(1.0), "{kind} leaf={leaf}");
+        }
+    }
+    // An ordinary type never reports isSubZone, whatever the flag says.
+    s.set_zone_texts(ZoneTexts {
+        pvp_type: Some("contested".into()),
+        pvp_is_subzone: true,
+        ..Default::default()
+    });
+    assert_eq!(
+        s.eval::<Option<f64>>("local _, sub = GetZonePVPInfo(); return sub")
+            .unwrap(),
+        None
+    );
 }

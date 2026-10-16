@@ -299,7 +299,13 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
     let mob = feed
         .app
         .world_mut()
-        .spawn((speeds, ObjectStore(ObjectFields::from_pairs(&[(22, 100)]))))
+        .spawn((
+            speeds,
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+            )),
+        ))
         .id();
     feed.app
         .world_mut()

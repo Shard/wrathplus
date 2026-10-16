@@ -405,6 +405,7 @@ pub(super) fn feed_action_state(
 mod tests {
     use super::*;
     use benilla_formats::SpellDisplay;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// `[rec+0x564]`'s three values (`0x4e5a50`): a live spell, a bare macro, and grey.
     #[test]
@@ -525,7 +526,7 @@ mod tests {
         const SWUNG_AT: u64 = 0xA1;
         const SELECTED: u64 = 0xB2;
         /// `UNIT_FIELD_COMBATREACH`.
-        const REACH: u16 = 130;
+        const REACH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCombatreach);
 
         let verdict = |distance: f32| {
             let (tx, _rx) = crossbeam_channel::unbounded();
@@ -591,14 +592,20 @@ mod tests {
                 SelfPlayer,
                 Engaged(SWUNG_AT),
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // The selected unit keeps the descriptor's default 1.5 reach.
             let selected = app
                 .world_mut()
                 .spawn((
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
@@ -712,7 +719,10 @@ mod tests {
                 crate::net::Embodied,
                 speeds,
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // A mob at the descriptor's default 1.5 reach; a live spline at 8 yd/s is its run.
             let mob = app
@@ -720,7 +730,10 @@ mod tests {
                 .spawn((
                     speeds,
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             if mob_runs {
@@ -772,8 +785,8 @@ mod tests {
         const FOOD_ITEM: u32 = 1487;
         const FOOD_SPELL: u32 = 433;
         // Raw indices: `ITEM_FIELD_STACK_COUNT`, and `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1.
-        const STACK: u16 = 14;
-        const PACK_SLOT_1: u16 = 532;
+        const STACK: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemStackCount);
+        const PACK_SLOT_1: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerPackSlot1);
 
         let lit = |in_combat: bool| {
             let (tx, _rx) = crossbeam_channel::unbounded();

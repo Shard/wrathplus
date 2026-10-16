@@ -574,8 +574,20 @@ mod tests {
         // `UNIT_FIELD_FLAGS` bit 3 (player-controlled) on us alone selects `CanAttack`'s mixed
         // arm; with no catalog the reaction resolves neutral, so the enemy bit clears. Both carry
         // `UNIT_FIELD_HEALTH` (22): a store with none reads dead to the gates.
-        let me = crate::net::ObjectStore(ObjectFields::from_pairs(&[(22, 100), (46, 1 << 3)]));
-        let it = crate::net::ObjectStore(ObjectFields::from_pairs(&[(22, 100), (35, 0)]));
+        let me = crate::net::ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitHealth, 100),
+                (benilla_protocol::messages::Field::UnitFlags, 1 << 3),
+            ],
+        ));
+        let it = crate::net::ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitHealth, 100),
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 0),
+            ],
+        ));
         let rel = TargetRelations {
             target_store: Some(&it),
             target_owner_store: None,
@@ -645,9 +657,27 @@ mod tests {
             benilla_formats::load_faction_catalog(&mut chain).expect("FactionTemplate.dbc"),
         );
         // Faction templates 35 and 1 are a real friendly pair. Field 46 is UNIT_FIELD_FLAGS.
-        let me = ObjectStore(ObjectFields::from_pairs(&[(35, 1), (46, 0x8)]));
-        let quiet = ObjectStore(ObjectFields::from_pairs(&[(35, 35), (46, 0)]));
-        let pvp = ObjectStore(ObjectFields::from_pairs(&[(35, 35), (46, 0x1000)]));
+        let me = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (benilla_protocol::messages::Field::UnitFlags, 0x8),
+            ],
+        ));
+        let quiet = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
+                (benilla_protocol::messages::Field::UnitFlags, 0),
+            ],
+        ));
+        let pvp = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
+                (benilla_protocol::messages::Field::UnitFlags, 0x1000),
+            ],
+        ));
         let reputations = Reputations(Vec::new());
         let rel = |target| TargetRelations {
             target_store: Some(target),
@@ -842,7 +872,12 @@ mod tests {
     fn a_dead_units_bind_clears_the_0x400_bit() {
         use benilla_protocol::ObjectFields;
 
-        let health = |hp| ObjectStore(ObjectFields::from_pairs(&[(22, hp)]));
+        let health = |hp| {
+            ObjectStore(ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[(benilla_protocol::messages::Field::UnitHealth, hp)],
+            ))
+        };
         let (corpse, live) = (health(0), health(100));
         let rel = |target| TargetRelations {
             target_store: Some(target),

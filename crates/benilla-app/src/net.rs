@@ -29,14 +29,13 @@ pub(crate) use objects::tear_down;
 mod session;
 mod world;
 pub(crate) mod wrath_auras;
-mod wrath_notices;
-mod wrath_mail_capture;
-mod wrath_quests_completed_capture;
-mod wrath_ui_timer_capture;
-mod wrath_mirror_image_capture;
+mod wrath_exchange_capture;
 mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
-mod wrath_exchange_capture;
+mod wrath_mail_capture;
+mod wrath_mirror_image_capture;
+mod wrath_notices;
+mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
@@ -46,6 +45,7 @@ pub(crate) mod wrath_combo_points;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
+mod wrath_ui_timer_capture;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
@@ -343,15 +343,6 @@ impl FieldChanged {
     pub fn unit_slot(&self, field: benilla_protocol::messages::Field, len: u16) -> Option<u16> {
         (self.is_unit() && self.field == field && self.offset < len).then_some(self.offset)
     }
-    #[deprecated(note = "WS2 staging only: migrate to named_field")]
-    pub fn unit_field(&self, index: u16) -> bool {
-        self.is_unit() && self.layout.field_at(self.kind, index) == Some((self.field, self.offset))
-    }
-    #[deprecated(note = "WS2 staging only: migrate to unit_slot")]
-    pub fn unit_array_slot(&self, base: u16, len: u16) -> Option<u16> {
-        let index = self.layout.resolve(self.field)?.index + self.offset;
-        (self.is_unit() && index >= base && index - base < len).then(|| index - base)
-    }
 }
 
 /// The field edges one feed saw this run, by guid and semantic array member: the reference fans
@@ -370,33 +361,6 @@ impl FieldEdges {
         offset: u16,
     ) -> bool {
         self.0.contains(&(guid, field, offset))
-    }
-    #[deprecated(note = "WS2 staging only: migrate Vanilla callers to moved_field")]
-    pub fn moved(&self, guid: u64, index: u16) -> bool {
-        // Existing callers pass Vanilla positions, even while projected Wrath is enabled.
-        use benilla_protocol::messages::{FieldLayout, ObjectType};
-        [ObjectType::Unit, ObjectType::Player]
-            .into_iter()
-            .any(|kind| {
-                FieldLayout::Vanilla5875
-                    .field_at(kind, index)
-                    .is_some_and(|(field, offset)| self.moved_field(guid, field, offset))
-            })
-    }
-    #[cfg(test)]
-    #[deprecated(note = "WS2 staging only: migrate fixtures to semantic_of")]
-    pub fn of(edges: &[(u64, u16)]) -> Self {
-        use benilla_protocol::messages::{FieldLayout, ObjectType};
-        Self(
-            edges
-                .iter()
-                .filter_map(|&(guid, index)| {
-                    FieldLayout::Vanilla5875
-                        .field_at(ObjectType::Player, index)
-                        .map(|(field, offset)| (guid, field, offset))
-                })
-                .collect(),
-        )
     }
     #[cfg(test)]
     pub fn semantic_of(edges: &[(u64, benilla_protocol::messages::Field, u16)]) -> Self {
@@ -641,7 +605,11 @@ impl NetCommands {
                 match command {
                     ClientCommand::AutostoreLootItem { slot } if *slot > 17 => false,
                     ClientCommand::SetSheathed { state } if *state > 2 => false,
-                    ClientCommand::StandStateChange { state } if !matches!(state, 0 | 1 | 3 | 8) => false,
+                    ClientCommand::StandStateChange { state }
+                        if !matches!(state, 0 | 1 | 3 | 8) =>
+                    {
+                        false
+                    }
                     _ => io::wrath::has_writer_route(command),
                 }
             }
@@ -1881,9 +1849,13 @@ pub(crate) enum ClientCommand {
         name: String,
     },
     /// Native Wrath `CMSG_SET_CHANNEL_WATCH`; empty name clears the watch.
-    SetChannelWatch { name: String },
+    SetChannelWatch {
+        name: String,
+    },
     /// Native Wrath `CMSG_CHANNEL_DISPLAY_LIST`, distinct from the ordinary chat list.
-    ChannelDisplayList { name: String },
+    ChannelDisplayList {
+        name: String,
+    },
     /// Native LFD lock queries; never emitted automatically by capture.
     LfgRequestPlayerLockInfo,
     LfgRequestPartyLockInfo,
@@ -2021,7 +1993,11 @@ pub(crate) enum ClientCommand {
     /// `CMSG_GROUP_DISBAND`: leave the group, despite the name.
     GroupLeave,
     /// Wrath MSG_PARTY_ASSIGNMENT, full guid; never translated to a Vanilla packet.
-    PartyAssignment { assignment: u8, apply: bool, guid: u64 },
+    PartyAssignment {
+        assignment: u8,
+        apply: bool,
+        guid: u64,
+    },
     /// `CMSG_GROUP_RAID_CONVERT`, leader only.
     GroupRaidConvert,
     /// `CMSG_REQUEST_PARTY_MEMBER_STATS`, only on the reference's two edges: a member's object
@@ -2075,7 +2051,9 @@ pub(crate) enum ClientCommand {
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
-    NativeMirrorImageQuery { guid: u64 },
+    NativeMirrorImageQuery {
+        guid: u64,
+    },
     /// Native instance controls; transport does not infer leadership, locks or permission.
     NativeInstanceControl(benilla_protocol::wrath_instance_control::Command),
     /// Native item/inventory commands with no Vanilla twin; transport does not claim acceptance.
@@ -2725,7 +2703,10 @@ mod tests {
     /// A re-create of a live object notifies like a delta.
     #[test]
     fn the_merge_emits_one_edge_per_moved_dword_and_none_for_a_first_create() {
-        use benilla_protocol::field::{FIELD_UNIT_HEALTH, FIELD_UNIT_LEVEL};
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitHealth);
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitLevel);
         use benilla_protocol::messages::ObjectType;
 
         let mut world = World::new();
@@ -2775,7 +2756,11 @@ mod tests {
         );
         let edges = drain(&mut world);
         assert_eq!(edges.len(), 1);
-        assert!(edges[0].unit_field(FIELD_UNIT_LEVEL) && edges[0].old == 9 && edges[0].new == 10);
+        assert!(
+            edges[0].named_field(benilla_protocol::messages::Field::UnitLevel)
+                && edges[0].old == 9
+                && edges[0].new == 10
+        );
         assert_eq!(
             world.get::<ObjectStore>(unit).unwrap().0.unit_level(),
             Some(10)
@@ -2784,7 +2769,6 @@ mod tests {
 
     /// All existing watcher roots retain their class and member after native reverse lookup.
     #[test]
-    #[allow(deprecated)]
     fn semantic_edges_preserve_existing_scalar_and_array_watchers() {
         use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
         let unit_fields = [
@@ -2822,7 +2806,6 @@ mod tests {
                     let edge = edges[0];
                     assert!(edge.named_field(field));
                     assert_eq!((edge.field, edge.offset), (field, 0));
-                    assert_eq!(edge.unit_field(span.index), edge.is_unit());
                     assert_eq!((edge.old, edge.new), (1, 2));
                     assert!(FieldEdges::semantic_of(&[(42, field, 0)]).moved_field(42, field, 0));
                 }
@@ -2850,7 +2833,6 @@ mod tests {
                         new: 2,
                     };
                     assert_eq!(edge.unit_slot(field, span.width), Some(offset));
-                    assert_eq!(edge.unit_array_slot(span.index, span.width), Some(offset));
                     assert_eq!(edge.unit_slot(field, offset), None);
                     assert!(!edge.named_field(Field::UnitHealth));
                 }

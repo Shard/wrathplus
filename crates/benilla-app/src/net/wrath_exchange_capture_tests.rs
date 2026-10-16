@@ -2,7 +2,8 @@ use super::*;
 use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 
 fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(opcode, body, 0).unwrap()
+    if let WrathDispatch::Handled { session_events, .. } =
+        adapter.dispatch(opcode, body, 0).unwrap()
     {
         crate::net::handlers::dispatch(app.world_mut(), session_events);
     }
@@ -73,6 +74,9 @@ fn shared_replies_reach_their_existing_owners_not_a_capture() {
         SessionEventKind::AuctionOwnerNotification,
         SessionEventKind::LootMasterList,
     ] {
-        assert!(census.get(&kind).is_some_and(|o| !o.is_empty()), "{kind:?} has no owner");
+        assert!(
+            census.get(&kind).is_some_and(|o| !o.is_empty()),
+            "{kind:?} has no owner"
+        );
     }
 }
