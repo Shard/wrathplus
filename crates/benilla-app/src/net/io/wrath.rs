@@ -346,6 +346,16 @@ fn run(
                         finish_character_action(&mut session, &mut characters, realm_record.clone(),
                             benilla_protocol::CharAction::Create, code, |event| send(events, event))?;
                     }
+                    Ok(CharRequest::Service(command)) => {
+                        let reply = session.char_service_result(&command)?;
+                        // A change the server applied re-emits the roster before the result, as
+                        // create and delete do.
+                        if reply.changed_roster() {
+                            characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+                            send(events, SessionEvent::CharacterList { characters: characters.clone(), realm: realm_record.clone() })?;
+                        }
+                        send(events, SessionEvent::WrathCharServiceResult { reply })?;
+                    }
                     Ok(CharRequest::Delete(guid)) => {
                         let code = session.delete_character_result(guid)?;
                         finish_character_action(&mut session, &mut characters, realm_record.clone(),

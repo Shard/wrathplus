@@ -167,6 +167,9 @@ pub enum SessionEvent {
     CharActionResult { action: CharAction, code: u8 },
     /// Build-12340 character mutation result. Raw codes are NOT Vanilla WorldResult values.
     WrathCharActionResult { action: CharAction, code: u8 },
+    /// Build-12340 character-screen service reply (rename, customize, faction/race change, declined
+    /// names, realm split); raw codes. A roster change is published first as a `CharacterList`.
+    WrathCharServiceResult { reply: crate::wrath_char_services::Reply },
     /// We are in the world; the IO thread emits this before any object update.
     Connected {
         self_guid: u64,
@@ -1222,7 +1225,11 @@ pub enum SessionEvent {
     /// A mail arrived (`SMSG_RECEIVED_MAIL`); `seconds` of delay, always `0.0` from vmangos.
     ReceivedMail { seconds: f32 },
     /// `MSG_QUERY_NEXT_MAIL_TIME`'s reply: `0.0` unread mail, `-86400.0` none; for `HasNewMail()`.
-    NextMailTime { seconds: f32 },
+    NextMailTime {
+        seconds: f32,
+        /// Build 12340's sender previews in wire order (at most two); empty on 1.12, which sends none.
+        previews: Vec<crate::wrath_mail::MailPreview>,
+    },
     /// `MSG_AUCTION_HELLO`'s reply, which opens the auction window: the auctioneer and its
     /// `AuctionHouse.dbc` row (1..7, the deposit and cut rates).
     AuctionHello { auctioneer: u64, house_id: u32 },

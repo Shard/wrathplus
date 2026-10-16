@@ -1039,7 +1039,10 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
         }
         ServerPacket::ReceivedMail { seconds } => vec![SessionEvent::ReceivedMail { seconds }],
         ServerPacket::NextMailTime { seconds } => {
-            vec![SessionEvent::NextMailTime { seconds }]
+            vec![SessionEvent::NextMailTime {
+                seconds,
+                previews: Vec::new(),
+            }]
         }
         ServerPacket::AuctionHello {
             auctioneer,
