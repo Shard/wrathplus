@@ -481,6 +481,37 @@ struct MailFeedExtras<'w, 's> {
     packages: Option<Res<'w, Packages>>,
     /// The package rows went to this VM.
     packages_pushed: Local<'s, crate::ui_script::VmMemo<bool>>,
+    /// `GetLatestThreeSenders`' auction-house names and the list this VM last heard.
+    auction_houses: Option<Res<'w, crate::ui_auction::AuctionHouses>>,
+    senders_pushed: Local<'s, crate::ui_script::VmMemo<Option<Vec<String>>>>,
+}
+
+/// `GetLatestThreeSenders`' names (`0x56f3a0` over `0x56d960`): the delivered previews
+/// (`delay <= 0`) in wire order, each named by kind. Normal (0) and item (5) mail: the GM
+/// stationery (61) is `GM_EMAIL_NAME`, else the sender's player name; auction (2): the
+/// `AuctionHouse.dbc` row's name; creature (3): its template name. A name still being asked is
+/// skipped until it lands. Labelled, not built: game-object senders (4), whose template cache is
+/// keyed by spawn here, not by entry.
+fn latest_senders(
+    previews: &[benilla_protocol::wrath_mail::MailPreview],
+    names: &NameCache,
+    commands: &NetCommands,
+    houses: Option<&crate::ui_auction::AuctionHouses>,
+    gm_name: Option<&str>,
+) -> Vec<String> {
+    previews
+        .iter()
+        .filter(|p| p.delay <= 0.0)
+        .filter_map(|p| match p.kind {
+            0 | 5 if p.stationery == 61 => gm_name.map(str::to_string),
+            0 | 5 => names.resolve(p.sender, commands).map(str::to_string),
+            2 => houses?.0.get(p.entry).map(|h| h.name.clone()),
+            3 => names
+                .resolve_creature(p.entry, 0, commands)
+                .map(str::to_string),
+            _ => None,
+        })
+        .collect()
 }
 
 fn feed_mail(
@@ -514,6 +545,8 @@ fn feed_mail(
         stationeries: mut last_stationeries,
         packages,
         mut packages_pushed,
+        auction_houses,
+        mut senders_pushed,
     } = extras;
     if let Some(packages) = packages.as_deref() {
         let pushed = packages_pushed.get(&script);
@@ -601,6 +634,23 @@ fn feed_mail(
         }
         // `CanComplainInboxItem`'s not-from-self test (`0x56fa70`) reads the player's GUID.
         script.set_wrath_mail_self_guid(self_q.single().map_or(0, |(_, guid)| guid.0));
+        let gm_name = script
+            .lua()
+            .globals()
+            .get::<String>("GM_EMAIL_NAME")
+            .ok();
+        let senders = latest_senders(
+            &pending.previews,
+            &names,
+            &commands,
+            auction_houses.as_deref(),
+            gm_name.as_deref(),
+        );
+        let last = senders_pushed.get(&script);
+        if last.as_ref() != Some(&senders) {
+            script.set_wrath_mail_latest_senders(senders.clone());
+            *last = Some(senders);
+        }
         *last_wrath = native;
         changed
     } else {
@@ -1128,5 +1178,41 @@ mod tests {
         assert!(row.has_body);
         // The item template has not answered yet.
         assert!(row.item_name.is_none());
+    }
+}
+
+#[cfg(test)]
+mod latest_senders_tests {
+    use super::*;
+    use benilla_protocol::wrath_mail::MailPreview;
+
+    /// `0x56d960` by kind over the delivered previews, in wire order.
+    #[test]
+    fn senders_are_named_by_kind_and_only_once_delivered() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let commands = NetCommands(tx);
+        let mut names = NameCache::default();
+        names.insert_player(0x42, "Arthas".into(), None);
+        let preview = |sender, entry, kind, stationery, delay| MailPreview {
+            sender,
+            entry,
+            kind,
+            stationery,
+            delay,
+        };
+        let previews = [
+            preview(0x42, 0, 0, 41, -5.0),
+            preview(0x43, 0, 0, 61, 0.0),
+            // Not yet deliverable.
+            preview(0x42, 0, 0, 41, 30.0),
+            // A player whose name is still being asked: skipped until it lands.
+            preview(0x99, 0, 0, 41, -1.0),
+        ];
+        assert_eq!(
+            latest_senders(&previews, &names, &commands, None, Some("Game Master")),
+            ["Arthas", "Game Master"]
+        );
+        assert!(latest_senders(&[preview(0, 7, 4, 41, -1.0)], &names, &commands, None, None)
+            .is_empty());
     }
 }

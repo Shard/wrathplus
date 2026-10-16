@@ -24,6 +24,9 @@ pub(crate) struct MailPending {
     /// A queued `UPDATE_PENDING_MAIL`, which fires at three sites only: the reply (`0x4ad605`), a
     /// near-zero arrival (`0x4ad66b`) and the step crossing under ε (`0x4adeba`).
     notify: bool,
+    /// The last `MSG_QUERY_NEXT_MAIL_TIME` reply's sender previews (build 12340, wire order), what
+    /// `GetLatestThreeSenders` names (`0x56f3a0`).
+    pub(super) previews: Vec<benilla_protocol::wrath_mail::MailPreview>,
 }
 
 impl Default for MailPending {
@@ -33,6 +36,7 @@ impl Default for MailPending {
             countdown: MAIL_TIME_NO_MAIL,
             refresh_pending: false,
             notify: false,
+            previews: Vec::new(),
         }
     }
 }
