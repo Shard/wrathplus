@@ -370,6 +370,436 @@ pub fn encode_force_root_ack(
     Ok(body)
 }
 
+// ── The remaining self orders: speeds, modes, knockback, collision height, near teleport ──
+//
+// AzerothCore `Unit::SendSpeedToController`, `SetWaterWalking`/`SetFeatherFall`/`SetHover`/
+// `SetCanFly`/`SetDisableGravity`, `KnockbackFrom`, `SetCollisionHeight` (Unit.cpp) and
+// `Player::SendTeleportAckPacket` (Player.cpp) all draw from the session's one order counter.
+// The ACKs are read by `HandleForceSpeedChangeAck`, `HandleMoveFlagChangeOpcode` (MiscHandler.cpp),
+// `HandleMoveKnockBackAck` and `HandleMoveTeleportAck` (MovementHandler.cpp).
+
+pub const MSG_MOVE_TELEPORT_ACK: u16 = 0x00c7;
+pub const SMSG_MOVE_WATER_WALK: u16 = 0x00de;
+pub const SMSG_MOVE_LAND_WALK: u16 = 0x00df;
+pub const SMSG_FORCE_RUN_SPEED_CHANGE: u16 = 0x00e2;
+pub const SMSG_FORCE_RUN_BACK_SPEED_CHANGE: u16 = 0x00e4;
+pub const SMSG_FORCE_SWIM_SPEED_CHANGE: u16 = 0x00e6;
+pub const SMSG_MOVE_KNOCK_BACK: u16 = 0x00ef;
+pub const CMSG_MOVE_KNOCK_BACK_ACK: u32 = 0x00f0;
+pub const SMSG_MOVE_FEATHER_FALL: u16 = 0x00f2;
+pub const SMSG_MOVE_NORMAL_FALL: u16 = 0x00f3;
+pub const SMSG_MOVE_SET_HOVER: u16 = 0x00f4;
+pub const SMSG_MOVE_UNSET_HOVER: u16 = 0x00f5;
+pub const CMSG_MOVE_HOVER_ACK: u32 = 0x00f6;
+pub const CMSG_MOVE_FEATHER_FALL_ACK: u32 = 0x02cf;
+pub const CMSG_MOVE_WATER_WALK_ACK: u32 = 0x02d0;
+pub const SMSG_FORCE_WALK_SPEED_CHANGE: u16 = 0x02da;
+pub const SMSG_FORCE_SWIM_BACK_SPEED_CHANGE: u16 = 0x02dc;
+pub const SMSG_FORCE_TURN_RATE_CHANGE: u16 = 0x02de;
+pub const SMSG_MOVE_SET_CAN_FLY: u16 = 0x0343;
+pub const SMSG_FORCE_FLIGHT_SPEED_CHANGE: u16 = 0x0381;
+pub const SMSG_FORCE_FLIGHT_BACK_SPEED_CHANGE: u16 = 0x0383;
+pub const SMSG_FORCE_PITCH_RATE_CHANGE: u16 = 0x045c;
+pub const SMSG_MOVE_GRAVITY_DISABLE: u16 = 0x04ce;
+pub const CMSG_MOVE_GRAVITY_DISABLE_ACK: u32 = 0x04cf;
+pub const SMSG_MOVE_GRAVITY_ENABLE: u16 = 0x04d0;
+pub const CMSG_MOVE_GRAVITY_ENABLE_ACK: u32 = 0x04d1;
+pub const SMSG_MOVE_SET_COLLISION_HGT: u16 = 0x0516;
+pub const CMSG_MOVE_SET_COLLISION_HGT_ACK: u32 = 0x0517;
+
+pub const MOVEMENT_FLAG_DISABLE_GRAVITY: u32 = 0x0000_0400;
+pub const MOVEMENT_FLAG_FALLING: u32 = wrath_ground::MOVE_FALLING;
+pub const MOVEMENT_FLAG_CAN_FLY: u32 = 0x0100_0000;
+pub const MOVEMENT_FLAG_WATER_WALKING: u32 = wrath_ground::MOVE_WATER_WALKING;
+pub const MOVEMENT_FLAG_FALLING_SLOW: u32 = wrath_ground::MOVE_FALLING_SLOW;
+pub const MOVEMENT_FLAG_HOVER: u32 = 0x4000_0000;
+pub const APPLIED_TRUE: u32 = 1;
+
+/// AzerothCore's `UnitMoveType`, in its order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeedOrderKind {
+    Walk,
+    Run,
+    RunBack,
+    Swim,
+    SwimBack,
+    TurnRate,
+    Flight,
+    FlightBack,
+    PitchRate,
+}
+
+impl SpeedOrderKind {
+    pub fn of(opcode: u16) -> Option<Self> {
+        Some(match opcode {
+            SMSG_FORCE_WALK_SPEED_CHANGE => Self::Walk,
+            SMSG_FORCE_RUN_SPEED_CHANGE => Self::Run,
+            SMSG_FORCE_RUN_BACK_SPEED_CHANGE => Self::RunBack,
+            SMSG_FORCE_SWIM_SPEED_CHANGE => Self::Swim,
+            SMSG_FORCE_SWIM_BACK_SPEED_CHANGE => Self::SwimBack,
+            SMSG_FORCE_TURN_RATE_CHANGE => Self::TurnRate,
+            SMSG_FORCE_FLIGHT_SPEED_CHANGE => Self::Flight,
+            SMSG_FORCE_FLIGHT_BACK_SPEED_CHANGE => Self::FlightBack,
+            SMSG_FORCE_PITCH_RATE_CHANGE => Self::PitchRate,
+            _ => return None,
+        })
+    }
+
+    /// The `CMSG_FORCE_*_CHANGE_ACK`, one above its order in every case.
+    pub fn ack_opcode(self) -> u32 {
+        u32::from(self.order_opcode()) + 1
+    }
+
+    pub fn order_opcode(self) -> u16 {
+        match self {
+            Self::Walk => SMSG_FORCE_WALK_SPEED_CHANGE,
+            Self::Run => SMSG_FORCE_RUN_SPEED_CHANGE,
+            Self::RunBack => SMSG_FORCE_RUN_BACK_SPEED_CHANGE,
+            Self::Swim => SMSG_FORCE_SWIM_SPEED_CHANGE,
+            Self::SwimBack => SMSG_FORCE_SWIM_BACK_SPEED_CHANGE,
+            Self::TurnRate => SMSG_FORCE_TURN_RATE_CHANGE,
+            Self::Flight => SMSG_FORCE_FLIGHT_SPEED_CHANGE,
+            Self::FlightBack => SMSG_FORCE_FLIGHT_BACK_SPEED_CHANGE,
+            Self::PitchRate => SMSG_FORCE_PITCH_RATE_CHANGE,
+        }
+    }
+}
+
+/// A server-granted movement mode and the flag its ACK reports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeOrderKind {
+    WaterWalk,
+    FeatherFall,
+    Hover,
+    CanFly,
+    /// Gravity disabled while applied.
+    DisableGravity,
+}
+
+impl ModeOrderKind {
+    /// The mode and whether the order applies it.
+    pub fn of(opcode: u16) -> Option<(Self, bool)> {
+        Some(match opcode {
+            SMSG_MOVE_WATER_WALK => (Self::WaterWalk, true),
+            SMSG_MOVE_LAND_WALK => (Self::WaterWalk, false),
+            SMSG_MOVE_FEATHER_FALL => (Self::FeatherFall, true),
+            SMSG_MOVE_NORMAL_FALL => (Self::FeatherFall, false),
+            SMSG_MOVE_SET_HOVER => (Self::Hover, true),
+            SMSG_MOVE_UNSET_HOVER => (Self::Hover, false),
+            SMSG_MOVE_SET_CAN_FLY => (Self::CanFly, true),
+            SMSG_MOVE_UNSET_CAN_FLY => (Self::CanFly, false),
+            SMSG_MOVE_GRAVITY_DISABLE => (Self::DisableGravity, true),
+            SMSG_MOVE_GRAVITY_ENABLE => (Self::DisableGravity, false),
+            _ => return None,
+        })
+    }
+
+    pub fn flag(self) -> u32 {
+        match self {
+            Self::WaterWalk => MOVEMENT_FLAG_WATER_WALKING,
+            Self::FeatherFall => MOVEMENT_FLAG_FALLING_SLOW,
+            Self::Hover => MOVEMENT_FLAG_HOVER,
+            Self::CanFly => MOVEMENT_FLAG_CAN_FLY,
+            Self::DisableGravity => MOVEMENT_FLAG_DISABLE_GRAVITY,
+        }
+    }
+
+    pub fn ack_opcode(self, apply: bool) -> u32 {
+        match self {
+            Self::WaterWalk => CMSG_MOVE_WATER_WALK_ACK,
+            Self::FeatherFall => CMSG_MOVE_FEATHER_FALL_ACK,
+            Self::Hover => CMSG_MOVE_HOVER_ACK,
+            Self::CanFly => CMSG_MOVE_SET_CAN_FLY_ACK,
+            Self::DisableGravity if apply => CMSG_MOVE_GRAVITY_DISABLE_ACK,
+            Self::DisableGravity => CMSG_MOVE_GRAVITY_ENABLE_ACK,
+        }
+    }
+}
+
+/// A self order beyond root and unset-can-fly. Every variant names the mover and the counter its
+/// ACK must echo.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MoverOrder {
+    /// `packed guid, u32 counter`, Run's `u8` (AC writes 0), `f32 speed`.
+    Speed {
+        kind: SpeedOrderKind,
+        mover_guid: u64,
+        counter: u32,
+        speed: f32,
+    },
+    /// `packed guid, u32 counter`.
+    Mode {
+        kind: ModeOrderKind,
+        apply: bool,
+        mover_guid: u64,
+        counter: u32,
+    },
+    /// `packed guid, u32 counter, f32 cos, f32 sin, f32 horizontal speed, f32 vertical speed`
+    /// (AC writes `-speedZ`, so the field is down-positive like the 1.12 jump tail).
+    KnockBack {
+        mover_guid: u64,
+        counter: u32,
+        cos_angle: f32,
+        sin_angle: f32,
+        horizontal_speed: f32,
+        vertical_speed: f32,
+    },
+    /// `packed guid, u32 counter, f32 height`.
+    CollisionHeight {
+        mover_guid: u64,
+        counter: u32,
+        height: f32,
+    },
+    /// `packed guid, u32 counter`, then the mover's `MovementInfo` at its destination.
+    TeleportNear {
+        mover_guid: u64,
+        counter: u32,
+        position: [f32; 3],
+        orientation: f32,
+    },
+}
+
+impl MoverOrder {
+    pub fn mover_guid(&self) -> u64 {
+        match *self {
+            Self::Speed { mover_guid, .. }
+            | Self::Mode { mover_guid, .. }
+            | Self::KnockBack { mover_guid, .. }
+            | Self::CollisionHeight { mover_guid, .. }
+            | Self::TeleportNear { mover_guid, .. } => mover_guid,
+        }
+    }
+
+    pub fn counter(&self) -> u32 {
+        match *self {
+            Self::Speed { counter, .. }
+            | Self::Mode { counter, .. }
+            | Self::KnockBack { counter, .. }
+            | Self::CollisionHeight { counter, .. }
+            | Self::TeleportNear { counter, .. } => counter,
+        }
+    }
+}
+
+/// Whether `opcode` is a [`MoverOrder`]. `SMSG_MOVE_UNSET_CAN_FLY` keeps its own codec above.
+pub fn is_mover_order(opcode: u16) -> bool {
+    opcode == MSG_MOVE_TELEPORT_ACK
+        || opcode == SMSG_MOVE_KNOCK_BACK
+        || opcode == SMSG_MOVE_SET_COLLISION_HGT
+        || SpeedOrderKind::of(opcode).is_some()
+        || (opcode != SMSG_MOVE_UNSET_CAN_FLY && ModeOrderKind::of(opcode).is_some())
+}
+
+fn take<const N: usize>(input: &mut &[u8]) -> Result<[u8; N], AuthorityCodecError> {
+    if input.len() < N {
+        return Err(AuthorityCodecError::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "short Wrath movement order",
+        )));
+    }
+    let (head, rest) = input.split_at(N);
+    *input = rest;
+    Ok(head.try_into().expect("N-byte slice"))
+}
+
+fn take_f32(input: &mut &[u8]) -> Result<f32, AuthorityCodecError> {
+    let value = f32::from_le_bytes(take(input)?);
+    if !value.is_finite() {
+        return Err(AuthorityCodecError::NonFinitePose);
+    }
+    Ok(value)
+}
+
+/// Decode one [`is_mover_order`] opcode; a short, non-finite or over-long body fails.
+pub fn decode_mover_order(opcode: u16, body: &[u8]) -> Result<MoverOrder, AuthorityCodecError> {
+    let mut input = body;
+    if opcode == MSG_MOVE_TELEPORT_ACK {
+        let mover_guid = read_packed_guid(&mut input)?;
+        let counter = u32::from_le_bytes(take(&mut input)?);
+        // `OutboundMovement` is `packed guid + MovementInfo`; the counter sits between them here.
+        let mut framed = Vec::with_capacity(9 + input.len());
+        write_packed_guid(mover_guid, &mut framed)?;
+        framed.extend(input);
+        let movement = OutboundMovement::from_bytes(&framed)?.movement;
+        let position = [
+            movement.position.x,
+            movement.position.y,
+            movement.position.z,
+        ];
+        if !position
+            .into_iter()
+            .chain([movement.position.orientation])
+            .all(f32::is_finite)
+        {
+            return Err(AuthorityCodecError::NonFinitePose);
+        }
+        return Ok(MoverOrder::TeleportNear {
+            mover_guid,
+            counter,
+            position,
+            orientation: movement.position.orientation,
+        });
+    }
+    let mover_guid = read_packed_guid(&mut input)?;
+    let counter = u32::from_le_bytes(take(&mut input)?);
+    let order = if let Some(kind) = SpeedOrderKind::of(opcode) {
+        if kind == SpeedOrderKind::Run {
+            let _unknown = take::<1>(&mut input)?;
+        }
+        MoverOrder::Speed {
+            kind,
+            mover_guid,
+            counter,
+            speed: take_f32(&mut input)?,
+        }
+    } else if opcode == SMSG_MOVE_KNOCK_BACK {
+        MoverOrder::KnockBack {
+            mover_guid,
+            counter,
+            cos_angle: take_f32(&mut input)?,
+            sin_angle: take_f32(&mut input)?,
+            horizontal_speed: take_f32(&mut input)?,
+            vertical_speed: take_f32(&mut input)?,
+        }
+    } else if opcode == SMSG_MOVE_SET_COLLISION_HGT {
+        MoverOrder::CollisionHeight {
+            mover_guid,
+            counter,
+            height: take_f32(&mut input)?,
+        }
+    } else if let Some((kind, apply)) =
+        ModeOrderKind::of(opcode).filter(|_| opcode != SMSG_MOVE_UNSET_CAN_FLY)
+    {
+        MoverOrder::Mode {
+            kind,
+            apply,
+            mover_guid,
+            counter,
+        }
+    } else {
+        return Err(AuthorityCodecError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "not a Wrath mover order",
+        )));
+    };
+    if !input.is_empty() {
+        return Err(AuthorityCodecError::WrongLength(input.len()));
+    }
+    Ok(order)
+}
+
+/// `packed guid, u32 counter` and the pose's `MovementInfo` with `extra` flags ORed in after the
+/// on-foot validation (mode bits the ordinary encoder does not admit).
+fn encode_mover_ack_prefix(
+    mover_guid: u64,
+    counter: u32,
+    pose: OnFootPose,
+    timestamp: u32,
+    extra: u32,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    pose.validate()?;
+    let mut encoded = wrath_ground::encode_on_foot(
+        wrath_ground::MSG_MOVE_HEARTBEAT,
+        mover_guid,
+        pose.flags,
+        timestamp,
+        pose.position,
+        pose.orientation,
+        pose.fall_time,
+        pose.fall,
+    )
+    .map_err(|_| AuthorityCodecError::UnsupportedGroundState)?;
+    let mut prefix = encoded.as_slice();
+    let _ = read_packed_guid(&mut prefix)?;
+    let prefix_len = encoded.len() - prefix.len();
+    let flags = pose.flags | extra;
+    encoded[prefix_len..prefix_len + 4].copy_from_slice(&flags.to_le_bytes());
+    let mut body = Vec::new();
+    write_packed_guid(mover_guid, &mut body)?;
+    body.extend(counter.to_le_bytes());
+    body.extend(&encoded[prefix_len..]);
+    Ok(body)
+}
+
+/// `CMSG_FORCE_*_CHANGE_ACK` and `CMSG_MOVE_SET_COLLISION_HGT_ACK`: the pose, then the ordered
+/// value verbatim (AzerothCore resets or kicks a mismatched speed).
+pub fn encode_value_ack(
+    mover_guid: u64,
+    counter: u32,
+    pose: OnFootPose,
+    timestamp: u32,
+    value: f32,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    let mut body = encode_mover_ack_prefix(mover_guid, counter, pose, timestamp, 0)?;
+    body.extend(value.to_le_bytes());
+    Ok(body)
+}
+
+/// A mode ACK: the pose with the mode's flag set when applied and cleared when revoked, then
+/// `u32 applied`, which the gravity ACKs do not carry.
+pub fn encode_mode_ack(
+    mover_guid: u64,
+    counter: u32,
+    pose: OnFootPose,
+    timestamp: u32,
+    kind: ModeOrderKind,
+    apply: bool,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    let pose = OnFootPose {
+        flags: pose.flags & !(kind.flag() & wrath_ground::GROUND_FLAG_MASK),
+        ..pose
+    };
+    let extra = if apply { kind.flag() } else { 0 };
+    let mut body = encode_mover_ack_prefix(mover_guid, counter, pose, timestamp, extra)?;
+    if kind != ModeOrderKind::DisableGravity {
+        body.extend(if apply { APPLIED_TRUE } else { APPLIED_FALSE }.to_le_bytes());
+    }
+    Ok(body)
+}
+
+/// `CMSG_MOVE_KNOCK_BACK_ACK`: the launch frame, the mover at its pose with `FALLING`, a zero fall
+/// time and the order's tail echoed as received (down-positive vertical speed, as the outbound
+/// jump tail writes it).
+pub fn encode_knock_back_ack(
+    mover_guid: u64,
+    counter: u32,
+    pose: OnFootPose,
+    timestamp: u32,
+    order: &MoverOrder,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    let MoverOrder::KnockBack {
+        cos_angle,
+        sin_angle,
+        horizontal_speed,
+        vertical_speed,
+        ..
+    } = *order
+    else {
+        return Err(AuthorityCodecError::UnsupportedGroundState);
+    };
+    let launch = OnFootPose {
+        flags: (pose.flags & !wrath_ground::MOVE_FALLING_FAR) | wrath_ground::MOVE_FALLING,
+        fall_time: 0,
+        fall: Some(FallTail {
+            vertical_speed,
+            sin_angle,
+            cos_angle,
+            horizontal_speed,
+        }),
+        ..pose
+    };
+    encode_mover_ack_prefix(mover_guid, counter, launch, timestamp, 0)
+}
+
+/// `MSG_MOVE_TELEPORT_ACK` from us: `packed guid, u32 counter, u32 time`.
+pub fn encode_teleport_ack(mover_guid: u64, counter: u32, timestamp: u32) -> Vec<u8> {
+    let mut body = Vec::new();
+    write_packed_guid(mover_guid, &mut body).expect("Vec write");
+    body.extend(counter.to_le_bytes());
+    body.extend(timestamp.to_le_bytes());
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,5 +937,222 @@ mod tests {
             ..airborne_pose()
         };
         assert!(encode_unset_can_fly_on_foot_ack(1, 1, pose, 99).is_err());
+    }
+
+    // ── Mover orders ──
+
+    fn order_body(opcode: u16, tail: &[u8]) -> Vec<u8> {
+        let _ = opcode;
+        let mut b = vec![0x09, 0x01, 0x05];
+        b.extend(0x1122_3344u32.to_le_bytes());
+        b.extend(tail);
+        b
+    }
+
+    fn pose() -> OnFootPose {
+        OnFootPose {
+            flags: 0,
+            position: [1.0, 2.0, 3.0],
+            orientation: 0.5,
+            fall_time: 0,
+            fall: None,
+        }
+    }
+
+    const GUID: u64 = 0x0000_0000_0500_0001;
+
+    #[test]
+    fn speed_orders_read_the_run_byte_and_ack_one_opcode_up_with_the_exact_speed() {
+        for (opcode, kind) in [
+            (SMSG_FORCE_WALK_SPEED_CHANGE, SpeedOrderKind::Walk),
+            (SMSG_FORCE_RUN_BACK_SPEED_CHANGE, SpeedOrderKind::RunBack),
+            (SMSG_FORCE_SWIM_SPEED_CHANGE, SpeedOrderKind::Swim),
+            (SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, SpeedOrderKind::SwimBack),
+            (SMSG_FORCE_TURN_RATE_CHANGE, SpeedOrderKind::TurnRate),
+            (SMSG_FORCE_FLIGHT_SPEED_CHANGE, SpeedOrderKind::Flight),
+            (
+                SMSG_FORCE_FLIGHT_BACK_SPEED_CHANGE,
+                SpeedOrderKind::FlightBack,
+            ),
+            (SMSG_FORCE_PITCH_RATE_CHANGE, SpeedOrderKind::PitchRate),
+        ] {
+            let body = order_body(opcode, &7.5f32.to_le_bytes());
+            assert_eq!(
+                decode_mover_order(opcode, &body).unwrap(),
+                MoverOrder::Speed {
+                    kind,
+                    mover_guid: GUID,
+                    counter: 0x1122_3344,
+                    speed: 7.5
+                }
+            );
+            assert_eq!(kind.ack_opcode(), u32::from(opcode) + 1);
+            assert!(decode_mover_order(opcode, &body[..body.len() - 1]).is_err());
+            assert!(decode_mover_order(opcode, &[body.as_slice(), &[0]].concat()).is_err());
+        }
+        // Run alone carries AC's u8 0 before the speed.
+        let body = order_body(SMSG_FORCE_RUN_SPEED_CHANGE, &[0, 0, 0, 0xe0, 0x40]);
+        assert!(matches!(
+            decode_mover_order(SMSG_FORCE_RUN_SPEED_CHANGE, &body).unwrap(),
+            MoverOrder::Speed { kind: SpeedOrderKind::Run, speed, .. } if speed == 7.0
+        ));
+        assert!(decode_mover_order(
+            SMSG_FORCE_RUN_SPEED_CHANGE,
+            &order_body(0, &7.0f32.to_le_bytes())
+        )
+        .is_err());
+        let nan = order_body(SMSG_FORCE_WALK_SPEED_CHANGE, &f32::NAN.to_le_bytes());
+        assert!(decode_mover_order(SMSG_FORCE_WALK_SPEED_CHANGE, &nan).is_err());
+
+        let ack = encode_value_ack(GUID, 0x1122_3344, pose(), 0xaabb_ccdd, 7.0).unwrap();
+        assert_eq!(
+            ack,
+            vec![
+                0x09, 0x01, 0x05, // packed guid
+                0x44, 0x33, 0x22, 0x11, // counter
+                0, 0, 0, 0, // flags
+                0, 0, // flags2
+                0xdd, 0xcc, 0xbb, 0xaa, // timestamp
+                0, 0, 0x80, 0x3f, 0, 0, 0, 0x40, 0, 0, 0x40, 0x40, 0, 0, 0, 0x3f, // xyzo
+                0, 0, 0, 0, // fall time
+                0, 0, 0xe0, 0x40, // the ordered speed
+            ]
+        );
+    }
+
+    #[test]
+    fn mode_orders_set_or_clear_their_flag_and_gravity_has_no_applied_word() {
+        for (opcode, kind, apply) in [
+            (SMSG_MOVE_WATER_WALK, ModeOrderKind::WaterWalk, true),
+            (SMSG_MOVE_LAND_WALK, ModeOrderKind::WaterWalk, false),
+            (SMSG_MOVE_FEATHER_FALL, ModeOrderKind::FeatherFall, true),
+            (SMSG_MOVE_NORMAL_FALL, ModeOrderKind::FeatherFall, false),
+            (SMSG_MOVE_SET_HOVER, ModeOrderKind::Hover, true),
+            (SMSG_MOVE_UNSET_HOVER, ModeOrderKind::Hover, false),
+            (SMSG_MOVE_SET_CAN_FLY, ModeOrderKind::CanFly, true),
+            (
+                SMSG_MOVE_GRAVITY_DISABLE,
+                ModeOrderKind::DisableGravity,
+                true,
+            ),
+            (
+                SMSG_MOVE_GRAVITY_ENABLE,
+                ModeOrderKind::DisableGravity,
+                false,
+            ),
+        ] {
+            let body = order_body(opcode, &[]);
+            assert_eq!(
+                decode_mover_order(opcode, &body).unwrap(),
+                MoverOrder::Mode {
+                    kind,
+                    apply,
+                    mover_guid: GUID,
+                    counter: 0x1122_3344
+                }
+            );
+            assert!(decode_mover_order(opcode, &[body.as_slice(), &[0]].concat()).is_err());
+            let ack = encode_mode_ack(GUID, 1, pose(), 9, kind, apply).unwrap();
+            let flags = u32::from_le_bytes(ack[7..11].try_into().unwrap());
+            assert_eq!(flags & kind.flag() != 0, apply, "{kind:?}");
+            let applied_word = kind != ModeOrderKind::DisableGravity;
+            assert_eq!(
+                ack.len(),
+                3 + 4 + 30 + if applied_word { 4 } else { 0 },
+                "{kind:?}"
+            );
+        }
+        // Unset-can-fly keeps its own codec.
+        assert!(!is_mover_order(SMSG_MOVE_UNSET_CAN_FLY));
+        assert!(decode_mover_order(SMSG_MOVE_UNSET_CAN_FLY, &order_body(0, &[])).is_err());
+        // A granted water walk stays on the pose; the revoke clears it.
+        let walking = OnFootPose {
+            flags: MOVEMENT_FLAG_WATER_WALKING,
+            ..pose()
+        };
+        let land = encode_mode_ack(GUID, 1, walking, 9, ModeOrderKind::WaterWalk, false).unwrap();
+        assert_eq!(u32::from_le_bytes(land[7..11].try_into().unwrap()), 0);
+    }
+
+    #[test]
+    fn knockback_acks_the_launch_frame_with_the_received_tail() {
+        let mut tail = Vec::new();
+        for f in [0.6f32, 0.8, 12.0, -9.0] {
+            tail.extend(f.to_le_bytes());
+        }
+        let order = decode_mover_order(SMSG_MOVE_KNOCK_BACK, &order_body(0, &tail)).unwrap();
+        assert_eq!(
+            order,
+            MoverOrder::KnockBack {
+                mover_guid: GUID,
+                counter: 0x1122_3344,
+                cos_angle: 0.6,
+                sin_angle: 0.8,
+                horizontal_speed: 12.0,
+                vertical_speed: -9.0,
+            }
+        );
+        let ack = encode_knock_back_ack(GUID, 0x1122_3344, pose(), 5, &order).unwrap();
+        let flags = u32::from_le_bytes(ack[7..11].try_into().unwrap());
+        assert_eq!(flags, MOVEMENT_FLAG_FALLING);
+        // fall time 0, then z-speed, sin, cos, horizontal speed as received.
+        let tail_at = 3 + 4 + 4 + 2 + 4 + 16;
+        assert_eq!(&ack[tail_at..tail_at + 4], &0u32.to_le_bytes());
+        let floats: Vec<f32> = ack[tail_at + 4..]
+            .chunks(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        assert_eq!(floats, [-9.0, 0.8, 0.6, 12.0]);
+    }
+
+    #[test]
+    fn collision_height_and_near_teleport() {
+        let order = decode_mover_order(
+            SMSG_MOVE_SET_COLLISION_HGT,
+            &order_body(0, &2.5f32.to_le_bytes()),
+        )
+        .unwrap();
+        assert!(matches!(order, MoverOrder::CollisionHeight { height, .. } if height == 2.5));
+
+        let movement = OutboundMovement {
+            mover_guid: GUID,
+            movement: MovementInfo {
+                flags: 0,
+                flags2: 0,
+                timestamp: 1,
+                position: Position {
+                    x: 10.0,
+                    y: 20.0,
+                    z: 30.0,
+                    orientation: 1.5,
+                },
+                transport: None,
+                pitch: None,
+                fall_time: 0,
+                jump: None,
+                spline_elevation: None,
+            },
+        }
+        .to_bytes()
+        .unwrap();
+        let mut body = vec![0x09, 0x01, 0x05];
+        body.extend(7u32.to_le_bytes());
+        body.extend(&movement[3..]);
+        assert_eq!(
+            decode_mover_order(MSG_MOVE_TELEPORT_ACK, &body).unwrap(),
+            MoverOrder::TeleportNear {
+                mover_guid: GUID,
+                counter: 7,
+                position: [10.0, 20.0, 30.0],
+                orientation: 1.5,
+            }
+        );
+        assert!(
+            decode_mover_order(MSG_MOVE_TELEPORT_ACK, &[body.as_slice(), &[0]].concat()).is_err()
+        );
+        assert_eq!(
+            encode_teleport_ack(GUID, 7, 0xaabb_ccdd),
+            vec![0x09, 0x01, 0x05, 7, 0, 0, 0, 0xdd, 0xcc, 0xbb, 0xaa]
+        );
     }
 }
