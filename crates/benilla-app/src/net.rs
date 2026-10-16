@@ -39,6 +39,7 @@ mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
+mod wrath_chat_notice_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -144,6 +145,7 @@ impl Plugin for NetPlugin {
         wrath_achievement_capture::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
+        wrath_chat_notice_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -938,6 +940,17 @@ impl MoveKind {
 
 /// The `ChatMsg` type an addon broadcast rides: the client's four-lane whitelist
 /// (`0x49fa3f`-`0x49fa4e`).
+/// [`addon_wire_chat_type`] in build 12340's `ChatMsg` numbering.
+pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
+    use benilla_ui::script::AddonDistribution as D;
+    match distribution {
+        D::Party => 0x02,
+        D::Raid => 0x03,
+        D::Guild => 0x04,
+        D::Battleground => 0x2c,
+    }
+}
+
 pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
     use benilla_protocol::messages as m;
     use benilla_ui::script::AddonDistribution as D;
@@ -986,6 +999,27 @@ pub(crate) enum ChatKind {
 }
 
 impl ChatKind {
+    /// Build 12340's `CMSG_MESSAGECHAT` `type` (AzerothCore `SharedDefines.h` `ChatMsg`).
+    pub(crate) fn wrath_chat_type(self) -> u32 {
+        match self {
+            Self::Say => 0x01,
+            Self::Party => 0x02,
+            Self::Raid => 0x03,
+            Self::Guild => 0x04,
+            Self::Officer => 0x05,
+            Self::Yell => 0x06,
+            Self::Whisper => 0x07,
+            Self::Emote => 0x0a,
+            Self::Channel => 0x11,
+            Self::Afk => 0x17,
+            Self::Dnd => 0x18,
+            Self::RaidLeader => 0x27,
+            Self::RaidWarning => 0x28,
+            Self::Battleground => 0x2c,
+            Self::BattlegroundLeader => 0x2d,
+        }
+    }
+
     /// The `CMSG_MESSAGECHAT` `type` field.
     pub(crate) fn chat_type(self) -> u32 {
         use benilla_protocol::messages as m;
@@ -1839,6 +1873,9 @@ pub(crate) enum ClientCommand {
     JoinChannel {
         name: String,
         password: String,
+        /// The `ChatChannels.dbc` row of a zone channel, 0 for a custom one; build 12340 sends it
+        /// and AC joins the constant channel by it.
+        channel_id: u32,
     },
     /// `CMSG_LEAVE_CHANNEL`.
     LeaveChannel {

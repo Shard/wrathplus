@@ -512,9 +512,11 @@ pub(crate) fn restore_chat_looks(world: &mut World, script: &mut UiScript) {
     // The header's `CHANNELS` re-join at login, as in the reference; zone channels are the walk's.
     if let Some(commands) = commands {
         for name in parsed.joined {
+            // Saved custom channels; zone channels re-join through the walk with their row.
             let _ = commands.send(ClientCommand::JoinChannel {
                 name,
                 password: String::new(),
+                channel_id: 0,
             });
         }
     }

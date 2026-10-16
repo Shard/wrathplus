@@ -35,6 +35,7 @@ pub mod wrath_achievement;
 pub mod wrath_calendar;
 pub mod wrath_quest;
 pub mod wrath_party;
+pub mod wrath_chat_notices;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;

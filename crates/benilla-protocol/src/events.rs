@@ -1159,6 +1159,8 @@ pub enum SessionEvent {
     WrathCalendar { packet: crate::wrath_calendar::Packet },
     /// Capture-only native quest POI and PvP-kill receipts (`wrath_quest`).
     WrathQuest { packet: crate::wrath_quest::Packet },
+    /// Capture-only native chat notices without a shared event (`wrath_chat_notices`).
+    WrathChatNotice { packet: crate::wrath_chat_notices::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
