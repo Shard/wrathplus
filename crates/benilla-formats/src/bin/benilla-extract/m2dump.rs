@@ -366,6 +366,7 @@ fn print_m2anim_summary(s: &M2AnimSummary, bytes: &[u8]) {
     }
     println!("ribbon emitters:    {}", s.ribbon_emitter_count);
     // A keyed ribbon track prints its whole `(ms, value)` ramp; its first value alone can read 0.
+    // The 1.12 parse keeps one lane, `slots[0]`.
     let scalar = |t: &benilla_formats::ValueTrack| -> String {
         match t.keys.len() {
             0 | 1 => format!("{:.2}", t.first()),
@@ -384,12 +385,11 @@ fn print_m2anim_summary(s: &M2AnimSummary, bytes: &[u8]) {
         .iter()
         .enumerate()
     {
-        let rgb = if r.color.keys.len() <= 1 {
-            let c = r.color.first();
+        let rgb = if r.color.slots[0].keys.len() <= 1 {
+            let c = r.color.slots[0].first();
             format!("[{:.2} {:.2} {:.2}]", c[0], c[1], c[2])
         } else {
-            let keys: Vec<String> = r
-                .color
+            let keys: Vec<String> = r.color.slots[0]
                 .keys
                 .iter()
                 .map(|&(ms, c)| format!("({ms}, [{:.2} {:.2} {:.2}])", c[0], c[1], c[2]))
@@ -407,10 +407,10 @@ fn print_m2anim_summary(s: &M2AnimSummary, bytes: &[u8]) {
         );
         println!(
             "            h above {}  below {}  rgb {}  a {}",
-            scalar(&r.height_above),
-            scalar(&r.height_below),
+            scalar(&r.height_above.slots[0]),
+            scalar(&r.height_below.slots[0]),
             rgb,
-            scalar(&r.alpha),
+            scalar(&r.alpha.slots[0]),
         );
     }
     println!(
