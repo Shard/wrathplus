@@ -273,10 +273,30 @@ mod tests {
                 visible: vec![true; 14],
                 interior_fog: vec![false; 14],
                 liquid_visited: vec![false; 14],
-                flooded: vec![crate::wmo_portal::WmoPortalInstance::group_flood(0, false); 14],
+                flooded: vec![native_flood_kind(0, None); 14],
             })
             .id();
         (world, placement)
+    }
+
+    fn native_flood_kind(
+        raw: u32,
+        kind: Option<benilla_formats::LiquidKind>,
+    ) -> Option<benilla_formats::LiquidKind> {
+        fn chunk(tag: &[u8; 4], data: &[u8]) -> Vec<u8> {
+            let mut b = tag.to_vec();
+            b.extend((data.len() as u32).to_le_bytes());
+            b.extend(data);
+            b
+        }
+        let mut mohd = vec![0; 64];
+        mohd[60..64].copy_from_slice(&5u32.to_le_bytes());
+        let root = benilla_formats::parse_wmo_root(&chunk(b"DHOM", &mohd)).unwrap();
+        let mut mogp = vec![0; 68];
+        mogp[52..56].copy_from_slice(&raw.to_le_bytes());
+        let native =
+            benilla_formats::wmo_group_wrath_liquid(&chunk(b"PGOM", &mogp), &root).unwrap();
+        benilla_assets::WmoLiquidState { native, kind }.flood_kind()
     }
 
     #[test]
@@ -333,8 +353,7 @@ mod tests {
             world
                 .get_mut::<crate::wmo_portal::WmoPortalInstance>(placement)
                 .unwrap()
-                .flooded[group as usize] =
-                crate::wmo_portal::WmoPortalInstance::group_flood(4, false);
+                .flooded[group as usize] = native_flood_kind(13, Some(LiquidKind::Still));
             let room = WmoRoom {
                 instance: placement,
                 group,

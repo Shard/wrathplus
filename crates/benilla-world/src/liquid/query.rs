@@ -129,11 +129,9 @@ pub enum LiquidClaim {
     /// Inside this placed building: only that placement's MLIQ answers.
     Inside {
         room: WmoRoom,
-        /// The room's whole-group submersion override: its MOGP `groupLiquid` when not the `0xf`
-        /// sentinel. The group probe `0x6b9f10` reads it first and, when set, hits unconditionally:
-        /// the raw value as the kind, `FLT_MAX` as the height, no Z compare and no MLIQ test. None
-        /// of the 13 groups that set it has an MLIQ; it floods the Deeprun Tram's submerged
-        /// sections, the Prison Oubliette and two MD caves.
+        /// The decoded room override. In Wrath, a nonzero resolved LiquidType ID
+        /// with either native tile dimension zero answers at FLT_MAX (0x7c8360).
+        /// The category is joined through LiquidType.dbc, never the raw MOGP nibble.
         flooded: Option<LiquidKind>,
     },
     /// No claim yet (a subject's first frame, before its tracker runs): both sources answer.
@@ -410,6 +408,13 @@ impl WaterChunkInfo {
     }
 }
 
+impl WaterChunkInfo {
+    /// Override semantic query category without changing the legacy render mesh policy.
+    pub(super) fn set_kind(&mut self, kind: LiquidKind) {
+        self.kind = kind;
+    }
+}
+
 /// A surface's [`WaterChunkInfo`], its grid carried into world WoW space by `transform`:
 /// `IDENTITY` for MCLQ, whose positions are already absolute (the axis round trip is exact), the
 /// MODF placement for model-local WMO liquid.
@@ -458,7 +463,8 @@ pub fn liquid_at<'a>(
     wow: [f32; 3],
     claim: LiquidClaim,
 ) -> Option<LiquidHit> {
-    // The whole-group override answers first and alone, as `0x6b9f10` reads it before any grid;
+    // Decoded whole-group overrides answer first; native Wrath 0x7c8360 selects this
+    // leg only for nonzero resolved IDs with a zero tile dimension;
     // as one more candidate, `min_by` would hand the room to any lower sibling pool.
     if let LiquidClaim::Inside {
         flooded: Some(kind),

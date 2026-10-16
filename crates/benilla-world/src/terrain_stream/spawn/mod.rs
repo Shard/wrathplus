@@ -330,11 +330,15 @@ pub(super) fn spawn_loaded_placements(
                                     .group_nav
                                     .iter()
                                     .enumerate()
-                                    .map(|(gi, g)| {
-                                        WmoPortalInstance::group_flood(
+                                    .map(|(gi, g)| match &m.wrath_liquid_states {
+                                        Some(states) => states
+                                            .get(gi)
+                                            .and_then(Option::as_ref)
+                                            .and_then(|s| s.flood_kind()),
+                                        None => WmoPortalInstance::group_flood(
                                             g.group_liquid,
                                             m.group_liquids.get(gi).is_some_and(Option::is_some),
-                                        )
+                                        ),
                                     })
                                     .collect(),
                             })
@@ -460,6 +464,13 @@ pub(super) fn spawn_loaded_placements(
                             ),
                             // The root's MOMT diffColor table: an interior pool's body colour.
                             &m.material_diff_color,
+                            match &m.wrath_liquid_states {
+                                Some(states) => states
+                                    .get(gi)
+                                    .and_then(Option::as_ref)
+                                    .and_then(|s| s.grid_kind()),
+                                None => Some(lq.kind),
+                            },
                             &mut ents,
                         );
                         // Another building's pool is exterior scene like its walls (`0x6856c0`),
