@@ -25,7 +25,7 @@ fn next_mail_parses_empty_and_two_sender_native_tails() {
         let body = query(seconds, count);
         assert!(
             matches!(&decode(MSG_QUERY_NEXT_MAIL_TIME, &body).unwrap()[0],
-            SessionEvent::NextMailTime { seconds: actual } if *actual == seconds)
+            SessionEvent::NextMailTime { seconds: actual, previews } if *actual == seconds && previews.len() == count as usize)
         );
         for end in 0..body.len() {
             assert!(decode(MSG_QUERY_NEXT_MAIL_TIME, &body[..end]).is_err());
@@ -45,7 +45,7 @@ fn notifications_and_native_next_mail_are_dispatched() {
                 assert_eq!(session_events.len(), 1);
                 match &session_events[0] {
                     SessionEvent::ReceivedMail { seconds } => assert_eq!(*seconds, 0.0),
-                    SessionEvent::NextMailTime { seconds } => assert_eq!(*seconds, -86400.0),
+                    SessionEvent::NextMailTime { seconds, .. } => assert_eq!(*seconds, -86400.0),
                     other => panic!("unexpected event {other:?}"),
                 }
             }
@@ -74,4 +74,22 @@ fn rejects_trailing_truncated_oversized_and_nonfinite_packets() {
         assert!(decode(opcode, &body[..body.len() - 1]).is_err());
     }
     assert!(decode(SMSG_RECEIVED_MAIL, &f32::NAN.to_le_bytes()).is_err());
+}
+
+#[test]
+fn next_mail_keeps_sender_previews_in_wire_order() {
+    let mut body = query(0.0, 0);
+    body[4..8].copy_from_slice(&2u32.to_le_bytes());
+    body.extend(preview());
+    body.extend([0u64.to_le_bytes().as_slice(), &7u32.to_le_bytes(), &3u32.to_le_bytes(), &62u32.to_le_bytes(), &5.0f32.to_le_bytes()].concat());
+    match &decode(MSG_QUERY_NEXT_MAIL_TIME, &body).unwrap()[0] {
+        SessionEvent::NextMailTime { previews, .. } => assert_eq!(
+            previews,
+            &vec![
+                MailPreview { sender: 42, entry: 0, kind: 0, stationery: 41, delay: -1.0 },
+                MailPreview { sender: 0, entry: 7, kind: 3, stationery: 62, delay: 5.0 },
+            ]
+        ),
+        other => panic!("{other:?}"),
+    }
 }

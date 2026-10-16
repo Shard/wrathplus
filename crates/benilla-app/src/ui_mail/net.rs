@@ -79,7 +79,7 @@ fn on_received_mail(
 }
 
 fn on_next_mail_time(In(ev): In<SessionEvent>, mut pending: ResMut<MailPending>) {
-    if let SessionEvent::NextMailTime { seconds } = ev {
+    if let SessionEvent::NextMailTime { seconds, .. } = ev {
         next_mail_time(seconds, &mut pending);
     }
 }
@@ -265,7 +265,7 @@ mod tests {
         app.world_mut().resource_mut::<MailOpen>().click(0x20);
         crate::net::handlers::dispatch(
             app.world_mut(),
-            vec![SessionEvent::NextMailTime { seconds: 0.0 }],
+            vec![SessionEvent::NextMailTime { seconds: 0.0, previews: Vec::new() }],
         );
         assert!(app.world().resource::<MailPending>().has_new_mail());
         let inbox = benilla_protocol::wrath_mail::Inbox {
