@@ -56,7 +56,7 @@ fn every_wrath_writer_route_is_admitted() {
         ),
         (
             "AddonMessage",
-            ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Party, text: "p\tm".into() },
+            ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Party, text: "p\tm".into(), target: None },
         ),
         ("JoinChannel", ClientCommand::JoinChannel { name: "General - Elwynn Forest".into(), password: String::new(), channel_id: 1 }),
         ("LeaveChannel", ClientCommand::LeaveChannel { name: "x".into() }),

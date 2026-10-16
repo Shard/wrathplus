@@ -1151,10 +1151,12 @@ pub(crate) enum ClientCommand {
         language: Option<u32>,
     },
     /// `SendAddonMessage`: a `CMSG_MESSAGECHAT` in `LANG_ADDON` (1.12 has no addon opcode and no
-    /// whispered addon message). `text` is `prefix` TAB `message`.
+    /// whispered addon message). `text` is `prefix` TAB `message`; `target` is the 12340 WHISPER
+    /// lane's recipient, `None` on every other lane.
     AddonMessage {
         distribution: benilla_ui::script::AddonDistribution,
         text: String,
+        target: Option<String>,
     },
     /// `CMSG_NAME_QUERY`, sent only by [`crate::names::NameCache`]'s ask-once resolve.
     NameQuery {

@@ -599,6 +599,8 @@ fn feed_mail(
         if changed {
             script.set_wrath_mail(native.clone());
         }
+        // `CanComplainInboxItem`'s not-from-self test (`0x56fa70`) reads the player's GUID.
+        script.set_wrath_mail_self_guid(self_q.single().map_or(0, |(_, guid)| guid.0));
         *last_wrath = native;
         changed
     } else {

@@ -1987,10 +1987,15 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
                 text: text.into_bytes(),
             }
         }
-        ClientCommand::AddonMessage { distribution, text } => Command {
+        ClientCommand::AddonMessage {
+            distribution,
+            text,
+            target,
+        } => Command {
             chat_type: crate::net::wrath_addon_chat_type(distribution),
             language: LANGUAGE_ADDON,
-            target: None,
+            // The WHISPER lane's recipient (`0x07` requires one); every other lane has none.
+            target: target.map(String::into_bytes),
             text: text.into_bytes(),
         },
         other => unreachable!("not a chat line: {other:?}"),
@@ -3309,8 +3314,11 @@ mod tests {
             chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1).unwrap().1,
             [7u32.to_le_bytes(), 7u32.to_le_bytes()].concat().into_iter().chain(*b"Bob\0hi\0").collect::<Vec<_>>()
         );
-        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into() };
+        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into(), target: None };
         assert_eq!(chat_line(addon, 1).unwrap().1[..8], [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]);
+        // The 12340 WHISPER lane: chat type 0x07, LANG_ADDON, the target before the text.
+        let whisper = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Whisper, text: "p\tm".into(), target: Some("Bob".into()) };
+        assert_eq!(chat_line(whisper, 1).unwrap().1, [7u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat().into_iter().chain(*b"Bob\0p\tm\0").collect::<Vec<_>>());
         let embedded = ClientCommand::Chat { kind: ChatKind::Say, target: None, text: "a\0b".into(), language: None };
         assert!(chat_line(embedded, 1).is_err(), "an embedded NUL is refused before send");
         assert_eq!(route(&ClientCommand::LeaveChannel { name: "x".into() }), WrathRoute::NativeChannel);
