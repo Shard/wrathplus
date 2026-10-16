@@ -28,11 +28,25 @@ pub(super) fn register(app: &mut App) {
 fn receive(
     In(event): In<SessionEvent>,
     mut receipts: ResMut<NativeFailures>,
+    // `Option`: a harness without the unit-cast feed still captures receipts.
+    unit_casts: Option<ResMut<super::unit_cast::CastEdges>>,
     spells: Option<Res<crate::ui_action::Spells>>,
     mut errors: Option<ResMut<crate::ui_action::UiErrorKeys>>,
 ) {
     match event {
-        SessionEvent::WrathSpellFailure(value) => receipts.0.push_back(Receipt::Spell(value)),
+        SessionEvent::WrathSpellFailure(value) => {
+            // The result ladder and the local extras (`0x809c70`), in `super::unit_cast`.
+            if let Some(mut unit_casts) = unit_casts {
+                unit_casts.push(super::unit_cast::CastEdge::Result {
+                    caster: value.caster,
+                    spell_id: value.spell_id,
+                    cast_count: value.cast_count,
+                    reason: Some(value.reason),
+                    failure: true,
+                });
+            }
+            receipts.0.push_back(Receipt::Spell(value));
+        }
         SessionEvent::WrathPetCastFailed(value) => {
             // 00806c30 requires a spell record before 00805610. Only the seven
             // independently proven no-format branches are presented; do not reuse

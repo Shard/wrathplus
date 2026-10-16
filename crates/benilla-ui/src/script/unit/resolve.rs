@@ -39,6 +39,68 @@ pub struct UnitGuids {
     pub held: HashMap<u64, u64>,
 }
 
+impl UnitGuids {
+    /// Every token naming `guid`, in the order build 12340's unit-event fan-out lists them
+    /// (`0x60bb70`, which `0x60bf60`/`0x60bf10` walk for each `UNIT_*` event): `player`, `pet`,
+    /// the first `partyN`/`partypetN` match, the first `raidN`/`raidpetN` match, `target`, `focus`,
+    /// `mouseover`. Not built (labelled): `vehicle`, `arenaN`/`arenapetN` and `bossN`, which these
+    /// inputs do not carry. A zero guid names nothing.
+    pub fn event_tokens(&self, guid: u64) -> Vec<String> {
+        let mut out = Vec::new();
+        if guid == 0 {
+            return out;
+        }
+        if self.player == guid {
+            out.push("player".into());
+        }
+        if self.pet == guid {
+            out.push("pet".into());
+        }
+        for i in 0..4 {
+            if self.party[i] == guid {
+                out.push(format!("party{}", i + 1));
+                break;
+            }
+            if self.party_pets[i] == guid {
+                out.push(format!("partypet{}", i + 1));
+                break;
+            }
+        }
+        for (i, (&raid, &pet)) in self
+            .raid
+            .iter()
+            .zip(self.raid_pets.iter().chain(std::iter::repeat(&0)))
+            .enumerate()
+        {
+            if raid == guid {
+                out.push(format!("raid{}", i + 1));
+                break;
+            }
+            if pet == guid {
+                out.push(format!("raidpet{}", i + 1));
+                break;
+            }
+        }
+        for (token, slot) in [
+            ("target", self.target),
+            ("focus", self.focus),
+            ("mouseover", self.mouseover),
+        ] {
+            if slot == guid {
+                out.push(token.into());
+            }
+        }
+        out
+    }
+}
+
+impl crate::script::UiScript {
+    /// [`UnitGuids::event_tokens`] over the resolver inputs the app last pushed.
+    pub fn unit_event_tokens(&self, guid: u64) -> Vec<String> {
+        self.model_ref().unit_guids.event_tokens(guid)
+    }
+}
+
 /// A token's base, the resolver's compares in its order (`partypet` before `party`, `raidpet`
 /// before `raid`); `npc` is tested apart, as its one full-string compare.
 #[derive(Clone, Copy)]
@@ -515,5 +577,44 @@ mod tests {
             "2^32 + 1 wraps to 1, index 0"
         );
         assert_eq!(index_of(b"x"), (u32::MAX, 0));
+    }
+
+    /// The unit-event fan-out order of `0x60bb70`, pinned: player, pet, the first party slot or
+    /// its pet, the first raid row or its pet, target, focus, mouseover.
+    #[test]
+    fn event_tokens_follow_the_native_fan_out_order() {
+        const G: u64 = 7;
+        let all = UnitGuids {
+            player: G,
+            pet: G,
+            target: G,
+            mouseover: G,
+            focus: G,
+            party: [0, G, G, 0],
+            party_pets: [G, 0, 0, 0],
+            raid: vec![0, 0, G],
+            raid_pets: vec![0, G],
+            ..Default::default()
+        };
+        assert_eq!(
+            all.event_tokens(G),
+            [
+                "player",
+                "pet",
+                "partypet1",
+                "raidpet2",
+                "target",
+                "focus",
+                "mouseover"
+            ]
+        );
+        assert!(all.event_tokens(0).is_empty());
+        assert!(all.event_tokens(8).is_empty());
+        let raid = UnitGuids {
+            raid: vec![0, G],
+            party: [0, 0, 0, G],
+            ..Default::default()
+        };
+        assert_eq!(raid.event_tokens(G), ["party4", "raid2"]);
     }
 }
