@@ -250,11 +250,9 @@ pub use particles::{
     ParticleEmitterDef, ParticleShape, SplineData,
 };
 mod ribbons;
-pub use ribbons::{
-    parse_m2_ribbon_emitters, RibbonClock, RibbonEmitterDef, RibbonTrack, RibbonVisibility,
-};
+pub use ribbons::{parse_m2_ribbon_emitters, RibbonEmitterDef, RibbonVisibility};
 mod value_track;
-pub use value_track::{TrackValue, ValueTrack};
+pub use value_track::{SeqClock, SeqTable, SeqTrack, TrackValue, ValueTrack};
 mod models;
 pub use models::wrath::{
     parse_wrath_render_model, parse_wrath_render_model_with_animations, sample_wrath_camera,
@@ -280,7 +278,7 @@ pub use models::{
     BillboardKind, BoneKeys, BoneScaleAnim, BoneSpin, CharSkinSlot, CollisionMesh, Coverage,
     CoverageReader, EmitterBoneLink, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
     GlobalSeqChannel, GroundQuad, KeyAnim, M2AnimSummary, M2Attachment, M2Bounds, M2CameraTracks,
-    M2Light, M2PaneCamera, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis,
+    M2Light, M2LightAnim, M2PaneCamera, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis,
     PlayableAnim, RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton,
     SkeletonBone, StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,
     WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef, WmoPortals, WmoRoot,
