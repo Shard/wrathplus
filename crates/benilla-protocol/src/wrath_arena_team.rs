@@ -163,6 +163,14 @@ pub enum Command {
     Invite { team_id: u32, name: Vec<u8> },
     Accept,
     Decline,
+    /// `CMSG_ARENA_TEAM_LEAVE`.
+    Leave { team_id: u32 },
+    /// `CMSG_ARENA_TEAM_REMOVE`: a member by name.
+    Remove { team_id: u32, name: Vec<u8> },
+    /// `CMSG_ARENA_TEAM_DISBAND`.
+    Disband { team_id: u32 },
+    /// `CMSG_ARENA_TEAM_LEADER`: the new captain by name.
+    Leader { team_id: u32, name: Vec<u8> },
 }
 impl Command {
     pub fn opcode(&self) -> u32 {
@@ -172,14 +180,23 @@ impl Command {
             Self::Invite { .. } => 0x034f,
             Self::Accept => 0x0351,
             Self::Decline => 0x0352,
+            Self::Leave { .. } => 0x0353,
+            Self::Remove { .. } => 0x0354,
+            Self::Disband { .. } => 0x0355,
+            Self::Leader { .. } => 0x0356,
         }
     }
     pub fn encode(&self) -> io::Result<Vec<u8>> {
         match self {
-            Self::Query { team_id } | Self::Roster { team_id } => {
+            Self::Query { team_id }
+            | Self::Roster { team_id }
+            | Self::Leave { team_id }
+            | Self::Disband { team_id } => {
                 Ok(team_id.to_le_bytes().to_vec())
             }
-            Self::Invite { team_id, name } => {
+            Self::Invite { team_id, name }
+            | Self::Remove { team_id, name }
+            | Self::Leader { team_id, name } => {
                 if name.contains(&0) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,

@@ -7,6 +7,20 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeBattleground", ClientCommand::NativeBattleground(benilla_protocol::wrath_battleground::Command::BfExit { battle_id: 1 })),
+        (
+            "BattlegroundJoin",
+            ClientCommand::NativeBattleground(benilla_protocol::wrath_battleground::Command::Join { battlemaster: 1, bg_type: 2, instance_id: 0, as_group: 0 }),
+        ),
+        ("BattlemasterHello", ClientCommand::BattlemasterHello { npc: 1 }),
+        ("AreaSpiritHealerQuery", ClientCommand::AreaSpiritHealerQuery { healer: 1 }),
+        ("AreaSpiritHealerQueue", ClientCommand::AreaSpiritHealerQueue { healer: 1 }),
+        ("SpiritHealerActivate", ClientCommand::SpiritHealerActivate { npc: 1 }),
+        ("InspectHonorStats", ClientCommand::InspectHonorStats { target: 1 }),
+        ("TogglePvp", ClientCommand::TogglePvp),
+        ("RequestBattlefieldScoreData", ClientCommand::RequestBattlefieldScoreData),
+        ("RequestBattlefieldPositions", ClientCommand::RequestBattlefieldPositions),
+        ("LeaveBattlefield", ClientCommand::LeaveBattlefield { map_id: 489 }),
         (
             "Chat",
             ClientCommand::Chat { kind: crate::net::ChatKind::Say, target: None, text: "hi".into(), language: None },

@@ -1031,6 +1031,7 @@ enum WrathRoute {
     NativeParty,
     NativeChatLine,
     NativeChannel,
+    NativeBattleground,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1065,6 +1066,16 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeBattleground(_)
+        | ClientCommand::BattlemasterHello { .. }
+        | ClientCommand::AreaSpiritHealerQuery { .. }
+        | ClientCommand::AreaSpiritHealerQueue { .. }
+        | ClientCommand::SpiritHealerActivate { .. }
+        | ClientCommand::InspectHonorStats { .. }
+        | ClientCommand::TogglePvp
+        | ClientCommand::RequestBattlefieldScoreData
+        | ClientCommand::RequestBattlefieldPositions
+        | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
         ClientCommand::JoinChannel { .. }
         | ClientCommand::LeaveChannel { .. }
         | ClientCommand::ChannelList { .. }
@@ -1432,6 +1443,10 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeBattleground => {
+                        let (opcode, body) = battleground_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeChannel => {
                         let (opcode, body) = benilla_protocol::wrath_chat_notices::encode(&channel_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -1661,6 +1676,29 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
         other => unreachable!("not a chat line: {other:?}"),
     };
     encode(&command)
+}
+
+/// The native body for a [`WrathRoute::NativeBattleground`] command. The shared commands below keep
+/// their 3.3.5 shapes (a GUID or nothing); list, join and port need this build's bg type and are
+/// native-only.
+fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_battleground::{encode, encode_leave};
+    let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
+    match command {
+        ClientCommand::NativeBattleground(command) => encode(&command),
+        ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
+        ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
+        ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
+        ClientCommand::SpiritHealerActivate { npc } => guid(0x021c, npc),
+        ClientCommand::InspectHonorStats { target } => guid(0x02d6, target),
+        // An empty body toggles; AC also takes one byte setting the flag outright.
+        ClientCommand::TogglePvp => (0x0253, Vec::new()),
+        ClientCommand::RequestBattlefieldScoreData => (0x02e0, Vec::new()),
+        ClientCommand::RequestBattlefieldPositions => (0x02e9, Vec::new()),
+        // AC reads none of the body and leaves the current battleground.
+        ClientCommand::LeaveBattlefield { .. } => encode_leave(),
+        other => unreachable!("not a battleground route: {other:?}"),
+    }
 }
 
 /// The native channel, emote and ignore command for a [`WrathRoute::NativeChannel`] route.
