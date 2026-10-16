@@ -416,20 +416,41 @@ fn run(
         reader.set_read_timeout(Some(READ_SLICE))?;
         let mut adapter = WrathEventAdapter::new();
         let mut packet_recorder = recorder::Recorder::from_env();
+        // `SMSG_MULTIPLE_MOVES` records, handled in order as the packets they name before the next
+        // socket read, so a bundled self order raises its authority barrier like a lone one.
+        let mut bundled = std::collections::VecDeque::new();
         loop {
             if let Ok(failure) = fatal.try_recv() {
                 if failure.epoch == epoch {
                     bail!("{}", failure.reason);
                 }
             }
-            let packet = match reader.recv_raw_with_frame_timeout(FRAME_TIMEOUT) {
-                Ok(packet) => packet,
-                Err(error) if retryable_timeout(&error) => continue,
-                Err(error) => return Err(error),
+            let packet = match bundled.pop_front() {
+                Some(packet) => packet,
+                None => {
+                    let packet = match reader.recv_raw_with_frame_timeout(FRAME_TIMEOUT) {
+                        Ok(packet) => packet,
+                        Err(error) if retryable_timeout(&error) => continue,
+                        Err(error) => return Err(error),
+                    };
+                    recorder::record(&mut packet_recorder, &packet);
+                    note_inbound();
+                    packet
+                }
             };
-            recorder::record(&mut packet_recorder, &packet);
-            note_inbound();
             match packet.opcode {
+                benilla_protocol::wrath_movement_misc::SMSG_MULTIPLE_MOVES => {
+                    let records =
+                        benilla_protocol::wrath_movement_misc::split_multiple_moves(&packet.body)
+                            .context("Wrath SMSG_MULTIPLE_MOVES")?;
+                    // A bundle inside a bundle is not something AzerothCore writes.
+                    if records.iter().any(|(opcode, _)| *opcode == packet.opcode) {
+                        bail!("nested Wrath SMSG_MULTIPLE_MOVES");
+                    }
+                    bundled.extend(records.into_iter().map(|(opcode, body)| {
+                        benilla_protocol::wrath_world::WrathServerPacket { opcode, body }
+                    }));
+                }
                 SMSG_CHARACTER_LOGIN_FAILED => {
                     let result = one_byte(&packet.body, "SMSG_CHARACTER_LOGIN_FAILED")?;
                     send(events, SessionEvent::CharacterLoginFailed { result })?;
@@ -1235,6 +1256,7 @@ enum WrathRoute {
     NativeInspect,
     NativeWorldportAck,
     NativeTeleportAck,
+    NativeMovementMisc,
     AuthorityAcked,
     NativeArenaTeam,
     DisabledMovement,
@@ -1465,9 +1487,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::ForceSpeedAck { .. }
         | ClientCommand::MoveModeAck { .. }
         | ClientCommand::KnockBackAck { .. } => WrathRoute::AuthorityAcked,
-        ClientCommand::MoveTimeSkipped { .. }
-        | ClientCommand::NotActiveMover { .. }
-        | ClientCommand::WorldportAck => WrathRoute::DisabledMovement,
+        ClientCommand::MountSpecial | ClientCommand::MoveTimeSkipped { .. } => {
+            WrathRoute::NativeMovementMisc
+        }
+        ClientCommand::NotActiveMover { .. } | ClientCommand::WorldportAck => {
+            WrathRoute::DisabledMovement
+        }
         _ => WrathRoute::DisabledGameAction,
     }
 }
@@ -1863,6 +1888,16 @@ fn writer_loop(
                             }
                             Err(error) => Err(error),
                         }
+                    }
+                    WrathRoute::NativeMovementMisc => {
+                        use benilla_protocol::wrath_movement_misc::{encode, Command};
+                        let native = match command {
+                            ClientCommand::MountSpecial => Command::MountSpecialAnim,
+                            ClientCommand::MoveTimeSkipped { guid, lag_ms } => Command::TimeSkipped { mover: guid, lag_ms },
+                            _ => unreachable!(),
+                        };
+                        let (opcode, body) = encode(&native);
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::AuthorityAcked => {
                         bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
@@ -4819,7 +4854,7 @@ mod observer_teleport_tests {
                 pitch: (flags & 0x0220_0000 != 0).then_some(0.25),
                 fall_time: 0,
                 jump: None,
-                spline_elevation: None,
+                spline_elevation: (flags & 0x0400_0000 != 0).then_some(1.0),
             },
         }
         .to_bytes()
@@ -4853,9 +4888,9 @@ mod observer_teleport_tests {
         let (control_tx, control_rx) = crossbeam_channel::unbounded();
         let mut adapter = WrathEventAdapter::new();
         let clock = SessionClock::new();
-        // An on-foot teleport relays as the observed unit's move; a flying one (CAN_FLY | FLYING)
-        // is outside the subset and drops. Neither is fatal, and neither moves or blocks our mover.
-        for (flags, dropped) in [(0, false), (0x0300_0000, true)] {
+        // An on-foot teleport relays as the observed unit's move; one with spline elevation is outside
+        // the relay subset and drops. Neither is fatal, and neither moves or blocks our mover.
+        for (flags, dropped) in [(0, false), (0x0400_0000, true)] {
             let packet = benilla_protocol::wrath_world::WrathServerPacket {
                 opcode: 0x00c5,
                 body: foreign_teleport(0x0777, flags),
