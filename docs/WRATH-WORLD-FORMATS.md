@@ -17,7 +17,7 @@ establish only the stated observations; a filename accessor is not schema proof.
 
 | Rank | Area | Current implementation | Gap / next evidence |
 | --- | --- | --- | --- |
-| 1 | ADT MH2O water/lava | `benilla-adt` parses bounded layer instances, masks, vertex formats and attributes; formats and assets retain them | No conversion into rendered/collision liquid meshes. Resolve LiquidType/Material before integration; verify native format selection and heights first. |
+| 1 | ADT MH2O water/lava | Rendered, queried and collided per LiquidType lane (`benilla-world` `liquid::wrath_surface`; see [MH2O rendering](#mh2o-rendering-experience)) | Frame clock, native origin rounding and per-type ambient sound remain labelled approximations; live appearance needs manager captures. |
 | 1 dependency | LiquidType / LiquidMaterial DBC | No dedicated supplied-chain catalog found | Establish native disk/runtime mapping, joins and render-class dispatch; retain raw unknown fields rather than guess policy. |
 | 2 | MCCV terrain vertex colours | No MCCV field in `McnkChunk` or terrain `ChunkMesh` | Authored colour is not propagated. Verify disk order, channel interpretation and native lighting equation before shader changes. |
 | 2 | WMO v17 flags/liquids | Shared root/group parsing, MOCV, MLIQ geometry and legacy liquid-nibble conversion exist | Version number alone cannot distinguish 1.12/3.3.5 semantics. Audit root/group flags and DBC-based liquid routing; do not interpret a Wrath liquid ID as a legacy nibble. |
@@ -41,7 +41,7 @@ Plus lighting limitations remain as documented in `EXPERIENCE.md` and
   MH2O on `TileMesh`, separately from legacy `ChunkMesh::liquids`.
 - `benilla-assets/src/adt.rs`: `WrathAdtLoader` reads the matching WDT, derives
   alpha options and calls the shared mesh builder. `AdtTile` explicitly retains
-  MH2O for future renderer integration; it is not rendered today.
+  MH2O, which the terrain streamer renders (see below).
 - `benilla-assets/src/wdt.rs`: raw MPHD flags and MAIN tile existence are
   exposed. The parser's `WowVersion::Classic` name is not itself evidence that
   matching terrain uses the Vanilla MCAL path: the Wrath ADT loader supplies
@@ -229,3 +229,44 @@ Tile-built surfaces also retain `parent: Some(WrathLiquidParent)` with tile-loca
 surfaces have `parent: None`. This is raw provenance, not native-origin or UV
 phase reconstruction; positions and topology remain unchanged. It lets consumers
 recover parent grouping without relying on filtered terrain chunks.
+
+## MH2O rendering (Experience)
+
+`benilla-world` `liquid::wrath_surface` draws MH2O natively; layers never become MCLQ
+`LiquidMesh`es or legacy nibbles. Under the Wrath profile, `setup_liquid` reads the catalogs from
+the world's own boot chain and builds one lane per LiquidType row; the terrain streamer spawns a
+tile's `AdtTile.wrath_liquids` with the tile and despawns them with it. A tile with MH2O ignores
+its MCLQ wholesale; a tile without MH2O keeps any MCLQ (a client policy, not a traced native rule).
+
+- **Arm** from the joined LiquidMaterial render selector: 0 is `psLiquidWater` (blended; depth
+  swatch on stage 0, animated sheet on stage 1), 1 is `psLiquidMagma` (opaque sheet). The shipped
+  `arbfp1` programs give `rgb = primary·tex0 + tex1.rgb + tex1.a·(secondary + 0.25)`,
+  `alpha = primary.a·tex0.a` and `rgb = primary·tex0`, `alpha = 1`: the equations `liquid.wgsl`
+  already runs for the MCLQ ADT and fullbright arms, so MH2O reuses those WGSL arms and their
+  exact vertex layout (asserted by test). The 0/1 routing comes from the installed joins (water
+  types → material 1, selector 0; magma/slime → material 2, selector 1), not from a traced shader
+  dispatch. Any other selector warns once and draws nothing; an ID without a lane warns once.
+- **Swatch** from LiquidType string word 16, never the category: native `0x8a2e20` builds
+  `proceduralRiverDepthTex` (`0x8a2bf0` pair 1) and `proceduralOceanDepthTex` (pair 0, last row
+  darkened) as 2×64 swatches with the legacy row fill, so `proceduralOceanDepthTex` selects the
+  ocean light rows and anything else the river rows. Orange Slime (181) is a water-arm type with
+  the river swatch over `LavaOrange` frames.
+- **Depth** from `wrath_inputs::depth_lut` (selector gate `0x79b870`, LiquidType word 41: 0 the
+  byte/42 ramp, 1 linear byte/255); **UV** authored ×3/256 for the UV vertex format, else world
+  XY × `0xa40410`. Positions are the tile surface's absolute WoW positions.
+- **Sheet** frames from LiquidType string word 15 (`texture_filenames`, `%d` over 1..30, loaded up
+  to the first missing frame), one array and material per (pattern, arm). Water arms keep the
+  legacy per-frame DC flattening.
+- **Queries**: each layer with a known word-3 category carries a `WaterChunkInfo`
+  (`LiquidSource::AdtChunk`, grid `[w+1, h+1]`, the layer's `exists` mask), so outdoor swimming,
+  submersion, foam and the camera waterline collider work as for MCLQ. Unknown categories draw
+  but answer no query.
+
+Labelled approximations: the frame clock is the shared 24 fps flip (water rows' word 42 is 1250,
+consistent with 30 frames at 24 fps, but its native reader was not traced; magma rows hold 0).
+Placement keeps MCNK header XY rather than native origin reconstruction `0x7c64b0`. The ambient
+sound class is the word-3 category; native reads the type's own SoundEntries (word 4). Light
+colours, alpha and blend are the existing ADT arm's. No MH2O scroll lane is established. The
+installed test runs all 226,825 Northrend layers (IDs 1/2/5/81/181) through the production lane
+and vertex builder and checks every shipped lane's frames exist. Appearance needs manager
+captures (Dalaran `Northrend_30_21`/`31_21`, ocean `Northrend_11_9`).
