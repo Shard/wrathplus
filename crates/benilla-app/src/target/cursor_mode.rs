@@ -603,6 +603,8 @@ pub(super) struct CursorInputs<'w, 's> {
     loot_latch: Res<'w, crate::ui_loot::LootLatch>,
     // `[0xb72038]`, the queued area; absent in a headless build, which reads as not queued.
     stone: Option<Res<'w, crate::ui_dialog_verbs::MeetingStone>>,
+    /// `CanAttack`'s creature metadata and controller lookup.
+    relations: super::RelationInputs<'w, 's>,
 }
 
 /// The cursor and the attack fork over a pick; no pick, or nothing resolvable, reads Point.
@@ -626,6 +628,7 @@ pub(super) fn classify(
         keys,
         loot_latch,
         stone,
+        relations,
     } = inputs;
     let can_auto_interact = crate::player::can_auto_interact(
         approach.enabled,
@@ -744,6 +747,7 @@ pub(super) fn classify(
             factions.as_deref(),
             reputations,
             Some(self_store),
+            relations.context(),
         ) {
             return None;
         }

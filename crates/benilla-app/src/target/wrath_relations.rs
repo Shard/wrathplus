@@ -5,18 +5,114 @@
 //! directional reaction ranks. FLAGS2 bit16 / vehicle metadata guards are also untraced and
 //! deliberately not guessed here. Missing creature metadata contributes no flags.
 
-use crate::net::ObjectStore;
+use std::marker::PhantomData;
+
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::{Entity, Query, Res};
+
+use crate::net::{GuidIndex, ObjectStore};
 use benilla_protocol::messages::{ObjectType, OwnerFallback};
 
-/// Live, caller-owned inputs: never a second object cache. The lookup is keyed for every
-/// controller hop, so a missing referenced owner stays missing rather than reusing a cached one.
+/// A live descriptor by guid: the object manager's lookup (`0x468460`), asked afresh at every
+/// controller hop. Never a second object cache.
+pub(crate) trait StoreLookup: Sync {
+    fn store(&self, guid: u64) -> Option<&ObjectStore>;
+}
+
+/// A closure as a [`StoreLookup`], for a caller whose stores are neither a query nor a param.
+pub(crate) struct ByGuid<'a, F>(F, PhantomData<&'a ObjectStore>);
+
+impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> ByGuid<'a, F> {
+    pub(crate) fn new(lookup: F) -> Self {
+        Self(lookup, PhantomData)
+    }
+}
+
+impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> StoreLookup for ByGuid<'a, F> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        (self.0)(guid)
+    }
+}
+
+/// No object streamed: every referenced owner stays missing.
+struct NoStores;
+
+impl StoreLookup for NoStores {
+    fn store(&self, _: u64) -> Option<&ObjectStore> {
+        None
+    }
+}
+
+/// The guid index over the stores query, the lookup every Bevy caller holds.
+pub(crate) struct GuidStores<'a, 'w, 's, 'q> {
+    pub(crate) index: Option<&'a GuidIndex>,
+    pub(crate) stores: &'a Query<'w, 's, &'q ObjectStore>,
+}
+
+impl StoreLookup for GuidStores<'_, '_, '_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        guid_store(self.index, self.stores, guid)
+    }
+}
+
+/// [`GuidStores`]' one read, for a caller that implements [`StoreLookup`] on its own params.
+pub(crate) fn guid_store<'a>(
+    index: Option<&GuidIndex>,
+    stores: &'a Query<&ObjectStore>,
+    guid: u64,
+) -> Option<&'a ObjectStore> {
+    let entity: Entity = *index?.0.get(&guid)?;
+    stores.get(entity).ok()
+}
+
+/// The live inputs as one system param, for a system that holds none of them already.
+/// `Option`s: a harness without the net stack or the name cache resolves no owner and no flags.
+#[derive(SystemParam)]
+pub(crate) struct RelationInputs<'w, 's> {
+    names: Option<Res<'w, crate::names::NameCache>>,
+    index: Option<Res<'w, GuidIndex>>,
+    stores: Query<'w, 's, &'static ObjectStore>,
+}
+
+impl StoreLookup for RelationInputs<'_, '_> {
+    fn store(&self, guid: u64) -> Option<&ObjectStore> {
+        guid_store(self.index.as_deref(), &self.stores, guid)
+    }
+}
+
+impl RelationInputs<'_, '_> {
+    pub(crate) fn context(&self) -> Context<'_> {
+        Context::new(self.names.as_deref(), self)
+    }
+}
+
+/// Live, caller-owned inputs of `CanAttack`/`CanAssist`: the creature template cache (for
+/// query-response `type_flags`) and the guid lookup the controller resolver walks.
 #[derive(Clone, Copy)]
 pub(crate) struct Context<'a> {
     pub(crate) names: Option<&'a crate::names::NameCache>,
-    pub(crate) lookup: &'a dyn Fn(u64) -> Option<ObjectStore>,
+    pub(crate) stores: &'a dyn StoreLookup,
 }
 
-impl Context<'_> {
+impl<'a> Context<'a> {
+    /// No template cache and no streamed owner: creature metadata contributes no flags and every
+    /// controller hop misses.
+    pub(crate) fn none() -> Self {
+        Self {
+            names: None,
+            stores: &NoStores,
+        }
+    }
+
+    pub(crate) fn new(
+        names: Option<&'a crate::names::NameCache>,
+        stores: &'a dyn StoreLookup,
+    ) -> Self {
+        Self { names, stores }
+    }
+
+    /// Creature metadata flags off the template cache, for a Unit object only (a player has no
+    /// creature record). Missing metadata contributes no flags.
     pub(crate) fn creature_flags(&self, unit: &ObjectStore) -> u32 {
         if unit.0.object_type() != Some(ObjectType::Unit) {
             return 0;
@@ -33,16 +129,16 @@ const RAID_UNIT: u32 = 0x0400_0000;
 
 /// Resolves CHARMEDBY, otherwise CREATEDBY, at most twice (00718b70). An unresolved
 /// nonzero owner never falls back to the original unit. Direct players need no lookup.
-pub(super) fn controller(
-    unit: &ObjectStore,
-    lookup: &mut impl FnMut(u64) -> Option<ObjectStore>,
-) -> Option<ObjectStore> {
-    let mut current = unit.clone();
+pub(super) fn controller<'a>(
+    unit: &'a ObjectStore,
+    stores: &'a dyn StoreLookup,
+) -> Option<&'a ObjectStore> {
+    let mut current = unit;
     for _ in 0..2 {
         let Some(owner) = current.0.unit_owner(OwnerFallback::CreatedBy) else {
             return (current.0.object_type() == Some(ObjectType::Player)).then_some(current);
         };
-        current = lookup(owner)?;
+        current = stores.store(owner)?;
         if current.0.object_type() == Some(ObjectType::Player) {
             return Some(current);
         }
@@ -60,11 +156,11 @@ fn same_duel(actor: &ObjectStore, target: &ObjectStore) -> bool {
 pub(super) fn attack(
     actor: &ObjectStore,
     target: &ObjectStore,
-    actor_creature_flags: u32,
     toward: u8,
     reverse: u8,
-    mut lookup: impl FnMut(u64) -> Option<ObjectStore>,
+    ctx: Context,
 ) -> bool {
+    let actor_creature_flags = ctx.creature_flags(actor);
     let (a, t) = (actor.0.unit_flags(), target.0.unit_flags());
     let (apc, tpc) = (a & PC != 0, t & PC != 0);
     if actor.0.object_type() == Some(ObjectType::Player) && actor.0.player_flags() & (1 << 19) != 0
@@ -96,10 +192,10 @@ pub(super) fn attack(
                 return false;
             }
             if let (Some(ac), Some(tc)) = (
-                controller(actor, &mut lookup),
-                controller(target, &mut lookup),
+                controller(actor, ctx.stores),
+                controller(target, ctx.stores),
             ) {
-                if same_duel(&ac, &tc) {
+                if same_duel(ac, tc) {
                     return true;
                 }
                 if target.0.unit_is_pvp() {
@@ -123,14 +219,8 @@ pub(super) fn attack(
     }
 }
 
-pub(super) fn assist(
-    actor: &ObjectStore,
-    target: &ObjectStore,
-    actor_creature_flags: u32,
-    target_creature_flags: u32,
-    toward: u8,
-    mut lookup: impl FnMut(u64) -> Option<ObjectStore>,
-) -> bool {
+pub(super) fn assist(actor: &ObjectStore, target: &ObjectStore, toward: u8, ctx: Context) -> bool {
+    let actor_creature_flags = ctx.creature_flags(actor);
     let (apc, tpc) = (
         actor.0.unit_flags() & PC != 0,
         target.0.unit_flags() & PC != 0,
@@ -144,8 +234,8 @@ pub(super) fn assist(
     }
     if tpc {
         if let (Some(ac), Some(tc)) = (
-            controller(actor, &mut lookup),
-            controller(target, &mut lookup),
+            controller(actor, ctx.stores),
+            controller(target, ctx.stores),
         ) {
             if tc.0.player_duel_team() != 0
                 && (ac.0.player_duel_arbiter() != tc.0.player_duel_arbiter()
@@ -161,19 +251,24 @@ pub(super) fn assist(
             && !target.0.unit_is_in_sanctuary()
             && target.0.unit_is_pvp());
     }
-    !apc || target.0.unit_is_pvp() || target_creature_flags & (0x1000 | RAID_UNIT) != 0
+    !apc || target.0.unit_is_pvp() || ctx.creature_flags(target) & (0x1000 | RAID_UNIT) != 0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::names::{CreatureRecord, NameCache};
     use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+    use std::collections::HashMap;
+
+    const ENTRY: u32 = 1423;
 
     fn unit(player: bool, flags: u32, pvp: u8, owner: u64) -> ObjectStore {
         let layout = FieldLayout::Wrath12340;
         let mut pairs = vec![];
         for (field, value) in [
             (Field::ObjectType, if player { 0x19 } else { 9 }),
+            (Field::ObjectEntry, if player { 0 } else { ENTRY }),
             (Field::UnitFlags, flags),
             (Field::UnitBytes2, u32::from(pvp) << 8),
         ] {
@@ -184,70 +279,147 @@ mod tests {
         ObjectStore(ObjectFields::from_native_pairs(layout, &pairs))
     }
 
+    fn names(type_flags: u32) -> NameCache {
+        let mut names = NameCache::default();
+        names.insert_creature(
+            ENTRY,
+            Some(CreatureRecord {
+                name: "Stormwind Guard".into(),
+                subname: None,
+                creature_type: 7,
+                pet_family: 0,
+                rank: 0,
+                type_flags,
+                civilian: false,
+                racial_leader: false,
+                display_id: 0,
+            }),
+        );
+        names
+    }
+
     #[test]
     fn controller_resolves_two_distinct_hops_and_never_reuses_a_missing_owner() {
         let pet = unit(false, PC, 0, 11);
         let guardian = unit(false, PC, 0, 22);
         let player = unit(true, PC, 0, 0);
-        let mut visits = Vec::new();
-        let resolved = controller(&pet, &mut |guid| {
-            visits.push(guid);
+        let visits = std::sync::Mutex::new(Vec::new());
+        let lookup = ByGuid::new(|guid| {
+            visits.lock().unwrap().push(guid);
             match guid {
-                11 => Some(guardian.clone()),
-                22 => Some(player.clone()),
+                11 => Some(&guardian),
+                22 => Some(&player),
                 _ => None,
             }
         });
-        assert_eq!(visits, [11, 22]);
+        let resolved = controller(&pet, &lookup);
+        assert_eq!(*visits.lock().unwrap(), [11, 22]);
         assert_eq!(resolved.unwrap().0.object_type(), Some(ObjectType::Player));
-        assert!(controller(&unit(true, PC, 0, 99), &mut |_| None).is_none());
-        assert!(controller(&pet, &mut |_| Some(guardian.clone())).is_none());
-        assert!(controller(&player, &mut |_| panic!("direct player lookup")).is_some());
+        assert!(controller(&unit(true, PC, 0, 99), &NoStores).is_none());
+        // A guardian that names itself again never resolves past the second hop.
+        let looping = unit(false, PC, 0, 11);
+        assert!(controller(&pet, &ByGuid::new(|_| Some(&looping))).is_none());
+        let unreachable =
+            ByGuid::new(|_| -> Option<&ObjectStore> { panic!("direct player lookup") });
+        assert!(controller(&player, &unreachable).is_some());
+    }
+
+    #[test]
+    fn creature_metadata_is_read_off_a_unit_template_only() {
+        let names = names(0x1000);
+        let ctx = Context::new(Some(&names), &NoStores);
+        assert_eq!(ctx.creature_flags(&unit(false, 0, 0, 0)), 0x1000);
+        assert_eq!(
+            ctx.creature_flags(&unit(true, 0, 0, 0)),
+            0,
+            "a player has no record"
+        );
+        assert_eq!(Context::none().creature_flags(&unit(false, 0, 0, 0)), 0);
     }
 
     #[test]
     fn assist_creature_metadata_is_not_a_unit_flag_or_owner_pvp_shortcut() {
         let actor = unit(true, PC, 0, 0);
         let target = unit(false, 0, 0, 99);
+        let pvp_owner = unit(true, PC, 1, 0);
+        let owner = ByGuid::new(|_| Some(&pvp_owner));
         for metadata in [0, 0x1000, RAID_UNIT] {
-            assert_eq!(
-                assist(&actor, &target, 0, metadata, 4, |_| Some(unit(
-                    true, PC, 1, 0
-                ))),
-                metadata != 0,
-            );
+            let names = names(metadata);
+            let ctx = Context::new(Some(&names), &owner);
+            assert_eq!(assist(&actor, &target, 4, ctx), metadata != 0);
         }
-        assert!(!assist(&actor, &unit(false, 0x1000, 0, 0), 0, 0, 4, |_| {
-            None
-        }));
-        assert!(assist(&actor, &unit(false, 0, 1, 0), 0, 0, 4, |_| None));
-        assert!(assist(&actor, &target, RAID_UNIT, 0x1000, 1, |_| None));
-        assert!(!assist(&actor, &target, 0, 0x1000, 3, |_| None));
+        // UNIT_FLAGS 0x1000 is not the creature CAN_ASSIST bit.
+        assert!(!assist(
+            &actor,
+            &unit(false, 0x1000, 0, 0),
+            4,
+            Context::none()
+        ));
+        assert!(assist(&actor, &unit(false, 0, 1, 0), 4, Context::none()));
+        let names = names(0x1000);
+        assert!(!assist(
+            &actor,
+            &target,
+            3,
+            Context::new(Some(&names), &NoStores)
+        ));
+    }
+
+    #[test]
+    fn assist_refuses_a_target_whose_controller_duels_someone_else() {
+        let actor = unit(true, PC, 0, 0);
+        let layout = FieldLayout::Wrath12340;
+        let at = |field| layout.resolve(field).unwrap().index;
+        let duellist = ObjectStore(ObjectFields::from_native_pairs(
+            layout,
+            &[
+                (at(Field::ObjectType), 0x19),
+                (at(Field::UnitFlags), PC),
+                (at(Field::PlayerDuelTeam), 1),
+            ],
+        ));
+        let pet = unit(false, PC, 0, 7);
+        let stores = HashMap::from([(7u64, duellist)]);
+        let lookup = ByGuid::new(|guid| stores.get(&guid));
+        assert!(!assist(&actor, &pet, 4, Context::new(None, &lookup)));
+        assert!(
+            assist(&actor, &pet, 4, Context::none()),
+            "an unresolved owner skips the duel leg"
+        );
     }
 
     #[test]
     fn native_player_attack_ffa_precedes_sanctuary_but_target_pvp_does_not() {
+        let none = Context::none();
         let actor = unit(true, PC, 4 | 8, 0);
         let target = unit(true, PC, 4, 0);
-        assert!(attack(&actor, &target, 0, 1, 1, |_| None));
-        assert!(!attack(&actor, &unit(true, PC, 1 | 4, 0), 0, 1, 1, |_| {
-            None
-        }));
+        assert!(attack(&actor, &target, 1, 1, none));
+        assert!(!attack(&actor, &unit(true, PC, 1 | 4, 0), 1, 1, none));
         assert!(!attack(
             &unit(true, PC, 0, 0),
             &unit(true, PC, 0, 0),
-            0,
             1,
             1,
-            |_| None
+            none
         ));
         assert!(attack(
             &unit(true, PC, 2, 0),
             &unit(true, PC, 0, 0),
-            0,
             1,
             1,
-            |_| None
+            none
         ));
+    }
+
+    #[test]
+    fn attack_resolves_a_pets_controller_before_the_pvp_legs() {
+        let me = unit(true, PC, 0, 0);
+        let pet = unit(false, PC, 0, 5);
+        let owner = unit(true, PC, 0, 0);
+        let lookup = ByGuid::new(|guid| (guid == 5).then_some(&owner));
+        // Both controllers resolve and nothing flags PvP: refused.
+        assert!(!attack(&me, &pet, 1, 1, Context::new(None, &lookup)));
+        // The owner never streamed: the missing-controller branch only checks sanctuary.
+        assert!(attack(&me, &pet, 1, 1, Context::none()));
     }
 }
