@@ -594,6 +594,7 @@ fn spell_visual_wire_golden() {
             caster,
             spell_id,
             cast_count: None,
+            reason: None,
         } => {
             assert_eq!((caster, spell_id), (0x42, 133));
         }
