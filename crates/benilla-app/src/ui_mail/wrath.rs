@@ -96,27 +96,20 @@ fn attachment_link(
         rolls.props?.0.get(attachment.random_property)?;
     }
     let name = rolls.name(&template.name, attachment.random_property as u32);
-    // Native table 0x00ad2a84: heirlooms (7) share artifacts' (6) color.
-    let color = match template.quality {
-        0 => "ff9d9d9d",
-        2 => "ff1eff00",
-        3 => "ff0070dd",
-        4 => "ffa335ee",
-        5 => "ffff8000",
-        6 | 7 => "ffe6cc80",
-        _ => "ffffffff",
-    };
     let enchants = &attachment.enchantments;
-    Some(format!(
-        "|c{color}|Hitem:{}:{}:{}:{}:{}:0:{}:{}:{}|h[{name}]|h|r",
-        attachment.entry as i32,
-        enchants[0][0] as i32,
-        enchants[2][0] as i32,
-        enchants[3][0] as i32,
-        enchants[4][0] as i32,
+    Some(crate::items::wrath_item_link(
+        attachment.entry,
+        &name,
+        template.quality,
+        [
+            enchants[0][0],
+            enchants[2][0],
+            enchants[3][0],
+            enchants[4][0],
+        ],
         attachment.random_property,
-        attachment.suffix_factor as i32,
-        level as i32,
+        attachment.suffix_factor,
+        level,
     ))
 }
 
@@ -437,10 +430,37 @@ mod action_tests {
             Some(ClientCommand::NativeMailMutation(command)) => command,
             other => panic!("{other:?}"),
         };
-        assert_eq!(native(Action::TakeItem), M::TakeItem { mailbox: 7, mail_id: 5, item_low_guid: 0x99 });
-        assert_eq!(native(Action::Delete), M::Delete { mailbox: 7, mail_id: 5, template: 3 });
-        assert_eq!(native(Action::Return), M::Return { mailbox: 7, mail_id: 5, sender: 0x42 });
-        assert_eq!(native(Action::TakeMoney), M::TakeMoney { mailbox: 7, mail_id: 5 });
+        assert_eq!(
+            native(Action::TakeItem),
+            M::TakeItem {
+                mailbox: 7,
+                mail_id: 5,
+                item_low_guid: 0x99
+            }
+        );
+        assert_eq!(
+            native(Action::Delete),
+            M::Delete {
+                mailbox: 7,
+                mail_id: 5,
+                template: 3
+            }
+        );
+        assert_eq!(
+            native(Action::Return),
+            M::Return {
+                mailbox: 7,
+                mail_id: 5,
+                sender: 0x42
+            }
+        );
+        assert_eq!(
+            native(Action::TakeMoney),
+            M::TakeMoney {
+                mailbox: 7,
+                mail_id: 5
+            }
+        );
         assert!(native_action(&inbox, 7, 2, Action::TakeMoney).is_none());
         assert!(native_action(&inbox, 7, 0, Action::TakeMoney).is_none());
         let mut empty = inbox.clone();
@@ -453,7 +473,10 @@ mod action_tests {
         let mut inbox = inbox();
         assert!(matches!(
             mark_read(&mut inbox, 7, 1),
-            Some(ClientCommand::NativeMailMutation(M::MarkRead { mailbox: 7, mail_id: 5 }))
+            Some(ClientCommand::NativeMailMutation(M::MarkRead {
+                mailbox: 7,
+                mail_id: 5
+            }))
         ));
         assert!(mark_read(&mut inbox, 7, 1).is_none());
     }
