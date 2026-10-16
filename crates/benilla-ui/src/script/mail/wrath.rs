@@ -225,31 +225,27 @@ fn install_family(lua: &mlua::Lua) -> mlua::Result<()> {
                 ));
             };
             let keep = super::super::binding_abi::bool_or_default(args.get(1), false);
-            let unlocked = {
-                let mut model = lua.app_data_mut::<super::Model>().expect("model");
-                if !std::mem::take(&mut model.wrath_mail_family.send_locked) {
-                    return Ok(());
-                }
-                if keep || slot != 0 {
-                    None
-                } else {
-                    Some(model.mail_send_item.take())
-                }
-            };
-            if let Some(item) = unlocked {
-                if let Some(item) = item {
-                    super::super::tick::fire_event_into(
-                        lua,
-                        "ITEM_LOCK_CHANGED",
-                        vec![
-                            ScriptValue::Int(item.bag),
-                            ScriptValue::Int(i64::from(item.slot)),
-                        ],
-                    );
-                }
-                super::super::tick::fire_event_into(lua, "MAIL_SEND_INFO_UPDATE", Vec::new());
+            let mut model = lua.app_data_mut::<super::Model>().expect("model");
+            if !std::mem::take(&mut model.wrath_mail_family.send_locked) {
+                return Ok(());
             }
-            super::super::tick::fire_event_into(lua, "MAIL_UNLOCK_SEND_ITEMS", Vec::new());
+            // Queued in the native order, the item unlock (`0x513770`) first, as
+            // `drop_send_mail_item` queues its MAIL_SEND_INFO_UPDATE.
+            if !keep && slot == 0 {
+                if let Some(item) = model.mail_send_item.take() {
+                    super::super::cursor::queue_lock_changed(&mut model, item.bag, item.slot);
+                }
+                model
+                    .pending_events
+                    .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
+            } else if !keep {
+                model
+                    .pending_events
+                    .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
+            }
+            model
+                .pending_events
+                .push(("MAIL_UNLOCK_SEND_ITEMS".to_string(), Vec::new()));
             Ok(())
         })?,
     )?;
@@ -644,10 +640,12 @@ mod family_tests {
              RespondMailLockSendItem(1, false)",
         )
         .unwrap();
+        s.tick(0.0);
         assert_eq!(s.eval::<i64>("return #SEEN").unwrap(), 0, "no lock pending");
         s.set_wrath_mail_send_locked(true);
         s.run("RespondMailLockSendItem(1, false) RespondMailLockSendItem(1, true)")
             .unwrap();
+        s.tick(0.0);
         assert_eq!(
             s.eval::<Vec<String>>("return SEEN").unwrap(),
             vec![
