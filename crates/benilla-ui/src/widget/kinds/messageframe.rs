@@ -8,8 +8,16 @@ pub struct MessageLine {
     pub text: String,
     /// The line's RGB, byte-quantized at insert ([`quantize_u8`]).
     pub color: [u8; 3],
-    /// `AddMessage`'s fifth argument, the chat-type id `UpdateColorByID` matches; 0 when absent.
+    /// `AddMessage`'s `typeID`, the chat-type id `UpdateColorByID` matches; 0 when absent. The
+    /// record's `+0x14`, which `GetMessageInfo` answers as its third value (FrameXML's `lineID`)
+    /// as a signed integer (`0x973150`).
     pub id: u32,
+    /// `AddMessage`'s `accessID` (`+0x18`), the `ChatHistory_GetAccessID` key the accessID
+    /// filters of `GetNumMessages`, `GetMessageInfo` and `RemoveMessagesByAccessID` match.
+    pub access_id: i32,
+    /// `AddMessage`'s `extraData` (`+0x1c`), the chat type and target id `ChatHistory_GetChatType`
+    /// decodes when FloatingChatFrame.lua:748 moves a conversation's lines to a new window.
+    pub extra_data: i32,
     /// Seconds left before the fade starts, from the `timeVisible` snapshot.
     pub time_left: f32,
     /// Seconds of fade left, from the `fadeDuration` snapshot; counts once `time_left` is spent.
@@ -50,6 +58,9 @@ pub struct ScrollingMessageState {
     pub fading_enabled: bool,
     /// Lines scrolled back from the newest; 0 is AtBottom, the only state in which fades tick.
     pub scroll_offset: usize,
+    /// `SetHyperlinksEnabled` (`0x973c40`, `+0x348`): while false the frame builds no hyperlink
+    /// buttons (`0x9699c0`), so its link spans neither hit-test nor click.
+    pub hyperlinks_enabled: bool,
 }
 
 impl Default for ScrollingMessageState {
@@ -64,6 +75,7 @@ impl Default for ScrollingMessageState {
             fading_enabled: true,
             lines_gen: 0,
             scroll_offset: 0,
+            hyperlinks_enabled: true,
         }
     }
 }
@@ -99,20 +111,45 @@ impl ScrollingMessageState {
         self.add_with_id(text, r, g, b, 0);
     }
 
-    /// `AddMessage(text, r, g, b, id)` (`0x792900`, `0x788150`): push the line and drop the oldest
-    /// past `max_lines`; a scrolled-up view stays on the same lines.
+    /// `AddMessage(text, r, g, b, typeID)` with no Wrath tail ([`Self::add_entry`]).
     pub fn add_with_id(&mut self, text: String, r: f32, g: f32, b: f32, id: u32) {
+        self.add_entry(text, [r, g, b], id, false, 0, 0);
+    }
+
+    /// The store `0x96a9f0` behind `AddMessage(text, [r, g, b,] typeID, backFill, accessID,
+    /// extraData)` (`0x972f20`). A normal line goes in at the newest end and drops the oldest past
+    /// `max_lines`; a scrolled-up view stays on the same lines. A `backFill` line goes in at the
+    /// oldest end, overwriting the oldest line when the ring is full, and leaves the view alone.
+    pub fn add_entry(
+        &mut self,
+        text: String,
+        rgb: [f32; 3],
+        id: u32,
+        back_fill: bool,
+        access_id: i32,
+        extra_data: i32,
+    ) {
         self.lines_gen = self.lines_gen.wrapping_add(1);
         let line = MessageLine {
             text,
             id,
-            color: [quantize_u8(r), quantize_u8(g), quantize_u8(b)],
+            access_id,
+            extra_data,
+            color: rgb.map(quantize_u8),
             time_left: self.time_visible,
             fade_left: self.fade_duration,
             alpha: 1.0,
             rows: 1,
             rows_key: 0,
         };
+        if back_fill {
+            if self.lines.len() >= self.max_lines {
+                self.lines.pop_front();
+            }
+            self.lines.push_front(line);
+            self.clamp_scroll();
+            return;
+        }
         self.lines.push_back(line);
         // Scrolled up: keep the same lines in view as the ring grows below them.
         if self.scroll_offset > 0 {
@@ -124,6 +161,39 @@ impl ScrollingMessageState {
             self.scroll_offset = self.scroll_offset.saturating_sub(1);
         }
         self.clamp_scroll();
+    }
+
+    /// `GetNumMessages([accessID])` (`0x969300`): every line for accessID 0, else the lines
+    /// carrying that accessID.
+    pub fn count_by_access(&self, access_id: i32) -> usize {
+        if access_id == 0 {
+            return self.lines.len();
+        }
+        self.lines
+            .iter()
+            .filter(|l| l.access_id == access_id)
+            .count()
+    }
+
+    /// `0x969670`: the 0-based `index`th line, oldest first, among every line for accessID 0,
+    /// else among the lines carrying that accessID.
+    pub fn line_by_access(&self, index: usize, access_id: i32) -> Option<&MessageLine> {
+        if access_id == 0 {
+            return self.lines.get(index);
+        }
+        self.lines
+            .iter()
+            .filter(|l| l.access_id == access_id)
+            .nth(index)
+    }
+
+    /// `RemoveMessagesByAccessID(accessID)` (`0x96a510`): compact out every line carrying the
+    /// accessID, 0 included, keeping the rest in order, and put the view back at the bottom
+    /// (`0x969fa0` on the head; the empty ring takes the `Clear` reset).
+    pub fn remove_by_access(&mut self, access_id: i32) {
+        self.lines_gen = self.lines_gen.wrapping_add(1);
+        self.lines.retain(|l| l.access_id != access_id);
+        self.scroll_offset = 0;
     }
 
     /// `SetMaxLines(n)` (`0x787dd0`): free every line and reset the scroll, then set the capacity.
@@ -351,6 +421,8 @@ impl MessageFrameState {
         self.lines.push_back(MessageLine {
             text,
             id: 0,
+            access_id: 0,
+            extra_data: 0,
             color: [quantize_u8(r), quantize_u8(g), quantize_u8(b)],
             time_left: self.time_visible,
             fade_left: self.fade_duration,

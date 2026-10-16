@@ -133,6 +133,8 @@ pub struct ChatWindowLook {
     pub messages: Vec<String>,
     /// `+0x64`/`+0x74`: `(name, zone channel id)` pairs, the `CHANNELS … END` block.
     pub channels: Vec<(String, u32)>,
+    /// Build 12340's `+0xe4`, `SetChatWindowUninteractable`; `GetChatWindowInfo`'s tenth value.
+    pub uninteractable: bool,
 }
 
 impl Default for ChatWindowLook {
@@ -155,6 +157,7 @@ impl ChatWindowLook {
         shown: false,
         messages: Vec::new(),
         channels: Vec::new(),
+        uninteractable: false,
     };
 
     /// Window `index`'s (0-based) record at boot (`0x4982c0`), what a client with no

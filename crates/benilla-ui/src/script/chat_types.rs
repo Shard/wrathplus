@@ -140,7 +140,7 @@ pub(super) fn seed() -> Vec<ChatTypeColor> {
 }
 
 /// `ResetChatColors`: the defaults back first, then the extras from the restored `CHANNEL`.
-fn reset(table: &mut [ChatTypeColor]) {
+pub(super) fn reset(table: &mut [ChatTypeColor]) {
     for (entry, (_, rgb)) in table.iter_mut().zip(DEFAULTS.iter()) {
         entry.rgb = *rgb;
     }
@@ -152,7 +152,7 @@ fn reset(table: &mut [ChatTypeColor]) {
 
 /// ASCII case-insensitive and nothing wider: the reference's compare folds only `A` to `Z`
 /// (`0x64a4c0`, `0x414310`).
-fn position(table: &[ChatTypeColor], name: &str) -> Option<usize> {
+pub(super) fn position(table: &[ChatTypeColor], name: &str) -> Option<usize> {
     table.iter().position(|e| e.name.eq_ignore_ascii_case(name))
 }
 
@@ -166,7 +166,7 @@ fn to_byte(x: f64) -> u8 {
 
 /// `UPDATE_CHAT_COLOR`'s value: the stored byte times the f32 reciprocal of 255 (`0x8026c8`), so
 /// an addon that passed `0.5` hears `127/255`.
-fn from_byte(b: u8) -> f64 {
+pub(super) fn from_byte(b: u8) -> f64 {
     f64::from(b as f32 * (1.0f32 / 255.0f32))
 }
 

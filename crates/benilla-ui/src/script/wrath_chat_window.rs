@@ -1,0 +1,390 @@
+//! Build-12340 chat-window bindings FloatingChatFrame.lua calls that the 1.12 surface lacks, and
+//! the Wrath shape of `GetChatWindowInfo`.
+//!
+//! Wow.exe 12340 evidence (`/tmp/azb-ui-fcf-native.log`, `/tmp/azb-ui-fcf-helpers.log`): the
+//! window records sit at `0xbcf0b0`, stride 0x100, ten slots: name `+0x00`, message-group flags
+//! `+0x80`, font size `+0xd0`, colour bytes `+0xd4..+0xd7` (B, G, R, A), locked `+0xd8`, docked
+//! `+0xdc`, shown `+0xe0`, uninteractable `+0xe4`. `GetChatWindowInfo` `0x4fbd90`,
+//! `SetChatWindowUninteractable` `0x4fc6e0`, `ResetChatWindows` `0x501f00`,
+//! `SetChatColorNameByClass` `0x4fedc0`, `JoinPermanentChannel` `0x50dac0` (the shared join
+//! `0x50d900` with its permanent flag set), `BNLeaveConversation` `0x536030`.
+//!
+//! Unresolved, labelled rather than guessed: the colour and message-group registries are still
+//! the 1.12 tables (`chat_types`, `chat_window::MESSAGE_GROUPS`), not 12340's 62 chat types and its
+//! own group list, so `ResetChatWindows` restores 1.12-shaped defaults; the window helpers
+//! `0x5019d0`/`0x501800` it runs per record were not audited and are taken as the stock record;
+//! the channel seed and `uninteractable`/`colorNameByClass` persistence are host work.
+
+use mlua::{Lua, MultiValue, Value};
+
+use super::binding_abi::bool_or_default;
+use super::chat_types;
+use super::chat_window::{ChatWindowLook, ENGINE_CHAT_WINDOW_SLOTS};
+use super::{Model, ScriptValue};
+
+/// A window id as the 12340 bindings read it: `lua_isnumber`, then rounded (`fistp`), 1-based.
+/// `None` for a number outside the ten slots, which the bindings ignore.
+fn window_slot(lua: &Lua, v: &Value) -> Option<Option<usize>> {
+    let n = lua.coerce_number(v.clone()).ok().flatten()?;
+    let index = (n.round_ties_even() as i64).wrapping_sub(1);
+    Some(usize::try_from(index).ok().filter(|i| *i < ENGINE_CHAT_WINDOW_SLOTS))
+}
+
+/// `byte · (1/255)` in f32 (`[0xa45564]`), as the colour getters push it.
+fn unit(b: u8) -> f64 {
+    f64::from(f32::from(b) * (1.0f32 / 255.0f32))
+}
+
+/// The stock record ResetChatWindows (`0x501f00`) leaves in window `index`: the boot record, with
+/// window 1 shown and docked at 1 and window 2 shown and docked at 2.
+fn reset_look(index: usize) -> ChatWindowLook {
+    let mut look = ChatWindowLook::stock(index);
+    match index {
+        0 => look.docked = Some(1),
+        1 => look.docked = Some(2),
+        _ => {}
+    }
+    look
+}
+
+impl super::UiScript {
+    /// Seeds the `ChatChannels.dbc` auto-join rows (`flags & 1`) as `(Shortcut, id)`, which
+    /// `ResetChatWindows` registers in window 1. No event and no window change.
+    pub fn set_chat_channel_seed(&mut self, rows: Vec<(String, u32)>) {
+        self.model_mut().chat_channel_seed = rows;
+    }
+
+    /// Every chat type's `colorNameByClass`, registry order, for the host's chat-cache writer.
+    pub fn chat_color_name_by_class(&self) -> Vec<(String, bool)> {
+        let model = self.model_ref();
+        model
+            .chat_colors
+            .iter()
+            .zip(model.chat_name_by_class.iter())
+            .map(|(c, on)| (c.name.clone(), *on))
+            .collect()
+    }
+}
+
+pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    let g = lua.globals();
+
+    // GetChatWindowInfo(index) → name, fontSize, r, g, b, alpha, shown, locked, docked,
+    // uninteractable. A non-number raises the usage line; an index outside 1..=10 answers nothing.
+    // shown and locked are 1 or nil, docked the dock position or nil, uninteractable the stored
+    // number or nil (`0x4fbe9a`).
+    g.set(
+        "GetChatWindowInfo",
+        lua.create_function(|lua, id: Value| {
+            let Some(slot) = window_slot(lua, &id) else {
+                return Err(mlua::Error::runtime("Usage: GetChatWindowInfo(index)"));
+            };
+            let Some(i) = slot else {
+                return Ok(MultiValue::new());
+            };
+            let look = lua.app_data_ref::<Model>().expect("model app_data").chat_window_looks[i]
+                .clone();
+            let flag = |on: bool| if on { Value::Integer(1) } else { Value::Nil };
+            Ok(MultiValue::from_vec(vec![
+                Value::String(lua.create_string(&look.name)?),
+                Value::Integer(i64::from(look.font_size)),
+                Value::Number(unit(look.r)),
+                Value::Number(unit(look.g)),
+                Value::Number(unit(look.b)),
+                Value::Number(unit(look.a)),
+                flag(look.shown),
+                flag(look.locked),
+                look.docked.map_or(Value::Nil, |d| Value::Integer(i64::from(d))),
+                flag(look.uninteractable),
+            ]))
+        })?,
+    )?;
+
+    // SetChatWindowUninteractable(index, uninteractable) (`0x4fc6e0`): the flag coercion with
+    // default 0 into `+0xe4`; no event. FCF_SetUninteractable (FloatingChatFrame.lua:982) pairs it
+    // with the frame's own SetHyperlinksEnabled.
+    g.set(
+        "SetChatWindowUninteractable",
+        lua.create_function(|lua, args: MultiValue| {
+            let id = args.front().cloned().unwrap_or(Value::Nil);
+            let Some(slot) = window_slot(lua, &id) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: SetChatWindowUninteractable(index, uninteractable)",
+                ));
+            };
+            let on = bool_or_default(args.get(1), false);
+            if let Some(i) = slot {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                if model.chat_window_looks[i].uninteractable != on {
+                    model.chat_window_looks[i].uninteractable = on;
+                    model.chat_window_changes.insert(i);
+                }
+            }
+            Ok(())
+        })?,
+    )?;
+
+    // ResetChatWindows() (`0x501f00`), FCF_ResetChatWindows' engine half
+    // (FloatingChatFrame.lua:1775): the chat-type colours and colorNameByClass back to their
+    // defaults (the CHANNELn extras from CHANNEL), every window record back to stock, the
+    // auto-join channels registered in window 1, then UPDATE_CHAT_WINDOWS and, per chat type in
+    // registry order, UPDATE_CHAT_COLOR(name, r, g, b) and
+    // UPDATE_CHAT_COLOR_NAME_BY_CLASS(name, colorNameByClass).
+    g.set(
+        "ResetChatWindows",
+        lua.create_function(|lua, _ignored: MultiValue| {
+            let rows: Vec<(String, [u8; 3], bool)> = {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                chat_types::reset(&mut model.chat_colors);
+                model.chat_name_by_class.iter_mut().for_each(|on| *on = false);
+                model.chat_colors_changed = true;
+                let seed = model.chat_channel_seed.clone();
+                for i in 0..ENGINE_CHAT_WINDOW_SLOTS {
+                    model.chat_window_looks[i] = reset_look(i);
+                    model.chat_window_changes.insert(i);
+                }
+                model.chat_window_looks[0].channels = seed;
+                model
+                    .chat_colors
+                    .iter()
+                    .zip(model.chat_name_by_class.iter())
+                    .map(|(c, on)| (c.name.clone(), c.rgb, *on))
+                    .collect()
+            };
+            super::tick::fire_event_into(lua, "UPDATE_CHAT_WINDOWS", Vec::new());
+            for (name, rgb, by_class) in rows {
+                super::tick::fire_event_into(
+                    lua,
+                    "UPDATE_CHAT_COLOR",
+                    vec![
+                        ScriptValue::Str(name.clone()),
+                        ScriptValue::Number(chat_types::from_byte(rgb[0])),
+                        ScriptValue::Number(chat_types::from_byte(rgb[1])),
+                        ScriptValue::Number(chat_types::from_byte(rgb[2])),
+                    ],
+                );
+                super::tick::fire_event_into(
+                    lua,
+                    "UPDATE_CHAT_COLOR_NAME_BY_CLASS",
+                    vec![ScriptValue::Str(name), ScriptValue::Bool(by_class)],
+                );
+            }
+            Ok(())
+        })?,
+    )?;
+
+    // SetChatColorNameByClass(chatType, colorNameByClass) (`0x4fedc0`): a non-string raises; the
+    // flag coercion with default 0. A chat type matched case-folded stores the flag and fires
+    // UPDATE_CHAT_COLOR_NAME_BY_CLASS with the caller's spelling, changed or not; an unknown type
+    // stores and fires nothing.
+    g.set(
+        "SetChatColorNameByClass",
+        lua.create_function(|lua, args: MultiValue| {
+            let Some(name) = args
+                .front()
+                .and_then(|v| super::binding_abi::optional_string(lua, v))
+            else {
+                return Err(mlua::Error::runtime(
+                    "Usage: SetChatColorNameByClass(chatType, colorNameByClass)",
+                ));
+            };
+            let on = bool_or_default(args.get(1), false);
+            {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                let Some(i) = chat_types::position(&model.chat_colors, &name) else {
+                    return Ok(());
+                };
+                model.chat_name_by_class[i] = on;
+                model.chat_colors_changed = true;
+            }
+            super::tick::fire_event_into(
+                lua,
+                "UPDATE_CHAT_COLOR_NAME_BY_CLASS",
+                vec![ScriptValue::Str(name), ScriptValue::Bool(on)],
+            );
+            Ok(())
+        })?,
+    )?;
+
+    // JoinPermanentChannel(name, password, frameID, hasVoice) (`0x50dac0`): the shared join with
+    // the permanent flag, so the same answers, send and window registration as JoinChannelByName.
+    // The host persists joined custom channels either way; voice is not supported.
+    let join: mlua::Function = g.get("JoinChannelByName")?;
+    g.set(
+        "JoinPermanentChannel",
+        lua.create_function(move |_, args: MultiValue| {
+            let first_three: MultiValue = args.into_iter().take(3).collect();
+            join.call::<MultiValue>(first_three)
+        })?,
+    )?;
+
+    // BNLeaveConversation(channel) (`0x536030`): every check before the usage line asks for a
+    // connected Battle.net session, which a 3.3.5a realm never opens, so it does nothing, raising
+    // nothing even without an argument.
+    g.set(
+        "BNLeaveConversation",
+        lua.create_function(|_, _ignored: MultiValue| Ok(()))?,
+    )?;
+
+    super::editbox::install_wrath(lua)?;
+    super::messageframe::install_wrath(lua)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::script::{ScriptDialect, UiScript};
+
+    fn wrath() -> UiScript {
+        UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    }
+
+    #[test]
+    fn get_chat_window_info_has_the_tenth_uninteractable_value() {
+        let mut s = wrath();
+        assert_eq!(
+            s.eval::<i64>("return select('#', GetChatWindowInfo(1))").unwrap(),
+            10
+        );
+        assert!(s
+            .eval::<bool>("return select(10, GetChatWindowInfo(3)) == nil")
+            .unwrap());
+        s.run("SetChatWindowUninteractable(3, true)").unwrap();
+        assert_eq!(
+            s.eval::<i64>("return select(10, GetChatWindowInfo(3))").unwrap(),
+            1
+        );
+        assert_eq!(s.take_chat_window_changes(), vec![2]);
+        s.run("SetChatWindowUninteractable(3, nil) SetChatWindowUninteractable(11, 1)")
+            .unwrap();
+        assert!(s
+            .eval::<bool>("return select(10, GetChatWindowInfo(3)) == nil")
+            .unwrap());
+        assert_eq!(
+            s.eval::<i64>("return select('#', GetChatWindowInfo(11))").unwrap(),
+            0,
+            "an index outside the ten records answers nothing"
+        );
+        assert!(s.run("SetChatWindowUninteractable('x')").is_err());
+    }
+
+    #[test]
+    fn reset_chat_windows_restores_records_colours_and_fires_in_order() {
+        let mut s = wrath();
+        s.set_chat_channel_seed(vec![("General".into(), 1), ("Trade".into(), 2)]);
+        s.run(
+            "SetChatWindowName(1, 'Mine') SetChatWindowDocked(1, nil) SetChatWindowShown(4, 1) \
+             SetChatWindowUninteractable(2, 1) ChangeChatColor('SAY', 0, 0, 0) \
+             SetChatColorNameByClass('SAY', true) \
+             SEEN = {} local f = CreateFrame('Frame') \
+             for _, e in ipairs({'UPDATE_CHAT_WINDOWS', 'UPDATE_CHAT_COLOR', \
+                                 'UPDATE_CHAT_COLOR_NAME_BY_CLASS'}) do f:RegisterEvent(e) end \
+             f:SetScript('OnEvent', function(_, e, a, b) SEEN[#SEEN + 1] = {e, a, b} end) \
+             ResetChatWindows()",
+        )
+        .unwrap();
+        let looks = s.chat_window_looks();
+        assert_eq!(looks[0].name, "");
+        assert_eq!(looks[0].docked, Some(1));
+        assert_eq!(looks[1].docked, Some(2));
+        assert!(!looks[1].uninteractable);
+        assert!(!looks[3].shown);
+        assert_eq!(
+            looks[0].channels,
+            vec![("General".to_string(), 1), ("Trade".to_string(), 2)]
+        );
+        assert_eq!(s.chat_colors()[0].rgb, [255, 255, 255]);
+        assert!(!s.chat_color_name_by_class()[0].1);
+        assert_eq!(s.eval::<String>("return SEEN[1][1]").unwrap(), "UPDATE_CHAT_WINDOWS");
+        assert_eq!(s.eval::<String>("return SEEN[2][1]").unwrap(), "UPDATE_CHAT_COLOR");
+        assert_eq!(s.eval::<String>("return SEEN[2][2]").unwrap(), "SAY");
+        assert_eq!(
+            s.eval::<String>("return SEEN[3][1]").unwrap(),
+            "UPDATE_CHAT_COLOR_NAME_BY_CLASS"
+        );
+        assert!(!s.eval::<bool>("return SEEN[3][3]").unwrap());
+        assert_eq!(
+            s.eval::<i64>("return #SEEN").unwrap() as usize,
+            1 + 2 * s.chat_colors().len()
+        );
+        assert_eq!(s.take_chat_window_changes(), (0..10).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn set_chat_color_name_by_class_fires_the_callers_spelling() {
+        let s = wrath();
+        s.run(
+            "local f = CreateFrame('Frame') f:RegisterEvent('UPDATE_CHAT_COLOR_NAME_BY_CLASS') \
+             f:SetScript('OnEvent', function(_, _, a, b) N = (N or 0) + 1 A, B = a, b end) \
+             SetChatColorNameByClass('guild', 1) SetChatColorNameByClass('NOPE', 1)",
+        )
+        .unwrap();
+        assert_eq!(s.eval::<i64>("return N").unwrap(), 1);
+        assert_eq!(s.eval::<String>("return A").unwrap(), "guild");
+        assert!(s.eval::<bool>("return B").unwrap());
+        let flags = s.chat_color_name_by_class();
+        assert!(flags.iter().any(|(n, on)| n == "GUILD" && *on));
+        assert!(s.run("SetChatColorNameByClass()").is_err());
+    }
+
+    #[test]
+    fn join_permanent_channel_joins_like_join_channel_by_name() {
+        let mut s = wrath();
+        s.run("A = {JoinPermanentChannel('MyChan', nil, 2, 1)}")
+            .unwrap();
+        assert_eq!(s.eval::<i64>("return A[1]").unwrap(), 0);
+        assert_eq!(
+            s.take_channel_commands(),
+            vec![crate::script::ChannelCommand::Join {
+                name: "MyChan".into(),
+                password: String::new(),
+            }]
+        );
+        assert_eq!(s.chat_window_looks()[1].channels, vec![("MyChan".to_string(), 0)]);
+    }
+
+    #[test]
+    fn bn_leave_conversation_is_inert_without_a_battle_net_session() {
+        let s = wrath();
+        assert_eq!(
+            s.eval::<i64>("return select('#', BNLeaveConversation(1))").unwrap(),
+            0
+        );
+        assert_eq!(
+            s.eval::<i64>("return select('#', BNLeaveConversation())").unwrap(),
+            0,
+            "no usage error without a session"
+        );
+    }
+
+    #[test]
+    fn edit_box_clear_history_drops_lines_and_keeps_the_cap() {
+        let s = wrath();
+        s.run(
+            "E = CreateFrame('EditBox') E:SetHistoryLines(4) \
+             E:AddHistoryLine('/s one') E:AddHistoryLine('/s two') E:ClearHistory()",
+        )
+        .unwrap();
+        assert_eq!(s.eval::<i64>("return E:GetHistoryLines()").unwrap(), 4);
+        let e: mlua::Table = s.eval("return E").unwrap();
+        let h = crate::script::object::frame_handle_of(s.lua(), &e).unwrap();
+        let n = super::super::editbox::history_len(s.lua(), h);
+        assert_eq!(n, Some(0));
+    }
+
+    #[test]
+    fn vanilla_has_none_of_these() {
+        let s = UiScript::new().unwrap();
+        for name in [
+            "SetChatWindowUninteractable",
+            "ResetChatWindows",
+            "SetChatColorNameByClass",
+            "JoinPermanentChannel",
+            "BNLeaveConversation",
+        ] {
+            assert!(
+                s.eval::<bool>(&format!("return {name} == nil")).unwrap(),
+                "{name}"
+            );
+        }
+    }
+}
