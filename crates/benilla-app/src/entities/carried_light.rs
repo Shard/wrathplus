@@ -13,11 +13,13 @@ use benilla_world::terrain_stream::point_light;
 /// Spawn a point light child for each casting M2 light of an entity's model. A light whose bone
 /// `joint` resolves rides that joint at `position − bone_pivot`; one without (a held item has no
 /// skeleton, a `-1` bone) hangs off `frame` in model space. As children, the lights leave with a
-/// gear change, a despawn or a mount transition.
+/// gear change, a despawn or a mount transition. An animated light (a torch's flicker) follows
+/// `seq`, the owner's sequence as its ribbons read it.
 pub(super) fn spawn_carried_lights(
     commands: &mut Commands,
     lights: &[ModelLight],
     frame: Entity,
+    seq: benilla_world::ribbons::RibbonSeq,
     joint: impl Fn(i16) -> Option<Entity>,
 ) {
     for l in lights {
@@ -42,6 +44,14 @@ pub(super) fn spawn_carried_lights(
                 Visibility::default(),
             ))
             .id();
+        if let Some(anim) = &l.def.anim {
+            commands
+                .entity(glow)
+                .insert(benilla_world::light_anim::LightAnimator::new(
+                    anim.clone(),
+                    seq,
+                ));
+        }
         commands.entity(parent).add_child(glow);
     }
 }
@@ -50,6 +60,7 @@ pub(super) fn spawn_carried_lights(
 mod tests {
     use super::*;
     use benilla_formats::M2Light;
+    use benilla_world::ribbons::RibbonSeq;
 
     fn light(light_type: u16, bone: i16, position: [f32; 3], visibility_off: bool) -> ModelLight {
         ModelLight {
@@ -65,6 +76,7 @@ mod tests {
                 attenuation_start: 1.388_889,
                 attenuation_end: 2.222_222_3,
                 visibility_off,
+                anim: None,
             },
             bone_pivot: [1.0, 0.0, 0.5],
         }
@@ -85,7 +97,7 @@ mod tests {
         ];
         app.world_mut().commands().queue(move |world: &mut World| {
             let mut q = world.commands();
-            spawn_carried_lights(&mut q, &lights, frame, move |bone| {
+            spawn_carried_lights(&mut q, &lights, frame, RibbonSeq::Fixed(0), move |bone| {
                 (bone == 3).then_some(joint)
             });
         });

@@ -7,8 +7,9 @@ use benilla_bytes::ByteExt;
 /// for the origin). The reference commits a point light on a placed prop as a hardware `GL_LIGHT`
 /// with the fixed attenuation `1 / (0.7·d + 0.03·d²)`, diffuse only; the glue scenes light their
 /// ambient through an ambient-only light, so both pairs are read. Colour and intensity are each
-/// track's first value, where the reference animates them; the attenuation range is a cull hint.
-#[derive(Debug, Clone, Copy)]
+/// track's first value; [`Self::anim`] carries the tracks that move. The attenuation range is a
+/// cull hint.
+#[derive(Debug, Clone)]
 pub struct M2Light {
     pub light_type: u16,
     pub bone: i16,
@@ -26,6 +27,49 @@ pub struct M2Light {
     /// when the track has keys (`0x716413`), so a light is dark only when its first visibility key
     /// is 0. The values are bytes (`0x71646d`: `+0xec = visibilityValue[k0]`).
     pub visibility_off: bool,
+    /// The diffuse and visibility tracks on their native clocks when any of them moves (a torch's
+    /// flicker, a spell light keyed on later); `None` for a static light and the 1.12 parse.
+    pub anim: Option<std::sync::Arc<M2LightAnim>>,
+}
+
+/// A 3.3.5 light's animated state, sampled every frame by the animate pass (`0x82f0f0`) and
+/// re-gated from the visibility byte (`0x828a00`).
+///
+/// Unmodelled: the ambient pair (type 0 feeds the ambient term, not a point light) and the
+/// model-alpha factor the reference multiplies into the diffuse product (`Model+0x198`).
+#[derive(Debug, Clone)]
+pub struct M2LightAnim {
+    pub diffuse_color: crate::SeqTrack<[f32; 3]>,
+    pub diffuse_intensity: crate::SeqTrack,
+    /// The visibility byte as 0/1, stepped.
+    pub visibility: crate::SeqTrack,
+    pub sequences: crate::SeqTable,
+}
+
+impl M2LightAnim {
+    /// Whether the visibility byte can ever read on.
+    pub fn can_show(&self) -> bool {
+        !self.visibility.is_keyed()
+            || self.visibility.default > 0.0
+            || self
+                .visibility
+                .slots
+                .iter()
+                .any(|l| l.keys.iter().any(|&(_, v)| v > 0.0))
+    }
+
+    /// `(diffuse colour, diffuse intensity)` at `clock`, intensity 0 while the byte is clear.
+    pub fn diffuse_at(&self, clock: crate::SeqClock) -> ([f32; 3], f32) {
+        let lit = self.visibility.sample(clock) > 0.0;
+        (
+            self.diffuse_color.sample(clock),
+            if lit {
+                self.diffuse_intensity.sample(clock)
+            } else {
+                0.0
+            },
+        )
+    }
 }
 
 impl M2Light {
@@ -34,9 +78,14 @@ impl M2Light {
         self.light_type == 1
     }
 
-    /// The spawn gate: a point light its visibility track does not hold dark.
+    /// The spawn gate: a point light its visibility track does not hold dark. An animated light
+    /// spawns if its byte can ever read on, and its animator gates it live.
     pub fn casts(&self) -> bool {
-        self.is_point() && !self.visibility_off
+        self.is_point()
+            && self
+                .anim
+                .as_ref()
+                .map_or(!self.visibility_off, |a| a.can_show())
     }
 }
 
@@ -179,6 +228,7 @@ fn read_m2_light(bytes: &[u8], rec: usize) -> Option<M2Light> {
         attenuation_start: track_first_f32(bytes, rec + 0x80).unwrap_or(0.0),
         attenuation_end: track_first_f32(bytes, rec + 0x9c).unwrap_or(0.0),
         visibility_off: track_first_u8(bytes, rec + 0xb8) == Some(0),
+        anim: None,
     })
 }
 

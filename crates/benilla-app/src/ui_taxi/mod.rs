@@ -364,9 +364,6 @@ mod tests {
                 .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use bevy::ecs::system::RunSystemOnce;
 
-        /// `UNIT_FIELD_BYTES_0`, `PLAYER_BYTES_3`: absolute descriptor indices.
-        const PLAYER_BYTES_3: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-            .index_of(benilla_protocol::messages::Field::PlayerBytes3);
         const MASTER: u64 = 0xF130_0000_0000_0099;
 
         let data = benilla_formats::wow_data_or_skip!();
