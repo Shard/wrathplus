@@ -975,7 +975,7 @@ fn writer_loop(
                     ClientCommand::AddonMessage { distribution, text } => {
                         w.send_addon_message(super::addon_wire_chat_type(distribution), &text)
                     }
-                    ClientCommand::JoinChannel { name, password } => {
+                    ClientCommand::JoinChannel { name, password, .. } => {
                         w.join_channel(&name, &password)
                     }
                     ClientCommand::LeaveChannel { name } => w.leave_channel(&name),
@@ -983,7 +983,7 @@ fn writer_loop(
                     // Wrath-only display roster commands never leak onto the Vanilla wire.
                     ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
                     | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
-                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeInspectAchievements { .. } | ClientCommand::NativeCalendar(_) | ClientCommand::NativeQuest(_) | ClientCommand::NativeParty(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
+                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeSpellControl(_) | ClientCommand::NativeInspectAchievements { .. } | ClientCommand::NativeCalendar(_) | ClientCommand::NativeQuest(_) | ClientCommand::NativeParty(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {

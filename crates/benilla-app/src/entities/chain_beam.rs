@@ -544,7 +544,10 @@ mod tests {
     /// A streamed unit: an empty descriptor store is all the spawner reads off a target.
     fn unit(app: &mut App) -> Entity {
         app.world_mut()
-            .spawn(ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[])))
+            .spawn(ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[],
+            )))
             .id()
     }
 
@@ -773,12 +776,30 @@ mod tests {
         let mut index = GuidIndex::default();
         index.0.insert(OBJECT_GUID, victim);
         // Field 20 = UNIT_FIELD_CHANNEL_OBJECT (a guid pair), 144 = UNIT_CHANNEL_SPELL.
-        let channelling = ObjectStore(ObjectFields::from_pairs(&[
-            (20, OBJECT_GUID as u32),
-            (21, (OBJECT_GUID >> 32) as u32),
-            (144, CHANNEL_SPELL),
-        ]));
-        let idle = ObjectStore(ObjectFields::from_pairs(&[]));
+        let channelling = ObjectStore(ObjectFields::from_field_slots(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (
+                    benilla_protocol::messages::Field::UnitChannelObject,
+                    0,
+                    OBJECT_GUID as u32,
+                ),
+                (
+                    benilla_protocol::messages::Field::UnitChannelObject,
+                    1,
+                    (OBJECT_GUID >> 32) as u32,
+                ),
+                (
+                    benilla_protocol::messages::Field::UnitChannelSpell,
+                    0,
+                    CHANNEL_SPELL,
+                ),
+            ],
+        ));
+        let idle = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[],
+        ));
 
         assert_eq!(
             select_targets(CHANNEL_SPELL, None, &channelling, &index),

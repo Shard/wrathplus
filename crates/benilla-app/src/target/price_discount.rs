@@ -34,6 +34,16 @@ fn price_discount(reaction: u8, vendor_unit_flags: u32, pvp_rank: u8) -> f64 {
     d
 }
 
+/// Wrath: 3.3.5 has no honor ranks (`PLAYER_BYTES_3` byte 2 is the PvP title), so only the
+/// reputation term applies, 5% per rank above Neutral, as AzerothCore charges it
+/// (`Player::GetReputationPriceDiscount`, used for repairs and taxi fares). The 12340 client's own
+/// routine is untraced; the vendor's reaction toward the player stands in for the rank, and its
+/// Exalted rung depends on that reaction reaching 7.
+fn wrath_price_discount(reaction: u8) -> f64 {
+    const NEUTRAL: u8 = 3;
+    0.05 * f64::from(reaction.saturating_sub(NEUTRAL))
+}
+
 /// [`price_discount`] for `vendor` and the player: the vendor's reaction toward the player
 /// ([`ring_reaction`], `vendor->UnitReaction(player)` at `0x612b93`), the vendor's own
 /// `UNIT_FIELD_FLAGS` (`[[vendor+0x110]+0xa0]`) and the player's current honor rank,
@@ -44,8 +54,12 @@ pub(crate) fn vendor_price_discount(
     vendor: &ObjectStore,
     player: &ObjectStore,
 ) -> f64 {
+    let reaction = ring_reaction(factions, reputations, Some(vendor), Some(player));
+    if vendor.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        return wrath_price_discount(reaction);
+    }
     price_discount(
-        ring_reaction(factions, reputations, Some(vendor), Some(player)),
+        reaction,
         vendor.0.unit_flags(),
         player.0.player_pvp_rank().unwrap_or(0),
     )
@@ -79,8 +93,23 @@ pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 
 #[cfg(test)]
 mod tests {
+    /// Wrath: 5% per rank above Neutral, never the 1.12 honor steps.
+    #[test]
+    fn the_wrath_discount_is_the_reputation_ladder_only() {
+        let d = super::wrath_price_discount;
+        assert_eq!(d(3), 0.0);
+        assert_eq!(d(1), 0.0);
+        assert!((d(4) - 0.05).abs() < 1e-12);
+        assert!((d(5) - 0.10).abs() < 1e-12);
+        assert!((d(7) - 0.20).abs() < 1e-12);
+    }
+
     use super::*;
-    use benilla_protocol::field::{FIELD_UNIT_FACTIONTEMPLATE, FIELD_UNIT_FLAGS};
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// The five values `0x612b80` can return, as the f64 bits its `st0` holds.
@@ -147,8 +176,8 @@ mod tests {
     }
 
     /// `PLAYER_BYTES_3`, `PLAYER_FIELD_BYTES`: absolute descriptor indices.
-    const PLAYER_BYTES_3: u16 = 195;
-    const PLAYER_FIELD_BYTES: u16 = 1222;
+    const PLAYER_BYTES_3: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerBytes3);
+    const PLAYER_FIELD_BYTES: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFieldBytes);
 
     /// The flag is read off the vendor and the rank off the player's current-rank byte, never the
     /// highest-rank-held byte of `PLAYER_FIELD_BYTES`. With no faction catalog the reaction is
@@ -178,7 +207,7 @@ mod tests {
     }
 
     /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
-    const BYTES_0: u16 = 36;
+    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
 
     /// The reputation term reads the vendor's reaction to the player, the standing rank: Friendly
     /// (8999) earns nothing, Honored (9000) the 0.1. The player's reaction to the vendor would be

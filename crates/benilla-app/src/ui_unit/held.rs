@@ -187,6 +187,7 @@ mod tests {
     use crate::target::Selection;
     use crate::ui_party::{GroupState, GROUPTYPE_RAID};
     use benilla_protocol::messages::{member_status, GroupMemberEntry};
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     const ME: u64 = 0x10;
@@ -211,11 +212,11 @@ mod tests {
     const EXTRA: u64 = 0xF130_0000_4B00_0001;
 
     /// `OBJECT_FIELD_TYPE`, `UNIT_FIELD_TARGET`, `_HEALTH`, `_MAXHEALTH` and `_LEVEL`.
-    const OBJECT_TYPE: u16 = 2;
-    const TARGET: u16 = 16;
-    const HEALTH: u16 = 22;
-    const MAXHEALTH: u16 = 28;
-    const LEVEL: u16 = 34;
+    const OBJECT_TYPE: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectType);
+    const TARGET: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitTarget);
+    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
+    const LEVEL: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
 
     fn unit(kind: u32, target: u64, health: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[

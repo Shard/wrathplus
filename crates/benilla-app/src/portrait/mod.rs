@@ -2302,10 +2302,21 @@ mod tests {
         let mut world = World::new();
         let held = world.spawn_empty().id();
         let summon = |guid: u64| {
-            crate::net::ObjectStore(ObjectFields::from_pairs(&[
-                (8, guid as u32),
-                (9, (guid >> 32) as u32),
-            ]))
+            crate::net::ObjectStore(ObjectFields::from_field_slots(
+                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                &[
+                    (
+                        benilla_protocol::messages::Field::UnitSummon,
+                        0,
+                        guid as u32,
+                    ),
+                    (
+                        benilla_protocol::messages::Field::UnitSummon,
+                        1,
+                        (guid >> 32) as u32,
+                    ),
+                ],
+            ))
         };
         let group = |status: u8| {
             let mut g = crate::ui_party::GroupState::default();

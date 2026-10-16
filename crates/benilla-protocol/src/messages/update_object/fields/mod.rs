@@ -397,6 +397,32 @@ impl ObjectFields {
         }
     }
 
+    /// A fixture from semantic `(field, value)` pairs, each the field's first dword on `layout`.
+    /// A field the layout lacks panics: a fixture naming it is wrong for that dialect.
+    pub fn from_fields(layout: FieldLayout, pairs: &[(Field, u32)]) -> Self {
+        let slots: Vec<_> = pairs
+            .iter()
+            .map(|&(field, value)| (field, 0, value))
+            .collect();
+        Self::from_field_slots(layout, &slots)
+    }
+
+    /// A fixture from semantic `(field, dword offset, value)` triples on `layout`: a GUID's high
+    /// half, an array member. An offset past the field's width panics.
+    pub fn from_field_slots(layout: FieldLayout, slots: &[(Field, u16, u32)]) -> Self {
+        let pairs: Vec<_> = slots
+            .iter()
+            .map(|&(field, offset, value)| {
+                let span = layout
+                    .resolve(field)
+                    .unwrap_or_else(|| panic!("{field:?} is not in {layout:?}"));
+                assert!(offset < span.width, "{field:?}+{offset} is past its width");
+                (span.index + offset, value)
+            })
+            .collect();
+        Self::from_native_pairs(layout, &pairs)
+    }
+
     pub fn layout(&self) -> FieldLayout {
         self.layout
     }
