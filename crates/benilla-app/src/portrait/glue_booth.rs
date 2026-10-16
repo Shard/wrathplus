@@ -816,6 +816,23 @@ pub(super) fn sync_glue_scene(
                 // shared, none per-placement, so `host: None` is exact.
                 let loops = benilla_world::doodad_anim::UvLoops::of(s);
                 let mut mat_anim = false;
+                // A two-stage batch's second transform, on its own rows, as the world lane runs it.
+                let stage2 = benilla_world::model_render::second_stage_loops(
+                    s,
+                    mats.materials(),
+                    material.id(),
+                );
+                if stage2.animates() {
+                    benilla_world::doodad_anim::register_entity_uv_stage2(
+                        &mut uv_reg,
+                        &mut anim_table,
+                        mats.materials(),
+                        material.id(),
+                        &stage2,
+                        None,
+                    );
+                    mat_anim = true;
+                }
                 if loops.animates() {
                     benilla_world::doodad_anim::register_entity_uv(
                         &mut uv_reg,

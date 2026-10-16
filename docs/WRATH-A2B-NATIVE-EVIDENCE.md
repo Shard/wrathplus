@@ -100,6 +100,10 @@ and compared the installed Direct3D variants. At the singular denominator, nativ
 and GPU reciprocal-square-root behavior also needs an explicit policy rather than
 an invented clamp. A denominator/sign-only patch would therefore be premature.
 
+**Update (2026-10-16):** prerequisite 1 below is answered. No reader of the evaluated weights in
+`0x7e0000`–`0x890000` reads a second weight entry; see `WRATH-TWO-STAGE.md`, "Second weight and
+off-world lanes".
+
 ## Blockers and next bounded implementation prerequisite
 
 Before a rendering patch:
