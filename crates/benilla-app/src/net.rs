@@ -44,7 +44,7 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_inspect_capture;
-mod wrath_char_service_capture;
+pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
@@ -1158,10 +1158,12 @@ pub(crate) enum ClientCommand {
         language: Option<u32>,
     },
     /// `SendAddonMessage`: a `CMSG_MESSAGECHAT` in `LANG_ADDON` (1.12 has no addon opcode and no
-    /// whispered addon message). `text` is `prefix` TAB `message`.
+    /// whispered addon message). `text` is `prefix` TAB `message`; `target` is the 12340 WHISPER
+    /// lane's recipient, `None` on every other lane.
     AddonMessage {
         distribution: benilla_ui::script::AddonDistribution,
         text: String,
+        target: Option<String>,
     },
     /// `CMSG_NAME_QUERY`, sent only by [`crate::names::NameCache`]'s ask-once resolve.
     NameQuery {

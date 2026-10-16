@@ -79,8 +79,9 @@ fn on_received_mail(
 }
 
 fn on_next_mail_time(In(ev): In<SessionEvent>, mut pending: ResMut<MailPending>) {
-    if let SessionEvent::NextMailTime { seconds, .. } = ev {
+    if let SessionEvent::NextMailTime { seconds, previews } = ev {
         next_mail_time(seconds, &mut pending);
+        pending.previews = previews;
     }
 }
 

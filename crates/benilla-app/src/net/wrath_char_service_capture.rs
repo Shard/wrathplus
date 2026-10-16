@@ -1,4 +1,5 @@
-//! Transport-only ordered native character-screen service replies; App owns the result feed.
+//! Ordered native character-screen service replies (rename, customize, faction and race change,
+//! declined names, realm split); `char_select::delete_result` drains them into the glue dialog.
 //! A roster change rides `CharacterList`, published before the reply.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_char_services::Reply, SessionEvent, SessionEventKind};

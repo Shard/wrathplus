@@ -900,7 +900,11 @@ pub(super) fn drain_chat_input(
                 let cmd = match cmd {
                     C::Join { name, password } => {
                         manual_join_or_leave(&channels, &mut script, &name);
-                        ClientCommand::JoinChannel { name, password, channel_id: 0 }
+                        ClientCommand::JoinChannel {
+                            name,
+                            password,
+                            channel_id: 0,
+                        }
                     }
                     C::Leave { name } => {
                         // `LeaveChannelByName` (`0x4a0000` → `0x49ee70`): a number names a
@@ -1579,15 +1583,11 @@ pub(super) fn drain_addon_message_sends(
                 &format!("-> {} {:?}", send.distribution.token(), send.text),
             );
         }
-        // The WHISPER lane needs its target on the wire; until App's writer carries
-        // `AddonSend::target`, it is held back rather than sent without a recipient.
-        if send.distribution == benilla_ui::script::AddonDistribution::Whisper {
-            info!("chat: addon whisper to {:?} not sent: the writer has no target yet", send.target);
-            continue;
-        }
         let cmd = ClientCommand::AddonMessage {
             distribution: send.distribution,
             text: send.text,
+            // The WHISPER lane's recipient, validated by the binding.
+            target: send.target,
         };
         if commands.0.send(cmd).is_err() {
             warn!("chat: not connected; addon broadcast dropped");
