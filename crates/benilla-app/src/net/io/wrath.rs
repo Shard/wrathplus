@@ -1005,18 +1005,10 @@ impl MovementAuthorityHandle {
         let Some(mut pose) = state.ground_pose else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
-        if rooted && pose.flags != 0 {
+        // SWIMMING alone is not motion: a still swimmer needs no STOP before its root.
+        if rooted && pose.flags & !wrath_ground::MOVE_SWIMMING != 0 {
             pose = pose.halted();
-            let stop = wrath_ground::encode_on_foot(
-                wrath_ground::MSG_MOVE_STOP,
-                self.self_guid,
-                0,
-                timestamp,
-                pose.position,
-                pose.orientation,
-                pose.fall_time,
-                pose.fall,
-            )?;
+            let stop = pose.encode(wrath_ground::MSG_MOVE_STOP, self.self_guid, timestamp)?;
             send(wrath_ground::MSG_MOVE_STOP, &stop)?;
             // STOP was successfully written and became the last pose reported to the server. Keep
             // that honest progress if the following ACK write fatally fails; this epoch is retired
@@ -1201,6 +1193,7 @@ impl MovementAuthorityHandle {
             orientation,
             fall_time: 0,
             fall: None,
+            pitch: None,
         });
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(PendingAuthorityOrder::Mover(order)));
@@ -2682,9 +2675,15 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     else {
         unreachable!()
     };
-    if pitch != 0.0 || transport.is_some() {
-        bail!("Wrath on-foot movement refuses pitch/transport tails");
+    if transport.is_some() {
+        bail!("Wrath movement refuses transport tails");
     }
+    // Pitch rides only with SWIMMING (AzerothCore `ReadMovementInfo`); on foot it must be level.
+    let swimming = flags & benilla_protocol::wrath_ground::MOVE_SWIMMING != 0;
+    if !swimming && pitch != 0.0 {
+        bail!("Wrath on-foot movement refuses a pitch outside the water");
+    }
+    let pitch = swimming.then_some(pitch);
     let fall = jump.map(|jump| wrath_ground::FallTail {
         vertical_speed: jump.zspeed,
         sin_angle: jump.sin_angle,
@@ -2697,21 +2696,13 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
         orientation,
         fall_time,
         fall,
+        pitch,
     };
     let authority = active.authority.clone();
     authority
         .with_on_foot_send(pose, || {
             let opcode = u32::from(kind.opcode());
-            let body = wrath_ground::encode_on_foot(
-                opcode,
-                active.active_mover,
-                flags,
-                active.clock.now_ms(),
-                pos,
-                orientation,
-                fall_time,
-                fall,
-            )?;
+            let body = pose.encode(opcode, active.active_mover, active.clock.now_ms())?;
             active.writer.send_raw(opcode, &body)
         })
         .unwrap_or(Ok(()))
@@ -3875,6 +3866,7 @@ mod tests {
                 cos_angle: 0.75,
                 horizontal_speed: 7.0,
             }),
+            pitch: None,
         };
         authority
             .with_on_foot_send(pose, || Ok(()))
@@ -4752,6 +4744,51 @@ mod mover_order_tests {
     }
 
     #[test]
+    fn a_swimming_pose_is_reported_and_a_root_keeps_the_swimmer_in_the_water() {
+        let authority = installed(0x508);
+        let swimming = OnFootPose {
+            flags: benilla_protocol::wrath_ground::MOVE_SWIMMING,
+            position: [1.0, 2.0, -3.0],
+            orientation: 0.5,
+            fall_time: 0,
+            fall: None,
+            pitch: Some(-0.3),
+        };
+        assert!(authority
+            .with_on_foot_send(swimming, || Ok(()))
+            .unwrap()
+            .is_ok());
+        let root = ForceRootOrder {
+            mover_guid: 0x508,
+            counter: 20,
+        };
+        authority.raise_root_barrier(root, true).unwrap();
+        let mut sent = Vec::new();
+        authority
+            .send_root_ack(root, true, 3, |opcode, body| {
+                sent.push((opcode, body.to_vec()));
+                Ok(())
+            })
+            .unwrap();
+        // No STOP: a still swimmer is not in motion.
+        let [(opcode, body)] = &sent[..] else {
+            panic!("{sent:?}")
+        };
+        assert_eq!(*opcode, wrath_authority::CMSG_FORCE_MOVE_ROOT_ACK);
+        let flags = u32::from_le_bytes(body[7..11].try_into().unwrap());
+        assert_eq!(
+            flags,
+            wrath_authority::MOVEMENT_FLAG_ROOT | benilla_protocol::wrath_ground::MOVE_SWIMMING
+        );
+        // The pitch rides after the position, before the fall time.
+        let pitch_at = 7 + 4 + 2 + 4 + 16;
+        assert_eq!(
+            f32::from_le_bytes(body[pitch_at..pitch_at + 4].try_into().unwrap()),
+            -0.3
+        );
+    }
+
+    #[test]
     fn a_stale_or_foreign_mover_order_fails_closed() {
         let authority = installed(0x505);
         let order = MoverOrder::Speed {
@@ -4802,8 +4839,8 @@ mod observer_teleport_tests {
                     orientation: 1.0,
                 },
                 transport: None,
-                // Swimming carries its pitch.
-                pitch: (flags & 0x0020_0000 != 0).then_some(0.25),
+                // Swimming and flying carry their pitch.
+                pitch: (flags & 0x0220_0000 != 0).then_some(0.25),
                 fall_time: 0,
                 jump: None,
                 spline_elevation: None,
@@ -4840,9 +4877,9 @@ mod observer_teleport_tests {
         let (control_tx, control_rx) = crossbeam_channel::unbounded();
         let mut adapter = WrathEventAdapter::new();
         let clock = SessionClock::new();
-        // An on-foot teleport relays as the observed unit's move; a swimming one is outside the
-        // subset and drops. Neither is fatal, and neither moves or blocks our mover.
-        for (flags, swimming) in [(0, false), (0x0020_0000, true)] {
+        // An on-foot teleport relays as the observed unit's move; a flying one (CAN_FLY | FLYING)
+        // is outside the subset and drops. Neither is fatal, and neither moves or blocks our mover.
+        for (flags, dropped) in [(0, false), (0x0300_0000, true)] {
             let packet = benilla_protocol::wrath_world::WrathServerPacket {
                 opcode: 0x00c5,
                 body: foreign_teleport(0x0777, flags),
@@ -4858,7 +4895,7 @@ mod observer_teleport_tests {
             )
             .unwrap();
             let event = events_rx.try_recv().unwrap();
-            if swimming {
+            if dropped {
                 assert!(matches!(
                     event,
                     SessionEvent::PacketDropped { opcode: 0x00c5, unparseable: true }
