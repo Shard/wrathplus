@@ -1147,6 +1147,10 @@ pub enum SessionEvent {
     WrathInventory { packet: crate::wrath_inventory::Packet },
     /// Capture-only native auction receipts without a shared event (`wrath_exchange`).
     WrathExchange { packet: crate::wrath_exchange::Packet },
+    /// Capture-only native achievement receipts (`wrath_achievement`).
+    WrathAchievement { packet: crate::wrath_achievement::Packet },
+    /// Capture-only native calendar receipts (`wrath_calendar`).
+    WrathCalendar { packet: crate::wrath_calendar::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     WrathMirrorImage { packet: crate::wrath_mirror_image::Packet },

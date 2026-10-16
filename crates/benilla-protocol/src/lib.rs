@@ -31,6 +31,8 @@ pub mod wrath_instance;
 pub mod wrath_instance_control;
 pub mod wrath_inventory;
 pub mod wrath_exchange;
+pub mod wrath_achievement;
+pub mod wrath_calendar;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;
