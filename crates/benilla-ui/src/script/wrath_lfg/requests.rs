@@ -7,8 +7,9 @@
 //! seconds rejects, still counting; otherwise the timestamp is stored, the counter reset to 0
 //! and the request sent. Accepted pushes true, rejected false. Nothing invalidates the caches,
 //! and there is no pending state or reply matching. The gates outlive VMs and sessions, so they
-//! are process statics. App injects the OS-monotonic clock; until it does, a process-relative
-//! clock stands in (labelled: native's clock is OS-counter-derived, not process-relative).
+//! are process statics. App injects a boot-relative OS-monotonic clock (ms as wrapping u32); until
+//! it does, a process-relative clock stands in (labelled): native's clock is OS uptime, so its first
+//! call passes the 10 s test, where the stand-in rejects every request in the process's first 10 s.
 //!
 //! Item requests (agreed with App): each `GetLFGDungeonRewardInfo` call on an uncached template,
 //! the native 0x552950 callback registration, appends one [`WrathLfgItemRequest`] to this VM's
