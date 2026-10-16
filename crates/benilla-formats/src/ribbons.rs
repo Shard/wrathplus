@@ -29,7 +29,7 @@ use std::io::Cursor;
 use anyhow::Result;
 use benilla_m2::parse_m2;
 
-use crate::value_track::{seq0_band, track_keys_with, ValueTrack};
+use crate::value_track::{seq0_band, track_keys_with, TrackValue, ValueTrack};
 use crate::ParticleBlend;
 
 const STRIDE: usize = 0xdc;
@@ -79,13 +79,14 @@ pub struct RibbonEmitterDef {
     pub blend: ParticleBlend,
     /// The raw blend behind the lossy [`Self::blend`] fold, when the material resolves.
     pub blend_mode: Option<u16>,
-    /// Trail tint (colorTrack, RGB 0..1, keyed on the clip clock; constant white when unkeyed).
-    pub color: ValueTrack<[f32; 3]>,
-    /// Trail opacity (alphaTrack, int16 / 32767; constant 1.0 when unkeyed).
-    pub alpha: ValueTrack,
+    /// Trail tint (colorTrack, RGB 0..1; constant white when unkeyed).
+    pub color: RibbonTrack<[f32; 3]>,
+    /// Trail opacity (alphaTrack, int16 / 32767; 1.0 when unkeyed, the instance state's load
+    /// value at `0x832ea0`).
+    pub alpha: RibbonTrack,
     /// Half-widths (yards) above and below the path; each edge keeps the width it was born with.
-    pub height_above: ValueTrack,
-    pub height_below: ValueTrack,
+    pub height_above: RibbonTrack,
+    pub height_below: RibbonTrack,
     /// Edges per second; with `edge_lifetime`, sizes the ring.
     pub edges_per_second: f32,
     /// Edge lifetime in seconds, clamped to at least 0.25 at load as the reference does.
@@ -99,6 +100,102 @@ pub struct RibbonEmitterDef {
     /// The `+0xc0` enable track, `None` when always on; otherwise [`RibbonVisibility::at`] is
     /// sampled on the host's playing sequence every frame.
     pub visible: Option<RibbonVisibility>,
+    /// The model's sequences in file order as `(AnimationData id, duration ms)`: a sequence
+    /// track's slot clock. Empty for the single-lane 1.12 parse, whose keys are rebased onto
+    /// sequence 0 and sampled on seconds since spawn.
+    pub sequences: Vec<(u16, u32)>,
+}
+
+impl RibbonEmitterDef {
+    /// The file slot a fixed `AnimationData` id plays: its first sequence, else slot 0.
+    pub fn slot_for(&self, anim: u16) -> usize {
+        self.sequences
+            .iter()
+            .position(|&(id, _)| id == anim)
+            .unwrap_or(0)
+    }
+
+    /// `ms` into `slot`, wrapped by the sequence's duration: a fixed-sequence owner loops it.
+    pub fn wrap_ms(&self, slot: usize, ms: f32) -> f32 {
+        match self.sequences.get(slot) {
+            Some(&(_, d)) if d > 0 => ms.rem_euclid(d as f32),
+            _ => ms,
+        }
+    }
+}
+
+/// Where a ribbon's look tracks are sampled this frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RibbonClock {
+    /// The owner's playing sequence slot (file order).
+    pub slot: usize,
+    /// Milliseconds into that sequence.
+    pub seq_ms: f32,
+    /// The scene clock in milliseconds, which global-sequence tracks loop on.
+    pub scene_ms: f64,
+}
+
+/// A ribbon look track (colour, alpha, heights) on its native clock: an M2Track keyed per
+/// sequence slot on that sequence's own time, or, with a global sequence, one key set looping on
+/// the scene clock modulo the period. The instance pushes a keyed track's value to the emitter
+/// every frame (`0x828a00`); an unkeyed one leaves the load value.
+///
+/// Unresolved (3.3.5 sampler not located): whether a keyed track holds its previous value or
+/// returns to the load value in a sequence with no keys. This reads the load value.
+#[derive(Debug, Clone)]
+pub struct RibbonTrack<V = f32> {
+    /// `Some(period ms)` for a global-sequence track, whose keys are `slots[0]`.
+    pub global_period_ms: Option<u32>,
+    /// Keys per sequence slot in sequence-local ms; an empty lane reads `default`.
+    pub slots: Vec<ValueTrack<V>>,
+    /// The value with no keys to sample.
+    pub default: V,
+}
+
+impl<V: TrackValue> RibbonTrack<V> {
+    /// One lane read on every slot, as the 1.12 parse rebases a track onto sequence 0.
+    pub(crate) fn single(track: ValueTrack<V>, default: V) -> Self {
+        Self {
+            global_period_ms: None,
+            slots: vec![track],
+            default,
+        }
+    }
+
+    /// Sample at `clock`: interp 0 steps, else lerps; past the last key the last holds.
+    pub fn sample(&self, clock: RibbonClock) -> V {
+        let (lane, ms) = match self.global_period_ms {
+            Some(period) => (
+                self.slots.first(),
+                if period == 0 {
+                    0.0
+                } else {
+                    clock.scene_ms.rem_euclid(f64::from(period)) as f32
+                },
+            ),
+            None => (self.slots.get(clock.slot), clock.seq_ms),
+        };
+        lane.filter(|t| !t.keys.is_empty())
+            .map_or(self.default, |t| t.sampled_ms(ms))
+    }
+
+    /// Whether any lane is keyed.
+    pub fn is_keyed(&self) -> bool {
+        self.slots.iter().any(|t| !t.keys.is_empty())
+    }
+}
+
+impl RibbonTrack<f32> {
+    /// The largest value any slot can reach, the default included where a slot is unkeyed.
+    pub fn peak(&self) -> f32 {
+        let keyed = self.slots.iter().filter(|t| !t.keys.is_empty());
+        let peak = keyed.clone().fold(f32::MIN, |m, t| m.max(t.peak()));
+        if keyed.count() < self.slots.len().max(1) {
+            peak.max(self.default)
+        } else {
+            peak
+        }
+    }
 }
 
 /// The `+0xc0` enable track per `AnimationData.dbc` id: step keys in band-local seconds, the
@@ -265,15 +362,27 @@ pub fn parse_m2_ribbon_emitters(bytes: &[u8]) -> Result<Vec<RibbonEmitterDef>> {
             texture,
             blend,
             blend_mode,
-            color: track_keys_with(bytes, e + 0x24, [1.0; 3], band, 12, |b, o| {
-                [le_f32(b, o), le_f32(b, o + 4), le_f32(b, o + 8)]
-            }),
+            color: RibbonTrack::single(
+                track_keys_with(bytes, e + 0x24, [1.0; 3], band, 12, |b, o| {
+                    [le_f32(b, o), le_f32(b, o + 4), le_f32(b, o + 8)]
+                }),
+                [1.0; 3],
+            ),
             // fix16 keys are signed (`movsx` at `0x717933`); the draw clamps a negative to 0.
-            alpha: track_keys_with(bytes, e + 0x40, 1.0, band, 2, |b, o| {
-                f32::from(le_u16(b, o) as i16) / 32767.0
-            }),
-            height_above: track_keys_with(bytes, e + 0x5c, 0.0, band, 4, le_f32),
-            height_below: track_keys_with(bytes, e + 0x78, 0.0, band, 4, le_f32),
+            alpha: RibbonTrack::single(
+                track_keys_with(bytes, e + 0x40, 1.0, band, 2, |b, o| {
+                    f32::from(le_u16(b, o) as i16) / 32767.0
+                }),
+                1.0,
+            ),
+            height_above: RibbonTrack::single(
+                track_keys_with(bytes, e + 0x5c, 0.0, band, 4, le_f32),
+                0.0,
+            ),
+            height_below: RibbonTrack::single(
+                track_keys_with(bytes, e + 0x78, 0.0, band, 4, le_f32),
+                0.0,
+            ),
             edges_per_second: le_f32(bytes, e + 0x94),
             edge_lifetime: le_f32(bytes, e + 0x98).max(0.25),
             gravity: le_f32(bytes, e + 0x9c),
@@ -281,6 +390,7 @@ pub fn parse_m2_ribbon_emitters(bytes: &[u8]) -> Result<Vec<RibbonEmitterDef>> {
             tile_cols: le_u16(bytes, e + 0xa2).max(1),
             tex_slot: track_first(bytes, e + 0xa4, 2, 0, le_u16),
             visible: visibility_by_anim(bytes, e + 0xc0),
+            sequences: Vec::new(),
         });
     }
     Ok(out)
@@ -336,16 +446,27 @@ mod tests {
         let defs = parse_m2_ribbon_emitters(&bytes).expect("parse ribbons");
         assert_eq!(defs.len(), 2);
         for r in &defs {
-            assert_eq!(r.height_above.first(), 0.0, "value[0] bake = no slash");
+            assert_eq!(
+                r.height_above.slots[0].first(),
+                0.0,
+                "value[0] bake = no slash"
+            );
             assert!((r.height_above.peak() - 0.167).abs() < 1e-3);
-            assert!((r.height_above.sample_ms(200.0) - 0.167).abs() < 1e-3);
-            assert_eq!(r.height_above.sample_ms(400.0), 0.0, "collapsed by 267 ms");
-            assert_eq!(r.height_below.keys, r.height_above.keys, "symmetric slash");
-            assert_eq!(r.alpha.sample_ms(0.0), 1.0);
-            assert!(r.alpha.sample_ms(600.0) < 1e-6);
+            assert!((r.height_above.slots[0].sample_ms(200.0) - 0.167).abs() < 1e-3);
+            assert_eq!(
+                r.height_above.slots[0].sample_ms(400.0),
+                0.0,
+                "collapsed by 267 ms"
+            );
+            assert_eq!(
+                r.height_below.slots[0].keys, r.height_above.slots[0].keys,
+                "symmetric slash"
+            );
+            assert_eq!(r.alpha.slots[0].sample_ms(0.0), 1.0);
+            assert!(r.alpha.slots[0].sample_ms(600.0) < 1e-6);
             // Rebased: every key is inside the 1133 ms clip.
-            assert!(r.height_above.keys.iter().all(|&(t, _)| t <= 1133));
-            assert_eq!(r.color.first(), [1.0; 3]);
+            assert!(r.height_above.slots[0].keys.iter().all(|&(t, _)| t <= 1133));
+            assert_eq!(r.color.slots[0].first(), [1.0; 3]);
             // Always on, its alpha doing the fade: no gate to darken it against Stand.
             assert_eq!(
                 r.visible, None,
