@@ -210,6 +210,14 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x0402 => Ok(match crate::wrath_mirror_image::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathMirrorImage { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x04f7 => Ok(match crate::wrath_ui_timer::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathUiTimer { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x01fc => Ok(match crate::wrath_environment::decode_damage(body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathEnvironmentalDamage(packet)], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
