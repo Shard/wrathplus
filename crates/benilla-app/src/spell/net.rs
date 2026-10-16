@@ -56,6 +56,8 @@ pub(super) fn register(app: &mut App) {
 /// instead ([`on_cast_result`]).
 #[derive(SystemParam)]
 pub(crate) struct Lifecycle<'w> {
+    /// The native unit-cast edges this packet adds, for [`super::unit_cast`].
+    unit_casts: ResMut<'w, super::unit_cast::CastEdges>,
     self_guid: Res<'w, SelfGuid>,
     index: Res<'w, GuidIndex>,
     spells: Option<Res<'w, Spells>>,
@@ -239,9 +241,17 @@ fn on_spell_start(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
         cast_time_ms,
         target,
         ammo_display_id,
-        ..
+        cast_count,
     } = ev
     {
+        if let Some(cast_count) = cast_count {
+            l.unit_casts.push(super::unit_cast::CastEdge::Start {
+                caster,
+                spell_id,
+                cast_count,
+                cast_ms: cast_time_ms,
+            });
+        }
         spell_start(
             caster,
             spell_id,
@@ -273,9 +283,18 @@ fn on_spell_go(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
         dest,
         ammo_display_id,
         item_caster,
-        ..
+        cast_count,
     } = ev
     {
+        if let Some(cast_count) = cast_count {
+            l.unit_casts.push(super::unit_cast::CastEdge::Result {
+                caster,
+                spell_id,
+                cast_count,
+                reason: Some(super::unit_cast::REASON_SUCCEEDED),
+                failure: false,
+            });
+        }
         let engaged = !sc.engaged_self.is_empty();
         spell_go(
             caster,
@@ -330,9 +349,21 @@ fn on_spell_chain_targets(In(ev): In<SessionEvent>, l: Lifecycle, mut sc: Scene)
 
 fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
     if let SessionEvent::SpellFailedOther {
-        caster, spell_id, ..
+        caster,
+        spell_id,
+        cast_count,
+        reason,
     } = ev
     {
+        if let Some(cast_count) = cast_count {
+            l.unit_casts.push(super::unit_cast::CastEdge::Result {
+                caster,
+                spell_id,
+                cast_count,
+                reason,
+                failure: false,
+            });
+        }
         spell_failed_other(
             caster,
             spell_id,
@@ -351,6 +382,8 @@ fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Sce
 
 fn on_spell_delayed(In(ev): In<SessionEvent>, mut l: Lifecycle) {
     if let SessionEvent::SpellDelayed { caster, delay_ms } = ev {
+        l.unit_casts
+            .push(super::unit_cast::CastEdge::Delayed { caster, delay_ms });
         spell_delayed(
             caster,
             delay_ms,
@@ -423,6 +456,28 @@ fn on_item_cooldown(In(ev): In<SessionEvent>, mut l: Lifecycle, sc: Scene) {
 /// Our own channel bar. Build 12340 sends every caster's channel to the set; only ours (or 1.12's
 /// guid-less self copy) drives it. Other casters' bars are the unit cast-event owner's.
 fn on_channel(In(ev): In<SessionEvent>, mut l: Lifecycle) {
+    // Every native caster's channel feeds the unit events; only ours drives the 1.12 bar.
+    match ev {
+        SessionEvent::ChannelStart {
+            spell_id,
+            duration_ms,
+            caster: Some(caster),
+        } => l.unit_casts.push(super::unit_cast::CastEdge::ChannelStart {
+            caster,
+            spell_id,
+            duration_ms,
+        }),
+        SessionEvent::ChannelUpdate {
+            remaining_ms,
+            caster: Some(caster),
+        } => l
+            .unit_casts
+            .push(super::unit_cast::CastEdge::ChannelUpdate {
+                caster,
+                remaining_ms,
+            }),
+        _ => {}
+    }
     let ours = |caster: Option<u64>| caster.is_none_or(|c| l.self_guid.0 == Some(c));
     match ev {
         SessionEvent::ChannelStart {

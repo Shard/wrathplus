@@ -74,6 +74,8 @@ pub(super) fn snapshot(
                 WrathMailRow {
                     header,
                     attachments,
+                    kind: row.kind,
+                    sender_guid: row.sender,
                 }
             })
             .collect(),
@@ -96,27 +98,20 @@ fn attachment_link(
         rolls.props?.0.get(attachment.random_property)?;
     }
     let name = rolls.name(&template.name, attachment.random_property as u32);
-    // Native table 0x00ad2a84: heirlooms (7) share artifacts' (6) color.
-    let color = match template.quality {
-        0 => "ff9d9d9d",
-        2 => "ff1eff00",
-        3 => "ff0070dd",
-        4 => "ffa335ee",
-        5 => "ffff8000",
-        6 | 7 => "ffe6cc80",
-        _ => "ffffffff",
-    };
     let enchants = &attachment.enchantments;
-    Some(format!(
-        "|c{color}|Hitem:{}:{}:{}:{}:{}:0:{}:{}:{}|h[{name}]|h|r",
-        attachment.entry as i32,
-        enchants[0][0] as i32,
-        enchants[2][0] as i32,
-        enchants[3][0] as i32,
-        enchants[4][0] as i32,
+    Some(crate::items::wrath_item_link(
+        attachment.entry,
+        &name,
+        template.quality,
+        [
+            enchants[0][0],
+            enchants[2][0],
+            enchants[3][0],
+            enchants[4][0],
+        ],
         attachment.random_property,
-        attachment.suffix_factor as i32,
-        level as i32,
+        attachment.suffix_factor,
+        level,
     ))
 }
 
@@ -302,7 +297,8 @@ mod tests {
 /// An inbox action a Lua row pick asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Action {
-    TakeItem,
+    /// The 1-based attachment slot `TakeInboxItem` named; `None` takes the first remaining one.
+    TakeItem(Option<u32>),
     TakeMoney,
     Delete,
     Return,
@@ -310,8 +306,9 @@ pub(super) enum Action {
 }
 
 /// Build-12340 inbox actions by native inbox row (1-based): the wire wants the attachment's low
-/// GUID, the sender and the template the legacy commands lack (AC `MailHandler.cpp`). The Lua
-/// binding records no attachment index, so a take names the row's first remaining attachment.
+/// GUID, the sender and the template the legacy commands lack (AC `MailHandler.cpp`). A take names
+/// the attachment in the slot `TakeInboxItem` gave (12340 `0x5711c0`/`0x56d920`, 1-based in Lua,
+/// 0-based on the wire), or the row's first remaining one; an empty named slot sends nothing.
 pub(super) fn native_action(
     inbox: &benilla_protocol::wrath_mail::Inbox,
     mailbox: u64,
@@ -322,10 +319,16 @@ pub(super) fn native_action(
     let row = inbox.mails.get(index_1based.checked_sub(1)? as usize)?;
     let mail_id = row.id;
     Some(ClientCommand::NativeMailMutation(match action {
-        Action::TakeItem => M::TakeItem {
+        Action::TakeItem(slot) => M::TakeItem {
             mailbox,
             mail_id,
-            item_low_guid: row.attachments.first()?.guid_low,
+            item_low_guid: match slot {
+                Some(slot) => {
+                    let slot = u8::try_from(slot.checked_sub(1)?).ok()?;
+                    row.attachments.iter().find(|a| a.slot == slot)?.guid_low
+                }
+                None => row.attachments.iter().min_by_key(|a| a.slot)?.guid_low,
+            },
         },
         Action::TakeMoney => M::TakeMoney { mailbox, mail_id },
         Action::Delete => M::Delete {
@@ -437,15 +440,55 @@ mod action_tests {
             Some(ClientCommand::NativeMailMutation(command)) => command,
             other => panic!("{other:?}"),
         };
-        assert_eq!(native(Action::TakeItem), M::TakeItem { mailbox: 7, mail_id: 5, item_low_guid: 0x99 });
-        assert_eq!(native(Action::Delete), M::Delete { mailbox: 7, mail_id: 5, template: 3 });
-        assert_eq!(native(Action::Return), M::Return { mailbox: 7, mail_id: 5, sender: 0x42 });
-        assert_eq!(native(Action::TakeMoney), M::TakeMoney { mailbox: 7, mail_id: 5 });
+        assert_eq!(
+            native(Action::TakeItem(None)),
+            M::TakeItem {
+                mailbox: 7,
+                mail_id: 5,
+                item_low_guid: 0x99
+            }
+        );
+        assert_eq!(
+            native(Action::TakeItem(Some(5))),
+            M::TakeItem {
+                mailbox: 7,
+                mail_id: 5,
+                item_low_guid: 0x99
+            },
+            "Lua slot 5 is wire slot 4"
+        );
+        assert!(
+            native_action(&inbox, 7, 1, Action::TakeItem(Some(1))).is_none(),
+            "an empty named slot sends nothing"
+        );
+        assert_eq!(
+            native(Action::Delete),
+            M::Delete {
+                mailbox: 7,
+                mail_id: 5,
+                template: 3
+            }
+        );
+        assert_eq!(
+            native(Action::Return),
+            M::Return {
+                mailbox: 7,
+                mail_id: 5,
+                sender: 0x42
+            }
+        );
+        assert_eq!(
+            native(Action::TakeMoney),
+            M::TakeMoney {
+                mailbox: 7,
+                mail_id: 5
+            }
+        );
         assert!(native_action(&inbox, 7, 2, Action::TakeMoney).is_none());
         assert!(native_action(&inbox, 7, 0, Action::TakeMoney).is_none());
         let mut empty = inbox.clone();
         empty.mails[0].attachments.clear();
-        assert!(native_action(&empty, 7, 1, Action::TakeItem).is_none());
+        assert!(native_action(&empty, 7, 1, Action::TakeItem(None)).is_none());
     }
 
     #[test]
@@ -453,7 +496,10 @@ mod action_tests {
         let mut inbox = inbox();
         assert!(matches!(
             mark_read(&mut inbox, 7, 1),
-            Some(ClientCommand::NativeMailMutation(M::MarkRead { mailbox: 7, mail_id: 5 }))
+            Some(ClientCommand::NativeMailMutation(M::MarkRead {
+                mailbox: 7,
+                mail_id: 5
+            }))
         ));
         assert!(mark_read(&mut inbox, 7, 1).is_none());
     }

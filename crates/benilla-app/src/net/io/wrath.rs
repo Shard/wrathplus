@@ -1230,6 +1230,9 @@ enum WrathRoute {
     NativeChannel,
     NativeBattleground,
     NativeContacts,
+    NativeDeath,
+    NativeSessionMeta,
+    NativeInspect,
     NativeWorldportAck,
     NativeTeleportAck,
     AuthorityAcked,
@@ -1272,6 +1275,25 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeInspect(_)
+        | ClientCommand::Inspect { .. }
+        | ClientCommand::LearnTalent { .. }
+        | ClientCommand::TalentWipeConfirm { .. } => WrathRoute::NativeInspect,
+        ClientCommand::NativeSessionMeta(_)
+        | ClientCommand::TutorialFlag { .. }
+        | ClientCommand::TutorialClear
+        | ClientCommand::TutorialReset
+        | ClientCommand::PlayedTime
+        | ClientCommand::NextCinematicCamera
+        | ClientCommand::CompleteCinematic
+        | ClientCommand::AreaTrigger { .. }
+        | ClientCommand::SetActionBarToggles { .. } => WrathRoute::NativeSessionMeta,
+        ClientCommand::NativeDeath(_)
+        | ClientCommand::RepopRequest
+        | ClientCommand::CorpseQuery
+        | ClientCommand::ReclaimCorpse { .. }
+        | ClientCommand::SummonResponse { .. }
+        | ClientCommand::SelfRes => WrathRoute::NativeDeath,
         ClientCommand::FriendListRequest
         | ClientCommand::AddFriend { .. }
         | ClientCommand::DelFriend { .. }
@@ -1680,6 +1702,25 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeInspect => {
+                        use benilla_protocol::wrath_inspect::{encode, Command as I};
+                        let (opcode, body) = encode(&match command {
+                            ClientCommand::NativeInspect(command) => command,
+                            ClientCommand::Inspect { target } => I::Inspect { target },
+                            ClientCommand::LearnTalent { talent_id, rank } => I::LearnTalent { talent_id, rank },
+                            ClientCommand::TalentWipeConfirm { trainer } => I::TalentWipeConfirm { trainer },
+                            _ => unreachable!(),
+                        });
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeSessionMeta => {
+                        let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeDeath => {
+                        let (opcode, body) = benilla_protocol::wrath_death::encode(&death_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeContacts => match contacts_packet(command) {
                         Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
                         Err(error) => {
@@ -1948,6 +1989,40 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
         other => unreachable!("not a chat line: {other:?}"),
     };
     encode(&command)
+}
+
+/// The native session-metadata command for a [`WrathRoute::NativeSessionMeta`] route.
+fn session_meta_command(command: ClientCommand) -> benilla_protocol::wrath_session_meta::Command {
+    use benilla_protocol::wrath_session_meta::Command as M;
+    match command {
+        ClientCommand::NativeSessionMeta(command) => command,
+        ClientCommand::TutorialFlag { id } => M::TutorialFlag { id },
+        ClientCommand::TutorialClear => M::TutorialClear,
+        ClientCommand::TutorialReset => M::TutorialReset,
+        // `/played`: AC echoes the byte, and 1 asks for the chat line.
+        ClientCommand::PlayedTime => M::PlayedTime { trigger: 1 },
+        ClientCommand::NextCinematicCamera => M::NextCinematicCamera,
+        ClientCommand::CompleteCinematic => M::CompleteCinematic,
+        // A teleporting trigger's transfer is the movement authority's.
+        ClientCommand::AreaTrigger { trigger_id } => M::AreaTrigger { trigger_id },
+        ClientCommand::SetActionBarToggles { toggles } => M::ActionBarToggles { toggles },
+        other => unreachable!("not a session-metadata route: {other:?}"),
+    }
+}
+
+/// The native death or summon command for a [`WrathRoute::NativeDeath`] route.
+fn death_command(command: ClientCommand) -> benilla_protocol::wrath_death::Command {
+    use benilla_protocol::wrath_death::Command as D;
+    match command {
+        ClientCommand::NativeDeath(command) => command,
+        ClientCommand::RepopRequest => D::Repop,
+        ClientCommand::CorpseQuery => D::CorpseQuery,
+        ClientCommand::ReclaimCorpse { corpse } => D::ReclaimCorpse { corpse },
+        // The shared command is the accept; a decline sends nothing and lets the summon lapse.
+        ClientCommand::SummonResponse { summoner } => D::SummonResponse { summoner, agree: true },
+        ClientCommand::SelfRes => D::SelfRes,
+        other => unreachable!("not a death route: {other:?}"),
+    }
 }
 
 /// The native contact or duel body for a [`WrathRoute::NativeContacts`] command, through the

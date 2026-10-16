@@ -1,7 +1,8 @@
 //! Build-12340 MESSAGECHAT → stock CHAT_MSG_* events. Never pass native type bytes
 //! to the Vanilla parser, language exemptions, or filter selectors.
-//! Addon byte delivery and achievement `$a` link expansion are separate pending units;
-//! their packets stay lossless in the sole capture FIFO until supported.
+//! Addon lines (`LANG_ADDON`) fire `CHAT_MSG_ADDON` as lossless bytes ([`addon_args`]).
+//! Achievement `$a` link expansion is a separate pending unit; those packets stay lossless in the
+//! sole capture FIFO until supported.
 use super::{
     edit::ChannelState,
     event::{language_name, ChatEvent},
@@ -92,7 +93,40 @@ pub(super) fn take_visible(packets: &mut std::collections::VecDeque<Message>) ->
 }
 
 fn deferred(msg: &Message) -> bool {
-    msg.language == u32::MAX || matches!(msg.chat_type, 0x30 | 0x31)
+    matches!(msg.chat_type, 0x30 | 0x31)
+}
+
+/// `LANG_ADDON`, the only mark of addon traffic on the wire.
+const LANG_ADDON: u32 = u32::MAX;
+
+/// `CHAT_MSG_ADDON`'s distribution token by chat type (`0x509dd0`'s switch): whispers include the
+/// foreign whisper and type `0x2F`; anything unlisted is `UNKNOWN`.
+fn addon_distribution(chat_type: u8) -> &'static str {
+    match chat_type {
+        2 => "PARTY",
+        3 => "RAID",
+        4 => "GUILD",
+        7 | 8 | 0x2f => "WHISPER",
+        0x2c => "BATTLEGROUND",
+        _ => "UNKNOWN",
+    }
+}
+
+/// `CHAT_MSG_ADDON(prefix, body, distribution, sender)` from one addon line (`0x509dd0`): the text
+/// is a C string, so it ends at its first NUL; the first TAB splits prefix from body (later TABs
+/// stay in the body; no TAB is an empty body). Prefix and body are bytes, never decoded.
+fn addon_args(msg: &Message, sender: String) -> Vec<V> {
+    let text = msg.text.split(|&b| b == 0).next().unwrap_or_default();
+    let (prefix, body) = match text.iter().position(|&b| b == b'\t') {
+        Some(tab) => (&text[..tab], &text[tab + 1..]),
+        None => (text, &[][..]),
+    };
+    vec![
+        V::Bytes(prefix.to_vec()),
+        V::Bytes(body.to_vec()),
+        V::Str(addon_distribution(msg.chat_type).into()),
+        V::Str(sender),
+    ]
 }
 
 /// Native tags are independent bits (AC Player::GetChatTag), unlike Vanilla's enum.
@@ -148,6 +182,15 @@ pub(super) fn deliver(
         return false;
     }
     if social.is_some_and(|s| s.is_ignored(msg.sender_guid)) {
+        return true;
+    }
+    // Addon traffic waits on its sender's name (the deferred path `0x502d00`) and never renders;
+    // a zero GUID is an empty sender.
+    if msg.language == LANG_ADDON {
+        let Some(sender) = name(None, msg.sender_guid, names, commands, expired) else {
+            return false;
+        };
+        script.fire_event("CHAT_MSG_ADDON", addon_args(msg, sender));
         return true;
     }
     let Some(kind) = token(msg.chat_type) else {
@@ -253,14 +296,72 @@ mod tests {
         let visible = take_visible(&mut fifo);
         assert_eq!(
             visible.iter().map(|m| m.chat_type).collect::<Vec<_>>(),
-            vec![1, 6]
+            vec![4, 1, 6]
         );
-        assert_eq!(fifo.len(), 3);
-        assert_eq!(fifo[0].text, addon.text);
-        assert_eq!(fifo[1].text, achievement.text);
-        assert_eq!(fifo[1].achievement_id, Some(42));
-        assert_eq!(fifo[2].chat_type, 0x31);
+        assert_eq!(
+            visible[0].text, addon.text,
+            "addon lines are delivered, losslessly"
+        );
+        assert_eq!(fifo.len(), 2);
+        assert_eq!(fifo[0].text, achievement.text);
+        assert_eq!(fifo[0].achievement_id, Some(42));
+        assert_eq!(fifo[1].chat_type, 0x31);
         assert!(take_visible(&mut fifo).is_empty());
+    }
+
+    /// `0x509dd0`: the C string ends at its first NUL, the first TAB splits prefix from body
+    /// (later TABs stay), bytes arrive undecoded, the type picks the token, and an unnamed sender
+    /// waits while a zero GUID is an empty sender.
+    #[test]
+    fn addon_lines_fire_chat_msg_addon_with_lossless_bytes() {
+        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        script
+            .run(
+                "GOT = {} local function hex(s) \
+                   return (s:gsub('.', function(c) return string.format('%02x', c:byte()) end)) end \
+                 local f = CreateFrame('Frame') f:RegisterEvent('CHAT_MSG_ADDON') \
+                 f:SetScript('OnEvent', function(_, _, p, b, d, s) \
+                   table.insert(GOT, hex(p) .. '|' .. hex(b) .. '|' .. d .. '|' .. s) end)",
+            )
+            .unwrap();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let send = |script: &mut UiScript, kind: u8, text: &[u8], guid: u64| {
+            let mut msg = message(kind);
+            msg.language = u32::MAX;
+            msg.text = text.to_vec();
+            msg.sender_name = None;
+            msg.sender_guid = guid;
+            deliver(
+                script,
+                &mut ChatWindows::default(),
+                &mut ChannelState::default(),
+                &NameCache::default(),
+                &NetCommands(tx.clone()),
+                None,
+                &mut NativeChatFeed::default(),
+                &msg,
+                false,
+            )
+        };
+        assert!(send(&mut script, 2, b"Pfx\tbo\tdy\0tail", 0));
+        assert!(send(&mut script, 0x2f, b"\xff\x80", 0));
+        assert!(send(&mut script, 0x2c, b"x\ty", 0));
+        assert!(send(&mut script, 0x11, b"c\td", 0));
+        assert!(
+            !send(&mut script, 7, b"w\tz", 0x55),
+            "an unnamed sender waits"
+        );
+        let got: Vec<String> = script.eval("return GOT").unwrap();
+        assert_eq!(
+            got,
+            [
+                // "Pfx" | "bo\tdy": the second TAB stays, the NUL ends the text.
+                "506678|626f096479|PARTY|",
+                "ff80||WHISPER|",
+                "78|79|BATTLEGROUND|",
+                "63|64|UNKNOWN|",
+            ]
+        );
     }
 
     #[test]

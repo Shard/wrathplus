@@ -1,5 +1,7 @@
-//! Transport-only ordered native auction receipts without a shared event. App owns any future reducer/UI feed.
-//! No pending-sales state or UI feed is inferred.
+//! Transport-only ordered native auction receipts without a shared event: 0490 pending sales.
+//! No pending-sales state or UI feed is inferred, by design: build 12340 has no Lua reader for
+//! auction pending sales (no such API string in the pinned Wow.exe), and AzerothCore always sends
+//! zero rows.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_exchange::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;

@@ -105,8 +105,35 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     assert!(!failures.iter().any(|f| f.contains("instruction budget")));
 }
 
+/// FrameXML-called names build 12340's `Wow.exe` itself lacks, so the native client would raise on
+/// the call too: reported as their own count and excluded from "missing". A name enters only
+/// with its evidence (a string scan of the pinned `Wow.exe` plus the caller that shows the call is
+/// dead natively) in the same commit, and a listed name this VM answers fails the census.
+const NATIVE_ABSENT: &[(&str, &str)] = &[
+    (
+        "AddSendMailMoney",
+        "Wow.exe 12340 has only Get/SetSendMailMoney (string scan, /tmp/azb-ui-mail-helpers.log); \
+         MoneyFrame.lua:83 calls it from the SEND_MAIL MoneyTypeInfo drop callback only",
+    ),
+    (
+        "PickupSendMailMoney",
+        "Wow.exe 12340 has only Get/SetSendMailMoney (string scan, /tmp/azb-ui-mail-helpers.log); \
+         MoneyFrame.lua:79 calls it from the SEND_MAIL MoneyTypeInfo pickup callback only",
+    ),
+    (
+        "AddSendMailCOD",
+        "Wow.exe 12340 has only Get/SetSendMailCOD (string scan, /tmp/azb-ui-mail-helpers.log); \
+         MoneyFrame.lua:100 calls it from the SEND_MAIL_COD MoneyTypeInfo drop callback only",
+    ),
+    (
+        "PickupSendMailCOD",
+        "Wow.exe 12340 has only Get/SetSendMailCOD (string scan, /tmp/azb-ui-mail-helpers.log); \
+         MoneyFrame.lua:96 calls it from the SEND_MAIL_COD MoneyTypeInfo pickup callback only",
+    ),
+];
+
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
-/// VM lacks after the load: the remaining API surface, in one list.
+/// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
 fn missing_surface(script: &UiScript) {
     let core = super::reference_ui::core().expect("FrameXML.toc");
     let mut sources = Vec::new();
@@ -275,14 +302,34 @@ fn missing_surface(script: &UiScript) {
         .load("local out = {} for _, n in ipairs(...) do if _G[n] == nil then out[#out+1] = n end end return out")
         .call(names)
         .unwrap();
+    let native_absent = |name: &str| NATIVE_ABSENT.iter().any(|(n, _)| *n == name);
     let mut lines = Vec::new();
     for (name, n) in &methods {
-        if !has.contains(name) {
+        if !has.contains(name) && !native_absent(name) {
             lines.push(format!("METHOD {name} {n}"));
         }
     }
+    let mut absent_listed = Vec::new();
     for name in absent {
-        lines.push(format!("GLOBAL {name} {}", calls[&name]));
+        if native_absent(&name) {
+            absent_listed.push(name);
+        } else {
+            lines.push(format!("GLOBAL {name} {}", calls[&name]));
+        }
+    }
+    // A listed name the VM now answers, or one the source no longer calls, is a stale row.
+    let stale: Vec<&str> = NATIVE_ABSENT
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !absent_listed.iter().any(|a| a == n))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "NATIVE_ABSENT rows that are answered or no longer called: {stale:?}"
+    );
+    eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
+    for (name, evidence) in NATIVE_ABSENT {
+        eprintln!("NATIVE-ABSENT {name} {}: {evidence}", calls.get(*name).copied().unwrap_or(0));
     }
     eprintln!("missing surface: {} names", lines.len());
     for line in lines {

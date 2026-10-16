@@ -46,6 +46,12 @@ pub struct SpellDisplay {
     /// `SpellFamilyFlags` (columns 161-162, low dword first): the modifier rows that apply, one
     /// summed cell per set bit over all 64; Cleanse 4987 sets bits 12 and 33.
     pub spell_family_flags: u64,
+    /// `SpellFamilyFlags[2]` (3.3.5 column 211): family bits 64-95, the third word of build
+    /// 12340's 96-bit mask; see [`Self::has_family_bit`].
+    pub spell_family_flags_2: u32,
+    /// `EffectSpellClassMask[3]` (3.3.5 columns 122-130): per effect, the 96 family bits (three
+    /// words, low first) its spell-modifier aura applies to.
+    pub effect_spell_class_mask: [[u32; 3]; 3],
     /// `PreventionType` (column 165): 1 silence, 2 pacify, 0 neither; the crowd control that
     /// refuses the spell locally (`0x6094f0`, from `TryCast` `0x6e4b60`). A stun refuses all.
     pub prevention_type: u32,
@@ -226,6 +232,8 @@ impl Default for SpellDisplay {
             attributes_ex4: 0,
             spell_family: 0,
             spell_family_flags: 0,
+            spell_family_flags_2: 0,
+            effect_spell_class_mask: [[0; 3]; 3],
             prevention_type: 0,
             passive: false,
             cast_ui: 0,
@@ -300,6 +308,16 @@ impl Default for SpellDisplay {
 }
 
 impl SpellDisplay {
+    /// Whether family bit `bit` (0-95) is set: bits 0-63 in [`Self::spell_family_flags`], 64-95
+    /// in [`Self::spell_family_flags_2`].
+    pub fn has_family_bit(&self, bit: u32) -> bool {
+        match bit {
+            0..64 => self.spell_family_flags >> bit & 1 == 1,
+            64..96 => self.spell_family_flags_2 >> (bit - 64) & 1 == 1,
+            _ => false,
+        }
+    }
+
     /// The level the effect values, cast time, cost and duration scale by for a caster whose
     /// skill in this spell's line is `skill_value` (`0x6e3130`): the skill capped at
     /// `maxLevel × 5` unless `maxLevel` is 0 (`0x5ea6dc`-`0x5ea6ea`), over 5 (`0x6e3195`).

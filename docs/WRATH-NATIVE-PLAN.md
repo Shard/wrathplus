@@ -253,7 +253,7 @@ Done criteria per worker (the existing WS "Done when" lines still apply):
 | Wire (WS4) | Player-relevant missing S→C/C→S rows, family by family: spell/aura logs, item & inventory results, quest, movement/teleport, group/raid, loot/trade/mail/auction remainders, channels, BG/arena, achievements, calendar last. GM/debug/dev/voice rows are out of scope. | Every in-scope row is handled or labelled capture-only with a reason. |
 | Descriptor (WS1) | Shares WS4 families with Wire (coordinate by family), then any WS1 leftovers. | As above, for its families. |
 | App Migration (WS2) | Raw 1.12 constants → semantic fields; consumers for capture-only rows; raw-bitfield audit rows. | WS2 rg check clean; audit doc has no pending rows; capture-only rows have consumers where the UI needs them. |
-| Native UI (WS3/5) | The census's missing APIs (494 at 4f9ff373), by FrameXML file, plus WS5 widget rules and the LFG L1 work. | Census reports 0 missing FrameXML-called APIs/methods. |
+| Native UI (WS3/5) | The census's missing APIs (494 at 4f9ff373), by FrameXML file, plus WS5 widget rules and the LFG L1 work. | Census reports 0 missing; native-absent list evidenced (names `Wow.exe` 12340 itself lacks, each with its string-scan and dead-caller evidence, `NATIVE_ABSENT` in `wrath_framexml_tests.rs`). |
 | Assets (WS6) | M2 v264 features (ribbons, lights, two-stage batches), remaining DBC layouts. | No asset load failure on a headless Northshire→Goldshire→Stormwind→Northrend route; installed-data tests green. |
 | Experience (WS7) | Northrend water render, Classic/Plus profile switch, override packs, Plus lighting. | WS7 "Done when". |
 

@@ -214,6 +214,18 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_inspect::OPCODES.contains(&opcode) => Ok(match crate::wrath_inspect::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            opcode if crate::wrath_session_meta::OPCODES.contains(&opcode) => Ok(match crate::wrath_session_meta::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            opcode if crate::wrath_death::OPCODES.contains(&opcode) => Ok(match crate::wrath_death::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_contacts::OPCODES.contains(&opcode) => Ok(match crate::wrath_contacts::decode(opcode, body) {
                 Ok(events) => handled(events, Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -300,16 +312,9 @@ impl WrathEventAdapter {
             }),
             0x0096 | 0x03b3 => {
                 Ok(match crate::wrath_chat::decode(opcode, body) {
-                    // The shared line for the chat feed (none for addon traffic), then the raw capture.
-                    Ok(message) => handled(
-                        crate::wrath_chat::shared_message(&message)
-                            .map(SessionEvent::Chat)
-                            .into_iter()
-                            .chain([SessionEvent::WrathChat { message }])
-                            .collect(),
-                        Vec::new(),
-                        Vec::new(),
-                    ),
+                    // Raw capture only: App's native feed (`ui_chat::native_message`) delivers it, and a
+                    // shared `Chat` would print every line twice.
+                    Ok(message) => handled(vec![SessionEvent::WrathChat { message }], Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }

@@ -453,6 +453,8 @@ pub(crate) struct Model {
     pub(crate) spell_catalog: std::collections::HashMap<u32, super::spell_info::SpellInfoView>,
     pub(crate) spellbook: spellbook::SpellBookState,
     pub(crate) wrath_lfg: super::wrath_lfg::State,
+    /// The cast and channel snapshots `UnitCastingInfo`/`UnitChannelInfo` read.
+    pub(crate) wrath_unit_casts: super::wrath_unit_casts::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -737,7 +739,10 @@ pub(crate) struct Model {
     pub(crate) wrath_mail: Option<mail::wrath::Inbox>,
     pub(crate) mail_check_inbox: bool,
     pub(crate) mail_opens: Vec<u32>,
-    pub(crate) mail_take_items: Vec<u32>,
+    /// `TakeInboxItem(messageIndex, attachIndex)` picks, both 1-based; `None` takes the first.
+    pub(crate) mail_take_items: Vec<(u32, Option<u32>)>,
+    /// Build 12340's mail-family state (`super::mail::wrath`).
+    pub(crate) wrath_mail_family: super::mail::wrath::Family,
     pub(crate) mail_take_money: Vec<u32>,
     pub(crate) mail_deletes: Vec<u32>,
     pub(crate) mail_returns: Vec<u32>,
@@ -1241,6 +1246,7 @@ impl Model {
             spell_catalog: Default::default(),
             spellbook: spellbook::SpellBookState::default(),
             wrath_lfg: Default::default(),
+            wrath_unit_casts: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),
@@ -1382,6 +1388,7 @@ impl Model {
             mail_check_inbox: false,
             mail_opens: Vec::new(),
             mail_take_items: Vec::new(),
+            wrath_mail_family: Default::default(),
             mail_take_money: Vec::new(),
             mail_deletes: Vec::new(),
             mail_returns: Vec::new(),

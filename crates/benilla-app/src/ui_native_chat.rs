@@ -1,8 +1,7 @@
 //! Sole lossless native chat capture owner: every `SMSG_MESSAGECHAT`/`SMSG_GM_MESSAGECHAT`, addon
-//! traffic included, with raw bytes, sender GUID and chat type. The wire also emits the shared
-//! `SessionEvent::Chat` the chat feed prints (`wrath_chat::shared_message`), never for
-//! `LANG_ADDON`; addon delivery is App Migration's consumer of this FIFO. This FIFO does not infer
-//! permissions, emit UI events, or initiate queries.
+//! traffic included, with raw bytes, sender GUID and chat type. It is the only input of the native
+//! chat feed (`ui_chat::native_message`); the wire emits no shared `SessionEvent::Chat` beside it.
+//! This FIFO does not infer permissions, emit UI events, or initiate queries.
 use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_chat::Message, SessionEvent, SessionEventKind};
 use bevy::prelude::*;

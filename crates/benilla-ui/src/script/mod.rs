@@ -40,6 +40,8 @@ mod wrath_channel_roster;
 mod wrath_channel_display;
 mod wrath_channel_bindings;
 mod wrath_chat_window;
+mod wrath_unit_casts;
+pub use wrath_unit_casts::WrathUnitCast;
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -262,6 +264,7 @@ pub use loot_roll::wrath::{native_reasons as wrath_loot_roll_reasons, Entry as W
 pub use macros::{MacroBinding, MacroState, MacroView, MAX_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME};
 pub use mail::wrath::{
     Attachment as WrathMailAttachment, Inbox as WrathMailInbox, Row as WrathMailRow,
+    WrathMailRequest,
 };
 pub use mail::{
     MailInboxRow, MailInvoice, MailSendRequest, MailState, PackageView, StationeryView,
@@ -785,6 +788,7 @@ impl UiScript {
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
+            wrath_unit_casts::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 
