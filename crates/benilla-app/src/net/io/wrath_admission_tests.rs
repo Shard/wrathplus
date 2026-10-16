@@ -7,6 +7,13 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        (
+            "NativeInspect",
+            ClientCommand::NativeInspect(benilla_protocol::wrath_inspect::Command::LearnPreviewTalents { talents: vec![(1, 0)] }),
+        ),
+        ("Inspect", ClientCommand::Inspect { target: 1 }),
+        ("LearnTalent", ClientCommand::LearnTalent { talent_id: 1, rank: 0 }),
+        ("TalentWipeConfirm", ClientCommand::TalentWipeConfirm { trainer: 1 }),
         ("NativeSessionMeta", ClientCommand::NativeSessionMeta(benilla_protocol::wrath_session_meta::Command::ReadyForAccountDataTimes)),
         ("TutorialFlag", ClientCommand::TutorialFlag { id: 1 }),
         ("TutorialClear", ClientCommand::TutorialClear),
