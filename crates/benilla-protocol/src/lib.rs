@@ -41,6 +41,7 @@ pub mod wrath_contacts;
 pub mod wrath_death;
 pub mod wrath_session_meta;
 pub mod wrath_inspect;
+pub mod wrath_char_services;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;
@@ -322,6 +323,7 @@ mod wrath_native_stream_tests;
 
 pub mod wrath_pet;
 pub mod wrath_spell_control;
+pub mod wrath_speed;
 
 pub mod wrath_chat;
 

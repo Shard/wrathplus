@@ -609,6 +609,11 @@ fn run(
                     Ok(CharRequest::Delete(target)) => {
                         Parked::Acted(CharAction::Delete, session.delete_character(target)?)
                     }
+                    // Build-12340 services have no 1.12 opcode.
+                    Ok(CharRequest::Service(command)) => {
+                        bevy::log::warn!("char select: {command:?} is a Wrath-only service; ignored");
+                        Parked::StayPut
+                    }
                 },
             };
             let (action, code) = match answer {
@@ -972,7 +977,7 @@ fn writer_loop(
                         language,
                     } => w.send_message_chat(kind.chat_type(), language, target.as_deref(), &text),
                     // The distribution is an enum, so its map to a chat type is total.
-                    ClientCommand::AddonMessage { distribution, text } => {
+                    ClientCommand::AddonMessage { distribution, text, .. } => {
                         w.send_addon_message(super::addon_wire_chat_type(distribution), &text)
                     }
                     ClientCommand::JoinChannel { name, password, .. } => {

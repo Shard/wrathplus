@@ -13,7 +13,6 @@ use super::Player;
 /// Physical movement outside the Wrath writer's deliberately bounded on-foot subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WrathGroundLimit {
-    Swimming,
     Transport,
     Flight,
 }
@@ -21,7 +20,6 @@ pub(super) enum WrathGroundLimit {
 impl WrathGroundLimit {
     pub(super) const fn bit(self) -> u8 {
         match self {
-            Self::Swimming => 1 << 0,
             Self::Transport => 1 << 1,
             Self::Flight => 1 << 2,
         }
@@ -29,19 +27,18 @@ impl WrathGroundLimit {
 
     pub(super) const fn description(self) -> &'static str {
         match self {
-            Self::Swimming => "swimming",
             Self::Transport => "transport movement",
             Self::Flight => "flight and hover movement",
         }
     }
 }
 
-/// The unsupported mode already present before input is integrated. Deep liquid is included so the
-/// first swim frame is held at its last authoritative pose rather than simulated and then dropped.
+/// The unsupported mode already present before input is integrated. Swimming is supported: the
+/// Wrath writer reports SWIMMING with its pitch (`wrath_ground::encode_movement`).
 pub(super) fn wrath_ground_limit(
     dialect: SessionDialect,
     player: &Player,
-    liquid_surface: Option<f32>,
+    _liquid_surface: Option<f32>,
 ) -> Option<WrathGroundLimit> {
     if dialect != SessionDialect::Wrath12340 {
         return None;
@@ -55,12 +52,6 @@ pub(super) fn wrath_ground_limit(
     if player.modes.levitating || player.modes.hover || player.move_flags & WRATH_FLIGHT_FLAGS != 0
     {
         return Some(WrathGroundLimit::Flight);
-    }
-    let deep_liquid = liquid_surface.is_some_and(|surface| {
-        surface - player.pos.y > super::swim_enter_depth(player.collision_height.0)
-    });
-    if player.swimming || player.move_flags & move_flags::SWIMMING != 0 || deep_liquid {
-        return Some(WrathGroundLimit::Swimming);
     }
     None
 }
@@ -639,11 +630,29 @@ mod tests {
             None
         );
 
+        // Deep water and swimming are reported natively now, not held.
         let surface =
             player.pos.y + super::super::swim_enter_depth(player.collision_height.0) + 0.1;
         assert_eq!(
             wrath_ground_limit(SessionDialect::Wrath12340, &player, Some(surface)),
-            Some(WrathGroundLimit::Swimming)
+            None
+        );
+        let swimmer = Player {
+            swimming: true,
+            ..Player::default()
+        };
+        assert_eq!(
+            wrath_ground_limit(SessionDialect::Wrath12340, &swimmer, Some(surface)),
+            None
+        );
+        let levitating = {
+            let mut p = Player::default();
+            p.modes.levitating = true;
+            p
+        };
+        assert_eq!(
+            wrath_ground_limit(SessionDialect::Wrath12340, &levitating, None),
+            Some(WrathGroundLimit::Flight)
         );
     }
 

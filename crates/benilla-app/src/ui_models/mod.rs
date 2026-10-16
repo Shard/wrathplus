@@ -323,6 +323,61 @@ impl UvPart {
     }
 }
 
+/// The second-stage [`UvPart`] for a two-stage batch whose stage-two transform animates, its rows
+/// written into the tile's own material clone; `None` when it is static.
+fn stage2_uv_part(
+    sub: &benilla_assets::ModelSubmesh,
+    handle: &Handle<WowModelMaterial>,
+    render: &mut TileRender,
+) -> Option<UvPart> {
+    let loops =
+        benilla_world::model_render::second_stage_loops(sub, render.mats.materials(), handle.id());
+    if !loops.animates() {
+        return None;
+    }
+    let mat = render.mats.materials().get_mut(handle.id())?;
+    let seed = [mat.extension.stage2_seed.x, mat.extension.stage2_seed.y];
+    let mut anim = mat.extension.stage2_anim;
+    let (trans, affine) = stage2_rows(&loops, seed, &mut anim, &mut render.table);
+    render
+        .mats
+        .materials()
+        .get_mut(handle.id())?
+        .extension
+        .stage2_anim = anim;
+    Some(UvPart {
+        material: handle.clone(),
+        trans,
+        affine,
+        uv_anim: loops.single,
+        uv_seq: loops.seqs,
+        uv_rot: loops.rot,
+        uv_scale: loops.scale,
+    })
+}
+
+/// Allocate stage two's translation and affine rows, pointing `stage2_anim.x`/`.z` at them; a full
+/// table leaves that channel at its seed or identity, as the world lane does.
+fn stage2_rows(
+    loops: &benilla_world::doodad_anim::UvLoops,
+    seed: [f32; 2],
+    anim: &mut Vec4,
+    table: &mut MatAnimTable,
+) -> (Option<(u16, [f32; 2])>, Option<u16>) {
+    let trans = (loops.single.is_some() || loops.seqs.is_some())
+        .then(|| table.alloc())
+        .flatten()
+        .map(|slot| {
+            anim.x = f32::from(slot);
+            (slot, seed)
+        });
+    let affine = (loops.rot.is_some() || loops.scale.is_some())
+        .then(|| table.alloc())
+        .flatten()
+        .inspect(|&slot| anim.z = f32::from(slot));
+    (trans, affine)
+}
+
 /// A live tile: its entity tree and what it was built from. A new file, icon, light slot or
 /// camera slot rebuilds it, since a twin binds one light buffer and every entity carries the layer.
 struct Tile {
@@ -1568,6 +1623,11 @@ fn build_tile(
                     uv_scale: sub.uv_scale_seq.clone(),
                 });
             }
+            // A two-stage batch's second transform runs off the same play head on its own rows
+            // (`stage2_anim.x`/`.z`, seeded at `stage2_seed`), as the world lane registers it.
+            if let Some(part) = stage2_uv_part(sub, &handle, render) {
+                uv_parts.push(part);
+            }
             part_mats.push(handle);
         }
     }
@@ -1695,6 +1755,50 @@ fn build_tile(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tile's stage-two transform gets its own rows off the pane's play head, distinct from
+    /// stage one's, and the delta it writes measures from the stage-two seed.
+    #[test]
+    fn stage_two_rows_are_allocated_apart_and_written_off_the_play_head() {
+        let mut table = MatAnimTable::default();
+        let stage_one = table.alloc().unwrap();
+        let loops = benilla_world::doodad_anim::UvLoops {
+            single: Some(Arc::new(benilla_formats::UvAnim {
+                period: 1.0,
+                step: false,
+                wrap: false,
+                gseq: false,
+                keys: vec![(0.0, [0.0, 0.0]), (1.0, [0.5, 0.0])],
+            })),
+            ..Default::default()
+        };
+        let mut anim = Vec4::ZERO;
+        let (trans, affine) = stage2_rows(&loops, [0.0, 0.0], &mut anim, &mut table);
+        let (slot, seed) = trans.expect("a translation row");
+        assert_ne!(slot, stage_one);
+        assert_eq!(anim.x, f32::from(slot));
+        assert_eq!(
+            (affine, anim.z),
+            (None, 0.0),
+            "no rotation or scale: no affine row"
+        );
+        let part = UvPart {
+            material: Handle::default(),
+            trans: Some((slot, seed)),
+            affine,
+            uv_anim: loops.single.clone(),
+            uv_seq: None,
+            uv_rot: None,
+            uv_scale: None,
+        };
+        part.write_rows(&mut table, None, 0.5, 0.0);
+        let row = table.row(slot);
+        assert!(
+            row[0] > 0.0 && row[0] < 0.5,
+            "half way along the scroll: {row:?}"
+        );
+        assert_eq!(table.row(stage_one), [0.0; 4], "stage one's row untouched");
+    }
 
     #[test]
     fn the_packer_keeps_cells_apart_and_in_order() {

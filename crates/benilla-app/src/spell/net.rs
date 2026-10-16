@@ -352,6 +352,7 @@ fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Sce
         caster,
         spell_id,
         cast_count,
+        reason,
     } = ev
     {
         if let Some(cast_count) = cast_count {
@@ -359,7 +360,7 @@ fn on_spell_failed_other(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Sce
                 caster,
                 spell_id,
                 cast_count,
-                reason: None,
+                reason,
                 failure: false,
             });
         }

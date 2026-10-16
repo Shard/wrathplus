@@ -44,6 +44,7 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_inspect_capture;
+mod wrath_char_service_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -154,6 +155,7 @@ impl Plugin for NetPlugin {
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
         wrath_inspect_capture::register(app);
+        wrath_char_service_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -640,6 +642,9 @@ pub(crate) enum CharRequest {
     Create(benilla_protocol::CharCreateReq),
     /// Delete a character by guid (`CMSG_CHAR_DELETE`), then stay parked at select.
     Delete(u64),
+    /// A build-12340 character-screen service (rename, customize, faction/race change, declined
+    /// names, realm split), then stay parked at select. 1.12 has none and ignores it.
+    Service(benilla_protocol::wrath_char_services::Command),
     /// Select's Back: drop the session and return to the pre-logon park.
     Abandon,
 }
@@ -1151,10 +1156,12 @@ pub(crate) enum ClientCommand {
         language: Option<u32>,
     },
     /// `SendAddonMessage`: a `CMSG_MESSAGECHAT` in `LANG_ADDON` (1.12 has no addon opcode and no
-    /// whispered addon message). `text` is `prefix` TAB `message`.
+    /// whispered addon message). `text` is `prefix` TAB `message`; `target` is the 12340 WHISPER
+    /// lane's recipient, `None` on every other lane.
     AddonMessage {
         distribution: benilla_ui::script::AddonDistribution,
         text: String,
+        target: Option<String>,
     },
     /// `CMSG_NAME_QUERY`, sent only by [`crate::names::NameCache`]'s ask-once resolve.
     NameQuery {

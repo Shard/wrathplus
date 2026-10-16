@@ -2,7 +2,8 @@
 //!
 //! AzerothCore's `WorldSession::WriteMovementInfo` writes a packed mover GUID followed by Wrath
 //! `MovementInfo`. This helper deliberately admits only the ordinary on-foot opcodes and fields
-//! whose shared meanings are established; transports, pitch, spline movement, and extra flags
+//! whose shared meanings are established, swimming with its pitch included; transports, flight,
+//! spline movement, and extra flags
 //! remain fenced.
 
 use crate::events::SessionEvent;
@@ -15,6 +16,12 @@ const MSG_MOVE_SET_RUN_MODE: u16 = 0x00c2;
 const MSG_MOVE_SET_WALK_MODE: u16 = 0x00c3;
 /// An observed near-teleport (AzerothCore `Unit::SendTeleportPacket`, sent to the set without us).
 const MSG_MOVE_TELEPORT: u16 = 0x00c5;
+/// Pitch keys (start up, start down, stop), the swim edges and a pitch set: swimming relays.
+const MSG_MOVE_START_PITCH_UP: u16 = 0x00bf;
+const MSG_MOVE_STOP_PITCH: u16 = 0x00c1;
+const MSG_MOVE_START_SWIM: u16 = 0x00ca;
+const MSG_MOVE_STOP_SWIM: u16 = 0x00cb;
+const MSG_MOVE_SET_PITCH: u16 = 0x00db;
 const MSG_MOVE_FALL_LAND: u16 = 0x00c9;
 const MSG_MOVE_SET_FACING: u16 = 0x00da;
 const MSG_MOVE_ROOT: u16 = 0x00ec;
@@ -27,9 +34,9 @@ const WRATH_FALLING_FAR: u32 = 0x0000_2000;
 const SHARED_ROOT: u32 = 0x0000_1000;
 const SHARED_FALLING: u32 = 0x0000_2000;
 const SHARED_FALLING_FAR: u32 = 0x0000_4000;
-/// Water walking and slow fall (`0x1000_0000`, `0x2000_0000`) are on-foot modes with the same bits in
-/// the shared word.
-const WRATH_ON_FOOT_FLAGS: u32 = 0x3000_013f | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
+/// Water walking and slow fall (`0x1000_0000`, `0x2000_0000`), swimming (`0x0020_0000`, which carries
+/// the pitch) and the pitch keys (`0x40`, `0x80`) have the same bits in the shared word.
+const WRATH_ON_FOOT_FLAGS: u32 = 0x3020_01ff | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
 
 /// Whether `opcode` has a source-verified AzerothCore on-foot relay layout.
 ///
@@ -44,6 +51,10 @@ pub const fn handles(opcode: u16) -> bool {
                 | MSG_MOVE_SET_RUN_MODE
                 | MSG_MOVE_SET_WALK_MODE
                 | MSG_MOVE_TELEPORT
+                | MSG_MOVE_START_PITCH_UP..=MSG_MOVE_STOP_PITCH
+                | MSG_MOVE_START_SWIM
+                | MSG_MOVE_STOP_SWIM
+                | MSG_MOVE_SET_PITCH
                 | MSG_MOVE_FALL_LAND
                 | MSG_MOVE_SET_FACING
                 | MSG_MOVE_ROOT
@@ -74,9 +85,6 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         return Err(CodecError::InvalidFlags(
             "Wrath on-foot relay has transport data",
         ));
-    }
-    if movement.pitch.is_some() {
-        return Err(CodecError::InvalidFlags("Wrath on-foot relay has pitch"));
     }
     if movement.spline_elevation.is_some() {
         return Err(CodecError::InvalidFlags(
@@ -147,7 +155,8 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         ],
         orientation: movement.position.orientation,
         flags,
-        pitch: 0.0,
+        // Present exactly while swimming (the codec checks the flag/data pairing).
+        pitch: movement.pitch.unwrap_or(0.0),
         time: movement.timestamp,
         verb: RelayVerb::of(opcode),
         fall_time: movement.fall_time,
@@ -200,13 +209,14 @@ mod tests {
     }
 
     #[test]
-    fn whitelist_is_exact_and_does_not_admit_pitch_swim_or_flight_families() {
+    fn whitelist_is_exact_and_admits_swimming_but_not_flight_families() {
         for opcode in 0x00b5..=0x00be {
             assert!(handles(opcode), "{opcode:#05x}");
         }
-        for opcode in [
-            0x00b4, 0x00bf, 0x00c0, 0x00c1, 0x00c4, 0x00ca, 0x00cb, 0x00db, 0x00ef, 0x035a,
-        ] {
+        for opcode in [0x00bf, 0x00c0, 0x00c1, 0x00ca, 0x00cb, 0x00db] {
+            assert!(handles(opcode), "{opcode:#05x}");
+        }
+        for opcode in [0x00b4, 0x00c4, 0x00ef, 0x0359, 0x035a, 0x03a7] {
             assert!(!handles(opcode), "{opcode:#05x}");
         }
         for opcode in [0x00c2, 0x00c3, 0x00c9, 0x00da, 0x00ec, 0x00ed, 0x00ee] {
@@ -360,21 +370,44 @@ mod tests {
         let mut flags2 = movement(0);
         flags2.movement.flags2 = MOVEMENT_FLAG2_ALWAYS_ALLOW_PITCHING;
         flags2.movement.pitch = Some(0.25);
-        let mut pitch = movement(MOVEMENT_FLAG_SWIMMING);
-        pitch.movement.pitch = Some(0.25);
         let mut flying = movement(MOVEMENT_FLAG_FLYING);
         flying.movement.pitch = Some(0.25);
         let mut spline = movement(MOVEMENT_FLAG_SPLINE_ELEVATION);
         spline.movement.spline_elevation = Some(1.0);
         let falling_far_alone = movement(WRATH_FALLING_FAR);
 
-        for packet in [transport, flags2, pitch, flying, spline, falling_far_alone] {
+        for packet in [transport, flags2, flying, spline, falling_far_alone] {
             let body = packet.to_bytes().unwrap();
             assert!(matches!(
                 decode(MSG_MOVE_HEARTBEAT, &body),
                 Err(CodecError::InvalidFlags(_))
             ));
         }
+    }
+
+    #[test]
+    fn a_swimmer_relays_its_pitch_and_the_swim_and_pitch_opcodes_decode() {
+        let mut swim = movement(MOVEMENT_FLAG_SWIMMING | wrath_ground::MOVE_FORWARD);
+        swim.movement.pitch = Some(-0.25);
+        let body = swim.to_bytes().unwrap();
+        for opcode in [
+            MSG_MOVE_HEARTBEAT,
+            MSG_MOVE_START_SWIM,
+            MSG_MOVE_SET_PITCH,
+            0x00c0,
+        ] {
+            let SessionEvent::UnitMove { flags, pitch, .. } = event(opcode, &body) else {
+                panic!()
+            };
+            assert_eq!(
+                (flags, pitch),
+                (MOVEMENT_FLAG_SWIMMING | wrath_ground::MOVE_FORWARD, -0.25),
+                "{opcode:#05x}"
+            );
+        }
+        // SWIMMING without its pitch is malformed.
+        let bare = movement(MOVEMENT_FLAG_SWIMMING).to_bytes();
+        assert!(bare.is_err() || decode(MSG_MOVE_HEARTBEAT, &bare.unwrap()).is_err());
     }
 
     #[test]
