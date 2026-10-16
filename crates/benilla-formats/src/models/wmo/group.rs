@@ -29,8 +29,8 @@ fn wmo_water_alpha_v(opacity_byte: u8) -> f32 {
     f32::from(opacity_byte) / 255.0
 }
 
-/// MOGP `groupLiquid` for a group with no liquid of its own; any other value is the whole-group
-/// submersion override.
+/// Legacy (5875) MOGP `groupLiquid` no-liquid sentinel, used only by the legacy APIs.
+/// Native Wrath must use [`wmo_group_wrath_liquid`] and MOHD.flags instead.
 pub const NO_GROUP_LIQUID: u32 = 0xf;
 
 /// A group's MOGP header fields. `flags` sits at `0x08` and the portal-ref slice at `0x24`/`0x26`,
@@ -48,10 +48,10 @@ pub struct WmoGroupHeader {
     /// reference's interior-fog selector `0x69de20`; the offset is fixed empirically
     /// (`tests/wmo_fogs.rs`). Zero if the header is short.
     pub fog_indices: [u8; 4],
-    /// MOGP `groupLiquid` at `0x34`: [`NO_GROUP_LIQUID`] on all but 13 of the 5220 shipped group
-    /// files. Any other value makes the reference's `0x6b9f10` report the whole group submerged in
-    /// that liquid type, height `FLT_MAX`, with no Z or MLIQ test; none of the 13 has an MLIQ. A
-    /// short header reads as no liquid.
+    /// Raw MOGP `groupLiquid` at `0x34`, not a resolved Wrath liquid ID. The legacy
+    /// 5875 whole-group override uses [`NO_GROUP_LIQUID`]; native Wrath interpretation
+    /// requires root flags and [`resolve_wrath_wmo_liquid_id`]. A short legacy header
+    /// reads as [`NO_GROUP_LIQUID`]; the Wrath decoder rejects missing context instead.
     pub group_liquid: u32,
 }
 
@@ -77,6 +77,163 @@ pub fn wmo_group_header(group_bytes: &[u8]) -> Option<WmoGroupHeader> {
         },
         group_liquid: u32_at(0x34).unwrap_or(NO_GROUP_LIQUID),
     })
+}
+
+/// Native Wrath resolver (0x007D7310), including the loader's MOHD bit-4 pretransform.
+/// Even direct mode maps inputs 1..=20; 0 and IDs >=21 pass through unchanged.
+pub fn resolve_wrath_wmo_liquid_id(root_flags: u32, group_flags: u32, raw: u32) -> u32 {
+    let n = if root_flags & 4 != 0 {
+        raw
+    } else if raw == 15 {
+        0
+    } else {
+        raw.wrapping_add(1)
+    };
+    resolve_wrath_liquid_class(group_flags, n)
+}
+
+fn resolve_wrath_liquid_class(group_flags: u32, n: u32) -> u32 {
+    if n == 0 || n >= 21 {
+        return n;
+    }
+    match (n - 1) & 3 {
+        0 if group_flags & 0x80000 != 0 => 14,
+        0 => 13,
+        1 => 14,
+        2 => 19,
+        _ => 20,
+    }
+}
+
+/// Native grid presence, independent of whether the legacy mesh builder emits triangles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrathWmoLiquidGrid {
+    /// No flagged MLIQ path: native dimensions remain zero (even if stray MLIQ bytes exist).
+    Absent,
+    /// A valid flagged MLIQ with at least one zero tile dimension.
+    ZeroSized,
+    /// A valid nonzero grid. All holes still means bounded queries, never a whole-group flood.
+    Tiles { all_holes: bool },
+}
+
+/// Native query mode (0x007C8360), not a rendering decision or liquid-category mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrathWmoLiquidMode {
+    Dry,
+    /// Native query succeeds with height f32::MAX, without sampling tiles.
+    WholeGroupFlood,
+    /// Query must sample bounded tiles/heights and reject low-nibble-15 holes.
+    Grid,
+}
+
+/// Decoded Wrath loader/query state; malformed data returns an error rather than a false flood.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WrathWmoLiquidState {
+    pub resolved_id: u32,
+    /// Native xTiles/yTiles, not vertex dimensions or the presence of a LiquidMesh.
+    pub tile_dimensions: [u32; 2],
+    pub grid: WrathWmoLiquidGrid,
+}
+
+impl WrathWmoLiquidState {
+    pub fn mode(&self) -> WrathWmoLiquidMode {
+        if self.resolved_id == 0 {
+            WrathWmoLiquidMode::Dry
+        } else if self.tile_dimensions.contains(&0) {
+            WrathWmoLiquidMode::WholeGroupFlood
+        } else {
+            WrathWmoLiquidMode::Grid
+        }
+    }
+
+    pub fn is_whole_group_flood(&self) -> bool {
+        self.mode() == WrathWmoLiquidMode::WholeGroupFlood
+    }
+}
+
+/// Decode the native Wrath liquid loader using retained MOHD context. Legacy mesh APIs are
+/// deliberately unchanged. Flagged missing/truncated/overflowing MLIQ is an error, including
+/// when the header ID is nonzero; unflagged MLIQ is ignored as in 0x007D7C30.
+pub fn wmo_group_wrath_liquid(group_bytes: &[u8], root: &WmoRoot) -> Result<WrathWmoLiquidState> {
+    decode_wrath_wmo_liquid(group_bytes, root.flags()?)
+}
+
+fn decode_wrath_wmo_liquid(group_bytes: &[u8], root_flags: u32) -> Result<WrathWmoLiquidState> {
+    let mogp = find_wmo_chunk(group_bytes, b"PGOM")
+        .ok_or_else(|| anyhow::anyhow!("Wrath WMO liquid decoder: missing MOGP"))?;
+    anyhow::ensure!(
+        mogp.len() >= 0x44,
+        "Wrath WMO liquid decoder: truncated MOGP header"
+    );
+    let u = |b: &[u8], i| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+    let flags = u(mogp, 8);
+    let mut state = WrathWmoLiquidState {
+        resolved_id: resolve_wrath_wmo_liquid_id(root_flags, flags, u(mogp, 0x34)),
+        tile_dimensions: [0, 0],
+        grid: WrathWmoLiquidGrid::Absent,
+    };
+    if flags & 0x1000 == 0 {
+        return Ok(state);
+    }
+    // Unlike the legacy clamping finder, reject a declared payload extending beyond EOF.
+    let mut off = 0x44usize;
+    let mliq = loop {
+        anyhow::ensure!(
+            mogp.len().saturating_sub(off) >= 8,
+            "Wrath WMO liquid decoder: flagged MLIQ missing or truncated chunk header"
+        );
+        let size = u(mogp, off + 4) as usize;
+        let start = off + 8;
+        let end = start
+            .checked_add(size)
+            .ok_or_else(|| anyhow::anyhow!("Wrath WMO liquid decoder: MLIQ chunk size overflow"))?;
+        anyhow::ensure!(
+            end <= mogp.len(),
+            "Wrath WMO liquid decoder: truncated flagged MLIQ/subchunk payload"
+        );
+        if &mogp[off..off + 4] == b"QILM" {
+            break &mogp[start..end];
+        }
+        off = end;
+    };
+    anyhow::ensure!(
+        mliq.len() >= 30,
+        "Wrath WMO liquid decoder: truncated MLIQ header"
+    );
+    let [xv, yv, xt, yt] = [u(mliq, 0), u(mliq, 4), u(mliq, 8), u(mliq, 12)];
+    let tile_start = (xv as usize)
+        .checked_mul(yv as usize)
+        .and_then(|n| n.checked_mul(8))
+        .and_then(|n| n.checked_add(30))
+        .ok_or_else(|| anyhow::anyhow!("Wrath WMO liquid decoder: MLIQ vertex size overflow"))?;
+    let count = (xt as usize)
+        .checked_mul(yt as usize)
+        .ok_or_else(|| anyhow::anyhow!("Wrath WMO liquid decoder: MLIQ tile count overflow"))?;
+    let end = tile_start
+        .checked_add(count)
+        .ok_or_else(|| anyhow::anyhow!("Wrath WMO liquid decoder: MLIQ tile size overflow"))?;
+    anyhow::ensure!(
+        end <= mliq.len(),
+        "Wrath WMO liquid decoder: truncated MLIQ vertices/tiles"
+    );
+    // Bounded by xTiles*yTiles, never trailing bytes in the chunk.
+    let first_wet = mliq[tile_start..end]
+        .iter()
+        .map(|b| b & 15)
+        .find(|&n| n != 15);
+    if state.resolved_id == 0 {
+        state.resolved_id =
+            resolve_wrath_liquid_class(flags, first_wet.map_or(0, |n| u32::from(n) + 1));
+    }
+    state.tile_dimensions = [xt, yt];
+    state.grid = if xt == 0 || yt == 0 {
+        WrathWmoLiquidGrid::ZeroSized
+    } else {
+        WrathWmoLiquidGrid::Tiles {
+            all_holes: first_wet.is_none(),
+        }
+    };
+    Ok(state)
 }
 
 /// An interior group's render triangles, per-vertex MOCV and per-triangle MOPY: the faces a game
@@ -601,6 +758,164 @@ pub fn wmo_group_submeshes(group_bytes: &[u8], root: &WmoRoot) -> Result<Vec<Ren
 mod tests {
     use super::super::test_bytes::chunk;
     use super::*;
+
+    fn wrath_group(raw: u32, flags: u32, mliq: Option<&[u8]>) -> Vec<u8> {
+        let mut mogp = vec![0; 0x44];
+        mogp[8..12].copy_from_slice(&flags.to_le_bytes());
+        mogp[0x34..0x38].copy_from_slice(&raw.to_le_bytes());
+        if let Some(liquid) = mliq {
+            mogp.extend(chunk(b"QILM", liquid));
+        }
+        chunk(b"PGOM", &mogp)
+    }
+
+    fn wrath_mliq(vertices: [u32; 2], tiles: [u32; 2], flags: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for n in vertices.into_iter().chain(tiles) {
+            bytes.extend(n.to_le_bytes());
+        }
+        bytes.resize(30 + vertices[0] as usize * vertices[1] as usize * 8, 0);
+        bytes.extend(flags);
+        bytes
+    }
+
+    #[test]
+    fn wrath_resolver_audit_classes_and_preprocessing() {
+        for group_flags in [0, 0x80000, 0x81008] {
+            for n in 0u32..=21 {
+                let expected = if n == 0 || n == 21 {
+                    n
+                } else {
+                    match (n - 1) & 3 {
+                        0 if group_flags & 0x80000 != 0 => 14,
+                        0 => 13,
+                        1 => 14,
+                        2 => 19,
+                        _ => 20,
+                    }
+                };
+                for root_flags in [4, 5, 0xffff_ffff] {
+                    assert_eq!(
+                        resolve_wrath_wmo_liquid_id(root_flags, group_flags, n),
+                        expected
+                    );
+                }
+                // Legacy mode applies +1 first, except raw 15.
+                let legacy = if n == 15 {
+                    0
+                } else {
+                    resolve_wrath_wmo_liquid_id(4, group_flags, n + 1)
+                };
+                assert_eq!(resolve_wrath_wmo_liquid_id(0, group_flags, n), legacy);
+                assert_eq!(resolve_wrath_wmo_liquid_id(1, group_flags, n), legacy);
+            }
+        }
+        assert_eq!(resolve_wrath_wmo_liquid_id(0, 0, 15), 0);
+        assert_eq!(resolve_wrath_wmo_liquid_id(4, 0, 15), 19);
+        for n in [22, 0x1234, u32::MAX] {
+            assert_eq!(resolve_wrath_wmo_liquid_id(4, 0, n), n);
+        }
+        assert_eq!(resolve_wrath_wmo_liquid_id(0, 0, u32::MAX), 0);
+        assert_eq!(resolve_wrath_wmo_liquid_id(0, 0, u32::MAX - 1), u32::MAX);
+    }
+
+    #[test]
+    fn wrath_absence_flag_gates_and_native_flood() {
+        let abbey = decode_wrath_wmo_liquid(&wrath_group(0, 8, None), 5).unwrap();
+        assert_eq!(abbey.resolved_id, 0);
+        assert_eq!(abbey.mode(), WrathWmoLiquidMode::Dry);
+        assert_eq!(abbey.grid, WrathWmoLiquidGrid::Absent);
+        let legacy = decode_wrath_wmo_liquid(&wrath_group(0, 8, None), 0).unwrap();
+        assert_eq!(legacy.resolved_id, 13);
+        assert!(legacy.is_whole_group_flood());
+        // Stray/unflagged invalid MLIQ is ignored, not decoded or used as fallback.
+        let stray = decode_wrath_wmo_liquid(&wrath_group(0, 0, Some(&[0])), 4).unwrap();
+        assert_eq!(
+            stray,
+            decode_wrath_wmo_liquid(&wrath_group(0, 0, None), 4).unwrap()
+        );
+        let high = decode_wrath_wmo_liquid(&wrath_group(1234, 0, None), 4).unwrap();
+        assert_eq!(high.resolved_id, 1234);
+        assert!(high.is_whole_group_flood());
+    }
+
+    #[test]
+    fn wrath_tile_fallback_is_bounded_and_skips_holes() {
+        let mliq = wrath_mliq([3, 2], [2, 1], &[0xff, 0xa2, 0]);
+        let group = wrath_group(0, 0x1000, Some(&mliq));
+        let state = decode_wrath_wmo_liquid(&group, 4).unwrap();
+        assert_eq!(state.resolved_id, 19); // first nonhole low nibble 2 -> n3
+        assert_eq!(state.tile_dimensions, [2, 1]);
+        assert_eq!(state.mode(), WrathWmoLiquidMode::Grid);
+        assert_eq!(state.grid, WrathWmoLiquidGrid::Tiles { all_holes: false });
+        // Existing nonzero header wins over wet tile fallback.
+        let state = decode_wrath_wmo_liquid(&wrath_group(21, 0x1000, Some(&mliq)), 4).unwrap();
+        assert_eq!(state.resolved_id, 21);
+        let water = wrath_mliq([2, 2], [1, 1], &[0x80]);
+        let state = decode_wrath_wmo_liquid(&wrath_group(0, 0x81000, Some(&water)), 4).unwrap();
+        assert_eq!(state.resolved_id, 14);
+        // A wet byte beyond declared tile count cannot supply fallback.
+        let holes = wrath_mliq([2, 2], [1, 1], &[0xff, 0]);
+        for raw in [0, 21] {
+            let state =
+                decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, Some(&holes)), 4).unwrap();
+            assert_eq!(state.resolved_id, raw);
+            assert_eq!(state.grid, WrathWmoLiquidGrid::Tiles { all_holes: true });
+            assert!(!state.is_whole_group_flood());
+            assert_eq!(
+                state.mode(),
+                if raw == 0 {
+                    WrathWmoLiquidMode::Dry
+                } else {
+                    WrathWmoLiquidMode::Grid
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn wrath_zero_dimensions_are_valid_but_invalid_payload_is_not_absence() {
+        for dims in [[0, 0], [0, 7], [8, 0]] {
+            let mliq = wrath_mliq([0, 0], dims, &[0]); // trailing wet byte is outside empty grid
+            for raw in [0, 21] {
+                let state =
+                    decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, Some(&mliq)), 4).unwrap();
+                assert_eq!(state.resolved_id, raw);
+                assert_eq!(state.tile_dimensions, dims);
+                assert_eq!(state.grid, WrathWmoLiquidGrid::ZeroSized);
+                assert_eq!(state.is_whole_group_flood(), raw != 0);
+            }
+        }
+        for raw in [0, 21] {
+            assert!(decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, None), 4).is_err());
+            assert!(decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, Some(&[0; 29])), 4).is_err());
+            let missing_tile = wrath_mliq([2, 2], [1, 1], &[]);
+            assert!(
+                decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, Some(&missing_tile)), 4).is_err()
+            );
+            let mut missing_vertices = wrath_mliq([0, 0], [0, 0], &[]);
+            missing_vertices[0..4].copy_from_slice(&2u32.to_le_bytes());
+            missing_vertices[4..8].copy_from_slice(&2u32.to_le_bytes());
+            assert!(
+                decode_wrath_wmo_liquid(&wrath_group(raw, 0x1000, Some(&missing_vertices)), 4)
+                    .is_err()
+            );
+        }
+        let mut overflow = vec![0xff; 30];
+        overflow[8..16].fill(0);
+        assert!(decode_wrath_wmo_liquid(&wrath_group(21, 0x1000, Some(&overflow)), 4).is_err());
+        let mut huge_tiles = vec![0; 30];
+        huge_tiles[8..16].fill(0xff);
+        assert!(decode_wrath_wmo_liquid(&wrath_group(21, 0x1000, Some(&huge_tiles)), 4).is_err());
+        let mut mogp = vec![0; 0x44];
+        mogp[8..12].copy_from_slice(&0x1000u32.to_le_bytes());
+        mogp.extend(b"QILM");
+        mogp.extend(100u32.to_le_bytes()); // declared payload longer than available bytes
+        mogp.extend([0; 30]);
+        assert!(decode_wrath_wmo_liquid(&chunk(b"PGOM", &mogp), 4).is_err());
+        assert!(decode_wrath_wmo_liquid(&[], 4).is_err());
+        assert!(decode_wrath_wmo_liquid(&chunk(b"PGOM", &[0; 0x37]), 4).is_err());
+    }
 
     #[test]
     fn builds_wmo_water_mesh_skipping_holes() {

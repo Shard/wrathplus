@@ -19,6 +19,21 @@ impl LiquidType {
     pub fn flags(&self) -> u32 {
         self.raw[2]
     }
+    /// Semantic liquid category, separate from LiquidMaterial's render selector.
+    /// AzerothCore build-12340 DBCStructure::LiquidTypeEntry and LiquidTypefmt
+    /// retain word 3 as Type; GetLiquidFlags returns 1 << Type. GridTerrainData
+    /// defines water/ocean/magma/slime as bits 1/2/4/8. Unknown categories stay unknown.
+    pub fn kind(&self) -> Option<crate::LiquidKind> {
+        use crate::LiquidKind;
+        match self.raw[3] {
+            0 => Some(LiquidKind::Still),
+            1 => Some(LiquidKind::Ocean),
+            2 => Some(LiquidKind::Magma),
+            3 => Some(LiquidKind::Slime),
+            _ => None,
+        }
+    }
+
     pub fn material_id(&self) -> u32 {
         self.raw[14]
     }

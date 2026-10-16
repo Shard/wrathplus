@@ -189,11 +189,9 @@ pub struct WmoPortalInstance {
 }
 
 impl WmoPortalInstance {
-    /// Bounded build-12340 liquid fix: a zero group field with no MLIQ is dry (NSABBEY).
-    /// The native point query 0x7c8360 rejects resolved LiquidType ID zero before the grid.
-    /// Nonzero raw values retain the existing mapping pending the full MOHD/MOGP decode audit;
-    /// they must not be globally disabled, since native nonzero IDs can flood rooms without grids.
-    /// No MOGP 0x1000 requirement: gridless whole-room liquid is a supported native case.
+    /// Legacy data-profile query mapping. Wrath production consumers use decoded
+    /// WmoLiquidState instead: a resolved DBC ID is never a tile nibble.
+    /// Retains the bounded zero/no-grid dry fix for legacy fixtures.
     pub fn group_flood(raw: u32, has_mliq: bool) -> Option<benilla_formats::LiquidKind> {
         if (raw == 0 && !has_mliq) || raw == benilla_formats::NO_GROUP_LIQUID {
             return None;
@@ -1494,6 +1492,7 @@ mod tests {
             group_footprint_grids: Vec::new(),
             group_light_refs: Vec::new(),
             group_liquids: Vec::new(),
+            wrath_liquid_states: None,
             doodad_base: Default::default(),
             doodad_owner: Default::default(),
             doodad_groups: Default::default(),

@@ -11,10 +11,10 @@ use benilla_dbc::{DbcParser, FieldType, Schema, SchemaField};
 /// The BLP texel forms, re-exported for [`BlpMipChain::texels`].
 pub use benilla_blp::BlpTexels;
 
+mod overrides;
 mod wrath_layouts;
 #[cfg(test)]
 mod wrath_layouts_installed_tests;
-mod overrides;
 pub use overrides::AssetOverrides;
 mod chain;
 pub use chain::{Chain, ChainEntry};
@@ -54,8 +54,8 @@ pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
 pub mod currencies;
 pub mod item_limit_category;
-pub mod lfg;
 mod itemsets;
+pub mod lfg;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};
 mod gm_ticket_category;
 pub use gm_ticket_category::{
@@ -284,6 +284,10 @@ pub use models::{
     WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef, WmoPortals, WmoRoot,
     ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT, NO_GROUP_LIQUID,
     OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
+};
+pub use models::{
+    resolve_wrath_wmo_liquid_id, wmo_group_wrath_liquid, wmo_root_flags, WrathWmoLiquidGrid,
+    WrathWmoLiquidMode, WrathWmoLiquidState,
 };
 mod terrain;
 pub use benilla_adt::Mh2oChunk;
