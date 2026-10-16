@@ -519,6 +519,10 @@ pub enum SessionEvent {
     PetActionFeedback { reason: u8 },
     /// The pet's cast refusal (`SMSG_PET_CAST_FAILED`); it never touches our own cast state.
     PetCastFailed { spell_id: u32, reason: Option<u8> },
+    /// Build-12340 lossless pet cast result (native reason and all arguments).
+    WrathPetCastFailed(crate::wrath_spell_failure::PetCastFailed),
+    /// Build-12340 interruption notification; distinct from SPELL_FAILED_OTHER.
+    WrathSpellFailure(crate::wrath_spell_failure::SpellFailure),
     /// A refused tame, Call Pet or Revive Pet (`SMSG_PET_TAME_FAILURE`): the reason's
     /// `PETTAME_*` string fills `ERR_TAME_FAILED`.
     PetTameFailure { reason: u8 },

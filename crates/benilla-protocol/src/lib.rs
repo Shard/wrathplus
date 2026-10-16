@@ -320,3 +320,5 @@ pub mod wrath_pet_name;
 
 pub mod wrath_quests_completed;
 pub mod wrath_ui_timer;
+
+pub mod wrath_spell_failure;

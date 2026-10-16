@@ -210,6 +210,14 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            0x0133 => Ok(match crate::wrath_spell_failure::decode_spell(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathSpellFailure(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0138 => Ok(match crate::wrath_spell_failure::decode_pet(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathPetCastFailed(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x01fc => Ok(match crate::wrath_environment::decode_damage(body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathEnvironmentalDamage(packet)], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
