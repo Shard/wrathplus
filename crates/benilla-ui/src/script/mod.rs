@@ -39,6 +39,7 @@ mod channel;
 mod wrath_channel_roster;
 mod wrath_channel_display;
 mod wrath_channel_bindings;
+mod wrath_chat_window;
 mod char_stats;
 mod chat_misc;
 mod chat_send;
@@ -778,6 +779,7 @@ impl UiScript {
             wrath_achievements::install(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
+            wrath_chat_window::install(&lua)?;
         }
 
         let s = UiScript {
@@ -1078,10 +1080,17 @@ impl UiScript {
 
     /// Replace the hyperlink spans `(frame, y-up rect, link, markup)` the app rasterized this
     /// frame; a release inside one fires `OnHyperlinkClick` on its frame ([`pointer`]).
+    /// A ScrollingMessageFrame whose `SetHyperlinksEnabled` is off keeps none.
     pub fn set_link_spans(&mut self, spans: Vec<(FrameHandle, Rect, String, String)>) {
         let mut model = self.model_mut();
         model.link_spans.clear();
         for (fh, rect, link, markup) in spans {
+            let disabled = model.arena.frame(fh).is_some_and(|f| {
+                matches!(&f.kind_state, crate::widget::KindState::ScrollingMessage(s) if !s.hyperlinks_enabled)
+            });
+            if disabled {
+                continue;
+            }
             model
                 .link_spans
                 .entry(fh)

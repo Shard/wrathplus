@@ -131,6 +131,11 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
     plain::install(lua)
 }
 
+/// The build-12340 ScrollingMessageFrame methods ([`scrolling::install_wrath`]).
+pub(super) fn install_wrath(lua: &mlua::Lua) -> mlua::Result<()> {
+    scrolling::install_wrath(lua)
+}
+
 /// The font a message frame's lines draw with: its declared `<FontString>` child, as the stock
 /// chat frames and `UIErrorsFrame.xml` declare it, else the default face at 14 px.
 #[derive(Clone)]
@@ -210,6 +215,25 @@ impl UiScript {
                 outline: Outline::default(),
                 justify_h: JustifyH::Left,
             })
+    }
+
+    /// The colour an uncoloured `AddMessage` line takes in build 12340 (`0x972f20` reads the
+    /// frame font's colour): the declared `<FontString>`'s text colour, else white.
+    pub(super) fn message_frame_text_rgb(model: &Model, fh: FrameHandle) -> [f32; 3] {
+        model
+            .arena
+            .frame(fh)
+            .and_then(|frame| {
+                frame.regions.iter().find(|&&rh| {
+                    matches!(
+                        model.arena.region(rh).map(|r| r.kind),
+                        Some(crate::widget::RegionKind::FontString)
+                    )
+                })
+            })
+            .and_then(|rh| model.region_data.get(rh))
+            .and_then(|d| d.vertex_color)
+            .map_or([1.0; 3], |[r, g, b, _]| [r, g, b])
     }
 
     /// How many rows frame `fh`'s resolved rect holds at its font's pitch, the client's
