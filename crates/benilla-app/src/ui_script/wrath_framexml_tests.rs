@@ -2,6 +2,9 @@
 
 use benilla_ui::script::{ScriptDialect, UiScript, UnitState};
 
+#[path = "wrath_census_lexer.rs"]
+mod census_lexer;
+
 /// Every distinct failure, error and warning, with a count, printed for triage.
 fn census(script: &mut UiScript, failures: &[String]) -> usize {
     let mut seen: Vec<(String, usize)> = Vec::new();
@@ -154,7 +157,7 @@ fn missing_surface(script: &UiScript) {
                 }
             }
         }
-        sources.push(text);
+        sources.push(census_lexer::executable_text(&text));
     }
     script.clear_instruction_budget();
     let has: Vec<String> = script
