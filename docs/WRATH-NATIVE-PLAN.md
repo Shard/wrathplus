@@ -31,8 +31,11 @@ renumbered, the quest log is repacked into 1.12's 20 slots, and the Lua API is 1
      installed FrameXML is the spec), retiring the `wrath_compat.lua` shims.
   3. **Engine/widget semantics**: the Wrath dialect follows 3.3.5 widget rules wherever they differ
      from 1.12, found systematically rather than by play.
-- Vanilla (`ScriptDialect::Vanilla`, `SessionDialect::Vanilla5875`) keeps working and its tests stay
-  green throughout. Every dialect fork is explicit.
+- **3.3.5 only (Shannon, 2026-10-16).** The client targets AzerothCore 3.3.5a exclusively. Vanilla
+  preservation is no longer a requirement: fixes follow native 3.3.5 semantics directly and need not
+  add dialect forks to keep 1.12 behaviour. Do not spend effort keeping Vanilla paths or tests alive;
+  if a change breaks a Vanilla-only test, delete or convert that test in the same commit. Removing
+  the Vanilla dialect wholesale is a separate scheduled cleanup, not part of feature units.
 
 ## Workstreams
 
