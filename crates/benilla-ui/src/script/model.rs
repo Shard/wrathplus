@@ -453,6 +453,8 @@ pub(crate) struct Model {
     pub(crate) spell_catalog: std::collections::HashMap<u32, super::spell_info::SpellInfoView>,
     pub(crate) spellbook: spellbook::SpellBookState,
     pub(crate) wrath_lfg: super::wrath_lfg::State,
+    /// The cast and channel snapshots `UnitCastingInfo`/`UnitChannelInfo` read.
+    pub(crate) wrath_unit_casts: super::wrath_unit_casts::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -1241,6 +1243,7 @@ impl Model {
             spell_catalog: Default::default(),
             spellbook: spellbook::SpellBookState::default(),
             wrath_lfg: Default::default(),
+            wrath_unit_casts: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),
