@@ -1018,6 +1018,7 @@ enum WrathRoute {
     NativeExchange,
     NativeInspectAchievements,
     NativeCalendar,
+    NativeQuest,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1050,6 +1051,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
         ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
+        ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::NativeExchange(_)
         | ClientCommand::AuctionHello { .. }
         | ClientCommand::AuctionListItems { .. }
@@ -1387,6 +1389,13 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeQuest => match quest_packet(command) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid native quest command rejected before send: {error}");
+                            continue;
+                        }
+                    },
                     WrathRoute::NativeCalendar => {
                         let ClientCommand::NativeCalendar(command) = command else { unreachable!() };
                         let (opcode, body) = benilla_protocol::wrath_calendar::encode(&command);
@@ -1577,6 +1586,16 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// The native body for a [`WrathRoute::NativeQuest`] command.
+fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_quest::{encode, encode_push_result};
+    match command {
+        ClientCommand::NativeQuest(command) => encode(&command),
+        ClientCommand::QuestPushResult { sharer, quest, msg } => Ok(encode_push_result(sharer, quest, msg.0)),
+        other => unreachable!("not a quest route: {other:?}"),
+    }
+}
+
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_exchange::{encode, Command as X};

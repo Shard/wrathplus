@@ -63,6 +63,16 @@ pub(crate) struct QuestGiver {
 }
 
 impl QuestGiver {
+    /// The quest the panel shows; a greeting lists several and names none.
+    pub(crate) fn shown_quest(&self) -> Option<u32> {
+        self.view.as_ref().and_then(|v| match v {
+            QuestView::Detail(d) => Some(d.quest_id),
+            QuestView::Progress(p) => Some(p.quest_id),
+            QuestView::Reward(o) => Some(o.quest_id),
+            QuestView::Greeting(_) => None,
+        })
+    }
+
     /// Open (or replace) the window with a fresh wire view for `npc`.
     pub(crate) fn open(&mut self, npc: u64, view: QuestView) {
         self.npc = Some(npc);
@@ -243,6 +253,7 @@ impl NpcSession for QuestGiver {
     fn walk_away_send(&self, npc: u64) -> Option<ClientCommand> {
         benilla_protocol::guid::is_player(npc).then_some(ClientCommand::QuestPushResult {
             sharer: npc,
+            quest: self.shown_quest().unwrap_or(0),
             msg: QuestShareMsg::DECLINE_QUEST,
         })
     }
@@ -545,11 +556,12 @@ pub(crate) fn feed_quest(
 /// `CloseQuest()`: its binding `0x501a10` calls only the teardown `0x501130(0,1)`, which declines
 /// a sharing player's quest and closes anything else silently. The player test is the guid's
 /// shape; the reference's `0x468460` also needs the sharer in view, which the range guard ensures.
-fn close_quest(npc: u64, commands: &NetCommands) {
+fn close_quest(npc: u64, quest: Option<u32>, commands: &NetCommands) {
     if benilla_protocol::guid::is_player(npc) {
         debug!("ui_quest: closing {npc:#x}'s shared quest — declining it");
         let _ = commands.0.send(ClientCommand::QuestPushResult {
             sharer: npc,
+            quest: quest.unwrap_or(0),
             msg: QuestShareMsg::DECLINE_QUEST,
         });
     }
@@ -672,16 +684,11 @@ fn drain_quest(
         let _ = commands.0.send(cmd);
     }
 
-    let view_quest = giver.view.as_ref().and_then(|v| match v {
-        QuestView::Detail(d) => Some(d.quest_id),
-        QuestView::Progress(p) => Some(p.quest_id),
-        QuestView::Reward(o) => Some(o.quest_id),
-        QuestView::Greeting(_) => None,
-    });
+    let view_quest = giver.shown_quest();
     for action in script.take_quest_actions() {
         match action {
             QuestAction::Close => {
-                close_quest(npc, &commands);
+                close_quest(npc, view_quest, &commands);
                 giver.clear();
             }
             QuestAction::Decline => {
@@ -690,7 +697,7 @@ fn drain_quest(
                 match leg {
                     DeclineLeg::Nothing => {}
                     DeclineLeg::Teardown => {
-                        close_quest(npc, &commands);
+                        close_quest(npc, view_quest, &commands);
                         giver.clear();
                     }
                     DeclineLeg::GossipHello => {
@@ -1149,6 +1156,7 @@ mod tests {
                     [ClientCommand::QuestPushResult {
                         sharer: SHARER,
                         msg: QuestShareMsg::DECLINE_QUEST,
+                        ..
                     }]
                 ),
                 "{verb} must answer the sharer: {sent:?}"
