@@ -1015,6 +1015,7 @@ enum WrathRoute {
     NativeMirrorImageQuery,
     NativeInstanceControl,
     NativeInventory,
+    NativeExchange,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1045,6 +1046,25 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AutoBankItem { .. }
         | ClientCommand::AutoStoreBankItem { .. }
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
+        ClientCommand::NativeExchange(_)
+        | ClientCommand::AuctionHello { .. }
+        | ClientCommand::AuctionListItems { .. }
+        | ClientCommand::AuctionListOwnerItems { .. }
+        | ClientCommand::AuctionListBidderItems { .. }
+        | ClientCommand::AuctionSellItem { .. }
+        | ClientCommand::AuctionPlaceBid { .. }
+        | ClientCommand::AuctionRemoveItem { .. }
+        | ClientCommand::LootMasterGive { .. }
+        | ClientCommand::InitiateTrade { .. }
+        | ClientCommand::BeginTrade
+        | ClientCommand::BusyTrade
+        | ClientCommand::IgnoreTrade
+        | ClientCommand::AcceptTrade
+        | ClientCommand::UnacceptTrade
+        | ClientCommand::CancelTrade
+        | ClientCommand::SetTradeGold { .. }
+        | ClientCommand::SetTradeItem { .. }
+        | ClientCommand::ClearTradeItem { .. } => WrathRoute::NativeExchange,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
@@ -1358,6 +1378,10 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_inventory::encode(&inventory_command(command));
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeExchange => {
+                        let (opcode, body) = exchange_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeMirrorImageQuery => {
                         let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
                         let (opcode, body) = benilla_protocol::wrath_mirror_image::encode_query(guid);
@@ -1539,6 +1563,54 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
+fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_exchange::{encode, Command as X};
+    use benilla_protocol::wrath_trade::Command as T;
+    let trade = |command: T| (command.opcode(), command.encode());
+    match command {
+        ClientCommand::NativeExchange(command) => encode(&command),
+        ClientCommand::AuctionHello { auctioneer } => encode(&X::AuctionHello { auctioneer }),
+        ClientCommand::AuctionListItems {
+            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
+            sub_category, quality, usable,
+        } => encode(&X::AuctionListItems {
+            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
+            sub_category, quality, usable,
+        }),
+        ClientCommand::AuctionListOwnerItems { auctioneer, list_from } => {
+            encode(&X::AuctionListOwner { auctioneer, list_from })
+        }
+        ClientCommand::AuctionListBidderItems { auctioneer, list_from, auction_ids } => {
+            encode(&X::AuctionListBidder { auctioneer, list_from, auction_ids })
+        }
+        ClientCommand::AuctionSellItem { auctioneer, item_guid, bid, buyout, etime_minutes, count } => {
+            encode(&X::AuctionSell { auctioneer, items: vec![(item_guid, count)], bid, buyout, etime_minutes })
+        }
+        ClientCommand::AuctionPlaceBid { auctioneer, auction_id, price } => {
+            encode(&X::AuctionPlaceBid { auctioneer, auction_id, price })
+        }
+        ClientCommand::AuctionRemoveItem { auctioneer, auction_id } => {
+            encode(&X::AuctionRemove { auctioneer, auction_id })
+        }
+        ClientCommand::LootMasterGive { guid, slot, target } => {
+            encode(&X::LootMasterGive { loot: guid, slot, target })
+        }
+        ClientCommand::InitiateTrade { target } => trade(T::Initiate { target }),
+        ClientCommand::BeginTrade => trade(T::Begin),
+        ClientCommand::BusyTrade => trade(T::Busy),
+        ClientCommand::IgnoreTrade => trade(T::Ignore),
+        // AC skips the word; the native client sends 1.
+        ClientCommand::AcceptTrade => trade(T::Accept { raw: 1 }),
+        ClientCommand::UnacceptTrade => trade(T::Unaccept),
+        ClientCommand::CancelTrade => trade(T::Cancel),
+        ClientCommand::SetTradeGold { copper } => trade(T::SetGold { gold: copper }),
+        ClientCommand::SetTradeItem { trade_slot, bag, slot } => trade(T::SetItem { trade_slot, bag, slot }),
+        ClientCommand::ClearTradeItem { trade_slot } => trade(T::ClearItem { trade_slot }),
+        other => unreachable!("not an exchange route: {other:?}"),
+    }
+}
+
 /// The native item/inventory body for a [`WrathRoute::NativeInventory`] command.
 fn inventory_command(command: ClientCommand) -> benilla_protocol::wrath_inventory::Command {
     use benilla_protocol::wrath_inventory::Command as I;
@@ -2308,6 +2380,29 @@ mod tests {
         assert_eq!(&body[3..7], &8690u32.to_le_bytes());
         assert_eq!(&body[7..15], &0x4000_0000_0000_0001u64.to_le_bytes());
         assert_eq!(&body[15..], &[0; 9]);
+    }
+
+    #[test]
+    fn trade_auction_and_master_loot_route_native_bodies() {
+        for (command, opcode, body) in [
+            (ClientCommand::AcceptTrade, 0x11a, vec![1, 0, 0, 0]),
+            (ClientCommand::SetTradeItem { trade_slot: 6, bag: 255, slot: 23 }, 0x11d, vec![6, 255, 23]),
+            (ClientCommand::CancelTrade, 0x11c, vec![]),
+            (
+                ClientCommand::AuctionSellItem { auctioneer: 7, item_guid: 9, bid: 1, buyout: 2, etime_minutes: 720, count: 20 },
+                0x256,
+                [7u64.to_le_bytes().as_slice(), &1u32.to_le_bytes(), &9u64.to_le_bytes(), &20u32.to_le_bytes(),
+                    &1u32.to_le_bytes(), &2u32.to_le_bytes(), &720u32.to_le_bytes()].concat(),
+            ),
+            (
+                ClientCommand::LootMasterGive { guid: 7, slot: 3, target: 9 },
+                0x2a3,
+                [7u64.to_le_bytes().as_slice(), &[3], &9u64.to_le_bytes()].concat(),
+            ),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeExchange);
+            assert_eq!(exchange_packet(command), (opcode, body));
+        }
     }
 
     #[test]

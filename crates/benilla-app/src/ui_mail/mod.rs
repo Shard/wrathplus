@@ -202,6 +202,21 @@ fn send_query_next_mail_time_on_enter(
 }
 
 /// Send only commands backed by the selected dialect's writer; never fabricate a reply.
+/// A row pick as its mail command: by the native inbox in build 12340, else the 1.12 row id.
+fn inbox_action(mail: &MailOpen, mailbox: u64, index: u32, action: wrath::Action) -> Option<ClientCommand> {
+    if let Some(inbox) = mail.wrath_inbox.as_ref() {
+        return wrath::native_action(inbox, mailbox, index, action);
+    }
+    let mail_id = mail.mail_id_at(index)?;
+    Some(match action {
+        wrath::Action::TakeItem => ClientCommand::MailTakeItem { mailbox, mail_id },
+        wrath::Action::TakeMoney => ClientCommand::MailTakeMoney { mailbox, mail_id },
+        wrath::Action::Delete => ClientCommand::MailDelete { mailbox, mail_id },
+        wrath::Action::Return => ClientCommand::MailReturnToSender { mailbox, mail_id },
+        wrath::Action::CreateTextItem => ClientCommand::MailCreateTextItem { mailbox, mail_id },
+    })
+}
+
 fn send_supported(commands: &NetCommands, dialect: SessionDialect, command: ClientCommand) -> bool {
     if !commands.supports(dialect, &command) {
         return false;
@@ -692,6 +707,15 @@ fn drain_mail(
         }
     }
 
+    // Build-12340 rows carry their text inline: an open only marks the native row read.
+    if let Some(inbox) = mail.wrath_inbox.as_mut() {
+        for index in script.take_mail_opens() {
+            if let Some(command) = wrath::mark_read(inbox, mailbox, index) {
+                pending.arm_refresh();
+                send_supported(&commands, *dialect, command);
+            }
+        }
+    }
     // An opened mail: mark read, then ask for the body, in `0x4af110`'s order.
     for index in script.take_mail_opens() {
         let Some((mail_id, text_id, read)) = index
@@ -721,48 +745,28 @@ fn drain_mail(
     }
 
     for index in script.take_mail_take_items() {
-        if let Some(mail_id) = mail.mail_id_at(index) {
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::MailTakeItem { mailbox, mail_id },
-            );
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeItem) {
+            send_supported(&commands, *dialect, command);
         }
     }
     for index in script.take_mail_take_money() {
-        if let Some(mail_id) = mail.mail_id_at(index) {
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::MailTakeMoney { mailbox, mail_id },
-            );
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeMoney) {
+            send_supported(&commands, *dialect, command);
         }
     }
     for index in script.take_mail_deletes() {
-        if let Some(mail_id) = mail.mail_id_at(index) {
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::MailDelete { mailbox, mail_id },
-            );
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::Delete) {
+            send_supported(&commands, *dialect, command);
         }
     }
     for index in script.take_mail_returns() {
-        if let Some(mail_id) = mail.mail_id_at(index) {
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::MailReturnToSender { mailbox, mail_id },
-            );
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::Return) {
+            send_supported(&commands, *dialect, command);
         }
     }
     for index in script.take_mail_take_texts() {
-        if let Some(mail_id) = mail.mail_id_at(index) {
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::MailCreateTextItem { mailbox, mail_id },
-            );
+        if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::CreateTextItem) {
+            send_supported(&commands, *dialect, command);
         }
     }
 
@@ -778,6 +782,18 @@ fn drain_mail(
             // `MAIL_SEND_INFO_UPDATE` fired (`0x4ae98d`).
             mail.errors.push("ERR_ITEM_NOT_FOUND");
             script.drop_send_mail_item();
+        } else if *dialect == SessionDialect::Wrath12340 {
+            let command = wrath::send(
+                mailbox,
+                req.target,
+                req.subject,
+                req.body,
+                req.stationery,
+                item_guid,
+                req.money,
+                req.cod,
+            );
+            send_supported(&commands, *dialect, command);
         } else {
             send_supported(
                 &commands,

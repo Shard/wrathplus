@@ -298,3 +298,163 @@ mod tests {
         .is_none());
     }
 }
+
+/// An inbox action a Lua row pick asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Action {
+    TakeItem,
+    TakeMoney,
+    Delete,
+    Return,
+    CreateTextItem,
+}
+
+/// Build-12340 inbox actions by native inbox row (1-based): the wire wants the attachment's low
+/// GUID, the sender and the template the legacy commands lack (AC `MailHandler.cpp`). The Lua
+/// binding records no attachment index, so a take names the row's first remaining attachment.
+pub(super) fn native_action(
+    inbox: &benilla_protocol::wrath_mail::Inbox,
+    mailbox: u64,
+    index_1based: u32,
+    action: Action,
+) -> Option<ClientCommand> {
+    use benilla_protocol::wrath_mail_mutations::Command as M;
+    let row = inbox.mails.get(index_1based.checked_sub(1)? as usize)?;
+    let mail_id = row.id;
+    Some(ClientCommand::NativeMailMutation(match action {
+        Action::TakeItem => M::TakeItem {
+            mailbox,
+            mail_id,
+            item_low_guid: row.attachments.first()?.guid_low,
+        },
+        Action::TakeMoney => M::TakeMoney { mailbox, mail_id },
+        Action::Delete => M::Delete {
+            mailbox,
+            mail_id,
+            template: row.template_id,
+        },
+        Action::Return => M::Return {
+            mailbox,
+            mail_id,
+            sender: row.sender,
+        },
+        Action::CreateTextItem => M::CreateTextItem { mailbox, mail_id },
+    }))
+}
+
+/// `CMSG_MAIL_MARK_AS_READ` for an unread native row, marking it read locally: no reply comes.
+pub(super) fn mark_read(
+    inbox: &mut benilla_protocol::wrath_mail::Inbox,
+    mailbox: u64,
+    index_1based: u32,
+) -> Option<ClientCommand> {
+    let row = inbox.mails.get_mut(index_1based.checked_sub(1)? as usize)?;
+    if row.checked & CHECKED_READ != 0 {
+        return None;
+    }
+    row.checked |= CHECKED_READ;
+    Some(ClientCommand::NativeMailMutation(
+        benilla_protocol::wrath_mail_mutations::Command::MarkRead {
+            mailbox,
+            mail_id: row.id,
+        },
+    ))
+}
+
+/// `CMSG_SEND_MAIL` in this build: attachments are `(slot, GUID)` pairs, the package word and the
+/// two trailing constants are 0 (AC reads and ignores them).
+pub(super) fn send(
+    mailbox: u64,
+    receiver: String,
+    subject: String,
+    body: String,
+    stationery: u32,
+    item_guid: Option<u64>,
+    money: u32,
+    cod: u32,
+) -> ClientCommand {
+    use benilla_protocol::wrath_mail_mutations::{Attachment, Command, SendMail};
+    ClientCommand::NativeMailMutation(Command::Send(SendMail {
+        mailbox,
+        receiver: receiver.into_bytes(),
+        subject: subject.into_bytes(),
+        body: body.into_bytes(),
+        stationery,
+        unknown_word: 0,
+        attachments: item_guid
+            .map(|item| vec![Attachment { slot: 0, item }])
+            .unwrap_or_default(),
+        money,
+        cod,
+        unknown_guid: 0,
+        unknown_byte: 0,
+    }))
+}
+
+#[cfg(test)]
+mod action_tests {
+    use super::*;
+    use benilla_protocol::wrath_mail::{Attachment, Inbox, Mail};
+    use benilla_protocol::wrath_mail_mutations::Command as M;
+
+    fn inbox() -> Inbox {
+        Inbox {
+            total_count: 1,
+            mails: vec![Mail {
+                id: 5,
+                kind: 0,
+                sender: 0x42,
+                cod: 0,
+                unknown: 0,
+                stationery: 41,
+                money: 10,
+                checked: 0,
+                expire_days: 30.0,
+                template_id: 3,
+                subject: "s".into(),
+                body: "b".into(),
+                attachments: vec![Attachment {
+                    slot: 4,
+                    guid_low: 0x99,
+                    entry: 2589,
+                    enchantments: [[0; 3]; 7],
+                    random_property: 0,
+                    suffix_factor: 0,
+                    count: 1,
+                    charges: 0,
+                    max_durability: 0,
+                    durability: 0,
+                    unknown: 0,
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn row_picks_carry_the_native_ids_the_wire_wants() {
+        let inbox = inbox();
+        let native = |action| match native_action(&inbox, 7, 1, action) {
+            Some(ClientCommand::NativeMailMutation(command)) => command,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(native(Action::TakeItem), M::TakeItem { mailbox: 7, mail_id: 5, item_low_guid: 0x99 });
+        assert_eq!(native(Action::Delete), M::Delete { mailbox: 7, mail_id: 5, template: 3 });
+        assert_eq!(native(Action::Return), M::Return { mailbox: 7, mail_id: 5, sender: 0x42 });
+        assert_eq!(native(Action::TakeMoney), M::TakeMoney { mailbox: 7, mail_id: 5 });
+        assert!(native_action(&inbox, 7, 2, Action::TakeMoney).is_none());
+        assert!(native_action(&inbox, 7, 0, Action::TakeMoney).is_none());
+        let mut empty = inbox.clone();
+        empty.mails[0].attachments.clear();
+        assert!(native_action(&empty, 7, 1, Action::TakeItem).is_none());
+    }
+
+    #[test]
+    fn an_open_marks_read_once() {
+        let mut inbox = inbox();
+        assert!(matches!(
+            mark_read(&mut inbox, 7, 1),
+            Some(ClientCommand::NativeMailMutation(M::MarkRead { mailbox: 7, mail_id: 5 }))
+        ));
+        assert!(mark_read(&mut inbox, 7, 1).is_none());
+    }
+}
