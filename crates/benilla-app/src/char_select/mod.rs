@@ -1332,6 +1332,44 @@ mod tests {
         );
     }
 
+    /// A refused native rename opens the dialog with its `CHAR_NAME_*` key; an applied one
+    /// (result 0, the roster already refreshed) opens nothing.
+    #[test]
+    fn a_refused_character_service_raises_the_glue_dialog() {
+        use crate::glue::dialog::GlueDialog;
+        use crate::net::wrath_char_service_capture::NativeCharServiceReplies;
+        use benilla_protocol::wrath_char_services::Reply;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<CharActionResultMessage>()
+            .init_resource::<GlueDialog>()
+            .init_resource::<NativeCharServiceReplies>()
+            .add_systems(Update, delete_result);
+        app.world_mut()
+            .resource_mut::<NativeCharServiceReplies>()
+            .0
+            .push_back(Reply::Rename {
+                result: 0,
+                renamed: Some((7, "Newname".into())),
+            });
+        app.update();
+        assert!(!app.world().resource::<GlueDialog>().is_open());
+        app.world_mut()
+            .resource_mut::<NativeCharServiceReplies>()
+            .0
+            .push_back(Reply::Rename {
+                result: 0x5e,
+                renamed: None,
+            });
+        app.update();
+        assert!(app.world().resource::<GlueDialog>().is_open());
+        assert!(app
+            .world()
+            .resource::<NativeCharServiceReplies>()
+            .0
+            .is_empty());
+    }
+
     /// The delete refusals resolve to the sentences 1.12 ships, each off a real key.
     #[test]
     fn every_delete_result_resolves_in_the_real_glue_strings() {
