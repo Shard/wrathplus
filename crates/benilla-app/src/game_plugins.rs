@@ -255,6 +255,7 @@ impl PluginGroup for GamePlugins {
             .add(crate::ui_arena_team::UiArenaTeamPlugin)
             .add(crate::ui_native_chat::UiNativeChatPlugin)
             .add(crate::ui_native_pet_name::UiNativePetNamePlugin)
+            .add(crate::ui_native_who::UiNativeWhoPlugin)
             .add(UiLayoutPlugin)
             .add(crate::screenshot::ScreenshotPlugin)
     }

@@ -29,6 +29,8 @@ const WHO_KEYS: [&str; 4] = [
 /// parser (`0x5adf60`) sends more than three rows to `WHO_LIST_UPDATE` and three or fewer to chat
 /// lines, with no event (`0x5adfca`); with `SetWhoToUI` set the event always fires. It compares the
 /// raw wire count, not the 50-capped copy (`0x5adf92`).
+// Wrath 006b8720 also reads c7bfe8 (default 3). Configurable native
+// threshold is not yet supported; this adapter implements its default only.
 const WHO_CHAT_MAX: usize = 3;
 
 /// What the feed last announced, so the list events fire on edges.
@@ -82,7 +84,7 @@ pub(super) fn feed_social(
     social.display_order = display_order;
     social.ignore_display_order = ignore_order;
 
-    script.set_social(VmSocial {
+    let mut snapshot = VmSocial {
         friends,
         selected_friend,
         ignores,
@@ -91,7 +93,8 @@ pub(super) fn feed_social(
         who_total: social.who_total,
         // The chain rides along: `SortWho` re-sorts inside the binding.
         who_sort: social.who_sort.clone(),
-    });
+    };
+    script.set_social(snapshot.clone());
 
     let first = !fed.seeded;
     fed.seeded = true;
@@ -108,23 +111,46 @@ pub(super) fn feed_social(
         social.ignores_dirty = false;
         script.fire_event("IGNORELIST_UPDATE", Vec::new());
     }
-    // `SMSG_WHO`'s two exits ([`WHO_CHAT_MAX`]); a sort fires its own event inside `SortWho`.
     if social.who_dirty {
-        social.who_dirty = false;
-        if answer_goes_to_the_frame(social.who_to_ui, social.who.len()) {
-            script.fire_event("WHO_LIST_UPDATE", Vec::new());
-        } else {
-            // In wire order: each line is composed inside the parse loop (`0x5ae0a1`), before the
-            // `qsort` at `0x5ae0e2` orders the array `GetWhoInfo` reads.
-            let printed = {
-                let get = |key: &str| script.lua().globals().get::<String>(key).ok();
-                let wire_order: Vec<WhoInfo> =
-                    social.who.iter().map(|e| who_row(e, areas)).collect();
-                who_lines(&wire_order, social.who_total, &get)
-            };
-            crate::ui_action::show_messages(&mut script, &mut sink, "ui_social", printed);
-        }
+        publish_who(&mut script, &mut sink, &mut social, areas, &mut snapshot);
     }
+    // Every receipt gets its own published snapshot and synchronous event/chat output.
+    while let Some((total, entries)) = social.pending_native_who.pop_front() {
+        super::native_who::apply(&mut social, total, entries);
+        publish_who(&mut script, &mut sink, &mut social, areas, &mut snapshot);
+    }
+}
+
+fn publish_who(
+    script: &mut UiScript,
+    sink: &mut MessageSink,
+    social: &mut SocialState,
+    areas: Option<&AreaTableCatalog>,
+    snapshot: &mut VmSocial,
+) {
+    social.who_dirty = false;
+    snapshot.who = who_rows(social, areas);
+    snapshot.who_total = social.who_total;
+    script.set_social(snapshot.clone());
+    if answer_goes_to_the_frame(
+        social.who_to_ui,
+        social.native_who_count.unwrap_or(social.who.len()),
+    ) {
+        script.fire_event("WHO_LIST_UPDATE", Vec::new());
+    } else {
+        let get = |key: &str| script.lua().globals().get::<String>(key).ok();
+        let wire_order = who_wire_rows(social, areas);
+        let total = who_summary_count(social);
+        let printed = who_lines(&wire_order, total, &get);
+        crate::ui_action::show_messages(script, sink, "ui_social", printed);
+    }
+}
+
+fn who_summary_count(social: &SocialState) -> u32 {
+    social
+        .native_who_count
+        .map(|n| n as u32)
+        .unwrap_or(social.who_total)
 }
 
 /// Whether an `SMSG_WHO` answer fires `WHO_LIST_UPDATE` (true) or prints chat lines (false).
@@ -285,8 +311,25 @@ fn ignore_rows(
 /// The `/who` rows, resolved, then sorted by the chain as the reference sorts every answer
 /// (`0x5ae0e2`); the comparator compares resolved names, so the sort runs after [`who_row`].
 fn who_rows(social: &SocialState, areas: Option<&AreaTableCatalog>) -> Vec<WhoInfo> {
-    let mut rows: Vec<WhoInfo> = social.who.iter().map(|e| who_row(e, areas)).collect();
+    let mut rows = who_wire_rows(social, areas);
     social.who_sort.sort(&mut rows);
+    rows
+}
+
+fn who_wire_rows(social: &SocialState, areas: Option<&AreaTableCatalog>) -> Vec<WhoInfo> {
+    let mut rows: Vec<WhoInfo> = social.who.iter().map(|e| who_row(e, areas)).collect();
+    if social.native_who_count.is_some() {
+        for (row, raw) in rows.iter_mut().zip(&social.native_who_rows) {
+            if raw.class == 6 {
+                row.class = "Death Knight".into();
+            }
+            match raw.race {
+                10 => row.race = "Blood Elf".into(),
+                11 => row.race = "Draenei".into(),
+                _ => {}
+            }
+        }
+    }
     rows
 }
 
@@ -332,6 +375,7 @@ pub(super) fn drain_social(
     commands: Res<NetCommands>,
     areas: Option<Res<AreaTableRes>>,
     mut tutorials: Option<MessageWriter<crate::tutorial::TutorialEvent>>,
+    dialect: Option<Res<crate::net::SessionDialect>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -396,10 +440,15 @@ pub(super) fn drain_social(
                 social.selected_ignore = row_guid(&social.ignore_display_order, index).unwrap_or(0);
             }
             SocialRequest::Who(filter) => {
-                let request = super::who_query(&filter, areas.as_deref().map(|a| &a.0));
-                let _ = commands.0.send(ClientCommand::Who {
-                    request: Box::new(request),
-                });
+                let command = super::native_who::command(
+                    &filter,
+                    areas.as_deref().map(|a| &a.0),
+                    dialect
+                        .as_deref()
+                        .copied()
+                        .unwrap_or(crate::net::SessionDialect::Vanilla5875),
+                );
+                let _ = commands.0.send(command);
             }
             // Mirror the click the binding applied to the VM's chain. No `who_dirty`: `SortWho`
             // already fired `WHO_LIST_UPDATE`, once per click as the reference does.
@@ -638,5 +687,214 @@ mod tests {
             .map(|(d, _)| d.to_string())
             .unwrap_or_default();
         assert_eq!(class, "");
+    }
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+    use crate::ui_native_who::NativeWhoPackets;
+    use benilla_protocol::wrath_who::{Entry, Packet};
+    fn entries(name: &str, race: u32) -> Vec<Entry> {
+        vec![Entry {
+            name: name.as_bytes().to_vec(),
+            guild: vec![],
+            level: 80,
+            class: 6,
+            race,
+            gender: 1,
+            zone: 12,
+        }]
+    }
+    #[test]
+    fn native_feed_publishes_each_receipt_before_its_event_and_clears_on_reset() {
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.init_resource::<SocialState>()
+            .init_resource::<NativeWhoPackets>()
+            .init_resource::<NameCache>()
+            .init_resource::<crate::ui_chat::ChatLog>()
+            .init_resource::<crate::sound::MessageSounds>()
+            .insert_resource(NetCommands(tx))
+            .add_systems(
+                Update,
+                (super::super::native_who::drain, feed_social).chain(),
+            );
+        let mut script = UiScript::new().unwrap();
+        script
+            .run(
+                r#"
+            received = {}
+            local f = CreateFrame('Frame')
+            f:RegisterEvent('WHO_LIST_UPDATE')
+            f:SetScript('OnEvent', function()
+                local name, guild, level, race, class = GetWhoInfo(1)
+                local count, total = GetNumWhoResults()
+                table.insert(received, name .. ':' .. race .. ':' .. class .. ':' .. total)
+            end)
+        "#,
+            )
+            .unwrap();
+        app.insert_non_send_resource(script);
+        app.world_mut().resource_mut::<SocialState>().who_to_ui = true;
+        for (name, race, total) in [("First", 10, 123), ("Second", 11, 456)] {
+            app.world_mut()
+                .resource_mut::<NativeWhoPackets>()
+                .0
+                .push_back(Packet::Who {
+                    total,
+                    entries: entries(name, race),
+                });
+        }
+        app.update();
+        let vm = app.world().non_send_resource::<UiScript>();
+        let got: String = vm
+            .lua()
+            .load("return table.concat(received, '|')")
+            .eval()
+            .unwrap();
+        assert_eq!(
+            got,
+            "First:Blood Elf:Death Knight:123|Second:Draenei:Death Knight:456"
+        );
+        assert!(app
+            .world()
+            .resource::<SocialState>()
+            .pending_native_who
+            .is_empty());
+        app.world_mut()
+            .resource_mut::<SocialState>()
+            .clear_session();
+        app.update();
+        let vm = app.world().non_send_resource::<UiScript>();
+        let count: u32 = vm.lua().load("return GetNumWhoResults()").eval().unwrap();
+        assert_eq!(count, 0);
+    }
+    fn connected() -> benilla_protocol::SessionEvent {
+        benilla_protocol::SessionEvent::Connected {
+            self_guid: 123,
+            name: "Synthetic".into(),
+            billing_time_rested: 0,
+            tutorial_flags: None,
+            addon_info: None,
+        }
+    }
+    fn packet(app: &mut App, name: &str) {
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![benilla_protocol::SessionEvent::WrathWho {
+                packet: Packet::Who {
+                    total: 88,
+                    entries: entries(name, 11),
+                },
+            }],
+        );
+    }
+    #[test]
+    fn real_handlers_clear_capture_and_pending_receipts_before_fresh_feed() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        app.insert_resource(crate::net::SessionDialect::Wrath12340);
+        packet(&mut app, "OldPending");
+        app.world_mut()
+            .run_system_once(super::super::native_who::drain)
+            .unwrap();
+        assert_eq!(
+            app.world()
+                .resource::<SocialState>()
+                .pending_native_who
+                .len(),
+            1
+        );
+        packet(&mut app, "OldCapture");
+        crate::net::handlers::dispatch(app.world_mut(), vec![connected()]);
+        assert!(app
+            .world()
+            .resource::<SocialState>()
+            .pending_native_who
+            .is_empty());
+        assert!(app.world().resource::<NativeWhoPackets>().0.is_empty());
+        packet(&mut app, "Fresh");
+        let social = app.world_mut().remove_resource::<SocialState>().unwrap();
+        let packets = app
+            .world_mut()
+            .remove_resource::<NativeWhoPackets>()
+            .unwrap();
+        // Run only the real social systems in a CPU app, not renderer startup.
+        let mut cpu = App::new();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        cpu.insert_resource(social)
+            .insert_resource(packets)
+            .init_resource::<NameCache>()
+            .init_resource::<crate::ui_chat::ChatLog>()
+            .init_resource::<crate::sound::MessageSounds>()
+            .insert_resource(NetCommands(tx))
+            .insert_non_send_resource(UiScript::new().unwrap())
+            .add_systems(
+                Update,
+                (super::super::native_who::drain, feed_social).chain(),
+            );
+        cpu.update();
+        let script = cpu.world().non_send_resource::<UiScript>();
+        let name: String = script.lua().load("return GetWhoInfo(1)").eval().unwrap();
+        assert_eq!(name, "Fresh");
+        let social = cpu.world_mut().remove_resource::<SocialState>().unwrap();
+        let packets = cpu
+            .world_mut()
+            .remove_resource::<NativeWhoPackets>()
+            .unwrap();
+        app.insert_resource(social).insert_resource(packets);
+        packet(&mut app, "DisconnectPending");
+        app.world_mut()
+            .run_system_once(super::super::native_who::drain)
+            .unwrap();
+        packet(&mut app, "DisconnectCapture");
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![benilla_protocol::SessionEvent::Disconnected {
+                reason: "synthetic".into(),
+                end: benilla_protocol::SessionEnd::Lost,
+            }],
+        );
+        let social = app.world().resource::<SocialState>();
+        assert!(social.pending_native_who.is_empty());
+        assert!(social.who.is_empty());
+        assert!(social.native_who_rows.is_empty());
+        assert!(app.world().resource::<NativeWhoPackets>().0.is_empty());
+    }
+    #[test]
+    fn vanilla_connected_does_not_reset_social_selection_or_rows() {
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        app.insert_resource(crate::net::SessionDialect::Vanilla5875);
+        {
+            let mut social = app.world_mut().resource_mut::<SocialState>();
+            social.selected_friend = 77;
+            social.selected_ignore = 99;
+            social.who_total = 42;
+            social.who_to_ui = true;
+        }
+        crate::net::handlers::dispatch(app.world_mut(), vec![connected()]);
+        let social = app.world().resource::<SocialState>();
+        assert_eq!(social.selected_friend, 77);
+        assert_eq!(social.selected_ignore, 99);
+        assert_eq!(social.who_total, 42);
+        assert!(social.who_to_ui);
+    }
+    #[test]
+    fn native_chat_rows_and_summary_use_raw_count_not_total() {
+        let mut social = SocialState::default();
+        super::super::native_who::apply(&mut social, 999, entries("Synthetic", 10));
+        let rows = who_wire_rows(&social, None);
+        assert_eq!(rows[0].class, "Death Knight");
+        assert_eq!(rows[0].race, "Blood Elf");
+        assert_eq!(who_summary_count(&social), 1);
+        let lines = who_lines(&rows, who_summary_count(&social), &|key| match key {
+            "WHO_LIST_FORMAT" => Some("%s %d %s %s %s".into()),
+            "WHO_NUM_RESULTS" => Some("%d player total".into()),
+            _ => None,
+        });
+        assert_eq!(lines.last().unwrap().text(), "1 player total");
+        assert!(lines[0].text().contains("Death Knight"));
+        assert!(lines[0].text().contains("Blood Elf"));
     }
 }

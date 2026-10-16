@@ -2044,6 +2044,8 @@ pub(crate) enum ClientCommand {
     },
     /// Native arena-team transport only; no UI producer or inferred authority.
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
+    /// Explicit transport only; no shared WHO UI producer or permission inference.
+    NativeWhoCommand(benilla_protocol::wrath_who::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,

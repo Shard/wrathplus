@@ -21,6 +21,24 @@ const RACE_IDS: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 /// Parse a `/who` filter into the wire request. A `z-` name that `areas` cannot resolve becomes a
 /// search term, which the server still matches against zone names.
 pub(crate) fn parse(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoRequest {
+    parse_with_ids(filter, areas, &CLASS_IDS, &RACE_IDS)
+}
+
+/// Wrath adds death knights, blood elves and draenei; Vanilla parser is unchanged.
+pub(super) fn parse_wrath(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoRequest {
+    parse_with_ids(
+        filter,
+        areas,
+        &[1, 2, 3, 4, 5, 6, 7, 8, 9, 11],
+        &[1, 2, 3, 4, 5, 6, 7, 8, 10, 11],
+    )
+}
+fn parse_with_ids(
+    filter: &str,
+    areas: Option<&AreaTableCatalog>,
+    classes: &[u8],
+    races: &[u8],
+) -> WhoRequest {
     let mut request = WhoRequest::default();
     let mut class_mask = 0u32;
     let mut race_mask = 0u32;
@@ -34,11 +52,18 @@ pub(crate) fn parse(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoReques
                 Some(id) => request.zones.push(id),
                 None => request.search_terms.push(value.to_string()),
             },
-            Some('c') => match mask_bit(value, &CLASS_IDS, class_names) {
+            Some('c') => match mask_bit(value, classes, |id| match id {
+                6 if classes.contains(&6) => Some(("Death Knight", "DEATHKNIGHT")),
+                _ => class_names(id),
+            }) {
                 Some(bit) => class_mask |= bit,
                 None => request.search_terms.push(value.to_string()),
             },
-            Some('r') => match mask_bit(value, &RACE_IDS, race_names) {
+            Some('r') => match mask_bit(value, races, |id| match id {
+                10 if races.contains(&10) => Some(("Blood Elf", "BloodElf")),
+                11 if races.contains(&11) => Some(("Draenei", "Draenei")),
+                _ => race_names(id),
+            }) {
                 Some(bit) => race_mask |= bit,
                 None => request.search_terms.push(value.to_string()),
             },
@@ -118,7 +143,7 @@ fn level_range(value: &str) -> Option<(u32, u32)> {
 fn mask_bit(
     value: &str,
     ids: &[u8],
-    names: fn(u8) -> Option<(&'static str, &'static str)>,
+    names: impl Fn(u8) -> Option<(&'static str, &'static str)>,
 ) -> Option<u32> {
     ids.iter().copied().find_map(|id| {
         let (display, token) = names(id)?;
