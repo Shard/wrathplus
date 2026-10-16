@@ -39,6 +39,7 @@ mod wrath_inventory_capture;
 mod wrath_exchange_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
+mod wrath_quest_capture;
 mod wrath_spell_log_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
@@ -140,6 +141,7 @@ impl Plugin for NetPlugin {
         wrath_exchange_capture::register(app);
         wrath_achievement_capture::register(app);
         wrath_calendar_capture::register(app);
+        wrath_quest_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
@@ -1693,6 +1695,8 @@ pub(crate) enum ClientCommand {
     /// `MSG_QUEST_PUSH_RESULT`: our decline of a shared quest, to `sharer`.
     QuestPushResult {
         sharer: u64,
+        /// The shared quest; build 12340 sends it and AC ignores it. 0 when no panel shows one.
+        quest: u32,
         msg: benilla_protocol::messages::QuestShareMsg,
     },
     // ── Mail ──
@@ -2078,6 +2082,8 @@ pub(crate) enum ClientCommand {
     NativeInspectAchievements { player: u64 },
     /// Native calendar commands; no UI producer yet, replies are capture-only.
     NativeCalendar(benilla_protocol::wrath_calendar::Command),
+    /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
+    NativeQuest(benilla_protocol::wrath_quest::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
