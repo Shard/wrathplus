@@ -491,6 +491,8 @@ pub(crate) fn restore_chat_looks(world: &mut World, script: &mut UiScript) {
     script.set_guild_recruitment_mode(u8::from(parsed.guild_recruitment_auto));
     script.set_chat_colors(parsed.colors);
     script.set_chat_window_looks(parsed.looks);
+    // The auto-join rows window 1 gets back on `ResetChatWindows` (`0x501a70`).
+    script.set_chat_channel_seed(auto_rows);
     // `UPDATE_CHAT_WINDOWS` once, then `UPDATE_CHAT_COLOR` for every registry entry, file or no
     // file (`0x4996b9`, `0x499934`).
     script.fire_event("UPDATE_CHAT_WINDOWS", vec![]);
