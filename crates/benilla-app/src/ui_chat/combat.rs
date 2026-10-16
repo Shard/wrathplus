@@ -607,7 +607,7 @@ impl Family {
 pub(crate) struct Trailers {
     pub absorbed: u32,
     /// Negative is a vulnerability bonus, worded by `VULNERABLE_TRAILER`.
-    pub resisted: i32,
+    pub resisted: i64,
     pub blocked: u32,
     /// The swing's `HitInfo`, for `0x4000` GLANCING and `0x8000` CRUSHING; melee only.
     pub hit_info: u32,
@@ -636,9 +636,9 @@ fn append_trailers(lua: &benilla_ui::script::UiScript, line: &mut String, t: Tra
         push("CRUSHING_TRAILER", None);
     }
     if t.resisted > 0 {
-        push("RESIST_TRAILER", Some(i64::from(t.resisted)));
+        push("RESIST_TRAILER", Some(t.resisted));
     } else if t.resisted < 0 {
-        push("VULNERABLE_TRAILER", Some(-i64::from(t.resisted)));
+        push("VULNERABLE_TRAILER", Some(-t.resisted));
     }
     if t.blocked != 0 {
         push("BLOCK_TRAILER", Some(i64::from(t.blocked)));
