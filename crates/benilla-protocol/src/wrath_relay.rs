@@ -1,10 +1,12 @@
-//! Strict projection of Wrath build-12340 on-foot movement relays into shared session events.
+//! Strict projection of Wrath build-12340 movement relays into shared session events.
 //!
 //! AzerothCore's `WorldSession::WriteMovementInfo` writes a packed mover GUID followed by Wrath
-//! `MovementInfo`. This helper deliberately admits only the ordinary on-foot opcodes and fields
-//! whose shared meanings are established, swimming with its pitch included; transports, flight,
-//! spline movement, and extra flags
-//! remain fenced.
+//! `MovementInfo`. Admitted: on-foot, swimming (with its pitch), flight (pitch kept; the Wrath-only
+//! CAN_FLY, FLYING, ASCENDING and DESCENDING bits have no shared meaning and are dropped; Wrath
+//! FLYING is the shared ON_TRANSPORT bit and must never leak into it) and transports (Wrath
+//! `0x200` becomes the shared `ON_TRANSPORT`, the tail the shared `TransportPose`). The mode,
+//! knockback and collision-height echoes relay their `MovementInfo`; their extra words are framed
+//! and dropped. Spline elevation and the pending-* bits stay fenced.
 
 use crate::events::SessionEvent;
 use crate::messages::{JumpInfo, RelayVerb};
@@ -27,6 +29,20 @@ const MSG_MOVE_SET_FACING: u16 = 0x00da;
 const MSG_MOVE_ROOT: u16 = 0x00ec;
 const MSG_MOVE_UNROOT: u16 = 0x00ed;
 const MSG_MOVE_HEARTBEAT: u16 = 0x00ee;
+/// Echoes AzerothCore sends to observers once a mover ACKs (MovementHandler.cpp, MiscHandler.cpp).
+const MSG_MOVE_KNOCK_BACK: u16 = 0x00f1;
+const MSG_MOVE_HOVER: u16 = 0x00f7;
+const MSG_MOVE_FEATHER_FALL: u16 = 0x02b0;
+const MSG_MOVE_WATER_WALK: u16 = 0x02b1;
+const MSG_MOVE_UPDATE_CAN_FLY: u16 = 0x03ad;
+const MSG_MOVE_GRAVITY_CHNG: u16 = 0x04d2;
+const MSG_MOVE_SET_COLLISION_HGT: u16 = 0x0518;
+/// Flight's vertical keys.
+const MSG_MOVE_START_ASCEND: u16 = 0x0359;
+const MSG_MOVE_STOP_ASCEND: u16 = 0x035a;
+const MSG_MOVE_START_DESCEND: u16 = 0x03a7;
+/// `packed guid, u32 lag`: not a pose (`HandleMoveTimeSkippedOpcode`).
+const MSG_MOVE_TIME_SKIPPED: u16 = 0x0319;
 
 const WRATH_ROOT: u32 = 0x0000_0800;
 const WRATH_FALLING: u32 = 0x0000_1000;
@@ -34,9 +50,17 @@ const WRATH_FALLING_FAR: u32 = 0x0000_2000;
 const SHARED_ROOT: u32 = 0x0000_1000;
 const SHARED_FALLING: u32 = 0x0000_2000;
 const SHARED_FALLING_FAR: u32 = 0x0000_4000;
+const WRATH_ON_TRANSPORT: u32 = 0x0000_0200;
+const SHARED_ON_TRANSPORT: u32 = 0x0200_0000;
+/// Wrath `DISABLE_GRAVITY` is the shared `LEVITATING` (`0x400`) and `HOVER` (`0x4000_0000`) is the same bit.
+const WRATH_SHARED_MODES: u32 = 0x0000_0400 | 0x4000_0000;
+/// CAN_FLY, FLYING, ASCENDING, DESCENDING: no shared meaning; dropped from the shared word.
+const WRATH_FLIGHT_ONLY: u32 = 0x0100_0000 | 0x0200_0000 | 0x0040_0000 | 0x0080_0000;
 /// Water walking and slow fall (`0x1000_0000`, `0x2000_0000`), swimming (`0x0020_0000`, which carries
 /// the pitch) and the pitch keys (`0x40`, `0x80`) have the same bits in the shared word.
 const WRATH_ON_FOOT_FLAGS: u32 = 0x3020_01ff | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
+const WRATH_RELAY_FLAGS: u32 =
+    WRATH_ON_FOOT_FLAGS | WRATH_ON_TRANSPORT | WRATH_SHARED_MODES | WRATH_FLIGHT_ONLY;
 
 /// Whether `opcode` has a source-verified AzerothCore on-foot relay layout.
 ///
@@ -60,6 +84,17 @@ pub const fn handles(opcode: u16) -> bool {
                 | MSG_MOVE_ROOT
                 | MSG_MOVE_UNROOT
                 | MSG_MOVE_HEARTBEAT
+                | MSG_MOVE_KNOCK_BACK
+                | MSG_MOVE_HOVER
+                | MSG_MOVE_FEATHER_FALL
+                | MSG_MOVE_WATER_WALK
+                | MSG_MOVE_UPDATE_CAN_FLY
+                | MSG_MOVE_GRAVITY_CHNG
+                | MSG_MOVE_SET_COLLISION_HGT
+                | MSG_MOVE_START_ASCEND
+                | MSG_MOVE_STOP_ASCEND
+                | MSG_MOVE_START_DESCEND
+                | MSG_MOVE_TIME_SKIPPED
     )
 }
 
@@ -74,26 +109,45 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         ));
     }
 
-    let outbound = OutboundMovement::from_bytes(body)?;
+    if opcode == MSG_MOVE_TIME_SKIPPED {
+        let mut input = body;
+        let guid = crate::wire::read_packed_guid(&mut input)
+            .map_err(|_| CodecError::InvalidFlags("short time-skipped relay"))?;
+        let [a, b, c, d] = <[u8; 4]>::try_from(input)
+            .map_err(|_| CodecError::InvalidFlags("time-skipped relay is not guid + u32"))?;
+        return Ok(SessionEvent::MoveTimeSkipped {
+            guid,
+            lag_ms: u32::from_le_bytes([a, b, c, d]),
+        });
+    }
+    // The knockback echo appends `sin, cos, xy, z` (already in the fall tail) and the collision
+    // echo the new height: framed and dropped.
+    let extra = match opcode {
+        MSG_MOVE_KNOCK_BACK => 16,
+        MSG_MOVE_SET_COLLISION_HGT => 4,
+        _ => 0,
+    };
+    let Some(split) = body.len().checked_sub(extra) else {
+        return Err(CodecError::InvalidFlags("relay shorter than its echo tail"));
+    };
+    if body[split..]
+        .chunks(4)
+        .any(|w| !f32::from_le_bytes(w.try_into().expect("whole words")).is_finite())
+    {
+        return Err(CodecError::InvalidFlags("non-finite relay echo tail"));
+    }
+    let outbound = OutboundMovement::from_bytes(&body[..split])?;
     let movement = outbound.movement;
-    if movement.flags2 != 0 {
-        return Err(CodecError::InvalidFlags(
-            "Wrath on-foot relay has secondary movement flags",
-        ));
-    }
-    if movement.transport.is_some() {
-        return Err(CodecError::InvalidFlags(
-            "Wrath on-foot relay has transport data",
-        ));
-    }
+    // `flags2` (pitching permissions, interpolation) has no shared meaning; the codec already
+    // checked its pairing with the transport `time2`.
     if movement.spline_elevation.is_some() {
         return Err(CodecError::InvalidFlags(
             "Wrath on-foot relay has spline elevation",
         ));
     }
-    if movement.flags & !WRATH_ON_FOOT_FLAGS != 0 {
+    if movement.flags & !WRATH_RELAY_FLAGS != 0 {
         return Err(CodecError::InvalidFlags(
-            "unsupported Wrath on-foot movement flag",
+            "unsupported Wrath relay movement flag",
         ));
     }
     if movement.flags & WRATH_FALLING_FAR != 0 && movement.flags & WRATH_FALLING == 0 {
@@ -129,7 +183,15 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         ));
     }
 
-    let mut flags = movement.flags & !(WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR);
+    let mut flags = movement.flags
+        & !(WRATH_ROOT
+            | WRATH_FALLING
+            | WRATH_FALLING_FAR
+            | WRATH_ON_TRANSPORT
+            | WRATH_FLIGHT_ONLY);
+    if movement.flags & WRATH_ON_TRANSPORT != 0 {
+        flags |= SHARED_ON_TRANSPORT;
+    }
     if movement.flags & WRATH_ROOT != 0 {
         flags |= SHARED_ROOT;
     }
@@ -155,13 +217,21 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         ],
         orientation: movement.position.orientation,
         flags,
-        // Present exactly while swimming (the codec checks the flag/data pairing).
+        // Present exactly while swimming or flying (the codec checks the flag/data pairing).
         pitch: movement.pitch.unwrap_or(0.0),
         time: movement.timestamp,
         verb: RelayVerb::of(opcode),
         fall_time: movement.fall_time,
         jump,
-        transport: None,
+        transport: movement.transport.map(|t| crate::messages::TransportPose {
+            guid: t.guid,
+            pos: crate::wire::Vector3d {
+                x: t.position.x,
+                y: t.position.y,
+                z: t.position.z,
+            },
+            orientation: t.position.orientation,
+        }),
     })
 }
 
@@ -216,7 +286,12 @@ mod tests {
         for opcode in [0x00bf, 0x00c0, 0x00c1, 0x00ca, 0x00cb, 0x00db] {
             assert!(handles(opcode), "{opcode:#05x}");
         }
-        for opcode in [0x00b4, 0x00c4, 0x00ef, 0x0359, 0x035a, 0x03a7] {
+        for opcode in [
+            0x0359, 0x035a, 0x03a7, 0x00f1, 0x00f7, 0x02b0, 0x02b1, 0x03ad, 0x04d2, 0x0518, 0x0319,
+        ] {
+            assert!(handles(opcode), "{opcode:#05x}");
+        }
+        for opcode in [0x00b4, 0x00c4, 0x00ef, 0x038d] {
             assert!(!handles(opcode), "{opcode:#05x}");
         }
         for opcode in [0x00c2, 0x00c3, 0x00c9, 0x00da, 0x00ec, 0x00ed, 0x00ee] {
@@ -376,13 +451,99 @@ mod tests {
         spline.movement.spline_elevation = Some(1.0);
         let falling_far_alone = movement(WRATH_FALLING_FAR);
 
-        for packet in [transport, flags2, flying, spline, falling_far_alone] {
+        // Transports, flags2 and flight relay now (see the translation test); these stay fenced.
+        let _ = (transport, flags2, flying);
+        for packet in [spline, falling_far_alone] {
             let body = packet.to_bytes().unwrap();
             assert!(matches!(
                 decode(MSG_MOVE_HEARTBEAT, &body),
                 Err(CodecError::InvalidFlags(_))
             ));
         }
+    }
+
+    #[test]
+    fn flight_and_transport_relays_translate_into_the_shared_word() {
+        // A flyer: CAN_FLY | FLYING | ASCENDING never reach the shared word (Wrath FLYING is the
+        // shared ON_TRANSPORT bit); its pitch rides.
+        let mut flying = movement(0x0100_0000 | MOVEMENT_FLAG_FLYING | 0x0040_0000);
+        flying.movement.pitch = Some(0.4);
+        let SessionEvent::UnitMove {
+            flags,
+            pitch,
+            transport,
+            ..
+        } = event(MSG_MOVE_START_ASCEND, &flying.to_bytes().unwrap())
+        else {
+            panic!()
+        };
+        assert_eq!((flags, pitch, transport), (0, 0.4, None));
+        // A passenger: Wrath ON_TRANSPORT (0x200) becomes the shared 0x0200_0000 with its deck pose.
+        let mut riding = movement(MOVEMENT_FLAG_ON_TRANSPORT | wrath_ground::MOVE_FORWARD);
+        riding.movement.transport = Some(TransportInfo {
+            guid: 0x1FC0_0000_0000_0042,
+            position: Position {
+                x: 1.5,
+                y: -2.0,
+                z: 3.0,
+                orientation: 0.25,
+            },
+            time: 9,
+            seat: -1,
+            time2: None,
+        });
+        let SessionEvent::UnitMove {
+            flags, transport, ..
+        } = event(MSG_MOVE_HEARTBEAT, &riding.to_bytes().unwrap())
+        else {
+            panic!()
+        };
+        assert_eq!(flags, 0x0200_0000 | wrath_ground::MOVE_FORWARD);
+        let t = transport.unwrap();
+        assert_eq!(
+            (t.guid, t.pos.x, t.pos.y, t.pos.z, t.orientation),
+            (0x1FC0_0000_0000_0042, 1.5, -2.0, 3.0, 0.25)
+        );
+        // Gravity off is the shared LEVITATING bit, hover the same bit.
+        let SessionEvent::UnitMove { flags, .. } = event(
+            MSG_MOVE_GRAVITY_CHNG,
+            &movement(0x0400 | 0x4000_0000).to_bytes().unwrap(),
+        ) else {
+            panic!()
+        };
+        assert_eq!(flags, 0x0400 | 0x4000_0000);
+    }
+
+    #[test]
+    fn echo_tails_and_time_skipped_frame_strictly() {
+        let base = movement(0).to_bytes().unwrap();
+        let knock = [base.as_slice(), &[0u8; 16]].concat();
+        assert!(matches!(
+            event(MSG_MOVE_KNOCK_BACK, &knock),
+            SessionEvent::UnitMove { .. }
+        ));
+        assert!(decode(MSG_MOVE_KNOCK_BACK, &base).is_err());
+        let height = [base.as_slice(), &2.0f32.to_le_bytes()].concat();
+        assert!(matches!(
+            event(MSG_MOVE_SET_COLLISION_HGT, &height),
+            SessionEvent::UnitMove { .. }
+        ));
+        assert!(decode(
+            MSG_MOVE_SET_COLLISION_HGT,
+            &[height.as_slice(), &[0]].concat()
+        )
+        .is_err());
+        let mut skipped = vec![0x01, 0x05];
+        skipped.extend(250u32.to_le_bytes());
+        assert!(matches!(
+            event(MSG_MOVE_TIME_SKIPPED, &skipped),
+            SessionEvent::MoveTimeSkipped {
+                guid: 5,
+                lag_ms: 250
+            }
+        ));
+        assert!(decode(MSG_MOVE_TIME_SKIPPED, &skipped[..5]).is_err());
+        assert!(decode(MSG_MOVE_TIME_SKIPPED, &[skipped.as_slice(), &[0]].concat()).is_err());
     }
 
     #[test]

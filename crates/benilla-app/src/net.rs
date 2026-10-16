@@ -44,9 +44,11 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_inspect_capture;
-mod wrath_char_service_capture;
+pub(crate) mod wrath_char_service_capture;
+mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
+mod wrath_movement_capture;
 pub(crate) mod wrath_combo_points;
 #[cfg(test)]
 mod wrath_stream_tests;
@@ -156,8 +158,10 @@ impl Plugin for NetPlugin {
         wrath_session_meta_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
+        wrath_faction_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
+        wrath_movement_capture::register(app);
         wrath_combo_points::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
@@ -2646,6 +2650,11 @@ mod tests {
                 slot: 0,
             },
             ClientCommand::CancelAutoRepeat,
+            // `CMSG_MOVE_TIME_SKIPPED` has a native route (movement M3).
+            ClientCommand::MoveTimeSkipped {
+                guid: 1057,
+                lag_ms: 2_210,
+            },
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
@@ -2653,10 +2662,6 @@ mod tests {
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
             ClientCommand::QueryTime,
-            ClientCommand::MoveTimeSkipped {
-                guid: 1057,
-                lag_ms: 2_210,
-            },
             ClientCommand::AutostoreLootItem { slot: 18 },
         ] {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));

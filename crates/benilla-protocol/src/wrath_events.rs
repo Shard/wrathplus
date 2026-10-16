@@ -214,6 +214,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_faction::OPCODES.contains(&opcode) => Ok(match crate::wrath_faction::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_inspect::OPCODES.contains(&opcode) => Ok(match crate::wrath_inspect::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -421,6 +425,12 @@ impl WrathEventAdapter {
             }
             opcode if crate::wrath_logs::handles(opcode) => {
                 Ok(match crate::wrath_logs::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            opcode if crate::wrath_movement_misc::handles(opcode) => {
+                Ok(match crate::wrath_movement_misc::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })

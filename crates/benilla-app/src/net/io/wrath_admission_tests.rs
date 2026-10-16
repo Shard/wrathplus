@@ -7,6 +7,9 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("SetFactionAtWar", ClientCommand::SetFactionAtWar { rep_list_id: 7, at_war: true }),
+        ("SetFactionInactive", ClientCommand::SetFactionInactive { rep_list_id: 7, inactive: true }),
+        ("SetWatchedFaction", ClientCommand::SetWatchedFaction { rep_list_id: -1 }),
         (
             "NativeInspect",
             ClientCommand::NativeInspect(benilla_protocol::wrath_inspect::Command::LearnPreviewTalents { talents: vec![(1, 0)] }),
@@ -241,6 +244,8 @@ fn every_wrath_writer_route_is_admitted() {
         ("PetRename", ClientCommand::PetRename { pet_guid: 1, name: "Rex".into() }),
         ("CancelAutoRepeat", ClientCommand::CancelAutoRepeat),
         ("TeleportAck", ClientCommand::TeleportAck { guid: 1, counter: 2 }),
+        ("MountSpecial", ClientCommand::MountSpecial),
+        ("MoveTimeSkipped", ClientCommand::MoveTimeSkipped { guid: 1, lag_ms: 250 }),
         ("CancelChannelling", ClientCommand::CancelChannelling { spell_id: 5143 }),
         ("ResurrectResponse", ClientCommand::ResurrectResponse { caster: 1, accept: true }),
         ("NativeSpellControl", ClientCommand::NativeSpellControl(benilla_protocol::wrath_spell_control::Command::SpellClick { unit: 1 })),
@@ -812,7 +817,6 @@ fn every_wrath_writer_route_is_admitted() {
         .unwrap();
     let disabled = [
         "BattlefieldStatusRequest",
-        "MoveTimeSkipped",
         "ForceSpeedAck",
         "NotActiveMover",
         "WorldportAck",

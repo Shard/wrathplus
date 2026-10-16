@@ -1192,10 +1192,14 @@ pub enum SessionEvent {
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
+    /// Capture-only native forced faction reactions (`wrath_faction`).
+    WrathFaction { packet: crate::wrath_faction::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
     WrathSpellControl { packet: crate::wrath_spell_control::Packet },
+    /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
+    WrathMovement { packet: crate::wrath_movement_misc::Packet },
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:
     /// the count banked on `target`, 0 for none.
     ComboPoints { target: u64, points: u8 },
