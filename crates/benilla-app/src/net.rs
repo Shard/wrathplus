@@ -35,6 +35,7 @@ mod wrath_quests_completed_capture;
 mod wrath_ui_timer_capture;
 mod wrath_mirror_image_capture;
 mod wrath_instance_control_capture;
+mod wrath_inventory_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -131,6 +132,7 @@ impl Plugin for NetPlugin {
         wrath_ui_timer_capture::register(app);
         wrath_mirror_image_capture::register(app);
         wrath_instance_control_capture::register(app);
+        wrath_inventory_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -1148,6 +1150,9 @@ pub(crate) enum ClientCommand {
         bag_index: u8,
         slot: u8,
         spell_index: u8,
+        /// Build 12340 names the cast spell and the item GUID; AC checks both.
+        spell_id: u32,
+        item_guid: u64,
         target: benilla_protocol::messages::UseItemTarget,
     },
     /// `CMSG_OPEN_ITEM`: the server answers `SMSG_LOOT_RESPONSE` on the item's own guid; a wrapped
@@ -2054,6 +2059,8 @@ pub(crate) enum ClientCommand {
     NativeMirrorImageQuery { guid: u64 },
     /// Native instance controls; transport does not infer leadership, locks or permission.
     NativeInstanceControl(benilla_protocol::wrath_instance_control::Command),
+    /// Native item/inventory commands with no Vanilla twin; transport does not claim acceptance.
+    NativeInventory(benilla_protocol::wrath_inventory::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
@@ -2554,6 +2561,10 @@ mod tests {
                 target: Some(7),
             },
             ClientCommand::CreatureQuery { entry: 69, guid: 7 },
+            ClientCommand::OpenItem {
+                bag_index: 255,
+                slot: 0,
+            },
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
@@ -2567,10 +2578,6 @@ mod tests {
                 lag_ms: 2_210,
             },
             ClientCommand::AutostoreLootItem { slot: 18 },
-            ClientCommand::OpenItem {
-                bag_index: 255,
-                slot: 0,
-            },
         ] {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));
             assert!(net.supports(SessionDialect::Vanilla5875, &command));
