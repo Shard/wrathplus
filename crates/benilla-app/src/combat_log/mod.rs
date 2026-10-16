@@ -93,6 +93,7 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::EnchantmentLog, on_enchantment_log)
             .net_handler(K::SpellLogExecute, on_spell_log_execute)
             .net_handler(K::EnvironmentalDamageLog, on_environmental_damage_log)
+            .net_handler(K::WrathEnvironmentalDamage, on_wrath_environmental_damage)
             .net_handler(K::XpGain, on_xp_gain)
             .net_handler(K::ExplorationXp, on_exploration_xp)
             .net_handler(K::LevelUp, on_level_up)
@@ -275,6 +276,13 @@ fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
     if let SessionEvent::SpellLogExecute(x) = ev {
         let ctx = c.ctx();
         chat::spell_log_execute(&x, &ctx, &l.stores, &l.poses, &mut l.log);
+    }
+}
+
+fn on_wrath_environmental_damage(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    if let SessionEvent::WrathEnvironmentalDamage(e) = ev {
+        let ctx = c.ctx();
+        chat::wrath_environmental_damage(e, &ctx, &l.stores, &l.poses, &mut l.log);
     }
 }
 

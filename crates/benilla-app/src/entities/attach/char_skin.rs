@@ -15,6 +15,8 @@ use super::super::{DisplayModel, EntityPart, SkinComposites, SkinKey, SkinSectio
 /// CreatureDisplayInfoExtra row; it drives both the geoset selection and the skin materials.
 pub(super) struct CharLook {
     pub(super) race: u8,
+    pub(super) class: u8,
+    pub(super) face: u8,
     pub(super) sex: u8,
     /// skinColor: keys the composite and the extra-skin BLP (tauren fur, M2 type 8), which a baked
     /// NPC atlas does not cover.
@@ -49,6 +51,12 @@ pub(super) fn resolve_char_look(
     if let Some(npc) = d.npc_appearance.as_ref() {
         return Some(CharLook {
             race: npc.race,
+            class: stores
+                .get(entity)
+                .ok()
+                .and_then(|s| s.0.unit_class())
+                .unwrap_or(0),
+            face: npc.face,
             sex: npc.sex,
             skin: npc.skin,
             hair_style: npc.hair_style,
@@ -66,6 +74,8 @@ pub(super) fn resolve_char_look(
         let look = super::super::corpse::corpse_char_look(stores.get(entity).ok())?;
         return Some(CharLook {
             race: look.race,
+            class: 0, // Corpse snapshot has no class; face flag still applies.
+            face: look.face,
             sex: look.sex,
             skin: look.skin,
             hair_style: look.hair_style,
@@ -81,6 +91,8 @@ pub(super) fn resolve_char_look(
         let s = &stores.get(entity).ok()?.0;
         return Some(CharLook {
             race: s.unit_race()?,
+            class: s.unit_class().unwrap_or(0),
+            face: s.player_face().unwrap_or(0),
             sex: s.unit_gender()?,
             skin: s.player_skin().unwrap_or(0),
             hair_style: s.player_hair_style().unwrap_or(0),
@@ -92,6 +104,20 @@ pub(super) fn resolve_char_look(
         });
     }
     None
+}
+
+/// Shared world, redress, portrait and preview eye selector.
+pub(super) fn eye_geosets(
+    cg: &benilla_formats::CharacterGeosets,
+    l: &CharLook,
+    equip: &benilla_formats::EquipGeosets,
+    sections: Option<&SkinSections>,
+) -> benilla_formats::VisibleGeosets {
+    let mut visible = cg.visible_geosets(l.race, l.sex, l.hair_style, l.facial_hair, equip);
+    let face_glow =
+        sections.is_some_and(|s| s.tables.face_has_eye_glow(l.race, l.sex, l.face, l.skin));
+    cg.apply_eye_glow(&mut visible, l.class, face_glow);
+    visible
 }
 
 /// The `mpq://` URL of a baked NPC atlas under `Textures\BakedNpcTextures\`.
@@ -428,4 +454,37 @@ pub(super) fn build_char_skin_materials(
         });
 
     (body, hair, object, skin_extra)
+}
+
+#[cfg(test)]
+mod eye_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn appearance_extraction_keeps_class_and_face_for_eye_selection() {
+        let mut app = App::new();
+        let dm = super::super::super::display::DisplayModel {
+            is_character_body: true,
+            ..super::super::super::display::empty_shell()
+        };
+        let net = NetEntity {
+            kind: EntityKind::Player,
+            display_id: Some(1),
+            scale: 1.0,
+        };
+        let e = app
+            .world_mut()
+            .spawn(ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
+                (36, 1 | 6 << 8),
+                (193, 2 | 4 << 8),
+            ])))
+            .id();
+        app.world_mut()
+            .run_system_once(move |stores: Query<&ObjectStore>| {
+                let l = resolve_char_look(&net, Some(&dm), e, &stores).unwrap();
+                assert_eq!((l.race, l.class, l.face, l.skin), (1, 6, 4, 2));
+            })
+            .unwrap();
+    }
 }

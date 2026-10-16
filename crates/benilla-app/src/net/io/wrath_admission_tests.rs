@@ -8,6 +8,12 @@ fn every_wrath_writer_route_is_admitted() {
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
         ("NativeMirrorImageQuery", ClientCommand::NativeMirrorImageQuery { guid: u64::MAX }),
+        (
+            "NativeWhoCommand",
+            ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Whois {
+                name: b"Synthetic".to_vec(),
+            }),
+        ),
         ("NativeUiTimerQuery", ClientCommand::NativeUiTimerQuery),
         (
             "GuildQuery",

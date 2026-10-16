@@ -731,6 +731,8 @@ pub enum SessionEvent {
     DamageShield(DamageShield),
     /// Environmental damage (`SMSG_ENVIRONMENTALDAMAGELOG`); kit from `EnvironmentalDamage.dbc`.
     EnvironmentalDamageLog(EnvironmentalDamageLog),
+    /// Native Wrath unsigned environmental damage, with native trailer order.
+    WrathEnvironmentalDamage(crate::wrath_environment::EnvironmentalDamage),
     /// A cast's per-target miss list (`SMSG_SPELLLOGMISS`).
     SpellLogMiss(SpellLogMiss),
     /// The killing blow (`SMSG_PARTYKILLLOG`), the only source of "You have slain %s!".

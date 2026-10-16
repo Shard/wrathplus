@@ -17,23 +17,28 @@ const REGION_BASES: [u16; 16] = [
     1, 101, 201, 301, 401, 501, 601, 702, 801, 901, 1001, 1101, 1201, 1301, 1401, 1501,
 ];
 
-/// The geosets a character shows: the selector's picks, plus every ID above 1700. `0x477520` first
+/// The geosets a character shows: selected managed IDs plus unmanaged IDs. Vanilla
+/// manages through 1700; Wrath `0x4ed900` clears through 2000, then enables 19 groups.
+/// Vanilla `0x477520` first
 /// disables only 0..=1700 (`0x6a4`, through `0x7110d0`) and then enables its picks, and a model's
 /// submeshes start visible (`0x70ebd0` fills their flags with 1), so a higher ID stays shown.
 #[derive(Debug)]
 pub struct VisibleGeosets {
     selected: Vec<u16>,
+    managed_max: u16,
 }
 
 impl VisibleGeosets {
     /// Whether a model submesh survives the character compositor's geoset selection.
     pub fn contains(&self, geoset_id: &u16) -> bool {
-        *geoset_id > 1700 || self.selected.contains(geoset_id)
+        *geoset_id > self.managed_max || self.selected.contains(geoset_id)
     }
 }
 
 /// The customization → geoset tables, resolving an appearance to the set of visible geosets.
 pub struct CharacterGeosets {
+    wrath: bool,
+    facial_extra: HashMap<(u8, u8, u8), [u32; 2]>,
     /// (race, sex, hairStyle) → hair `GeosetID` (group 0).
     hair: HashMap<(u8, u8, u8), u32>,
     /// (race, sex, facialHair) → three geoset variations in file order, for groups 1, 3, 2
@@ -75,6 +80,14 @@ impl CharacterGeosets {
         // The naked set: the region bases and geoset 0, the body.
         let mut set = REGION_BASES.to_vec();
         set.push(0);
+        if self.wrath {
+            // Wrath 0x4ed900 manages 0..=2000 and 19 groups, including eye glow.
+            set.extend([1601, 1701, 1801]);
+            if let Some(&[a, b]) = self.facial_extra.get(&(race, sex, facial_hair)) {
+                set.retain(|id| !matches!(*id, 1601 | 1701));
+                set.extend([(1600 + a) as u16, (1700 + b) as u16]);
+            }
+        }
         // Hair: `0x478540` returns `max(1, geosetId)`, so a bald style shows geoset 1, the scalp.
         if let Some(&g) = self.hair.get(&(race, sex, hair_style)) {
             set[0] = g.max(1) as u16;
@@ -174,7 +187,18 @@ impl CharacterGeosets {
         // The client sets a flag per submesh (`0x7110d0`), so a repeated enable is a no-op there.
         set.sort_unstable();
         set.dedup();
-        VisibleGeosets { selected: set }
+        VisibleGeosets {
+            selected: set,
+            managed_max: if self.wrath { 2000 } else { 1700 },
+        }
+    }
+
+    /// Apply Wrath's independent class/selected-face override (`0x4ed900`).
+    pub fn apply_eye_glow(&self, visible: &mut VisibleGeosets, class: u8, face_glow: bool) {
+        if self.wrath && (class == 6 || face_glow) {
+            visible.selected.retain(|id| *id / 100 != 17);
+            visible.selected.push(1703);
+        }
     }
 
     /// Load the customization DBCs from the patch chain. A repeated `(race, sex, variation)` key
@@ -204,6 +228,7 @@ impl CharacterGeosets {
             }
             m
         };
+        let mut facial_extra = HashMap::new();
         let facial = {
             let bytes = chain
                 .read_file(CHAR_FACIAL_HAIR)
@@ -219,6 +244,11 @@ impl CharacterGeosets {
                 if let (Some(race), Some(sex), Some(var)) =
                     (u32_at(r, 0), u32_at(r, 1), u32_at(r, 2))
                 {
+                    if matches!(profile, DataProfile::Wrath { .. }) {
+                        facial_extra
+                            .entry((race as u8, sex as u8, var as u8))
+                            .or_insert([u32_at(r, 6).unwrap_or(0), u32_at(r, 7).unwrap_or(0)]);
+                    }
                     let start = if matches!(profile, DataProfile::Vanilla) {
                         6
                     } else {
@@ -246,6 +276,8 @@ impl CharacterGeosets {
             Err(_) => HashMap::new(),
         };
         Ok(Self {
+            wrath: matches!(profile, DataProfile::Wrath { .. }),
+            facial_extra,
             hair,
             facial,
             helmet_vis,
@@ -312,8 +344,8 @@ pub(crate) fn char_facial_hair_schema(profile: &DataProfile) -> Schema {
             ("Geoset100", FieldType::UInt32),
             ("Geoset300", FieldType::UInt32),
             ("Geoset200", FieldType::UInt32),
-            ("Unknown6", FieldType::UInt32),
-            ("Unknown7", FieldType::UInt32),
+            ("Geoset1600", FieldType::UInt32),
+            ("Geoset1700", FieldType::UInt32),
         ],
     };
     for &(name, ty) in fields {
@@ -327,8 +359,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wrath_eye_glow_is_selected_not_unconditionally_enabled() {
+        let cg = CharacterGeosets {
+            wrath: true,
+            hair: HashMap::new(),
+            facial: HashMap::new(),
+            facial_extra: HashMap::from([((1, 0, 0), [1, 1])]),
+            helmet_vis: HashMap::new(),
+        };
+        let visible = cg.visible_geosets(1, 0, 0, 0, &Default::default());
+        for (class, face, expected) in [(1, false, false), (6, false, true), (1, true, true)] {
+            let mut v = cg.visible_geosets(1, 0, 0, 0, &Default::default());
+            cg.apply_eye_glow(&mut v, class, face);
+            assert_eq!(v.contains(&1703), expected);
+            assert_eq!(v.contains(&1701), !expected);
+        }
+        assert!(visible.contains(&1701));
+        for id in [1702, 1703, 1999, 2000] {
+            assert!(!visible.contains(&id));
+        }
+        assert!(visible.contains(&2001));
+        assert!(visible.contains(&1601));
+    }
+
+    #[test]
     fn geoset_visibility_preserves_unmanaged_ids() {
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: HashMap::new(),
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),
@@ -336,7 +394,10 @@ mod tests {
         let mut boots = EquipGeosets::default();
         boots.bodyslots[4] = Some([2, 0, 0]);
         for equip in [EquipGeosets::default(), boots] {
-            let visible = cg.visible_geosets(4, 1, 0, 0, &equip);
+            let mut visible = cg.visible_geosets(4, 1, 0, 0, &equip);
+            let before = visible.selected.clone();
+            cg.apply_eye_glow(&mut visible, 6, true);
+            assert_eq!(visible.selected, before, "Vanilla ignores Wrath override");
             assert!(
                 visible.contains(&0),
                 "stock eye glow stays on the body geoset"
@@ -395,6 +456,8 @@ mod tests {
     #[test]
     fn equipment_geoset_branches() {
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: HashMap::new(),
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),
@@ -441,6 +504,8 @@ mod tests {
     #[test]
     fn b3_shirt_sleeve_follows_the_forearm_tile_not_the_chest_slot() {
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: HashMap::new(),
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),
@@ -471,6 +536,8 @@ mod tests {
     #[test]
     fn b6_tabard_preview_wears_the_flap_with_an_empty_slot() {
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: HashMap::new(),
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),
@@ -498,6 +565,8 @@ mod tests {
     #[test]
     fn b7_is_gated_by_the_chest_robe_and_the_tabard() {
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: HashMap::new(),
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),
@@ -561,6 +630,8 @@ mod tests {
         helmet_vis.insert(368, [u32::MAX; 5]); // a shipped row id, hiding everything
         helmet_vis.insert(245, [0u32; 5]); // a shipped row id, hiding nothing
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair,
             facial,
             helmet_vis,
@@ -580,6 +651,8 @@ mod tests {
         let mut hair = HashMap::new();
         hair.insert((1, 1, 1), 5u32);
         let cg2 = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair,
             facial: HashMap::new(),
             helmet_vis: cg.helmet_vis.clone(),
@@ -593,6 +666,8 @@ mod tests {
         let mut helmet_vis = HashMap::new();
         helmet_vis.insert(300, [1u32 << 2; 5]);
         let cg3 = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair: cg2.hair.clone(),
             facial: HashMap::new(),
             helmet_vis,
@@ -613,6 +688,8 @@ mod tests {
         let mut facial = HashMap::new();
         facial.insert((1, 0, 1), [1u32, 2, 1]);
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair,
             facial,
             helmet_vis: HashMap::new(),
@@ -635,6 +712,8 @@ mod tests {
         let mut hair = HashMap::new();
         hair.insert((1, 0, 0), 0u32); // variation 0 → GeosetID 0
         let cg = CharacterGeosets {
+            wrath: false,
+            facial_extra: HashMap::new(),
             hair,
             facial: HashMap::new(),
             helmet_vis: HashMap::new(),

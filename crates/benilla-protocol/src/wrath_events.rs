@@ -218,8 +218,20 @@ impl WrathEventAdapter {
                 Ok(packet) => handled(vec![SessionEvent::WrathUiTimer { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            0x01fc => Ok(match crate::wrath_environment::decode_damage(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathEnvironmentalDamage(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x02bd => Ok(match crate::wrath_environment::decode_durability(body) {
+                Ok(()) => handled(vec![SessionEvent::DurabilityDamageDeath], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x0063 | 0x0065 => Ok(match crate::wrath_who::decode(opcode, body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathWho { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x04f7 => Ok(match crate::wrath_ui_timer::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathUiTimer { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
             0x0501 => Ok(match crate::wrath_quests_completed::decode(body) {
