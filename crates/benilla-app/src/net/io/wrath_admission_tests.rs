@@ -7,6 +7,7 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeMirrorImageQuery", ClientCommand::NativeMirrorImageQuery { guid: u64::MAX }),
         ("NativeUiTimerQuery", ClientCommand::NativeUiTimerQuery),
         (
             "GuildQuery",
