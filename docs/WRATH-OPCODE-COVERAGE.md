@@ -24,11 +24,13 @@ Malformed known packets often become `Unhandled`/`PacketDropped` rather than fat
 
 Pet-name (`0x0052/0053`) and WHO/WHOIS (`0x0062..0065`) rows below were re-audited through transport and visible consumers on this branch. Other rows retain the original audit baseline above; this is not a fresh whole-client census. Manager accepted the documented default-3 WHO routing and BG/arena augmentation limitations. Final gates: protocol **548 passed, 0 failed**; App **4,628 passed, 0 failed, 12 ignored**. Codec, FIFO ownership/privacy, per-receipt feed and real-handler reset regressions are in `wrath_who_tests`, `ui_native_who_tests`, `ui_social::feed::native_tests`, `names_native_pet_tests` and `net/io/wrath/{pet_name,who}_tests`. No live client was launched.
 
+Environmental/death durability (`0x01FC/02BD`) rows were separately re-audited in `fb261e3f`: native codecs, dispatch and existing semantic feedback are active. Registered-handler regressions verify single feedback per sink and unchanged native item durability. Post-`9e59bad2` gates: App **4,634 passed, 0 failed, 12 ignored**; Protocol **553 passed, 0 failed**; UI **1,825 passed, 0 failed, 1 ignored**. This bounded update does not re-audit other rows.
+
 ## Coverage totals
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 139 | 33 | 517 | 689 |
+| S→C | 141 | 33 | 515 | 689 |
 | C→S | 125 | 0 | 599 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Outbound: 125 admitted numeric opcodes, including 99 with producers/automatic replies, 19 transport-only, three producer-gated, and four stable mutations with incomplete native feedback. “Handled” outbound does not mean any of those gates may be removed without owner approval.
@@ -555,7 +557,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x01F9` | `CMSG_GM_SET_SECURITY_GROUP` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x01FA` | `CMSG_GM_NUKE` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x01FB` | `MSG_RANDOM_ROLL` | S→C / C→S | missing / missing | common | proven_send_site: `game/Entities/Player/Player.cpp:16549` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01FC` | `SMSG_ENVIRONMENTAL_DAMAGE_LOG` | S→C | missing | niche | proven_send_site: `game/Entities/Player/Player.cpp:851` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x01FC` | `SMSG_ENVIRONMENTAL_DAMAGE_LOG` | S→C | handled | niche | proven_send_site: `game/Entities/Player/Player.cpp:851` | S→C: Native strict 21-byte DTO/dispatch in crates/benilla-protocol/src/wrath_environment.rs and wrath_events.rs; combat_log and creature_anim handlers deliver existing chat/kit feedback. Raw unsigned resisted-before-absorbed preserved; unknown types are not guessed into chat families. |
 | `0x01FD` | `CMSG_CHANGEPLAYER_DIFFICULTY` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x01FE` | `SMSG_RWHOIS` | S→C | missing | core | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x01FF` | `SMSG_LFG_PLAYER_REWARD` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:510` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/completion.rs:24; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
@@ -748,7 +750,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x02BA` | `CMSG_SHOWING_CLOAK` | C→S | missing | niche | AC receive: `HandleShowingCloakOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x02BB` | `SMSG_LFG_ROLE_CHOSEN` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:391` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/queue.rs:80; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
 | `0x02BC` | `SMSG_PLAYER_SKINNED` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x02BD` | `SMSG_DURABILITY_DAMAGE_DEATH` | S→C | missing | core | proven_send_site: `game/Entities/Player/Player.cpp:4799` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x02BD` | `SMSG_DURABILITY_DAMAGE_DEATH` | S→C | handled | core | proven_send_site: `game/Entities/Player/Player.cpp:4799` | S→C: Strict empty-body decode in crates/benilla-protocol/src/wrath_environment.rs and wrath_events.rs; existing death::net::on_durability_damage_death emits one combat-misc notification. Feedback only: no synthetic item durability mutation. |
 | `0x02BE` | `CMSG_SET_EXPLORATION` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x02BF` | `CMSG_SET_ACTIONBAR_TOGGLES` | C→S | missing | common | AC receive: `HandleSetActionBarToggles` (STATUS_AUTHED). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x02C0` | `UMSG_DELETE_GUILD_CHARTER` | internal | missing | common | Internal UMSG registry entry; not an external direction. | Internal registry entry, not an on-wire client/server feature. |
