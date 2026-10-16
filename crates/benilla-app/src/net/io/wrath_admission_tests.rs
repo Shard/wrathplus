@@ -7,6 +7,12 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeDeath", ClientCommand::NativeDeath(benilla_protocol::wrath_death::Command::HearthAndResurrect)),
+        ("RepopRequest", ClientCommand::RepopRequest),
+        ("CorpseQuery", ClientCommand::CorpseQuery),
+        ("ReclaimCorpse", ClientCommand::ReclaimCorpse { corpse: 1 }),
+        ("SummonResponse", ClientCommand::SummonResponse { summoner: 1 }),
+        ("SelfRes", ClientCommand::SelfRes),
         ("FriendListRequest", ClientCommand::FriendListRequest),
         ("AddFriend", ClientCommand::AddFriend { name: "Bob".into() }),
         ("DelFriend", ClientCommand::DelFriend { guid: 1 }),
