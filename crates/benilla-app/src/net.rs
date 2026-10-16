@@ -42,6 +42,7 @@ mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
 mod wrath_death_capture;
+mod wrath_session_meta_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 pub(crate) mod wrath_combo_points;
@@ -150,6 +151,7 @@ impl Plugin for NetPlugin {
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
+        wrath_session_meta_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_combo_points::register(app);
@@ -2116,6 +2118,8 @@ pub(crate) enum ClientCommand {
     NativeBattleground(benilla_protocol::wrath_battleground::Command),
     /// Native death/corpse commands with no shared producer (hearth-and-resurrect, map position).
     NativeDeath(benilla_protocol::wrath_death::Command),
+    /// Native zone-update and account-data commands with no shared producer.
+    NativeSessionMeta(benilla_protocol::wrath_session_meta::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

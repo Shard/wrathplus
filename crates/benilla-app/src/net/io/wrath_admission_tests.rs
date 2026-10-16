@@ -7,6 +7,15 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeSessionMeta", ClientCommand::NativeSessionMeta(benilla_protocol::wrath_session_meta::Command::ReadyForAccountDataTimes)),
+        ("TutorialFlag", ClientCommand::TutorialFlag { id: 1 }),
+        ("TutorialClear", ClientCommand::TutorialClear),
+        ("TutorialReset", ClientCommand::TutorialReset),
+        ("PlayedTime", ClientCommand::PlayedTime),
+        ("NextCinematicCamera", ClientCommand::NextCinematicCamera),
+        ("CompleteCinematic", ClientCommand::CompleteCinematic),
+        ("AreaTrigger", ClientCommand::AreaTrigger { trigger_id: 45 }),
+        ("SetActionBarToggles", ClientCommand::SetActionBarToggles { toggles: 1 }),
         ("NativeDeath", ClientCommand::NativeDeath(benilla_protocol::wrath_death::Command::HearthAndResurrect)),
         ("RepopRequest", ClientCommand::RepopRequest),
         ("CorpseQuery", ClientCommand::CorpseQuery),
