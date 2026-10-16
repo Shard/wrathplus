@@ -142,5 +142,81 @@ pub fn encode(command: &Command) -> io::Result<(u32, Vec<u8>)> {
     Ok((CMSG_MESSAGECHAT, body))
 }
 
+/// `LANG_ADDON`: addon traffic never becomes a shared chat line; App owns its raw capture.
+pub const LANGUAGE_ADDON: u32 = u32::MAX;
+
+/// This build's `ChatMsg` as 1.12's, for the shared chat feed; `None` where 1.12 has no such line
+/// (monster party, channel join/leave/list/notice users, skill/loot/money/combat lanes, restricted,
+/// Battle.net, achievements, arena points). AzerothCore `SharedDefines.h` `ChatMsg`.
+fn shared_chat_type(chat_type: u8) -> Option<u8> {
+    use crate::messages as m;
+    Some(match chat_type {
+        0x00 => m::CHAT_MSG_SYSTEM,
+        0x01 => m::CHAT_MSG_SAY,
+        // Party leader is a party line with a leader mark the 1.12 feed cannot show.
+        0x02 | 0x33 => m::CHAT_MSG_PARTY,
+        0x03 => m::CHAT_MSG_RAID,
+        0x04 => m::CHAT_MSG_GUILD,
+        0x05 => m::CHAT_MSG_OFFICER,
+        0x06 => m::CHAT_MSG_YELL,
+        // Whisper and the cross-language whisper.
+        0x07 | 0x08 => m::CHAT_MSG_WHISPER,
+        0x09 => m::CHAT_MSG_WHISPER_INFORM,
+        0x0a => m::CHAT_MSG_EMOTE,
+        0x0c => m::CHAT_MSG_MONSTER_SAY,
+        0x0e => m::CHAT_MSG_MONSTER_YELL,
+        0x0f => m::CHAT_MSG_MONSTER_WHISPER,
+        0x10 => m::CHAT_MSG_MONSTER_EMOTE,
+        0x11 => m::CHAT_MSG_CHANNEL,
+        0x17 => m::CHAT_MSG_AFK,
+        0x18 => m::CHAT_MSG_DND,
+        0x19 => m::CHAT_MSG_IGNORED,
+        0x24 => m::CHAT_MSG_BG_SYSTEM_NEUTRAL,
+        0x25 => m::CHAT_MSG_BG_SYSTEM_ALLIANCE,
+        0x26 => m::CHAT_MSG_BG_SYSTEM_HORDE,
+        0x27 => m::CHAT_MSG_RAID_LEADER,
+        0x28 => m::CHAT_MSG_RAID_WARNING,
+        0x29 => m::CHAT_MSG_RAID_BOSS_EMOTE,
+        0x2a => m::CHAT_MSG_RAID_BOSS_WHISPER,
+        0x2b => m::CHAT_MSG_FILTERED,
+        0x2c => m::CHAT_MSG_BATTLEGROUND,
+        0x2d => m::CHAT_MSG_BATTLEGROUND_LEADER,
+        _ => return None,
+    })
+}
+
+/// This build's chat-tag bits (1 AFK, 2 DND, 4 GM) as 1.12's single tag, GM over DND over AFK.
+fn shared_chat_tag(tag: u8) -> u8 {
+    use crate::messages::chat_tag;
+    if tag & 0x04 != 0 {
+        chat_tag::GM
+    } else if tag & 0x02 != 0 {
+        chat_tag::DND
+    } else if tag & 0x01 != 0 {
+        chat_tag::AFK
+    } else {
+        chat_tag::NONE
+    }
+}
+
+/// A native line as the shared chat event, which the 1.12-shaped feed already prints. Addon
+/// traffic and line kinds 1.12 lacks stay in the raw capture only.
+pub fn shared_message(message: &Message) -> Option<crate::messages::ChatMessage> {
+    if message.language == LANGUAGE_ADDON {
+        return None;
+    }
+    let lossy = |bytes: &Vec<u8>| String::from_utf8_lossy(bytes).into_owned();
+    Some(crate::messages::ChatMessage {
+        chat_type: shared_chat_type(message.chat_type)?,
+        language: message.language,
+        sender_guid: message.sender_guid,
+        target_guid: message.receiver_guid,
+        sender_name: message.sender_name.as_ref().map(lossy),
+        channel: message.channel.as_ref().map(lossy),
+        text: lossy(&message.text),
+        chat_tag: shared_chat_tag(message.chat_tag),
+    })
+}
+
 #[cfg(test)]
 mod tests;

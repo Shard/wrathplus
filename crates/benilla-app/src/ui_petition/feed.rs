@@ -310,7 +310,16 @@ mod tests {
 
     /// The player's display ids, `UNIT_FIELD_DISPLAYID` (131) and `UNIT_FIELD_NATIVEDISPLAYID`.
     fn player(display: u32, native: u32) -> ObjectStore {
-        ObjectStore(ObjectFields::from_pairs(&[(131, display), (132, native)]))
+        ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitDisplayId, display),
+                (
+                    benilla_protocol::messages::Field::UnitNativeDisplayId,
+                    native,
+                ),
+            ],
+        ))
     }
 
     fn run(npc: u64, designer: u64, me: &ObjectStore) -> (Vec<ClientCommand>, Vec<&'static str>) {

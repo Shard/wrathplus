@@ -1,6 +1,6 @@
 # Raw descriptor bitfield dialect audit
 
-Status: tracked findings, 2026-10-15. App follow-up after NPC fix `98321cbf`
+Status: no pending rows, 2026-10-16 (App Migration reconciliation); tracked findings from 2026-10-15. App follow-up after NPC fix `98321cbf`
 (integrated as `705ebdd0`). No behavioral changes in this document. No client launched.
 Auction work remains paused. Protocol semantic predicates belong to Native Descriptor.
 
@@ -15,22 +15,22 @@ Statuses apply only to the bounded finding described, not complete subsystem par
 | Aura MOUNT/AURAS_VISIBLE collision and native 295 guard | fixed | App `5837336b`. Present effects, whole-list gate and catalog/context invalidation; missing spell row explicitly remains visible. App 4,553 / 0 / 12. |
 | Unit snapshot PvP/FFA state sources | fixed | Descriptor `c89f8d25`; App `b3f2ce6a`. Raw state only. App 4,554 / 0 / 12. |
 | Reaction/attack/assist PvP and FFA sources | fixed (bounded) | App `native/app-migration`: Wrath `CanAttack`/`CanAssist` run 12340's `00729740`/`007293d0` branch topology (`target/wrath_relations.rs`) on dialect-aware PvP/FFA/sanctuary state, the two-hop CHARMEDBY/CREATEDBY controller resolver `00718b70` (a fresh guid lookup per hop, never a cached owner) and creature-query `type_flags` (Unit objects only). Every production caller passes live context (`RelationContext`). The selection ring's PvP read is dialect-aware. **Unresolved, labelled, not guessed:** reaction `007251c0`'s group/global helpers (`004cee50`, `005129f0`/`00512a00`), the full forced-reputation comparator, and `CanAttack`'s FLAGS2 bit16/vehicle guard (`0074c650`, metadata `0x20000000`). Spell-group predicates (`spell/group_relation.rs`) keep their one-hop owner. Evidence `/tmp/azb-wire-reaction-*.log`. |
-| Quest-marker invalidation after PvP/FFA source migration | pending | Audit `quest_markers/query.rs` generation and field-edge keys together with reaction migration. |
-| Nameplate PvP source / controlled-unit ownership | pending | Separate direct state from inheritance policy in `nameplates.rs` and `vplates.rs`. |
-| Vendor PvP/rank discount | pending | `target/price_discount.rs`; dialect source correction does not authorize Vanilla rank-discount policy in Wrath. |
+| Quest-marker invalidation after PvP/FFA source migration | fixed (already merged) | `quest_markers/query.rs` polls the dialect-aware `unit_is_pvp`/`unit_is_ffa_pvp` pair as an authorised conservative superset, coalesced once per second (`pvp_refresh`); the native BYTES_2 watch registration remains a labelled TODO there. Reconciled 2026-10-16. |
+| Nameplate PvP source / controlled-unit ownership | fixed (source) / labelled (inheritance) | `nameplates.rs` and the selection ring (`target/ring.rs`) read the unit's own dialect-aware `unit_is_pvp`. Controlled-unit inheritance (the reference reads the charmer's or summoner's) is not built and labelled in code. `vplates.rs` reads no PvP bit; its category is `CanAttack` (native on Wrath). |
+| Vendor PvP/rank discount | fixed (bounded) | Wrath no longer applies the 1.12 honor-rank steps (Wrath `PLAYER_BYTES_3` byte 2 is the PvP title, which the old path read as a rank). The Wrath discount is AzerothCore `Player::GetReputationPriceDiscount`, 5% per rank above Neutral, what the server charges for repairs and taxi fares. **Labelled:** the 12340 client routine is untraced; the vendor reaction stands in for the rank, so Exalted depends on the reaction reaching 7. |
 | Shared unit-flag masks | not-a-bug | Compared masks agree; composed predicates still need separate review. |
-| Swim and animation-suppression predicates | pending | Audit `player/swim.rs` and `creature_anim/driver.rs`; not a demonstrated mask collision. |
-| Unit flags 2 coverage | pending | Missing native consumers are a coverage gap, not a proven collision. Keep SpellClick eligibility separate. |
+| Swim and animation-suppression predicates | not-a-bug | Swim `0x8 \| 0x800 \| 0x8000` = AC `UNIT_FLAG_PLAYER_CONTROLLED`, `PET_IN_COMBAT`, `SWIMMING`; loot kneel `0x400` = AC `UNIT_FLAG_LOOTING`, suppressor `0x10000000` unchanged (AC `UNK_28`). Masks agree; the 12340 composed predicates are untraced (labelled). |
+| Unit flags 2 coverage | labelled (coverage gap) | No collision: no App code reads FLAGS2 as anything else. Feign death still reaches the dead look through `UNIT_DYNFLAG_DEAD`, which AC sets alongside `UNIT_FLAG2_FEIGN_DEATH`. Offhand/ranged disarm, cannot-turn and the CanAttack FLAGS2 bit16 vehicle guard remain unbuilt features, not migration rows. |
 | Dynamic-flag masks | not-a-bug | Compared consumed masks agree. |
 | Player flags other than FFA | not-a-bug | Compared masks agree; PvP preference 0x200 is not replicated PvP state. |
 | Already semantic packed bytes / PvP title guards | not-a-bug | Preserve existing layout handling listed below. |
-| Wrath special-area PvP projection | pending | App `area.rs` still projects Vanilla territory semantics. Wrath `GetZonePVPInfo` `0x0051ba50` reads leaf AreaTable flags (falls back to zone flags when leaf flags are unavailable): `0x800` sanctuary, then `0x80` arena, then `0x1000000` combat. These branches return `(type, 1/nil isSubZone)` (two values); ordinary territory returns `(type, nil, factionName)` (three values). App needs explicit Wrath special-area/context projection; do not reinterpret Vanilla `is_arena` as `isSubZone`. Native evidence: `/tmp/azb-ui-live-errors-native.log` (pinned Wow.exe SHA256 `c6f9209840a8a5941538bcda0e63c4bf445a154b6c1c9c7397be31cebabc289c`). |
-| Drunk scaling | pending | Numeric-policy question; do not infer a field move. |
+| Wrath special-area PvP projection | fixed | `area.rs::wrath_zone_pvp` runs `0x51ba50`: leaf flags (else zone), `0x800` sanctuary, `0x80` arena, `0x1000000` combat, with isSubZone from the leaf (`ZoneTexts::pvp_is_subzone`, benilla-ui, agreed with Native UI); then AC `CONTESTED_AREA` `0x40000`, then the player template masks (no template reads friendly). Vanilla `is_arena` untouched. **Labelled:** the ordinary-territory gate `[0xb2f998] == 0 && !(zone flags & 0x10)` (no values) is untraced and not applied. |
+| Drunk scaling | not-a-bug | AC `Player::SetDrunkValue` writes 0..100 to `PLAYER_BYTES_3` byte 1; `player/drunk.rs::fraction` is `min(byte,100) × 0.01`, so the Wrath byte is consumed directly. The 12340 constant is untraced (labelled). |
 | Highest lifetime rank offset | not-a-bug | Offset retained; no demonstrated move. |
 | Gameobject consumed flag masks | not-a-bug | Numeric agreement; NO_INTERACT/NOT_SELECTABLE wording alone proves no collision. |
-| Gameobject interaction policy | pending | Native predicate audit needed before behavior changes. |
+| Gameobject interaction policy | labelled (unresolved) | No mask collision (see inventory). The 12340 interaction predicate is untraced; the current policy stands and is not claimed native. |
 | Item soulbound/unlocked/wrapped masks | not-a-bug | Instance masks agree; do not substitute template flags. |
-| Item force-red 0x10 and refundable/BOP-trade coverage | pending | Meaning/coverage unresolved; no confirmed repurposing. |
+| Item force-red 0x10 and refundable/BOP-trade coverage | labelled (unresolved) | No repurposing confirmed. Refundable/BOP-tradeable state belongs to Native UI's item-services seam (`set_item_refunds`, capture-only); no App consumer yet. |
 
 ## Completed changes and evidence
 
@@ -122,7 +122,7 @@ UNIT_FLAGS `0x1000` as PvP. AzerothCore retains that name with a changed-in-3.0.
 annotation, but `Unit.h::IsPvP` reads BYTES_2 byte 1 mask `0x01`.
 
 Implemented seam (`c89f8d25`): Descriptor-owned dialect-aware PvP/FFA state predicates;
-App snapshot migrated in `b3f2ce6a`. Remaining callers are pending. Review
+App snapshot migrated in `b3f2ce6a`; the remaining callers are resolved in the status table (2026-10-16). Review
 individual callers before migration: faction reaction, controlled-unit inheritance,
 player preference, PvP title and vendor discount are distinct policies. In
 particular, no evidence here authorizes transplanting Vanilla rank discounts.
@@ -145,10 +145,10 @@ Protocol already handles the following packed-layout changes:
 | Family | Status | Finding | Limits / next work |
 | --- | --- | --- | --- |
 | Unit flags | not-a-bug | Principal consumed stun, silence, pacify, fear/confuse, combat, taxi, disarm, possessed, selectable, skinnable, immunity and looting masks agree across references. | Agreement does not prove each composed client predicate. Review swim `player/swim.rs`, animation suppression `creature_anim/driver.rs` and nameplate owner gate `vplates.rs` separately. |
-| Unit flags 2 | pending | No production App consumer found in reserved inventory; native layout has the field. AC includes feign death, hide body, offhand/ranged disarm and cannot-turn. | Coverage gap, not proof every current death/control path is wrong. SpellClick's additional FLAGS2/GUID eligibility is separately audited; raw flag presence alone must not send. |
+| Unit flags 2 | labelled (coverage gap) | No production App consumer found in reserved inventory; native layout has the field. AC includes feign death, hide body, offhand/ranged disarm and cannot-turn. | Coverage gap, not proof every current death/control path is wrong. SpellClick's additional FLAGS2/GUID eligibility is separately audited; raw flag presence alone must not send. |
 | Dynamic flags | not-a-bug | Consumed lootable 1, tracked 2, tapped 4, tapped-by-player 8, special-info 0x10 and dead 0x20 agree. | Additional Wrath bits are not thereby implemented. |
 | Player flags | not-a-bug | Leader, AFK/DND/GM, ghost, resting, helm/cloak and playtime masks agree. | Remaining FFA policy callers above are outstanding. PvP preference 0x200 is not a confirmed mismatch: AC still toggles it as preference despite renaming. |
-| Other packed bytes | pending | Stand, race/class/power, sheath, drunk, rest, action bars, release timer, tracking and bank slots inventoried. | Drunk scaling remains a numeric-policy question. Highest lifetime rank retains its offset; do not report it as moved. |
+| Other packed bytes | not-a-bug | Stand, race/class/power, sheath, drunk, rest, action bars, release timer, tracking and bank slots inventoried. | Drunk scaling resolved (byte 1 is 0..100 on AC; see the status table). Highest lifetime rank retains its offset; do not report it as moved. |
 | Gameobject flags | not-a-bug | Consumed in-use 1, locked 2, conditional-interaction 4, refusal 0x10 agree numerically. | NO_INTERACT versus NOT_SELECTABLE wording warrants policy review, not a claimed mask collision. |
 | Item instance flags | not-a-bug | Soulbound 1, unlocked 4 and wrapped 8 agree. | Force-red 0x10 remains unknown in AC; no confirmed repurposing. BOP-tradeable/refundable additions lack App consumers in inventory. Do not confuse instance flags with template flags. |
 

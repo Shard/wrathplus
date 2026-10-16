@@ -214,6 +214,16 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_chat_notices::OPCODES.contains(&opcode) => Ok(match crate::wrath_chat_notices::decode(opcode, body) {
+                Ok(events) => handled(events, Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            crate::wrath_channel::SMSG_CHANNEL_NOTIFY if !matches!(body.first(), Some(2 | 3)) => {
+                Ok(match crate::wrath_chat_notices::decode_channel_notify(body) {
+                    Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_party::OPCODES.contains(&opcode) => Ok(match crate::wrath_party::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -282,7 +292,16 @@ impl WrathEventAdapter {
             }),
             0x0096 | 0x03b3 => {
                 Ok(match crate::wrath_chat::decode(opcode, body) {
-                    Ok(message) => handled(vec![SessionEvent::WrathChat { message }], Vec::new(), Vec::new()),
+                    // The shared line for the chat feed (none for addon traffic), then the raw capture.
+                    Ok(message) => handled(
+                        crate::wrath_chat::shared_message(&message)
+                            .map(SessionEvent::Chat)
+                            .into_iter()
+                            .chain([SessionEvent::WrathChat { message }])
+                            .collect(),
+                        Vec::new(),
+                        Vec::new(),
+                    ),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }

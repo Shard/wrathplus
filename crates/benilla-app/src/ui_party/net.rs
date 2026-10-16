@@ -64,12 +64,24 @@ fn on_wrath_group(
         } => invited(&mut group, &mut errors, &inviter),
         Packet::Invite { invited: false, .. } => {}
         Packet::Decline { name } => declined(&mut group, &mut errors, &name),
-        Packet::Uninvite => { uninvited(&mut group, &mut errors); group.leave_group(); }
+        Packet::Uninvite => {
+            uninvited(&mut group, &mut errors);
+            group.leave_group();
+        }
         Packet::List(roster) => {
-            let fresh = roster.members.iter().filter(|m| !group.wrath_stats.contains_key(&m.guid)).map(|m| m.guid).collect::<Vec<_>>();
-            for m in &roster.members { names.resolve(m.guid, &commands); }
+            let fresh = roster
+                .members
+                .iter()
+                .filter(|m| !group.wrath_stats.contains_key(&m.guid))
+                .map(|m| m.guid)
+                .collect::<Vec<_>>();
+            for m in &roster.members {
+                names.resolve(m.guid, &commands);
+            }
             let lines = group.apply_wrath_list(roster, self_guid.0);
-            if lines.invite_accept { sounds.push_cue(INVITE_ACCEPT_SOUND); }
+            if lines.invite_accept {
+                sounds.push_cue(INVITE_ACCEPT_SOUND);
+            }
             quest.bump_reask();
             push_group_lines(&mut errors, lines.lines);
             for member in &group.members {
@@ -99,11 +111,20 @@ fn apply_wrath_raid(
         group.wrath_raid.ready_events.push(packet.clone());
     }
     match packet {
-        Packet::CommandResult { operation, member, result, value } => {
+        Packet::CommandResult {
+            operation,
+            member,
+            result,
+            value,
+        } => {
             command_result(group, errors, operation, &member, result);
             group.wrath_raid.command_result = Some((operation, member, result, value));
         }
-        Packet::TargetSet { setter, icon, target } => {
+        Packet::TargetSet {
+            setter,
+            icon,
+            target,
+        } => {
             group.wrath_raid.target_setter = Some(setter);
             group.apply_raid_target(icon, target);
         }
@@ -112,7 +133,10 @@ fn apply_wrath_raid(
             group.wrath_raid.ready_initiator = Some(initiator);
             group.wrath_raid.ready_answers.clear();
             // Wrath carries the actual initiator: an assistant may start the check.
-            push_group_lines(errors, group.apply_ready_check_request(me.0 == Some(initiator)));
+            push_group_lines(
+                errors,
+                group.apply_ready_check_request(me.0 == Some(initiator)),
+            );
         }
         Packet::ReadyConfirm { guid, state } => {
             group.wrath_raid.ready_answers.push((guid, state));
@@ -488,6 +512,7 @@ mod tests {
     use crate::net::ClientCommand;
     use benilla_protocol::guid;
     use benilla_protocol::messages::member_status;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     fn member(g: u64, name: &str) -> GroupMemberEntry {
         GroupMemberEntry {
@@ -682,13 +707,13 @@ mod tests {
     // ── The out-of-range record ──────────────────────────────────────────────
 
     /// Unit descriptor field indices, build 5875.
-    const HEALTH: u16 = 22;
-    const MAXHEALTH: u16 = 28;
+    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
     /// `UNIT_FIELD_POWER2`/`MAXPOWER2`, the rage slot (`POWER1 + POWER_RAGE`).
-    const POWER2: u16 = 24;
-    const MAXPOWER2: u16 = 30;
-    const LEVEL: u16 = 34;
-    const BYTES_0: u16 = 36;
+    const POWER2: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPower) + 1;
+    const MAXPOWER2: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxPower) + 1;
+    const LEVEL: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
+    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
 
     fn asked(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u64> {
         rx.try_iter()
@@ -803,9 +828,9 @@ mod tests {
     /// effect bit; the pet block comes off the pet's own object (`0x5f0a1f`-`0x5f0b72`).
     #[test]
     fn a_members_despawn_snapshots_their_auras_and_their_pets() {
-        const AURA: u16 = 47;
-        const AURAFLAGS: u16 = 95;
-        const SUMMON: u16 = 8;
+        const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
+        const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
+        const SUMMON: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummon);
         let (tx, _rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let guid = 0x1234;
@@ -822,7 +847,7 @@ mod tests {
             (SUMMON + 1, (pet_guid >> 32) as u32),
         ]));
         // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
-        const PETNUMBER: u16 = 139;
+        const PETNUMBER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnumber);
         let pet = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
             (HEALTH, 900),
             (PETNUMBER, 4),
@@ -1061,34 +1086,49 @@ mod wrath_raid_tests {
         app.world_mut().resource_mut::<GroupState>().leader = 99;
         let mut adapter = WrathEventAdapter::new();
         for (opcode, body) in [
-            (0x322, vec![7,0,0,0,0,0,0,0]),
-            (0x3ae, vec![8,0,0,0,0,0,0,0,2]),
-            (0x321, vec![0,7,0,0,0,0,0,0,0,3,8,0,0,0,0,0,0,0]),
-            (0x07f, vec![255,255,255,255,b'A',0,255,255,255,255,1,2,3,4]),
+            (0x322, vec![7, 0, 0, 0, 0, 0, 0, 0]),
+            (0x3ae, vec![8, 0, 0, 0, 0, 0, 0, 0, 2]),
+            (
+                0x321,
+                vec![0, 7, 0, 0, 0, 0, 0, 0, 0, 3, 8, 0, 0, 0, 0, 0, 0, 0],
+            ),
+            (
+                0x07f,
+                vec![255, 255, 255, 255, b'A', 0, 255, 255, 255, 255, 1, 2, 3, 4],
+            ),
             (0x3c6, vec![]),
         ] {
             let WrathDispatch::Handled { session_events, .. } = adapter
-                .dispatch_packet(&WrathServerPacket { opcode, body }, 1).unwrap()
-            else { panic!("native raid opcode not handled"); };
+                .dispatch_packet(&WrathServerPacket { opcode, body }, 1)
+                .unwrap()
+            else {
+                panic!("native raid opcode not handled");
+            };
             assert_eq!(session_events.len(), 1);
             crate::net::handlers::dispatch(app.world_mut(), session_events);
         }
         let group = app.world().resource::<GroupState>();
-        assert_eq!((group.ready_check_requests, group.ready_check), (1,0));
+        assert_eq!((group.ready_check_requests, group.ready_check), (1, 0));
         assert_eq!(group.wrath_raid.ready_initiator, Some(7));
-        assert_eq!(group.wrath_raid.ready_answers, [(8,2)]);
+        assert_eq!(group.wrath_raid.ready_answers, [(8, 2)]);
         assert_eq!(group.wrath_raid.target_setter, Some(7));
         assert_eq!(group.raid_targets[3], 8);
-        assert_eq!(group.wrath_raid.command_result, Some((u32::MAX,"A".into(),u32::MAX,0x04030201)));
+        assert_eq!(
+            group.wrath_raid.command_result,
+            Some((u32::MAX, "A".into(), u32::MAX, 0x04030201))
+        );
         assert_eq!(group.wrath_raid.ready_finished, 1);
-        crate::net::handlers::dispatch(app.world_mut(), vec![SessionEvent::WrathGroup {
-            packet: Box::new(benilla_protocol::wrath_group::Packet::Uninvite),
-        }]);
+        crate::net::handlers::dispatch(
+            app.world_mut(),
+            vec![SessionEvent::WrathGroup {
+                packet: Box::new(benilla_protocol::wrath_group::Packet::Uninvite),
+            }],
+        );
         let group = app.world().resource::<GroupState>();
         assert!(group.wrath_raid.ready_initiator.is_none());
         assert!(group.wrath_raid.ready_answers.is_empty());
         assert!(group.wrath_raid.command_result.is_none());
-        assert_eq!(group.raid_targets, [0;8]);
+        assert_eq!(group.raid_targets, [0; 8]);
     }
 
     #[test]
@@ -1097,21 +1137,58 @@ mod wrath_raid_tests {
         let mut errors = UiErrorKeys::default();
         let me = SelfGuid(Some(7));
         group.leader = 99; // An assistant, rather than the leader, starts this check.
-        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x322, &[7,0,0,0,0,0,0,0]).unwrap());
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            decode(0x322, &[7, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+        );
         assert_eq!(group.wrath_raid.ready_initiator, Some(7));
-        assert_eq!((group.ready_check_requests, group.ready_check), (1,0));
-        apply_wrath_raid(&mut group, &mut errors, &me, decode(0x3ae, &[8,0,0,0,0,0,0,0,255]).unwrap());
-        assert_eq!(group.wrath_raid.ready_answers, [(8,255)]);
-        assert_eq!(group.ready_check_answers, [(8,true)]);
+        assert_eq!((group.ready_check_requests, group.ready_check), (1, 0));
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            decode(0x3ae, &[8, 0, 0, 0, 0, 0, 0, 0, 255]).unwrap(),
+        );
+        assert_eq!(group.wrath_raid.ready_answers, [(8, 255)]);
+        assert_eq!(group.ready_check_answers, [(8, true)]);
         apply_wrath_raid(&mut group, &mut errors, &me, decode(0x3c6, &[]).unwrap());
         assert_eq!(group.wrath_raid.ready_finished, 1);
-        apply_wrath_raid(&mut group, &mut errors, &me, Packet::TargetSet { setter:u64::MAX, icon:7, target:8 });
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::TargetSet {
+                setter: u64::MAX,
+                icon: 7,
+                target: 8,
+            },
+        );
         assert_eq!(group.wrath_raid.target_setter, Some(u64::MAX));
         assert_eq!(group.raid_targets[7], 8);
-        apply_wrath_raid(&mut group, &mut errors, &me, Packet::TargetList { entries:vec![] });
-        assert_eq!(group.raid_targets, [0;8]);
-        apply_wrath_raid(&mut group, &mut errors, &me, Packet::CommandResult { operation:u32::MAX, member:"Ally".into(), result:u32::MAX, value:u32::MAX });
-        assert_eq!(group.wrath_raid.command_result, Some((u32::MAX,"Ally".into(),u32::MAX,u32::MAX)));
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::TargetList { entries: vec![] },
+        );
+        assert_eq!(group.raid_targets, [0; 8]);
+        apply_wrath_raid(
+            &mut group,
+            &mut errors,
+            &me,
+            Packet::CommandResult {
+                operation: u32::MAX,
+                member: "Ally".into(),
+                result: u32::MAX,
+                value: u32::MAX,
+            },
+        );
+        assert_eq!(
+            group.wrath_raid.command_result,
+            Some((u32::MAX, "Ally".into(), u32::MAX, u32::MAX))
+        );
         group.clear_session();
         assert!(group.wrath_raid.ready_initiator.is_none());
         assert!(group.wrath_raid.command_result.is_none());

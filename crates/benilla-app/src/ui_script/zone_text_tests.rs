@@ -28,6 +28,7 @@ fn area(zone: &str, sub: &str, pvp: &str, faction: &str) -> ZoneTexts {
         pvp_type: some(pvp),
         pvp_faction: some(faction),
         is_arena: false,
+        pvp_is_subzone: false,
     }
 }
 

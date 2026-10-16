@@ -801,15 +801,16 @@ fn run_container_clicks(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::messages::{ItemInfo, ObjectFields, ITEM_FLAG_LOOTABLE};
 
     /// Small Barnacled Clam.
     const CLAM_ENTRY: u32 = 7973;
     const CLAM: u64 = 0x4000_0000_0000_1939;
     /// `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1's guid pair.
-    const F_PACK_SLOT_1: u16 = 532;
+    const F_PACK_SLOT_1: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerPackSlot1);
     /// `OBJECT_FIELD_ENTRY` on the item object.
-    const F_OBJECT_ENTRY: u16 = 3;
+    const F_OBJECT_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
 
     /// Right-clicks backpack slot 1, holding a lootable template, and runs the click dispatcher.
     fn open_the_clam() -> (App, crossbeam_channel::Receiver<ClientCommand>) {
@@ -1029,7 +1030,9 @@ mod tests {
     /// through `PickupInventoryItem`.
     fn click_to_repair_the_sword(money: u32, worn: bool) -> RepairClick {
         use crate::ui_merchant::purse_fixture::{player, record_errors, seat, SWORD_ENTRY};
-        use benilla_protocol::field::FIELD_PLAYER_INV_SLOT_HEAD;
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         let (mut app, rx) = open_the_clam();
         while rx.try_recv().is_ok() {} // drain the clam's own send
         seat(app.world_mut());
@@ -1301,10 +1304,13 @@ mod bind_confirm_tests {
     const FLURRY_AXE: u32 = 871;
     const AXE_GUID: u64 = 0x4000_0000_0000_0871;
     /// `ITEM_FIELD_FLAGS` (field 21); bit 0 is soulbound (`0x5da2c0`).
-    const F_ITEM_FLAGS: u16 = 21;
+    const F_ITEM_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::ItemFlags);
     /// `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1's guid pair.
-    const F_PACK_SLOT_1: u16 = 532;
-    const F_OBJECT_ENTRY: u16 = 3;
+    const F_PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerPackSlot1);
+    const F_OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::ObjectEntry);
 
     fn load_ui(s: &UiScript) {
         // Chain files, so through the chain-aware reader.

@@ -832,19 +832,26 @@ pub(crate) fn end_repair_mode_on_right_press(
 #[cfg(test)]
 pub(crate) mod purse_fixture {
     use super::*;
-    use benilla_protocol::field::{
-        FIELD_PLAYER_FIELD_COINAGE, FIELD_UNIT_FLAGS, FIELD_UNIT_NPC_FLAGS,
-    };
+    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerCoinage);
+    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
     use benilla_protocol::ObjectFields;
 
     pub(crate) const VENDOR: u64 = 0xF130_0000_0000_0043;
     pub(crate) const SWORD: u64 = 0x4000_0000_0000_0707;
     pub(crate) const SWORD_ENTRY: u32 = 2488;
     /// Absolute descriptor indices.
-    const OBJECT_ENTRY: u16 = 3;
-    const ITEM_DURABILITY: u16 = 46;
-    const ITEM_MAXDURABILITY: u16 = 47;
-    const PLAYER_BYTES_3: u16 = 195;
+    const OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::ObjectEntry);
+    const ITEM_DURABILITY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::ItemDurability);
+    const ITEM_MAXDURABILITY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::ItemMaxdurability);
+    const PLAYER_BYTES_3: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerBytes3);
     /// The string `ERR_NOT_ENOUGH_MONEY` holds in 1.12's `GlobalStrings.lua`.
     pub(crate) const NOT_ENOUGH_MONEY: &str = "You don't have enough money.";
 
@@ -994,6 +1001,7 @@ pub(crate) mod purse_fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// A repair's `UNIT_INVENTORY_CHANGED` reads this frame's total: the stock handler refreshes
     /// the Repair All button from `GetRepairAllCost` (`PaperDollFrame.lua:717-724`).
@@ -1012,19 +1020,25 @@ mod tests {
     /// its rounding, and the undiscounted total is not what the VM reads.
     #[test]
     fn the_repair_all_total_takes_the_merchants_discount() {
-        use benilla_protocol::field::{
-            FIELD_PLAYER_INV_SLOT_HEAD, FIELD_UNIT_FACTIONTEMPLATE, FIELD_UNIT_FLAGS,
-            FIELD_UNIT_NPC_FLAGS,
-        };
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitFlags);
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
         /// Absolute descriptor indices.
-        const OBJECT_ENTRY: u16 = 3;
-        const ITEM_DURABILITY: u16 = 46;
-        const ITEM_MAXDURABILITY: u16 = 47;
-        const BYTES_0: u16 = 36;
-        const PLAYER_BYTES_3: u16 = 195;
+        const OBJECT_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
+        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
+        const ITEM_MAXDURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemMaxdurability);
+        const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+        const PLAYER_BYTES_3: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerBytes3);
         const VENDOR: u64 = 0xF130_0000_0000_0042;
         const SWORD: u64 = 0x4000_0000_0000_0007;
         const SWORD_ENTRY: u32 = 2488;
@@ -1108,7 +1122,8 @@ mod tests {
         slot_field: u16,
         money: u32,
     ) -> (Vec<ClientCommand>, Vec<String>, Vec<&'static str>) {
-        use benilla_protocol::field::FIELD_UNIT_NPC_FLAGS;
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
@@ -1155,7 +1170,9 @@ mod tests {
     #[test]
     fn repair_all_does_nothing_at_a_vendor_that_does_not_repair() {
         use crate::target::cursor_mode::npc_flags::VENDOR as NPC_FLAG_VENDOR;
-        use benilla_protocol::field::FIELD_PLAYER_INV_SLOT_HEAD;
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1184,7 +1201,9 @@ mod tests {
     /// total of 0 and the repair-all goes out.
     #[test]
     fn repair_all_tests_the_purse_against_the_worn_gear_alone() {
-        use benilla_protocol::field::FIELD_PLAYER_INV_SLOT_HEAD;
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1219,7 +1238,9 @@ mod tests {
     /// An item's cost is discounted at the vendor and full once it closes (`0x4faf30`).
     #[test]
     fn each_items_cost_takes_the_open_vendors_discount() {
-        use benilla_protocol::field::FIELD_PLAYER_INV_SLOT_HEAD;
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
 
@@ -1259,12 +1280,16 @@ mod tests {
     /// item is priced but left out of the total (`0x4fbd60`).
     #[test]
     fn each_input_alone_reopens_the_repair_cost_gate() {
-        use benilla_protocol::field::{FIELD_PLAYER_INV_SLOT_HEAD, FIELD_UNIT_FLAGS};
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::messages::FieldLayout::Vanilla5875
+                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+            .index_of(benilla_protocol::messages::Field::UnitFlags);
         use benilla_protocol::ObjectFields;
         use purse_fixture::*;
 
         /// `ITEM_FIELD_DURABILITY`, absolute.
-        const ITEM_DURABILITY: u16 = 46;
+        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
         let main_hand = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 15;
         let backpack_1 = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 23;
         // `PLAYER_FIELD_BANK_SLOT_1`, inventory slot 39.

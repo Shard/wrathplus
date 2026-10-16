@@ -206,6 +206,7 @@ pub(super) fn route_swing_impacts(
 
 #[cfg(test)]
 mod tests {
+    use benilla_protocol::messages::{Field, FieldLayout};
     use bevy::ecs::message::MessageCursor;
 
     use super::*;
@@ -288,7 +289,7 @@ mod tests {
     }
 
     /// `UNIT_DYNAMIC_FLAGS`'s UpdateField index; bit `0x1` is LOOTABLE.
-    const FIELD_DYNAMIC_FLAGS: u16 = 143;
+    const FIELD_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
 
     /// Give `entity` a store carrying `flags` in `UNIT_DYNAMIC_FLAGS`.
     fn dynamic_flags(app: &mut App, entity: Entity, flags: u32) {

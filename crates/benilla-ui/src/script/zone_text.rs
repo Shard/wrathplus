@@ -26,6 +26,9 @@ pub struct ZoneTexts {
     pub pvp_faction: Option<String>,
     /// `GetZonePVPInfo`'s isArena: the leaf area's flag `0x80`, the free-for-all pit.
     pub is_arena: bool,
+    /// Wrath `GetZonePVPInfo`'s isSubZone (`0x51ba50`): a special-area type (sanctuary, arena,
+    /// combat) whose flags came from the leaf row rather than the zone's. Always false on Vanilla.
+    pub pvp_is_subzone: bool,
 }
 
 impl super::UiScript {
@@ -75,8 +78,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     return Ok(MultiValue::new());
                 };
                 let mut values = vec![Value::String(lua.create_string(kind)?)];
-                values.push(Value::Nil);
-                if !matches!(kind, "sanctuary" | "arena" | "combat") {
+                // isSubZone: 1 when the special flags came from the leaf (`FUN_0084e2a0(1.0)`).
+                let special = matches!(kind, "sanctuary" | "arena" | "combat");
+                values.push(if special && z.pvp_is_subzone {
+                    Value::Number(1.0)
+                } else {
+                    Value::Nil
+                });
+                if !special {
                     values.push(Value::String(
                         lua.create_string(z.pvp_faction.as_deref().unwrap_or(""))?,
                     ));

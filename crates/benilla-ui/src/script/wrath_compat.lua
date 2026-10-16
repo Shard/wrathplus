@@ -228,10 +228,9 @@ Sound_GameSystem_GetOutputDriverNameByIndex = none
 
 -- ── dungeon finder, achievements, calendar, companions, vehicles ───────────────────────────────
 GetLFGProposal, GetLFGMode, GetLFGRoleUpdate = none, none, none
-GetLFGQueuedList, GetLFGInfoServer, GetLFGDungeonRewards = none, none, zero
+GetLFGQueuedList, GetLFGInfoServer = none, none
 GetLFGRoles = function() return false, false, false, false end
 HasLFGRestrictions, IsPartyLFG, IsLFGDungeonJoinable = none, none, none
-GetNumRandomDungeons = zero
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none

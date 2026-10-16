@@ -233,17 +233,18 @@ fn feed_pet_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
-    const BYTES_0: u16 = 36;
-    const BYTES_1: u16 = 138;
-    const POWER5: u16 = 27;
-    const PETNUMBER: u16 = 139;
-    const PETXP: u16 = 141;
-    const PETNEXTXP: u16 = 142;
-    const TRAINING: u16 = 149;
+    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+    const BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
+    const POWER5: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPower) + 4;
+    const PETNUMBER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnumber);
+    const PETXP: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetexperience);
+    const PETNEXTXP: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnextlevelexp);
+    const TRAINING: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitTrainingPoints);
     /// `OBJECT_FIELD_ENTRY`, the pet's creature-template id.
-    const ENTRY: u16 = 3;
+    const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
     /// vmangos `creature_template` entries: Imp (`pet_family` 23) and Stonetusk Boar (5).
     const IMP_ENTRY: u32 = 416;
     const BOAR_ENTRY: u32 = 113;

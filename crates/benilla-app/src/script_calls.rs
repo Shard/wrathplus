@@ -142,6 +142,7 @@ mod tests {
     use benilla_protocol::messages::{
         ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
     };
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_ui::script::{PetBookState, SpellBookState, SpellSlotView, SpellTabView};
     use bevy::ecs::system::RunSystemOnce;
     use crossbeam_channel::Receiver;
@@ -156,9 +157,9 @@ mod tests {
     /// A mob the TAB scan can pick: it alone carries a `NetEntity`.
     const MOB: u64 = 0x31;
     /// `UNIT_FIELD_FACTIONTEMPLATE`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FLAGS`.
-    const TEMPLATE: u16 = 35;
-    const HEALTH: u16 = 22;
-    const FLAGS: u16 = 46;
+    const TEMPLATE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
     /// The fixture's templates: ours (group 1, friendly toward group 2, enemy of group 4), a
     /// friendly NPC's (group 2) and a hostile mob's (group 4).
     const OURS: u32 = 1;
@@ -183,10 +184,10 @@ mod tests {
                 Guid(guid),
                 Transform::from_xyz(x, 0.0, 0.0),
                 GlobalTransform::from_translation(Vec3::new(x, 0.0, 0.0)),
-                ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                    (22, 100),
-                    (28, 100),
-                ])),
+                ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+                )),
             )
         };
         // We are a player (`OBJECT_FIELD_TYPE` 0x19, `UNIT_FLAG_PVP_ATTACKABLE`), which selects
@@ -194,12 +195,15 @@ mod tests {
         let me = world.spawn((SelfPlayer, unit(ME, 0.0))).id();
         world
             .entity_mut(me)
-            .insert(ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-                (2, 0x19),
-                (22, 100),
-                (28, 100),
-                (46, 0x8),
-            ])));
+            .insert(ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[
+                    (Field::ObjectType, 0x19),
+                    (Field::UnitHealth, 100),
+                    (Field::UnitMaxHealth, 100),
+                    (Field::UnitFlags, 0x8),
+                ],
+            )));
         let old = world.spawn(unit(OLD, 5.0)).id();
         let new = world.spawn(unit(NEW, 6.0)).id();
         let index = &mut world.resource_mut::<GuidIndex>().0;
