@@ -2084,6 +2084,8 @@ pub(crate) enum ClientCommand {
     NativeCalendar(benilla_protocol::wrath_calendar::Command),
     /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
     NativeQuest(benilla_protocol::wrath_quest::Command),
+    /// Native party commands with no Vanilla twin; transport does not claim leadership.
+    NativeParty(benilla_protocol::wrath_party::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
