@@ -1,0 +1,37 @@
+# Item/inventory family
+
+Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`.
+`Server/Packets/{ItemPackets,BankPackets}.{h,cpp}`, `Handlers/{ItemHandler,SpellHandler,
+BankHandler,QueryHandler,CharacterHandler}.cpp`, `Entities/Item/Item.cpp`, `Entities/Player/
+{Player,PlayerStorage}.cpp` establish every layout. No client-only behavior is inferred; no
+Ghidra round required. Codec: `crates/benilla-protocol/src/wrath_inventory.rs`.
+
+Receive opcodes decoded into existing shared events (**handled**): 005B page text,
+00B0 item cooldown, 01B8 show bank, 01BA buy-bank-slot result, 01EA item time,
+01EB item enchant time (its trailing owner GUID is framed, not kept). AC also sends
+`ERR_BANKSLOT_OK` (3); the bank feed has no message for it and shows nothing.
+
+Receive opcodes that are **capture-only** (`NativeInventoryPackets` FIFO, sole owner, cleared on
+Connected and Disconnected, duplicates kept): 00AE/00AF read item ok/failed, 0137 equipment set
+saved, 01D7 enchantment log, 0244 item text, 02C5 item-set name, 04B2 refund info, 04B5 refund
+result, 04BC equipment set list, 04D6 equipment set use result, 050B socket gems result.
+Reasons: no equipment manager, refund or socketing state exists yet; 01D7 carries a
+SpellItemEnchantment id where the shared combat-log event wants a spell id; 0244 is keyed by item
+GUID while the letter cache is keyed by text id. Raw codes, zeros and ignored-slot values (raw
+GUID 1) are preserved. Strict framing rejects truncation and trailing bytes; malformed packets
+dispatch as unhandled.
+
+Outbound: existing `ClientCommand`s now have native writers (route `NativeInventory`):
+open, wrap, auto-equip, set ammo, swap-inv (destination first in this build), swap, auto-store
+bag, split (u32 count), destroy (three trailing zero bytes), banker activate, buy bank slot,
+autobank, autostore bank, page text query. `UseItem` gains the spell id and item GUID that
+build 12340's `CMSG_USE_ITEM` carries (AC refuses a GUID mismatch); it rides the session route
+to share the cast counter with `CMSG_CAST_SPELL`, glyph index and cast flags 0, target block with
+a u32 mask. `ClientCommand::NativeInventory` carries the commands with no producer yet
+(transport-only): read item, item-set name query, item text query by GUID, auto-equip slot,
+refund info/refund, socket gems, cancel temp enchantment, equipment set save/delete/use.
+Routes need the live writer only; they claim no server acceptance.
+
+Not in this unit: 0057/0059 item query multiple (AC `Handle_NULL`/registry only), 00B2 destroy
+items and 0106/0107 ground items (AC `Handle_NULL`), the Vanilla-shaped `ItemTextQuery` (text
+id; mail family), 0164 loot item notify (loot family), guild bank swaps.

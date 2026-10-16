@@ -528,6 +528,7 @@ mod tests {
             bag_index: 255,
             slot: 24,
             entry: 7148,
+            item_guid: 0x4000_0000_0000_0001,
             spell_index: 0,
             on_object: None,
         };
