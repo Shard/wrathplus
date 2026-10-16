@@ -325,6 +325,7 @@ fn apply_walk(
                 let command = ClientCommand::JoinChannel {
                     name: name.clone(),
                     password: String::new(),
+                    channel_id: channels.channels.row_for_name(name).map_or(0, |row| row.id),
                 };
                 if commands.supports(dialect, &command) {
                     let _ = commands.0.send(command);
@@ -889,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn wrath_walk_applies_local_channel_state_without_sending_unsupported_packets() {
+    fn wrath_walk_sends_native_joins_with_their_channel_row() {
         let (tx, rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let mut channels = state(SEED);
@@ -906,9 +907,17 @@ mod tests {
             crate::net::SessionDialect::Wrath12340,
         ));
         assert_eq!(channels.number_of("General - Elwynn Forest"), Some(1));
+        let general = channels.channels.row_for_name("General - Elwynn Forest").map(|row| row.id);
+        let sent: Vec<_> = rx.try_iter().collect();
         assert!(
-            rx.try_iter().next().is_none(),
-            "JoinChannel and LeaveChannel are fenced"
+            matches!(
+                sent.as_slice(),
+                [
+                    ClientCommand::JoinChannel { name, channel_id, .. },
+                    ClientCommand::LeaveChannel { name: left },
+                ] if name == "General - Elwynn Forest" && Some(*channel_id) == general && left == "General - Durotar"
+            ),
+            "the zone join carries its ChatChannels row: {sent:?}"
         );
     }
 

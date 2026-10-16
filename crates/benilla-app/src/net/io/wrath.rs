@@ -294,7 +294,12 @@ fn run(
         if canceled() {
             return Ok(WrathCycle::Repark);
         }
-        send(events, SessionEvent::WrathAccountExpansion { expansion: session.account_expansion() })?;
+        send(
+            events,
+            SessionEvent::WrathAccountExpansion {
+                expansion: session.account_expansion(),
+            },
+        )?;
         let mut characters = normalize_characters(session.char_enum().context("Wrath roster")?);
         if canceled() {
             return Ok(WrathCycle::Repark);
@@ -353,6 +358,12 @@ fn run(
             .iter()
             .find(|character| character.guid == guid)
             .map_or_else(String::new, |character| character.name.clone());
+        let chat_language = characters
+            .iter()
+            .find(|character| character.guid == guid)
+            .map_or(benilla_protocol::messages::LANGUAGE_COMMON, |character| {
+                benilla_protocol::messages::faction_language(character.race)
+            });
 
         // Lossless handoff: send login, split immediately, announce the session, then consume every
         // queued packet through the Wrath adapter.
@@ -370,6 +381,7 @@ fn run(
                 epoch,
                 session: Box::new(WrathWriterSwap {
                     writer,
+                    chat_language,
                     clock: Arc::clone(&session_clock),
                     active_mover: guid,
                     authority: authority.clone(),
@@ -424,7 +436,9 @@ fn run(
                     return Ok(WrathCycle::LoggedOut);
                 }
                 opcode if benilla_protocol::wrath_logout::handles(opcode) => {
-                    let Some(event) = authority.logout_event(opcode, &packet.body)? else { continue; };
+                    let Some(event) = authority.logout_event(opcode, &packet.body)? else {
+                        continue;
+                    };
                     let complete = matches!(event, SessionEvent::LoggedOut);
                     send(events, event)?;
                     if complete {
@@ -439,10 +453,15 @@ fn run(
                         .record_pong(sequence);
                 }
                 0x003e | 0x003f | 0x0040 => {
-                    let packet = match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body) {
-                        Ok(packet) => packet,
-                        Err(error) => { authority.revoke(); return Err(error.into()); }
-                    };
+                    let packet =
+                        match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body)
+                        {
+                            Ok(packet) => packet,
+                            Err(error) => {
+                                authority.revoke();
+                                return Err(error.into());
+                            }
+                        };
                     authority.publish_transfer(packet, |event| send(events, event))?;
                 }
                 SMSG_CLIENT_CONTROL_UPDATE => {
@@ -545,7 +564,14 @@ fn dispatch_packet(
             // The adapter's vectors preserve packet/block order. Replies use the sole cipher writer.
             for event in session_events {
                 authority.observe_taxi_spline(&event);
-                if *crate::net::CAST_TRACE && !matches!(&event, SessionEvent::WrathWho { packet: benilla_protocol::wrath_who::Packet::Whois { .. } }) {
+                if *crate::net::CAST_TRACE
+                    && !matches!(
+                        &event,
+                        SessionEvent::WrathWho {
+                            packet: benilla_protocol::wrath_who::Packet::Whois { .. }
+                        }
+                    )
+                {
                     bevy::log::info!("net(wrath) RECV {event:?}");
                 }
                 send(events, event)?;
@@ -638,6 +664,8 @@ struct EpochFatal {
 
 struct WrathWriterSwap {
     writer: WrathWorldWriter,
+    /// The character's own tongue for chat that names none (`faction_language` of its race).
+    chat_language: u32,
     clock: Arc<SessionClock>,
     active_mover: u64,
     authority: MovementAuthorityHandle,
@@ -1016,10 +1044,14 @@ enum WrathRoute {
     NativeInstanceControl,
     NativeInventory,
     NativeExchange,
+    NativeSpellControl,
     NativeInspectAchievements,
     NativeCalendar,
     NativeQuest,
     NativeParty,
+    NativeChatLine,
+    NativeChannel,
+    NativeBattleground,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1029,9 +1061,15 @@ enum WrathRoute {
 
 fn route(command: &ClientCommand) -> WrathRoute {
     match command {
-        ClientCommand::GuildQuery { .. } | ClientCommand::GuildInfoRequest | ClientCommand::GuildRosterRequest
-        | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
-        | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
+        ClientCommand::GuildQuery { .. }
+        | ClientCommand::GuildInfoRequest
+        | ClientCommand::GuildRosterRequest
+        | ClientCommand::GuildInvite { .. }
+        | ClientCommand::GuildAccept
+        | ClientCommand::GuildDecline
+        | ClientCommand::GuildPromote { .. }
+        | ClientCommand::GuildDemote { .. }
+        | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
         ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
         ClientCommand::NativeInstanceControl(_) => WrathRoute::NativeInstanceControl,
@@ -1053,6 +1091,35 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
+        ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeBattleground(_)
+        | ClientCommand::BattlemasterHello { .. }
+        | ClientCommand::AreaSpiritHealerQuery { .. }
+        | ClientCommand::AreaSpiritHealerQueue { .. }
+        | ClientCommand::SpiritHealerActivate { .. }
+        | ClientCommand::InspectHonorStats { .. }
+        | ClientCommand::TogglePvp
+        | ClientCommand::RequestBattlefieldScoreData
+        | ClientCommand::RequestBattlefieldPositions
+        | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        ClientCommand::JoinChannel { .. }
+        | ClientCommand::LeaveChannel { .. }
+        | ClientCommand::ChannelList { .. }
+        | ClientCommand::ChannelOwner { .. }
+        | ClientCommand::ChannelSetOwner { .. }
+        | ClientCommand::ChannelPassword { .. }
+        | ClientCommand::ChannelModerator { .. }
+        | ClientCommand::ChannelUnmoderator { .. }
+        | ClientCommand::ChannelMute { .. }
+        | ClientCommand::ChannelUnmute { .. }
+        | ClientCommand::ChannelInvite { .. }
+        | ClientCommand::ChannelKick { .. }
+        | ClientCommand::ChannelBan { .. }
+        | ClientCommand::ChannelUnban { .. }
+        | ClientCommand::ChannelAnnouncements { .. }
+        | ClientCommand::ChannelModerate { .. }
+        | ClientCommand::TextEmote { .. }
+        | ClientCommand::ChatIgnored { .. } => WrathRoute::NativeChannel,
         ClientCommand::NativeParty(_)
         | ClientCommand::GroupUninvite { .. }
         | ClientCommand::GroupSetLeader { .. }
@@ -1077,6 +1144,17 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetTradeGold { .. }
         | ClientCommand::SetTradeItem { .. }
         | ClientCommand::ClearTradeItem { .. } => WrathRoute::NativeExchange,
+        ClientCommand::NativeSpellControl(_)
+        | ClientCommand::PetAction { .. }
+        | ClientCommand::PetSetAction { .. }
+        | ClientCommand::PetStopAttack { .. }
+        | ClientCommand::PetCancelAura { .. }
+        | ClientCommand::PetSpellAutocast { .. }
+        | ClientCommand::PetAbandon { .. }
+        | ClientCommand::PetRename { .. }
+        | ClientCommand::CancelAutoRepeat
+        | ClientCommand::CancelChannelling { .. }
+        | ClientCommand::ResurrectResponse { .. } => WrathRoute::NativeSpellControl,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
@@ -1086,7 +1164,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
-        ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
+        ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => {
+            WrathRoute::DisabledGameAction
+        }
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
         ClientCommand::Logout | ClientCommand::ForceLogout => WrathRoute::Logout,
         ClientCommand::LogoutCancel => WrathRoute::LogoutCancel,
@@ -1169,9 +1249,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
-        ClientCommand::BattlefieldStatusRequest => {
-            WrathRoute::DeferredReadOnlyQuery
-        }
+        ClientCommand::BattlefieldStatusRequest => WrathRoute::DeferredReadOnlyQuery,
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
         ClientCommand::MoveTimeSkipped { .. }
         | ClientCommand::ForceSpeedAck { .. }
@@ -1187,7 +1265,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
 /// Only implemented wire routes grant command admission. Deferred queries have no writer.
 /// Shape/value validation and epoch/capability checks remain at their existing boundaries.
 pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
-    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery)
+    !matches!(
+        route(command),
+        WrathRoute::DisabledMovement
+            | WrathRoute::DisabledGameAction
+            | WrathRoute::DeferredReadOnlyQuery
+    )
 }
 
 fn writer_loop(
@@ -1395,6 +1478,21 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeChatLine => match chat_line(command, active.chat_language) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid chat line rejected before send: {error}");
+                            continue;
+                        }
+                    },
+                    WrathRoute::NativeBattleground => {
+                        let (opcode, body) = battleground_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeChannel => {
+                        let (opcode, body) = benilla_protocol::wrath_chat_notices::encode(&channel_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeParty => {
                         let (opcode, body) = benilla_protocol::wrath_party::encode(&party_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -1414,6 +1512,15 @@ fn writer_loop(
                     WrathRoute::NativeExchange => {
                         let (opcode, body) = exchange_packet(command);
                         active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeSpellControl => {
+                        match benilla_protocol::wrath_spell_control::encode(&spell_control_command(command)) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid spell-control command rejected before send: {error}");
+                                continue;
+                            }
+                        }
                     }
                     WrathRoute::NativeMirrorImageQuery => {
                         let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
@@ -1596,6 +1703,83 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// A chat-bar or addon line as build 12340's `CMSG_MESSAGECHAT`; a line naming no language
+/// speaks `own_language`, an addon line `LANG_ADDON`.
+fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_chat::{encode, Command, LANGUAGE_ADDON};
+    let command = match command {
+        ClientCommand::Chat { kind, target, text, language } => {
+            let chat_type = kind.wrath_chat_type();
+            Command {
+                chat_type,
+                language: language.unwrap_or(own_language),
+                // Whisper and channel name their target; the rest send none.
+                target: matches!(chat_type, 0x07 | 0x11).then(|| target.unwrap_or_default().into_bytes()),
+                text: text.into_bytes(),
+            }
+        }
+        ClientCommand::AddonMessage { distribution, text } => Command {
+            chat_type: crate::net::wrath_addon_chat_type(distribution),
+            language: LANGUAGE_ADDON,
+            target: None,
+            text: text.into_bytes(),
+        },
+        other => unreachable!("not a chat line: {other:?}"),
+    };
+    encode(&command)
+}
+
+/// The native body for a [`WrathRoute::NativeBattleground`] command. The shared commands below keep
+/// their 3.3.5 shapes (a GUID or nothing); list, join and port need this build's bg type and are
+/// native-only.
+fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_battleground::{encode, encode_leave};
+    let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
+    match command {
+        ClientCommand::NativeBattleground(command) => encode(&command),
+        ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
+        ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
+        ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
+        ClientCommand::SpiritHealerActivate { npc } => guid(0x021c, npc),
+        ClientCommand::InspectHonorStats { target } => guid(0x02d6, target),
+        // An empty body toggles; AC also takes one byte setting the flag outright.
+        ClientCommand::TogglePvp => (0x0253, Vec::new()),
+        ClientCommand::RequestBattlefieldScoreData => (0x02e0, Vec::new()),
+        ClientCommand::RequestBattlefieldPositions => (0x02e9, Vec::new()),
+        // AC reads none of the body and leaves the current battleground.
+        ClientCommand::LeaveBattlefield { .. } => encode_leave(),
+        other => unreachable!("not a battleground route: {other:?}"),
+    }
+}
+
+/// The native channel, emote and ignore command for a [`WrathRoute::NativeChannel`] route.
+fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notices::Command {
+    use benilla_protocol::wrath_chat_notices::Command as C;
+    let pair = |opcode, name, other| C::NamedPair { opcode, name, other };
+    match command {
+        ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
+        ClientCommand::LeaveChannel { name } => C::Leave { name },
+        ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
+        ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
+        ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
+        ClientCommand::ChannelPassword { name, password } => pair(0x009c, name, password),
+        ClientCommand::ChannelSetOwner { name, player } => pair(0x009d, name, player),
+        ClientCommand::ChannelModerator { name, player } => pair(0x009f, name, player),
+        ClientCommand::ChannelUnmoderator { name, player } => pair(0x00a0, name, player),
+        ClientCommand::ChannelMute { name, player } => pair(0x00a1, name, player),
+        ClientCommand::ChannelUnmute { name, player } => pair(0x00a2, name, player),
+        ClientCommand::ChannelInvite { name, player } => pair(0x00a3, name, player),
+        ClientCommand::ChannelKick { name, player } => pair(0x00a4, name, player),
+        ClientCommand::ChannelBan { name, player } => pair(0x00a5, name, player),
+        ClientCommand::ChannelUnban { name, player } => pair(0x00a6, name, player),
+        // AC echoes the emote number and uses nothing else of it.
+        ClientCommand::TextEmote { text_id, target } => C::TextEmote { text_emote: text_id, emote_num: 0, target },
+        ClientCommand::ChatIgnored { guid } => C::ChatIgnored { guid },
+        other => unreachable!("not a channel route: {other:?}"),
+    }
+}
+
 /// The native party command for a [`WrathRoute::NativeParty`] route.
 fn party_command(command: ClientCommand) -> benilla_protocol::wrath_party::Command {
     use benilla_protocol::wrath_party::Command as P;
@@ -1620,6 +1804,25 @@ fn quest_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 }
 
 /// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
+/// The native request for a [`WrathRoute::NativeSpellControl`] command.
+fn spell_control_command(command: ClientCommand) -> benilla_protocol::wrath_spell_control::Command {
+    use benilla_protocol::wrath_spell_control::Command as C;
+    match command {
+        ClientCommand::NativeSpellControl(command) => command,
+        ClientCommand::PetAction { pet_guid, packed, target_guid } => C::PetAction { pet: pet_guid, word: packed, target: target_guid },
+        ClientCommand::PetSetAction { pet_guid, entries } => C::PetSetAction { pet: pet_guid, entries },
+        ClientCommand::PetStopAttack { pet_guid } => C::PetStopAttack { pet: pet_guid },
+        ClientCommand::PetCancelAura { pet_guid, spell_id } => C::PetCancelAura { pet: pet_guid, spell_id },
+        ClientCommand::PetSpellAutocast { pet_guid, spell_id, enabled } => C::PetSpellAutocast { pet: pet_guid, spell_id, enabled },
+        ClientCommand::PetAbandon { pet_guid } => C::PetAbandon { pet: pet_guid },
+        ClientCommand::PetRename { pet_guid, name } => C::PetRename { pet: pet_guid, name },
+        ClientCommand::CancelAutoRepeat => C::CancelAutoRepeatSpell,
+        ClientCommand::CancelChannelling { spell_id } => C::CancelChannelling { spell_id },
+        ClientCommand::ResurrectResponse { caster, accept } => C::ResurrectResponse { caster, accept },
+        _ => unreachable!("not a spell-control route"),
+    }
+}
+
 fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_exchange::{encode, Command as X};
     use benilla_protocol::wrath_trade::Command as T;
@@ -1628,30 +1831,79 @@ fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::NativeExchange(command) => encode(&command),
         ClientCommand::AuctionHello { auctioneer } => encode(&X::AuctionHello { auctioneer }),
         ClientCommand::AuctionListItems {
-            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
-            sub_category, quality, usable,
+            auctioneer,
+            list_from,
+            searched_name,
+            level_min,
+            level_max,
+            slot_id,
+            main_category,
+            sub_category,
+            quality,
+            usable,
         } => encode(&X::AuctionListItems {
-            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
-            sub_category, quality, usable,
+            auctioneer,
+            list_from,
+            searched_name,
+            level_min,
+            level_max,
+            slot_id,
+            main_category,
+            sub_category,
+            quality,
+            usable,
         }),
-        ClientCommand::AuctionListOwnerItems { auctioneer, list_from } => {
-            encode(&X::AuctionListOwner { auctioneer, list_from })
-        }
-        ClientCommand::AuctionListBidderItems { auctioneer, list_from, auction_ids } => {
-            encode(&X::AuctionListBidder { auctioneer, list_from, auction_ids })
-        }
-        ClientCommand::AuctionSellItem { auctioneer, item_guid, bid, buyout, etime_minutes, count } => {
-            encode(&X::AuctionSell { auctioneer, items: vec![(item_guid, count)], bid, buyout, etime_minutes })
-        }
-        ClientCommand::AuctionPlaceBid { auctioneer, auction_id, price } => {
-            encode(&X::AuctionPlaceBid { auctioneer, auction_id, price })
-        }
-        ClientCommand::AuctionRemoveItem { auctioneer, auction_id } => {
-            encode(&X::AuctionRemove { auctioneer, auction_id })
-        }
-        ClientCommand::LootMasterGive { guid, slot, target } => {
-            encode(&X::LootMasterGive { loot: guid, slot, target })
-        }
+        ClientCommand::AuctionListOwnerItems {
+            auctioneer,
+            list_from,
+        } => encode(&X::AuctionListOwner {
+            auctioneer,
+            list_from,
+        }),
+        ClientCommand::AuctionListBidderItems {
+            auctioneer,
+            list_from,
+            auction_ids,
+        } => encode(&X::AuctionListBidder {
+            auctioneer,
+            list_from,
+            auction_ids,
+        }),
+        ClientCommand::AuctionSellItem {
+            auctioneer,
+            item_guid,
+            bid,
+            buyout,
+            etime_minutes,
+            count,
+        } => encode(&X::AuctionSell {
+            auctioneer,
+            items: vec![(item_guid, count)],
+            bid,
+            buyout,
+            etime_minutes,
+        }),
+        ClientCommand::AuctionPlaceBid {
+            auctioneer,
+            auction_id,
+            price,
+        } => encode(&X::AuctionPlaceBid {
+            auctioneer,
+            auction_id,
+            price,
+        }),
+        ClientCommand::AuctionRemoveItem {
+            auctioneer,
+            auction_id,
+        } => encode(&X::AuctionRemove {
+            auctioneer,
+            auction_id,
+        }),
+        ClientCommand::LootMasterGive { guid, slot, target } => encode(&X::LootMasterGive {
+            loot: guid,
+            slot,
+            target,
+        }),
         ClientCommand::InitiateTrade { target } => trade(T::Initiate { target }),
         ClientCommand::BeginTrade => trade(T::Begin),
         ClientCommand::BusyTrade => trade(T::Busy),
@@ -1661,7 +1913,15 @@ fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::UnacceptTrade => trade(T::Unaccept),
         ClientCommand::CancelTrade => trade(T::Cancel),
         ClientCommand::SetTradeGold { copper } => trade(T::SetGold { gold: copper }),
-        ClientCommand::SetTradeItem { trade_slot, bag, slot } => trade(T::SetItem { trade_slot, bag, slot }),
+        ClientCommand::SetTradeItem {
+            trade_slot,
+            bag,
+            slot,
+        } => trade(T::SetItem {
+            trade_slot,
+            bag,
+            slot,
+        }),
         ClientCommand::ClearTradeItem { trade_slot } => trade(T::ClearItem { trade_slot }),
         other => unreachable!("not an exchange route: {other:?}"),
     }
@@ -1672,23 +1932,69 @@ fn inventory_command(command: ClientCommand) -> benilla_protocol::wrath_inventor
     use benilla_protocol::wrath_inventory::Command as I;
     match command {
         ClientCommand::NativeInventory(command) => command,
-        ClientCommand::OpenItem { bag_index, slot } => I::OpenItem { bag: bag_index, slot },
-        ClientCommand::WrapItem { gift_bag, gift_slot, item_bag, item_slot } => {
-            I::WrapItem { gift_bag, gift_slot, item_bag, item_slot }
-        }
-        ClientCommand::AutoEquipItem { bag_index, slot } => I::AutoEquipItem { bag: bag_index, slot },
+        ClientCommand::OpenItem { bag_index, slot } => I::OpenItem {
+            bag: bag_index,
+            slot,
+        },
+        ClientCommand::WrapItem {
+            gift_bag,
+            gift_slot,
+            item_bag,
+            item_slot,
+        } => I::WrapItem {
+            gift_bag,
+            gift_slot,
+            item_bag,
+            item_slot,
+        },
+        ClientCommand::AutoEquipItem { bag_index, slot } => I::AutoEquipItem {
+            bag: bag_index,
+            slot,
+        },
         ClientCommand::SetAmmo { entry } => I::SetAmmo { entry },
         ClientCommand::SwapInvItem { src_slot, dst_slot } => I::SwapInvItem { src_slot, dst_slot },
-        ClientCommand::SwapItem { dst_bag, dst_slot, src_bag, src_slot } => {
-            I::SwapItem { dst_bag, dst_slot, src_bag, src_slot }
-        }
-        ClientCommand::AutoStoreBagItem { src_bag, src_slot, dst_bag } => {
-            I::AutoStoreBagItem { src_bag, src_slot, dst_bag }
-        }
-        ClientCommand::SplitItem { src_bag, src_slot, dst_bag, dst_slot, count } => {
-            I::SplitItem { src_bag, src_slot, dst_bag, dst_slot, count: count.into() }
-        }
-        ClientCommand::DestroyItem { bag_index, slot, count } => I::DestroyItem { bag: bag_index, slot, count },
+        ClientCommand::SwapItem {
+            dst_bag,
+            dst_slot,
+            src_bag,
+            src_slot,
+        } => I::SwapItem {
+            dst_bag,
+            dst_slot,
+            src_bag,
+            src_slot,
+        },
+        ClientCommand::AutoStoreBagItem {
+            src_bag,
+            src_slot,
+            dst_bag,
+        } => I::AutoStoreBagItem {
+            src_bag,
+            src_slot,
+            dst_bag,
+        },
+        ClientCommand::SplitItem {
+            src_bag,
+            src_slot,
+            dst_bag,
+            dst_slot,
+            count,
+        } => I::SplitItem {
+            src_bag,
+            src_slot,
+            dst_bag,
+            dst_slot,
+            count: count.into(),
+        },
+        ClientCommand::DestroyItem {
+            bag_index,
+            slot,
+            count,
+        } => I::DestroyItem {
+            bag: bag_index,
+            slot,
+            count,
+        },
         ClientCommand::BankerActivate { guid } => I::BankerActivate { banker: guid },
         ClientCommand::BuyBankSlot { guid } => I::BuyBankSlot { banker: guid },
         ClientCommand::AutoBankItem { bag, slot } => I::AutoBankItem { bag, slot },
@@ -1701,33 +2007,37 @@ fn inventory_command(command: ClientCommand) -> benilla_protocol::wrath_inventor
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_group as g;
     use benilla_protocol::wrath_npc as n;
-    use benilla_protocol::wrath_vendor as v;
-    use benilla_protocol::wrath_trainer as t;
     use benilla_protocol::wrath_session::{self as s, CastTarget};
+    use benilla_protocol::wrath_trainer as t;
+    use benilla_protocol::wrath_vendor as v;
     // The client's cast counter, echoed by the server's cast results.
     static CAST_COUNT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
     let cast = |spell_id: u32, target: CastTarget| {
         let count = CAST_COUNT
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             .wrapping_add(1);
-        (s::CMSG_CAST_SPELL, s::encode_cast_spell(count, spell_id, &target))
+        (
+            s::CMSG_CAST_SPELL,
+            s::encode_cast_spell(count, spell_id, &target),
+        )
     };
     match command {
         ClientCommand::NameQuery { guid } => (s::CMSG_NAME_QUERY, s::encode_name_query(guid)),
-        ClientCommand::CreatureQuery { entry, guid } => {
-            (s::CMSG_CREATURE_QUERY, s::encode_template_query(entry, guid))
-        }
-        ClientCommand::GameObjectQuery { entry, guid } => {
-            (s::CMSG_GAMEOBJECT_QUERY, s::encode_template_query(entry, guid))
-        }
+        ClientCommand::CreatureQuery { entry, guid } => (
+            s::CMSG_CREATURE_QUERY,
+            s::encode_template_query(entry, guid),
+        ),
+        ClientCommand::GameObjectQuery { entry, guid } => (
+            s::CMSG_GAMEOBJECT_QUERY,
+            s::encode_template_query(entry, guid),
+        ),
         ClientCommand::SetActionButton { button, packed } => (
             s::CMSG_SET_ACTION_BUTTON,
             s::encode_set_action_button(button, packed),
         ),
-        ClientCommand::CastSpell { spell_id, target } => cast(
-            spell_id,
-            target.map_or(CastTarget::None, CastTarget::Unit),
-        ),
+        ClientCommand::CastSpell { spell_id, target } => {
+            cast(spell_id, target.map_or(CastTarget::None, CastTarget::Unit))
+        }
         ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
         ClientCommand::CastSpellAtSource { spell_id, src } => {
             cast(spell_id, CastTarget::Source(src))
@@ -1735,13 +2045,25 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::CastSpellGameObject { spell_id, go_guid } => {
             cast(spell_id, CastTarget::GameObject(go_guid))
         }
-        ClientCommand::CastSpellItem { spell_id, item_guid } => {
-            cast(spell_id, CastTarget::Item(item_guid))
-        }
+        ClientCommand::CastSpellItem {
+            spell_id,
+            item_guid,
+        } => cast(spell_id, CastTarget::Item(item_guid)),
         // One cast counter for both opcodes: the server echoes it in either's cast results.
-        ClientCommand::UseItem { bag_index, slot, spell_id, item_guid, target, .. } => {
-            let count = CAST_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed).wrapping_add(1);
-            benilla_protocol::wrath_inventory::encode_use_item(count, bag_index, slot, spell_id, item_guid, &target)
+        ClientCommand::UseItem {
+            bag_index,
+            slot,
+            spell_id,
+            item_guid,
+            target,
+            ..
+        } => {
+            let count = CAST_COUNT
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                .wrapping_add(1);
+            benilla_protocol::wrath_inventory::encode_use_item(
+                count, bag_index, slot, spell_id, item_guid, &target,
+            )
         }
         ClientCommand::CancelCast { spell_id } => {
             (s::CMSG_CANCEL_CAST, s::encode_cancel_cast(spell_id))
@@ -1754,9 +2076,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             n::CMSG_GOSSIP_SELECT_OPTION,
             n::encode_gossip_select_option(guid, option),
         ),
-        ClientCommand::NpcTextQuery { text_id, guid } => {
-            (n::CMSG_NPC_TEXT_QUERY, n::encode_npc_text_query(text_id, guid))
-        }
+        ClientCommand::NpcTextQuery { text_id, guid } => (
+            n::CMSG_NPC_TEXT_QUERY,
+            n::encode_npc_text_query(text_id, guid),
+        ),
         ClientCommand::QuestgiverStatusQuery { npc } => {
             (n::CMSG_QUESTGIVER_STATUS_QUERY, npc.to_le_bytes().to_vec())
         }
@@ -1791,49 +2114,108 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::QuestConfirmAccept { quest } => {
             (n::CMSG_QUEST_CONFIRM_ACCEPT, quest.to_le_bytes().to_vec())
         }
-        ClientCommand::ListInventory { guid } => (v::CMSG_LIST_INVENTORY, guid.to_le_bytes().to_vec()),
-        ClientCommand::BuyItem { vendor, entry, count } => {
-            (v::CMSG_BUY_ITEM, v::encode_buy_item(vendor, entry, count))
+        ClientCommand::ListInventory { guid } => {
+            (v::CMSG_LIST_INVENTORY, guid.to_le_bytes().to_vec())
         }
-        ClientCommand::BuyItemInSlot { vendor, entry, bag_guid, bag_slot, count } => (
+        ClientCommand::BuyItem {
+            vendor,
+            entry,
+            count,
+        } => (v::CMSG_BUY_ITEM, v::encode_buy_item(vendor, entry, count)),
+        ClientCommand::BuyItemInSlot {
+            vendor,
+            entry,
+            bag_guid,
+            bag_slot,
+            count,
+        } => (
             v::CMSG_BUY_ITEM_IN_SLOT,
             v::encode_buy_item_in_slot(vendor, entry, bag_guid, bag_slot, count),
         ),
-        ClientCommand::SellItem { vendor, item_guid, count } => {
-            (v::CMSG_SELL_ITEM, v::encode_sell_item(vendor, item_guid, count))
-        }
+        ClientCommand::SellItem {
+            vendor,
+            item_guid,
+            count,
+        } => (
+            v::CMSG_SELL_ITEM,
+            v::encode_sell_item(vendor, item_guid, count),
+        ),
         ClientCommand::BuybackItem { vendor, slot } => {
             (v::CMSG_BUYBACK_ITEM, v::encode_buyback_item(vendor, slot))
         }
-        ClientCommand::RepairItem { vendor, item_guid } => {
-            (v::CMSG_REPAIR_ITEM, v::encode_repair_item(vendor, item_guid, false))
-        }
-        ClientCommand::TaxiNodeStatusQuery { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXINODE_STATUS_QUERY, benilla_protocol::wrath_taxi::encode_query(guid)),
-        ClientCommand::TaxiQueryNodes { guid } => (benilla_protocol::wrath_taxi::CMSG_TAXIQUERYAVAILABLENODES, benilla_protocol::wrath_taxi::encode_query(guid)),
-        ClientCommand::ActivateTaxi { guid, source_node, dest_node } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXI, benilla_protocol::wrath_taxi::encode_activate(guid, source_node, dest_node)),
-        ClientCommand::ActivateTaxiExpress { guid, nodes, .. } => (benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXIEXPRESS, benilla_protocol::wrath_taxi::encode_express(guid, &nodes)),
+        ClientCommand::RepairItem { vendor, item_guid } => (
+            v::CMSG_REPAIR_ITEM,
+            v::encode_repair_item(vendor, item_guid, false),
+        ),
+        ClientCommand::TaxiNodeStatusQuery { guid } => (
+            benilla_protocol::wrath_taxi::CMSG_TAXINODE_STATUS_QUERY,
+            benilla_protocol::wrath_taxi::encode_query(guid),
+        ),
+        ClientCommand::TaxiQueryNodes { guid } => (
+            benilla_protocol::wrath_taxi::CMSG_TAXIQUERYAVAILABLENODES,
+            benilla_protocol::wrath_taxi::encode_query(guid),
+        ),
+        ClientCommand::ActivateTaxi {
+            guid,
+            source_node,
+            dest_node,
+        } => (
+            benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXI,
+            benilla_protocol::wrath_taxi::encode_activate(guid, source_node, dest_node),
+        ),
+        ClientCommand::ActivateTaxiExpress { guid, nodes, .. } => (
+            benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXIEXPRESS,
+            benilla_protocol::wrath_taxi::encode_express(guid, &nodes),
+        ),
         ClientCommand::GroupInvite { name } => (
             g::CMSG_GROUP_INVITE,
             g::encode_invite(name.split('\0').next().unwrap_or("")).expect("NUL-free name"),
         ),
         ClientCommand::GroupAccept => (g::CMSG_GROUP_ACCEPT, g::encode_accept()),
         ClientCommand::GroupDecline => (g::CMSG_GROUP_DECLINE, g::encode_decline()),
-        ClientCommand::PartyAssignment { assignment, apply, guid } => (g::MSG_PARTY_ASSIGNMENT, g::encode_assignment(assignment, apply, guid)),
+        ClientCommand::PartyAssignment {
+            assignment,
+            apply,
+            guid,
+        } => (
+            g::MSG_PARTY_ASSIGNMENT,
+            g::encode_assignment(assignment, apply, guid),
+        ),
         ClientCommand::GroupLeave => (g::CMSG_GROUP_DISBAND, g::encode_leave()),
         ClientCommand::GroupRaidConvert => (g::commands::CMSG_GROUP_RAID_CONVERT, Vec::new()),
-        ClientCommand::LootMethod { method, master, threshold } =>
-            (g::commands::CMSG_LOOT_METHOD, g::commands::loot_method(method, master, threshold)),
-        ClientCommand::SetRaidTarget { icon, guid } =>
-            (g::commands::MSG_RAID_TARGET_UPDATE, g::commands::raid_target(icon, guid)),
-        ClientCommand::GroupChangeSubGroup { name, group } =>
-            (g::commands::CMSG_GROUP_CHANGE_SUB_GROUP, g::commands::change_subgroup(name.split('\0').next().unwrap_or(""), group).expect("NUL-free name")),
-        ClientCommand::GroupSwapSubGroup { name, other } =>
-            (g::commands::CMSG_GROUP_SWAP_SUB_GROUP, g::commands::swap_subgroup(name.split('\0').next().unwrap_or(""), other.split('\0').next().unwrap_or("")).expect("NUL-free names")),
-        ClientCommand::GroupAssistantLeader { guid, grant } =>
-            (g::commands::CMSG_GROUP_ASSISTANT_LEADER, g::commands::assistant(guid, grant)),
+        ClientCommand::LootMethod {
+            method,
+            master,
+            threshold,
+        } => (
+            g::commands::CMSG_LOOT_METHOD,
+            g::commands::loot_method(method, master, threshold),
+        ),
+        ClientCommand::SetRaidTarget { icon, guid } => (
+            g::commands::MSG_RAID_TARGET_UPDATE,
+            g::commands::raid_target(icon, guid),
+        ),
+        ClientCommand::GroupChangeSubGroup { name, group } => (
+            g::commands::CMSG_GROUP_CHANGE_SUB_GROUP,
+            g::commands::change_subgroup(name.split('\0').next().unwrap_or(""), group)
+                .expect("NUL-free name"),
+        ),
+        ClientCommand::GroupSwapSubGroup { name, other } => (
+            g::commands::CMSG_GROUP_SWAP_SUB_GROUP,
+            g::commands::swap_subgroup(
+                name.split('\0').next().unwrap_or(""),
+                other.split('\0').next().unwrap_or(""),
+            )
+            .expect("NUL-free names"),
+        ),
+        ClientCommand::GroupAssistantLeader { guid, grant } => (
+            g::commands::CMSG_GROUP_ASSISTANT_LEADER,
+            g::commands::assistant(guid, grant),
+        ),
         ClientCommand::ReadyCheckStart => (g::commands::MSG_RAID_READY_CHECK, Vec::new()),
-        ClientCommand::ReadyCheckAnswer { ready } =>
-            (g::commands::MSG_RAID_READY_CHECK, vec![u8::from(ready)]),
+        ClientCommand::ReadyCheckAnswer { ready } => {
+            (g::commands::MSG_RAID_READY_CHECK, vec![u8::from(ready)])
+        }
         ClientCommand::RequestPartyMemberStats { guid } => (
             g::CMSG_REQUEST_PARTY_MEMBER_STATS,
             g::encode_request_stats(guid),
@@ -1864,11 +2246,21 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_roll::encode_vote(looted_target, item_slot, roll_type)
                 .expect("validated native roll vote"),
         ),
-        ClientCommand::ListStabledPets { npc } => stable_packet(benilla_protocol::wrath_stable::Command::List { npc }),
-        ClientCommand::StablePet { npc } => stable_packet(benilla_protocol::wrath_stable::Command::Stable { npc }),
-        ClientCommand::UnstablePet { npc, pet_number } => stable_packet(benilla_protocol::wrath_stable::Command::Unstable { npc, pet_number }),
-        ClientCommand::StableSwapPet { npc, pet_number } => stable_packet(benilla_protocol::wrath_stable::Command::Swap { npc, pet_number }),
-        ClientCommand::BuyStableSlot { npc } => stable_packet(benilla_protocol::wrath_stable::Command::BuySlot { npc }),
+        ClientCommand::ListStabledPets { npc } => {
+            stable_packet(benilla_protocol::wrath_stable::Command::List { npc })
+        }
+        ClientCommand::StablePet { npc } => {
+            stable_packet(benilla_protocol::wrath_stable::Command::Stable { npc })
+        }
+        ClientCommand::UnstablePet { npc, pet_number } => {
+            stable_packet(benilla_protocol::wrath_stable::Command::Unstable { npc, pet_number })
+        }
+        ClientCommand::StableSwapPet { npc, pet_number } => {
+            stable_packet(benilla_protocol::wrath_stable::Command::Swap { npc, pet_number })
+        }
+        ClientCommand::BuyStableSlot { npc } => {
+            stable_packet(benilla_protocol::wrath_stable::Command::BuySlot { npc })
+        }
         ClientCommand::GuildBankQuery(query) => (query.opcode(), query.encode()),
         ClientCommand::RequestRaidInfo => (
             benilla_protocol::wrath_instance::CMSG_REQUEST_RAID_INFO,
@@ -2394,10 +2786,25 @@ mod tests {
         let quest = 783u32;
         let guid_quest = [npc.to_le_bytes().as_slice(), quest.to_le_bytes().as_slice()].concat();
         for (command, opcode, body) in [
-            (ClientCommand::QuestgiverComplete { npc, quest }, 0x18a, guid_quest.clone()),
-            (ClientCommand::QuestgiverRequestReward { npc, quest }, 0x18c, guid_quest.clone()),
-            (ClientCommand::QuestgiverChooseReward { npc, quest, choice: 2 }, 0x18e,
-                [guid_quest.as_slice(), 2u32.to_le_bytes().as_slice()].concat()),
+            (
+                ClientCommand::QuestgiverComplete { npc, quest },
+                0x18a,
+                guid_quest.clone(),
+            ),
+            (
+                ClientCommand::QuestgiverRequestReward { npc, quest },
+                0x18c,
+                guid_quest.clone(),
+            ),
+            (
+                ClientCommand::QuestgiverChooseReward {
+                    npc,
+                    quest,
+                    choice: 2,
+                },
+                0x18e,
+                [guid_quest.as_slice(), 2u32.to_le_bytes().as_slice()].concat(),
+            ),
             (ClientCommand::QuestlogRemove { slot: 24 }, 0x194, vec![24]),
         ] {
             assert_eq!(route(&command), WrathRoute::NativeSession);
@@ -2408,17 +2815,45 @@ mod tests {
     #[test]
     fn item_commands_route_native_inventory_bodies_and_use_item_shares_the_cast_counter() {
         for (command, opcode, body) in [
-            (ClientCommand::SwapInvItem { src_slot: 23, dst_slot: 24 }, 0x10d, vec![24, 23]),
             (
-                ClientCommand::SplitItem { src_bag: 255, src_slot: 23, dst_bag: 19, dst_slot: 1, count: 5 },
+                ClientCommand::SwapInvItem {
+                    src_slot: 23,
+                    dst_slot: 24,
+                },
+                0x10d,
+                vec![24, 23],
+            ),
+            (
+                ClientCommand::SplitItem {
+                    src_bag: 255,
+                    src_slot: 23,
+                    dst_bag: 19,
+                    dst_slot: 1,
+                    count: 5,
+                },
                 0x10e,
                 vec![255, 23, 19, 1, 5, 0, 0, 0],
             ),
-            (ClientCommand::DestroyItem { bag_index: 255, slot: 23, count: 0 }, 0x111, vec![255, 23, 0, 0, 0, 0]),
-            (ClientCommand::BankerActivate { guid: 7 }, 0x1b7, 7u64.to_le_bytes().to_vec()),
+            (
+                ClientCommand::DestroyItem {
+                    bag_index: 255,
+                    slot: 23,
+                    count: 0,
+                },
+                0x111,
+                vec![255, 23, 0, 0, 0, 0],
+            ),
+            (
+                ClientCommand::BankerActivate { guid: 7 },
+                0x1b7,
+                7u64.to_le_bytes().to_vec(),
+            ),
         ] {
             assert_eq!(route(&command), WrathRoute::NativeInventory);
-            assert_eq!(benilla_protocol::wrath_inventory::encode(&inventory_command(command)), (opcode, body));
+            assert_eq!(
+                benilla_protocol::wrath_inventory::encode(&inventory_command(command)),
+                (opcode, body)
+            );
         }
         let use_item = || ClientCommand::UseItem {
             bag_index: 255,
@@ -2442,16 +2877,43 @@ mod tests {
     fn trade_auction_and_master_loot_route_native_bodies() {
         for (command, opcode, body) in [
             (ClientCommand::AcceptTrade, 0x11a, vec![1, 0, 0, 0]),
-            (ClientCommand::SetTradeItem { trade_slot: 6, bag: 255, slot: 23 }, 0x11d, vec![6, 255, 23]),
+            (
+                ClientCommand::SetTradeItem {
+                    trade_slot: 6,
+                    bag: 255,
+                    slot: 23,
+                },
+                0x11d,
+                vec![6, 255, 23],
+            ),
             (ClientCommand::CancelTrade, 0x11c, vec![]),
             (
-                ClientCommand::AuctionSellItem { auctioneer: 7, item_guid: 9, bid: 1, buyout: 2, etime_minutes: 720, count: 20 },
+                ClientCommand::AuctionSellItem {
+                    auctioneer: 7,
+                    item_guid: 9,
+                    bid: 1,
+                    buyout: 2,
+                    etime_minutes: 720,
+                    count: 20,
+                },
                 0x256,
-                [7u64.to_le_bytes().as_slice(), &1u32.to_le_bytes(), &9u64.to_le_bytes(), &20u32.to_le_bytes(),
-                    &1u32.to_le_bytes(), &2u32.to_le_bytes(), &720u32.to_le_bytes()].concat(),
+                [
+                    7u64.to_le_bytes().as_slice(),
+                    &1u32.to_le_bytes(),
+                    &9u64.to_le_bytes(),
+                    &20u32.to_le_bytes(),
+                    &1u32.to_le_bytes(),
+                    &2u32.to_le_bytes(),
+                    &720u32.to_le_bytes(),
+                ]
+                .concat(),
             ),
             (
-                ClientCommand::LootMasterGive { guid: 7, slot: 3, target: 9 },
+                ClientCommand::LootMasterGive {
+                    guid: 7,
+                    slot: 3,
+                    target: 9,
+                },
                 0x2a3,
                 [7u64.to_le_bytes().as_slice(), &[3], &9u64.to_le_bytes()].concat(),
             ),
@@ -2462,10 +2924,34 @@ mod tests {
     }
 
     #[test]
+    fn chat_lines_speak_the_own_language_and_name_only_whisper_and_channel_targets() {
+        use crate::net::ChatKind;
+        let line = |kind, target: Option<&str>, language| ClientCommand::Chat {
+            kind,
+            target: target.map(str::to_string),
+            text: "hi".into(),
+            language,
+        };
+        assert_eq!(route(&line(ChatKind::Say, None, None)), WrathRoute::NativeChatLine);
+        assert_eq!(chat_line(line(ChatKind::Say, None, None), 1).unwrap(), (0x95, [1u32.to_le_bytes(), 1u32.to_le_bytes()].concat().into_iter().chain(*b"hi\0").collect()));
+        assert_eq!(
+            chat_line(line(ChatKind::Whisper, Some("Bob"), Some(7)), 1).unwrap().1,
+            [7u32.to_le_bytes(), 7u32.to_le_bytes()].concat().into_iter().chain(*b"Bob\0hi\0").collect::<Vec<_>>()
+        );
+        let addon = ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Guild, text: "p\tm".into() };
+        assert_eq!(chat_line(addon, 1).unwrap().1[..8], [4u32.to_le_bytes(), u32::MAX.to_le_bytes()].concat()[..]);
+        let embedded = ClientCommand::Chat { kind: ChatKind::Say, target: None, text: "a\0b".into(), language: None };
+        assert!(chat_line(embedded, 1).is_err(), "an embedded NUL is refused before send");
+        assert_eq!(route(&ClientCommand::LeaveChannel { name: "x".into() }), WrathRoute::NativeChannel);
+        assert_eq!(
+            benilla_protocol::wrath_chat_notices::encode(&channel_command(ClientCommand::ChannelKick { name: "x".into(), player: "Bob".into() })),
+            (0xa4, b"x\0Bob\0".to_vec())
+        );
+    }
+
+    #[test]
     fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
-        for command in [
-            ClientCommand::BattlefieldStatusRequest,
-        ] {
+        for command in [ClientCommand::BattlefieldStatusRequest] {
             assert_eq!(route(&command), WrathRoute::DeferredReadOnlyQuery);
         }
         assert_eq!(
@@ -3301,13 +3787,39 @@ mod group_tests {
     #[test]
     fn group_commands_route_and_encode_native_bodies() {
         for (command, opcode, body) in [
-            (ClientCommand::GroupInvite { name: "Ally".into() }, 0x6e, b"Ally\0\0\0\0\0".to_vec()),
+            (
+                ClientCommand::GroupInvite {
+                    name: "Ally".into(),
+                },
+                0x6e,
+                b"Ally\0\0\0\0\0".to_vec(),
+            ),
             (ClientCommand::GroupAccept, 0x72, vec![0; 4]),
             (ClientCommand::GroupDecline, 0x73, vec![]),
             (ClientCommand::GroupLeave, 0x7b, vec![]),
-            (ClientCommand::PartyAssignment { assignment: 1, apply: true, guid: 0x8877665544332211 }, 0x38e, vec![1,1,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88]),
-            (ClientCommand::PartyAssignment { assignment: 0, apply: false, guid: 0 }, 0x38e, vec![0;10]),
-            (ClientCommand::RequestPartyMemberStats { guid: 7 }, 0x27f, vec![7,0,0,0,0,0,0,0]),
+            (
+                ClientCommand::PartyAssignment {
+                    assignment: 1,
+                    apply: true,
+                    guid: 0x8877665544332211,
+                },
+                0x38e,
+                vec![1, 1, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88],
+            ),
+            (
+                ClientCommand::PartyAssignment {
+                    assignment: 0,
+                    apply: false,
+                    guid: 0,
+                },
+                0x38e,
+                vec![0; 10],
+            ),
+            (
+                ClientCommand::RequestPartyMemberStats { guid: 7 },
+                0x27f,
+                vec![7, 0, 0, 0, 0, 0, 0, 0],
+            ),
         ] {
             assert_eq!(route(&command), WrathRoute::NativeSession);
             assert_eq!(session_packet(command), (opcode, body));
@@ -3324,10 +3836,29 @@ mod channel_command_tests {
     use super::*;
     #[test]
     fn native_channel_commands_route_and_encode_in_request_order() {
-        let commands = [ClientCommand::SetChannelWatch { name: "General".into() }, ClientCommand::ChannelDisplayList { name: "General".into() }, ClientCommand::SetChannelWatch { name: String::new() }];
-        for command in &commands { assert_eq!(route(command), WrathRoute::NativeSession); }
+        let commands = [
+            ClientCommand::SetChannelWatch {
+                name: "General".into(),
+            },
+            ClientCommand::ChannelDisplayList {
+                name: "General".into(),
+            },
+            ClientCommand::SetChannelWatch {
+                name: String::new(),
+            },
+        ];
+        for command in &commands {
+            assert_eq!(route(command), WrathRoute::NativeSession);
+        }
         let packets: Vec<_> = commands.into_iter().map(session_packet).collect();
-        assert_eq!(packets, vec![(0x3ef, b"General\0".to_vec()), (0x3d2, b"General\0".to_vec()), (0x3ef, vec![0])]);
+        assert_eq!(
+            packets,
+            vec![
+                (0x3ef, b"General\0".to_vec()),
+                (0x3d2, b"General\0".to_vec()),
+                (0x3ef, vec![0])
+            ]
+        );
     }
 }
 
@@ -3340,8 +3871,10 @@ mod lfg_command_tests {
     use super::*;
     #[test]
     fn native_lock_queries_route_to_exact_empty_packets() {
-        for (command, opcode) in [(ClientCommand::LfgRequestPlayerLockInfo, 0x036e),
-            (ClientCommand::LfgRequestPartyLockInfo, 0x0371)] {
+        for (command, opcode) in [
+            (ClientCommand::LfgRequestPlayerLockInfo, 0x036e),
+            (ClientCommand::LfgRequestPartyLockInfo, 0x0371),
+        ] {
             assert_eq!(route(&command), WrathRoute::NativeSession);
             assert_eq!(session_packet(command), (opcode, Vec::new()));
         }
@@ -3412,7 +3945,10 @@ mod repair_funding_tests {
     #[test]
     fn existing_vendor_repairs_use_personal_money_only() {
         for item_guid in [0, 0x8877665544332211] {
-            let command = ClientCommand::RepairItem { vendor: 0x0102030405060708, item_guid };
+            let command = ClientCommand::RepairItem {
+                vendor: 0x0102030405060708,
+                item_guid,
+            };
             assert_eq!(route(&command), WrathRoute::NativeSession);
             let (opcode, body) = session_packet(command);
             assert_eq!(opcode, benilla_protocol::wrath_vendor::CMSG_REPAIR_ITEM);
@@ -3437,14 +3973,29 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
         ClientCommand::GuildQuery { guild_id } => G::Query { guild_id },
         ClientCommand::GuildInfoRequest => G::Info,
         ClientCommand::GuildRosterRequest => G::Roster,
-        ClientCommand::GuildInvite { name } => G::Invite { name: name.into_bytes() },
+        ClientCommand::GuildInvite { name } => G::Invite {
+            name: name.into_bytes(),
+        },
         ClientCommand::GuildAccept => G::Accept,
         ClientCommand::GuildDecline => G::Decline,
-        ClientCommand::GuildPromote { name } => G::Promote { name: name.into_bytes() },
-        ClientCommand::GuildDemote { name } => G::Demote { name: name.into_bytes() },
-        ClientCommand::GuildRemove { name } => G::Remove { name: name.into_bytes() },
-        ClientCommand::GuildMotd { motd } => G::Motd { text: motd.into_bytes() },
-        _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a native core guild command")),
+        ClientCommand::GuildPromote { name } => G::Promote {
+            name: name.into_bytes(),
+        },
+        ClientCommand::GuildDemote { name } => G::Demote {
+            name: name.into_bytes(),
+        },
+        ClientCommand::GuildRemove { name } => G::Remove {
+            name: name.into_bytes(),
+        },
+        ClientCommand::GuildMotd { motd } => G::Motd {
+            text: motd.into_bytes(),
+        },
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "not a native core guild command",
+            ))
+        }
     };
     Ok((command.opcode(), command.encode()?))
 }
@@ -3452,7 +4003,9 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
 #[path = "wrath/guild_tests.rs"]
 mod guild_tests;
 
-fn arena_team_packet(command: &benilla_protocol::wrath_arena_team::Command) -> std::io::Result<(u32, Vec<u8>)> {
+fn arena_team_packet(
+    command: &benilla_protocol::wrath_arena_team::Command,
+) -> std::io::Result<(u32, Vec<u8>)> {
     Ok((command.opcode(), command.encode()?))
 }
 #[cfg(test)]
@@ -3479,10 +4032,19 @@ fn finish_character_action(
     code: u8,
     publish: impl FnMut(SessionEvent) -> Result<()>,
 ) -> Result<()> {
-    publish_character_action(action, code, || {
-        *characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
-        Ok(SessionEvent::CharacterList { characters: characters.clone(), realm })
-    }, publish)
+    publish_character_action(
+        action,
+        code,
+        || {
+            *characters =
+                normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+            Ok(SessionEvent::CharacterList {
+                characters: characters.clone(),
+                realm,
+            })
+        },
+        publish,
+    )
 }
 
 // Refresh must complete and publish before success. A transport failure never fabricates a result.
@@ -3502,7 +4064,9 @@ fn publish_character_action(
 #[path = "wrath/character_tests.rs"]
 mod character_tests;
 
-fn native_mail_packet(command: &benilla_protocol::wrath_mail_mutations::Command) -> std::io::Result<(u32, Vec<u8>)> {
+fn native_mail_packet(
+    command: &benilla_protocol::wrath_mail_mutations::Command,
+) -> std::io::Result<(u32, Vec<u8>)> {
     Ok((command.opcode(), command.encode()?))
 }
 
@@ -3519,8 +4083,13 @@ impl MovementAuthorityHandle {
         }
         Ok(match packet {
             Packet::Response { reason, instant } => {
-                if reason != 0 { state.logout_pending = false; }
-                Some(SessionEvent::LogoutResponse { reason, instant: instant != 0 })
+                if reason != 0 {
+                    state.logout_pending = false;
+                }
+                Some(SessionEvent::LogoutResponse {
+                    reason,
+                    instant: instant != 0,
+                })
             }
             Packet::Complete => {
                 state.logout_pending = false;
@@ -3553,8 +4122,14 @@ mod who_tests;
 #[cfg(test)]
 #[test]
 fn completed_quest_query_is_native_and_empty() {
-    assert_eq!(route(&ClientCommand::NativeQuestsCompletedQuery), WrathRoute::NativeQuestsCompletedQuery);
-    assert_eq!(benilla_protocol::wrath_quests_completed::encode_query(), (0x500, vec![]));
+    assert_eq!(
+        route(&ClientCommand::NativeQuestsCompletedQuery),
+        WrathRoute::NativeQuestsCompletedQuery
+    );
+    assert_eq!(
+        benilla_protocol::wrath_quests_completed::encode_query(),
+        (0x500, vec![])
+    );
 }
 
 #[cfg(test)]
@@ -3564,6 +4139,12 @@ mod admission_tests;
 #[cfg(test)]
 #[test]
 fn ui_timer_query_is_native_and_empty() {
-    assert_eq!(route(&ClientCommand::NativeUiTimerQuery), WrathRoute::NativeUiTimerQuery);
-    assert_eq!(benilla_protocol::wrath_ui_timer::encode_query(), (0x4f6, vec![]));
+    assert_eq!(
+        route(&ClientCommand::NativeUiTimerQuery),
+        WrathRoute::NativeUiTimerQuery
+    );
+    assert_eq!(
+        benilla_protocol::wrath_ui_timer::encode_query(),
+        (0x4f6, vec![])
+    );
 }

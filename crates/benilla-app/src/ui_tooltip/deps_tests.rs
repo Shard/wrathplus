@@ -470,7 +470,13 @@ impl Rig {
             for slot in 0..u32::from(EQUIPMENT_SLOTS) {
                 objs.spawn(
                     Layout::guid(kind, slot),
-                    ObjectFields::from_pairs(&[(3, Layout::entry(kind))]),
+                    ObjectFields::from_fields(
+                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        &[(
+                            benilla_protocol::messages::Field::ObjectEntry,
+                            Layout::entry(kind),
+                        )],
+                    ),
                 );
             }
         }
@@ -478,7 +484,13 @@ impl Rig {
         for (i, &entry) in reagents.iter().enumerate() {
             objs.spawn(
                 0x2_0000 + i as u64,
-                ObjectFields::from_pairs(&[(3, entry), (14, 5)]),
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[
+                        (benilla_protocol::messages::Field::ObjectEntry, entry),
+                        (benilla_protocol::messages::Field::UnitCreatedby, 5),
+                    ],
+                ),
             );
         }
         Some(Rig {
@@ -873,7 +885,10 @@ fn a_reagent_moving_requeues_the_views_that_list_it() {
     };
 
     // The names stream in: every reagent line appears, and each view that has one is due.
-    let empty = mat_of(ObjectStore(ObjectFields::from_pairs(&[(22, 100)])));
+    let empty = mat_of(ObjectStore(ObjectFields::from_fields(
+        benilla_protocol::messages::FieldLayout::Vanilla5875,
+        &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+    )));
     let unnamed = states(t, &empty.store);
     let before: Vec<_> = listing
         .iter()
@@ -952,7 +967,13 @@ fn a_pet_view_reads_no_player_form_equipment_reach_or_unit_field_but_the_ranged_
         ..
     } = &mut rig;
     let objects = objs.get();
-    let pet = ObjectFields::from_pairs(&[(34, 30), (162, 900)]);
+    let pet = ObjectFields::from_fields(
+        benilla_protocol::messages::FieldLayout::Vanilla5875,
+        &[
+            (benilla_protocol::messages::Field::UnitLevel, 30),
+            (benilla_protocol::messages::Field::UnitBaseMana, 900),
+        ],
+    );
     let m = mat(
         layout,
         Inputs::default(),

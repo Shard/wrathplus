@@ -161,6 +161,8 @@ mod wrath_achievements;
 pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
 mod wrath_tutorial;
 mod wrath_ready_check;
+mod wrath_quests_completed;
+mod wrath_server_time;
 pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
@@ -207,7 +209,9 @@ pub use char_stats::{
 pub use chat_misc::EmoteRequest;
 pub use chat_send::ChatSend;
 pub use chat_types::ChatTypeColor;
-pub use chat_window::{message_group_index, ChatWindowLook, MESSAGE_GROUPS};
+pub use chat_window::{
+    message_group_index, ChatWindowLook, COMBAT_LOG_GROUPS_START, MESSAGE_GROUPS,
+};
 pub use container::{
     BagAutoStore, ContainerMove, ContainerSlot, ContainerState, EnchantView, PendingWrap,
     PetitionSlotView, RandomPropertyView, UiCursorMode,
@@ -781,6 +785,7 @@ impl UiScript {
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
+            wrath_quests_completed::install(&lua)?;
         }
 
         let s = UiScript {

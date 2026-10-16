@@ -1,6 +1,7 @@
 //! The `fxview` fixture's driver: stands the effect-viewer's subject up in the world; the
 //! request, its knobs and the camera are [`super`]'s.
 
+use benilla_protocol::messages::{Field, FieldLayout};
 use bevy::prelude::*;
 
 use benilla_assets::m2_url;
@@ -72,12 +73,13 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(
+                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
                         &[
-                            (22, 100), // UNIT_FIELD_HEALTH
-                            (28, 100), // UNIT_FIELD_MAXHEALTH
-                            (34, 60),  // UNIT_FIELD_LEVEL
-                            (35, 35),  // UNIT_FIELD_FACTIONTEMPLATE: friendly, no combat pose
+                            (Field::UnitHealth, 100),
+                            (Field::UnitMaxHealth, 100),
+                            (Field::UnitLevel, 60),
+                            (Field::UnitFactionTemplate, 35), // friendly, no combat pose
                         ],
                     )),
                     Transform::from_translation(pos)
@@ -108,10 +110,11 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(
+                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
                         &[
-                            (14, req.go_state), // GAMEOBJECT_STATE
-                            (21, req.go_type),  // GAMEOBJECT_TYPE_ID
+                            (Field::GameobjectState, req.go_state),
+                            (Field::GameobjectTypeId, req.go_type),
                         ],
                     )),
                     Transform::from_translation(pos)

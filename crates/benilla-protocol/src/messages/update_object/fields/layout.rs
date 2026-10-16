@@ -29,6 +29,19 @@ impl FieldLayout {
         }
     }
 
+    /// The first dword index of `field` on this layout, for fixtures and watch constants that
+    /// still key on an index. A field the layout lacks is a compile-time error in a `const`.
+    pub const fn index_of(self, field: Field) -> u16 {
+        let span = match self {
+            Self::Vanilla5875 => generated::VANILLA[field as usize],
+            Self::Wrath12340 => generated::WRATH[field as usize],
+        };
+        match span {
+            Some(span) => span.index,
+            None => panic!("the field is not in this layout"),
+        }
+    }
+
     pub fn descriptor_len(self, object_type: ObjectType) -> u16 {
         let slot = Self::class_slot(object_type);
         match self {

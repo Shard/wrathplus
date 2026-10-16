@@ -801,7 +801,10 @@ mod tests {
             world.insert_resource(spells);
             // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
             let live = || {
-                crate::net::ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(22, 100)]))
+                crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                ))
             };
             world.spawn((
                 SelfPlayer,
@@ -903,7 +906,10 @@ mod tests {
                 turn_rate: 3.1,
             });
             let live = || {
-                crate::net::ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(22, 100)]))
+                crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                ))
             };
             world.spawn((
                 SelfPlayer,

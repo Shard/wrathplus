@@ -86,6 +86,7 @@ pub(super) fn feed_action_state(
         Res<crate::spell::SpellTargeting>,
         Res<crate::ui_macro::MacroBoundSpells>,
         Res<crate::spell::SpellModifiers>,
+        Res<crate::net::wrath_combo_points::NativeComboPoints>,
         // The caster's and the target's reach and motion, which the range compare reads.
         crate::spell::RangeUnits,
         // The usable walk's `CanAttack`/`CanAssist` inputs.
@@ -122,8 +123,17 @@ pub(super) fn feed_action_state(
         memory.last_cd_trace = Some(now);
     }
 
-    let (pending, queued_melee, channel, targeting, bound, spell_mods, range_units, relations) =
-        &cast_state;
+    let (
+        pending,
+        queued_melee,
+        channel,
+        targeting,
+        bound,
+        spell_mods,
+        combo,
+        range_units,
+        relations,
+    ) = &cast_state;
     let me = self_q.iter().next();
     // The bags, walked once per frame for every reagent, totem and item count below.
     let carried = me
@@ -206,6 +216,7 @@ pub(super) fn feed_action_state(
                         cooldowns: &cooldowns,
                         carried: &carried,
                         spell_mods,
+                        combo,
                         relations: relations.context(),
                     };
                     let (u, oom) = usable::spell_usable(
@@ -287,6 +298,7 @@ pub(super) fn feed_action_state(
                         cooldowns: &cooldowns,
                         carried: &carried,
                         spell_mods,
+                        combo,
                         relations: relations.context(),
                     };
                     let (u, oom) = usable::item_usable(
@@ -393,6 +405,7 @@ pub(super) fn feed_action_state(
 mod tests {
     use super::*;
     use benilla_formats::SpellDisplay;
+    use benilla_protocol::messages::{Field, FieldLayout};
 
     /// `[rec+0x564]`'s three values (`0x4e5a50`): a live spell, a bare macro, and grey.
     #[test]
@@ -461,6 +474,7 @@ mod tests {
             .insert_resource(bound)
             .init_resource::<Cooldowns>()
             .init_resource::<crate::spell::SpellModifiers>()
+            .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
             .init_resource::<crate::ui_script::UiClock>()
             .init_resource::<AutoRepeatActive>()
             .init_resource::<crate::spell::PendingCast>()
@@ -512,7 +526,7 @@ mod tests {
         const SWUNG_AT: u64 = 0xA1;
         const SELECTED: u64 = 0xB2;
         /// `UNIT_FIELD_COMBATREACH`.
-        const REACH: u16 = 130;
+        const REACH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCombatreach);
 
         let verdict = |distance: f32| {
             let (tx, _rx) = crossbeam_channel::unbounded();
@@ -551,6 +565,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()
@@ -577,14 +592,20 @@ mod tests {
                 SelfPlayer,
                 Engaged(SWUNG_AT),
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // The selected unit keeps the descriptor's default 1.5 reach.
             let selected = app
                 .world_mut()
                 .spawn((
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
@@ -668,6 +689,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()
@@ -697,7 +719,10 @@ mod tests {
                 crate::net::Embodied,
                 speeds,
                 Transform::default(),
-                ObjectStore(ObjectFields::from_pairs(&[(22, 100), (23, 500)])),
+                ObjectStore(ObjectFields::from_fields(
+                    FieldLayout::Vanilla5875,
+                    &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
+                )),
             ));
             // A mob at the descriptor's default 1.5 reach; a live spline at 8 yd/s is its run.
             let mob = app
@@ -705,7 +730,10 @@ mod tests {
                 .spawn((
                     speeds,
                     Transform::from_xyz(distance, 0.0, 0.0),
-                    ObjectStore(ObjectFields::from_pairs(&[(22, 100)])),
+                    ObjectStore(ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::UnitHealth, 100)],
+                    )),
                 ))
                 .id();
             if mob_runs {
@@ -757,8 +785,8 @@ mod tests {
         const FOOD_ITEM: u32 = 1487;
         const FOOD_SPELL: u32 = 433;
         // Raw indices: `ITEM_FIELD_STACK_COUNT`, and `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1.
-        const STACK: u16 = 14;
-        const PACK_SLOT_1: u16 = 532;
+        const STACK: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemStackCount);
+        const PACK_SLOT_1: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerPackSlot1);
 
         let lit = |in_combat: bool| {
             let (tx, _rx) = crossbeam_channel::unbounded();
@@ -803,6 +831,7 @@ mod tests {
                 })
                 .init_resource::<Cooldowns>()
                 .init_resource::<crate::spell::SpellModifiers>()
+                .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
                 .init_resource::<crate::ui_script::UiClock>()
                 .init_resource::<AutoRepeatActive>()
                 .init_resource::<crate::spell::PendingCast>()

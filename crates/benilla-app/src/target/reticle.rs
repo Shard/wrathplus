@@ -199,6 +199,7 @@ mod tests {
             world.init_resource::<WorldCursor>();
             world.init_resource::<SpellTargeting>();
             world.init_resource::<crate::spell::SpellModifiers>();
+            world.init_resource::<crate::net::wrath_combo_points::NativeComboPoints>();
             world.insert_resource(PickOcclusion {
                 distance: 10.0,
                 point: Some(Vec3::ZERO),

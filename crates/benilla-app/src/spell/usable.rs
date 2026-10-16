@@ -44,6 +44,8 @@ pub(crate) struct UsableCtx<'a> {
     pub(crate) cooldowns: &'a Cooldowns,
     /// The talent spell-modifier tables leg 12's cost goes through.
     pub(crate) spell_mods: &'a SpellModifiers,
+    /// Build 12340's combo points, which no descriptor carries.
+    pub(crate) combo: &'a crate::net::wrath_combo_points::NativeComboPoints,
     /// Every carried entry's count for the frame ([`crate::ui_items::carried_counts`]).
     pub(crate) carried: &'a std::collections::HashMap<u32, u32>,
     /// `CanAttack`/`CanAssist`'s creature metadata and controller lookup.
@@ -381,7 +383,8 @@ pub(crate) fn spell_usable(
     // test) fails while the caster's combo-point byte (`PLAYER_FIELD_BYTES` byte 1) is 0. It reads
     // no target, so a point banked on another mob leaves the button lit and the server refuses the
     // cast. No class gate, unlike Lua `GetComboPoints 0x51a190`: a warrior's Overpower greys here.
-    if d.needs_combo_points() && ctx.store.0.player_combo_points().unwrap_or(0) == 0 {
+    if d.needs_combo_points() && crate::net::wrath_combo_points::banked(ctx.store, ctx.combo).0 == 0
+    {
         return (false, false);
     }
     // Leg 6 (`0x612480`): the form's `SpellShapeshiftForm.dbc` stance flag decides whether it
@@ -547,6 +550,7 @@ pub(crate) fn can_afford(d: &SpellDisplay, store: &ObjectStore, mods: &SpellModi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     // Field indices, private in the protocol crate: health 22, power1 23, max health 28, flags
@@ -582,7 +586,13 @@ mod tests {
             for (i, (field, guid)) in hands.iter().enumerate() {
                 pairs.push((*field, *guid as u32));
                 let entry = 500 + i as u32;
-                deps.spawn_item(*guid, ObjectFields::from_pairs(&[(3, entry)]));
+                deps.spawn_item(
+                    *guid,
+                    ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::ObjectEntry, entry)],
+                    ),
+                );
                 deps.items.insert_template(
                     entry,
                     Some(benilla_protocol::messages::ItemInfo {
@@ -615,8 +625,9 @@ mod tests {
         const INV_MAINHAND: u16 = 486 + 2 * 15;
         const INV_OFFHAND: u16 = 486 + 2 * 16;
         // `ITEM_FIELD_DURABILITY` / `_MAXDURABILITY`, instance fields.
-        const ITEM_DURABILITY: u16 = 46;
-        const ITEM_MAX_DURABILITY: u16 = 47;
+        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
+        const ITEM_MAX_DURABILITY: u16 =
+            FieldLayout::Vanilla5875.index_of(Field::ItemMaxdurability);
 
         let spell = |ex3: u32| SpellDisplay {
             equipped_item_class: 2,
@@ -703,7 +714,13 @@ mod tests {
                 let guid = 0x2a + i as u64;
                 pairs.push((*field, guid as u32));
                 let entry = 500 + i as u32;
-                deps.spawn_item(guid, ObjectFields::from_pairs(&[(3, entry)]));
+                deps.spawn_item(
+                    guid,
+                    ObjectFields::from_fields(
+                        FieldLayout::Vanilla5875,
+                        &[(Field::ObjectEntry, entry)],
+                    ),
+                );
                 deps.items.insert_template(
                     entry,
                     Some(benilla_protocol::messages::ItemInfo {
@@ -753,6 +770,10 @@ mod tests {
             cooldowns,
             carried,
             spell_mods,
+            combo: &crate::net::wrath_combo_points::NativeComboPoints {
+                points: 0,
+                target: 0,
+            },
             relations: crate::target::RelationContext::none(),
         }
     }
@@ -847,7 +868,10 @@ mod tests {
             mana_cost: 100,
             ..Default::default()
         };
-        let store = ObjectStore(ObjectFields::from_pairs(&[(23, 80)]));
+        let store = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitPower, 80)],
+        ));
 
         let mut mods = SpellModifiers::default();
         mods.set_class_family(3);
@@ -1001,8 +1025,14 @@ mod tests {
             ..Default::default()
         };
 
-        let healthy = ObjectStore(ObjectFields::from_pairs(&[(22, 100), (125, 0)]));
-        let low = ObjectStore(ObjectFields::from_pairs(&[(22, 10), (125, 0x2)]));
+        let healthy = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
+        ));
+        let low = ObjectStore(ObjectFields::from_fields(
+            FieldLayout::Vanilla5875,
+            &[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
+        ));
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();
         let carried = crate::ui_items::carried_counts(&me.0, &objects);
@@ -1015,6 +1045,10 @@ mod tests {
                 cooldowns: &cooldowns,
                 carried: &carried,
                 spell_mods: &SpellModifiers::default(),
+                combo: &crate::net::wrath_combo_points::NativeComboPoints {
+                    points: 0,
+                    target: 0,
+                },
                 relations: crate::target::RelationContext::none(),
             };
             assert_eq!(
