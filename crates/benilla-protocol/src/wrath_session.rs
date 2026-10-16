@@ -101,8 +101,8 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
         }],
         SMSG_SPELL_FAILED_OTHER => {
             let caster = read_packed_guid(&mut r)?;
-            let _count = u8_le(&mut r)?;
-            vec![SessionEvent::SpellFailedOther { caster, spell_id: u32_le(&mut r)? }]
+            let cast_count = Some(u8_le(&mut r)?);
+            vec![SessionEvent::SpellFailedOther { caster, spell_id: u32_le(&mut r)?, cast_count }]
         }
         SMSG_NAME_QUERY_RESPONSE => name_query(&mut r)?,
         SMSG_CREATURE_QUERY_RESPONSE => session_decode(creature_query(&mut r)?),
@@ -283,7 +283,7 @@ fn targets(r: &mut Cursor<&[u8]>) -> io::Result<Targets> {
 fn spell_start(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
     let item_or_caster = read_packed_guid(r)?;
     let caster = read_packed_guid(r)?;
-    let _count = u8_le(r)?;
+    let count = u8_le(r)?;
     let spell_id = u32_le(r)?;
     let cast_flags = u32_le(r)?;
     let cast_time_ms = u32_le(r)?;
@@ -295,6 +295,7 @@ fn spell_start(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         cast_time_ms,
         target: t.unit,
         ammo_display_id: None,
+        cast_count: Some(count),
     }])
 }
 
@@ -339,6 +340,7 @@ fn spell_go(r: &mut Cursor<&[u8]>, self_guid: Option<u64>) -> io::Result<Vec<Ses
         dest: t.dest,
         ammo_display_id: None,
         item_caster: (item_or_caster != caster).then_some(item_or_caster),
+        cast_count: Some(count),
     });
     Ok(events)
 }
