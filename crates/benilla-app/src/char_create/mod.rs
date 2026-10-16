@@ -512,14 +512,36 @@ fn rotate_model(
 // ── Result ───────────────────────────────────────────────────────────────────────────────────────
 
 /// Surface each create result in the status line; a success returns to select with the row armed.
+/// Native results ride the same system: the transport publishes the refreshed roster before a
+/// success (`9bab9156`), and a refusal shows its 12340 status key
+/// ([`crate::char_select::wrath_char_result_key`]).
 fn create_result(
     mut msgs: MessageReader<CharActionResultMessage>,
+    native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
     mut sel: ResMut<CreateSelection>,
     mut roster: ResMut<Roster>,
     mut next: ResMut<NextState<ClientState>>,
     mut status: Query<&mut Text, With<parts::StatusLine>>,
     strings: Res<GlueStrings>,
 ) {
+    for msg in native
+        .into_iter()
+        .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
+    {
+        if msg.action != CharAction::Create {
+            continue;
+        }
+        sel.creating = false;
+        let key =
+            crate::char_select::wrath_char_result_key(msg.code).unwrap_or("CHAR_CREATE_FAILED");
+        info!("char create: native result {:#04x} — {key}", msg.code);
+        if msg.code == benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS {
+            roster.note_created(sel.name.text.clone());
+            next.set(ClientState::CharSelect);
+        } else if let Ok(mut text) = status.single_mut() {
+            text.0 = strings.text(key, "Character creation failed").to_string();
+        }
+    }
     for msg in msgs.read() {
         if msg.action != CharAction::Create {
             continue;
