@@ -246,6 +246,7 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
                 caster,
                 spell_id,
                 cast_count: None,
+                reason: None,
             }]
         }
         ServerPacket::CancelAutoRepeat => vec![SessionEvent::CancelAutoRepeat],

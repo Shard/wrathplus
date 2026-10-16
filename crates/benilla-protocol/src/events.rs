@@ -679,11 +679,13 @@ pub enum SessionEvent {
         targets: Vec<u64>,
     },
     /// An observed cast was interrupted or cancelled (`SMSG_SPELL_FAILED_OTHER`).
-    /// `cast_count`: build 12340's cast count byte; `None` on 1.12.
+    /// `cast_count` and `reason`: build 12340's cast count and `SpellCastResult` bytes (AzerothCore
+    /// `Spell::SendInterrupted` always writes both); `None` on 1.12, which has neither.
     SpellFailedOther {
         caster: u64,
         spell_id: u32,
         cast_count: Option<u8>,
+        reason: Option<u8>,
     },
     /// Our cast was pushed back by damage (`SMSG_SPELL_DELAYED`); its end moves out by `delay_ms`.
     SpellDelayed { caster: u64, delay_ms: u32 },

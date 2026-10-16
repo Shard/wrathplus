@@ -25,6 +25,9 @@ pub const MSG_MOVE_SET_WALK_MODE: u32 = 0x00c3;
 pub const MSG_MOVE_FALL_LAND: u32 = 0x00c9;
 pub const MSG_MOVE_HEARTBEAT: u32 = 0x00ee;
 pub const MSG_MOVE_SET_FACING: u32 = 0x00da;
+/// Entering and leaving the water (AzerothCore `MovementHandler.cpp` relays both).
+pub const MSG_MOVE_START_SWIM: u32 = 0x00ca;
+pub const MSG_MOVE_STOP_SWIM: u32 = 0x00cb;
 
 pub const MOVE_FORWARD: u32 = 0x0000_0001;
 pub const MOVE_BACKWARD: u32 = 0x0000_0002;
@@ -39,6 +42,8 @@ pub const MOVE_FALLING_FAR: u32 = 0x0000_2000;
 /// orders them, the mover reports them on every packet until revoked. Same bits as 1.12.
 pub const MOVE_WATER_WALKING: u32 = 0x1000_0000;
 pub const MOVE_FALLING_SLOW: u32 = 0x2000_0000;
+/// `MOVEMENTFLAG_SWIMMING`: the mover reports its pitch (`MovementInfo` pitch field) while set.
+pub const MOVE_SWIMMING: u32 = 0x0020_0000;
 
 const DIRECTION_MASK: u32 = MOVE_FORWARD
     | MOVE_BACKWARD
@@ -172,7 +177,35 @@ pub fn encode_on_foot(
     fall_time: u32,
     fall: Option<FallTail>,
 ) -> Result<Vec<u8>, GroundError> {
-    validate_on_foot(opcode, flags, position, orientation, fall_time, fall)?;
+    encode_movement(
+        opcode,
+        mover_guid,
+        flags,
+        timestamp,
+        position,
+        orientation,
+        None,
+        fall_time,
+        fall,
+    )
+}
+
+/// [`encode_on_foot`] plus swimming: with `MOVE_SWIMMING` the mover reports its `pitch` and has no
+/// fall tail (AzerothCore `ReadMovementInfo` reads pitch for SWIMMING or FLYING). Entering and
+/// leaving the water are `MSG_MOVE_START_SWIM` (SWIMMING set) and `MSG_MOVE_STOP_SWIM` (cleared).
+#[allow(clippy::too_many_arguments)]
+pub fn encode_movement(
+    opcode: u32,
+    mover_guid: u64,
+    flags: u32,
+    timestamp: u32,
+    position: [f32; 3],
+    orientation: f32,
+    pitch: Option<f32>,
+    fall_time: u32,
+    fall: Option<FallTail>,
+) -> Result<Vec<u8>, GroundError> {
+    validate_movement(opcode, flags, position, orientation, pitch, fall_time, fall)?;
     Ok(OutboundMovement {
         mover_guid,
         movement: MovementInfo {
@@ -186,7 +219,7 @@ pub fn encode_on_foot(
                 orientation,
             },
             transport: None,
-            pitch: None,
+            pitch,
             fall_time,
             jump: fall.map(|fall| JumpInfo {
                 vertical_speed: fall.vertical_speed,
@@ -263,6 +296,48 @@ fn validate(
         _ => return Err(GroundError::UnsupportedOpcode(opcode)),
     }
     Ok(())
+}
+
+fn validate_movement(
+    opcode: u32,
+    flags: u32,
+    position: [f32; 3],
+    orientation: f32,
+    pitch: Option<f32>,
+    fall_time: u32,
+    fall: Option<FallTail>,
+) -> Result<(), GroundError> {
+    let swimming = flags & MOVE_SWIMMING != 0;
+    if swimming != pitch.is_some() {
+        return Err(GroundError::OpcodeFlags("SWIMMING flag/pitch mismatch"));
+    }
+    if pitch.is_some_and(|pitch| !pitch.is_finite()) {
+        return Err(GroundError::NonFinitePose);
+    }
+    if swimming && (flags & (MOVE_FALLING | MOVE_FALLING_FAR) != 0 || fall.is_some()) {
+        return Err(GroundError::OpcodeFlags(
+            "SWIMMING with an airborne flag or tail",
+        ));
+    }
+    let opcode = match opcode {
+        MSG_MOVE_START_SWIM if !swimming => {
+            return Err(GroundError::OpcodeFlags("START_SWIM without SWIMMING"));
+        }
+        MSG_MOVE_STOP_SWIM if swimming => {
+            return Err(GroundError::OpcodeFlags("STOP_SWIM retains SWIMMING"));
+        }
+        // The swim edges carry no direction rule of their own.
+        MSG_MOVE_START_SWIM | MSG_MOVE_STOP_SWIM => MSG_MOVE_HEARTBEAT,
+        other => other,
+    };
+    validate_on_foot(
+        opcode,
+        flags & !MOVE_SWIMMING,
+        position,
+        orientation,
+        fall_time,
+        fall,
+    )
 }
 
 fn validate_on_foot(
@@ -476,12 +551,77 @@ mod tests {
             cos_angle: 1.0,
             horizontal_speed: 0.0,
         };
-        for flags in [0x200, 0x20_0000, 0x0200_0000, 0x0800_0000] {
+        for flags in [0x200, 0x0200_0000, 0x0800_0000] {
             assert!(matches!(
                 encode_on_foot(MSG_MOVE_HEARTBEAT, 1, flags, 0, [0.0; 3], 0.0, 0, None),
                 Err(GroundError::UnsupportedFlags(_))
             ));
         }
+        // Swimming is admitted only with its pitch, and never with an airborne tail.
+        assert!(matches!(
+            encode_on_foot(
+                MSG_MOVE_HEARTBEAT,
+                1,
+                MOVE_SWIMMING,
+                0,
+                [0.0; 3],
+                0.0,
+                0,
+                None
+            ),
+            Err(GroundError::OpcodeFlags(_))
+        ));
+        assert!(encode_movement(
+            MSG_MOVE_START_SWIM,
+            1,
+            MOVE_SWIMMING,
+            0,
+            [0.0; 3],
+            0.0,
+            Some(0.2),
+            0,
+            None
+        )
+        .is_ok());
+        assert!(encode_movement(
+            MSG_MOVE_STOP_SWIM,
+            1,
+            MOVE_SWIMMING,
+            0,
+            [0.0; 3],
+            0.0,
+            Some(0.2),
+            0,
+            None
+        )
+        .is_err());
+        assert!(
+            encode_movement(MSG_MOVE_START_SWIM, 1, 0, 0, [0.0; 3], 0.0, None, 0, None).is_err()
+        );
+        assert!(encode_movement(
+            MSG_MOVE_HEARTBEAT,
+            1,
+            0,
+            0,
+            [0.0; 3],
+            0.0,
+            Some(0.2),
+            0,
+            None
+        )
+        .is_err());
+        assert!(encode_movement(
+            MSG_MOVE_HEARTBEAT,
+            1,
+            MOVE_SWIMMING | MOVE_FALLING,
+            0,
+            [0.0; 3],
+            0.0,
+            Some(0.2),
+            0,
+            Some(tail)
+        )
+        .is_err());
         assert!(matches!(
             encode_on_foot(
                 MSG_MOVE_JUMP,
