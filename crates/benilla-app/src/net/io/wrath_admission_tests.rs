@@ -7,6 +7,13 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("FriendListRequest", ClientCommand::FriendListRequest),
+        ("AddFriend", ClientCommand::AddFriend { name: "Bob".into() }),
+        ("DelFriend", ClientCommand::DelFriend { guid: 1 }),
+        ("AddIgnore", ClientCommand::AddIgnore { name: "Bob".into() }),
+        ("DelIgnore", ClientCommand::DelIgnore { guid: 1 }),
+        ("DuelAccepted", ClientCommand::DuelAccepted { arbiter: 1 }),
+        ("DuelCancelled", ClientCommand::DuelCancelled { arbiter: 1 }),
         ("NativeBattleground", ClientCommand::NativeBattleground(benilla_protocol::wrath_battleground::Command::BfExit { battle_id: 1 })),
         (
             "BattlegroundJoin",
