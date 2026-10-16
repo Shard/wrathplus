@@ -36,6 +36,7 @@ pub(crate) fn hover_probe_armed() -> bool {
 pub(crate) mod lock;
 mod price_discount;
 mod relations;
+mod wrath_relations;
 mod reticle;
 // `pub(crate)` for the hover inspector too: its faction catalog feeds `go_highlightable`.
 pub(crate) mod ring;

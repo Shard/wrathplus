@@ -301,7 +301,7 @@ fn buffs_visible_on(
     self_store: Option<&ObjectStore>,
     factions: Option<&Factions>,
     reputations: &Reputations,
-    owner_store: impl FnOnce(u64) -> Option<ObjectStore>,
+    owner_store: impl FnMut(u64) -> Option<ObjectStore>,
 ) -> bool {
     if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
         // Native packet/roster lists apply their own whole-unit gate. No native snapshot

@@ -587,6 +587,14 @@ pub(crate) fn can_attack_from_player(
     let (Some(target), Some(own)) = (target_store, self_store) else {
         return false; // fields not streamed yet; the reference's null path refuses too
     };
+    if own.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        return super::wrath_relations::attack(
+            own, target, 0,
+            reaction_from_player(factions, reputations, target_store, self_store),
+            ring_reaction(factions, reputations, target_store, self_store),
+            |_| None,
+        );
+    }
     let (tflags, oflags) = (target.0.unit_flags(), own.0.unit_flags());
     // (a) The ghost gate (`0x606987`): only a creature whose type flags carry `0x2` may attack a
     // ghost player, so the local player never can.

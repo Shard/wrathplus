@@ -142,11 +142,17 @@ pub(crate) fn can_assist(
     factions: Option<&Factions>,
     reputations: &Reputations,
     self_store: Option<&ObjectStore>,
-    owner_store: impl FnOnce(u64) -> Option<ObjectStore>,
+    mut owner_store: impl FnMut(u64) -> Option<ObjectStore>,
 ) -> bool {
     let Some(store) = store else {
         return false;
     };
+    if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        let Some(actor) = self_store else { return false; };
+        return super::wrath_relations::assist(actor, store, 0, 0,
+            super::ring::reaction_from_player(factions, reputations, Some(store), self_store),
+            &mut owner_store);
+    }
     let flags = store.0.unit_flags();
     if flags & UNIT_FLAG_NOT_SELECTABLE != 0 {
         return false;
