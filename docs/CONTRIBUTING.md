@@ -106,6 +106,13 @@ out of scope is closed with the reason.
     `WOW_GOD=off` leaves it off.
   - A trace is `WOW_MOVE_TRACE=<file>`, filtered with `WOW_MOVE_TRACE_TAGS` (`"move,snd,in"`) and
     ended by `WOW_PROBE_EXIT_AT=<seconds>`; grep it for the `rly` and `snd` lines.
+    Add `hit` for movement obstruction diagnostics: when a frame retains less than half its
+    intended horizontal travel, it replays that horizontal capsule sweep and logs the entity,
+    source kind (WMO, M2, terrain, or runtime/unknown), contact normal/point and nearest triangle.
+    This replay is not the resolver's exact contact history; `nearest_face` is a geometric match,
+    not an exact sweep feature ID. Positions and normals use Bevy world coordinates (+Y up).
+    A replay miss is logged explicitly. With `hit` filtered out, no diagnostic cast, triangle
+    search or formatting runs; movement resolution is unchanged.
   - A capture runs through `scripts/visual.sh`, whose recipe is the header of
     `crates/benilla-app/src/capture/mod.rs`. Pixel questions go through `benilla-visual crop`,
     `series` and `hotspot`.

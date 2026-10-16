@@ -744,7 +744,8 @@ fn stream_terrain(
         if let Some((verts, tris)) = collider_data {
             // Terrain takes the selection ring and clamps the pick (the reference's world trace).
             tile_ent.insert((
-                PendingCollider::new(build_collider_task(verts, tris), None, true),
+                PendingCollider::new(build_collider_task(verts, tris), None, true)
+                    .with_source(crate::collision::ColliderSource::Terrain),
                 GroundDecalSurface,
                 PickOccluder,
             ));
@@ -752,11 +753,14 @@ fn stream_terrain(
         tile.entity = Some(tile_ent.id());
         tile.wall = wall_data.map(|(verts, tris)| {
             commands
-                .spawn(PendingCollider::new(
-                    build_collider_task(verts, tris),
-                    Some(walk_layers()),
-                    true,
-                ))
+                .spawn(
+                    PendingCollider::new(
+                        build_collider_task(verts, tris),
+                        Some(walk_layers()),
+                        true,
+                    )
+                    .with_source(crate::collision::ColliderSource::Terrain),
+                )
                 .id()
         });
         tile.material = Some(material);

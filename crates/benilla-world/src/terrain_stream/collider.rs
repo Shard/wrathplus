@@ -34,6 +34,7 @@ pub struct PendingCollider {
     /// Insert `RigidBody::Static` too. `false` for a transport deck prop, whose bare collider
     /// rides the boat's kinematic body; a static one would stay at its spawn pose.
     static_body: bool,
+    source: crate::collision::ColliderSource,
 }
 
 impl PendingCollider {
@@ -44,7 +45,14 @@ impl PendingCollider {
             built: None,
             layers,
             static_body,
+            source: crate::collision::ColliderSource::Runtime,
         }
+    }
+
+    /// Explicit asset provenance for diagnostics; layers describe audiences, not sources.
+    pub fn with_source(mut self, source: crate::collision::ColliderSource) -> Self {
+        self.source = source;
+        self
     }
 
     /// An already-built collider, so a test stages a burst without a thread pool.
@@ -55,6 +63,7 @@ impl PendingCollider {
             built: Some(collider),
             layers,
             static_body,
+            source: crate::collision::ColliderSource::Runtime,
         }
     }
 }
@@ -120,7 +129,7 @@ pub(super) fn finish_colliders(
         let Some(collider) = pc.built.take() else {
             continue;
         };
-        entity_mut.insert(collider);
+        entity_mut.insert((collider, pc.source));
         if pc.static_body {
             entity_mut.insert(RigidBody::Static);
         }
@@ -597,6 +606,24 @@ mod tests {
         assert!(
             app.world().entity(e).contains::<RigidBody>(),
             "a static body rides the attach"
+        );
+        assert!(app.world().get::<PendingCollider>(e).is_none());
+    }
+
+    #[test]
+    fn diagnostic_source_survives_pending_attach() {
+        let mut app = test_app();
+        let e = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                ready_trimesh(true).with_source(crate::collision::ColliderSource::Terrain),
+            ))
+            .id();
+        app.world_mut().run_system_once(finish_colliders).unwrap();
+        assert_eq!(
+            app.world().get::<crate::collision::ColliderSource>(e),
+            Some(&crate::collision::ColliderSource::Terrain)
         );
         assert!(app.world().get::<PendingCollider>(e).is_none());
     }

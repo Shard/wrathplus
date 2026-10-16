@@ -3,6 +3,7 @@
 //!
 //! - `move`: an interesting frame of the player mover ([`frame`]): a step-down snap, a grounded
 //!   flip, an airborne frame or a sizeable vertical delta. The walk arm alone emits it.
+//! - `hit`: more than half the horizontal travel clipped; opt-in horizontal replay witness.
 //! - `swim`: a frame over liquid ([`swim`]): the depth against the two latch thresholds.
 //! - `mvr`: a mover-claim packet ([`mover_claim`]), which decides whether the server accepts `snd`.
 //! - `sit`: a stand-state decision ([`posture`]), committed or refused, from `X` or `/sit`.
@@ -19,6 +20,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use benilla_assets::trace;
+
+mod hit;
+pub(super) use hit::hit;
 
 /// What the mover did this frame, filled at the end of the physics step in [`super`].
 pub(super) struct Frame {
