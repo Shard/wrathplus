@@ -763,12 +763,18 @@ mod attack_actor_tests {
     use super::*;
     use benilla_protocol::ObjectFields;
 
-    const HEALTH: u16 = 22;
-    const MAXHEALTH: u16 = 28;
-    const FLAGS: u16 = 46;
-    const CHARMEDBY: u16 = 10;
-    const MOUNT: u16 = 133;
-    const PLAYER_FLAGS: u16 = 190;
+    const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitHealth);
+    const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
+    const FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    const CHARMEDBY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitCharmedby);
+    const MOUNT: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::UnitMountDisplayId);
+    const PLAYER_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        .index_of(benilla_protocol::messages::Field::PlayerFlags);
 
     fn actor(pairs: &[(u16, u32)]) -> ObjectStore {
         // A live, unowned, unmounted, unimpaired unit unless a case says otherwise.

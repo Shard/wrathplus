@@ -12,6 +12,7 @@ use benilla_protocol::SessionEvent;
 use super::press_tests::{claw, growl, listen, listening_vm, rig, Rig, CLAW, GROWL, ME, PET};
 use super::PetBar;
 use crate::net::ObjectStore;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 /// The three events, in the reference's order.
 const FLUSH: [&str; 3] = [
@@ -21,7 +22,7 @@ const FLUSH: [&str; 3] = [
 ];
 
 /// `UNIT_FIELD_SUMMONEDBY`, low word, the owner test the GO's pet leg reads (`0x6e859a`).
-const SUMMONEDBY: u16 = 12;
+const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
 
 /// Our own pet by the field the GO's pet leg reads: `SUMMONEDBY` us.
 fn summoned_pet() -> ObjectStore {
@@ -366,7 +367,10 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         // Our class, so the book reads a token (`0x4b4463`); no `ChrClasses` row, so "PET".
         world.spawn((
             crate::net::SelfPlayer,
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[(36, 3 << 8)])),
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(
+                FieldLayout::Vanilla5875,
+                &[(Field::UnitBytes0, 3 << 8)],
+            )),
         ));
         world.insert_resource(crate::chr_classes::ChrClassTable(Default::default()));
         world.resource_mut::<PetBar>().spells.spells = vec![PetActionEntry::from(

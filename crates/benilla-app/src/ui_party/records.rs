@@ -219,9 +219,23 @@ mod tests {
         let g = group_with(record(member_status::ONLINE));
         assert_eq!(g.party_pet_guid(MEMBER, None), Some(PET));
 
-        let summon = ObjectFields::from_pairs(&[(8, 0x55), (9, 0)]);
+        let summon = ObjectFields::from_field_slots(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+            ],
+        );
         assert_eq!(g.party_pet_guid(MEMBER, Some(&summon)), Some(0x55));
-        let both = ObjectFields::from_pairs(&[(6, 0x66), (7, 0), (8, 0x55), (9, 0)]);
+        let both = ObjectFields::from_field_slots(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitCharm, 0, 0x66),
+                (benilla_protocol::messages::Field::UnitCharm, 1, 0),
+                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+            ],
+        );
         assert_eq!(
             g.party_pet_guid(MEMBER, Some(&both)),
             Some(0x66),
@@ -243,7 +257,13 @@ mod tests {
     fn the_raid_pet_guid_reads_the_record_whatever_its_online_bit() {
         let g = group_with(record(member_status::ONLINE));
         assert_eq!(g.raid_pet_guid(MEMBER, None), Some(PET));
-        let summon = ObjectFields::from_pairs(&[(8, 0x55), (9, 0)]);
+        let summon = ObjectFields::from_field_slots(
+            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            &[
+                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+            ],
+        );
         assert_eq!(g.raid_pet_guid(MEMBER, Some(&summon)), Some(0x55));
         assert_eq!(
             g.raid_pet_guid(MEMBER, Some(&ObjectFields::default())),

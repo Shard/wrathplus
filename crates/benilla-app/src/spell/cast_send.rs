@@ -101,6 +101,8 @@ pub(crate) struct CastLadder<'w, 's> {
     pub(crate) cooldowns: ResMut<'w, crate::spell::Cooldowns>,
     /// The talent spell modifiers the power gate's cost goes through.
     pub(crate) spell_mods: Res<'w, crate::spell::SpellModifiers>,
+    /// Build 12340's combo points for the finisher rung.
+    pub(crate) combo: Res<'w, crate::net::wrath_combo_points::NativeComboPoints>,
     pub(crate) cast_errors: ResMut<'w, CastErrors>,
     pub(crate) auto_repeat: ResMut<'w, AutoRepeatActive>,
     pub(crate) trade_skill_opens: ResMut<'w, crate::ui_tradeskill::TradeSkillOpens>,
@@ -284,6 +286,7 @@ impl CastLadder<'_, '_> {
             &mut self.queued_melee,
             &mut self.cooldowns,
             &self.spell_mods,
+            &self.combo,
             &mut self.cast_errors,
             &mut self.auto_repeat,
             &mut self.trade_skill_opens,
@@ -340,6 +343,7 @@ fn send_spell_cast(
     queued_melee: &mut crate::spell::QueuedMeleeSpell,
     cooldowns: &mut crate::spell::Cooldowns,
     spell_mods: &crate::spell::SpellModifiers,
+    combo: &crate::net::wrath_combo_points::NativeComboPoints,
     cast_errors: &mut CastErrors,
     auto_repeat: &mut AutoRepeatActive,
     trade_skill_opens: &mut crate::ui_tradeskill::TradeSkillOpens,
@@ -418,7 +422,7 @@ fn send_spell_cast(
     // requires combo points" for a rogue (class byte 4, `6e4e98`), else 0x12. Like the button
     // greying, it reads no target.
     if let (Some(d), Some(store)) = (def, ctx.rel.self_store) {
-        if d.needs_combo_points() && store.0.player_combo_points().unwrap_or(0) == 0 {
+        if d.needs_combo_points() && crate::net::wrath_combo_points::banked(store, combo).0 == 0 {
             let reason = if store.0.unit_class() == Some(CLASS_ROGUE) {
                 0x46
             } else {
@@ -842,6 +846,7 @@ mod tests {
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::Cooldowns>();
         world.init_resource::<crate::spell::SpellModifiers>();
+        world.init_resource::<crate::net::wrath_combo_points::NativeComboPoints>();
         world.init_resource::<CastErrors>();
         world.init_resource::<AutoRepeatActive>();
         world.init_resource::<crate::ui_tradeskill::TradeSkillOpens>();
@@ -1239,7 +1244,10 @@ mod tests {
             let (mut world, rx) = combat_world(false);
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
-                    let me = crate::net::ObjectStore(ObjectFields::from_pairs(&[(36, class << 8)]));
+                    let me = crate::net::ObjectStore(ObjectFields::from_fields(
+                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        &[(benilla_protocol::messages::Field::UnitBytes0, class << 8)],
+                    ));
                     let ctx = cast_target::CastContext {
                         rel: cast_target::TargetRelations {
                             self_store: Some(&me),

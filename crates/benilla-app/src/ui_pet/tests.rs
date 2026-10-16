@@ -16,6 +16,7 @@ use super::drain::*;
 use super::menu::*;
 use super::unit::*;
 use super::*;
+use benilla_protocol::messages::{Field, FieldLayout};
 
 fn packed(action: u32, kind: u8) -> PetActionEntry {
     PetActionEntry::from(action | (u32::from(kind) << 24))
@@ -385,9 +386,9 @@ fn only_a_possessed_units_attack_press_raises_the_latch() {
 /// `0x5ee5a0` asks for the unit we possess, not the one we own.
 #[test]
 fn the_latch_gate_is_possession_not_ownership() {
-    const FLAGS: u16 = 46;
-    const CHARMEDBY: u16 = 10;
-    const CREATEDBY: u16 = 14;
+    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
+    const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -552,9 +553,9 @@ fn touching_your_target_calls_the_pet_off() {
 /// The owner test falls back to SUMMONEDBY, not `0x5ee5a0`'s CREATEDBY.
 #[test]
 fn the_attack_events_read_the_pets_combat_flag_not_the_click_latch() {
-    const FLAGS: u16 = 46;
-    const CHARMEDBY: u16 = 10;
-    const SUMMONEDBY: u16 = 12;
+    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
+    const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -619,8 +620,8 @@ fn only_the_attack_order_is_gated() {
 /// A pet with one aura in slot 0. `AURAFLAGS` packs a nibble per slot: `0x2` is an effect-index
 /// bit (the slot is live), `0x1` is `AFLAG_CANCELABLE`, the bit `0x4bcea0` tests.
 fn pet_running(spell_id: u32, nibble: u32) -> ObjectStore {
-    const AURA: u16 = 47;
-    const AURAFLAGS: u16 = 95;
+    const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
+    const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
     ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
         (AURA, spell_id),
         (AURAFLAGS, nibble),
@@ -1000,7 +1001,7 @@ fn a_held_pet_names_its_templates_creature_type() {
     use bevy::prelude::*;
     const PET: u64 = 0xF140_0000_0000_002A;
     /// `OBJECT_FIELD_ENTRY`, and the Imp's template entry.
-    const OBJECT_FIELD_ENTRY: u16 = 3;
+    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
     const IMP: u32 = 416;
 
     let mut names = crate::names::NameCache::default();

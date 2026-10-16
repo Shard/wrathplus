@@ -431,8 +431,10 @@ pub(crate) fn drive_nameplates(
             self_store.single().ok(),
         );
         let is_dead = store.is_some_and(|s| s.0.unit_is_dead());
-        // The ring's player inputs, for this unit: PvP flag (`UNIT_FIELD_FLAGS` 0x1000) and party.
-        let pvp = store.is_some_and(|s| s.0.unit_flags() & 0x1000 != 0);
+        // The ring's player inputs, for this unit: its own PvP state (Wrath `UNIT_FIELD_BYTES_2`
+        // byte 1 `0x01`, Vanilla `UNIT_FIELD_FLAGS` 0x1000) and party. A controlled unit reads
+        // its own state, not its controller's (owner inheritance is not built).
+        let pvp = store.is_some_and(|s| s.0.unit_is_pvp());
         let in_party = group.members.iter().any(|m| m.guid == guid.0);
         // The selector's first-priority branch: the combat flash while we melee this unit.
         let color = if flash.unit == Some(entity) {

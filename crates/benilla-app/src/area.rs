@@ -196,14 +196,30 @@ fn feed_zone_events(
     // GetZonePVPInfo (`0x48d540`): isArena is the leaf's Flags `0x80`; the type is the zone's
     // FactionGroupMask against the player template's friend then enemy masks, "contested" when
     // neither; never "arena"; nil only on structural failure. factionName is FactionGroup.dbc's
-    // Name for the zone's mask bit; the realm type never enters.
+    // Name for the zone's mask bit; the realm type never enters. Wrath runs `0x51ba50` instead
+    // ([`wrath_zone_pvp`]), with its special-area types.
     let is_arena = leaf_row.flags & 0x80 != 0;
-    let zone_mask = areas.0.get(zone).map_or(0, |r| r.faction_group_mask);
-    let pvp = factions
+    let zone_row = areas.0.get(zone);
+    let zone_mask = zone_row.map_or(0, |r| r.faction_group_mask);
+    let template = factions
         .as_ref()
         .zip(self_store.single().ok())
-        .and_then(|(f, store)| {
-            let tpl = f.catalog().template(store.0.unit_faction_template()?)?;
+        .map(|(f, store)| {
+            store
+                .0
+                .unit_faction_template()
+                .and_then(|t| f.catalog().template(t))
+        });
+    let faction_name = factions
+        .as_deref()
+        .and_then(|f| f.catalog().faction_group_name(zone_mask))
+        .unwrap_or("");
+    let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
+    let (pvp, pvp_is_subzone) = if wrath {
+        let (kind, from_leaf) = wrath_zone_pvp(Some(leaf_row), zone_row, template);
+        (kind.map(|k| (k, faction_name)), from_leaf)
+    } else {
+        let pvp = template.flatten().map(|tpl| {
             let ty = if zone_mask & tpl.friend_group_mask != 0 {
                 "friendly"
             } else if zone_mask & tpl.enemy_group_mask != 0 {
@@ -211,8 +227,10 @@ fn feed_zone_events(
             } else {
                 "contested"
             };
-            Some((ty, f.catalog().faction_group_name(zone_mask).unwrap_or("")))
+            (ty, faction_name)
         });
+        (pvp, false)
+    };
     let pvp_type = pvp.map_or("", |(ty, _)| ty);
 
     script.set_zone_texts(benilla_ui::script::ZoneTexts {
@@ -226,6 +244,7 @@ fn feed_zone_events(
             .filter(|f| !f.is_empty())
             .map(str::to_string),
         is_arena,
+        pvp_is_subzone,
     });
 
     if let Some(event) = event {
@@ -245,6 +264,55 @@ fn feed_zone_events(
     cache.minimap_text = minimap_text;
     cache.indoor = signal.indoor;
     cache.wmo_group = wmo_group;
+}
+
+/// AreaTable flags `GetZonePVPInfo 0x51ba50` tests, in its order (AzerothCore `AreaFlags`).
+const AREA_FLAG_SANCTUARY: u32 = 0x800;
+const AREA_FLAG_ARENA: u32 = 0x80;
+/// Wintergrasp-style battlefield, the "combat" type.
+const AREA_FLAG_COMBAT: u32 = 0x0100_0000;
+const AREA_FLAG_CONTESTED: u32 = 0x0004_0000;
+
+/// Wrath `GetZonePVPInfo 0x51ba50`'s type: the leaf row's flags when it has one, else the zone's;
+/// sanctuary, arena and combat first, with isSubZone set when the flags came from the leaf. Any
+/// other area needs the zone row and the player: the contested flag, else the player's template
+/// masks against the zone's (a player with no template reads friendly, `0x51bbaf`).
+///
+/// Unresolved and not applied: the ordinary-territory gate `[0xb2f998] == 0 && !(zone flags &
+/// 0x10)` returns no values; its global is untraced, so ordinary territory always reports.
+fn wrath_zone_pvp(
+    leaf: Option<&benilla_formats::AreaTableRow>,
+    zone: Option<&benilla_formats::AreaTableRow>,
+    template: Option<Option<&benilla_formats::FactionTemplate>>,
+) -> (Option<&'static str>, bool) {
+    let (flags, from_leaf) = match (leaf, zone) {
+        (Some(leaf), _) => (leaf.flags, true),
+        (None, Some(zone)) => (zone.flags, false),
+        (None, None) => (0, false),
+    };
+    for (bit, kind) in [
+        (AREA_FLAG_SANCTUARY, "sanctuary"),
+        (AREA_FLAG_ARENA, "arena"),
+        (AREA_FLAG_COMBAT, "combat"),
+    ] {
+        if flags & bit != 0 {
+            return (Some(kind), from_leaf);
+        }
+    }
+    let (Some(zone), Some(template)) = (zone, template) else {
+        return (None, false);
+    };
+    let kind = if flags & AREA_FLAG_CONTESTED != 0 {
+        "contested"
+    } else {
+        match template {
+            None => "friendly",
+            Some(t) if t.friend_group_mask & zone.faction_group_mask != 0 => "friendly",
+            Some(t) if t.enemy_group_mask & zone.faction_group_mask != 0 => "hostile",
+            Some(_) => "contested",
+        }
+    };
+    (Some(kind), false)
 }
 
 /// The shared area catalog and the zone-event feed.
@@ -268,6 +336,85 @@ impl Plugin for AreaPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(flags: u32, mask: u32) -> benilla_formats::AreaTableRow {
+        benilla_formats::AreaTableRow {
+            map_id: 0,
+            zone_id: 0,
+            explore_flag: 0,
+            flags,
+            faction_group_mask: mask,
+            exploration_level: 0,
+            name: String::new(),
+        }
+    }
+
+    /// `0x51ba50`: leaf flags first, the special types in order with isSubZone from the leaf, then
+    /// contested, then the player's masks; a player with no template reads friendly.
+    #[test]
+    fn wrath_zone_pvp_follows_the_native_ladder() {
+        let human = benilla_formats::FactionTemplate {
+            faction: 1,
+            group_mask: 3,
+            friend_group_mask: 2,
+            enemy_group_mask: 4,
+            enemies: [0; 4],
+            friends: [0; 4],
+        };
+        let me = Some(Some(&human));
+        let zone = row(0, 2);
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0x800 | 0x80, 0)), Some(&zone), me),
+            (Some("sanctuary"), true)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0x80, 0)), Some(&zone), me),
+            (Some("arena"), true)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0x100_0000, 0)), Some(&zone), me),
+            (Some("combat"), true)
+        );
+        assert_eq!(
+            wrath_zone_pvp(None, Some(&row(0x800, 2)), me),
+            (Some("sanctuary"), false)
+        );
+        // A special type needs no player at all.
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0x80, 0)), None, None),
+            (Some("arena"), true)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0x4_0000, 0)), Some(&zone), me),
+            (Some("contested"), false)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), Some(&zone), me),
+            (Some("friendly"), false)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), Some(&row(0, 4)), me),
+            (Some("hostile"), false)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), Some(&row(0, 0)), me),
+            (Some("contested"), false)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), Some(&row(0, 4)), Some(None)),
+            (Some("friendly"), false)
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), Some(&zone), None),
+            (None, false),
+            "no player"
+        );
+        assert_eq!(
+            wrath_zone_pvp(Some(&row(0, 0)), None, me),
+            (None, false),
+            "no zone row"
+        );
+    }
 
     fn sig(zone_id: u32, zone: &str, sub: &str, indoor: bool) -> ZoneSignal {
         ZoneSignal {

@@ -992,12 +992,13 @@ mod attack_stand_tests {
     }
 
     #[test]
-    fn wrath_start_admits_native_melee_but_preserves_unported_auto_repeat() {
+    fn wrath_start_admits_native_melee_and_cancels_auto_repeat() {
         let (sent, app) = start_once(crate::net::SessionDialect::Wrath12340, false, false, true);
         assert!(sent);
+        // `CMSG_CANCEL_AUTO_REPEAT_SPELL` has a native route, so the start arm cancels as 1.12 did.
         assert_eq!(
             app.world().resource::<crate::spell::AutoRepeatActive>().0,
-            Some(75)
+            None
         );
         assert_eq!(app.world().resource::<Messages<SheathRequest>>().len(), 1);
         assert_eq!(

@@ -85,10 +85,11 @@ pub(super) fn stamp_collision_heights(
 mod native_display {
     use super::prism_display_id;
     use crate::net::ObjectStore;
+    use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_NATIVEDISPLAYID`, between DISPLAYID (131) and MOUNTDISPLAYID (133).
-    const NATIVE: u16 = 132;
+    const NATIVE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNativeDisplayId);
 
     fn store(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(pairs))

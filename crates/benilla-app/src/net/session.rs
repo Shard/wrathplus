@@ -119,7 +119,8 @@ fn on_login_edge(In(ev): In<SessionEvent>, mut e: Edges) {
             char_action_result(action, code, &mut e.char_actions)
         }
         SessionEvent::WrathCharActionResult { action, code } => {
-            e.native_char_actions.write(super::WrathCharActionResultMessage { action, code });
+            e.native_char_actions
+                .write(super::WrathCharActionResultMessage { action, code });
         }
         SessionEvent::CharacterLoginFailed { result } => {
             character_login_failed(result, &mut e.char_login_failures)
@@ -156,7 +157,9 @@ fn on_connected(
         if let Some(mut packets) = native_pet_names {
             packets.0.clear();
         }
-        if let Some(mut packets) = native_who { packets.0.clear(); }
+        if let Some(mut packets) = native_who {
+            packets.0.clear();
+        }
         connected(
             guid,
             name,

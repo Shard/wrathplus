@@ -1,0 +1,427 @@
+//! Build-12340 spell control, pet and visual feedback, framed strictly from what AzerothCore
+//! writes and reads: `Player::_StartCooldown`/`AddSpellMod` (Player.cpp), `Pet::RemoveSpellCooldown`
+//! (Pet.cpp), `Spell::SendChannelStart`/`SendChannelUpdate`/`SendResurrectRequest` (Spell.cpp),
+//! `Unit::SendTameFailure`, `SendPlaySpellVisual`, `SendPlaySpellImpact`, `SendPetActionFeedback`,
+//! `SendPetActionSound`, `SendPetDismissSound`, `SendComboPoints` (Unit.cpp),
+//! `WorldSession::SendPetNameInvalid` (PetHandler.cpp), `TotemCreated` (TotemPackets.cpp), and the
+//! matching `WorldSession::Handle*` readers for the requests.
+//!
+//! Replies that mean what their 1.12 counterparts mean become the shared events their owners
+//! read. Another unit's channel, a spell impact and a created totem have no shared event and are
+//! capture-only ([`Packet`]). Registry-only opcodes in this family stay undecoded:
+//! [`REGISTRY_ONLY`].
+
+use std::io::{self, Cursor};
+
+use crate::events::SessionEvent;
+use crate::wire::{read_cstring, read_packed_guid};
+use crate::wrath_session::{f32_le, u32_le, u8_le};
+
+pub const SMSG_COOLDOWN_EVENT: u16 = 0x0135;
+pub const MSG_CHANNEL_START: u16 = 0x0139;
+pub const MSG_CHANNEL_UPDATE: u16 = 0x013A;
+pub const SMSG_RESURRECT_REQUEST: u16 = 0x015B;
+pub const SMSG_PET_TAME_FAILURE: u16 = 0x0173;
+pub const SMSG_PET_NAME_INVALID: u16 = 0x0178;
+pub const SMSG_CLEAR_COOLDOWN: u16 = 0x01DE;
+pub const SMSG_PLAY_SPELL_VISUAL: u16 = 0x01F3;
+pub const SMSG_PLAY_SPELL_IMPACT: u16 = 0x01F7;
+pub const SMSG_SET_FLAT_SPELL_MODIFIER: u16 = 0x0266;
+pub const SMSG_SET_PCT_SPELL_MODIFIER: u16 = 0x0267;
+pub const SMSG_PET_ACTION_FEEDBACK: u16 = 0x02C6;
+pub const SMSG_PET_ACTION_SOUND: u16 = 0x0324;
+pub const SMSG_PET_DISMISS_SOUND: u16 = 0x0325;
+pub const SMSG_UPDATE_COMBO_POINTS: u16 = 0x039D;
+pub const SMSG_TOTEM_CREATED: u16 = 0x0413;
+
+/// `SMSG_RESUME_CAST_BAR`, `SMSG_PET_MODE`, `SMSG_RESURRECT_FAILED`, `SMSG_PET_BROKEN`,
+/// `SMSG_PET_UNLEARN_CONFIRM`, `SMSG_SPELL_UPDATE_CHAIN_TARGETS`, the four obsolete extra-aura-info
+/// opcodes, `SMSG_FORCE_DISPLAY_UPDATE`, `SMSG_PLAY_DANCE` and `SMSG_PET_RENAMEABLE`: in
+/// AzerothCore's opcode table only, with no send site, so there is no layout to frame.
+pub const REGISTRY_ONLY: [u16; 13] = [
+    0x014D, 0x017A, 0x0252, 0x02AF, 0x02F1, 0x0330, 0x03A3, 0x03A4, 0x03A5, 0x03A6, 0x0403, 0x044C,
+    0x0475,
+];
+
+pub const CMSG_CANCEL_CHANNELLING: u32 = 0x013B;
+pub const CMSG_RESURRECT_RESPONSE: u32 = 0x015C;
+pub const CMSG_PET_SET_ACTION: u32 = 0x0174;
+pub const CMSG_PET_ACTION: u32 = 0x0175;
+pub const CMSG_PET_ABANDON: u32 = 0x0176;
+pub const CMSG_PET_RENAME: u32 = 0x0177;
+pub const CMSG_PET_CANCEL_AURA: u32 = 0x026B;
+pub const CMSG_CANCEL_AUTO_REPEAT_SPELL: u32 = 0x026D;
+pub const CMSG_REQUEST_PET_INFO: u32 = 0x0279;
+pub const CMSG_CANCEL_GROWTH_AURA: u32 = 0x029B;
+pub const CMSG_PET_STOP_ATTACK: u32 = 0x02EA;
+pub const CMSG_PET_SPELL_AUTOCAST: u32 = 0x02F3;
+pub const CMSG_CANCEL_MOUNT_AURA: u32 = 0x0375;
+pub const CMSG_SPELLCLICK: u32 = 0x03F8;
+pub const CMSG_TOTEM_DESTROYED: u32 = 0x0414;
+pub const CMSG_PET_LEARN_TALENT: u32 = 0x047A;
+
+/// Capture-only receipts: no shared event or presentation owns them yet.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Packet {
+    /// `MSG_CHANNEL_START` for a unit other than us (AC sends it to the whole set).
+    ChannelStart {
+        caster: u64,
+        spell_id: u32,
+        duration_ms: u32,
+    },
+    /// `MSG_CHANNEL_UPDATE` for a unit other than us.
+    ChannelUpdate { caster: u64, remaining_ms: u32 },
+    /// `SMSG_PLAY_SPELL_IMPACT`: a `SpellVisualKit` id played as an impact on `target`.
+    SpellImpact { target: u64, kit_id: u32 },
+    /// `SMSG_TOTEM_CREATED`: totem `slot` holds `totem` for `duration_ms`, from `spell_id`.
+    TotemCreated {
+        slot: u8,
+        totem: u64,
+        duration_ms: u32,
+        spell_id: u32,
+    },
+}
+
+/// Requests, each with the body AC's handler reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    CancelChannelling {
+        spell_id: u32,
+    },
+    /// AC treats status 0 as a decline, anything else as an accept.
+    ResurrectResponse {
+        caster: u64,
+        accept: bool,
+    },
+    /// One `(position, word)` pair removes or sets; two move (AC counts them by body size).
+    PetSetAction {
+        pet: u64,
+        entries: Vec<(u32, u32)>,
+    },
+    PetAction {
+        pet: u64,
+        word: u32,
+        target: u64,
+    },
+    PetAbandon {
+        pet: u64,
+    },
+    /// No declined names: the `isdeclined` byte is 0.
+    PetRename {
+        pet: u64,
+        name: String,
+    },
+    PetCancelAura {
+        pet: u64,
+        spell_id: u32,
+    },
+    CancelAutoRepeatSpell,
+    RequestPetInfo,
+    CancelGrowthAura,
+    PetStopAttack {
+        pet: u64,
+    },
+    PetSpellAutocast {
+        pet: u64,
+        spell_id: u32,
+        enabled: bool,
+    },
+    CancelMountAura,
+    SpellClick {
+        unit: u64,
+    },
+    TotemDestroyed {
+        slot: u8,
+    },
+    PetLearnTalent {
+        pet: u64,
+        talent_id: u32,
+        rank: u32,
+    },
+}
+
+pub const fn handles(opcode: u16) -> bool {
+    matches!(
+        opcode,
+        SMSG_COOLDOWN_EVENT
+            | MSG_CHANNEL_START
+            | MSG_CHANNEL_UPDATE
+            | SMSG_RESURRECT_REQUEST
+            | SMSG_PET_TAME_FAILURE
+            | SMSG_PET_NAME_INVALID
+            | SMSG_CLEAR_COOLDOWN
+            | SMSG_PLAY_SPELL_VISUAL
+            | SMSG_PLAY_SPELL_IMPACT
+            | SMSG_SET_FLAT_SPELL_MODIFIER
+            | SMSG_SET_PCT_SPELL_MODIFIER
+            | SMSG_PET_ACTION_FEEDBACK
+            | SMSG_PET_ACTION_SOUND
+            | SMSG_PET_DISMISS_SOUND
+            | SMSG_UPDATE_COMBO_POINTS
+            | SMSG_TOTEM_CREATED
+    )
+}
+
+fn invalid(what: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, what)
+}
+
+fn u64_le(r: &mut Cursor<&[u8]>) -> io::Result<u64> {
+    Ok(u64::from(u32_le(r)?) | u64::from(u32_le(r)?) << 32)
+}
+
+/// Decode one of the [`handles`] opcodes. `self_guid` is our player, once its create arrived: the
+/// channel opcodes name their caster, and only ours drives the shared channel bar.
+pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Vec<SessionEvent>> {
+    let mut r = Cursor::new(body);
+    let event = match opcode {
+        SMSG_COOLDOWN_EVENT => SessionEvent::CooldownEvent {
+            spell_id: u32_le(&mut r)?,
+            caster: u64_le(&mut r)?,
+        },
+        SMSG_CLEAR_COOLDOWN => SessionEvent::ClearCooldown {
+            spell_id: u32_le(&mut r)?,
+            caster: u64_le(&mut r)?,
+        },
+        MSG_CHANNEL_START => {
+            let caster = read_packed_guid(&mut r)?;
+            let spell_id = u32_le(&mut r)?;
+            let duration_ms = u32_le(&mut r)?;
+            if self_guid == Some(caster) {
+                SessionEvent::ChannelStart {
+                    spell_id,
+                    duration_ms,
+                }
+            } else {
+                SessionEvent::WrathSpellControl {
+                    packet: Packet::ChannelStart {
+                        caster,
+                        spell_id,
+                        duration_ms,
+                    },
+                }
+            }
+        }
+        MSG_CHANNEL_UPDATE => {
+            let caster = read_packed_guid(&mut r)?;
+            let remaining_ms = u32_le(&mut r)?;
+            if self_guid == Some(caster) {
+                SessionEvent::ChannelUpdate { remaining_ms }
+            } else {
+                SessionEvent::WrathSpellControl {
+                    packet: Packet::ChannelUpdate {
+                        caster,
+                        remaining_ms,
+                    },
+                }
+            }
+        }
+        SMSG_RESURRECT_REQUEST => resurrect_request(&mut r)?,
+        SMSG_PET_TAME_FAILURE => SessionEvent::PetTameFailure {
+            reason: u8_le(&mut r)?,
+        },
+        SMSG_PET_NAME_INVALID => pet_name_invalid(&mut r)?,
+        SMSG_PLAY_SPELL_VISUAL => SessionEvent::PlaySpellVisual {
+            unit: u64_le(&mut r)?,
+            kit_id: u32_le(&mut r)?,
+        },
+        SMSG_PLAY_SPELL_IMPACT => SessionEvent::WrathSpellControl {
+            packet: Packet::SpellImpact {
+                target: u64_le(&mut r)?,
+                kit_id: u32_le(&mut r)?,
+            },
+        },
+        // `u8 eff` (a `SpellFamilyFlags` bit, 0..95 in build 12340), `u8 op`, `i32` absolute total.
+        SMSG_SET_FLAT_SPELL_MODIFIER | SMSG_SET_PCT_SPELL_MODIFIER => SessionEvent::SpellModifier {
+            flat: opcode == SMSG_SET_FLAT_SPELL_MODIFIER,
+            mask_bit: u8_le(&mut r)?,
+            op: u8_le(&mut r)?,
+            value: u32_le(&mut r)? as i32,
+        },
+        SMSG_PET_ACTION_FEEDBACK => SessionEvent::PetActionFeedback {
+            reason: u8_le(&mut r)?,
+        },
+        SMSG_PET_ACTION_SOUND => SessionEvent::PetActionSound {
+            pet_guid: u64_le(&mut r)?,
+            talk: u32_le(&mut r)?,
+        },
+        SMSG_PET_DISMISS_SOUND => SessionEvent::PetDismissSound {
+            model_id: u32_le(&mut r)?,
+            position: [f32_le(&mut r)?, f32_le(&mut r)?, f32_le(&mut r)?],
+        },
+        // An empty packed guid (mask 0) is "no combo target".
+        SMSG_UPDATE_COMBO_POINTS => SessionEvent::ComboPoints {
+            target: read_packed_guid(&mut r)?,
+            points: u8_le(&mut r)?,
+        },
+        SMSG_TOTEM_CREATED => SessionEvent::WrathSpellControl {
+            packet: Packet::TotemCreated {
+                slot: u8_le(&mut r)?,
+                totem: u64_le(&mut r)?,
+                duration_ms: u32_le(&mut r)?,
+                spell_id: u32_le(&mut r)?,
+            },
+        },
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a Wrath spell-control opcode",
+            ))
+        }
+    };
+    if r.position() as usize != body.len() {
+        return Err(invalid("Wrath spell-control trailing bytes"));
+    }
+    Ok(vec![event])
+}
+
+/// `u64 caster, u32 nameLength` (the name plus its terminator), the name, AC's extra terminator,
+/// `u8 sickness`, then an optional `u32 0` that overrides the resurrect delay
+/// (`SPELL_ATTR3_NO_RES_TIMER`). A player caster's name is empty: the client looks it up.
+fn resurrect_request(r: &mut Cursor<&[u8]>) -> io::Result<SessionEvent> {
+    let caster = u64_le(r)?;
+    let length = u32_le(r)? as usize;
+    let name = read_cstring(r)?;
+    if length != name.len() + 1 {
+        return Err(invalid("resurrect name length mismatch"));
+    }
+    if u8_le(r)? != 0 {
+        return Err(invalid("resurrect name second terminator"));
+    }
+    let sickness = u8_le(r)? != 0;
+    let left = r.get_ref().len() - r.position() as usize;
+    let has_timer = match left {
+        0 => false,
+        4 => {
+            let _delay = u32_le(r)?;
+            true
+        }
+        _ => return Err(invalid("resurrect delay override is not one word")),
+    };
+    Ok(SessionEvent::ResurrectRequest {
+        caster,
+        name,
+        sickness,
+        has_timer,
+    })
+}
+
+/// `u32 PetNameInvalidReason`, the refused name, then a declined-names flag and, when set, the
+/// five declined forms.
+fn pet_name_invalid(r: &mut Cursor<&[u8]>) -> io::Result<SessionEvent> {
+    let reason = u32_le(r)?;
+    let name = read_cstring(r)?;
+    let declined = match u8_le(r)? {
+        0 => None,
+        _ => {
+            let mut forms: [String; 5] = Default::default();
+            for form in &mut forms {
+                *form = read_cstring(r)?;
+            }
+            Some(Box::new(forms))
+        }
+    };
+    Ok(SessionEvent::PetNameInvalid {
+        reason,
+        name,
+        declined,
+    })
+}
+
+fn cstring(body: &mut Vec<u8>, s: &str) -> io::Result<()> {
+    if s.as_bytes().contains(&0) {
+        return Err(invalid("string contains NUL"));
+    }
+    body.extend(s.as_bytes());
+    body.push(0);
+    Ok(())
+}
+
+/// The opcode and body AC's handler reads for `command`.
+pub fn encode(command: &Command) -> io::Result<(u32, Vec<u8>)> {
+    let mut b = Vec::new();
+    let opcode = match command {
+        Command::CancelChannelling { spell_id } => {
+            b.extend(spell_id.to_le_bytes());
+            CMSG_CANCEL_CHANNELLING
+        }
+        Command::ResurrectResponse { caster, accept } => {
+            b.extend(caster.to_le_bytes());
+            b.push(u8::from(*accept));
+            CMSG_RESURRECT_RESPONSE
+        }
+        Command::PetSetAction { pet, entries } => {
+            if !(1..=2).contains(&entries.len()) {
+                return Err(invalid("pet set-action takes one or two entries"));
+            }
+            b.extend(pet.to_le_bytes());
+            for (position, word) in entries {
+                b.extend(position.to_le_bytes());
+                b.extend(word.to_le_bytes());
+            }
+            CMSG_PET_SET_ACTION
+        }
+        Command::PetAction { pet, word, target } => {
+            b.extend(pet.to_le_bytes());
+            b.extend(word.to_le_bytes());
+            b.extend(target.to_le_bytes());
+            CMSG_PET_ACTION
+        }
+        Command::PetAbandon { pet } => {
+            b.extend(pet.to_le_bytes());
+            CMSG_PET_ABANDON
+        }
+        Command::PetRename { pet, name } => {
+            b.extend(pet.to_le_bytes());
+            cstring(&mut b, name)?;
+            b.push(0);
+            CMSG_PET_RENAME
+        }
+        Command::PetCancelAura { pet, spell_id } => {
+            b.extend(pet.to_le_bytes());
+            b.extend(spell_id.to_le_bytes());
+            CMSG_PET_CANCEL_AURA
+        }
+        Command::CancelAutoRepeatSpell => CMSG_CANCEL_AUTO_REPEAT_SPELL,
+        Command::RequestPetInfo => CMSG_REQUEST_PET_INFO,
+        Command::CancelGrowthAura => CMSG_CANCEL_GROWTH_AURA,
+        Command::PetStopAttack { pet } => {
+            b.extend(pet.to_le_bytes());
+            CMSG_PET_STOP_ATTACK
+        }
+        Command::PetSpellAutocast {
+            pet,
+            spell_id,
+            enabled,
+        } => {
+            b.extend(pet.to_le_bytes());
+            b.extend(spell_id.to_le_bytes());
+            b.push(u8::from(*enabled));
+            CMSG_PET_SPELL_AUTOCAST
+        }
+        Command::CancelMountAura => CMSG_CANCEL_MOUNT_AURA,
+        Command::SpellClick { unit } => {
+            b.extend(unit.to_le_bytes());
+            CMSG_SPELLCLICK
+        }
+        Command::TotemDestroyed { slot } => {
+            b.push(*slot);
+            CMSG_TOTEM_DESTROYED
+        }
+        Command::PetLearnTalent {
+            pet,
+            talent_id,
+            rank,
+        } => {
+            b.extend(pet.to_le_bytes());
+            b.extend(talent_id.to_le_bytes());
+            b.extend(rank.to_le_bytes());
+            CMSG_PET_LEARN_TALENT
+        }
+    };
+    Ok((opcode, b))
+}
+
+#[cfg(test)]
+#[path = "wrath_spell_control_tests.rs"]
+mod tests;

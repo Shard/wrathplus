@@ -520,12 +520,20 @@ mod tests {
         world.init_resource::<Messages<SwingFlush>>();
         let attacker = world
             .spawn(ObjectStore(
-                ObjectFields::from_pairs(&[(22, 100)]).into_created(ObjectType::Unit),
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                )
+                .into_created(ObjectType::Unit),
             ))
             .id();
         let victim = world
             .spawn(ObjectStore(
-                ObjectFields::from_pairs(&[(22, 100)]).into_created(ObjectType::Unit),
+                ObjectFields::from_fields(
+                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                )
+                .into_created(ObjectType::Unit),
             ))
             .id();
         let mut index = world.resource_mut::<GuidIndex>();

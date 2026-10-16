@@ -3,7 +3,8 @@ use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use benilla_protocol::wrath_inventory::decode;
 
 fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(opcode, body, 0).unwrap()
+    if let WrathDispatch::Handled { session_events, .. } =
+        adapter.dispatch(opcode, body, 0).unwrap()
     {
         crate::net::handlers::dispatch(app.world_mut(), session_events);
     }
@@ -88,6 +89,9 @@ fn bank_replies_feed_the_existing_bank_state() {
         app.world().resource::<crate::ui_bank::BankOpen>().banker,
         Some(banker)
     );
-    assert_eq!(app.world().resource::<crate::ui_bank::BankErrors>().0, vec![1]);
+    assert_eq!(
+        app.world().resource::<crate::ui_bank::BankErrors>().0,
+        vec![1]
+    );
     assert!(captured(&app).is_empty());
 }
