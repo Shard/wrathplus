@@ -214,6 +214,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_exchange::OPCODES.contains(&opcode) => Ok(match crate::wrath_exchange::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x0214 | 0x0147| 0x02cb | 0x02fa | 0x031e | 0x031f | 0x0320 | 0x0329 | 0x032b | 0x033b | 0x0396 | 0x04eb | 0x0506 => Ok(match crate::wrath_instance_control::decode(opcode, body) {
                 Ok(packet) => handled(vec![SessionEvent::WrathInstanceControl { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -250,7 +254,7 @@ impl WrathEventAdapter {
                 Ok(packet) => handled(vec![SessionEvent::WrathQuestsCompleted { packet }], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
-            0x0239 | 0x0297 => {
+            0x0297 => {
                 Ok(match crate::wrath_mail_mutations::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathMailMutation { packet }], Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },

@@ -36,6 +36,7 @@ mod wrath_ui_timer_capture;
 mod wrath_mirror_image_capture;
 mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
+mod wrath_exchange_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -133,6 +134,7 @@ impl Plugin for NetPlugin {
         wrath_mirror_image_capture::register(app);
         wrath_instance_control_capture::register(app);
         wrath_inventory_capture::register(app);
+        wrath_exchange_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -1784,6 +1786,9 @@ pub(crate) enum ClientCommand {
         bid: u32,
         buyout: u32,
         etime_minutes: u32,
+        /// The stack size sold; build 12340 sends `(guid, count)` pairs and AC refuses a count
+        /// above the stack.
+        count: u32,
     },
     /// `CMSG_AUCTION_PLACE_BID`: a `price` at or above a nonzero buyout is the buyout.
     AuctionPlaceBid {
@@ -2061,6 +2066,8 @@ pub(crate) enum ClientCommand {
     NativeInstanceControl(benilla_protocol::wrath_instance_control::Command),
     /// Native item/inventory commands with no Vanilla twin; transport does not claim acceptance.
     NativeInventory(benilla_protocol::wrath_inventory::Command),
+    /// Native auction/loot commands with no Vanilla twin; transport does not claim acceptance.
+    NativeExchange(benilla_protocol::wrath_exchange::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

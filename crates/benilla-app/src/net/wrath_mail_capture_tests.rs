@@ -10,32 +10,24 @@ fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &
 }
 
 #[test]
-fn fifo_retains_duplicates_interleaving_and_rejects_partial_packets() {
+fn fifo_retains_duplicate_mailboxes_rejects_partial_packets_and_skips_results() {
     let mut app = App::new();
     register(&mut app);
     let mut adapter = WrathEventAdapter::new();
-    let result = [255; 12]; // Unknown action/result values retained, no conditional tail.
+    let result = [255; 12]; // A send-mail result: now the shared event's, never captured here.
     let mailbox = [255; 8];
     for (opcode, body) in [
-        (0x239, result.as_slice()),
         (0x297, mailbox.as_slice()),
         (0x239, result.as_slice()),
+        (0x297, [0; 8].as_slice()),
+        (0x297, mailbox.as_slice()),
     ] {
         dispatch(&mut app, &mut adapter, opcode, body);
     }
-    let expected = vec![
-        benilla_protocol::wrath_mail_mutations::decode(0x239, &result).unwrap(),
-        Packet::ShowMailbox { mailbox: u64::MAX },
-        benilla_protocol::wrath_mail_mutations::decode(0x239, &result).unwrap(),
-    ];
-    for (opcode, body) in [(0x239, result.as_slice()), (0x297, mailbox.as_slice())] {
-        for end in 0..body.len() {
-            dispatch(&mut app, &mut adapter, opcode, &body[..end]);
-        }
-        let mut trailing = body.to_vec();
-        trailing.push(0);
-        dispatch(&mut app, &mut adapter, opcode, &trailing);
+    for end in 0..mailbox.len() {
+        dispatch(&mut app, &mut adapter, 0x297, &mailbox[..end]);
     }
+    dispatch(&mut app, &mut adapter, 0x297, &[0; 9]);
     assert_eq!(
         app.world()
             .resource::<NativeMailMutationPackets>()
@@ -43,7 +35,11 @@ fn fifo_retains_duplicates_interleaving_and_rejects_partial_packets() {
             .iter()
             .cloned()
             .collect::<Vec<_>>(),
-        expected
+        vec![
+            Packet::ShowMailbox { mailbox: u64::MAX },
+            Packet::ShowMailbox { mailbox: 0 },
+            Packet::ShowMailbox { mailbox: u64::MAX },
+        ]
     );
     crate::net::handlers::dispatch(
         app.world_mut(),
@@ -57,14 +53,6 @@ fn fifo_retains_duplicates_interleaving_and_rejects_partial_packets() {
         .resource::<NativeMailMutationPackets>()
         .0
         .is_empty());
-    dispatch(&mut app, &mut adapter, 0x297, &[0; 8]);
-    assert_eq!(
-        app.world()
-            .resource::<NativeMailMutationPackets>()
-            .0
-            .front(),
-        Some(&Packet::ShowMailbox { mailbox: 0 })
-    );
 }
 
 #[test]

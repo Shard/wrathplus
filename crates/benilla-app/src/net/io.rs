@@ -983,7 +983,7 @@ fn writer_loop(
                     // Wrath-only display roster commands never leak onto the Vanilla wire.
                     ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
                     | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
-                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
+                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeWorldportAck(_) => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {
@@ -1354,6 +1354,7 @@ fn writer_loop(
                         bid,
                         buyout,
                         etime_minutes,
+                        ..
                     } => w.auction_sell_item(auctioneer, item_guid, bid, buyout, etime_minutes),
                     ClientCommand::AuctionPlaceBid {
                         auctioneer,
