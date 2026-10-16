@@ -24,12 +24,10 @@ pub const SMSG_SPELL_DELAYED: u16 = 0x01E2;
 pub const SMSG_SPELL_FAILED_OTHER: u16 = 0x02A6;
 pub const SMSG_INITIALIZE_FACTIONS: u16 = 0x0122;
 pub const SMSG_SET_FACTION_STANDING: u16 = 0x0124;
-pub const SMSG_SPELLNONMELEEDAMAGELOG: u16 = 0x0250;
 /// Unchanged since 1.12; the Vanilla parser reads them (XP gain only appends a trailing byte).
 pub const SMSG_LOG_XPGAIN: u16 = 0x01D0;
 pub const SMSG_PARTYKILLLOG: u16 = 0x01F5;
 pub const SMSG_EXPLORATION_EXPERIENCE: u16 = 0x01F8;
-pub const SMSG_SPELLLOGMISS: u16 = 0x024B;
 
 pub const CMSG_NAME_QUERY: u32 = 0x0050;
 pub const CMSG_GAMEOBJECT_QUERY: u32 = 0x005E;
@@ -61,11 +59,9 @@ pub const fn handles(opcode: u16) -> bool {
             | SMSG_SPELL_FAILED_OTHER
             | SMSG_INITIALIZE_FACTIONS
             | SMSG_SET_FACTION_STANDING
-            | SMSG_SPELLNONMELEEDAMAGELOG
             | SMSG_LOG_XPGAIN
             | SMSG_PARTYKILLLOG
             | SMSG_EXPLORATION_EXPERIENCE
-            | SMSG_SPELLLOGMISS
     )
 }
 
@@ -92,8 +88,7 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
                 .collect::<io::Result<Vec<_>>>()?;
             vec![SessionEvent::ReputationDelta { standings }]
         }
-        SMSG_SPELLNONMELEEDAMAGELOG => vec![SessionEvent::SpellDamageLog(spell_damage_log(&mut r)?)],
-        SMSG_LOG_XPGAIN | SMSG_PARTYKILLLOG | SMSG_EXPLORATION_EXPERIENCE | SMSG_SPELLLOGMISS => {
+        SMSG_LOG_XPGAIN | SMSG_PARTYKILLLOG | SMSG_EXPLORATION_EXPERIENCE => {
             session_decode(crate::messages::parse_server_with_tail(opcode, body)?.0)
         }
         SMSG_CAST_FAILED => cast_failed(&mut r)?,
@@ -233,37 +228,6 @@ fn initial_spells(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
         spell_ids,
         cooldowns,
     }])
-}
-
-/// `SMSG_SPELLNONMELEEDAMAGELOG` (AzerothCore `SendSpellNonMeleeDamageLog`): packed target and
-/// caster, `u32 spell, u32 damage, u32 overkill, u8 schoolMask, u32 absorb, u32 resist,
-/// u8 periodic, u8 unused, u32 blocked, u32 hitInfo, u8 debug`. 1.12 has no overkill and names
-/// the school by index, which the lowest mask bit gives.
-fn spell_damage_log(r: &mut Cursor<&[u8]>) -> io::Result<crate::messages::SpellDamageLog> {
-    let target = read_packed_guid(r)?;
-    let attacker = read_packed_guid(r)?;
-    let spell_id = u32_le(r)?;
-    let damage = u32_le(r)?;
-    let _overkill = u32_le(r)?;
-    let school_mask = u8_le(r)?;
-    let absorb = u32_le(r)?;
-    let resist = u32_le(r)? as i32;
-    let periodic = u8_le(r)? != 0;
-    let _unused = u8_le(r)?;
-    let blocked = u32_le(r)?;
-    let hit_info = u32_le(r)?;
-    Ok(crate::messages::SpellDamageLog {
-        target,
-        attacker,
-        spell_id,
-        damage,
-        school: if school_mask == 0 { 0 } else { school_mask.trailing_zeros() as u8 },
-        absorb,
-        resist,
-        periodic,
-        blocked,
-        hit_info,
-    })
 }
 
 /// Cast count, spell, a build-12340 `SpellCastResult` (renumbered from 1.12; the client maps
