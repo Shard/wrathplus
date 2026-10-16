@@ -321,7 +321,7 @@ pub(super) fn periodic_aura_log(
                         extra,
                     },
                 ),
-                PeriodicTick::Heal { amount } => Some(CombatTextEvent {
+                PeriodicTick::Heal { amount, .. } => Some(CombatTextEvent {
                     message_type: "PERIODIC_HEAL",
                     data: Some(
                         names
@@ -357,6 +357,7 @@ pub(super) fn periodic_aura_log(
                     school,
                     absorb,
                     resist,
+                    ..
                 } => {
                     let Some((action, flags)) = spell_feedback(amount, absorb, resist, false)
                     else {
@@ -364,7 +365,7 @@ pub(super) fn periodic_aura_log(
                     };
                     (action, flags, amount, school)
                 }
-                PeriodicTick::Heal { amount } => ("HEAL", "", amount, 0),
+                PeriodicTick::Heal { amount, .. } => ("HEAL", "", amount, 0),
                 // No ENERGIZE: the string is absent from the 1.12 client; power reaches the centre
                 // text only.
                 PeriodicTick::Energize { .. } | PeriodicTick::ManaLeech { .. } => continue,
@@ -736,6 +737,7 @@ mod tests {
             periodic: false,
             blocked,
             hit_info: 0,
+            overkill: 0,
         }
     }
 

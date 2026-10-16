@@ -37,6 +37,7 @@ mod wrath_mirror_image_capture;
 mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
 mod wrath_exchange_capture;
+mod wrath_spell_log_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -135,6 +136,7 @@ impl Plugin for NetPlugin {
         wrath_instance_control_capture::register(app);
         wrath_inventory_capture::register(app);
         wrath_exchange_capture::register(app);
+        wrath_spell_log_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)

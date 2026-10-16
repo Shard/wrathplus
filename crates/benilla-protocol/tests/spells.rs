@@ -759,6 +759,7 @@ fn combat_log_wire_golden() {
                     periodic: false,
                     blocked: 10,
                     hit_info: 0x2,
+                    overkill: 0,
                 }
             );
         }
@@ -795,6 +796,8 @@ fn combat_log_wire_golden() {
                         school: 6,
                         absorb: 12,
                         resist: -5,
+                        overkill: 0,
+                        critical: false,
                     }],
                 }
             );
@@ -823,7 +826,12 @@ fn combat_log_wire_golden() {
                     target: 1,
                     caster: 1,
                     spell_id: 89,
-                    ticks: vec![PeriodicTick::Heal { amount: 45 }],
+                    ticks: vec![PeriodicTick::Heal {
+                        amount: 45,
+                        overheal: 0,
+                        absorb: 0,
+                        critical: false,
+                    }],
                 }
             );
         }
@@ -857,6 +865,8 @@ fn combat_log_wire_golden() {
                     attacker: 0x2222,
                     damage: 33,
                     school: 4,
+                    spell_id: 0,
+                    overkill: 0,
                 }
             );
         }
@@ -1107,8 +1117,8 @@ fn spell_chain_targets_wire() {
 #[test]
 fn kill_outcome_dispel_enchantment_and_execute_logs_parse() {
     use benilla_protocol::messages::{
-        DispelFailed, EnchantmentLog, ExecuteLog, PartyKillLog, SpellDispelLog, SpellInstaKillLog,
-        SpellLogExecute, SpellOutcomeLog,
+        DispelFailed, DispelledAura, EnchantmentLog, ExecuteLog, PartyKillLog, SpellDispelLog,
+        SpellInstaKillLog, SpellLogExecute, SpellOutcomeLog,
     };
 
     // SMSG_PARTYKILLLOG: raw killer + raw victim guid (vmangos `Server/Packets/Combat.cpp:52-56`).
@@ -1134,7 +1144,8 @@ fn kill_outcome_dispel_enchantment_and_execute_logs_parse() {
             p,
             SpellInstaKillLog {
                 victim: 9,
-                spell_id: 9997
+                spell_id: 9997,
+                caster: 0,
             }
         ),
         other => panic!("instakill log, got {}", other.name()),
@@ -1176,7 +1187,18 @@ fn kill_outcome_dispel_enchantment_and_execute_logs_parse() {
             SpellDispelLog {
                 victim: 5,
                 caster: 0x600,
-                spell_ids: vec![10, 20],
+                spell_id: 0,
+                flag: 0,
+                auras: vec![
+                    DispelledAura {
+                        spell_id: 10,
+                        flag: 0
+                    },
+                    DispelledAura {
+                        spell_id: 20,
+                        flag: 0
+                    },
+                ],
             }
         ),
         other => panic!("spell dispel log, got {}", other.name()),
@@ -1196,6 +1218,7 @@ fn kill_outcome_dispel_enchantment_and_execute_logs_parse() {
             DispelFailed {
                 caster: 3,
                 victim: 4,
+                spell_id: 0,
                 spell_ids: vec![99, 100],
             }
         ),

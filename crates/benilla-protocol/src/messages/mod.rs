@@ -99,9 +99,9 @@ pub use client::{
     random_roll, teleport_ack, text_emote,
 };
 pub use combat_log::{
-    DamageShield, DispelFailed, EnchantmentLog, EnvironmentalDamageLog, ExecuteLog, PartyKillLog,
-    PeriodicAuraLog, PeriodicTick, SpellDamageLog, SpellDispelLog, SpellEnergizeLog, SpellHealLog,
-    SpellInstaKillLog, SpellLogExecute, SpellLogMiss, SpellOutcomeLog,
+    DamageShield, DispelFailed, DispelledAura, EnchantmentLog, EnvironmentalDamageLog, ExecuteLog,
+    PartyKillLog, PeriodicAuraLog, PeriodicTick, SpellDamageLog, SpellDispelLog, SpellEnergizeLog,
+    SpellHealLog, SpellInstaKillLog, SpellLogExecute, SpellLogMiss, SpellOutcomeLog,
 };
 pub use death::{
     area_spirit_healer, reclaim_corpse, resurrect_response, spirit_healer_activate,

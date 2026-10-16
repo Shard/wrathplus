@@ -21,6 +21,8 @@ pub struct SpellDamageLog {
     pub periodic: bool,
     pub blocked: u32,
     pub hit_info: u32,
+    /// Build 12340's overkill word (AC `Unit::SendSpellNonMeleeDamageLog`); 0 on 1.12.
+    pub overkill: u32,
 }
 
 pub(super) fn read_spell_damage_log(r: &mut impl Read) -> io::Result<SpellDamageLog> {
@@ -47,20 +49,29 @@ pub(super) fn read_spell_damage_log(r: &mut impl Read) -> io::Result<SpellDamage
         periodic,
         blocked,
         hit_info,
+        overkill: 0,
     })
 }
 
 /// One `SMSG_PERIODICAURALOG` tick, shaped by its aura type (vmangos `SpellAuraDefines.h`).
+/// `overkill`, `overheal`, heal `absorb` and `critical` are build 12340's (AC
+/// `Unit::SendPeriodicAuraLog`); 1.12 leaves them 0 and false.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PeriodicTick {
     Damage {
         amount: u32,
+        /// The `SPELL_SCHOOL<n>_NAME` index.
         school: u32,
         absorb: u32,
         resist: i32,
+        overkill: u32,
+        critical: bool,
     },
     Heal {
         amount: u32,
+        overheal: u32,
+        absorb: u32,
+        critical: bool,
     },
     Energize {
         power: u32,
@@ -106,9 +117,14 @@ pub(super) fn read_periodic_aura_log(r: &mut impl Read) -> io::Result<PeriodicAu
                 school: read_u32_le(r)?,
                 absorb: read_u32_le(r)?,
                 resist: read_i32_le(r)?,
+                overkill: 0,
+                critical: false,
             },
             AURA_PERIODIC_HEAL | AURA_OBS_MOD_HEALTH => PeriodicTick::Heal {
                 amount: read_u32_le(r)?,
+                overheal: 0,
+                absorb: 0,
+                critical: false,
             },
             AURA_OBS_MOD_MANA | AURA_PERIODIC_ENERGIZE => PeriodicTick::Energize {
                 power: read_u32_le(r)?,
@@ -144,6 +160,9 @@ pub struct SpellHealLog {
     pub spell_id: u32,
     pub amount: u32,
     pub critical: bool,
+    /// Build 12340's overheal and heal-absorb words (AC `Unit::SendHealSpellLog`); 0 on 1.12.
+    pub overheal: u32,
+    pub absorb: u32,
 }
 
 pub(super) fn read_spell_heal_log(r: &mut impl Read) -> io::Result<SpellHealLog> {
@@ -153,6 +172,8 @@ pub(super) fn read_spell_heal_log(r: &mut impl Read) -> io::Result<SpellHealLog>
         spell_id: read_u32_le(r)?,
         amount: read_u32_le(r)?,
         critical: read_u8(r)? != 0,
+        overheal: 0,
+        absorb: 0,
     })
 }
 
@@ -184,7 +205,11 @@ pub struct DamageShield {
     pub victim: u64,
     pub attacker: u64,
     pub damage: u32,
+    /// The `SPELL_SCHOOL<n>_NAME` index.
     pub school: u32,
+    /// Build 12340's shield spell and overkill (AC `Unit::DealMeleeDamage`); 0 on 1.12.
+    pub spell_id: u32,
+    pub overkill: u32,
 }
 
 pub(super) fn read_damage_shield(r: &mut impl Read) -> io::Result<DamageShield> {
@@ -193,6 +218,8 @@ pub(super) fn read_damage_shield(r: &mut impl Read) -> io::Result<DamageShield> 
         attacker: read_u64_le(r)?,
         damage: read_u32_le(r)?,
         school: read_u32_le(r)?,
+        spell_id: 0,
+        overkill: 0,
     })
 }
 
@@ -274,12 +301,15 @@ pub(super) fn read_party_kill_log(r: &mut impl Read) -> io::Result<PartyKillLog>
 pub struct SpellInstaKillLog {
     pub victim: u64,
     pub spell_id: u32,
+    /// Build 12340 names the caster first (AC `Spell::EffectInstaKill`); 0 on 1.12.
+    pub caster: u64,
 }
 
 pub(super) fn read_spell_insta_kill_log(r: &mut impl Read) -> io::Result<SpellInstaKillLog> {
     Ok(SpellInstaKillLog {
         victim: read_u64_le(r)?,
         spell_id: read_u32_le(r)?,
+        caster: 0,
     })
 }
 
@@ -310,21 +340,37 @@ pub struct SpellDispelLog {
     pub victim: u64,
     /// The dispeller; the `AURADISPEL*` line never names them.
     pub caster: u64,
-    pub spell_ids: Vec<u32>,
+    /// Build 12340's dispelling spell and its header byte (AC writes 0, "not used"); 0 on 1.12.
+    pub spell_id: u32,
+    pub flag: u8,
+    pub auras: Vec<DispelledAura>,
+}
+
+/// One removed aura. `flag` is build 12340's per-aura byte (AC: 0 dispelled, non-zero cleansed;
+/// on `SMSG_SPELLSTEALLOG` 0 stolen, non-zero transferred); 0 on 1.12.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DispelledAura {
+    pub spell_id: u32,
+    pub flag: u8,
 }
 
 pub(super) fn read_spell_dispel_log(r: &mut impl Read) -> io::Result<SpellDispelLog> {
     let victim = read_packed_guid(r)?;
     let caster = read_packed_guid(r)?;
     let count = read_u32_le(r)?;
-    let mut spell_ids = Vec::with_capacity(capacity_hint(count, 64));
+    let mut auras = Vec::with_capacity(capacity_hint(count, 64));
     for _ in 0..count {
-        spell_ids.push(read_u32_le(r)?);
+        auras.push(DispelledAura {
+            spell_id: read_u32_le(r)?,
+            flag: 0,
+        });
     }
     Ok(SpellDispelLog {
         victim,
         caster,
-        spell_ids,
+        spell_id: 0,
+        flag: 0,
+        auras,
     })
 }
 
@@ -334,6 +380,8 @@ pub(super) fn read_spell_dispel_log(r: &mut impl Read) -> io::Result<SpellDispel
 pub struct DispelFailed {
     pub caster: u64,
     pub victim: u64,
+    /// Build 12340's dispelling spell, ahead of the list (AC `Spell::EffectDispel`); 0 on 1.12.
+    pub spell_id: u32,
     pub spell_ids: Vec<u32>,
 }
 
@@ -353,6 +401,7 @@ pub(super) fn read_dispel_failed(r: &mut impl Read) -> io::Result<DispelFailed> 
     Ok(DispelFailed {
         caster,
         victim,
+        spell_id: 0,
         spell_ids,
     })
 }
