@@ -172,8 +172,9 @@ impl super::UiScript {
         std::mem::take(&mut self.model_mut().mail_opens)
     }
 
-    /// Drain the 1-based `TakeInboxItem` row picks.
-    pub fn take_mail_take_items(&mut self) -> Vec<u32> {
+    /// Drain the `TakeInboxItem` picks: the 1-based row and, when given, the 1-based attachment
+    /// slot (build 12340 `0x5711c0`; `None` takes the row's first attachment, `0x56d420`).
+    pub fn take_mail_take_items(&mut self) -> Vec<(u32, Option<u32>)> {
         std::mem::take(&mut self.model_mut().mail_take_items)
     }
 
@@ -523,9 +524,31 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // TakeInboxItem(messageIndex [, attachIndex]) (12340 `0x5711c0`): the row must be a number
+    // (the usage line otherwise); the attachment slot is optional, rounded, and names the slot
+    // whose item the take sends (`0x56d920`), absent meaning the first occupied one.
+    g.set(
+        "TakeInboxItem",
+        lua.create_function(|lua, args: mlua::MultiValue| {
+            let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Nil);
+            let Some(index) = lua.coerce_number(arg(0))? else {
+                return Err(mlua::Error::runtime(
+                    "Usage: TakeInboxItem(messageIndex, attachIndex)",
+                ));
+            };
+            let attach = lua
+                .coerce_number(arg(1))?
+                .map(|n| n.round_ties_even() as i64 as u32);
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .mail_take_items
+                .push((index.round_ties_even() as i64 as u32, attach));
+            Ok(())
+        })?,
+    )?;
+
     for (name, field) in [
-        ("TakeInboxItem", 0u8),
-        ("TakeInboxMoney", 1),
+        ("TakeInboxMoney", 1u8),
         ("DeleteInboxItem", 2),
         ("ReturnInboxItem", 3),
         ("TakeInboxTextItem", 4),
@@ -535,7 +558,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             lua.create_function(move |lua, index: u32| {
                 let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                 match field {
-                    0 => model.mail_take_items.push(index),
                     1 => model.mail_take_money.push(index),
                     2 => model.mail_deletes.push(index),
                     3 => model.mail_returns.push(index),
@@ -1134,7 +1156,7 @@ mod tests {
 
         s.run("TakeInboxItem(1) TakeInboxMoney(1) DeleteInboxItem(2) ReturnInboxItem(1) TakeInboxTextItem(1)")
             .unwrap();
-        assert_eq!(s.take_mail_take_items(), vec![1]);
+        assert_eq!(s.take_mail_take_items(), vec![(1, None)]);
         assert_eq!(s.take_mail_take_money(), vec![1]);
         assert_eq!(s.take_mail_deletes(), vec![2]);
         assert_eq!(s.take_mail_returns(), vec![1]);

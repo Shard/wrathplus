@@ -264,6 +264,7 @@ pub use loot_roll::wrath::{native_reasons as wrath_loot_roll_reasons, Entry as W
 pub use macros::{MacroBinding, MacroState, MacroView, MAX_MACROS, MAX_MACRO_BODY, MAX_MACRO_NAME};
 pub use mail::wrath::{
     Attachment as WrathMailAttachment, Inbox as WrathMailInbox, Row as WrathMailRow,
+    WrathMailRequest,
 };
 pub use mail::{
     MailInboxRow, MailInvoice, MailSendRequest, MailState, PackageView, StationeryView,
