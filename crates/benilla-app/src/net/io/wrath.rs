@@ -1239,6 +1239,7 @@ enum WrathRoute {
     NativeContacts,
     NativeDeath,
     NativeSessionMeta,
+    NativeInspect,
     NativeWorldportAck,
     NativeTeleportAck,
     AuthorityAcked,
@@ -1281,6 +1282,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::NativeInspect(_)
+        | ClientCommand::Inspect { .. }
+        | ClientCommand::LearnTalent { .. }
+        | ClientCommand::TalentWipeConfirm { .. } => WrathRoute::NativeInspect,
         ClientCommand::NativeSessionMeta(_)
         | ClientCommand::TutorialFlag { .. }
         | ClientCommand::TutorialClear
@@ -1704,6 +1709,17 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeInspect => {
+                        use benilla_protocol::wrath_inspect::{encode, Command as I};
+                        let (opcode, body) = encode(&match command {
+                            ClientCommand::NativeInspect(command) => command,
+                            ClientCommand::Inspect { target } => I::Inspect { target },
+                            ClientCommand::LearnTalent { talent_id, rank } => I::LearnTalent { talent_id, rank },
+                            ClientCommand::TalentWipeConfirm { trainer } => I::TalentWipeConfirm { trainer },
+                            _ => unreachable!(),
+                        });
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeSessionMeta => {
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));
                         active.writer.send_raw(opcode, &body)
