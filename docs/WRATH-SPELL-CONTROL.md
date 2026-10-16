@@ -16,7 +16,8 @@ Strict framing throughout: a short body or a trailing byte is `Unhandled`, never
 **Handled** (shared events, existing owners):
 - 0135 cooldown event, 01DE clear cooldown: `u32 spell, u64 guid` → the self or pet cooldown store.
 - 0139/013A channel start/update: build 12340 names the caster (packed) and sends it to the whole
-  set. Only our own drives the shared channel bar; another unit's is capture-only (below).
+  set. Every caster reaches the shared `ChannelStart`/`ChannelUpdate` with `caster: Some(guid)`; the
+  self channel bar acts on ours only (for App Migration's unit cast events, which own other bars).
 - 015B resurrect request: `u64 caster, u32 nameLength`, the name with AC's terminator, AC's second
   terminator, `u8 sickness`, then an optional `u32 0` delay override (`SPELL_ATTR3_NO_RES_TIMER`),
   read as `has_timer`.
@@ -38,7 +39,7 @@ i32 total`), but build 12340's family mask is 96 bits and `spell/mods.rs` holds 
 the third family word (assets).
 
 **Capture-only** (`NativeSpellControlPackets`, `net/wrath_spell_control_capture.rs`, ordered with
-duplicates, cleared on Connected and Disconnected): another unit's channel start/update, 01F7 spell
+duplicates, cleared on Connected and Disconnected): 01F7 spell
 impact, 0413 totem created.
 
 **Outbound** (`WrathRoute::NativeSpellControl`, admission fixtures in `wrath_admission_tests.rs`),

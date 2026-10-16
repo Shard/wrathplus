@@ -388,6 +388,7 @@ fn spell_visual_wire_golden() {
             cast_time_ms,
             target,
             ammo_display_id,
+            cast_count: None,
         } => assert_eq!(
             (
                 caster,
@@ -478,6 +479,7 @@ fn spell_visual_wire_golden() {
             dest,
             ammo_display_id,
             item_caster,
+            cast_count: None,
         } => {
             assert_eq!(caster, creature);
             assert_eq!(spell_id, 75);
@@ -588,7 +590,11 @@ fn spell_visual_wire_golden() {
         other => panic!("spell failed other, got {}", other.name()),
     }
     match decode(packet).pop().unwrap() {
-        SessionEvent::SpellFailedOther { caster, spell_id } => {
+        SessionEvent::SpellFailedOther {
+            caster,
+            spell_id,
+            cast_count: None,
+        } => {
             assert_eq!((caster, spell_id), (0x42, 133));
         }
         other => panic!("spell failed other event, got {other:?}"),
@@ -647,6 +653,7 @@ fn spell_visual_wire_golden() {
         SessionEvent::ChannelStart {
             spell_id,
             duration_ms,
+            caster: None,
         } => assert_eq!((spell_id, duration_ms), (10797, 6000)),
         other => panic!("channel start event, got {other:?}"),
     }
@@ -659,7 +666,10 @@ fn spell_visual_wire_golden() {
         other => panic!("channel update, got {}", other.name()),
     }
     match decode(packet).pop().unwrap() {
-        SessionEvent::ChannelUpdate { remaining_ms } => assert_eq!(remaining_ms, 3000),
+        SessionEvent::ChannelUpdate {
+            remaining_ms,
+            caster: None,
+        } => assert_eq!(remaining_ms, 3000),
         other => panic!("channel update event, got {other:?}"),
     }
 

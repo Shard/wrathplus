@@ -214,6 +214,7 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             cast_time_ms: s.cast_time_ms,
             target: s.targets.unit_target,
             ammo_display_id: s.ammo_display_id,
+            cast_count: None,
         }],
         ServerPacket::SpellGo(s) => {
             let caster = spell_caster(s.item_or_caster, s.caster);
@@ -229,6 +230,7 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
                 ammo_display_id: s.ammo_display_id,
                 // Against the resolved caster: a GameObject's own guid in slot 1 is not an item.
                 item_caster: (s.item_or_caster != caster).then_some(s.item_or_caster),
+                cast_count: None,
             }]
         }
         ServerPacket::SpellChainTargets(c) => vec![SessionEvent::SpellChainTargets {
@@ -240,7 +242,11 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             vec![SessionEvent::SpellDelayed { caster, delay_ms }]
         }
         ServerPacket::SpellFailedOther { caster, spell_id } => {
-            vec![SessionEvent::SpellFailedOther { caster, spell_id }]
+            vec![SessionEvent::SpellFailedOther {
+                caster,
+                spell_id,
+                cast_count: None,
+            }]
         }
         ServerPacket::CancelAutoRepeat => vec![SessionEvent::CancelAutoRepeat],
         ServerPacket::SpellCooldownList { caster, cooldowns } => {
@@ -289,9 +295,13 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
         } => vec![SessionEvent::ChannelStart {
             spell_id,
             duration_ms,
+            caster: None,
         }],
         ServerPacket::ChannelUpdate { remaining_ms } => {
-            vec![SessionEvent::ChannelUpdate { remaining_ms }]
+            vec![SessionEvent::ChannelUpdate {
+                remaining_ms,
+                caster: None,
+            }]
         }
         ServerPacket::UpdateAuraDuration { slot, remaining_ms } => {
             vec![SessionEvent::AuraDuration { slot, remaining_ms }]
