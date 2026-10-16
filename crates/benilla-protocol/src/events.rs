@@ -1192,6 +1192,8 @@ pub enum SessionEvent {
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
+    /// Capture-only native forced faction reactions (`wrath_faction`).
+    WrathFaction { packet: crate::wrath_faction::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).

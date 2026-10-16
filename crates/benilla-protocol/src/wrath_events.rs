@@ -214,6 +214,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_faction::OPCODES.contains(&opcode) => Ok(match crate::wrath_faction::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_inspect::OPCODES.contains(&opcode) => Ok(match crate::wrath_inspect::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
