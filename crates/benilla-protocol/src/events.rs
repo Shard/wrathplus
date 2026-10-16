@@ -1163,6 +1163,8 @@ pub enum SessionEvent {
     WrathChatNotice { packet: crate::wrath_chat_notices::Packet },
     /// Capture-only native battleground/arena/battlefield receipts (`wrath_battleground`).
     WrathBattleground { packet: crate::wrath_battleground::Packet },
+    /// Capture-only native death and corpse receipts (`wrath_death`).
+    WrathDeath { packet: crate::wrath_death::Packet },
     /// Capture-only native spell/aura log receipts without a shared event (`wrath_logs`).
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
