@@ -117,6 +117,15 @@ fn choices(state: &State, raid: bool) -> Vec<Choice> {
     rows
 }
 
+// Preference getters walk the same two native choice lists; order is immaterial
+// to keyed tables, but duplicate resolution and catalog filters remain identical.
+pub(super) fn choice_preferences(state: &State, raid: bool) -> Vec<(i32, i32)> {
+    choices(state, raid)
+        .into_iter()
+        .map(|r| (r.id, r.group))
+        .collect()
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     for (name, raid) in [("GetLFDChoiceOrder", false), ("GetLFRChoiceOrder", true)] {
         lua.globals().set(
