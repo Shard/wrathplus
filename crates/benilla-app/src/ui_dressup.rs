@@ -255,6 +255,7 @@ fn player_look(
     Some(DressUpLook {
         display_id: net.display_id?,
         race: s.unit_race()?,
+        class: s.unit_class().unwrap_or(0),
         sex: s.unit_gender()?,
         skin: s.player_skin().unwrap_or(0),
         face: s.player_face().unwrap_or(0),

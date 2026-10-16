@@ -165,6 +165,8 @@ pub enum SessionEvent {
     },
     /// `SMSG_CHAR_CREATE`/`_DELETE`'s raw `WorldResult`; on success a fresh roster comes first.
     CharActionResult { action: CharAction, code: u8 },
+    /// Build-12340 character mutation result. Raw codes are NOT Vanilla WorldResult values.
+    WrathCharActionResult { action: CharAction, code: u8 },
     /// We are in the world; the IO thread emits this before any object update.
     Connected {
         self_guid: u64,
@@ -292,8 +294,12 @@ pub enum SessionEvent {
         position: [f32; 3],
         orientation: f32,
     },
-    /// `SMSG_NEW_WORLD` (acked) or the login `SMSG_LOGIN_VERIFY_WORLD`. After a transfer that
-    /// named a transport the pose is boat-local (vmangos `SendNewWorld` sends `GetTransportPos()`).
+    /// Lossless Wrath far-transfer packet plus local single-use acknowledgement capability.
+    WrathTransfer {
+        packet: crate::wrath_transfer::Packet,
+        token: Option<crate::wrath_transfer::Token>,
+    },
+    /// Legacy worldport or initial login pose; Wrath transfers use `WrathTransfer`.
     Worldport {
         map_id: u32,
         position: [f32; 3],
@@ -513,6 +519,10 @@ pub enum SessionEvent {
     PetActionFeedback { reason: u8 },
     /// The pet's cast refusal (`SMSG_PET_CAST_FAILED`); it never touches our own cast state.
     PetCastFailed { spell_id: u32, reason: Option<u8> },
+    /// Build-12340 lossless pet cast result (native reason and all arguments).
+    WrathPetCastFailed(crate::wrath_spell_failure::PetCastFailed),
+    /// Build-12340 interruption notification; distinct from SPELL_FAILED_OTHER.
+    WrathSpellFailure(crate::wrath_spell_failure::SpellFailure),
     /// A refused tame, Call Pet or Revive Pet (`SMSG_PET_TAME_FAILURE`): the reason's
     /// `PETTAME_*` string fills `ERR_TAME_FAILED`.
     PetTameFailure { reason: u8 },
@@ -552,8 +562,10 @@ pub enum SessionEvent {
     WrathLfg { packet: crate::wrath_lfg::Packet },
     /// Lossless native guild-bank reply; App owns capture and lifecycle.
     WrathGuildBank { packet: crate::wrath_guild_bank::Packet },
-    /// Lossless arena-team transport; no inferred UI state.
+    /// Lossless native pet-name response; timestamp and declensions remain raw.
+    WrathPetName { response: crate::wrath_pet_name::Response },
     WrathChat { message: crate::wrath_chat::Message },
+    /// Lossless arena-team transport; no inferred UI state.
     WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
     WrathGuild { packet: crate::wrath_guild::Packet },
@@ -723,6 +735,8 @@ pub enum SessionEvent {
     DamageShield(DamageShield),
     /// Environmental damage (`SMSG_ENVIRONMENTALDAMAGELOG`); kit from `EnvironmentalDamage.dbc`.
     EnvironmentalDamageLog(EnvironmentalDamageLog),
+    /// Native Wrath unsigned environmental damage, with native trailer order.
+    WrathEnvironmentalDamage(crate::wrath_environment::EnvironmentalDamage),
     /// A cast's per-target miss list (`SMSG_SPELLLOGMISS`).
     SpellLogMiss(SpellLogMiss),
     /// The killing blow (`SMSG_PARTYKILLLOG`), the only source of "You have slain %s!".
@@ -1076,6 +1090,8 @@ pub enum SessionEvent {
     FriendStatus(FriendStatusUpdate),
     /// A `/who` answer (`SMSG_WHO`): at most 49 rows, plus the true match total.
     WhoResults(WhoResults),
+    /// Lossless native WHO/WHOIS, never projected into Vanilla social rows.
+    WrathWho { packet: crate::wrath_who::Packet },
     /// A guild's name, ten rank names and tabard (`SMSG_GUILD_QUERY_RESPONSE`), cached by id.
     GuildQueryResponse(GuildQueryResponse),
     /// The whole guild (`SMSG_GUILD_ROSTER`), a complete snapshot that replaces what is held.
@@ -1124,7 +1140,18 @@ pub enum SessionEvent {
     /// `SMSG_NEW_TAXI_PATH`, empty, sent with [`Self::TaxiNodeStatus`] on a first visit.
     NewTaxiPath,
     /// The inbox (`SMSG_MAIL_LIST_RESULT`), answering `CMSG_GET_MAIL_LIST`.
+    /// Native completed-quest reply, including explicit empty replies.
+    WrathQuestsCompleted { packet: crate::wrath_quests_completed::Packet },
+    WrathInstanceControl { packet: crate::wrath_instance_control::Packet },
+    /// Capture-only native item/inventory receipts (`wrath_inventory`).
+    WrathInventory { packet: crate::wrath_inventory::Packet },
+    /// Capture-only native auction receipts without a shared event (`wrath_exchange`).
+    WrathExchange { packet: crate::wrath_exchange::Packet },
+    WrathMirrorImage { packet: crate::wrath_mirror_image::Packet },
+    WrathUiTimer { packet: crate::wrath_ui_timer::Packet },
     WrathMailList { inbox: crate::wrath_mail::Inbox },
+    /// Ordered native mail mutation receipt or mailbox-open notice; capture only.
+    WrathMailMutation { packet: crate::wrath_mail_mutations::Packet },
     MailList { mails: Vec<MailListEntry> },
     /// A mail action's verdict (`SMSG_SEND_MAIL_RESULT`); `equip_error`/`item` are exclusive tails.
     SendMailResult {

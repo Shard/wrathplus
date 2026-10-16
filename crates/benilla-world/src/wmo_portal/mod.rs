@@ -189,6 +189,16 @@ pub struct WmoPortalInstance {
 }
 
 impl WmoPortalInstance {
+    /// Legacy data-profile query mapping. Wrath production consumers use decoded
+    /// WmoLiquidState instead: a resolved DBC ID is never a tile nibble.
+    /// Retains the bounded zero/no-grid dry fix for legacy fixtures.
+    pub fn group_flood(raw: u32, has_mliq: bool) -> Option<benilla_formats::LiquidKind> {
+        if (raw == 0 && !has_mliq) || raw == benilla_formats::NO_GROUP_LIQUID {
+            return None;
+        }
+        benilla_formats::LiquidKind::from_nibble((raw & 0xf) as u8)
+    }
+
     /// The `[0xca7f00]` bit for one group, the grain every consumer asks at: a WMO piece ORs it
     /// over its groups, a unit asks it of the room its light node attached to. A group past the set
     /// reads false.
@@ -1482,6 +1492,7 @@ mod tests {
             group_footprint_grids: Vec::new(),
             group_light_refs: Vec::new(),
             group_liquids: Vec::new(),
+            wrath_liquid_states: None,
             doodad_base: Default::default(),
             doodad_owner: Default::default(),
             doodad_groups: Default::default(),

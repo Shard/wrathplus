@@ -106,6 +106,13 @@ out of scope is closed with the reason.
     `WOW_GOD=off` leaves it off.
   - A trace is `WOW_MOVE_TRACE=<file>`, filtered with `WOW_MOVE_TRACE_TAGS` (`"move,snd,in"`) and
     ended by `WOW_PROBE_EXIT_AT=<seconds>`; grep it for the `rly` and `snd` lines.
+    Add `hit` for movement obstruction diagnostics: when a frame retains less than half its
+    intended horizontal travel, it replays that horizontal capsule sweep and logs the entity,
+    source kind (WMO, M2, terrain, or runtime/unknown), contact normal/point and nearest triangle.
+    This replay is not the resolver's exact contact history; `nearest_face` is a geometric match,
+    not an exact sweep feature ID. Positions and normals use Bevy world coordinates (+Y up).
+    A replay miss is logged explicitly. With `hit` filtered out, no diagnostic cast, triangle
+    search or formatting runs; movement resolution is unchanged.
   - A capture runs through `scripts/visual.sh`, whose recipe is the header of
     `crates/benilla-app/src/capture/mod.rs`. Pixel questions go through `benilla-visual crop`,
     `series` and `hotspot`.
@@ -121,3 +128,41 @@ line from the start of the terminal output, your platform and the server you ran
 and ideas are welcome there or on the Discord linked from the README.
 
 Working with an AI agent is expected. The agent reads `AGENTS.md`, and the same rules bind it.
+
+### Abbey dry-room liquid regression
+
+NSABBEY's installed 3.3.5 groups have raw MOGP `groupLiquid = 0` and no MLIQ;
+these must not receive a whole-room liquid override. The native group query
+`0x7c8360` rejects resolved LiquidType ID zero before testing the grid. The bounded
+fix originally treated raw zero without MLIQ as dry, unconditionally. The full
+Wrath decoder below now supersedes that temporary mapping for Wrath assets.
+Gridless nonzero resolved IDs remain supported: MOGP `0x1000` is not required
+for a legitimate whole-room flood.
+Headless regressions query the player's actual indoor claim at the Abbey stuck
+anchor in groups 3/5, then check the Wrath ground-controller limit; an explicit
+nonzero gridless flood remains a positive control. Live traversal is manager-only.
+
+### Wrath WMO liquid identity and query state
+
+The build-12340 loader resolves MOGP liquid fields with retained MOHD flags before
+queries consume them. MOHD `0x4` chooses direct input; otherwise raw `15` becomes
+zero and other inputs increment with wrapping. Inputs 1–20 resolve by `(n-1)&3`
+to IDs 13/14/19/20 (group `0x80000` selects 14 rather than 13 for class zero).
+Flagged MLIQ supplies the first non-hole tile class only when this resolves to zero.
+Evidence: native loader `0x7d82e0`, resolver `0x7d7310`, query `0x7c8360`.
+
+The asset retains actual tile dimensions independently of the legacy render mesh:
+all-hole grids, missing geometry, and malformed data must not turn a bounded pool
+into an infinite-height room flood. A valid nonzero resolved ID with either tile
+dimension zero retains the native whole-group `FLT_MAX` query. Invalid groups and
+unknown catalog categories warn and do not synthesize water.
+
+LiquidType word 3 supplies the semantic category, not its ID nibble or the
+LiquidMaterial render selector. Schema/consumer references: AzerothCore
+`shared/DataStores/DBCStructure.h` (`LiquidTypeEntry::Type`), `DBCfmt.h`
+(`LiquidTypefmt`), `game/DataStores/DBCStores.cpp::GetLiquidFlags` (`1 << Type`),
+and `game/Grids/GridTerrainData.h` water/ocean/magma/slime masks 1/2/4/8.
+Catalogs load once from the same explicit boot override chain as the asset reader.
+Legacy MLIQ rendering, texture/UV/opacity/scroll/sound policy is unchanged; this
+query-state integration does not certify native liquid visual parity. Camera
+submersion's existing treatment of whole-room floods is not broadened here.

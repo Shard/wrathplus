@@ -362,6 +362,7 @@ pub(crate) struct Player {
     /// blocking load returns (`0x401cae`, after `0x66fbe0`), and vmangos has no load timeout. A
     /// riding crossing never settles and acks at once.
     pub(crate) owes_worldport_ack: bool,
+    pub(crate) native_worldport_ack: Option<benilla_protocol::wrath_transfer::Token>,
     /// `Time::elapsed_secs` when we last sent a heartbeat.
     pub(super) last_heartbeat: f32,
     /// Milliseconds of movement the settle hold skipped, sent as `CMSG_MOVE_TIME_SKIPPED` on the

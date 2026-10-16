@@ -153,3 +153,79 @@ pointer table. Type `+8` is consumed as flags (for example `0x793d20` tests
 MH2O vertex-format policy, texture animation equations or complete rendering
 parity. Catalog accessors expose the verified join, raw flags and raw selector;
 remaining words stay uninterpreted. Required read/string/decode errors propagate.
+
+### MH2O accessor contract correction
+
+Build-12340 MH2O vtable `0xa594b8` dispatches height/depth/UV accessors
+`0x8a3130`, `0x8a3160`, `0x8a31b0`. With payload base B, vertex offset O,
+vertex count N and index i: selectors 0/1 read height at B+O+4i;
+selector 2 returns height zero. Selector 0 reads depth at B+O+4N+i;
+selector 2 reads B+O+i, explicitly returning 255 when O=0. Selector 1
+returns UV storage B+O+4(N+i); other selectors return static zero UVs.
+These bodies establish four UV bytes per vertex, not component normalization.
+
+The parser now accepts only selectors 0–2, rejecting the later combined layout
+3 rather than inventing unsupported native behavior. Selector 2 with no payload
+retains explicit depth 255 and zero heights. Selectors 0/1 with O=0 fail closed:
+the native height accessor has no missing-offset guard, so a `min_height` plane
+was an unsupported invention. Rejection is a bounded safety policy, not a claim
+that the native client rejects malformed files identically. No rendering changes
+are included in this correction.
+
+A bounded effective-enUS sample of 16 ADTs across Northrend, Azeroth, Kalimdor
+and Expansion01 contains 1,683 layers in nine tiles: selector 0/nonzero offset
+147; selector 2/nonzero offset 93; selector 2/zero offset 1,443. Seven tiles have
+no MH2O layers. No selector 1, selector 3, or selector 0/zero-offset example was
+observed; this is not a complete installed-chain census. The installed regression
+walks raw chunk headers independently and compares every sampled height/depth
+against the production parser, including all 1,443 default-depth layers.
+
+### Raw MH2O surface geometry (formats-only)
+
+`wrath_liquid_surface::build_wrath_liquid_surface` is an explicit-placement seam,
+not renderer integration. It keeps the complete layer and full parent attributes,
+including raw liquid ID, vertex selector, UV words and depth bytes. The caller
+supplies parent XY and signed row-X/column-Y steps; absolute source heights are
+retained. No DBC classification, UV/depth normalization, Z offset, lattice snap,
+layer merging, clipping, material selection or asset loading is performed.
+
+Native `0x7cdf80` iterates rows outside columns with inclusive rectangle bounds;
+its local spacing is the negative chunk-coordinate difference times 0.125,
+and its Z is accessor height minus owner Z. Native `0x7ce1f0` flattens rectangle
+cells row-major; `0x95da20` tests LSB-first bits. Assembly at `0x7ce5d0` establishes
+triangle offsets `(0,S,S+1)` and `(0,S+1,1)` for row stride S. The new surface
+uses these triangles for admitted cells without the native outcode clipping.
+Malformed public layers/nonfinite positions fail closed as a safety policy.
+
+UV consumer `0x7ce390` branches on the **MH2O vertex selector**, not the joined
+LiquidMaterial render selector. Producer `0x7c5690` copies instance u16 at +2
+to surface +8 (`liquid-build.log`); `0x7ce390` tests that field against 1.
+Selector 1 fetches unsigned u16 pairs through provider vtable +0xC and multiplies
+by 3/256 (`0xa40414`); otherwise the first two coordinates produced by transform
+`0x4c21b0` are multiplied by approximately 0.06 (`0xa40410`). Experience's
+separate renderer audit owns the full Classic batch-matrix closure and verified
+native-world UV equation; this loader unit retains raw provenance only and does
+not reconstruct that transform or claim header/native rounding equivalence.
+This corrects an earlier audit description that conflated the surface selector
+with the catalog material selector. The geometry unit leaves UV words raw and
+never used that mistaken interpretation for production behavior.
+Native local-coordinate arithmetic/rounding is not reproduced by the explicit
+placement API. Owner-origin helper `0x7c64b0` reconstructs coordinates as
+`17066.666015625 - global_chunk_index * 33.33333206176758`, rather than reading
+MCNK header XY; the handoff deliberately retains header-based placement and
+must not claim native rounding parity. Renderer integration must supply and
+verify placement separately.
+
+Loader handoff builds `TileMesh.wrath_liquids` from original MCNK headers before
+terrain filtering: no-MCVT chunks still contribute liquids. Native `0x8a3070`
+indexes entries as `index_y * 16 + index_x`; vector ordinal is not a substitute.
+Positions use unsnapped header XY and signed `CHUNK_SIZE/8` spacing, retaining
+absolute liquid heights independently of header Z. `AdtTile.wrath_liquids`
+forwards these surfaces without changing source override precedence, provenance,
+MCLQ geometry, catalogs, materials or lighting. Raw `mh2o` remains available.
+
+Tile-built surfaces also retain `parent: Some(WrathLiquidParent)` with tile-local
+`[index_x, index_y]` and exact original header XYZ. Generic explicit-placement
+surfaces have `parent: None`. This is raw provenance, not native-origin or UV
+phase reconstruction; positions and topology remain unchanged. It lets consumers
+recover parent grouping without relying on filtered terrain chunks.

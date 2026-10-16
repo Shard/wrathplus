@@ -321,6 +321,15 @@ pub(super) fn step(
         }
     }
 
+    if benilla_assets::trace::enabled_for("hit") {
+        let intended = if held || anchored {
+            Vec3::ZERO
+        } else {
+            player.horiz_vel * dt
+        };
+        move_trace::hit(world, capsule, pre_move, center, intended, SKIN_WIDTH);
+    }
+
     player.pos = center - half_h;
     move_trace::frame(move_trace::Frame {
         y_in: pre_move.y - half_h.y,

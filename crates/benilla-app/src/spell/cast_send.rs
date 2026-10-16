@@ -41,6 +41,8 @@ pub(crate) enum CastCommit {
         slot: u8,
         /// The item's template entry: the not-ready rung queries the `(use_spell, entry)` record.
         entry: u32,
+        /// The item's GUID: build 12340's `CMSG_USE_ITEM` names it, and AC refuses a mismatch.
+        item_guid: u64,
         spell_index: u8,
         /// `CGItem::Use`'s own target argument, set only for a key in a lock; it bypasses the
         /// binder, as TryCast's target resolve (`6e4ef4`) takes the pair it was passed.
@@ -162,11 +164,14 @@ impl CastLadder<'_, '_> {
                 bag_index,
                 slot,
                 spell_index,
+                item_guid,
                 ..
             } => ClientCommand::UseItem {
                 bag_index,
                 slot,
                 spell_index,
+                spell_id,
+                item_guid,
                 target: match bound {
                     TargetedBind::Dest(dest) => UseItemTarget::Dest(dest),
                     TargetedBind::Source(src) => UseItemTarget::Source(src),
@@ -716,11 +721,14 @@ fn send_spell_cast(
             slot,
             spell_index,
             on_object,
+            item_guid,
             ..
         } => ClientCommand::UseItem {
             bag_index,
             slot,
             spell_index,
+            spell_id,
+            item_guid,
             target: match (on_object, item_target, target) {
                 (Some(go), _, _) => UseItemTarget::Object(go),
                 (None, Some(item), _) => UseItemTarget::Item(item),
@@ -792,6 +800,7 @@ mod tests {
         bag_index: 255,
         slot: 24,
         entry: 6948,
+        item_guid: 0x4000_0000_0000_0001,
         spell_index: 0,
         on_object: None,
     };
@@ -1449,7 +1458,8 @@ mod tests {
                 bag_index: 255,
                 slot: 24,
                 spell_index: 0,
-                target: UseItemTarget::SelfImplicit
+                target: UseItemTarget::SelfImplicit,
+                ..
             })
         ));
 
@@ -1461,6 +1471,7 @@ mod tests {
                 bag_index: 255,
                 slot: 81,
                 entry: 6948,
+                item_guid: 0x4000_0000_0000_0001,
                 spell_index: 0,
                 on_object: Some(0xF110_000C_1F00_A3B2),
             },

@@ -250,7 +250,8 @@ pub(super) fn spawn_loaded_placements(
                                             build_collider_task(verts, tris),
                                             None,
                                             !doodad_hulls_bare(),
-                                        ),
+                                        )
+                                        .with_source(crate::collision::ColliderSource::M2),
                                         PickOccluder,
                                     ))
                                     .id(),
@@ -325,18 +326,19 @@ pub(super) fn spawn_loaded_placements(
                                 // Fogged only once a flood puts the group on the chain.
                                 interior_fog: vec![false; m.group_nav.len()],
                                 liquid_visited: vec![false; m.group_nav.len()],
-                                // MOGP `groupLiquid`: a room wholly submerged, with no liquid grid.
                                 flooded: m
                                     .group_nav
                                     .iter()
-                                    .map(|g| {
-                                        (g.group_liquid != benilla_formats::NO_GROUP_LIQUID)
-                                            .then(|| {
-                                                benilla_formats::LiquidKind::from_nibble(
-                                                    (g.group_liquid & 0xf) as u8,
-                                                )
-                                            })
-                                            .flatten()
+                                    .enumerate()
+                                    .map(|(gi, g)| match &m.wrath_liquid_states {
+                                        Some(states) => states
+                                            .get(gi)
+                                            .and_then(Option::as_ref)
+                                            .and_then(|s| s.flood_kind()),
+                                        None => WmoPortalInstance::group_flood(
+                                            g.group_liquid,
+                                            m.group_liquids.get(gi).is_some_and(Option::is_some),
+                                        ),
                                     })
                                     .collect(),
                             })
@@ -462,6 +464,13 @@ pub(super) fn spawn_loaded_placements(
                             ),
                             // The root's MOMT diffColor table: an interior pool's body colour.
                             &m.material_diff_color,
+                            match &m.wrath_liquid_states {
+                                Some(states) => states
+                                    .get(gi)
+                                    .and_then(Option::as_ref)
+                                    .and_then(|s| s.grid_kind()),
+                                None => Some(lq.kind),
+                            },
                             &mut ents,
                         );
                         // Another building's pool is exterior scene like its walls (`0x6856c0`),
@@ -496,7 +505,8 @@ pub(super) fn spawn_loaded_placements(
                                         build_collider_task(verts, tris),
                                         Some(walk_layers()),
                                         true,
-                                    ),
+                                    )
+                                    .with_source(crate::collision::ColliderSource::Wmo),
                                     // The walk faces take the selection ring (floors, steps).
                                     GroundDecalSurface,
                                     // Clamps the mouse pick. The reference's occluder faces are
@@ -511,11 +521,14 @@ pub(super) fn spawn_loaded_placements(
                     {
                         ents.push(
                             commands
-                                .spawn(PendingCollider::new(
-                                    build_collider_task(verts, tris),
-                                    Some(camera_layers()),
-                                    true,
-                                ))
+                                .spawn(
+                                    PendingCollider::new(
+                                        build_collider_task(verts, tris),
+                                        Some(camera_layers()),
+                                        true,
+                                    )
+                                    .with_source(crate::collision::ColliderSource::Wmo),
+                                )
                                 .id(),
                         );
                     }
@@ -720,7 +733,8 @@ pub(super) fn spawn_loaded_placements(
                                     build_collider_task(verts, tris),
                                     None,
                                     !doodad_hulls_bare(),
-                                ),
+                                )
+                                .with_source(crate::collision::ColliderSource::M2),
                                 PickOccluder,
                             ))
                             .id(),

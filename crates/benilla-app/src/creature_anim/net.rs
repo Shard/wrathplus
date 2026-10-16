@@ -30,7 +30,8 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::PlaySpellVisual, on_play_spell_visual)
         .net_handler(K::AttackerState, on_attacker_state)
         .net_handler(K::WrathAttackerState, on_wrath_attacker_state)
-        .net_handler(K::EnvironmentalDamageLog, on_environmental_damage_log);
+        .net_handler(K::EnvironmentalDamageLog, on_environmental_damage_log)
+        .net_handler(K::WrathEnvironmentalDamage, on_wrath_environmental_damage);
 }
 
 fn on_attack_start(In(ev): In<SessionEvent>, mut commands: Commands, index: Res<GuidIndex>) {
@@ -185,6 +186,26 @@ fn on_wrath_attacker_state(
         &stores,
         play_seq.next(),
     );
+}
+
+fn on_wrath_environmental_damage(
+    In(ev): In<SessionEvent>,
+    index: Res<GuidIndex>,
+    table: Option<Res<EnvDamageTable>>,
+    mut play_seq: ResMut<PlaySeq>,
+    mut out: MessageWriter<KitPush>,
+) {
+    if let SessionEvent::WrathEnvironmentalDamage(e) = ev {
+        environmental_damage_visual(
+            e.victim,
+            e.damage_type,
+            e.damage,
+            &index,
+            table.as_deref(),
+            &mut play_seq,
+            &mut out,
+        );
+    }
 }
 
 fn on_environmental_damage_log(
@@ -423,11 +444,31 @@ fn environmental_damage_log(
     play_seq: &mut PlaySeq,
     out: &mut MessageWriter<KitPush>,
 ) {
-    if let Some(&ent) = index.0.get(&e.victim) {
-        if let Some(kit_id) = table.and_then(|t| t.0.kit_id(e.damage_type)) {
+    environmental_damage_visual(
+        e.victim,
+        e.damage_type,
+        e.damage,
+        index,
+        table,
+        play_seq,
+        out,
+    );
+}
+
+fn environmental_damage_visual(
+    guid: u64,
+    damage_type: u8,
+    damage: u32,
+    index: &GuidIndex,
+    table: Option<&EnvDamageTable>,
+    play_seq: &mut PlaySeq,
+    out: &mut MessageWriter<KitPush>,
+) {
+    if let Some(&ent) = index.0.get(&guid) {
+        if let Some(kit_id) = table.and_then(|t| t.0.kit_id(damage_type)) {
             debug!(
                 "net: environmental damage on {:#x} (type {}, {} dmg) → kit {kit_id}",
-                e.victim, e.damage_type, e.damage
+                guid, damage_type, damage
             );
             out.write(KitPush {
                 entity: ent,

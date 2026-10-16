@@ -883,20 +883,16 @@ mod tests {
     }
 
     #[test]
-    fn wrath_identity_misses_do_not_send_or_poison_the_ask_once_cache() {
+    fn wrath_identity_misses_send_native_query_once_and_mark_pending() {
         let (commands, rx) = net_commands();
         let mut guild = GuildState::default();
         guild.set_dialect(SessionDialect::Wrath12340);
 
         assert!(guild.resolve_identity(7, &commands).is_none());
-        assert!(
-            rx.try_iter().next().is_none(),
-            "GuildQuery is unsupported in Wrath"
-        );
-        assert!(
-            !guild.identities.is_pending(7),
-            "support is checked before get_or_ask"
-        );
+        assert!(guild.resolve_identity(7, &commands).is_none());
+        assert!(matches!(rx.try_recv(), Ok(ClientCommand::GuildQuery { guild_id: 7 })));
+        assert!(rx.try_recv().is_err(), "pending identity is queried only once");
+        assert!(guild.identities.is_pending(7));
     }
 
     #[test]

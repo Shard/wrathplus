@@ -164,3 +164,17 @@ fn native_filter_limits_reject_instead_of_truncate_and_all_strings_reject_nul() 
         io::ErrorKind::InvalidInput
     );
 }
+
+#[test]
+fn whois_debug_redacts_synthetic_request_and_reply_bytes() {
+    let packet = Packet::Whois {
+        message: b"synthetic-sensitive".to_vec(),
+    };
+    let command = Command::Whois {
+        name: b"synthetic-sensitive".to_vec(),
+    };
+    assert_eq!(format!("{packet:?}"), "Whois { <redacted> }");
+    assert_eq!(format!("{command:?}"), "Whois { <redacted> }");
+    let event = crate::SessionEvent::WrathWho { packet };
+    assert!(!format!("{event:?}").contains("synthetic-sensitive"));
+}

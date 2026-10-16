@@ -313,7 +313,8 @@ pub(super) fn spawn_wmo_gameobject_props(
                 let hull = commands
                     .spawn((
                         Transform::IDENTITY,
-                        PendingCollider::new(build_collider_task(verts, tris), None, false),
+                        PendingCollider::new(build_collider_task(verts, tris), None, false)
+                            .with_source(benilla_world::collision::ColliderSource::M2),
                     ))
                     .id();
                 commands.entity(entity).add_child(hull);

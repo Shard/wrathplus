@@ -597,12 +597,11 @@ pub(super) fn attach_entity_visuals(
             );
             let visible_geosets = look.as_ref().and_then(|l| {
                 let cg = characters.as_deref()?;
-                Some(cg.0.visible_geosets(
-                    l.race,
-                    l.sex,
-                    l.hair_style,
-                    l.facial_hair,
+                Some(char_skin::eye_geosets(
+                    &cg.0,
+                    l,
                     &equip_geosets,
+                    sections.as_deref(),
                 ))
             });
             let char_mats = match look.as_ref() {

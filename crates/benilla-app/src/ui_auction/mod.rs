@@ -777,6 +777,11 @@ fn drain_auction(
                 bid: req.min_bid,
                 buyout: req.buyout,
                 etime_minutes: req.duration,
+                count: objects
+                    .object(item_guid)
+                    .and_then(|o| o.item_stack_count())
+                    .unwrap_or(1)
+                    .max(1),
             });
         }
     }

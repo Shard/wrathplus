@@ -164,10 +164,15 @@ pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
+mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_surface;
 mod wrath_lfg;
-pub use wrath_lfg::{WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup};
+pub use wrath_lfg::{
+    WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
+    WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
+    WrathLfgRewardItem,
+};
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
 
@@ -762,6 +767,7 @@ impl UiScript {
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
             wrath_items::install(&lua)?;
+            wrath_bag_portrait::install(&lua)?;
             wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;

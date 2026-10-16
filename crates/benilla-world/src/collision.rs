@@ -16,6 +16,8 @@ use bevy::ecs::system::ResMut;
 use bevy::math::{Dir3, Quat, Vec3};
 
 mod one_sided;
+mod witness;
+pub use witness::{ColliderSource, HitWitness, WitnessFace};
 
 /// The collision audiences. avian puts every collider without explicit `CollisionLayers` on bit 0,
 /// [`CollisionLayer::Default`]; only WMO faces and liquid carry a layer.
@@ -114,6 +116,7 @@ pub struct MoverTraceExclusions(pub bevy::ecs::entity::EntityHashSet);
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct WorldCollision<'w, 's> {
     ms: MoveAndSlide<'w, 's>,
+    sources: bevy::ecs::system::Query<'w, 's, &'static ColliderSource>,
     exclusions: bevy::ecs::system::Res<'w, MoverTraceExclusions>,
 }
 

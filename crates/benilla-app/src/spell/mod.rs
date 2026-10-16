@@ -19,6 +19,7 @@ pub(crate) mod cooldowns;
 pub(crate) mod group_relation;
 mod inflight;
 mod mods;
+mod native_failure;
 pub(crate) mod net;
 mod range_units;
 pub(crate) mod targeting;
@@ -113,6 +114,7 @@ impl Plugin for SpellPlugin {
             )
             .add_systems(OnEnter(ClientState::InWorld), mods::clear_on_world_enter);
         net::register(app);
+        native_failure::register(app);
     }
 }
 

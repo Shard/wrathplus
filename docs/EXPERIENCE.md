@@ -405,3 +405,32 @@ never initialize this GPU test. The embedding-only Bevy shader-library loader ha
 its ClearColor-extraction and compressed-format-support diagnostics are expected, not GPU
 validation failures. The test does not exercise the 2D UI combine attachment lane, which Plus
 world postprocessing does not select.
+
+### On-demand WoW shadow GPU validation
+
+The ignored `wow_shadowcaster_gpu_smoke` test uses a headless real device and Bevy's production
+prepass initialization, material specialization, shader composition and material allocator. It
+checks 4×4 `Depth32Float` readback for opaque coverage, alpha-mask pass/discard, the keyed
+no-depth-write exclusion and an identity custom-rig palette. It opens no window and loads no
+world or network actors. This validates tiny fixture coverage and binding/pipeline compatibility,
+not animated skinning correctness, live shadow orientation, world streaming or visual fidelity.
+Classic and ordinary GPU-less test runs leave it ignored; no production rendering is changed.
+
+Compile under the shared heavy-build lock, then run the resulting test executable **outside**
+that lock. Both stages must have a hard process timeout (for example `timeout --kill-after=10s
+300`); never hold the shared lock for an unbounded on-demand GPU run. Preserve the usual worker
+build environment (`CARGO_TARGET_DIR`, `CARGO_BUILD_JOBS=4`, `CARGO_INCREMENTAL=0`, `nice -n 15`),
+and unset `WOW_CLIENT_PROFILE`/`WOW_LOCALE` with `WOW_DATA=`. For example, obtain the executable
+from the `compiler-artifact` JSON emitted by `cargo test -p benilla-world --lib --no-run
+--message-format=json`, then execute:
+
+```sh
+env -u WOW_CLIENT_PROFILE -u WOW_LOCALE WOW_DATA= \
+  timeout --kill-after=10s 300 nice -n 15 "$WORLD_TEST_BINARY" \
+  wow_shadowcaster_gpu_smoke --ignored --nocapture --test-threads 1
+```
+
+GPU completion and map callbacks are bounded to 30 seconds inside the test; the outer process
+limit also bounds shader/setup work. A successful fixture run on Apple M3 Max / Metal validated
+all five cases. As with the postprocess smoke above, the embedding-only shader-library loader
+emits expected missing-RenderApp and compressed-format-support diagnostics during setup.

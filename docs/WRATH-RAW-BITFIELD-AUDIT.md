@@ -24,6 +24,7 @@ Statuses apply only to the bounded finding described, not complete subsystem par
 | Dynamic-flag masks | not-a-bug | Compared consumed masks agree. |
 | Player flags other than FFA | not-a-bug | Compared masks agree; PvP preference 0x200 is not replicated PvP state. |
 | Already semantic packed bytes / PvP title guards | not-a-bug | Preserve existing layout handling listed below. |
+| Wrath special-area PvP projection | pending | App `area.rs` still projects Vanilla territory semantics. Wrath `GetZonePVPInfo` `0x0051ba50` reads leaf AreaTable flags (falls back to zone flags when leaf flags are unavailable): `0x800` sanctuary, then `0x80` arena, then `0x1000000` combat. These branches return `(type, 1/nil isSubZone)` (two values); ordinary territory returns `(type, nil, factionName)` (three values). App needs explicit Wrath special-area/context projection; do not reinterpret Vanilla `is_arena` as `isSubZone`. Native evidence: `/tmp/azb-ui-live-errors-native.log` (pinned Wow.exe SHA256 `c6f9209840a8a5941538bcda0e63c4bf445a154b6c1c9c7397be31cebabc289c`). |
 | Drunk scaling | pending | Numeric-policy question; do not infer a field move. |
 | Highest lifetime rank offset | not-a-bug | Offset retained; no demonstrated move. |
 | Gameobject consumed flag masks | not-a-bug | Numeric agreement; NO_INTERACT/NOT_SELECTABLE wording alone proves no collision. |

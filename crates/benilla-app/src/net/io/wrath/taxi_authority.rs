@@ -1,8 +1,25 @@
 use super::*;
 
 impl MovementAuthorityHandle {
-    pub(super) fn send_logout<T>(&self, send: impl FnOnce() -> T) -> T {
-        self.revoke();
+    // Native 006b1930 only sets the pending flag. Server root/unroot owns freezing;
+    // neither request nor cancel may revoke or recreate ground/taxi authority.
+    pub(super) fn send_logout(&self, send: impl FnOnce() -> Result<()>) -> Result<()> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || state.logout_pending {
+            return Ok(());
+        }
+        state.logout_pending = true;
+        send()
+    }
+
+    pub(super) fn send_logout_cancel(&self, send: impl FnOnce() -> Result<()>) -> Result<()> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(());
+        }
+        // Native 006b18c0 clears immediately without LOGOUT_CANCEL; 006b0900
+        // emits that event only if pending remains set when the untagged ACK arrives.
+        state.logout_pending = false;
         send()
     }
 
@@ -27,7 +44,13 @@ impl MovementAuthorityHandle {
             return;
         }
         // Preserve the consumed marker for a duplicate delivery of the same server spline.
-        if *flying && !stop && !cyclic && transport.is_none() {
+        if !state.transfer_waiting
+            && !state.transfer_transport
+            && *flying
+            && !stop
+            && !cyclic
+            && transport.is_none()
+        {
             if state.taxi_spline.map(|(id, _)| id) != Some(*spline_id) {
                 state.taxi_spline = Some((*spline_id, false));
             }

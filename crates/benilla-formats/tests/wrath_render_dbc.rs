@@ -24,14 +24,43 @@ fn installed_wrath_renderer_tables_resolve_benchone_human_male_and_nearby_displa
     let sections = CharSections::load(&mut chain).expect("Wrath character body textures");
     let geosets = CharacterGeosets::load(&mut chain).expect("Wrath character geosets");
     // Installed Human/Male hair style 1 maps to geoset 2; facial style 1 selects
-    // variations [1, 2, 1]. Check the projection, not merely successful parsing.
+    // variations [1, 2, 1], plus raw fields 6/7 = 0/0 selecting 1600/1700.
+    // Check the native base-plus-field projection, not merely successful parsing.
     let visible = geosets.visible_geosets(1, 0, 1, 1, &Default::default());
     assert_eq!(
         (0..=1700)
             .filter(|id| visible.contains(id))
             .collect::<Vec<_>>(),
-        [0, 2, 101, 201, 302, 401, 501, 601, 702, 801, 901, 1001, 1101, 1201, 1301, 1401, 1501]
+        [
+            0, 2, 101, 201, 302, 401, 501, 601, 702, 801, 901, 1001, 1101, 1201, 1301, 1401, 1501,
+            1600, 1700
+        ]
     );
+    let mut benchone = geosets.visible_geosets(1, 0, 0, 0, &Default::default());
+    assert!(!sections.face_has_eye_glow(1, 0, 0, 0));
+    geosets.apply_eye_glow(&mut benchone, 1, sections.face_has_eye_glow(1, 0, 0, 0));
+    let mut dk = geosets.visible_geosets(1, 0, 0, 0, &Default::default());
+    geosets.apply_eye_glow(&mut dk, 6, false);
+    assert!(dk.contains(&1703), "DK retains its authored glow cards");
+    let parts =
+        benilla_formats::load_m2_mesh(&mut chain, r"Character\Human\Male\HumanMale.m2").unwrap();
+    let dk_eyes: Vec<_> = parts.iter().filter(|p| p.geoset_id == 1703).collect();
+    assert!(
+        !dk_eyes.is_empty(),
+        "installed HumanMale carries DK eye cards"
+    );
+    for eyes in dk_eyes {
+        assert!(eyes
+            .texture
+            .as_ref()
+            .unwrap()
+            .to_ascii_lowercase()
+            .ends_with("deathknighteyeglow.blp"));
+        assert!(
+            !benchone.contains(&eyes.geoset_id),
+            "warrior must not draw DK eye glow"
+        );
+    }
     let items = load_item_display_catalog(&mut chain).expect("Wrath item displays");
     let gameobjects = load_gameobject_catalog(&mut chain).expect("Wrath gameobject displays");
 

@@ -82,3 +82,29 @@ fn malformed_headers_lengths_and_strings_fail() {
     assert!(parse_liquid_catalogs(&dbc(&[row(2, 0)], b"\0name\0path"), &mat).is_err());
     assert!(parse_liquid_catalogs(&dbc(&[row(2, 0)], b"\0name\0\xff\0"), &mat).is_err());
 }
+
+#[test]
+fn semantic_kind_uses_type_word_not_id_or_render_selector() {
+    use crate::LiquidKind;
+    for (category, expected) in [
+        (0, Some(LiquidKind::Still)),
+        (1, Some(LiquidKind::Ocean)),
+        (2, Some(LiquidKind::Magma)),
+        (3, Some(LiquidKind::Slime)),
+        (4, None),
+        (u32::MAX, None),
+    ] {
+        let mut raw = row(0x1239, 7);
+        raw[3] = category;
+        let catalogs =
+            parse_liquid_catalogs(&dbc(&[raw], b"\0name\0path\0"), &dbc(&[[7, 2, 0]], b"\0"))
+                .unwrap();
+        let liquid = catalogs.liquid_type(0x1239).unwrap();
+        assert_eq!(liquid.kind(), expected);
+        assert_eq!(
+            catalogs.material_for(liquid).unwrap().raw_render_selector(),
+            2
+        );
+        assert!(catalogs.liquid_type(0x1238).is_none());
+    }
+}

@@ -74,7 +74,12 @@ fn stale_epoch_and_retirement_refuse_pending_taxi_ack() {
     old.revoke();
     assert_eq!(ack(&current, 88), 1);
     current.observe_taxi_spline(&spline(7, 90));
-    current.send_logout(|| assert_eq!(ack(&current, 90), 0));
+    current.send_logout(|| Ok(())).unwrap();
+    assert_eq!(ack(&current, 90), 1);
+    // Revoke a still-outstanding spline, not merely an already-consumed ACK.
+    current.observe_taxi_spline(&spline(7, 92));
+    current.revoke();
+    assert_eq!(ack(&current, 92), 0);
     assert_eq!(ack(&current, 90), 0);
 
     let next = ready(&shared, 3);

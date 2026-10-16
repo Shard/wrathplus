@@ -146,6 +146,14 @@ pub(super) fn release_post_snap_hold(
     }
     // The worldport ack, the reference's post-load `0xDC`, goes at either end of the hold: the
     // server keeps an unacked transfer out of world until logout.
+    if !player.settling {
+        if let (Some(token), Some(net)) = (player.native_worldport_ack, net_cmds.as_deref()) {
+            player.native_worldport_ack = None;
+            let _ = net
+                .0
+                .send(crate::net::ClientCommand::NativeWorldportAck(token));
+        }
+    }
     if !player.settling && player.owes_worldport_ack {
         if let Some(net) = net_cmds.as_deref() {
             player.owes_worldport_ack = false;
@@ -402,6 +410,40 @@ mod tests {
         // The same facts, now about the right tile: stale clears and the hold ends at once.
         step(&mut app, 0.05, |p| p.focus_tile = Some(own_tile()));
         assert!(!settling(&mut app), "matching residency must still release");
+    }
+
+    #[test]
+    fn native_ack_waits_for_release_and_preserves_transfer_identity_once() {
+        let mut app = app();
+        let (tx, rx) = crossbeam_channel::unbounded();
+        app.insert_resource(crate::net::NetCommands(tx));
+        let token = benilla_protocol::wrath_transfer::Token {
+            epoch: 8,
+            sequence: 19,
+        };
+        {
+            let mut player = app.world_mut().resource_mut::<Player>();
+            player.world_stale = false;
+            player.native_worldport_ack = Some(token);
+        }
+        step(&mut app, 0.1, |p| {
+            p.total = 2000;
+            p.ready = 1500;
+            p.colliders_pending = 5;
+            p.scene_ready = false;
+        });
+        assert!(rx.try_recv().is_err());
+        step(&mut app, 0.1, |p| {
+            p.ready = 2000;
+            p.colliders_pending = 0;
+            p.scene_ready = true;
+        });
+        let sent: Vec<_> = rx.try_iter().collect();
+        assert!(
+            matches!(sent.as_slice(), [crate::net::ClientCommand::NativeWorldportAck(t)] if *t == token)
+        );
+        step(&mut app, 0.1, |_| {});
+        assert!(rx.try_recv().is_err());
     }
 
     /// The ack is the reference's post-load `0xDC`, so it rides the release, never the snap.

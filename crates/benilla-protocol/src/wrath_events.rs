@@ -210,6 +210,60 @@ impl WrathEventAdapter {
         client_time_ms: u32,
     ) -> Result<WrathDispatch, WrathEventError> {
         match opcode {
+            opcode if crate::wrath_inventory::OPCODES.contains(&opcode) => Ok(match crate::wrath_inventory::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            opcode if crate::wrath_exchange::OPCODES.contains(&opcode) => Ok(match crate::wrath_exchange::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0214 | 0x0147| 0x02cb | 0x02fa | 0x031e | 0x031f | 0x0320 | 0x0329 | 0x032b | 0x033b | 0x0396 | 0x04eb | 0x0506 => Ok(match crate::wrath_instance_control::decode(opcode, body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathInstanceControl { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0402 => Ok(match crate::wrath_mirror_image::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathMirrorImage { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x04f7 => Ok(match crate::wrath_ui_timer::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathUiTimer { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0133 => Ok(match crate::wrath_spell_failure::decode_spell(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathSpellFailure(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0138 => Ok(match crate::wrath_spell_failure::decode_pet(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathPetCastFailed(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x01fc => Ok(match crate::wrath_environment::decode_damage(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathEnvironmentalDamage(packet)], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x02bd => Ok(match crate::wrath_environment::decode_durability(body) {
+                Ok(()) => handled(vec![SessionEvent::DurabilityDamageDeath], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0063 | 0x0065 => Ok(match crate::wrath_who::decode(opcode, body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathWho { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0501 => Ok(match crate::wrath_quests_completed::decode(body) {
+                Ok(packet) => handled(vec![SessionEvent::WrathQuestsCompleted { packet }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            0x0297 => {
+                Ok(match crate::wrath_mail_mutations::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathMailMutation { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            0x0053 => Ok(match crate::wrath_pet_name::decode(body) {
+                Ok(response) => handled(vec![SessionEvent::WrathPetName { response }], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             0x0096 | 0x03b3 => {
                 Ok(match crate::wrath_chat::decode(opcode, body) {
                     Ok(message) => handled(vec![SessionEvent::WrathChat { message }], Vec::new(), Vec::new()),

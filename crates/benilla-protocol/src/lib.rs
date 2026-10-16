@@ -8,6 +8,7 @@ pub mod messages;
 pub mod wire;
 pub mod world;
 pub mod wrath_auth;
+pub mod wrath_environment;
 pub mod wrath_bind;
 pub mod wrath_auras;
 pub mod wrath_authority;
@@ -27,6 +28,9 @@ pub mod wrath_guild_bank_tab;
 pub mod wrath_guild_rank;
 pub mod wrath_lfg;
 pub mod wrath_instance;
+pub mod wrath_instance_control;
+pub mod wrath_inventory;
+pub mod wrath_exchange;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;
@@ -44,6 +48,7 @@ pub mod wrath_stable;
 pub mod wrath_vendor;
 pub mod wrath_channel;
 pub mod wrath_mail;
+pub mod wrath_mail_mutations;
 pub mod wrath_roll;
 pub mod wrath_taxi;
 pub mod wrath_taxi_ack;
@@ -308,3 +313,15 @@ mod wrath_native_stream_tests;
 pub mod wrath_pet;
 
 pub mod wrath_chat;
+
+pub mod wrath_trade;
+pub mod wrath_transfer;
+
+pub mod wrath_logout;
+
+pub mod wrath_pet_name;
+
+pub mod wrath_quests_completed;
+pub mod wrath_ui_timer;
+pub mod wrath_mirror_image;
+pub mod wrath_spell_failure;

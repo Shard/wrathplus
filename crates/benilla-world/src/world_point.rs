@@ -257,6 +257,138 @@ mod tests {
     use crate::wmo_portal::WmoRoom;
     use bevy::ecs::system::RunSystemOnce;
 
+    const ABBEY_ANCHOR: [f32; 3] = [-8910.12, -144.18, 81.97];
+
+    /// Consumer fixture for NSABBEY groups 3/5: Wrath resolved liquidID 0 and no MLIQ
+    /// mean dry. Exercise the production spawn mapping for the installed raw zero/no-MLIQ fields.
+    fn abbey_world() -> (World, Entity) {
+        let mut world = World::new();
+        init_world_point_resources(&mut world);
+        let placement = world
+            .spawn(crate::wmo_portal::WmoPortalInstance {
+                handle: Handle::default(),
+                // Queries use the already-resolved room, not placement geometry.
+                world_from_local: bevy::math::Affine3A::IDENTITY,
+                name_set: 0,
+                visible: vec![true; 14],
+                interior_fog: vec![false; 14],
+                liquid_visited: vec![false; 14],
+                flooded: vec![native_flood_kind(0, None); 14],
+            })
+            .id();
+        (world, placement)
+    }
+
+    fn native_flood_kind(
+        raw: u32,
+        kind: Option<benilla_formats::LiquidKind>,
+    ) -> Option<benilla_formats::LiquidKind> {
+        fn chunk(tag: &[u8; 4], data: &[u8]) -> Vec<u8> {
+            let mut b = tag.to_vec();
+            b.extend((data.len() as u32).to_le_bytes());
+            b.extend(data);
+            b
+        }
+        let mut mohd = vec![0; 64];
+        mohd[60..64].copy_from_slice(&5u32.to_le_bytes());
+        let root = benilla_formats::parse_wmo_root(&chunk(b"DHOM", &mohd)).unwrap();
+        let mut mogp = vec![0; 68];
+        mogp[52..56].copy_from_slice(&raw.to_le_bytes());
+        let native =
+            benilla_formats::wmo_group_wrath_liquid(&chunk(b"PGOM", &mogp), &root).unwrap();
+        benilla_assets::WmoLiquidState { native, kind }.flood_kind()
+    }
+
+    #[test]
+    fn bounded_group_flood_fix_keeps_grid_and_nonzero_cases() {
+        use crate::wmo_portal::WmoPortalInstance;
+        use benilla_formats::LiquidKind;
+        assert_eq!(WmoPortalInstance::group_flood(0, false), None);
+        assert_eq!(
+            WmoPortalInstance::group_flood(0, true),
+            Some(LiquidKind::Still)
+        );
+        assert_eq!(
+            WmoPortalInstance::group_flood(4, false),
+            Some(LiquidKind::Still)
+        );
+        assert_eq!(WmoPortalInstance::group_flood(15, false), None);
+    }
+
+    #[test]
+    fn wrath_abbey_zero_liquid_id_without_mliq_is_dry_in_the_players_room() {
+        let (mut world, placement) = abbey_world();
+        for group in [3, 5] {
+            let room = WmoRoom {
+                instance: placement,
+                group,
+            };
+            world.insert_resource(PlayerWmoRoom(Some(room)));
+            world
+                .run_system_once(move |point: WorldPoint| {
+                    assert_eq!(
+                        point.claim(Subject::Player),
+                        LiquidClaim::Inside {
+                            room,
+                            flooded: None
+                        },
+                        "must query the loaded Abbey placement, not an empty outdoor world"
+                    );
+                    assert!(point.room_settled(Subject::Player));
+                    assert_eq!(point.liquid_at(Subject::Player, ABBEY_ANCHOR), None);
+                    assert_eq!(point.water_surface_at(Subject::Player, ABBEY_ANCHOR), None);
+                })
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn explicit_nonzero_no_grid_flood_still_answers_through_world_point() {
+        use benilla_formats::LiquidKind;
+
+        let (mut world, placement) = abbey_world();
+        // Synthetic positive control: unlike Abbey's resolved zero, an explicit nonzero
+        // native liquid resolves to Some(kind) and keeps the whole-group override, no MLIQ.
+        for group in [3, 5] {
+            world
+                .get_mut::<crate::wmo_portal::WmoPortalInstance>(placement)
+                .unwrap()
+                .flooded[group as usize] = native_flood_kind(13, Some(LiquidKind::Still));
+            let room = WmoRoom {
+                instance: placement,
+                group,
+            };
+            world.insert_resource(PlayerWmoRoom(Some(room)));
+            world
+                .run_system_once(move |point: WorldPoint| {
+                    assert_eq!(
+                        point.claim(Subject::Player),
+                        LiquidClaim::Inside {
+                            room,
+                            flooded: Some(LiquidKind::Still),
+                        }
+                    );
+                    assert_eq!(
+                        point.liquid_at(Subject::Player, ABBEY_ANCHOR),
+                        Some(LiquidHit {
+                            surface_z: f32::MAX,
+                            kind: LiquidKind::Still,
+                        })
+                    );
+                })
+                .unwrap();
+            world
+                .get_mut::<crate::wmo_portal::WmoPortalInstance>(placement)
+                .unwrap()
+                .flooded[group as usize] = None;
+            world
+                .run_system_once(|point: WorldPoint| {
+                    assert_eq!(point.liquid_at(Subject::Player, ABBEY_ANCHOR), None);
+                })
+                .unwrap();
+        }
+    }
+
     #[test]
     fn a_unit_subject_resolves_to_that_units_own_room() {
         let mut world = World::new();

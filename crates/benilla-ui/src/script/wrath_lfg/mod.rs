@@ -43,6 +43,8 @@ pub(crate) struct State {
     groups: Arc<Vec<WrathLfgGroup>>,
     catalog: Arc<WrathLfgCatalog>,
     expansion: Option<u8>,
+    locks: Arc<WrathLfgLockSnapshot>,
+    presentation: Arc<WrathLfgPresentation>,
 }
 
 impl UiScript {
@@ -57,11 +59,19 @@ impl UiScript {
     }
 }
 
+mod locks;
+pub use locks::{
+    WrathLfgLock, WrathLfgLockSnapshot, WrathLfgMemberLocks, WrathLfgPlayerLocks,
+    WrathLfgPresentation, WrathLfgPreview, WrathLfgRewardItem,
+};
+
 mod choices;
 mod order;
+mod preferences;
 pub use choices::WrathLfgGroup;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    preferences::install(lua)?;
     choices::install(lua)?;
     order::install(lua)?;
     lua.globals().set(

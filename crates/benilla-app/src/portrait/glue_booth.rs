@@ -49,6 +49,7 @@ pub(crate) struct CreateLook {
 /// The select screen's look: the roster entry's appearance and equipment, off `SMSG_CHAR_ENUM`.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SelectLook {
+    pub(crate) class: u8,
     pub(crate) race: u8,
     pub(crate) sex: u8,
     pub(crate) skin: u8,
@@ -79,6 +80,7 @@ impl From<&benilla_protocol::Character> for SelectLook {
     fn from(c: &benilla_protocol::Character) -> Self {
         Self {
             race: c.race,
+            class: c.class,
             sex: c.gender.min(1),
             skin: c.skin,
             face: c.face,

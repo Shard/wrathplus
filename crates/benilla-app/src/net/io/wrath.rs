@@ -5,6 +5,9 @@
 
 mod recorder;
 
+#[path = "wrath/transfer_authority.rs"]
+mod transfer_authority;
+
 use std::io;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -35,11 +38,8 @@ use crate::net::{
 };
 
 // AzerothCore 3.3.5a Opcodes.h, also used by the validated `wrath_objects` probe.
-const CMSG_LOGOUT_REQUEST: u32 = 0x04b;
 const CMSG_ITEM_QUERY_SINGLE: u32 = 0x056;
 const SMSG_CHARACTER_LOGIN_FAILED: u16 = 0x041;
-const SMSG_LOGOUT_RESPONSE: u16 = 0x04c;
-const SMSG_LOGOUT_COMPLETE: u16 = 0x04d;
 const CMSG_PING: u32 = 0x01dc;
 const SMSG_PONG: u16 = 0x01dd;
 const CMSG_SET_ACTIVE_MOVER: u32 = 0x026a;
@@ -295,7 +295,7 @@ fn run(
             return Ok(WrathCycle::Repark);
         }
         send(events, SessionEvent::WrathAccountExpansion { expansion: session.account_expansion() })?;
-        let characters = normalize_characters(session.char_enum().context("Wrath roster")?);
+        let mut characters = normalize_characters(session.char_enum().context("Wrath roster")?);
         if canceled() {
             return Ok(WrathCycle::Repark);
         }
@@ -330,8 +330,21 @@ fn run(
                     Err(_) => return Ok(WrathCycle::Exit),
                     Ok(CharRequest::Enter(guid)) => break guid,
                     Ok(CharRequest::Abandon) => return Ok(WrathCycle::Repark),
-                    Ok(CharRequest::Create(_)) | Ok(CharRequest::Delete(_)) => {
-                        bail!("Wrath character mutation is not integrated; reconnecting without sending a Vanilla packet")
+                    Ok(CharRequest::Create(request)) => {
+                        let native = benilla_protocol::wrath_world::WrathCreateCharacter {
+                            name: request.name, race: request.race, class: request.class,
+                            gender: request.gender, skin: request.skin, face: request.face,
+                            hair_style: request.hair_style, hair_color: request.hair_color,
+                            facial_hair: request.facial_hair, outfit_id: 0,
+                        };
+                        let code = session.create_character_result(&native)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Create, code, |event| send(events, event))?;
+                    }
+                    Ok(CharRequest::Delete(guid)) => {
+                        let code = session.delete_character_result(guid)?;
+                        finish_character_action(&mut session, &mut characters, realm_record.clone(),
+                            benilla_protocol::CharAction::Delete, code, |event| send(events, event))?;
                     }
                 }
             }
@@ -410,24 +423,13 @@ fn run(
                     send(events, SessionEvent::CharacterLoginFailed { result })?;
                     return Ok(WrathCycle::LoggedOut);
                 }
-                SMSG_LOGOUT_RESPONSE => {
-                    if packet.body.len() != 5 {
-                        bail!(
-                            "Wrath SMSG_LOGOUT_RESPONSE has {} bytes, expected 5",
-                            packet.body.len()
-                        );
+                opcode if benilla_protocol::wrath_logout::handles(opcode) => {
+                    let Some(event) = authority.logout_event(opcode, &packet.body)? else { continue; };
+                    let complete = matches!(event, SessionEvent::LoggedOut);
+                    send(events, event)?;
+                    if complete {
+                        return Ok(WrathCycle::LoggedOut);
                     }
-                    send(
-                        events,
-                        SessionEvent::LogoutResponse {
-                            reason: u32::from_le_bytes(packet.body[..4].try_into().unwrap()),
-                            instant: packet.body[4] != 0,
-                        },
-                    )?;
-                }
-                SMSG_LOGOUT_COMPLETE => {
-                    send(events, SessionEvent::LoggedOut)?;
-                    return Ok(WrathCycle::LoggedOut);
                 }
                 SMSG_PONG => {
                     let sequence = le_u32_exact(&packet.body, "SMSG_PONG")?;
@@ -435,6 +437,13 @@ fn run(
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
                         .record_pong(sequence);
+                }
+                0x003e | 0x003f | 0x0040 => {
+                    let packet = match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body) {
+                        Ok(packet) => packet,
+                        Err(error) => { authority.revoke(); return Err(error.into()); }
+                    };
+                    authority.publish_transfer(packet, |event| send(events, event))?;
                 }
                 SMSG_CLIENT_CONTROL_UPDATE => {
                     let (mover, allow_move) = client_control_update(&packet.body)?;
@@ -536,7 +545,7 @@ fn dispatch_packet(
             // The adapter's vectors preserve packet/block order. Replies use the sole cipher writer.
             for event in session_events {
                 authority.observe_taxi_spline(&event);
-                if *crate::net::CAST_TRACE {
+                if *crate::net::CAST_TRACE && !matches!(&event, SessionEvent::WrathWho { packet: benilla_protocol::wrath_who::Packet::Whois { .. } }) {
                     bevy::log::info!("net(wrath) RECV {event:?}");
                 }
                 send(events, event)?;
@@ -651,6 +660,11 @@ struct MovementAuthorityState {
     last_order_counter: Option<u32>,
     rooted: bool,
     taxi_spline: Option<(u32, bool)>,
+    logout_pending: bool,
+    transfer_sequence: u64,
+    transfer_ack: Option<benilla_protocol::wrath_transfer::Token>,
+    transfer_waiting: bool,
+    transfer_transport: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -680,6 +694,11 @@ impl MovementAuthority {
             last_order_counter: None,
             rooted: false,
             taxi_spline: None,
+            logout_pending: false,
+            transfer_sequence: 0,
+            transfer_ack: None,
+            transfer_waiting: false,
+            transfer_transport: false,
         };
         MovementAuthorityHandle {
             shared: Arc::clone(self),
@@ -693,6 +712,9 @@ impl MovementAuthorityHandle {
     fn observe_self_create(&self, guid: u64, movement: &MovementPosition) -> Result<()> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(());
+        }
+        if state.transfer_waiting || state.transfer_transport {
             return Ok(());
         }
         if guid != self.self_guid {
@@ -761,9 +783,11 @@ impl MovementAuthorityHandle {
     fn revoke(&self) {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch == self.epoch && state.self_guid == self.self_guid {
+            state.logout_pending = false;
             state.self_control = false;
             state.control_decided = true;
             state.taxi_spline = None;
+            state.transfer_ack = None;
         }
     }
 
@@ -975,13 +999,24 @@ enum WrathRoute {
     TaxiSplineDone,
     SetActiveMover,
     Logout,
+    LogoutCancel,
     NativeItemQuery,
     NativeMelee,
     NativeLoot,
     NativeSession,
     NativeLfg,
     NativeGuild,
+    NativePetNameQuery,
+    NativeWho,
     NativeChat,
+    NativeMailMutation,
+    NativeQuestsCompletedQuery,
+    NativeUiTimerQuery,
+    NativeMirrorImageQuery,
+    NativeInstanceControl,
+    NativeInventory,
+    NativeExchange,
+    NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -994,12 +1029,55 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildInvite { .. } | ClientCommand::GuildAccept | ClientCommand::GuildDecline
         | ClientCommand::GuildPromote { .. } | ClientCommand::GuildDemote { .. } | ClientCommand::GuildRemove { .. }
         | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
+        ClientCommand::NativeInstanceControl(_) => WrathRoute::NativeInstanceControl,
+        ClientCommand::NativeInventory(_)
+        | ClientCommand::OpenItem { .. }
+        | ClientCommand::WrapItem { .. }
+        | ClientCommand::AutoEquipItem { .. }
+        | ClientCommand::SetAmmo { .. }
+        | ClientCommand::SwapInvItem { .. }
+        | ClientCommand::SwapItem { .. }
+        | ClientCommand::AutoStoreBagItem { .. }
+        | ClientCommand::SplitItem { .. }
+        | ClientCommand::DestroyItem { .. }
+        | ClientCommand::BankerActivate { .. }
+        | ClientCommand::BuyBankSlot { .. }
+        | ClientCommand::AutoBankItem { .. }
+        | ClientCommand::AutoStoreBankItem { .. }
+        | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
+        ClientCommand::NativeExchange(_)
+        | ClientCommand::AuctionHello { .. }
+        | ClientCommand::AuctionListItems { .. }
+        | ClientCommand::AuctionListOwnerItems { .. }
+        | ClientCommand::AuctionListBidderItems { .. }
+        | ClientCommand::AuctionSellItem { .. }
+        | ClientCommand::AuctionPlaceBid { .. }
+        | ClientCommand::AuctionRemoveItem { .. }
+        | ClientCommand::LootMasterGive { .. }
+        | ClientCommand::InitiateTrade { .. }
+        | ClientCommand::BeginTrade
+        | ClientCommand::BusyTrade
+        | ClientCommand::IgnoreTrade
+        | ClientCommand::AcceptTrade
+        | ClientCommand::UnacceptTrade
+        | ClientCommand::CancelTrade
+        | ClientCommand::SetTradeGold { .. }
+        | ClientCommand::SetTradeItem { .. }
+        | ClientCommand::ClearTradeItem { .. } => WrathRoute::NativeExchange,
+        ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
+        ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
+        ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
+        ClientCommand::NativeWhoCommand(_) => WrathRoute::NativeWho,
+        ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
         ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
+        ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
         ClientCommand::LootRoll { roll_type, .. } if *roll_type > 3 => WrathRoute::DisabledGameAction,
         ClientCommand::SetActiveMover { .. } => WrathRoute::SetActiveMover,
         ClientCommand::Logout | ClientCommand::ForceLogout => WrathRoute::Logout,
+        ClientCommand::LogoutCancel => WrathRoute::LogoutCancel,
         ClientCommand::Move { .. } => WrathRoute::GroundMovement,
         ClientCommand::ItemQuery { .. } => WrathRoute::NativeItemQuery,
         ClientCommand::Loot { .. }
@@ -1034,6 +1112,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::CastSpellAtSource { .. }
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
+        | ClientCommand::UseItem { .. }
         | ClientCommand::CancelCast { .. }
         | ClientCommand::CancelAura { .. }
         | ClientCommand::GossipHello { .. }
@@ -1091,6 +1170,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::KnockBackAck { .. } => WrathRoute::DisabledMovement,
         _ => WrathRoute::DisabledGameAction,
     }
+}
+
+/// Only implemented wire routes grant command admission. Deferred queries have no writer.
+/// Shape/value validation and epoch/capability checks remain at their existing boundaries.
+pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
+    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery)
 }
 
 fn writer_loop(
@@ -1259,6 +1344,13 @@ fn writer_loop(
                             active.writer.send_raw(opcode, &body)
                         })
                     }
+                    WrathRoute::LogoutCancel => {
+                        let authority = active.authority.clone();
+                        authority.send_logout_cancel(|| {
+                            let (opcode, body) = benilla_protocol::wrath_logout::encode_cancel();
+                            active.writer.send_raw(opcode, &body)
+                        })
+                    }
                     WrathRoute::GroundMovement => send_ground_movement(active, command),
                     WrathRoute::TaxiSplineDone => {
                         let ClientCommand::MoveSplineDone { flags, pos, orientation, spline_id } = command else { unreachable!() };
@@ -1273,6 +1365,61 @@ fn writer_loop(
                     }
                     WrathRoute::NativeMelee => send_melee(active, command),
                     WrathRoute::NativeLoot => send_loot(active, command),
+                    WrathRoute::NativeWorldportAck => {
+                        let ClientCommand::NativeWorldportAck(token) = command else { unreachable!() };
+                        active.authority.send_worldport_ack(token, || active.writer.send_raw(benilla_protocol::wrath_transfer::MSG_MOVE_WORLDPORT_ACK, &[]))
+                    }
+                    WrathRoute::NativeInstanceControl => {
+                        let ClientCommand::NativeInstanceControl(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_instance_control::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeInventory => {
+                        let (opcode, body) = benilla_protocol::wrath_inventory::encode(&inventory_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeExchange => {
+                        let (opcode, body) = exchange_packet(command);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeMirrorImageQuery => {
+                        let ClientCommand::NativeMirrorImageQuery { guid } = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_mirror_image::encode_query(guid);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeUiTimerQuery => {
+                        let (opcode, body) = benilla_protocol::wrath_ui_timer::encode_query();
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeQuestsCompletedQuery => {
+                        let (opcode, body) = benilla_protocol::wrath_quests_completed::encode_query();
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeMailMutation => {
+                        let ClientCommand::NativeMailMutation(command) = command else { unreachable!() };
+                        match native_mail_packet(&command) {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid native mail rejected before send: {error}");
+                                continue;
+                            }
+                        }
+                    }
+                    WrathRoute::NativeWho => {
+                        let ClientCommand::NativeWhoCommand(command) = command else { unreachable!() };
+                        match command.encode() {
+                            Ok(body) => active.writer.send_raw(command.opcode(), &body),
+                            Err(_) => {
+                                bevy::log::warn!("net(wrath): invalid native WHO command rejected before send");
+                                continue;
+                            }
+                        }
+                    }
+                    WrathRoute::NativePetNameQuery => {
+                        let ClientCommand::PetNameQuery { pet_number, guid } = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_pet_name::encode_query(pet_number, guid);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeChat => {
                         let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
                         match benilla_protocol::wrath_chat::encode(&command) {
@@ -1416,6 +1563,85 @@ fn lfg_packet(
 }
 
 /// Queries, the action bar and casting, in build 12340's layouts.
+/// The native trade, auction and master-loot body for a [`WrathRoute::NativeExchange`] command.
+fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
+    use benilla_protocol::wrath_exchange::{encode, Command as X};
+    use benilla_protocol::wrath_trade::Command as T;
+    let trade = |command: T| (command.opcode(), command.encode());
+    match command {
+        ClientCommand::NativeExchange(command) => encode(&command),
+        ClientCommand::AuctionHello { auctioneer } => encode(&X::AuctionHello { auctioneer }),
+        ClientCommand::AuctionListItems {
+            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
+            sub_category, quality, usable,
+        } => encode(&X::AuctionListItems {
+            auctioneer, list_from, searched_name, level_min, level_max, slot_id, main_category,
+            sub_category, quality, usable,
+        }),
+        ClientCommand::AuctionListOwnerItems { auctioneer, list_from } => {
+            encode(&X::AuctionListOwner { auctioneer, list_from })
+        }
+        ClientCommand::AuctionListBidderItems { auctioneer, list_from, auction_ids } => {
+            encode(&X::AuctionListBidder { auctioneer, list_from, auction_ids })
+        }
+        ClientCommand::AuctionSellItem { auctioneer, item_guid, bid, buyout, etime_minutes, count } => {
+            encode(&X::AuctionSell { auctioneer, items: vec![(item_guid, count)], bid, buyout, etime_minutes })
+        }
+        ClientCommand::AuctionPlaceBid { auctioneer, auction_id, price } => {
+            encode(&X::AuctionPlaceBid { auctioneer, auction_id, price })
+        }
+        ClientCommand::AuctionRemoveItem { auctioneer, auction_id } => {
+            encode(&X::AuctionRemove { auctioneer, auction_id })
+        }
+        ClientCommand::LootMasterGive { guid, slot, target } => {
+            encode(&X::LootMasterGive { loot: guid, slot, target })
+        }
+        ClientCommand::InitiateTrade { target } => trade(T::Initiate { target }),
+        ClientCommand::BeginTrade => trade(T::Begin),
+        ClientCommand::BusyTrade => trade(T::Busy),
+        ClientCommand::IgnoreTrade => trade(T::Ignore),
+        // AC skips the word; the native client sends 1.
+        ClientCommand::AcceptTrade => trade(T::Accept { raw: 1 }),
+        ClientCommand::UnacceptTrade => trade(T::Unaccept),
+        ClientCommand::CancelTrade => trade(T::Cancel),
+        ClientCommand::SetTradeGold { copper } => trade(T::SetGold { gold: copper }),
+        ClientCommand::SetTradeItem { trade_slot, bag, slot } => trade(T::SetItem { trade_slot, bag, slot }),
+        ClientCommand::ClearTradeItem { trade_slot } => trade(T::ClearItem { trade_slot }),
+        other => unreachable!("not an exchange route: {other:?}"),
+    }
+}
+
+/// The native item/inventory body for a [`WrathRoute::NativeInventory`] command.
+fn inventory_command(command: ClientCommand) -> benilla_protocol::wrath_inventory::Command {
+    use benilla_protocol::wrath_inventory::Command as I;
+    match command {
+        ClientCommand::NativeInventory(command) => command,
+        ClientCommand::OpenItem { bag_index, slot } => I::OpenItem { bag: bag_index, slot },
+        ClientCommand::WrapItem { gift_bag, gift_slot, item_bag, item_slot } => {
+            I::WrapItem { gift_bag, gift_slot, item_bag, item_slot }
+        }
+        ClientCommand::AutoEquipItem { bag_index, slot } => I::AutoEquipItem { bag: bag_index, slot },
+        ClientCommand::SetAmmo { entry } => I::SetAmmo { entry },
+        ClientCommand::SwapInvItem { src_slot, dst_slot } => I::SwapInvItem { src_slot, dst_slot },
+        ClientCommand::SwapItem { dst_bag, dst_slot, src_bag, src_slot } => {
+            I::SwapItem { dst_bag, dst_slot, src_bag, src_slot }
+        }
+        ClientCommand::AutoStoreBagItem { src_bag, src_slot, dst_bag } => {
+            I::AutoStoreBagItem { src_bag, src_slot, dst_bag }
+        }
+        ClientCommand::SplitItem { src_bag, src_slot, dst_bag, dst_slot, count } => {
+            I::SplitItem { src_bag, src_slot, dst_bag, dst_slot, count: count.into() }
+        }
+        ClientCommand::DestroyItem { bag_index, slot, count } => I::DestroyItem { bag: bag_index, slot, count },
+        ClientCommand::BankerActivate { guid } => I::BankerActivate { banker: guid },
+        ClientCommand::BuyBankSlot { guid } => I::BuyBankSlot { banker: guid },
+        ClientCommand::AutoBankItem { bag, slot } => I::AutoBankItem { bag, slot },
+        ClientCommand::AutoStoreBankItem { bag, slot } => I::AutoStoreBankItem { bag, slot },
+        ClientCommand::PageTextQuery { page_id, guid } => I::PageTextQuery { page_id, guid },
+        other => unreachable!("not an inventory route: {other:?}"),
+    }
+}
+
 fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     use benilla_protocol::wrath_group as g;
     use benilla_protocol::wrath_npc as n;
@@ -1455,6 +1681,11 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         }
         ClientCommand::CastSpellItem { spell_id, item_guid } => {
             cast(spell_id, CastTarget::Item(item_guid))
+        }
+        // One cast counter for both opcodes: the server echoes it in either's cast results.
+        ClientCommand::UseItem { bag_index, slot, spell_id, item_guid, target, .. } => {
+            let count = CAST_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed).wrapping_add(1);
+            benilla_protocol::wrath_inventory::encode_use_item(count, bag_index, slot, spell_id, item_guid, &target)
         }
         ClientCommand::CancelCast { spell_id } => {
             (s::CMSG_CANCEL_CAST, s::encode_cancel_cast(spell_id))
@@ -1811,7 +2042,7 @@ pub(crate) fn ping_packet(sequence: u32, last_rtt_ms: u32) -> (u32, Vec<u8>) {
 }
 
 pub(crate) fn logout_packet() -> (u32, Vec<u8>) {
-    (CMSG_LOGOUT_REQUEST, Vec::new())
+    benilla_protocol::wrath_logout::encode_request()
 }
 
 pub(crate) fn item_query_packet(entry: u32, guid: u64) -> (u32, Vec<u8>) {
@@ -1926,7 +2157,7 @@ mod tests {
     use super::*;
     use benilla_protocol::wrath_world::WrathCharEnumItem;
 
-    fn test_self_position() -> MovementPosition {
+    pub(super) fn test_self_position() -> MovementPosition {
         MovementPosition::Stationary(benilla_protocol::wrath_gameplay::Position {
             x: 1.0,
             y: 2.0,
@@ -2115,6 +2346,62 @@ mod tests {
         ] {
             assert_eq!(route(&command), WrathRoute::NativeSession);
             assert_eq!(session_packet(command), (opcode, body));
+        }
+    }
+
+    #[test]
+    fn item_commands_route_native_inventory_bodies_and_use_item_shares_the_cast_counter() {
+        for (command, opcode, body) in [
+            (ClientCommand::SwapInvItem { src_slot: 23, dst_slot: 24 }, 0x10d, vec![24, 23]),
+            (
+                ClientCommand::SplitItem { src_bag: 255, src_slot: 23, dst_bag: 19, dst_slot: 1, count: 5 },
+                0x10e,
+                vec![255, 23, 19, 1, 5, 0, 0, 0],
+            ),
+            (ClientCommand::DestroyItem { bag_index: 255, slot: 23, count: 0 }, 0x111, vec![255, 23, 0, 0, 0, 0]),
+            (ClientCommand::BankerActivate { guid: 7 }, 0x1b7, 7u64.to_le_bytes().to_vec()),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeInventory);
+            assert_eq!(benilla_protocol::wrath_inventory::encode(&inventory_command(command)), (opcode, body));
+        }
+        let use_item = || ClientCommand::UseItem {
+            bag_index: 255,
+            slot: 23,
+            spell_index: 0,
+            spell_id: 8690,
+            item_guid: 0x4000_0000_0000_0001,
+            target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
+        };
+        assert_eq!(route(&use_item()), WrathRoute::NativeSession);
+        // The cast count (byte 2) comes from the shared counter, which parallel tests also advance.
+        let (opcode, body) = session_packet(use_item());
+        assert_eq!(opcode, 0x0ab);
+        assert_eq!(&body[..2], &[255, 23]);
+        assert_eq!(&body[3..7], &8690u32.to_le_bytes());
+        assert_eq!(&body[7..15], &0x4000_0000_0000_0001u64.to_le_bytes());
+        assert_eq!(&body[15..], &[0; 9]);
+    }
+
+    #[test]
+    fn trade_auction_and_master_loot_route_native_bodies() {
+        for (command, opcode, body) in [
+            (ClientCommand::AcceptTrade, 0x11a, vec![1, 0, 0, 0]),
+            (ClientCommand::SetTradeItem { trade_slot: 6, bag: 255, slot: 23 }, 0x11d, vec![6, 255, 23]),
+            (ClientCommand::CancelTrade, 0x11c, vec![]),
+            (
+                ClientCommand::AuctionSellItem { auctioneer: 7, item_guid: 9, bid: 1, buyout: 2, etime_minutes: 720, count: 20 },
+                0x256,
+                [7u64.to_le_bytes().as_slice(), &1u32.to_le_bytes(), &9u64.to_le_bytes(), &20u32.to_le_bytes(),
+                    &1u32.to_le_bytes(), &2u32.to_le_bytes(), &720u32.to_le_bytes()].concat(),
+            ),
+            (
+                ClientCommand::LootMasterGive { guid: 7, slot: 3, target: 9 },
+                0x2a3,
+                [7u64.to_le_bytes().as_slice(), &[3], &9u64.to_le_bytes()].concat(),
+            ),
+        ] {
+            assert_eq!(route(&command), WrathRoute::NativeExchange);
+            assert_eq!(exchange_packet(command), (opcode, body));
         }
     }
 
@@ -3119,3 +3406,108 @@ mod arena_team_tests;
 #[cfg(test)]
 #[path = "wrath/chat_tests.rs"]
 mod chat_tests;
+
+fn native_character_action_succeeded(action: benilla_protocol::CharAction, code: u8) -> bool {
+    use benilla_protocol::wrath_world::{CHAR_CREATE_SUCCESS, CHAR_DELETE_SUCCESS};
+    match action {
+        benilla_protocol::CharAction::Create => code == CHAR_CREATE_SUCCESS,
+        benilla_protocol::CharAction::Delete => code == CHAR_DELETE_SUCCESS,
+    }
+}
+
+fn finish_character_action(
+    session: &mut WrathWorldSession,
+    characters: &mut Vec<Character>,
+    realm: Option<benilla_protocol::RealmInfo>,
+    action: benilla_protocol::CharAction,
+    code: u8,
+    publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    publish_character_action(action, code, || {
+        *characters = normalize_characters(session.char_enum().context("Wrath refreshed roster")?);
+        Ok(SessionEvent::CharacterList { characters: characters.clone(), realm })
+    }, publish)
+}
+
+// Refresh must complete and publish before success. A transport failure never fabricates a result.
+fn publish_character_action(
+    action: benilla_protocol::CharAction,
+    code: u8,
+    refresh: impl FnOnce() -> Result<SessionEvent>,
+    mut publish: impl FnMut(SessionEvent) -> Result<()>,
+) -> Result<()> {
+    if native_character_action_succeeded(action, code) {
+        publish(refresh()?)?;
+    }
+    publish(SessionEvent::WrathCharActionResult { action, code })
+}
+
+#[cfg(test)]
+#[path = "wrath/character_tests.rs"]
+mod character_tests;
+
+fn native_mail_packet(command: &benilla_protocol::wrath_mail_mutations::Command) -> std::io::Result<(u32, Vec<u8>)> {
+    Ok((command.opcode(), command.encode()?))
+}
+
+#[cfg(test)]
+#[path = "wrath/mail_mutation_tests.rs"]
+mod mail_mutation_tests;
+impl MovementAuthorityHandle {
+    fn logout_event(&self, opcode: u16, body: &[u8]) -> io::Result<Option<SessionEvent>> {
+        use benilla_protocol::wrath_logout::{decode, Packet};
+        let packet = decode(opcode, body)?;
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(None);
+        }
+        Ok(match packet {
+            Packet::Response { reason, instant } => {
+                if reason != 0 { state.logout_pending = false; }
+                Some(SessionEvent::LogoutResponse { reason, instant: instant != 0 })
+            }
+            Packet::Complete => {
+                state.logout_pending = false;
+                state.self_control = false;
+                state.control_decided = true;
+                state.taxi_spline = None;
+                state.transfer_ack = None;
+                Some(SessionEvent::LoggedOut)
+            }
+            Packet::CancelAck => {
+                let pending = std::mem::take(&mut state.logout_pending);
+                pending.then_some(SessionEvent::LogoutCancelled)
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "wrath/logout_tests.rs"]
+mod logout_tests;
+
+#[cfg(test)]
+#[path = "wrath/pet_name_tests.rs"]
+mod pet_name_tests;
+
+#[cfg(test)]
+#[path = "wrath/who_tests.rs"]
+mod who_tests;
+
+#[cfg(test)]
+#[test]
+fn completed_quest_query_is_native_and_empty() {
+    assert_eq!(route(&ClientCommand::NativeQuestsCompletedQuery), WrathRoute::NativeQuestsCompletedQuery);
+    assert_eq!(benilla_protocol::wrath_quests_completed::encode_query(), (0x500, vec![]));
+}
+
+#[cfg(test)]
+#[path = "wrath_admission_tests.rs"]
+mod admission_tests;
+
+#[cfg(test)]
+#[test]
+fn ui_timer_query_is_native_and_empty() {
+    assert_eq!(route(&ClientCommand::NativeUiTimerQuery), WrathRoute::NativeUiTimerQuery);
+    assert_eq!(benilla_protocol::wrath_ui_timer::encode_query(), (0x4f6, vec![]));
+}

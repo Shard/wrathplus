@@ -30,6 +30,13 @@ mod session;
 mod world;
 pub(crate) mod wrath_auras;
 mod wrath_notices;
+mod wrath_mail_capture;
+mod wrath_quests_completed_capture;
+mod wrath_ui_timer_capture;
+mod wrath_mirror_image_capture;
+mod wrath_instance_control_capture;
+mod wrath_inventory_capture;
+mod wrath_exchange_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -121,6 +128,13 @@ impl Plugin for NetPlugin {
         objects::register(app);
         wrath_auras::register(app);
         wrath_notices::register(app);
+        wrath_mail_capture::register(app);
+        wrath_quests_completed_capture::register(app);
+        wrath_ui_timer_capture::register(app);
+        wrath_mirror_image_capture::register(app);
+        wrath_instance_control_capture::register(app);
+        wrath_inventory_capture::register(app);
+        wrath_exchange_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -164,6 +178,7 @@ impl Plugin for NetPlugin {
             .add_message::<RealmListMessage>()
             .add_message::<CharListMessage>()
             .add_message::<CharActionResultMessage>()
+            .add_message::<WrathCharActionResultMessage>()
             .add_message::<CharacterLoginFailedMessage>()
             .add_message::<EnteredWorldMessage>()
             .add_message::<CinematicTriggeredMessage>()
@@ -609,66 +624,14 @@ impl NetCommands {
                         )
                         .is_ok();
                 }
-                matches!(
-                    command,
-                    ClientCommand::SetActiveMover { .. }
-                        | ClientCommand::Logout
-                        | ClientCommand::ForceLogout
-                        | ClientCommand::ItemQuery { .. }
-                        | ClientCommand::SetSelection { .. }
-                        | ClientCommand::AttackSwing { .. }
-                        | ClientCommand::AttackStop
-                        | ClientCommand::Loot { .. }
-                        | ClientCommand::LootMoney
-                        | ClientCommand::LootRelease { .. }
-                        | ClientCommand::GroupInvite { .. }
-                        | ClientCommand::GroupAccept
-                        | ClientCommand::GroupDecline
-                        | ClientCommand::PartyAssignment { .. }
-                        | ClientCommand::GroupLeave
-                        | ClientCommand::RequestPartyMemberStats { .. }
-                        // `benilla_protocol::wrath_session`: queries, action bar, casting.
-                        | ClientCommand::NameQuery { .. }
-                        | ClientCommand::CreatureQuery { .. }
-                        | ClientCommand::GameObjectQuery { .. }
-                        | ClientCommand::SetActionButton { .. }
-                        | ClientCommand::CastSpell { .. }
-                        | ClientCommand::CastSpellAtDest { .. }
-                        | ClientCommand::CastSpellAtSource { .. }
-                        | ClientCommand::CastSpellGameObject { .. }
-                        | ClientCommand::CastSpellItem { .. }
-                        | ClientCommand::CancelCast { .. }
-                        | ClientCommand::CancelAura { .. }
-                        // `benilla_protocol::wrath_npc`: gossip and the quest giver.
-                        | ClientCommand::GossipHello { .. }
-                        | ClientCommand::GossipSelectOption { .. }
-                        | ClientCommand::NpcTextQuery { .. }
-                        | ClientCommand::QuestgiverStatusQuery { .. }
-                        | ClientCommand::QuestgiverHello { .. }
-                        | ClientCommand::QuestgiverQuery { .. }
-                        | ClientCommand::QuestgiverAccept { .. }
-                        | ClientCommand::QuestgiverComplete { .. }
-                        | ClientCommand::QuestgiverRequestReward { .. }
-                        | ClientCommand::QuestgiverChooseReward { .. }
-                        | ClientCommand::QuestQuery { .. }
-                        | ClientCommand::QuestlogRemove { .. }
-                        | ClientCommand::PushQuestToParty { .. }
-                        | ClientCommand::QuestConfirmAccept { .. }
-                        // `benilla_protocol::wrath_vendor`.
-                        | ClientCommand::ListInventory { .. }
-                        | ClientCommand::BuyItem { .. }
-                        | ClientCommand::BuyItemInSlot { .. }
-                        | ClientCommand::SellItem { .. }
-                        | ClientCommand::BuybackItem { .. }
-                        | ClientCommand::RepairItem { .. }
-                ) || matches!(
-                    command,
-                    ClientCommand::AutostoreLootItem { slot: 0..=17 }
-                        | ClientCommand::SetSheathed { state: 0..=2 }
-                        | ClientCommand::StandStateChange {
-                            state: 0 | 1 | 3 | 8
-                        }
-                )
+                // Route ownership is the source of truth. Keep value-level validation separate
+                // from admission so adding a native writer cannot silently strand its producer.
+                match command {
+                    ClientCommand::AutostoreLootItem { slot } if *slot > 17 => false,
+                    ClientCommand::SetSheathed { state } if *state > 2 => false,
+                    ClientCommand::StandStateChange { state } if !matches!(state, 0 | 1 | 3 | 8) => false,
+                    _ => io::wrath::has_writer_route(command),
+                }
             }
         }
     }
@@ -1142,6 +1105,7 @@ pub(crate) enum ClientCommand {
     },
     /// `MSG_MOVE_WORLDPORT_ACK`: unblocks the new map's stream.
     WorldportAck,
+    NativeWorldportAck(benilla_protocol::wrath_transfer::Token),
     /// `CMSG_SET_SELECTION`; `guid == 0` clears.
     SetSelection {
         guid: u64,
@@ -1188,6 +1152,9 @@ pub(crate) enum ClientCommand {
         bag_index: u8,
         slot: u8,
         spell_index: u8,
+        /// Build 12340 names the cast spell and the item GUID; AC checks both.
+        spell_id: u32,
+        item_guid: u64,
         target: benilla_protocol::messages::UseItemTarget,
     },
     /// `CMSG_OPEN_ITEM`: the server answers `SMSG_LOOT_RESPONSE` on the item's own guid; a wrapped
@@ -1819,6 +1786,9 @@ pub(crate) enum ClientCommand {
         bid: u32,
         buyout: u32,
         etime_minutes: u32,
+        /// The stack size sold; build 12340 sends `(guid, count)` pairs and AC refuses a count
+        /// above the stack.
+        count: u32,
     },
     /// `CMSG_AUCTION_PLACE_BID`: a `price` at or above a nonzero buyout is the buyout.
     AuctionPlaceBid {
@@ -2086,6 +2056,19 @@ pub(crate) enum ClientCommand {
     },
     /// Native arena-team transport only; no UI producer or inferred authority.
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
+    /// Explicit transport only; no shared WHO UI producer or permission inference.
+    NativeWhoCommand(benilla_protocol::wrath_who::Command),
+    /// Transport-only native mail; no legacy mail conversion or UI producer.
+    NativeQuestsCompletedQuery,
+    NativeUiTimerQuery,
+    NativeMirrorImageQuery { guid: u64 },
+    /// Native instance controls; transport does not infer leadership, locks or permission.
+    NativeInstanceControl(benilla_protocol::wrath_instance_control::Command),
+    /// Native item/inventory commands with no Vanilla twin; transport does not claim acceptance.
+    NativeInventory(benilla_protocol::wrath_inventory::Command),
+    /// Native auction/loot commands with no Vanilla twin; transport does not claim acceptance.
+    NativeExchange(benilla_protocol::wrath_exchange::Command),
+    NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
     GuildBankQuery(benilla_protocol::wrath_guild_bank_query::Query),
@@ -2310,6 +2293,14 @@ pub(crate) struct CharActionResultMessage {
     pub(crate) code: u8,
 }
 
+/// Native build-12340 result; successful operations publish the refreshed roster first.
+/// Deliberately separate from Vanilla's result-byte namespace.
+#[derive(Message, Clone, Copy)]
+pub(crate) struct WrathCharActionResultMessage {
+    pub(crate) action: benilla_protocol::CharAction,
+    pub(crate) code: u8,
+}
+
 /// `SMSG_CHARACTER_LOGIN_FAILED`: the picked character was refused. `result` is the raw reason,
 /// read by [`crate::char_select::char_login_refusal_text`].
 #[derive(Message, Clone, Copy)]
@@ -2478,6 +2469,7 @@ pub(crate) struct WorldportMessage {
     pub(crate) position: [f32; 3],
     pub(crate) orientation: f32,
     pub(crate) needs_ack: bool,
+    pub(crate) native_token: Option<benilla_protocol::wrath_transfer::Token>,
     /// The transport carrying us, from `SMSG_TRANSFER_PENDING` ([`PendingTransfer`]). `None`
     /// means the server detached us and any ride is stale.
     pub(crate) transport_entry: Option<u32>,
@@ -2576,6 +2568,10 @@ mod tests {
                 target: Some(7),
             },
             ClientCommand::CreatureQuery { entry: 69, guid: 7 },
+            ClientCommand::OpenItem {
+                bag_index: 255,
+                slot: 0,
+            },
         ] {
             assert!(net.supports(SessionDialect::Wrath12340, &command));
         }
@@ -2589,10 +2585,6 @@ mod tests {
                 lag_ms: 2_210,
             },
             ClientCommand::AutostoreLootItem { slot: 18 },
-            ClientCommand::OpenItem {
-                bag_index: 255,
-                slot: 0,
-            },
         ] {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));
             assert!(net.supports(SessionDialect::Vanilla5875, &command));

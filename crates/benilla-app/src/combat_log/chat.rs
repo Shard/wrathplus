@@ -123,7 +123,7 @@ pub(super) fn attacker_state(
         // of `0x628410`'s call sites, this one passes a real `blocked` and `HitInfo` (`0x629ee7`).
         trailers: landed.then_some(combat::Trailers {
             absorbed: s.absorb,
-            resisted: s.resist,
+            resisted: i64::from(s.resist),
             blocked: s.blocked,
             hit_info: s.hit_info,
         }),
@@ -199,7 +199,7 @@ pub(super) fn spell_damage_log(
             // `0x628341` passes zero for blocked and HitInfo: absorb and resist trailers only.
             trailers: Some(combat::Trailers {
                 absorbed: s.absorb,
-                resisted: s.resist,
+                resisted: i64::from(s.resist),
                 blocked: 0,
                 hit_info: 0,
             }),
@@ -244,7 +244,7 @@ pub(super) fn spell_damage_log(
         amount: i64::from(s.damage),
         trailers: landed.then_some(combat::Trailers {
             absorbed: s.absorb,
-            resisted: s.resist,
+            resisted: i64::from(s.resist),
             blocked: s.blocked,
             hit_info: 0,
         }),
@@ -1108,8 +1108,52 @@ pub(super) fn environmental_damage_log(
     poses: &Query<&mut Transform>,
     log: &mut ChatLog,
 ) {
-    let victim = ctx.classify(e.victim, stores);
-    let Some(family) = combat::env_family(e.damage_type) else {
+    environmental_damage_fields(
+        e.victim,
+        e.damage_type,
+        e.damage,
+        e.absorb,
+        i64::from(e.resist),
+        ctx,
+        stores,
+        poses,
+        log,
+    );
+}
+
+pub(super) fn wrath_environmental_damage(
+    e: benilla_protocol::wrath_environment::EnvironmentalDamage,
+    ctx: &ChatCtx,
+    stores: &Query<&mut ObjectStore>,
+    poses: &Query<&mut Transform>,
+    log: &mut ChatLog,
+) {
+    environmental_damage_fields(
+        e.victim,
+        e.damage_type,
+        e.damage,
+        e.absorbed,
+        i64::from(e.resisted),
+        ctx,
+        stores,
+        poses,
+        log,
+    );
+}
+
+fn environmental_damage_fields(
+    guid: u64,
+    damage_type: u8,
+    damage: u32,
+    absorbed: u32,
+    resisted: i64,
+    ctx: &ChatCtx,
+    stores: &Query<&mut ObjectStore>,
+    poses: &Query<&mut Transform>,
+    log: &mut ChatLog,
+) {
+    let victim = ctx.classify(guid, stores);
+    let Some(family) = combat::env_family(damage_type) else {
         return;
     };
     let Some(kind) = combat::combat_kind(victim, victim, false) else {
@@ -1121,13 +1165,13 @@ pub(super) fn environmental_damage_log(
         poses,
         kind,
         family,
-        (e.victim, victim),
-        (e.victim, victim),
+        (guid, victim),
+        (guid, victim),
         Fills {
-            amount: i64::from(e.damage),
+            amount: i64::from(damage),
             trailers: Some(combat::Trailers {
-                absorbed: e.absorb,
-                resisted: e.resist,
+                absorbed: absorbed,
+                resisted: resisted,
                 // The environmental call site passes zero for both.
                 blocked: 0,
                 hit_info: 0,
