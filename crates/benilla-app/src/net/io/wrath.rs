@@ -1250,6 +1250,7 @@ enum WrathRoute {
     NativeDeath,
     NativeSessionMeta,
     NativeInspect,
+    NativeFaction,
     NativeWorldportAck,
     NativeTeleportAck,
     AuthorityAcked,
@@ -1292,6 +1293,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::SetFactionAtWar { .. }
+        | ClientCommand::SetFactionInactive { .. }
+        | ClientCommand::SetWatchedFaction { .. } => WrathRoute::NativeFaction,
         ClientCommand::NativeInspect(_)
         | ClientCommand::Inspect { .. }
         | ClientCommand::LearnTalent { .. }
@@ -1719,6 +1723,16 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeFaction => {
+                        use benilla_protocol::wrath_faction as f;
+                        let (opcode, body) = match command {
+                            ClientCommand::SetFactionAtWar { rep_list_id, at_war } => f::encode_at_war(rep_list_id, at_war),
+                            ClientCommand::SetFactionInactive { rep_list_id, inactive } => f::encode_inactive(rep_list_id, inactive),
+                            ClientCommand::SetWatchedFaction { rep_list_id } => f::encode_watched(rep_list_id),
+                            _ => unreachable!(),
+                        };
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeInspect => {
                         use benilla_protocol::wrath_inspect::{encode, Command as I};
                         let (opcode, body) = encode(&match command {
