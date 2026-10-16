@@ -354,6 +354,11 @@ pub(super) fn drain_chat_input(
                 let subject_entity = subject_guid.and_then(|g| guids.0.get(&g).copied());
                 let target_store = subject_entity.and_then(|e| stores.get(e).ok());
                 let own_store = self_store.iter().next();
+                let lookup = crate::target::GuidStores {
+                    index: Some(&**guids),
+                    stores,
+                };
+                let relations = crate::target::RelationContext::new(Some(&*names), &lookup);
                 let is_player = subject_entity
                     .and_then(|e| kinds.get(e).ok())
                     .is_some_and(|n| n.kind == benilla_protocol::EntityKind::Player);
@@ -401,7 +406,8 @@ pub(super) fn drain_chat_input(
                         target_store,
                         factions.as_deref(),
                         reputations,
-                        own_store
+                        own_store,
+                        relations,
                     )
                 ));
                 // The at-war bit: the whole of the player-to-unit reaction's leg 3 for a faction
@@ -445,6 +451,7 @@ pub(super) fn drain_chat_input(
                     factions.as_deref(),
                     reputations,
                     own_store,
+                    relations,
                 );
                 lines.push(format!(
                     "reaction: CURSOR npc_flags 0x{:04x} · can_interact {interactable} · \
@@ -472,6 +479,7 @@ pub(super) fn drain_chat_input(
                     target_store,
                     own_store,
                     is_player,
+                    relations,
                 );
                 lines.push(format!(
                     "reaction: plate is_player {is_player} (OBJECT_FIELD_TYPE says {:?}; the two \
@@ -491,6 +499,7 @@ pub(super) fn drain_chat_input(
                         target_store,
                         own_store,
                         is_player,
+                        relations,
                     ),
                 ));
                 lines.push(format!(

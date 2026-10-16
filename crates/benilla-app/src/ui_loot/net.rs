@@ -1126,6 +1126,7 @@ mod tests {
                     Some(&factions),
                     &reps,
                     Some(&me_store),
+                    crate::target::RelationContext::none(),
                 )
             })
             .expect("a template a Stormwind human can attack");

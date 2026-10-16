@@ -398,7 +398,7 @@ pub(super) fn periodic_aura_log(
                     ..Default::default()
                 },
             ),
-            PeriodicTick::Heal { amount } => (
+            PeriodicTick::Heal { amount, .. } => (
                 combat::PERIODICAURAHEAL,
                 true,
                 Fills {
@@ -609,7 +609,8 @@ pub(super) fn spell_dispel_log(
 ) {
     let bearer = ctx.classify(s.victim, stores);
     let caster = ctx.classify(s.caster, stores);
-    for &spell_id in &s.spell_ids {
+    for aura in &s.auras {
+        let spell_id = aura.spell_id;
         let Some(spell) = ctx.spell_name(spell_id) else {
             continue;
         };
@@ -1317,8 +1318,15 @@ mod tests {
             school: 3,
             absorb: 0,
             resist: 0,
+            overkill: 0,
+            critical: false,
         };
-        let heal = PeriodicTick::Heal { amount: 12 };
+        let heal = PeriodicTick::Heal {
+            amount: 12,
+            overheal: 0,
+            absorb: 0,
+            critical: false,
+        };
         // A creature's DoT ticking me types SELF.
         assert_eq!(
             periodic_subject(&dmg, UnitClass::Creature, UnitClass::Me),

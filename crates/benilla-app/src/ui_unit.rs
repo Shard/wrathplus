@@ -768,6 +768,7 @@ fn feed_unit_reach(
     transforms: Query<&Transform>,
     factions: Option<Res<Factions>>,
     reputations: Res<Reputations>,
+    relations: crate::target::RelationInputs,
 ) {
     let Some(mut script) = script else {
         return;
@@ -788,6 +789,7 @@ fn feed_unit_reach(
                     factions.as_deref(),
                     &reputations,
                     Some(self_store),
+                    relations.context(),
                 );
             reach.insert(
                 guid,
@@ -1343,6 +1345,10 @@ fn feed_units(
         feed.warned_sideless = sideless;
     }
     // What the three snapshots below (target, target-of-target, NPC) read besides a descriptor.
+    let lookup = crate::target::GuidStores {
+        index: index.as_deref(),
+        stores: &stores.all,
+    };
     let held = held::HeldUnits {
         names: &names,
         commands: &commands,
@@ -1352,6 +1358,7 @@ fn feed_units(
         self_store: self_pair.map(|(s, _)| s),
         classes: chr,
         types,
+        relations: crate::target::RelationContext::new(Some(&names), &lookup),
     };
     let target = selection.target.zip(selection.guid).and_then(|(e, guid)| {
         let store = stores.all.get(e).ok()?;

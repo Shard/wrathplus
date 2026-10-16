@@ -292,6 +292,8 @@ struct PlateWorld<'w, 's> {
     window: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
     // The pending ground-target cast, for the plate's hit-test veto (`0x7cba30`).
     targeting: Res<'w, crate::spell::SpellTargeting>,
+    /// `CanAttack`'s controller lookup, for the plate category.
+    relations: crate::target::RelationInputs<'w, 's>,
 }
 
 /// Every frame: gate the units, seat each plate and hand the result to the widget layer as
@@ -434,6 +436,7 @@ fn drive_vplates(
             store,
             self_store,
             is_player,
+            world.relations.context(),
         );
         if friendly && !mode.friends || !friendly && !mode.enemies {
             continue;
