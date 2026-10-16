@@ -49,3 +49,5 @@ objc2 = "0.5"
 # Match Bevy 0.18's Naga module type for CPU-only shader validation.
 naga = { version = "27", features = ["wgsl-in"] }
 futures-lite = "2"
+# Synthetic MH2O layers for the Wrath liquid spawn tests.
+benilla-adt = { path = "../benilla-adt" }
