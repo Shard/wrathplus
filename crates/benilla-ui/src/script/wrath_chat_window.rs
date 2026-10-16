@@ -27,7 +27,11 @@ use super::{Model, ScriptValue};
 fn window_slot(lua: &Lua, v: &Value) -> Option<Option<usize>> {
     let n = lua.coerce_number(v.clone()).ok().flatten()?;
     let index = (n.round_ties_even() as i64).wrapping_sub(1);
-    Some(usize::try_from(index).ok().filter(|i| *i < ENGINE_CHAT_WINDOW_SLOTS))
+    Some(
+        usize::try_from(index)
+            .ok()
+            .filter(|i| *i < ENGINE_CHAT_WINDOW_SLOTS),
+    )
 }
 
 /// `byte · (1/255)` in f32 (`[0xa45564]`), as the colour getters push it.
@@ -82,7 +86,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some(i) = slot else {
                 return Ok(MultiValue::new());
             };
-            let look = lua.app_data_ref::<Model>().expect("model app_data").chat_window_looks[i]
+            let look = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .chat_window_looks[i]
                 .clone();
             let flag = |on: bool| if on { Value::Integer(1) } else { Value::Nil };
             Ok(MultiValue::from_vec(vec![
@@ -94,7 +101,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::Number(unit(look.a)),
                 flag(look.shown),
                 flag(look.locked),
-                look.docked.map_or(Value::Nil, |d| Value::Integer(i64::from(d))),
+                look.docked
+                    .map_or(Value::Nil, |d| Value::Integer(i64::from(d))),
                 flag(look.uninteractable),
             ]))
         })?,
@@ -136,7 +144,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let rows: Vec<(String, [u8; 3], bool)> = {
                 let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                 chat_types::reset(&mut model.chat_colors);
-                model.chat_name_by_class.iter_mut().for_each(|on| *on = false);
+                model
+                    .chat_name_by_class
+                    .iter_mut()
+                    .for_each(|on| *on = false);
                 model.chat_colors_changed = true;
                 let seed = model.chat_channel_seed.clone();
                 for i in 0..ENGINE_CHAT_WINDOW_SLOTS {
@@ -242,7 +253,8 @@ mod tests {
     fn get_chat_window_info_has_the_tenth_uninteractable_value() {
         let mut s = wrath();
         assert_eq!(
-            s.eval::<i64>("return select('#', GetChatWindowInfo(1))").unwrap(),
+            s.eval::<i64>("return select('#', GetChatWindowInfo(1))")
+                .unwrap(),
             10
         );
         assert!(s
@@ -250,7 +262,8 @@ mod tests {
             .unwrap());
         s.run("SetChatWindowUninteractable(3, true)").unwrap();
         assert_eq!(
-            s.eval::<i64>("return select(10, GetChatWindowInfo(3))").unwrap(),
+            s.eval::<i64>("return select(10, GetChatWindowInfo(3))")
+                .unwrap(),
             1
         );
         assert_eq!(s.take_chat_window_changes(), vec![2]);
@@ -260,7 +273,8 @@ mod tests {
             .eval::<bool>("return select(10, GetChatWindowInfo(3)) == nil")
             .unwrap());
         assert_eq!(
-            s.eval::<i64>("return select('#', GetChatWindowInfo(11))").unwrap(),
+            s.eval::<i64>("return select('#', GetChatWindowInfo(11))")
+                .unwrap(),
             0,
             "an index outside the ten records answers nothing"
         );
@@ -294,8 +308,14 @@ mod tests {
         );
         assert_eq!(s.chat_colors()[0].rgb, [255, 255, 255]);
         assert!(!s.chat_color_name_by_class()[0].1);
-        assert_eq!(s.eval::<String>("return SEEN[1][1]").unwrap(), "UPDATE_CHAT_WINDOWS");
-        assert_eq!(s.eval::<String>("return SEEN[2][1]").unwrap(), "UPDATE_CHAT_COLOR");
+        assert_eq!(
+            s.eval::<String>("return SEEN[1][1]").unwrap(),
+            "UPDATE_CHAT_WINDOWS"
+        );
+        assert_eq!(
+            s.eval::<String>("return SEEN[2][1]").unwrap(),
+            "UPDATE_CHAT_COLOR"
+        );
         assert_eq!(s.eval::<String>("return SEEN[2][2]").unwrap(), "SAY");
         assert_eq!(
             s.eval::<String>("return SEEN[3][1]").unwrap(),
@@ -339,18 +359,23 @@ mod tests {
                 password: String::new(),
             }]
         );
-        assert_eq!(s.chat_window_looks()[1].channels, vec![("MyChan".to_string(), 0)]);
+        assert_eq!(
+            s.chat_window_looks()[1].channels,
+            vec![("MyChan".to_string(), 0)]
+        );
     }
 
     #[test]
     fn bn_leave_conversation_is_inert_without_a_battle_net_session() {
         let s = wrath();
         assert_eq!(
-            s.eval::<i64>("return select('#', BNLeaveConversation(1))").unwrap(),
+            s.eval::<i64>("return select('#', BNLeaveConversation(1))")
+                .unwrap(),
             0
         );
         assert_eq!(
-            s.eval::<i64>("return select('#', BNLeaveConversation())").unwrap(),
+            s.eval::<i64>("return select('#', BNLeaveConversation())")
+                .unwrap(),
             0,
             "no usage error without a session"
         );
