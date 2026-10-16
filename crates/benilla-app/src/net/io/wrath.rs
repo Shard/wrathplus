@@ -1016,6 +1016,7 @@ enum WrathRoute {
     NativeInstanceControl,
     NativeInventory,
     NativeExchange,
+    NativeInspectAchievements,
     NativeWorldportAck,
     NativeArenaTeam,
     DisabledMovement,
@@ -1046,6 +1047,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AutoBankItem { .. }
         | ClientCommand::AutoStoreBankItem { .. }
         | ClientCommand::PageTextQuery { .. } => WrathRoute::NativeInventory,
+        ClientCommand::NativeInspectAchievements { .. } => WrathRoute::NativeInspectAchievements,
         ClientCommand::NativeExchange(_)
         | ClientCommand::AuctionHello { .. }
         | ClientCommand::AuctionListItems { .. }
@@ -1376,6 +1378,11 @@ fn writer_loop(
                     }
                     WrathRoute::NativeInventory => {
                         let (opcode, body) = benilla_protocol::wrath_inventory::encode(&inventory_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeInspectAchievements => {
+                        let ClientCommand::NativeInspectAchievements { player } = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_achievement::encode_inspect_query(player);
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeExchange => {
