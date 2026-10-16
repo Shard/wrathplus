@@ -123,6 +123,118 @@ impl ValueTrack<f32> {
     }
 }
 
+/// A model's sequences in file order as `(AnimationData id, duration ms)`: the slot clocks
+/// [`SeqTrack`] lanes key on.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SeqTable(pub Vec<(u16, u32)>);
+
+impl SeqTable {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The file slot a fixed `AnimationData` id plays: its first sequence, else slot 0.
+    pub fn slot_for(&self, anim: u16) -> usize {
+        self.0.iter().position(|&(id, _)| id == anim).unwrap_or(0)
+    }
+
+    /// `ms` into `slot`, wrapped by the sequence's duration: a fixed-sequence owner loops it.
+    pub fn wrap_ms(&self, slot: usize, ms: f32) -> f32 {
+        match self.0.get(slot) {
+            Some(&(_, d)) if d > 0 => ms.rem_euclid(d as f32),
+            _ => ms,
+        }
+    }
+}
+
+/// Where a model's effect tracks are sampled this frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SeqClock {
+    /// The owner's playing sequence slot (file order).
+    pub slot: usize,
+    /// Milliseconds into that sequence.
+    pub seq_ms: f32,
+    /// The scene clock in milliseconds, which global-sequence tracks loop on.
+    pub scene_ms: f64,
+}
+
+/// A 3.3.5 M2Track on its native clock, as the animate pass samples ribbon and light state
+/// (`0x82f0f0` → `0x82b0a0`/`0x82b340`/`0x82af40`): one key lane per sequence slot in
+/// sequence-local time, the bone's slot falling back to slot 0 past the track's sequence count;
+/// or, with a global sequence, one lane looping on the scene clock modulo its period. A slot
+/// with no keys reads the caller's default, never a held value.
+///
+/// Unmodelled: the sampler's cross-fade between the outgoing and incoming sequence (bone state
+/// `+0xa8`), and per-bone sequence state (this reads the owner model's playing slot).
+#[derive(Debug, Clone)]
+pub struct SeqTrack<V = f32> {
+    /// `Some(period ms)` for a global-sequence track, whose keys are `slots[0]`.
+    pub global_period_ms: Option<u32>,
+    /// Keys per sequence slot in sequence-local ms.
+    pub slots: Vec<ValueTrack<V>>,
+    /// What a keyed track reads in a slot with no keys (the sampler's caller default).
+    pub default: V,
+    /// What a track with no keys anywhere reads: the animate pass never samples it, so the
+    /// consumer keeps its load value.
+    pub unkeyed: V,
+}
+
+impl<V: TrackValue> SeqTrack<V> {
+    /// One lane read on every slot, as the 1.12 parse rebases a track onto sequence 0.
+    pub(crate) fn single(track: ValueTrack<V>, default: V) -> Self {
+        Self {
+            global_period_ms: None,
+            slots: vec![track],
+            default,
+            unkeyed: default,
+        }
+    }
+
+    /// Whether any lane is keyed.
+    pub fn is_keyed(&self) -> bool {
+        self.slots.iter().any(|t| !t.keys.is_empty())
+    }
+
+    /// Sample at `clock`: interp 0 steps, else lerps; past the last key the last holds.
+    pub fn sample(&self, clock: SeqClock) -> V {
+        if !self.is_keyed() {
+            return self.unkeyed;
+        }
+        let (lane, ms) = match self.global_period_ms {
+            Some(period) => (
+                self.slots.first(),
+                if period == 0 {
+                    0.0
+                } else {
+                    clock.scene_ms.rem_euclid(f64::from(period)) as f32
+                },
+            ),
+            None => (
+                self.slots.get(clock.slot).or(self.slots.first()),
+                clock.seq_ms,
+            ),
+        };
+        lane.filter(|t| !t.keys.is_empty())
+            .map_or(self.default, |t| t.sampled_ms(ms))
+    }
+}
+
+impl SeqTrack<f32> {
+    /// The largest value any slot can reach, the default included where a slot is unkeyed.
+    pub fn peak(&self) -> f32 {
+        if !self.is_keyed() {
+            return self.unkeyed;
+        }
+        let keyed = self.slots.iter().filter(|t| !t.keys.is_empty());
+        let peak = keyed.clone().fold(f32::MIN, |m, t| m.max(t.peak()));
+        if keyed.count() < self.slots.len() {
+            peak.max(self.default)
+        } else {
+            peak
+        }
+    }
+}
+
 /// Rebase a track from the global timeline onto a sequence's `[start, end]` band: in-band keys
 /// shift by `-start`, the last key at or before `start` becomes `t = 0`, and the first at or
 /// after `end` closes the band at `end - start`.

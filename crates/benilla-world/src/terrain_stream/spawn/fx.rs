@@ -47,13 +47,20 @@ fn spawn_point_light(
 
 /// Spawns a light for each casting M2 point light (`type == 1`) at its rest position, since a
 /// placed prop never animates its light bone; `room` comes off the placement's [`emitter_fade`].
+/// An animated light's colour, intensity and gate follow the placement's sequence, as its
+/// ribbons do; an unanimated placement rests in `Stand`.
 pub(super) fn spawn_lights_for(
     commands: &mut Commands,
     lights: &[ModelLight],
     transform: Transform,
+    host: Option<&super::assemble::PlacementHost>,
     room: Option<&crate::wmo_portal::WmoGroupVis>,
     out: &mut Vec<Entity>,
 ) {
+    let seq = host.and_then(|h| h.arm).map_or(
+        crate::ribbons::RibbonSeq::Fixed(0),
+        crate::ribbons::RibbonSeq::Host,
+    );
     for l in lights.iter().map(|l| &l.def) {
         if !l.casts() {
             continue; // directional lights feed the ambient; a static `0` visibility key is dark
@@ -67,6 +74,11 @@ pub(super) fn spawn_lights_for(
             room.cloned(),
             out,
         );
+        if let (Some(anim), Some(&e)) = (&l.anim, out.last()) {
+            commands
+                .entity(e)
+                .insert(crate::light_anim::LightAnimator::new(anim.clone(), seq));
+        }
     }
 }
 
