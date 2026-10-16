@@ -215,7 +215,7 @@ impl AssetLoader for WrathM2ModelLoader {
         let lights = semantic
             .lights
             .iter()
-            .copied()
+            .cloned()
             .map(|def| {
                 let bone_pivot = usize::try_from(def.bone)
                     .ok()

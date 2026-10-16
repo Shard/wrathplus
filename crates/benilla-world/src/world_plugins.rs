@@ -113,6 +113,7 @@ impl PluginGroup for WorldPlugins {
             .add(crate::water_fx::WaterFxPlugin)
             .add(crate::ffx_glow::FfxGlowPlugin)
             .add(crate::ribbons::RibbonPlugin)
+            .add(crate::light_anim::LightAnimPlugin)
             // Stuck-modifier reconciliation: macOS system shortcuts (⇧⌘5) swallow modifier
             // releases without a focus loss, wedging every bare-key binding.
             .add(crate::modkeys::ModKeysPlugin)

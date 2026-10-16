@@ -218,7 +218,7 @@ pub struct ModelRibbon {
 
 /// One M2 light and its bone's rest pivot: the reference moves the light with the live bone each
 /// frame (`0x718960`), so a torch's glow follows the hand.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ModelLight {
     pub def: M2Light,
     pub bone_pivot: [f32; 3],

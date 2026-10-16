@@ -186,6 +186,57 @@ pub fn spawn_ribbon(
     )
 }
 
+/// The owner's sequence clock `(anim id, slot, seconds in)`, or `None` while a host is still being
+/// built: the reference arms a sequence as the M2 goes live (`0x70ebd0`). A fixed sequence runs on
+/// `age`, wrapped by its duration; a host's playing slot with no clip row reads as `Stand` (0).
+pub(crate) fn playing_of(
+    seq: RibbonSeq,
+    table: &benilla_formats::SeqTable,
+    age: f32,
+    hosts: &Query<(&AnimationPlayer, &benilla_assets::ModelAnimations)>,
+) -> Option<(u16, usize, f32)> {
+    match seq {
+        RibbonSeq::Fixed(a) => {
+            let slot = table.slot_for(a);
+            Some((a, slot, table.wrap_ms(slot, age * 1000.0) / 1000.0))
+        }
+        RibbonSeq::Host(h) => hosts.get(h).ok().map(|(player, anims)| {
+            crate::doodad_anim::playing_seq(player, anims)
+                .and_then(|(slot, t)| {
+                    Some((
+                        anims.clips.iter().find(|c| c.seq_index == slot)?.anim_id,
+                        slot,
+                        t,
+                    ))
+                })
+                .unwrap_or((0, 0, 0.0))
+        }),
+    }
+}
+
+/// The effect tracks' clock: the playing slot (3.3.5 keys are sequence-local) and the scene clock
+/// for a global sequence; a 1.12 single-lane def, or a host with no clock yet, keeps seconds since
+/// spawn on slot 0.
+pub(crate) fn seq_clock(
+    playing: Option<(u16, usize, f32)>,
+    table: &benilla_formats::SeqTable,
+    age: f32,
+    scene_ms: f64,
+) -> benilla_formats::SeqClock {
+    match playing {
+        Some((_, slot, t)) if !table.is_empty() => benilla_formats::SeqClock {
+            slot,
+            seq_ms: t * 1000.0,
+            scene_ms,
+        },
+        _ => benilla_formats::SeqClock {
+            slot: 0,
+            seq_ms: age * 1000.0,
+            scene_ms,
+        },
+    }
+}
+
 /// Per frame: places nodes, commits and expires edges, applies gravity and writes the strips.
 pub(crate) fn simulate_ribbons(
     time: Res<Time>,
@@ -322,40 +373,8 @@ pub(crate) fn simulate_ribbons(
         }
 
         *age += dt;
-        // The owner's sequence clock: `(anim id, slot, seconds in)`, or `None` while the host is
-        // still being built. The reference arms a sequence as the M2 goes live (`0x70ebd0`).
-        let playing = match *seq {
-            RibbonSeq::Fixed(a) => {
-                let slot = def.slot_for(a);
-                Some((a, slot, def.wrap_ms(slot, *age * 1000.0) / 1000.0))
-            }
-            RibbonSeq::Host(h) => hosts.get(h).ok().map(|(player, anims)| {
-                // The playing sequence; a slot with no clip row reads as `Stand` (0).
-                crate::doodad_anim::playing_seq(player, anims)
-                    .and_then(|(slot, t)| {
-                        Some((
-                            anims.clips.iter().find(|c| c.seq_index == slot)?.anim_id,
-                            slot,
-                            t,
-                        ))
-                    })
-                    .unwrap_or((0, 0, 0.0))
-            }),
-        };
-        // The look tracks' clock: the playing slot (3.3.5 keys are sequence-local), the scene
-        // clock for a global sequence; a 1.12 single-lane def keeps seconds since spawn.
-        let clock = match playing {
-            Some((_, slot, t)) if !def.sequences.is_empty() => benilla_formats::RibbonClock {
-                slot,
-                seq_ms: t * 1000.0,
-                scene_ms,
-            },
-            _ => benilla_formats::RibbonClock {
-                slot: 0,
-                seq_ms: *age * 1000.0,
-                scene_ms,
-            },
-        };
+        let playing = playing_of(*seq, &def.sequences, *age, &hosts);
+        let clock = seq_clock(playing, &def.sequences, *age, scene_ms);
         // Heights sample at commit, since the reference stores each edge's vertex pair; colour
         // and alpha sample per frame.
         let h_above = def.height_above.sample(clock).max(0.0);
