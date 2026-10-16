@@ -6,28 +6,34 @@
 //! `0x499a80`, read by `0x498a60`):
 //!
 //! ```text
-//! VERSION 2
-//! ADDEDVERSION 2
+//! VERSION 5
+//! ADDEDVERSION 13
 //! OPTION_GUILD_RECRUITMENT_CHANNEL AUTO
 //! CHANNELS … END           ← the custom channels, one per line, re-joined at login
 //! ZONECHANNELS 18874371    ← the joined zone channels, as bits 1<<(ChannelID-1)
-//! COLORS … END             ← the chat-type registry, one SAY 255 255 255 row per type
+//! COLORS … END             ← the chat-type registry, one SAY 255 255 255 N row per type, the
+//!                            trailing Y/N its colorNameByClass
 //! WINDOW 1                 ← then per window:
 //! NAME General             ← only when a name was stored
 //! SIZE 0
 //! COLOR 0 0 0 0            ← R G B A bytes, from the record's packed BGRA quad
 //! LOCKED 1
+//! UNINTERACTABLE 0
 //! DOCKED 1
 //! SHOWN 1
-//! MESSAGES … END           ← the enabled groups of the 68-entry CHATMSGGROUP table, in order
+//! MESSAGES … END           ← the enabled groups of the 46-entry CHATMSGGROUP table, in order
 //! CHANNELS … END           ← this window's custom channels; its zone channels are bits
 //! ZONECHANNELS 18874371    ← this window's zone channels, masked by the joined set
 //! END
 //! ```
 //!
-//! The loader zeroes every window's flags first, so a `MESSAGES` block is the whole set; a window
-//! the file omits keeps its boot init ([`ChatWindowLook::stock`]), and a file older than
-//! `ADDEDVERSION 2` gets the groups added since. `LOCKED` is an `i32` (`CHATWINDOW+0x8c`) written
+//! Build 12340's grammar is taken from a real 12340-written `chat-cache.txt` (VERSION 5,
+//! ADDEDVERSION 13, the `Y`/`N` colour flag, the `UNINTERACTABLE` line); the 1.12 addresses below
+//! name the loader and writer whose shape it keeps. The loader zeroes every window's flags first,
+//! so a `MESSAGES` block is the whole set; a window the file omits keeps its stock record
+//! ([`ChatWindowLook::stock`]), and a file older than `ADDEDVERSION 13` gets the `defaultOn` groups
+//! added since: general groups into window 1, combat-log groups into window 2. Label: the 12340
+//! back-fill rule is inferred from the group table's version words, not audited. `LOCKED` is an `i32` (`CHATWINDOW+0x8c`) written
 //! through `setne`, so only 0 and 1 round-trip. Deviation: `set_chat_window_looks` drops an
 //! out-of-range window, where the reference's `WINDOW` bound is off by one (`0x498d1c`, `ja` where
 //! the array needs `jae`), because that write would land past the array.
@@ -43,7 +49,9 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
-use benilla_ui::script::{ChatTypeColor, ChatWindowLook, UiScript, MESSAGE_GROUPS};
+use benilla_ui::script::{
+    ChatTypeColor, ChatWindowLook, UiScript, COMBAT_LOG_GROUPS_START, MESSAGE_GROUPS,
+};
 
 use super::edit::zone_bit;
 use crate::net::{ClientCommand, NetCommands};
@@ -56,8 +64,9 @@ const SAVE_QUIET: std::time::Duration = std::time::Duration::from_secs(1);
 const HEADER: &str = "\
 # benilla chat cache, in the reference's chat-cache.txt grammar (written by
 # 0x499a80, read by 0x498a60): the custom channels to re-join, the joined zone channels as bits, the
-# per-type COLORS table, then one WINDOW block per chat frame — NAME (when one was set), SIZE,
-# COLOR r g b a as bytes, LOCKED, DOCKED, SHOWN, the MESSAGES … END list of the groups the window
+# per-type COLORS table (r g b and the Y/N colorNameByClass), then one WINDOW block per chat frame —
+# NAME (when one was set), SIZE, COLOR r g b a as bytes, LOCKED, UNINTERACTABLE, DOCKED, SHOWN, the
+# MESSAGES … END list of the groups the window
 # shows, its CHANNELS … END list of custom channels, and its zone channels as ZONECHANNELS bits.
 # Written whole; the tab menu, /join and ChangeChatColor are what move it.
 ";
@@ -83,7 +92,8 @@ pub(super) struct ChatWindowFile {
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Parsed {
     pub(super) looks: Vec<(usize, ChatWindowLook)>,
-    pub(super) colors: Vec<(String, [u8; 3])>,
+    /// `(name, rgb, colorNameByClass)`; a row without the flag reads `N`.
+    pub(super) colors: Vec<(String, [u8; 3], bool)>,
     pub(super) joined: Vec<String>,
     /// The header's `ZONECHANNELS` word, the reference's `[0xb6e5e0]`, overwritten from the file
     /// (`0x498d83`); `None` without the line, so the loader seeds from the DBC rather than 0.
@@ -128,7 +138,7 @@ fn render(
         "STANDARD"
     };
     out.push_str(&format!(
-        "\nVERSION 2\n\nADDEDVERSION 2\n\nOPTION_GUILD_RECRUITMENT_CHANNEL {recruitment}\n\nCHANNELS\n"
+        "\nVERSION 5\n\nADDEDVERSION 13\n\nOPTION_GUILD_RECRUITMENT_CHANNEL {recruitment}\n\nCHANNELS\n"
     ));
     for name in custom {
         out.push_str(name);
@@ -137,8 +147,12 @@ fn render(
     out.push_str(&format!("END\n\nZONECHANNELS {zone_mask}\n\nCOLORS\n"));
     for c in colors {
         out.push_str(&format!(
-            "{} {} {} {}\n",
-            c.name, c.rgb[0], c.rgb[1], c.rgb[2]
+            "{} {} {} {} {}\n",
+            c.name,
+            c.rgb[0],
+            c.rgb[1],
+            c.rgb[2],
+            if c.name_by_class { 'Y' } else { 'N' }
         ));
     }
     out.push_str("END\n\n");
@@ -148,13 +162,14 @@ fn render(
             out.push_str(&format!("NAME {}\n", l.name));
         }
         out.push_str(&format!(
-            "SIZE {}\nCOLOR {} {} {} {}\nLOCKED {}\nDOCKED {}\nSHOWN {}\n\nMESSAGES\n",
+            "SIZE {}\nCOLOR {} {} {} {}\nLOCKED {}\nUNINTERACTABLE {}\nDOCKED {}\nSHOWN {}\n\nMESSAGES\n",
             l.font_size,
             l.r,
             l.g,
             l.b,
             l.a,
             i32::from(l.locked),
+            i32::from(l.uninteractable),
             l.docked.unwrap_or(0),
             i32::from(l.shown),
         ));
@@ -218,7 +233,8 @@ fn parse(text: &str, rows: &[(u32, String)]) -> Parsed {
                     block = Block::Top;
                 } else {
                     let rgb = [byte(it.next()), byte(it.next()), byte(it.next())];
-                    out.colors.push((head.to_ascii_uppercase(), rgb));
+                    let by_class = it.next().is_some_and(|f| f.eq_ignore_ascii_case("Y"));
+                    out.colors.push((head.to_ascii_uppercase(), rgb, by_class));
                 }
                 continue;
             }
@@ -308,12 +324,12 @@ fn parse(text: &str, rows: &[(u32, String)]) -> Parsed {
         }
     }
     flush(&mut current, &mut out);
-    // The loader's EOF back-fill (`0x49967c`): an older file gets the groups added since, the
-    // first ten into window 1 and the rest, both `addedVersion` rows among them, into window 2.
-    if added_version < 2 {
+    // The loader's EOF back-fill (`0x49967c` in 1.12): an older file gets the `defaultOn` groups
+    // added since, general groups into window 1 and combat-log groups into window 2.
+    if added_version < 13 {
         for (i, (name, on, ver)) in MESSAGE_GROUPS.iter().enumerate() {
             if *on && *ver > added_version {
-                let target = usize::from(i >= 10);
+                let target = usize::from(i >= COMBAT_LOG_GROUPS_START);
                 if let Some((_, look)) = out.looks.iter_mut().find(|(w, _)| *w == target) {
                     if !look.messages.iter().any(|m| m == name) {
                         look.messages.push((*name).to_string());
@@ -350,6 +366,8 @@ fn apply_key<'a>(
         look.a = byte(it.next());
     } else if key.eq_ignore_ascii_case("LOCKED") {
         look.locked = flag(it.next());
+    } else if key.eq_ignore_ascii_case("UNINTERACTABLE") {
+        look.uninteractable = it.next().is_some_and(|v| v.trim() != "0");
     } else if key.eq_ignore_ascii_case("DOCKED") {
         look.docked = it
             .next()
@@ -495,17 +513,26 @@ pub(crate) fn restore_chat_looks(world: &mut World, script: &mut UiScript) {
     // `load_chat_channels` has read them before any in-game UI load, and every load re-seeds.
     script.set_chat_channel_seed(auto_rows);
     // `UPDATE_CHAT_WINDOWS` once, then `UPDATE_CHAT_COLOR` for every registry entry, file or no
-    // file (`0x4996b9`, `0x499934`).
+    // file (`0x4996b9`, `0x499934`). Each colour is followed by its
+    // `UPDATE_CHAT_COLOR_NAME_BY_CLASS`, the pair 12340's ResetChatWindows fires (`0x501f00`), so a
+    // restored flag reaches `ChatTypeInfo`. Label: the loader's own pair was not audited.
     script.fire_event("UPDATE_CHAT_WINDOWS", vec![]);
     let renorm = |b: u8| f64::from(b as f32 * (1.0f32 / 255.0f32));
     for entry in script.chat_colors() {
         script.fire_event(
             "UPDATE_CHAT_COLOR",
             vec![
-                benilla_ui::script::ScriptValue::Str(entry.name),
+                benilla_ui::script::ScriptValue::Str(entry.name.clone()),
                 benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[0])),
                 benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[1])),
                 benilla_ui::script::ScriptValue::Number(renorm(entry.rgb[2])),
+            ],
+        );
+        script.fire_event(
+            "UPDATE_CHAT_COLOR_NAME_BY_CLASS",
+            vec![
+                benilla_ui::script::ScriptValue::Str(entry.name),
+                benilla_ui::script::ScriptValue::Bool(entry.name_by_class),
             ],
         );
     }
@@ -680,6 +707,7 @@ mod tests {
             .map(|(n, rgb)| ChatTypeColor {
                 name: (*n).to_string(),
                 rgb: *rgb,
+                name_by_class: n.starts_with("CHANNEL"),
             })
             .collect()
     }
@@ -690,6 +718,7 @@ mod tests {
         named.name = "Loot & Trade".into();
         named.shown = true;
         named.messages = vec!["LOOT".into(), "MONEY".into()];
+        named.uninteractable = true;
         named.channels = vec![("MyChan".into(), 0), ("Trade".into(), 2)];
         let looks = vec![
             look(1, 0, 0, 0, 64, 14),
@@ -703,6 +732,8 @@ mod tests {
             text.contains("\nCHANNELS\nMyChan\nEND\n\nZONECHANNELS 3\n"),
             "{text}"
         );
+        assert!(text.contains("\nSAY 1 2 3 N\nCHANNEL7 4 5 6 Y\n"), "{text}");
+        assert!(text.contains("\nUNINTERACTABLE 1\n"), "{text}");
         let parsed = parse(&text, &rows());
         let mut expect = looks.clone();
         // The zone channel comes back by its Shortcut row, after the custom names.
@@ -719,8 +750,8 @@ mod tests {
         assert_eq!(
             parsed.colors,
             vec![
-                ("SAY".to_string(), [1, 2, 3]),
-                ("CHANNEL7".to_string(), [4, 5, 6])
+                ("SAY".to_string(), [1, 2, 3], false),
+                ("CHANNEL7".to_string(), [4, 5, 6], true)
             ]
         );
         assert_eq!(parsed.joined, vec!["MyChan".to_string()]);
@@ -887,7 +918,7 @@ mod tests {
         assert_eq!(parse(HEADER, &rows()), Parsed::default());
     }
 
-    /// benilla's older one-line rows (no `ADDEDVERSION`), with the back-fill into window 2.
+    /// benilla's older one-line rows (no `ADDEDVERSION`): the back-fill leaves the stock sets.
     #[test]
     fn one_line_rows_without_addedversion_still_parse() {
         let got = parse(
@@ -907,33 +938,41 @@ mod tests {
                 (2, look(3, 0, 0, 0, 0, 12)),
             ]
         );
-        assert!(got.looks[1].1.messages.iter().any(|m| m == "MONEY"));
+        assert!(got.looks[1].1.messages.iter().any(|m| m == "OPENING"));
     }
 
+    /// The grammar of a real 12340-written `chat-cache.txt`.
     #[test]
     fn a_stock_reference_file_parses() {
-        let text = "VERSION 2\n\nADDEDVERSION 2\n\nOPTION_GUILD_RECRUITMENT_CHANNEL AUTO\n\n\
+        let text = "VERSION 5\n\nADDEDVERSION 13\n\nOPTION_GUILD_RECRUITMENT_CHANNEL AUTO\n\n\
                     CHANNELS\nMyGuildChat\nEND\n\nZONECHANNELS 8388611\n\n\
-                    COLORS\nSAY 255 255 255\nSYSTEM 200 200 0\nEND\n\n\
-                    WINDOW 1\nSIZE 0\nCOLOR 0 0 0 0\nLOCKED 1\nDOCKED 1\nSHOWN 1\n\n\
-                    MESSAGES\nSYSTEM\nSAY\nEND\n\nCHANNELS\nMyGuildChat\nEND\n\n\
+                    COLORS\nSAY 255 255 255 N\nSYSTEM 200 200 0 Y\nEND\n\n\
+                    WINDOW 1\nNAME General\nSIZE 0\nCOLOR 0 0 0 40\nLOCKED 1\n\
+                    UNINTERACTABLE 0\nDOCKED 1\nSHOWN 1\n\n\
+                    MESSAGES\nSYSTEM\nSAY\nACHIEVEMENT\nEND\n\nCHANNELS\nMyGuildChat\nEND\n\n\
                     ZONECHANNELS 8388611\n\nEND\n\n\
-                    WINDOW 2\nNAME Combat Log\nSIZE 0\nCOLOR 0 0 0 0\nLOCKED 1\nDOCKED 2\nSHOWN 0\n\n\
-                    MESSAGES\nCOMBAT_XP_GAIN\nEND\n\nCHANNELS\nEND\n\nZONECHANNELS 0\n\nEND\n";
+                    WINDOW 2\nNAME Combat Log\nSIZE 0\nCOLOR 0 0 0 40\nLOCKED 1\n\
+                    UNINTERACTABLE 1\nDOCKED 2\nSHOWN 0\n\n\
+                    MESSAGES\nOPENING\nCOMBAT_XP_GAIN\nEND\n\nCHANNELS\nEND\n\nZONECHANNELS 0\n\nEND\n";
         let got = parse(text, &rows());
         assert_eq!(
             got.colors,
             vec![
-                ("SAY".to_string(), [255, 255, 255]),
-                ("SYSTEM".to_string(), [200, 200, 0])
+                ("SAY".to_string(), [255, 255, 255], false),
+                ("SYSTEM".to_string(), [200, 200, 0], true)
             ]
         );
         assert_eq!(got.joined, vec!["MyGuildChat".to_string()]);
         assert_eq!(got.looks.len(), 2);
         let (i, w1) = &got.looks[0];
         assert_eq!(*i, 0);
-        assert!(w1.shown && w1.name.is_empty());
-        assert_eq!(w1.messages, vec!["SYSTEM".to_string(), "SAY".to_string()]);
+        assert!(w1.shown && !w1.uninteractable);
+        assert_eq!(w1.name, "General");
+        assert_eq!(
+            w1.messages,
+            vec!["SYSTEM".to_string(), "SAY".to_string(), "ACHIEVEMENT".to_string()],
+            "a Wrath group is kept, not dropped as unknown"
+        );
         assert_eq!(
             w1.channels,
             vec![
@@ -945,10 +984,29 @@ mod tests {
             "bits 0, 1 and 23 of 8388611 — the shortcut rows, in DBC order"
         );
         let (_, w2) = &got.looks[1];
-        assert!(!w2.shown);
+        assert!(!w2.shown && w2.uninteractable);
         assert_eq!(w2.name, "Combat Log");
         assert_eq!(w2.docked, Some(2));
-        assert_eq!(w2.messages, vec!["COMBAT_XP_GAIN".to_string()]);
+        assert_eq!(
+            w2.messages,
+            vec!["OPENING".to_string(), "COMBAT_XP_GAIN".to_string()]
+        );
+    }
+
+    /// A file older than `ADDEDVERSION 13` gains the `defaultOn` groups added since, general ones
+    /// in window 1 and combat-log ones in window 2.
+    #[test]
+    fn an_older_file_is_back_filled_by_group_version() {
+        let got = parse(
+            "ADDEDVERSION 7\nWINDOW 1\nMESSAGES\nSAY\nEND\nEND\nWINDOW 2\nMESSAGES\nEND\nEND\n",
+            &rows(),
+        );
+        let w1 = &got.looks[0].1.messages;
+        assert!(w1.iter().any(|m| m == "ACHIEVEMENT"), "version 8");
+        assert!(w1.iter().any(|m| m == "BN_WHISPER"), "version 12");
+        assert!(!w1.iter().any(|m| m == "EMOTE"), "version 7 is not newer");
+        assert!(!w1.iter().any(|m| m == "TARGETICONS"), "not defaultOn");
+        assert!(got.looks[1].1.messages.is_empty(), "the combat-log groups are version 6 or 0");
     }
 
     #[test]
@@ -976,8 +1034,8 @@ mod tests {
         let text = render(std::slice::from_ref(&moved), &[], &[], 0, true);
         assert!(text.contains("DOCKED 3"));
         assert_eq!(parse(&text, &rows()).looks, vec![(0, moved.clone())]);
-        // The boot init: window 1 shown and undocked with ten groups, window 2 shown at dock
-        // index 1 with 34, window 3 hidden.
+        // The stock records: window 1 shown at dock 1 with 39 groups, window 2 shown at dock 2
+        // with the six combat-log groups, window 3 hidden.
         let got = parse(
             "WINDOW 1  SIZE 0\nWINDOW 2  SIZE 0\nWINDOW 3  SIZE 0\n",
             &rows(),
@@ -987,7 +1045,7 @@ mod tests {
                 .iter()
                 .map(|(_, l)| (l.docked, l.shown, l.messages.len()))
                 .collect::<Vec<_>>(),
-            vec![(None, true, 10), (Some(1), true, 34), (None, false, 0)]
+            vec![(Some(1), true, 39), (Some(2), true, 6), (None, false, 0)]
         );
     }
 
@@ -1003,7 +1061,7 @@ mod tests {
     /// A `MESSAGES` block replaces the init set: the loader zeroes every flag before it reads.
     #[test]
     fn an_empty_messages_block_is_an_empty_set() {
-        let got = parse("ADDEDVERSION 2\nWINDOW 1\nMESSAGES\nEND\nEND\n", &rows());
+        let got = parse("ADDEDVERSION 13\nWINDOW 1\nMESSAGES\nEND\nEND\n", &rows());
         assert!(got.looks[0].1.messages.is_empty());
     }
 
