@@ -59,16 +59,27 @@ mod tests {
         let dispatch = |app: &mut App, event| {
             crate::net::handlers::dispatch(app.world_mut(), vec![event]);
         };
-        dispatch(&mut app, SessionEvent::WrathAccountExpansion { expansion: Some(2) });
-        dispatch(&mut app, SessionEvent::Disconnected {
-            reason: "replace session".into(),
-            end: benilla_protocol::SessionEnd::Lost,
-        });
+        dispatch(
+            &mut app,
+            SessionEvent::WrathAccountExpansion { expansion: Some(2) },
+        );
+        dispatch(
+            &mut app,
+            SessionEvent::Disconnected {
+                reason: "replace session".into(),
+                end: benilla_protocol::SessionEnd::Lost,
+            },
+        );
         assert_eq!(app.world().resource::<NativeAccountExpansion>().0, None);
-        dispatch(&mut app, SessionEvent::WrathAccountExpansion { expansion: Some(0) });
+        dispatch(
+            &mut app,
+            SessionEvent::WrathAccountExpansion { expansion: Some(0) },
+        );
         assert_eq!(app.world().resource::<NativeAccountExpansion>().0, Some(0));
-        dispatch(&mut app, SessionEvent::WrathAccountExpansion { expansion: None });
+        dispatch(
+            &mut app,
+            SessionEvent::WrathAccountExpansion { expansion: None },
+        );
         assert_eq!(app.world().resource::<NativeAccountExpansion>().0, None);
     }
-
 }
