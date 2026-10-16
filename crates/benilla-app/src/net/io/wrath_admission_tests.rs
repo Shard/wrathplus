@@ -7,6 +7,32 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        (
+            "Chat",
+            ClientCommand::Chat { kind: crate::net::ChatKind::Say, target: None, text: "hi".into(), language: None },
+        ),
+        (
+            "AddonMessage",
+            ClientCommand::AddonMessage { distribution: benilla_ui::script::AddonDistribution::Party, text: "p\tm".into() },
+        ),
+        ("JoinChannel", ClientCommand::JoinChannel { name: "General - Elwynn Forest".into(), password: String::new(), channel_id: 1 }),
+        ("LeaveChannel", ClientCommand::LeaveChannel { name: "x".into() }),
+        ("ChannelList", ClientCommand::ChannelList { name: "x".into() }),
+        ("ChannelOwner", ClientCommand::ChannelOwner { name: "x".into() }),
+        ("ChannelSetOwner", ClientCommand::ChannelSetOwner { name: "x".into(), player: "Bob".into() }),
+        ("ChannelPassword", ClientCommand::ChannelPassword { name: "x".into(), password: "p".into() }),
+        ("ChannelModerator", ClientCommand::ChannelModerator { name: "x".into(), player: "Bob".into() }),
+        ("ChannelUnmoderator", ClientCommand::ChannelUnmoderator { name: "x".into(), player: "Bob".into() }),
+        ("ChannelMute", ClientCommand::ChannelMute { name: "x".into(), player: "Bob".into() }),
+        ("ChannelUnmute", ClientCommand::ChannelUnmute { name: "x".into(), player: "Bob".into() }),
+        ("ChannelInvite", ClientCommand::ChannelInvite { name: "x".into(), player: "Bob".into() }),
+        ("ChannelKick", ClientCommand::ChannelKick { name: "x".into(), player: "Bob".into() }),
+        ("ChannelBan", ClientCommand::ChannelBan { name: "x".into(), player: "Bob".into() }),
+        ("ChannelUnban", ClientCommand::ChannelUnban { name: "x".into(), player: "Bob".into() }),
+        ("ChannelAnnouncements", ClientCommand::ChannelAnnouncements { name: "x".into() }),
+        ("ChannelModerate", ClientCommand::ChannelModerate { name: "x".into() }),
+        ("TextEmote", ClientCommand::TextEmote { text_id: 101, target: 0 }),
+        ("ChatIgnored", ClientCommand::ChatIgnored { guid: 1 }),
         ("NativeParty", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::ReadyCheckFinished)),
         ("PartyUninviteGuid", ClientCommand::NativeParty(benilla_protocol::wrath_party::Command::UninviteGuid { guid: 1, reason: String::new() })),
         ("GroupUninvite", ClientCommand::GroupUninvite { name: "Bob".into() }),

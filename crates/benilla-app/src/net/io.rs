@@ -975,7 +975,7 @@ fn writer_loop(
                     ClientCommand::AddonMessage { distribution, text } => {
                         w.send_addon_message(super::addon_wire_chat_type(distribution), &text)
                     }
-                    ClientCommand::JoinChannel { name, password } => {
+                    ClientCommand::JoinChannel { name, password, .. } => {
                         w.join_channel(&name, &password)
                     }
                     ClientCommand::LeaveChannel { name } => w.leave_channel(&name),

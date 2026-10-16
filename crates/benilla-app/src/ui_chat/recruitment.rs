@@ -163,6 +163,7 @@ pub(super) fn guild_recruitment_cascade(
             let command = ClientCommand::JoinChannel {
                 name,
                 password: String::new(),
+                channel_id: row.id,
             };
             send_supported(&commands, *dialect, command);
         }
@@ -261,29 +262,30 @@ mod tests {
     }
 
     #[test]
-    fn wrath_recruitment_join_and_leave_commands_are_both_unsupported() {
+    fn wrath_recruitment_join_and_leave_commands_are_native() {
         let (tx, rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
         for command in [
             ClientCommand::JoinChannel {
                 name: "GuildRecruitment - City".into(),
                 password: String::new(),
+                channel_id: 25,
             },
             ClientCommand::LeaveChannel {
                 name: "GuildRecruitment - City".into(),
             },
         ] {
-            assert!(!send_supported(
+            assert!(send_supported(
                 &commands,
                 crate::net::SessionDialect::Wrath12340,
                 command,
             ));
         }
-        assert!(rx.try_iter().next().is_none());
+        assert_eq!(rx.try_iter().count(), 2);
     }
 
     #[test]
-    fn wrath_cascade_leave_updates_the_mask_without_sending() {
+    fn wrath_cascade_leave_sends_and_updates_the_mask() {
         const GUILD_RECRUITMENT: u32 = 25;
         let mut channels = ChannelState {
             channels: benilla_formats::ChatChannelsCatalog::from_rows(vec![
@@ -308,8 +310,11 @@ mod tests {
         );
 
         assert!(
-            rx.try_iter().next().is_none(),
-            "unsupported leave is fenced"
+            matches!(
+                rx.try_iter().collect::<Vec<_>>().as_slice(),
+                [ClientCommand::LeaveChannel { name }] if name == "GuildRecruitment - City"
+            ),
+            "the native leave goes out"
         );
         assert_eq!(
             channels.zone_mask,
