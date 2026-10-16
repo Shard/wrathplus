@@ -13,7 +13,7 @@ use crate::target::ring::Factions;
 use crate::ui_party::GroupState;
 
 /// Read-only `ObjectStore` lookup by entity, the one thing [`classify`] needs from the world.
-pub(crate) trait Stores {
+pub(crate) trait Stores: Sync {
     fn store(&self, entity: Entity) -> Option<&ObjectStore>;
 }
 
@@ -291,13 +291,19 @@ pub(crate) fn classify(
 
     // Friend or foe is `CanAttack` on this unit itself, never its owner (`0x5f00e3`/`0x5f00f2`).
     let hostile = {
-        let me_store = index.0.get(&me).copied().and_then(|e| stores.store(e));
+        let store_of = crate::target::ByGuid::new(|g: u64| {
+            index.0.get(&g).copied().and_then(|e| stores.store(e))
+        });
+        let me_store = crate::target::StoreLookup::store(&store_of, me);
+        // The player acts, so no creature metadata is read; the controller walk needs the lookup.
+        let relations = crate::target::RelationContext::new(None, &store_of);
         crate::target::ring::can_attack_from_player(
             factions,
             reputations,
             Some(store),
             me_store,
             benilla_protocol::guid::is_player(guid),
+            relations,
         )
     };
 

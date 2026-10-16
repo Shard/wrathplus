@@ -15,6 +15,7 @@ use benilla_protocol::messages::{ObjectType, OwnerFallback};
 
 use crate::net::{ObjectStore, Reputations};
 
+use super::wrath_relations::Context;
 use super::{ring_reaction, Factions};
 
 /// `OBJECT_FIELD_TYPE` bit 4, the reference's own player test (`0x606984` in `CanAttack`,
@@ -37,6 +38,7 @@ pub(crate) fn can_attack(
     factions: Option<&Factions>,
     reputations: &Reputations,
     self_store: Option<&ObjectStore>,
+    ctx: Context,
 ) -> bool {
     super::ring::can_attack_from_player(
         factions,
@@ -44,6 +46,7 @@ pub(crate) fn can_attack(
         store,
         self_store,
         is_player_object(store),
+        ctx,
     )
 }
 
@@ -137,16 +140,27 @@ const UNIT_FLAG_PLAYER_CONTROLLED: u32 = 0x8;
 ///
 /// The player-controlled arm (`0x60673e`..`0x60679f`) reads an `[obj+0xe68]` record whose fields
 /// are unnamed and is not built: a player-controlled unit passes, which never hides a buff.
+///
+/// Wrath runs 12340's `CanAssist 007293d0` instead ([`super::wrath_relations::assist`]), on the
+/// player's reaction toward the unit and `ctx`'s live owner lookup and creature metadata.
 pub(crate) fn can_assist(
     store: Option<&ObjectStore>,
     factions: Option<&Factions>,
     reputations: &Reputations,
     self_store: Option<&ObjectStore>,
-    owner_store: impl FnOnce(u64) -> Option<ObjectStore>,
+    ctx: Context,
 ) -> bool {
     let Some(store) = store else {
         return false;
     };
+    if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+        let Some(actor) = self_store else {
+            return false;
+        };
+        let toward =
+            super::ring::reaction_from_player(factions, reputations, Some(store), self_store);
+        return super::wrath_relations::assist(actor, store, toward, ctx);
+    }
     let flags = store.0.unit_flags();
     if flags & UNIT_FLAG_NOT_SELECTABLE != 0 {
         return false;
@@ -162,7 +176,7 @@ pub(crate) fn can_assist(
     let owned = store
         .0
         .unit_owner(OwnerFallback::CreatedBy)
-        .and_then(owner_store);
+        .and_then(|owner| ctx.stores.store(owner));
     let pvp_flags = owned.as_ref().map_or(flags, |o| o.0.unit_flags());
     pvp_flags & UNIT_FLAG_PVP != 0
 }
