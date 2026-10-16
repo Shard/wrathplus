@@ -111,39 +111,20 @@ fn channel_notices_follow_ac_tails_and_leave_joined_left_to_wrath_channel() {
     assert!(decode_channel_notify(&notice(0x24, vec![])).is_err());
 }
 
+/// MESSAGECHAT has one consumer, App's native feed over the raw capture: a shared `Chat` beside it
+/// printed every line twice (3de4d931).
 #[test]
-fn chat_lines_translate_types_and_tags_and_never_addon_traffic() {
-    use crate::messages as m;
-    let line = |chat_type: u8, language: u32, tag: u8| crate::wrath_chat::Message {
-        gm: false,
-        chat_type,
-        language,
-        sender_guid: 9,
-        flags: 0,
-        sender_name: None,
-        receiver_guid: 8,
-        receiver_name: None,
-        channel: (chat_type == 0x11).then(|| b"Trade".to_vec()),
-        text: b"hi".to_vec(),
-        chat_tag: tag,
-        achievement_id: None,
-    };
-    for (wrath, shared) in [
-        (0x00, m::CHAT_MSG_SYSTEM),
-        (0x01, m::CHAT_MSG_SAY),
-        (0x07, m::CHAT_MSG_WHISPER),
-        (0x09, m::CHAT_MSG_WHISPER_INFORM),
-        (0x11, m::CHAT_MSG_CHANNEL),
-        (0x28, m::CHAT_MSG_RAID_WARNING),
-        (0x33, m::CHAT_MSG_PARTY),
-    ] {
-        let out = crate::wrath_chat::shared_message(&line(wrath, 7, 0)).unwrap();
-        assert_eq!((out.chat_type, out.sender_guid, out.target_guid, out.text.as_str()), (shared, 9, 8, "hi"));
+fn chat_lines_dispatch_only_the_raw_capture() {
+    // Type SAY, language 7, sender, flags, receiver, sized text, tag.
+    let say = [vec![0x01], w(7), q(9), w(0), q(9), w(3), b"hi\0".to_vec(), vec![0]].concat();
+    let mut adapter = crate::wrath_events::WrathEventAdapter::new();
+    match adapter.dispatch(0x96, &say, 0).unwrap() {
+        crate::wrath_events::WrathDispatch::Handled { session_events, .. } => assert!(
+            matches!(session_events.as_slice(), [SessionEvent::WrathChat { message }] if message.chat_type == 1),
+            "{session_events:?}"
+        ),
+        other => panic!("{other:?}"),
     }
-    let channel = crate::wrath_chat::shared_message(&line(0x11, 7, 4 | 1)).unwrap();
-    assert_eq!((channel.channel.as_deref(), channel.chat_tag), (Some("Trade"), m::chat_tag::GM));
-    assert!(crate::wrath_chat::shared_message(&line(0x02, crate::wrath_chat::LANGUAGE_ADDON, 0)).is_none());
-    assert!(crate::wrath_chat::shared_message(&line(0x30, 0, 0)).is_none(), "achievement lines stay raw");
 }
 
 #[test]
