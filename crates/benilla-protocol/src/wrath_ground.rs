@@ -35,6 +35,10 @@ pub const MOVE_TURN_RIGHT: u32 = 0x0000_0020;
 pub const MOVE_WALKING: u32 = 0x0000_0100;
 pub const MOVE_FALLING: u32 = 0x0000_1000;
 pub const MOVE_FALLING_FAR: u32 = 0x0000_2000;
+/// Granted on-foot modes (AzerothCore `MOVEMENTFLAG_WATERWALKING`, `_FALLING_SLOW`): once the server
+/// orders them, the mover reports them on every packet until revoked. Same bits as 1.12.
+pub const MOVE_WATER_WALKING: u32 = 0x1000_0000;
+pub const MOVE_FALLING_SLOW: u32 = 0x2000_0000;
 
 const DIRECTION_MASK: u32 = MOVE_FORWARD
     | MOVE_BACKWARD
@@ -42,7 +46,8 @@ const DIRECTION_MASK: u32 = MOVE_FORWARD
     | MOVE_STRAFE_RIGHT
     | MOVE_TURN_LEFT
     | MOVE_TURN_RIGHT;
-pub const GROUND_FLAG_MASK: u32 = DIRECTION_MASK | MOVE_WALKING;
+pub const GROUND_FLAG_MASK: u32 =
+    DIRECTION_MASK | MOVE_WALKING | MOVE_WATER_WALKING | MOVE_FALLING_SLOW;
 pub const ON_FOOT_FLAG_MASK: u32 = GROUND_FLAG_MASK | MOVE_FALLING | MOVE_FALLING_FAR;
 
 /// The four values AzerothCore reads when Wrath's `FALLING` flag is present.

@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use benilla_protocol::wrath_authority::{
-    self, ForceRootOrder, GroundPose, OnFootPose, UnsetCanFlyOrder,
+    self, ForceRootOrder, GroundPose, MoverOrder, OnFootPose, UnsetCanFlyOrder,
 };
 use benilla_protocol::wrath_combat;
 use benilla_protocol::wrath_events::{
@@ -485,6 +485,29 @@ fn run(
                         })
                         .map_err(|_| anyhow!("Wrath writer stopped"))?;
                 }
+                opcode if wrath_authority::is_mover_order(opcode) => {
+                    let order = match wrath_authority::decode_mover_order(opcode, &packet.body) {
+                        Ok(order) => order,
+                        Err(error) => {
+                            authority.revoke();
+                            return Err(error).context("Wrath mover order");
+                        }
+                    };
+                    // Barrier first, as for root: no later app movement may overtake the order.
+                    authority.raise_mover_barrier(order)?;
+                    if let Some(event) = mover_order_event(&order) {
+                        send(events, event)?;
+                    }
+                    // A near teleport is acknowledged by the controller once it has snapped.
+                    if !matches!(order, MoverOrder::TeleportNear { .. }) {
+                        control
+                            .send(WrathWriterControl::Internal {
+                                epoch,
+                                command: WrathWriterCommand::Mover(order),
+                            })
+                            .map_err(|_| anyhow!("Wrath writer stopped"))?;
+                    }
+                }
                 _ => {
                     reject_unsupported_movement(&authority, packet.opcode)?;
                     dispatch_packet(
@@ -513,8 +536,28 @@ fn dispatch_packet(
 ) -> Result<()> {
     let now = clock.now_ms();
     if benilla_protocol::wrath_relay::handles(packet.opcode) {
-        let event = benilla_protocol::wrath_relay::decode(packet.opcode, &packet.body)
-            .context("Wrath on-foot movement relay")?;
+        let event = match benilla_protocol::wrath_relay::decode(packet.opcode, &packet.body) {
+            Ok(event) => event,
+            // Another unit swimming, flying or riding is outside the on-foot relay subset: drop
+            // that one packet. Only our own mover's server-authored pose is authority.
+            Err(error)
+                if benilla_protocol::wire::read_packed_guid(&mut packet.body.as_slice())
+                    .is_ok_and(|guid| guid != authority.self_guid) =>
+            {
+                bevy::log::debug!(
+                    "net(wrath): foreign movement relay {:#05x} outside the on-foot subset dropped: {error}",
+                    packet.opcode
+                );
+                return send(
+                    events,
+                    SessionEvent::PacketDropped {
+                        opcode: packet.opcode,
+                        unparseable: true,
+                    },
+                );
+            }
+            Err(error) => return Err(error).context("Wrath on-foot movement relay"),
+        };
         if let SessionEvent::UnitMove { guid, .. } = &event {
             let raw = benilla_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packet.body)?;
             authority.observe_server_pose(*guid, &raw.movement)?;
@@ -582,6 +625,8 @@ enum WrathWriterCommand {
     Reply(WrathReply),
     UnsetCanFly(UnsetCanFlyOrder),
     ForceRoot { order: ForceRootOrder, rooted: bool },
+    /// A speed, mode, knockback or collision-height order the writer acknowledges itself.
+    Mover(MoverOrder),
     PoseReady,
 }
 
@@ -667,10 +712,13 @@ struct MovementAuthorityState {
     transfer_transport: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum PendingAuthorityOrder {
     UnsetCanFly(UnsetCanFlyOrder),
     ForceRoot { order: ForceRootOrder, rooted: bool },
+    /// Every other self order. A near teleport waits for the controller's `TeleportAck`; the
+    /// rest the writer acknowledges from the last reported pose.
+    Mover(MoverOrder),
 }
 
 #[derive(Clone)]
@@ -868,6 +916,10 @@ impl MovementAuthorityHandle {
         let order = match pending {
             PendingAuthorityOrder::UnsetCanFly(order)
             | PendingAuthorityOrder::ForceRoot { order, .. } => order,
+            PendingAuthorityOrder::Mover(order) => UnsetCanFlyOrder {
+                mover_guid: order.mover_guid(),
+                counter: order.counter(),
+            },
         };
         if order.mover_guid != self.self_guid {
             state.self_control = false;
@@ -984,6 +1036,138 @@ impl MovementAuthorityHandle {
         debug_assert_eq!(retired, Some(expected));
         Ok(UnsetAckResult::Sent)
     }
+
+    fn raise_mover_barrier(&self, order: MoverOrder) -> Result<()> {
+        self.raise_authority_order(PendingAuthorityOrder::Mover(order))?;
+        // A near teleport ends any flight path: no SPLINE_DONE may follow it.
+        if matches!(order, MoverOrder::TeleportNear { .. }) {
+            let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+            if state.epoch == self.epoch && state.self_guid == self.self_guid {
+                state.taxi_spline = None;
+            }
+        }
+        Ok(())
+    }
+
+    /// Acknowledge the head speed, mode, knockback or collision-height order from the last pose
+    /// reported to the server, as root and unset-can-fly do. A near teleport is never acknowledged
+    /// here: it waits for the controller's snap ([`Self::send_teleport_ack`]).
+    fn send_mover_ack(
+        &self,
+        order: MoverOrder,
+        timestamp: u32,
+        send: impl FnOnce(u32, &[u8]) -> Result<()>,
+    ) -> Result<UnsetAckResult> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return Ok(UnsetAckResult::Stale);
+        }
+        let expected = PendingAuthorityOrder::Mover(order);
+        if order.mover_guid() != self.self_guid
+            || state.pending_orders.front() != Some(&expected)
+            || matches!(order, MoverOrder::TeleportNear { .. })
+        {
+            state.self_control = false;
+            state.control_decided = true;
+            bail!("Wrath mover-order ACK did not match the pending order head");
+        }
+        let Some(pose) = state.ground_pose else {
+            return Ok(UnsetAckResult::PendingSelfPose);
+        };
+        let (opcode, body, reported) = match order {
+            MoverOrder::Speed { kind, counter, speed, .. } => (
+                kind.ack_opcode(),
+                wrath_authority::encode_value_ack(self.self_guid, counter, pose, timestamp, speed)?,
+                pose,
+            ),
+            MoverOrder::CollisionHeight { counter, height, .. } => (
+                wrath_authority::CMSG_MOVE_SET_COLLISION_HGT_ACK,
+                wrath_authority::encode_value_ack(self.self_guid, counter, pose, timestamp, height)?,
+                pose,
+            ),
+            MoverOrder::Mode { kind, apply, counter, .. } => {
+                let body = wrath_authority::encode_mode_ack(
+                    self.self_guid,
+                    counter,
+                    pose,
+                    timestamp,
+                    kind,
+                    apply,
+                )?;
+                // Water walking and slow fall are on-foot bits the mover keeps reporting; the
+                // airborne modes stay outside the on-foot pose.
+                let mut reported = pose;
+                let bit = kind.flag() & benilla_protocol::wrath_ground::GROUND_FLAG_MASK;
+                if apply {
+                    reported.flags |= bit;
+                } else {
+                    reported.flags &= !bit;
+                }
+                (kind.ack_opcode(apply), body, reported)
+            }
+            MoverOrder::KnockBack { counter, .. } => (
+                wrath_authority::CMSG_MOVE_KNOCK_BACK_ACK,
+                wrath_authority::encode_knock_back_ack(
+                    self.self_guid,
+                    counter,
+                    pose,
+                    timestamp,
+                    &order,
+                )?,
+                pose,
+            ),
+            MoverOrder::TeleportNear { .. } => unreachable!("refused above"),
+        };
+        send(opcode, &body)?;
+        state.ground_pose = Some(reported);
+        let retired = state.pending_orders.pop_front();
+        debug_assert_eq!(retired, Some(expected));
+        Ok(UnsetAckResult::Sent)
+    }
+
+    /// The controller snapped to a near-teleport destination: acknowledge it (`MSG_MOVE_TELEPORT_ACK`)
+    /// only when it is the head order, so no movement from the old pose can follow the ACK.
+    fn send_teleport_ack(
+        &self,
+        guid: u64,
+        counter: u32,
+        timestamp: u32,
+        send: impl FnOnce(&[u8]) -> Result<()>,
+    ) -> Result<bool> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid != self.self_guid {
+            return Ok(false);
+        }
+        let Some(&PendingAuthorityOrder::Mover(
+            order @ MoverOrder::TeleportNear {
+                counter: pending,
+                position,
+                orientation,
+                ..
+            },
+        )) = state.pending_orders.front()
+        else {
+            return Ok(false);
+        };
+        if pending != counter {
+            return Ok(false);
+        }
+        send(&wrath_authority::encode_teleport_ack(
+            self.self_guid,
+            counter,
+            timestamp,
+        ))?;
+        state.ground_pose = Some(OnFootPose {
+            flags: 0,
+            position,
+            orientation,
+            fall_time: 0,
+            fall: None,
+        });
+        let retired = state.pending_orders.pop_front();
+        debug_assert_eq!(retired, Some(PendingAuthorityOrder::Mover(order)));
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1022,6 +1206,8 @@ enum WrathRoute {
     NativeQuest,
     NativeParty,
     NativeWorldportAck,
+    NativeTeleportAck,
+    AuthorityAcked,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -1185,13 +1371,14 @@ fn route(command: &ClientCommand) -> WrathRoute {
             WrathRoute::DeferredReadOnlyQuery
         }
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
-        ClientCommand::MoveTimeSkipped { .. }
-        | ClientCommand::ForceSpeedAck { .. }
-        | ClientCommand::NotActiveMover { .. }
-        | ClientCommand::TeleportAck { .. }
-        | ClientCommand::WorldportAck
+        ClientCommand::TeleportAck { .. } => WrathRoute::NativeTeleportAck,
+        // The writer acknowledged these orders itself from the reported pose (`send_mover_ack`).
+        ClientCommand::ForceSpeedAck { .. }
         | ClientCommand::MoveModeAck { .. }
-        | ClientCommand::KnockBackAck { .. } => WrathRoute::DisabledMovement,
+        | ClientCommand::KnockBackAck { .. } => WrathRoute::AuthorityAcked,
+        ClientCommand::MoveTimeSkipped { .. }
+        | ClientCommand::NotActiveMover { .. }
+        | ClientCommand::WorldportAck => WrathRoute::DisabledMovement,
         _ => WrathRoute::DisabledGameAction,
     }
 }
@@ -1199,7 +1386,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
 /// Only implemented wire routes grant command admission. Deferred queries have no writer.
 /// Shape/value validation and epoch/capability checks remain at their existing boundaries.
 pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
-    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery)
+    !matches!(route(command), WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction | WrathRoute::DeferredReadOnlyQuery | WrathRoute::AuthorityAcked)
 }
 
 fn writer_loop(
@@ -1243,6 +1430,12 @@ fn writer_loop(
                             WrathWriterCommand::ForceRoot { order, rooted } => queue_or_send_authority(
                                 active,
                                 PendingAuthorityOrder::ForceRoot { order, rooted },
+                                &mut pending_authority,
+                                &mut pre_self_timeout,
+                            ),
+                            WrathWriterCommand::Mover(order) => queue_or_send_authority(
+                                active,
+                                PendingAuthorityOrder::Mover(order),
                                 &mut pending_authority,
                                 &mut pre_self_timeout,
                             ),
@@ -1519,6 +1712,25 @@ fn writer_loop(
                             bevy::log::info!("net(wrath) SEND 0x{opcode:04x} {body:02x?}");
                         }
                         active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeTeleportAck => {
+                        let ClientCommand::TeleportAck { guid, counter } = command else { unreachable!() };
+                        let authority = active.authority.clone();
+                        let timestamp = active.clock.now_ms();
+                        match authority.send_teleport_ack(guid, counter, timestamp, |body| {
+                            active.writer.send_raw(u32::from(wrath_authority::MSG_MOVE_TELEPORT_ACK), body)
+                        }) {
+                            Ok(true) => Ok(()),
+                            Ok(false) => {
+                                bevy::log::warn!("net(wrath): teleport ACK {counter} for {guid:#x} is not the pending head order; not sent");
+                                continue;
+                            }
+                            Err(error) => Err(error),
+                        }
+                    }
+                    WrathRoute::AuthorityAcked => {
+                        bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
+                        continue;
                     }
                     WrathRoute::DeferredReadOnlyQuery => {
                         if warned < SEND_WARN_CAP {
@@ -2027,6 +2239,7 @@ fn send_pending_authority(
         PendingAuthorityOrder::ForceRoot { order, rooted } => {
             send_force_root(active, order, rooted)
         }
+        PendingAuthorityOrder::Mover(order) => send_mover_ack(active, order),
     }
 }
 
@@ -2079,41 +2292,88 @@ fn send_force_root(
     })
 }
 
+/// The shared event the controller applies for a mover order, where it models the state: the
+/// 1.12 speeds, water walk, feather fall, hover, knockback and the near-teleport snap. Flight and
+/// pitch speeds, can-fly, gravity and collision height are acknowledged without one.
+fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
+    use benilla_protocol::messages::{JumpInfo, MoveMode, SpeedKind};
+    use wrath_authority::{ModeOrderKind, SpeedOrderKind};
+    Some(match *order {
+        MoverOrder::Speed { kind, mover_guid, counter, speed } => SessionEvent::ForceSpeedChange {
+            guid: mover_guid,
+            kind: match kind {
+                SpeedOrderKind::Walk => SpeedKind::Walk,
+                SpeedOrderKind::Run => SpeedKind::Run,
+                SpeedOrderKind::RunBack => SpeedKind::RunBack,
+                SpeedOrderKind::Swim => SpeedKind::Swim,
+                SpeedOrderKind::SwimBack => SpeedKind::SwimBack,
+                SpeedOrderKind::TurnRate => SpeedKind::TurnRate,
+                SpeedOrderKind::Flight | SpeedOrderKind::FlightBack | SpeedOrderKind::PitchRate => {
+                    return None
+                }
+            },
+            counter,
+            speed,
+        },
+        MoverOrder::Mode { kind, apply, mover_guid, counter } => SessionEvent::MoveMode {
+            guid: mover_guid,
+            counter,
+            mode: match kind {
+                ModeOrderKind::WaterWalk => MoveMode::WaterWalk,
+                ModeOrderKind::FeatherFall => MoveMode::FeatherFall,
+                ModeOrderKind::Hover => MoveMode::Hover,
+                ModeOrderKind::CanFly | ModeOrderKind::DisableGravity => return None,
+            },
+            apply,
+        },
+        MoverOrder::KnockBack {
+            mover_guid,
+            counter,
+            cos_angle,
+            sin_angle,
+            horizontal_speed,
+            vertical_speed,
+        } => SessionEvent::KnockBack {
+            guid: mover_guid,
+            counter,
+            launch: JumpInfo {
+                zspeed: vertical_speed,
+                cos_angle,
+                sin_angle,
+                xy_speed: horizontal_speed,
+            },
+        },
+        MoverOrder::TeleportNear { mover_guid, counter, position, orientation } => {
+            SessionEvent::Teleport { guid: mover_guid, counter, position, orientation }
+        }
+        MoverOrder::CollisionHeight { .. } => return None,
+    })
+}
+
+fn send_mover_ack(active: &mut WrathWriterSwap, order: MoverOrder) -> Result<UnsetAckResult> {
+    let authority = active.authority.clone();
+    let timestamp = active.clock.now_ms();
+    authority.send_mover_ack(order, timestamp, |opcode, body| {
+        active.writer.send_raw(opcode, body)
+    })
+}
+
+/// An undecodable self order is logged and ignored, not fatal: nothing was queued, so the
+/// authority FIFO and counter are untouched (manager rule, 2026-10-16).
 fn reject_unsupported_movement(authority: &MovementAuthorityHandle, opcode: u16) -> Result<()> {
     if mandatory_movement_order(opcode) {
-        authority.revoke();
-        bail!("unsupported mandatory Wrath movement/control order {opcode:#05x}");
+        bevy::log::warn!(
+            "net(wrath): ignoring unproven movement order {opcode:#05x} for {:#x}",
+            authority.self_guid
+        );
     }
     Ok(())
 }
 
+/// Self orders with no decoder: only the swim/fly transition pair, which AzerothCore registers but
+/// never sends. Every other order has a native ACK path (`MoverOrder`, root, unset-can-fly).
 fn mandatory_movement_order(opcode: u16) -> bool {
-    matches!(
-        opcode,
-        0x00c5
-            | 0x00de
-            | 0x00df
-            | 0x00e2
-            | 0x00e4
-            | 0x00e6
-            | 0x00ef
-            | 0x00f2
-            | 0x00f3
-            | 0x00f4
-            | 0x00f5
-            | 0x02da
-            | 0x02dc
-            | 0x02de
-            | 0x033e
-            | 0x033f
-            | 0x0343
-            | 0x0381
-            | 0x0383
-            | 0x045c
-            | 0x04ce
-            | 0x04d0
-            | 0x0516
-    )
+    matches!(opcode, 0x033e | 0x033f)
 }
 
 fn client_control_update(body: &[u8]) -> Result<(u64, bool)> {
@@ -2781,9 +3041,22 @@ mod tests {
 
     #[test]
     fn unsupported_mandatory_orders_are_classified_fail_closed() {
-        for opcode in [0x00c5, 0x00e2, 0x00ef, 0x0343, 0x04ce, 0x0516] {
+        // Only the never-sent swim/fly transition pair remains undecodable; it is logged and ignored.
+        for opcode in [0x033e, 0x033f] {
             assert!(mandatory_movement_order(opcode), "{opcode:#05x}");
+            assert!(!wrath_authority::is_mover_order(opcode), "{opcode:#05x}");
         }
+        // Every other self order has a native ACK path.
+        for opcode in [
+            0x00c7, 0x00de, 0x00df, 0x00e2, 0x00e4, 0x00e6, 0x00ef, 0x00f2, 0x00f3, 0x00f4, 0x00f5,
+            0x02da, 0x02dc, 0x02de, 0x0343, 0x0381, 0x0383, 0x045c, 0x04ce, 0x04d0, 0x0516,
+        ] {
+            assert!(wrath_authority::is_mover_order(opcode), "{opcode:#05x}");
+            assert!(!mandatory_movement_order(opcode), "{opcode:#05x}");
+        }
+        // An observed teleport is a relay, not an order.
+        assert!(benilla_protocol::wrath_relay::handles(0x00c5));
+        assert!(!mandatory_movement_order(0x00c5));
         for opcode in [
             SMSG_PONG,
             SMSG_CLIENT_CONTROL_UPDATE,
@@ -2800,7 +3073,7 @@ mod tests {
         authority
             .observe_self_create(0xaa, &test_self_position())
             .unwrap();
-        assert!(mandatory_movement_order(0x0343));
+        assert!(mandatory_movement_order(0x033e));
         authority.revoke();
         assert!(authority.with_movement_send(|| ()).is_none());
     }
@@ -3606,4 +3879,329 @@ mod admission_tests;
 fn ui_timer_query_is_native_and_empty() {
     assert_eq!(route(&ClientCommand::NativeUiTimerQuery), WrathRoute::NativeUiTimerQuery);
     assert_eq!(benilla_protocol::wrath_ui_timer::encode_query(), (0x4f6, vec![]));
+}
+
+#[cfg(test)]
+mod mover_order_tests {
+    use super::tests::test_self_position;
+    use super::*;
+    use benilla_protocol::wrath_authority::{ModeOrderKind, SpeedOrderKind};
+
+    fn installed(guid: u64) -> MovementAuthorityHandle {
+        let shared = Arc::new(MovementAuthority::default());
+        let authority = shared.install(90, guid);
+        authority
+            .observe_self_create(guid, &test_self_position())
+            .unwrap();
+        authority
+    }
+
+    #[test]
+    fn a_speed_order_holds_movement_until_its_exact_speed_is_acknowledged() {
+        let authority = installed(0x501);
+        let order = MoverOrder::Speed {
+            kind: SpeedOrderKind::Run,
+            mover_guid: 0x501,
+            counter: 3,
+            speed: 14.0,
+        };
+        authority.raise_mover_barrier(order).unwrap();
+        assert!(authority.with_movement_send(|| ()).is_none());
+        let mut sent = Vec::new();
+        assert_eq!(
+            authority
+                .send_mover_ack(order, 7, |opcode, body| {
+                    sent.push((opcode, body.to_vec()));
+                    Ok(())
+                })
+                .unwrap(),
+            UnsetAckResult::Sent
+        );
+        let [(opcode, body)] = &sent[..] else { panic!() };
+        assert_eq!(*opcode, 0x00e3);
+        assert_eq!(body[body.len() - 4..], 14.0f32.to_le_bytes());
+        assert_eq!(authority.with_movement_send(|| 1), Some(1));
+        // The controller's own ACK is a no-op on this route.
+        assert_eq!(
+            route(&ClientCommand::ForceSpeedAck {
+                kind: benilla_protocol::messages::SpeedKind::Run,
+                guid: 0x501,
+                counter: 3,
+                speed: 14.0,
+                flags: 0,
+                pos: [0.0; 3],
+                orientation: 0.0,
+                pitch: 0.0,
+                fall_time: 0,
+                jump: None,
+                transport: None,
+            }),
+            WrathRoute::AuthorityAcked
+        );
+    }
+
+    #[test]
+    fn a_granted_water_walk_stays_on_later_acks_and_the_land_walk_clears_it() {
+        let authority = installed(0x502);
+        let walk = MoverOrder::Mode {
+            kind: ModeOrderKind::WaterWalk,
+            apply: true,
+            mover_guid: 0x502,
+            counter: 4,
+        };
+        authority.raise_mover_barrier(walk).unwrap();
+        authority.send_mover_ack(walk, 1, |_, _| Ok(())).unwrap();
+        let speed = MoverOrder::Speed {
+            kind: SpeedOrderKind::Swim,
+            mover_guid: 0x502,
+            counter: 5,
+            speed: 4.7,
+        };
+        authority.raise_mover_barrier(speed).unwrap();
+        let mut flags = 0;
+        authority
+            .send_mover_ack(speed, 2, |_, body| {
+                flags = u32::from_le_bytes(body[7..11].try_into().unwrap());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(flags, wrath_authority::MOVEMENT_FLAG_WATER_WALKING);
+        let land = MoverOrder::Mode {
+            kind: ModeOrderKind::WaterWalk,
+            apply: false,
+            mover_guid: 0x502,
+            counter: 6,
+        };
+        authority.raise_mover_barrier(land).unwrap();
+        let mut opcode = 0;
+        authority
+            .send_mover_ack(land, 3, |sent, body| {
+                opcode = sent;
+                flags = u32::from_le_bytes(body[7..11].try_into().unwrap());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!((opcode, flags), (0x02d0, 0));
+    }
+
+    #[test]
+    fn a_near_teleport_waits_for_the_controllers_snap_and_moves_the_reported_pose() {
+        let authority = installed(0x503);
+        let order = MoverOrder::TeleportNear {
+            mover_guid: 0x503,
+            counter: 8,
+            position: [50.0, 60.0, 70.0],
+            orientation: 2.0,
+        };
+        authority.raise_mover_barrier(order).unwrap();
+        assert!(matches!(
+            mover_order_event(&order),
+            Some(SessionEvent::Teleport { counter: 8, .. })
+        ));
+        // Never acknowledged by the writer itself, and movement stays held.
+        assert!(authority.send_mover_ack(order, 1, |_, _| Ok(())).is_err());
+        let authority = installed(0x504);
+        let order = MoverOrder::TeleportNear {
+            mover_guid: 0x504,
+            counter: 8,
+            position: [50.0, 60.0, 70.0],
+            orientation: 2.0,
+        };
+        authority.raise_mover_barrier(order).unwrap();
+        assert!(authority.with_movement_send(|| ()).is_none());
+        // A wrong counter is not the head order and sends nothing.
+        assert!(!authority
+            .send_teleport_ack(0x504, 9, 1, |_| panic!("wrong counter"))
+            .unwrap());
+        let mut body = Vec::new();
+        assert!(authority
+            .send_teleport_ack(0x504, 8, 0x55, |sent| {
+                body = sent.to_vec();
+                Ok(())
+            })
+            .unwrap());
+        assert_eq!(body, wrath_authority::encode_teleport_ack(0x504, 8, 0x55));
+        assert_eq!(authority.with_movement_send(|| 1), Some(1));
+        // Later ACKs report from the destination.
+        let state = authority.shared.state.lock().unwrap();
+        assert_eq!(state.ground_pose.unwrap().position, [50.0, 60.0, 70.0]);
+        drop(state);
+        assert_eq!(
+            route(&ClientCommand::TeleportAck {
+                guid: 0x504,
+                counter: 8
+            }),
+            WrathRoute::NativeTeleportAck
+        );
+    }
+
+    #[test]
+    fn knockback_and_flight_orders_map_to_the_controller_only_where_it_models_them() {
+        let knock = MoverOrder::KnockBack {
+            mover_guid: 1,
+            counter: 2,
+            cos_angle: 0.6,
+            sin_angle: 0.8,
+            horizontal_speed: 12.0,
+            vertical_speed: -9.0,
+        };
+        let Some(SessionEvent::KnockBack { launch, .. }) = mover_order_event(&knock) else {
+            panic!()
+        };
+        assert_eq!(
+            (launch.zspeed, launch.cos_angle, launch.sin_angle, launch.xy_speed),
+            (-9.0, 0.6, 0.8, 12.0)
+        );
+        for order in [
+            MoverOrder::Speed {
+                kind: SpeedOrderKind::Flight,
+                mover_guid: 1,
+                counter: 2,
+                speed: 7.0,
+            },
+            MoverOrder::Mode {
+                kind: ModeOrderKind::CanFly,
+                apply: true,
+                mover_guid: 1,
+                counter: 2,
+            },
+            MoverOrder::CollisionHeight {
+                mover_guid: 1,
+                counter: 2,
+                height: 2.0,
+            },
+        ] {
+            assert!(mover_order_event(&order).is_none(), "{order:?}");
+        }
+    }
+
+    #[test]
+    fn a_stale_or_foreign_mover_order_fails_closed() {
+        let authority = installed(0x505);
+        let order = MoverOrder::Speed {
+            kind: SpeedOrderKind::Walk,
+            mover_guid: 0x505,
+            counter: 10,
+            speed: 2.5,
+        };
+        authority.raise_mover_barrier(order).unwrap();
+        assert!(authority
+            .raise_mover_barrier(MoverOrder::Speed {
+                kind: SpeedOrderKind::Walk,
+                mover_guid: 0x505,
+                counter: 10,
+                speed: 2.5,
+            })
+            .is_err());
+        let authority = installed(0x506);
+        assert!(authority
+            .raise_mover_barrier(MoverOrder::Speed {
+                kind: SpeedOrderKind::Walk,
+                mover_guid: 0x999,
+                counter: 10,
+                speed: 2.5,
+            })
+            .is_err());
+        assert!(authority.with_movement_send(|| ()).is_none());
+    }
+}
+
+#[cfg(test)]
+mod observer_teleport_tests {
+    use super::tests::test_self_position;
+    use super::*;
+    use benilla_protocol::wrath_gameplay::{MovementInfo, OutboundMovement, Position};
+
+    fn foreign_teleport(guid: u64, flags: u32) -> Vec<u8> {
+        OutboundMovement {
+            mover_guid: guid,
+            movement: MovementInfo {
+                flags,
+                flags2: 0,
+                timestamp: 1,
+                position: Position {
+                    x: 900.0,
+                    y: 800.0,
+                    z: 70.0,
+                    orientation: 1.0,
+                },
+                transport: None,
+                // Swimming carries its pitch.
+                pitch: (flags & 0x0020_0000 != 0).then_some(0.25),
+                fall_time: 0,
+                jump: None,
+                spline_elevation: None,
+            },
+        }
+        .to_bytes()
+        .unwrap()
+    }
+
+    type Snapshot = (Option<OnFootPose>, Vec<PendingAuthorityOrder>, Option<u32>, bool, bool);
+
+    fn snapshot(authority: &MovementAuthorityHandle) -> Snapshot {
+        let state = authority.shared.state.lock().unwrap();
+        (
+            state.ground_pose,
+            state.pending_orders.iter().copied().collect(),
+            state.last_order_counter,
+            state.self_control,
+            state.rooted,
+        )
+    }
+
+    /// AzerothCore sends `MSG_MOVE_TELEPORT` to the set without the teleporter: for us it is
+    /// always another unit, a relay, never an order on our mover.
+    #[test]
+    fn an_observed_teleport_for_another_guid_never_touches_our_authority() {
+        let shared = Arc::new(MovementAuthority::default());
+        let authority = shared.install(91, 0x601);
+        authority
+            .observe_self_create(0x601, &test_self_position())
+            .unwrap();
+        let before = snapshot(&authority);
+        let (events_tx, events_rx) = crossbeam_channel::unbounded();
+        let (control_tx, control_rx) = crossbeam_channel::unbounded();
+        let mut adapter = WrathEventAdapter::new();
+        let clock = SessionClock::new();
+        // An on-foot teleport relays as the observed unit's move; a swimming one is outside the
+        // subset and drops. Neither is fatal, and neither moves or blocks our mover.
+        for (flags, swimming) in [(0, false), (0x0020_0000, true)] {
+            let packet = benilla_protocol::wrath_world::WrathServerPacket {
+                opcode: 0x00c5,
+                body: foreign_teleport(0x0777, flags),
+            };
+            dispatch_packet(
+                &events_tx,
+                &control_tx,
+                91,
+                &mut adapter,
+                &packet,
+                &clock,
+                &authority,
+            )
+            .unwrap();
+            let event = events_rx.try_recv().unwrap();
+            if swimming {
+                assert!(matches!(
+                    event,
+                    SessionEvent::PacketDropped { opcode: 0x00c5, unparseable: true }
+                ));
+            } else {
+                assert!(matches!(
+                    event,
+                    SessionEvent::UnitMove {
+                        guid: 0x0777,
+                        verb: benilla_protocol::messages::RelayVerb::Teleport,
+                        ..
+                    }
+                ));
+            }
+            assert!(control_rx.try_recv().is_err(), "no writer command");
+            assert_eq!(snapshot(&authority), before);
+            assert_eq!(authority.with_movement_send(|| 1), Some(1));
+        }
+        assert!(!mandatory_movement_order(0x00c5));
+        assert!(!wrath_authority::is_mover_order(0x00c5));
+    }
 }
