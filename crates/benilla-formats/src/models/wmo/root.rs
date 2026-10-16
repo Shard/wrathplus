@@ -59,9 +59,26 @@ pub struct WmoRoot {
     portals: WmoPortals,
     fogs: Vec<WmoFog>,
     skybox: Option<String>,
+    mohd_flags: Option<u32>,
+    mohd_present: bool,
 }
 
 impl WmoRoot {
+    /// Retained MOHD.flags at payload +0x3c. Required by the native Wrath liquid decoder;
+    /// missing/truncated context must not silently select legacy preprocessing.
+    pub fn flags(&self) -> Result<u32> {
+        self.mohd_flags.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Wrath WMO liquid decoder: {} MOHD.flags at +0x3c",
+                if self.mohd_present {
+                    "truncated"
+                } else {
+                    "missing (MOHD absent)"
+                }
+            )
+        })
+    }
+
     /// Number of group files (`<stem>_NNN.wmo`) this root references.
     pub fn group_count(&self) -> u32 {
         match &self.parsed {
@@ -151,6 +168,8 @@ pub fn parse_wmo_root(bytes: &[u8]) -> Result<WmoRoot> {
         portals,
         fogs,
         skybox,
+        mohd_flags: wmo_root_flags(bytes).ok(),
+        mohd_present: find_wmo_chunk(bytes, b"DHOM").is_some(),
     })
 }
 
@@ -316,6 +335,17 @@ pub fn parse_wmo_fogs(bytes: &[u8]) -> Vec<WmoFog> {
         .collect()
 }
 
+/// Read MOHD.flags without inventing a default when root liquid context is unavailable.
+pub fn wmo_root_flags(root_bytes: &[u8]) -> Result<u32> {
+    let mohd = find_wmo_chunk(root_bytes, b"DHOM").ok_or_else(|| {
+        anyhow::anyhow!("Wrath WMO liquid decoder: missing MOHD.flags (missing MOHD)")
+    })?;
+    let flags = mohd.get(0x3c..0x40).ok_or_else(|| {
+        anyhow::anyhow!("Wrath WMO liquid decoder: truncated MOHD.flags at +0x3c")
+    })?;
+    Ok(u32::from_le_bytes(flags.try_into().unwrap()))
+}
+
 /// `MOHD.wmoID` at `0x20`, the building's `WMOAreaTable.WMOID` key; 0 for a short header.
 pub fn wmo_root_id(root_bytes: &[u8]) -> u32 {
     find_wmo_chunk(root_bytes, b"DHOM")
@@ -373,6 +403,35 @@ fn parse_wmo_doodads(bytes: &[u8]) -> (Vec<WmoDoodad>, Vec<WmoDoodadSet>) {
 mod tests {
     use super::super::test_bytes::{chunk, f3};
     use super::*;
+
+    #[test]
+    fn wrath_root_flags_require_complete_context() {
+        assert!(wmo_root_flags(&[])
+            .unwrap_err()
+            .to_string()
+            .contains("missing MOHD"));
+        assert!(wmo_root_flags(&chunk(b"DHOM", &[0; 0x3f]))
+            .unwrap_err()
+            .to_string()
+            .contains("truncated MOHD.flags"));
+        let short_root = parse_wmo_root(&chunk(b"DHOM", &[0; 8])).unwrap();
+        assert!(short_root
+            .flags()
+            .unwrap_err()
+            .to_string()
+            .contains("truncated"));
+        assert!(super::super::wmo_group_wrath_liquid(&[], &short_root)
+            .unwrap_err()
+            .to_string()
+            .contains("MOHD.flags"));
+        let mut mohd = vec![0; 0x40];
+        for flags in [0u32, 4, 5, u32::MAX] {
+            mohd[0x3c..0x40].copy_from_slice(&flags.to_le_bytes());
+            assert_eq!(wmo_root_flags(&chunk(b"DHOM", &mohd)).unwrap(), flags);
+            let root = parse_wmo_root(&chunk(b"DHOM", &mohd)).unwrap();
+            assert_eq!(root.flags().unwrap(), flags);
+        }
+    }
 
     #[test]
     fn parses_portal_vertices_infos_and_refs() {

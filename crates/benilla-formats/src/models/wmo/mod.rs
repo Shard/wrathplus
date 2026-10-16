@@ -1,5 +1,7 @@
 //! WMO (building) parsing: [`root`] parses the root file's shared tables, [`group`] a group file
-//! against a parsed root.
+//! against a parsed root. Native Wrath liquids use [`wmo_group_wrath_liquid`] with retained
+//! [`WmoRoot::flags`] context and [`WrathWmoLiquidState`]; [`wmo_group_liquid_mesh`] remains
+//! the legacy 5875 mesh API, not the Wrath liquid-ID decoder.
 
 mod group;
 mod root;

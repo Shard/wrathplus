@@ -270,6 +270,7 @@ fn load_subject(internal: &str, site: Option<&Site>) -> Subject {
         material_diff_color: Vec::new(),
         group_light_refs: Vec::new(),
         group_liquids,
+        wrath_liquid_states: None,
         doodad_base: Vec::new(),
         doodad_owner: Vec::new(),
         doodad_groups: Vec::new(),

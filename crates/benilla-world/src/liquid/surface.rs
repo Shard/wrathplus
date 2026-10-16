@@ -249,6 +249,8 @@ pub(crate) fn spawn_wmo_liquids<'a>(
     pool: WmoPool,
     // The owning root's MOMT `diffColor` table: MOMT lives in the root, not the group file.
     material_diff_color: &[[f32; 3]],
+    // Native category for queries only; None is dry/invalid/unsupported, never guessed water.
+    query_kind: Option<LiquidKind>,
     entities: &mut Vec<Entity>,
 ) {
     let Some(liquid) = liquid_assets else {
@@ -291,11 +293,11 @@ pub(crate) fn spawn_wmo_liquids<'a>(
             ))
             .id();
         // Every kind carries the swim grid, so lava and slime swim; their damage is not modelled.
-        commands.entity(surface).insert(wet_footprint(
-            lq,
-            &transform,
-            LiquidSource::WmoGroup(pool),
-        ));
+        if let Some(kind) = query_kind {
+            let mut footprint = wet_footprint(lq, &transform, LiquidSource::WmoGroup(pool));
+            footprint.set_kind(kind);
+            commands.entity(surface).insert(footprint);
+        }
         if !lq.kind.is_fullbright() {
             commands.entity(surface).insert(FoamPatch);
         }
