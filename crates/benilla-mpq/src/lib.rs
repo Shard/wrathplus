@@ -1,6 +1,5 @@
-//! A read-only MPQ reader for the 1.12.1 `Data/` chain: format V1/V2, every file stored whole or
-//! `COMPRESS`-flagged and sectored, no encrypted or single-unit files, no PTCH patches. Anything
-//! else is a hard error.
+//! Read-only MPQ V1/V2 reader for the Wrath archive chain. Supports stored, sectored and
+//! single-unit zlib/bzip2 files; encryption, other codecs and PTCH patch payloads remain unsupported.
 //!
 //! The patch archives carry delete markers (flag `0x02000000`, size 0): the path is deleted from
 //! the composite chain. [`Archive::contains`] reports one present and [`Archive::read_file`]
@@ -52,6 +51,7 @@ struct HashEntry {
 struct BlockEntry {
     file_pos: u32,
     file_size: u32,
+    packed_size: u32,
     flags: u32,
 }
 
@@ -72,13 +72,13 @@ pub struct Archive {
     index: Arc<Index>,
 }
 
-/// A read error; anything outside the 1.12.1 envelope surfaces here.
+/// A read error; unsupported archive features fail explicitly.
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
     NotMpq,
     NotFound(String),
-    /// A file or codec shape 1.12.1 data does not contain.
+    /// A file or codec shape this reader does not implement.
     Unsupported(String),
     Decompress(String),
     /// A count or length claims more than the archive file holds: a corrupt or truncated archive.
@@ -91,7 +91,7 @@ impl std::fmt::Display for Error {
             Error::Io(e) => write!(f, "io: {e}"),
             Error::NotMpq => write!(f, "not an MPQ archive (no header signature found)"),
             Error::NotFound(n) => write!(f, "file not in archive: {n}"),
-            Error::Unsupported(m) => write!(f, "unsupported (outside 1.12.1 envelope): {m}"),
+            Error::Unsupported(m) => write!(f, "unsupported MPQ feature: {m}"),
             Error::Decompress(m) => write!(f, "decompress: {m}"),
             Error::Corrupt(m) => write!(f, "corrupt archive: {m}"),
         }
@@ -217,12 +217,9 @@ impl Archive {
         if block.flags & FLAG_DELETE_MARKER != 0 {
             return Err(Error::NotFound(name.into()));
         }
-        // Outside the 1.12.1 envelope: refuse rather than guess.
+        // Refuse encryption rather than interpreting ciphertext as payload.
         if block.flags & FLAG_ENCRYPTED != 0 {
             return Err(Error::Unsupported(format!("encrypted file {name}")));
-        }
-        if block.flags & FLAG_SINGLE_UNIT != 0 {
-            return Err(Error::Unsupported(format!("single-unit file {name}")));
         }
 
         let file = File::open(&idx.path)?;
@@ -246,6 +243,33 @@ impl Archive {
             pos: 0,
             sector: None,
         };
+        if block.flags & FLAG_SINGLE_UNIT != 0 {
+            // SINGLE_UNIT has no sector-offset table: the block-table packed size bounds the
+            // one payload. Reuse the sector reader with exactly one file-sized sector, retaining
+            // Read + Seek semantics without interpreting the payload's first word as an offset.
+            let packed = block.packed_size as usize;
+            if packed > avail || packed > file_size || (file_size != 0 && packed == 0) {
+                return Err(Error::Corrupt(format!(
+                    "{name}: invalid single-unit packed size {packed} for {file_size} bytes"
+                )));
+            }
+            if !compressed && packed != file_size {
+                return Err(Error::Corrupt(format!(
+                    "{name}: short stored single-unit payload"
+                )));
+            }
+            // A single-unit decode is resident in memory; unlike streaming sectors, a malicious
+            // block can otherwise request a multi-gigabyte allocation from one tiny zlib stream.
+            const MAX_SINGLE_UNIT: usize = 256 * 1024 * 1024;
+            if file_size > MAX_SINGLE_UNIT {
+                return Err(Error::Unsupported(format!(
+                    "{name}: single-unit output exceeds 256 MiB safety limit"
+                )));
+            }
+            open.sector_size = file_size.max(1);
+            open.offsets = Some(vec![0, block.packed_size]);
+            return Ok(open);
+        }
         if !compressed {
             // Stored: exactly `file_size` raw bytes, refused up front if the file cannot hold them.
             if capped(file_size, 1, avail) < file_size {
@@ -559,7 +583,7 @@ fn read_block_table(
             let o = i * 4;
             BlockEntry {
                 file_pos: words[o],
-                // words[o + 1] is compressed_size, unread: the offset table sizes the sectors.
+                packed_size: words[o + 1],
                 file_size: words[o + 2],
                 flags: words[o + 3],
             }
@@ -567,7 +591,7 @@ fn read_block_table(
         .collect())
 }
 
-/// Decompress one sector by its codec mask; 1.12.1 data uses zlib alone.
+/// Decompress a sector or single-unit payload by its codec mask. Combined codecs fail closed.
 fn decompress(method: u8, data: &[u8], expected: usize, name: &str) -> Result<Vec<u8>> {
     match method {
         0x02 => {
@@ -578,6 +602,14 @@ fn decompress(method: u8, data: &[u8], expected: usize, name: &str) -> Result<Ve
                 .take(expected as u64)
                 .read_to_end(&mut out)
                 .map_err(|e| Error::Decompress(format!("{name}: zlib: {e}")))?;
+            Ok(out)
+        }
+        0x10 => {
+            let mut out = Vec::with_capacity(expected);
+            bzip2::read::BzDecoder::new(data)
+                .take(expected as u64)
+                .read_to_end(&mut out)
+                .map_err(|e| Error::Decompress(format!("{name}: bzip2: {e}")))?;
             Ok(out)
         }
         other => Err(Error::Unsupported(format!(
@@ -708,6 +740,97 @@ mod tests {
         }
         bytes.extend_from_slice(data);
         bytes
+    }
+
+    #[test]
+    fn single_unit_zlib_reads_and_seeks_without_sector_table() {
+        use std::io::Write;
+        let name = "single.bin";
+        let expected = vec![b'x'; 8192];
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&expected).unwrap();
+        let mut packed = vec![2];
+        packed.extend(encoder.finish().unwrap());
+        let (arc, path) = open_temp_kept(
+            "single_zlib",
+            &archive_with_one_block(
+                name,
+                FLAG_EXISTS | FLAG_SINGLE_UNIT | FLAG_COMPRESS,
+                &packed,
+                expected.len() as u32,
+            ),
+        );
+        assert_eq!(arc.read_file(name).unwrap(), expected);
+        let mut file = arc.open_file(name).unwrap();
+        file.seek(SeekFrom::End(-4)).unwrap();
+        let mut tail = Vec::new();
+        file.read_to_end(&mut tail).unwrap();
+        assert_eq!(tail, b"xxxx");
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let mut first = [0; 3];
+        file.read_exact(&mut first).unwrap();
+        assert_eq!(&first, b"xxx");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn single_unit_bzip2_reads_real_codec_payload_and_rejects_truncation() {
+        use std::io::Write;
+        let expected = vec![b'w'; 8192];
+        let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::best());
+        encoder.write_all(&expected).unwrap();
+        let mut packed = vec![0x10];
+        packed.extend(encoder.finish().unwrap());
+        let (arc, path) = open_temp_kept(
+            "single_bzip2",
+            &archive_with_one_block(
+                "bz",
+                FLAG_EXISTS | FLAG_SINGLE_UNIT | FLAG_COMPRESS,
+                &packed,
+                expected.len() as u32,
+            ),
+        );
+        assert_eq!(arc.read_file("bz").unwrap(), expected);
+        std::fs::remove_file(path).unwrap();
+        assert!(decompress(0x10, &packed[1..8], expected.len(), "truncated").is_err());
+        assert!(decompress(0x12, &packed[1..], expected.len(), "combined").is_err());
+    }
+
+    #[test]
+    fn single_unit_uncompressed_and_unshrunk_compress_flag() {
+        for flags in [
+            FLAG_EXISTS | FLAG_SINGLE_UNIT,
+            FLAG_EXISTS | FLAG_SINGLE_UNIT | FLAG_COMPRESS,
+        ] {
+            let (arc, path) = open_temp_kept(
+                "single_raw",
+                &archive_with_one_entry("raw", flags, b"raw payload"),
+            );
+            assert_eq!(arc.read_file("raw").unwrap(), b"raw payload");
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn single_unit_rejects_short_output_unknown_codec_and_oversized_allocation() {
+        for (tag, data, size) in [
+            ("short", &[2, 120, 156, 3, 0, 0, 0, 0, 1][..], 100),
+            ("codec", &[0x40, 0][..], 100),
+            ("large", &[2, 0][..], u32::MAX),
+        ] {
+            let (arc, path) = open_temp_kept(
+                tag,
+                &archive_with_one_block(
+                    "bad",
+                    FLAG_EXISTS | FLAG_SINGLE_UNIT | FLAG_COMPRESS,
+                    data,
+                    size,
+                ),
+            );
+            assert!(arc.read_file("bad").is_err(), "{tag}");
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
     /// The control for the delete-marker test: the same builder's plain entry reads back.
