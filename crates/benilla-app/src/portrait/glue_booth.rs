@@ -1666,6 +1666,7 @@ mod tests {
                 attenuation_start: 2.0,
                 attenuation_end: 5.0,
                 visibility_off: false,
+                anim: None,
             },
             bone_pivot: [0.0; 3],
         }
