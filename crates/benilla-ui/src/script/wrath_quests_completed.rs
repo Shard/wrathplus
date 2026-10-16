@@ -14,7 +14,7 @@ use mlua::{Lua, Value};
 
 /// The stored reply and the queries no host has drained yet.
 #[derive(Default)]
-pub(super) struct State {
+pub(crate) struct State {
     quest_ids: Vec<u32>,
     pending_queries: u32,
 }

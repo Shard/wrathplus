@@ -88,7 +88,7 @@ fn the_feed_sends_queries_and_applies_each_reply_in_order() {
         .insert_resource(NetCommands(tx));
     register(&mut app);
     let new_vm = || {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("N = 0 local f = CreateFrame('Frame') f:RegisterEvent('QUEST_QUERY_COMPLETE') f:SetScript('OnEvent', function() N = N + 1 end)").unwrap();
         s
     };
