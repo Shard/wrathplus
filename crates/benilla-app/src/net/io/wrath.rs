@@ -1236,6 +1236,7 @@ enum WrathRoute {
     NativeChatLine,
     NativeChannel,
     NativeBattleground,
+    NativeContacts,
     NativeWorldportAck,
     NativeTeleportAck,
     AuthorityAcked,
@@ -1278,6 +1279,13 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeCalendar(_) => WrathRoute::NativeCalendar,
         ClientCommand::NativeQuest(_) | ClientCommand::QuestPushResult { .. } => WrathRoute::NativeQuest,
         ClientCommand::Chat { .. } | ClientCommand::AddonMessage { .. } => WrathRoute::NativeChatLine,
+        ClientCommand::FriendListRequest
+        | ClientCommand::AddFriend { .. }
+        | ClientCommand::DelFriend { .. }
+        | ClientCommand::AddIgnore { .. }
+        | ClientCommand::DelIgnore { .. }
+        | ClientCommand::DuelAccepted { .. }
+        | ClientCommand::DuelCancelled { .. } => WrathRoute::NativeContacts,
         ClientCommand::NativeBattleground(_)
         | ClientCommand::BattlemasterHello { .. }
         | ClientCommand::AreaSpiritHealerQuery { .. }
@@ -1679,6 +1687,13 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeContacts => match contacts_packet(command) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid contact command rejected before send: {error}");
+                            continue;
+                        }
+                    },
                     WrathRoute::NativeBattleground => {
                         let (opcode, body) = battleground_packet(command);
                         active.writer.send_raw(opcode, &body)
@@ -1940,6 +1955,26 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
         other => unreachable!("not a chat line: {other:?}"),
     };
     encode(&command)
+}
+
+/// The native contact or duel body for a [`WrathRoute::NativeContacts`] command, through the
+/// existing `wrath_social`/`wrath_duel` encoders.
+fn contacts_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
+    use benilla_protocol::wrath_duel::Command as D;
+    use benilla_protocol::wrath_social::Command as S;
+    let social = |command: S| Ok((command.opcode(), command.encode()?));
+    let duel = |command: D| Ok((command.opcode(), command.encode()));
+    match command {
+        // Friends, ignores and mutes: AC lists the contacts carrying any asked flag.
+        ClientCommand::FriendListRequest => social(S::ContactList { flags: 0x07 }),
+        ClientCommand::AddFriend { name } => social(S::AddFriend { name: name.into_bytes(), note: Vec::new() }),
+        ClientCommand::DelFriend { guid } => social(S::DeleteFriend { guid }),
+        ClientCommand::AddIgnore { name } => social(S::AddIgnore { name: name.into_bytes() }),
+        ClientCommand::DelIgnore { guid } => social(S::DeleteIgnore { guid }),
+        ClientCommand::DuelAccepted { arbiter } => duel(D::Accepted { arbiter }),
+        ClientCommand::DuelCancelled { arbiter } => duel(D::Cancelled { arbiter }),
+        other => unreachable!("not a contacts route: {other:?}"),
+    }
 }
 
 /// The native body for a [`WrathRoute::NativeBattleground`] command. The shared commands below keep
