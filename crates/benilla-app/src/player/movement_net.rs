@@ -564,6 +564,62 @@ mod tests {
     use std::f32::consts::TAU;
 
     #[test]
+    fn wrath_abbey_dry_indoor_room_does_not_trip_the_swimming_gate() {
+        use benilla_assets::coords::wow_to_bevy;
+        use benilla_world::liquid::LiquidClaim;
+        use benilla_world::wmo_portal::{PlayerWmoRoom, WmoPortalInstance, WmoRoom};
+        use benilla_world::world_point::{init_world_point_resources, Subject, WorldPoint};
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::prelude::*;
+
+        const ANCHOR: [f32; 3] = [-8910.12, -144.18, 81.97];
+        let mut world = World::new();
+        init_world_point_resources(&mut world);
+        // NSABBEY groups 3/5: resolved Wrath liquidID 0, no MLIQ. Exercise the production
+        // spawn mapping from the installed raw zero/no-MLIQ fields.
+        let placement = world
+            .spawn(WmoPortalInstance {
+                handle: Handle::default(),
+                world_from_local: bevy::math::Affine3A::IDENTITY,
+                name_set: 0,
+                visible: vec![true; 14],
+                interior_fog: vec![false; 14],
+                liquid_visited: vec![false; 14],
+                flooded: vec![WmoPortalInstance::group_flood(0, false); 14],
+            })
+            .id();
+        for group in [3, 5] {
+            let room = WmoRoom {
+                instance: placement,
+                group,
+            };
+            world.insert_resource(PlayerWmoRoom(Some(room)));
+            world
+                .run_system_once(move |point: WorldPoint| {
+                    assert_eq!(
+                        point.claim(Subject::Player),
+                        LiquidClaim::Inside {
+                            room,
+                            flooded: None
+                        }
+                    );
+                    let player = Player {
+                        pos: wow_to_bevy(ANCHOR),
+                        ..Default::default()
+                    };
+                    let surface = super::super::swim::surface_over_feet(&point, player.pos);
+                    assert_eq!(surface, None, "Abbey's dry room has no swim surface");
+                    assert_eq!(
+                        wrath_ground_limit(SessionDialect::Wrath12340, &player, surface),
+                        None,
+                        "a dry indoor Abbey anchor must allow Wrath ground movement"
+                    );
+                })
+                .unwrap();
+        }
+    }
+
+    #[test]
     fn wrath_gate_refuses_unsupported_modes_without_changing_vanilla() {
         let player = Player::default();
         assert_eq!(
