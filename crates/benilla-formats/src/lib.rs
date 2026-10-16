@@ -250,7 +250,9 @@ pub use particles::{
     ParticleEmitterDef, ParticleShape, SplineData,
 };
 mod ribbons;
-pub use ribbons::{parse_m2_ribbon_emitters, RibbonEmitterDef, RibbonVisibility};
+pub use ribbons::{
+    parse_m2_ribbon_emitters, RibbonClock, RibbonEmitterDef, RibbonTrack, RibbonVisibility,
+};
 mod value_track;
 pub use value_track::{TrackValue, ValueTrack};
 mod models;

@@ -75,8 +75,8 @@ pub struct RibbonTrail {
     /// Committed edges, newest last; the live head is added only at draw.
     edges: VecDeque<Edge>,
     accumulator: f32,
-    /// Seconds since spawn: the clip clock the keyed tracks sample, as an effect's ribbons spawn at
-    /// its clip start (a persistent trail's tracks are constant).
+    /// Seconds since spawn: a fixed sequence's clock (wrapped by its duration), and the whole
+    /// clock of a 1.12 single-lane def.
     age: f32,
     texture: Handle<Image>,
     /// The owner-last draw-order rung its model's quad clouds take, added to the sort key.
@@ -225,6 +225,8 @@ pub(crate) fn simulate_ribbons(
     let (farclip, exterior_gate, camera_instance) = gates.scene(Some((cam_tf, projection)));
     let dt = time.delta_secs().min(0.1);
     let now = time.elapsed_secs();
+    // The scene clock in f64, which global-sequence look tracks loop on.
+    let scene_ms = time.elapsed_secs_f64() * 1000.0;
     for (entity, mut trail, mut entity_tf, mut entity_global) in &mut trails {
         let RibbonTrail {
             def,
@@ -319,35 +321,57 @@ pub(crate) fn simulate_ribbons(
             continue;
         }
 
+        *age += dt;
+        // The owner's sequence clock: `(anim id, slot, seconds in)`, or `None` while the host is
+        // still being built. The reference arms a sequence as the M2 goes live (`0x70ebd0`).
+        let playing = match *seq {
+            RibbonSeq::Fixed(a) => {
+                let slot = def.slot_for(a);
+                Some((a, slot, def.wrap_ms(slot, *age * 1000.0) / 1000.0))
+            }
+            RibbonSeq::Host(h) => hosts.get(h).ok().map(|(player, anims)| {
+                // The playing sequence; a slot with no clip row reads as `Stand` (0).
+                crate::doodad_anim::playing_seq(player, anims)
+                    .and_then(|(slot, t)| {
+                        Some((
+                            anims.clips.iter().find(|c| c.seq_index == slot)?.anim_id,
+                            slot,
+                            t,
+                        ))
+                    })
+                    .unwrap_or((0, 0, 0.0))
+            }),
+        };
+        // The look tracks' clock: the playing slot (3.3.5 keys are sequence-local), the scene
+        // clock for a global sequence; a 1.12 single-lane def keeps seconds since spawn.
+        let clock = match playing {
+            Some((_, slot, t)) if !def.sequences.is_empty() => benilla_formats::RibbonClock {
+                slot,
+                seq_ms: t * 1000.0,
+                scene_ms,
+            },
+            _ => benilla_formats::RibbonClock {
+                slot: 0,
+                seq_ms: *age * 1000.0,
+                scene_ms,
+            },
+        };
         // Heights sample at commit, since the reference stores each edge's vertex pair; colour
         // and alpha sample per frame.
-        *age += dt;
-        let ms = *age * 1000.0;
-        let h_above = def.height_above.sample_ms(ms).max(0.0);
-        let h_below = def.height_below.sample_ms(ms).max(0.0);
+        let h_above = def.height_above.sample(clock).max(0.0);
+        let h_below = def.height_below.sample(clock).max(0.0);
 
-        // The `+0xc0` enable gate, sampled live against the host's sequence. The per-ribbon byte
+        // The `+0xc0` enable gate, sampled live against the owner's sequence. The per-ribbon byte
         // `block+0xbc` is the sampled `visibilityTrack`: 0 from the ctor (`0x71b34c`), 1 from the
         // loader (`0x70f80e`), then each frame `values[k0]` in `0x714260` (`0x7176ee` step arm,
         // `0x717714` non-step arm); nothing else writes it and `0x718960` only reads it. A clear
         // byte skips the ribbon's whole draw (`0x7080c2` jumps to `0x708263`), not just commits.
-        let lit = def.visible.as_ref().is_none_or(|vis| match *seq {
-            RibbonSeq::Fixed(a) => vis.at(a, 0.0),
-            RibbonSeq::Host(h) => match hosts.get(h) {
-                // The playing sequence; a slot with no clip row reads as `Stand` (0).
-                Ok((player, anims)) => {
-                    let (anim, t) = crate::doodad_anim::playing_seq(player, anims)
-                        .and_then(|(slot, t)| {
-                            Some((anims.clips.iter().find(|c| c.seq_index == slot)?.anim_id, t))
-                        })
-                        .unwrap_or((0, 0.0));
-                    vis.at(anim, t)
-                }
-                // No clock yet: the host is still being built. The reference arms a sequence as the
-                // M2 goes live (`0x70ebd0`), so this holds dark rather than invent a lit frame.
-                Err(_) => false,
-            },
-        });
+        // 3.3.5 keeps the byte at instance state `+0x4c`, loaded 1 (`0x832ea0`) and handed to the
+        // emitter each frame (`0x828a00`). With no clock yet this holds dark.
+        let lit = def
+            .visible
+            .as_ref()
+            .is_none_or(|vis| playing.is_some_and(|(anim, _, t)| vis.at(anim, t)));
         let head = lit.then_some(head).flatten();
 
         while edges
@@ -417,8 +441,8 @@ pub(crate) fn simulate_ribbons(
             f32::from(cell / cols + 1) / f32::from(rows),
         );
         // Raw authored RGB and alpha: the effect shader decodes gamma once, texture included.
-        let rgb = def.color.sample_ms(ms);
-        let rgba = [rgb[0], rgb[1], rgb[2], def.alpha.sample_ms(ms).max(0.0)];
+        let rgb = def.color.sample(clock);
+        let rgba = [rgb[0], rgb[1], rgb[2], def.alpha.sample(clock).max(0.0)];
         // The sort anchor: the live head, or a draining trail's newest edge. The draw fold maps
         // stored to world (`0xcf5b68 = A · T · S`); the head is already world.
         let out = |p: Vec3| to_world.map_or(p, |a| a.transform_point3(p));
