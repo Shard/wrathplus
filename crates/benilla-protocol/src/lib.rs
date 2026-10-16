@@ -28,6 +28,7 @@ pub mod wrath_guild_bank_tab;
 pub mod wrath_guild_rank;
 pub mod wrath_lfg;
 pub mod wrath_instance;
+pub mod wrath_instance_control;
 pub mod wrath_loot;
 pub mod wrath_logs;
 pub mod wrath_movement;

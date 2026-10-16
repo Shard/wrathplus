@@ -1138,6 +1138,7 @@ pub enum SessionEvent {
     /// The inbox (`SMSG_MAIL_LIST_RESULT`), answering `CMSG_GET_MAIL_LIST`.
     /// Native completed-quest reply, including explicit empty replies.
     WrathQuestsCompleted { packet: crate::wrath_quests_completed::Packet },
+    WrathInstanceControl { packet: crate::wrath_instance_control::Packet },
     WrathMirrorImage { packet: crate::wrath_mirror_image::Packet },
     WrathUiTimer { packet: crate::wrath_ui_timer::Packet },
     WrathMailList { inbox: crate::wrath_mail::Inbox },

@@ -34,6 +34,7 @@ mod wrath_mail_capture;
 mod wrath_quests_completed_capture;
 mod wrath_ui_timer_capture;
 mod wrath_mirror_image_capture;
+mod wrath_instance_control_capture;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -129,6 +130,7 @@ impl Plugin for NetPlugin {
         wrath_quests_completed_capture::register(app);
         wrath_ui_timer_capture::register(app);
         wrath_mirror_image_capture::register(app);
+        wrath_instance_control_capture::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -2050,6 +2052,8 @@ pub(crate) enum ClientCommand {
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
     NativeMirrorImageQuery { guid: u64 },
+    /// Native instance controls; transport does not infer leadership, locks or permission.
+    NativeInstanceControl(benilla_protocol::wrath_instance_control::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

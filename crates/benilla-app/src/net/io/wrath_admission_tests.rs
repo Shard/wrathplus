@@ -7,6 +7,11 @@ fn every_wrath_writer_route_is_admitted() {
     let (sender, _receiver) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(sender);
     let rows = vec![
+        ("NativeInstanceControl", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::ResetInstances)),
+        ("InstanceDungeonDifficulty", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetDungeonDifficulty { mode: 1 })),
+        ("InstanceRaidDifficulty", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetRaidDifficulty { mode: 3 })),
+        ("InstanceLockResponse", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 })),
+        ("InstanceExtend", ClientCommand::NativeInstanceControl(benilla_protocol::wrath_instance_control::Command::SetSavedInstanceExtend { map: 1, difficulty: 3, raw_extend: 1 })),
         ("NativeMirrorImageQuery", ClientCommand::NativeMirrorImageQuery { guid: u64::MAX }),
         (
             "NativeWhoCommand",
