@@ -1353,6 +1353,62 @@ mod wrath_environment_tests {
         SessionEventKind as K,
     };
 
+    /// One native SAY prints exactly once through the real feed: 3de4d931 also emitted a shared
+    /// `Chat`, whose 1.12 wire line fired a second `CHAT_MSG_SAY` beside `native_message`'s.
+    #[test]
+    fn one_native_say_fires_exactly_one_chat_msg_say() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = crate::game_plugins::schedule_tests::headless_client();
+        let script = benilla_ui::script::UiScript::new_with_dialect(
+            benilla_ui::script::ScriptDialect::Wrath12340,
+        )
+        .unwrap();
+        script
+            .lua()
+            .load(
+                r#"
+                SAYS = 0
+                local f = CreateFrame('Frame')
+                f:RegisterEvent('CHAT_MSG_SAY')
+                f:SetScript('OnEvent', function() SAYS = SAYS + 1 end)
+            "#,
+            )
+            .exec()
+            .unwrap();
+        app.insert_non_send_resource(script);
+        // SAY in Common: sender, flags, receiver, sized text, tag.
+        let say = [
+            vec![0x01],
+            7u32.to_le_bytes().to_vec(),
+            42u64.to_le_bytes().to_vec(),
+            0u32.to_le_bytes().to_vec(),
+            42u64.to_le_bytes().to_vec(),
+            3u32.to_le_bytes().to_vec(),
+            b"hi\0".to_vec(),
+            vec![0],
+        ]
+        .concat();
+        let WrathDispatch::Handled { session_events, .. } =
+            WrathEventAdapter::new().dispatch(0x96, &say, 0).unwrap()
+        else {
+            panic!()
+        };
+        crate::net::handlers::dispatch(app.world_mut(), session_events);
+        // Past the name-query budget, so the unresolved sender still delivers.
+        for _ in 0..=NAME_MAX_TRIES {
+            app.world_mut().run_system_once(feed_chat).unwrap();
+        }
+        let says = app
+            .world()
+            .non_send_resource::<benilla_ui::script::UiScript>()
+            .lua()
+            .globals()
+            .get::<i64>("SAYS")
+            .unwrap();
+        assert_eq!(says, 1);
+        assert_eq!(app.world().resource::<ChatLog>().pending_len(), 0);
+    }
+
     #[test]
     fn registered_native_environment_and_durability_have_single_feedback_per_sink() {
         let mut app = crate::game_plugins::schedule_tests::headless_client();

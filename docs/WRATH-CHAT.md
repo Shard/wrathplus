@@ -8,13 +8,12 @@ Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `SharedD
 Agreed with App Migration (2026-10-16).
 
 **Received chat** (0096, GM 03B3): every line stays in `ui_native_chat`'s `NativeChatPackets` as
-raw bytes with sender GUID and chat type (unchanged). A line whose 3.3.5 `ChatMsg` has a 1.12
-counterpart is also emitted as the shared `SessionEvent::Chat` the chat feed prints: types are
-renumbered (system 0x00→0x0A, say 0x01→0x00, …, channel 0x11→0x0E, raid warning 0x28→0x58,
-BG 0x2C→0x5C; party leader joins party), the tag bits (1 AFK, 2 DND, 4 GM) become 1.12's single
-tag, strings are lossy UTF-8. **`LANG_ADDON` lines never become shared events**; addon delivery is
-App Migration's consumer of the raw FIFO. Line kinds 1.12 lacks (monster party, skill/loot/money/
-combat lanes, restricted, Battle.net, achievements, arena points) stay raw only.
+raw bytes with sender GUID and chat type, and that FIFO is the only input of App Migration's native
+feed (`ui_chat::native_message`), which fires the stock 12340 `CHAT_MSG_*` events; addon and
+achievement lines stay deferred there for App's units. The wire emits **no** shared
+`SessionEvent::Chat` for these opcodes: 3de4d931 did, and every line was delivered twice (native and
+1.12-shaped); removed, with regression tests on both sides of the seam (one SAY packet fires exactly
+one `CHAT_MSG_SAY` through the real feed).
 
 **Shared notices (handled)**: 0099 every channel notice (you-joined/left keep `wrath_channel`'s
 path; the other tails match 1.12, plus 0x20/0x21 empty and 0x22/0x23 voice on/off with the actor),
