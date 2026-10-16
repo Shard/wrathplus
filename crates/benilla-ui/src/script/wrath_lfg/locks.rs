@@ -74,8 +74,11 @@ impl UiScript {
     /// App replaces only the relevant optional block in its sole reducer, then
     /// installs each receipt before its synchronous notification pair. VM reseeding
     /// uses this same setter without replaying old receipts.
+    /// The native random list and best choice are rebuilt here (`0x55aaf0` runs on each receipt).
     pub fn set_wrath_lfg_lock_snapshot(&mut self, snapshot: Arc<WrathLfgLockSnapshot>) {
-        self.model_mut().wrath_lfg.locks = snapshot;
+        let mut model = self.model_mut();
+        model.wrath_lfg.locks = snapshot;
+        model.wrath_lfg.rederive();
     }
 
     /// Publish derived readiness before notifications, independently of lock validity.

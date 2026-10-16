@@ -172,6 +172,7 @@ mod wrath_paperdoll;
 mod wrath_surface;
 mod wrath_lfg;
 pub use wrath_lfg::{
+    set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest,
     WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
     WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
     WrathLfgRewardItem,

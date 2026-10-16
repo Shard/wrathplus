@@ -45,6 +45,13 @@ pub(crate) struct State {
     expansion: Option<u8>,
     locks: Arc<WrathLfgLockSnapshot>,
     presentation: Arc<WrathLfgPresentation>,
+    /// The native random list (`0x55aaf0`, count `0xbeaa74`) and best choice (`0x559ea0`,
+    /// `0xbeaa24`) as full packed entries, rebuilt from the inputs when a lock block is present.
+    derived: l1::Derived,
+    /// Accepted explicit lock requests for App to send, in call order.
+    requests: Vec<WrathLfgLockRequest>,
+    /// Uncached reward-item lookups for App's completion queue, in call order.
+    item_requests: Vec<WrathLfgItemRequest>,
 }
 
 impl UiScript {
@@ -56,8 +63,14 @@ impl UiScript {
         let mut model = self.model_mut();
         model.wrath_lfg.catalog = catalog;
         model.wrath_lfg.expansion = expansion;
+        model.wrath_lfg.rederive();
     }
 }
+
+mod derived;
+mod l1;
+mod requests;
+pub use requests::{set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest};
 
 mod locks;
 pub use locks::{
@@ -72,6 +85,8 @@ pub use choices::WrathLfgGroup;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     preferences::install(lua)?;
+    l1::install(lua)?;
+    requests::install(lua)?;
     choices::install(lua)?;
     order::install(lua)?;
     lua.globals().set(
@@ -89,15 +104,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )
 }
 
-// Shared by the scalar getter and choice-info array builder (0x554e60).
-fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result<MultiValue> {
+/// `[min, max, targetMin, targetMax]`: the row's, or the session expansion's LFGDungeonExpansion
+/// row when one matches.
+fn level_bounds(state: &State, row: &WrathLfgDungeon) -> [i32; 4] {
     let id = row.id;
-    let mut bounds = [
-        row.min_level,
-        row.max_level,
-        row.target_min_level,
-        row.target_max_level,
-    ];
     // 0x6349f0: stop when the matching dungeon's contiguous group ends; first expansion
     // match wins. Never sort this table, or substitute a different expansion's row.
     let mut found_group = false;
@@ -113,15 +123,25 @@ fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result
             .expansion
             .is_some_and(|expansion| entry[2] == u32::from(expansion))
         {
-            bounds = [
+            return [
                 entry[4] as i32,
                 entry[5] as i32,
                 entry[6] as i32,
                 entry[7] as i32,
             ];
-            break;
         }
     }
+    [
+        row.min_level,
+        row.max_level,
+        row.target_min_level,
+        row.target_max_level,
+    ]
+}
+
+// Shared by the scalar getter and choice-info array builder (0x554e60).
+fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result<MultiValue> {
+    let bounds = level_bounds(state, row);
     // 0x634950: exact map/difficulty lookup, no fallback. The getter exposes nil on miss.
     let maximum = state
         .catalog
