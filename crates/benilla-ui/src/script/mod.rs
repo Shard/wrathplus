@@ -856,6 +856,7 @@ impl UiScript {
             wrath_achievements::install(&lua)?;
             wrath_achievement_progress::install(&lua)?;
             guild::install_wrath(&lua)?;
+            worldmap::install_wrath(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;

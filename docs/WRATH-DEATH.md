@@ -21,3 +21,8 @@ GUID), 04B7 corpse map position (AC answers four zero floats).
 command is the accept, sent with agree 1; a decline sends nothing), 02B3 self-res. Transport-only
 `ClientCommand::NativeDeath`: 049C hearth-and-resurrect, 04B6 corpse map position query. A
 resurrect that teleports goes through Wire A's movement authority.
+
+The release location (0378) now feeds the world map: `set_death_release_location((map, x, y))`,
+projected by `GetDeathReleasePosition()` (WorldMapFrame.lua:908, previously undefined) through the
+same world-to-map projection as `GetWorldLocMapPosition`; map -1 clears it, as do Connected and
+Disconnected. 0494 pre-resurrect and 04B7 corpse map position (AC answers zeros) stay captured.

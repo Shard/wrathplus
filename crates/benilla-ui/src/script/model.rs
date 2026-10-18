@@ -88,6 +88,8 @@ pub(crate) struct Model {
     pub(crate) texture_probe: Option<TextureProbe>,
     /// `GetWorldLocMapPosition`'s projection; `None` answers `(0, 0)`.
     pub(crate) world_loc_projector: Option<WorldLocProjector>,
+    /// `GetDeathReleasePosition`'s world location, `(map, x, y)` (`SMSG_DEATH_RELEASE_LOC`).
+    pub(crate) death_release: Option<(u32, f32, f32)>,
     /// A path's texel size, which an axis authored as 0 takes, one texel per unit, as the client's
     /// `GetWidth` (`0x770720`) and `GetHeight` (`0x770790`) do; `None` leaves it as authored.
     pub(crate) texture_size_probe: Option<TextureSizeProbe>,
@@ -1103,6 +1105,7 @@ impl Model {
             measurer: None,
             texture_probe: None,
             world_loc_projector: None,
+            death_release: None,
             texture_size_probe: None,
             font_probe: None,
             addons_saved_account: None,
