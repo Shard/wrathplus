@@ -1408,7 +1408,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::DuelAccepted { .. }
         | ClientCommand::DuelCancelled { .. }
         | ClientCommand::SetContactNotes { .. } => WrathRoute::NativeContacts,
-        ClientCommand::NativeGuildBank(_) => WrathRoute::NativeGuildBank,
+        ClientCommand::NativeGuildBank(_)
+        | ClientCommand::NativeGuildBankSwap(_)
+        | ClientCommand::NativeGuildBankTab(_)
+        | ClientCommand::NativeGuildBankText(_) => WrathRoute::NativeGuildBank,
         ClientCommand::NativeBattleground(_)
         | ClientCommand::BattlemasterHello { .. }
         | ClientCommand::AreaSpiritHealerQuery { .. }
@@ -1834,8 +1837,20 @@ fn writer_loop(
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeGuildBank => {
-                        let ClientCommand::NativeGuildBank(command) = command else { unreachable!() };
-                        active.writer.send_raw(command.opcode(), &command.encode())
+                        let packet = match command {
+                            ClientCommand::NativeGuildBank(c) => Ok((c.opcode(), c.encode())),
+                            ClientCommand::NativeGuildBankSwap(c) => Ok((c.opcode(), c.encode())),
+                            ClientCommand::NativeGuildBankTab(c) => c.encode().map(|b| (c.opcode(), b)),
+                            ClientCommand::NativeGuildBankText(c) => c.encode().map(|b| (c.opcode(), b)),
+                            _ => unreachable!(),
+                        };
+                        match packet {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid guild-bank command rejected before send: {error}");
+                                continue;
+                            }
+                        }
                     }
                     WrathRoute::NativeSessionMeta => {
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));

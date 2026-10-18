@@ -55,6 +55,7 @@ pub(super) fn register(app: &mut App) {
             Update,
             feed_sockets
                 .after(super::wrath_equipment_sets::feed_equipment_sets)
+                .after(crate::ui_guild_bank::feed_guild_bank)
                 .in_set(crate::ui_script::UiFeed)
                 .run_if(crate::ui_script::ingame_ui_up),
         );
@@ -146,6 +147,7 @@ pub(super) fn feed_sockets(
     items: Res<crate::items::Items>,
     icons: Option<Res<crate::entities::ItemDisplays>>,
     commands: Res<NetCommands>,
+    guild_bank: Res<crate::ui_guild_bank::GuildBankOpen>,
     mut last: Local<crate::ui_script::VmMemo<Option<Option<SocketSessionView>>>>,
 ) {
     let Some(mut script) = script else {
@@ -168,13 +170,23 @@ pub(super) fn feed_sockets(
     .collect();
     let entry = |guid: u64| objects.object(guid).and_then(|o| o.object_entry());
     for request in script.take_item_service_requests() {
-        // The guild-bank money intent belongs to the guild-bank unit.
+        // The guild-bank money withdrawal names the open vault.
         let at = match request {
             ItemServiceRequest::SocketContainer { bag, slot } => walker_container_slot(bag, slot),
             ItemServiceRequest::SocketInventory { slot } => {
                 u8::try_from(slot - 1).ok().map(|s| (PLAYER_ARRAY, s))
             }
-            ItemServiceRequest::WithdrawGuildBankMoney { .. } => None,
+            ItemServiceRequest::WithdrawGuildBankMoney { copper } => {
+                if let Some(banker) = guild_bank.banker() {
+                    let _ = commands.0.send(ClientCommand::NativeGuildBank(
+                        benilla_protocol::wrath_guild_bank_commands::Command::WithdrawMoney {
+                            banker,
+                            amount: copper,
+                        },
+                    ));
+                }
+                None
+            }
         };
         if let Some(&guid) = at.and_then(|at| carried.get(&at)) {
             *session = SocketSession {

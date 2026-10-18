@@ -462,6 +462,7 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
+    pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -898,6 +899,8 @@ pub(crate) struct Model {
     pub(crate) wrath_runes: super::WrathRunes,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
+    /// `SetUIVisibility(false)`'s flag (`wrath_options`).
+    pub(crate) ui_hidden: bool,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1266,6 +1269,7 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
+            wrath_unit_popup: Default::default(),
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
@@ -1522,6 +1526,7 @@ impl Model {
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
             spellbook_highest_rank: Vec::new(),
+            ui_hidden: false,
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,

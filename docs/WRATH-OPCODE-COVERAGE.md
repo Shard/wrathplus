@@ -44,20 +44,20 @@ Movement M5a, flight: CAN_FLY/FLYING controller mode with the ascend/descend key
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 344 | 134 | 211 | 689 |
-| C→S | 389 | 0 | 335 | 724 |
+| S→C | 349 | 132 | 208 | 689 |
+| C→S | 394 | 0 | 330 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 389 admitted numeric opcodes, 99 of them transport-only (no UI producer) and 290 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 394 admitted numeric opcodes, 97 of them transport-only (no UI producer) and 297 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (558 = 218 S→C + 340 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (550 = 215 S→C + 335 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
 | (a) in scope, Wire A: movement, flight, vehicle, taxi (M4) | 3 | 10 | 13 |
 | (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 3 | 3 |
-| (b) in scope, previously unowned: Wire B | 19 | 23 | 42 |
+| (b) in scope, previously unowned: Wire B | 16 | 18 | 34 |
 | (b) in scope, previously unowned: Assets | 9 | 4 | 13 |
 | (c) out of scope: GM/debug/dev | 53 | 138 | 191 |
 | (c) out of scope: voice chat | 11 | 14 | 25 |
@@ -65,8 +65,8 @@ Every row still **missing** above, counted per direction like the totals (558 = 
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
 | (c) out of scope: no AC sender (commented-out/doc reference only) | 5 | 0 | 5 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **31** | **40** | **71** |
-| All missing rows | 218 | 340 | 558 |
+| **True remaining (a + b)** | **28** | **35** | **63** |
+| All missing rows | 215 | 335 | 550 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
@@ -80,7 +80,6 @@ Spell, pet, rune and cooldown: `0x01F0` CMSG_PET_CAST_SPELL, `0x0462` CMSG_UPDAT
 
 Split by the manager: Assets owns game objects and world presentation (the dance-studio row included), GM tickets and help, refer-a-friend and session misc except `0x02D3` (BG, Wire B); Wire B owns the rest, guild bank and raid browser included.
 
-- **Guild bank (needs WRATH-GUILD-BANK-PLAN approval)** (Wire B): `0x03E8` SMSG_GUILD_BANK_LIST, `0x03E9` CMSG_GUILD_BANK_SWAP_ITEMS, `0x03EB` CMSG_GUILD_BANK_UPDATE_TAB, `0x03EE` MSG_GUILD_BANK_LOG_QUERY (S→C), `0x03EE` MSG_GUILD_BANK_LOG_QUERY (C→S), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (S→C), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (C→S), `0x040B` CMSG_SET_GUILD_BANK_TEXT.
 - **Petitions and charters** (Wire B): `0x01BB` CMSG_PETITION_SHOWLIST, `0x01BC` SMSG_PETITION_SHOWLIST, `0x01BD` CMSG_PETITION_BUY, `0x01BE` CMSG_PETITION_SHOW_SIGNATURES, `0x01BF` SMSG_PETITION_SHOW_SIGNATURES, `0x01C0` CMSG_PETITION_SIGN, `0x01C1` SMSG_PETITION_SIGN_RESULTS, `0x01C2` MSG_PETITION_DECLINE (S→C), `0x01C2` MSG_PETITION_DECLINE (C→S), `0x01C3` CMSG_OFFER_PETITION, `0x01C4` CMSG_TURN_IN_PETITION, `0x01C5` SMSG_TURN_IN_PETITION_RESULTS, `0x01C6` CMSG_PETITION_QUERY, `0x01C7` SMSG_PETITION_QUERY_RESPONSE, `0x02C1` MSG_PETITION_RENAME (S→C), `0x02C1` MSG_PETITION_RENAME (C→S).
 - **Raid browser (LFR)** (Wire B): `0x035E` CMSG_SEARCH_LFG_JOIN, `0x035F` CMSG_SEARCH_LFG_LEAVE, `0x0360` SMSG_UPDATE_LFG_LIST, `0x0369` SMSG_LFG_UPDATE_SEARCH.
 - **Channels remainder** (Wire B): `0x03D4` CMSG_GET_CHANNEL_MEMBER_COUNT, `0x03D5` SMSG_CHANNEL_MEMBER_COUNT, `0x03F0` SMSG_USERLIST_ADD, `0x03F1` SMSG_USERLIST_REMOVE, `0x03F2` SMSG_USERLIST_UPDATE, `0x03F3` CMSG_CLEAR_CHANNEL_WATCH, `0x0410` CMSG_DECLINE_CHANNEL_INVITE.
@@ -1108,15 +1107,15 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x03E3` | `SMSG_VOICE_CHAT_STATUS` | S→C | missing | core | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x03E4` | `CMSG_REPORT_PVP_AFK` | C→S | handled | common | AC receive: `HandleReportPvPAFK` (STATUS_LOGGEDIN). | C→S: BG — transport-only; `ClientCommand::NativeBattleground`, P/wrath_battleground.rs encoder; no UI producer. See docs/WRATH-BATTLEGROUND.md. |
 | `0x03E5` | `SMSG_REPORT_PVP_AFK_RESULT` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03E6` | `CMSG_GUILD_BANKER_ACTIVATE` | C→S | handled | common | AC receive: `HandleGuildBankerActivate` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(Activate)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
-| `0x03E7` | `CMSG_GUILD_BANK_QUERY_TAB` | C→S | handled | common | AC receive: `HandleGuildBankQueryTab` (STATUS_LOGGEDIN). | C→S: Guild-bank read transport — TRANSPORT; A/net/io/wrath.rs:1573; P/wrath_guild_bank_query.rs:6–38; A/net.rs:2089–2090. Producer status is explained in the family notes above. |
-| `0x03E8` | `SMSG_GUILD_BANK_LIST` | S→C | missing | common | proven_send_site: `game/Guilds/Guild.cpp:2981` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03E9` | `CMSG_GUILD_BANK_SWAP_ITEMS` | C→S | missing | common | AC receive: `HandleGuildBankSwapItems` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03E6` | `CMSG_GUILD_BANKER_ACTIVATE` | C→S | handled | common | AC receive: `HandleGuildBankerActivate` (STATUS_LOGGEDIN). | C→S: Guild bank — `NativeGuildBank(Activate)`; producer the guild-vault click (A/ui_guild_bank.rs). See docs/WRATH-GUILD-BANK.md. |
+| `0x03E7` | `CMSG_GUILD_BANK_QUERY_TAB` | C→S | handled | common | AC receive: `HandleGuildBankQueryTab` (STATUS_LOGGEDIN). | C→S: Guild bank — `GuildBankQuery(Tab)`; producer `QueryGuildBankTab`. See docs/WRATH-GUILD-BANK.md. |
+| `0x03E8` | `SMSG_GUILD_BANK_LIST` | S→C | handled | common | proven_send_site: `game/Guilds/Guild.cpp:2981` | S→C: Guild bank — A/ui_guild_bank.rs: tabs, slots, money → `WrathGuildBankView`, frame events. See docs/WRATH-GUILD-BANK.md. |
+| `0x03E9` | `CMSG_GUILD_BANK_SWAP_ITEMS` | C→S | handled | common | AC receive: `HandleGuildBankSwapItems` (STATUS_LOGGEDIN). | C→S: Guild bank — `ClientCommand::NativeGuildBankSwap`; producers `AutoStoreGuildBankItem` and `PickupGuildBankItem` with a bag item held. See docs/WRATH-GUILD-BANK.md. |
 | `0x03EA` | `CMSG_GUILD_BANK_BUY_TAB` | C→S | handled | common | AC receive: `HandleGuildBankBuyTab` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(BuyTab)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
-| `0x03EB` | `CMSG_GUILD_BANK_UPDATE_TAB` | C→S | missing | common | AC receive: `HandleGuildBankUpdateTab` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03EB` | `CMSG_GUILD_BANK_UPDATE_TAB` | C→S | handled | common | AC receive: `HandleGuildBankUpdateTab` (STATUS_LOGGEDIN). | C→S: Guild bank — `ClientCommand::NativeGuildBankTab`; producer `SetGuildBankTabInfo`. See docs/WRATH-GUILD-BANK.md. |
 | `0x03EC` | `CMSG_GUILD_BANK_DEPOSIT_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankDepositMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(DepositMoney)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
-| `0x03ED` | `CMSG_GUILD_BANK_WITHDRAW_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankWithdrawMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(WithdrawMoney)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
-| `0x03EE` | `MSG_GUILD_BANK_LOG_QUERY` | S→C / C→S | missing / missing | common | proven_send_site: `game/Guilds/Guild.cpp:1850` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03ED` | `CMSG_GUILD_BANK_WITHDRAW_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankWithdrawMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — `NativeGuildBank(WithdrawMoney)`; producer `WithdrawGuildBankMoney` (A/net/wrath_sockets.rs drains the item-service intent). See docs/WRATH-GUILD-BANK.md. |
+| `0x03EE` | `MSG_GUILD_BANK_LOG_QUERY` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1850` | S→C: Guild bank — the tab and money logs → `WrathGuildBankView`. C→S: `NativeGuildBankText(QueryLog)`; producer `QueryGuildBankLog`. See docs/WRATH-GUILD-BANK.md. |
 | `0x03EF` | `CMSG_SET_CHANNEL_WATCH` | C→S | handled | common | AC receive: `HandleSetChannelWatch` (STATUS_LOGGEDIN). | C→S: Native channel display/watch — ACTIVE; A/net/io/wrath.rs:1586–1593; P/wrath_channel.rs:125–126; direct Wrath producer A/ui_chat/native_feed.rs:92–113. Producer status is explained in the family notes above. |
 | `0x03F0` | `SMSG_USERLIST_ADD` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1177` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x03F1` | `SMSG_USERLIST_REMOVE` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1193` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
@@ -1131,8 +1130,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x03FA` | `CMSG_GM_CHARACTER_RESTORE` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03FB` | `CMSG_GM_CHARACTER_SAVE` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03FC` | `SMSG_VOICESESSION_FULL` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03FD` | `MSG_GUILD_PERMISSIONS` | S→C / C→S | capture-only / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1892` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:231-237; crates/benilla-protocol/src/wrath_guild_bank.rs:157-198; crates/benilla-app/src/ui_guild_bank.rs:1-26 — 0x03e8 has a codec but is NOT routed here. C→S: Guild-bank read transport — TRANSPORT; A/net/io/wrath.rs:1573; P/wrath_guild_bank_query.rs:6–38; A/net.rs:2089–2090. Producer status is explained in the family notes above. |
-| `0x03FE` | `MSG_GUILD_BANK_MONEY_WITHDRAWN` | S→C / C→S | capture-only / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1921` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:231-237; crates/benilla-protocol/src/wrath_guild_bank.rs:157-198; crates/benilla-app/src/ui_guild_bank.rs:1-26 — 0x03e8 has a codec but is NOT routed here. C→S: Guild-bank read transport — TRANSPORT; A/net/io/wrath.rs:1573; P/wrath_guild_bank_query.rs:6–38; A/net.rs:2089–2090. Producer status is explained in the family notes above. |
+| `0x03FD` | `MSG_GUILD_PERMISSIONS` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1892` | S→C: Guild bank — A/ui_guild_bank.rs: the tab rights → the view's tabs. C→S: `GuildBankQuery` (existing). See docs/WRATH-GUILD-BANK.md. |
+| `0x03FE` | `MSG_GUILD_BANK_MONEY_WITHDRAWN` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1921` | S→C: Guild bank — A/ui_guild_bank.rs: money withdrawable today → `GUILDBANK_UPDATE_WITHDRAWMONEY`. C→S: `GuildBankQuery` (existing). See docs/WRATH-GUILD-BANK.md. |
 | `0x03FF` | `MSG_GUILD_EVENT_LOG_QUERY` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1836` | S→C: raw `WrathGuild` → A/ui_guild/wrath.rs → `set_wrath_guild_events`. C→S: `NativeGuild` route; producer `QueryGuildEventLog()`. See docs/WRATH-GUILD.md. |
 | `0x0400` | `CMSG_MAELSTROM_RENAME_GUILD` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0401` | `CMSG_GET_MIRRORIMAGE_DATA` | C→S | handled | niche | AC receive: `HandleMirrorImageDataRequest` (STATUS_LOGGEDIN). | C→S: admitted native writer, transport-only — `ClientCommand::NativeMirrorImageQuery` → P/wrath_mirror_image.rs `encode_query` (raw guid); no producer yet, no acceptance claimed. |
@@ -1144,8 +1143,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0407` | `CMSG_KEEP_ALIVE` | C→S | missing | niche | AC receive: `Handle_EarlyProccess` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0408` | `SMSG_RAID_READY_CHECK_ERROR` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0409` | `CMSG_OPT_OUT_OF_LOOT` | C→S | handled | core | AC receive: `HandleOptOutOfLootOpcode` (STATUS_AUTHED). | C→S: Exchange — transport-only; `ClientCommand::NativeExchange`, P/wrath_exchange.rs encoder; no UI producer. See docs/WRATH-EXCHANGE.md. |
-| `0x040A` | `MSG_QUERY_GUILD_BANK_TEXT` | S→C / C→S | missing / missing | common | proven_send_site: `game/Guilds/Guild.cpp:505` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x040B` | `CMSG_SET_GUILD_BANK_TEXT` | C→S | missing | common | AC receive: `HandleSetGuildBankTabText` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x040A` | `MSG_QUERY_GUILD_BANK_TEXT` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:505` | S→C: Guild bank — the tab text → `WrathGuildBankView`, `GUILDBANK_UPDATE_TEXT`. C→S: `NativeGuildBankText(QueryText)`; producer `QueryGuildBankText`. See docs/WRATH-GUILD-BANK.md. |
+| `0x040B` | `CMSG_SET_GUILD_BANK_TEXT` | C→S | handled | common | AC receive: `HandleSetGuildBankTabText` (STATUS_LOGGEDIN). | C→S: Guild bank — `NativeGuildBankText(SetText)`; producer `SetGuildBankText`. See docs/WRATH-GUILD-BANK.md. |
 | `0x040C` | `CMSG_SET_GRANTABLE_LEVELS` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x040D` | `CMSG_GRANT_LEVEL` | C→S | handled | niche | AC receive: `HandleGrantLevel` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeReferFriend`, P/wrath_refer_friend.rs encoder (packed guid); no UI producer. See docs/WRATH-REFER-A-FRIEND.md. |
 | `0x040E` | `CMSG_REFER_A_FRIEND` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |

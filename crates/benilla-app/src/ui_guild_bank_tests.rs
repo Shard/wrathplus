@@ -1,80 +1,230 @@
 use super::*;
-use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
+use benilla_protocol::wrath_guild_bank::Slot;
+use benilla_protocol::wrath_guild_bank_log::Entry;
+use benilla_protocol::wrath_guild_bank_text::Text;
 
-fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, opcode: u16, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } =
-        adapter.dispatch(opcode, body, 0).unwrap()
-    {
-        crate::net::handlers::dispatch(app.world_mut(), session_events);
+fn dbg(command: Option<ClientCommand>) -> String {
+    format!("{command:?}")
+}
+
+fn item(count: u32) -> Item {
+    Item {
+        flags: 0,
+        random_property: 0,
+        random_property_seed: None,
+        count,
+        enchantment: 0,
+        charges: 0,
+        sockets: Vec::new(),
     }
 }
 
-#[test]
-fn adapter_fifo_retains_repeats_interleaving_and_resets_on_disconnect() {
-    let mut app = App::new();
-    app.add_plugins(UiGuildBankPlugin);
-    let mut adapter = WrathEventAdapter::new();
-    let mut body = vec![255; 61];
-    body[12] = 0; // Six rows remain even when no tabs are purchased.
-    let permission = benilla_protocol::wrath_guild_bank::decode(0x3fd, &body).unwrap();
-    let expected = vec![
-        Packet::RemainingMoney { remaining: -1 },
-        permission.clone(),
-        Packet::RemainingMoney {
-            remaining: i32::MIN,
-        },
-        permission,
-    ];
-    dispatch(&mut app, &mut adapter, 0x3fe, &[255; 4]);
-    dispatch(&mut app, &mut adapter, 0x3fd, &body);
-    dispatch(&mut app, &mut adapter, 0x3fe, &[0, 0, 0, 128]);
-    dispatch(&mut app, &mut adapter, 0x3fd, &body);
-    assert_eq!(
-        app.world()
-            .resource::<NativeGuildBankPackets>()
-            .0
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>(),
-        expected
-    );
-    for end in 0..body.len() {
-        dispatch(&mut app, &mut adapter, 0x3fd, &body[..end]);
-    }
-    body.push(0);
-    dispatch(&mut app, &mut adapter, 0x3fd, &body);
-    for end in 0..4 {
-        dispatch(&mut app, &mut adapter, 0x3fe, &vec![0; end]);
-    }
-    dispatch(&mut app, &mut adapter, 0x3fe, &[0; 5]);
-    assert_eq!(app.world().resource::<NativeGuildBankPackets>().0.len(), 4);
-    crate::net::handlers::dispatch(
-        app.world_mut(),
-        vec![SessionEvent::Disconnected {
-            reason: "test".into(),
-            end: benilla_protocol::SessionEnd::Lost,
-        }],
-    );
-    assert!(app
-        .world()
-        .resource::<NativeGuildBankPackets>()
-        .0
-        .is_empty());
-    dispatch(&mut app, &mut adapter, 0x3fe, &[0; 4]);
-    assert_eq!(
-        app.world().resource::<NativeGuildBankPackets>().0.front(),
-        Some(&Packet::RemainingMoney { remaining: 0 })
-    );
+fn list(tab: u8, full_update: u8, slots: Vec<(u8, u32, u32)>) -> Packet {
+    Packet::Contents(Contents {
+        money: 5_000,
+        tab,
+        remaining_withdrawals: 3,
+        full_update,
+        tab_info: (tab == 0 && full_update != 0).then(|| {
+            vec![TabInfo {
+                name: b"Mats".to_vec(),
+                icon: b"INV_Box_01".to_vec(),
+            }]
+        }),
+        slots: slots
+            .into_iter()
+            .map(|(slot, item_id, count)| Slot {
+                slot,
+                item_id,
+                item: (item_id != 0).then(|| item(count)),
+            })
+            .collect(),
+    })
 }
 
 #[test]
-fn built_client_registers_exactly_one_guild_bank_owner() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathGuildBank];
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(owners[0].contains("ui_guild_bank::receive"));
+fn lists_fill_tabs_and_slots_and_partial_updates_patch_them() {
+    let mut bank = GuildBank::default();
+    apply(&mut bank, list(0, 1, vec![(0, 100, 5), (3, 200, 1)]), false);
+    assert!(!bank.open, "a list nobody asked for opens nothing");
+    apply(&mut bank, list(0, 1, vec![(0, 100, 5), (3, 200, 1)]), true);
+    assert!(bank.open);
+    assert_eq!(bank.tabs.len(), 1);
+    assert_eq!(bank.slots[0].len(), 2);
+    // A partial update changes the named slots only; item 0 empties one.
+    apply(&mut bank, list(0, 0, vec![(3, 0, 0), (7, 300, 2)]), true);
+    assert_eq!(bank.slots[0].keys().copied().collect::<Vec<_>>(), [0, 7]);
+    assert_eq!(
+        bank.tabs.len(),
+        1,
+        "tab info only rides a full tab-0 update"
+    );
+    apply(&mut bank, Packet::RemainingMoney { remaining: -1 }, true);
+    apply(
+        &mut bank,
+        Packet::Text(Text {
+            tab: 0,
+            text: b"Officers only".to_vec(),
+        }),
+        true,
+    );
+    apply(
+        &mut bank,
+        Packet::Log(Log {
+            tab: MONEY_LOG_TAB,
+            entries: vec![Entry {
+                kind: 4,
+                actor: 9,
+                payload: Payload::Money { amount: 100 },
+                elapsed: 60,
+            }],
+        }),
+        true,
+    );
+    assert_eq!(bank.money_remaining, Some(-1));
+    assert_eq!(bank.texts[&0], "Officers only");
+    assert_eq!(bank.logs[&MONEY_LOG_TAB].entries.len(), 1);
+}
+
+#[test]
+fn gestures_name_the_vault_and_zero_based_coordinates() {
+    use benilla_protocol::wrath_guild_bank_query::Query;
+    use benilla_protocol::wrath_guild_bank_text::Command as T;
+    let mut bank = GuildBank::default();
+    let mut open = GuildBankOpen::default();
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::QueryTab { tab: 1 },
+            None
+        )),
+        dbg(None),
+        "no vault open"
+    );
+    open.open(0x77);
+    apply(&mut bank, list(0, 1, vec![(4, 100, 5)]), true);
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::QueryTab { tab: 1 },
+            None
+        )),
+        dbg(Some(ClientCommand::GuildBankQuery(Query::Tab {
+            banker: 0x77,
+            tab: 0,
+            full_update: 1
+        })))
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::QueryLog { tab: 7 },
+            None
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankText(T::QueryLog {
+            tab: 6
+        }))),
+        "tab 7 is the money log"
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::AutoStoreItem { tab: 1, slot: 5 },
+            None
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankSwap(Swap {
+            banker: 0x77,
+            transfer: Transfer::AutoStore {
+                source: BankSlot {
+                    tab: 0,
+                    slot: 4,
+                    item: 100
+                },
+                count: 5
+            },
+        })))
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::PickupItem { tab: 1, slot: 1 },
+            None
+        )),
+        dbg(None),
+        "picking a bank item up waits for the cursor mode"
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::PickupItem { tab: 1, slot: 1 },
+            Some((255, 23, 0))
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankSwap(Swap {
+            banker: 0x77,
+            transfer: Transfer::InventoryToBank {
+                destination: BankSlot {
+                    tab: 0,
+                    slot: 0,
+                    item: 0
+                },
+                container: 255,
+                container_slot: 23,
+                stack_count: 0,
+            },
+        })))
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::Close,
+            None
+        )),
+        dbg(None)
+    );
+    assert!(open.banker().is_none() && !bank.open);
+}
+
+#[test]
+fn the_frame_events_follow_the_view() {
+    let names = |events: Vec<(&'static str, Vec<ScriptValue>)>| {
+        events.into_iter().map(|(e, _)| e).collect::<Vec<_>>()
+    };
+    let open = WrathGuildBankView {
+        money: 10,
+        tabs: vec![WrathGuildBankTab::default()],
+        slots: vec![Vec::new()],
+        tab_text: vec![String::new()],
+        ..Default::default()
+    };
+    assert_eq!(
+        names(events(None, &open)),
+        [
+            "GUILDBANKFRAME_OPENED",
+            "GUILDBANK_UPDATE_TABS",
+            "GUILDBANK_UPDATE_MONEY",
+            "GUILDBANKBAGSLOTS_CHANGED",
+            "GUILDBANK_UPDATE_TEXT"
+        ]
+    );
+    let mut richer = open.clone();
+    richer.money = 20;
+    richer.tab_text[0] = "hi".into();
+    let changed = events(Some(&open), &richer);
+    assert_eq!(
+        names(changed.clone()),
+        ["GUILDBANK_UPDATE_MONEY", "GUILDBANK_UPDATE_TEXT"]
+    );
+    assert_eq!(changed[1].1, [ScriptValue::Int(1)]);
+    assert_eq!(
+        names(events(Some(&richer), &WrathGuildBankView::default())),
+        ["GUILDBANKFRAME_CLOSED"]
+    );
+    assert!(events(None, &WrathGuildBankView::default()).is_empty());
 }
