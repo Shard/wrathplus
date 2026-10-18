@@ -343,6 +343,7 @@ fn vendor_list_inventory_wire() {
                         price: 536,
                         max_durability: 35,
                         buy_count: 1,
+                        extended_cost: 0,
                     },
                     VendorItem {
                         slot: 2,
@@ -352,6 +353,7 @@ fn vendor_list_inventory_wire() {
                         price: 342,
                         max_durability: 40,
                         buy_count: 1,
+                        extended_cost: 0,
                     },
                 ]
             );

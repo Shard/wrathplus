@@ -48,8 +48,8 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             price: u32_le(&mut r)?,
             max_durability: u32_le(&mut r)?,
             buy_count: u32_le(&mut r)?,
+            extended_cost: u32_le(&mut r)?,
         });
-        let _extended_cost = u32_le(&mut r)?;
     }
     let slots = items.iter().map(|i| (i.entry, i.slot)).collect();
     *SLOTS.lock().unwrap_or_else(|p| p.into_inner()) = Some((vendor, slots));
