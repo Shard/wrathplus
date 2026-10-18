@@ -441,6 +441,8 @@ pub enum SessionEvent {
         civilian: bool,
         /// The tooltip's white LEADER line.
         racial_leader: bool,
+        /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::messages::CreatureQueryInfo`]).
+        modifiers: Option<[u32; 2]>,
     },
     /// `SMSG_GAMEOBJECT_QUERY_RESPONSE`, keyed by template `entry`; `data` is the type-specific
     /// raw tail. An unknown entry still fires, every field zero or empty.
@@ -1200,6 +1202,8 @@ pub enum SessionEvent {
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
     WrathSpellControl { packet: crate::wrath_spell_control::Packet },
+    /// Retained native death-knight rune state (`wrath_spell_control::RunePacket`).
+    WrathRunes { packet: crate::wrath_spell_control::RunePacket },
     /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
     WrathMovement { packet: crate::wrath_movement_misc::Packet },
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:

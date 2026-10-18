@@ -3724,6 +3724,7 @@ fn a_no_wound_creature_takes_no_flinch() {
         civilian: false,
         racial_leader: false,
         display_id: 0,
+        modifiers: None,
     };
     {
         let mut names = app.world_mut().resource_mut::<crate::names::NameCache>();
@@ -3810,6 +3811,7 @@ fn the_no_wound_flag_takes_the_parry_but_not_the_dodge() {
         civilian: false,
         racial_leader: false,
         display_id: 0,
+        modifiers: None,
     };
     {
         let mut names = app.world_mut().resource_mut::<crate::names::NameCache>();

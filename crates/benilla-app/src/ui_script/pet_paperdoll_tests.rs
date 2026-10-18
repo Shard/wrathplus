@@ -64,6 +64,8 @@ fn hunter_pet_stats() -> PetStats {
         food_types: ["Meat", "Fish", "Cheese", "Bread", "Fungus", "Fruit"]
             .map(String::from)
             .to_vec(),
+        health_modifier: 1.0,
+        power_modifier: 1.0,
     }
 }
 
