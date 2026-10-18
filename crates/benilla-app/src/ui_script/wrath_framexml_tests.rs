@@ -225,6 +225,51 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
     ),
 ];
 
+/// FrameXML-defined names (see [`scan_calls`]) that are also exact strings in `Wow.exe` 12340
+/// and that this VM does not answer, reviewed as not being shadowed engine APIs. Any other such
+/// name stays counted as missing, so a FrameXML definition cannot hide an engine method or global.
+/// A row needs its reason; the list only shrinks.
+const SHADOW_REVIEWED: &[(&str, &str)] = &[];
+
+/// The census lines a FrameXML definition must not suppress: each `(kind, name, count)` that was
+/// suppressed only by a FrameXML definition, is an exact NUL-bounded string in `exe`, is not
+/// answered by the VM, and is not in `reviewed`.
+fn shadow_guard(
+    suppressed: &[(&str, String, usize)],
+    exe: &[u8],
+    answered: impl Fn(&str) -> bool,
+    reviewed: &[(&str, &str)],
+) -> Vec<String> {
+    suppressed
+        .iter()
+        .filter(|(_, name, _)| {
+            let needle = [b"\0".as_slice(), name.as_bytes(), b"\0".as_slice()].concat();
+            exe.windows(needle.len()).any(|w| w == needle.as_slice())
+                && !answered(name)
+                && !reviewed.iter().any(|(r, _)| r == name)
+        })
+        .map(|(kind, name, n)| format!("{kind} {name} {n}"))
+        .collect()
+}
+
+#[test]
+fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
+    let exe = b"junk\0SetBindingClick\0OnUpdate\0Run\0other";
+    let suppressed = vec![
+        ("METHOD", "SetBindingClick".to_string(), 2),
+        ("METHOD", "OnUpdate".to_string(), 1),
+        ("METHOD", "SetSelection".to_string(), 3),
+        ("GLOBAL", "Run".to_string(), 1),
+    ];
+    let reviewed = [("OnUpdate", "a script-handler name, reviewed in this test")];
+    let lines = shadow_guard(&suppressed, exe, |n| n == "Run", &reviewed);
+    assert_eq!(
+        lines,
+        vec!["METHOD SetBindingClick 2".to_string()],
+        "reviewed OnUpdate, answered Run and a name absent from Wow.exe are not re-counted"
+    );
+}
+
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
 /// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
 fn missing_surface(script: &UiScript) {
@@ -362,6 +407,55 @@ fn missing_surface(script: &UiScript) {
         eprintln!("CONST {name} {}", constants[&name]);
     }
     let names: Vec<String> = calls.keys().filter(|n| !defined.contains(*n)).cloned().collect();
+    // The names only a FrameXML definition suppresses, for the Wow.exe shadow guard.
+    let mut suppressed: Vec<(&str, String, usize)> = Vec::new();
+    for (name, n) in &methods {
+        if !has.contains(name) && defined.contains(name) {
+            suppressed.push(("METHOD", name.clone(), *n));
+        }
+    }
+    for (name, n) in &calls {
+        if defined.contains(name) {
+            suppressed.push(("GLOBAL", name.clone(), *n));
+        }
+    }
+    let exe_path = std::path::Path::new(&std::env::var("WOW_DATA").expect("WOW_DATA"))
+        .parent()
+        .expect("WOW_DATA has a parent")
+        .join("Wow.exe");
+    let exe = std::fs::read(&exe_path)
+        .unwrap_or_else(|e| panic!("the shadow guard needs {}: {e}", exe_path.display()));
+    let candidate_names: Vec<String> = suppressed.iter().map(|(_, n, _)| n.clone()).collect();
+    let globals_present: std::collections::HashSet<String> = script
+        .lua()
+        .load("local out = {} for _, n in ipairs(...) do if _G[n] ~= nil then out[#out+1] = n end end return out")
+        .call::<Vec<String>>(candidate_names)
+        .unwrap()
+        .into_iter()
+        .collect();
+    let shadowed = shadow_guard(
+        &suppressed,
+        &exe,
+        |n| has.contains(n) || globals_present.contains(n),
+        SHADOW_REVIEWED,
+    );
+    let shadow_hits: std::collections::HashSet<&str> = suppressed
+        .iter()
+        .filter(|(_, name, _)| {
+            let needle = [b"\0".as_slice(), name.as_bytes(), b"\0".as_slice()].concat();
+            exe.windows(needle.len()).any(|w| w == needle.as_slice())
+        })
+        .map(|(_, n, _)| n.as_str())
+        .collect();
+    let stale_reviewed: Vec<&str> = SHADOW_REVIEWED
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !shadow_hits.contains(n))
+        .collect();
+    assert!(
+        stale_reviewed.is_empty(),
+        "SHADOW_REVIEWED rows no longer shadowing a Wow.exe string: {stale_reviewed:?}"
+    );
     let absent: Vec<String> = script
         .lua()
         .load("local out = {} for _, n in ipairs(...) do if _G[n] == nil then out[#out+1] = n end end return out")
@@ -392,6 +486,8 @@ fn missing_surface(script: &UiScript) {
         stale.is_empty(),
         "NATIVE_ABSENT rows that are answered or no longer called: {stale:?}"
     );
+    eprintln!("shadow-guarded: {} names", shadowed.len());
+    lines.extend(shadowed);
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {
         eprintln!("NATIVE-ABSENT {name} {}: {evidence}", calls.get(*name).copied().unwrap_or(0));

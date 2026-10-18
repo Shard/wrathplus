@@ -24,6 +24,9 @@ pub(crate) struct EquipmentSets {
     sets: BTreeMap<u32, EquipmentSet>,
     /// The set a use is waiting on, for `EQUIPMENT_SWAP_FINISHED`.
     pending_use: Option<String>,
+    /// Indexes deleted before `SMSG_EQUIPMENT_SET_SAVED` numbered them: the delete goes out with
+    /// the GUID.
+    pending_delete: Vec<u32>,
 }
 
 pub(super) fn register(app: &mut App) {
@@ -37,7 +40,7 @@ pub(super) fn register(app: &mut App) {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn feed_equipment_sets(
+pub(super) fn feed_equipment_sets(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
     mut sets: ResMut<EquipmentSets>,
@@ -52,8 +55,14 @@ fn feed_equipment_sets(
     if script.dialect() != ScriptDialect::Wrath12340 {
         return;
     }
-    for (completed, name) in absorb(&mut packets.0, &mut sets) {
+    let (finished, deletes) = absorb(&mut packets.0, &mut sets);
+    for (completed, name) in finished {
         script.equipment_swap_finished(completed, name);
+    }
+    for set_guid in deletes {
+        let _ = commands
+            .0
+            .send(ClientCommand::NativeInventory(Command::EquipmentSetDelete { set_guid }));
     }
     // Where each carried item is now: equipped slots and bag slots, by GUID.
     let carried: HashMap<u64, (u8, u8)> = self_q
@@ -106,12 +115,14 @@ fn feed_equipment_sets(
 }
 
 /// Take the equipment-set receipts out of the capture into `sets`, returning each use's
-/// `(completed, set name)`; every other receipt stays, in order, for its own consumer.
+/// `(completed, set name)` and the GUIDs of sets deleted before they were numbered; every other
+/// receipt stays, in order, for its own consumer.
 fn absorb(
     packets: &mut std::collections::VecDeque<Packet>,
     sets: &mut EquipmentSets,
-) -> Vec<(bool, Option<String>)> {
+) -> (Vec<(bool, Option<String>)>, Vec<u64>) {
     let mut finished = Vec::new();
+    let mut deletes = Vec::new();
     let mut kept = std::collections::VecDeque::new();
     for packet in packets.drain(..) {
         match packet {
@@ -119,7 +130,10 @@ fn absorb(
                 sets.sets = list.into_iter().map(|s| (s.index, s)).collect();
             }
             Packet::EquipmentSetSaved { index, set_guid } => {
-                if let Some(set) = sets.sets.get_mut(&index) {
+                if let Some(at) = sets.pending_delete.iter().position(|&i| i == index) {
+                    sets.pending_delete.remove(at);
+                    deletes.push(set_guid);
+                } else if let Some(set) = sets.sets.get_mut(&index) {
                     set.set_guid = set_guid;
                 }
             }
@@ -130,7 +144,7 @@ fn absorb(
         }
     }
     *packets = kept;
-    finished
+    (finished, deletes)
 }
 
 /// One gear-manager gesture against the local copy, and the packet it sends.
@@ -174,15 +188,20 @@ fn apply(
         }
         EquipmentSetRequest::Delete { name } => {
             let set = sets.sets.remove(&by_name(sets, &name)?)?;
-            // A set the server has not numbered yet cannot be named to it.
-            (set.set_guid != 0).then_some(Command::EquipmentSetDelete {
+            // A set the server has not numbered yet is deleted when its GUID arrives.
+            if set.set_guid == 0 {
+                sets.pending_delete.push(set.index);
+                return None;
+            }
+            Some(Command::EquipmentSetDelete {
                 set_guid: set.set_guid,
             })
         }
         EquipmentSetRequest::Use { name } => {
             let set = &sets.sets[&by_name(sets, &name)?];
             // Each slot's item and where it is; AzerothCore finds the item by GUID and reads the
-            // position only for its log. An ignored or empty slot carries no position.
+            // position only for its log, so an item no longer carried goes as 255/255. An ignored
+            // or empty slot carries no position.
             let items = set.items.map(|item| match item {
                 0 | IGNORED => (item, 0, 0),
                 guid => {

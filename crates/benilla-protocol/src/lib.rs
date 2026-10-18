@@ -40,6 +40,7 @@ pub mod wrath_battleground;
 pub mod wrath_contacts;
 pub mod wrath_death;
 pub mod wrath_session_meta;
+pub mod wrath_help;
 pub mod wrath_inspect;
 pub mod wrath_char_services;
 pub mod wrath_faction;

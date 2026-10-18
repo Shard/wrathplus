@@ -56,6 +56,7 @@ pub mod currencies;
 pub mod glyphs;
 pub mod item_limit_category;
 mod itemsets;
+pub mod gems;
 pub mod lfg;
 pub mod vehicles;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};
@@ -251,8 +252,8 @@ mod emit_timing;
 pub use emit_timing::{EmitParams, EmitTiming, ParamsNow};
 mod particles;
 pub use particles::{
-    parse_m2_particle_emitters, CellRamp, OverLife, OverLifeSample, ParticleBlend,
-    ParticleEmitterDef, ParticleShape, SplineData,
+    parse_m2_particle_emitters, parse_m2_particle_emitters_with_animations, CellRamp, OverLife,
+    OverLifeSample, ParticleBlend, ParticleEmitterDef, ParticleShape, SplineData,
 };
 mod ribbons;
 pub use ribbons::{parse_m2_ribbon_emitters, RibbonEmitterDef, RibbonVisibility};

@@ -187,6 +187,7 @@ mod ui_social;
 mod ui_spellbook;
 mod ui_stable;
 mod ui_summon;
+mod ui_static_popup;
 mod ui_tabard;
 mod ui_talent;
 mod ui_talent_wipe;

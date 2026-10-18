@@ -43,6 +43,8 @@ mod wrath_chat_window;
 mod wrath_unit_casts;
 mod wrath_combat_log;
 mod wrath_chat_verbs;
+mod wrath_static_popup;
+pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
 pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
 pub use wrath_unit_casts::WrathUnitCast;
@@ -175,6 +177,8 @@ pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
 mod wrath_item_services;
+mod wrath_sockets;
+pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
 pub use wrath_equipment::{
     EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
 };
@@ -792,6 +796,7 @@ impl UiScript {
             wrath_companions::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
+            wrath_sockets::install(&lua)?;
             wrath_bag_portrait::install(&lua)?;
             wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
@@ -806,6 +811,7 @@ impl UiScript {
             wrath_combat_log::install(&lua)?;
             wrath_chat_verbs::install(&lua)?;
             wrath_inspect_talents::install(&lua)?;
+            wrath_static_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 
