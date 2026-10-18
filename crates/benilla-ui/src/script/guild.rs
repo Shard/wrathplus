@@ -210,6 +210,8 @@ pub enum GuildRequest {
     AddRank(String),
     /// `GuildControlDelRank()`: no argument and an empty `0x233`; the server deletes the last rank.
     DelRank,
+    /// `QueryGuildEventLog()`: `MSG_GUILD_EVENT_LOG_QUERY`, answered into the event log.
+    QueryEventLog,
     /// `SetGuildRosterSelection(index)`, mirrored so the next push agrees.
     Select(u32),
     /// `SetGuildRosterShowOffline(flag)`, mirrored so the next push agrees.
@@ -731,7 +733,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
+    Ok(())
+}
 
+/// The 3.3.5-only guild binding: `QueryGuildEventLog()` asks for the log
+/// `GetNumGuildEvents`/`GetGuildEventInfo` read.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "QueryGuildEventLog",
+        lua.create_function(|lua, _ignored: MultiValue| {
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            model.guild_requests.push(GuildRequest::QueryEventLog);
+            Ok(())
+        })?,
+    )?;
     Ok(())
 }
 
