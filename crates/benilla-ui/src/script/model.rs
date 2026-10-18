@@ -88,6 +88,8 @@ pub(crate) struct Model {
     pub(crate) texture_probe: Option<TextureProbe>,
     /// `GetWorldLocMapPosition`'s projection; `None` answers `(0, 0)`.
     pub(crate) world_loc_projector: Option<WorldLocProjector>,
+    /// `GetDeathReleasePosition`'s world location, `(map, x, y)` (`SMSG_DEATH_RELEASE_LOC`).
+    pub(crate) death_release: Option<(u32, f32, f32)>,
     /// A path's texel size, which an axis authored as 0 takes, one texel per unit, as the client's
     /// `GetWidth` (`0x770720`) and `GetHeight` (`0x770790`) do; `None` leaves it as authored.
     pub(crate) texture_size_probe: Option<TextureSizeProbe>,
@@ -469,6 +471,8 @@ pub(crate) struct Model {
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
+    /// The item id the last tooltip item lookup asked for, taken by the render that follows.
+    pub(crate) tooltip_viewed_item: Option<u32>,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -1108,6 +1112,7 @@ impl Model {
             measurer: None,
             texture_probe: None,
             world_loc_projector: None,
+            death_release: None,
             texture_size_probe: None,
             font_probe: None,
             addons_saved_account: None,
@@ -1282,6 +1287,7 @@ impl Model {
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
+            tooltip_viewed_item: None,
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),

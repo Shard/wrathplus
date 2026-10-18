@@ -77,6 +77,19 @@ pub(super) fn render_view(
     // `None`: a template source, with no item object and no instance block.
     inst: Option<&ItemInstance>,
 ) -> mlua::Result<()> {
+    // The shown item, for `GetItem`/`IsEquippedItem`: the id the preceding lookup asked for.
+    let h = crate::script::object::frame_handle_of(lua, this)?;
+    {
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        if let Some(id) = model.tooltip_viewed_item.take() {
+            let name = inst
+                .and_then(|i| i.name.clone())
+                .unwrap_or_else(|| v.name.clone());
+            if let Ok(t) = crate::script::tooltip::tip_mut(&mut model, h) {
+                t.item = Some((id, name));
+            }
+        }
+    }
     let (req, known_spell, taught_known, set_view, equipped) = {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
         let knows = |id: u32| model.spellbook.slots.iter().any(|s| s.spell_id == id);

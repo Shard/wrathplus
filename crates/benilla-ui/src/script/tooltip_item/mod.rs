@@ -76,6 +76,7 @@ fn compare_against_worn(
 /// The cached template; a miss records the ask, and the hover's re-enter loop repaints on arrival.
 fn view_of(lua: &Lua, item_id: u32) -> Option<ItemTemplateView> {
     let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+    model.tooltip_viewed_item = Some(item_id);
     let v = model.item_templates.get(&item_id).cloned();
     if v.is_none() && item_id != 0 {
         model.item_stat_asks.insert(item_id);
@@ -127,7 +128,7 @@ fn hyperlink_enchant_spell(link: &str) -> Option<u32> {
     tail[..end].parse().ok().filter(|&id: &u32| id != 0)
 }
 
-fn hyperlink_item_fields(link: &str) -> Option<(u32, u32, u32)> {
+pub(super) fn hyperlink_item_fields(link: &str) -> Option<(u32, u32, u32)> {
     let at = link.find("item:")? + 5;
     let tail = &link[at..];
     let end = tail.find("|h").unwrap_or(tail.len());
@@ -197,7 +198,7 @@ fn set_quest_item_view(
 
 /// An InventoryType's compare candidate slots, as `GetInventorySlotInfo` ids: the reference's
 /// mask table `0x809200[InventoryType]`.
-fn equip_slots_for(inventory_type: u32) -> &'static [u32] {
+pub(super) fn equip_slots_for(inventory_type: u32) -> &'static [u32] {
     match inventory_type {
         1 => &[1],             // head
         2 => &[2],             // neck

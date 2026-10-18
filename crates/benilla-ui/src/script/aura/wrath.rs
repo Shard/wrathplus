@@ -54,6 +54,33 @@ fn returns(lua: &Lua, a: &AuraState) -> mlua::Result<MultiValue> {
     ]))
 }
 
+/// The aura `UnitAura(unit, index | name, …, filter)` names, shared with
+/// `GameTooltip:SetUnitAura`.
+pub(crate) fn find_aura(
+    model: &Model,
+    token: &str,
+    which: &Value,
+    filter: Option<&str>,
+    default_helpful: bool,
+) -> mlua::Result<Option<AuraState>> {
+    let filter = parse_filter(filter, default_helpful);
+    Ok(auras_of(model, token)?.and_then(|list| {
+        let mut matching = list.iter().filter(|a| {
+            a.helpful == filter.helpful && filter.cancelable.is_none_or(|c| a.cancelable == c)
+        });
+        match which {
+            Value::Integer(i) if *i >= 1 => matching.nth((*i - 1) as usize),
+            Value::Number(n) if *n >= 1.0 => matching.nth((*n as usize) - 1),
+            Value::String(name) => {
+                let name = name.to_string_lossy();
+                matching.find(|a| a.name.as_deref() == Some(name.as_str()))
+            }
+            _ => None,
+        }
+        .cloned()
+    }))
+}
+
 fn find(
     lua: &Lua,
     token: Option<String>,
@@ -61,28 +88,12 @@ fn find(
     filter: Option<String>,
     default_helpful: bool,
 ) -> mlua::Result<MultiValue> {
-    let filter = parse_filter(filter.as_deref(), default_helpful);
     let hit = {
         let model = lua.app_data_ref::<Model>().expect("model app_data");
         let Some(token) = token else {
             return Ok(MultiValue::new());
         };
-        auras_of(&model, &token)?.and_then(|list| {
-            let mut matching = list.iter().filter(|a| {
-                a.helpful == filter.helpful
-                    && filter.cancelable.is_none_or(|c| a.cancelable == c)
-            });
-            match &which {
-                Value::Integer(i) if *i >= 1 => matching.nth((*i - 1) as usize),
-                Value::Number(n) if *n >= 1.0 => matching.nth((*n as usize) - 1),
-                Value::String(name) => {
-                    let name = name.to_string_lossy();
-                    matching.find(|a| a.name.as_deref() == Some(name.as_str()))
-                }
-                _ => None,
-            }
-            .cloned()
-        })
+        find_aura(&model, &token, &which, filter.as_deref(), default_helpful)?
     };
     match hit {
         Some(a) => returns(lua, &a),
