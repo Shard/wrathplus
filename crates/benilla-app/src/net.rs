@@ -42,7 +42,9 @@ pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_appearance;
-mod wrath_calendar_capture;
+pub(crate) mod wrath_social_lists_capture;
+mod wrath_raid_browser_feed;
+pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
 pub(crate) mod wrath_battleground_capture;
@@ -58,6 +60,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
@@ -162,6 +165,8 @@ impl Plugin for NetPlugin {
         wrath_exchange_capture::register(app);
         wrath_achievement_capture::register(app);
         wrath_appearance::register(app);
+        wrath_social_lists_capture::register(app);
+        wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
@@ -178,6 +183,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_bootstrap_capture::register(app);
         wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
@@ -1323,6 +1329,13 @@ pub(crate) enum ClientCommand {
         target: benilla_protocol::messages::CorpseTarget,
         corpse_guid: u64,
     },
+    /// Build 12340's `CMSG_PET_CAST_SPELL`: a cast whose caster is our pet, charm or possessed
+    /// unit, with the same targets block (the targeting cursor's pet commit).
+    NativePetCastSpell {
+        caster: u64,
+        spell_id: u32,
+        target: benilla_protocol::wrath_session::CastTarget,
+    },
     /// `CMSG_CAST_SPELL` with `TARGET_FLAG_DEST_LOCATION`; `dest` in WoW coordinates.
     CastSpellAtDest {
         spell_id: u32,
@@ -2201,6 +2214,14 @@ pub(crate) enum ClientCommand {
     NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
     /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
     NativeAppearance(benilla_protocol::wrath_appearance::Command),
+    /// `CMSG_GET_CHANNEL_MEMBER_COUNT`.
+    GetChannelMemberCount { name: String },
+    /// `CMSG_CLEAR_CHANNEL_WATCH`: stop a channel's roster deltas.
+    ClearChannelWatch { name: String },
+    /// `CMSG_DECLINE_CHANNEL_INVITE` (AC reads nothing from it).
+    DeclineChannelInvite { name: String },
+    /// The raid browser's search join and leave.
+    NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),

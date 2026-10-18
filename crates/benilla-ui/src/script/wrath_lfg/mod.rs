@@ -54,6 +54,8 @@ pub(crate) struct State {
     item_requests: Vec<WrathLfgItemRequest>,
     /// L2: the queue snapshot, L0 selection and verbs (`queue`).
     queue: queue::Queue,
+    /// LFRFrame's raid browser (`raid_browser`).
+    raid_browser: raid_browser::RaidBrowser,
 }
 
 impl UiScript {
@@ -81,10 +83,17 @@ pub use locks::{
 };
 
 mod queue;
+pub(crate) use queue::start_backfill;
 pub use queue::{
     WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem, WrathLfgEncounter, WrathLfgProposal,
     WrathLfgProposalRow, WrathLfgQueueRequest, WrathLfgQueueSnapshot, WrathLfgQueueStatus,
     WrathLfgRoleCheck, WrathLfgRoleCheckMember, WrathLfgUpdate,
+};
+
+mod raid_browser;
+pub use raid_browser::{
+    WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest, WrathRaidBrowserStats,
+    WrathRaidBrowserView,
 };
 
 mod choices;
@@ -99,6 +108,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     choices::install(lua)?;
     order::install(lua)?;
     queue::install(lua)?;
+    raid_browser::install(lua)?;
     lua.globals().set(
         "GetLFGDungeonInfo",
         lua.create_function(|lua, id: Value| {

@@ -592,6 +592,10 @@ pub enum SessionEvent {
     /// Lossless arena-team transport; no inferred UI state.
     WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
+    /// A watched channel's roster deltas and channel member counts.
+    WrathChannelMembers { packet: crate::wrath_channel_members::Packet },
+    /// The raid browser's list and searching flag, raw.
+    WrathRaidBrowser { packet: crate::wrath_raid_browser::Packet },
     /// Appearance replies: titles earned or lost, the barber chair and its result.
     WrathAppearance { packet: crate::wrath_appearance::Packet },
     WrathGuild { packet: crate::wrath_guild::Packet },
@@ -1230,6 +1234,8 @@ pub enum SessionEvent {
     WrathRunes { packet: crate::wrath_spell_control::RunePacket },
     /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
     WrathMovement { packet: crate::wrath_movement_misc::Packet },
+    /// Build 12340's auth bootstrap packets (`crate::wrath_bootstrap`).
+    WrathBootstrap { packet: crate::wrath_bootstrap::Packet },
     /// Build 12340 vehicles and their passengers (`crate::wrath_vehicle`).
     WrathVehicle(crate::wrath_vehicle::VehicleEvent),
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:

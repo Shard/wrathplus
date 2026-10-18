@@ -5,8 +5,6 @@
 //!
 //! The raid roster ([`PartyState::raid`]) is one list, the player included, because the
 //! reference's count (`0xb713e0`) bounds the very array `GetRaidRosterInfo` indexes (`0xb712a8`).
-//! The saved-instance list ([`SavedInstanceInfo`]) is a separate push, as a roster push replaces
-//! [`PartyState`] whole.
 
 use mlua::{Lua, MultiValue, Value};
 
@@ -19,17 +17,6 @@ pub struct PartyMemberInfo {
     pub name: String,
     /// The identity `UnitInParty` matches any token against; `0` never matches.
     pub guid: u64,
-}
-
-/// One saved raid lockout, `GetSavedInstanceInfo`'s three returns, from `SMSG_RAID_INSTANCE_INFO`
-/// with the `Map.dbc` name resolved by the app ([`UiScript::set_saved_instances`]).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SavedInstanceInfo {
-    /// The `Map.dbc` name, e.g. `"Molten Core"`.
-    pub name: String,
-    pub instance: u32,
-    /// Seconds until the lockout resets.
-    pub reset: u32,
 }
 
 /// One raid roster row, `GetRaidRosterInfo`'s nine returns in push order (`0x4bb560`). The
@@ -153,8 +140,6 @@ pub enum PartyRequest {
     ReadyCheckStart,
     /// `ConfirmReadyCheck(ready)` (`MSG_RAID_READY_CHECK`, one byte).
     ReadyCheckAnswer(bool),
-    /// `RequestRaidInfo()` (`CMSG_REQUEST_RAID_INFO`).
-    RequestRaidInfo,
 }
 
 impl super::UiScript {
@@ -228,11 +213,6 @@ impl super::UiScript {
     /// Drain the party/loot intents queued since the last call.
     pub fn take_party_requests(&mut self) -> Vec<PartyRequest> {
         std::mem::take(&mut self.model_mut().party_requests)
-    }
-
-    /// Push the saved raid-lockout list, replacing it; the app fires `UPDATE_INSTANCE_INFO`.
-    pub fn set_saved_instances(&mut self, saved: Vec<SavedInstanceInfo>) {
-        self.model_mut().saved_instances = saved;
     }
 }
 
@@ -523,7 +503,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // ── The raid-management verbs ────────────────────────────────────────────
     // Each only marshals its arguments into a client call or a send (`ConvertToRaid 0x4bbc90`,
     // `SetRaidSubgroup 0x4bb990`, `SwapRaidSubgroup 0x4bbb00`, `PromoteToAssistant 0x4bbd20`,
-    // `RequestRaidInfo 0x4a1850`, `GetSavedInstanceInfo 0x4a1920`, `UninviteFromRaid 0x48a580`,
+    // `UninviteFromRaid 0x48a580`,
     // `SetRaidRosterSelection 0x4bb820`), so the verbs here queue a request.
     g.set(
         "ConvertToRaid",
@@ -640,46 +620,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    g.set(
-        "RequestRaidInfo",
-        lua.create_function(|lua, ()| {
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.party_requests.push(PartyRequest::RequestRaidInfo);
-            Ok(())
-        })?,
-    )?;
-
-    // GetNumSavedInstances() / GetSavedInstanceInfo(index), 1-based over the pushed list; a miss
-    // returns nothing.
-    g.set(
-        "GetNumSavedInstances",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(model.saved_instances.len() as i64)
-        })?,
-    )?;
-    g.set(
-        "GetSavedInstanceInfo",
-        lua.create_function(|lua, index: Value| {
-            let index = number_arg(lua, index, "Usage: GetSavedInstanceInfo(index)")?;
-            let row = {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                usize::try_from(index.wrapping_sub(1))
-                    .ok()
-                    .and_then(|i| model.saved_instances.get(i))
-                    .cloned()
-            };
-            Ok(match row {
-                Some(r) => MultiValue::from_vec(vec![
-                    Value::String(lua.create_string(&r.name)?),
-                    Value::Integer(i64::from(r.instance)),
-                    Value::Integer(i64::from(r.reset)),
-                ]),
-                None => MultiValue::new(),
-            })
-        })?,
-    )?;
-
     // SetRaidRosterSelection(index) / GetRaidRosterSelection(): a client-side cursor; the
     // reference's `0x4bb820` writes a global and sends nothing.
     g.set(
@@ -1299,7 +1239,6 @@ mod tests {
             DemoteAssistant("Bob")
             UninviteFromRaid(9)
             DoReadyCheck()
-            RequestRaidInfo()
             "#,
         )
         .unwrap();
@@ -1323,7 +1262,6 @@ mod tests {
                 },
                 PartyRequest::UninviteRaid(9),
                 PartyRequest::ReadyCheckStart,
-                PartyRequest::RequestRaidInfo,
             ]
         );
         assert!(s.take_party_requests().is_empty(), "the drain empties");
@@ -1345,44 +1283,6 @@ mod tests {
                 PartyRequest::ReadyCheckAnswer(true),
             ]
         );
-    }
-
-    #[test]
-    fn saved_instance_info_reads_the_pushed_list() {
-        use crate::script::SavedInstanceInfo;
-        let mut s = UiScript::new().unwrap();
-        assert_eq!(s.eval::<i64>("return GetNumSavedInstances()").unwrap(), 0);
-        s.set_saved_instances(vec![
-            SavedInstanceInfo {
-                name: "Molten Core".into(),
-                instance: 1234,
-                reset: 86_400,
-            },
-            SavedInstanceInfo {
-                name: "Onyxia's Lair".into(),
-                instance: 77,
-                reset: 3_600,
-            },
-        ]);
-        assert_eq!(s.eval::<i64>("return GetNumSavedInstances()").unwrap(), 2);
-        let (name, id, reset) = s
-            .eval::<(String, i64, i64)>("return GetSavedInstanceInfo(1)")
-            .unwrap();
-        assert_eq!((name.as_str(), id, reset), ("Molten Core", 1234, 86_400));
-        assert_eq!(
-            s.eval::<String>("return GetSavedInstanceInfo(2)").unwrap(),
-            "Onyxia's Lair"
-        );
-        for miss in ["0", "3", "-1"] {
-            assert!(
-                s.eval::<bool>(&format!("return GetSavedInstanceInfo({miss}) == nil"))
-                    .unwrap(),
-                "index {miss} is a miss"
-            );
-        }
-        assert!(s
-            .eval::<i64>(r#"return GetSavedInstanceInfo("x")"#)
-            .is_err());
     }
 
     #[test]

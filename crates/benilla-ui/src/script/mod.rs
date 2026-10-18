@@ -47,6 +47,15 @@ mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_unit_popup;
+pub use wrath_calendar::{
+    WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
+    WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid, WrathCalendarRaidReset,
+    WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
+};
+pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
+mod wrath_titles;
+mod wrath_tooltip;
+pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -180,6 +189,8 @@ pub use wrath_achievements::{
 };
 mod wrath_tutorial;
 mod wrath_ready_check;
+mod wrath_calendar;
+mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
@@ -222,7 +233,8 @@ pub use wrath_lfg::{
     WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
     WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
     WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
-    WrathLfgUpdate,
+    WrathLfgUpdate, WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest,
+    WrathRaidBrowserStats, WrathRaidBrowserView,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
@@ -250,7 +262,9 @@ pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
 pub use wrath_channel_display::WrathDisplayChannel;
-pub use wrath_channel_roster::{WrathChannelRosterMember, WrathChannelRosterRequest};
+pub use wrath_channel_roster::{
+    WrathChannelRosterDelta, WrathChannelRosterMember, WrathChannelRosterRequest,
+};
 pub use channel::{ChannelCommand, ZoneChannelRow};
 pub use char_stats::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, UnitCombatStats,
@@ -323,7 +337,7 @@ pub use merchant::{ItemStatsHead, MerchantItem, MerchantState, RepairCosts};
 pub(crate) use minimap::apply_model_attrs as apply_minimap_model_attrs;
 pub(crate) use model::Model;
 pub use model::{FontProbe, TextureProbe, TextureSizeProbe, WorldLocProjector};
-pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SavedInstanceInfo};
+pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo};
 pub use pet::{PetActionView, PetStats};
 pub use pvp::{HonorState, InspectHonorData};
 pub use quest::{
@@ -850,6 +864,7 @@ impl UiScript {
             wrath_achievements::install(&lua)?;
             wrath_achievement_progress::install(&lua)?;
             guild::install_wrath(&lua)?;
+            worldmap::install_wrath(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
@@ -863,7 +878,11 @@ impl UiScript {
             wrath_guild_bank::install(&lua)?;
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
+            wrath_titles::install(&lua)?;
+            wrath_tooltip::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
+            wrath_calendar::install(&lua)?;
+            wrath_saved_instances::install(&lua)?;
         }
 
         let s = UiScript {

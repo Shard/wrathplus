@@ -205,6 +205,9 @@ pub struct TooltipState {
     pub xml_declared_lines: bool,
     /// Wrath `AddTexture`: the 0-based line each used `$parentTextureN` sits on, in use order.
     pub texture_lines: Vec<usize>,
+    /// The item the content shows (`+0x360`) and its displayed name, for `GetItem` and
+    /// `IsEquippedItem`; cleared with the content.
+    pub item: Option<(u32, String)>,
 }
 
 /// The plate's text inset: the stock template seats `TextLeft1` at TOPLEFT (10, −10).

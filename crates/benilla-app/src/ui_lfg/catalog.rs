@@ -1,7 +1,9 @@
 //! Immutable build-12340 metadata and current authenticated context; not queue policy.
 use std::sync::Arc;
 
-use benilla_ui::script::{ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgDungeon};
+use benilla_ui::script::{
+    ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgDungeon, WrathLfgEncounter,
+};
 use bevy::prelude::*;
 
 use super::auth::NativeAccountExpansion;
@@ -9,6 +11,10 @@ use crate::ui_script::VmMemo;
 
 #[derive(Resource)]
 pub(super) struct Catalog(pub(super) Arc<WrathLfgCatalog>);
+
+/// `DungeonEncounter.dbc` for `GetLFGProposalEncounter`, with each row's `SpellIcon` path.
+#[derive(Resource)]
+pub(super) struct Encounters(pub(super) Arc<Vec<WrathLfgEncounter>>);
 
 pub(super) fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
     use benilla_assets::LockRecover;
@@ -20,6 +26,20 @@ pub(super) fn load(mut commands: Commands, assets: Option<Res<benilla_assets::Wo
     match benilla_formats::lfg::load_lfg_catalogs(&mut chain) {
         Ok(rows) => commands.insert_resource(Catalog(Arc::new(project(&rows)))),
         Err(error) => warn!("LFG DBCs: {error:#}"),
+    }
+    match benilla_formats::lfg::load_dungeon_encounters(&mut chain) {
+        Ok(rows) => commands.insert_resource(Encounters(Arc::new(
+            rows.iter()
+                .map(|r| WrathLfgEncounter {
+                    map: r.map_id(),
+                    difficulty: r.difficulty(),
+                    bit: r.bit(),
+                    name: r.name.clone(),
+                    icon: r.icon.clone(),
+                })
+                .collect(),
+        ))),
+        Err(error) => warn!("DungeonEncounter.dbc: {error:#}"),
     }
 }
 
@@ -65,12 +85,14 @@ fn project(rows: &benilla_formats::lfg::LfgCatalogs) -> WrathLfgCatalog {
 }
 
 type LastCatalog = Option<(Arc<WrathLfgCatalog>, Option<u8>)>;
+type LastEncounters = Option<Arc<Vec<WrathLfgEncounter>>>;
 
 pub(super) fn feed(
     script: Option<NonSendMut<UiScript>>,
     catalog: Option<Res<Catalog>>,
     expansion: Res<NativeAccountExpansion>,
-    mut memo: Local<VmMemo<LastCatalog>>,
+    mut memo: Local<VmMemo<(LastCatalog, LastEncounters)>>,
+    encounters: Option<Res<Encounters>>,
 ) {
     let (Some(mut script), Some(catalog)) = (script, catalog) else {
         return;
@@ -78,7 +100,16 @@ pub(super) fn feed(
     if script.dialect() != ScriptDialect::Wrath12340 {
         return;
     }
-    let last = memo.get(&script);
+    let (last, last_encounters) = memo.get(&script);
+    if let Some(rows) = encounters.as_deref() {
+        if !last_encounters
+            .as_ref()
+            .is_some_and(|seen| Arc::ptr_eq(seen, &rows.0))
+        {
+            script.set_wrath_lfg_encounters(Arc::clone(&rows.0));
+            *last_encounters = Some(Arc::clone(&rows.0));
+        }
+    }
     if last
         .as_ref()
         .is_some_and(|(rows, context)| Arc::ptr_eq(rows, &catalog.0) && *context == expansion.0)

@@ -6,8 +6,7 @@ use benilla_protocol::messages::{
     member_status, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, GROUP_MEMBER_ASSISTANT,
 };
 use benilla_ui::script::{
-    PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SavedInstanceInfo, ScriptValue,
-    UiScript, UnitState,
+    PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, ScriptValue, UiScript, UnitState,
 };
 use bevy::prelude::*;
 
@@ -49,8 +48,8 @@ pub(super) struct FedParty {
     /// The raid roster's identity (guid, rank, subgroup, online): the edge that stands in for the
     /// `RAID_ROSTER_UPDATE` sites no list carries.
     raid_key: Vec<(u64, u32, u32, bool)>,
-    saved: Vec<SavedInstanceInfo>,
-    saved_answers: u32,
+    /// The saved-instance receipts the feed has answered.
+    saved_receipts: usize,
     ready_check: u32,
     ready_check_requests: u32,
     answers_forwarded: usize,
@@ -86,10 +85,32 @@ pub(crate) const PARTY_TOKENS: [&str; 4] = ["party1", "party2", "party3", "party
 /// `partypet1..partypet4`, the pet of each [`PARTY_TOKENS`] slot (`0x4e81d0`).
 pub(crate) const PARTY_PET_TOKENS: [&str; 4] = ["partypet1", "partypet2", "partypet3", "partypet4"];
 
-/// A new list or a new answer: `RaidFrame.lua:43-52` decides the Raid Info button on the second
-/// `UPDATE_INSTANCE_INFO`, which an unchanging empty list reaches only through the answer count.
-fn saved_instances_moved(saved: &[SavedInstanceInfo], answers: u32, fed: &FedParty) -> bool {
-    saved != fed.saved || answers != fed.saved_answers
+/// A receipt's rows with their `Map.dbc` name, raid bit and `MapDifficulty` cap and string.
+fn saved_instances(
+    info: &benilla_protocol::wrath_instance::RaidInstanceInfo,
+    maps: Option<&benilla_assets::MapCatalogRes>,
+    difficulties: Option<&crate::ui_calendar::CalendarCatalog>,
+) -> Vec<benilla_ui::script::WrathSavedInstance> {
+    info.entries
+        .iter()
+        .map(|e| {
+            let (key, max_players) = difficulties
+                .and_then(|d| d.difficulty(e.map, e.difficulty))
+                .unwrap_or_default();
+            benilla_ui::script::WrathSavedInstance {
+                map: e.map,
+                name: maps.and_then(|m| m.0.name(e.map)).map(str::to_string),
+                difficulty: e.difficulty,
+                instance: e.instance_guid,
+                locked: e.raw_flag != 0,
+                extended: e.extended != 0,
+                reset: e.reset_seconds as i32,
+                is_raid: maps.and_then(|m| m.0.instance_type(e.map)) == Some(2),
+                max_players,
+                difficulty_key: key,
+            }
+        })
+        .collect()
 }
 
 /// The `PARTY_MEMBERS_CHANGED`s the lists applied since the feed's last look owe: one each, as the
@@ -162,7 +183,10 @@ pub(super) fn feed_party(
     // The area under us, through the accessor `crate::area` uses: `terrain_stream::CurrentArea`
     // would cross the world-API wall (`tests/world_api_wall.rs`).
     here: benilla_world::world_point::WorldPoint,
-    map_catalog: Option<Res<benilla_assets::MapCatalogRes>>,
+    maps: (
+        Option<Res<benilla_assets::MapCatalogRes>>,
+        Option<Res<crate::ui_calendar::CalendarCatalog>>,
+    ),
     mut fed: Local<crate::ui_script::VmMemo<FedParty>>,
     mut chat: ResMut<crate::ui_chat::ChatLog>,
 ) {
@@ -208,7 +232,7 @@ pub(super) fn feed_party(
     let stores_removed = !removed_stores.is_empty();
     let factions_changed = factions.as_ref().is_some_and(|r| r.is_changed());
     let areas_changed = areas.as_ref().is_some_and(|r| r.is_changed());
-    let maps_changed = map_catalog.as_ref().is_some_and(|r| r.is_changed());
+    let maps_changed = maps.0.as_ref().is_some_and(|r| r.is_changed());
     gate::trace(
         "feed_party",
         &[
@@ -356,6 +380,10 @@ pub(super) fn feed_party(
                 members,
                 dungeon_difficulty: r.loot.as_ref().map(|l| l.dungeon_difficulty + 1),
                 raid_difficulty: r.loot.as_ref().map(|l| l.raid_difficulty + 1),
+                // `SMSG_GROUP_LIST`'s LFG block (group type `0x08`): its status byte and entry.
+                // Labelled: `lfg_flags` and `lfg_restricted` have no traced source and stay 0.
+                lfg_status: r.lfg.map_or(0, |l| l.0),
+                lfg_dungeon_entry: r.lfg.map_or(0, |l| l.1),
                 ..Default::default()
             }
         })
@@ -604,30 +632,25 @@ pub(super) fn feed_party(
 
     // ── UPDATE_INSTANCE_INFO ────────────────────────────────────────────────
     //
-    // The lockout list with its `Map.dbc` names resolved; a missing catalog shows the map id.
-    let saved: Vec<SavedInstanceInfo> = group
-        .saved_instances
-        .iter()
-        .map(|e| SavedInstanceInfo {
-            name: map_catalog
-                .as_ref()
-                .and_then(|c| c.0.name(e.map))
-                .map_or_else(|| e.map.to_string(), str::to_string),
-            instance: e.instance,
-            reset: e.reset,
-        })
-        .collect();
-    // The event follows the answer, as the reference signals once per packet. A fresh VM is
-    // re-seeded in silence, since no packet arrived; the pane's `RequestRaidInfo` on show
-    // (`RaidFrame.xml:350`) fetches the real list.
-    if saved_instances_moved(&saved, group.saved_instances_answers, fed) {
+    // `0x501030` installs every list, then fires the event: one per receipt, empty ones and
+    // duplicates included. A fresh VM is re-seeded in silence, since no packet arrived; the pane's
+    // `RequestRaidInfo` on show fetches the real list.
+    let receipts = group.wrath_saved_instances.receipts.len();
+    if receipts != fed.saved_receipts || vm_reset {
         gate.audit("feed_party", "the saved-instance edge");
-        fed.saved = saved.clone();
-        fed.saved_answers = group.saved_instances_answers;
-        script.set_saved_instances(saved);
+        let list = group
+            .wrath_saved_instances
+            .snapshot
+            .as_ref()
+            .map(|s| saved_instances(s, maps.0.as_deref(), maps.1.as_deref()))
+            .unwrap_or_default();
+        script.set_wrath_saved_instances(std::sync::Arc::new(list));
         if !vm_reset {
-            script.fire_event("UPDATE_INSTANCE_INFO", vec![]);
+            for _ in fed.saved_receipts.min(receipts)..receipts {
+                script.fire_event("UPDATE_INSTANCE_INFO", vec![]);
+            }
         }
+        fed.saved_receipts = receipts;
     }
 
     if group.pending_invite != fed.invite {
@@ -894,7 +917,9 @@ fn member_unit_state(
     s.reaction = 5;
     s.faction_group = own_group;
     // Native status is authoritative for the unstreamed record, including explicit clears.
-    if store.is_none() && group.wrath_record(m.guid).is_some() { return s; }
+    if store.is_none() && group.wrath_record(m.guid).is_some() {
+        return s;
+    }
     // The roster status byte overlays both legs, but for `is_connected`, which is the record leg's.
     s.is_pvp_ffa = m.status & member_status::PVP_FFA != 0;
     s.pvp = s.pvp || m.status & member_status::PVP != 0;
@@ -933,8 +958,16 @@ pub(super) fn drain_party(
             continue;
         }
         match req {
-            PartyRequest::Assignment { assignment, apply, guid } => {
-                let _ = commands.0.send(ClientCommand::PartyAssignment { assignment, apply, guid });
+            PartyRequest::Assignment {
+                assignment,
+                apply,
+                guid,
+            } => {
+                let _ = commands.0.send(ClientCommand::PartyAssignment {
+                    assignment,
+                    apply,
+                    guid,
+                });
             }
             PartyRequest::Accept => {
                 let _ = commands.0.send(ClientCommand::GroupAccept);
@@ -1128,10 +1161,33 @@ pub(super) fn drain_party(
             PartyRequest::ReadyCheckAnswer(ready) => {
                 let _ = commands.0.send(ClientCommand::ReadyCheckAnswer { ready });
             }
-            PartyRequest::RequestRaidInfo => {
-                let _ = commands.0.send(ClientCommand::RequestRaidInfo);
-            }
         }
+    }
+    for req in script.take_wrath_saved_instance_requests() {
+        use benilla_ui::script::WrathSavedInstanceRequest as S;
+        let command = match req {
+            // The sandbox answers at once with the held list, as the server answers a second ask.
+            S::RequestRaidInfo if group.test => {
+                if let Some(held) = group.wrath_saved_instances.snapshot.clone() {
+                    group.wrath_saved_instances.receive(held);
+                }
+                continue;
+            }
+            S::RequestRaidInfo => ClientCommand::RequestRaidInfo,
+            // `SetSavedInstanceExtend` (`0x50dc10`): CMSG `0x292`, map, difficulty, the bit.
+            S::Extend {
+                map,
+                difficulty,
+                extend,
+            } => ClientCommand::NativeInstanceControl(
+                benilla_protocol::wrath_instance_control::Command::SetSavedInstanceExtend {
+                    map,
+                    difficulty,
+                    raw_extend: u8::from(extend),
+                },
+            ),
+        };
+        let _ = commands.0.send(command);
     }
 }
 
@@ -1321,13 +1377,6 @@ fn apply_test_intent(
             // The server's echo to the whole raid, us included. Only the leader has the button,
             // and the leader's echo takes the collection arm: no popup for the presser.
             group.apply_ready_check_request(true);
-            true
-        }
-        PartyRequest::RequestRaidInfo => {
-            // Answered at once with the seeded list, as the server answers a second ask; the
-            // re-apply counts the answer that fires `UPDATE_INSTANCE_INFO`.
-            let held = std::mem::take(&mut group.saved_instances);
-            group.apply_raid_instance_info(held);
             true
         }
         _ => false,
@@ -1562,25 +1611,30 @@ pub(crate) fn synthetic_raid(
     }
     // Six lockouts: the Raid Info panel shows four rows and scrolls from five
     // (`RaidFrame.lua:108`). Real map ids, so the rows carry `Map.dbc` names.
-    group.apply_raid_instance_info(
-        [
-            (409, 3 * 86_400 + 7_200, 1234), // Molten Core
-            (249, 14_400, 77),               // Onyxia's Lair
-            (469, 5 * 86_400, 812),          // Blackwing Lair
-            (309, 2_700, 3),                 // Zul'Gurub
-            (509, 2 * 86_400 + 60, 640),     // Ruins of Ahn'Qiraj
-            (533, 6 * 86_400, 91),           // Naxxramas
-        ]
-        .into_iter()
-        .map(
-            |(map, reset, instance)| benilla_protocol::messages::RaidInstanceEntry {
-                map,
-                reset,
-                instance,
-            },
-        )
-        .collect(),
-    );
+    group
+        .wrath_saved_instances
+        .receive(benilla_protocol::wrath_instance::RaidInstanceInfo {
+            entries: [
+                (409, 3 * 86_400 + 7_200, 1234), // Molten Core
+                (249, 14_400, 77),               // Onyxia's Lair
+                (469, 5 * 86_400, 812),          // Blackwing Lair
+                (309, 2_700, 3),                 // Zul'Gurub
+                (509, 2 * 86_400 + 60, 640),     // Ruins of Ahn'Qiraj
+                (533, 6 * 86_400, 91),           // Naxxramas
+            ]
+            .into_iter()
+            .map(|(map, reset_seconds, instance_guid)| {
+                benilla_protocol::wrath_instance::SavedInstance {
+                    map,
+                    difficulty: 0,
+                    instance_guid,
+                    raw_flag: 1,
+                    extended: 0,
+                    reset_seconds,
+                }
+            })
+            .collect(),
+        });
     // Sandbox on, after `apply_list` cleared it.
     group.test = true;
     lines
@@ -2119,29 +2173,36 @@ mod tests {
         assert!(errors.is_empty(), "script errors: {errors:?}");
     }
 
+    /// A receipt's row keeps its words; without the catalogs it has no name, so it reads as
+    /// the defaults.
     #[test]
-    fn a_second_empty_answer_is_still_a_saved_instance_edge() {
-        let mut fed = FedParty::default();
-        assert!(
-            saved_instances_moved(&[], 1, &fed),
-            "the first answer moves it"
+    fn saved_instance_rows_keep_their_words() {
+        let info = benilla_protocol::wrath_instance::RaidInstanceInfo {
+            entries: vec![benilla_protocol::wrath_instance::SavedInstance {
+                map: 533,
+                difficulty: 1,
+                instance_guid: 0x2_0000_0007,
+                raw_flag: 1,
+                extended: 1,
+                reset_seconds: 86_400,
+            }],
+        };
+        let rows = saved_instances(&info, None, None);
+        assert_eq!(
+            rows,
+            [benilla_ui::script::WrathSavedInstance {
+                map: 533,
+                name: None,
+                difficulty: 1,
+                instance: 0x2_0000_0007,
+                locked: true,
+                extended: true,
+                reset: 86_400,
+                is_raid: false,
+                max_players: 0,
+                difficulty_key: String::new(),
+            }]
         );
-        fed.saved_answers = 1;
-        assert!(
-            !saved_instances_moved(&[], 1, &fed),
-            "and nothing has happened since"
-        );
-        assert!(
-            saved_instances_moved(&[], 2, &fed),
-            "the SECOND empty answer is an edge too — the button is decided on it, and a diff \
-             over the list alone can never reach it"
-        );
-        let one = [SavedInstanceInfo {
-            name: "Molten Core".into(),
-            instance: 1234,
-            reset: 86_400,
-        }];
-        assert!(saved_instances_moved(&one, 1, &fed));
     }
 
     #[test]
@@ -2438,15 +2499,53 @@ mod wrath_tests {
     use super::*;
     #[test]
     fn native_unstreamed_member_snapshot_keeps_large_health_and_runic_power() {
-        use benilla_protocol::wrath_group::{Roster, Member, Stats};
+        use benilla_protocol::wrath_group::{Member, Roster, Stats};
         let mut g = GroupState::default();
-        g.apply_wrath_list(Roster { group_type: 0, subgroup: 0, flags: 0, roles: 0,
-            lfg: None, group_guid: 3, counter: 1, leader: 7, loot: None,
-            members: vec![Member { guid: 7, name: "Ally".into(), status: 1, subgroup: 0, flags: 0, roles: 0 }] }, Some(1));
-        g.apply_wrath_stats(Stats { guid: 7, cur_hp: Some(500000), max_hp: Some(900000),
-            power_type: Some(6), cur_power: Some(439), max_power: Some(1000), status: Some(1), ..Default::default() });
-        let s = member_unit_state(&g.members[0], None, None, &g, None, None, Default::default());
-        assert_eq!((s.health, s.max_health, s.power, s.max_power), (500000, 900000, 43, 100));
+        g.apply_wrath_list(
+            Roster {
+                group_type: 0,
+                subgroup: 0,
+                flags: 0,
+                roles: 0,
+                lfg: None,
+                group_guid: 3,
+                counter: 1,
+                leader: 7,
+                loot: None,
+                members: vec![Member {
+                    guid: 7,
+                    name: "Ally".into(),
+                    status: 1,
+                    subgroup: 0,
+                    flags: 0,
+                    roles: 0,
+                }],
+            },
+            Some(1),
+        );
+        g.apply_wrath_stats(Stats {
+            guid: 7,
+            cur_hp: Some(500000),
+            max_hp: Some(900000),
+            power_type: Some(6),
+            cur_power: Some(439),
+            max_power: Some(1000),
+            status: Some(1),
+            ..Default::default()
+        });
+        let s = member_unit_state(
+            &g.members[0],
+            None,
+            None,
+            &g,
+            None,
+            None,
+            Default::default(),
+        );
+        assert_eq!(
+            (s.health, s.max_health, s.power, s.max_power),
+            (500000, 900000, 43, 100)
+        );
         assert!(s.is_connected);
     }
 }

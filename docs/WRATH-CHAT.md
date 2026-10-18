@@ -33,3 +33,15 @@ recruitment channel (resolved from the catalog), 0 for custom, manual and saved 
 
 Not actionable: 0102 `CMSG_EMOTE` (no producer or command), 033A defense message (no AC sender),
 0331 chat filtered, voice rows (out of scope).
+
+## Channel members (`P/wrath_channel_members.rs`)
+
+AC `Chat/Channels/Channel.cpp`, `Handlers/ChannelHandler.cpp`: 03F0/03F2 userlist add/update (GUID,
+member flags, channel flags, member count, channel name) and 03F1 remove (GUID, channel flags,
+count, name), sent to a channel's watchers, and 03D5 member count (name, flags, count) are decoded
+and captured (`NativeChannelMembers`). The roster feed (`A/ui_chat/native_feed.rs`) applies the
+deltas through Native UI's `apply_wrath_channel_roster_delta` after the full lists, resolving an
+added member's name by revision as for a full list; the UI fires the roster events. No 12340
+binding sends the member-count request, so its answer is dropped. Writers on the channel route, transport-only:
+`GetChannelMemberCount` 03D4, `ClearChannelWatch` 03F3, `DeclineChannelInvite` 0410 (AC reads
+nothing from it); each takes the channel name.

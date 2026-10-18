@@ -989,6 +989,9 @@ fn writer_loop(
                     // alphabetical order, so concurrent additions merge.
                     ClientCommand::ArenaTeamCommand(_)
                     | ClientCommand::ChannelDisplayList { .. }
+                    | ClientCommand::ClearChannelWatch { .. }
+                    | ClientCommand::DeclineChannelInvite { .. }
+                    | ClientCommand::GetChannelMemberCount { .. }
                     | ClientCommand::GuildBankQuery(_)
                     | ClientCommand::GuildEventLogQuery
                     | ClientCommand::LfgCommand(_)
@@ -1014,8 +1017,10 @@ fn writer_loop(
                     | ClientCommand::NativeMirrorImageQuery { .. }
                     | ClientCommand::NativeMovementMisc(_)
                     | ClientCommand::NativeParty(_)
+                    | ClientCommand::NativePetCastSpell { .. }
                     | ClientCommand::NativeQuest(_)
                     | ClientCommand::NativeQuestsCompletedQuery
+                    | ClientCommand::NativeRaidBrowser(_)
                     | ClientCommand::NativeReferFriend(_)
                     | ClientCommand::NativeSessionMeta(_)
                     | ClientCommand::NativeSessionMisc(_)

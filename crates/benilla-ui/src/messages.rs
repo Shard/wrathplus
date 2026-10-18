@@ -48,9 +48,23 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
     CATALOG.get(usize::from(id))
 }
 
-/// The record for a `GlobalStrings` key; keys are unique (the generator refuses a duplicate).
+/// Build 12340 rows the 1.12 table lacks, read off `Wow.exe`'s message table (`0xac8af0`, 20-byte
+/// rows): the id is the build-12340 index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`,
+/// which is the 1.12 table's 10.
+#[rustfmt::skip]
+pub static WRATH_SUPPLEMENT: [MessageRecord; 3] = [
+    MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x280, key: "ERR_PET_LEARN_ABILITY_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x281, key: "ERR_PET_SPELL_UNLEARNED_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+];
+
+/// The record for a `GlobalStrings` key; keys are unique (the generator refuses a duplicate),
+/// then the build-12340 [`WRATH_SUPPLEMENT`].
 pub fn by_key(key: &str) -> Option<&'static MessageRecord> {
-    CATALOG.iter().find(|r| r.key == key)
+    CATALOG
+        .iter()
+        .chain(WRATH_SUPPLEMENT.iter())
+        .find(|r| r.key == key)
 }
 
 /// Where a message goes, by key. A key with no row is a benilla typo, never a reference state

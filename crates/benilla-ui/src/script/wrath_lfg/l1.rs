@@ -137,7 +137,7 @@ fn localized(lua: &Lua, key: &str) -> mlua::Result<Value> {
 }
 
 /// The n-th (0-based) preview item of the valid self block's node for `entry` (`0x5574c0`).
-fn preview_item(state: &State, entry: u32, index: i32) -> Option<super::WrathLfgRewardItem> {
+pub(super) fn preview_item(state: &State, entry: u32, index: i32) -> Option<super::WrathLfgRewardItem> {
     let index = usize::try_from(index).ok()?;
     let nodes = state.player_nodes()?;
     let node = nodes.into_iter().find(|n| n.entry == entry)?;

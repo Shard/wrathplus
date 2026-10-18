@@ -16,7 +16,8 @@
 //! Unresolved, labelled: the battlemaster session opened by `0x51fce0` and closed by `0x518d50`
 //! is modelled as the leash below, closing at 5.5556 yd. The receipts this reducer does not consume
 //! go on to [`NativeBattlegroundRest`]; opcodes `0x14b`, `0x4e5` and `0x4e8` are not decoded.
-//! `CMSG_BATTLEFIELD_STATUS` and `CMSG_BATTLEFIELD_MGR_QUEUE_REQUEST` await their wire.
+//! AzerothCore drops `CMSG_BATTLEFIELD_MGR_QUEUE_REQUEST` (`STATUS_NEVER`), so that request is
+//! sent and never answered.
 //!
 //! The 1.12 kinds (`BattlefieldStatus`, `BattlefieldList`, `PvpLogData`,
 //! `GroupJoinedBattleground`) are dropped by an explicit handler: build 12340 delivers them
@@ -694,10 +695,8 @@ fn drain_battlefield(
                 }
             }
             BattlefieldRequest::BfExit { battle_id } => send(Bg::BfExit { battle_id }),
-            // Unresolved, labelled: CMSG 0x4E3 awaits its writer, and AzerothCore drops it
-            // (`STATUS_NEVER`) anyway.
             BattlefieldRequest::BfQueueRequest { battle_id } => {
-                debug!("battlefield: queue request for battle {battle_id} awaits its wire");
+                send(Bg::BfQueueRequest { battle_id })
             }
             BattlefieldRequest::Close => state.close(),
         }
@@ -712,11 +711,12 @@ fn drain_battlefield(
 }
 
 /// World enter (`0x54ca50`): the list, the selection and the battlemaster clear, the queue slots
-/// stay. The bodyless `CMSG_BATTLEFIELD_STATUS` the reference sends next awaits its wire.
+/// stay, and the bodyless `CMSG_BATTLEFIELD_STATUS` goes out, answered slot by slot.
 fn reset_on_world_enter(
     mut entered: MessageReader<EnteredWorldMessage>,
     mut state: ResMut<Battlefield>,
     script: Option<NonSendMut<UiScript>>,
+    commands: Res<NetCommands>,
 ) {
     if entered.read().next().is_none() {
         return;
@@ -725,6 +725,11 @@ fn reset_on_world_enter(
     if let Some(mut script) = script {
         script.reset_battlefield_selection();
     }
+    request_battlefield_status(&commands);
+}
+
+fn request_battlefield_status(commands: &NetCommands) {
+    let _ = commands.0.send(ClientCommand::BattlefieldStatusRequest);
 }
 
 /// The battlemaster window's shared packet handlers.

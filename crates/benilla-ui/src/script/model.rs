@@ -88,6 +88,8 @@ pub(crate) struct Model {
     pub(crate) texture_probe: Option<TextureProbe>,
     /// `GetWorldLocMapPosition`'s projection; `None` answers `(0, 0)`.
     pub(crate) world_loc_projector: Option<WorldLocProjector>,
+    /// `GetDeathReleasePosition`'s world location, `(map, x, y)` (`SMSG_DEATH_RELEASE_LOC`).
+    pub(crate) death_release: Option<(u32, f32, f32)>,
     /// A path's texel size, which an axis authored as 0 takes, one texel per unit, as the client's
     /// `GetWidth` (`0x770720`) and `GetHeight` (`0x770790`) do; `None` leaves it as authored.
     pub(crate) texture_size_probe: Option<TextureSizeProbe>,
@@ -279,11 +281,11 @@ pub(crate) struct Model {
     pub(crate) wrath_ready_check: super::wrath_ready_check::State,
     /// `GetQuestsCompleted`'s stored reply and the undrained `QueryQuestsCompleted` calls.
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
+    pub(crate) wrath_calendar: super::wrath_calendar::State,
+    pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
-    /// Saved raid lockouts from `SMSG_RAID_INSTANCE_INFO`, which outlive any roster change.
-    pub(crate) saved_instances: Vec<party::SavedInstanceInfo>,
     /// `SetRaidRosterSelection`'s raid row index, client-side only.
     pub(crate) raid_selection: i64,
     /// `GetTime()`'s session seconds, which only the host moves ([`super::UiScript::tick`],
@@ -463,6 +465,9 @@ pub(crate) struct Model {
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
+    pub(crate) wrath_titles: super::wrath_titles::State,
+    /// The item id the last tooltip item lookup asked for, taken by the render that follows.
+    pub(crate) tooltip_viewed_item: Option<u32>,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -1088,6 +1093,7 @@ impl Model {
             measurer: None,
             texture_probe: None,
             world_loc_projector: None,
+            death_release: None,
             texture_size_probe: None,
             font_probe: None,
             addons_saved_account: None,
@@ -1173,9 +1179,10 @@ impl Model {
             ready_check: party::ReadyCheckState::default(),
             wrath_ready_check: super::wrath_ready_check::State::default(),
             wrath_quests_completed: Default::default(),
+            wrath_calendar: Default::default(),
+            wrath_saved_instances: Default::default(),
             wrath_inspect_talents: None,
             wrath_server_time_offset: None,
-            saved_instances: Vec::new(),
             raid_selection: 0,
             now: 0.0,
             game_time: (0, 0),
@@ -1258,6 +1265,8 @@ impl Model {
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
+            wrath_titles: Default::default(),
+            tooltip_viewed_item: None,
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),

@@ -432,8 +432,9 @@ fn spell_and_pet_remainders_are_captured_with_strict_framing() {
         ),
         (
             SMSG_PET_UPDATE_COMBO_POINTS,
-            vec![0x01, 0x05, 3],
+            vec![0x01, 0x07, 0x01, 0x05, 3],
             Packet::PetComboPoints {
+                unit: 7,
                 target: 5,
                 points: 3,
             },

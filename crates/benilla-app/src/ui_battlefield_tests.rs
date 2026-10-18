@@ -296,3 +296,18 @@ fn type_views_resolve_level_holiday_and_side() {
     assert!(!v[1].can_enter, "random needs level 80");
     assert!(type_views(&t, None, &WorldStates::default(), 80, -1)[1].can_enter);
 }
+
+#[test]
+fn world_enter_asks_for_the_status_on_the_native_wire() {
+    let (tx, rx) = crossbeam_channel::unbounded();
+    request_battlefield_status(&NetCommands(tx));
+    assert!(matches!(
+        rx.try_recv(),
+        Ok(ClientCommand::BattlefieldStatusRequest)
+    ));
+    // 12340 routes it to `CMSG_BATTLEFIELD_STATUS` (0x2D3) with an empty body.
+    assert_eq!(
+        benilla_protocol::wrath_battleground::encode(&Bg::Status),
+        (0x02d3, Vec::new())
+    );
+}

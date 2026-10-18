@@ -155,10 +155,6 @@ function GetNumLanguages()
 end
 
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-GetCurrentTitle = GetCurrentTitle or function() return -1 end
-GetNumTitles = GetNumTitles or zero
-GetTitleName = GetTitleName or none
-IsTitleKnown = IsTitleKnown or none
 UnitIsAFK = UnitIsAFK or none
 UnitIsDND = UnitIsDND or none
 UnitIsSameServer = UnitIsSameServer or function() return 1 end
@@ -215,11 +211,6 @@ IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none
-CalendarGetNumPendingInvites = zero
-function CalendarGetDate()
-    local now = date("*t")
-    return now.wday, now.month, now.day, now.year
-end
 UnitHasVehicleUI, UnitInVehicle, UnitUsingVehicle, CanExitVehicle = none, none, none, none
 UnitVehicleSkin, UnitVehicleSeatInfo = none, none
 UnitVehicleSeatCount = zero
@@ -591,7 +582,7 @@ UnitIsTappedByAllThreatList = UnitIsTappedByAllThreatList or none
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none
 FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
-IsEquippableItem, IsEquippedItem = IsEquippableItem or none, IsEquippedItem or none
+IsEquippableItem = IsEquippableItem or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none

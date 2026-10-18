@@ -34,6 +34,9 @@ use crate::ui_action::{reagent_totem_refusal, CastErrors, Spells};
 pub(crate) enum CastCommit {
     /// `CMSG_CAST_SPELL` (0x12e).
     Spell,
+    /// Build 12340's `CMSG_PET_CAST_SPELL` (0x1f0): our pet's, charm's or possessed unit's spell,
+    /// raised to the cursor by its bar ([`super::cast_target::pet_cursor_word`]).
+    Pet { caster: u64 },
     /// `CMSG_USE_ITEM` (0xab): the item's wire position and spell ordinal, plus a caller-bound
     /// GameObject.
     Item {
@@ -139,7 +142,32 @@ impl CastLadder<'_, '_> {
         commit: CastCommit,
         bound: TargetedBind,
     ) {
+        if let CastCommit::Pet { caster } = commit {
+            // The pet's cast: its own counter, cooldowns and GCD, none of ours to arm.
+            use benilla_protocol::wrath_session::CastTarget;
+            let target = match bound {
+                TargetedBind::Dest(at) => CastTarget::Dest(at),
+                TargetedBind::Source(at) => CastTarget::Source(at),
+                TargetedBind::Item(guid) => CastTarget::Item(guid),
+                TargetedBind::Object(guid) => CastTarget::GameObject(guid),
+                TargetedBind::Unit(guid) => CastTarget::Unit(guid),
+                TargetedBind::Corpse(..) => {
+                    debug!("ui_action: pet cast {spell_id} at a corpse is not built; dropped");
+                    self.ground.clear();
+                    return;
+                }
+            };
+            let _ = self.commands.0.send(ClientCommand::NativePetCastSpell {
+                caster,
+                spell_id,
+                target,
+            });
+            self.ground.clear();
+            return;
+        }
         let cmd = match commit {
+            // Sent above.
+            CastCommit::Pet { .. } => return,
             // The same targets block under either opcode; the spell side has one builder per bind.
             CastCommit::Spell => match bound {
                 TargetedBind::Dest(dest) => ClientCommand::CastSpellAtDest { spell_id, dest },
@@ -453,7 +481,7 @@ fn send_spell_cast(
     let mut deferred_refusal = None;
     let explicit_object = match commit {
         CastCommit::Item { on_object, .. } => on_object,
-        CastCommit::Spell => bound_object,
+        CastCommit::Spell | CastCommit::Pet { .. } => bound_object,
     };
     let candidates = cast_target::CastCandidates {
         selection: ctx.selection_guid,
@@ -520,7 +548,7 @@ fn send_spell_cast(
     // `StartRecoveryCategory`. Local, because the server's NOT_READY fail clears the running GCD.
     let queried_item = match commit {
         CastCommit::Item { entry, .. } => entry,
-        CastCommit::Spell => 0,
+        CastCommit::Spell | CastCommit::Pet { .. } => 0,
     };
     if cooldowns.not_ready(spell_id, queried_item, def, now) {
         debug!("ui_action: cast {spell_id} refused locally — not ready (the validator's rung 1)");
@@ -710,6 +738,8 @@ fn send_spell_cast(
     }
     // `SendCast 0x6e54f0`: one targets block, two opcodes.
     let _ = commands.0.send(match commit {
+        // A pet's spell reaches the wire only through its cursor commit.
+        CastCommit::Pet { .. } => return,
         CastCommit::Spell => match (explicit_object, item_target) {
             // A lock opener bound by its click; `BindTarget`'s GameObject arm fills the block.
             (Some(go_guid), _) => ClientCommand::CastSpellGameObject { spell_id, go_guid },

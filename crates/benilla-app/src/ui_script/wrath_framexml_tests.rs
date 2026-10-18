@@ -323,6 +323,9 @@ fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
     );
 }
 
+/// The `Blizzard_*` addons whose sources the census scans beside FrameXML.toc's files.
+const CENSUS_ADDONS: [&str; 2] = ["Blizzard_TimeManager", "Blizzard_BarbershopUI"];
+
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
 /// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
 fn missing_surface(script: &UiScript) {
@@ -347,12 +350,13 @@ fn missing_surface(script: &UiScript) {
                 let _ = std::fs::write(std::path::Path::new(&dir).join(file), bytes);
             }
         }
-        for name in ["Blizzard_TimeManager"] {
-            let dir = format!(r"Interface\AddOns\{name}");
-            if let Some(toc) = super::reference_ui::read(&format!(r"{dir}\{name}.toc")) {
-                let toc = benilla_ui::toc::Toc::parse(&benilla_ui::source::decode(&toc));
-                queue.extend(toc.files.iter().map(|f| format!(r"{dir}\{f}")));
-            }
+    }
+    // The stock addons whose sources are counted too, whatever the dump setting.
+    for name in CENSUS_ADDONS {
+        let dir = format!(r"Interface\AddOns\{name}");
+        if let Some(toc) = super::reference_ui::read(&format!(r"{dir}\{name}.toc")) {
+            let toc = benilla_ui::toc::Toc::parse(&benilla_ui::source::decode(&toc));
+            queue.extend(toc.files.iter().map(|f| format!(r"{dir}\{f}")));
         }
     }
     let mut seen = std::collections::HashSet::new();

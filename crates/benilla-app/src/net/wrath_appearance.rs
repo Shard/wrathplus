@@ -56,7 +56,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(SessionEventKind::Disconnected, clear)
         .add_systems(
             Update,
-            feed_appearance
+            (feed_appearance, feed_titles)
                 .in_set(crate::ui_script::UiFeed)
                 .run_if(crate::ui_script::ingame_ui_up),
         );
@@ -156,6 +156,60 @@ fn feed_appearance(
                 .push(crate::ui_action::UiError::key("ERR_NOT_ENOUGH_MONEY")),
             Packet::BarberShopResult { .. } => {}
         }
+    }
+}
+
+/// The player's titles for Native UI's title getters: the `CharTitles.dbc` catalog once per VM,
+/// and `PLAYER__FIELD_KNOWN_TITLES` (three 64-bit words) with `PLAYER_CHOSEN_TITLE` when they move.
+fn feed_titles(
+    script: Option<NonSendMut<UiScript>>,
+    tables: Option<Res<crate::quest_rewards::QuestRewardTables>>,
+    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    mut catalog_sent: Local<crate::ui_script::VmMemo<bool>>,
+    mut last: Local<crate::ui_script::VmMemo<Option<(Vec<u64>, u32)>>>,
+) {
+    use benilla_protocol::messages::Field;
+    let Some(mut script) = script else {
+        return;
+    };
+    if script.dialect() != ScriptDialect::Wrath12340 {
+        return;
+    }
+    let (sent, _) = catalog_sent.get_reset(&script);
+    if !*sent {
+        if let Some(titles) = tables.as_ref().and_then(|t| t.char_titles()) {
+            *sent = true;
+            script.set_wrath_char_titles(std::sync::Arc::new(
+                titles
+                    .iter()
+                    .map(|t| benilla_ui::script::WrathCharTitle {
+                        id: t.id,
+                        male: t.male_name.clone(),
+                        female: t.female_name.clone(),
+                        mask_id: t.mask_id,
+                    })
+                    .collect(),
+            ));
+        }
+    }
+    let Some(store) = self_q.iter().next() else {
+        return;
+    };
+    let known: Vec<u64> = [
+        Field::PlayerKnownTitles,
+        Field::PlayerKnownTitles1,
+        Field::PlayerKnownTitles2,
+    ]
+    .into_iter()
+    .map(|f| store.0.get_field_guid(f, 0).unwrap_or(0))
+    .collect();
+    let chosen = store.0.get(Field::PlayerChosenTitle).unwrap_or(0);
+    let now = Some((known, chosen));
+    let (last, reset) = last.get_reset(&script);
+    if reset || *last != now {
+        *last = now.clone();
+        let (known, chosen) = now.expect("just built");
+        script.set_wrath_player_titles(known, chosen);
     }
 }
 

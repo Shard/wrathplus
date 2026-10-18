@@ -35,3 +35,9 @@ queue reply and eject. 04F7 world-state UI timer keeps its existing capture (sta
 Not actionable: no AC sender for 014B port denied, 0170 removed from queue, 0222 spirit-healer confirm,
 038A joined queue, 03E5 report-AFK result, 04A6 info throttled, 04C8 change failed, 04DC queue stats,
 04E5 eject pending, 04E8 state change; AC `Handle_NULL` for 023E, 028B, 0348, 04E3; GM/cheat rating rows.
+
+02D3 `CMSG_BATTLEFIELD_STATUS` (empty; AC answers with every queue's status) is
+`NativeBattleground(Status)`, sent by the world-enter `BattlefieldStatusRequest` (12340 `0x54ca50`,
+Experience's trace). 04E3 `CMSG_BATTLEFIELD_MGR_QUEUE_REQUEST` (u32 battle id, `0x54d590`) is
+`NativeBattleground(BfQueueRequest)` for Experience's battlefield reducer; AC registers it
+`STATUS_NEVER`/`Handle_NULL`, so the server ignores it.

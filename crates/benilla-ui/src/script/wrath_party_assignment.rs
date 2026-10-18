@@ -138,19 +138,37 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             name,
             lua.create_function(move |lua, args: MultiValue| {
                 let now = clock::now(lua);
+                // Both refusals are kind 0 in the 12340 message table (`ERR_NOT_IN_GROUP` entry
+                // at `0xac9130`, `ERR_NOT_LEADER` at `0xac9180`): a system chat line, not a red
+                // UI error (kind 2).
+                let refusal = {
+                    let m = lua.app_data_ref::<Model>().expect("model");
+                    let own = m.unit("player").map_or(m.unit_guids.player, |p| p.guid);
+                    if m.party.members.is_empty() && m.party.raid.is_empty() {
+                        Some("ERR_NOT_IN_GROUP")
+                    } else if own == 0
+                        || (own != m.party.leader_guid
+                            && !(m.party.raid.iter().any(|p| p.guid == own)
+                                && flags(&m, own) & 1 != 0))
+                    {
+                        Some("ERR_NOT_LEADER")
+                    } else {
+                        None
+                    }
+                };
+                if let Some(key) = refusal {
+                    let message = match lua.globals().get::<Value>(key)? {
+                        Value::String(s) => s.to_string_lossy(),
+                        _ => key.to_string(),
+                    };
+                    super::super::tick::fire_event_into(
+                        lua,
+                        "CHAT_MSG_SYSTEM",
+                        vec![super::super::ScriptValue::Str(message)],
+                    );
+                    return Ok(());
+                }
                 let mut m = lua.app_data_mut::<Model>().expect("model");
-                if m.party.members.is_empty() && m.party.raid.is_empty() {
-                    m.ui_errors.push("ERR_NOT_IN_GROUP");
-                    return Ok(());
-                }
-                let own = m.unit("player").map_or(m.unit_guids.player, |p| p.guid);
-                if own == 0
-                    || (own != m.party.leader_guid
-                        && !(m.party.raid.iter().any(|p| p.guid == own) && flags(&m, own) & 1 != 0))
-                {
-                    m.ui_errors.push("ERR_NOT_LEADER");
-                    return Ok(());
-                }
                 let a = assignment(lua, args.front().cloned().unwrap_or(Value::Nil))?;
                 if m.assignment_sent_at.is_some_and(|t| now - t < 0.750) {
                     return Ok(());

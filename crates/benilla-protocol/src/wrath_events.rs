@@ -344,6 +344,18 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_channel_members::OPCODES.contains(&opcode) => {
+                Ok(match crate::wrath_channel_members::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathChannelMembers { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            opcode if crate::wrath_raid_browser::OPCODES.contains(&opcode) => {
+                Ok(match crate::wrath_raid_browser::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathRaidBrowser { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_petition::OPCODES.contains(&opcode) => {
                 Ok(match crate::wrath_petition::decode(opcode, body) {
                     Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
@@ -456,6 +468,12 @@ impl WrathEventAdapter {
             }
             opcode if crate::wrath_logs::handles(opcode) => {
                 Ok(match crate::wrath_logs::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            opcode if crate::wrath_bootstrap::handles(opcode) => {
+                Ok(match crate::wrath_bootstrap::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })

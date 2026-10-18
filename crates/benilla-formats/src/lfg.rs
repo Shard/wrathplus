@@ -195,11 +195,11 @@ impl LfgMapDifficultyCatalog {
 
 // These tables have no Vanilla projection. Decode every word directly so that
 // locale offsets/masks and unlabelled fields survive alongside selected text.
-struct Table<'a, const N: usize> {
-    rows: Vec<[u32; N]>,
-    strings: &'a [u8],
+pub(crate) struct Table<'a, const N: usize> {
+    pub(crate) rows: Vec<[u32; N]>,
+    pub(crate) strings: &'a [u8],
 }
-fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
+pub(crate) fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
     ensure!(
         bytes.len() >= 20 && &bytes[..4] == b"WDBC",
         "invalid WDBC header"
@@ -229,7 +229,7 @@ fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
         strings: &bytes[end..],
     })
 }
-fn text(strings: &[u8], offset: u32) -> Result<String> {
+pub(crate) fn text(strings: &[u8], offset: u32) -> Result<String> {
     let tail = strings
         .get(offset as usize..)
         .context("string offset out of bounds")?;
@@ -241,7 +241,7 @@ fn text(strings: &[u8], offset: u32) -> Result<String> {
         .context("invalid DBC UTF-8")?
         .to_owned())
 }
-fn localized(strings: &[u8], offsets: &[u32], slot: usize) -> Result<String> {
+pub(crate) fn localized(strings: &[u8], offsets: &[u32], slot: usize) -> Result<String> {
     // Validate inactive locale offsets too; malformed overrides are errors,
     // not empty strings or a reason to fall back to a lower-precedence archive.
     for offset in offsets {
@@ -297,6 +297,67 @@ pub fn parse_lfg_map_difficulties(bytes: &[u8], locale: &str) -> Result<LfgMapDi
         });
     }
     Ok(LfgMapDifficultyCatalog(rows))
+}
+
+/// A `DungeonEncounter.dbc` row (`0xad36cc`): the boss a proposal's completed mask names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DungeonEncounter {
+    raw: [u32; 23],
+    pub name: String,
+    /// The `SpellIcon.dbc` path, `None` for no row.
+    pub icon: Option<String>,
+}
+impl DungeonEncounter {
+    pub fn raw_columns(&self) -> &[u32; 23] {
+        &self.raw
+    }
+    pub fn id(&self) -> u32 {
+        self.raw[0]
+    }
+    pub fn map_id(&self) -> i32 {
+        self.raw[1] as i32
+    }
+    pub fn difficulty(&self) -> i32 {
+        self.raw[2] as i32
+    }
+    pub fn order(&self) -> i32 {
+        self.raw[3] as i32
+    }
+    pub fn bit(&self) -> u32 {
+        self.raw[4]
+    }
+    pub fn spell_icon(&self) -> u32 {
+        self.raw[22]
+    }
+}
+pub fn parse_dungeon_encounters(bytes: &[u8], locale: &str) -> Result<Vec<DungeonEncounter>> {
+    let slot = crate::cfg_categories::locale_slot(locale)?;
+    let t = table::<23>(bytes)?;
+    let mut rows = Vec::with_capacity(t.rows.len());
+    for raw in t.rows {
+        rows.push(DungeonEncounter {
+            name: localized(t.strings, &raw[5..21], slot)?,
+            icon: None,
+            raw,
+        });
+    }
+    Ok(rows)
+}
+/// The encounters in file order, each with its `SpellIcon.dbc` path.
+pub fn load_dungeon_encounters(chain: &mut Chain) -> Result<Vec<DungeonEncounter>> {
+    let DataProfile::Wrath { locale } = chain.profile() else {
+        anyhow::bail!("dungeon encounters require Wrath data");
+    };
+    let locale = locale.clone();
+    let bytes = chain
+        .read_file("DBFilesClient\\DungeonEncounter.dbc")
+        .context("reading DungeonEncounter")?;
+    let mut rows = parse_dungeon_encounters(&bytes, &locale).context("DungeonEncounter")?;
+    let icons = crate::dbc::load_spell_icon_map(chain)?;
+    for row in &mut rows {
+        row.icon = icons.get(&row.spell_icon()).cloned();
+    }
+    Ok(rows)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

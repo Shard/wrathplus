@@ -130,6 +130,9 @@ pub enum Command {
     QueryTime,
     /// `CMSG_UNLEARN_SKILL`: AC unlearns primary professions only.
     UnlearnSkill { skill: u32 },
+    /// `CMSG_TOGGLE_PVP` with its one-byte body (`SetPVP`, `0x5168b0`): AC sets the PvP flag to
+    /// the byte, where an empty body toggles it (`HandleTogglePvP`).
+    SetPvp { on: u8 },
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {
@@ -138,6 +141,7 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
         Command::Emote { emote } => (0x0102, emote.to_le_bytes().to_vec()),
         Command::QueryTime => (0x01ce, vec![]),
         Command::UnlearnSkill { skill } => (0x0202, skill.to_le_bytes().to_vec()),
+        Command::SetPvp { on } => (0x0253, vec![*on]),
     }
 }
 

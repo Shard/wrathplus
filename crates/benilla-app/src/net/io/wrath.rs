@@ -378,6 +378,9 @@ fn run(
         // Lossless handoff: send login, split immediately, announce the session, then consume every
         // queued packet through the Wrath adapter.
         session.begin_player_login(guid)?;
+        // The auth bootstrap the select screen kept (`SMSG_ADDON_INFO`, `SMSG_CLIENTCACHE_VERSION`).
+        let addon_reply = session.addon_reply_received();
+        let bootstrap = session.take_bootstrap_packets();
         let (mut reader, writer) = session.into_split()?;
         let session_clock = Arc::new(SessionClock::new());
         *next_epoch = next_epoch
@@ -418,11 +421,30 @@ fn run(
                 name,
                 billing_time_rested: 0,
                 tutorial_flags: None,
-                // `SMSG_ADDON_INFO` is not decoded on this route; the realm hides no addon, and
-                // without a reply the client's addon array stays empty and nothing can load.
-                addon_info: Some(Vec::new()),
+                // Our auth session names no addon, so `SMSG_ADDON_INFO` hides none: an empty list
+                // once it arrived, `None` (nothing loads) if the server never answered.
+                addon_info: addon_reply.then(Vec::new),
             },
         )?;
+        for packet in bootstrap {
+            match benilla_protocol::wrath_bootstrap::decode(packet.opcode, &packet.body) {
+                Ok(decoded) => {
+                    for event in decoded {
+                        send(events, event)?;
+                    }
+                }
+                Err(error) => {
+                    bevy::log::warn!("net(wrath): bootstrap {:#06x} dropped: {error}", packet.opcode);
+                    send(
+                        events,
+                        SessionEvent::PacketDropped {
+                            opcode: packet.opcode,
+                            unparseable: true,
+                        },
+                    )?;
+                }
+            }
+        }
         reader.set_read_timeout(Some(READ_SLICE))?;
         let mut adapter = WrathEventAdapter::new();
         let mut packet_recorder = recorder::Recorder::from_env();
@@ -1561,6 +1583,7 @@ enum WrathRoute {
     NativeSessionMeta,
     NativeAppearance,
     NativePetition,
+    NativeRaidBrowser,
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
@@ -1575,7 +1598,6 @@ enum WrathRoute {
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
-    DeferredReadOnlyQuery,
 }
 
 fn route(command: &ClientCommand) -> WrathRoute {
@@ -1692,7 +1714,11 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::RequestBattlefieldScoreData
         | ClientCommand::RequestBattlefieldPositions
         | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        ClientCommand::NativeRaidBrowser(_) => WrathRoute::NativeRaidBrowser,
         ClientCommand::JoinChannel { .. }
+        | ClientCommand::GetChannelMemberCount { .. }
+        | ClientCommand::ClearChannelWatch { .. }
+        | ClientCommand::DeclineChannelInvite { .. }
         | ClientCommand::LeaveChannel { .. }
         | ClientCommand::ChannelList { .. }
         | ClientCommand::ChannelOwner { .. }
@@ -1792,6 +1818,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetActionButton { .. }
         | ClientCommand::CastSpell { .. }
         | ClientCommand::CastSpellAtDest { .. }
+        | ClientCommand::NativePetCastSpell { .. }
         | ClientCommand::CastSpellAtSource { .. }
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
@@ -1840,7 +1867,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
-        ClientCommand::BattlefieldStatusRequest => WrathRoute::DeferredReadOnlyQuery,
+        ClientCommand::BattlefieldStatusRequest => WrathRoute::NativeBattleground,
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
         ClientCommand::TeleportAck { .. } => WrathRoute::NativeTeleportAck,
         // The writer acknowledged these orders itself from the reported pose (`send_mover_ack`).
@@ -1864,7 +1891,6 @@ pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
         route(command),
         WrathRoute::DisabledMovement
             | WrathRoute::DisabledGameAction
-            | WrathRoute::DeferredReadOnlyQuery
             | WrathRoute::AuthorityAcked
     )
 }
@@ -2144,6 +2170,11 @@ fn writer_loop(
                             }
                         }
                     }
+                    WrathRoute::NativeRaidBrowser => {
+                        let ClientCommand::NativeRaidBrowser(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_raid_browser::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativePetition => {
                         let (opcode, body) = benilla_protocol::wrath_petition::encode(&petition_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -2352,13 +2383,6 @@ fn writer_loop(
                     }
                     WrathRoute::AuthorityAcked => {
                         bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
-                        continue;
-                    }
-                    WrathRoute::DeferredReadOnlyQuery => {
-                        if warned < SEND_WARN_CAP {
-                            bevy::log::warn!("net(wrath): query unavailable in this client; no request sent or result synthesized: {command:?}");
-                            warned += 1;
-                        }
                         continue;
                     }
                     // Not yet encoded for build 12340: dropped, never sent in Vanilla's format, and
@@ -2584,6 +2608,10 @@ fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
     match command {
         ClientCommand::NativeBattleground(command) => encode(&command),
+        // The world-enter reset's empty `CMSG_BATTLEFIELD_STATUS` (`0x54ca50`).
+        ClientCommand::BattlefieldStatusRequest => {
+            encode(&benilla_protocol::wrath_battleground::Command::Status)
+        }
         ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
         ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
         ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
@@ -2607,6 +2635,9 @@ fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notic
         ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
         ClientCommand::LeaveChannel { name } => C::Leave { name },
         ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::GetChannelMemberCount { name } => C::Named { opcode: 0x03d4, name },
+        ClientCommand::ClearChannelWatch { name } => C::Named { opcode: 0x03f3, name },
+        ClientCommand::DeclineChannelInvite { name } => C::Named { opcode: 0x0410, name },
         ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
         ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
         ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
@@ -2887,6 +2918,20 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             cast(spell_id, target.map_or(CastTarget::None, CastTarget::Unit))
         }
         ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
+        // One counter with `CMSG_CAST_SPELL`: the server echoes it in the cast results.
+        ClientCommand::NativePetCastSpell {
+            caster,
+            spell_id,
+            target,
+        } => {
+            let count = CAST_COUNT
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                .wrapping_add(1);
+            (
+                s::CMSG_PET_CAST_SPELL,
+                s::encode_pet_cast_spell(caster, count, spell_id, &target),
+            )
+        }
         ClientCommand::CastSpellAtSource { spell_id, src } => {
             cast(spell_id, CastTarget::Source(src))
         }
@@ -3933,10 +3978,9 @@ mod tests {
     }
 
     #[test]
-    fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
-        for command in [ClientCommand::BattlefieldStatusRequest] {
-            assert_eq!(route(&command), WrathRoute::DeferredReadOnlyQuery);
-        }
+    fn the_world_enter_status_request_is_native_and_other_queries_keep_their_routes() {
+        assert_eq!(route(&ClientCommand::BattlefieldStatusRequest), WrathRoute::NativeBattleground);
+        assert_eq!(battleground_packet(ClientCommand::BattlefieldStatusRequest), (0x02d3, Vec::new()));
         assert_eq!(
             route(&ClientCommand::QueryTime),
             WrathRoute::NativeSessionMisc
