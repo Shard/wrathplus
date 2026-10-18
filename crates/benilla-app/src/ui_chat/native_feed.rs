@@ -17,16 +17,19 @@ pub(super) fn feed(
     mut state: ResMut<NativeRosterFeed>,
     names: Res<crate::names::NameCache>,
     commands: Res<crate::net::NetCommands>,
+    mut deltas: ResMut<crate::net::wrath_social_lists_capture::NativeChannelMembers>,
 ) {
     let Some(mut script) = script else {
         state.session = None;
         state.pending.clear();
         receipts.0.clear();
+        deltas.0.clear();
         return;
     };
     if script.dialect() != ScriptDialect::Wrath12340 {
         state.pending.clear();
         receipts.0.clear();
+        deltas.0.clear();
         return;
     }
     if state.session != Some(script.session()) {
@@ -77,6 +80,34 @@ pub(super) fn feed(
                 names.resolve(guid, &commands);
                 state.pending.push((revision, guid));
             }
+        }
+    }
+    // A watched channel's deltas (`SMSG_USERLIST_*`) patch the selected roster after its full
+    // list; the UI fires the roster events itself once names are complete. Member counts answer a
+    // request no 12340 binding sends, so they are dropped.
+    use benilla_protocol::wrath_channel_members::{Delta, Packet};
+    use benilla_ui::script::WrathChannelRosterDelta as D;
+    while let Some(packet) = deltas.0.pop_front() {
+        let Packet::Roster {
+            channel,
+            delta,
+            channel_flags,
+            count,
+        } = packet
+        else {
+            continue;
+        };
+        let (delta, added) = match delta {
+            Delta::Add { guid, flags } => (D::Add { guid, flags }, Some(guid)),
+            Delta::Update { guid, flags } => (D::Update { guid, flags }, None),
+            Delta::Remove { guid } => (D::Remove { guid }, None),
+        };
+        if let (Some(revision), Some(guid)) = (
+            script.apply_wrath_channel_roster_delta(&channel, delta, channel_flags, count),
+            added,
+        ) {
+            names.resolve(guid, &commands);
+            state.pending.push((revision, guid));
         }
     }
     state.pending.retain(|&(revision, guid)| {
@@ -153,6 +184,7 @@ mod tests {
         world.insert_resource(channels);
         world.insert_resource(ledger);
         world.insert_resource(NativeChannelRosters::default());
+        world.insert_resource(crate::net::wrath_social_lists_capture::NativeChannelMembers::default());
         world.insert_resource(NativeRosterFeed::default());
         world.insert_resource(crate::names::NameCache::default());
         let (tx, _) = crossbeam_channel::unbounded();

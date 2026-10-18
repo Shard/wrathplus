@@ -42,7 +42,8 @@ pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_appearance;
-mod wrath_social_lists_capture;
+pub(crate) mod wrath_social_lists_capture;
+mod wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
@@ -164,6 +165,7 @@ impl Plugin for NetPlugin {
         wrath_achievement_capture::register(app);
         wrath_appearance::register(app);
         wrath_social_lists_capture::register(app);
+        wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);

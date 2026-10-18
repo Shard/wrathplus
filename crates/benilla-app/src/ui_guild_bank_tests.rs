@@ -228,3 +228,89 @@ fn the_frame_events_follow_the_view() {
     );
     assert!(events(None, &WrathGuildBankView::default()).is_empty());
 }
+
+#[test]
+fn held_bank_items_move_to_bank_bag_and_worn_slots() {
+    let mut bank = GuildBank::default();
+    let mut open = GuildBankOpen::default();
+    open.open(0x77);
+    apply(&mut bank, list(0, 1, vec![(4, 100, 5)]), true);
+    let source = BankSlot {
+        tab: 0,
+        slot: 4,
+        item: 100,
+    };
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::MoveItem {
+                from_tab: 1,
+                from_slot: 5,
+                to_tab: 1,
+                to_slot: 9,
+                count: Some(2)
+            },
+            None
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankSwap(Swap {
+            banker: 0x77,
+            transfer: Transfer::BankToBank {
+                destination: BankSlot {
+                    tab: 0,
+                    slot: 8,
+                    item: 0
+                },
+                source,
+                count: 2
+            },
+        })))
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::DropOnBag {
+                tab: 1,
+                slot: 5,
+                bag: 0,
+                bag_slot: 1,
+                count: None
+            },
+            None
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankSwap(Swap {
+            banker: 0x77,
+            transfer: Transfer::BankToInventory {
+                source,
+                container: 255,
+                container_slot: 23,
+                stack_count: 0
+            },
+        }))),
+        "the backpack's first slot"
+    );
+    assert_eq!(
+        dbg(command(
+            &mut bank,
+            &mut open,
+            WrathGuildBankRequest::DropOnEquip {
+                tab: 1,
+                slot: 5,
+                equip_slot: 1,
+                count: None
+            },
+            None
+        )),
+        dbg(Some(ClientCommand::NativeGuildBankSwap(Swap {
+            banker: 0x77,
+            transfer: Transfer::BankToInventory {
+                source,
+                container: 255,
+                container_slot: 0,
+                stack_count: 0
+            },
+        }))),
+        "the head slot"
+    );
+}
