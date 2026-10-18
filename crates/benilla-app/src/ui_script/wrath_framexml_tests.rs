@@ -424,7 +424,8 @@ fn missing_surface(script: &UiScript) {
             r##"
             local kinds = { "Frame", "Button", "CheckButton", "EditBox", "StatusBar", "Slider",
                 "ScrollFrame", "MessageFrame", "ScrollingMessageFrame", "GameTooltip", "Model",
-                "PlayerModel", "DressUpModel", "Minimap", "ColorSelect", "SimpleHTML", "Cooldown" }
+                "PlayerModel", "DressUpModel", "TabardModel", "Minimap", "ColorSelect", "SimpleHTML",
+                "Cooldown", "LootButton", "MovieFrame" }
             local has, out = {}, {}
             for _, kind in ipairs(kinds) do
                 local ok, frame = pcall(CreateFrame, kind)
@@ -605,7 +606,8 @@ fn missing_surface(script: &UiScript) {
     lines.extend(shadowed);
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {
-        eprintln!("NATIVE-ABSENT {name} {}: {evidence}", calls.get(*name).copied().unwrap_or(0));
+        let n = calls.get(*name).or_else(|| methods.get(*name)).copied().unwrap_or(0);
+        eprintln!("NATIVE-ABSENT {name} {n}: {evidence}");
     }
     // Per origin, the missing names its own files call.
     let mut by_origin: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
