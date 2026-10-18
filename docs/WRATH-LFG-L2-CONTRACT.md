@@ -94,3 +94,24 @@ request outbox, which App sends through the existing `LfgCommand` writers:
 Boot votes and backfill already ride StaticPopup's outbox. No optimistic state from a send.
 Resets: socket teardown clears the snapshot; `LFG_DISABLED` clears it natively. ReloadUI seeds
 the current snapshot and replays no events.
+
+## App wiring (landed)
+
+- `ui_lfg::l1::feed` publishes `LfgQueue::snapshot` with `set_wrath_lfg_queue` after each L2
+  receipt's store and before its lines and events, republishes it without events when a name
+  lands, and seeds a new VM with the latest one. The queue start is `queued_at_ms` on the
+  `GetTime` clock. Boot victim names come from the name cache, and `victim_realm` reads `None`.
+  The completion names its random dungeon, else the one done.
+- The outbox maps the verbs to the `LfgCommand` writers:
+  - Join → `CMSG_LFG_JOIN`;
+  - Leave;
+  - RoleCheckAnswer → `CMSG_LFG_SET_ROLES` (0x36A);
+  - Proposal → `CMSG_LFG_PROPOSAL_RESULT`;
+  - Teleport;
+  - SetComment.
+- `set_wrath_lfg_encounters` gets `DungeonEncounter.dbc` with each row's `SpellIcon` path
+  (`benilla_formats::lfg::load_dungeon_encounters`).
+- `set_wrath_lfg_location` is `CurrentMap` with the latest `SMSG_INSTANCE_DIFFICULTY`.
+- `WrathGroup` takes `lfg_status`/`lfg_dungeon_entry` from `SMSG_GROUP_LIST`'s LFG block.
+- Labelled: `lfg_flags` and `lfg_restricted` have no traced source and read 0. Backfill
+  (`0x55a0c0`) is still not sent.

@@ -78,6 +78,8 @@ pub(crate) struct InstanceLock {
     lock: Option<PendingLock>,
     granter: Option<u64>,
     grant_owed: bool,
+    /// The latest `SMSG_INSTANCE_DIFFICULTY`'s difficulty, read by the LFG feed.
+    pub(crate) difficulty: Option<u32>,
 }
 
 /// A pending instance lock: when it forces (`GetTime` seconds), whether accepting extends, and
@@ -386,6 +388,17 @@ pub(crate) fn drive(
     let Some(mut lock) = lock else {
         return;
     };
+    let mut packets = packets;
+    // `SMSG_INSTANCE_DIFFICULTY`: the instance's difficulty, `IsInLFGDungeon`'s location half.
+    if let Some(p) = packets.as_mut() {
+        p.0.retain(|packet| match *packet {
+            Packet::InstanceDifficulty { difficulty, .. } => {
+                lock.difficulty = Some(difficulty);
+                false
+            }
+            _ => true,
+        });
+    }
     if let Some(warning) = packets.and_then(|mut p| take_lock_warning(&mut p.0, script.now())) {
         lock.lock = Some(warning);
         script.fire_event("INSTANCE_LOCK_START", Vec::new());

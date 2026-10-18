@@ -53,6 +53,9 @@ pub(crate) struct LfgL1 {
     host_held_next: Vec<u32>,
     /// L2's stores ([`super::l2`]), reset with the session.
     queue: super::l2::LfgQueue,
+    /// The snapshot and location last published to the VM.
+    queue_pushed: Option<Arc<benilla_ui::script::WrathLfgQueueSnapshot>>,
+    location: Option<(i32, i32)>,
 }
 
 /// The OS boot-relative millisecond count as `u32`, the reference's `GetTickCount` input to the
@@ -213,6 +216,9 @@ pub(super) struct L2Inputs<'w> {
     chat: Option<ResMut<'w, crate::ui_chat::ChatLog>>,
     group: Option<Res<'w, crate::ui_party::GroupState>>,
     catalog: Option<Res<'w, super::catalog::Catalog>>,
+    /// `IsInLFGDungeon`'s location: our map and the instance's difficulty.
+    map: Option<Res<'w, benilla_world::world_map::CurrentMap>>,
+    instance: Option<Res<'w, crate::ui_static_popup::InstanceLock>>,
 }
 
 /// The per-frame L1 feed, after `feed_item_stats` so an answered template is in the VM before its
@@ -264,12 +270,47 @@ pub(super) fn feed(
     if memo.get_reset(&script).1 {
         script.set_wrath_lfg_lock_snapshot(Arc::clone(&l1.snapshot));
         script.set_wrath_lfg_presentation(Arc::clone(&l1.presentation));
+        if let Some(pushed) = &l1.queue_pushed {
+            script.set_wrath_lfg_queue(Arc::clone(pushed));
+        }
+        script.set_wrath_lfg_location(l1.location);
         if self_guid.0.is_some() {
             send(ClientCommand::LfgCommand(
                 wrath_lfg::commands::Command::GetStatus,
             ));
             send(ClientCommand::LfgRequestPlayerLockInfo);
         }
+    }
+
+    // The L2 verbs' sends (contract: no optimistic state from a send).
+    for request in script.take_wrath_lfg_queue_requests() {
+        use benilla_ui::script::WrathLfgQueueRequest as Q;
+        use wrath_lfg::commands::{Command as C, Join};
+        send(ClientCommand::LfgCommand(match request {
+            Q::Join {
+                roles,
+                no_partial_clear,
+                achievements,
+                dungeons,
+                needs,
+                comment,
+            } => C::Join(Join {
+                roles: u32::from(roles),
+                no_partial_clear,
+                achievements,
+                slots: dungeons,
+                needs,
+                comment,
+            }),
+            Q::Leave => C::Leave,
+            Q::RoleCheckAnswer { roles } => C::SetRoles(roles),
+            Q::Proposal { id, accept } => C::ProposalResult {
+                proposal_id: id,
+                accept,
+            },
+            Q::Teleport { out } => C::Teleport { out },
+            Q::SetComment { text } => C::SetComment(text),
+        }));
     }
 
     for request in script.take_wrath_lfg_lock_requests() {
@@ -331,6 +372,10 @@ pub(super) fn feed(
         };
         let queue = l1.queue.apply(&packet, &inputs);
         if let Some(effects) = &queue {
+            // The snapshot first, so the events' handlers read the new stores.
+            let snapshot = Arc::new(l1.queue.snapshot(&name));
+            script.set_wrath_lfg_queue(Arc::clone(&snapshot));
+            l1.queue_pushed = Some(snapshot);
             super::l2::run(&mut script, l2.chat.as_deref_mut(), effects);
         }
         if locks.is_none() && queue.is_none() {
@@ -365,6 +410,34 @@ pub(super) fn feed(
                 script.fire_event("LFG_UPDATE_RANDOM_INFO", vec![]);
             }
         }
+    }
+
+    // Names land without a receipt: republish the queue without events.
+    let name = |guid: u64| {
+        names
+            .as_deref()
+            .and_then(|n| n.resolve(guid, &commands))
+            .map(str::to_string)
+    };
+    if l1.queue_pushed.is_some() {
+        let snapshot = l1.queue.snapshot(&name);
+        if l1.queue_pushed.as_deref() != Some(&snapshot) {
+            let snapshot = Arc::new(snapshot);
+            script.set_wrath_lfg_queue(Arc::clone(&snapshot));
+            l1.queue_pushed = Some(snapshot);
+        }
+    }
+    let location = l2.map.as_deref().map(|m| {
+        let difficulty = l2
+            .instance
+            .as_deref()
+            .and_then(|i| i.difficulty)
+            .unwrap_or(0);
+        (m.0 as i32, difficulty as i32)
+    });
+    if location != l1.location {
+        l1.location = location;
+        script.set_wrath_lfg_location(location);
     }
 
     // Names and the level move without a receipt: republish without events.
