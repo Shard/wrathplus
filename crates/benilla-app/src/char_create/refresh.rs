@@ -88,19 +88,12 @@ pub(super) fn refresh_dynamic(
                     .as_ref()
                     .and_then(|(h, size)| Some((h.clone(), tc_rect(*size, class_tc(class?)?))))
             }
-            DynIcon::Info(InfoKind::Faction) => art.factions.as_ref().map(|(h, size)| {
-                let half = if alliance {
-                    [0.0, 0.5, 0.0, 1.0]
-                } else {
-                    [0.5, 1.0, 0.0, 1.0]
-                };
-                (h.clone(), tc_rect(*size, half))
-            }),
-            DynIcon::Info(InfoKind::Race) => art.races.as_ref().and_then(|(h, size)| {
+            // `RACE_ICON_TCOORDS` and `CLASS_ICON_TCOORDS` index the round sheets too.
+            DynIcon::Info(InfoKind::Race) => art.races_round.as_ref().and_then(|(h, size)| {
                 Some((h.clone(), tc_rect(*size, race_tc(sel.race, sel.sex)?)))
             }),
             DynIcon::Info(InfoKind::Class) => art
-                .classes
+                .class_circles
                 .as_ref()
                 .and_then(|(h, size)| Some((h.clone(), tc_rect(*size, class_tc(sel.class)?)))),
         };
@@ -130,42 +123,41 @@ pub(super) fn refresh_dynamic(
             },
             // Painted by `refresh_name_box`.
             DynText::Name => continue,
-            DynText::InfoTitle(InfoKind::Faction) => strings
-                .text(
-                    if alliance { "ALLIANCE" } else { "HORDE" },
-                    if alliance { "Alliance" } else { "Horde" },
-                )
-                .to_string(),
             DynText::InfoTitle(InfoKind::Race) => race_name(sel.race).to_string(),
             DynText::InfoTitle(InfoKind::Class) => class_name(sel.class).to_string(),
-            // Never trimmed: each `FACTION_INFO_*`, `RACE_INFO_*` and `CLASS_*` string opens with
-            // eight spaces, which is the reference's first-line clearance past the header icon.
-            DynText::InfoBody(InfoKind::Faction) => strings
-                .text(
-                    if alliance {
-                        "FACTION_INFO_ALLIANCE"
-                    } else {
-                        "FACTION_INFO_HORDE"
-                    },
-                    "",
-                )
-                .to_string(),
-            DynText::InfoBody(InfoKind::Race) => {
-                strings.text(&format!("RACE_INFO_{file}"), "").to_string()
-            }
-            DynText::InfoAbilities => {
-                // `CharacterCreateEnumerateRaces` joins every `ABILITY_INFO_<FILE><n>` by newline.
-                let mut lines = Vec::new();
-                let mut n = 1;
-                while let Some(a) = strings.get(&format!("ABILITY_INFO_{file}{n}")) {
-                    lines.push(a);
+            // `SetCharacterRace`/`SetCharacterClass`: each line then a blank one, the race's
+            // `ABILITY_INFO_<FILE>1..`, the class's `CLASS_INFO_<FILE>0..`.
+            DynText::InfoAbilities(kind) => {
+                let (tag, mut n) = match kind {
+                    InfoKind::Race => (format!("ABILITY_INFO_{file}"), 1),
+                    InfoKind::Class => (format!("CLASS_INFO_{}", class_file(sel.class)), 0),
+                };
+                let mut text = String::new();
+                while let Some(line) = strings.get(&format!("{tag}{n}")) {
+                    text.push_str(line);
+                    text.push_str("\n\n");
                     n += 1;
                 }
-                lines.join("\n")
+                text
             }
-            DynText::InfoBody(InfoKind::Class) => strings
-                .text(&format!("CLASS_{}", class_file(sel.class)), "")
-                .to_string(),
+            // `GetFlavorText(tag, sex)`, the sex's string before the other, then `|n|n`.
+            DynText::InfoBody(kind) => {
+                let tag = match kind {
+                    InfoKind::Race => format!("RACE_INFO_{file}"),
+                    InfoKind::Class => format!("CLASS_{}", class_file(sel.class)),
+                };
+                let female = format!("{tag}_FEMALE");
+                let order = if sel.sex == 1 {
+                    [&female, &tag]
+                } else {
+                    [&tag, &female]
+                };
+                let flavor = order
+                    .into_iter()
+                    .find_map(|k| strings.get(k).filter(|t| !t.is_empty()))
+                    .unwrap_or("");
+                format!("{flavor}\n\n")
+            }
             // A disabled class's tooltip is its `<FILE>_DISABLED` line.
             DynText::ClassSlotLabel(i) => match CLASS_SLOTS.get(*i as usize) {
                 Some(&c) if class_live(c) => class_name(c).to_string(),

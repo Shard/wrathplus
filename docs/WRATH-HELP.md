@@ -33,5 +33,14 @@ string with a length word AC ignores; the writer sends its byte length). A strin
 NUL or a malformed survey is refused before send. Routes need the live writer only; no server
 acceptance is claimed.
 
-Not in this unit: Lua bindings for the 3.3.5 Help frame (`GMResponseResolve`, the survey frame,
-`ReportPlayer`), which belong to the UI owners; the transport-only commands have no producer yet.
+**Help-frame globals** (`U/script/wrath_help_request.rs`, Wrath dialect only), queued with the
+ticket verbs and sent by `ui_gm_ticket` with the player's map and position: `GMReportLag(number)`
+(`0x5ad020`, rounded) sends 0502 `CMSG_GM_REPORT_LAG` (lag type, map, x, y, z; AC
+`HandleReportLag`); `GMResponseNeedMoreHelp(text)` (`0x5ad150` → `0x5ac8f0(text, 1, 1)`) files a new
+0205 ticket with the caller's text, asking for a response and flagged needs-more-help. Either
+global's wrong argument type raises the native usage error. Untraced: the `0x5191c0(0x11)` UI-state
+gate in front of the need-more-help send, which is not applied. 0502 was classified GM/debug; the
+player Help frame sends it, so it is in scope.
+
+Not in this unit: Lua bindings for `GMResponseResolve`, the survey frame and `ReportPlayer`, which
+belong to the UI owners; those transport-only commands have no producer yet.

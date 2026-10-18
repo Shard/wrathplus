@@ -27,7 +27,7 @@ use super::Model;
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // Blizzard_TimeManager.lua:91 reads minutes since midnight during OnLoad.
-    super::cvars::install_wrath_clock_cvars(lua)?;
+    super::cvars::install_wrath_engine_cvars(lua)?;
     install_truthful_readers(lua)?;
     super::mail::wrath::install(lua)?;
     super::wrath_lfg::install(lua)?;

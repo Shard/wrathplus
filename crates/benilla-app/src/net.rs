@@ -51,12 +51,14 @@ mod wrath_session_meta_capture;
 mod wrath_help_capture;
 pub(crate) mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
+mod wrath_session_misc_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
 #[cfg(test)]
@@ -169,12 +171,14 @@ impl Plugin for NetPlugin {
         wrath_help_capture::register(app);
         wrath_refer_friend_capture::register(app);
         wrath_world_objects_capture::register(app);
+        wrath_session_misc_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
         wrath_threat::register(app);
@@ -957,6 +961,10 @@ pub(crate) enum MoveKind {
     StopAscend,
     StartDescend,
     SetFly,
+    /// The pitch keys while swimming or flying (`0x6ef860` events 0xe/0xf/0x10).
+    StartPitchUp,
+    StartPitchDown,
+    StopPitch,
     /// The walk/run toggle: sent from the toggle handler (`ToggleRun 0x513d50` to `0x617de0`),
     /// not the move broadcaster, so it goes out standing still (`0x61a99d` gates the latter).
     SetWalkMode,
@@ -987,6 +995,9 @@ impl MoveKind {
             MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
             MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
             MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
+            MoveKind::StartPitchUp => wrath_ground::MSG_MOVE_START_PITCH_UP as u16,
+            MoveKind::StartPitchDown => wrath_ground::MSG_MOVE_START_PITCH_DOWN as u16,
+            MoveKind::StopPitch => wrath_ground::MSG_MOVE_STOP_PITCH as u16,
             MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
             MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
             MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
@@ -1168,6 +1179,9 @@ pub(crate) enum ClientCommand {
         orientation: f32,
         fall_time: u32,
     },
+    /// Build 12340: dismiss the vehicle we drive, or change seats on it. The writer adds the
+    /// vehicle's guid and halted pose.
+    NativeVehicleControl(benilla_protocol::wrath_authority::VehicleControl),
     /// `CMSG_FAR_SIGHT`: `true` on attach, `false` on release; neither names an object.
     FarSight {
         engage: bool,
@@ -2185,6 +2199,8 @@ pub(crate) enum ClientCommand {
     NativeReferFriend(benilla_protocol::wrath_refer_friend::Command),
     /// Native game-object report-use; `GameObjUse` is the shared use command.
     NativeWorldObjects(benilla_protocol::wrath_world_objects::Command),
+    /// Native player-logout and emote commands with no shared producer.
+    NativeSessionMisc(benilla_protocol::wrath_session_misc::Command),
     /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
@@ -2708,6 +2724,8 @@ mod tests {
                 slot: 0,
             },
             ClientCommand::CancelAutoRepeat,
+            // `CMSG_QUERY_TIME` has a native route (session misc).
+            ClientCommand::QueryTime,
             // `CMSG_MOVE_TIME_SKIPPED` has a native route (movement M3).
             ClientCommand::MoveTimeSkipped {
                 guid: 1057,
@@ -2719,7 +2737,6 @@ mod tests {
         for command in [
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
-            ClientCommand::QueryTime,
             ClientCommand::AutostoreLootItem { slot: 18 },
         ] {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));

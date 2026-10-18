@@ -200,6 +200,7 @@ mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
+mod wrath_help_request;
 mod wrath_runes;
 mod wrath_merchant;
 mod wrath_spellbook;
@@ -215,7 +216,10 @@ pub use wrath_lfg::{
     set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest,
     WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
     WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
-    WrathLfgRewardItem,
+    WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
+    WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
+    WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
+    WrathLfgUpdate,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
@@ -815,6 +819,7 @@ impl UiScript {
             wrath_paperdoll::install(&lua)?;
             wrath_character::install(&lua)?;
             wrath_companions::install(&lua)?;
+            wrath_help_request::install(&lua)?;
             wrath_runes::install(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;

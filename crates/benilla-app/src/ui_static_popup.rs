@@ -20,16 +20,23 @@
 //! `LEVEL_GRANT_PROPOSED` with their name once known; `AcceptLevelGrant` answers it (`0x420`).
 //! Labelled: `SMSG_REFER_A_FRIEND_FAILURE` stays in its capture (no error line yet).
 //!
-//! Not sent yet: the guild-bank tab purchase and money deposit (the banker is Wire B's pending
-//! `GuildBankOpen`), and `PartyLFGStartBackfill` (`0x55a0c0` re-joins with the party's current
-//! dungeon, which the LFG reducer does not hold yet).
+//! The guild bank: `GetGuildBankTabCost` (`0x5a6b20`) reads the next tab's price from the
+//! six-row table `0xa15eec` (100 to 5000 gold) by the purchased count, nil past it.
+//! `BuyGuildBankTab` (`0x5a5d30`), with the frame open on a banker, raises
+//! `ERR_BANKSLOT_INSUFFICIENT_FUNDS` (`0x10f`) while the vault's money plus the player's falls
+//! short of it, else sends CMSG `0x3EA` with the banker and that count (`0x5a5010`).
+//! `DepositGuildBankMoney` (`0x5a5e20`, capped by Native UI) sends `0x3EB` with the banker.
+//! Labelled: the funds check's two operands are read as the vault's and the player's money
+//! (`0xc1dc20` and `0x51a2b0`, by their writers only).
+//!
+//! Not sent yet: `PartyLFGStartBackfill` (`0x55a0c0` re-joins with the party's current dungeon,
+//! which the LFG reducer does not hold yet).
 //!
 //! The state: `IsFalling` (our mover airborne, not rooted), `IsOutOfBounds` (`PLAYER_FLAGS`
 //! `0x4000`), `PlayerCanTeleport` (no stun, confuse or flee flag) and `UnitIsControlling` (a charm
 //! or summon) are published. Not built: glyph placement and the bound-tradeable, refund and
 //! trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
-//! player byte, `+0xf47 & 4`, whose writer is untraced) and the guild-bank tab cost publish their
-//! defaults.
+//! player byte, `+0xf47 & 4`, whose writer is untraced) publishes its default.
 
 use bevy::prelude::*;
 
@@ -170,6 +177,38 @@ pub(crate) struct Lookups<'a> {
     pub(crate) friend: &'a dyn Fn(Option<u32>, Option<&str>) -> Option<u64>,
     /// `ComplainChat`'s line: by its id, else the newest from the named sender.
     pub(crate) chat_line: &'a dyn Fn(Option<i32>, Option<&str>) -> Option<ComplaintLine>,
+    /// The guild vault in use (`GuildBankOpen`).
+    pub(crate) banker: Option<u64>,
+}
+
+/// `0xa15eec`: the price of each guild-bank tab in purchase order, copper.
+const TAB_COSTS: [u32; 6] = [
+    1_000_000, 2_500_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000,
+];
+
+/// `GetGuildBankTabCost`: the next tab's price, `None` once all six are bought.
+pub(crate) fn tab_cost(purchased: usize) -> Option<u32> {
+    TAB_COSTS.get(purchased).copied().filter(|&c| c != 0)
+}
+
+/// `BuyGuildBankTab`'s outcome: nothing without an open frame on a banker or past the last tab,
+/// else the purchase or the refusal's key.
+pub(crate) fn buy_tab(
+    banker: Option<u64>,
+    (open, purchased, vault): (bool, usize, u64),
+    money: u64,
+) -> Option<Result<ClientCommand, &'static str>> {
+    let banker = banker.filter(|&b| b != 0 && open)?;
+    let cost = TAB_COSTS.get(purchased).copied()?;
+    if vault.saturating_add(money) < u64::from(cost) {
+        return Some(Err("ERR_BANKSLOT_INSUFFICIENT_FUNDS"));
+    }
+    Some(Ok(ClientCommand::NativeGuildBank(
+        benilla_protocol::wrath_guild_bank_commands::Command::BuyTab {
+            banker,
+            tab: purchased as u8,
+        },
+    )))
 }
 
 /// `CMSG_COMPLAIN`'s chat arm for one line.
@@ -267,6 +306,12 @@ fn answer(request: &WrathPopupRequest, look: &Lookups) -> Option<ClientCommand> 
                 description: text.clone().unwrap_or_default(),
             })
         }
+        R::DepositGuildBankMoney { copper } => ClientCommand::NativeGuildBank(
+            benilla_protocol::wrath_guild_bank_commands::Command::DepositMoney {
+                banker: look.banker.filter(|&b| b != 0)?,
+                amount: *copper,
+            },
+        ),
         _ => return None,
     })
 }
@@ -294,6 +339,16 @@ pub(crate) struct PopupInputs<'w, 's> {
     falling: Option<Res<'w, crate::player::Falling>>,
     units: Query<'w, 's, (&'static crate::net::Guid, &'static ObjectStore)>,
     refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
+    /// The vault and its open banker, for the tab purchase and deposit.
+    bank: (
+        Option<Res<'w, crate::ui_guild_bank::GuildBank>>,
+        Option<Res<'w, crate::ui_guild_bank::GuildBankOpen>>,
+    ),
+    /// A refusal's line: the message sink's halves.
+    sink: (
+        Option<ResMut<'w, crate::ui_chat::ChatLog>>,
+        Option<ResMut<'w, crate::sound::MessageSounds>>,
+    ),
     memo: Local<'s, crate::ui_script::VmMemo<Memo>>,
 }
 
@@ -319,8 +374,15 @@ pub(crate) fn drive(
         self_q,
         objects,
         lock,
+        bank: (vault, bank_open),
+        sink: (log, sounds),
         mut memo,
     } = inputs;
+    let banker = bank_open.as_deref().and_then(|o| o.banker());
+    let purchase = vault.as_deref().map_or((false, 0, 0), |v| v.tab_purchase());
+    let mut sink = log
+        .zip(sounds)
+        .map(|(chat, sounds)| crate::ui_action::MessageSink { chat, sounds });
     let Some(mut lock) = lock else {
         return;
     };
@@ -395,6 +457,23 @@ pub(crate) fn drive(
         })
     };
     for request in script.take_wrath_popup_requests() {
+        if request == WrathPopupRequest::BuyGuildBankTab {
+            let money = store.and_then(|s| s.0.player_money()).unwrap_or(0);
+            match buy_tab(banker, purchase, u64::from(money)) {
+                Some(Ok(command)) => {
+                    let _ = commands.0.send(command);
+                }
+                Some(Err(key)) => {
+                    if let (Some(line), Some(sink)) =
+                        (crate::ui_action::keyed_line(script, key), sink.as_mut())
+                    {
+                        crate::ui_action::show_messages(script, sink, "ui_static_popup", [line]);
+                    }
+                }
+                None => debug!("BuyGuildBankTab: no open vault or no tab left"),
+            }
+            continue;
+        }
         let look = Lookups {
             team_id: &team_id,
             summoner: summon.pending(),
@@ -402,6 +481,7 @@ pub(crate) fn drive(
             refund_item: &refund_item,
             friend: &friend,
             chat_line: &chat_line,
+            banker,
         };
         match answer(&request, &look) {
             Some(command) => {
@@ -427,6 +507,7 @@ pub(crate) fn drive(
         controlling: controlling(units.iter().map(|(g, s)| (g.0, s))),
         instance_lock: lock.lock.map(PendingLock::view),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
+        guild_bank_tab_cost: tab_cost(purchase.1),
         ..Default::default()
     };
     let memo = memo.get(script);

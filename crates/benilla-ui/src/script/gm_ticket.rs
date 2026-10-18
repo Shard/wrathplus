@@ -18,6 +18,11 @@ pub enum GmTicketIntent {
     Delete,
     /// `NewGMTicket` or `UpdateGMTicket`.
     Write(GmTicketWrite),
+    /// Build 12340 `GMReportLag(type)` (`0x5ad020` → `0x5acf30`): `CMSG_GM_REPORT_LAG`.
+    ReportLag { lag_type: u32 },
+    /// Build 12340 `GMResponseNeedMoreHelp(text)` (`0x5ad150` → `0x5ac8f0(text, 1, 1)`): a new
+    /// ticket asking for a response and flagged needs-more-help, with the caller's text.
+    NeedMoreHelp { text: String },
 }
 
 /// One `NewGMTicket` or `UpdateGMTicket` call.

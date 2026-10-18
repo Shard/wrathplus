@@ -1018,8 +1018,10 @@ fn writer_loop(
                     | ClientCommand::NativeQuestsCompletedQuery
                     | ClientCommand::NativeReferFriend(_)
                     | ClientCommand::NativeSessionMeta(_)
+                    | ClientCommand::NativeSessionMisc(_)
                     | ClientCommand::NativeSpellControl(_)
                     | ClientCommand::NativeUiTimerQuery
+                    | ClientCommand::NativeVehicleControl(_)
                     | ClientCommand::NativeWhoCommand(_)
                     | ClientCommand::NativeWorldObjects(_)
                     | ClientCommand::NativeWorldportAck(_)

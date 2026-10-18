@@ -40,7 +40,6 @@ pub const CMSG_CONTROLLER_EJECT_PASSENGER: u32 = 0x04a9;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
     Dismount { unit: u64 },
-    PlayerVehicleData { unit: u64, vehicle_id: u32 },
     CancelExpectedRideVehicleAura,
 }
 
@@ -98,12 +97,10 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             let id: [u8; 4] = input
                 .try_into()
                 .map_err(|_| invalid("vehicle data is guid + u32"))?;
-            SessionEvent::WrathMovement {
-                packet: Packet::PlayerVehicleData {
-                    unit,
-                    vehicle_id: u32::from_le_bytes(id),
-                },
-            }
+            SessionEvent::WrathVehicle(crate::wrath_vehicle::VehicleEvent::Kit {
+                unit,
+                vehicle_id: u32::from_le_bytes(id),
+            })
         }
         SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA if body.is_empty() => {
             SessionEvent::WrathMovement {
@@ -203,12 +200,12 @@ mod tests {
         data.extend(312u32.to_le_bytes());
         assert!(matches!(
             &decode(SMSG_PLAYER_VEHICLE_DATA, &data).unwrap()[..],
-            [SessionEvent::WrathMovement {
-                packet: Packet::PlayerVehicleData {
+            [SessionEvent::WrathVehicle(
+                crate::wrath_vehicle::VehicleEvent::Kit {
                     unit: 5,
                     vehicle_id: 312
                 }
-            }]
+            )]
         ));
         assert!(decode(SMSG_PLAYER_VEHICLE_DATA, &data[..5]).is_err());
         assert!(decode(SMSG_PLAYER_VEHICLE_DATA, &[data.as_slice(), &[0]].concat()).is_err());

@@ -33,8 +33,6 @@ pub(crate) const BTN_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.05);
 pub(crate) const BTN_HOVER: Color = Color::srgba(1.0, 1.0, 1.0, 0.14);
 pub(crate) const FALLBACK_ALPHA: f32 = 0.8;
 
-/// The info panels' backdrop: `TextPanel-Border`, edge/tile 32 (CharacterCreate.xml).
-pub(crate) const PANEL_EDGE: f32 = 32.0;
 /// The name box's backdrop: `Glue-Tooltip-Border`, edge/tile 16.
 pub(crate) const NAME_EDGE: f32 = 16.0;
 
@@ -70,9 +68,6 @@ pub(crate) struct ScrollArt {
     pub(crate) up_btn: ScrollBtnArt,
     pub(crate) down_btn: ScrollBtnArt,
     pub(crate) knob: (Handle<Image>, Vec2),
-    /// The decorative track behind the slider, shown only when the panel scrolls.
-    pub(crate) track_top: Option<(Handle<Image>, Vec2)>,
-    pub(crate) track_bottom: Option<(Handle<Image>, Vec2)>,
 }
 
 /// The create screen's reference art, loaded from the player's client data on first entry.
@@ -82,7 +77,11 @@ pub(crate) struct GlueArt {
     pub(crate) races: Option<(Handle<Image>, Vec2)>,
     pub(crate) classes: Option<(Handle<Image>, Vec2)>,
     pub(crate) gender: Option<(Handle<Image>, Vec2)>,
-    pub(crate) factions: Option<(Handle<Image>, Vec2)>,
+    /// The info panes' `UI-CharacterCreate-InfoBox` frame and their round header icons,
+    /// `UI-CharacterCreate-RacesRound` and `UI-Classes-Circles`.
+    pub(crate) info_box: Option<(Handle<Image>, Vec2)>,
+    pub(crate) races_round: Option<(Handle<Image>, Vec2)>,
+    pub(crate) class_circles: Option<(Handle<Image>, Vec2)>,
     pub(crate) banners: Option<Handle<Image>>,
     pub(crate) hilight: Option<Handle<AddUiMaterial>>,
     pub(crate) logo: Option<Handle<Image>>,
@@ -109,8 +108,7 @@ pub(crate) struct GlueArt {
     pub(crate) rotate_down: Option<Handle<Image>>,
     /// The rotate buttons' hover ring (`UI-Common-MouseHilight`).
     pub(crate) mouse_hilight: Option<Handle<AddUiMaterial>>,
-    /// The two edge files split into their eight pieces, and the tiled `UI-Tooltip-Background`.
-    pub(crate) panel_border: Option<BackdropEdges>,
+    /// The name box's edge file split into its eight pieces, and `UI-Tooltip-Background`.
     pub(crate) name_border: Option<BackdropEdges>,
     pub(crate) tooltip_bg: Option<Handle<Image>>,
     /// All or nothing: without the full set the info panels scroll by wheel only.
@@ -236,7 +234,13 @@ impl GlueArt {
         self.races = sized(assets, &format!("{CC}Races"), images);
         self.classes = sized(assets, &format!("{CC}Classes"), images);
         self.gender = sized(assets, &format!("{CC}Gender"), images);
-        self.factions = sized(assets, &format!("{CC}Factions"), images);
+        self.info_box = sized(assets, &format!("{CC}InfoBox"), images);
+        self.races_round = sized(assets, &format!("{CC}RacesRound"), images);
+        self.class_circles = sized(
+            assets,
+            "Interface\\TargetingFrame\\UI-Classes-Circles",
+            images,
+        );
         self.banners = assets.sprite_texture(&format!("{CC}Banners"), images);
         // `CharacterCreateIconButtonTemplate`'s ADD sheen, `UI-CharacterCreate-Highlights`' top-left
         // quarter; the checked quarter beside it is labelled as the same sheen, locked.
@@ -261,7 +265,7 @@ impl GlueArt {
             images,
             add_mats,
         );
-        self.logo = assets.sprite_texture("Interface\\Glues\\Common\\Glues-WoW-Logo", images);
+        self.logo = assets.sprite_texture("Interface\\Glues\\Common\\Glues-WoW-WotLKLogo", images);
         self.arrow_left = arrow(assets, "Left", images, add_mats);
         self.arrow_right = arrow(assets, "Right", images, add_mats);
         self.button_up = sized(assets, &format!("{GB}Up"), images);
@@ -295,11 +299,6 @@ impl GlueArt {
             FULL_TC,
             images,
             add_mats,
-        );
-        self.panel_border = super::backdrop::backdrop_edges(
-            assets,
-            "Interface\\Glues\\Common\\TextPanel-Border",
-            images,
         );
         self.name_border = super::backdrop::backdrop_edges(
             assets,
@@ -336,12 +335,6 @@ impl GlueArt {
                 up_btn: scroll_btn(assets, "Up", images, add_mats)?,
                 down_btn: scroll_btn(assets, "Down", images, add_mats)?,
                 knob: sized(assets, "Interface\\Buttons\\UI-ScrollBar-Knob", images)?,
-                track_top: sized(assets, &format!("{CC}ScrollBar-Top"), images),
-                track_bottom: sized(
-                    assets,
-                    "Interface\\ClassTrainerFrame\\UI-ClassTrainer-ScrollBar",
-                    images,
-                ),
             })
         })();
         // The select screen's set.
@@ -486,14 +479,16 @@ impl GlueArt {
             self.tab_inactive.is_some(),
         );
         debug!(
-            "glue art: races {} classes {} gender {} factions {} banners {} hilight {} logo {} \
+            "glue art: races {} classes {} gender {} infobox {}/{}/{} banners {} hilight {} logo {} \
              arrows {}/{} button {}/{}/{}/{} tower {}/{} shadow {} label {} rotate {}/{} \
-             mousehl {} borders {}/{} bg {} scroll {} sel-hi {} dialog {}/{}/{} chatinput {}/{} \
+             mousehl {} border {} bg {} scroll {} sel-hi {} dialog {}/{}/{} chatinput {}/{} \
              blizz {} check {}",
             self.races.is_some(),
             self.classes.is_some(),
             self.gender.is_some(),
-            self.factions.is_some(),
+            self.info_box.is_some(),
+            self.races_round.is_some(),
+            self.class_circles.is_some(),
             self.banners.is_some(),
             self.hilight.is_some(),
             self.logo.is_some(),
@@ -510,7 +505,6 @@ impl GlueArt {
             self.rotate_up.is_some(),
             self.rotate_down.is_some(),
             self.mouse_hilight.is_some(),
-            self.panel_border.is_some(),
             self.name_border.is_some(),
             self.tooltip_bg.is_some(),
             self.scroll.is_some(),
