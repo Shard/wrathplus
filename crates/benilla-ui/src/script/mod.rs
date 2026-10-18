@@ -201,6 +201,8 @@ mod wrath_companions;
 mod wrath_runes;
 mod wrath_merchant;
 mod wrath_spellbook;
+mod wrath_skills;
+mod wrath_kb;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
@@ -813,6 +815,8 @@ impl UiScript {
             wrath_runes::install(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
+            wrath_skills::install(&lua)?;
+            wrath_kb::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;
