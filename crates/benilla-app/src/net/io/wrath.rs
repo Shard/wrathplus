@@ -1281,6 +1281,7 @@ enum WrathRoute {
     NativeSessionMeta,
     NativeHelp,
     NativeReferFriend,
+    NativeWorldObjects,
     NativeInspect,
     NativeFaction,
     NativeWorldportAck,
@@ -1349,6 +1350,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GmTicketDelete
         | ClientCommand::GmTicketSystemStatus => WrathRoute::NativeHelp,
         ClientCommand::NativeReferFriend(_) => WrathRoute::NativeReferFriend,
+        // Chests, doors, mailboxes, herbs, ore and fishing bobbers: build 12340 keeps the full guid.
+        ClientCommand::NativeWorldObjects(_) | ClientCommand::GameObjUse { .. } => {
+            WrathRoute::NativeWorldObjects
+        }
         ClientCommand::NativeDeath(_)
         | ClientCommand::RepopRequest
         | ClientCommand::CorpseQuery
@@ -1797,6 +1802,16 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeWorldObjects => {
+                        use benilla_protocol::wrath_world_objects::Command as O;
+                        let command = match command {
+                            ClientCommand::NativeWorldObjects(command) => command,
+                            ClientCommand::GameObjUse { guid } => O::Use { object: guid },
+                            other => unreachable!("not a world-object route: {other:?}"),
+                        };
+                        let (opcode, body) = benilla_protocol::wrath_world_objects::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeReferFriend => {
                         let ClientCommand::NativeReferFriend(command) = command else {
                             unreachable!("not a refer-a-friend route")

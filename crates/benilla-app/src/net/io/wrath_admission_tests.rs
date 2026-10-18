@@ -20,6 +20,11 @@ fn every_wrath_writer_route_is_admitted() {
         ("NativeSessionMeta", ClientCommand::NativeSessionMeta(benilla_protocol::wrath_session_meta::Command::ReadyForAccountDataTimes)),
         ("TutorialFlag", ClientCommand::TutorialFlag { id: 1 }),
         ("NativeHelp", ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ResolveResponse)),
+        ("GameObjUse", ClientCommand::GameObjUse { guid: 0xf110_0000_0000_0007 }),
+        (
+            "NativeWorldObjects",
+            ClientCommand::NativeWorldObjects(benilla_protocol::wrath_world_objects::Command::ReportUse { object: 1 }),
+        ),
         (
             "NativeReferFriend",
             ClientCommand::NativeReferFriend(benilla_protocol::wrath_refer_friend::Command::AcceptLevelGrant { granter: 1 }),
