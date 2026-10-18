@@ -46,12 +46,14 @@ mod wrath_chat_verbs;
 mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
+mod wrath_unit_popup;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
+pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
 pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
 pub use wrath_unit_casts::WrathUnitCast;
@@ -832,6 +834,7 @@ impl UiScript {
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
+            wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 
