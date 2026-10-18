@@ -159,6 +159,12 @@ impl CastLadder<'_, '_> {
                     self.ground.clear();
                     return;
                 }
+                // A glyph socket only binds the player's item use; a pet cast never waits on one.
+                TargetedBind::Glyph(_) => {
+                    debug!("ui_action: pet cast {spell_id} bound to a glyph socket; dropped");
+                    self.ground.clear();
+                    return;
+                }
             };
             let _ = self.commands.0.send(ClientCommand::NativePetCastSpell {
                 caster,
