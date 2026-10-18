@@ -40,6 +40,9 @@ pub struct SpellDisplay {
     pub attributes_ex3: u32,
     /// `AttributesEx4` (column 10, `+0x28`).
     pub attributes_ex4: u32,
+    /// Build 12340's `AttributesEx5` (`+0x24`): `0x8` usable while stunned, `0x20000` while
+    /// feared, `0x40000` while confused (AzerothCore `SPELL_ATTR5_USABLE_WHILE_*`).
+    pub attributes_ex5: u32,
     /// `SpellFamilyName` (column 160): `GetSpellModifiers` (`0x6e6b30`) applies nothing unless it
     /// is nonzero and equals the local player's class family (`[0xcecaac]`, `0x6e6b46`).
     pub spell_family: u32,
@@ -232,6 +235,7 @@ impl Default for SpellDisplay {
             modal_next_spell: 0,
             attributes_ex3: 0,
             attributes_ex4: 0,
+            attributes_ex5: 0,
             spell_family: 0,
             spell_family_flags: 0,
             spell_family_flags_2: 0,
