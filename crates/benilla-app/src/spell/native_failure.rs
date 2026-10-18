@@ -34,12 +34,34 @@ fn receive(
     mut errors: Option<ResMut<crate::ui_action::UiErrorKeys>>,
     // `SPELL_CAST_FAILED` for the build-12340 combat log (`0x751ad0`).
     native_log: Option<ResMut<crate::combat_log::native::NativeCombatLog>>,
+    // Out of ammo stops our Auto Shot.
+    auto_repeat: (
+        Option<Res<crate::net::SelfGuid>>,
+        Option<ResMut<super::AutoRepeatActive>>,
+        Option<Res<crate::net::NetCommands>>,
+        Query<Entity, With<crate::net::SelfPlayer>>,
+        Commands,
+    ),
 ) {
     if let Some(mut log) = native_log {
         log.record(&event);
     }
     match event {
         SessionEvent::WrathSpellFailure(value) => {
+            // `0x809c70`: our own failure for want of ammo (`NEED_AMMO`, `_AMMO_POUCH`,
+            // `_EXOTIC_AMMO`, 52-54) stops auto-repeat through `0x807560(1)`, which sends
+            // `CMSG_CANCEL_AUTO_REPEAT_SPELL` and clears the running spell.
+            let (me, active, net, body, mut commands) = auto_repeat;
+            if me.is_some_and(|me| me.0 == Some(value.caster)) && stops_auto_repeat(value.reason) {
+                if let (Some(mut active), Some(net)) = (active, net) {
+                    crate::creature_anim::cancel_auto_repeat_local(
+                        body.single().ok(),
+                        &mut active,
+                        &mut commands,
+                        &net,
+                    );
+                }
+            }
             // The result ladder and the local extras (`0x809c70`), in `super::unit_cast`.
             if let Some(mut unit_casts) = unit_casts {
                 unit_casts.push(super::unit_cast::CastEdge::Result {
@@ -69,6 +91,12 @@ fn receive(
         _ => {}
     }
 }
+/// The failures `0x809c70` ends auto-repeat on: `SPELL_FAILED_NEED_AMMO`, `_NEED_AMMO_POUCH` and
+/// `_NEED_EXOTIC_AMMO`.
+fn stops_auto_repeat(reason: u8) -> bool {
+    matches!(reason, 52..=54)
+}
+
 fn pet_message(reason: u8) -> Option<&'static str> {
     Some(match reason {
         0x01 => "ERR_PET_SPELL_AFFECTING_COMBAT",
@@ -102,6 +130,17 @@ fn connected(
 mod tests {
     use super::*;
     use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
+    #[test]
+    fn only_the_ammo_failures_stop_auto_repeat() {
+        for reason in 0..=u8::MAX {
+            assert_eq!(
+                stops_auto_repeat(reason),
+                (52..=54).contains(&reason),
+                "{reason}"
+            );
+        }
+    }
+
     #[test]
     fn native_receipts_preserve_order_duplicates_and_raw_fields_without_shared_projection() {
         let mut app = App::new();
