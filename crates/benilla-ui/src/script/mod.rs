@@ -45,6 +45,8 @@ mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
 mod wrath_friends_frame;
+mod wrath_guild_bank;
+pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
@@ -815,6 +817,7 @@ impl UiScript {
             wrath_inspect_talents::install(&lua)?;
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
+            wrath_guild_bank::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 
