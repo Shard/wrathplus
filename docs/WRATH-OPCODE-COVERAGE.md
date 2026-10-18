@@ -48,7 +48,7 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 397 | 103 | 189 | 689 |
+| S→C | 398 | 102 | 189 | 689 |
 | C→S | 419 | 0 | 305 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 104 of them transport-only (no UI producer) and 314 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
@@ -997,7 +997,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0375` | `CMSG_CANCEL_MOUNT_AURA` | C→S | handled | niche | AC receive: `HandleCancelMountAuraOpcode` (STATUS_LOGGEDIN). | C→S: admitted native writer — A/net/io/wrath.rs `WrathRoute::NativeSpellControl` → P/wrath_spell_control.rs `encode` (AC handler read layout); fixture in A/net/io/wrath_admission_tests.rs; transport-only (`ClientCommand::NativeSpellControl`, no producer yet), no server acceptance claimed. |
 | `0x0376` | `SMSG_ARENA_ERROR` | S→C | capture-only | niche | proven_send_site: `game/Handlers/ArenaTeamHandler.cpp:423` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. |
 | `0x0377` | `MSG_INSPECT_ARENA_TEAMS` | S→C / C→S | capture-only / handled | common | proven_send_site: `game/Battlegrounds/ArenaTeam.cpp:540` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. C→S: BG — transport-only; `ClientCommand::NativeBattleground`; no UI producer. |
-| `0x0378` | `SMSG_DEATH_RELEASE_LOC` | S→C | capture-only | core | proven_send_site: `game/Entities/Player/Player.cpp:4566` | S→C: capture-only — P/wrath_death.rs → A/net/wrath_death_capture.rs FIFO; no UI feed; see docs/WRATH-DEATH.md. |
+| `0x0378` | `SMSG_DEATH_RELEASE_LOC` | S→C | handled | core | proven_send_site: `game/Entities/Player/Player.cpp:4566` | S→C: Death — A/net/wrath_death_capture.rs → `set_death_release_location` → the world map's `GetDeathReleasePosition` (map -1 clears). See docs/WRATH-DEATH.md. |
 | `0x0379` | `CMSG_CANCEL_TEMP_ENCHANTMENT` | C→S | handled | niche | AC receive: `HandleCancelTempEnchantmentOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — transport-only; `ClientCommand::NativeInventory`, P/wrath_inventory.rs encoder; no UI producer. See docs/WRATH-INVENTORY.md. |
 | `0x037A` | `SMSG_FORCED_DEATH_UPDATE` | S→C | missing | core | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x037B` | `CMSG_CHEAT_SET_HONOR_CURRENCY` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
