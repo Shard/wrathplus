@@ -1,7 +1,8 @@
 //! Wrath static achievement metadata. This is not a player-progress store.
 use benilla_assets::{AssetSet, LockRecover, WorldAssets};
 use benilla_ui::script::{
-    UiScript, WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata,
+    UiScript, WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion,
+    WrathAchievementMetadata,
 };
 use bevy::prelude::*;
 
@@ -28,13 +29,37 @@ fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     if !matches!(chain.profile(), benilla_formats::DataProfile::Wrath { .. }) {
         return;
     }
-    use benilla_formats::achievements::{load_achievement_criteria, load_achievements};
+    use benilla_formats::achievements::{
+        load_achievement_categories, load_achievement_criteria, load_achievement_icons,
+        load_achievements,
+    };
+    // Icons and categories are optional: without them the window shows no icons or categories.
+    let icons = load_achievement_icons(&mut chain).unwrap_or_else(|e| {
+        warn!("achievement icons unavailable: {e:#}");
+        Default::default()
+    });
+    let categories = load_achievement_categories(&mut chain).map_err(|e| {
+        warn!("achievement categories unavailable: {e:#}");
+    });
     match (
         load_achievements(&mut chain),
         load_achievement_criteria(&mut chain),
     ) {
         (Ok(achievements), Ok(criteria)) => {
             let mut metadata = WrathAchievementMetadata::default();
+            if let Ok(categories) = categories {
+                // The catalog is keyed by id; the window lists by the file's `order` column.
+                let mut rows: Vec<_> = categories.iter().collect();
+                rows.sort_by_key(|c| (c.order, c.id));
+                metadata.categories = rows
+                    .into_iter()
+                    .map(|c| WrathAchievementCategory {
+                        id: c.id,
+                        parent_id: c.parent_id,
+                        name: c.name.clone(),
+                    })
+                    .collect();
+            }
             for row in achievements.iter() {
                 metadata.achievements.insert(
                     row.id,
@@ -45,6 +70,12 @@ fn load(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
                         flags: row.flags,
                         required_criteria_count: row.required_criteria_count,
                         reference_achievement_id: row.reference_achievement_id,
+                        required_faction: row.required_faction,
+                        parent_achievement_id: row.parent_achievement_id,
+                        description: row.description.clone(),
+                        points: row.points,
+                        icon: icons.get(&row.icon_id).cloned().unwrap_or_default(),
+                        reward: row.reward.clone(),
                     },
                 );
                 metadata.linked_criteria.insert(
@@ -101,6 +132,7 @@ mod tests {
                 flags: 0,
                 required_criteria_count: 0,
                 reference_achievement_id: 0,
+                ..Default::default()
             },
         );
         for id in [12, 10] {
