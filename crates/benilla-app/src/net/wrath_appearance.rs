@@ -3,8 +3,15 @@
 //! (`CharTitles.dbc` through [`crate::quest_rewards::QuestRewardTables`]);
 //! `SMSG_ENABLE_BARBER_SHOP` fires `BARBER_SHOP_OPEN`; `SMSG_BARBER_SHOP_RESULT` 0 fires
 //! `BARBER_SHOP_SUCCESS` then `BARBER_SHOP_APPEARANCE_APPLIED`, 1 shows `ERR_NOT_ENOUGH_MONEY`,
-//! and 2 (refused) shows nothing; getting up from the chair fires `BARBER_SHOP_CLOSE`. Labelled: the barber events' order and the money line are
-//! untraced in the client.
+//! and 2 (refused) shows nothing; getting up from the chair fires `BARBER_SHOP_CLOSE`. Labelled:
+//! the barber events' order and the money line are untraced in the client.
+//!
+//! While the chair is open, [`feed_barber`] publishes the shop (`set_wrath_barber_shop`): the
+//! `BarberShopStyle.dbc` rows for our race and sex, `gtBarberShopCostBase` at our level, the
+//! race's hair colors and customization tokens, and `PLAYER_BYTES`. `ApplyBarberShopStyle` sends
+//! `CMSG_ALTER_APPEARANCE`, and the preview dresses our own body
+//! ([`crate::entities::BarberPreview`]). Labelled: `CancelBarberShop` (`0x52e9f0`, untraced) stands
+//! the player up here, which closes the window as getting up does.
 use super::{NetHandlerApp, ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_appearance::Packet;
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -54,12 +61,173 @@ pub(super) fn register(app: &mut App) {
         .net_handler(SessionEventKind::WrathAppearance, receive)
         .net_handler(SessionEventKind::Connected, clear)
         .net_handler(SessionEventKind::Disconnected, clear)
+        .init_resource::<crate::entities::BarberPreview>()
+        .add_systems(Startup, load_barber.after(benilla_assets::AssetSet::Open))
         .add_systems(
             Update,
-            (feed_appearance, feed_titles)
+            (
+                feed_appearance,
+                feed_titles,
+                feed_barber.after(feed_appearance),
+            )
                 .in_set(crate::ui_script::UiFeed)
                 .run_if(crate::ui_script::ingame_ui_up),
         );
+}
+
+/// The barber shop's tables; either is absent when the install lacks it.
+#[derive(Resource, Default)]
+pub(crate) struct BarberTables {
+    styles: Option<benilla_formats::BarberStyles>,
+    cost: Option<benilla_formats::BarberCostBase>,
+}
+
+fn load_barber(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
+    use benilla_assets::LockRecover;
+    let Some(assets) = assets else { return };
+    let mut chain = assets.chain.lock_recover();
+    commands.insert_resource(BarberTables {
+        styles: benilla_formats::load_barber_styles(&mut chain).ok(),
+        cost: benilla_formats::load_barber_cost_base(&mut chain).ok(),
+    });
+}
+
+/// Who sits in the chair: race, sex, level and `[skin, hair style, hair color, facial hair]`.
+struct Sitter {
+    race: u8,
+    sex: u8,
+    level: u32,
+    look: [u8; 4],
+}
+
+/// The shop for a sitter. Hair and facial-hair rows are always offered; the skin rows exist only
+/// for a race the barber can reskin, so an empty list is `CanAlterSkin`'s false.
+fn barber_shop(
+    tables: &BarberTables,
+    sitter: &Sitter,
+    hair_colors: u32,
+    tokens: (&str, &str),
+) -> benilla_ui::script::WrathBarberShop {
+    use benilla_formats::barber_kind;
+    let rows = |kind| -> Vec<benilla_ui::script::WrathBarberStyle> {
+        tables.styles.as_ref().map_or_else(Vec::new, |styles| {
+            styles
+                .for_look(kind, u32::from(sitter.race), u32::from(sitter.sex))
+                .map(|s| benilla_ui::script::WrathBarberStyle {
+                    id: s.id,
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                    cost_modifier: s.cost_modifier,
+                    data: s.data,
+                })
+                .collect()
+        })
+    };
+    let [skin, hair_style, hair_color, facial_hair] = sitter.look.map(u32::from);
+    benilla_ui::script::WrathBarberShop {
+        base_cost: tables
+            .cost
+            .as_ref()
+            .and_then(|c| c.at_level(sitter.level))
+            .unwrap_or(0.0),
+        hair_styles: rows(barber_kind::HAIR),
+        facial_styles: rows(barber_kind::FACIAL_HAIR),
+        skin_styles: rows(barber_kind::SKIN),
+        hair_colors,
+        hair_style,
+        hair_color,
+        facial_hair,
+        skin,
+        hair_customization: tokens.0.to_string(),
+        facial_customization: tokens.1.to_string(),
+    }
+}
+
+/// The barber verb's packet: `Apply` sends `CMSG_ALTER_APPEARANCE`; `Cancel` stands up.
+fn barber_command(request: benilla_ui::script::WrathBarberRequest) -> super::ClientCommand {
+    use benilla_protocol::wrath_appearance::Command;
+    use benilla_ui::script::WrathBarberRequest;
+    match request {
+        WrathBarberRequest::Apply {
+            hair,
+            hair_color,
+            facial_hair,
+            skin_color,
+        } => super::ClientCommand::NativeAppearance(Command::AlterAppearance {
+            hair,
+            hair_color,
+            facial_hair,
+            skin_color,
+        }),
+        WrathBarberRequest::Cancel => super::ClientCommand::StandStateChange { state: 0 },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn feed_barber(
+    script: Option<NonSendMut<UiScript>>,
+    chair: Res<BarberChair>,
+    tables: Option<Res<BarberTables>>,
+    races: Option<Res<crate::entities::CharCreate>>,
+    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    commands: Res<super::NetCommands>,
+    mut preview: ResMut<crate::entities::BarberPreview>,
+    mut last: Local<crate::ui_script::VmMemo<Option<Option<benilla_ui::script::WrathBarberShop>>>>,
+) {
+    let Some(mut script) = script else {
+        return;
+    };
+    if script.dialect() != ScriptDialect::Wrath12340 {
+        return;
+    }
+    let sitter = self_q.iter().next().and_then(|s| {
+        let s = &s.0;
+        Some(Sitter {
+            race: s.unit_race()?,
+            sex: s.unit_gender()?,
+            level: s.unit_level().unwrap_or(1),
+            look: [
+                s.player_skin().unwrap_or(0),
+                s.player_hair_style().unwrap_or(0),
+                s.player_hair_color().unwrap_or(0),
+                s.player_facial_hair().unwrap_or(0),
+            ],
+        })
+    });
+    let shop = chair
+        .open
+        .then_some(())
+        .and(tables.as_deref())
+        .zip(sitter.as_ref())
+        .map(|(tables, sitter)| {
+            let races = races.as_deref().map(|r| &r.0);
+            let hair_colors = races
+                .and_then(|r| r.ranges(sitter.race, sitter.sex))
+                .map_or(0, |r| u32::from(r.hair_color));
+            let hair = races
+                .and_then(|r| r.hair_customization(sitter.race))
+                .unwrap_or_default();
+            let facial = races
+                .and_then(|r| r.facial_hair_customization(sitter.race, sitter.sex))
+                .unwrap_or_default();
+            barber_shop(tables, sitter, hair_colors, (hair, facial))
+        });
+    let (last, reset) = last.get_reset(&script);
+    if reset || last.as_ref() != Some(&shop) {
+        *last = Some(shop.clone());
+        script.set_wrath_barber_shop(shop);
+    }
+    for request in script.take_wrath_barber_requests() {
+        let _ = commands.0.send(barber_command(request));
+    }
+    let shown = script
+        .wrath_barber_preview()
+        .map(|(hair_style, hair_color, facial_hair, skin)| {
+            [skin, hair_style, hair_color, facial_hair].map(|v| u8::try_from(v).unwrap_or(0))
+        });
+    if preview.0 != shown {
+        preview.0 = shown;
+    }
 }
 
 fn receive(In(event): In<SessionEvent>, mut receipts: ResMut<AppearanceReceipts>) {

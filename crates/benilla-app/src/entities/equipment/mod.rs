@@ -84,8 +84,17 @@ pub(crate) struct Equipment {
     pub(crate) emblem: Option<benilla_formats::GuildEmblem>,
     /// The tabard designer's preview on our own body (`[cc+0xc]`, `0x5e07d0`).
     pub(crate) tabard_preview: bool,
+    /// The appearance the body shows: skin, hair style, hair color and facial hair, from
+    /// `PLAYER_BYTES`/`_2`, or the barber chair's preview on our own body ([`BarberPreview`]). In
+    /// the key, so a haircut, applied or previewed, re-dresses in place.
+    pub(crate) look: [u8; 4],
     pub(crate) settled: bool,
 }
+
+/// The barber chair's preview look on our own body, `[skin, hair style, hair color, facial
+/// hair]`, while the barber shop is open (`crate::net` `wrath_appearance`).
+#[derive(Resource, Default, PartialEq, Eq)]
+pub(crate) struct BarberPreview(pub(crate) Option<[u8; 4]>);
 
 /// The [`Equipment`] a player's visual was dressed with; a change re-dresses it in place.
 #[derive(Component)]

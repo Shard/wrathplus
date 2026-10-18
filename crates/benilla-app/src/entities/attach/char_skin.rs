@@ -43,6 +43,8 @@ pub(super) fn resolve_char_look(
     dm: Option<&DisplayModel>,
     entity: Entity,
     stores: &Query<&ObjectStore>,
+    // A player's resolved [`Equipment::look`]: its descriptor bytes, or our barber preview.
+    equipment: Option<&super::super::Equipment>,
 ) -> Option<CharLook> {
     // The look follows the display, not the entity kind: the display's own appearance row first,
     // the wire's only for a character body without one, as the reference's race and sex getters
@@ -89,15 +91,26 @@ pub(super) fn resolve_char_look(
         // create mask (`Object.cpp:1149`), and an absent field is 0, so each customization byte
         // defaults to 0.
         let s = &stores.get(entity).ok()?.0;
+        let [skin, hair_style, hair_color, facial_hair] = equipment.map_or_else(
+            || {
+                [
+                    s.player_skin().unwrap_or(0),
+                    s.player_hair_style().unwrap_or(0),
+                    s.player_hair_color().unwrap_or(0),
+                    s.player_facial_hair().unwrap_or(0),
+                ]
+            },
+            |e| e.look,
+        );
         return Some(CharLook {
             race: s.unit_race()?,
             class: s.unit_class().unwrap_or(0),
             face: s.player_face().unwrap_or(0),
             sex: s.unit_gender()?,
-            skin: s.player_skin().unwrap_or(0),
-            hair_style: s.player_hair_style().unwrap_or(0),
-            hair_color: s.player_hair_color().unwrap_or(0),
-            facial_hair: s.player_facial_hair().unwrap_or(0),
+            skin,
+            hair_style,
+            hair_color,
+            facial_hair,
             body: BodySkin::Composite {
                 face: s.player_face().unwrap_or(0),
             },
@@ -485,7 +498,7 @@ mod eye_tests {
             .id();
         app.world_mut()
             .run_system_once(move |stores: Query<&ObjectStore>| {
-                let l = resolve_char_look(&net, Some(&dm), e, &stores).unwrap();
+                let l = resolve_char_look(&net, Some(&dm), e, &stores, None).unwrap();
                 assert_eq!((l.race, l.class, l.face, l.skin), (1, 6, 4, 2));
             })
             .unwrap();

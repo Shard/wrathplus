@@ -14,10 +14,23 @@ Codec: `P/wrath_appearance.rs`; App: `A/net/wrath_appearance.rs`, `A/ui_unit.rs`
   the player's hide bits (`PLAYER_FLAGS_HIDE_HELM`/`HIDE_CLOAK`) say is hidden.
 - **Barber shop.** 0427 fires `BARBER_SHOP_OPEN`; 0428 result 0 fires `BARBER_SHOP_SUCCESS` then
   `BARBER_SHOP_APPEARANCE_APPLIED`, 1 shows `ERR_NOT_ENOUGH_MONEY`, 2 nothing. The writer is
-  `NativeAppearance(AlterAppearance { hair, hair_color, facial_hair, skin_color })`; Native UI owns
-  the Blizzard_BarberShopUI getters and will queue the apply (`take_wrath_barber_requests`, wired
-  when it lands). `BARBER_SHOP_CLOSE` fires when the player's stand state leaves the chair states
-  (`SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`, 4..6) after having sat in one.
+  `NativeAppearance(AlterAppearance { hair, hair_color, facial_hair, skin_color })`. Native UI owns
+  the Blizzard_BarberShopUI getters (`wrath_barber.rs`). `BARBER_SHOP_CLOSE` fires when the
+  player's stand state leaves the chair states (`SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`, 4..6) after
+  having sat in one. While the chair is open, `feed_barber` publishes the shop
+  (`set_wrath_barber_shop`):
+  - the `BarberShopStyle.dbc` rows for our race and sex, by type (0 hair, 2 facial hair, 3 skin;
+    no skin rows is `CanAlterSkin`'s false);
+  - `gtBarberShopCostBase` at our level;
+  - the race's hair-color count and customization tokens (`CharCreateCatalog`);
+  - `PLAYER_BYTES` as the current look.
+
+  It republishes when those move. It drains `take_wrath_barber_requests`: `Apply` sends 0426, and
+  `Cancel` sends `CMSG_STANDSTATECHANGE` 0, which closes the window as getting up does. Labelled:
+  the native cancel (`0x52e9f0`) is untraced. The preview (`wrath_barber_preview`) dresses our own
+  body through `entities::BarberPreview`. `Equipment::look` now carries the shown skin, hair style,
+  hair color and facial hair (descriptor bytes, or the preview on our own body), so both a
+  previewed and an applied haircut re-dress the model in place.
 - **Titles.** 0373 prints `NEW_TITLE_EARNED` / `OLD_TITLE_LOST` as a system line with the
   `CharTitles.dbc` title for that bit, formatted with our name and gender. The known-title getters
   are Native UI's (`wrath_titles.rs`); App feeds them the catalog once per VM
@@ -25,4 +38,4 @@ Codec: `P/wrath_appearance.rs`; App: `A/net/wrath_appearance.rs`, `A/ui_unit.rs`
   `PLAYER_CHOSEN_TITLE` when they move (`set_wrath_player_titles`). `SetCurrentTitle` is 0374
   (`docs/WRATH-SESSION-META.md`).
 
-Labelled (untraced in the client): the barber events' order and the money line.
+Labelled (untraced in the client): the barber events' order, the money line and the cancel.

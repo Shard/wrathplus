@@ -51,7 +51,7 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 | S→C | 401 | 99 | 189 | 689 |
 | C→S | 419 | 0 | 305 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 419 admitted numeric opcodes, 85 of them transport-only (no UI producer) and 334 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 419 admitted numeric opcodes, 84 of them transport-only (no UI producer) and 335 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -1171,7 +1171,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0423` | `SMSG_SPLINE_MOVE_UNSET_FLYING` | S→C | handled | niche | proven_send_site: `game/Entities/Unit/Unit.cpp:16181` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:320-325; crates/benilla-protocol/src/wrath_spline.rs:15-61; crates/benilla-app/src/net/objects.rs:57-74 |
 | `0x0424` | `SMSG_SUMMON_CANCEL` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0425` | `CMSG_CHANGE_PERSONAL_ARENA_RATING` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0426` | `CMSG_ALTER_APPEARANCE` | C→S | handled | niche | AC receive: `HandleAlterAppearance` (STATUS_LOGGEDIN). | C→S: Appearance — transport-only; `NativeAppearance(AlterAppearance)`, P/wrath_appearance.rs; Native UI queues the apply. See docs/WRATH-APPEARANCE.md. |
+| `0x0426` | `CMSG_ALTER_APPEARANCE` | C→S | handled | niche | AC receive: `HandleAlterAppearance` (STATUS_LOGGEDIN). | C→S: Appearance — `NativeAppearance(AlterAppearance)`, P/wrath_appearance.rs; producer `ApplyBarberShopStyle` (Native UI's `take_wrath_barber_requests`, drained by A/net/wrath_appearance.rs `feed_barber`). See docs/WRATH-APPEARANCE.md. |
 | `0x0427` | `SMSG_ENABLE_BARBER_SHOP` | S→C | handled | niche | proven_send_site: `game/Entities/GameObject/GameObject.cpp:2043` | S→C: Appearance — A/net/wrath_appearance.rs fires `BARBER_SHOP_OPEN`. See docs/WRATH-APPEARANCE.md. |
 | `0x0428` | `SMSG_BARBER_SHOP_RESULT` | S→C | handled | niche | proven_send_site: `game/Handlers/CharacterHandler.cpp:1559` | S→C: Appearance — A/net/wrath_appearance.rs: `BARBER_SHOP_SUCCESS`/`APPEARANCE_APPLIED`, or the money line. See docs/WRATH-APPEARANCE.md. |
 | `0x0429` | `CMSG_CALENDAR_GET_CALENDAR` | C→S | handled | niche | AC receive: `HandleCalendarGetCalendar` (STATUS_LOGGEDIN). | C→S: Calendar — `ClientCommand::NativeCalendar`, P/wrath_calendar.rs encoder; UI producer: benilla-ui wrath_calendar requests sent by A/ui_calendar.rs. See docs/WRATH-CALENDAR.md. |

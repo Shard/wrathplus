@@ -119,7 +119,7 @@ pub(in crate::entities) fn redress_player_looks(
         };
 
         let worn = resolve_worn_equip(net, Some(live), Some(dm));
-        let look = resolve_char_look(net, Some(dm), entity, &stores);
+        let look = resolve_char_look(net, Some(dm), entity, &stores, Some(live));
         // A re-dress is the reference's incremental composite (`0x47789c`–`0x4778c3`): the new
         // geosets apply at once and the atlas composites that frame when its sections are
         // resident, never gated or withheld. So it composites here, in the frame, taking over a
