@@ -1683,3 +1683,27 @@ fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
     let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
     assert_eq!(vanilla.player_arena_team_id(0), None);
 }
+
+#[test]
+fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
+    let wrath = ObjectFields::from_field_slots(
+        FieldLayout::Wrath12340,
+        &[
+            (Field::PlayerGlyphSlots1, 0, 21),
+            (Field::PlayerGlyphSlots1, 5, 26),
+            (Field::PlayerGlyphs1, 1, 251),
+            (Field::PlayerGlyphsEnabled, 0, 0b11),
+        ],
+    );
+    assert_eq!(
+        (wrath.player_glyph_slot(0), wrath.player_glyph_slot(5), wrath.player_glyph_slot(6)),
+        (Some(21), Some(26), None)
+    );
+    assert_eq!((wrath.player_glyph(1), wrath.player_glyph(6)), (Some(251), None));
+    assert_eq!(wrath.player_glyphs_enabled(), Some(0b11));
+    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
+    assert_eq!(
+        (vanilla.player_glyph_slot(0), vanilla.player_glyph(0), vanilla.player_glyphs_enabled()),
+        (None, None, None)
+    );
+}

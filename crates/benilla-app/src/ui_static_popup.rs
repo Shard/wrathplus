@@ -29,13 +29,14 @@
 //! Labelled: the funds check's two operands are read as the vault's and the player's money
 //! (`0xc1dc20` and `0x51a2b0`, by their writers only).
 //!
-//! Not sent yet: `PartyLFGStartBackfill` (`0x55a0c0` re-joins with the party's current dungeon,
-//! which the LFG reducer does not hold yet).
+//! `PartyLFGStartBackfill` (`0x55a0c0`) is Native UI's: it reselects the group's dungeon and joins
+//! through the LFG outbox.
 //!
 //! The state: `IsFalling` (our mover airborne, not rooted), `IsOutOfBounds` (`PLAYER_FLAGS`
 //! `0x4000`), `PlayerCanTeleport` (no stun, confuse or flee flag) and `UnitIsControlling` (a charm
-//! or summon) are published. Not built: glyph placement and the bound-tradeable, refund and
-//! trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
+//! or summon) are published. `PlaceGlyphInSocket` forwards to the cast path's glyph wait
+//! ([`crate::spell::targeting::glyph`]). Not built: the
+//! bound-tradeable, refund and trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
 //! player byte, `+0xf47 & 4`, whose writer is untraced) publishes its default.
 
 use bevy::prelude::*;
@@ -341,6 +342,8 @@ pub(crate) struct PopupInputs<'w, 's> {
     falling: Option<Res<'w, crate::player::Falling>>,
     units: Query<'w, 's, (&'static crate::net::Guid, &'static ObjectStore)>,
     refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
+    /// `PlaceGlyphInSocket`'s forward to the cast path.
+    placements: Option<ResMut<'w, crate::spell::targeting::glyph::GlyphPlacements>>,
     /// The vault and its open banker, for the tab purchase and deposit.
     bank: (
         Option<Res<'w, crate::ui_guild_bank::GuildBank>>,
@@ -367,6 +370,7 @@ pub(crate) fn drive(
     let PopupInputs {
         packets,
         refer,
+        mut placements,
         falling,
         units,
         progress,
@@ -470,6 +474,13 @@ pub(crate) fn drive(
         })
     };
     for request in script.take_wrath_popup_requests() {
+        // `PlaceGlyphInSocket(socket)`: the cast path checks and commits the glyph wait.
+        if let WrathPopupRequest::PlaceGlyphInSocket { socket } = request {
+            if let Some(p) = placements.as_mut() {
+                p.0.push(socket.saturating_sub(1));
+            }
+            continue;
+        }
         if request == WrathPopupRequest::BuyGuildBankTab {
             let money = store.and_then(|s| s.0.player_money()).unwrap_or(0);
             match buy_tab(banker, purchase, u64::from(money)) {

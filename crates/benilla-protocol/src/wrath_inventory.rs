@@ -455,20 +455,21 @@ const TARGET_FLAG_GAMEOBJECT: u32 = 0x0800;
 
 /// `CMSG_USE_ITEM` (0x00ab): bag, slot, cast count, spell, item GUID, glyph index, cast flags,
 /// then `SpellCastTargets::Read`'s block (u32 mask in this build). AC refuses a GUID that is not
-/// the item at the position and a spell it does not know. Glyph index and cast flags are 0: no
-/// glyph or trajectory data is claimed.
+/// the item at the position and a spell it does not know. The glyph index is the socket a
+/// glyph's cast names (0 for any other use); cast flags are 0, as no trajectory data is claimed.
 pub fn encode_use_item(
     cast_count: u8,
     bag: u8,
     slot: u8,
     spell_id: u32,
     item_guid: u64,
+    glyph_index: u32,
     target: &UseItemTarget,
 ) -> (u32, Vec<u8>) {
     let mut body = vec![bag, slot, cast_count];
     body.extend(spell_id.to_le_bytes());
     body.extend(item_guid.to_le_bytes());
-    body.extend(0u32.to_le_bytes());
+    body.extend(glyph_index.to_le_bytes());
     body.push(0);
     let position = |at: &[f32; 3], body: &mut Vec<u8>| {
         body.push(0); // no transport: a packed zero GUID

@@ -2948,6 +2948,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             slot,
             spell_id,
             item_guid,
+            glyph_index,
             target,
             ..
         } => {
@@ -2955,7 +2956,13 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 .wrapping_add(1);
             benilla_protocol::wrath_inventory::encode_use_item(
-                count, bag_index, slot, spell_id, item_guid, &target,
+                count,
+                bag_index,
+                slot,
+                spell_id,
+                item_guid,
+                glyph_index,
+                &target,
             )
         }
         ClientCommand::CancelCast { spell_id } => {
@@ -3886,6 +3893,7 @@ mod tests {
             spell_index: 0,
             spell_id: 8690,
             item_guid: 0x4000_0000_0000_0001,
+            glyph_index: 0,
             target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
         };
         assert_eq!(route(&use_item()), WrathRoute::NativeSession);
