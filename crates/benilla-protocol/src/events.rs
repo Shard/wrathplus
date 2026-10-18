@@ -1219,6 +1219,8 @@ pub enum SessionEvent {
     WrathRunes { packet: crate::wrath_spell_control::RunePacket },
     /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
     WrathMovement { packet: crate::wrath_movement_misc::Packet },
+    /// Build 12340 vehicles and their passengers (`crate::wrath_vehicle`).
+    WrathVehicle(crate::wrath_vehicle::VehicleEvent),
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:
     /// the count banked on `target`, 0 for none.
     ComboPoints { target: u64, points: u8 },

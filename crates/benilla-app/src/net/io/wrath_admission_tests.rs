@@ -317,6 +317,22 @@ fn every_wrath_writer_route_is_admitted() {
                 guid: Default::default(),
             },
         ),
+        (
+            "NotActiveMover",
+            ClientCommand::NotActiveMover {
+                guid: Default::default(),
+                flags: 0,
+                pos: [0.0; 3],
+                orientation: 0.0,
+                fall_time: 0,
+            },
+        ),
+        (
+            "NativeVehicleControl",
+            ClientCommand::NativeVehicleControl(
+                benilla_protocol::wrath_authority::VehicleControl::Dismiss,
+            ),
+        ),
         ("Logout", ClientCommand::Logout),
         ("ForceLogout", ClientCommand::ForceLogout),
         ("LogoutCancel", ClientCommand::LogoutCancel),
@@ -840,7 +856,6 @@ fn every_wrath_writer_route_is_admitted() {
     let disabled = [
         "BattlefieldStatusRequest",
         "ForceSpeedAck",
-        "NotActiveMover",
         "WorldportAck",
         "MoveModeAck",
         "KnockBackAck",

@@ -68,6 +68,7 @@ fn on_durability_damage_death(In(ev): In<SessionEvent>, mut log: ResMut<crate::u
 fn on_move_mode(
     In(ev): In<SessionEvent>,
     self_guid: Res<SelfGuid>,
+    player: Option<Res<crate::player::Player>>,
     mut death_net: ResMut<DeathNet>,
     mut out: MessageWriter<MoveModeMessage>,
 ) {
@@ -84,6 +85,7 @@ fn on_move_mode(
             mode,
             apply,
             &self_guid,
+            player.as_ref().and_then(|p| p.foreign_mover),
             &mut death_net,
             &mut out,
         );
@@ -206,22 +208,25 @@ fn durability_damage_death(log: &mut crate::ui_chat::ChatLog) {
     });
 }
 
-/// The acked movement modes, root, water-walk, feather-fall and hover, addressed only to our own
-/// mover and applied by the controller ([`crate::player::wire_in`]); water-walk is also mirrored
-/// into [`DeathNet`] as a ghost cue.
+/// The acked movement modes, root, water-walk, feather-fall, hover and can-fly, addressed to our own
+/// body or to the unit we drive (`driven`, a vehicle or a possessed unit) and applied by the
+/// controller ([`crate::player::wire_in`]); our own water-walk is also mirrored into [`DeathNet`]
+/// as a ghost cue.
+#[allow(clippy::too_many_arguments)]
 fn move_mode(
     guid: u64,
     counter: u32,
     mode: MoveMode,
     apply: bool,
     self_guid: &SelfGuid,
+    driven: Option<u64>,
     death_net: &mut DeathNet,
     out: &mut MessageWriter<MoveModeMessage>,
 ) {
-    if self_guid.0 != Some(guid) {
+    if self_guid.0 != Some(guid) && driven != Some(guid) {
         return;
     }
-    if mode == MoveMode::WaterWalk {
+    if mode == MoveMode::WaterWalk && self_guid.0 == Some(guid) {
         death_net.water_walk = apply;
     }
     out.write(MoveModeMessage {
