@@ -48,14 +48,50 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
     CATALOG.get(usize::from(id))
 }
 
-/// Build 12340 rows the 1.12 table lacks, read off `Wow.exe`'s message table (`0xac8af0`, 20-byte
-/// rows): the id is the build-12340 index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`,
-/// which is the 1.12 table's 10.
+/// Build 12340 rows the 1.12 table lacks that the client names, read off `Wow.exe`'s message table
+/// (`0xac8af0`, 20-byte rows: key, kind, sound, type tag, chat type): the id is the build-12340
+/// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
+/// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 3] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 38] = [
+    MessageRecord { id: 0x22d, key: "ERR_SYSTEM_DISABLED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x231, key: "ERR_USER_SQUELCHED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x280, key: "ERR_PET_LEARN_ABILITY_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x281, key: "ERR_PET_SPELL_UNLEARNED_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x28c, key: "ERR_PARTY_LFG_BOOT_VOTE_SUCCEEDED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x28d, key: "ERR_PARTY_LFG_BOOT_VOTE_FAILED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x296, key: "ERR_NOT_WHILE_FALLING", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2a8, key: "ERR_LFG_ROLE_CHECK_FAILED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2a9, key: "ERR_LFG_ROLE_CHECK_FAILED_TIMEOUT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2aa, key: "ERR_LFG_ROLE_CHECK_FAILED_NOT_VIABLE", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2ab, key: "ERR_LFG_GROUP_FULL", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2ac, key: "ERR_LFG_NO_LFG_OBJECT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2ad, key: "ERR_LFG_NO_SLOTS_PLAYER", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2ae, key: "ERR_LFG_NO_SLOTS_PARTY", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2af, key: "ERR_LFG_MISMATCHED_SLOTS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b0, key: "ERR_LFG_PARTY_PLAYERS_FROM_DIFFERENT_REALMS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b1, key: "ERR_LFG_MEMBERS_NOT_PRESENT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b2, key: "ERR_LFG_GET_INFO_TIMEOUT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b3, key: "ERR_LFG_INVALID_SLOT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b4, key: "ERR_LFG_DESERTER_PLAYER", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b5, key: "ERR_LFG_DESERTER_PARTY", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b6, key: "ERR_LFG_RANDOM_COOLDOWN_PLAYER", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b7, key: "ERR_LFG_RANDOM_COOLDOWN_PARTY", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b8, key: "ERR_LFG_TOO_MANY_MEMBERS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2b9, key: "ERR_LFG_PROPOSAL_FAILED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2ba, key: "ERR_LFG_PROPOSAL_DECLINED_SELF", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2bb, key: "ERR_LFG_PROPOSAL_DECLINED_PARTY", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2bc, key: "ERR_LFG_NO_SLOTS_SELECTED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2bd, key: "ERR_LFG_NO_ROLES_SELECTED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2be, key: "ERR_LFG_ROLE_CHECK_INITIATED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2bf, key: "ERR_LFG_PLAYER_DECLINED_ROLE_CHECK", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c0, key: "ERR_LFG_JOINED_QUEUE", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c1, key: "ERR_LFG_JOINED_LIST", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c2, key: "ERR_LFG_LEFT_QUEUE", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c3, key: "ERR_LFG_LEFT_LIST", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c4, key: "ERR_LFG_ROLE_CHECK_ABORTED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c6, key: "ERR_LFG_CANT_USE_DUNGEONS", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
 ];
 
 /// The record for a `GlobalStrings` key; keys are unique (the generator refuses a duplicate),
