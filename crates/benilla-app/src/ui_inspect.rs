@@ -7,10 +7,17 @@
 //! latches the token; the window paints without waiting for `SMSG_INSPECT`, a bare guid echo.
 //! `UNIT_INVENTORY_CHANGED` and `UNIT_LEVEL` fire for the inspected token on change, a first
 //! resolve included (`InspectPaperDollFrame.lua:2-5`, `82`).
+//!
+//! Build 12340's `SMSG_INSPECT_TALENT` reply ([`crate::ui_inspect_wrath`]) carries the gear in
+//! full: for its guid it replaces the visible-item slots, and its talents push with
+//! `INSPECT_TALENT_READY` on every reply.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use benilla_ui::script::{InspectView, InvSlotView, InventorySlots, ScriptValue, UiScript};
+use benilla_ui::script::{
+    InspectView, InvSlotView, InventorySlots, ScriptValue, UiScript, WrathInspectTalents,
+};
 
 use crate::entities::ItemDisplays;
 use crate::items::Items;
@@ -23,6 +30,10 @@ use crate::ui_script::UiFeed;
 #[derive(Resource, Default)]
 pub(crate) struct InspectTarget {
     pub(crate) token: Option<String>,
+    /// The newest native reply, for its guid alone.
+    reply: Option<crate::ui_inspect_wrath::Reply>,
+    /// Counts replies, so each one fires `INSPECT_TALENT_READY` once per VM.
+    replies: u32,
 }
 
 /// The last view pushed and level seen, per VM ([`crate::ui_script::VmMemo`]), so a `/reload`'s
@@ -37,15 +48,43 @@ struct InspectFeedState {
 struct InspectFeedMemo {
     last: Option<InspectView>,
     last_level: Option<u32>,
+    /// The reply count and talents last pushed.
+    talents: Option<(u32, WrathInspectTalents)>,
+}
+
+/// The native reply's inputs: its FIFO, the talent and spell catalogs, creator names and our own
+/// level for the links.
+#[derive(SystemParam)]
+struct WrathInspectInputs<'w, 's> {
+    packets: Option<ResMut<'w, crate::net::wrath_inspect_capture::NativeInspectPackets>>,
+    talents: Option<Res<'w, crate::ui_talent::Talents>>,
+    spells: Option<Res<'w, crate::ui_action::Spells>>,
+    names: Res<'w, crate::names::NameCache>,
+    me: Query<'w, 's, &'static ObjectStore, With<crate::net::SelfPlayer>>,
 }
 
 pub(crate) struct InspectUiPlugin;
 
 impl Plugin for InspectUiPlugin {
     fn build(&self, app: &mut App) {
+        use crate::net::NetHandlerApp;
         app.init_resource::<InspectTarget>()
             .init_resource::<InspectFeedState>()
-            .add_systems(Update, feed_inspect.in_set(UiFeed));
+            .add_systems(Update, feed_inspect.in_set(UiFeed))
+            .net_handler(
+                benilla_protocol::SessionEventKind::Disconnected,
+                drop_native_reply,
+            );
+    }
+}
+
+/// World exit: a held native reply belongs to the old session.
+fn drop_native_reply(
+    In(event): In<benilla_protocol::SessionEvent>,
+    mut target: ResMut<InspectTarget>,
+) {
+    if matches!(event, benilla_protocol::SessionEvent::Disconnected { .. }) {
+        target.reply = None;
     }
 }
 
@@ -121,10 +160,19 @@ fn feed_inspect(
     stores: Query<&ObjectStore>,
     selection: Res<crate::target::Selection>,
     group: Res<crate::ui_party::GroupState>,
+    mut wrath: WrathInspectInputs,
 ) {
     let Some(mut script) = script else {
         return;
     };
+    if let Some(reply) = wrath
+        .packets
+        .as_deref_mut()
+        .and_then(|p| crate::ui_inspect_wrath::drain_latest(&mut p.0))
+    {
+        target.reply = Some(reply);
+        target.replies = target.replies.wrapping_add(1);
+    }
     // A `/reload` keeps the latched token, and the fresh memo re-pushes the view.
     let memo = feed.vm.get(&script);
 
@@ -144,6 +192,7 @@ fn feed_inspect(
     // `ClearInspectPlayer()`, from `InspectFrame_OnHide`: the resolve stops and the booth empties.
     if script.take_inspect_clear() {
         target.token = None;
+        target.reply = None;
     }
 
     // Re-resolve the latched token every frame, so the window follows a retarget as the
@@ -161,6 +210,9 @@ fn feed_inspect(
             memo.last = None;
             memo.last_level = None;
         }
+        if memo.talents.take().is_some() {
+            script.set_wrath_inspect_talents(None);
+        }
         booth.unit = None;
         return;
     };
@@ -172,19 +224,41 @@ fn feed_inspect(
     let Ok(store) = stores.get(entity) else {
         return;
     };
+    let reply = target.reply.as_ref().filter(|r| r.guid == guid);
+    let rolls = || crate::items::RollCatalogs {
+        enchants: catalogs.0.as_deref(),
+        props: catalogs.1.as_deref(),
+    };
+    let link_level = wrath
+        .me
+        .single()
+        .ok()
+        .and_then(|me| me.0.unit_level())
+        .unwrap_or(0);
     let mut slots: InventorySlots = Default::default();
     for slot in 1..=19u8 {
-        slots[usize::from(slot)] = inspect_slot_view(
-            store,
-            &items,
-            icons.as_deref(),
-            crate::items::RollCatalogs {
-                enchants: catalogs.0.as_deref(),
-                props: catalogs.1.as_deref(),
-            },
-            &commands,
-            slot - 1,
-        );
+        slots[usize::from(slot)] = match reply {
+            // The reply's slot mask is the whole doll: an absent slot is empty.
+            Some(reply) => reply.items.iter().find(|i| i.slot == slot - 1).map(|item| {
+                crate::ui_inspect_wrath::slot_view(
+                    item,
+                    &items,
+                    icons.as_deref(),
+                    rolls(),
+                    &commands,
+                    &wrath.names,
+                    link_level,
+                )
+            }),
+            None => inspect_slot_view(
+                store,
+                &items,
+                icons.as_deref(),
+                rolls(),
+                &commands,
+                slot - 1,
+            ),
+        };
     }
     let view = InspectView {
         unit: token.clone(),
@@ -205,4 +279,39 @@ fn feed_inspect(
         memo.last_level = level;
         script.fire_event("UNIT_LEVEL", vec![ScriptValue::Str(token)]);
     }
+
+    // Each reply's talents, once per VM; a later reply refires even when unchanged.
+    let Some(reply) = reply else {
+        if memo.talents.take().is_some() {
+            script.set_wrath_inspect_talents(None);
+        }
+        return;
+    };
+    if memo.talents.as_ref().map(|(n, _)| *n) == Some(target.replies) {
+        return;
+    }
+    let (Some(catalog), Some(spells)) = (wrath.talents.as_deref(), wrath.spells.as_deref()) else {
+        return;
+    };
+    let pushed = {
+        let get = |key: &str| {
+            script
+                .lua()
+                .globals()
+                .get::<String>(key)
+                .ok()
+                .filter(|t| !t.is_empty())
+        };
+        crate::ui_inspect_wrath::talents(
+            reply,
+            &catalog.catalog,
+            &spells.catalog,
+            store.0.unit_race().unwrap_or(0),
+            store.0.unit_class().unwrap_or(0),
+            &get,
+        )
+    };
+    script.set_wrath_inspect_talents(Some(pushed.clone()));
+    memo.talents = Some((target.replies, pushed));
+    script.fire_event("INSPECT_TALENT_READY", Vec::new());
 }

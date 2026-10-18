@@ -150,6 +150,7 @@ mod ui_gossip;
 mod ui_guild;
 mod ui_honor;
 mod ui_inspect;
+mod ui_inspect_wrath;
 mod ui_instance;
 mod ui_item_text;
 mod ui_items;

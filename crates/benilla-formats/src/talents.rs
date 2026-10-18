@@ -86,6 +86,15 @@ pub struct TalentCatalog {
 }
 
 impl TalentCatalog {
+    /// A catalog from rows, talents kept in the given order per tab; for fixtures.
+    pub fn from_rows(tabs: Vec<TalentTabInfo>, talents: Vec<Talent>) -> Self {
+        let mut by_tab: HashMap<u32, Vec<Talent>> = HashMap::new();
+        for t in talents {
+            by_tab.entry(t.tab).or_default().push(t);
+        }
+        Self { tabs, by_tab }
+    }
+
     /// A race and class's tabs (unit bytes, 1-based) in file order, as `0x4f2e50` filters them.
     pub fn tabs_for_class(&self, race: u8, class: u8) -> Vec<&TalentTabInfo> {
         if !(1..=32).contains(&class) || !(1..=32).contains(&race) {
