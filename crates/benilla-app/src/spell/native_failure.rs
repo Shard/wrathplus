@@ -32,7 +32,12 @@ fn receive(
     unit_casts: Option<ResMut<super::unit_cast::CastEdges>>,
     spells: Option<Res<crate::ui_action::Spells>>,
     mut errors: Option<ResMut<crate::ui_action::UiErrorKeys>>,
+    // `SPELL_CAST_FAILED` for the build-12340 combat log (`0x751ad0`).
+    native_log: Option<ResMut<crate::combat_log::native::NativeCombatLog>>,
 ) {
+    if let Some(mut log) = native_log {
+        log.record(&event);
+    }
     match event {
         SessionEvent::WrathSpellFailure(value) => {
             // The result ladder and the local extras (`0x809c70`), in `super::unit_cast`.

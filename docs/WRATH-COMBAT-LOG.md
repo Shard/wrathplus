@@ -83,9 +83,36 @@ rows, resisted and absorbed are the rows' sums, blocked the packet's, and the hi
 ## App producers (`crates/benilla-app/src/combat_log/native.rs`)
 
 The combat-log handlers record each packet; `feed` flags (`native_flags.rs`, `0x74dcb0`) and names
-the units and pushes into Native UI's store. Built: SWING_DAMAGE/MISSED, SPELL_DAMAGE,
-SPELL_PERIODIC_DAMAGE/HEAL/ENERGIZE/LEECH, SPELL_HEAL, SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_MISSED,
-SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED, PARTY_KILL, ENVIRONMENTAL_DAMAGE. Labelled:
-the swing miss type by AC victim state; the school as `1 << index`; a dispel's aura type by the
-victim's hostility; no focus unit; names nil while unknown. Not built yet: SPELL_CAST_*, the aura
-events, UNIT_DIED, the remaining effect logs.
+the units and pushes into Native UI's store. Every spell entry needs a named spell not hidden from
+the log (`Attributes & 0x180`, the gate each builder applies). Built:
+
+- Part 1: SWING_DAMAGE/MISSED, SPELL_DAMAGE, SPELL_PERIODIC_DAMAGE/HEAL/ENERGIZE/LEECH, SPELL_HEAL,
+  SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_MISSED, SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED,
+  PARTY_KILL, ENVIRONMENTAL_DAMAGE.
+- Casts: SPELL_CAST_START (`0x751920`, no destination), SPELL_CAST_SUCCESS (`0x7519e0`, the unit
+  target), SPELL_CAST_FAILED (`0x751ad0`, our own result; group `0x2` the reason's text).
+- Auras (`0x752710`, `0x752860`, `0x752ba0`), from the packet aura snapshots: SPELL_AURA_APPLIED,
+  SPELL_AURA_REMOVED (only while the unit lives), SPELL_AURA_APPLIED_DOSE/REMOVED_DOSE (a spell
+  with `StackAmount > 1`; the new count), SPELL_AURA_REFRESH; applied, removed and refresh skip
+  passive spells. Group `0x400` is `BUFF` for a zero byte (`0x74e290`).
+- Dispel and steal (`0x752930`, from the `0x27B`/`0x333` handler `0x6ce2b0`): the removed aura is
+  the extra spell, the per-aura wire byte the aura type; SPELL_STOLEN.
+- Execute log rows: SPELL_DRAIN (effect 8), SPELL_EXTRA_ATTACKS (`0x752520`), SPELL_INTERRUPT
+  (`0x7523d0`, the interrupted spell as the extra spell), SPELL_DURABILITY_DAMAGE(_ALL)
+  (`0x7525e0`/`0x752680`), SPELL_RESURRECT (`0x752340`), SPELL_SUMMON or SPELL_CREATE by the
+  destination guid's kind (`0x7522a0`).
+- UNIT_DIED (`0x752ed0`): a unit's health reaching 0 after a living reading.
+
+Labelled:
+- the swing miss type by AC victim state, and the school as `1 << index`;
+- no focus unit; names are nil while unknown;
+- the cast unit check (vtable `+0x148`) is skipped, and the failure text's `%s` is not filled;
+- the aura snapshot diff stands in for `0x72f5d0`: a unit's first snapshot logs nothing, a re-sent
+  unchanged slot reads as a refresh, and the `AttributesEx6 & 0x400` gate isn't applied;
+- the execute-log dispatcher isn't a defined function, so effects map by AzerothCore's effect ids;
+  a durability entry's item name is nil;
+- UNIT_DESTROYED (totems) and UNIT_DISSIPATES (creature type 13) aren't split from UNIT_DIED.
+
+Not built: SPELL_AURA_BROKEN(_SPELL) (`0x752a40`, opcode `0x14F`, which AzerothCore never sends),
+ENCHANT_APPLIED/REMOVED, SPELL_BUILDING_DAMAGE/HEAL, DAMAGE_SPLIT, DAMAGE_SHIELD_MISSED,
+SPELL_PERIODIC_MISSED/DRAIN, SPELL_LEECH, SPELL_CREATE for items.

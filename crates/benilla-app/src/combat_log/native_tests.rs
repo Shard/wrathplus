@@ -152,3 +152,300 @@ fn spell_entries_carry_the_native_suffix_groups() {
     assert_eq!(fall[0].suffix[0], V::Str("FALLING".into()));
     assert!(recorded(SessionEvent::CancelAutoRepeat).is_empty());
 }
+
+fn aura(slot: u8, spell_id: u32, stacks: u8, caster: Option<u64>, helpful: bool) -> NativeAura {
+    NativeAura {
+        slot,
+        spell_id,
+        flags: if helpful { 0x10 } else { 0x80 },
+        level: 80,
+        stacks,
+        caster_guid: caster,
+        max_duration_ms: None,
+        remaining_ms: None,
+    }
+}
+
+fn snapshot(guid: u64, auras: Vec<NativeAura>, updated: &[u8]) -> SessionEvent {
+    SessionEvent::UnitAuras {
+        guid,
+        auras,
+        updated_slots: updated.to_vec(),
+    }
+}
+
+/// `0x751920`/`0x7519e0`/`0x751ad0`: a start has no destination, a launch its unit target; our
+/// refused cast carries its `SPELL_FAILED_*` key for the feed to resolve; success is no failure.
+#[test]
+fn casts_log_start_success_and_our_failures() {
+    let start = recorded(SessionEvent::SpellStart {
+        caster: 1,
+        spell_id: 133,
+        cast_flags: 0,
+        cast_time_ms: 1500,
+        target: Some(2),
+        ammo_display_id: None,
+        cast_count: Some(1),
+    });
+    assert_eq!(
+        (start[0].event, start[0].source, start[0].dest),
+        (event::SPELL_CAST_START, 1, 0)
+    );
+    let go = recorded(SessionEvent::SpellGo {
+        caster: 1,
+        spell_id: 133,
+        cast_flags: 0,
+        hits: vec![2],
+        misses: vec![],
+        target: Some(2),
+        go_target: None,
+        dest: None,
+        ammo_display_id: None,
+        item_caster: None,
+        cast_count: Some(1),
+    });
+    assert_eq!((go[0].event, go[0].dest), (event::SPELL_CAST_SUCCESS, 2));
+    let failure = |reason| {
+        recorded(SessionEvent::WrathSpellFailure(
+            benilla_protocol::wrath_spell_failure::SpellFailure {
+                caster: 1,
+                cast_count: 1,
+                spell_id: 133,
+                reason,
+            },
+        ))
+    };
+    let failed = failure(0x43);
+    assert_eq!(
+        (failed[0].event, failed[0].fill, failed[0].suffix.clone()),
+        (
+            event::SPELL_CAST_FAILED,
+            Fill::FailedKey,
+            vec![V::Str("SPELL_FAILED_NOT_READY".into())]
+        )
+    );
+    assert!(failure(0).is_empty());
+}
+
+/// The snapshot diff: a unit's first snapshot logs nothing; then a new slot applies, a stack
+/// change doses, a re-sent unchanged slot refreshes, a vacated slot (even one the packet does not
+/// name) is removed and a swapped spell is removed then applied.
+#[test]
+fn aura_snapshots_diff_into_applied_dose_refresh_and_removed() {
+    let mut log = NativeCombatLog::default();
+    log.record(&snapshot(
+        9,
+        vec![aura(0, 100, 1, Some(1), true), aura(1, 200, 0, None, false)],
+        &[0, 1],
+    ));
+    assert!(log.0.is_empty(), "first sight");
+    log.record(&snapshot(
+        9,
+        vec![
+            aura(0, 100, 3, Some(1), true),
+            aura(2, 300, 0, Some(4), false),
+            aura(3, 400, 0, None, true),
+        ],
+        &[0, 2, 3],
+    ));
+    log.record(&snapshot(
+        9,
+        vec![
+            aura(0, 100, 3, Some(1), true),
+            aura(2, 500, 0, Some(4), false),
+            aura(3, 400, 0, None, true),
+        ],
+        &[0, 2],
+    ));
+    let got: Vec<_> = log
+        .0
+        .iter()
+        .map(|p| (p.event, p.source, p.spell, p.suffix.clone(), p.aura))
+        .collect();
+    let buff = || V::Str("BUFF".into());
+    let debuff = || V::Str("DEBUFF".into());
+    assert_eq!(
+        got,
+        [
+            (
+                event::SPELL_AURA_APPLIED_DOSE,
+                1,
+                Some(100),
+                vec![buff(), V::Int(3)],
+                Some(AuraGate::Dose)
+            ),
+            (
+                event::SPELL_AURA_REMOVED,
+                9,
+                Some(200),
+                vec![debuff()],
+                Some(AuraGate::Removed)
+            ),
+            (
+                event::SPELL_AURA_APPLIED,
+                4,
+                Some(300),
+                vec![debuff()],
+                Some(AuraGate::Shown)
+            ),
+            (
+                event::SPELL_AURA_APPLIED,
+                9,
+                Some(400),
+                vec![buff()],
+                Some(AuraGate::Shown)
+            ),
+            (
+                event::SPELL_AURA_REFRESH,
+                1,
+                Some(100),
+                vec![buff()],
+                Some(AuraGate::Shown)
+            ),
+            (
+                event::SPELL_AURA_REMOVED,
+                4,
+                Some(300),
+                vec![debuff()],
+                Some(AuraGate::Removed)
+            ),
+            (
+                event::SPELL_AURA_APPLIED,
+                4,
+                Some(500),
+                vec![debuff()],
+                Some(AuraGate::Shown)
+            ),
+        ]
+    );
+    // A unit leaving view forgets its snapshot: its next one is a first sight again.
+    log.0.clear();
+    log.record(&SessionEvent::ObjectsRemoved(vec![9]));
+    log.record(&snapshot(9, vec![], &[]));
+    assert!(log.0.is_empty());
+}
+
+/// Execute rows by effect; the dispel byte is the aura type, and a steal logs `SPELL_STOLEN`.
+#[test]
+fn execute_rows_and_dispels_take_their_native_events() {
+    const TOTEM: u64 = 0xf130_0000_0000_0005;
+    const FLAG: u64 = 0xf110_0000_0000_0006;
+    let rows = recorded(SessionEvent::SpellLogExecute(SpellLogExecute {
+        caster: 1,
+        spell_id: 77,
+        effects: vec![
+            (
+                68,
+                vec![ExecuteLog::InterruptCast {
+                    target: 2,
+                    spell_id: 116,
+                }],
+            ),
+            (
+                19,
+                vec![ExecuteLog::ExtraAttacks {
+                    target: 1,
+                    count: 2,
+                }],
+            ),
+            (
+                111,
+                vec![
+                    ExecuteLog::DurabilityDamage {
+                        target: 2,
+                        item_entry: -1,
+                        slot: -1,
+                    },
+                    ExecuteLog::DurabilityDamage {
+                        target: 2,
+                        item_entry: 4500,
+                        slot: 3,
+                    },
+                ],
+            ),
+            (28, vec![ExecuteLog::Target { target: TOTEM }]),
+            (83, vec![ExecuteLog::Target { target: FLAG }]),
+            (113, vec![ExecuteLog::Target { target: 2 }]),
+            (24, vec![ExecuteLog::CreateItem { item_entry: 9 }]),
+        ],
+    }));
+    assert_eq!(
+        rows.iter()
+            .map(|p| (p.event, p.dest, p.fill, p.suffix.clone()))
+            .collect::<Vec<_>>(),
+        [
+            (
+                event::SPELL_INTERRUPT,
+                2,
+                Fill::ExtraSpell,
+                vec![V::Int(116)]
+            ),
+            (event::SPELL_EXTRA_ATTACKS, 1, Fill::None, vec![V::Int(2)]),
+            (event::SPELL_DURABILITY_DAMAGE_ALL, 2, Fill::None, vec![]),
+            (
+                event::SPELL_DURABILITY_DAMAGE,
+                2,
+                Fill::Item,
+                vec![V::Int(4500)]
+            ),
+            (event::SPELL_SUMMON, TOTEM, Fill::None, vec![]),
+            (event::SPELL_CREATE, FLAG, Fill::None, vec![]),
+            (event::SPELL_RESURRECT, 2, Fill::None, vec![]),
+        ]
+    );
+    let log = SpellDispelLog {
+        victim: 2,
+        caster: 1,
+        spell_id: 527,
+        flag: 0,
+        auras: vec![
+            benilla_protocol::messages::DispelledAura {
+                spell_id: 589,
+                flag: 1,
+            },
+            benilla_protocol::messages::DispelledAura {
+                spell_id: 17,
+                flag: 0,
+            },
+        ],
+    };
+    let dispels = recorded(SessionEvent::SpellDispelLog(log.clone()));
+    assert_eq!(
+        dispels.iter().map(|p| p.suffix.clone()).collect::<Vec<_>>(),
+        [
+            vec![V::Int(589), V::Str("DEBUFF".into())],
+            vec![V::Int(17), V::Str("BUFF".into())]
+        ]
+    );
+    let stolen = recorded(SessionEvent::WrathSpellLog {
+        packet: benilla_protocol::wrath_logs::Packet::SpellSteal(log),
+    });
+    assert!(stolen
+        .iter()
+        .all(|p| p.event == event::SPELL_STOLEN && p.fill == Fill::ExtraSpell));
+}
+
+/// `UNIT_DIED`: health falling to 0 after a living reading; a unit first seen dead logs nothing.
+#[test]
+fn a_unit_dies_when_its_health_falls_to_zero() {
+    use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+    let unit = |health: u32| {
+        crate::net::ObjectStore(ObjectFields::from_field_slots(
+            FieldLayout::Wrath12340,
+            &[(Field::ObjectType, 0, 9), (Field::UnitHealth, 0, health)],
+        ))
+    };
+    let (alive, dead) = (unit(40), unit(0));
+    let mut health = HashMap::new();
+    let mut log = NativeCombatLog::default();
+    deaths([(5, &dead), (6, &alive)], &mut health, &mut log);
+    assert!(log.0.is_empty());
+    deaths([(6, &dead), (5, &dead)], &mut health, &mut log);
+    assert_eq!(
+        log.0
+            .iter()
+            .map(|p| (p.event, p.source, p.dest))
+            .collect::<Vec<_>>(),
+        [(event::UNIT_DIED, 0, 6)]
+    );
+}
