@@ -56,6 +56,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
 #[cfg(test)]
@@ -173,6 +174,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
         wrath_threat::register(app);
@@ -955,6 +957,10 @@ pub(crate) enum MoveKind {
     StopAscend,
     StartDescend,
     SetFly,
+    /// The pitch keys while swimming or flying (`0x6ef860` events 0xe/0xf/0x10).
+    StartPitchUp,
+    StartPitchDown,
+    StopPitch,
     /// The walk/run toggle: sent from the toggle handler (`ToggleRun 0x513d50` to `0x617de0`),
     /// not the move broadcaster, so it goes out standing still (`0x61a99d` gates the latter).
     SetWalkMode,
@@ -985,6 +991,9 @@ impl MoveKind {
             MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
             MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
             MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
+            MoveKind::StartPitchUp => wrath_ground::MSG_MOVE_START_PITCH_UP as u16,
+            MoveKind::StartPitchDown => wrath_ground::MSG_MOVE_START_PITCH_DOWN as u16,
+            MoveKind::StopPitch => wrath_ground::MSG_MOVE_STOP_PITCH as u16,
             MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
             MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
             MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
@@ -1166,6 +1175,9 @@ pub(crate) enum ClientCommand {
         orientation: f32,
         fall_time: u32,
     },
+    /// Build 12340: dismiss the vehicle we drive, or change seats on it. The writer adds the
+    /// vehicle's guid and halted pose.
+    NativeVehicleControl(benilla_protocol::wrath_authority::VehicleControl),
     /// `CMSG_FAR_SIGHT`: `true` on attach, `false` on release; neither names an object.
     FarSight {
         engage: bool,

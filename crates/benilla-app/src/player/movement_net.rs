@@ -80,7 +80,9 @@ const OUTBOUND_FLAG_MASK: u32 = move_flags::FORWARD
     | move_flags::CAN_FLY
     | move_flags::FLYING
     | move_flags::ASCENDING
-    | move_flags::DESCENDING;
+    | move_flags::DESCENDING
+    | move_flags::PITCH_UP
+    | move_flags::PITCH_DOWN;
 
 /// The bits under which the position changes every frame and the move stream carries it; the
 /// position reconcile runs only with none set. Turning is absent: a turn in place moves nothing.
@@ -310,6 +312,20 @@ pub(super) fn stream_self_movement_for_dialect(
     {
         send_move!(MoveKind::StopAscend);
     }
+    // The pitch keys while swimming or flying (events 0xe/0xf/0x10): `START_PITCH_UP` (0xbf),
+    // `START_PITCH_DOWN` (0xc0), and `STOP_PITCH` (0xc1) for either released in the medium. Leaving
+    // the medium clears them with its own edge.
+    const PITCH_KEYS: u32 = move_flags::PITCH_UP | move_flags::PITCH_DOWN;
+    if added & move_flags::PITCH_UP != 0 {
+        send_move!(MoveKind::StartPitchUp);
+    } else if added & move_flags::PITCH_DOWN != 0 {
+        send_move!(MoveKind::StartPitchDown);
+    } else if removed & PITCH_KEYS != 0
+        && wire_flags & PITCH_KEYS == 0
+        && wire_flags & (move_flags::SWIMMING | move_flags::FLYING) != 0
+    {
+        send_move!(MoveKind::StopPitch);
+    }
     // `START_SWIM` (0xca) and `STOP_SWIM` (0xcb) go out the frame `SWIMMING` flips, enqueued by
     // the swim decision `0x6030c0`; airborne and swimming never overlap, so the arc cannot race.
     if added & move_flags::SWIMMING != 0 {
@@ -399,7 +415,8 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
         & !(move_flags::FALLING
             | move_flags::FALLING_FAR
             | move_flags::ON_TRANSPORT
-            | move_flags::FLYING);
+            | move_flags::FLYING
+            | move_flags::ROOT);
     if flags & move_flags::FALLING != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_FALLING;
     }
@@ -409,6 +426,11 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     // The shared ON_TRANSPORT (`0x0200_0000`) is Wrath FLYING; Wrath ON_TRANSPORT is `0x200`.
     if flags & move_flags::ON_TRANSPORT != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT;
+    }
+    // The shared ROOT (`0x1000`) is Wrath FALLING; Wrath ROOT is `0x800` (the writer sets it from the
+    // root orders in any case).
+    if flags & move_flags::ROOT != 0 {
+        wrath |= benilla_protocol::wrath_ground::MOVE_ROOT;
     }
     // ...and the controller's own FLYING bit is Wrath FLYING. CAN_FLY, ASCENDING and DESCENDING
     // are already the Wrath bits.

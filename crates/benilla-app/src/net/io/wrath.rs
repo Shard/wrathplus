@@ -508,7 +508,9 @@ fn run(
                             return Err(error).context("Wrath SMSG_MOVE_UNSET_CAN_FLY");
                         }
                     };
-                    authority.raise_unset_barrier(order)?;
+                    if !authority.raise_unset_barrier(order)? {
+                        continue;
+                    }
                     // The controller lands a flier and drops the grant (`0x6ef860` event 0x30).
                     send(
                         events,
@@ -537,7 +539,19 @@ fn run(
                     };
                     // The reader raises the barrier before enqueue, so no later app movement can
                     // overtake receipt of this server authority order.
-                    authority.raise_root_barrier(order, rooted)?;
+                    if !authority.raise_root_barrier(order, rooted)? {
+                        continue;
+                    }
+                    // The controller stops translating (it may still turn), as a 1.12 root does.
+                    send(
+                        events,
+                        SessionEvent::MoveMode {
+                            guid: order.mover_guid,
+                            counter: order.counter,
+                            mode: benilla_protocol::messages::MoveMode::Root,
+                            apply: rooted,
+                        },
+                    )?;
                     control
                         .send(WrathWriterControl::Internal {
                             epoch,
@@ -554,7 +568,9 @@ fn run(
                         }
                     };
                     // Barrier first, as for root: no later app movement may overtake the order.
-                    authority.raise_mover_barrier(order)?;
+                    if !authority.raise_mover_barrier(order)? {
+                        continue;
+                    }
                     if let Some(event) = mover_order_event(&order) {
                         send(events, event)?;
                     }
@@ -570,6 +586,18 @@ fn run(
                 }
                 _ => {
                     reject_unsupported_movement(&authority, packet.opcode)?;
+                    // A spline onto or off a vehicle seat (`MoveSplineInit::Launch`).
+                    let seated = match packet.opcode {
+                        0x00dd | 0x02ae => benilla_protocol::wrath_vehicle::monster_move_seat(
+                            &packet.body,
+                            packet.opcode == 0x02ae,
+                        )
+                        .and_then(|(mover, seat)| authority.observe_seat(mover, seat)),
+                        _ => None,
+                    };
+                    if let Some(change) = seated {
+                        send(events, SessionEvent::WrathVehicle(change))?;
+                    }
                     dispatch_packet(
                         events,
                         control,
@@ -621,6 +649,11 @@ fn dispatch_packet(
         if let SessionEvent::UnitMove { guid, .. } = &event {
             let raw = benilla_protocol::wrath_gameplay::OutboundMovement::from_bytes(&packet.body)?;
             authority.observe_server_pose(*guid, &raw.movement)?;
+            let seat = movement_seat(&raw.movement);
+            if let Some(change) = authority.observe_seat(*guid, seat) {
+                send(events, event)?;
+                return send(events, SessionEvent::WrathVehicle(change));
+            }
         }
         return send(events, event);
     }
@@ -630,10 +663,14 @@ fn dispatch_packet(
             wrath_events,
             replies,
         }) => {
+            let mut vehicle_events = Vec::new();
             for event in &wrath_events {
+                authority.observe_vehicles(event, &mut vehicle_events);
                 if let WrathEvent::Object(object) = event {
                     if let ObjectUpdate::Create { guid, movement, .. } = object.as_ref() {
-                        if movement.update_flags & UPDATE_FLAG_SELF != 0 {
+                        if movement.update_flags & UPDATE_FLAG_SELF == 0 {
+                            authority.observe_unit_create(*guid, &movement.position);
+                        } else {
                             authority.observe_self_create(*guid, &movement.position)?;
                             control
                                 .send(WrathWriterControl::Internal {
@@ -659,6 +696,9 @@ fn dispatch_packet(
                     bevy::log::info!("net(wrath) RECV {event:?}");
                 }
                 send(events, event)?;
+            }
+            for event in vehicle_events {
+                send(events, SessionEvent::WrathVehicle(event))?;
             }
             for reply in replies {
                 control
@@ -779,6 +819,72 @@ struct MovementAuthorityState {
     transfer_ack: Option<benilla_protocol::wrath_transfer::Token>,
     transfer_waiting: bool,
     transfer_transport: bool,
+    /// The unit the server lets us drive (AzerothCore `m_mover`): our own guid until
+    /// `SMSG_CLIENT_CONTROL_UPDATE` hands us a vehicle or a possessed unit. `ground_pose` and
+    /// `rooted` are this mover's.
+    mover: u64,
+    /// The last known pose and root of every other unit we may come to drive or have driven: our
+    /// own body while we drive another, and each unit created with a living movement block.
+    parked: std::collections::HashMap<u64, ParkedMover>,
+    /// Units seen as vehicles and every passenger's seat, for the vehicle feed's change events.
+    vehicles: std::collections::HashSet<u64>,
+    riders: std::collections::HashMap<u64, (u64, i8)>,
+}
+
+/// A unit's pose and root while it is not the active mover.
+#[derive(Debug, Clone, Copy, Default)]
+struct ParkedMover {
+    pose: Option<OnFootPose>,
+    rooted: bool,
+}
+
+impl MovementAuthorityState {
+    /// Whether an order for `guid` has a pose to acknowledge from: the active mover, or a unit we
+    /// parked (our own body while we drive another).
+    fn drives_or_parked(&self, guid: u64) -> bool {
+        guid == self.mover || self.parked.contains_key(&guid)
+    }
+
+    fn pose_of(&self, guid: u64) -> Option<OnFootPose> {
+        if guid == self.mover {
+            self.ground_pose
+        } else {
+            self.parked.get(&guid).and_then(|p| p.pose)
+        }
+    }
+
+    fn set_pose_of(&mut self, guid: u64, pose: OnFootPose) {
+        if guid == self.mover {
+            self.ground_pose = Some(pose);
+        } else {
+            self.parked.entry(guid).or_default().pose = Some(pose);
+        }
+    }
+
+    fn set_rooted_of(&mut self, guid: u64, rooted: bool) {
+        if guid == self.mover {
+            self.rooted = rooted;
+        } else {
+            self.parked.entry(guid).or_default().rooted = rooted;
+        }
+    }
+
+    /// Hand the active mover to `to` (AzerothCore `Player::SetMover`): park the current one with
+    /// its pose and root, and take `to`'s.
+    fn switch_mover(&mut self, to: u64) {
+        if to == self.mover {
+            return;
+        }
+        let parked = ParkedMover {
+            pose: self.ground_pose,
+            rooted: self.rooted,
+        };
+        self.parked.insert(self.mover, parked);
+        let taken = self.parked.remove(&to).unwrap_or_default();
+        self.ground_pose = taken.pose;
+        self.rooted = taken.rooted;
+        self.mover = to;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -816,6 +922,10 @@ impl MovementAuthority {
             transfer_ack: None,
             transfer_waiting: false,
             transfer_transport: false,
+            mover: self_guid,
+            parked: std::collections::HashMap::new(),
+            vehicles: std::collections::HashSet::new(),
+            riders: std::collections::HashMap::new(),
         };
         MovementAuthorityHandle {
             shared: Arc::clone(self),
@@ -840,20 +950,12 @@ impl MovementAuthorityHandle {
             bail!("Wrath self create named foreign mover {guid:#018x}");
         }
         let reported = match movement {
-            MovementPosition::Living(movement) => OnFootPose::from_movement(movement).or_else(|error| {
-                // A state the writer does not report (flight): stand at the world position, so an
-                // order ACK cannot rewind us; the controller holds unsupported movement anyway.
-                bevy::log::warn!(
-                    "net(wrath): self create in an unreported movement state ({error}); ACKs report the world position"
-                );
-                GroundPose::stationary(&movement.position).map(Into::into)
-            }),
+            MovementPosition::Living(movement) => Ok(living_pose(movement)),
             MovementPosition::Stationary(position) => GroundPose::stationary(position).map(Into::into),
             _ => Err(wrath_authority::AuthorityCodecError::UnsupportedGroundState),
         };
-        state.ground_pose = Some(
-            reported.context("Wrath self create pose")?,
-        );
+        let pose = reported.context("Wrath self create pose")?;
+        state.set_pose_of(self.self_guid, pose);
         state.self_created = true;
         // AzerothCore calls SetMover(this) before UpdateVisibilityForPlayer emits this player's
         // CREATE_OBJECT with UPDATEFLAG_SELF (Player.cpp:11816; Object.cpp:197). It does not send
@@ -866,6 +968,19 @@ impl MovementAuthorityHandle {
         Ok(())
     }
 
+    /// Another unit's create with a living movement block: its pose, should the server hand it to us
+    /// (a vehicle or a possessed unit) and order it before we report it.
+    fn observe_unit_create(&self, guid: u64, movement: &MovementPosition) {
+        let MovementPosition::Living(movement) = movement else {
+            return;
+        };
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid || guid == self.self_guid {
+            return;
+        }
+        state.set_pose_of(guid, living_pose(movement));
+    }
+
     fn observe_server_pose(
         &self,
         guid: u64,
@@ -874,8 +989,8 @@ impl MovementAuthorityHandle {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch
             || state.self_guid != self.self_guid
-            || guid != self.self_guid
             || !state.self_created
+            || !(guid == self.self_guid || state.drives_or_parked(guid))
         {
             return Ok(());
         }
@@ -886,30 +1001,139 @@ impl MovementAuthorityHandle {
         // A server-authored pose in a state the writer does not report (flight) keeps the last
         // reported pose rather than ending the session.
         match OnFootPose::from_movement(&movement) {
-            Ok(pose) => state.ground_pose = Some(pose),
-            Err(error) => bevy::log::debug!("net(wrath): self pose not representable ({error}); last pose kept"),
+            Ok(pose) => state.set_pose_of(guid, pose),
+            Err(error) => bevy::log::debug!("net(wrath): pose of {guid:#x} not representable ({error}); last pose kept"),
         }
         Ok(())
     }
 
+    /// `SMSG_CLIENT_CONTROL_UPDATE`. AzerothCore's `Player::SetClientControl` makes the unit our
+    /// mover when it allows movement (`SetMover`), so a grant for a vehicle or a possessed unit
+    /// hands it to us with the pose we last saw for it; a refusal for the active mover holds it.
     fn observe_control(&self, mover: u64, allow_move: bool) -> Result<()> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
             return Ok(());
         }
-        if mover != self.self_guid {
-            // A vehicle or possessed unit: we do not drive it, so our own movement stays held until
-            // control returns to our guid. Nothing was queued, so the authority state stays coherent.
-            bevy::log::warn!(
-                "net(wrath): control of non-player mover {mover:#018x} (allow {allow_move}) is not driven; our movement is held"
-            );
-            state.self_control = false;
-            state.control_decided = true;
-            return Ok(());
-        }
-        state.self_control = allow_move;
         state.control_decided = true;
+        if mover == state.mover {
+            state.self_control = allow_move;
+        } else if allow_move {
+            state.switch_mover(mover);
+            state.self_control = true;
+            if state.ground_pose.is_none() {
+                bevy::log::warn!(
+                    "net(wrath): control of {mover:#018x} granted before any pose of it; its orders wait for the first report"
+                );
+            }
+        } else {
+            // A refusal for a unit we do not drive changes nothing (`SetMover` runs only on allow).
+            bevy::log::debug!("net(wrath): control refusal for inactive mover {mover:#018x}");
+        }
         Ok(())
+    }
+
+    /// The vehicle we drive and its halted pose, for a dismiss or seat change: only while we drive a
+    /// unit other than our body with no order pending. The halted pose becomes the reported one.
+    fn with_vehicle_pose(
+        &self,
+        send: impl FnOnce(u64, OnFootPose) -> Result<()>,
+    ) -> Option<Result<()>> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch
+            || state.self_guid != self.self_guid
+            || state.mover == self.self_guid
+            || !state.self_control
+            || !state.pending_orders.is_empty()
+        {
+            return None;
+        }
+        let pose = state.ground_pose?.halted();
+        let result = send(state.mover, pose);
+        if result.is_ok() {
+            state.ground_pose = Some(pose);
+        }
+        Some(result)
+    }
+
+    /// Vehicles and seats from an object block: a create's `UPDATEFLAG_VEHICLE` id, any living
+    /// movement's transport seat, and units leaving the world.
+    fn observe_vehicles(
+        &self,
+        event: &WrathEvent,
+        out: &mut Vec<benilla_protocol::wrath_vehicle::VehicleEvent>,
+    ) {
+        use benilla_protocol::wrath_vehicle::VehicleEvent;
+        let gone = |guid: u64, out: &mut Vec<VehicleEvent>| {
+            let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+            if state.vehicles.remove(&guid) | state.riders.remove(&guid).is_some() {
+                out.push(VehicleEvent::Gone { unit: guid });
+            }
+        };
+        match event {
+            WrathEvent::Destroy { guid, .. } => gone(*guid, out),
+            WrathEvent::Object(object) => match object.as_ref() {
+                ObjectUpdate::OutOfRange(guids) => {
+                    for &guid in guids {
+                        gone(guid, out);
+                    }
+                }
+                ObjectUpdate::Create { guid, movement, .. } => {
+                    if let Some((vehicle_id, _)) = movement.vehicle {
+                        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+                        state.vehicles.insert(*guid);
+                        out.push(VehicleEvent::Kit {
+                            unit: *guid,
+                            vehicle_id,
+                        });
+                    }
+                    if let MovementPosition::Living(info) = &movement.position {
+                        out.extend(self.observe_seat(*guid, movement_seat(info)));
+                    }
+                }
+                ObjectUpdate::Movement { guid, movement } => {
+                    if let MovementPosition::Living(info) = &movement.position {
+                        out.extend(self.observe_seat(*guid, movement_seat(info)));
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
+    /// `passenger` is seen in `seat`: an event only when that changes.
+    fn observe_seat(
+        &self,
+        passenger: u64,
+        seat: Option<(u64, i8)>,
+    ) -> Option<benilla_protocol::wrath_vehicle::VehicleEvent> {
+        let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch || state.self_guid != self.self_guid {
+            return None;
+        }
+        let previous = match seat {
+            Some(seat) => state.riders.insert(passenger, seat),
+            None => state.riders.remove(&passenger),
+        };
+        (previous != seat).then_some(benilla_protocol::wrath_vehicle::VehicleEvent::Seat {
+            passenger,
+            seat,
+        })
+    }
+
+    /// The controller claims `guid` with `CMSG_SET_ACTIVE_MOVER`: only the mover the server handed
+    /// us. Root and pending orders do not hold the claim; the reference sends it at hand-over.
+    fn claim_mover(&self, guid: u64, send: impl FnOnce() -> Result<()>) -> Option<Result<()>> {
+        let state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.epoch != self.epoch
+            || state.self_guid != self.self_guid
+            || !state.self_created
+            || state.mover != guid
+        {
+            return None;
+        }
+        Some(send())
     }
 
     fn revoke(&self) {
@@ -959,13 +1183,27 @@ impl MovementAuthorityHandle {
         pose: GroundPose,
         send: impl FnOnce() -> Result<()>,
     ) -> Option<Result<()>> {
-        self.with_on_foot_send(pose.into(), send)
+        self.with_on_foot_send(self.self_guid, pose.into(), |_, _| send())
     }
 
-    fn with_on_foot_send(
+    #[cfg(test)]
+    fn with_self_send(
         &self,
         pose: OnFootPose,
         send: impl FnOnce() -> Result<()>,
+    ) -> Option<Result<()>> {
+        self.with_on_foot_send(self.self_guid, pose, |_, _| send())
+    }
+
+    /// One movement packet from the controller for `claimed`, the mover it last claimed: sent only
+    /// while that is the active mover, it is controllable and no order is pending. ROOT follows the
+    /// root orders, not the controller: a rooted mover reports it and may only turn (a moving packet
+    /// is dropped, AzerothCore would drop it too), and a free one never reports it.
+    fn with_on_foot_send(
+        &self,
+        claimed: u64,
+        pose: OnFootPose,
+        send: impl FnOnce(u64, OnFootPose) -> Result<()>,
     ) -> Option<Result<()>> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch
@@ -973,26 +1211,38 @@ impl MovementAuthorityHandle {
             || !state.self_created
             || !state.self_control
             || !state.pending_orders.is_empty()
-            || state.rooted
+            || state.mover != claimed
         {
             return None;
         }
-        let result = send();
+        let mut pose = pose;
+        if state.rooted {
+            if pose.flags & ROOTED_MOVING != 0 || pose.fall.is_some() {
+                return None;
+            }
+            pose.flags |= wrath_ground::MOVE_ROOT;
+        } else {
+            pose.flags &= !wrath_ground::MOVE_ROOT;
+        }
+        let result = send(claimed, pose);
         if result.is_ok() {
             state.ground_pose = Some(pose);
         }
         Some(result)
     }
 
-    fn raise_unset_barrier(&self, order: UnsetCanFlyOrder) -> Result<()> {
+    fn raise_unset_barrier(&self, order: UnsetCanFlyOrder) -> Result<bool> {
         self.raise_authority_order(PendingAuthorityOrder::UnsetCanFly(order))
     }
 
-    fn raise_root_barrier(&self, order: ForceRootOrder, rooted: bool) -> Result<()> {
+    fn raise_root_barrier(&self, order: ForceRootOrder, rooted: bool) -> Result<bool> {
         self.raise_authority_order(PendingAuthorityOrder::ForceRoot { order, rooted })
     }
 
-    fn raise_authority_order(&self, pending: PendingAuthorityOrder) -> Result<()> {
+    /// Queue an order behind the barrier. `Ok(false)`: it names a unit we neither drive nor parked,
+    /// whose ACK AzerothCore would refuse (`guid != m_mover`); it is logged and not queued, but its
+    /// counter still advances the session's.
+    fn raise_authority_order(&self, pending: PendingAuthorityOrder) -> Result<bool> {
         let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch || state.self_guid != self.self_guid {
             bail!("stale Wrath movement-authority order");
@@ -1005,14 +1255,7 @@ impl MovementAuthorityHandle {
                 counter: order.counter(),
             },
         };
-        if order.mover_guid != self.self_guid {
-            state.self_control = false;
-            state.control_decided = true;
-            bail!(
-                "Wrath movement-authority order named foreign mover {:#018x}",
-                order.mover_guid
-            );
-        }
+        let known = order.mover_guid == self.self_guid || state.drives_or_parked(order.mover_guid);
         if state.last_order_counter.is_some_and(|previous| {
             let advance = order.counter.wrapping_sub(previous);
             advance == 0 || advance >= 0x8000_0000
@@ -1027,8 +1270,15 @@ impl MovementAuthorityHandle {
         }
         // AzerothCore reconnect login may send an initial UNROOT before initial self packets.
         state.last_order_counter = Some(order.counter);
+        if !known {
+            bevy::log::warn!(
+                "net(wrath): movement order for unknown mover {:#018x} ignored",
+                order.mover_guid
+            );
+            return Ok(false);
+        }
         state.pending_orders.push_back(pending);
-        Ok(())
+        Ok(true)
     }
 
     fn send_root_ack(
@@ -1043,27 +1293,27 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::ForceRoot { order, rooted };
-        if order.mover_guid != self.self_guid || state.pending_orders.front() != Some(&expected) {
+        if !state.drives_or_parked(order.mover_guid) || state.pending_orders.front() != Some(&expected) {
             state.self_control = false;
             state.control_decided = true;
             bail!("Wrath force-root ACK did not match the pending order head");
         }
-        let Some(mut pose) = state.ground_pose else {
+        let Some(mut pose) = state.pose_of(order.mover_guid) else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
         // The medium and granted modes alone are not motion: a still swimmer, flier or passenger
         // needs no STOP.
         if rooted && pose.halted() != pose {
             pose = pose.halted();
-            let stop = pose.encode(wrath_ground::MSG_MOVE_STOP, self.self_guid, timestamp)?;
+            let stop = pose.encode(wrath_ground::MSG_MOVE_STOP, order.mover_guid, timestamp)?;
             send(wrath_ground::MSG_MOVE_STOP, &stop)?;
             // STOP was successfully written and became the last pose reported to the server. Keep
             // that honest progress if the following ACK write fatally fails; this epoch is retired
             // rather than retried through a socket whose delivery state is no longer trustworthy.
-            state.ground_pose = Some(pose);
+            state.set_pose_of(order.mover_guid, pose);
         }
         let body = wrath_authority::encode_force_root_on_foot_ack(
-            self.self_guid,
+            order.mover_guid,
             order.counter,
             pose,
             timestamp,
@@ -1079,7 +1329,7 @@ impl MovementAuthorityHandle {
         )?;
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(expected));
-        state.rooted = rooted;
+        state.set_rooted_of(order.mover_guid, rooted);
         Ok(UnsetAckResult::Sent)
     }
 
@@ -1094,33 +1344,38 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::UnsetCanFly(order);
-        if order.mover_guid != self.self_guid || state.pending_orders.front() != Some(&expected) {
+        if !state.drives_or_parked(order.mover_guid) || state.pending_orders.front() != Some(&expected) {
             state.self_control = false;
             state.control_decided = true;
             bail!("Wrath UNSET_CAN_FLY ACK did not match the pending order head");
         }
-        let Some(pose) = state.ground_pose else {
+        let Some(pose) = state.pose_of(order.mover_guid) else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
         let body = wrath_authority::encode_unset_can_fly_on_foot_ack(
-            self.self_guid,
+            order.mover_guid,
             order.counter,
             pose,
             timestamp,
         )?;
         send(&body)?;
         let landed = pose.landed();
-        state.ground_pose = Some(OnFootPose {
-            flags: landed.flags & !wrath_ground::MOVE_CAN_FLY,
-            ..landed
-        });
+        state.set_pose_of(
+            order.mover_guid,
+            OnFootPose {
+                flags: landed.flags & !wrath_ground::MOVE_CAN_FLY,
+                ..landed
+            },
+        );
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(expected));
         Ok(UnsetAckResult::Sent)
     }
 
-    fn raise_mover_barrier(&self, order: MoverOrder) -> Result<()> {
-        self.raise_authority_order(PendingAuthorityOrder::Mover(order))?;
+    fn raise_mover_barrier(&self, order: MoverOrder) -> Result<bool> {
+        if !self.raise_authority_order(PendingAuthorityOrder::Mover(order))? {
+            return Ok(false);
+        }
         // A near teleport ends any flight path: no SPLINE_DONE may follow it.
         if matches!(order, MoverOrder::TeleportNear { .. }) {
             let mut state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
@@ -1128,7 +1383,7 @@ impl MovementAuthorityHandle {
                 state.taxi_spline = None;
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     /// Acknowledge the head speed, mode, knockback or collision-height order from the last pose
@@ -1145,7 +1400,8 @@ impl MovementAuthorityHandle {
             return Ok(UnsetAckResult::Stale);
         }
         let expected = PendingAuthorityOrder::Mover(order);
-        if order.mover_guid() != self.self_guid
+        let guid = order.mover_guid();
+        if !state.drives_or_parked(guid)
             || state.pending_orders.front() != Some(&expected)
             || matches!(order, MoverOrder::TeleportNear { .. })
         {
@@ -1153,23 +1409,23 @@ impl MovementAuthorityHandle {
             state.control_decided = true;
             bail!("Wrath mover-order ACK did not match the pending order head");
         }
-        let Some(pose) = state.ground_pose else {
+        let Some(pose) = state.pose_of(guid) else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
         let (opcode, body, reported) = match order {
             MoverOrder::Speed { kind, counter, speed, .. } => (
                 kind.ack_opcode(),
-                wrath_authority::encode_value_ack(self.self_guid, counter, pose, timestamp, speed)?,
+                wrath_authority::encode_value_ack(guid, counter, pose, timestamp, speed)?,
                 pose,
             ),
             MoverOrder::CollisionHeight { counter, height, .. } => (
                 wrath_authority::CMSG_MOVE_SET_COLLISION_HGT_ACK,
-                wrath_authority::encode_value_ack(self.self_guid, counter, pose, timestamp, height)?,
+                wrath_authority::encode_value_ack(guid, counter, pose, timestamp, height)?,
                 pose,
             ),
             MoverOrder::Mode { kind, apply, counter, .. } => {
                 let body = wrath_authority::encode_mode_ack(
-                    self.self_guid,
+                    guid,
                     counter,
                     pose,
                     timestamp,
@@ -1196,7 +1452,7 @@ impl MovementAuthorityHandle {
             MoverOrder::KnockBack { counter, .. } => (
                 wrath_authority::CMSG_MOVE_KNOCK_BACK_ACK,
                 wrath_authority::encode_knock_back_ack(
-                    self.self_guid,
+                    guid,
                     counter,
                     pose,
                     timestamp,
@@ -1207,7 +1463,7 @@ impl MovementAuthorityHandle {
             MoverOrder::TeleportNear { .. } => unreachable!("refused above"),
         };
         send(opcode, &body)?;
-        state.ground_pose = Some(reported);
+        state.set_pose_of(guid, reported);
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(expected));
         Ok(UnsetAckResult::Sent)
@@ -1272,6 +1528,8 @@ enum WrathRoute {
     GroundMovement,
     TaxiSplineDone,
     SetActiveMover,
+    NotActiveMover,
+    NativeVehicleControl,
     Logout,
     LogoutCancel,
     NativeItemQuery,
@@ -1576,9 +1834,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::MountSpecial
         | ClientCommand::MoveTimeSkipped { .. }
         | ClientCommand::NativeMovementMisc(_) => WrathRoute::NativeMovementMisc,
-        ClientCommand::NotActiveMover { .. } | ClientCommand::WorldportAck => {
-            WrathRoute::DisabledMovement
-        }
+        ClientCommand::NotActiveMover { .. } => WrathRoute::NotActiveMover,
+        ClientCommand::NativeVehicleControl(_) => WrathRoute::NativeVehicleControl,
+        ClientCommand::WorldportAck => WrathRoute::DisabledMovement,
         _ => WrathRoute::DisabledGameAction,
     }
 }
@@ -1746,17 +2004,39 @@ fn writer_loop(
                 let result = match route(&command) {
                     WrathRoute::SetActiveMover => {
                         let ClientCommand::SetActiveMover { guid } = command else { unreachable!() };
-                        if guid != active.authority.self_guid {
-                            // The controller claims a vehicle or possessed unit we cannot drive: withhold
-                            // the claim rather than end the session; movement stays held (`observe_control`).
-                            bevy::log::warn!("net(wrath): active-mover claim for non-player {guid:#018x} withheld");
-                            continue;
-                        }
+                        // Only the mover the server handed us (`SMSG_CLIENT_CONTROL_UPDATE`); from
+                        // here the controller's movement goes out under its guid (`0x729010`).
                         let authority = active.authority.clone();
-                        authority.with_movement_send(|| {
+                        match authority.claim_mover(guid, || {
                             let (opcode, body) = active_mover_packet(guid);
                             active.writer.send_raw(opcode, &body)
-                        }).unwrap_or(Ok(()))
+                        }) {
+                            Some(result) => {
+                                if result.is_ok() {
+                                    active.active_mover = guid;
+                                }
+                                result
+                            }
+                            None => {
+                                bevy::log::warn!("net(wrath): active-mover claim for {guid:#018x} not granted; withheld");
+                                Ok(())
+                            }
+                        }
+                    }
+                    WrathRoute::NotActiveMover => send_not_active_mover(active, command),
+                    WrathRoute::NativeVehicleControl => {
+                        let ClientCommand::NativeVehicleControl(request) = command else { unreachable!() };
+                        let authority = active.authority.clone();
+                        let timestamp = active.clock.now_ms();
+                        authority
+                            .with_vehicle_pose(|vehicle, pose| {
+                                let body = request.encode(vehicle, pose, timestamp)?;
+                                active.writer.send_raw(request.opcode(), &body)
+                            })
+                            .unwrap_or_else(|| {
+                                bevy::log::warn!("net(wrath): {request:?} without a driven vehicle; withheld");
+                                Ok(())
+                            })
                     }
                     WrathRoute::Logout => {
                         let authority = active.authority.clone();
@@ -2831,6 +3111,50 @@ fn expire_pre_self_orders(
     });
 }
 
+/// The vehicle seat a living movement names (`ON_TRANSPORT` with `seat >= 0`).
+fn movement_seat(movement: &benilla_protocol::wrath_gameplay::MovementInfo) -> Option<(u64, i8)> {
+    movement
+        .transport
+        .as_ref()
+        .and_then(|t| benilla_protocol::wrath_vehicle::vehicle_seat(t.guid, t.seat))
+}
+
+/// AzerothCore's `MOVEMENTFLAG_MASK_MOVING`: what a rooted mover may not report.
+const ROOTED_MOVING: u32 = wrath_ground::MOVE_FORWARD
+    | wrath_ground::MOVE_BACKWARD
+    | wrath_ground::MOVE_STRAFE_LEFT
+    | wrath_ground::MOVE_STRAFE_RIGHT
+    | wrath_ground::MOVE_PITCH_UP
+    | wrath_ground::MOVE_PITCH_DOWN
+    | wrath_ground::MOVE_FALLING
+    | wrath_ground::MOVE_FALLING_FAR
+    | wrath_ground::MOVE_ASCENDING
+    | wrath_ground::MOVE_DESCENDING;
+
+/// A create block's living pose as the authority keeps it: ROOT stripped (the root orders own it),
+/// and a state the writer does not report (a creature's flight, spline elevation) stood at its
+/// world position, so an ACK from it cannot rewind the unit.
+fn living_pose(movement: &benilla_protocol::wrath_gameplay::MovementInfo) -> OnFootPose {
+    let mut movement = movement.clone();
+    movement.flags &= !wrath_authority::MOVEMENT_FLAG_ROOT;
+    OnFootPose::from_movement(&movement).unwrap_or_else(|error| {
+        bevy::log::debug!("net(wrath): living pose not reportable ({error}); standing at its position");
+        OnFootPose {
+            flags: 0,
+            position: [
+                movement.position.x,
+                movement.position.y,
+                movement.position.z,
+            ],
+            orientation: movement.position.orientation,
+            fall_time: 0,
+            fall: None,
+            pitch: None,
+            transport: None,
+        }
+    })
+}
+
 fn accepts_epoch(command_epoch: u64, active_epoch: u64) -> bool {
     command_epoch == active_epoch
 }
@@ -2880,12 +3204,46 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     };
     let authority = active.authority.clone();
     authority
-        .with_on_foot_send(pose, || {
+        .with_on_foot_send(active.active_mover, pose, |mover, pose| {
             let opcode = u32::from(kind.opcode());
-            let body = pose.encode(opcode, active.active_mover, timestamp)?;
+            let body = pose.encode(opcode, mover, timestamp)?;
             active.writer.send_raw(opcode, &body)
         })
         .unwrap_or(Ok(()))
+}
+
+/// `CMSG_MOVE_NOT_ACTIVE_MOVER`: our own body's parting pose as we hand control to a vehicle or a
+/// possessed unit (`Wow.exe` `0x729010` sends it only for the player, before `SET_ACTIVE_MOVER`).
+/// AzerothCore reads `packed guid + MovementInfo` and keeps it only while we are still its mover.
+fn send_not_active_mover(active: &mut WrathWriterSwap, command: ClientCommand) -> Result<()> {
+    let ClientCommand::NotActiveMover {
+        guid,
+        pos,
+        orientation,
+        ..
+    } = command
+    else {
+        unreachable!()
+    };
+    if guid != active.authority.self_guid {
+        bevy::log::warn!("net(wrath): NOT_ACTIVE_MOVER for {guid:#018x} is not our body; withheld");
+        return Ok(());
+    }
+    // The parting pose is a standing one: the controller parks the body first
+    // (`player::wire_in::yield_own_body`), so no direction bit or arc rides it.
+    let pose = OnFootPose {
+        flags: 0,
+        position: pos,
+        orientation,
+        fall_time: 0,
+        fall: None,
+        pitch: None,
+        transport: None,
+    };
+    let body = wrath_authority::encode_mover_pose(guid, pose, active.clock.now_ms())?;
+    active
+        .writer
+        .send_raw(wrath_authority::CMSG_MOVE_NOT_ACTIVE_MOVER, &body)
 }
 
 fn send_pending_authority(
@@ -3785,19 +4143,104 @@ mod tests {
     }
 
     #[test]
-    fn a_vehicle_or_possessed_mover_holds_our_movement_without_ending_the_session() {
+    fn a_vehicle_handed_to_us_is_driven_and_acked_from_its_own_pose() {
+        use benilla_protocol::wrath_gameplay::{MovementInfo, Position};
         let shared = Arc::new(MovementAuthority::default());
         let authority = shared.install(3, 0x88);
         authority
             .observe_self_create(0x88, &test_self_position())
             .unwrap();
-        // Control of a unit we cannot drive: held, not fatal.
+        // The vehicle's create gives the pose its first orders ACK from.
+        let car = MovementInfo {
+            flags: 0,
+            flags2: 0,
+            timestamp: 0,
+            position: Position {
+                x: 50.0,
+                y: 60.0,
+                z: 70.0,
+                orientation: 1.0,
+            },
+            transport: None,
+            pitch: None,
+            fall_time: 0,
+            jump: None,
+            spline_elevation: None,
+        };
+        authority.observe_unit_create(0x99, &MovementPosition::Living(car));
+        // `SetClientControl(vehicle, true)`, then the root AzerothCore puts on a DISABLE_MOVE one.
         authority.observe_control(0x99, true).unwrap();
-        assert!(authority.with_movement_send(|| ()).is_none());
-        assert!(authority.with_player_action(|| ()).is_none());
-        // Control returns to our own guid: movement resumes.
+        let root = ForceRootOrder {
+            mover_guid: 0x99,
+            counter: 1,
+        };
+        assert!(authority.raise_root_barrier(root, true).unwrap());
+        let mut sent = Vec::new();
+        assert_eq!(
+            authority
+                .send_root_ack(root, true, 5, |opcode, body| {
+                    sent.push((opcode, body.to_vec()));
+                    Ok(())
+                })
+                .unwrap(),
+            UnsetAckResult::Sent
+        );
+        assert_eq!(
+            sent,
+            vec![(
+                wrath_authority::CMSG_FORCE_MOVE_ROOT_ACK,
+                wrath_authority::encode_force_root_on_foot_ack(
+                    0x99,
+                    1,
+                    GroundPose::new(0, [50.0, 60.0, 70.0], 1.0).unwrap().into(),
+                    5,
+                    true,
+                )
+                .unwrap()
+            )]
+        );
+        // Rooted, the vehicle may only turn: a turn goes out under its guid with ROOT, a step
+        // does not, and our body's claim is not the mover.
+        let turning = OnFootPose {
+            flags: wrath_ground::MOVE_TURN_LEFT,
+            ..GroundPose::new(0, [50.0, 60.0, 70.0], 1.2).unwrap().into()
+        };
+        let mut wrote = None;
+        assert!(authority
+            .with_on_foot_send(0x99, turning, |guid, pose| {
+                wrote = Some((guid, pose.flags));
+                Ok(())
+            })
+            .unwrap()
+            .is_ok());
+        assert_eq!(
+            wrote,
+            Some((0x99, wrath_ground::MOVE_TURN_LEFT | wrath_ground::MOVE_ROOT))
+        );
+        let stepping = OnFootPose {
+            flags: wrath_ground::MOVE_FORWARD,
+            ..turning
+        };
+        assert!(authority
+            .with_on_foot_send(0x99, stepping, |_, _| panic!("rooted step"))
+            .is_none());
+        assert!(authority
+            .with_on_foot_send(0x88, turning, |_, _| panic!("our body is not the mover"))
+            .is_none());
+        // An order for a unit we never saw is ignored, not fatal.
+        assert!(!authority
+            .raise_unset_barrier(UnsetCanFlyOrder {
+                mover_guid: 0x777,
+                counter: 2,
+            })
+            .unwrap());
+        // Control returns to our body with its own pose and no root.
         authority.observe_control(0x88, true).unwrap();
         assert_eq!(authority.with_movement_send(|| 1), Some(1));
+        let state = authority.shared.state.lock().unwrap();
+        assert_eq!(state.mover, 0x88);
+        assert_eq!(state.ground_pose.unwrap().position, [1.0, 2.0, 3.0]);
+        assert!(state.parked[&0x99].rooted);
     }
 
     #[test]
@@ -3822,7 +4265,7 @@ mod tests {
             pitch: None,
             transport: Some(deck),
         };
-        assert!(authority.with_on_foot_send(riding, || Ok(())).unwrap().is_ok());
+        assert!(authority.with_self_send(riding, || Ok(())).unwrap().is_ok());
         let root = ForceRootOrder {
             mover_guid: 0x89,
             counter: 30,
@@ -4107,7 +4550,7 @@ mod tests {
             transport: None,
         };
         authority
-            .with_on_foot_send(pose, || Ok(()))
+            .with_self_send(pose, || Ok(()))
             .unwrap()
             .unwrap();
         let newer = OnFootPose {
@@ -4115,7 +4558,7 @@ mod tests {
             ..pose
         };
         assert!(authority
-            .with_on_foot_send(newer, || bail!("write failed"))
+            .with_self_send(newer, || bail!("write failed"))
             .unwrap()
             .is_err());
         let unset = UnsetCanFlyOrder {
@@ -4124,7 +4567,7 @@ mod tests {
         };
         authority.raise_unset_barrier(unset).unwrap();
         assert!(authority
-            .with_on_foot_send(newer, || panic!("order barrier bypass"))
+            .with_self_send(newer, || panic!("order barrier bypass"))
             .is_none());
         let mut body = Vec::new();
         authority
@@ -4176,15 +4619,15 @@ mod tests {
             .unwrap()
         );
         assert!(authority
-            .with_on_foot_send(newer, || panic!("root bypass"))
+            .with_self_send(newer, || panic!("root bypass"))
             .is_none());
         authority.observe_control(0x0500_0001, false).unwrap();
         let replacement = shared.install(71, 0x0500_0001);
         assert!(authority
-            .with_on_foot_send(pose, || panic!("stale epoch bypass"))
+            .with_self_send(pose, || panic!("stale epoch bypass"))
             .is_none());
         assert!(replacement
-            .with_on_foot_send(pose, || panic!("pre-self bypass"))
+            .with_self_send(pose, || panic!("pre-self bypass"))
             .is_none());
     }
 
@@ -4391,20 +4834,24 @@ mod tests {
     }
 
     #[test]
-    fn foreign_unset_revokes_and_fails_closed_before_enqueue() {
+    fn an_unknown_movers_unset_is_ignored_but_advances_the_counter() {
         let shared = Arc::new(MovementAuthority::default());
         let authority = shared.install(34, 0x341);
         authority
             .observe_self_create(0x341, &test_self_position())
             .unwrap();
-        let error = authority
+        // AzerothCore would refuse its ACK (`guid != m_mover`): logged and not queued.
+        assert!(!authority
             .raise_unset_barrier(UnsetCanFlyOrder {
                 mover_guid: 0x999,
                 counter: 1,
             })
-            .unwrap_err();
-        assert!(error.to_string().contains("foreign mover"));
-        assert!(authority.with_movement_send(|| ()).is_none());
+            .unwrap());
+        assert_eq!(authority.with_movement_send(|| 1), Some(1));
+        assert_eq!(
+            authority.shared.state.lock().unwrap().last_order_counter,
+            Some(1)
+        );
     }
 }
 
@@ -5029,7 +5476,7 @@ mod mover_order_tests {
             transport: None,
         };
         assert!(authority
-            .with_on_foot_send(swimming, || Ok(()))
+            .with_self_send(swimming, || Ok(()))
             .unwrap()
             .is_ok());
         let root = ForceRootOrder {
@@ -5063,7 +5510,7 @@ mod mover_order_tests {
     }
 
     #[test]
-    fn a_stale_or_foreign_mover_order_fails_closed() {
+    fn a_stale_counter_fails_closed_and_an_unknown_mover_is_ignored() {
         let authority = installed(0x505);
         let order = MoverOrder::Speed {
             kind: SpeedOrderKind::Walk,
@@ -5081,15 +5528,15 @@ mod mover_order_tests {
             })
             .is_err());
         let authority = installed(0x506);
-        assert!(authority
+        assert!(!authority
             .raise_mover_barrier(MoverOrder::Speed {
                 kind: SpeedOrderKind::Walk,
                 mover_guid: 0x999,
                 counter: 10,
                 speed: 2.5,
             })
-            .is_err());
-        assert!(authority.with_movement_send(|| ()).is_none());
+            .unwrap());
+        assert_eq!(authority.with_movement_send(|| 1), Some(1));
     }
 }
 

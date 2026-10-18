@@ -289,6 +289,14 @@ impl Plugin for PlayerPlugin {
                 .before(control)
                 .in_set(crate::char_select::InWorldGated),
         )
+        .add_systems(
+            Update,
+            wire_in::apply_vehicle_aim
+                .in_set(WorldStage::Input)
+                .after(crate::net::wrath_vehicle::drain_vehicle_requests)
+                .before(control)
+                .in_set(crate::char_select::InWorldGated),
+        )
         // A server spline driving us (Charge, knockback, taxi) is mirrored into `Player` before
         // `control` reads `pos`; gated as `control` is.
         .add_systems(
