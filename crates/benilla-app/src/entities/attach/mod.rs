@@ -349,7 +349,7 @@ pub(super) fn attach_entity_visuals(
 
         // A character model carries every hair, facial and body geoset, and is shared by its
         // display, so the entity's own look picks which show.
-        let look = model.and_then(|_| resolve_char_look(net, dm, entity, &stores));
+        let look = model.and_then(|_| resolve_char_look(net, dm, entity, &stores, equipment));
         // A body whose composite is still running is not built: nothing of it draws, its mount
         // included, until it can draw dressed, as the reference's ShouldRender answers the
         // composite driver's 0 (`0x607e7c` → `0x481749`). Retried each frame, with the look of

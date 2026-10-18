@@ -154,6 +154,7 @@ pub(in crate::entities) fn resolve_equipment(
     // Mutable because a miss sends the `CMSG_GUILD_QUERY` whose answer paints the tabard.
     mut guilds: Option<ResMut<crate::ui_guild::GuildState>>,
     tabard_design: Option<Res<crate::ui_tabard::TabardDesign>>,
+    barber: Option<Res<super::BarberPreview>>,
 ) {
     let Some(mut held) = held else {
         return;
@@ -170,7 +171,8 @@ pub(in crate::entities) fn resolve_equipment(
         || items_moved
         || creatures.as_ref().is_some_and(|c| c.is_changed())
         || enchants.as_ref().is_some_and(|e| e.is_changed())
-        || tabard_design.as_ref().is_some_and(|d| d.is_changed());
+        || tabard_design.as_ref().is_some_and(|d| d.is_changed())
+        || barber.as_ref().is_some_and(|b| b.is_changed());
     let mut glows = glows;
     let enchant_rows = enchants.as_deref().map(|e| &e.0);
     for (
@@ -258,6 +260,16 @@ pub(in crate::entities) fn resolve_equipment(
                     eq.emblem = Some(design);
                     eq.tabard_preview = true;
                 }
+            }
+            eq.look = [
+                s.player_skin().unwrap_or(0),
+                s.player_hair_style().unwrap_or(0),
+                s.player_hair_color().unwrap_or(0),
+                s.player_facial_hair().unwrap_or(0),
+            ];
+            // The barber chair's preview, our own body only, as the designer's above.
+            if let Some(look) = barber.as_deref().and_then(|b| b.0).filter(|_| is_self) {
+                eq.look = look;
             }
             if current_equipment != Some(&eq) {
                 commands.entity(entity).insert(eq);
@@ -858,6 +870,41 @@ mod tests {
             .get::<HeldItems>(player)
             .is_some_and(|h| h.slots[3].is_some());
         (eq, helm_attached)
+    }
+
+    /// The barber preview dresses our own body only; another player keeps its descriptor bytes.
+    #[test]
+    fn the_barber_preview_is_our_own_look_only() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        let (tx, _rx) = crossbeam_channel::unbounded::<ClientCommand>();
+        app.insert_resource(Items::default());
+        app.init_resource::<crate::net::GuidIndex>();
+        app.insert_resource(NetCommands(tx));
+        app.insert_resource(ItemDisplays::icons_for_tests(
+            benilla_formats::ItemDisplayCatalog::from_displays(std::collections::HashMap::new()),
+        ));
+        app.insert_resource(super::super::BarberPreview(Some([1, 2, 3, 4])));
+        let player = |app: &mut App, own: bool| {
+            let mut e = app.world_mut().spawn((
+                NetEntity {
+                    kind: EntityKind::Player,
+                    display_id: Some(49),
+                    scale: 1.0,
+                },
+                wearing(0, &[]),
+            ));
+            if own {
+                e.insert(crate::net::SelfPlayer);
+            }
+            e.id()
+        };
+        let (me, other) = (player(&mut app, true), player(&mut app, false));
+        app.add_systems(Update, resolve_equipment);
+        app.update();
+        let look = |e| app.world().get::<Equipment>(e).expect("resolved").look;
+        assert_eq!(look(me), [1, 2, 3, 4]);
+        assert_eq!(look(other), [0; 4]);
     }
 
     /// `PLAYER_FLAGS`' `HIDE_HELM 0x400` and `HIDE_CLOAK 0x800` zero the resolved display ids.
