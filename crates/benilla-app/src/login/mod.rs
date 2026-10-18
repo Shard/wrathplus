@@ -80,6 +80,7 @@ impl Plugin for LoginPlugin {
                         ),
                     )
                         .chain()
+                        .in_set(crate::glue::GlueScreens::Login)
                         .before(crate::glue::GlueVisuals)
                         // `answer_dialog` holds the VM, and every VM holder in `Update` declares
                         // its side of the UI tick; a glue screen has nothing the tick must see.
@@ -878,8 +879,8 @@ fn answer_dialog(
 ) {
     for answer in answers.read() {
         match answer.kind {
-            // Already dismissed by the widget.
-            DialogKind::Error => {}
+            // Already dismissed by the widget; the login screen raises no confirm.
+            DialogKind::Error | DialogKind::Confirm => {}
             DialogKind::Realmlist => {
                 // Okay takes the address or stays open with the text as typed, the one press
                 // that does not end its dialog. Cancel (or Escape) closes.

@@ -35,10 +35,12 @@ pub(super) fn select_input(
     mut next: ResMut<NextState<ClientState>>,
     mut sounds: MessageWriter<GlueSound>,
     mut intent: ResMut<crate::login::LoginIntent>,
-    // The glue dialog, and the raise Enter World's lock refusals go out through.
-    (glue_dialog, mut raise): (
+    // The glue dialog, the raise Enter World's lock refusals go out through, and the paid
+    // service a row's button arms.
+    (glue_dialog, mut raise, mut paid): (
         Res<crate::glue::dialog::GlueDialog>,
         MessageWriter<super::GlueRaise>,
+        ResMut<crate::char_create::paid::PaidChange>,
     ),
     time: Res<Time>,
     mut last_click: Local<Option<(usize, f32)>>,
@@ -76,6 +78,18 @@ pub(super) fn select_input(
                 sounds.write(GlueSound("gsCharacterSelectionDelCharacter"));
                 if let Some(c) = roster.selected_char() {
                     dialog.open_for(c.guid, c.name.clone(), c.level, class_name(c.class));
+                }
+            }
+            // `CharacterSelect_PaidServiceOnClick`: the row's service, then the create screen.
+            SelectAction::PaidService(i) => {
+                let target = roster.chars.get(i).and_then(|c| {
+                    crate::char_create::paid::PaidService::offered(c.customize_flags)
+                        .map(|service| crate::char_create::paid::PaidTarget::of(c, service))
+                });
+                if let Some(target) = target {
+                    sounds.write(GlueSound("gsCharacterSelectionCreateNew"));
+                    paid.0 = Some(target);
+                    next.set(ClientState::CharCreate);
                 }
             }
             SelectAction::CreateChar => {

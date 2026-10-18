@@ -144,10 +144,6 @@ end
 -- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-local runeTypes = { 1, 1, 2, 2, 3, 3 }
-function GetRuneType(rune) return runeTypes[rune] end
-function GetRuneCooldown() return 0, 0, true end
-function GetRuneCount() return 1 end
 function GetTotemInfo() return false, "", 0, 0, "" end
 GetTotemTimeLeft = zero
 
@@ -643,9 +639,3 @@ QuestPOIGetIconInfo = QuestPOIGetIconInfo or none
 QuestPOIGetQuestIDByVisibleIndex = QuestPOIGetQuestIDByVisibleIndex or none
 GetQuestPOILeaderBoard = GetQuestPOILeaderBoard or none
 
--- ── 3.x movement binding names ────────────────────────────────────────────────────────────────
--- `Bindings.xml` calls the flying-era names; on the ground they are 1.12's jump and sit.
-JumpOrAscendStart = JumpOrAscendStart or Jump
-AscendStop = AscendStop or none
-SitStandOrDescendStart = SitStandOrDescendStart or SitOrStand
-DescendStop = DescendStop or none

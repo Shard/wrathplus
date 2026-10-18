@@ -45,6 +45,8 @@ mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
 mod wrath_friends_frame;
+mod wrath_guild_bank;
+pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
@@ -196,6 +198,10 @@ mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
+mod wrath_runes;
+mod wrath_merchant;
+pub use wrath_merchant::{CostItemView, ExtendedCostView};
+pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
 mod wrath_lfg;
@@ -803,6 +809,8 @@ impl UiScript {
             wrath_paperdoll::install(&lua)?;
             wrath_character::install(&lua)?;
             wrath_companions::install(&lua)?;
+            wrath_runes::install(&lua)?;
+            wrath_merchant::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;
@@ -824,6 +832,7 @@ impl UiScript {
             wrath_inspect_talents::install(&lua)?;
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
+            wrath_guild_bank::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 

@@ -511,6 +511,7 @@ fn shipped_panel_slot_replaces_gossip_with_merchant() {
             stats: None,
             link: None,
             max_stack: Some(1),
+            extended_cost: None,
         }],
         ..Default::default()
     }));
@@ -650,6 +651,7 @@ fn shipped_panel_slot_pushable_promotes_to_center() {
             stats: None,
             link: None,
             max_stack: Some(1),
+            extended_cost: None,
         }],
         ..Default::default()
     }));

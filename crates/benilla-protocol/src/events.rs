@@ -54,6 +54,11 @@ pub struct MoveSpeeds {
     pub swim: f32,
     pub swim_back: f32,
     pub turn_rate: f32,
+    /// Build 12340's flight speeds and pitch rate (the create block's sixth, seventh and ninth
+    /// speeds); 1.12 has none and takes the stock 7.0, 4.5 and pi.
+    pub flight: f32,
+    pub flight_back: f32,
+    pub pitch_rate: f32,
 }
 
 impl MoveSpeeds {
@@ -65,6 +70,9 @@ impl MoveSpeeds {
             swim: s[3],
             swim_back: s[4],
             turn_rate: s[5],
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         }
     }
 }
@@ -1199,6 +1207,12 @@ pub enum SessionEvent {
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
     /// Capture-only native Help Request receipts: GM response, survey offer, complaint (`wrath_help`).
     WrathHelp { packet: crate::wrath_help::Packet },
+    /// Capture-only native refer-a-friend receipts: a level-grant proposal, a failure
+    /// (`wrath_refer_friend`).
+    WrathReferFriend { packet: crate::wrath_refer_friend::Packet },
+    /// Capture-only native world-presentation receipts without a shared event: page text, light
+    /// override, phase shift, movie, dance moves, building damage (`wrath_world_objects`).
+    WrathWorldObjects { packet: crate::wrath_world_objects::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).

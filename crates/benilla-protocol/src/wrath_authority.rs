@@ -27,6 +27,14 @@ pub struct UnsetCanFlyOrder {
 
 pub type ForceRootOrder = UnsetCanFlyOrder;
 
+/// What survives a root: the medium a mover is in (with its tail) and its granted modes.
+const HALT_KEEPS: u32 = wrath_ground::MOVE_SWIMMING
+    | wrath_ground::MOVE_FLYING
+    | wrath_ground::MOVE_CAN_FLY
+    | wrath_ground::MOVE_ON_TRANSPORT
+    | wrath_ground::MOVE_WATER_WALKING
+    | wrath_ground::MOVE_FALLING_SLOW;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GroundPose {
     pub flags: u32,
@@ -43,7 +51,7 @@ pub struct OnFootPose {
     pub orientation: f32,
     pub fall_time: u32,
     pub fall: Option<FallTail>,
-    /// The swimming pitch, present exactly while `MOVE_SWIMMING` is set.
+    /// The pitch, present exactly while `MOVE_SWIMMING` or `MOVE_FLYING` is set.
     pub pitch: Option<f32>,
     /// The deck-local pose, present exactly while `MOVE_ON_TRANSPORT` is set.
     pub transport: Option<wrath_ground::TransportTail>,
@@ -105,13 +113,30 @@ impl OnFootPose {
     }
 
     /// A server root halts movement at the latest reported XYZ, not at an invented landing.
-    /// ROOT cannot coexist with FALLING/FALLING_FAR in AzerothCore's moving-mask validation.
-    /// A rooted swimmer stays in the water and a rooted passenger on its deck: SWIMMING and
-    /// ON_TRANSPORT survive with their tails.
+    /// ROOT cannot coexist with FALLING/FALLING_FAR or the ascend/descend keys in AzerothCore's
+    /// moving-mask validation. A rooted swimmer stays in the water, a rooted flier in the air and a
+    /// rooted passenger on its deck: SWIMMING, FLYING and ON_TRANSPORT survive with their tails, as
+    /// do the granted modes (CAN_FLY, water walking, slow fall).
     pub fn halted(self) -> Self {
         Self {
-            flags: self.flags & (wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT),
+            flags: self.flags & HALT_KEEPS,
             fall: None,
+            ..self
+        }
+    }
+
+    /// `Wow.exe` `0x98c240` (stop flying): FLYING, the ascend/descend keys and the pitch go; the
+    /// mover keeps its position and falls from there on its next frame.
+    pub fn landed(self) -> Self {
+        if self.flags & wrath_ground::MOVE_FLYING == 0 {
+            return self;
+        }
+        Self {
+            flags: self.flags
+                & !(wrath_ground::MOVE_FLYING
+                    | wrath_ground::MOVE_ASCENDING
+                    | wrath_ground::MOVE_DESCENDING),
+            pitch: None,
             ..self
         }
     }
@@ -156,10 +181,9 @@ fn encode_on_foot_ack(
         // The caller supplies the explicitly halted pose for ROOT. Never discard an airborne
         // tail implicitly while encoding an ACK that only changes a movement-authority bit.
         if rooted {
-            // A rooted swimmer or passenger keeps SWIMMING / ON_TRANSPORT (and their tails); nothing
-            // else may ride with ROOT.
-            if pose.flags & !(wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT) != 0
-                || pose.fall.is_some()
+            // A rooted swimmer, flier or passenger keeps SWIMMING / FLYING / ON_TRANSPORT (and their
+            // tails) and its granted modes; nothing else may ride with ROOT.
+            if pose.flags & !HALT_KEEPS != 0 || pose.fall.is_some()
             {
                 return Err(AuthorityCodecError::UnsupportedGroundState);
             }
@@ -177,12 +201,18 @@ fn encode_on_foot_ack(
     Ok(body)
 }
 
+/// The unset-can-fly ACK lands a flier and clears CAN_FLY (`0x6ef860` event 0x30).
 pub fn encode_unset_can_fly_on_foot_ack(
     mover_guid: u64,
     counter: u32,
     pose: OnFootPose,
     timestamp: u32,
 ) -> Result<Vec<u8>, AuthorityCodecError> {
+    let pose = pose.landed();
+    let pose = OnFootPose {
+        flags: pose.flags & !wrath_ground::MOVE_CAN_FLY,
+        ..pose
+    };
     encode_on_foot_ack(mover_guid, counter, pose, timestamp, None)
 }
 
@@ -760,8 +790,15 @@ pub fn encode_mode_ack(
     kind: ModeOrderKind,
     apply: bool,
 ) -> Result<Vec<u8>, AuthorityCodecError> {
+    // Revoking CAN_FLY lands a flier first (`0x6ef860` event 0x30: `0x98c240`, then the bit).
+    let pose = if kind == ModeOrderKind::CanFly && !apply {
+        pose.landed()
+    } else {
+        pose
+    };
     let pose = OnFootPose {
-        flags: pose.flags & !(kind.flag() & wrath_ground::GROUND_FLAG_MASK),
+        flags: pose.flags
+            & !(kind.flag() & (wrath_ground::GROUND_FLAG_MASK | wrath_ground::MOVE_CAN_FLY)),
         ..pose
     };
     let extra = if apply { kind.flag() } else { 0 };
@@ -793,6 +830,7 @@ pub fn encode_knock_back_ack(
     else {
         return Err(AuthorityCodecError::UnsupportedGroundState);
     };
+    let pose = pose.landed();
     let launch = OnFootPose {
         flags: (pose.flags & !(wrath_ground::MOVE_FALLING_FAR | wrath_ground::MOVE_SWIMMING))
             | wrath_ground::MOVE_FALLING,
@@ -1177,5 +1215,78 @@ mod tests {
             encode_teleport_ack(GUID, 7, 0xaabb_ccdd),
             vec![0x09, 0x01, 0x05, 7, 0, 0, 0, 0xdd, 0xcc, 0xbb, 0xaa]
         );
+    }
+    #[test]
+    fn a_flier_keeps_its_medium_under_root_and_lands_when_the_grant_goes() {
+        use crate::wrath_ground::{MOVE_ASCENDING, MOVE_CAN_FLY, MOVE_FLYING, MOVE_FORWARD};
+        let flier = OnFootPose {
+            flags: MOVE_CAN_FLY | MOVE_FLYING | MOVE_ASCENDING | MOVE_FORWARD,
+            position: [1.0, 2.0, 30.0],
+            orientation: 0.5,
+            fall_time: 0,
+            fall: None,
+            pitch: Some(0.4),
+            transport: None,
+        };
+        let movement = |body: &[u8]| {
+            // `packed guid, u32 counter, MovementInfo`: re-frame the info as an `OutboundMovement`.
+            let mut rest = body;
+            let _ = read_packed_guid(&mut rest).unwrap();
+            let rest = &rest[4..];
+            let mut framed = Vec::new();
+            write_packed_guid(1, &mut framed).unwrap();
+            framed.extend(rest);
+            framed
+        };
+        // A rooted flier hangs in the air: FLYING, CAN_FLY and the pitch survive, the keys go.
+        let halted = flier.halted();
+        assert_eq!(halted.flags, MOVE_CAN_FLY | MOVE_FLYING);
+        assert_eq!(halted.pitch, Some(0.4));
+        let ack = encode_force_root_on_foot_ack(0x0500_0001, 3, halted, 9, true).unwrap();
+        let info = OutboundMovement::from_bytes(&movement(&ack)).unwrap().movement;
+        assert_eq!(info.flags, MOVEMENT_FLAG_ROOT | MOVE_CAN_FLY | MOVE_FLYING);
+        assert_eq!(info.pitch, Some(0.4));
+        assert!(encode_force_root_on_foot_ack(0x0500_0001, 3, flier, 9, true).is_err());
+
+        // Revoking the grant lands first (`0x6ef860` event 0x30), on either path.
+        let revoke = encode_mode_ack(0x0500_0001, 4, flier, 9, ModeOrderKind::CanFly, false)
+            .unwrap();
+        let info = OutboundMovement::from_bytes(&movement(&revoke[..revoke.len() - 4]))
+            .unwrap()
+            .movement;
+        assert_eq!(info.flags, MOVE_FORWARD);
+        assert_eq!(info.pitch, None);
+        assert_eq!(revoke[revoke.len() - 4..], APPLIED_FALSE.to_le_bytes());
+        let unset = encode_unset_can_fly_on_foot_ack(0x0500_0001, 4, flier, 9).unwrap();
+        assert_eq!(unset, revoke);
+        // The grant sets the bit on a walker.
+        let walker = OnFootPose {
+            flags: MOVE_FORWARD,
+            pitch: None,
+            ..flier
+        };
+        let grant =
+            encode_mode_ack(0x0500_0001, 5, walker, 9, ModeOrderKind::CanFly, true).unwrap();
+        let info = OutboundMovement::from_bytes(&movement(&grant[..grant.len() - 4]))
+            .unwrap()
+            .movement;
+        assert_eq!(info.flags, MOVE_FORWARD | MOVE_CAN_FLY);
+
+        // A knockback launches a flier from the landed pose.
+        let knock = MoverOrder::KnockBack {
+            mover_guid: 0x0500_0001,
+            counter: 6,
+            cos_angle: 1.0,
+            sin_angle: 0.0,
+            horizontal_speed: 5.0,
+            vertical_speed: -7.0,
+        };
+        let body = encode_knock_back_ack(0x0500_0001, 6, flier, 9, &knock).unwrap();
+        let info = OutboundMovement::from_bytes(&movement(&body)).unwrap().movement;
+        assert_eq!(
+            info.flags,
+            MOVE_CAN_FLY | MOVE_FORWARD | crate::wrath_ground::MOVE_FALLING
+        );
+        assert_eq!(info.pitch, None);
     }
 }

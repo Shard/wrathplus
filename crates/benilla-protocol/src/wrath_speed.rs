@@ -3,7 +3,7 @@
 //! `MSG_MOVE_SET_*_SPEED` (`packed guid + MovementInfo + f32 speed`, to the set without the mover),
 //! and `Unit::UpdateSpeed` sends a server-driven unit's as `SMSG_SPLINE_SET_*_SPEED`
 //! (`packed guid + f32 speed`). Both become the shared `SpeedChanged`, which carries the 1.12
-//! kinds; the flight and pitch-rate echoes belong with flight and stay undecoded here.
+//! kinds and build 12340's flight, flight-back and pitch rate.
 
 use std::io;
 
@@ -24,6 +24,12 @@ pub const SMSG_SPLINE_SET_SWIM_SPEED: u16 = 0x0300;
 pub const SMSG_SPLINE_SET_WALK_SPEED: u16 = 0x0301;
 pub const SMSG_SPLINE_SET_SWIM_BACK_SPEED: u16 = 0x0302;
 pub const SMSG_SPLINE_SET_TURN_RATE: u16 = 0x0303;
+pub const MSG_MOVE_SET_FLIGHT_SPEED: u16 = 0x037e;
+pub const MSG_MOVE_SET_FLIGHT_BACK_SPEED: u16 = 0x0380;
+pub const SMSG_SPLINE_SET_FLIGHT_SPEED: u16 = 0x0385;
+pub const SMSG_SPLINE_SET_FLIGHT_BACK_SPEED: u16 = 0x0386;
+pub const MSG_MOVE_SET_PITCH_RATE: u16 = 0x045b;
+pub const SMSG_SPLINE_SET_PITCH_RATE: u16 = 0x045e;
 
 /// The speed an opcode names, and whether it is the `MovementInfo`-carrying relay.
 fn kind(opcode: u16) -> Option<(SpeedKind, bool)> {
@@ -40,6 +46,12 @@ fn kind(opcode: u16) -> Option<(SpeedKind, bool)> {
         SMSG_SPLINE_SET_WALK_SPEED => (SpeedKind::Walk, false),
         SMSG_SPLINE_SET_SWIM_BACK_SPEED => (SpeedKind::SwimBack, false),
         SMSG_SPLINE_SET_TURN_RATE => (SpeedKind::TurnRate, false),
+        MSG_MOVE_SET_FLIGHT_SPEED => (SpeedKind::Flight, true),
+        MSG_MOVE_SET_FLIGHT_BACK_SPEED => (SpeedKind::FlightBack, true),
+        MSG_MOVE_SET_PITCH_RATE => (SpeedKind::PitchRate, true),
+        SMSG_SPLINE_SET_FLIGHT_SPEED => (SpeedKind::Flight, false),
+        SMSG_SPLINE_SET_FLIGHT_BACK_SPEED => (SpeedKind::FlightBack, false),
+        SMSG_SPLINE_SET_PITCH_RATE => (SpeedKind::PitchRate, false),
         _ => return None,
     })
 }
@@ -94,6 +106,9 @@ mod tests {
             (SMSG_SPLINE_SET_WALK_SPEED, SpeedKind::Walk),
             (SMSG_SPLINE_SET_SWIM_BACK_SPEED, SpeedKind::SwimBack),
             (SMSG_SPLINE_SET_TURN_RATE, SpeedKind::TurnRate),
+            (SMSG_SPLINE_SET_FLIGHT_SPEED, SpeedKind::Flight),
+            (SMSG_SPLINE_SET_FLIGHT_BACK_SPEED, SpeedKind::FlightBack),
+            (SMSG_SPLINE_SET_PITCH_RATE, SpeedKind::PitchRate),
         ] {
             let mut b = Vec::new();
             write_packed_guid(GUID, &mut b).unwrap();
@@ -146,9 +161,22 @@ mod tests {
         assert_eq!((*guid, *kind, *speed), (GUID, SpeedKind::Run, 14.0));
         assert!(decode(MSG_MOVE_SET_RUN_SPEED, &[b.as_slice(), &[0]].concat()).is_err());
         assert!(decode(MSG_MOVE_SET_RUN_SPEED, &b[..b.len() - 1]).is_err());
-        // The flight echoes are not this module's.
-        for opcode in [0x037e, 0x0380, 0x045b, 0x0385, 0x0386, 0x045e] {
-            assert!(!handles(opcode), "{opcode:#x}");
+        // A flier's relay carries FLYING and its pitch.
+        let mut flier = OutboundMovement::from_bytes(&b[..b.len() - 4]).unwrap();
+        flier.movement.flags = crate::wrath_gameplay::MOVEMENT_FLAG_FLYING | 0x0100_0000;
+        flier.movement.pitch = Some(0.3);
+        let mut b = flier.to_bytes().unwrap();
+        b.extend(7.0f32.to_le_bytes());
+        for (opcode, expect) in [
+            (MSG_MOVE_SET_FLIGHT_SPEED, SpeedKind::Flight),
+            (MSG_MOVE_SET_FLIGHT_BACK_SPEED, SpeedKind::FlightBack),
+            (MSG_MOVE_SET_PITCH_RATE, SpeedKind::PitchRate),
+        ] {
+            let [SessionEvent::SpeedChanged { kind, speed, .. }] = &decode(opcode, &b).unwrap()[..]
+            else {
+                panic!("{opcode:#x}")
+            };
+            assert_eq!((*kind, *speed), (expect, 7.0));
         }
     }
 }
