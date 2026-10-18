@@ -440,3 +440,108 @@ fn installed_wrath_lights_keep_their_animation() {
     assert!(l.anim.is_some(), "its visibility is keyed");
     assert!(l.casts(), "a light that turns on later still spawns");
 }
+
+/// Installed incidence of particle-emitter tracks keyed inside external `.anim` sequences
+/// (sequence flags bit 0x20 clear), which the emitter parser reads as unkeyed.
+#[test]
+fn installed_wrath_particle_anim_file_incidence() {
+    if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+        return;
+    }
+    let u32_at = |b: &[u8], o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
+    let mut chain =
+        Chain::open_wrath(Path::new(&std::env::var("WOW_DATA").unwrap()), "enUS").unwrap();
+    let entries = chain
+        .list_filtered(|p| p.to_ascii_lowercase().ends_with(".m2"))
+        .unwrap();
+    let (mut emitter_models, mut hit_models, mut hit_emitters, mut hit_tracks) = (0, 0, 0, 0);
+    let mut examples = Vec::new();
+    for entry in entries {
+        let b = chain.read_file(&entry.name).unwrap();
+        if b.get(4..8) != Some(&264u32.to_le_bytes()) || u32_at(&b, 0x128) == 0 {
+            continue;
+        }
+        emitter_models += 1;
+        let (nseq, oseq) = (u32_at(&b, 0x1c), u32_at(&b, 0x20));
+        let external: Vec<bool> = (0..nseq)
+            .map(|i| u32_at(&b, oseq + i * 64 + 0x0c) & 0x20 == 0)
+            .collect();
+        let (count, base) = (u32_at(&b, 0x128), u32_at(&b, 0x12c));
+        let mut model_hit = false;
+        for k in 0..count {
+            let e = base + k * 0x1dc;
+            let mut emitter_hit = false;
+            for t in [
+                0x34, 0x48, 0x5c, 0x70, 0x84, 0x98, 0xb0, 0xc8, 0xdc, 0xf0, 0x1c8,
+            ] {
+                let track = e + t;
+                if u16::from_le_bytes([b[track + 2], b[track + 3]]) != u16::MAX {
+                    continue; // a global sequence keeps its keys inline
+                }
+                let (n, ofs) = (u32_at(&b, track + 4), u32_at(&b, track + 8));
+                let keyed = (0..n.min(external.len())).any(|i| {
+                    external[i] && ofs + i * 8 + 4 <= b.len() && u32_at(&b, ofs + i * 8) > 0
+                });
+                if keyed {
+                    hit_tracks += 1;
+                    emitter_hit = true;
+                }
+            }
+            if emitter_hit {
+                hit_emitters += 1;
+                model_hit = true;
+            }
+        }
+        if model_hit {
+            hit_models += 1;
+            if examples.len() < 8 {
+                examples.push(entry.name.clone());
+            }
+        }
+    }
+    eprintln!("ANIMPARTICLE emitter_models={emitter_models} models={hit_models} emitters={hit_emitters} tracks={hit_tracks} e.g. {examples:?}");
+    assert!(emitter_models > 0);
+}
+
+/// `FrostLord.m2` keys emitter tracks inside external `.anim` sequences; with the files the asset
+/// loader resolves, those sequences keep their keys instead of reading as unkeyed.
+#[test]
+fn installed_wrath_particle_tracks_read_external_anim_keys() {
+    if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+        return;
+    }
+    let mut chain =
+        Chain::open_wrath(Path::new(&std::env::var("WOW_DATA").unwrap()), "enUS").unwrap();
+    let path = "Creature\\FrostLord\\FrostLord.m2";
+    let bytes = chain.read_file(path).unwrap();
+    let stem = &path[..path.len() - 3];
+    let deps = benilla_formats::wrath_render_animation_dependencies(&bytes).unwrap();
+    assert!(!deps.is_empty(), "FrostLord has external sequences");
+    let mut external: Vec<Option<Vec<u8>>> =
+        vec![None; deps.iter().map(|d| d.sequence_index + 1).max().unwrap()];
+    for d in &deps {
+        let anim = format!("{stem}{:04}-{:02}.anim", d.animation_id, d.variation_index);
+        external[d.sequence_index] = Some(chain.read_file(&anim).unwrap());
+    }
+    let refs: Vec<Option<&[u8]>> = external.iter().map(|b| b.as_deref()).collect();
+    let without = benilla_formats::parse_m2_particle_emitters(&bytes).unwrap();
+    let with = benilla_formats::parse_m2_particle_emitters_with_animations(&bytes, &refs).unwrap();
+    assert_eq!(without.len(), with.len());
+    let gained = without
+        .iter()
+        .zip(&with)
+        .filter(|(a, b)| format!("{:?}", a.timing) != format!("{:?}", b.timing))
+        .count();
+    eprintln!(
+        "FROSTLORD emitters={} gained_external_keys={gained}",
+        with.len()
+    );
+    assert!(
+        gained > 0,
+        "an emitter keyed in an external sequence gains its keys"
+    );
+    // Inline sequences read the same either way.
+    let inline_only =
+        benilla_formats::parse_m2_particle_emitters_with_animations(&bytes, &[]).unwrap();
+    assert_eq!(format!("{inline_only:?}"), format!("{without:?}"));
+}
