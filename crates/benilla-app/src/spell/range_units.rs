@@ -129,6 +129,9 @@ mod tests {
             swim: 4.722_222,
             swim_back: 2.5,
             turn_rate: std::f32::consts::PI,
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         }
     }
 

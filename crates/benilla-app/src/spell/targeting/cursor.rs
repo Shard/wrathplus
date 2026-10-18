@@ -904,6 +904,9 @@ mod tests {
                 swim: 4.7,
                 swim_back: 2.5,
                 turn_rate: 3.1,
+                flight: 7.0,
+                flight_back: 4.5,
+                pitch_rate: std::f32::consts::PI,
             });
             let live = || {
                 crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(

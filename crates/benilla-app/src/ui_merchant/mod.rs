@@ -108,6 +108,10 @@ impl Plugin for UiMerchantPlugin {
         app.init_resource::<MerchantOpen>()
             .init_resource::<MerchantErrors>()
             .add_systems(
+                Startup,
+                load_extended_costs.after(benilla_assets::AssetSet::Open),
+            )
+            .add_systems(
                 Update,
                 (
                     // Range-close first so the clear fires `MERCHANT_CLOSED` the same frame. The
@@ -124,6 +128,91 @@ impl Plugin for UiMerchantPlugin {
                 ),
             );
     }
+}
+
+/// `ItemExtendedCost.dbc`, loaded once under the Wrath profile.
+#[derive(Resource)]
+pub(crate) struct ExtendedCostTable(pub(crate) benilla_formats::ExtendedCosts);
+
+fn load_extended_costs(
+    mut commands: Commands,
+    assets: Option<Res<benilla_assets::WorldAssets>>,
+    profile: Option<Res<benilla_assets::ClientDataProfile>>,
+) {
+    use benilla_assets::LockRecover;
+    let (Some(assets), Some(profile)) = (assets, profile) else {
+        return;
+    };
+    if !matches!(profile.0, benilla_formats::DataProfile::Wrath { .. }) {
+        return;
+    }
+    let loaded = benilla_formats::load_item_extended_costs(&mut assets.chain.lock_recover());
+    match loaded {
+        Ok(table) => commands.insert_resource(ExtendedCostTable(table)),
+        Err(e) => warn!("merchant: ItemExtendedCost.dbc failed to load — no extended costs: {e:#}"),
+    }
+}
+
+/// `0x5a37b0`, the descriptor leg: one of the three `PLAYER_FIELD_ARENA_TEAM_INFO` slots (7 words
+/// each) has a team type at least the bracket's size (`0xa15abc`: 2, 3, 5) and a personal rating
+/// (word 6) at least the record's. Unresolved, labelled: the reference also requires its client
+/// arena-team table (`0xc0f860`) to agree, which is not modelled.
+fn personal_rating_met(
+    cost: &benilla_formats::ExtendedCost,
+    player: Option<&benilla_protocol::ObjectFields>,
+) -> bool {
+    if cost.personal_rating == 0 {
+        return true;
+    }
+    let Some(min_size) = [2u32, 3, 5].get(cost.arena_bracket as usize).copied() else {
+        return false;
+    };
+    let word = |slot: u16, i: u16| {
+        player
+            .and_then(|f| {
+                f.get_at(
+                    benilla_protocol::messages::Field::PlayerArenaTeamInfo11,
+                    slot * 7 + i,
+                )
+            })
+            .unwrap_or(0)
+    };
+    (0..3).any(|s| word(s, 1) >= min_size && word(s, 6) >= cost.personal_rating)
+}
+
+/// A row's extended cost, its items resolved through the template cache (asked on a miss).
+fn resolve_cost(
+    id: u32,
+    table: Option<&benilla_formats::ExtendedCosts>,
+    player: Option<&benilla_protocol::ObjectFields>,
+    items: &Items,
+    icons: Option<&ItemDisplays>,
+    commands: &NetCommands,
+) -> Option<benilla_ui::script::ExtendedCostView> {
+    let cost = table?.get(id)?;
+    let cost_items = cost
+        .items
+        .iter()
+        .zip(cost.counts)
+        .filter(|(&item, _)| item != 0)
+        .map(|(&item_id, count)| {
+            let template = items.template(item_id, 0, commands);
+            benilla_ui::script::CostItemView {
+                item_id,
+                count,
+                texture: template
+                    .and_then(|t| icons?.catalog.get(t.display_info_id))
+                    .and_then(|d| d.icon.clone()),
+                link: template.map(|t| item_link(item_id, &t.name, t.quality)),
+            }
+        })
+        .collect();
+    Some(benilla_ui::script::ExtendedCostView {
+        honor: cost.honor,
+        arena: cost.arena,
+        items: cost_items,
+        rating_ok: personal_rating_met(cost, player),
+    })
 }
 
 /// The one `BuyResult` code the reference shows nothing for: `0x5dcde7`'s jump table sends 6 to
@@ -168,6 +257,10 @@ fn resolve_item(
     items: &Items,
     icons: Option<&ItemDisplays>,
     commands: &NetCommands,
+    costs: (
+        Option<&benilla_formats::ExtendedCosts>,
+        Option<&benilla_protocol::ObjectFields>,
+    ),
 ) -> MerchantItem {
     let template = items.template(item.entry, 0, commands);
     let name = template.map(|t| t.name.clone());
@@ -205,6 +298,7 @@ fn resolve_item(
         stats,
         link,
         max_stack: template.map(|t| t.stackable),
+        extended_cost: resolve_cost(item.extended_cost, costs.0, costs.1, items, icons, commands),
     }
 }
 
@@ -264,12 +358,13 @@ fn resolve_buyback(
         num_available: 0,
         item_id: entry,
         stats,
-        // No link: 1.12 has no `GetBuybackItemLink`, and the buyback click is a bare
-        // `BuybackItem(this:GetID())` (`MerchantFrame.lua:358-361`).
-        link: None,
+        // Build 12340's `GetBuybackItemLink` (`0x5852c0`); the template's plain link, not the
+        // instance's enchants (labelled).
+        link: template.map(|t| item_link(entry, &t.name, t.quality)),
         // No max stack: `GetMerchantItemMaxStack` indexes the merchant list, and a buyback row
         // is bought whole.
         max_stack: None,
+        extended_cost: None,
     }
 }
 
@@ -545,6 +640,7 @@ fn snapshot(
     commands: &NetCommands,
     player: Option<&benilla_protocol::ObjectFields>,
     can_repair: bool,
+    extended_costs: Option<&benilla_formats::ExtendedCosts>,
 ) -> Option<MerchantState> {
     open.vendor?;
     let buyback = player
@@ -559,7 +655,7 @@ fn snapshot(
         items: open
             .items
             .iter()
-            .map(|it| resolve_item(it, items, icons, commands))
+            .map(|it| resolve_item(it, items, icons, commands, (extended_costs, player)))
             .collect(),
         buyback,
         can_repair,
@@ -584,6 +680,7 @@ fn feed_merchant(
     mut last_name: Local<crate::ui_script::VmMemo<Option<String>>>,
     mut last_vendor: Local<crate::ui_script::VmMemo<Option<u64>>>,
     mut sink: crate::ui_action::MessageSink,
+    extended_costs: Option<Res<ExtendedCostTable>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -628,6 +725,7 @@ fn feed_merchant(
         &commands,
         player,
         vendor_can_repair(&open, &units),
+        extended_costs.as_deref().map(|t| &t.0),
     );
     // The vendor's name rides `MERCHANT_SHOW` and `MERCHANT_UPDATE` as arg1, and its landing alone
     // re-fires `MERCHANT_UPDATE`; the reference fires both bare (`0x4fad92`, `0x4facaa`), and
@@ -1385,6 +1483,7 @@ mod tests {
             price: 500,
             max_durability: 0,
             buy_count: 1,
+            extended_cost: 0,
         }
     }
 
@@ -1494,10 +1593,16 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
         // Unlimited stock is `numAvailable` -1; a finite count passes through.
-        let unlimited = resolve_item(&row(159, 1, STOCK_UNLIMITED), &items, None, &commands);
+        let unlimited = resolve_item(
+            &row(159, 1, STOCK_UNLIMITED),
+            &items,
+            None,
+            &commands,
+            (None, None),
+        );
         assert_eq!(unlimited.num_available, -1);
         assert_eq!(unlimited.item_id, 159);
-        let finite = resolve_item(&row(4540, 2, 5), &items, None, &commands);
+        let finite = resolve_item(&row(4540, 2, 5), &items, None, &commands, (None, None));
         assert_eq!(finite.num_available, 5);
         // No template answer yet: no name or stats, the rest present.
         assert!(finite.name.is_none());
@@ -1567,7 +1672,7 @@ mod tests {
                 bag_family: 0,
             }),
         );
-        let resolved = resolve_item(&row(2129, 1, 3), &items, None, &commands);
+        let resolved = resolve_item(&row(2129, 1, 3), &items, None, &commands, (None, None));
         let stats = resolved.stats.expect("template answered → stats present");
         assert_eq!(
             (

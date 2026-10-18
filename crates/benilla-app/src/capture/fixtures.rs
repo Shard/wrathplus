@@ -193,6 +193,7 @@ pub(super) fn seed_ui_fixture(
                         price: *price,
                         max_durability: 40,
                         buy_count: 1,
+                        extended_cost: 0,
                     }
                 })
                 .collect();

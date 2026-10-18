@@ -28,6 +28,14 @@ pub const MSG_MOVE_SET_FACING: u32 = 0x00da;
 /// Entering and leaving the water (AzerothCore `MovementHandler.cpp` relays both).
 pub const MSG_MOVE_START_SWIM: u32 = 0x00ca;
 pub const MSG_MOVE_STOP_SWIM: u32 = 0x00cb;
+/// Ascend/descend edges while swimming or flying (`Wow.exe` `0x6ef860` events 6/7/8; AzerothCore
+/// relays all three). `STOP_ASCEND` ends either direction.
+pub const MSG_MOVE_START_ASCEND: u32 = 0x0359;
+pub const MSG_MOVE_STOP_ASCEND: u32 = 0x035a;
+pub const MSG_MOVE_START_DESCEND: u32 = 0x03a7;
+/// Taking off and landing (`0x6ef860` events 0x2d/0x2e): FLYING set or cleared. AzerothCore
+/// `HandleMovementOpcodes` handles it as an ordinary movement packet.
+pub const CMSG_MOVE_SET_FLY: u32 = 0x0346;
 
 pub const MOVE_FORWARD: u32 = 0x0000_0001;
 pub const MOVE_BACKWARD: u32 = 0x0000_0002;
@@ -46,6 +54,12 @@ pub const MOVE_FALLING_SLOW: u32 = 0x2000_0000;
 pub const MOVE_SWIMMING: u32 = 0x0020_0000;
 /// `MOVEMENTFLAG_ONTRANSPORT`: the mover reports its deck-local pose ([`TransportTail`]).
 pub const MOVE_ON_TRANSPORT: u32 = 0x0000_0200;
+/// `MOVEMENTFLAG_CAN_FLY` (granted by `SMSG_MOVE_SET_CAN_FLY`), `_FLYING` (airborne in flight mode;
+/// reports pitch like SWIMMING) and the ascend/descend keys.
+pub const MOVE_ASCENDING: u32 = 0x0040_0000;
+pub const MOVE_DESCENDING: u32 = 0x0080_0000;
+pub const MOVE_CAN_FLY: u32 = 0x0100_0000;
+pub const MOVE_FLYING: u32 = 0x0200_0000;
 
 /// The `ON_TRANSPORT` tail a mover writes: the transport, its deck-local pose and a time. AzerothCore
 /// `ReadMovementInfo` reads `guid, x, y, z, o, u32 time, i8 seat`; it never validates the time and
@@ -380,16 +394,35 @@ fn validate_movement(
     fall: Option<FallTail>,
 ) -> Result<(), GroundError> {
     let swimming = flags & MOVE_SWIMMING != 0;
-    if swimming != pitch.is_some() {
-        return Err(GroundError::OpcodeFlags("SWIMMING flag/pitch mismatch"));
+    let flying = flags & MOVE_FLYING != 0;
+    if (swimming || flying) != pitch.is_some() {
+        return Err(GroundError::OpcodeFlags(
+            "SWIMMING/FLYING flag/pitch mismatch",
+        ));
     }
     if pitch.is_some_and(|pitch| !pitch.is_finite()) {
         return Err(GroundError::NonFinitePose);
     }
-    if swimming && (flags & (MOVE_FALLING | MOVE_FALLING_FAR) != 0 || fall.is_some()) {
+    if swimming && flying {
+        // `0x989890` clears SWIMMING when flight starts.
+        return Err(GroundError::OpcodeFlags("SWIMMING with FLYING"));
+    }
+    if flying && flags & MOVE_CAN_FLY == 0 {
+        return Err(GroundError::OpcodeFlags("FLYING without CAN_FLY"));
+    }
+    if pitch.is_some() && (flags & (MOVE_FALLING | MOVE_FALLING_FAR) != 0 || fall.is_some()) {
         return Err(GroundError::OpcodeFlags(
-            "SWIMMING with an airborne flag or tail",
+            "SWIMMING/FLYING with an airborne flag or tail",
         ));
+    }
+    let vertical = flags & (MOVE_ASCENDING | MOVE_DESCENDING);
+    if vertical != 0 && pitch.is_none() {
+        return Err(GroundError::OpcodeFlags(
+            "ASCENDING/DESCENDING outside SWIMMING/FLYING",
+        ));
+    }
+    if vertical == MOVE_ASCENDING | MOVE_DESCENDING {
+        return Err(GroundError::ContradictoryFlags("ascend/descend"));
     }
     let opcode = match opcode {
         MSG_MOVE_START_SWIM if !swimming => {
@@ -398,13 +431,29 @@ fn validate_movement(
         MSG_MOVE_STOP_SWIM if swimming => {
             return Err(GroundError::OpcodeFlags("STOP_SWIM retains SWIMMING"));
         }
-        // The swim edges carry no direction rule of their own.
-        MSG_MOVE_START_SWIM | MSG_MOVE_STOP_SWIM => MSG_MOVE_HEARTBEAT,
+        MSG_MOVE_START_ASCEND if vertical != MOVE_ASCENDING => {
+            return Err(GroundError::OpcodeFlags("START_ASCEND without ASCENDING"));
+        }
+        MSG_MOVE_START_DESCEND if vertical != MOVE_DESCENDING => {
+            return Err(GroundError::OpcodeFlags("START_DESCEND without DESCENDING"));
+        }
+        MSG_MOVE_STOP_ASCEND if vertical != 0 || pitch.is_none() => {
+            return Err(GroundError::OpcodeFlags(
+                "STOP_ASCEND retains a vertical key or left SWIMMING/FLYING",
+            ));
+        }
+        // The swim, vertical and flight edges carry no direction rule of their own.
+        MSG_MOVE_START_SWIM
+        | MSG_MOVE_STOP_SWIM
+        | MSG_MOVE_START_ASCEND
+        | MSG_MOVE_START_DESCEND
+        | MSG_MOVE_STOP_ASCEND
+        | CMSG_MOVE_SET_FLY => MSG_MOVE_HEARTBEAT,
         other => other,
     };
     validate_on_foot(
         opcode,
-        flags & !MOVE_SWIMMING,
+        flags & !(MOVE_SWIMMING | MOVE_FLYING | MOVE_CAN_FLY | MOVE_ASCENDING | MOVE_DESCENDING),
         position,
         orientation,
         fall_time,
@@ -623,12 +672,33 @@ mod tests {
             cos_angle: 1.0,
             horizontal_speed: 0.0,
         };
-        for flags in [0x0200_0000, 0x0800_0000] {
-            assert!(matches!(
-                encode_on_foot(MSG_MOVE_HEARTBEAT, 1, flags, 0, [0.0; 3], 0.0, 0, None),
-                Err(GroundError::UnsupportedFlags(_))
-            ));
-        }
+        assert!(matches!(
+            encode_on_foot(
+                MSG_MOVE_HEARTBEAT,
+                1,
+                0x0800_0000,
+                0,
+                [0.0; 3],
+                0.0,
+                0,
+                None
+            ),
+            Err(GroundError::UnsupportedFlags(_))
+        ));
+        // FLYING is admitted only with CAN_FLY and its pitch, which the on-foot API never carries.
+        assert!(matches!(
+            encode_on_foot(
+                MSG_MOVE_HEARTBEAT,
+                1,
+                MOVE_FLYING,
+                0,
+                [0.0; 3],
+                0.0,
+                0,
+                None
+            ),
+            Err(GroundError::OpcodeFlags(_))
+        ));
         // ON_TRANSPORT travels with its tail: guid, deck xyzo, time, seat -1, no time2.
         let deck = TransportTail {
             guid: 0x1FC0_0000_0000_0042,
@@ -811,5 +881,95 @@ mod tests {
             wrapping_millis(Duration::from_millis(u64::from(u32::MAX) + 8)),
             7
         );
+    }
+    #[test]
+    fn flight_reports_its_pitch_and_vertical_keys_under_can_fly() {
+        let fly = |opcode: u32, flags: u32, pitch: Option<f32>, fall: Option<FallTail>| {
+            encode_movement(opcode, 1, flags, 0, [0.0; 3], 0.0, pitch, 0, fall)
+        };
+        let flying = MOVE_CAN_FLY | MOVE_FLYING;
+        // Take-off and landing are ordinary packets; FLYING carries the pitch.
+        let body = fly(CMSG_MOVE_SET_FLY, flying | MOVE_FORWARD, Some(0.3), None).unwrap();
+        let decoded = OutboundMovement::from_bytes(&body).unwrap();
+        assert_eq!(decoded.movement.flags, flying | MOVE_FORWARD);
+        assert_eq!(decoded.movement.pitch, Some(0.3));
+        assert!(fly(CMSG_MOVE_SET_FLY, MOVE_CAN_FLY, None, None).is_ok());
+        // The grant alone rides an on-foot packet.
+        assert!(fly(MSG_MOVE_HEARTBEAT, MOVE_CAN_FLY, None, None).is_ok());
+        // The vertical edges check their bits.
+        assert!(fly(
+            MSG_MOVE_START_ASCEND,
+            flying | MOVE_ASCENDING,
+            Some(0.0),
+            None
+        )
+        .is_ok());
+        assert!(fly(MSG_MOVE_START_ASCEND, flying, Some(0.0), None).is_err());
+        assert!(fly(
+            MSG_MOVE_START_DESCEND,
+            flying | MOVE_DESCENDING,
+            Some(0.0),
+            None
+        )
+        .is_ok());
+        assert!(fly(
+            MSG_MOVE_START_DESCEND,
+            flying | MOVE_ASCENDING,
+            Some(0.0),
+            None
+        )
+        .is_err());
+        assert!(fly(MSG_MOVE_STOP_ASCEND, flying, Some(0.0), None).is_ok());
+        assert!(fly(
+            MSG_MOVE_STOP_ASCEND,
+            flying | MOVE_DESCENDING,
+            Some(0.0),
+            None
+        )
+        .is_err());
+        assert!(fly(MSG_MOVE_STOP_ASCEND, MOVE_CAN_FLY, None, None).is_err());
+        let fall = FallTail {
+            vertical_speed: 1.0,
+            sin_angle: 0.0,
+            cos_angle: 1.0,
+            horizontal_speed: 0.0,
+        };
+        for (flags, pitch, fall, why) in [
+            (MOVE_FLYING, Some(0.0), None, "FLYING without CAN_FLY"),
+            (flying, None, None, "FLYING without its pitch"),
+            (MOVE_CAN_FLY, Some(0.0), None, "a pitch without a medium"),
+            (flying | MOVE_SWIMMING, Some(0.0), None, "both media"),
+            (
+                flying | MOVE_FALLING,
+                Some(0.0),
+                Some(fall),
+                "a falling flier",
+            ),
+            (
+                MOVE_CAN_FLY | MOVE_ASCENDING,
+                None,
+                None,
+                "a key without a medium",
+            ),
+            (
+                flying | MOVE_ASCENDING | MOVE_DESCENDING,
+                Some(0.0),
+                None,
+                "both keys",
+            ),
+        ] {
+            assert!(
+                fly(MSG_MOVE_HEARTBEAT, flags, pitch, fall).is_err(),
+                "{why}"
+            );
+        }
+        // A swimmer's keys pass too (`0x9898e0` accepts either medium).
+        assert!(fly(
+            MSG_MOVE_START_ASCEND,
+            MOVE_SWIMMING | MOVE_ASCENDING,
+            Some(0.0),
+            None
+        )
+        .is_ok());
     }
 }

@@ -41,6 +41,12 @@ pub enum HeldInput {
     TurnOrAction,
     /// `0x2`, `CameraOrSelectOrMoveStart`/`Stop` (`0x514190`/`0x5141d0`), the left button's.
     CameraOrSelectOrMove,
+    /// Build 12340's ascend key, held from `JumpOrAscendStart` to `AscendStop`: a flier rises
+    /// (`Wow.exe` `0x9898e0(1)`, `MSG_MOVE_START_ASCEND`).
+    Ascend,
+    /// Build 12340's descend key, held from `SitStandOrDescendStart` to `DescendStop`: a flier sinks
+    /// (`0x9898e0(0)`, `MSG_MOVE_START_DESCEND`).
+    Descend,
 }
 
 /// A one-shot command, fired as its key fires it.
@@ -156,6 +162,47 @@ fn inert(lua: &Lua, names: &[&str]) -> mlua::Result<()> {
     let g = lua.globals();
     for name in names {
         g.set(*name, lua.create_function(|_, _: MultiValue| Ok(()))?)?;
+    }
+    Ok(())
+}
+
+/// Build 12340 only: the 3.x flying-era binding names, which the 1.12 surface lacks.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    // The 3.x flying-era names the stock `JUMP` and `SITORSTAND` bodies call. Each Start fires the
+    // ground verb and raises the held key; the engine picks one by the mover's state: on foot the
+    // jump or the sit, flying the ascend or descend (the jump `0x9883f0` refuses a flier). Each
+    // Stop releases the key. The same gate as the movement table.
+    let flying_era: [(&str, &[BindingInput]); 4] = [
+        (
+            "JumpOrAscendStart",
+            &[
+                BindingInput::Fire(FiredInput::Jump),
+                BindingInput::Start(HeldInput::Ascend),
+            ],
+        ),
+        ("AscendStop", &[BindingInput::Stop(HeldInput::Ascend)]),
+        (
+            "SitStandOrDescendStart",
+            &[
+                BindingInput::Fire(FiredInput::SitOrStand),
+                BindingInput::Start(HeldInput::Descend),
+            ],
+        ),
+        ("DescendStop", &[BindingInput::Stop(HeldInput::Descend)]),
+    ];
+    let g = lua.globals();
+    for (name, inputs) in flying_era {
+        g.set(
+            name,
+            lua.create_function(move |lua, _: MultiValue| {
+                if in_binding(lua) {
+                    for &input in inputs {
+                        push(lua, input);
+                    }
+                }
+                Ok(())
+            })?,
+        )?;
     }
     Ok(())
 }
@@ -474,6 +521,30 @@ mod tests {
 
     /// The zoom's amount: a number or numeric string (`0x6f34d0`), else 1.0 (`0x50b42d`); a
     /// non-finite amount is dropped.
+    #[test]
+    fn the_flying_era_names_fire_the_ground_verb_and_hold_the_vertical_key() {
+        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        s.run("JumpOrAscendStart() SitStandOrDescendStart()")
+            .unwrap();
+        assert!(
+            s.take_binding_input().is_empty(),
+            "gated like the movement table"
+        );
+        s.run_binding("JumpOrAscendStart() AscendStop() SitStandOrDescendStart() DescendStop()")
+            .unwrap();
+        assert_eq!(
+            s.take_binding_input(),
+            vec![
+                BindingInput::Fire(FiredInput::Jump),
+                BindingInput::Start(HeldInput::Ascend),
+                BindingInput::Stop(HeldInput::Ascend),
+                BindingInput::Fire(FiredInput::SitOrStand),
+                BindingInput::Start(HeldInput::Descend),
+                BindingInput::Stop(HeldInput::Descend),
+            ]
+        );
+    }
+
     #[test]
     fn a_zoom_takes_its_yards_or_one() {
         let mut s = UiScript::new().unwrap();

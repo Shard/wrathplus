@@ -52,7 +52,8 @@ pub(super) fn update(
     // The queued asks (the `/sit` family) ran in the reference's message pass, before the X key
     // is read; the last writer wins, and all land on the single commit below.
     let mut request_stand = asks.read().last().map(|r| r.state);
-    if binds.fired(crate::bindings::Input::SitOrStand) {
+    // A flier's sit key is the descend (`SitStandOrDescendStart`): it never sits in the air.
+    if binds.fired(crate::bindings::Input::SitOrStand) && !player.flying {
         request_stand = Some(u8::from(stand_state == 0));
     }
     // Movement stands us up, volunteered, as the server never does: translation, a keyboard turn
