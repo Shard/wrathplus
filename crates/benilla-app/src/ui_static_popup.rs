@@ -38,8 +38,8 @@
 //! ([`crate::spell::targeting::glyph`]). `EndRefund` and `EndBoundTradeable` resume the item
 //! enchant (`crate::spell::EnchantResume`) or the sockets (`SocketResume`), whose prompts those
 //! seams raise. Not built: `ReplaceTradeEnchant` (`0x80c5f0`, the trade window's untraded slot as
-//! an enchant's target, which no seam binds yet) and the "spellenchant" resume; `CannotBeResurrected` (a client-only
-//! player byte, `+0xf47 & 4`, whose writer is untraced) publishes its default.
+//! an enchant's target, which no seam binds yet) and the "spellenchant" resume.
+//! `CannotBeResurrected` reads an aura of type 314 among ours ([`cannot_be_resurrected`]).
 
 use bevy::prelude::*;
 
@@ -166,6 +166,25 @@ pub(crate) fn filled_glyph_sockets(
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// `SPELL_AURA_PREVENT_RESURRECTION`.
+const AURA_PREVENT_RESURRECTION: u32 = 314;
+
+/// `CannotBeResurrected` (`0x802270`): the player's aura-type bitset (`+0xf20`, rebuilt by
+/// `0x727e70` from each aura's effect mask and its spell's `EffectApplyAuraName`) holds 314 (the
+/// tested `+0xf47 & 4`).
+pub(crate) fn cannot_be_resurrected<'a>(
+    auras: Option<impl Iterator<Item = &'a benilla_protocol::wrath_auras::NativeAura>>,
+    aura_type: impl Fn(u32, usize) -> u32,
+) -> bool {
+    auras.is_some_and(|mut list| {
+        list.any(|a| {
+            (0..3).any(|k| {
+                a.flags & (1 << k) != 0 && aura_type(a.spell_id, k) == AURA_PREVENT_RESURRECTION
+            })
+        })
+    })
 }
 
 /// What an answer reads besides itself.
@@ -344,12 +363,18 @@ pub(crate) struct PopupInputs<'w, 's> {
     falling: Option<Res<'w, crate::player::Falling>>,
     units: Query<'w, 's, (&'static crate::net::Guid, &'static ObjectStore)>,
     refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
-    /// `PlaceGlyphInSocket`'s forward to the cast path.
-    placements: Option<ResMut<'w, crate::spell::targeting::glyph::GlyphPlacements>>,
-    /// `EndRefund` / `EndBoundTradeable`'s resumes: the item enchant and the sockets.
-    resumes: (
+    /// `PlaceGlyphInSocket`'s forward to the cast path, and `EndRefund` / `EndBoundTradeable`'s
+    /// resumes: the item enchant and the sockets.
+    forwards: (
+        Option<ResMut<'w, crate::spell::targeting::glyph::GlyphPlacements>>,
         Option<ResMut<'w, crate::spell::EnchantResume>>,
         Option<ResMut<'w, crate::net::wrath_sockets::SocketResume>>,
+    ),
+    /// `CannotBeResurrected`'s read: our auras and their spells' effects.
+    auras: (
+        Option<Res<'w, crate::net::wrath_auras::PacketAuras>>,
+        Option<Res<'w, crate::ui_action::Spells>>,
+        Option<Res<'w, crate::net::SelfGuid>>,
     ),
     /// The vault and its open banker, for the tab purchase and deposit.
     bank: (
@@ -377,8 +402,8 @@ pub(crate) fn drive(
     let PopupInputs {
         packets,
         refer,
-        mut placements,
-        resumes: (mut enchant_resume, mut socket_resume),
+        forwards: (mut placements, mut enchant_resume, mut socket_resume),
+        auras: (auras, spells, self_guid),
         falling,
         units,
         progress,
@@ -559,6 +584,18 @@ pub(crate) fn drive(
         controlling: controlling(units.iter().map(|(g, s)| (g.0, s))),
         instance_lock: lock.lock.map(PendingLock::view),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
+        cannot_be_resurrected: cannot_be_resurrected(
+            self_guid
+                .and_then(|g| g.0)
+                .and_then(|g| auras.as_deref()?.by_guid.get(&g))
+                .map(|list| list.iter().map(|s| &s.aura)),
+            |spell, k| {
+                spells
+                    .as_deref()
+                    .and_then(|s| s.catalog.get(spell))
+                    .map_or(0, |d| d.effect_apply_aura[k])
+            },
+        ),
         guild_bank_tab_cost: tab_cost(purchase.1),
         ..Default::default()
     };

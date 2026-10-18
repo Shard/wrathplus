@@ -235,3 +235,27 @@ fn guild_bank_tabs_cost_by_count_and_buy_with_the_vault_and_purse() {
         )))
     ));
 }
+
+/// `CannotBeResurrected`: an aura whose set effect bit names aura type 314.
+#[test]
+fn a_prevent_resurrection_effect_blocks_resurrection() {
+    let aura = |spell_id, flags| benilla_protocol::wrath_auras::NativeAura {
+        slot: 0,
+        spell_id,
+        flags,
+        level: 80,
+        stacks: 0,
+        caster_guid: None,
+        max_duration_ms: None,
+        remaining_ms: None,
+    };
+    // Spell 9 has 314 in effect 1 only.
+    let kind = |spell: u32, k: usize| if spell == 9 && k == 1 { 314 } else { 6 };
+    assert!(cannot_be_resurrected(Some([aura(9, 0b010)].iter()), kind));
+    assert!(!cannot_be_resurrected(Some([aura(9, 0b001)].iter()), kind));
+    assert!(!cannot_be_resurrected(Some([aura(8, 0b111)].iter()), kind));
+    assert!(!cannot_be_resurrected(
+        None::<std::slice::Iter<'_, _>>,
+        kind
+    ));
+}
