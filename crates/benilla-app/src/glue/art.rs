@@ -98,6 +98,10 @@ pub(crate) struct GlueArt {
     pub(crate) icon_shadow: Option<Handle<Image>>,
     /// `UI-CharacterCreate-Highlights`, for the icon buttons' `BevelEdge` quarter.
     pub(crate) icon_bevel: Option<(Handle<Image>, Vec2)>,
+    /// The select screen's paid-service buttons: `UI-PaidCharacterCustomization-Button`'s
+    /// quarters and the `ButtonHilight-Square` ADD sheen over them.
+    pub(crate) paid_service: Option<(Handle<Image>, Vec2)>,
+    pub(crate) square_hilight: Option<Handle<AddUiMaterial>>,
     /// The dial rows' `CharacterCreate-LabelFrame`: 128×64, a 25|stretch|25 horizontal 3-slice.
     pub(crate) label_frame: Option<(Handle<Image>, Vec2)>,
     /// `UI-RotationRight-Big-*`; the left rotate button is this art mirrored.
@@ -245,6 +249,18 @@ impl GlueArt {
         );
         // Its `BevelEdge` overlay, the bottom-left quarter.
         self.icon_bevel = sized(assets, &format!("{CC}Highlights"), images);
+        self.paid_service = sized(
+            assets,
+            "Interface\\Buttons\\UI-PaidCharacterCustomization-Button",
+            images,
+        );
+        self.square_hilight = add_overlay(
+            assets,
+            "Interface\\Buttons\\ButtonHilight-Square",
+            FULL_TC,
+            images,
+            add_mats,
+        );
         self.logo = assets.sprite_texture("Interface\\Glues\\Common\\Glues-WoW-Logo", images);
         self.arrow_left = arrow(assets, "Left", images, add_mats);
         self.arrow_right = arrow(assets, "Right", images, add_mats);
