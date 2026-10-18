@@ -16,6 +16,15 @@ pub struct WrathChannelRosterMember {
     pub name: Option<String>,
 }
 
+/// One `SMSG_USERLIST_ADD`/`_UPDATE`/`_REMOVE` (`0x3F0`/`0x3F2`/`0x3F1`), which the server sends
+/// a channel's watchers after `SetChannelWatch` (AC `Channel.cpp`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WrathChannelRosterDelta {
+    Add { guid: u64, flags: u8 },
+    Update { guid: u64, flags: u8 },
+    Remove { guid: u64 },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Identity {
     Server(String),
@@ -100,6 +109,37 @@ impl WrathChannelRoster {
         self.members = members;
         self.flags = flags;
         self.received = true;
+        self.sort_ready();
+        Some(self.revision)
+    }
+
+    /// Patch the received roster of the selected server channel. Labelled: the native delta
+    /// handlers are unread; an add of a present member updates it, and the re-sort follows the
+    /// full roster's.
+    pub fn apply(
+        &mut self,
+        channel: &str,
+        delta: WrathChannelRosterDelta,
+        channel_flags: u8,
+    ) -> Option<u64> {
+        if !self.received
+            || !matches!(&self.selected, Some(Identity::Server(name)) if name.eq_ignore_ascii_case(channel))
+        {
+            return None;
+        }
+        match delta {
+            WrathChannelRosterDelta::Add { guid, flags } | WrathChannelRosterDelta::Update { guid, flags } => {
+                match self.members.iter_mut().find(|r| r.guid == guid) {
+                    Some(row) => row.flags = flags,
+                    None if matches!(delta, WrathChannelRosterDelta::Add { .. }) => {
+                        self.members.push(WrathChannelRosterMember { guid, flags, name: None })
+                    }
+                    None => return None,
+                }
+            }
+            WrathChannelRosterDelta::Remove { guid } => self.members.retain(|r| r.guid != guid),
+        }
+        self.flags = channel_flags;
         self.sort_ready();
         Some(self.revision)
     }
@@ -246,6 +286,24 @@ impl super::UiScript {
         let revision = model
             .wrath_channel_roster
             .receive(channel_type, channel, flags, members)?;
+        notify_ready(&mut model);
+        Some(revision)
+    }
+
+    /// Apply one roster delta to the selected server channel, then fire the count and roster
+    /// updates as a received roster does; the revision binds the added member's name completion.
+    /// `count`, the server's member count, is the roster's own length here.
+    pub fn apply_wrath_channel_roster_delta(
+        &mut self,
+        channel: &str,
+        delta: WrathChannelRosterDelta,
+        channel_flags: u8,
+        _count: u32,
+    ) -> Option<u64> {
+        let mut model = self.model_mut();
+        let revision = model
+            .wrath_channel_roster
+            .apply(channel, delta, channel_flags)?;
         notify_ready(&mut model);
         Some(revision)
     }
