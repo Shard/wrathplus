@@ -43,16 +43,38 @@ fn filled_sockets_are_the_active_groups_glyphs() {
     assert!(filled_glyph_sockets(None).is_empty());
 }
 
-/// Each answer's send; `CancelSummon` needs a latched summoner and a refund a resolved item.
+/// Each answer's send; `CancelSummon` needs a latched summoner, a refund a resolved item, notes a
+/// known friend and a complaint a held line.
 #[test]
 fn answers_map_to_their_sends() {
     let team = |t: u8| u32::from(t) * 10;
-    let none = |_: i64, _: u32, _: bool| None;
     let item = |bag: i64, slot: u32, equipped: bool| {
         Some(bag as u64 * 100 + u64::from(slot) + u64::from(equipped))
     };
+    let friend = |index: Option<u32>, name: Option<&str>| match (index, name) {
+        (Some(2), _) => Some(0x42),
+        (None, Some("Bob")) => Some(0x43),
+        _ => None,
+    };
+    let line = |id: Option<i32>, _: Option<&str>| {
+        (id == Some(9)).then_some(ComplaintLine {
+            sender: 0x44,
+            language: 7,
+            chat_type: 1,
+            seconds_since: 3,
+        })
+    };
+    let none2 = |_: i64, _: u32, _: bool| None;
+    let look = |summoner| Lookups {
+        team_id: &team,
+        summoner,
+        refund_item: &item,
+        friend: &friend,
+        chat_line: &line,
+    };
+    let send = |request: WrathPopupRequest| answer(&request, &look(None));
     assert!(matches!(
-        answer(&WrathPopupRequest::CancelSummon, &team, Some(7), &none),
+        answer(&WrathPopupRequest::CancelSummon, &look(Some(7))),
         Some(ClientCommand::NativeDeath(
             benilla_protocol::wrath_death::Command::SummonResponse {
                 summoner: 7,
@@ -60,58 +82,88 @@ fn answers_map_to_their_sends() {
             }
         ))
     ));
-    assert!(answer(&WrathPopupRequest::CancelSummon, &team, None, &none).is_none());
+    assert!(send(WrathPopupRequest::CancelSummon).is_none());
     assert!(matches!(
-        answer(&WrathPopupRequest::DeclineInvite, &team, None, &none),
+        send(WrathPopupRequest::DeclineInvite),
         Some(ClientCommand::GroupDecline)
     ));
     assert!(matches!(
-        answer(
-            &WrathPopupRequest::ArenaTeamDisband { team: 2 },
-            &team,
-            None,
-            &none
-        ),
+        send(WrathPopupRequest::ArenaTeamDisband { team: 2 }),
         Some(ClientCommand::ArenaTeamCommand(
             benilla_protocol::wrath_arena_team::Command::Disband { team_id: 20 }
         ))
     ));
     assert!(matches!(
-        answer(
-            &WrathPopupRequest::RespondInstanceLock { accept: true },
-            &team,
-            None,
-            &none
-        ),
+        send(WrathPopupRequest::RespondInstanceLock { accept: true }),
         Some(ClientCommand::NativeInstanceControl(
             benilla_protocol::wrath_instance_control::Command::LockResponse { raw_accept: 1 }
         ))
     ));
     assert!(matches!(
-        answer(
-            &WrathPopupRequest::RefundItemPurchase {
-                bag: 1,
-                slot: 4,
-                equipped: false
-            },
-            &team,
-            None,
-            &item
-        ),
+        send(WrathPopupRequest::RefundItemPurchase {
+            bag: 1,
+            slot: 4,
+            equipped: false
+        }),
         Some(ClientCommand::NativeInventory(
             benilla_protocol::wrath_inventory::Command::Refund { item_guid: 104 }
         ))
     ));
+    let no_refund = Lookups {
+        refund_item: &none2,
+        ..look(None)
+    };
     assert!(answer(
         &WrathPopupRequest::RefundItemPurchase {
             bag: 1,
             slot: 4,
             equipped: false
         },
-        &team,
-        None,
-        &none
+        &no_refund
     )
     .is_none());
-    assert!(answer(&WrathPopupRequest::GmResponseResolve, &team, None, &none).is_none());
+    assert!(matches!(
+        send(WrathPopupRequest::GmResponseResolve),
+        Some(ClientCommand::NativeHelp(
+            benilla_protocol::wrath_help::Command::ResolveResponse
+        ))
+    ));
+    assert!(matches!(
+        send(WrathPopupRequest::RemoveGlyphFromSocket { socket: 3 }),
+        Some(ClientCommand::NativeInspect(
+            benilla_protocol::wrath_inspect::Command::RemoveGlyph { slot: 2 }
+        ))
+    ));
+    assert!(matches!(
+        send(WrathPopupRequest::SetFriendNotes {
+            index: Some(2),
+            name: None,
+            note: "tank".into()
+        }),
+        Some(ClientCommand::SetContactNotes { guid: 0x42, .. })
+    ));
+    assert!(send(WrathPopupRequest::SetFriendNotes {
+        index: None,
+        name: Some("Eve".into()),
+        note: String::new()
+    })
+    .is_none());
+    assert!(matches!(
+        send(WrathPopupRequest::ComplainChat {
+            line_id: Some(9),
+            name: None,
+            text: None
+        }),
+        Some(ClientCommand::NativeHelp(
+            benilla_protocol::wrath_help::Command::ComplainChat {
+                spammer: 0x44,
+                language: 7,
+                message_type: 1,
+                channel_id: 0,
+                seconds_since: 3,
+                ..
+            }
+        ))
+    ));
+    assert!(send(WrathPopupRequest::BuyGuildBankTab).is_none());
 }

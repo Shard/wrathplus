@@ -199,6 +199,11 @@ impl GuildState {
     }
 
     /// A guild's identity if we hold a real one; `None` while in flight and for no such guild.
+    /// Our own guild's rank name for `index`, `""` before the identity answers.
+    pub(crate) fn own_rank_name(&self, index: u32) -> &str {
+        self.identity(self.guild_id).map_or("", |i| i.rank_name(index))
+    }
+
     fn identity(&self, guild_id: u32) -> Option<&Identity> {
         self.identities.get(guild_id).filter(|i| i.exists())
     }
