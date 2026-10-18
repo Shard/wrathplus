@@ -120,6 +120,19 @@ const ELSEWHERE: &[(&str, &str, &str)] = &[
 /// Pairs nothing fires on the verb's path, each with its reason.
 const GAP: &[(&str, &str, &str)] = &[
     (
+        "AddSkillUp",
+        "SKILL_LINES_CHANGED",
+        "the reference's allocator (0x5cdbf0 via 0x4d32d0) moves a temp point and fires; build \
+         12340 has no skill points (`GetSkillLineInfo` answers nil step and rank costs), so the \
+         verb (`wrath_skills.rs`) allocates nothing and there is no change to announce",
+    ),
+    (
+        "RemoveSkillUp",
+        "SKILL_LINES_CHANGED",
+        "the reference's release (0x5cdd20 via 0x4d3480) gives a temp point back and fires; with no \
+         temp points allocatable (see AddSkillUp) there is none to release",
+    ),
+    (
         "CancelSkillUps",
         "SKILL_LINES_CHANGED",
         "the reference's verb (0x4d3e30) calls the temp-point reset and fires unconditionally at \

@@ -16,7 +16,11 @@
 //! or name) and chat complaints (`0x3C7`, the line by id or the newest from the named sender, held
 //! by the native chat feed; the channel id reads 0).
 //!
-//! Not sent yet: the level grant (no writer), the guild-bank tab purchase and money deposit (no
+//! The refer-a-friend grant: `SMSG_PROPOSE_LEVEL_GRANT` latches the granter and fires
+//! `LEVEL_GRANT_PROPOSED` with their name once known; `AcceptLevelGrant` answers it (`0x420`).
+//! Labelled: `SMSG_REFER_A_FRIEND_FAILURE` stays in its capture (no error line yet).
+//!
+//! Not sent yet: the guild-bank tab purchase and money deposit (no
 //! guild-bank state: the banker and the tab count), and `PartyLFGStartBackfill` (`0x55a0c0` re-joins
 //! with the party's current dungeon, which the LFG reducer does not hold yet). Not built: glyph placement and the bound-tradeable, refund and trade-enchant
 //! confirmations (each resumes a pending cast), and the falling, out-of-bounds, can-teleport,
@@ -25,6 +29,7 @@
 use bevy::prelude::*;
 
 use benilla_protocol::wrath_instance_control::Packet;
+use benilla_ui::script::ScriptValue as V;
 use benilla_ui::script::{
     ScriptDialect, UiScript, WrathInstanceLock, WrathPopupRequest, WrathPopupState,
 };
@@ -46,16 +51,22 @@ impl Plugin for UiStaticPopupPlugin {
     }
 }
 
-/// The lock dies with the session.
-fn end_session(In(event): In<benilla_protocol::SessionEvent>, mut lock: ResMut<InstanceLock>) {
+/// The lock and the grant die with the session.
+fn end_session(In(event): In<benilla_protocol::SessionEvent>, mut held: ResMut<InstanceLock>) {
     if matches!(event, benilla_protocol::SessionEvent::Disconnected { .. }) {
-        lock.0 = None;
+        *held = InstanceLock::default();
     }
 }
 
-/// The pending instance lock, `None` when nothing asks.
+/// The session's pending questions: the instance lock, and a refer-a-friend level grant's
+/// granter (`SMSG_PROPOSE_LEVEL_GRANT`), with whether its `LEVEL_GRANT_PROPOSED` is still owed
+/// (it fires once the granter's name is known).
 #[derive(Resource, Default)]
-pub(crate) struct InstanceLock(Option<PendingLock>);
+pub(crate) struct InstanceLock {
+    lock: Option<PendingLock>,
+    granter: Option<u64>,
+    grant_owed: bool,
+}
 
 /// A pending instance lock: when it forces (`GetTime` seconds), whether accepting extends, and
 /// the completed-encounter mask.
@@ -127,6 +138,8 @@ pub(crate) struct Lookups<'a> {
     pub(crate) team_id: &'a dyn Fn(u8) -> u32,
     /// The latched summoner `CancelSummon` answers.
     pub(crate) summoner: Option<u64>,
+    /// The latched level-grant granter `AcceptLevelGrant` answers.
+    pub(crate) granter: Option<u64>,
     /// `ContainerRefundItemPurchase`'s item: bag, 1-based slot, equipped.
     pub(crate) refund_item: &'a dyn Fn(i64, u32, bool) -> Option<u64>,
     /// `SetFriendNotes`' friend: a row index or a name.
@@ -192,6 +205,12 @@ fn answer(request: &WrathPopupRequest, look: &Lookups) -> Option<ClientCommand> 
         R::SetLfgBootVote { yes } => ClientCommand::LfgCommand(
             benilla_protocol::wrath_lfg::commands::Command::SetBootVote { agree: *yes },
         ),
+        // `AcceptLevelGrant()` (`0x523360` → `0x521b00`): CMSG `0x420` with the proposer.
+        R::AcceptLevelGrant => ClientCommand::NativeReferFriend(
+            benilla_protocol::wrath_refer_friend::Command::AcceptLevelGrant {
+                granter: look.granter?,
+            },
+        ),
         // `GMResponseResolve()` (`0x5ad1b0`): CMSG `0x4F0`, empty.
         R::GmResponseResolve => {
             ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ResolveResponse)
@@ -247,6 +266,7 @@ pub(crate) struct PopupInputs<'w, 's> {
     self_q: Query<'w, 's, &'static ObjectStore, With<SelfPlayer>>,
     objects: Objects<'w, 's>,
     lock: Option<ResMut<'w, InstanceLock>>,
+    refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
     memo: Local<'s, crate::ui_script::VmMemo<Memo>>,
 }
 
@@ -262,6 +282,7 @@ pub(crate) fn drive(
     }
     let PopupInputs {
         packets,
+        refer,
         progress,
         social,
         names,
@@ -275,8 +296,32 @@ pub(crate) fn drive(
         return;
     };
     if let Some(warning) = packets.and_then(|mut p| take_lock_warning(&mut p.0, script.now())) {
-        lock.0 = Some(warning);
+        lock.lock = Some(warning);
         script.fire_event("INSTANCE_LOCK_START", Vec::new());
+    }
+
+    // `SMSG_PROPOSE_LEVEL_GRANT`: the newest granter is latched; every other receipt stays.
+    if let Some(mut refer) = refer {
+        use benilla_protocol::wrath_refer_friend::Packet as Refer;
+        refer.0.retain(|packet| match *packet {
+            Refer::ProposeLevelGrant { granter } => {
+                lock.granter = Some(granter);
+                lock.grant_owed = true;
+                false
+            }
+            _ => true,
+        });
+    }
+    // `LEVEL_GRANT_PROPOSED(name)`, once the granter's name has landed.
+    if lock.grant_owed {
+        let name = lock
+            .granter
+            .and_then(|g| names.as_deref().and_then(|n| n.resolve(g, commands)))
+            .map(str::to_string);
+        if let Some(name) = name {
+            lock.grant_owed = false;
+            script.fire_event("LEVEL_GRANT_PROPOSED", vec![V::Str(name)]);
+        }
     }
 
     let store = self_q.single().ok();
@@ -324,6 +369,7 @@ pub(crate) fn drive(
         let look = Lookups {
             team_id: &team_id,
             summoner: summon.pending(),
+            granter: lock.granter,
             refund_item: &refund_item,
             friend: &friend,
             chat_line: &chat_line,
@@ -333,8 +379,9 @@ pub(crate) fn drive(
                 let _ = commands.0.send(command);
                 match request {
                     WrathPopupRequest::CancelSummon => summon.cancel(),
+                    WrathPopupRequest::AcceptLevelGrant => lock.granter = None,
                     WrathPopupRequest::RespondInstanceLock { .. } => {
-                        lock.0 = None;
+                        lock.lock = None;
                         script.fire_event("INSTANCE_LOCK_STOP", Vec::new());
                     }
                     _ => {}
@@ -346,7 +393,7 @@ pub(crate) fn drive(
 
     let state = WrathPopupState {
         can_teleport: true,
-        instance_lock: lock.0.map(PendingLock::view),
+        instance_lock: lock.lock.map(PendingLock::view),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
         ..Default::default()
     };

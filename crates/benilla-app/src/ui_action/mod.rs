@@ -45,8 +45,8 @@ pub(crate) struct ActionBook;
 
 pub(crate) use errors::{
     attack_actor_blocked, attack_actor_refusal, keyed_line, keyed_line_s, reagent_totem_refusal,
-    show_messages, ui_error_text, CastErrors, CastFail, Caster, FillArg, MessageSink, MountErrors,
-    PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
+    show_messages, ui_error_text, ui_error_text_for_script, CastErrors, CastFail, Caster, FillArg,
+    MessageSink, MountErrors, PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
 };
 pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon};
 
