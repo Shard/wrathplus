@@ -48,10 +48,10 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 372 | 126 | 191 | 689 |
+| S→C | 373 | 125 | 191 | 689 |
 | C→S | 418 | 0 | 306 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 104 of them transport-only (no UI producer) and 314 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 103 of them transport-only (no UI producer) and 315 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -688,8 +688,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0240` | `CMSG_SET_VEHICLE_REC_ID_ACK` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0241` | `CMSG_TAXICLEARNODE` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0242` | `CMSG_TAXIENABLENODE` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0243` | `CMSG_ITEM_TEXT_QUERY` | C→S | handled | common | AC receive: `HandleItemTextQuery` (STATUS_LOGGEDIN). | C→S: Inventory — transport-only; `ClientCommand::NativeInventory`, P/wrath_inventory.rs encoder; no UI producer. See docs/WRATH-INVENTORY.md. |
-| `0x0244` | `SMSG_ITEM_TEXT_QUERY_RESPONSE` | S→C | capture-only | common | proven_send_site: `game/Handlers/ItemHandler.cpp:1481` | S→C: capture-only — P/wrath_inventory.rs `Packet` → A/net/wrath_inventory_capture.rs FIFO (item-GUID keyed text; mail letter cache is text-id keyed); no UI feed; see docs/WRATH-INVENTORY.md. |
+| `0x0243` | `CMSG_ITEM_TEXT_QUERY` | C→S | handled | common | AC receive: `HandleItemTextQuery` (STATUS_LOGGEDIN). | C→S: Inventory — `NativeInventory(ItemTextQuery)`; producer the item-text reader opening a letter (A/ui_item_text.rs). See docs/WRATH-INVENTORY.md. |
+| `0x0244` | `SMSG_ITEM_TEXT_QUERY_RESPONSE` | S→C | handled | common | proven_send_site: `game/Handlers/ItemHandler.cpp:1481` | S→C: Inventory — A/net/wrath_inventory_capture.rs → `ui_item_text::LetterTexts`: a letter's text for the reader. See docs/WRATH-INVENTORY.md. |
 | `0x0245` | `CMSG_MAIL_TAKE_MONEY` | C→S | handled | common | AC receive: `HandleMailTakeMoney` (STATUS_LOGGEDIN). | C→S: Exchange — ACTIVE; A/net/io/wrath.rs NativeExchange/NativeMailMutation route; producer: ui_mail (native row). Server acceptance not claimed; see docs/WRATH-EXCHANGE.md. |
 | `0x0246` | `CMSG_MAIL_TAKE_ITEM` | C→S | handled | common | AC receive: `HandleMailTakeItem` (STATUS_LOGGEDIN). | C→S: Exchange — ACTIVE; A/net/io/wrath.rs NativeExchange/NativeMailMutation route; producer: ui_mail (native row, first attachment). Server acceptance not claimed; see docs/WRATH-EXCHANGE.md. |
 | `0x0247` | `CMSG_MAIL_MARK_AS_READ` | C→S | handled | common | AC receive: `HandleMailMarkAsRead` (STATUS_LOGGEDIN). | C→S: Exchange — ACTIVE; A/net/io/wrath.rs NativeExchange/NativeMailMutation route; producer: ui_mail (native row open). Server acceptance not claimed; see docs/WRATH-EXCHANGE.md. |

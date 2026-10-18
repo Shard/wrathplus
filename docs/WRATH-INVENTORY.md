@@ -13,7 +13,7 @@ Receive opcodes decoded into existing shared events (**handled**): 005B page tex
 
 Receive opcodes that are **capture-only** (`NativeInventoryPackets` FIFO, sole owner, cleared on
 Connected and Disconnected, duplicates kept): 00AE/00AF read item ok/failed, 01D7 enchantment log,
-0244 item text, 02C5 item-set name. Reasons: 01D7 carries a SpellItemEnchantment id where the shared combat-log event wants a spell id;
+02C5 item-set name. Reasons: 01D7 carries a SpellItemEnchantment id where the shared combat-log event wants a spell id;
 0244 is keyed by item GUID while the letter cache is keyed by text id. Raw codes, zeros and
 ignored-slot values (raw GUID 1) are preserved. Strict framing rejects truncation and trailing
 bytes; malformed packets dispatch as unhandled.
@@ -37,6 +37,10 @@ Consumers take their receipts out of that FIFO and leave the rest in order:
   reads 0 in `GetEquipmentSetItemIDs`; `EquipmentSetContainsLockedItems` is always false;
   `PickupEquipmentSetByName` holds nothing (no action-bar set buttons); the set tooltip shows the
   name only.
+- **Letters**: a mail-made letter's text is asked by the item's GUID in 12340 (0243, from the
+  item-text reader, `A/ui_item_text.rs`), and 0244's answer goes to the reader's `LetterTexts`
+  cache instead of the FIFO. Labelled: AC's "no text" answer carries no GUID, so it answers
+  nothing and the reader waits.
 - **Sockets** (`A/net/wrath_sockets.rs`, Lua in `U/script/wrath_sockets.rs`, gem tables in
   `benilla-formats` `gems.rs`): `SocketContainerItem`/`SocketInventoryItem` open a session on a
   carried item. Its sockets are the template's socket blocks (now kept by the item-query codec as
