@@ -44,6 +44,17 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
             })
         })?,
     )?;
+    // HasFocus() (`0x976490`): this box is the focused one.
+    m.set(
+        "HasFocus",
+        lua.create_function(|lua, this: Table| {
+            let h = crate::script::object::frame_handle_of(lua, &this)?;
+            let model = lua
+                .app_data_ref::<crate::script::Model>()
+                .expect("model app_data");
+            Ok(model.focused_editbox == Some(h))
+        })?,
+    )?;
     m.set(
         "ClearHistory",
         lua.create_function(|lua, this: Table| {

@@ -106,6 +106,16 @@ mod tests {
     }
 
     #[test]
+    fn smooth_progress_and_stop_animating() {
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("f=CreateFrame('Frame');t=f:CreateTexture();g=t:CreateAnimationGroup();a=g:CreateAnimation('Alpha');a:SetDuration(1);a:SetSmoothing('IN');stops=0;g:SetScript('OnStop',function() stops=stops+1 end);g:Play()").unwrap();
+        s.tick(0.5);
+        assert!(s.eval::<bool>("return math.abs(a:GetProgress()-0.5)<1e-6 and math.abs(a:GetSmoothProgress()-0.25)<1e-6").unwrap());
+        s.run("t:StopAnimating(); t:StopAnimating(); f:StopAnimating()").unwrap();
+        assert!(s.eval::<bool>("return stops==1 and not g:IsPlaying()").unwrap());
+    }
+
+    #[test]
     fn child_callback_can_stop_without_later_callbacks_or_group_finish() {
         let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("f=CreateFrame('Frame');g=f:CreateAnimationGroup();a=g:CreateAnimation();a:SetDuration(1);b=g:CreateAnimation();b:SetOrder(2);b:SetDuration(1);events='';a:SetScript('OnFinished',function() events=events..'a';g:Stop() end);b:SetScript('OnPlay',function() events=events..'b' end);g:SetScript('OnFinished',function() events=events..'g' end);g:Play()").unwrap();
