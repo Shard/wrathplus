@@ -22,6 +22,8 @@ pub const SMSG_SPELL_GO: u16 = 0x0132;
 pub const SMSG_SPELL_COOLDOWN: u16 = 0x0134;
 pub const SMSG_SPELL_DELAYED: u16 = 0x01E2;
 pub const SMSG_SPELL_FAILED_OTHER: u16 = 0x02A6;
+/// `Player::SendAutoRepeatCancel`: the packed guid of the unit whose auto-repeat stopped, to the set.
+pub const SMSG_CANCEL_AUTO_REPEAT: u16 = 0x029C;
 pub const SMSG_INITIALIZE_FACTIONS: u16 = 0x0122;
 pub const SMSG_SET_FACTION_STANDING: u16 = 0x0124;
 /// Unchanged since 1.12; the Vanilla parser reads them (XP gain only appends a trailing byte).
@@ -57,6 +59,7 @@ pub const fn handles(opcode: u16) -> bool {
             | SMSG_SPELL_COOLDOWN
             | SMSG_SPELL_DELAYED
             | SMSG_SPELL_FAILED_OTHER
+            | SMSG_CANCEL_AUTO_REPEAT
             | SMSG_INITIALIZE_FACTIONS
             | SMSG_SET_FACTION_STANDING
             | SMSG_LOG_XPGAIN
@@ -109,6 +112,18 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "SPELL_FAILED_OTHER trailing bytes"));
             }
             vec![SessionEvent::SpellFailedOther { caster, spell_id, cast_count, reason }]
+        }
+        // Only our own drives the shared (self-only) cancel; another unit's is consumed silently.
+        SMSG_CANCEL_AUTO_REPEAT => {
+            let unit = read_packed_guid(&mut r)?;
+            if r.position() as usize != body.len() {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "CANCEL_AUTO_REPEAT trailing bytes"));
+            }
+            if self_guid == Some(unit) {
+                vec![SessionEvent::CancelAutoRepeat]
+            } else {
+                Vec::new()
+            }
         }
         SMSG_NAME_QUERY_RESPONSE => name_query(&mut r)?,
         SMSG_CREATURE_QUERY_RESPONSE => session_decode(creature_query(&mut r)?),

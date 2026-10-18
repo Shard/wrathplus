@@ -51,6 +51,7 @@ mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
 pub(crate) mod wrath_combo_points;
+pub(crate) mod wrath_runes;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -164,6 +165,7 @@ impl Plugin for NetPlugin {
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
         wrath_combo_points::register(app);
+        wrath_runes::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
