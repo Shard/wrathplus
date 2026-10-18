@@ -79,6 +79,14 @@ pub(super) fn surface_over_feet(world: &WorldPoint, feet: Vec3) -> Option<f32> {
         .map(|hit| feet.y + (hit.surface_z - wow[2]))
 }
 
+/// The swimmer rests at the surface cap ([`rest_cap`]), within a few centimetres: where a climb
+/// can only leave the water.
+pub(super) fn at_surface(player: &Player, surface_y: Option<f32>) -> bool {
+    const BAND: f32 = 0.05;
+    surface_y
+        .is_some_and(|surface| surface - player.pos.y <= rest_cap(player.collision_height.0) + BAND)
+}
+
 /// Latches [`Player::swimming`] as `0x6030c0` does and returns it: enter on a strict
 /// `depth > 0.75·h`, leave on `depth < 0.75·h - 1/36` or no liquid at all. Entry also waits out a
 /// rising launch until its upward speed halves (`0x7c5de0`, about 0.236 s for a swim jump), so the
@@ -286,6 +294,7 @@ pub(super) fn drive_step(
     surface_y: Option<f32>,
     basis: (Vec3, Vec3),
     amounts: (f32, f32),
+    vertical: f32,
     speeds: Option<benilla_protocol::MoveSpeeds>,
     move_speed: &super::MoveSpeed,
     wobble: f32,
@@ -300,10 +309,11 @@ pub(super) fn drive_step(
     }
     let mut pitch = player.mover_pitch;
     // The travel basis (`0x7c5880`): forward is the facing pitched by the swim pitch, strafe stays
-    // level, and there is no vertical input; Space's one swim role is the jump.
+    // level, and build 12340's ascend and descend keys (`0x9898e0`, which takes SWIMMING as it takes
+    // FLYING) climb or sink straight up or down, the climb still capped at the rest line.
     let (sp, cp) = player.mover_pitch.sin_cos();
     let fwd_axis = basis.0 * cp + Vec3::Y * sp;
-    let v = fwd_axis * swim_fwd + basis.1 * swim_side;
+    let v = fwd_axis * swim_fwd + basis.1 * swim_side + Vec3::Y * vertical;
     let dir3 = v.normalize_or_zero();
     let rest_line = rest_line(player, surface_y);
     // The directional speed (`0x7c4c90`'s swim arm): backward takes `min(swimBack, swim)`,
@@ -397,6 +407,16 @@ mod tests {
             collision_height: crate::entities::CollisionHeight(h),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_surface_is_the_rest_cap_and_not_below_it() {
+        let player = player_at(0.0);
+        let cap = rest_cap(HUMAN_MALE);
+        assert!(at_surface(&player, Some(cap)));
+        assert!(at_surface(&player, Some(cap + 0.04)));
+        assert!(!at_surface(&player, Some(cap + 0.5)), "a diver is below it");
+        assert!(!at_surface(&player, None));
     }
 
     #[test]

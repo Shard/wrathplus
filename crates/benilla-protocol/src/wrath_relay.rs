@@ -1,9 +1,9 @@
 //! Strict projection of Wrath build-12340 movement relays into shared session events.
 //!
 //! AzerothCore's `WorldSession::WriteMovementInfo` writes a packed mover GUID followed by Wrath
-//! `MovementInfo`. Admitted: on-foot, swimming (with its pitch), flight (pitch kept; the Wrath-only
-//! CAN_FLY, FLYING, ASCENDING and DESCENDING bits have no shared meaning and are dropped; Wrath
-//! FLYING is the shared ON_TRANSPORT bit and must never leak into it) and transports (Wrath
+//! `MovementInfo`. Admitted: on-foot, swimming (with its pitch), flight (pitch kept; Wrath FLYING is
+//! the shared ON_TRANSPORT bit, so it becomes the shared word's own FLYING `0x0800_0000`, and
+//! CAN_FLY, ASCENDING and DESCENDING keep their bits) and transports (Wrath
 //! `0x200` becomes the shared `ON_TRANSPORT`, the tail the shared `TransportPose`). The mode,
 //! knockback and collision-height echoes relay their `MovementInfo`; their extra words are framed
 //! and dropped. Spline elevation and the pending-* bits stay fenced.
@@ -54,8 +54,11 @@ const WRATH_ON_TRANSPORT: u32 = 0x0000_0200;
 const SHARED_ON_TRANSPORT: u32 = 0x0200_0000;
 /// Wrath `DISABLE_GRAVITY` is the shared `LEVITATING` (`0x400`) and `HOVER` (`0x4000_0000`) is the same bit.
 const WRATH_SHARED_MODES: u32 = 0x0000_0400 | 0x4000_0000;
-/// CAN_FLY, FLYING, ASCENDING, DESCENDING: no shared meaning; dropped from the shared word.
+/// CAN_FLY, FLYING, ASCENDING, DESCENDING. Wrath FLYING moves to [`SHARED_FLYING`]; the others keep
+/// their bits, which the shared word holds for build 12340 (`benilla-app` `move_flags`).
 const WRATH_FLIGHT_ONLY: u32 = 0x0100_0000 | 0x0200_0000 | 0x0040_0000 | 0x0080_0000;
+const WRATH_FLYING: u32 = 0x0200_0000;
+const SHARED_FLYING: u32 = 0x0800_0000;
 /// Water walking and slow fall (`0x1000_0000`, `0x2000_0000`), swimming (`0x0020_0000`, which carries
 /// the pitch) and the pitch keys (`0x40`, `0x80`) have the same bits in the shared word.
 const WRATH_ON_FOOT_FLAGS: u32 = 0x3020_01ff | WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR;
@@ -184,13 +187,12 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
     }
 
     let mut flags = movement.flags
-        & !(WRATH_ROOT
-            | WRATH_FALLING
-            | WRATH_FALLING_FAR
-            | WRATH_ON_TRANSPORT
-            | WRATH_FLIGHT_ONLY);
+        & !(WRATH_ROOT | WRATH_FALLING | WRATH_FALLING_FAR | WRATH_ON_TRANSPORT | WRATH_FLYING);
     if movement.flags & WRATH_ON_TRANSPORT != 0 {
         flags |= SHARED_ON_TRANSPORT;
+    }
+    if movement.flags & WRATH_FLYING != 0 {
+        flags |= SHARED_FLYING;
     }
     if movement.flags & WRATH_ROOT != 0 {
         flags |= SHARED_ROOT;
@@ -464,8 +466,8 @@ mod tests {
 
     #[test]
     fn flight_and_transport_relays_translate_into_the_shared_word() {
-        // A flyer: CAN_FLY | FLYING | ASCENDING never reach the shared word (Wrath FLYING is the
-        // shared ON_TRANSPORT bit); its pitch rides.
+        // A flyer: Wrath FLYING (the shared ON_TRANSPORT bit) becomes the shared FLYING
+        // `0x0800_0000`; CAN_FLY and ASCENDING keep their bits; its pitch rides.
         let mut flying = movement(0x0100_0000 | MOVEMENT_FLAG_FLYING | 0x0040_0000);
         flying.movement.pitch = Some(0.4);
         let SessionEvent::UnitMove {
@@ -477,7 +479,10 @@ mod tests {
         else {
             panic!()
         };
-        assert_eq!((flags, pitch, transport), (0, 0.4, None));
+        assert_eq!(
+            (flags, pitch, transport),
+            (0x0100_0000 | 0x0800_0000 | 0x0040_0000, 0.4, None)
+        );
         // A passenger: Wrath ON_TRANSPORT (0x200) becomes the shared 0x0200_0000 with its deck pose.
         let mut riding = movement(MOVEMENT_FLAG_ON_TRANSPORT | wrath_ground::MOVE_FORWARD);
         riding.movement.transport = Some(TransportInfo {
