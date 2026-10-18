@@ -806,6 +806,9 @@ mod under_floor {
                 swim: 2.0,
                 swim_back: 2.0,
                 turn_rate: 0.0,
+                flight: 7.0,
+                flight_back: 4.5,
+                pitch_rate: std::f32::consts::PI,
             },
         ));
         // A floor 0.06 under the wire Z: past the standing slack (0.028), inside the moving reach.

@@ -309,6 +309,14 @@ pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
             s.swim
         };
     }
+    // Build 12340's flight arm, shaped as the swim arm.
+    if flags & f::FLYING != 0 {
+        return if flags & f::BACKWARD != 0 {
+            s.flight_back.min(s.flight)
+        } else {
+            s.flight
+        };
+    }
     if flags & f::WALK_MODE != 0 {
         return s.walk.min(s.run);
     }
@@ -937,6 +945,12 @@ pub(crate) enum MoveKind {
     FallLand,
     StartSwim,
     StopSwim,
+    /// Build 12340's flight edges (`Wow.exe` `0x6ef860`): the ascend and descend keys while flying
+    /// (`STOP_ASCEND` ends either) and taking off or landing (`CMSG_MOVE_SET_FLY`).
+    StartAscend,
+    StopAscend,
+    StartDescend,
+    SetFly,
     /// The walk/run toggle: sent from the toggle handler (`ToggleRun 0x513d50` to `0x617de0`),
     /// not the move broadcaster, so it goes out standing still (`0x61a99d` gates the latter).
     SetWalkMode,
@@ -948,6 +962,7 @@ pub(crate) enum MoveKind {
 impl MoveKind {
     pub(crate) fn opcode(self) -> u16 {
         use benilla_protocol::messages::opcode as op;
+        use benilla_protocol::wrath_ground;
         match self {
             MoveKind::StartForward => op::MSG_MOVE_START_FORWARD,
             MoveKind::StartBackward => op::MSG_MOVE_START_BACKWARD,
@@ -962,6 +977,10 @@ impl MoveKind {
             MoveKind::FallLand => op::MSG_MOVE_FALL_LAND,
             MoveKind::StartSwim => op::MSG_MOVE_START_SWIM,
             MoveKind::StopSwim => op::MSG_MOVE_STOP_SWIM,
+            MoveKind::StartAscend => wrath_ground::MSG_MOVE_START_ASCEND as u16,
+            MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
+            MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
+            MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
             MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
             MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
             MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
@@ -3005,6 +3024,9 @@ mod tests {
             swim: 4.722,
             swim_back: 2.5,
             turn_rate: std::f32::consts::PI,
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         }
     }
 
@@ -3053,6 +3075,9 @@ mod tests {
             swim: 4.0,
             swim_back: 9.0, // a swim-back above swim
             turn_rate: std::f32::consts::PI,
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         };
         assert_eq!(current_speed(&s, f::FORWARD | f::WALK_MODE), 7.0);
         assert_eq!(current_speed(&s, f::BACKWARD), 7.0);

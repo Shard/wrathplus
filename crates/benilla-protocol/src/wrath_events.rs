@@ -986,6 +986,9 @@ fn project_speeds(speeds: Option<[f32; 9]>) -> Option<MoveSpeeds> {
         swim: s[3],
         swim_back: s[4],
         turn_rate: s[7],
+        flight: s[5],
+        flight_back: s[6],
+        pitch_rate: s[8],
     })
 }
 
@@ -1434,6 +1437,9 @@ mod tests {
                 swim: 4.7,
                 swim_back: 2.5,
                 turn_rate: std::f32::consts::PI,
+                flight: 7.0,
+                flight_back: 4.5,
+                pitch_rate: std::f32::consts::PI,
             }
         );
     }

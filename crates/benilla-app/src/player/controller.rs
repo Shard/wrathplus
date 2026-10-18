@@ -573,8 +573,26 @@ pub(super) fn control(
         }
         let swimming = swimming && !breach && !knock_breach;
 
-        // Read by both the swim mover and the flag build, so the two cannot disagree.
-        let (swim_fwd, swim_side) = if swimming {
+        // Build 12340 flight (`super::flight`). The ascend and descend keys are live only while
+        // translation is. The water, a knockback and the grant's loss land a flier (`0x98c240`);
+        // the ascend key held in the air takes off (`0x989890`), and a flier's jump is refused
+        // (`0x9883f0`), so its Space is the ascend alone.
+        let ascend = binds.pressed(crate::bindings::Input::Ascend) && may_translate;
+        let descend = binds.pressed(crate::bindings::Input::Descend) && may_translate;
+        if swimming || knockback.is_some() || !player.modes.can_fly {
+            flight::land(&mut player);
+        }
+        if flight::takes_off(&player, player.airborne_since.is_some(), ascend) {
+            player.flying = true;
+        }
+        let flying = player.flying;
+        let vertical = flight::vertical(ascend, descend);
+        if flying {
+            want_jump = false;
+        }
+
+        // Read by the swim and flight movers and the flag build, so the two cannot disagree.
+        let (swim_fwd, swim_side) = if swimming || flying {
             swim::translate_amounts(&axes, !may_translate)
         } else {
             (0.0, 0.0)
@@ -638,6 +656,21 @@ pub(super) fn control(
             );
             swim_pitch = frame.pitch;
             frame.outcome
+        } else if flying {
+            // One flying frame: the swim resolver with no waterline, at the flight speeds.
+            let frame = flight::drive_step(
+                &mut player,
+                &time,
+                &collide,
+                capsule,
+                (move_fwd, move_right),
+                (swim_fwd, swim_side),
+                vertical,
+                mover_speeds,
+                move_speed,
+            );
+            swim_pitch = frame.pitch;
+            frame.outcome
         } else {
             // Water walking hands the mover the liquid surface as ground ([`mover::water_floor`]),
             // where the reference ORs the liquid layers into the walk trace's class mask
@@ -674,7 +707,8 @@ pub(super) fn control(
         let now = time.elapsed_secs();
         // Our FALLING: never while swimming, and a root ends it outright (`SetRoot` `0x7c7340`
         // calls `StopFalling` `0x7c6290`), leaving the body hanging; `grounded` keeps true contact.
-        let airborne = !swimming && !held && !player.modes.rooted && (!grounded || jumped);
+        let airborne =
+            !swimming && !flying && !held && !player.modes.rooted && (!grounded || jumped);
         // Airborne keeps the attachment, so a jump above a deck lands where it took off.
         ride::update_attachment(
             &mut player,
@@ -682,7 +716,7 @@ pub(super) fn control(
             child_of,
             ground,
             grounded,
-            swimming,
+            swimming || flying,
         );
         // The live flag word, the take-off-frozen one the animation reads, and the fall clock.
         let flags::FrameFlags {
@@ -693,7 +727,8 @@ pub(super) fn control(
         } = flags::this_frame(
             &mut player,
             &axes,
-            swimming.then_some((swim_fwd, swim_side)),
+            (swimming || flying).then_some((swim_fwd, swim_side)),
+            flying.then_some(vertical),
             airborne,
             jumped,
             held,
