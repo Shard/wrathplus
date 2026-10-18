@@ -37,7 +37,7 @@ mod wrath_item_refunds;
 mod wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
-mod wrath_notices;
+pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
