@@ -58,6 +58,11 @@ pub(crate) use edit::ChannelState;
 pub(crate) use event::event_name;
 pub(crate) use event::{default_color, ChatEvent, ChatEventKind};
 pub(crate) use feed::ChatLog;
+
+/// Push one line into the chat log as `CHAT_MSG_SYSTEM`.
+pub(crate) fn push_system_line(chat: &mut ChatLog, line: String) {
+    chat.push_event(ChatEvent::text_only(ChatEventKind::System, line));
+}
 /// The per-character chat cache's restore, called from the world-entry UI load: its two events
 /// must precede the session's first chat line and `PLAYER_LOGIN`.
 pub(crate) use settings::restore_chat_looks;

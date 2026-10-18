@@ -592,6 +592,8 @@ pub enum SessionEvent {
     /// Lossless arena-team transport; no inferred UI state.
     WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
+    /// Appearance replies: titles earned or lost, the barber chair and its result.
+    WrathAppearance { packet: crate::wrath_appearance::Packet },
     WrathGuild { packet: crate::wrath_guild::Packet },
     /// Raw native stable reply; no Vanilla loyalty or slot projection.
     WrathStable { packet: crate::wrath_stable::Packet },
@@ -1213,6 +1215,9 @@ pub enum SessionEvent {
     /// Capture-only native world-presentation receipts without a shared event: page text, light
     /// override, phase shift, movie, dance moves, building damage (`wrath_world_objects`).
     WrathWorldObjects { packet: crate::wrath_world_objects::Packet },
+    /// Capture-only native session receipts without a shared event: daily-reset countdown,
+    /// play-time warning, inebriation, feature-system status (`wrath_session_misc`).
+    WrathSessionMisc { packet: crate::wrath_session_misc::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).
@@ -1225,6 +1230,8 @@ pub enum SessionEvent {
     WrathRunes { packet: crate::wrath_spell_control::RunePacket },
     /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
     WrathMovement { packet: crate::wrath_movement_misc::Packet },
+    /// Build 12340 vehicles and their passengers (`crate::wrath_vehicle`).
+    WrathVehicle(crate::wrath_vehicle::VehicleEvent),
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:
     /// the count banked on `target`, 0 for none.
     ComboPoints { target: u64, points: u8 },

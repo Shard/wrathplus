@@ -79,6 +79,17 @@ fn control_verdict(mover: u64, allow_move: bool, self_guid: Option<u64>) -> Cont
 /// `self_pose` is the streamed self entity's translation and yaw, the take-control target.
 // `control`'s own transports query, passed through.
 #[allow(clippy::type_complexity)]
+/// A vehicle aim request (`net::wrath_vehicle::VehicleRequest::AimPitch`) becomes the driven unit's
+/// mover pitch before `control` reads it.
+pub(super) fn apply_vehicle_aim(
+    mut player: ResMut<Player>,
+    mut vehicle: ResMut<crate::net::wrath_vehicle::VehicleState>,
+) {
+    if let Some(pitch) = vehicle.aim_pitch.take() {
+        player.set_aim_pitch(pitch);
+    }
+}
+
 pub(super) fn apply_server_moves(
     time: &Time,
     commands: &mut Commands,
@@ -111,6 +122,12 @@ pub(super) fn apply_server_moves(
             }
             ControlVerdict::Restored => {
                 player.control_lost = false;
+                // Our own body's modes come back with it (set aside at the grant below).
+                if player.foreign_mover.is_some() {
+                    if let Some(own) = player.parked_modes.take() {
+                        player.modes = own;
+                    }
+                }
                 player.foreign_mover = None;
                 player.reseat = true;
                 // Re-claim ourselves, as login does (after a possession `m_clientMoverGuid` still
@@ -130,6 +147,10 @@ pub(super) fn apply_server_moves(
                 // second yield (`MovementHandler.cpp:891-897`).
                 if player.foreign_mover.is_none() {
                     yield_own_body(net_cmds, player, self_guid);
+                    // The driven unit's modes are its own: ours wait (its root, for one, arrives as
+                    // an order naming it right after the grant).
+                    player.parked_modes = Some(std::mem::take(&mut player.modes));
+                    super::flight::land(player);
                 }
                 player.control_lost = false;
                 player.foreign_mover = Some(guid);

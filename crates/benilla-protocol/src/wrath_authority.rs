@@ -27,8 +27,10 @@ pub struct UnsetCanFlyOrder {
 
 pub type ForceRootOrder = UnsetCanFlyOrder;
 
-/// What survives a root: the medium a mover is in (with its tail) and its granted modes.
-const HALT_KEEPS: u32 = wrath_ground::MOVE_SWIMMING
+/// What survives a root: the root itself, the medium a mover is in (with its tail) and its granted
+/// modes. The turn keys go too: the halted pose is the parting STOP's.
+const HALT_KEEPS: u32 = wrath_ground::MOVE_ROOT
+    | wrath_ground::MOVE_SWIMMING
     | wrath_ground::MOVE_FLYING
     | wrath_ground::MOVE_CAN_FLY
     | wrath_ground::MOVE_ON_TRANSPORT
@@ -188,6 +190,10 @@ fn encode_on_foot_ack(
                 return Err(AuthorityCodecError::UnsupportedGroundState);
             }
             let flags = MOVEMENT_FLAG_ROOT | pose.flags;
+            encoded[prefix_len..prefix_len + 4].copy_from_slice(&flags.to_le_bytes());
+        } else {
+            // The unroot ACK reports the mover free.
+            let flags = pose.flags & !MOVEMENT_FLAG_ROOT;
             encoded[prefix_len..prefix_len + 4].copy_from_slice(&flags.to_le_bytes());
         }
     }
@@ -832,7 +838,12 @@ pub fn encode_knock_back_ack(
     };
     let pose = pose.landed();
     let launch = OnFootPose {
-        flags: (pose.flags & !(wrath_ground::MOVE_FALLING_FAR | wrath_ground::MOVE_SWIMMING))
+        flags: (pose.flags
+            & !(wrath_ground::MOVE_FALLING_FAR
+                | wrath_ground::MOVE_SWIMMING
+                | wrath_ground::MOVE_ROOT
+                | wrath_ground::MOVE_PITCH_UP
+                | wrath_ground::MOVE_PITCH_DOWN))
             | wrath_ground::MOVE_FALLING,
         pitch: None,
         fall_time: 0,
@@ -845,6 +856,77 @@ pub fn encode_knock_back_ack(
         ..pose
     };
     encode_mover_ack_prefix(mover_guid, counter, launch, timestamp, 0)
+}
+
+// ── Control hand-over and the controlled vehicle (`Wow.exe` `0x729010`, `0x6ef860` events
+// 0x34/0x37; AzerothCore `HandleMoveNotActiveMover`, `HandleDismissControlledVehicle`,
+// `HandleChangeSeatsOnControlledVehicle`) ──
+
+pub const CMSG_MOVE_NOT_ACTIVE_MOVER: u32 = 0x02d1;
+pub const CMSG_DISMISS_CONTROLLED_VEHICLE: u32 = 0x046d;
+pub const CMSG_CHANGE_SEATS_ON_CONTROLLED_VEHICLE: u32 = 0x049b;
+
+/// A request about the vehicle we drive, sent with its halted pose (`0x6ef860` events 0x34/0x37
+/// halt the mover through `0x6e9980` first).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleControl {
+    /// `CMSG_DISMISS_CONTROLLED_VEHICLE`: leave the vehicle we drive.
+    Dismiss,
+    /// `CMSG_CHANGE_SEATS_ON_CONTROLLED_VEHICLE`: `accessory` 0 with `seat`'s sign for the previous
+    /// or next seat of this vehicle, else a seat on that accessory.
+    ChangeSeats { accessory: u64, seat: i8 },
+}
+
+impl VehicleControl {
+    pub fn opcode(self) -> u32 {
+        match self {
+            Self::Dismiss => CMSG_DISMISS_CONTROLLED_VEHICLE,
+            Self::ChangeSeats { .. } => CMSG_CHANGE_SEATS_ON_CONTROLLED_VEHICLE,
+        }
+    }
+
+    /// The body for the vehicle `vehicle_guid` at `pose`.
+    pub fn encode(
+        self,
+        vehicle_guid: u64,
+        pose: OnFootPose,
+        timestamp: u32,
+    ) -> Result<Vec<u8>, AuthorityCodecError> {
+        match self {
+            Self::Dismiss => encode_mover_pose(vehicle_guid, pose, timestamp),
+            Self::ChangeSeats { accessory, seat } => {
+                encode_change_seats(vehicle_guid, pose, timestamp, accessory, seat)
+            }
+        }
+    }
+}
+
+/// `packed guid + MovementInfo`: the parting pose of the mover we stop driving
+/// (`CMSG_MOVE_NOT_ACTIVE_MOVER`), or the driven vehicle's pose as we dismiss it
+/// (`CMSG_DISMISS_CONTROLLED_VEHICLE`).
+pub fn encode_mover_pose(
+    mover_guid: u64,
+    pose: OnFootPose,
+    timestamp: u32,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    pose.encode(wrath_ground::MSG_MOVE_HEARTBEAT, mover_guid, timestamp)
+        .map_err(|_| AuthorityCodecError::UnsupportedGroundState)
+}
+
+/// `CMSG_CHANGE_SEATS_ON_CONTROLLED_VEHICLE`: the vehicle's `packed guid + MovementInfo`, then the
+/// target `packed guid` (zero for a seat on this vehicle, else the accessory) and `i8 seat`
+/// (with a zero target AzerothCore moves to the previous or next seat by its sign).
+pub fn encode_change_seats(
+    vehicle_guid: u64,
+    pose: OnFootPose,
+    timestamp: u32,
+    accessory: u64,
+    seat: i8,
+) -> Result<Vec<u8>, AuthorityCodecError> {
+    let mut body = encode_mover_pose(vehicle_guid, pose, timestamp)?;
+    write_packed_guid(accessory, &mut body)?;
+    body.push(seat as u8);
+    Ok(body)
 }
 
 /// `MSG_MOVE_TELEPORT_ACK` from us: `packed guid, u32 counter, u32 time`.

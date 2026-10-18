@@ -30,6 +30,10 @@ impl CharTitlesCatalog {
     pub fn get(&self, id: u32) -> Option<&CharTitle> {
         self.0.get(&id)
     }
+    /// The title at a `PLAYER__FIELD_KNOWN_TITLES` bit, as `SMSG_TITLE_EARNED` names it.
+    pub fn by_bit(&self, bit_index: u32) -> Option<&CharTitle> {
+        self.0.values().find(|t| t.mask_id == bit_index)
+    }
     pub fn len(&self) -> usize {
         self.0.len()
     }

@@ -593,6 +593,21 @@ pub(super) fn control(
         if flying {
             want_jump = false;
         }
+        // The pitch keys tilt a swimmer's or flier's nose at the pitch rate, clamped to ±π/2
+        // (`0x989220`; refused outside the medium, and a root stops them as it stops translation).
+        let pitched = (swimming || flying) && may_translate;
+        let pitch_key = flight::vertical(
+            pitched && binds.pressed(crate::bindings::Input::PitchUp),
+            pitched && binds.pressed(crate::bindings::Input::PitchDown),
+        );
+        if pitch_key != 0.0 {
+            let rate = mover_speeds
+                .map(|s| s.pitch_rate)
+                .filter(|r| *r > 0.0)
+                .unwrap_or(std::f32::consts::PI);
+            player.mover_pitch = (player.mover_pitch + pitch_key * rate * dt)
+                .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+        }
 
         // Read by the swim and flight movers and the flag build, so the two cannot disagree.
         let (swim_fwd, swim_side) = if swimming || flying {
@@ -723,7 +738,7 @@ pub(super) fn control(
         );
         // The live flag word, the take-off-frozen one the animation reads, and the fall clock.
         let flags::FrameFlags {
-            wire: move_flags_now,
+            wire: mut move_flags_now,
             pose: pose_flags,
             landed,
             fall_time: wire_fall_time,
@@ -741,6 +756,12 @@ pub(super) fn control(
             now,
             launch_y,
         );
+        // The held pitch key rides the wire while in the medium (one at a time, as `0x989220`).
+        if pitch_key > 0.0 {
+            move_flags_now |= move_flags::PITCH_UP;
+        } else if pitch_key < 0.0 {
+            move_flags_now |= move_flags::PITCH_DOWN;
+        }
         if let Some(falling) = falling.as_deref_mut() {
             falling.0 = player.is_falling();
         }

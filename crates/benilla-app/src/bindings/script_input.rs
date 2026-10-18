@@ -28,6 +28,10 @@ pub(crate) enum Input {
     TurnOrAction,
     /// `CameraOrSelectOrMoveStart`/`Stop`, bit `0x2`.
     CameraOrSelectOrMove,
+    /// `PitchUpStart`/`Stop`, bit `0x400`: the swimmer's or flier's pitch keys.
+    PitchUp,
+    /// `PitchDownStart`/`Stop`, bit `0x800`.
+    PitchDown,
     /// `JumpOrAscendStart`/`AscendStop`: the flier's ascend key.
     Ascend,
     /// `SitStandOrDescendStart`/`DescendStop`: the flier's descend key.
@@ -64,6 +68,8 @@ fn held_input(input: HeldInput) -> Input {
         HeldInput::StrafeRight => Input::StrafeRight,
         HeldInput::TurnOrAction => Input::TurnOrAction,
         HeldInput::CameraOrSelectOrMove => Input::CameraOrSelectOrMove,
+        HeldInput::PitchUp => Input::PitchUp,
+        HeldInput::PitchDown => Input::PitchDown,
         HeldInput::Ascend => Input::Ascend,
         HeldInput::Descend => Input::Descend,
     }

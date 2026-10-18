@@ -1009,16 +1009,34 @@ fn drain_pvp_toggles(script: Option<NonSendMut<UiScript>>, commands: Res<NetComm
 }
 
 /// Drain the `ShowHelm`/`ShowCloak` flips into `CMSG_TOGGLE_HELM`/`CMSG_TOGGLE_CLOAK`; the VM,
-/// which alone knows what the Options row did, has already decided each is needed.
-fn drain_worn_display_toggles(script: Option<NonSendMut<UiScript>>, commands: Res<NetCommands>) {
+/// which alone knows what the Options row did, has already decided each is needed. 3.3.5's
+/// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` carry the state instead: a flip shows what is hidden.
+fn drain_worn_display_toggles(
+    script: Option<NonSendMut<UiScript>>,
+    commands: Res<NetCommands>,
+    self_q: Query<&crate::net::ObjectStore, With<crate::net::SelfPlayer>>,
+) {
+    use benilla_protocol::wrath_appearance::Command as A;
     let Some(mut script) = script else {
         return;
     };
+    let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
+    let hidden = self_q
+        .iter()
+        .next()
+        .map(|s| (s.0.player_hides_helm(), s.0.player_hides_cloak()));
     for which in script.take_worn_display_toggles() {
-        let _ = commands.0.send(match which {
-            WornDisplay::Helm => crate::net::ClientCommand::ToggleHelm,
-            WornDisplay::Cloak => crate::net::ClientCommand::ToggleCloak,
-        });
+        let command = match (which, wrath) {
+            (WornDisplay::Helm, false) => crate::net::ClientCommand::ToggleHelm,
+            (WornDisplay::Cloak, false) => crate::net::ClientCommand::ToggleCloak,
+            (WornDisplay::Helm, true) => crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
+                show: hidden.is_some_and(|h| h.0),
+            }),
+            (WornDisplay::Cloak, true) => crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
+                show: hidden.is_some_and(|h| h.1),
+            }),
+        };
+        let _ = commands.0.send(command);
     }
 }
 
