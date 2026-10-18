@@ -356,6 +356,7 @@ pub(super) fn feed_party(
                 members,
                 dungeon_difficulty: r.loot.as_ref().map(|l| l.dungeon_difficulty + 1),
                 raid_difficulty: r.loot.as_ref().map(|l| l.raid_difficulty + 1),
+                ..Default::default()
             }
         })
         .unwrap_or_default();

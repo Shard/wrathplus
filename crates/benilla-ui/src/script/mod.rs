@@ -216,7 +216,10 @@ pub use wrath_lfg::{
     set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest,
     WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
     WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
-    WrathLfgRewardItem,
+    WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
+    WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
+    WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
+    WrathLfgUpdate,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
