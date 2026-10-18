@@ -1280,6 +1280,7 @@ enum WrathRoute {
     NativeDeath,
     NativeSessionMeta,
     NativeHelp,
+    NativeReferFriend,
     NativeInspect,
     NativeFaction,
     NativeWorldportAck,
@@ -1347,6 +1348,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GmTicketGet
         | ClientCommand::GmTicketDelete
         | ClientCommand::GmTicketSystemStatus => WrathRoute::NativeHelp,
+        ClientCommand::NativeReferFriend(_) => WrathRoute::NativeReferFriend,
         ClientCommand::NativeDeath(_)
         | ClientCommand::RepopRequest
         | ClientCommand::CorpseQuery
@@ -1795,6 +1797,13 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeReferFriend => {
+                        let ClientCommand::NativeReferFriend(command) = command else {
+                            unreachable!("not a refer-a-friend route")
+                        };
+                        let (opcode, body) = benilla_protocol::wrath_refer_friend::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeDeath => {
                         let (opcode, body) = benilla_protocol::wrath_death::encode(&death_command(command));
                         active.writer.send_raw(opcode, &body)

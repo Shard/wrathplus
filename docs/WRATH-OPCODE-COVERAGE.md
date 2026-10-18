@@ -42,10 +42,10 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 310 | 136 | 243 | 689 |
-| C→S | 357 | 0 | 367 | 724 |
+| S→C | 310 | 138 | 241 | 689 |
+| C→S | 359 | 0 | 365 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 357 admitted numeric opcodes, 89 of them transport-only (no UI producer) and 268 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 359 admitted numeric opcodes, 91 of them transport-only (no UI producer) and 268 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -1149,7 +1149,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x040A` | `MSG_QUERY_GUILD_BANK_TEXT` | S→C / C→S | missing / missing | common | proven_send_site: `game/Guilds/Guild.cpp:505` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x040B` | `CMSG_SET_GUILD_BANK_TEXT` | C→S | missing | common | AC receive: `HandleSetGuildBankTabText` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x040C` | `CMSG_SET_GRANTABLE_LEVELS` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x040D` | `CMSG_GRANT_LEVEL` | C→S | missing | niche | AC receive: `HandleGrantLevel` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x040D` | `CMSG_GRANT_LEVEL` | C→S | handled | niche | AC receive: `HandleGrantLevel` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeReferFriend`, P/wrath_refer_friend.rs encoder (packed guid); no UI producer. See docs/WRATH-REFER-A-FRIEND.md. |
 | `0x040E` | `CMSG_REFER_A_FRIEND` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x040F` | `MSG_GM_CHANGE_ARENA_RATING` | S→C / C→S | missing / missing | GM-debug | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0410` | `CMSG_DECLINE_CHANNEL_INVITE` | C→S | missing | common | AC receive: `HandleChannelDeclineInvite` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
@@ -1167,9 +1167,9 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x041C` | `CMSG_CLEAR_SERVER_BUCK_DATA` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x041D` | `SMSG_SERVER_BUCK_DATA` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x041E` | `SMSG_SEND_UNLEARN_SPELLS` | S→C | capture-only | GM-debug | proven_send_site: `game/Entities/Player/Player.cpp:2924` | S→C: capture-only — P/wrath_spell_control.rs (`u32 count` + spell ids, count checked against the body, strict) → `WrathSpellControl` → A/net/wrath_spell_control_capture.rs `NativeSpellControlPackets`, cleared on Connected/Disconnected; no unlearn dialog consumer. |
-| `0x041F` | `SMSG_PROPOSE_LEVEL_GRANT` | S→C | missing | niche | proven_send_site: `game/Handlers/ReferAFriendHandler.cpp:63` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x0420` | `CMSG_ACCEPT_LEVEL_GRANT` | C→S | missing | niche | AC receive: `HandleAcceptGrantLevel` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0421` | `SMSG_REFER_A_FRIEND_FAILURE` | S→C | missing | core | proven_send_site: `game/Handlers/ReferAFriendHandler.cpp:57` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x041F` | `SMSG_PROPOSE_LEVEL_GRANT` | S→C | capture-only | niche | proven_send_site: `game/Handlers/ReferAFriendHandler.cpp:63` | S→C: capture-only — P/wrath_refer_friend.rs → A/net/wrath_refer_friend_capture.rs FIFO (proposer guid); see docs/WRATH-REFER-A-FRIEND.md. |
+| `0x0420` | `CMSG_ACCEPT_LEVEL_GRANT` | C→S | handled | niche | AC receive: `HandleAcceptGrantLevel` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeReferFriend`, P/wrath_refer_friend.rs encoder (packed guid); no UI producer. See docs/WRATH-REFER-A-FRIEND.md. |
+| `0x0421` | `SMSG_REFER_A_FRIEND_FAILURE` | S→C | capture-only | core | proven_send_site: `game/Handlers/ReferAFriendHandler.cpp:57` | S→C: capture-only — P/wrath_refer_friend.rs → A/net/wrath_refer_friend_capture.rs FIFO (error, name only for not-in-group); see docs/WRATH-REFER-A-FRIEND.md. |
 | `0x0422` | `SMSG_SPLINE_MOVE_SET_FLYING` | S→C | handled | niche | proven_send_site: `game/Entities/Unit/Unit.cpp:16181` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:320-325; crates/benilla-protocol/src/wrath_spline.rs:15-61; crates/benilla-app/src/net/objects.rs:57-74 |
 | `0x0423` | `SMSG_SPLINE_MOVE_UNSET_FLYING` | S→C | handled | niche | proven_send_site: `game/Entities/Unit/Unit.cpp:16181` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:320-325; crates/benilla-protocol/src/wrath_spline.rs:15-61; crates/benilla-app/src/net/objects.rs:57-74 |
 | `0x0424` | `SMSG_SUMMON_CANCEL` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
