@@ -136,6 +136,18 @@ impl StorageSlots {
     }
 }
 
+/// The inverse of [`wire_pos_for`] for the backpack (Lua container `0`) and the four equipped
+/// bags (`1..=4`); `None` anywhere else.
+pub(crate) fn lua_bag_pos(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
+    if bag_index == BAG_PLAYER_INVENTORY {
+        let inner = slot.checked_sub(SLOT_PACK_FIRST)?;
+        (inner < PACK_SLOTS).then_some((0, u32::from(inner) + 1))
+    } else {
+        let bag = bag_index.checked_sub(SLOT_BAG_FIRST)?;
+        (bag < 4 && slot < 36).then_some((i64::from(bag) + 1, u32::from(slot) + 1))
+    }
+}
+
 pub(crate) fn wire_pos_for(
     layout: benilla_protocol::messages::FieldLayout,
     bag: i64,
@@ -1054,8 +1066,8 @@ impl Plugin for UiItemsPlugin {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_equip_slot, item_use_route, keyring_size, wire_pos, ItemUse, ItemUseRoute,
-        KEYRING_CONTAINER,
+        find_equip_slot, item_use_route, keyring_size, lua_bag_pos, wire_pos, ItemUse,
+        ItemUseRoute, KEYRING_CONTAINER,
     };
     use benilla_ui::script::EQUIPMENT_BAG;
 
@@ -1082,6 +1094,18 @@ mod tests {
             "97 is past KEYRING_SLOT_END — not a position on this wire"
         );
         assert_eq!(wire_pos(KEYRING_CONTAINER, 0), None);
+    }
+
+    /// `lua_bag_pos` inverts `wire_pos` over the backpack and the four bags, and nowhere else.
+    #[test]
+    fn lua_bag_pos_inverts_wire_pos_for_the_carried_bags() {
+        for (bag, slot) in [(0, 1), (0, 16), (1, 1), (4, 36)] {
+            let (b, s) = wire_pos(bag, slot).unwrap();
+            assert_eq!(lua_bag_pos(b, s), Some((bag, slot)));
+        }
+        assert_eq!(lua_bag_pos(255, 0), None, "a worn slot");
+        let (b, s) = wire_pos(KEYRING_CONTAINER, 1).unwrap();
+        assert_eq!(lua_bag_pos(b, s), None, "the keyring");
     }
 
     /// Rung 15 turns on the worn position alone, and beats the cast tail below it.
