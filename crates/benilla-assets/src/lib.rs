@@ -289,6 +289,10 @@ pub fn register_asset_loaders(app: &mut App) {
     materials::register_shaders(app);
 }
 
+// Installed-data pack replacement of a real model and texture (Experience, WS7).
+#[cfg(test)]
+mod override_real_data;
+
 #[cfg(test)]
 mod tests {
     use super::*;

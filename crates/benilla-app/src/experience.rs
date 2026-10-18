@@ -45,6 +45,25 @@ impl Feature {
     pub const fn plus_default(self) -> bool {
         !matches!(self, Self::ReadableText | Self::AmbientOcclusion)
     }
+
+    /// The config spelling (`[experience.features]` keys).
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AssetOverrides => "asset_overrides",
+            Self::Shadows => "shadows",
+            Self::Fog => "fog",
+            Self::Bloom => "bloom",
+            Self::ToneMapping => "tone_mapping",
+            Self::ColourGrading => "colour_grading",
+            Self::ReadableText => "readable_text",
+            Self::AmbientOcclusion => "ambient_occlusion",
+        }
+    }
+
+    /// Fixed at boot: packs mount once and AO latches the startup antialiasing.
+    const fn boot_only(self) -> bool {
+        matches!(self, Self::AssetOverrides | Self::AmbientOcclusion)
+    }
 }
 
 /// `[experience]` in the same config.toml as `[cvars]`. Pack order is ascending priority.
@@ -124,6 +143,65 @@ impl Experience {
 
     pub fn packs(&self) -> &[String] {
         &self.config.packs
+    }
+
+    /// The runtime switch's grammar, session-only (the boot config is never rewritten):
+    /// no argument prints the state; `classic`/`plus` sets the profile; `<feature> on|off` sets
+    /// one feature. Returns the console lines.
+    pub fn command(&mut self, args: &str) -> Vec<String> {
+        let words: Vec<&str> = args.split_whitespace().collect();
+        match words.as_slice() {
+            [] => {}
+            [profile] if profile.eq_ignore_ascii_case("classic") => {
+                self.set_profile(Profile::Classic)
+            }
+            [profile] if profile.eq_ignore_ascii_case("plus") => self.set_profile(Profile::Plus),
+            [name, value] => {
+                let Some(feature) = Feature::ALL
+                    .into_iter()
+                    .find(|f| f.name().eq_ignore_ascii_case(name))
+                else {
+                    return vec![format!("experience: unknown feature {name:?}")];
+                };
+                let enabled = match value.to_ascii_lowercase().as_str() {
+                    "on" | "1" | "true" => true,
+                    "off" | "0" | "false" => false,
+                    _ => return vec![format!("experience: expected on|off, got {value:?}")],
+                };
+                self.set_feature(feature, enabled);
+            }
+            _ => {
+                return vec![
+                    "experience: usage: experience [classic|plus] | experience <feature> on|off"
+                        .to_string(),
+                ]
+            }
+        }
+        self.status()
+    }
+
+    /// The profile, then each feature's effective state.
+    fn status(&self) -> Vec<String> {
+        let mut lines = vec![format!(
+            "experience: {} (session only)",
+            match self.profile() {
+                Profile::Classic => "classic",
+                Profile::Plus => "plus",
+            }
+        )];
+        lines.extend(Feature::ALL.into_iter().map(|f| {
+            format!(
+                "  {}: {}{}",
+                f.name(),
+                if self.enabled(f) { "on" } else { "off" },
+                if f.boot_only() {
+                    " (fixed at startup)"
+                } else {
+                    ""
+                }
+            )
+        }));
+        lines
     }
 }
 
@@ -226,6 +304,14 @@ mod tests {
     }
 }
 
+/// The `experience` console command body ([`Experience::command`]); dev builds register it.
+pub fn console_command(world: &mut World, args: &str) -> Vec<String> {
+    match world.get_resource_mut::<Experience>() {
+        Some(mut experience) => experience.command(args),
+        None => vec!["experience: not available".to_string()],
+    }
+}
+
 /// Publish after runtime profile setters and before the renderer's PostUpdate light pack.
 pub(crate) fn sync_lighting(
     experience: Res<Experience>,
@@ -267,5 +353,48 @@ mod lighting_tests {
         assert!(lighting_policy(&experience).tone_mapping);
         experience.set_profile(Profile::Classic);
         assert_eq!(lighting_policy(&experience), Default::default());
+    }
+
+    /// The console switch end to end: `/console experience …` through the registry to the
+    /// renderer's policy resource, and back to Classic's all-off policy.
+    #[test]
+    fn console_switch_drives_the_renderer_policy() {
+        use crate::console::{execute, ConsoleCommandApp, ConsolePlugin};
+        use benilla_world::modern_lighting::ModernLighting;
+        let mut app = App::new();
+        app.add_plugins(ConsolePlugin)
+            .console_command("experience", "test", console_command)
+            .insert_resource(Experience::default())
+            .init_resource::<ModernLighting>()
+            .add_systems(Update, sync_lighting);
+        let mut run = |line: &str| {
+            let out = execute(app.world_mut(), line);
+            app.update();
+            (out, *app.world().resource::<ModernLighting>())
+        };
+        let (out, policy) = run("experience");
+        assert_eq!(out[0], "experience: classic (session only)");
+        assert_eq!(policy, ModernLighting::default());
+        let (out, policy) = run("experience PLUS");
+        assert!(out.contains(&"  fog: on".to_string()), "{out:?}");
+        assert!(out.contains(&"  ambient_occlusion: off (fixed at startup)".to_string()));
+        assert!(policy.fog && policy.bloom && policy.shadows && policy.post_process());
+        let (_, policy) = run("experience bloom off");
+        assert!(!policy.bloom && policy.tone_mapping);
+        let (out, policy) = run("experience classic");
+        assert!(out.contains(&"  bloom: off".to_string()));
+        assert_eq!(policy, ModernLighting::default());
+        // A Classic feature write is remembered for Plus but stays masked.
+        let (out, policy) = run("experience fog on");
+        assert!(out.contains(&"  fog: off".to_string()));
+        assert_eq!(policy, ModernLighting::default());
+        for bad in [
+            "experience blooom on",
+            "experience fog maybe",
+            "experience a b c",
+        ] {
+            let (out, _) = run(bad);
+            assert_eq!(out.len(), 1, "{bad}: {out:?}");
+        }
     }
 }
