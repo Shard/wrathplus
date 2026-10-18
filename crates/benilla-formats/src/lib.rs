@@ -53,9 +53,11 @@ mod macro_icons;
 pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
 pub mod currencies;
+pub mod glyphs;
 pub mod item_limit_category;
 mod itemsets;
 pub mod lfg;
+pub mod vehicles;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};
 mod gm_ticket_category;
 pub use gm_ticket_category::{
@@ -162,8 +164,9 @@ mod game_tables;
 pub use game_tables::{load_wrath_game_tables, GameTable, WrathGameTables, GAME_TABLE_MAX_LEVEL};
 mod quest_rewards;
 pub use quest_rewards::{
-    load_char_titles, load_quest_xp, load_team_contribution_points, CharTitle, CharTitlesCatalog,
-    QuestXpCatalog, TeamContributionPointsCatalog,
+    load_char_titles, load_quest_faction_reward, load_quest_xp, load_team_contribution_points,
+    CharTitle, CharTitlesCatalog, QuestFactionRewardCatalog, QuestXpCatalog,
+    TeamContributionPointsCatalog,
 };
 mod quest_info;
 pub use quest_info::{load_quest_tag_names, QuestTagNames};
@@ -278,12 +281,12 @@ pub use models::{
     BillboardKind, BoneKeys, BoneScaleAnim, BoneSpin, CharSkinSlot, CollisionMesh, Coverage,
     CoverageReader, EmitterBoneLink, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
     GlobalSeqChannel, GroundQuad, KeyAnim, M2AnimSummary, M2Attachment, M2Bounds, M2CameraTracks,
-    M2Light, M2LightAnim, M2PaneCamera, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis,
-    PlayableAnim, RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton,
-    SkeletonBone, StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,
-    WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef, WmoPortals, WmoRoot,
-    ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT, NO_GROUP_LIQUID,
-    OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
+    M2Light, M2LightAnim, M2PaneCamera, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm,
+    ParentBasis, PlayableAnim, RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene,
+    Skeleton, SkeletonBone, StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad,
+    WmoDoodadSet, WmoFog, WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef,
+    WmoPortals, WmoRoot, ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT,
+    NO_GROUP_LIQUID, OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
 };
 pub use models::{
     resolve_wrath_wmo_liquid_id, wmo_group_wrath_liquid, wmo_root_flags, WrathWmoLiquidGrid,
