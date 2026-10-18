@@ -1,6 +1,14 @@
-//! The delete confirm dialog (`CharacterDeleteDialog`): typing `DELETE_CONFIRM_STRING` ("DELETE")
-//! arms Okay, which sends `CMSG_CHAR_DELETE` (`gsTitleOptionOK`); Cancel or Escape close it
-//! (`gsTitleOptionExit`). The target is snapshotted at open, so a roster refresh cannot retarget.
+//! The character screen's two typed dialogs, one shape (`CharacterSelect.xml`):
+//!
+//! - The delete confirm (`CharacterDeleteDialog`): typing `DELETE_CONFIRM_STRING` ("DELETE") arms
+//!   Okay, which sends `CMSG_CHAR_DELETE` (`gsTitleOptionOK`).
+//! - The forced rename (`CharacterRenameDialog`, raised by `FORCE_RENAME_CHARACTER` from Enter
+//!   World, `0x4d9bd0`): Okay runs `RenameCharacter` (`0x4e3410`) on the typed name, which re-raises
+//!   the dialog with a refusal's key or sends `CMSG_CHAR_RENAME` (`0x4d8d20`) under the
+//!   `CHAR_RENAME_IN_PROGRESS` status ([`rename_check`]).
+//!
+//! Cancel or Escape close either (`gsTitleOptionExit`). The target is snapshotted at open, so a
+//! roster refresh cannot retarget.
 
 use benilla_ui::widget::EditBoxState;
 use bevy::input::keyboard::KeyboardInput;
@@ -20,12 +28,28 @@ use crate::sound::GlueSound;
 
 use super::wow_font;
 
-/// The delete dialog's state.
+/// What the dialog is up for.
+#[derive(Clone, Debug, PartialEq)]
+enum Purpose {
+    /// The delete confirm: guid, name, level, class name.
+    Delete(u64, String, u8, &'static str),
+    /// The forced rename: the guid, the current name, and `CharacterRenameText1`'s key.
+    Rename {
+        guid: u64,
+        name: String,
+        message: &'static str,
+    },
+}
+
+/// `CharacterRenameEditBox`'s `letters="12"`.
+const RENAME_LETTERS: usize = 12;
+
+/// The typed dialog's state.
 #[derive(Resource, Default)]
 pub(super) struct DeleteDialog {
     pub(super) open: bool,
-    /// The snapshotted target: guid, name, level, class name.
-    target: Option<(u64, String, u8, &'static str)>,
+    /// The snapshotted target.
+    target: Option<Purpose>,
     /// The confirm box's text; the reference's `letters="32"` cap is its `max_letters`.
     pub(super) typed: EditBoxState,
     /// The spawned dialog root, while up.
@@ -37,8 +61,27 @@ pub(super) struct DeleteDialog {
 impl DeleteDialog {
     pub(super) fn open_for(&mut self, guid: u64, name: String, level: u8, class: &'static str) {
         self.open = true;
-        self.target = Some((guid, name, level, class));
+        self.target = Some(Purpose::Delete(guid, name, level, class));
+        self.typed.max_letters = 0;
         self.typed.set_text("");
+    }
+
+    /// `FORCE_RENAME_CHARACTER(message)`: show the rename dialog with `message`'s text. A re-raise
+    /// while it is up keeps the typed name (`OnHide` alone clears it) and rebuilds the text.
+    pub(super) fn open_rename(&mut self, guid: u64, name: String, message: &'static str) {
+        let reraise = self.open && matches!(self.target, Some(Purpose::Rename { .. }));
+        self.open = true;
+        self.target = Some(Purpose::Rename {
+            guid,
+            name,
+            message,
+        });
+        self.typed.max_letters = RENAME_LETTERS;
+        if !reraise {
+            self.typed.set_text("");
+        }
+        // The text changed: rebuild the tree on the next drive.
+        self.spawned_s = 0.0;
     }
 
     pub(super) fn close(&mut self) {
@@ -47,10 +90,43 @@ impl DeleteDialog {
         self.typed.set_text("");
     }
 
-    /// The typed text matches `DELETE_CONFIRM_STRING`, case-insensitive (the reference's
-    /// `strupper`).
+    /// Okay is live: the delete's typed text matches `DELETE_CONFIRM_STRING`, case-insensitive
+    /// (the reference's `strupper`); the rename's Okay always is.
     fn armed(&self, confirm: &str) -> bool {
-        self.typed.text.eq_ignore_ascii_case(confirm)
+        match &self.target {
+            Some(Purpose::Rename { .. }) => true,
+            _ => self.typed.text.eq_ignore_ascii_case(confirm),
+        }
+    }
+}
+
+/// `RenameCharacter` on a typed name, before anything is sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RenameCheck {
+    /// An empty name: the binding returns nil and the dialog stays.
+    Nothing,
+    /// Re-raise the dialog with this key (`0x4e3410`'s same-name `CHAR_CREATE_NAME_IN_USE`, the
+    /// name check's `CHAR_NAME_*`).
+    Refuse(&'static str),
+    /// Send `CMSG_CHAR_RENAME`.
+    Send,
+}
+
+/// `0x4e3410` then `0x4d8d20`: the current name (compared case-insensitively) is in use; the name
+/// check `0x6b0f90` refuses fewer than 2 or more than 12 characters. Labelled: its language,
+/// apostrophe, space and repeat rules (`0x7e18c0`, locale tables) are left to the server's
+/// `CHAR_NAME_*` reply.
+pub(super) fn rename_check(current: &str, typed: &str) -> RenameCheck {
+    if typed.is_empty() {
+        return RenameCheck::Nothing;
+    }
+    if typed.to_lowercase() == current.to_lowercase() {
+        return RenameCheck::Refuse("CHAR_CREATE_NAME_IN_USE");
+    }
+    match typed.chars().count() {
+        0..=1 => RenameCheck::Refuse("CHAR_NAME_TOO_SHORT"),
+        2..=RENAME_LETTERS => RenameCheck::Send,
+        _ => RenameCheck::Refuse("CHAR_NAME_TOO_LONG"),
     }
 }
 
@@ -99,7 +175,8 @@ pub(super) fn drive_delete_dialog(
         (&Window, Option<&bevy::window::RawHandleWrapper>),
         With<bevy::window::PrimaryWindow>,
     >,
-    time: Res<Time>,
+    // The clock, and the raise a sent rename's status goes out through.
+    (time, mut raise): (Res<Time>, MessageWriter<super::GlueRaise>),
 ) {
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
@@ -176,12 +253,33 @@ pub(super) fn drive_delete_dialog(
         do_cancel = true;
     }
     if do_delete {
-        if let Some((guid, name, _, _)) = &dialog.target {
-            info!("char select: deleting {name}");
-            let _ = pick.0.send(CharRequest::Delete(*guid));
+        match dialog.target.clone() {
+            Some(Purpose::Delete(guid, name, _, _)) => {
+                info!("char select: deleting {name}");
+                let _ = pick.0.send(CharRequest::Delete(guid));
+                sounds.write(GlueSound("gsTitleOptionOK"));
+                dialog.close();
+            }
+            Some(Purpose::Rename { guid, name, .. }) => {
+                let typed = dialog.typed.text.clone();
+                match rename_check(&name, &typed) {
+                    RenameCheck::Nothing => {}
+                    RenameCheck::Refuse(key) => dialog.open_rename(guid, name, key),
+                    RenameCheck::Send => {
+                        info!("char select: renaming {name} to {typed}");
+                        let _ = pick.0.send(CharRequest::Service(
+                            benilla_protocol::wrath_char_services::Command::Rename {
+                                guid,
+                                name: typed,
+                            },
+                        ));
+                        dialog.close();
+                        raise.write(super::GlueRaise::Status("CHAR_RENAME_IN_PROGRESS"));
+                    }
+                }
+            }
+            None => dialog.close(),
         }
-        sounds.write(GlueSound("gsTitleOptionOK"));
-        dialog.close();
     } else if do_cancel {
         sounds.write(GlueSound("gsTitleOptionExit"));
         dialog.close();
@@ -201,23 +299,49 @@ fn spawn_dialog(
 ) -> Entity {
     let px = |v: f32| Val::Px(v * s);
     let font = wow_font(assets);
-    let (name, level, class) = dialog
-        .target
-        .as_ref()
-        .map(|(_, n, l, c)| (n.clone(), *l, *c))
-        .unwrap_or_default();
-    // `CONFIRM_CHAR_DELETE`'s `|cffffffff` span splits it: gold lead above, white identity below.
-    let raw = strings.text(
-        "CONFIRM_CHAR_DELETE",
-        "Do you want to delete\n|cffffffff%s   Level %d   %s|r?",
-    );
-    let filled = raw
-        .replacen("%s", &name, 1)
-        .replacen("%d", &level.to_string(), 1)
-        .replacen("%s", class, 1);
-    let (lead, identity) = match filled.split_once("|cffffffff") {
-        Some((a, b)) => (a.trim_end_matches('\n').to_string(), b.replace("|r", "")),
-        None => (filled.clone(), String::new()),
+    // The two text lines, the instructions and their tops. The rename's description is one
+    // line here (labelled: a wrapped `CHAR_*` key would overlap the instructions).
+    let (lead, identity, instructions, instructions_top, box_top) = match &dialog.target {
+        Some(Purpose::Rename { message, .. }) => (
+            strings
+                .text(message, "Your name has been flagged for rename")
+                .to_string(),
+            String::new(),
+            strings.text("CHAR_RENAME_INSTRUCTIONS", "Please enter a new name"),
+            // Text1 TOP (0,-16), 18 high; Text2 20 below; the box 5 below Text2's 12.
+            54.0,
+            71.0,
+        ),
+        _ => {
+            let (name, level, class) = match &dialog.target {
+                Some(Purpose::Delete(_, n, l, c)) => (n.clone(), *l, *c),
+                _ => Default::default(),
+            };
+            // `CONFIRM_CHAR_DELETE`'s `|cffffffff` span splits it: gold lead above, white
+            // identity below.
+            let raw = strings.text(
+                "CONFIRM_CHAR_DELETE",
+                "Do you want to delete\n|cffffffff%s   Level %d   %s|r?",
+            );
+            let filled = raw
+                .replacen("%s", &name, 1)
+                .replacen("%d", &level.to_string(), 1)
+                .replacen("%s", class, 1);
+            let (lead, identity) = match filled.split_once("|cffffffff") {
+                Some((a, b)) => (a.trim_end_matches('\n').to_string(), b.replace("|r", "")),
+                None => (filled.clone(), String::new()),
+            };
+            (
+                lead,
+                identity,
+                strings.text(
+                    "CONFIRM_CHAR_DELETE_INSTRUCTIONS",
+                    "Type \"DELETE\" into the field to confirm.",
+                ),
+                83.0,
+                102.0,
+            )
+        }
     };
 
     commands
@@ -303,7 +427,7 @@ fn spawn_dialog(
                     b,
                     Node {
                         position_type: PositionType::Absolute,
-                        top: px(83.0),
+                        top: px(instructions_top),
                         width: Val::Percent(100.0),
                         justify_content: JustifyContent::Center,
                         ..default()
@@ -311,10 +435,7 @@ fn spawn_dialog(
                     (),
                     (),
                     GlueText {
-                        text: strings.text(
-                            "CONFIRM_CHAR_DELETE_INSTRUCTIONS",
-                            "Type \"DELETE\" into the field to confirm.",
-                        ),
+                        text: instructions,
                         size: 12.0,
                         color: GOLD,
                         wrap: false,
@@ -326,7 +447,7 @@ fn spawn_dialog(
                 // pieces overhang by 10 each side; the text has no TextInsets.
                 b.spawn((Node {
                     position_type: PositionType::Absolute,
-                    top: px(102.0),
+                    top: px(box_top),
                     width: Val::Percent(100.0),
                     justify_content: JustifyContent::Center,
                     ..default()

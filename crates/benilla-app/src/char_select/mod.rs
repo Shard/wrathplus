@@ -72,6 +72,7 @@ impl Plugin for CharSelectPlugin {
                 publish_world_live.before(benilla_world::schedule::WorldStage::Net),
             )
             .init_resource::<dialog::DeleteDialog>()
+            .add_message::<GlueRaise>()
             .init_resource::<addons::AddonsPanel>()
             .add_systems(
                 OnEnter(ClientState::CharSelect),
@@ -512,9 +513,22 @@ fn back_on_logout(
 ///
 /// The native character services (rename, customize, faction and race change) answer here too, by
 /// the same table: the transport publishes the refreshed roster before an applied change
-/// (`2163ca6b`), so a success needs nothing and a refusal opens the dialog with its key.
+/// (`2163ca6b`), so a success only takes down the `CHAR_RENAME_IN_PROGRESS` status and a refusal
+/// replaces it with the key's dialog. The status's Cancel closes it (labelled: native's
+/// `StatusDialogClick` for the rename state is not traced).
 /// Labelled: a declined-names refusal (a `u32`, outside the table) reads `RESPONSE_FAILURE`; the
 /// realm-split reply has no character-screen surface here.
+/// A glue dialog an earlier link of the select chain raises, by its key: the one select system
+/// that writes the glue dialog is [`delete_result`], since another writer would run unordered
+/// against the login screen's copies of it.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum GlueRaise {
+    /// The one-button `OKAY` dialog (Enter World's lock refusals).
+    Error(&'static str),
+    /// The `CANCEL` status dialog (`CHAR_RENAME_IN_PROGRESS`).
+    Status(&'static str),
+}
+
 fn delete_result(
     mut msgs: MessageReader<CharActionResultMessage>,
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
@@ -523,13 +537,40 @@ fn delete_result(
     >,
     mut dialog: ResMut<crate::glue::dialog::GlueDialog>,
     strings: Option<Res<GlueStrings>>,
+    (answers, raises): (
+        Option<MessageReader<crate::glue::dialog::GlueDialogAnswer>>,
+        Option<MessageReader<GlueRaise>>,
+    ),
 ) {
     use benilla_protocol::wrath_char_services::Reply;
+    use crate::glue::dialog::DialogKind;
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
+    for raise in raises
+        .into_iter()
+        .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
+    {
+        match raise {
+            GlueRaise::Error(key) => dialog.open_error(strings.text(key, key)),
+            GlueRaise::Status(key) => dialog.open_status(strings.text(key, key)),
+        }
+    }
+    for answer in answers
+        .into_iter()
+        .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
+    {
+        if answer.kind == DialogKind::Status && answer.button1 {
+            dialog.close();
+        }
+    }
     for reply in services.into_iter().flat_map(|mut q| q.0.drain(..).collect::<Vec<_>>()) {
         let code = match &reply {
-            _ if reply.changed_roster() => continue,
+            _ if reply.changed_roster() => {
+                if dialog.kind == Some(DialogKind::Status) {
+                    dialog.close();
+                }
+                continue;
+            }
             Reply::Rename { result, .. }
             | Reply::Customize { result, .. }
             | Reply::ChangeRace { result, .. } => *result,
@@ -1368,6 +1409,86 @@ mod tests {
             .resource::<NativeCharServiceReplies>()
             .0
             .is_empty());
+    }
+
+    /// An applied rename takes down its `CHAR_RENAME_IN_PROGRESS` status; the status's Cancel
+    /// closes it too.
+    #[test]
+    fn an_applied_rename_or_cancel_takes_down_the_rename_status() {
+        use crate::glue::dialog::{DialogKind, GlueDialog, GlueDialogAnswer};
+        use crate::net::wrath_char_service_capture::NativeCharServiceReplies;
+        use benilla_protocol::wrath_char_services::Reply;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<CharActionResultMessage>()
+            .add_message::<GlueDialogAnswer>()
+            .init_resource::<GlueDialog>()
+            .init_resource::<NativeCharServiceReplies>()
+            .add_systems(Update, delete_result);
+        app.world_mut()
+            .resource_mut::<GlueDialog>()
+            .open_status("Renaming Character...");
+        app.world_mut()
+            .resource_mut::<NativeCharServiceReplies>()
+            .0
+            .push_back(Reply::Rename {
+                result: 0,
+                renamed: Some((7, "Newname".into())),
+            });
+        app.update();
+        assert!(!app.world().resource::<GlueDialog>().is_open());
+        app.world_mut()
+            .resource_mut::<GlueDialog>()
+            .open_status("Renaming Character...");
+        app.world_mut().write_message(GlueDialogAnswer {
+            kind: DialogKind::Status,
+            button1: true,
+            button2: false,
+        });
+        app.update();
+        assert!(!app.world().resource::<GlueDialog>().is_open());
+    }
+
+    /// `0x4d9bd0`'s order: the two locks, then the rename flag, else enter.
+    #[test]
+    fn enter_world_checks_the_locks_then_the_rename_flag() {
+        use super::input::{enter_world_gate, EnterGate};
+        assert_eq!(enter_world_gate(0), EnterGate::Enter);
+        assert_eq!(enter_world_gate(0x2000), EnterGate::Enter, "a ghost enters");
+        assert_eq!(
+            enter_world_gate(0x4 | 0x4000),
+            EnterGate::Locked("CHAR_LOGIN_LOCKED_FOR_TRANSFER")
+        );
+        assert_eq!(
+            enter_world_gate(0x100_0000),
+            EnterGate::Locked("CHAR_LOGIN_LOCKED_BY_BILLING")
+        );
+        assert_eq!(enter_world_gate(0x4000), EnterGate::Rename);
+    }
+
+    /// `RenameCharacter`'s refusals before a send: empty, the current name in any case, too short
+    /// or long by characters.
+    #[test]
+    fn a_rename_refuses_its_own_name_and_bad_lengths() {
+        use super::dialog::{rename_check, RenameCheck};
+        assert_eq!(rename_check("Arthas", ""), RenameCheck::Nothing);
+        assert_eq!(
+            rename_check("Arthas", "arTHas"),
+            RenameCheck::Refuse("CHAR_CREATE_NAME_IN_USE")
+        );
+        assert_eq!(
+            rename_check("Arthas", "A"),
+            RenameCheck::Refuse("CHAR_NAME_TOO_SHORT")
+        );
+        assert_eq!(
+            rename_check("Arthas", "Abcdefghijklm"),
+            RenameCheck::Refuse("CHAR_NAME_TOO_LONG")
+        );
+        assert_eq!(
+            rename_check("Arthas", "Ärthäsmenethi"),
+            RenameCheck::Refuse("CHAR_NAME_TOO_LONG")
+        );
+        assert_eq!(rename_check("Arthas", "Ärthäs"), RenameCheck::Send);
     }
 
     /// The delete refusals resolve to the sentences 1.12 ships, each off a real key.
