@@ -279,6 +279,7 @@ pub(crate) struct Model {
     pub(crate) wrath_ready_check: super::wrath_ready_check::State,
     /// `GetQuestsCompleted`'s stored reply and the undrained `QueryQuestsCompleted` calls.
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
+    pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
     /// Saved raid lockouts from `SMSG_RAID_INSTANCE_INFO`, which outlive any roster change.
@@ -753,8 +754,8 @@ pub(crate) struct Model {
     pub(crate) mail_send: Option<(String, String, String)>,
     pub(crate) mail_send_money: u32,
     pub(crate) mail_send_cod: u32,
-    /// The Send tab's attached item, resolved to its guid when the send fires.
-    pub(crate) mail_send_item: Option<cursor::CursorItem>,
+    /// Build 12340's twelve send attachment slots (`0xbeb038`, stride 0x18), 0-based.
+    pub(crate) mail_send_items: [Option<cursor::CursorItem>; super::mail::SEND_SLOTS],
     /// The usable stationery, in the picker's order.
     pub(crate) mail_stationeries: Vec<mail::StationeryView>,
     /// `SelectStationery`'s `Stationery.dbc` id; 0 is none, which silences `SendMail`.
@@ -1169,6 +1170,7 @@ impl Model {
             ready_check: party::ReadyCheckState::default(),
             wrath_ready_check: super::wrath_ready_check::State::default(),
             wrath_quests_completed: Default::default(),
+            wrath_inspect_talents: None,
             wrath_server_time_offset: None,
             saved_instances: Vec::new(),
             raid_selection: 0,
@@ -1400,7 +1402,7 @@ impl Model {
             mail_send: None,
             mail_send_money: 0,
             mail_send_cod: 0,
-            mail_send_item: None,
+            mail_send_items: Default::default(),
             mail_stationeries: Vec::new(),
             mail_stationery: 0,
             mail_packages: Vec::new(),

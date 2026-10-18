@@ -364,15 +364,17 @@ pub(super) fn mark_read(
     ))
 }
 
-/// `CMSG_SEND_MAIL` in this build: attachments are `(slot, GUID)` pairs, the package word and the
-/// two trailing constants are 0 (AC reads and ignores them).
+/// `CMSG_SEND_MAIL` as 12340 writes it (`0x570910`): the stationery, the package (only with an
+/// item), then each attachment as its 0-based send slot and item GUID, in slot order.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn send(
     mailbox: u64,
     receiver: String,
     subject: String,
     body: String,
     stationery: u32,
-    item_guid: Option<u64>,
+    package: u32,
+    items: Vec<(u8, u64)>,
     money: u32,
     cod: u32,
 ) -> ClientCommand {
@@ -383,10 +385,11 @@ pub(super) fn send(
         subject: subject.into_bytes(),
         body: body.into_bytes(),
         stationery,
-        unknown_word: 0,
-        attachments: item_guid
-            .map(|item| vec![Attachment { slot: 0, item }])
-            .unwrap_or_default(),
+        unknown_word: package,
+        attachments: items
+            .into_iter()
+            .map(|(slot, item)| Attachment { slot, item })
+            .collect(),
         money,
         cod,
         unknown_guid: 0,

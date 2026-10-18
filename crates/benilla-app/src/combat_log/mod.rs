@@ -22,6 +22,8 @@ use crate::ui_chat::ChatLog;
 use crate::ui_unit::{CombatTextEvent, UnitCombatFeedback};
 
 pub(crate) mod chat;
+pub(crate) mod native;
+pub(crate) mod native_flags;
 pub(crate) mod text;
 
 /// The chat line's read-only inputs, built into a [`chat::ChatCtx`] per packet.
@@ -67,6 +69,17 @@ pub(crate) struct Sinks<'w, 's> {
     text: MessageWriter<'w, CombatTextSpawn>,
     feedback: MessageWriter<'w, UnitCombatFeedback>,
     center: MessageWriter<'w, CombatTextEvent>,
+    /// The build-12340 entries for `COMBAT_LOG_EVENT` ([`native`]); `Option` for harnesses.
+    native: Option<ResMut<'w, native::NativeCombatLog>>,
+}
+
+impl Sinks<'_, '_> {
+    /// Record `ev`'s native combat-log entries ahead of the 1.12 legs.
+    fn record_native(&mut self, ev: &SessionEvent) {
+        if let Some(log) = self.native.as_deref_mut() {
+            log.record(ev);
+        }
+    }
 }
 
 /// The combat log's handler registration. Added ahead of
@@ -76,6 +89,12 @@ pub(crate) struct CombatLogPlugin;
 impl Plugin for CombatLogPlugin {
     fn build(&self, app: &mut App) {
         use SessionEventKind as K;
+        app.init_resource::<native::NativeCombatLog>().add_systems(
+            Update,
+            native::feed
+                .in_set(crate::ui_script::UiFeed)
+                .run_if(crate::ui_script::ingame_ui_up),
+        );
         app.net_handler(K::AttackerState, on_attacker_state)
             .net_handler(K::WrathAttackerState, on_wrath_attacker_state)
             .net_handler(K::SpellDamageLog, on_spell_damage_log)
@@ -109,6 +128,7 @@ fn on_attacker_state(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_wrath_attacker_state(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     let SessionEvent::WrathAttackerState(native) = ev else {
         return;
     };
@@ -124,6 +144,7 @@ fn on_wrath_attacker_state(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_damage_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellDamageLog(s) = ev {
         let ctx = c.ctx();
         chat::spell_damage_log(s, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -145,6 +166,7 @@ fn on_spell_damage_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 /// `CombatLogPeriodicSpells` gates the whole packet: the handler `0x626dd0` reads it first
 /// (`0x626dee`) and a zero jumps to the epilogue `0x6271b4`, so no line, number or word.
 fn on_periodic_aura_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::PeriodicAuraLog(s) = ev {
         if !c.periodic.0 {
             return;
@@ -168,6 +190,7 @@ fn on_periodic_aura_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_heal_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellHealLog(s) = ev {
         let ctx = c.ctx();
         chat::spell_heal_log(s, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -184,6 +207,7 @@ fn on_spell_heal_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_energize_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellEnergizeLog(s) = ev {
         let ctx = c.ctx();
         chat::spell_energize_log(s, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -192,6 +216,7 @@ fn on_spell_energize_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_damage_shield(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::DamageShield(s) = ev {
         let ctx = c.ctx();
         chat::damage_shield(s, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -208,6 +233,7 @@ fn on_damage_shield(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_log_miss(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellLogMiss(s) = ev {
         let ctx = c.ctx();
         chat::spell_log_miss(&s, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -228,6 +254,7 @@ fn on_spell_log_miss(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 // ── Chat-only packets: no damage number, so no floating-text leg ──
 
 fn on_party_kill_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::PartyKillLog(k) = ev {
         let ctx = c.ctx();
         chat::party_kill_log(k, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -235,6 +262,7 @@ fn on_party_kill_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_insta_kill_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellInstaKillLog(k) = ev {
         let ctx = c.ctx();
         chat::spell_insta_kill_log(k, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -252,6 +280,7 @@ fn on_spell_outcome_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_dispel_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellDispelLog(d) = ev {
         let ctx = c.ctx();
         chat::spell_dispel_log(&d, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -259,6 +288,7 @@ fn on_spell_dispel_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_dispel_failed(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::DispelFailed(d) = ev {
         let ctx = c.ctx();
         chat::dispel_failed(&d, &ctx, &l.stores, &l.poses, &mut l.log);
@@ -280,6 +310,7 @@ fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_wrath_environmental_damage(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::WrathEnvironmentalDamage(e) = ev {
         let ctx = c.ctx();
         chat::wrath_environmental_damage(e, &ctx, &l.stores, &l.poses, &mut l.log);

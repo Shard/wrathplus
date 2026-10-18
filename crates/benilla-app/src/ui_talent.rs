@@ -196,14 +196,40 @@ pub(crate) fn build_pages(
     // The VM's `GlobalStrings.lua`, for the red requirement lines.
     get: &dyn Fn(&str) -> Option<String>,
 ) -> TalentUiState {
+    build_pages_by(
+        catalog,
+        &|t| rank_of(t, known),
+        &|spell| known.contains(&spell),
+        spells,
+        race,
+        class,
+        points,
+        get,
+    )
+}
+
+/// [`build_pages`] over any rank source: our own known spells, or an inspected player's
+/// `SMSG_INSPECT_TALENT` ranks ([`crate::ui_inspect_wrath`]). `knows` answers a talent's
+/// `requiredSpell`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_pages_by(
+    catalog: &TalentCatalog,
+    rank_of: &dyn Fn(&Talent) -> u32,
+    knows: &dyn Fn(u32) -> bool,
+    spells: &benilla_formats::SpellCatalog,
+    race: u8,
+    class: u8,
+    points: (u32, u32),
+    get: &dyn Fn(&str) -> Option<String>,
+) -> TalentUiState {
     let mut tabs = Vec::new();
     let mut pages = Vec::new();
     for tab in catalog.tabs_for_class(race, class) {
         let list = catalog.talents_in_tab(tab.id);
-        let spent: u32 = list.iter().map(|t| rank_of(t, known)).sum();
+        let spent: u32 = list.iter().map(|t| rank_of(t)).sum();
         let mut views = Vec::with_capacity(list.len());
         for t in list {
-            let rank = rank_of(t, known);
+            let rank = rank_of(t);
             let max_rank = t.max_rank();
             let display_spell = t.ranks[rank.max(1) as usize - 1];
             let next_spell = if rank > 0 && rank < max_rank {
@@ -213,7 +239,7 @@ pub(crate) fn build_pages(
             };
             let d = spells.get(display_spell);
             // `meetsPrereq` is the `requiredSpell` check alone (`GetTalentInfo` `0x4f3200`).
-            let meets_prereq = t.required_spell == 0 || known.contains(&t.required_spell);
+            let meets_prereq = t.required_spell == 0 || knows(t.required_spell);
             // The tier gate reads the tab's own spent sum; prereqs read the prereq's rank.
             let tier_unlocked = t.row * 5 <= spent;
             let mut req_lines = Vec::new();
@@ -234,7 +260,7 @@ pub(crate) fn build_pages(
             if t.prereq_talent != 0 {
                 if let Some(p) = catalog.talent(t.tab, t.prereq_talent) {
                     let need = t.prereq_rank + 1;
-                    let learnable = rank_of(p, known) >= need;
+                    let learnable = rank_of(p) >= need;
                     prereqs.push(TalentPrereqView {
                         tier: p.row + 1,
                         column: p.col + 1,
