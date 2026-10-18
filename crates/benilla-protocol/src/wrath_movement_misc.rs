@@ -19,6 +19,9 @@ pub const SMSG_MOUNTSPECIAL_ANIM: u16 = 0x0172;
 pub const SMSG_DISMOUNT: u16 = 0x03ac;
 pub const CMSG_MOUNTSPECIAL_ANIM: u32 = 0x0171;
 pub const CMSG_MOVE_TIME_SKIPPED: u32 = 0x02ce;
+/// `/timetest`: `u8 on` (AzerothCore `HandleSetTaxiBenchmarkOpcode`: non-zero sets
+/// `PLAYER_FLAGS_TAXI_BENCHMARK`, zero clears it).
+pub const CMSG_SET_TAXI_BENCHMARK_MODE: u32 = 0x0389;
 
 /// Capture-only receipts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +34,7 @@ pub enum Packet {
 pub enum Command {
     MountSpecialAnim,
     TimeSkipped { mover: u64, lag_ms: u32 },
+    TaxiBenchmark { on: bool },
 }
 
 pub const fn handles(opcode: u16) -> bool {
@@ -96,6 +100,7 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             body.extend(lag_ms.to_le_bytes());
             (CMSG_MOVE_TIME_SKIPPED, body)
         }
+        Command::TaxiBenchmark { on } => (CMSG_SET_TAXI_BENCHMARK_MODE, vec![u8::from(on)]),
     }
 }
 
@@ -152,6 +157,14 @@ mod tests {
                 lag_ms: 250
             }),
             (0x02ce, vec![0x01, 0x05, 250, 0, 0, 0])
+        );
+        assert_eq!(
+            encode(&Command::TaxiBenchmark { on: true }),
+            (0x0389, vec![1])
+        );
+        assert_eq!(
+            encode(&Command::TaxiBenchmark { on: false }),
+            (0x0389, vec![0])
         );
     }
 }
