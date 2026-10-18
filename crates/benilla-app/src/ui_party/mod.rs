@@ -84,14 +84,9 @@ pub struct GroupState {
     pub raid_targets: [u64; 8],
     /// `/partytest` sandbox: the drain applies group intents to this mirror; a real list clears it.
     pub test: bool,
-    /// Our raid lockouts, the character's rather than the group's: leaving the group keeps them.
-    pub saved_instances: Vec<benilla_protocol::messages::RaidInstanceEntry>,
-    /// Lossless Wrath lockouts and ordered receipts; never projected into Vanilla entries.
+    /// Our raid lockouts, the character's rather than the group's (leaving the group keeps them):
+    /// the latest list and the ordered receipts, each one `UPDATE_INSTANCE_INFO` (`0x501030`).
     pub(crate) wrath_saved_instances: saved_instances::NativeSavedInstances,
-    /// How many `SMSG_RAID_INSTANCE_INFO` answers arrived, empty ones included. The reference fires
-    /// `UPDATE_INSTANCE_INFO` once per packet (`0x49e1a7`, straight from `0x49e0d8` when empty)
-    /// and `RaidFrame.lua:43` ignores the first, so the Raid Info button is decided on the second.
-    pub saved_instances_answers: u32,
     /// Bumped by each ready check that pops for us; a count, so a second one still fires.
     pub ready_check: u32,
     /// Bumped by every ready-check open, ours as leader included, where [`Self::ready_check`] skips
@@ -448,9 +443,7 @@ impl GroupState {
             // Session state the feed fires edges on: kept until `clear_session`.
             lists_applied: _,
             roster_updates: _,
-            saved_instances: _,
             wrath_saved_instances: _,
-            saved_instances_answers: _,
             ready_check: _,
             ready_check_requests: _,
             ready_check_answers: _,
@@ -484,15 +477,6 @@ impl GroupState {
     /// Session teardown: everything resets with the socket.
     pub fn clear_session(&mut self) {
         *self = GroupState::default();
-    }
-
-    /// `SMSG_RAID_INSTANCE_INFO`: replaces the lockouts and counts the answer, even an empty one.
-    pub fn apply_raid_instance_info(
-        &mut self,
-        entries: Vec<benilla_protocol::messages::RaidInstanceEntry>,
-    ) {
-        self.saved_instances = entries;
-        self.saved_instances_answers = self.saved_instances_answers.wrapping_add(1);
     }
 
     /// `MSG_RAID_READY_CHECK`, open form, echoed to the whole group: `0x4ba360` splits on the
@@ -532,32 +516,6 @@ mod tests {
             status: 1,
             flags: 0,
         }
-    }
-
-    #[test]
-    fn an_unchanged_lockout_list_still_counts_as_an_answer() {
-        let mut g = GroupState::default();
-        assert_eq!(g.saved_instances_answers, 0, "nobody has asked yet");
-
-        g.apply_raid_instance_info(Vec::new());
-        assert_eq!(g.saved_instances_answers, 1);
-        g.apply_raid_instance_info(Vec::new());
-        assert_eq!(
-            g.saved_instances_answers, 2,
-            "the second empty answer is the one the button is decided on"
-        );
-
-        g.apply_raid_instance_info(vec![benilla_protocol::messages::RaidInstanceEntry {
-            map: 409,
-            reset: 86_400,
-            instance: 7,
-        }]);
-        assert_eq!(g.saved_instances_answers, 3);
-        assert_eq!(g.saved_instances.len(), 1, "and the list is the new one");
-
-        g.clear_session();
-        assert_eq!(g.saved_instances_answers, 0);
-        assert!(g.saved_instances.is_empty());
     }
 
     #[test]
@@ -707,11 +665,6 @@ mod tests {
 
     #[test]
     fn leaving_the_group_keeps_the_session_tickets() {
-        let lockout = benilla_protocol::messages::RaidInstanceEntry {
-            map: 409,
-            reset: 86_400,
-            instance: 7,
-        };
         let mut g = GroupState {
             in_group: true,
             leader: 0xA11CE,
@@ -720,10 +673,7 @@ mod tests {
         };
         g.raid_targets[0] = 0xA11CE;
         g.apply_ready_check_request(false);
-        g.apply_raid_instance_info(Vec::new());
-        g.apply_raid_instance_info(vec![lockout]);
         assert_eq!((g.ready_check, g.ready_check_requests), (1, 1));
-        assert_eq!(g.saved_instances_answers, 2);
 
         g.apply_list(0, 0, vec![], 0, None, None);
 
@@ -736,16 +686,9 @@ mod tests {
             (1, 1),
             "no READY_CHECK edge"
         );
-        assert_eq!(g.saved_instances_answers, 2, "no UPDATE_INSTANCE_INFO edge");
-        assert_eq!(
-            g.saved_instances,
-            vec![lockout],
-            "the lockouts are the character's"
-        );
 
         g.clear_session();
-        assert_eq!((g.ready_check, g.saved_instances_answers), (0, 0));
-        assert!(g.saved_instances.is_empty());
+        assert_eq!(g.ready_check, 0);
     }
 
     #[test]

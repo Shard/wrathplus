@@ -37,7 +37,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::ReadyCheckRequest, on_ready_check_request)
         .net_handler(K::ReadyCheckAnswer, on_ready_check_answer)
         .net_handler(K::WrathRaidInstanceInfo, on_wrath_raid_instance_info)
-        .net_handler(K::RaidInstanceInfo, on_raid_instance_info)
+        .net_handler(K::RaidInstanceInfo, drop_raid_instance_info)
         .net_handler(K::Disconnected, on_session_end);
 }
 
@@ -293,15 +293,17 @@ fn on_ready_check_answer(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>
     }
 }
 
-fn on_wrath_raid_instance_info(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
-    if let SessionEvent::WrathRaidInstanceInfo { info } = ev {
-        group.wrath_saved_instances.receive(info);
+/// A 1.12 session's list: build 12340 sends `SMSG_RAID_INSTANCE_INFO` as
+/// `WrathRaidInstanceInfo`, so this decode has no consumer (3.3.5 only).
+fn drop_raid_instance_info(In(ev): In<SessionEvent>) {
+    if let SessionEvent::RaidInstanceInfo { entries } = ev {
+        debug!("a 1.12 saved-instance list ({} rows) has no 3.3.5 consumer", entries.len());
     }
 }
 
-fn on_raid_instance_info(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
-    if let SessionEvent::RaidInstanceInfo { entries } = ev {
-        group.apply_raid_instance_info(entries);
+fn on_wrath_raid_instance_info(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>) {
+    if let SessionEvent::WrathRaidInstanceInfo { info } = ev {
+        group.wrath_saved_instances.receive(info);
     }
 }
 

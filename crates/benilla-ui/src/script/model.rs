@@ -280,11 +280,10 @@ pub(crate) struct Model {
     /// `GetQuestsCompleted`'s stored reply and the undrained `QueryQuestsCompleted` calls.
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
     pub(crate) wrath_calendar: super::wrath_calendar::State,
+    pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
-    /// Saved raid lockouts from `SMSG_RAID_INSTANCE_INFO`, which outlive any roster change.
-    pub(crate) saved_instances: Vec<party::SavedInstanceInfo>,
     /// `SetRaidRosterSelection`'s raid row index, client-side only.
     pub(crate) raid_selection: i64,
     /// `GetTime()`'s session seconds, which only the host moves ([`super::UiScript::tick`],
@@ -1187,9 +1186,9 @@ impl Model {
             wrath_ready_check: super::wrath_ready_check::State::default(),
             wrath_quests_completed: Default::default(),
             wrath_calendar: Default::default(),
+            wrath_saved_instances: Default::default(),
             wrath_inspect_talents: None,
             wrath_server_time_offset: None,
-            saved_instances: Vec::new(),
             raid_selection: 0,
             now: 0.0,
             game_time: (0, 0),
