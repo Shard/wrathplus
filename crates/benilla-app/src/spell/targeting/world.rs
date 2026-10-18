@@ -178,6 +178,42 @@ mod tests {
         world.run_system(id).expect("the object commit runs");
     }
 
+    /// A pet's location spell, raised to the cursor by its bar, commits as build 12340's
+    /// `CMSG_PET_CAST_SPELL` with the pet as caster and the clicked point as DEST (`0x80ac90`).
+    #[test]
+    fn a_pet_cursor_commits_the_pets_cast_at_the_point() {
+        const FREEZE: u32 = 33395;
+        const PET: u64 = 0xF140_0000_0000_0050;
+        let (mut world, rx, _) = fixture();
+        let id = world.register_system(commit_ground_cast_on_click);
+        world.resource_mut::<super::super::SpellTargeting>().enter(
+            FREEZE,
+            crate::spell::CastCommit::Pet { caster: PET },
+            0x0040,
+        );
+        world.resource_mut::<crate::target::PressPick>().occlusion = crate::target::PickOcclusion {
+            distance: 5.0,
+            point: Some(Vec3::new(1.0, 2.0, 3.0)),
+            ray: None,
+        };
+        world
+            .resource_mut::<Messages<WorldClick>>()
+            .write(WorldClick);
+        world.run_system(id).expect("the ground commit runs");
+        let sent = rx.try_recv().expect("the pet's cast");
+        let ClientCommand::NativePetCastSpell {
+            caster,
+            spell_id,
+            target: benilla_protocol::wrath_session::CastTarget::Dest(_),
+        } = sent
+        else {
+            panic!("expected the pet's dest cast, got {sent:?}");
+        };
+        assert_eq!((caster, spell_id), (PET, FREEZE));
+        assert!(rx.try_recv().is_err(), "nothing else, no player cast");
+        assert!(!world.resource::<super::super::SpellTargeting>().active());
+    }
+
     /// `BindLocation 0x6e60f0`: the standing word alone binds the point to SOURCE (`Targets 0x20`,
     /// spell 265) or DEST (`Targets 0x40`, Blizzard).
     #[test]

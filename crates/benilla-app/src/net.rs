@@ -1327,6 +1327,13 @@ pub(crate) enum ClientCommand {
         target: benilla_protocol::messages::CorpseTarget,
         corpse_guid: u64,
     },
+    /// Build 12340's `CMSG_PET_CAST_SPELL`: a cast whose caster is our pet, charm or possessed
+    /// unit, with the same targets block (the targeting cursor's pet commit).
+    NativePetCastSpell {
+        caster: u64,
+        spell_id: u32,
+        target: benilla_protocol::wrath_session::CastTarget,
+    },
     /// `CMSG_CAST_SPELL` with `TARGET_FLAG_DEST_LOCATION`; `dest` in WoW coordinates.
     CastSpellAtDest {
         spell_id: u32,
