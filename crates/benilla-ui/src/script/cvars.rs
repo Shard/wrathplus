@@ -594,10 +594,13 @@ pub const VIDEO_DEFAULT_CVARS: &[&str] = &[
 /// `Getanisotropic`, `GetspellEffectLevel`, `GetweatherDensity` and their setters.
 /// `GetFarclip`/`SetFarclip` (`0x488f00`/`0x488f30`, in [`super::video_pairs`]) do exist;
 /// `getglobal` is case-sensitive.
-pub(super) fn install_wrath_clock_cvars(lua: &Lua) -> mlua::Result<()> {
+pub(super) fn install_wrath_engine_cvars(lua: &Lua) -> mlua::Result<()> {
     let register = lua.globals().get::<mlua::Function>("RegisterCVar")?;
     register.call::<()>(("timeMgrAlarmTime", "0"))?;
-    register.call::<()>(("timeMgrAlarmMessage", ""))
+    register.call::<()>(("timeMgrAlarmMessage", ""))?;
+    // ShowAllSpellRanks: registered with the game's CVars at `0x51f1e1` (flags 0x10, category 4)
+    // with default "1", every rank shown.
+    register.call::<()>(("ShowAllSpellRanks", "1"))
 }
 
 fn install_video_verbs(lua: &Lua) -> mlua::Result<()> {

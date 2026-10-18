@@ -94,8 +94,9 @@ pub enum Packet {
     /// `SMSG_PET_SPELLS`.
     PetLearnedSpell { spell_id: u32 },
     PetUnlearnedSpell { spell_id: u32 },
-    /// `SMSG_PET_UPDATE_COMBO_POINTS` (`Unit::SendComboPoints` to a charmer): `packed target, u8`.
-    PetComboPoints { target: u64, points: u8 },
+    /// `SMSG_PET_UPDATE_COMBO_POINTS` (`Unit::SendComboPoints` to the charmer or owner of a pet or
+    /// vehicle that builds them): `packed unit, packed target, u8 points`.
+    PetComboPoints { unit: u64, target: u64, points: u8 },
     /// `SMSG_MODIFY_COOLDOWN` (`Player::ModifySpellCooldown`): `u32 spell, u64 player, i32 delta ms`.
     ModifyCooldown { spell_id: u32, unit: u64, delta_ms: i32 },
     /// `SMSG_FEIGN_DEATH_RESISTED`: `u64 unit, u8` (AzerothCore writes 0).
@@ -320,6 +321,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
         },
         SMSG_PET_UPDATE_COMBO_POINTS => SessionEvent::WrathSpellControl {
             packet: Packet::PetComboPoints {
+                unit: read_packed_guid(&mut r)?,
                 target: read_packed_guid(&mut r)?,
                 points: u8_le(&mut r)?,
             },

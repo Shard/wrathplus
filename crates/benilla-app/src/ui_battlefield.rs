@@ -397,12 +397,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_request_is_vanilla_only_until_wrath_wire_exists() {
+    fn status_request_reaches_both_wires() {
         use crossbeam_channel::TryRecvError;
 
+        // 12340 sends `CMSG_BATTLEFIELD_STATUS` (0x2d3, empty) on world enter.
         for (dialect, expected) in [
             (SessionDialect::Vanilla5875, true),
-            (SessionDialect::Wrath12340, false),
+            (SessionDialect::Wrath12340, true),
         ] {
             let (tx, rx) = crossbeam_channel::unbounded();
             let commands = NetCommands(tx);

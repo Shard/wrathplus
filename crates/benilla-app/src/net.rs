@@ -42,6 +42,7 @@ pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_appearance;
+mod wrath_social_lists_capture;
 pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
@@ -162,6 +163,7 @@ impl Plugin for NetPlugin {
         wrath_exchange_capture::register(app);
         wrath_achievement_capture::register(app);
         wrath_appearance::register(app);
+        wrath_social_lists_capture::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
@@ -309,7 +311,10 @@ pub(crate) struct UnitSpeeds(pub(crate) MoveSpeeds);
 /// the post-create apply `0x5fad50` applies our own speed block as it does a remote one.
 pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     use crate::creature_anim::move_flags as f;
-    if flags & f::ANY_MOVE == 0 {
+    // A swimmer or flier on its ascend or descend key moves without a direction bit.
+    let vertical = flags & (f::SWIMMING | f::FLYING) != 0
+        && flags & (f::ASCENDING | f::DESCENDING) != 0;
+    if flags & f::ANY_MOVE == 0 && !vertical {
         return 0.0;
     }
     if flags & f::SWIMMING != 0 {
@@ -2213,6 +2218,14 @@ pub(crate) enum ClientCommand {
     NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
     /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
     NativeAppearance(benilla_protocol::wrath_appearance::Command),
+    /// `CMSG_GET_CHANNEL_MEMBER_COUNT`.
+    GetChannelMemberCount { name: String },
+    /// `CMSG_CLEAR_CHANNEL_WATCH`: stop a channel's roster deltas.
+    ClearChannelWatch { name: String },
+    /// `CMSG_DECLINE_CHANNEL_INVITE` (AC reads nothing from it).
+    DeclineChannelInvite { name: String },
+    /// The raid browser's search join and leave.
+    NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),

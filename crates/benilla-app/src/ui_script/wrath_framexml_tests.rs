@@ -37,15 +37,15 @@ fn scan_calls(
                 &src[..start]
             };
             let preceded_by_function = head.trim_end().ends_with("function");
-            // `<expr>.Name = function` / `<expr>:Name = function`: a method FrameXML defines on an
-            // instance (PaperDollFrame.lua:2353 `self.SetSelection = function`).
-            if (before == b'.' || before == b':') && name.as_bytes()[0].is_ascii_uppercase() {
-                let rest = src[i..].trim_start();
-                if let Some(rhs) = rest.strip_prefix('=').filter(|r| !r.starts_with('=')) {
-                    if rhs.trim_start().starts_with("function") {
-                        defined.insert(name.to_string());
-                    }
-                }
+            // `<expr>.Name = <value>`: a method FrameXML defines on an instance, by a function
+            // (PaperDollFrame.lua:2353 `self.SetSelection = function`) or another value
+            // (InterfaceOptionsPanels.xml:3009 `self.SetDisplayValue = self.SetValue`). A name that
+            // is also a Wow.exe string stays counted through the shadow guard.
+            if (before == b'.' || before == b':')
+                && name.as_bytes()[0].is_ascii_uppercase()
+                && src[i..].trim_start().strip_prefix('=').is_some_and(|r| !r.starts_with('='))
+            {
+                defined.insert(name.to_string());
             }
             if j < bytes.len() && bytes[j] == b'(' && name.as_bytes()[0].is_ascii_uppercase() {
                 if preceded_by_function {
@@ -71,12 +71,14 @@ fn census_treats_frame_xml_defined_methods_as_defined() {
     let mut calls = std::collections::BTreeMap::new();
     let src = census_lexer::executable_text(
         "self.SetSelection = function(self, t) end\nfunction Foo.Bar:Baz(a) end\n\
-         function Foo.Qux(a) end\nself:SetSelection(1)\nself:GetName()",
+         function Foo.Qux(a) end\nself:SetSelection(1)\nself:GetName()\n\
+         self.SetDisplayValue = self.SetValue\nif self.IsCompared == x then end",
     );
     scan_calls(&src, &mut defined, &mut methods, &mut calls);
-    for n in ["SetSelection", "Baz", "Qux"] {
+    for n in ["SetSelection", "Baz", "Qux", "SetDisplayValue"] {
         assert!(defined.contains(n), "{n}");
     }
+    assert!(!defined.contains("IsCompared"), "a comparison is no assignment");
     assert_eq!(methods.get("GetName"), Some(&1), "an engine method call still counts");
 }
 
@@ -276,7 +278,11 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
 /// and that this VM does not answer, reviewed as not being shadowed engine APIs. Any other such
 /// name stays counted as missing, so a FrameXML definition cannot hide an engine method or global.
 /// A row needs its reason; the list only shrinks.
-const SHADOW_REVIEWED: &[(&str, &str)] = &[];
+const SHADOW_REVIEWED: &[(&str, &str)] = &[(
+    "OnFinished",
+    "an animation script-handler name FrameXML defines per instance; Wow.exe's string is the \
+     handler name, not an engine method (reviewed by the manager, 2026-10-19)",
+)];
 
 /// The census lines a FrameXML definition must not suppress: each `(kind, name, count)` that was
 /// suppressed only by a FrameXML definition, is an exact NUL-bounded string in `exe`, is not
@@ -534,6 +540,9 @@ fn missing_surface(script: &UiScript) {
         "NATIVE_ABSENT rows that are answered or no longer called: {stale:?}"
     );
     eprintln!("shadow-guarded: {} names", shadowed.len());
+    for line in &shadowed {
+        eprintln!("SHADOW-GUARDED {line}");
+    }
     lines.extend(shadowed);
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {

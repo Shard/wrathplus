@@ -86,15 +86,30 @@ These are transport-only: the vehicle UI (`VehicleExit` and the rest) is still a
 
 ## Labelled, not built
 
-- **`MSG_MOVE_SET_PITCH` `0x00DB`:** drain event 0x14 (`0x6e9380`) sends it when `0x989bc0`
-  accepts a pitch. The event's enqueuer was not traced. Mouse-look pitch still rides the heartbeats.
-- **`CMSG_MOVE_FALL_RESET` `0x02CA`:** `0x71f2c0` sends it when a mover state bit
-  (`+0xa30 & 0x80`) is set. The setter was not traced.
-- **`CMSG_MOVE_CHNG_TRANSPORT` `0x038D`:** sent after a client-side transport change succeeds for
-  the active player (`0x6ec400` → `0x6f0c70`, and `0x6eb0b0`'s resync). The callers were not
-  traced.
-- **`CMSG_ENABLETAXI` `0x0493`:** `0x6d62a0` sends a `u64` guid from `0x6ddbb0`, untraced.
-  AzerothCore handles it as `CMSG_TAXIQUERYAVAILABLENODES`, which the client already sends.
+The second Ghidra round (movement M6, `/tmp/azb-wire-ghidra/m6`) narrowed each of these. None is
+proven far enough to emit:
+
+- **`MSG_MOVE_SET_PITCH` `0x00DB`:**
+  - Drain event 0x14 (`0x6e9380`) sends it whenever `0x989bc0` stores a pitch change above its
+    threshold; a resting water walker is the exception.
+  - The event is queued only by `0x6ee460(pitch)`, which clamps the pitch to the controlled
+    vehicle seat's pitch range when the seat allows pitching.
+  - Its caller `0x72ead0` (vehicle aim, mouse look, or both) was not traced.
+- **`CMSG_MOVE_FALL_RESET` `0x02CA`:**
+  - The generic movement sender (`0x71ef80`) sets `+0xa30 & 0x80` when it sends while FALLING and
+    clears the bit otherwise.
+  - `0x71f2c0` sends FALL_RESET if the bit is set, reached through `0x6e9270` from `0x7612b0`,
+    which was not traced.
+- **`CMSG_MOVE_CHNG_TRANSPORT` `0x038D`:**
+  - `0x6f0c70` sends it when `CMovementData_C::ForceSetTransportInt` (`0x6ec400`) changes the active
+    player's transport guid or seat.
+  - Its callers (`0x70ffd0`, `0x710460`, `0x73c8e0`, `0x7576e0`, `0x760720`) re-seat or unseat the
+    player from vehicle and transport handlers whose triggers were not traced.
+- **`CMSG_ENABLETAXI` `0x0493`:**
+  - The right-click unit handler (`0x6ddbb0`) sends it, with the unit's guid, before its NPC-flag
+    dispatch.
+  - It is sent only when an untraced unit field at `+0x94` equals 7.
+  - AzerothCore handles it as `CMSG_TAXIQUERYAVAILABLENODES`, which the client sends.
 - **`MSG_MOVE_WORLDPORT_ACK` S→C:** AzerothCore never constructs it. It moves to the out-of-scope
   "no AC sender" bucket.
 - **Passengers.** The ON_TRANSPORT seat of a passenger who does not drive stays `-1`; AzerothCore

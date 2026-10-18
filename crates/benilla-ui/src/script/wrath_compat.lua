@@ -195,8 +195,6 @@ GetNumBattlegroundTypes = GetNumBattlegroundTypes or zero
 GetBattlegroundInfo = GetBattlegroundInfo or none
 IsActiveBattlefieldArena = IsActiveBattlefieldArena or none
 GetCurrentArenaSeason = GetCurrentArenaSeason or zero
-GetArenaTeam = GetArenaTeam or none
-IsArenaTeamCaptain = IsArenaTeamCaptain or none
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -218,10 +216,7 @@ Sound_GameSystem_GetNumOutputDrivers = Sound_GameSystem_GetNumOutputDrivers or z
 Sound_GameSystem_GetOutputDriverNameByIndex = none
 
 -- ── dungeon finder, achievements, calendar, companions, vehicles ───────────────────────────────
-GetLFGProposal, GetLFGMode, GetLFGRoleUpdate = none, none, none
-GetLFGQueuedList, GetLFGInfoServer = none, none
-GetLFGRoles = function() return false, false, false, false end
-HasLFGRestrictions, IsPartyLFG, IsLFGDungeonJoinable = none, none, none
+IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none
@@ -233,7 +228,7 @@ IsVehicleAimAngleAdjustable, IsVehicleAimPowerAdjustable = none, none
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
 IsThreatWarningEnabled = IsThreatWarningEnabled or none
 GetSummonFriendCooldown = GetSummonFriendCooldown or function() return 0, 0 end
-IsListedInLFR, GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none, none
+GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
 GetDungeonDifficulty = GetDungeonDifficulty or function() return 1 end
 GetRaidDifficulty = GetRaidDifficulty or function() return 1 end
 UnitIsPossessed, IsPossessBarVisible = none, none
@@ -389,7 +384,6 @@ do
     screenEdgeFlash = "1",
     scriptErrors = "0",
     secureAbilityToggle = "1",
-    ShowAllSpellRanks = "1",
     showArenaEnemyCastbar = "1",
     showArenaEnemyFrames = "1",
     showArenaEnemyPets = "1",
@@ -528,7 +522,6 @@ GetMultiCastBarOffset = GetMultiCastBarOffset or zero
 HasCompletedAnyAchievement = HasCompletedAnyAchievement or none
 IsZoomOutAvailable = IsZoomOutAvailable or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
-CanPartyLFGBackfill = CanPartyLFGBackfill or none
 function GetContainerNumFreeSlots(bag)
     local free = 0
     for slot = 1, GetContainerNumSlots(bag) or 0 do
@@ -604,7 +597,6 @@ EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
-GetCursorInfo = GetCursorInfo or none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
 ForceGossip = ForceGossip or function() return nil end

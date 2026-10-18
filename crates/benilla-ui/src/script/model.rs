@@ -897,6 +897,8 @@ pub(crate) struct Model {
     pub(crate) wrath_companions: super::WrathCompanions,
     /// The timed death-knight runes (`wrath_runes`).
     pub(crate) wrath_runes: super::WrathRunes,
+    /// The arena-team slots, rosters and the client's roster order (`wrath_arena`).
+    pub(crate) wrath_arena: super::wrath_arena::ArenaState,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1526,6 +1528,7 @@ impl Model {
             wrath_paperdoll_stats: Default::default(),
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
+            wrath_arena: Default::default(),
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

@@ -73,6 +73,8 @@ pub(crate) fn place_action(model: &mut Model, id: u32) -> bool {
         CursorPayload::StablePet(_) => None,
         CursorPayload::Money(_) => None,
         CursorPayload::Merchant(_) => None,
+        // Mode 11, a guild bank item, is outside `PlaceAction`'s modes.
+        CursorPayload::GuildBankItem(_) => None,
     };
     let Some((kind, action, texture)) = placeable else {
         model.cursor = Some(held);
