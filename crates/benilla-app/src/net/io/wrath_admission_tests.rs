@@ -74,6 +74,13 @@ fn every_wrath_writer_route_is_admitted() {
         ("SaveGuildEmblem", ClientCommand::SaveGuildEmblem { vendor: 1, design: [0; 5] }),
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
+        ("GetChannelMemberCount", ClientCommand::GetChannelMemberCount { name: "Trade".into() }),
+        ("ClearChannelWatch", ClientCommand::ClearChannelWatch { name: "Trade".into() }),
+        ("DeclineChannelInvite", ClientCommand::DeclineChannelInvite { name: "Trade".into() }),
+        (
+            "NativeRaidBrowser",
+            ClientCommand::NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command::Join { dungeon: 251 }),
+        ),
         ("PetitionShowList", ClientCommand::PetitionShowList { npc: 1 }),
         ("PetitionBuy", ClientCommand::PetitionBuy { npc: 1, name: "G".into() }),
         ("PetitionShowSignatures", ClientCommand::PetitionShowSignatures { item: 1 }),

@@ -1561,6 +1561,7 @@ enum WrathRoute {
     NativeSessionMeta,
     NativeAppearance,
     NativePetition,
+    NativeRaidBrowser,
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
@@ -1692,7 +1693,11 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::RequestBattlefieldScoreData
         | ClientCommand::RequestBattlefieldPositions
         | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        ClientCommand::NativeRaidBrowser(_) => WrathRoute::NativeRaidBrowser,
         ClientCommand::JoinChannel { .. }
+        | ClientCommand::GetChannelMemberCount { .. }
+        | ClientCommand::ClearChannelWatch { .. }
+        | ClientCommand::DeclineChannelInvite { .. }
         | ClientCommand::LeaveChannel { .. }
         | ClientCommand::ChannelList { .. }
         | ClientCommand::ChannelOwner { .. }
@@ -2143,6 +2148,11 @@ fn writer_loop(
                                 continue;
                             }
                         }
+                    }
+                    WrathRoute::NativeRaidBrowser => {
+                        let ClientCommand::NativeRaidBrowser(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_raid_browser::encode(&command);
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativePetition => {
                         let (opcode, body) = benilla_protocol::wrath_petition::encode(&petition_command(command));
@@ -2607,6 +2617,9 @@ fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notic
         ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
         ClientCommand::LeaveChannel { name } => C::Leave { name },
         ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::GetChannelMemberCount { name } => C::Named { opcode: 0x03d4, name },
+        ClientCommand::ClearChannelWatch { name } => C::Named { opcode: 0x03f3, name },
+        ClientCommand::DeclineChannelInvite { name } => C::Named { opcode: 0x0410, name },
         ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
         ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
         ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
