@@ -59,6 +59,12 @@ pub(crate) fn apply_script_calls(
         match call {
             ScriptCall::Select(request) => appliers.p0().select(request),
             ScriptCall::TargetByName { name, exact } => appliers.p0().target_by_name(&name, exact),
+            // The 12340 player-only modes need the player filter App has not wired: capture-only.
+            ScriptCall::TargetNearest {
+                mode: mode @ (benilla_ui::script::NearestMode::EnemyPlayer
+                | benilla_ui::script::NearestMode::FriendPlayer),
+                ..
+            } => debug!("TargetNearest {mode:?} not applied yet: capture-only"),
             ScriptCall::TargetNearest { mode, reverse } => {
                 appliers.p0().target_nearest(mode, reverse);
             }
@@ -89,6 +95,16 @@ pub(crate) fn apply_script_calls(
             }
             ScriptCall::PetAction(slot) => appliers.p6().press_slot(slot),
             ScriptCall::PetOrder(packed) => appliers.p6().order(packed),
+            // Build 12340 verbs (native/ui ChatFrame unit), labelled capture-only until App wires
+            // them in call order.
+            other @ (ScriptCall::StartAttack { .. }
+            | ScriptCall::StopAttack
+            | ScriptCall::TargetLastFriend
+            | ScriptCall::CancelShapeshiftForm
+            | ScriptCall::Dismount
+            | ScriptCall::ActivateTalentGroup { .. }) => {
+                debug!("script call {other:?} not applied yet: capture-only");
+            }
         }
         // TryCast's attack pick can move the selection mid-cast (`0x6e4efb`), so a press held
         // there is picked and resumed before the next call reads the selection.

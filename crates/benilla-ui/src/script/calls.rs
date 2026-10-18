@@ -51,6 +51,19 @@ pub enum ScriptCall {
     PetAction(u32),
     /// `PetAttack` and the other one-shot orders, as their bar slot's packed word.
     PetOrder(u32),
+    /// Build 12340 `StartAttack([unit])` (`0x523090`): the named unit, else the target; no toggle.
+    StartAttack { unit: Option<String> },
+    /// Build 12340 `StopAttack()` (`0x51d0b0`).
+    StopAttack,
+    /// Build 12340 `TargetLastFriend()` (`0x525e50`).
+    TargetLastFriend,
+    /// Build 12340 `CancelShapeshiftForm()` (`0x53de60` → `0x726ce0`, the cancel-aura send).
+    CancelShapeshiftForm,
+    /// Build 12340 `Dismount()` (`0x51d170` → `0x7412e0`, CMSG `0x375`).
+    Dismount,
+    /// Build 12340 `SetActiveTalentGroup(group)` (`0x5c5e70`): cast the 1-based group's
+    /// activation spell (63645/63644, table `0xad05e8`).
+    ActivateTalentGroup { group: u8 },
 }
 
 /// The mode the four `TargetNearest*` shims hand the TAB cycler `0x493f60`, the only byte that
@@ -65,6 +78,10 @@ pub enum NearestMode {
     PartyMember,
     /// Mode 4, `TargetNearestRaidMember`: a party or raid member other than us.
     RaidMember,
+    /// Build 12340 `TargetNearestEnemyPlayer` (`0x525b10`, mode 2 of `0x524fc0`).
+    EnemyPlayer,
+    /// Build 12340 `TargetNearestFriendPlayer` (`0x525b90`, mode 4 of `0x524fc0`).
+    FriendPlayer,
 }
 
 impl UiScript {
