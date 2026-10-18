@@ -239,30 +239,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         push(lua, R::ArenaTeamLeave { team });
         none()
     })?;
-    // GetArenaTeamRosterInfo(team, index) (`0x5a2fc0`) → name, rank, level, class, online,
-    // played, win, seasonPlayed, seasonWin, rating. No arena roster is carried, so every row is
-    // the native miss: nil, 0, 0, nil, nil, 0, 0, 0, 0, 0.
-    set(lua, "GetArenaTeamRosterInfo", |lua, args| {
-        if !is_number(lua, &arg(&args, 0)) || !is_number(lua, &arg(&args, 1)) {
-            return Err(mlua::Error::runtime(
-                "Usage: GetArenaTeamRosterInfo(team, index)",
-            ));
-        }
-        let z = || Value::Integer(0);
-        Ok(MultiValue::from_vec(vec![
-            Value::Nil,
-            z(),
-            z(),
-            Value::Nil,
-            Value::Nil,
-            z(),
-            z(),
-            z(),
-            z(),
-            z(),
-        ]))
-    })?;
-
     // ── Battle.net: closed session ──
     for global in [
         "BNInviteToConversation",
@@ -663,11 +639,6 @@ mod tests {
             s.eval::<i64>("return select('#', BNIsFriend(1)) + select('#', BNSendWhisper())")
                 .unwrap(),
             0
-        );
-        assert_eq!(
-            s.eval::<i64>("return select('#', GetArenaTeamRosterInfo(1, 1))")
-                .unwrap(),
-            10
         );
         s.model_mut().units_by_guid.insert(
             0x42,

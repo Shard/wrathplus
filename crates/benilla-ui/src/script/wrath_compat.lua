@@ -195,8 +195,6 @@ GetNumBattlegroundTypes = GetNumBattlegroundTypes or zero
 GetBattlegroundInfo = GetBattlegroundInfo or none
 IsActiveBattlefieldArena = IsActiveBattlefieldArena or none
 GetCurrentArenaSeason = GetCurrentArenaSeason or zero
-GetArenaTeam = GetArenaTeam or none
-IsArenaTeamCaptain = IsArenaTeamCaptain or none
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
