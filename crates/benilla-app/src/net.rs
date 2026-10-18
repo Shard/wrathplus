@@ -45,7 +45,7 @@ mod wrath_appearance;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
-mod wrath_battleground_capture;
+pub(crate) mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
@@ -1521,11 +1521,6 @@ pub(crate) enum ClientCommand {
     AreaSpiritHealerQuery {
         healer: u64,
     },
-    /// `AcceptBattlefieldPort(index, accept)`: `CMSG_BATTLEFIELD_PORT`.
-    BattlefieldPort {
-        map_id: u32,
-        accept: bool,
-    },
     /// `RequestBattlefieldScoreData()`: `MSG_PVP_LOG_DATA`.
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
@@ -1550,10 +1545,6 @@ pub(crate) enum ClientCommand {
     /// `ResetTutorials()`: `CMSG_TUTORIAL_RESET`.
     TutorialReset,
     // ── The battleground list window ──
-    /// `ShowBattlefieldList(index)`: `CMSG_BATTLEFIELD_LIST`.
-    BattlefieldList {
-        map_id: u32,
-    },
     /// `JoinBattlefield` when the list came from a battlemaster: `CMSG_BATTLEMASTER_JOIN`.
     BattlemasterJoin {
         battlemaster: u64,
@@ -1577,12 +1568,6 @@ pub(crate) enum ClientCommand {
     /// The ladder's BATTLEMASTER arm: `CMSG_BATTLEMASTER_HELLO`.
     BattlemasterHello {
         npc: u64,
-    },
-    /// `JoinBattlefield` when the list came without one: `CMSG_BATTLEFIELD_JOIN`.
-    BattlefieldJoin {
-        map_id: u32,
-        instance_id: u32,
-        as_group: bool,
     },
     /// The world-enter status request: `CMSG_BATTLEFIELD_STATUS`.
     BattlefieldStatusRequest,

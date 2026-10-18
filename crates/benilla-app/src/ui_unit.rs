@@ -554,13 +554,14 @@ pub(crate) fn race_faction_group(race: u8) -> Option<&'static str> {
 /// never the live template: `ChrRaces.dbc` field 2 to `FactionTemplate.dbc` field 3's group mask,
 /// `& 4` Horde, else `& 2` Alliance, so a template-35 GM keeps his rank title. Read by
 /// `GetPVPRankInfo` (`0x51a9af`, `0x51a9c8`), `UnitPVPName` (`0x5efe60`) and the scoreboard
-/// (`0x4aa200`). A frozen copy of the shipped nine rows; race 9 (Goblin) answers Alliance.
+/// (`0x4aa200`). A frozen copy of the shipped rows, with build 12340's Blood Elf (Horde) and
+/// Draenei (Alliance); race 9 (Goblin) answers Alliance.
 pub(crate) fn race_pvp_team(race: u8) -> i8 {
     match race {
         // Group mask 3, Player|Alliance: `& 4` clear, `& 2` set.
-        1 | 3 | 4 | 7 | 9 => 1,
+        1 | 3 | 4 | 7 | 9 | 11 => 1,
         // Group mask 5, Player|Horde: `& 4` set, tested first.
-        2 | 5 | 6 | 8 => 0,
+        2 | 5 | 6 | 8 | 10 => 0,
         // No `ChrRaces` row: the engine's bounds-failure `-1`, which names no GlobalString.
         _ => -1,
     }
@@ -2711,16 +2712,18 @@ mod tests {
     #[test]
     fn race_pvp_team_matches_the_shipped_tables() {
         let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        let profile = benilla_formats::DataProfile::from_env().expect("profile");
+        let mut chain = benilla_formats::Chain::open_profile(&data, &profile).expect("open chain");
         let want = benilla_formats::load_race_pvp_teams(&mut chain).expect("ChrRaces walk");
-        // 1.12 ships nine rows; a truncated map would pass by asserting nothing.
-        assert_eq!(want.len(), 9, "ChrRaces.dbc row count");
-        for (&race, &team) in &want {
-            assert_eq!(race_pvp_team(race), team, "race {race}");
+        // Build 12340 ships the eleven playable races among its rows; a truncated map would
+        // pass by asserting nothing.
+        assert!(want.len() >= 11, "ChrRaces.dbc row count {}", want.len());
+        for race in 1u8..=11 {
+            assert_eq!(Some(&race_pvp_team(race)), want.get(&race), "race {race}");
         }
         assert!(want.values().any(|&t| t == 0), "some race is Horde");
         assert!(want.values().any(|&t| t == 1), "some race is Alliance");
-        for race in [0u8, 10, 255] {
+        for race in [0u8, 255] {
             assert!(!want.contains_key(&race));
             assert_eq!(race_pvp_team(race), -1, "race {race} has no ChrRaces row");
         }

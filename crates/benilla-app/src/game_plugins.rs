@@ -710,11 +710,14 @@ pub(crate) mod schedule_tests {
     ///   selects as the click does, so it writes `Selection` where the click's drain does;
     /// - the vehicle aim (`player::wire_in::apply_vehicle_aim`) against the other `Player` writers
     ///   before `control`: it writes only `mover_pitch`, which none of them reads or writes.
+    /// - the native battlefield reducer and feed (`ui_battlefield::drain_native`,
+    ///   `feed_battlefield`) against the terrain stream's release and rescatter: they read the
+    ///   player's area through `WorldPoint`, which those systems only rebuild between frames' reads.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_649;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_653;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
