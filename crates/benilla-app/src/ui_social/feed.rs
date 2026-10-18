@@ -368,7 +368,7 @@ fn index_of(order: &[u64], guid: u64) -> u32 {
 
 /// Turn the Lua API's social intents into their sends. By-index intents resolve through the order
 /// the feed published, by-name ones through the resolved names, since the wire removes by guid.
-pub(super) fn drain_social(
+pub(crate) fn drain_social(
     script: Option<NonSendMut<UiScript>>,
     mut social: ResMut<SocialState>,
     names: Res<NameCache>,
