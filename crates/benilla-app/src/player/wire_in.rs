@@ -264,6 +264,15 @@ pub(super) fn apply_server_moves(
         else if m.mode == MoveMode::Hover && m.apply {
             player.hover_launch = true;
         }
+        // Losing CAN_FLY lands a flier inside the ACK (`0x6ef860` event 0x30 sends 0x345 alone), so
+        // the ACK's pose is the last one reported and no SET_FLY follows.
+        else if m.mode == MoveMode::CanFly && !m.apply {
+            super::flight::land(player);
+            player.move_flags &= !(crate::creature_anim::move_flags::FLYING
+                | crate::creature_anim::move_flags::ASCENDING
+                | crate::creature_anim::move_flags::DESCENDING
+                | crate::creature_anim::move_flags::CAN_FLY);
+        }
         let facing = player.face_yaw.rem_euclid(std::f32::consts::TAU);
         let _ = net_cmds.0.send(ClientCommand::MoveModeAck {
             guid: m.guid,
@@ -535,7 +544,9 @@ mod session_end_tests {
             feather_fall: true,
             hover: true,
             levitating: true,
+            can_fly: true,
         };
+        p.flying = true;
         p.autorun = true;
         p.control_lost = true;
         p.foreign_mover = Some(0xBB);

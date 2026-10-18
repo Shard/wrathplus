@@ -96,6 +96,16 @@ pub(crate) mod move_flags {
     /// `MOVEFLAG_HOVER`: the body rests 1.0 yd above the ground (Levitate): the walk resolver
     /// `0x6367b0` adds the `[0x7ff9d8]` offset and the step-down reach widens by it (`0x633e35`).
     pub const HOVER: u32 = 0x4000_0000;
+    /// Build 12340's CAN_FLY (the same bit on the Wrath wire); 1.12 never sets it.
+    pub const CAN_FLY: u32 = 0x0100_0000;
+    /// Build 12340's ASCENDING and DESCENDING (the same bits on the Wrath wire), set by the jump and
+    /// descend keys while swimming or flying (`0x9898e0`).
+    pub const ASCENDING: u32 = 0x0040_0000;
+    pub const DESCENDING: u32 = 0x0080_0000;
+    /// Build 12340's FLYING, held in a bit of its own: the Wrath wire's `0x0200_0000` is the shared
+    /// word's [`ON_TRANSPORT`], so `player::movement_net` maps this bit onto it at the boundary.
+    /// Outside [`SERVER_AUTHORED`]: the server never sets our flight in a merged pose.
+    pub const FLYING: u32 = 0x0800_0000;
 
     /// The bits a server-authored move packet owns, the reference's merge mask (`0x618c30` @
     /// `0x618deb`). [`ON_TRANSPORT`] is outside it: a server pose relocates a rider but never

@@ -28,6 +28,10 @@ pub(crate) enum Input {
     TurnOrAction,
     /// `CameraOrSelectOrMoveStart`/`Stop`, bit `0x2`.
     CameraOrSelectOrMove,
+    /// `JumpOrAscendStart`/`AscendStop`: the flier's ascend key.
+    Ascend,
+    /// `SitStandOrDescendStart`/`DescendStop`: the flier's descend key.
+    Descend,
     /// `Jump()`.
     Jump,
     /// `ToggleRun()`, the walk toggle.
@@ -60,6 +64,8 @@ fn held_input(input: HeldInput) -> Input {
         HeldInput::StrafeRight => Input::StrafeRight,
         HeldInput::TurnOrAction => Input::TurnOrAction,
         HeldInput::CameraOrSelectOrMove => Input::CameraOrSelectOrMove,
+        HeldInput::Ascend => Input::Ascend,
+        HeldInput::Descend => Input::Descend,
     }
 }
 
@@ -91,6 +97,10 @@ impl BindingsState {
             if pressed {
                 self.fired.push(input);
                 self.just.push(input);
+            }
+            // `JUMP` is `JumpOrAscendStart`/`AscendStop`: the key also holds the ascend.
+            if input == Input::Jump {
+                self.apply_held(Input::Ascend, pressed);
             }
             return true;
         }

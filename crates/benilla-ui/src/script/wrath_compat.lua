@@ -644,9 +644,3 @@ QuestPOIGetIconInfo = QuestPOIGetIconInfo or none
 QuestPOIGetQuestIDByVisibleIndex = QuestPOIGetQuestIDByVisibleIndex or none
 GetQuestPOILeaderBoard = GetQuestPOILeaderBoard or none
 
--- ── 3.x movement binding names ────────────────────────────────────────────────────────────────
--- `Bindings.xml` calls the flying-era names; on the ground they are 1.12's jump and sit.
-JumpOrAscendStart = JumpOrAscendStart or Jump
-AscendStop = AscendStop or none
-SitStandOrDescendStart = SitStandOrDescendStart or SitOrStand
-DescendStop = DescendStop or none

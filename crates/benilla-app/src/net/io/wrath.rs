@@ -509,6 +509,16 @@ fn run(
                         }
                     };
                     authority.raise_unset_barrier(order)?;
+                    // The controller lands a flier and drops the grant (`0x6ef860` event 0x30).
+                    send(
+                        events,
+                        SessionEvent::MoveMode {
+                            guid: order.mover_guid,
+                            counter: order.counter,
+                            mode: benilla_protocol::messages::MoveMode::CanFly,
+                            apply: false,
+                        },
+                    )?;
                     control
                         .send(WrathWriterControl::Internal {
                             epoch,
@@ -1041,8 +1051,9 @@ impl MovementAuthorityHandle {
         let Some(mut pose) = state.ground_pose else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
-        // SWIMMING and ON_TRANSPORT alone are not motion: a still swimmer or passenger needs no STOP.
-        if rooted && pose.flags & !(wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT) != 0 {
+        // The medium and granted modes alone are not motion: a still swimmer, flier or passenger
+        // needs no STOP.
+        if rooted && pose.halted() != pose {
             pose = pose.halted();
             let stop = pose.encode(wrath_ground::MSG_MOVE_STOP, self.self_guid, timestamp)?;
             send(wrath_ground::MSG_MOVE_STOP, &stop)?;
@@ -1098,6 +1109,11 @@ impl MovementAuthorityHandle {
             timestamp,
         )?;
         send(&body)?;
+        let landed = pose.landed();
+        state.ground_pose = Some(OnFootPose {
+            flags: landed.flags & !wrath_ground::MOVE_CAN_FLY,
+            ..landed
+        });
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(expected));
         Ok(UnsetAckResult::Sent)
@@ -1160,10 +1176,16 @@ impl MovementAuthorityHandle {
                     kind,
                     apply,
                 )?;
-                // Water walking and slow fall are on-foot bits the mover keeps reporting; the
-                // airborne modes stay outside the on-foot pose.
-                let mut reported = pose;
-                let bit = kind.flag() & benilla_protocol::wrath_ground::GROUND_FLAG_MASK;
+                // Water walking, slow fall and can-fly are bits the mover keeps reporting (losing
+                // can-fly lands a flier); hover and gravity stay outside the reported pose.
+                let mut reported = if kind == wrath_authority::ModeOrderKind::CanFly && !apply {
+                    pose.landed()
+                } else {
+                    pose
+                };
+                let bit = kind.flag()
+                    & (benilla_protocol::wrath_ground::GROUND_FLAG_MASK
+                        | benilla_protocol::wrath_ground::MOVE_CAN_FLY);
                 if apply {
                     reported.flags |= bit;
                 } else {
@@ -1180,7 +1202,7 @@ impl MovementAuthorityHandle {
                     timestamp,
                     &order,
                 )?,
-                pose,
+                pose.landed(),
             ),
             MoverOrder::TeleportNear { .. } => unreachable!("refused above"),
         };
@@ -2740,12 +2762,12 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
         orientation: t.orientation,
         time: timestamp,
     });
-    // Pitch rides only with SWIMMING (AzerothCore `ReadMovementInfo`); on foot it must be level.
-    let swimming = flags & benilla_protocol::wrath_ground::MOVE_SWIMMING != 0;
-    if !swimming && pitch != 0.0 {
-        bail!("Wrath on-foot movement refuses a pitch outside the water");
+    // Pitch rides only with SWIMMING or FLYING (AzerothCore `ReadMovementInfo`); otherwise level.
+    let pitched = flags & (wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_FLYING) != 0;
+    if !pitched && pitch != 0.0 {
+        bail!("Wrath on-foot movement refuses a pitch outside the water or the air");
     }
-    let pitch = swimming.then_some(pitch);
+    let pitch = pitched.then_some(pitch);
     let fall = jump.map(|jump| wrath_ground::FallTail {
         vertical_speed: jump.zspeed,
         sin_angle: jump.sin_angle,
@@ -2833,9 +2855,9 @@ fn send_force_root(
     })
 }
 
-/// The shared event the controller applies for a mover order, where it models the state: the
-/// 1.12 speeds, water walk, feather fall, hover, knockback and the near-teleport snap. Flight and
-/// pitch speeds, can-fly, gravity and collision height are acknowledged without one.
+/// The shared event the controller applies for a mover order, where it models the state: every
+/// speed, water walk, feather fall, hover, can-fly, knockback and the near-teleport snap. Gravity
+/// and collision height are acknowledged without one.
 fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
     use benilla_protocol::messages::{JumpInfo, MoveMode, SpeedKind};
     use wrath_authority::{ModeOrderKind, SpeedOrderKind};
@@ -2849,9 +2871,9 @@ fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
                 SpeedOrderKind::Swim => SpeedKind::Swim,
                 SpeedOrderKind::SwimBack => SpeedKind::SwimBack,
                 SpeedOrderKind::TurnRate => SpeedKind::TurnRate,
-                SpeedOrderKind::Flight | SpeedOrderKind::FlightBack | SpeedOrderKind::PitchRate => {
-                    return None
-                }
+                SpeedOrderKind::Flight => SpeedKind::Flight,
+                SpeedOrderKind::FlightBack => SpeedKind::FlightBack,
+                SpeedOrderKind::PitchRate => SpeedKind::PitchRate,
             },
             counter,
             speed,
@@ -2863,7 +2885,8 @@ fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
                 ModeOrderKind::WaterWalk => MoveMode::WaterWalk,
                 ModeOrderKind::FeatherFall => MoveMode::FeatherFall,
                 ModeOrderKind::Hover => MoveMode::Hover,
-                ModeOrderKind::CanFly | ModeOrderKind::DisableGravity => return None,
+                ModeOrderKind::CanFly => MoveMode::CanFly,
+                ModeOrderKind::DisableGravity => return None,
             },
             apply,
         },
@@ -4672,6 +4695,7 @@ fn ui_timer_query_is_native_and_empty() {
 mod mover_order_tests {
     use super::tests::test_self_position;
     use super::*;
+    use benilla_protocol::messages::{MoveMode, SpeedKind};
     use benilla_protocol::wrath_authority::{ModeOrderKind, SpeedOrderKind};
 
     fn installed(guid: u64) -> MovementAuthorityHandle {
@@ -4839,15 +4863,27 @@ mod mover_order_tests {
             (launch.zspeed, launch.cos_angle, launch.sin_angle, launch.xy_speed),
             (-9.0, 0.6, 0.8, 12.0)
         );
-        for order in [
-            MoverOrder::Speed {
+        assert!(matches!(
+            mover_order_event(&MoverOrder::Speed {
                 kind: SpeedOrderKind::Flight,
                 mover_guid: 1,
                 counter: 2,
                 speed: 7.0,
-            },
-            MoverOrder::Mode {
+            }),
+            Some(SessionEvent::ForceSpeedChange { kind: SpeedKind::Flight, speed, .. }) if speed == 7.0
+        ));
+        assert!(matches!(
+            mover_order_event(&MoverOrder::Mode {
                 kind: ModeOrderKind::CanFly,
+                apply: true,
+                mover_guid: 1,
+                counter: 2,
+            }),
+            Some(SessionEvent::MoveMode { mode: MoveMode::CanFly, apply: true, .. })
+        ));
+        for order in [
+            MoverOrder::Mode {
+                kind: ModeOrderKind::DisableGravity,
                 apply: true,
                 mover_guid: 1,
                 counter: 2,

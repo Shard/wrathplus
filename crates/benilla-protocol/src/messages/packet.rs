@@ -1490,6 +1490,8 @@ impl ServerPacket {
                 (MoveMode::FeatherFall, false) => "SMSG_MOVE_NORMAL_FALL".into(),
                 (MoveMode::Hover, true) => "SMSG_MOVE_SET_HOVER".into(),
                 (MoveMode::Hover, false) => "SMSG_MOVE_UNSET_HOVER".into(),
+                (MoveMode::CanFly, true) => "SMSG_MOVE_SET_CAN_FLY".into(),
+                (MoveMode::CanFly, false) => "SMSG_MOVE_UNSET_CAN_FLY".into(),
             },
             ServerPacket::SplineMoveMode { mode, apply, .. } => match (mode, apply) {
                 (SplineMode::CanFly, true) => "SMSG_SPLINE_MOVE_SET_FLYING".into(),
