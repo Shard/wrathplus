@@ -43,7 +43,7 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
 | S→C | 298 | 124 | 267 | 689 |
-| C→S | 336 | 0 | 388 | 724 |
+| C→S | 337 | 0 | 387 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 332 admitted numeric opcodes, 77 of them transport-only (no UI producer) and 255 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
@@ -1017,7 +1017,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0386` | `SMSG_SPLINE_SET_FLIGHT_BACK_SPEED` | S→C | missing | niche | proven_send_site: `game/Entities/Unit/Unit.cpp:11040` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0387` | `CMSG_MAELSTROM_INVALIDATE_CACHE` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0388` | `SMSG_FLIGHT_SPLINE_SYNC` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x0389` | `CMSG_SET_TAXI_BENCHMARK_MODE` | C→S | missing | common | AC receive: `HandleSetTaxiBenchmarkOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x0389` | `CMSG_SET_TAXI_BENCHMARK_MODE` | C→S | handled | common | AC receive: `HandleSetTaxiBenchmarkOpcode` (STATUS_LOGGEDIN). | C→S: admitted native writer, transport-only — `ClientCommand::NativeMovementMisc(TaxiBenchmark { on })` (App Migration's `/timetest` verb is the producer) → `WrathRoute::NativeMovementMisc` → P/wrath_movement_misc.rs `u8 on` (AzerothCore `HandleSetTaxiBenchmarkOpcode`). |
 | `0x038A` | `SMSG_JOINED_BATTLEGROUND_QUEUE` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x038B` | `SMSG_REALM_SPLIT` | S→C | capture-only | niche | proven_send_site: `game/Handlers/MiscHandler.cpp:1184` | S→C: capture-only — P/wrath_char_services.rs `Reply` via the char-select session → A/net/wrath_char_service_capture.rs FIFO (a roster change is published first as CharacterList); App owns the feed; see docs/WRATH-CHAR-SERVICES.md. |
 | `0x038C` | `CMSG_REALM_SPLIT` | C→S | handled | niche | AC receive: `HandleRealmSplitOpcode` (STATUS_AUTHED). | C→S: Char select — transport-only; `CharRequest::Service` → WrathWorldSession::char_service_result (P/wrath_char_services.rs); no UI producer yet (App wires it). See docs/WRATH-CHAR-SERVICES.md. |

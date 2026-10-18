@@ -246,6 +246,7 @@ fn every_wrath_writer_route_is_admitted() {
         ("TeleportAck", ClientCommand::TeleportAck { guid: 1, counter: 2 }),
         ("MountSpecial", ClientCommand::MountSpecial),
         ("MoveTimeSkipped", ClientCommand::MoveTimeSkipped { guid: 1, lag_ms: 250 }),
+        ("NativeMovementMisc", ClientCommand::NativeMovementMisc(benilla_protocol::wrath_movement_misc::Command::TaxiBenchmark { on: true })),
         ("CancelChannelling", ClientCommand::CancelChannelling { spell_id: 5143 }),
         ("ResurrectResponse", ClientCommand::ResurrectResponse { caster: 1, accept: true }),
         ("NativeSpellControl", ClientCommand::NativeSpellControl(benilla_protocol::wrath_spell_control::Command::SpellClick { unit: 1 })),

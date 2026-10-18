@@ -1,5 +1,6 @@
 //! Native build-12340 quest reward tables. Layouts: AzerothCore `DBCStructure.h`
-//! `CharTitlesEntry`, `QuestXPEntry`, `TeamContributionPointsEntry`. These readers retain
+//! `CharTitlesEntry`, `QuestXPEntry`, `TeamContributionPointsEntry`, `QuestFactionRewEntry`.
+//! These readers retain
 //! source values; quest XP difficulty/scaling and honor multiplier/addition belong to callers.
 
 use std::collections::BTreeMap;
@@ -7,7 +8,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
-use crate::dbc::{f32_at, parse, str_at, u32_at};
+use crate::dbc::{f32_at, i32_at, parse, str_at, u32_at};
 use crate::Chain;
 
 /// One title: the quest's title id is distinct from the player's known-title bit index.
@@ -47,6 +48,29 @@ impl QuestXpCatalog {
     }
     pub fn xp(&self, level: u32, difficulty: usize) -> Option<u32> {
         self.get(level)?.get(difficulty).copied()
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// `QuestFactionReward.dbc`: row id (1 gains, 2 losses) to the ten signed reputation amounts a
+/// quest's reward-faction index (1-9; 0 means none) selects.
+#[derive(Debug, Default)]
+pub struct QuestFactionRewardCatalog(BTreeMap<u32, [i32; 10]>);
+
+impl QuestFactionRewardCatalog {
+    pub fn get(&self, id: u32) -> Option<&[i32; 10]> {
+        self.0.get(&id)
+    }
+    /// The amount for a quest's signed reward index: row 2 when negative, else row 1, at its
+    /// absolute value (AzerothCore `Player::RewardReputation`).
+    pub fn amount(&self, index: i32) -> Option<i32> {
+        let row = if index >= 0 { 1 } else { 2 };
+        self.get(row)?.get(index.unsigned_abs() as usize).copied()
     }
     pub fn len(&self) -> usize {
         self.0.len()
@@ -125,6 +149,24 @@ fn quest_xp(bytes: &[u8]) -> Result<QuestXpCatalog> {
     Ok(QuestXpCatalog(rows))
 }
 
+fn quest_faction_reward(bytes: &[u8]) -> Result<QuestFactionRewardCatalog> {
+    let rs = parse(
+        bytes,
+        schema("QuestFactionReward", 11, &[], &[]),
+        "QuestFactionReward",
+    )?;
+    let mut rows = BTreeMap::new();
+    for r in rs.records() {
+        let id = u32_at(r, 0).context("QuestFactionReward id")?;
+        let mut values = [0; 10];
+        for (i, value) in values.iter_mut().enumerate() {
+            *value = i32_at(r, i + 1).context("QuestFactionReward value")?;
+        }
+        rows.insert(id, values);
+    }
+    Ok(QuestFactionRewardCatalog(rows))
+}
+
 fn team_points(bytes: &[u8]) -> Result<TeamContributionPointsCatalog> {
     let rs = parse(
         bytes,
@@ -153,6 +195,13 @@ pub fn load_quest_xp(chain: &mut Chain) -> Result<QuestXpCatalog> {
         &chain
             .read_file("DBFilesClient\\QuestXP.dbc")
             .context("reading QuestXP")?,
+    )
+}
+pub fn load_quest_faction_reward(chain: &mut Chain) -> Result<QuestFactionRewardCatalog> {
+    quest_faction_reward(
+        &chain
+            .read_file("DBFilesClient\\QuestFactionReward.dbc")
+            .context("reading QuestFactionReward")?,
     )
 }
 pub fn load_team_contribution_points(chain: &mut Chain) -> Result<TeamContributionPointsCatalog> {
