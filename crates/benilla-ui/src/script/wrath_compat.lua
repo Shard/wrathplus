@@ -155,10 +155,6 @@ function GetNumLanguages()
 end
 
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-GetCurrentTitle = GetCurrentTitle or function() return -1 end
-GetNumTitles = GetNumTitles or zero
-GetTitleName = GetTitleName or none
-IsTitleKnown = IsTitleKnown or none
 UnitIsAFK = UnitIsAFK or none
 UnitIsDND = UnitIsDND or none
 UnitIsSameServer = UnitIsSameServer or function() return 1 end
