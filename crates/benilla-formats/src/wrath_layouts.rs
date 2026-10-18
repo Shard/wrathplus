@@ -239,39 +239,73 @@ fn area_table(m: &mut Map) {
 mod tests {
     use super::columns;
 
+    /// Installed build-12340 data: every mapped table's file has the map's field count, and every
+    /// record parses through the map. Run with `WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS
+    /// WOW_DATA=<Data>`; skipped otherwise.
+    #[test]
+    fn installed_every_mapped_table_parses_through_its_map() {
+        if std::env::var("WOW_CLIENT_PROFILE").as_deref() != Ok("wrath") {
+            return;
+        }
+        let data = std::env::var("WOW_DATA").expect("WOW_DATA");
+        let mut chain = crate::Chain::open_wrath(std::path::Path::new(&data), "enUS").unwrap();
+        for &(table, v, w) in MAPPED {
+            let bytes = chain
+                .read_file(&format!("DBFilesClient\\{table}.dbc"))
+                .unwrap_or_else(|e| panic!("{table}: {e:#}"));
+            let fields = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+            assert_eq!(fields, w, "{table}: installed field count");
+            let mut schema = benilla_dbc::Schema::new(table);
+            for i in 0..v {
+                schema.add_field(benilla_dbc::SchemaField::new(
+                    format!("c{i}"),
+                    benilla_dbc::FieldType::UInt32,
+                ));
+            }
+            let rs = crate::dbc::parse(&bytes, schema, table)
+                .unwrap_or_else(|e| panic!("{table}: {e:#}"));
+            let rows = rs.records().len();
+            assert!(rows > 0, "{table}: no records");
+            eprintln!("MAPPED {table} rows={rows} fields={fields}");
+        }
+    }
+
+    /// Every mapped table: name, 1.12 schema slots, build-12340 file fields.
+    const MAPPED: &[(&str, usize, usize)] = &[
+        ("AreaPOI", 29, 54),
+        ("CreatureSoundData", 30, 38),
+        ("CreatureModelData", 16, 28),
+        ("PetPersonality", 19, 24),
+        ("Spell", 183, 234),
+        ("SpellDispelType", 12, 21),
+        ("SkillLine", 22, 56),
+        ("TalentTab", 15, 24),
+        ("SpellShapeshiftForm", 14, 35),
+        ("Faction", 37, 57),
+        ("ChrRaces", 29, 69),
+        ("ChrClasses", 17, 60),
+        ("CreatureDisplayInfo", 12, 16),
+        ("CreatureFamily", 18, 28),
+        ("SpellItemEnchantment", 24, 38),
+        ("AreaTable", 25, 36),
+        ("WorldMapArea", 8, 11),
+        ("WorldMapContinent", 13, 14),
+        ("TaxiPathNode", 9, 11),
+        ("Talent", 21, 23),
+        ("SkillLineAbility", 15, 14),
+        ("SpellRange", 22, 40),
+        ("AnimationData", 7, 8),
+        ("SoundEntries", 29, 30),
+        ("Material", 3, 5),
+        ("SpellVisual", 16, 32),
+        ("GroundEffectTexture", 7, 11),
+        ("SpellVisualKit", 35, 38),
+        ("SpellVisualEffectName", 5, 7),
+    ];
+
     #[test]
     fn every_map_is_in_range_and_injective() {
-        for (table, v, w) in [
-            ("AreaPOI", 29, 54),
-            ("CreatureSoundData", 30, 38),
-            ("CreatureModelData", 16, 28),
-            ("PetPersonality", 19, 24),
-            ("Spell", 183, 234),
-            ("SpellDispelType", 12, 21),
-            ("SkillLine", 22, 56),
-            ("TalentTab", 15, 24),
-            ("SpellShapeshiftForm", 14, 35),
-            ("Faction", 37, 57),
-            ("ChrRaces", 29, 69),
-            ("ChrClasses", 17, 60),
-            ("CreatureDisplayInfo", 12, 16),
-            ("CreatureFamily", 18, 28),
-            ("SpellItemEnchantment", 24, 38),
-            ("AreaTable", 25, 36),
-            ("WorldMapArea", 8, 11),
-            ("WorldMapContinent", 13, 14),
-            ("TaxiPathNode", 9, 11),
-            ("Talent", 21, 23),
-            ("SkillLineAbility", 15, 14),
-            ("SpellRange", 22, 40),
-            ("AnimationData", 7, 8),
-            ("SoundEntries", 29, 30),
-            ("Material", 3, 5),
-            ("SpellVisual", 16, 32),
-            ("GroundEffectTexture", 7, 11),
-            ("SpellVisualKit", 35, 38),
-            ("SpellVisualEffectName", 5, 7),
-        ] {
+        for &(table, v, w) in MAPPED {
             let map = columns(table, v, w).unwrap();
             let mut seen = std::collections::HashSet::new();
             for c in map.iter().flatten() {

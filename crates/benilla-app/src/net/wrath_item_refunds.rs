@@ -5,7 +5,7 @@
 //! `SMSG_ITEM_REFUND_RESULT` succeeds. Refunds expire after two hours of played time
 //! (AzerothCore `Item::IsRefundExpired`), counted down from the reply.
 use super::wrath_inventory_capture::NativeInventoryPackets;
-use super::{ClientCommand, NetCommands, Objects, ObjectStore, SelfPlayer};
+use super::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_protocol::wrath_inventory::{Command, Packet, RefundCost};
 use benilla_ui::script::{ItemRefundCost, ItemRefundView, ScriptDialect, UiScript};
 use bevy::prelude::*;
@@ -55,7 +55,7 @@ fn lua_key(bag: u8, slot: u8) -> Option<(bool, i32, i32)> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn feed_item_refunds(
+pub(super) fn feed_item_refunds(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
     mut refunds: ResMut<ItemRefunds>,
@@ -78,6 +78,8 @@ fn feed_item_refunds(
     let Some(store) = self_q.iter().next() else {
         return;
     };
+    // The link's level field, as other native links carry it.
+    let level = store.0.unit_level().unwrap_or(0);
     let slots = crate::ui_items::collect_inventory(
         &store.0,
         &objects,
@@ -95,12 +97,19 @@ fn feed_item_refunds(
         if refunds.asked.insert(guid) {
             let _ = commands
                 .0
-                .send(ClientCommand::NativeInventory(Command::RefundInfo { item_guid: guid }));
+                .send(ClientCommand::NativeInventory(Command::RefundInfo {
+                    item_guid: guid,
+                }));
         }
-        let (Some(key), Some((cost, left, at))) = (lua_key(bag, slot), refunds.infos.get(&guid)) else {
+        let (Some(key), Some((cost, left, at))) = (lua_key(bag, slot), refunds.infos.get(&guid))
+        else {
             continue;
         };
         let seconds_remaining = (left - (now - at)).max(0.0) as i32;
+        // An expired refund is no longer offered (`Item::IsRefundExpired`).
+        if seconds_remaining == 0 {
+            continue;
+        }
         let cost_items = cost
             .items
             .iter()
@@ -112,7 +121,11 @@ fn feed_item_refunds(
                         crate::ui_items::item_icon(icons.as_deref(), t.display_info_id)
                     }),
                     count: count as i32,
-                    link: template.map(|t| crate::ui_items::item_link(entry, &t.name, t.quality)),
+                    link: template.map(|t| {
+                        crate::items::wrath_item_link(
+                            entry, &t.name, t.quality, [0; 4], 0, 0, level,
+                        )
+                    }),
                 }
             })
             .collect();

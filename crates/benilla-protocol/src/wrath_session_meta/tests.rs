@@ -81,6 +81,8 @@ fn commands_encode_ac_read_order() {
             [w(4), w(5), w(6), vec![0x78, 0x9c]].concat(),
         ),
         (Command::ReadyForAccountDataTimes, 0x4ff, vec![]),
+        (Command::SetTitle { title: 42 }, 0x374, 42i32.to_le_bytes().to_vec()),
+        (Command::SetTitle { title: -1 }, 0x374, vec![0xff; 4]),
     ] {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");
     }

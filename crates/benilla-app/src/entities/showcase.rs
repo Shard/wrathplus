@@ -4,6 +4,24 @@ use benilla_assets::materials::WowModelMaterial;
 use bevy::asset::{LoadState, RecursiveDependencyLoadState, VisitAssetDependencies};
 use bevy::prelude::*;
 
+/// Visual-only installed CreatureDisplayInfo id, never a server creature entry or GUID.
+#[derive(Clone, Debug, serde::Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ShowcaseActor {
+    pub(crate) display_id: u32,
+    pub(crate) position: [f64; 3],
+    /// WoW heading radians, bounded to one turn; the visual spawner owns coordinate conversion.
+    #[serde(default)]
+    pub(crate) yaw: f64,
+    /// Multiplier on the display's installed model scale, not an absolute game unit size.
+    #[serde(default = "default_actor_scale")]
+    pub(crate) scale: f64,
+}
+
+fn default_actor_scale() -> f64 {
+    1.0
+}
+
 /// Installed CreatureDisplayInfo ids wanted by the recorder, not creature entries or GUIDs.
 #[derive(Resource, Default)]
 pub(crate) struct RequestedDisplays(pub(crate) Vec<u32>);
@@ -187,6 +205,8 @@ mod request_tests {
 }
 
 /// One recorder-owned world visual. No WorldUnit marker means no interaction/nameplate lane.
+// Reached only from the dev-build recorder (`showcase_capture::driver`).
+#[allow(dead_code)]
 pub(crate) struct SpawnedActor {
     pub(crate) root: Entity,
     pub(crate) slot: u16,
@@ -195,8 +215,10 @@ pub(crate) struct SpawnedActor {
     pub(crate) manifest: String,
 }
 
+// Reached only from the dev-build recorder (`showcase_capture::driver`).
+#[allow(dead_code)]
 pub(crate) fn actor_transform(
-    actor: &crate::showcase_capture::ShowcaseActor,
+    actor: &ShowcaseActor,
     installed_scale: f32,
 ) -> Result<Transform, String> {
     let scale = installed_scale * actor.scale as f32;
@@ -212,10 +234,12 @@ pub(crate) fn actor_transform(
 }
 
 /// World rig/material lane, not the booth's unfogged studio variants or mirrored palettes.
+// Reached only from the dev-build recorder (`showcase_capture::driver`).
+#[allow(dead_code)]
 pub(crate) fn spawn_actor(
     commands: &mut Commands,
     palettes: &mut benilla_world::rig_palette::RigPalettes,
-    actor: &crate::showcase_capture::ShowcaseActor,
+    actor: &ShowcaseActor,
     ready: ReadyDisplay<'_>,
 ) -> Result<SpawnedActor, String> {
     use benilla_world::rig_anim::RigPose;
@@ -311,7 +335,7 @@ mod transform_tests {
     use super::*;
     #[test]
     fn actor_coordinates_yaw_and_installed_scale_match_world_units() {
-        let actor = crate::showcase_capture::ShowcaseActor {
+        let actor = ShowcaseActor {
             display_id: 42,
             position: [10.0, 20.0, 30.0],
             yaw: std::f64::consts::FRAC_PI_2,

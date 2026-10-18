@@ -176,7 +176,7 @@ impl AssetLoader for WrathM2ModelLoader {
             .map(|sequence| sequence.duration)
             .filter(|duration| *duration > 0.0);
 
-        let emitters = build_emitters(ctx, &bytes, &semantic, animations.as_ref());
+        let emitters = build_emitters(ctx, &bytes, &external_refs, &semantic, animations.as_ref());
         let owner_reach = benilla_formats::m2_owner_reach(&semantic.submeshes);
         let b = &semantic.bounds;
         let water_bound = (
@@ -332,10 +332,12 @@ fn build_cameras(
 
 /// The model's particle emitters ([`benilla_formats::parse_m2_particle_emitters`] reads v264), as
 /// the Vanilla loader places them: texture, bone pivot, billboard host, child models, the owner's
-/// draw-order rung and water sphere, and its idle slot.
+/// draw-order rung and water sphere, and its idle slot. Tracks keyed inside external sequences
+/// read the `.anim` files resolved for the bones.
 fn build_emitters(
     ctx: &mut LoadContext<'_>,
     bytes: &[u8],
+    external: &[Option<&[u8]>],
     semantic: &benilla_formats::WrathRenderModel,
     animations: Option<&ModelAnimations>,
 ) -> Vec<super::ModelEmitter> {
@@ -351,7 +353,7 @@ fn build_emitters(
     );
     let idle_seq = animations.and_then(ModelAnimations::idle_seq).unwrap_or(0);
     let skeleton = &semantic.skeleton;
-    benilla_formats::parse_m2_particle_emitters(bytes)
+    benilla_formats::parse_m2_particle_emitters_with_animations(bytes, external)
         .unwrap_or_default()
         .into_iter()
         .map(|def| {

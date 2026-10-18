@@ -37,6 +37,14 @@ impl Plugin for DevToolsPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(feature = "dev")]
         {
+            use crate::console::ConsoleCommandApp;
+            // The runtime Classic/Plus switch for side-by-side captures; dev builds only, so the
+            // player build keeps the stock command set.
+            app.console_command(
+                "experience",
+                "Show or switch the experience: [classic|plus] or <feature> on|off.",
+                crate::experience::console_command,
+            );
             app.add_plugins(crate::debug_panel::DebugPanelPlugin)
                 .add_plugins(crate::perf::PerfPlugin)
                 // `WOW_FX_CENSUS=1`: where particle draws are addressed, and whether their view is

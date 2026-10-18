@@ -33,6 +33,20 @@ pub const SMSG_PET_ACTION_SOUND: u16 = 0x0324;
 pub const SMSG_PET_DISMISS_SOUND: u16 = 0x0325;
 pub const SMSG_UPDATE_COMBO_POINTS: u16 = 0x039D;
 pub const SMSG_TOTEM_CREATED: u16 = 0x0413;
+/// Spell and pet remainders (AzerothCore Pet.cpp, Player.cpp, Unit.cpp, SpellEffects.cpp,
+/// SpellAuraEffects.cpp, SpellHandler.cpp).
+pub const SMSG_BREAK_TARGET: u16 = 0x0152;
+pub const SMSG_FEIGN_DEATH_RESISTED: u16 = 0x02b4;
+pub const SMSG_CLEAR_TARGET: u16 = 0x03bf;
+pub const SMSG_SEND_UNLEARN_SPELLS: u16 = 0x041e;
+pub const SMSG_CONVERT_RUNE: u16 = 0x0486;
+pub const SMSG_RESYNC_RUNES: u16 = 0x0487;
+pub const SMSG_ADD_RUNE_POWER: u16 = 0x0488;
+pub const SMSG_MODIFY_COOLDOWN: u16 = 0x0491;
+pub const SMSG_PET_UPDATE_COMBO_POINTS: u16 = 0x0492;
+pub const SMSG_PET_LEARNED_SPELL: u16 = 0x0499;
+pub const SMSG_PET_UNLEARNED_SPELL: u16 = 0x049a;
+pub const SMSG_SET_PROJECTILE_POSITION: u16 = 0x04bf;
 
 /// `SMSG_RESUME_CAST_BAR`, `SMSG_PET_MODE`, `SMSG_RESURRECT_FAILED`, `SMSG_PET_BROKEN`,
 /// `SMSG_PET_UNLEARN_CONFIRM`, `SMSG_SPELL_UPDATE_CHAIN_TARGETS`, the four obsolete extra-aura-info
@@ -59,6 +73,10 @@ pub const CMSG_CANCEL_MOUNT_AURA: u32 = 0x0375;
 pub const CMSG_SPELLCLICK: u32 = 0x03F8;
 pub const CMSG_TOTEM_DESTROYED: u32 = 0x0414;
 pub const CMSG_PET_LEARN_TALENT: u32 = 0x047A;
+pub const CMSG_STABLE_REVIVE_PET: u32 = 0x0274;
+pub const CMSG_FAR_SIGHT: u32 = 0x027A;
+pub const CMSG_DISMISS_CRITTER: u32 = 0x048D;
+pub const CMSG_LEARN_PREVIEW_TALENTS_PET: u32 = 0x04C2;
 
 /// Capture-only receipts: no shared event or presentation owns them yet.
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +90,41 @@ pub enum Packet {
         duration_ms: u32,
         spell_id: u32,
     },
+    /// `SMSG_PET_LEARNED_SPELL` / `SMSG_PET_UNLEARNED_SPELL`: `u32 spell`; the pet book's whole list is
+    /// `SMSG_PET_SPELLS`.
+    PetLearnedSpell { spell_id: u32 },
+    PetUnlearnedSpell { spell_id: u32 },
+    /// `SMSG_PET_UPDATE_COMBO_POINTS` (`Unit::SendComboPoints` to a charmer): `packed target, u8`.
+    PetComboPoints { target: u64, points: u8 },
+    /// `SMSG_MODIFY_COOLDOWN` (`Player::ModifySpellCooldown`): `u32 spell, u64 player, i32 delta ms`.
+    ModifyCooldown { spell_id: u32, unit: u64, delta_ms: i32 },
+    /// `SMSG_FEIGN_DEATH_RESISTED`: `u64 unit, u8` (AzerothCore writes 0).
+    FeignDeathResisted { unit: u64, flag: u8 },
+    /// `SMSG_BREAK_TARGET` (`Unit::SendClearTarget`-like, packed guid): stop targeting this unit.
+    BreakTarget { unit: u64 },
+    /// `SMSG_CLEAR_TARGET`: `u64 caster`.
+    ClearTarget { caster: u64 },
+    /// `SMSG_SET_PROJECTILE_POSITION`: `u64 caster, u8 cast count, f32 x, y, z`.
+    ProjectilePosition {
+        caster: u64,
+        cast_count: u8,
+        position: [f32; 3],
+    },
+    /// `SMSG_SEND_UNLEARN_SPELLS` (`Player::SendUnlearnSpells`): `u32 count`, then spell ids.
+    UnlearnSpells { spell_ids: Vec<u32> },
+}
+
+/// Death-knight runes (AzerothCore `Player::ConvertRune`, `ResyncRunes`, `AddRunePower`), kept as
+/// retained native state by the app: there are six runes, `type` 0 blood, 1 unholy, 2 frost, 3 death.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunePacket {
+    /// `u8 index, u8 type`.
+    Convert { index: u8, rune_type: u8 },
+    /// `u32 count`, then `(u8 type, u8 passed)` per rune; `passed` 255 is ready (AzerothCore writes
+    /// `255 - cooldown * 51`).
+    Resync { runes: Vec<(u8, u8)> },
+    /// `u32 mask`: these runes are ready now.
+    AddPower { mask: u32 },
 }
 
 /// Requests, each with the body AC's handler reads.
@@ -130,6 +183,14 @@ pub enum Command {
         talent_id: u32,
         rank: u32,
     },
+    /// `HandleFarSightOpcode`: `u8 apply`.
+    FarSight { engage: bool },
+    /// `HandleDismissCritter`: the critter's raw guid.
+    DismissCritter { critter: u64 },
+    /// `HandleStableRevivePet`: `u64 stable master, u32 pet number`.
+    StableRevivePet { npc: u64, pet_number: u32 },
+    /// `HandleLearnPreviewTalentsPet`: `u64 pet, u32 count`, then `(u32 talent, u32 rank)` pairs.
+    LearnPreviewTalentsPet { pet: u64, talents: Vec<(u32, u32)> },
 }
 
 pub const fn handles(opcode: u16) -> bool {
@@ -151,6 +212,18 @@ pub const fn handles(opcode: u16) -> bool {
             | SMSG_PET_DISMISS_SOUND
             | SMSG_UPDATE_COMBO_POINTS
             | SMSG_TOTEM_CREATED
+            | SMSG_BREAK_TARGET
+            | SMSG_FEIGN_DEATH_RESISTED
+            | SMSG_CLEAR_TARGET
+            | SMSG_SEND_UNLEARN_SPELLS
+            | SMSG_CONVERT_RUNE
+            | SMSG_RESYNC_RUNES
+            | SMSG_ADD_RUNE_POWER
+            | SMSG_MODIFY_COOLDOWN
+            | SMSG_PET_UPDATE_COMBO_POINTS
+            | SMSG_PET_LEARNED_SPELL
+            | SMSG_PET_UNLEARNED_SPELL
+            | SMSG_SET_PROJECTILE_POSITION
     )
 }
 
@@ -229,6 +302,85 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                 totem: u64_le(&mut r)?,
                 duration_ms: u32_le(&mut r)?,
                 spell_id: u32_le(&mut r)?,
+            },
+        },
+        SMSG_PET_LEARNED_SPELL => SessionEvent::WrathSpellControl {
+            packet: Packet::PetLearnedSpell {
+                spell_id: u32_le(&mut r)?,
+            },
+        },
+        SMSG_PET_UNLEARNED_SPELL => SessionEvent::WrathSpellControl {
+            packet: Packet::PetUnlearnedSpell {
+                spell_id: u32_le(&mut r)?,
+            },
+        },
+        SMSG_PET_UPDATE_COMBO_POINTS => SessionEvent::WrathSpellControl {
+            packet: Packet::PetComboPoints {
+                target: read_packed_guid(&mut r)?,
+                points: u8_le(&mut r)?,
+            },
+        },
+        SMSG_MODIFY_COOLDOWN => SessionEvent::WrathSpellControl {
+            packet: Packet::ModifyCooldown {
+                spell_id: u32_le(&mut r)?,
+                unit: u64_le(&mut r)?,
+                delta_ms: u32_le(&mut r)? as i32,
+            },
+        },
+        SMSG_FEIGN_DEATH_RESISTED => SessionEvent::WrathSpellControl {
+            packet: Packet::FeignDeathResisted {
+                unit: u64_le(&mut r)?,
+                flag: u8_le(&mut r)?,
+            },
+        },
+        SMSG_BREAK_TARGET => SessionEvent::WrathSpellControl {
+            packet: Packet::BreakTarget {
+                unit: read_packed_guid(&mut r)?,
+            },
+        },
+        SMSG_CLEAR_TARGET => SessionEvent::WrathSpellControl {
+            packet: Packet::ClearTarget {
+                caster: u64_le(&mut r)?,
+            },
+        },
+        SMSG_SET_PROJECTILE_POSITION => SessionEvent::WrathSpellControl {
+            packet: Packet::ProjectilePosition {
+                caster: u64_le(&mut r)?,
+                cast_count: u8_le(&mut r)?,
+                position: [f32_le(&mut r)?, f32_le(&mut r)?, f32_le(&mut r)?],
+            },
+        },
+        SMSG_SEND_UNLEARN_SPELLS => {
+            let count = u32_le(&mut r)? as usize;
+            if count.saturating_mul(4) != body.len() - r.position() as usize {
+                return Err(invalid("unlearn list count disagrees with the body"));
+            }
+            let spell_ids = (0..count).map(|_| u32_le(&mut r)).collect::<io::Result<_>>()?;
+            SessionEvent::WrathSpellControl {
+                packet: Packet::UnlearnSpells { spell_ids },
+            }
+        }
+        SMSG_CONVERT_RUNE => SessionEvent::WrathRunes {
+            packet: RunePacket::Convert {
+                index: u8_le(&mut r)?,
+                rune_type: u8_le(&mut r)?,
+            },
+        },
+        SMSG_RESYNC_RUNES => {
+            let count = u32_le(&mut r)? as usize;
+            if count.saturating_mul(2) != body.len() - r.position() as usize {
+                return Err(invalid("rune resync count disagrees with the body"));
+            }
+            let runes = (0..count)
+                .map(|_| Ok((u8_le(&mut r)?, u8_le(&mut r)?)))
+                .collect::<io::Result<_>>()?;
+            SessionEvent::WrathRunes {
+                packet: RunePacket::Resync { runes },
+            }
+        }
+        SMSG_ADD_RUNE_POWER => SessionEvent::WrathRunes {
+            packet: RunePacket::AddPower {
+                mask: u32_le(&mut r)?,
             },
         },
         _ => {
@@ -386,6 +538,28 @@ pub fn encode(command: &Command) -> io::Result<(u32, Vec<u8>)> {
             b.extend(talent_id.to_le_bytes());
             b.extend(rank.to_le_bytes());
             CMSG_PET_LEARN_TALENT
+        }
+        Command::FarSight { engage } => {
+            b.push(u8::from(*engage));
+            CMSG_FAR_SIGHT
+        }
+        Command::DismissCritter { critter } => {
+            b.extend(critter.to_le_bytes());
+            CMSG_DISMISS_CRITTER
+        }
+        Command::StableRevivePet { npc, pet_number } => {
+            b.extend(npc.to_le_bytes());
+            b.extend(pet_number.to_le_bytes());
+            CMSG_STABLE_REVIVE_PET
+        }
+        Command::LearnPreviewTalentsPet { pet, talents } => {
+            b.extend(pet.to_le_bytes());
+            b.extend((talents.len() as u32).to_le_bytes());
+            for (talent, rank) in talents {
+                b.extend(talent.to_le_bytes());
+                b.extend(rank.to_le_bytes());
+            }
+            CMSG_LEARN_PREVIEW_TALENTS_PET
         }
     };
     Ok((opcode, b))

@@ -3,6 +3,9 @@
 
 use serde::Deserialize;
 
+// Compiled in every build: the always-on display cache names it (`entities::showcase`).
+pub(crate) use crate::entities::showcase::ShowcaseActor;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PathFile {
@@ -23,24 +26,6 @@ struct Keyframe {
     target: [f64; 3],
     #[serde(default = "default_fov")]
     fov_degrees: f64,
-}
-
-/// Visual-only installed CreatureDisplayInfo id, never a server creature entry or GUID.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ShowcaseActor {
-    pub(crate) display_id: u32,
-    pub(crate) position: [f64; 3],
-    /// WoW heading radians, bounded to one turn; the visual spawner owns coordinate conversion.
-    #[serde(default)]
-    pub(crate) yaw: f64,
-    /// Multiplier on the display's installed model scale, not an absolute game unit size.
-    #[serde(default = "default_actor_scale")]
-    pub(crate) scale: f64,
-}
-
-fn default_actor_scale() -> f64 {
-    1.0
 }
 
 fn default_fov() -> f64 {

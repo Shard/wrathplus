@@ -13,21 +13,18 @@ use super::Player;
 /// Physical movement outside the Wrath writer's deliberately bounded on-foot subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WrathGroundLimit {
-    Transport,
     Flight,
 }
 
 impl WrathGroundLimit {
     pub(super) const fn bit(self) -> u8 {
         match self {
-            Self::Transport => 1 << 1,
             Self::Flight => 1 << 2,
         }
     }
 
     pub(super) const fn description(self) -> &'static str {
         match self {
-            Self::Transport => "transport movement",
             Self::Flight => "flight and hover movement",
         }
     }
@@ -43,12 +40,9 @@ pub(super) fn wrath_ground_limit(
     if dialect != SessionDialect::Wrath12340 {
         return None;
     }
-    if player.ride.is_some() || player.move_flags & move_flags::ON_TRANSPORT != 0 {
-        return Some(WrathGroundLimit::Transport);
-    }
-    // These two bits are CAN_FLY and FLYING in the Wrath movement word. Vanilla does not name
-    // them, but a Wrath self pose can still carry them into the shared state during the port.
-    const WRATH_FLIGHT_FLAGS: u32 = 0x0100_0000 | 0x0200_0000;
+    // CAN_FLY in the Wrath movement word. Wrath FLYING (`0x0200_0000`) is the shared ON_TRANSPORT
+    // bit, so it is never tested here: the relay drops it and maps Wrath ON_TRANSPORT onto it.
+    const WRATH_FLIGHT_FLAGS: u32 = 0x0100_0000;
     if player.modes.levitating || player.modes.hover || player.move_flags & WRATH_FLIGHT_FLAGS != 0
     {
         return Some(WrathGroundLimit::Flight);
@@ -373,12 +367,17 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     }
     // The shared controller keeps Vanilla's internal arc bits. Wrath 12340 moved FALLING and
     // FALLING_FAR down one bit; convert only at the command boundary.
-    let mut wrath = flags & !(move_flags::FALLING | move_flags::FALLING_FAR);
+    let mut wrath =
+        flags & !(move_flags::FALLING | move_flags::FALLING_FAR | move_flags::ON_TRANSPORT);
     if flags & move_flags::FALLING != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_FALLING;
     }
     if flags & move_flags::FALLING_FAR != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_FALLING_FAR;
+    }
+    // The shared ON_TRANSPORT (`0x0200_0000`) is Wrath FLYING; Wrath ON_TRANSPORT is `0x200`.
+    if flags & move_flags::ON_TRANSPORT != 0 {
+        wrath |= benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT;
     }
     wrath
 }
@@ -391,9 +390,14 @@ pub(super) fn flags_from_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     }
     let falling = flags & benilla_protocol::wrath_ground::MOVE_FALLING != 0;
     let falling_far = flags & benilla_protocol::wrath_ground::MOVE_FALLING_FAR != 0;
+    let on_transport = flags & benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT != 0;
     let mut shared = flags
         & !(benilla_protocol::wrath_ground::MOVE_FALLING
-            | benilla_protocol::wrath_ground::MOVE_FALLING_FAR);
+            | benilla_protocol::wrath_ground::MOVE_FALLING_FAR
+            | benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT);
+    if on_transport {
+        shared |= move_flags::ON_TRANSPORT;
+    }
     if falling {
         shared |= move_flags::FALLING;
     }
@@ -644,6 +648,29 @@ mod tests {
         assert_eq!(
             wrath_ground_limit(SessionDialect::Wrath12340, &swimmer, Some(surface)),
             None
+        );
+        // A passenger on a deck is reported natively too (Wrath ON_TRANSPORT plus the tail).
+        let rider = Player {
+            move_flags: move_flags::ON_TRANSPORT,
+            ..Player::default()
+        };
+        assert_eq!(
+            wrath_ground_limit(SessionDialect::Wrath12340, &rider, None),
+            None
+        );
+        assert_eq!(
+            flags_for_dialect(
+                move_flags::ON_TRANSPORT | move_flags::FORWARD,
+                SessionDialect::Wrath12340
+            ),
+            benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT | move_flags::FORWARD
+        );
+        assert_eq!(
+            flags_from_dialect(
+                benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT,
+                SessionDialect::Wrath12340
+            ),
+            move_flags::ON_TRANSPORT
         );
         let levitating = {
             let mut p = Player::default();
