@@ -29,7 +29,24 @@ fn scan_calls(
                 j += 1;
             }
             let before = if start > 0 { bytes[start - 1] } else { b' ' };
-            let preceded_by_function = src[..start].trim_end().ends_with("function");
+            // `function Name(`, and `function <expr>:Name(` / `function <expr>.Name(`: a FrameXML
+            // definition, the expression walked back over identifiers, dots and colons.
+            let head = if before == b':' || before == b'.' {
+                src[..start].trim_end_matches(|c: char| c.is_ascii_alphanumeric() || "_.:".contains(c))
+            } else {
+                &src[..start]
+            };
+            let preceded_by_function = head.trim_end().ends_with("function");
+            // `<expr>.Name = function` / `<expr>:Name = function`: a method FrameXML defines on an
+            // instance (PaperDollFrame.lua:2353 `self.SetSelection = function`).
+            if (before == b'.' || before == b':') && name.as_bytes()[0].is_ascii_uppercase() {
+                let rest = src[i..].trim_start();
+                if let Some(rhs) = rest.strip_prefix('=').filter(|r| !r.starts_with('=')) {
+                    if rhs.trim_start().starts_with("function") {
+                        defined.insert(name.to_string());
+                    }
+                }
+            }
             if j < bytes.len() && bytes[j] == b'(' && name.as_bytes()[0].is_ascii_uppercase() {
                 if preceded_by_function {
                     defined.insert(name.to_string());
@@ -43,6 +60,24 @@ fn scan_calls(
             i += 1;
         }
     }
+}
+
+/// Methods FrameXML defines itself, by assignment or `function <expr>:Name(`, are definitions:
+/// their calls are neither missing methods nor missing globals.
+#[test]
+fn census_treats_frame_xml_defined_methods_as_defined() {
+    let mut defined = std::collections::HashSet::new();
+    let mut methods = std::collections::BTreeMap::new();
+    let mut calls = std::collections::BTreeMap::new();
+    let src = census_lexer::executable_text(
+        "self.SetSelection = function(self, t) end\nfunction Foo.Bar:Baz(a) end\n\
+         function Foo.Qux(a) end\nself:SetSelection(1)\nself:GetName()",
+    );
+    scan_calls(&src, &mut defined, &mut methods, &mut calls);
+    for n in ["SetSelection", "Baz", "Qux"] {
+        assert!(defined.contains(n), "{n}");
+    }
+    assert_eq!(methods.get("GetName"), Some(&1), "an engine method call still counts");
 }
 
 /// A `local` binding hides only its own chunk's calls: the same name called as a global in
@@ -335,7 +370,7 @@ fn missing_surface(script: &UiScript) {
     let native_absent = |name: &str| NATIVE_ABSENT.iter().any(|(n, _)| *n == name);
     let mut lines = Vec::new();
     for (name, n) in &methods {
-        if !has.contains(name) && !native_absent(name) {
+        if !has.contains(name) && !native_absent(name) && !defined.contains(name) {
             lines.push(format!("METHOD {name} {n}"));
         }
     }
