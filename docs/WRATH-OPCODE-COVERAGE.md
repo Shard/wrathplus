@@ -45,9 +45,9 @@ Movement M5a, flight: CAN_FLY/FLYING controller mode with the ascend/descend key
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
 | S→C | 344 | 134 | 211 | 689 |
-| C→S | 388 | 0 | 336 | 724 |
+| C→S | 389 | 0 | 335 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 388 admitted numeric opcodes, 99 of them transport-only (no UI producer) and 289 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 389 admitted numeric opcodes, 99 of them transport-only (no UI producer) and 290 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -1392,7 +1392,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x04FF` | `CMSG_READY_FOR_ACCOUNT_DATA_TIMES` | C→S | handled | common | AC receive: `HandleReadyForAccountDataTimes` (STATUS_AUTHED). | C→S: Session — transport-only; `ClientCommand::NativeSessionMeta`, P/wrath_session_meta.rs encoder; no UI producer. See docs/WRATH-SESSION-META.md. |
 | `0x0500` | `CMSG_QUERY_QUESTS_COMPLETED` | C→S | handled | core | AC receive: `HandleQueryQuestsCompleted` (STATUS_LOGGEDIN). | C→S: Quest — transport-only; existing `ClientCommand::NativeQuestsCompletedQuery` writer (P/wrath_quests_completed.rs); no UI producer. See docs/WRATH-QUEST-REMAINDERS.md. |
 | `0x0501` | `SMSG_QUERY_QUESTS_COMPLETED_RESPONSE` | S→C | capture-only | core | proven_send_site: `game/Handlers/QuestHandler.cpp:636` | S→C: capture-only — existing P/wrath_quests_completed.rs → A/net/wrath_quests_completed_capture.rs; no UI feed; see docs/WRATH-QUEST-REMAINDERS.md. |
-| `0x0502` | `CMSG_GM_REPORT_LAG` | C→S | missing | GM-debug | AC receive: `HandleReportLag` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x0502` | `CMSG_GM_REPORT_LAG` | C→S | handled | niche | AC receive: `HandleReportLag` (STATUS_LOGGEDIN). | C→S: Session — ACTIVE; A/net/io/wrath.rs NativeHelp route, P/wrath_help.rs encoder (lag type, map, position); producer: HelpFrame `GMReportLag` (U/script/wrath_help_request.rs) via ui_gm_ticket. Player Help UI, not GM/debug. See docs/WRATH-HELP.md. |
 | `0x0503` | `CMSG_AFK_MONITOR_INFO_REQUEST` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0504` | `SMSG_AFK_MONITOR_INFO_RESPONSE` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0505` | `CMSG_AFK_MONITOR_INFO_CLEAR` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |

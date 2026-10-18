@@ -2,7 +2,8 @@
 //! Wire reference: AzerothCore 7f12e89ee5f467a50e62eba1d525eac7dc953d03: TicketHandler.cpp
 //! (create, update, delete, get, system status, survey, response resolve), TicketMgr.cpp
 //! (`GmTicket::WritePacket`, `GmTicket::SendResponse`, `TicketMgr::SendTicket`), MiscHandler.cpp
-//! (`HandleBugOpcode`, `HandleComplainOpcode`), MiscPackets.cpp (`Complain`, `ComplainResult`).
+//! (`HandleBugOpcode`, `HandleComplainOpcode`), MiscPackets.cpp (`Complain`, `ComplainResult`),
+//! TicketHandler.cpp (`HandleReportLag`).
 //! Strict framing.
 //!
 //! The ticket replies mean what 1.12's do and feed the shared events. This build's ticket has no
@@ -169,6 +170,12 @@ pub enum Command {
         seconds_since: u32,
         description: String,
     },
+    /// `CMSG_GM_REPORT_LAG` (`GMReportLag`): the lag type and where the player stands.
+    ReportLag {
+        lag_type: u32,
+        map: u32,
+        pos: [f32; 3],
+    },
     /// `CMSG_BUG`: a bug report or a suggestion. AC ignores both length words.
     Bug {
         suggestion: bool,
@@ -238,6 +245,14 @@ pub fn encode(command: &Command) -> io::Result<(u32, Vec<u8>)> {
             0x032a
         }
         Command::ResolveResponse => 0x04f0,
+        Command::ReportLag { lag_type, map, pos } => {
+            body.extend(lag_type.to_le_bytes());
+            body.extend(map.to_le_bytes());
+            for v in pos {
+                body.extend(v.to_le_bytes());
+            }
+            0x0502
+        }
         Command::ComplainMail { spammer, mail_id } => {
             body.push(0);
             body.extend(spammer.to_le_bytes());
