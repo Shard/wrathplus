@@ -1664,3 +1664,22 @@ fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
         assert!(!zero.unit_is_in_sanctuary());
     }
 }
+
+#[test]
+fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
+    let wrath = ObjectFields::from_field_slots(
+        FieldLayout::Wrath12340,
+        &[
+            (Field::PlayerArenaTeamInfo11, 0, 11),
+            (Field::PlayerArenaTeamInfo11, 1, 99),
+            (Field::PlayerArenaTeamInfo11, 7, 0),
+            (Field::PlayerArenaTeamInfo11, 14, 33),
+        ],
+    );
+    assert_eq!(
+        (0..4).map(|s| wrath.player_arena_team_id(s)).collect::<Vec<_>>(),
+        [Some(11), Some(0), Some(33), None]
+    );
+    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
+    assert_eq!(vanilla.player_arena_team_id(0), None);
+}
