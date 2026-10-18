@@ -90,8 +90,65 @@ fn find(
     }
 }
 
+/// CancelUnitBuff(unit, index | name [, rank] [, filter]) (12340 `0x804220`): on the player, the
+/// aura the arguments name (HELPFUL by default) is cancelled when it may be
+/// ([`super::cancel_authorized`]). Labelled: the pet and vehicle branch is not carried, and the
+/// rank argument is not compared.
+fn install_cancel(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "CancelUnitBuff",
+        lua.create_function(|lua, args: MultiValue| {
+            let arg = |i: usize| args.get(i).cloned().unwrap_or(Value::Nil);
+            let Some(token) = lua.coerce_string(arg(0))?.map(|s| s.to_string_lossy()) else {
+                return Err(mlua::Error::runtime(
+                    r#"Usage: CancelUnitBuff("unit", [index] or ["name", "rank"][, "filter"])"#,
+                ));
+            };
+            if !token.eq_ignore_ascii_case("player") {
+                return Ok(());
+            }
+            let which = arg(1);
+            // A name's filter follows the rank; an index's follows the index.
+            let filter = match &which {
+                Value::String(_) => arg(3),
+                _ => arg(2),
+            };
+            let filter = lua.coerce_string(filter)?.map(|s| s.to_string_lossy());
+            let filter = parse_filter(filter.as_deref(), true);
+            let spell = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                auras_of(&model, &token)?.and_then(|list| {
+                    let mut matching = list.iter().filter(|a| {
+                        a.helpful == filter.helpful
+                            && filter.cancelable.is_none_or(|c| a.cancelable == c)
+                    });
+                    match &which {
+                        Value::Integer(i) if *i >= 1 => matching.nth((*i - 1) as usize),
+                        Value::Number(n) if *n >= 1.0 => matching.nth((*n as usize) - 1),
+                        Value::String(name) => {
+                            let name = name.to_string_lossy();
+                            matching.find(|a| a.name.as_deref() == Some(name.as_str()))
+                        }
+                        _ => None,
+                    }
+                    .filter(|a| super::cancel_authorized(a))
+                    .map(|a| a.spell_id)
+                })
+            };
+            if let Some(spell) = spell {
+                lua.app_data_mut::<Model>()
+                    .expect("model app_data")
+                    .cancel_aura_requests
+                    .push(spell);
+            }
+            Ok(())
+        })?,
+    )
+}
+
 /// Replace the 1.12 readers with build 12340's.
 pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
+    install_cancel(lua)?;
     let g = lua.globals();
     g.set(
         "UnitAura",

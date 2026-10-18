@@ -26,6 +26,24 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     // ClearHistory() (`0x9761a0` → `0x964720`): free every history line and end any browse;
     // `historyLines` stays. FloatingChatFrame.lua:578 and :734 call it when a window's chat type
     // changes, so Up no longer recalls the old conversation's lines.
+    // GetCursorPosition() (`0x976a20`): the caret as a byte offset; GetUTF8CursorPosition()
+    // (`0x976a70`) the characters before it.
+    m.set(
+        "GetCursorPosition",
+        lua.create_function(|lua, this: Table| with_editbox(lua, &this, |eb| eb.cursor as i64))?,
+    )?;
+    m.set(
+        "GetUTF8CursorPosition",
+        lua.create_function(|lua, this: Table| {
+            with_editbox(lua, &this, |eb| {
+                let at = eb.cursor.min(eb.text.len());
+                eb.text
+                    .char_indices()
+                    .take_while(|(i, _)| *i < at)
+                    .count() as i64
+            })
+        })?,
+    )?;
     m.set(
         "ClearHistory",
         lua.create_function(|lua, this: Table| {
