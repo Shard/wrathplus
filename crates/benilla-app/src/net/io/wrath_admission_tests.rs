@@ -55,6 +55,11 @@ fn every_wrath_writer_route_is_admitted() {
         ("DelFriend", ClientCommand::DelFriend { guid: 1 }),
         ("AddIgnore", ClientCommand::AddIgnore { name: "Bob".into() }),
         ("DelIgnore", ClientCommand::DelIgnore { guid: 1 }),
+        ("SetContactNotes", ClientCommand::SetContactNotes { guid: 1, note: "tank".into() }),
+        (
+            "NativeGuildBank",
+            ClientCommand::NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command::BuyTab { banker: 1, tab: 0 }),
+        ),
         ("DuelAccepted", ClientCommand::DuelAccepted { arbiter: 1 }),
         ("DuelCancelled", ClientCommand::DuelCancelled { arbiter: 1 }),
         ("NativeBattleground", ClientCommand::NativeBattleground(benilla_protocol::wrath_battleground::Command::BfExit { battle_id: 1 })),

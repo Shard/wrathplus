@@ -1056,7 +1056,7 @@ pub(crate) fn wow_font(assets: &AssetServer) -> Handle<Font> {
     assets.load("mpq://Fonts/FRIZQT__.ttf")
 }
 
-// ── 1.12 display names ──────────────────────────────────────────────────────────────────────────
+// ── Display names ──────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn race_name(race: u8) -> &'static str {
     match race {
@@ -1068,6 +1068,8 @@ pub(crate) fn race_name(race: u8) -> &'static str {
         6 => "Tauren",
         7 => "Gnome",
         8 => "Troll",
+        10 => "Blood Elf",
+        11 => "Draenei",
         _ => "?",
     }
 }
@@ -1079,6 +1081,7 @@ pub(crate) fn class_name(class: u8) -> &'static str {
         3 => "Hunter",
         4 => "Rogue",
         5 => "Priest",
+        6 => "Death Knight",
         7 => "Shaman",
         8 => "Mage",
         9 => "Warlock",
@@ -1110,6 +1113,7 @@ pub(crate) fn test_character(guid: u64, name: &str) -> Character {
             z: 0.0,
         },
         flags: 0,
+        customize_flags: 0,
         equipment: [benilla_protocol::CharEnumItem::default(); 19],
         pet_display_id: 0,
         pet_level: 0,

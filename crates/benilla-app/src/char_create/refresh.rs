@@ -12,7 +12,7 @@ use super::parts::{
     CharCreateUi, DialRow, DynIcon, DynText, DynTint, InfoKind, InfoScroll, ScrollArrow,
     ScrollHides, ScrollThumb,
 };
-use super::{class_file, race_classes, CreateAction, CreateSelection, ALLIANCE};
+use super::{class_enabled, class_file, CreateAction, CreateSelection, ALLIANCE, CLASS_SLOTS};
 use crate::glue::art::{
     class_tc, race_tc, tc_rect, GlueArt, ALLIANCE_FILL, BACKDROP_ALLIANCE, BACKDROP_HORDE, BTN_BG,
     BTN_HOVER, FALLBACK_ALPHA, HORDE_FILL,
@@ -39,7 +39,11 @@ pub(super) fn refresh_dynamic(
         Without<DynIcon>,
     >,
     mut dial_rows: Query<(&DialRow, &mut Node), Without<Button>>,
-    mut slots: Query<(&CreateAction, &mut Node), With<Button>>,
+    slots: Query<(&CreateAction, &Children), With<Button>>,
+    mut shades: Query<
+        &mut BackgroundColor,
+        (With<crate::glue::widgets::IconDisabled>, Without<DynTint>),
+    >,
 ) {
     let force = root.iter().any(|r| r.is_added());
     if !force && !sel.is_changed() {
@@ -48,7 +52,6 @@ pub(super) fn refresh_dynamic(
     let cat = catalog.as_deref();
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
-    let classes = race_classes(cat, sel.race);
     let alliance = ALLIANCE.contains(&sel.race);
     let file = cat
         .and_then(|c| c.0.race_file(sel.race))
@@ -70,7 +73,7 @@ pub(super) fn refresh_dynamic(
                 .as_ref()
                 .and_then(|(h, size)| Some((h.clone(), tc_rect(*size, race_tc(*r, sel.sex)?)))),
             DynIcon::ClassSlot(i) => {
-                let class = classes.get(*i as usize).copied();
+                let class = CLASS_SLOTS.get(*i as usize).copied();
                 art.classes
                     .as_ref()
                     .and_then(|(h, size)| Some((h.clone(), tc_rect(*size, class_tc(class?)?))))
@@ -153,10 +156,15 @@ pub(super) fn refresh_dynamic(
             DynText::InfoBody(InfoKind::Class) => strings
                 .text(&format!("CLASS_{}", class_file(sel.class)), "")
                 .to_string(),
-            DynText::ClassSlotLabel(i) => classes
-                .get(*i as usize)
-                .map(|&c| class_name(c).to_string())
-                .unwrap_or_default(),
+            // A disabled class's tooltip is its `<FILE>_DISABLED` line.
+            DynText::ClassSlotLabel(i) => match CLASS_SLOTS.get(*i as usize) {
+                Some(&c) if class_enabled(cat, &sel, c) => class_name(c).to_string(),
+                Some(&c) => strings
+                    .get(&format!("{}_DISABLED", class_file(c)))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| class_name(c).to_string()),
+                None => String::new(),
+            },
         };
         if t.0 != new {
             t.0 = new;
@@ -197,14 +205,25 @@ pub(super) fn refresh_dynamic(
         }
     }
 
-    // The reference fills the valid classes into the first buttons and hides the rest.
-    for (action, mut node) in &mut slots {
-        if let CreateAction::ClassSlot(i) = action {
-            node.display = if (*i as usize) < classes.len() {
-                Display::Flex
-            } else {
-                Display::None
-            };
+    // Every class keeps its button; one the race cannot be shows its `DisableTexture`.
+    for (action, children) in &slots {
+        let CreateAction::ClassSlot(i) = action else {
+            continue;
+        };
+        let enabled = CLASS_SLOTS
+            .get(*i as usize)
+            .is_some_and(|&c| class_enabled(cat, &sel, c));
+        for child in children {
+            if let Ok(mut shade) = shades.get_mut(*child) {
+                let want = if enabled {
+                    Color::NONE
+                } else {
+                    Color::BLACK.with_alpha(0.75)
+                };
+                if shade.0 != want {
+                    shade.0 = want;
+                }
+            }
         }
     }
 }
@@ -215,7 +234,6 @@ pub(super) fn refresh_dynamic(
 #[allow(clippy::type_complexity)]
 pub(super) fn refresh_hover(
     sel: Res<CreateSelection>,
-    catalog: Option<Res<CharCreate>>,
     art: Res<GlueArt>,
     // Accept, Back and Randomize are wholly the shared visuals pass's.
     mut buttons: Query<
@@ -232,12 +250,10 @@ pub(super) fn refresh_hover(
     mut labels: Query<&mut Visibility, (With<HoverLabel>, Without<Hilight>)>,
     mut disables: Query<(&CreateAction, &mut GlueDisabled)>,
 ) {
-    let cat = catalog.as_deref();
-    let classes = race_classes(cat, sel.race);
     let selected = |action: &CreateAction| match *action {
         CreateAction::Race(r) => sel.race == r,
         CreateAction::Gender(g) => sel.sex == g,
-        CreateAction::ClassSlot(i) => classes.get(i as usize) == Some(&sel.class),
+        CreateAction::ClassSlot(i) => CLASS_SLOTS.get(i as usize) == Some(&sel.class),
         _ => false,
     };
 

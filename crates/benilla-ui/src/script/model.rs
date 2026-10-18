@@ -462,6 +462,8 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
+    /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
+    pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -890,6 +892,10 @@ pub(crate) struct Model {
 
     /// The paper doll's combat stats, `None` until the first push.
     pub(crate) wrath_paperdoll_stats: super::WrathPaperDollStats,
+    /// The Wrath companion lists (`wrath_companions`).
+    pub(crate) wrath_companions: super::WrathCompanions,
+    /// The timed death-knight runes (`wrath_runes`).
+    pub(crate) wrath_runes: super::WrathRunes,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1258,6 +1264,7 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
+            wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),
@@ -1510,6 +1517,8 @@ impl Model {
             .into_iter()
             .collect(),
             wrath_paperdoll_stats: Default::default(),
+            wrath_companions: Default::default(),
+            wrath_runes: Default::default(),
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,

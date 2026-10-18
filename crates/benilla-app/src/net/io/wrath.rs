@@ -1283,6 +1283,7 @@ enum WrathRoute {
     NativeReferFriend,
     NativeWorldObjects,
     NativeInspect,
+    NativeGuildBank,
     NativeFaction,
     NativeWorldportAck,
     NativeTeleportAck,
@@ -1366,7 +1367,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::AddIgnore { .. }
         | ClientCommand::DelIgnore { .. }
         | ClientCommand::DuelAccepted { .. }
-        | ClientCommand::DuelCancelled { .. } => WrathRoute::NativeContacts,
+        | ClientCommand::DuelCancelled { .. }
+        | ClientCommand::SetContactNotes { .. } => WrathRoute::NativeContacts,
+        ClientCommand::NativeGuildBank(_) => WrathRoute::NativeGuildBank,
         ClientCommand::NativeBattleground(_)
         | ClientCommand::BattlemasterHello { .. }
         | ClientCommand::AreaSpiritHealerQuery { .. }
@@ -1791,6 +1794,10 @@ fn writer_loop(
                         });
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeGuildBank => {
+                        let ClientCommand::NativeGuildBank(command) = command else { unreachable!() };
+                        active.writer.send_raw(command.opcode(), &command.encode())
+                    }
                     WrathRoute::NativeSessionMeta => {
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -2178,6 +2185,7 @@ fn contacts_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
         ClientCommand::DelFriend { guid } => social(S::DeleteFriend { guid }),
         ClientCommand::AddIgnore { name } => social(S::AddIgnore { name: name.into_bytes() }),
         ClientCommand::DelIgnore { guid } => social(S::DeleteIgnore { guid }),
+        ClientCommand::SetContactNotes { guid, note } => social(S::SetContactNotes { guid, note: note.into_bytes() }),
         ClientCommand::DuelAccepted { arbiter } => duel(D::Accepted { arbiter }),
         ClientCommand::DuelCancelled { arbiter } => duel(D::Cancelled { arbiter }),
         other => unreachable!("not a contacts route: {other:?}"),
@@ -3058,6 +3066,7 @@ fn normalize_character(character: WrathCharacter) -> Character {
             z: character.position[2],
         },
         flags: character.flags,
+        customize_flags: character.customization_flags,
         equipment,
         pet_display_id: character.pet_display_id,
         pet_level: character.pet_level,

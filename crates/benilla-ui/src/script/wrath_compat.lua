@@ -144,10 +144,6 @@ end
 -- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-local runeTypes = { 1, 1, 2, 2, 3, 3 }
-function GetRuneType(rune) return runeTypes[rune] end
-function GetRuneCooldown() return 0, 0, true end
-function GetRuneCount() return 1 end
 function GetTotemInfo() return false, "", 0, 0, "" end
 GetTotemTimeLeft = zero
 
@@ -235,7 +231,6 @@ function CalendarGetDate()
     local now = date("*t")
     return now.wday, now.month, now.day, now.year
 end
-GetNumCompanions, GetCompanionInfo = zero, none
 UnitHasVehicleUI, UnitInVehicle, UnitUsingVehicle, CanExitVehicle = none, none, none, none
 UnitVehicleSkin, UnitVehicleSeatInfo = none, none
 UnitVehicleSeatCount = zero
@@ -612,7 +607,7 @@ SpellCanTargetItem, SpellTargetItem = none, none
 FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
 IsEquippableItem, IsEquippedItem = IsEquippableItem or none, IsEquippedItem or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
-PickupCompanion, PickupEquipmentSet, SetMultiCastSpell = none, none, none
+PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 GetCursorInfo = GetCursorInfo or none

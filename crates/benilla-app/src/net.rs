@@ -30,13 +30,15 @@ mod session;
 mod world;
 pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
-mod wrath_instance_control_capture;
+pub(crate) mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
+mod wrath_achievements;
 mod wrath_equipment_sets;
 mod wrath_item_refunds;
+mod wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
-mod wrath_notices;
+pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
@@ -2162,8 +2164,12 @@ pub(crate) enum ClientCommand {
     NativeReferFriend(benilla_protocol::wrath_refer_friend::Command),
     /// Native game-object report-use; `GameObjUse` is the shared use command.
     NativeWorldObjects(benilla_protocol::wrath_world_objects::Command),
-    /// Native preview-talent learning; no UI producer.
+    /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
+    /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
+    NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command),
+    /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
+    SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

@@ -44,6 +44,11 @@ mod wrath_unit_casts;
 mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
+mod wrath_friends_frame;
+pub use wrath_friends_frame::{
+    WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
+    WrathGuildEvent,
+};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
 pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
@@ -166,7 +171,9 @@ mod wrath_currency;
 mod wrath_equipment;
 mod wrath_modifiers;
 mod wrath_achievements;
-pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
+pub use wrath_achievements::{
+    WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
+};
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_quests_completed;
@@ -177,6 +184,10 @@ pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
 mod wrath_item_services;
+mod wrath_sockets;
+mod wrath_achievement_progress;
+pub use wrath_achievement_progress::{WrathAchievementProgress, WrathAchievementRequest};
+pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
 pub use wrath_equipment::{
     EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
 };
@@ -184,6 +195,10 @@ pub use wrath_item_services::{ItemRefundCost, ItemRefundView, ItemServiceRequest
 mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_character;
+mod wrath_companions;
+mod wrath_runes;
+pub use wrath_runes::{RuneView, WrathRunes};
+pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
 mod wrath_lfg;
 pub use wrath_lfg::{
@@ -789,14 +804,18 @@ impl UiScript {
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
             wrath_character::install(&lua)?;
+            wrath_companions::install(&lua)?;
+            wrath_runes::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
+            wrath_sockets::install(&lua)?;
             wrath_bag_portrait::install(&lua)?;
             wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;
             wrath_achievements::install(&lua)?;
+            wrath_achievement_progress::install(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
@@ -806,6 +825,7 @@ impl UiScript {
             wrath_chat_verbs::install(&lua)?;
             wrath_inspect_talents::install(&lua)?;
             wrath_static_popup::install(&lua)?;
+            wrath_friends_frame::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 

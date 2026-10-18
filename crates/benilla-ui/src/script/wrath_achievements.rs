@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 /// Static Achievement.dbc fields consumed by this bounded query family.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WrathAchievement {
     pub id: u32,
     pub name: String,
@@ -11,6 +11,24 @@ pub struct WrathAchievement {
     pub flags: u32,
     pub required_criteria_count: u32,
     pub reference_achievement_id: u32,
+    /// -1 any, 0 Horde, 1 Alliance.
+    pub required_faction: i32,
+    /// The previous step of a series (`GetPreviousAchievement`), 0 for none.
+    pub parent_achievement_id: u32,
+    pub description: String,
+    pub points: u32,
+    /// The `SpellIcon` texture path, empty for none.
+    pub icon: String,
+    pub reward: String,
+}
+
+/// An Achievement_Category.dbc row.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WrathAchievementCategory {
+    pub id: u32,
+    /// -1 for a root.
+    pub parent_id: i32,
+    pub name: String,
 }
 
 /// Actual Achievement_Criteria.dbc rows, not synthetic special-flag criteria.
@@ -32,10 +50,12 @@ pub struct WrathAchievementMetadata {
     pub achievements: BTreeMap<u32, WrathAchievement>,
     pub criteria: BTreeMap<u32, WrathAchievementCriterion>,
     pub linked_criteria: BTreeMap<u32, Vec<u32>>,
+    /// In file order, as the category lists walk them.
+    pub categories: Vec<WrathAchievementCategory>,
 }
 
 impl WrathAchievementMetadata {
-    fn criteria_owner(&self, achievement: &WrathAchievement) -> Option<u32> {
+    pub(super) fn criteria_owner(&self, achievement: &WrathAchievement) -> Option<u32> {
         let id = if achievement.reference_achievement_id == 0 {
             achievement.id
         } else {
@@ -176,12 +196,14 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
                 } else {
                     criterion.required_quantity as i32
                 };
-            let formatted = formatted_quantity(lua, achievement.flags, flags, required)?;
+            let (quantity, completed) =
+                super::wrath_achievement_progress::criterion_progress(lua, criterion.id, required);
+            let formatted = formatted_quantity(lua, achievement.flags, flags, quantity, required)?;
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&criterion.description)?),
                 Value::Integer(i64::from(criterion.criteria_type)),
-                Value::Boolean(false),
-                Value::Integer(0),
+                Value::Boolean(completed),
+                Value::Integer(quantity.into()),
                 Value::Integer(i64::from(required)),
                 Value::Nil,
                 Value::Integer(i64::from(flags)),
@@ -237,20 +259,26 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-// This empty-progress projection deliberately has no achievement completion/progress cache.
-fn formatted_quantity(
+/// The criterion's progress text; `quantity` comes from the published progress
+/// (`wrath_achievement_progress`), 0 without any.
+pub(super) fn formatted_quantity(
     lua: &mlua::Lua,
     achievement: u32,
     flags: u32,
+    quantity: i32,
     required: i32,
 ) -> mlua::Result<String> {
-    let ordinary = if achievement & 1 != 0 { "--" } else { "0" };
+    let ordinary = if achievement & 1 != 0 && quantity == 0 {
+        "--".to_owned()
+    } else {
+        quantity.to_string()
+    };
     let money_base =
         flags & 0x20 != 0 && (achievement & 8 != 0 || (achievement & 0x38 == 0 && flags & 1 != 0));
     let mut result = if money_base {
-        money(lua, 0)?
+        money(lua, quantity)?
     } else {
-        ordinary.to_owned()
+        ordinary
     };
     if flags & 1 != 0 {
         result.push_str(" / ");
@@ -263,7 +291,7 @@ fn formatted_quantity(
     Ok(result)
 }
 
-fn money(lua: &mlua::Lua, quantity: i32) -> mlua::Result<String> {
+pub(super) fn money(lua: &mlua::Lua, quantity: i32) -> mlua::Result<String> {
     let symbols = {
         let model = lua.app_data_ref::<super::Model>().expect("model");
         model
@@ -331,6 +359,7 @@ mod tests {
                     flags,
                     required_criteria_count: 7,
                     reference_achievement_id: reference,
+                    ..Default::default()
                 },
             );
         }
@@ -424,15 +453,15 @@ mod tests {
         let script = fixture();
         script.run("COPPER_AMOUNT_TEXTURE='%d copper-icon'; SILVER_AMOUNT_TEXTURE='%d silver-icon'; GOLD_AMOUNT_TEXTURE='%d gold-icon'; COPPER_AMOUNT_SYMBOL='c'; SILVER_AMOUNT_SYMBOL='s'; GOLD_AMOUNT_SYMBOL='g'").unwrap();
         assert_eq!(
-            formatted_quantity(&script.lua, 0, 0x21, -5).unwrap(),
+            formatted_quantity(&script.lua, 0, 0x21, 0, -5).unwrap(),
             "0 copper-icon / -5 copper-icon"
         );
         assert_eq!(
-            formatted_quantity(&script.lua, 1, 1, 100).unwrap(),
+            formatted_quantity(&script.lua, 1, 1, 0, 100).unwrap(),
             "-- / 100"
         );
         assert_eq!(
-            formatted_quantity(&script.lua, 8, 0x20, 100).unwrap(),
+            formatted_quantity(&script.lua, 8, 0x20, 0, 100).unwrap(),
             "0 copper-icon"
         );
         assert_eq!(
@@ -446,7 +475,7 @@ mod tests {
             latched: false,
         }]);
         assert_eq!(
-            formatted_quantity(&script.lua, 0, 0x21, 101).unwrap(),
+            formatted_quantity(&script.lua, 0, 0x21, 0, 101).unwrap(),
             "0c / 1s 1c"
         );
         script.run("COPPER_AMOUNT_SYMBOL=nil").unwrap();

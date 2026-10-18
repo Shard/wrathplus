@@ -24,14 +24,18 @@ use crate::portrait::{CreateLook, GlueLook, GluePreview};
 use crate::sound::GlueSound;
 
 /// Alliance and Horde race columns, top to bottom: `CharacterCreateEnumerateRaces` fills buttons
-/// 1..8 in `GetAvailableRaces()` order and `CharacterCreate.xml` chains 1-4 down the first column,
-/// 5-8 down the second, so Alliance then Horde, ascending race id. `RACE_ICON_TCOORDS`'s table
-/// order is a name-to-UV lookup and never the layout order.
+/// 1..10 in `GetAvailableRaces()` order (`0x4e1880`) and build 12340's `CharacterCreate.xml`
+/// chains 1-5 down the first column, 6-10 down the second, so Alliance then Horde, ascending race
+/// id. `RACE_ICON_TCOORDS`'s table order is a name-to-UV lookup and never the layout order.
 ///
 /// The Alliance half is also the race-to-side split `ui_unit::race_faction_group` answers
 /// `UnitFactionGroup("player")` with.
-pub(crate) const ALLIANCE: [u8; 4] = [1, 3, 4, 7]; // Human, Dwarf, Night Elf, Gnome
-const HORDE: [u8; 4] = [2, 5, 6, 8]; // Orc, Scourge, Tauren, Troll
+pub(crate) const ALLIANCE: [u8; 5] = [1, 3, 4, 7, 11]; // Human, Dwarf, Night Elf, Gnome, Draenei
+const HORDE: [u8; 5] = [2, 5, 6, 8, 10]; // Orc, Scourge, Tauren, Troll, Blood Elf
+/// The ten class buttons by slot, `GetAvailableClasses()`' `ChrClasses` row order (`0x4e0830`):
+/// every class has its button, and one the race cannot be shows disabled
+/// (`CharacterCreateEnumerateClasses`' `IsRaceClassValid` arm).
+const CLASS_SLOTS: [u8; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
 /// The reference's initial facing (`SetCharacterCreateFacing(-15)`), reset on every race switch.
 const INITIAL_FACING: f32 = -15.0 * std::f32::consts::PI / 180.0;
 
@@ -216,6 +220,9 @@ pub(crate) struct CreateSelection {
     name: EditBoxState,
     /// Waiting on `SMSG_CHAR_CREATE`: Create is disarmed.
     creating: bool,
+    /// The roster holds a level-55 character, which the Death Knight button needs
+    /// (`DEATHKNIGHT_DISABLED`); set on entry.
+    death_knight: bool,
 }
 
 /// The five dial counts for a (race, sex), or `[1; 5]` without the catalog.
@@ -242,7 +249,7 @@ impl CreateSelection {
     /// Re-clamp class and dials into the current (race, sex)'s valid ranges.
     fn clamp(&mut self, catalog: Option<&CharCreate>) {
         if let Some(c) = catalog {
-            if !c.0.allows(self.race, self.class) {
+            if !c.0.allows(self.race, self.class) || (self.class == 6 && !self.death_knight) {
                 self.class =
                     c.0.classes_for_race(self.race)
                         .first()
@@ -290,8 +297,7 @@ impl CreateSelection {
 enum CreateAction {
     Race(u8),
     Gender(u8),
-    /// An index into the race's valid classes: the reference lists only those, so the slot's class
-    /// shifts per race.
+    /// A class button by slot ([`CLASS_SLOTS`]); a class the race cannot be is disabled.
     ClassSlot(u8),
     /// Dial index 0..5, direction ±1.
     Dial(u8, i8),
@@ -310,7 +316,20 @@ enum CreateAction {
 fn race_classes(catalog: Option<&CharCreate>, race: u8) -> Vec<u8> {
     catalog
         .map(|c| c.0.classes_for_race(race))
-        .unwrap_or_else(|| vec![1, 2, 3, 4, 5, 7, 8, 9, 11])
+        .unwrap_or_else(|| CLASS_SLOTS.to_vec())
+}
+
+/// `IsRaceClassValid`: the race may be the class.
+fn class_allowed(catalog: Option<&CharCreate>, race: u8, class: u8) -> bool {
+    race_classes(catalog, race).contains(&class)
+}
+
+/// A class button is live: the race may be the class and, for the Death Knight,
+/// `DEATHKNIGHT_DISABLED`'s "a level 55 character" holds on this roster. Labelled: native reads
+/// that from its own enabled flag (`0x4e0830`'s third value, not traced); AzerothCore enforces the
+/// same level server-side. Every class is expansion-enabled on a 3.3.5a realm.
+fn class_enabled(catalog: Option<&CharCreate>, sel: &CreateSelection, class: u8) -> bool {
+    class_allowed(catalog, sel.race, class) && (class != 6 || sel.death_knight)
 }
 
 /// A class id's file string, the `CLASS_ICON_TCOORDS` key.
@@ -324,6 +343,7 @@ fn class_file(class: u8) -> &'static str {
         7 => "SHAMAN",
         8 => "MAGE",
         9 => "WARLOCK",
+        6 => "DEATHKNIGHT",
         11 => "DRUID",
         _ => "WARRIOR",
     }
@@ -371,7 +391,8 @@ fn create_input(
                 sounds.write(GlueSound("gsCharacterCreationClass"));
                 if sel.race != r {
                     sel.race = r;
-                    sel.class = race_classes(cat, r).first().copied().unwrap_or(1);
+                    // Labelled: the class survives a switch when the race allows it, else the
+                    // race's first (the C++ `SetSelectedRace` is not traced).
                     sel.clamp(cat);
                     preview.yaw = INITIAL_FACING;
                     changed_look = true;
@@ -386,12 +407,15 @@ fn create_input(
                 }
             }
             CreateAction::ClassSlot(slot) => {
-                // The reference always clicks and re-dresses only on a real change (`0x470f50`).
-                if let Some(&class) = race_classes(cat, sel.race).get(slot as usize) {
-                    sounds.write(GlueSound("gsCharacterCreationClass"));
-                    if sel.class != class {
-                        sel.class = class;
-                        changed_look = true;
+                // `CharacterClass_OnClick` clicks, then switches only to a valid class; a disabled
+                // button's `OnClick` does nothing (`self.enable`).
+                if let Some(&class) = CLASS_SLOTS.get(slot as usize) {
+                    if class_enabled(cat, &sel, class) {
+                        sounds.write(GlueSound("gsCharacterCreationClass"));
+                        if sel.class != class {
+                            sel.class = class;
+                            changed_look = true;
+                        }
                     }
                 }
             }
@@ -697,13 +721,42 @@ mod tests {
 
     #[test]
     fn race_columns_match_the_reference_screen() {
-        assert_eq!(ALLIANCE, [1, 3, 4, 7], "Human, Dwarf, Night Elf, Gnome");
-        assert_eq!(HORDE, [2, 5, 6, 8], "Orc, Scourge, Tauren, Troll");
+        assert_eq!(ALLIANCE, [1, 3, 4, 7, 11], "Human, Dwarf, Night Elf, Gnome, Draenei");
+        assert_eq!(HORDE, [2, 5, 6, 8, 10], "Orc, Scourge, Tauren, Troll, Blood Elf");
         let mut all: Vec<u8> = ALLIANCE.iter().chain(&HORDE).copied().collect();
         all.sort_unstable();
-        assert_eq!(all, (1..=8).collect::<Vec<u8>>());
+        assert_eq!(all, [1, 2, 3, 4, 5, 6, 7, 8, 10, 11]);
         assert!(ALLIANCE.windows(2).all(|w| w[0] < w[1]));
         assert!(HORDE.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    /// Ten class buttons in `ChrClasses` order, Death Knight sixth; a class the race cannot be
+    /// stays on its button, disabled, and a click on it changes nothing.
+    #[test]
+    fn every_class_has_a_slot_and_invalid_ones_refuse() {
+        assert_eq!(CLASS_SLOTS, [1, 2, 3, 4, 5, 6, 7, 8, 9, 11]);
+        assert_eq!(class_file(6), "DEATHKNIGHT");
+        assert!(crate::glue::art::class_tc(6).is_some());
+        for race in ALLIANCE.iter().chain(&HORDE) {
+            assert!(crate::glue::art::race_tc(*race, 0).is_some(), "race {race}");
+            assert!(crate::glue::art::race_tc(*race, 1).is_some(), "race {race}");
+        }
+        // Without a catalog every class reads as allowed.
+        assert!(CLASS_SLOTS.iter().all(|&c| class_allowed(None, 10, c)));
+    }
+
+    /// `DEATHKNIGHT_DISABLED`: the Death Knight needs a level-55 character on the roster.
+    #[test]
+    fn the_death_knight_needs_a_level_55_character() {
+        let mut sel = CreateSelection {
+            race: 10,
+            class: 6,
+            ..default()
+        };
+        assert!(!class_enabled(None, &sel, 6));
+        assert!(class_enabled(None, &sel, 1));
+        sel.death_knight = true;
+        assert!(class_enabled(None, &sel, 6));
     }
 
     #[test]
@@ -763,7 +816,7 @@ mod tests {
                         1.0,
                     );
                 }
-                for slot in 0..8u8 {
+                for slot in 0..10u8 {
                     icon_button(
                         p,
                         &font,
@@ -781,7 +834,7 @@ mod tests {
 
         let mut app = App::new();
         app.init_resource::<GlueArt>()
-            // Human, female, mage: without a catalog `race_classes` is the full list, so slot 6.
+            // Human, female, mage: the mage's button is slot 7 of `CLASS_SLOTS`.
             .insert_resource(CreateSelection {
                 race: 1,
                 sex: 1,
@@ -807,8 +860,8 @@ mod tests {
         assert!(locked.contains(&CreateAction::Race(1)), "Human");
         assert!(locked.contains(&CreateAction::Gender(1)), "female");
         assert!(
-            locked.contains(&CreateAction::ClassSlot(6)),
-            "mage is slot 6 of [1,2,3,4,5,7,8,9,11] — the mage icon itself must carry the lock, \
+            locked.contains(&CreateAction::ClassSlot(7)),
+            "mage is slot 7 of [1,2,3,4,5,6,7,8,9,11] — the mage icon itself must carry the lock, \
              not sit unmarked"
         );
 
@@ -823,6 +876,6 @@ mod tests {
             .map(|(a, _)| *a)
             .collect();
         assert!(locked.contains(&CreateAction::ClassSlot(0)));
-        assert!(!locked.contains(&CreateAction::ClassSlot(6)));
+        assert!(!locked.contains(&CreateAction::ClassSlot(7)));
     }
 }

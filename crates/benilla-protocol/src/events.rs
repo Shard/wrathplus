@@ -556,6 +556,11 @@ pub enum SessionEvent {
         entry: u32,
         metadata: Option<crate::wrath_items::RollMetadata>,
     },
+    /// The same response's socket blocks, after `WrathItemRollMetadata`; `None` is query failure.
+    WrathItemSocketMetadata {
+        entry: u32,
+        metadata: Option<crate::wrath_items::SocketMetadata>,
+    },
     /// One chat line (`SMSG_MESSAGECHAT`); system lines (type `0x0A`) carry GM command feedback.
     Chat(crate::messages::ChatMessage),
     /// A channel notice (`SMSG_CHANNEL_NOTIFY`); `notice` selects the `tail` payload.
