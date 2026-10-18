@@ -898,6 +898,8 @@ pub(crate) struct Model {
     pub(crate) wrath_runes: super::WrathRunes,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
+    /// `SetUIVisibility(false)`'s flag (`wrath_options`).
+    pub(crate) ui_hidden: bool,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1522,6 +1524,7 @@ impl Model {
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
             spellbook_highest_rank: Vec::new(),
+            ui_hidden: false,
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,
