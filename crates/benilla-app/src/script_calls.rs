@@ -34,7 +34,15 @@ pub(crate) fn apply_script_calls(
         crate::ui_pet::PetPress,
         crate::ui_action::AttackPress,
     )>,
+    // The 12340 cast-order verbs' reads: our packet auras and talent groups, and our guid.
+    // `Option` for harnesses without the net resources.
+    wrath: (
+        Option<Res<crate::net::wrath_auras::PacketAuras>>,
+        Option<Res<crate::net::wrath_notices::WrathProgress>>,
+        Option<Res<crate::net::SelfGuid>>,
+    ),
 ) {
+    let (auras, progress, self_guid) = wrath;
     // Native Wrath defaults use the existing ordered application seam, not a second system
     // with duplicate state dependencies or an addon gameplay API.
     if *dialect == crate::net::SessionDialect::Wrath12340 {
@@ -59,12 +67,6 @@ pub(crate) fn apply_script_calls(
         match call {
             ScriptCall::Select(request) => appliers.p0().select(request),
             ScriptCall::TargetByName { name, exact } => appliers.p0().target_by_name(&name, exact),
-            // The 12340 player-only modes need the player filter App has not wired: capture-only.
-            ScriptCall::TargetNearest {
-                mode: mode @ (benilla_ui::script::NearestMode::EnemyPlayer
-                | benilla_ui::script::NearestMode::FriendPlayer),
-                ..
-            } => debug!("TargetNearest {mode:?} not applied yet: capture-only"),
             ScriptCall::TargetNearest { mode, reverse } => {
                 appliers.p0().target_nearest(mode, reverse);
             }
@@ -95,14 +97,40 @@ pub(crate) fn apply_script_calls(
             }
             ScriptCall::PetAction(slot) => appliers.p6().press_slot(slot),
             ScriptCall::PetOrder(packed) => appliers.p6().order(packed),
-            // Build 12340 verbs (native/ui ChatFrame unit), labelled capture-only until App wires
-            // them in call order.
-            other @ (ScriptCall::StartAttack { .. }
-            | ScriptCall::StopAttack
-            | ScriptCall::TargetLastFriend
-            | ScriptCall::CancelShapeshiftForm
-            | ScriptCall::Dismount
-            | ScriptCall::ActivateTalentGroup { .. }) => {
+            // Build 12340's ChatFrame verbs ([`crate::ui_chat_verbs`]), in call order.
+            ScriptCall::StartAttack { unit } => {
+                // A token that names nothing streamed starts nothing (labelled: native's
+                // by-name fallback `0x520190` is not built).
+                let passed = match unit {
+                    Some(token) => match appliers.p0().token_guid(&token) {
+                        Some(guid) => Some(guid),
+                        None => return,
+                    },
+                    None => None,
+                };
+                appliers.p7().start_attack(passed);
+            }
+            ScriptCall::StopAttack => appliers.p7().stop_attack(),
+            ScriptCall::TargetLastFriend => appliers.p0().target_last_friend(),
+            ScriptCall::CancelShapeshiftForm => {
+                if let (Some(auras), Some(me)) =
+                    (auras.as_deref(), self_guid.as_ref().and_then(|g| g.0))
+                {
+                    crate::ui_chat_verbs::cancel_form(&mut appliers.p3(), auras, me);
+                }
+            }
+            ScriptCall::Dismount => crate::ui_chat_verbs::dismount(&mut appliers.p3()),
+            ScriptCall::ActivateTalentGroup { group } => {
+                if let Some(progress) = progress.as_deref() {
+                    crate::ui_chat_verbs::activate_talent_group(
+                        &mut appliers.p3(),
+                        progress,
+                        group,
+                    );
+                }
+            }
+            // `DismissCompanion("CRITTER")`'s CMSG 0x48D has no wire command yet: capture-only.
+            other @ ScriptCall::DismissCritter { .. } => {
                 debug!("script call {other:?} not applied yet: capture-only");
             }
         }
@@ -873,5 +901,72 @@ mod tests {
             .resource::<crate::ui_action::CastErrors>()
             .0
             .is_empty());
+    }
+
+    /// Queue `calls` as the VM would and apply them, as [`run`] does for Lua.
+    fn apply(f: &mut Frame, calls: Vec<ScriptCall>) {
+        f.app
+            .world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .requeue_script_calls(calls);
+        f.app
+            .world_mut()
+            .run_system_once(apply_script_calls)
+            .expect("the calls apply as a one-shot system");
+    }
+
+    /// Build 12340's `StartAttack()` swings at the selection, `StartAttack("unit")` at the token's
+    /// unit; `TargetLastFriend` commits the remembered friend.
+    #[test]
+    fn start_attack_and_target_last_friend_apply_in_call_order() {
+        let mut f = frame(true);
+        apply(&mut f, vec![ScriptCall::StartAttack { unit: None }]);
+        assert_eq!(swings(&f).0, [OLD]);
+
+        let mut f = frame(false);
+        f.app.world_mut().resource_mut::<crate::target::LastFriend>().0 = Some(NEW);
+        apply(
+            &mut f,
+            vec![
+                ScriptCall::TargetLastFriend,
+                ScriptCall::StartAttack {
+                    unit: Some("target".into()),
+                },
+            ],
+        );
+        assert_eq!(selected(&f), Some(NEW));
+        assert_eq!(swings(&f).0, [NEW], "the swing reads the friend the call before selected");
+    }
+
+    /// `Dismount()` sends `CMSG_CANCEL_MOUNT_AURA` off a flight path; `SetActiveTalentGroup` of the
+    /// active group or one past the count sends nothing.
+    #[test]
+    fn dismount_sends_and_the_active_talent_group_does_not_recast() {
+        let group = || benilla_protocol::events::TalentGroup {
+            talents: Vec::new(),
+            glyphs: Vec::new(),
+        };
+        let mut f = frame(false);
+        apply(&mut f, vec![ScriptCall::Dismount]);
+        assert!(f.rx.try_iter().any(|c| matches!(
+            c,
+            ClientCommand::NativeSpellControl(
+                benilla_protocol::wrath_spell_control::Command::CancelMountAura
+            )
+        )));
+        f.app
+            .world_mut()
+            .resource_mut::<crate::net::wrath_notices::WrathProgress>()
+            .talents
+            .insert(false, (0, 0, vec![group(), group()]));
+        apply(
+            &mut f,
+            vec![
+                ScriptCall::ActivateTalentGroup { group: 1 },
+                ScriptCall::ActivateTalentGroup { group: 3 },
+                ScriptCall::ActivateTalentGroup { group: 0 },
+            ],
+        );
+        assert!(casts(&f).is_empty());
     }
 }

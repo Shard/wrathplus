@@ -449,6 +449,8 @@ pub enum SessionEvent {
         civilian: bool,
         /// The tooltip's white LEADER line.
         racial_leader: bool,
+        /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::messages::CreatureQueryInfo`]).
+        modifiers: Option<[u32; 2]>,
     },
     /// `SMSG_GAMEOBJECT_QUERY_RESPONSE`, keyed by template `entry`; `data` is the type-specific
     /// raw tail. An unknown entry still fires, every field zero or empty.
@@ -561,6 +563,11 @@ pub enum SessionEvent {
     WrathItemRollMetadata {
         entry: u32,
         metadata: Option<crate::wrath_items::RollMetadata>,
+    },
+    /// The same response's socket blocks, after `WrathItemRollMetadata`; `None` is query failure.
+    WrathItemSocketMetadata {
+        entry: u32,
+        metadata: Option<crate::wrath_items::SocketMetadata>,
     },
     /// One chat line (`SMSG_MESSAGECHAT`); system lines (type `0x0A`) carry GM command feedback.
     Chat(crate::messages::ChatMessage),
@@ -1198,6 +1205,8 @@ pub enum SessionEvent {
     WrathDeath { packet: crate::wrath_death::Packet },
     /// Capture-only native account-data receipts (`wrath_session_meta`).
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
+    /// Capture-only native Help Request receipts: GM response, survey offer, complaint (`wrath_help`).
+    WrathHelp { packet: crate::wrath_help::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).

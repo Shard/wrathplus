@@ -232,6 +232,10 @@ pub fn load_achievement_criteria(chain: &mut Chain) -> Result<AchievementCriteri
     let (bytes, locale) = read(chain, "Achievement_Criteria")?;
     criteria(&bytes, &locale)
 }
+/// `SpellIcon.dbc`, id → texture path, for `Achievement.icon_id`.
+pub fn load_achievement_icons(chain: &mut Chain) -> Result<std::collections::HashMap<u32, String>> {
+    crate::dbc::load_spell_icon_map(chain)
+}
 /// Load localized categories, preserving root and unresolved parent IDs.
 pub fn load_achievement_categories(chain: &mut Chain) -> Result<AchievementCategoryCatalog> {
     let (bytes, locale) = read(chain, "Achievement_Category")?;

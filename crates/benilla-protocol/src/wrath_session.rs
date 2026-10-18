@@ -179,7 +179,7 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<ServerPacket> {
     for _ in 0..3 {
         u32_le(r)?;
     }
-    let _modifiers = (u32_le(r)?, u32_le(r)?);
+    let modifiers = [u32_le(r)?, u32_le(r)?];
     let racial_leader = u8_le(r)? != 0;
     Ok(ServerPacket::CreatureQueryResponse {
         entry,
@@ -194,6 +194,7 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<ServerPacket> {
             civilian: false,
             racial_leader,
             display_id,
+            modifiers: Some(modifiers),
         }),
     })
 }

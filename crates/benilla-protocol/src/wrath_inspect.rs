@@ -156,6 +156,8 @@ pub enum Command {
     TalentWipeConfirm { trainer: u64 },
     /// `CMSG_LEARN_PREVIEW_TALENTS`: (talent, rank) pairs; AC reads at most 150.
     LearnPreviewTalents { talents: Vec<(u32, u32)> },
+    /// `CMSG_REMOVE_GLYPH`: a 0-based glyph slot (AC `HandleRemoveGlyph`, slots below 6).
+    RemoveGlyph { slot: u32 },
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {
@@ -173,6 +175,10 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
         Command::TalentWipeConfirm { trainer } => {
             body.extend(trainer.to_le_bytes());
             0x02aa
+        }
+        Command::RemoveGlyph { slot } => {
+            body.extend(slot.to_le_bytes());
+            0x048a
         }
         Command::LearnPreviewTalents { talents } => {
             body.extend((talents.len() as u32).to_le_bytes());

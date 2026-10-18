@@ -203,6 +203,8 @@ pub struct TooltipState {
     pub padding: f32,
     /// Line 1 came from XML (`ShoppingTooltipTemplate`), so later lines clone the previous fonts.
     pub xml_declared_lines: bool,
+    /// Wrath `AddTexture`: the 0-based line each used `$parentTextureN` sits on, in use order.
+    pub texture_lines: Vec<usize>,
 }
 
 /// The plate's text inset: the stock template seats `TextLeft1` at TOPLEFT (10, −10).
@@ -220,6 +222,9 @@ pub const TOOLTIP_WRAP_WIDTH: f32 = 260.0;
 /// and written by `Model`'s 23 methods (table `0x878948`); the render is the app's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelState {
+    /// Wrath `PlayerModel:SetCreature(creatureID)` (`0x597960`): the creature template whose
+    /// cached display the pane shows; the app resolves it through the creature cache.
+    pub creature: Option<u32>,
     /// `SetModel`'s path as written (`.mdx`); the app's loader maps it to the shipped `.m2`.
     pub path: Option<String>,
     /// `PlayerModel:SetUnit`'s unit (`0x505d70`); it and [`Self::path`] each clear the other.
@@ -317,6 +322,7 @@ impl Default for ModelLight {
 impl Default for ModelState {
     fn default() -> Self {
         Self {
+            creature: None,
             path: None,
             unit: None,
             sequence: 0,

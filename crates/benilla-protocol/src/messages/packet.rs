@@ -56,6 +56,9 @@ pub struct CreatureQueryInfo {
     /// `creature_template.display_id[0]` (`QueryHandler.cpp:179`), `0` if none, for drawing an
     /// unseen creature; a spawned unit may use any of its four ids, so its own display id wins.
     pub display_id: u32,
+    /// Wrath's HealthModifier/PowerModifier template floats as raw bits (`Eq` stays derivable);
+    /// `None` where the dialect's packet carries none (1.12).
+    pub modifiers: Option<[u32; 2]>,
 }
 
 /// A decoded server packet; an unmodelled opcode is [`Self::Other`].

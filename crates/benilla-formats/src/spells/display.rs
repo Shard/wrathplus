@@ -205,6 +205,8 @@ pub struct SpellDisplay {
     /// `EffectMiscValue[3]` (columns 106-108, signed). On a trade-skill opener (effect 47),
     /// slot 0 picks the window: nonzero the CraftFrame, 0 the TradeSkillFrame (`0x6e4bd7`).
     pub effect_misc_value: [i32; 3],
+    /// `EffectMiscValueB[3]`: a SUMMON effect's `SummonProperties.dbc` row (Wrath data only).
+    pub effect_misc_value_b: [i32; 3],
     /// `EffectDicePerLevel[3]` (columns 70-72): the integer per-level term (`0x6e3871`).
     pub effect_dice_per_level: [i32; 3],
     /// `EffectRealPointsPerLevel[3]` (columns 73-75): the float per-level term (`0x6e3889`); 5.0
@@ -303,6 +305,7 @@ impl Default for SpellDisplay {
             effect_trigger_spell: [0; 3],
             effect_item_type: [0; 3],
             effect_misc_value: [0; 3],
+            effect_misc_value_b: [0; 3],
         }
     }
 }

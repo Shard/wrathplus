@@ -97,6 +97,11 @@ pub struct PetStats {
     /// (`0x4bea10`: bit `1 << (id - 1)` of `CreatureFamily` column 7, names from `ItemPetFood`).
     /// Empty for a zero mask (every warlock minion) or a failed hunter gate, which the app applies.
     pub food_types: Vec<String>,
+    /// `GetUnitHealthModifier("pet")` / `GetUnitPowerModifier("pet")` (`0x71b8d0`/`0x71b960`):
+    /// 1 for a hunter-created pet, else the creature record's HealthModifier/PowerModifier, 0
+    /// with no record.
+    pub health_modifier: f32,
+    pub power_modifier: f32,
 }
 
 /// The pushed pet state: the bar's slots and bar-wide bits, the stat block, the menu predicates.
@@ -936,6 +941,8 @@ mod tests {
                 "Fungus".into(),
                 "Fruit".into(),
             ],
+            health_modifier: 1.0,
+            power_modifier: 1.0,
         }
     }
 

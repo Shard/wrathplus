@@ -226,6 +226,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_help::OPCODES.contains(&opcode) => Ok(match crate::wrath_help::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_death::OPCODES.contains(&opcode) => Ok(match crate::wrath_death::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -550,14 +554,22 @@ impl WrathEventAdapter {
             SMSG_ITEM_QUERY_SINGLE_RESPONSE => {
                 let (entry, template) = decode_native_item_query_response(body)
                     .map_err(|source| WrathEventError::ItemCodec { opcode, source })?;
-                let (info, metadata) = match template {
-                    Some(template) => (Some(Box::new(template.info)), Some(template.roll)),
-                    None => (None, None),
+                let (info, metadata, sockets) = match template {
+                    Some(template) => (
+                        Some(Box::new(template.info)),
+                        Some(template.roll),
+                        Some(template.sockets),
+                    ),
+                    None => (None, None, None),
                 };
                 Ok(handled(
                     vec![
                         SessionEvent::ItemTemplate { entry, info },
                         SessionEvent::WrathItemRollMetadata { entry, metadata },
+                        SessionEvent::WrathItemSocketMetadata {
+                            entry,
+                            metadata: sockets,
+                        },
                     ],
                     Vec::new(),
                     Vec::new(),
@@ -1315,8 +1327,9 @@ mod tests {
         assert!(matches!(
             &session_events[..],
             [SessionEvent::ItemTemplate { entry: 117, info: Some(info) },
-             SessionEvent::WrathItemRollMetadata { entry: 117, metadata: Some(metadata) }]
-                if info.name.is_empty() && metadata.flags2 == 0
+             SessionEvent::WrathItemRollMetadata { entry: 117, metadata: Some(metadata) },
+             SessionEvent::WrathItemSocketMetadata { entry: 117, metadata: Some(sockets) }]
+                if info.name.is_empty() && metadata.flags2 == 0 && *sockets == Default::default()
                     && metadata.required_disenchant_skill == 0 && metadata.item_limit_category == 0
         ));
 
@@ -1335,7 +1348,8 @@ mod tests {
             [SessionEvent::ItemTemplate {
                 entry: 9999,
                 info: None
-            }, SessionEvent::WrathItemRollMetadata { entry: 9999, metadata: None }]
+            }, SessionEvent::WrathItemRollMetadata { entry: 9999, metadata: None },
+            SessionEvent::WrathItemSocketMetadata { entry: 9999, metadata: None }]
         ));
     }
 

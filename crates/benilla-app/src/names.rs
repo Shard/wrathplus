@@ -99,6 +99,9 @@ pub(crate) struct CreatureRecord {
     /// The only model for a unit with no world object, such as a stabled pet; an on-screen unit's
     /// own `UNIT_FIELD_DISPLAYID` wins.
     pub(crate) display_id: u32,
+    /// Wrath's template HealthModifier/PowerModifier, `GetUnitHealthModifier`'s answer for a
+    /// non-hunter pet (`0x71b8d0` reads record `+0x34`/`+0x38`); `None` for a 1.12 answer.
+    pub(crate) modifiers: Option<[f32; 2]>,
 }
 
 /// The 1.12 client's creature-rank getter (`0x605620`): 0 before the record is queried and 0 for
@@ -363,7 +366,8 @@ impl crate::query_cache::AskOnce for NameCache {
 const CACHE_MAGIC: &str = "benilla-namecache";
 /// Our record-layout version; bump it when a column changes. Version 2 holds creature records
 /// only.
-const CACHE_FORMAT: u32 = 2;
+// 3: creature lines carry the Wrath HealthModifier/PowerModifier columns.
+const CACHE_FORMAT: u32 = 3;
 /// The client build, the reference's `0x16f3`.
 const CACHE_BUILD: u32 = 5875;
 /// In the header as in the reference's; benilla reads DBC locale slot 0 only.
@@ -378,7 +382,7 @@ impl NameCache {
         for (entry, rec) in self.creatures.iter() {
             match rec {
                 Some(r) => out.push_str(&format!(
-                    "C\t{entry}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                    "C\t{entry}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                     r.creature_type,
                     r.pet_family,
                     r.rank,
@@ -387,7 +391,11 @@ impl NameCache {
                     u8::from(r.racial_leader),
                     r.display_id,
                     r.name,
-                    r.subname.as_deref().unwrap_or("")
+                    r.subname.as_deref().unwrap_or(""),
+                    // Raw f32 bits, so the round trip is exact; empty is no modifiers.
+                    r.modifiers
+                        .map(|[h, p]| format!("{}\t{}", h.to_bits(), p.to_bits()))
+                        .unwrap_or_default()
                 )),
                 None => out.push_str(&format!("c\t{entry}\n")),
             }
@@ -438,6 +446,14 @@ impl NameCache {
                             civilian: f[6] == "1",
                             racial_leader: f[7] == "1",
                             display_id,
+                            modifiers: match (f.get(11), f.get(12)) {
+                                (Some(h), Some(p)) => h
+                                    .parse()
+                                    .ok()
+                                    .zip(p.parse().ok())
+                                    .map(|(h, p)| [f32::from_bits(h), f32::from_bits(p)]),
+                                _ => None,
+                            },
                         }),
                     );
                 }
@@ -564,6 +580,7 @@ pub(crate) mod net {
             display_id,
             civilian,
             racial_leader,
+            modifiers,
         } = ev
         {
             creature_name(
@@ -577,6 +594,7 @@ pub(crate) mod net {
                 civilian,
                 racial_leader,
                 display_id,
+                modifiers,
                 &mut names,
             );
         }
@@ -625,6 +643,7 @@ pub(crate) mod net {
         civilian: bool,
         racial_leader: bool,
         display_id: u32,
+        modifiers: Option<[u32; 2]>,
         names: &mut NameCache,
     ) {
         names.insert_creature(
@@ -639,6 +658,7 @@ pub(crate) mod net {
                 civilian,
                 racial_leader,
                 display_id,
+                modifiers: modifiers.map(|m| m.map(f32::from_bits)),
             }),
         );
     }
@@ -785,6 +805,7 @@ mod tests {
                 civilian: true,
                 racial_leader: false,
                 display_id: 533,
+                modifiers: None,
             }),
         );
         cache.insert_creature(1234, None); // the server flagged the entry unknown
@@ -816,10 +837,38 @@ mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 1,
+                modifiers: None,
             }),
         );
         let back = NameCache::from_tsv(&cache.to_tsv("R"), "R").expect("header");
         assert_eq!(back.creature_record(70).unwrap().subname, None);
+    }
+
+    /// The Wrath template modifiers survive the file bit-exactly; a line without them reads
+    /// `None`, never a fabricated 1.0.
+    #[test]
+    fn creature_modifiers_round_trip_through_the_file() {
+        let mut cache = NameCache::default();
+        let record = |modifiers| CreatureRecord {
+            name: "Imp".into(),
+            subname: None,
+            creature_type: 3,
+            pet_family: 23,
+            rank: 0,
+            type_flags: 0,
+            civilian: false,
+            racial_leader: false,
+            display_id: 4449,
+            modifiers,
+        };
+        cache.insert_creature(416, Some(record(Some([0.3, 1.1]))));
+        cache.insert_creature(417, Some(record(None)));
+        let back = NameCache::from_tsv(&cache.to_tsv("R"), "R").expect("header");
+        assert_eq!(
+            back.creature_record(416).unwrap().modifiers,
+            Some([0.3, 1.1])
+        );
+        assert_eq!(back.creature_record(417).unwrap().modifiers, None);
     }
 
     /// The reference builds `'WNAM'` (ctor `0x554cd0`) and `'WPNM'` with persistence off; a 1.12
@@ -841,6 +890,7 @@ mod tests {
                 civilian: true,
                 racial_leader: false,
                 display_id: 533,
+                modifiers: None,
             }),
         );
 
@@ -992,6 +1042,7 @@ mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 0,
+                modifiers: None,
             }),
         );
         assert_eq!(cache.resolve(wolf_b, &cmds), Some("Young Wolf"));
@@ -1059,6 +1110,7 @@ mod tests {
             civilian: false,
             racial_leader: false,
             display_id: 0,
+            modifiers: None,
         }
     }
 

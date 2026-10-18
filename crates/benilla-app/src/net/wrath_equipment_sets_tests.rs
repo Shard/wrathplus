@@ -34,7 +34,7 @@ fn set_receipts_leave_the_capture_and_other_receipts_keep_their_order() {
             played_seconds: 0,
         },
     ]);
-    assert!(absorb(&mut packets, &mut sets).is_empty());
+    assert_eq!(absorb(&mut packets, &mut sets), (Vec::new(), Vec::new()));
     assert_eq!(packets.len(), 2, "only the set list leaves");
     assert_eq!(
         sets.sets
@@ -56,7 +56,7 @@ fn set_receipts_leave_the_capture_and_other_receipts_keep_their_order() {
     ]);
     assert_eq!(
         absorb(&mut packets, &mut sets),
-        [(false, Some("Tank".into())), (true, None)]
+        (vec![(false, Some("Tank".into())), (true, None)], Vec::new())
     );
     assert!(packets.is_empty());
     assert_eq!(sets.sets[&5].set_guid, 50);
@@ -115,9 +115,15 @@ fn saves_deletes_and_uses_update_the_local_copy_and_name_the_packet() {
     assert_eq!((items[1], items[4]), ((0, 0, 0), (IGNORED, 0, 0)));
     assert_eq!(sets.pending_use.as_deref(), Some("Heal"));
 
-    // An unnumbered set is forgotten locally but cannot be named to the server.
+    // An unnumbered set is forgotten locally and deleted once its GUID arrives.
     let delete = |name: &str| EquipmentSetRequest::Delete { name: name.into() };
     assert_eq!(apply(&mut sets, delete("PvP"), &worn, &carried), None);
+    let mut packets = VecDeque::from([Packet::EquipmentSetSaved {
+        index: 1,
+        set_guid: 77,
+    }]);
+    assert_eq!(absorb(&mut packets, &mut sets), (Vec::new(), vec![77]));
+    assert!(!sets.sets.contains_key(&1) && sets.pending_delete.is_empty());
     assert_eq!(
         apply(&mut sets, delete("Heal"), &worn, &carried),
         Some(Command::EquipmentSetDelete { set_guid: 10 })

@@ -155,6 +155,7 @@ mod tests {
                     z: 0.0,
                 },
                 flags: 0,
+                customize_flags: 0,
                 equipment: [benilla_protocol::CharEnumItem::default(); 19],
                 pet_display_id: 0,
                 pet_level: 0,
@@ -201,6 +202,7 @@ mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 0,
+                modifiers: None,
             }),
         );
         let path = crate::local_state::name_cache_path("Realm").expect("a state folder");
