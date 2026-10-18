@@ -164,7 +164,9 @@ mod wrath_currency;
 mod wrath_equipment;
 mod wrath_modifiers;
 mod wrath_achievements;
-pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathAchievementMetadata};
+pub use wrath_achievements::{
+    WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
+};
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_quests_completed;
@@ -176,6 +178,8 @@ mod wrath_item_spell;
 mod wrath_items;
 mod wrath_item_services;
 mod wrath_sockets;
+mod wrath_achievement_progress;
+pub use wrath_achievement_progress::{WrathAchievementProgress, WrathAchievementRequest};
 pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
 pub use wrath_equipment::{
     EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
@@ -798,6 +802,7 @@ impl UiScript {
             wrath_equipment::install(&lua)?;
             wrath_modifiers::install(&lua)?;
             wrath_achievements::install(&lua)?;
+            wrath_achievement_progress::install(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
