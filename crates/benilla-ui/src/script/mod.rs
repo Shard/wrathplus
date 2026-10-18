@@ -175,6 +175,9 @@ pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
 mod wrath_item_services;
+pub use wrath_equipment::{
+    EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
+};
 pub use wrath_item_services::{ItemRefundCost, ItemRefundView, ItemServiceRequest};
 mod wrath_bag_portrait;
 mod wrath_paperdoll;
