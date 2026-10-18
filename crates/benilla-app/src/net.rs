@@ -48,7 +48,7 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
-mod wrath_refer_friend_capture;
+pub(crate) mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
