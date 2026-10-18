@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(expand("A $C of $R", Some(&s)), "A Priest of Night Elf");
         assert_eq!(expand("a $c of $r", Some(&s)), "a priest of night elf");
         let unknown = Subject {
-            class: 6,
+            class: 12,
             ..subject(0)
         };
         assert_eq!(expand("[$C]", Some(&unknown)), "[]");

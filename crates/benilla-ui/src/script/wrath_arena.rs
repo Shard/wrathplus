@@ -231,6 +231,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let set = |name: &str, f: fn(&Lua, MultiValue) -> mlua::Result<MultiValue>| {
         g.set(name, lua.create_function(f)?)
     };
+    // IsInArenaTeam() (`0x60dbf0`): a boolean, any of the three descriptor slots holds a team id.
+    set("IsInArenaTeam", |lua, _| {
+        let model = lua.app_data_ref::<Model>().expect("model");
+        let any = model.wrath_arena.teams.iter().any(|t| t.descriptor[0] != 0);
+        Ok(MultiValue::from_vec(vec![Value::Boolean(any)]))
+    })?;
     // teamName, teamSize, teamRating, weekPlayed, weekWins, seasonPlayed, seasonWins,
     // playerPlayed, seasonPlayerPlayed, teamRank, playerRating, then the background colour, the
     // emblem and its colour, the border and its colour: 22 values, `nil` and zeros for an empty
@@ -492,6 +498,16 @@ mod tests {
             ],
         );
         s
+    }
+
+    #[test]
+    fn in_arena_team_reads_the_descriptor_slots() {
+        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        assert!(!s.eval::<bool>("return IsInArenaTeam()").unwrap());
+        let mut team = ArenaTeamView::default();
+        team.descriptor[0] = 9;
+        s.set_wrath_arena_teams([Default::default(), Default::default(), team]);
+        assert!(s.eval::<bool>("return IsInArenaTeam()").unwrap());
     }
 
     #[test]
