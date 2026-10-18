@@ -261,7 +261,8 @@ pub use container::{
 pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
-    CursorAction, CursorItem, CursorMacro, CursorMerchantItem, CursorMoney, CursorPayload,
+    CursorAction, CursorGuildBankItem, CursorItem, CursorMacro, CursorMerchantItem, CursorMoney,
+    CursorPayload,
     CursorPetAction, CursorSpell, CursorStablePet, EnchantConfirm, WorldPick, EQUIPMENT_BAG,
 };
 pub use cvars::{small_cull_text, sstr_to_int};
@@ -848,6 +849,7 @@ impl UiScript {
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
+            cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }

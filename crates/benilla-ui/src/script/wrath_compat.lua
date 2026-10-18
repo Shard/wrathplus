@@ -604,7 +604,6 @@ EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
-GetCursorInfo = GetCursorInfo or none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
 ForceGossip = ForceGossip or function() return nil end

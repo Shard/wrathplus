@@ -145,11 +145,13 @@ fn play_item_gesture_sounds(
 
     let mut play = |payload: &CursorPayload, gesture: CursorGesture| match payload {
         // Mode 5 takes the item arm: the vendor grab `0x4950f0` is handed the row's
-        // `ItemDisplayInfo` id, so it plays the item's own pickup and put-down.
-        CursorPayload::Item(_) | CursorPayload::Merchant(_) => {
+        // `ItemDisplayInfo` id, so it plays the item's own pickup and put-down; so is mode 11's
+        // guild bank grab (`0x520d30` from `0x5a6200`).
+        CursorPayload::Item(_) | CursorPayload::Merchant(_) | CursorPayload::GuildBankItem(_) => {
             let item_id = match payload {
                 CursorPayload::Item(i) => i.item_id,
                 CursorPayload::Merchant(m) => m.item_id,
+                CursorPayload::GuildBankItem(g) => g.item_id,
                 _ => unreachable!("guarded by the arm's own pattern"),
             };
             let (Some(displays), Some(sounds)) = (&displays, &sounds) else {
