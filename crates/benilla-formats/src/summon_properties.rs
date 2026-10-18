@@ -16,18 +16,36 @@ const SUMMON_PROPERTIES: &str = "DBFilesClient\\SummonProperties.dbc";
 /// The minipet summon slot (`SUMMON_SLOT_MINIPET`), which `0x8009b0` tests.
 pub const SUMMON_SLOT_MINIPET: u32 = 5;
 
-/// SummonProperties ID → Slot.
+/// `SUMMON_PROP_FLAG` bit 0x20: the summon cannot be dismissed (UnitPopup's pet check
+/// `0x5d3820`).
+pub const SUMMON_FLAG_UNDISMISSABLE: u32 = 0x20;
+
+/// SummonProperties ID → (Slot, Flags).
 #[derive(Debug, Default, Clone)]
-pub struct SummonProperties(HashMap<u32, u32>);
+pub struct SummonProperties(HashMap<u32, (u32, u32)>);
 
 impl SummonProperties {
     pub fn from_slots(rows: impl IntoIterator<Item = (u32, u32)>) -> Self {
-        Self(rows.into_iter().collect())
+        Self(rows.into_iter().map(|(id, slot)| (id, (slot, 0))).collect())
+    }
+
+    /// Rows as `(ID, Slot, Flags)`.
+    pub fn from_rows(rows: impl IntoIterator<Item = (u32, u32, u32)>) -> Self {
+        Self(
+            rows.into_iter()
+                .map(|(id, slot, flags)| (id, (slot, flags)))
+                .collect(),
+        )
     }
 
     /// The row's Slot; `None` for an ID with no row, which `0x8009b0` treats as no companion.
     pub fn slot(&self, id: u32) -> Option<u32> {
-        self.0.get(&id).copied()
+        self.0.get(&id).map(|&(slot, _)| slot)
+    }
+
+    /// The row's Flags; `None` for an ID with no row.
+    pub fn flags(&self, id: u32) -> Option<u32> {
+        self.0.get(&id).map(|&(_, flags)| flags)
     }
 
     pub fn len(&self) -> usize {
@@ -52,11 +70,15 @@ pub fn load_summon_properties(chain: &mut Chain) -> Result<SummonProperties> {
         .read_file(SUMMON_PROPERTIES)
         .with_context(|| format!("reading {SUMMON_PROPERTIES}"))?;
     let rs = parse(&bytes, schema(), "SummonProperties")?;
-    Ok(SummonProperties::from_slots(
-        rs.records()
-            .iter()
-            .filter_map(|r| Some((u32_at(r, 0)?, u32_at(r, 4).unwrap_or(0)))),
-    ))
+    Ok(SummonProperties::from_rows(rs.records().iter().filter_map(
+        |r| {
+            Some((
+                u32_at(r, 0)?,
+                u32_at(r, 4).unwrap_or(0),
+                u32_at(r, 5).unwrap_or(0),
+            ))
+        },
+    )))
 }
 
 #[cfg(test)]
