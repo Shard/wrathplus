@@ -74,6 +74,10 @@ pub(crate) struct UiChatPlugin;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ChatDrain;
 
+/// The chat feed's drain of the native chat FIFO: a system queueing a line there runs before it.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct NativeChatFeedSet;
+
 impl Plugin for UiChatPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
@@ -145,6 +149,7 @@ impl Plugin for UiChatPlugin {
                 Update,
                 feed::feed_chat
                     .in_set(UiFeed)
+                    .in_set(NativeChatFeedSet)
                     .after(crate::ui_unit::UnitFeed)
                     .after(crate::ui_guild::GuildFeed)
                     .run_if(crate::ui_script::ingame_ui_up),

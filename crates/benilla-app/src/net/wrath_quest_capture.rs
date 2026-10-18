@@ -1,5 +1,6 @@
-//! Transport-only ordered native quest POI and PvP-kill receipts. App owns any future reducer/UI feed.
-//! No map POIs or objective counters are inferred.
+//! Native quest receipts. A PvP-kill tick re-asks the givers' markers, as `SMSG_QUESTUPDATE_ADD_KILL`
+//! does; its count lives in the quest-log slot (`crate::ui_quest_log`), whose diff toasts it. The
+//! POI responses stay an ordered transport FIFO until the map takes them; no POIs are inferred.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_quest::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -15,9 +16,20 @@ pub(super) fn register(app: &mut App) {
         .net_handler(SessionEventKind::Disconnected, clear);
 }
 
-fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeQuestPackets>) {
-    if let SessionEvent::WrathQuest { packet } = event {
-        packets.0.push_back(packet);
+fn receive(
+    In(event): In<SessionEvent>,
+    mut packets: ResMut<NativeQuestPackets>,
+    mut quest: ResMut<crate::ui_quest::QuestGiver>,
+) {
+    match event {
+        SessionEvent::WrathQuest {
+            packet: Packet::PvpKill { quest: id, current, required },
+        } => {
+            debug!("net: quest {id} PvP kills at {current}/{required}");
+            quest.bump_reask();
+        }
+        SessionEvent::WrathQuest { packet } => packets.0.push_back(packet),
+        _ => {}
     }
 }
 

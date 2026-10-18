@@ -3,12 +3,14 @@
 //! `wrath_notices`) moves the counters; the player's own `SMSG_ACHIEVEMENT_EARNED` adds an earn
 //! and fires `ACHIEVEMENT_EARNED`; `SMSG_ACHIEVEMENT_DELETED`/`SMSG_CRITERIA_DELETED` remove rows.
 //! `SetAchievementComparisonUnit` sends `CMSG_QUERY_INSPECT_ACHIEVEMENTS`, and the asked player's
-//! `SMSG_RESPOND_INSPECT_ACHIEVEMENTS` becomes the comparison. Other players' earns and server
-//! firsts stay in the capture.
+//! `SMSG_RESPOND_INSPECT_ACHIEVEMENTS` becomes the comparison. A server first
+//! (`SMSG_SERVER_FIRST_ACHIEVEMENT`) becomes an achievement chat line ([`server_first_line`]).
+//! Other players' earns stay in the capture.
 use super::wrath_achievement_capture::NativeAchievementPackets;
 use super::wrath_notices::WrathProgress;
 use super::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_achievement::{Packet, Snapshot};
+use benilla_protocol::wrath_chat::Message;
 use benilla_ui::script::{
     ScriptDialect, UiScript, WrathAchievementProgress, WrathAchievementRequest,
 };
@@ -32,8 +34,37 @@ pub(super) fn register(app: &mut App) {
         Update,
         feed_achievements
             .in_set(crate::ui_script::UiFeed)
+            .before(crate::ui_chat::NativeChatFeedSet)
             .run_if(crate::ui_script::ingame_ui_up),
     );
+}
+
+/// A server first's chat line, as the reference's handler (`0x50b010`) builds it: the template
+/// `SERVER_FIRST_ACHIEVEMENT`, or `PLAYER_SERVER_FIRST_ACHIEVEMENT` when the link word is set,
+/// raised as chat type `0x30` (`ACHIEVEMENT`) with the name as sender and the achievement id, so
+/// the chat feed expands `$a`. Labelled: the template's `%s` are filled with the name here. The
+/// handler passes the name to its text lookup `0x819d40`, and the player variant's two `%s`
+/// would otherwise fail `ChatFrame`'s one-argument `format`; that the lookup fills them is
+/// inferred, not traced.
+fn server_first_line(template: &str, name: &str, player: u64, achievement: u32) -> Message {
+    let text = benilla_ui::strings::fill(
+        template,
+        &[benilla_ui::strings::Arg::S(name), benilla_ui::strings::Arg::S(name)],
+    );
+    Message {
+        gm: false,
+        chat_type: 0x30,
+        language: 0,
+        sender_guid: player,
+        flags: 0,
+        sender_name: Some(name.as_bytes().to_vec()),
+        receiver_guid: 0,
+        receiver_name: None,
+        channel: None,
+        text: text.into_bytes(),
+        chat_tag: 0,
+        achievement_id: Some(achievement),
+    }
 }
 
 /// The achievement faction of a race: 0 Horde, 1 Alliance (`Achievement.dbc` `Faction`).
@@ -68,6 +99,7 @@ fn feed_achievements(
     self_guid: Res<SelfGuid>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
+    mut chat: Option<ResMut<crate::ui_native_chat::NativeChatPackets>>,
     mut last: Local<crate::ui_script::VmMemo<Option<WrathAchievementProgress>>>,
 ) {
     let Some(mut script) = script else {
@@ -78,7 +110,23 @@ fn feed_achievements(
     }
     let me = self_guid.0.unwrap_or(0);
     let faction = faction(self_q.iter().next().and_then(|s| s.0.unit_race()));
-    let (earned_now, comparison) = absorb(&mut packets.0, &mut state, me);
+    let (earned_now, comparison, firsts) = absorb(&mut packets.0, &mut state, me);
+    if let Some(chat) = chat.as_deref_mut() {
+        for first in firsts {
+            let key = if first.raw_link != 0 {
+                "PLAYER_SERVER_FIRST_ACHIEVEMENT"
+            } else {
+                "SERVER_FIRST_ACHIEVEMENT"
+            };
+            let template = crate::ui_action::global_string(&script, key).unwrap_or_default();
+            chat.0.push_back(server_first_line(
+                &template,
+                &first.name,
+                first.player,
+                first.achievement,
+            ));
+        }
+    }
     for request in script.take_wrath_achievement_requests() {
         let WrathAchievementRequest::Compare { guid } = request;
         state.compared = Some(guid);
@@ -113,16 +161,26 @@ fn feed_achievements(
     }
 }
 
-/// Take the player's achievement receipts out of the capture into `state`; returns the
-/// achievements just earned and the asked comparison, if it arrived. Other players' earns and
-/// server firsts stay, in order.
+/// One `SMSG_SERVER_FIRST_ACHIEVEMENT`, for [`server_first_line`].
+#[derive(Debug, PartialEq)]
+struct ServerFirst {
+    name: String,
+    player: u64,
+    achievement: u32,
+    raw_link: u32,
+}
+
+/// Take the player's achievement receipts and the server firsts out of the capture into `state`;
+/// returns the achievements just earned, the asked comparison, if it arrived, and the server
+/// firsts. Other players' earns stay, in order.
 fn absorb(
     packets: &mut std::collections::VecDeque<Packet>,
     state: &mut Achievements,
     me: u64,
-) -> (Vec<u32>, Option<(u64, Snapshot)>) {
+) -> (Vec<u32>, Option<(u64, Snapshot)>, Vec<ServerFirst>) {
     let mut earned = Vec::new();
     let mut comparison = None;
+    let mut firsts = Vec::new();
     let mut kept = std::collections::VecDeque::new();
     for packet in packets.drain(..) {
         match packet {
@@ -151,11 +209,22 @@ fn absorb(
             Packet::Inspect { player, data } if state.compared == Some(player) => {
                 comparison = Some((player, data));
             }
+            Packet::ServerFirst {
+                name,
+                player,
+                achievement,
+                raw_link,
+            } => firsts.push(ServerFirst {
+                name,
+                player,
+                achievement,
+                raw_link,
+            }),
             other => kept.push_back(other),
         }
     }
     *packets = kept;
-    (earned, comparison)
+    (earned, comparison, firsts)
 }
 
 /// A session boundary forgets the progress and any comparison.
