@@ -229,16 +229,7 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
 /// and that this VM does not answer, reviewed as not being shadowed engine APIs. Any other such
 /// name stays counted as missing, so a FrameXML definition cannot hide an engine method or global.
 /// A row needs its reason; the list only shrinks.
-const SHADOW_REVIEWED: &[(&str, &str)] = &[
-    (
-        "OnUpdate",
-        "a script-handler name in Wow.exe; AnimationSystem.lua and others define Lua :OnUpdate methods",
-    ),
-    (
-        "Run",
-        "AnimationSystem.lua/RestrictedFrames.lua define Lua :Run methods; the Wow.exe string is not a script method",
-    ),
-];
+const SHADOW_REVIEWED: &[(&str, &str)] = &[];
 
 /// The census lines a FrameXML definition must not suppress: each `(kind, name, count)` that was
 /// suppressed only by a FrameXML definition, is an exact NUL-bounded string in `exe`, is not
@@ -270,7 +261,8 @@ fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
         ("METHOD", "SetSelection".to_string(), 3),
         ("GLOBAL", "Run".to_string(), 1),
     ];
-    let lines = shadow_guard(&suppressed, exe, |n| n == "Run", SHADOW_REVIEWED);
+    let reviewed = [("OnUpdate", "a script-handler name, reviewed in this test")];
+    let lines = shadow_guard(&suppressed, exe, |n| n == "Run", &reviewed);
     assert_eq!(
         lines,
         vec!["METHOD SetBindingClick 2".to_string()],
