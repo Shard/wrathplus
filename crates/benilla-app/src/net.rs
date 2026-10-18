@@ -2321,6 +2321,10 @@ pub(crate) enum ClientCommand {
     GuildInfoText {
         text: String,
     },
+    /// `QueryGuildEventLog()`: `MSG_GUILD_EVENT_LOG_QUERY`.
+    GuildEventLogQuery,
+    /// `GuildControlSaveRank` in 3.3.5: the rank with its bank money and tab rights.
+    NativeGuildRank(benilla_protocol::wrath_guild_rank::SaveRank),
     // ── Petitions (founding a guild) ──
     // A charter is addressed by its item guid except in the record query. A refusal is
     // `SMSG_GUILD_COMMAND_RESULT`; almost nothing is acked, so nothing is applied at the send.
