@@ -65,7 +65,22 @@ pose were on-foot only.
   `SMSG_SPLINE_SET_*_SPEED` (`packed guid + f32`) for the six 1.12 kinds become `SpeedChanged`
   (`wrath_speed.rs`).
 
-**Movement M3** (next): flight (CAN_FLY/FLYING, ascend and descend, flight and pitch-rate speeds and
-their echoes, hover/gravity/can-fly echoes), knockback and collision-height echoes, transports
-(`CMSG_MOVE_CHNG_TRANSPORT`), `SMSG_MULTIPLE_MOVES`, time skipped, mount special anim, dismount,
-vehicle seat/exit.
+**Movement M3: observers, bundles, mount and time-skip.**
+- Relays (`wrath_relay.rs`) now place flying units and passengers. Flight keeps the pitch and drops
+  the Wrath-only CAN_FLY, FLYING, ASCENDING and DESCENDING bits. Wrath FLYING (`0x0200_0000`) is the
+  shared ON_TRANSPORT bit, so it must never pass through. Wrath ON_TRANSPORT (`0x200`) becomes the
+  shared bit with the deck pose. DISABLE_GRAVITY and HOVER share their 1.12 bits. Flyers are placed
+  but not flight-animated. Spline elevation stays fenced.
+- The mode, knockback and collision-height echoes relay their `MovementInfo`; the knockback and
+  height extras are framed and dropped. `MSG_MOVE_TIME_SKIPPED` becomes `MoveTimeSkipped`.
+- `SMSG_MULTIPLE_MOVES`: the reader splits it strictly and handles each record in order as the
+  packet it names. The can-fly, water-walk, feather-fall and hover orders AzerothCore bundles at
+  login now raise their barrier and are ACKed instead of being dropped. A malformed bundle fails
+  closed.
+- Mount special anim both ways; `CMSG_MOVE_TIME_SKIPPED` admitted; `SMSG_DISMOUNT` capture-only (the
+  descriptor carries the mount).
+
+**Not yet** (movement M4, controller-level): our own flight (flight physics; `WrathGroundLimit`
+holds the flyer), our own transport movement (the authority pose and outbound transport tail),
+vehicles (`046D`, `0476..0479`, `049B`, `04A8`, `04A9`, `04A7`, `049D`), `CMSG_MOVE_SET_FLY`,
+`CMSG_MOVE_CHNG_TRANSPORT`, `CMSG_MOVE_NOT_ACTIVE_MOVER` (possession).

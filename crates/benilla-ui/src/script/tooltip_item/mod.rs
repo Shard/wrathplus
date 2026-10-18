@@ -983,17 +983,21 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GameTooltip:SetSendMailItem(): the attached item's hover (`MailFrame.xml:952`); an empty
-    // slot does nothing.
+    // GameTooltip:SetSendMailItem([index]): a send slot's hover (12340 `0x62f8b0`, slot 1 without
+    // an index, MailFrame.lua:1098); an empty slot does nothing.
     m.set(
         "SetSendMailItem",
-        lua.create_function(|lua, this: Table| {
+        lua.create_function(|lua, (this, index): (Table, Value)| {
             let h = frame_handle_of(lua, &this)?;
+            let slot = match lua.coerce_number(index)? {
+                None => Some(0),
+                Some(n) => usize::try_from((n - 1.0).round_ties_even() as i64)
+                    .ok()
+                    .filter(|i| *i < crate::script::mail::SEND_SLOTS),
+            };
             let item_id = {
                 let model = lua.app_data_mut::<Model>().expect("model app_data");
-                model
-                    .mail_send_item
-                    .as_ref()
+                slot.and_then(|i| model.mail_send_items[i].as_ref())
                     .map(|it| it.item_id)
                     .unwrap_or(0)
             };

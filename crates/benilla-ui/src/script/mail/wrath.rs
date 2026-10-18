@@ -213,9 +213,7 @@ fn install_family(lua: &mlua::Lua) -> mlua::Result<()> {
 
     // RespondMailLockSendItem(slot, keepItem) (`0x56f410`): only while a lock is pending, which
     // it clears. Keeping fires MAIL_UNLOCK_SEND_ITEMS; otherwise the slot's attachment is dropped
-    // and unlocked, then MAIL_SEND_INFO_UPDATE and MAIL_UNLOCK_SEND_ITEMS fire. Labelled: the send
-    // side is still the single-attachment model, so only slot 1 holds an item here; 12340 has
-    // twelve send slots (`0xbeb038`).
+    // and unlocked, then MAIL_SEND_INFO_UPDATE and MAIL_UNLOCK_SEND_ITEMS fire.
     g.set(
         "RespondMailLockSendItem",
         lua.create_function(|lua, args: MultiValue| {
@@ -231,14 +229,14 @@ fn install_family(lua: &mlua::Lua) -> mlua::Result<()> {
             }
             // Queued in the native order, the item unlock (`0x513770`) first, as
             // `drop_send_mail_item` queues its MAIL_SEND_INFO_UPDATE.
-            if !keep && slot == 0 {
-                if let Some(item) = model.mail_send_item.take() {
+            if !keep {
+                let taken = usize::try_from(slot)
+                    .ok()
+                    .filter(|i| *i < super::SEND_SLOTS)
+                    .and_then(|i| model.mail_send_items[i].take());
+                if let Some(item) = taken {
                     super::super::cursor::queue_lock_changed(&mut model, item.bag, item.slot);
                 }
-                model
-                    .pending_events
-                    .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));
-            } else if !keep {
                 model
                     .pending_events
                     .push(("MAIL_SEND_INFO_UPDATE".to_string(), Vec::new()));

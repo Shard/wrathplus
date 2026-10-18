@@ -1198,6 +1198,8 @@ pub enum SessionEvent {
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
     WrathSpellControl { packet: crate::wrath_spell_control::Packet },
+    /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
+    WrathMovement { packet: crate::wrath_movement_misc::Packet },
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:
     /// the count banked on `target`, 0 for none.
     ComboPoints { target: u64, points: u8 },
