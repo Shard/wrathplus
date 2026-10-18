@@ -102,6 +102,7 @@ pub(crate) fn apply_script_calls(
             | ScriptCall::TargetLastFriend
             | ScriptCall::CancelShapeshiftForm
             | ScriptCall::Dismount
+            | ScriptCall::DismissCritter { .. }
             | ScriptCall::ActivateTalentGroup { .. }) => {
                 debug!("script call {other:?} not applied yet: capture-only");
             }

@@ -38,6 +38,11 @@ mod weapon_icon;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CooldownEvents;
 
+/// The rank pass and the identity feed, the writers of [`PlayerActions`]' book state; a reader of
+/// the book in the unit feed orders after it.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ActionBook;
+
 pub(crate) use errors::{
     attack_actor_blocked, attack_actor_refusal, keyed_line, keyed_line_s, reagent_totem_refusal,
     show_messages, ui_error_text, CastErrors, CastFail, Caster, FillArg, MessageSink, MountErrors,
@@ -252,8 +257,9 @@ impl Plugin for UiActionPlugin {
                     // input pass, in any order: a gesture fills only one of their queues.
                     ranks::normalize_action_ranks
                         .in_set(UnitFeed)
+                        .in_set(ActionBook)
                         .before(feed::feed_actions),
-                    feed::feed_actions.in_set(UnitFeed),
+                    feed::feed_actions.in_set(UnitFeed).in_set(ActionBook),
                     state::feed_action_state
                         .in_set(UnitFeed)
                         .in_set(CooldownEvents)

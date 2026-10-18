@@ -68,6 +68,7 @@ use crate::ui_pass::PlayerUiPlugin;
 use crate::ui_pet::UiPetPlugin;
 use crate::ui_pet_book::UiPetBookPlugin;
 use crate::ui_pet_doll::UiPetDollPlugin;
+use crate::ui_companions::UiCompanionsPlugin;
 use crate::ui_pet_stats::UiPetStatsPlugin;
 use crate::ui_petition::UiPetitionPlugin;
 use crate::ui_quest::UiQuestPlugin;
@@ -218,6 +219,7 @@ impl PluginGroup for GamePlugins {
             .add(ChrClassesPlugin)
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
+            .add(UiCompanionsPlugin)
             .add(crate::ui_paperdoll::UiPaperDollPlugin)
             .add(UiPetDollPlugin)
             .add(UiNetPlugin)
@@ -703,7 +705,7 @@ pub(crate) mod schedule_tests {
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_982;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_730;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
