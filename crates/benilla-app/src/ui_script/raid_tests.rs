@@ -2,13 +2,16 @@
 //! and colouring, the drag, the row menu, the ready check and the saved-instance panel.
 
 use benilla_ui::script::{
-    PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SavedInstanceInfo, SelectionRequest,
-    UiScript,
+    PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SelectionRequest, UiScript,
 };
 
 fn setup() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
+    // The 1.12 RaidFrame's saved-instance calls; the lockouts are build 12340's
+    // (`benilla_ui::script::WrathSavedInstance`), so this Vanilla VM answers none.
+    s.run("function RequestRaidInfo() end function GetNumSavedInstances() return 0 end function GetSavedInstanceInfo() end")
+        .unwrap();
     super::test_ui::load_social_ui(&mut s);
     s
 }
@@ -91,14 +94,9 @@ fn twelve() -> Vec<RaidMemberInfo> {
     raid
 }
 
-/// Opens the tab and drains the `RequestRaidInfo()` its OnShow sends (`RaidFrame.xml:350`).
+/// Opens the tab.
 fn open_raid_tab(s: &mut UiScript) {
     s.run("ToggleFriendsFrame(4)").unwrap();
-    assert_eq!(
-        s.take_party_requests(),
-        vec![PartyRequest::RequestRaidInfo],
-        "showing the pane asks the server for our lockouts"
-    );
 }
 
 // ── The tab ──────────────────────────────────────────────────────────────────────────────────────
@@ -603,74 +601,6 @@ fn the_menu_verbs_queue_the_right_requests() {
 // ── Raid Info ────────────────────────────────────────────────────────────────────────────────────
 
 #[test]
-fn the_raid_info_panel_lists_the_saved_lockouts() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    open_raid_tab(&mut s);
-    // The first `UPDATE_INSTANCE_INFO` only arms `RaidFrame.hasRaidInfo` (`RaidFrame.lua:43-47`).
-    s.fire_event("UPDATE_INSTANCE_INFO", Vec::new());
-    s.set_saved_instances(vec![
-        SavedInstanceInfo {
-            name: "Molten Core".into(),
-            instance: 1234,
-            reset: 3 * 86_400,
-        },
-        SavedInstanceInfo {
-            name: "Onyxia's Lair".into(),
-            instance: 77,
-            reset: 3_600,
-        },
-    ]);
-    s.fire_event("UPDATE_INSTANCE_INFO", Vec::new());
-    assert_eq!(
-        s.eval::<i64>("return RaidFrameRaidInfoButton:IsEnabled()")
-            .unwrap(),
-        1
-    );
-    // The rows live inside the flyout, so `IsVisible` is false until it opens.
-    s.run("RaidInfoFrame:Show()").unwrap();
-    assert!(visible(&s, "RaidInfoInstance1"));
-    assert!(visible(&s, "RaidInfoInstance2"));
-    assert!(
-        !visible(&s, "RaidInfoInstance3"),
-        "rows past the list stay away"
-    );
-    assert_eq!(text_of(&s, "RaidInfoInstance1Name"), "Molten Core");
-    assert_eq!(text_of(&s, "RaidInfoInstance1ID"), "1234");
-    assert!(
-        text_of(&s, "RaidInfoInstance1Reset").starts_with("Resets in 3 Days"),
-        "the reset is a REMAINING duration through SecondsToTime, not a timestamp: {:?}",
-        text_of(&s, "RaidInfoInstance1Reset")
-    );
-    assert!(
-        !visible(&s, "RaidInfoScrollFrameScrollBar"),
-        "four rows fit, so two need no bar"
-    );
-
-    s.set_saved_instances(Vec::new());
-    s.fire_event("UPDATE_INSTANCE_INFO", Vec::new());
-    assert_eq!(
-        s.eval::<i64>("return RaidFrameRaidInfoButton:IsEnabled()")
-            .unwrap(),
-        0
-    );
-    // The stale row stays, as in the reference: `RaidInfoFrame_Update` wraps its row loop in
-    // `if ( savedInstances > 0 )` (`RaidFrame.lua:94`), so a count of zero never reaches the
-    // `Hide()`. The dead button keeps the flyout from reopening onto it.
-    assert!(
-        visible(&s, "RaidInfoInstance1"),
-        "the reference leaves the last row standing when the count hits zero"
-    );
-
-    assert!(visible(&s, "RaidInfoFrame"));
-    s.run("RaidFrameRaidInfoButton:GetScript(\"OnClick\")()")
-        .unwrap();
-    assert!(!visible(&s, "RaidInfoFrame"), "and closes it again");
-}
-
-/// An ordinary session gets two empty answers, for `PLAYER_ENTERING_WORLD`'s `RequestRaidInfo` and
-/// the pane's OnShow; the first arms the latch, the second disables the button.
-#[test]
 fn a_player_with_no_lockouts_loses_the_raid_info_button_on_the_second_answer() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = setup();
@@ -720,59 +650,6 @@ fn a_player_with_no_lockouts_loses_the_raid_info_button_on_the_second_answer() {
     );
 }
 
-/// Past four lockouts `RaidInfoFrame_Update` seats the bar at `(8, -3)` off the scroll frame
-/// (`RaidFrame.lua:108-110`), centred on the trough art, not at the template's `(6, -16)`.
-#[test]
-fn the_scroll_bar_is_seated_on_the_trough_the_panel_draws_behind_it() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = setup();
-    open_raid_tab(&mut s);
-    s.fire_event("UPDATE_INSTANCE_INFO", Vec::new());
-    s.set_saved_instances(
-        (1..=6)
-            .map(|i| SavedInstanceInfo {
-                name: format!("Instance {i}"),
-                instance: 1000 + i,
-                reset: i * 3_600,
-            })
-            .collect(),
-    );
-    s.fire_event("UPDATE_INSTANCE_INFO", Vec::new());
-    s.run("RaidInfoFrame:Show()").unwrap();
-    assert!(
-        visible(&s, "RaidInfoScrollFrameScrollBar"),
-        "six lockouts do not fit in four rows"
-    );
-
-    let mid_x = |s: &UiScript, f: &str| -> f32 {
-        let l: f32 = s.eval(&format!("return {f}:GetLeft()")).unwrap();
-        let r: f32 = s.eval(&format!("return {f}:GetRight()")).unwrap();
-        (l + r) / 2.0
-    };
-    let top = |s: &UiScript, f: &str| -> f32 { s.eval(&format!("return {f}:GetTop()")).unwrap() };
-
-    let bar = mid_x(&s, "RaidInfoScrollFrameScrollBar");
-    let trough = mid_x(&s, "RaidInfoScrollFrameTop");
-    assert!(
-        (bar - trough).abs() < 0.01,
-        "the bar rides the middle of its trough: bar {bar} vs trough {trough}"
-    );
-    assert!(
-        (top(&s, "RaidInfoScrollFrameScrollBar") - (top(&s, "RaidInfoScrollFrame") - 3.0)).abs()
-            < 0.01,
-        "and hangs 3 px under the frame's top, not the template's 16"
-    );
-    // The up arrow rides above the bar, so the re-seat lifts it into the trough's cap.
-    assert!(
-        top(&s, "RaidInfoScrollFrameScrollBarScrollUpButton") > top(&s, "RaidInfoScrollFrame"),
-        "the up arrow clears the scroll frame, where the template left it 13 px inside"
-    );
-}
-
-// ── The ready check ──────────────────────────────────────────────────────────────────────────────
-
-/// `READY_CHECK` opens the popup naming the leader; Yes calls `ConfirmReadyCheck(1)`, No calls it
-/// with no argument (`Blizzard_RaidUI.xml:710`, `:728`).
 #[test]
 fn the_ready_check_popup_opens_and_answers() {
     let _data = benilla_formats::wow_data_or_skip!();
