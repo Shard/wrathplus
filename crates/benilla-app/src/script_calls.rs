@@ -136,6 +136,23 @@ pub(crate) fn apply_script_calls(
                     benilla_protocol::wrath_spell_control::Command::DismissCritter { critter },
                 ));
             }
+            // `DestroyTotem(slot)`: CMSG_TOTEM_DESTROYED with the 0-based slot (AC
+            // `HandleTotemDestroyed`).
+            ScriptCall::DestroyTotem { slot } => {
+                let _ = appliers.p3().ladder.commands.0.send(crate::net::ClientCommand::NativeSpellControl(
+                    benilla_protocol::wrath_spell_control::Command::TotemDestroyed { slot },
+                ));
+            }
+            // `RunMacro`/`RunMacroText`: the lines run as a macro slot's do, in call order.
+            ScriptCall::RunMacro { index } => {
+                crate::ui_macro::run_macro(script, index);
+            }
+            ScriptCall::RunMacroText { text } => crate::ui_macro::run_macro_text(script, &text),
+            // `CastSpellByID` at a unit token other than the selection or the player needs a
+            // cast context bound to that unit, which the cast tail does not build: capture-only.
+            other @ ScriptCall::CastSpellAt { .. } => {
+                debug!("script call {other:?} not applied yet: capture-only");
+            }
         }
         // TryCast's attack pick can move the selection mid-cast (`0x6e4efb`), so a press held
         // there is picked and resumed before the next call reads the selection.

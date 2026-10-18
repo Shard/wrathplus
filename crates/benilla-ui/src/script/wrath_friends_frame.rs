@@ -85,12 +85,37 @@ pub enum WrathGuildBankRequest {
     QueryText { tab: u8 },
     /// `QueryGuildBankLog(tab)` (`0x5a6d50`); tab 7 is the money log.
     QueryLog { tab: u8 },
-    /// `PickupGuildBankItem(tab, slot)` (`0x5a6200`), both 1-based: pick up, or place the held item.
+    /// `PickupGuildBankItem(tab, slot)` (`0x5a6200`), both 1-based, with a bag item on the cursor:
+    /// the deposit (`0x5a50c0`). App reads the held item and clears the cursor.
     PickupItem { tab: u8, slot: u8 },
+    /// `PickupGuildBankItem` with a bank item on the cursor (mode 11): the move `0x5a5410`, all
+    /// 1-based; `count` the split amount, `None` the whole stack.
+    MoveItem {
+        from_tab: u8,
+        from_slot: u8,
+        to_tab: u8,
+        to_slot: u8,
+        count: Option<u32>,
+    },
+    /// A held bank item dropped on a bag slot (`PickupContainerItem`, `0x5d7ff0`'s mode-11 arm,
+    /// withdraw `0x6db880`).
+    DropOnBag {
+        tab: u8,
+        slot: u8,
+        bag: i64,
+        bag_slot: u32,
+        count: Option<u32>,
+    },
+    /// A held bank item dropped on an equipment slot (`PickupInventoryItem`; labelled: its
+    /// mode-11 arm `0x5e85d0` is unread).
+    DropOnEquip {
+        tab: u8,
+        slot: u8,
+        equip_slot: u32,
+        count: Option<u32>,
+    },
     /// `AutoStoreGuildBankItem(tab, slot)` (`0x5a63f0`): withdraw into the bags.
     AutoStoreItem { tab: u8, slot: u8 },
-    /// `SplitGuildBankItem(tab, slot, count)` (`0x5a6600`).
-    SplitItem { tab: u8, slot: u8, count: u32 },
     /// `SetGuildBankText(tab, text)` (`0x5a7180`).
     SetText { tab: u8, text: String },
     /// `SetGuildBankTabInfo(tab, name, icon)` (`0x5a6a00`).

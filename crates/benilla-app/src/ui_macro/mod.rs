@@ -310,6 +310,14 @@ fn rebind_macro_spells(
 /// once, at `0x51b4ff`, with the string at `0x852470`.
 const EXECUTE_CHAT_LINE: &str = "EXECUTE_CHAT_LINE";
 
+/// Run free macro text, `RunMacroText`'s body (`0x566400` → `0x564db0`, the macro runner), as a
+/// macro body's lines run.
+pub(crate) fn run_macro_text(script: &mut UiScript, text: &str) {
+    for line in run::macro_lines(text).map(str::to_string).collect::<Vec<_>>() {
+        script.fire_event(EXECUTE_CHAT_LINE, vec![ScriptValue::Str(line)]);
+    }
+}
+
 /// Run a macro by its 1-based index; returns whether anything ran. Like the reference's runner
 /// (`0x4f14e0`, reached only from `UseAction` at `0x4e6098`), it fires `EXECUTE_CHAT_LINE` per
 /// non-empty line and nothing else: the stock `ChatFrame1` sends each through its edit box

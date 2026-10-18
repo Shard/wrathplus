@@ -234,7 +234,12 @@ fn command(
             *open = GuildBankOpen::default();
             return None;
         }
-        R::PickupMoney { .. } | R::SplitItem { .. } | R::SummonFriend { .. } => return None,
+        // Native UI's mode-11 cursor requests, not sent yet.
+        R::PickupMoney { .. }
+        | R::MoveItem { .. }
+        | R::DropOnBag { .. }
+        | R::DropOnEquip { .. }
+        | R::SummonFriend { .. } => return None,
     })
 }
 

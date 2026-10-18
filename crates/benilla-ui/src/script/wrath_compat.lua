@@ -195,8 +195,6 @@ GetNumBattlegroundTypes = GetNumBattlegroundTypes or zero
 GetBattlegroundInfo = GetBattlegroundInfo or none
 IsActiveBattlefieldArena = IsActiveBattlefieldArena or none
 GetCurrentArenaSeason = GetCurrentArenaSeason or zero
-GetArenaTeam = GetArenaTeam or none
-IsArenaTeamCaptain = IsArenaTeamCaptain or none
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -222,11 +220,6 @@ IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none
-CalendarGetNumPendingInvites = zero
-function CalendarGetDate()
-    local now = date("*t")
-    return now.wday, now.month, now.day, now.year
-end
 UnitHasVehicleUI, UnitInVehicle, UnitUsingVehicle, CanExitVehicle = none, none, none, none
 UnitVehicleSkin, UnitVehicleSeatInfo = none, none
 UnitVehicleSeatCount = zero
@@ -604,7 +597,6 @@ EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
-GetCursorInfo = GetCursorInfo or none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
 ForceGossip = ForceGossip or function() return nil end

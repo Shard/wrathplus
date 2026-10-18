@@ -1560,6 +1560,7 @@ enum WrathRoute {
     NativeDeath,
     NativeSessionMeta,
     NativeAppearance,
+    NativePetition,
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
@@ -1668,6 +1669,15 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::DuelCancelled { .. }
         | ClientCommand::SetContactNotes { .. } => WrathRoute::NativeContacts,
         ClientCommand::NativeAppearance(_) => WrathRoute::NativeAppearance,
+        ClientCommand::PetitionShowList { .. }
+        | ClientCommand::PetitionBuy { .. }
+        | ClientCommand::PetitionShowSignatures { .. }
+        | ClientCommand::PetitionSign { .. }
+        | ClientCommand::OfferPetition { .. }
+        | ClientCommand::TurnInPetition { .. }
+        | ClientCommand::PetitionQuery { .. }
+        | ClientCommand::PetitionRename { .. }
+        | ClientCommand::PetitionDecline { .. } => WrathRoute::NativePetition,
         ClientCommand::NativeGuildBank(_)
         | ClientCommand::NativeGuildBankSwap(_)
         | ClientCommand::NativeGuildBankTab(_)
@@ -2134,6 +2144,10 @@ fn writer_loop(
                             }
                         }
                     }
+                    WrathRoute::NativePetition => {
+                        let (opcode, body) = benilla_protocol::wrath_petition::encode(&petition_command(command));
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeAppearance => {
                         let ClientCommand::NativeAppearance(command) = command else { unreachable!() };
                         let (opcode, body) = benilla_protocol::wrath_appearance::encode(&command);
@@ -2520,6 +2534,24 @@ fn death_command(command: ClientCommand) -> benilla_protocol::wrath_death::Comma
         ClientCommand::SummonResponse { summoner } => D::SummonResponse { summoner, agree: true },
         ClientCommand::SelfRes => D::SelfRes,
         other => unreachable!("not a death route: {other:?}"),
+    }
+}
+
+/// The native charter command for a [`WrathRoute::NativePetition`] command. The registrar sells
+/// one guild charter, so a buy names row 1 (AC reads the index for arena-team charters only).
+fn petition_command(command: ClientCommand) -> benilla_protocol::wrath_petition::Command {
+    use benilla_protocol::wrath_petition::Command as P;
+    match command {
+        ClientCommand::PetitionShowList { npc } => P::ShowList { npc },
+        ClientCommand::PetitionBuy { npc, name } => P::Buy { npc, name, index: 1 },
+        ClientCommand::PetitionShowSignatures { item } => P::ShowSignatures { item },
+        ClientCommand::PetitionSign { item, byte } => P::Sign { item, byte },
+        ClientCommand::OfferPetition { item, player } => P::Offer { item, player },
+        ClientCommand::TurnInPetition { item } => P::TurnIn { item },
+        ClientCommand::PetitionQuery { petition_id, item } => P::Query { petition_id, item },
+        ClientCommand::PetitionRename { item, name } => P::Rename { item, name },
+        ClientCommand::PetitionDecline { item } => P::Decline { item },
+        other => unreachable!("not a petition route: {other:?}"),
     }
 }
 

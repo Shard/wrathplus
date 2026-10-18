@@ -64,6 +64,15 @@ pub enum ScriptCall {
     /// Build 12340 `DismissCompanion("CRITTER")` (`0x53e6b0` → `0x802f80`): CMSG `0x48D`
     /// (`CMSG_DISMISS_CRITTER`) with the player's `UNIT_FIELD_CRITTER` guid.
     DismissCritter { critter: u64 },
+    /// Build 12340 `CastSpellByID(id, unit)` (`0x53e060`) at a unit token other than the
+    /// selection or the player.
+    CastSpellAt { spell_id: u32, unit: String },
+    /// Build 12340 `RunMacro(index or name)` (`0x566e80`): the macro's lines, as a macro slot.
+    RunMacro { index: u32 },
+    /// Build 12340 `RunMacroText(text)` (`0x566400`): the text's lines, as a macro body.
+    RunMacroText { text: String },
+    /// Build 12340 `DestroyTotem(slot)` (`0x51d520` → `0x5197d0`): `CMSG_TOTEM_DESTROYED`, 0-based.
+    DestroyTotem { slot: u8 },
     /// Build 12340 `SetActiveTalentGroup(group)` (`0x5c5e70`): cast the 1-based group's
     /// activation spell (63645/63644, table `0xad05e8`).
     ActivateTalentGroup { group: u8 },

@@ -44,6 +44,21 @@ pub enum CursorPayload {
     StablePet(CursorStablePet),
     /// Mode 2, coins taken off a money frame.
     Money(CursorMoney),
+    /// Mode 11, a guild bank item (`PickupGuildBankItem` `0x5a6200`, `SplitGuildBankItem`
+    /// `0x5a6600`). Not an `Item`: `CursorHasItem` (`0x515100`) answers modes 1 and 9 only.
+    GuildBankItem(CursorGuildBankItem),
+}
+
+/// A guild bank item held on the cursor, mode 11: its 1-based tab and slot, and the split count
+/// (`None` for the whole stack). The bank slot shows locked while held.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CursorGuildBankItem {
+    pub tab: u8,
+    pub slot: u8,
+    pub item_id: u32,
+    pub texture: Option<String>,
+    pub link: Option<String>,
+    pub count: Option<u32>,
 }
 
 /// Copper held on the cursor, mode 2 (`[0xb4e2f0]`, set by `PickupPlayerMoney`, `0x48abc0`). The
@@ -437,6 +452,45 @@ pub enum EnchantConfirm {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // Lua globals
 // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/// `GetCursorInfo()` (`0x515200`), build 12340's cursor report: "item", id, link for an item
+/// (mode 1) or a guild bank item (mode 11); "money", copper; "spell", book slot, book type;
+/// "merchant", row; "macro", index. Nothing for a pet action, a bar action or a stabled pet,
+/// which its switch has no case for.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "GetCursorInfo",
+        lua.create_function(|lua, ()| {
+            use mlua::Value;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let text = |s: &str| lua.create_string(s).map(Value::String);
+            let link = |l: &Option<String>| match l {
+                Some(l) => text(l),
+                None => Ok(Value::Nil),
+            };
+            let out = match &model.cursor {
+                Some(CursorPayload::Item(i)) => {
+                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                }
+                Some(CursorPayload::GuildBankItem(i)) => {
+                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                }
+                Some(CursorPayload::Money(m)) => vec![text("money")?, Value::Integer(m.copper.into())],
+                Some(CursorPayload::Spell(s)) => vec![
+                    text("spell")?,
+                    Value::Integer(s.book_slot.into()),
+                    text(if s.book_type == "pet" { "pet" } else { "spell" })?,
+                ],
+                Some(CursorPayload::Merchant(m)) => {
+                    vec![text("merchant")?, Value::Integer(i64::from(m.row) + 1)]
+                }
+                Some(CursorPayload::Macro(m)) => vec![text("macro")?, Value::Integer(m.index.into())],
+                _ => Vec::new(),
+            };
+            Ok(mlua::MultiValue::from_vec(out))
+        })?,
+    )
+}
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();

@@ -278,7 +278,11 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
 /// and that this VM does not answer, reviewed as not being shadowed engine APIs. Any other such
 /// name stays counted as missing, so a FrameXML definition cannot hide an engine method or global.
 /// A row needs its reason; the list only shrinks.
-const SHADOW_REVIEWED: &[(&str, &str)] = &[];
+const SHADOW_REVIEWED: &[(&str, &str)] = &[(
+    "OnFinished",
+    "an animation script-handler name FrameXML defines per instance; Wow.exe's string is the \
+     handler name, not an engine method (reviewed by the manager, 2026-10-19)",
+)];
 
 /// The census lines a FrameXML definition must not suppress: each `(kind, name, count)` that was
 /// suppressed only by a FrameXML definition, is an exact NUL-bounded string in `exe`, is not

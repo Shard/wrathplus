@@ -48,20 +48,20 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 361 | 124 | 204 | 689 |
-| C→S | 403 | 0 | 321 | 724 |
+| S→C | 368 | 124 | 197 | 689 |
+| C→S | 412 | 0 | 312 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 389 admitted numeric opcodes, 95 of them transport-only (no UI producer) and 294 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 412 admitted numeric opcodes, 101 of them transport-only (no UI producer) and 311 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (525 = 204 S→C + 321 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (509 = 197 S→C + 312 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
 | (a) in scope, Wire A: movement, flight, vehicle, taxi (M5) | 0 | 4 | 4 |
 | (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 3 | 3 |
-| (b) in scope, previously unowned: Wire B | 13 | 15 | 28 |
+| (b) in scope, previously unowned: Wire B | 6 | 6 | 12 |
 | (b) in scope, previously unowned: Assets | 2 | 0 | 2 |
 | (c) out of scope: GM/debug/dev | 53 | 137 | 190 |
 | (c) out of scope: voice chat | 11 | 14 | 25 |
@@ -69,8 +69,8 @@ Every row still **missing** above, counted per direction like the totals (525 = 
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
 | (c) out of scope: no AC sender (commented-out/doc reference only) | 7 | 0 | 7 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **15** | **22** | **37** |
-| All missing rows | 204 | 321 | 525 |
+| **True remaining (a + b)** | **8** | **13** | **21** |
+| All missing rows | 197 | 312 | 509 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
@@ -84,10 +84,8 @@ Spell, pet, rune and cooldown: `0x01F0` CMSG_PET_CAST_SPELL, `0x0462` CMSG_UPDAT
 
 Split by the manager: Assets owns game objects and world presentation (the dance-studio row included), GM tickets and help, refer-a-friend and session misc except `0x02D3` (BG, Wire B); Wire B owns the rest, guild bank and raid browser included.
 
-- **Petitions and charters** (Wire B): `0x01BB` CMSG_PETITION_SHOWLIST, `0x01BC` SMSG_PETITION_SHOWLIST, `0x01BD` CMSG_PETITION_BUY, `0x01BE` CMSG_PETITION_SHOW_SIGNATURES, `0x01BF` SMSG_PETITION_SHOW_SIGNATURES, `0x01C0` CMSG_PETITION_SIGN, `0x01C1` SMSG_PETITION_SIGN_RESULTS, `0x01C2` MSG_PETITION_DECLINE (S→C), `0x01C2` MSG_PETITION_DECLINE (C→S), `0x01C3` CMSG_OFFER_PETITION, `0x01C4` CMSG_TURN_IN_PETITION, `0x01C5` SMSG_TURN_IN_PETITION_RESULTS, `0x01C6` CMSG_PETITION_QUERY, `0x01C7` SMSG_PETITION_QUERY_RESPONSE, `0x02C1` MSG_PETITION_RENAME (S→C), `0x02C1` MSG_PETITION_RENAME (C→S).
 - **Raid browser (LFR)** (Wire B): `0x035E` CMSG_SEARCH_LFG_JOIN, `0x035F` CMSG_SEARCH_LFG_LEAVE, `0x0360` SMSG_UPDATE_LFG_LIST, `0x0369` SMSG_LFG_UPDATE_SEARCH.
 - **Channels remainder** (Wire B): `0x03D4` CMSG_GET_CHANNEL_MEMBER_COUNT, `0x03D5` SMSG_CHANNEL_MEMBER_COUNT, `0x03F0` SMSG_USERLIST_ADD, `0x03F1` SMSG_USERLIST_REMOVE, `0x03F2` SMSG_USERLIST_UPDATE, `0x03F3` CMSG_CLEAR_CHANNEL_WATCH, `0x0410` CMSG_DECLINE_CHANNEL_INVITE.
-- **Barber shop, titles, appearance** (Wire B): (none).
 - **Session and player misc** (Assets): `0x02D3` CMSG_BATTLEFIELD_STATUS (Wire B), `0x02EF` SMSG_ADDON_INFO, `0x04AB` SMSG_CLIENTCACHE_VERSION.
 
 ### (c) Out of scope
@@ -556,19 +554,19 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x01B8` | `SMSG_SHOW_BANK` | S→C | handled | common | proven_send_site: `game/Handlers/BankHandler.cpp:186` | S→C: semantic-consumer — P/wrath_inventory.rs decode → ShowBank → ui_bank BankOpen; strict framing; see docs/WRATH-INVENTORY.md. |
 | `0x01B9` | `CMSG_BUY_BANK_SLOT` | C→S | handled | common | AC receive: `HandleBuyBankSlotOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — ACTIVE; A/net/io/wrath.rs NativeInventory/NativeSession route, P/wrath_inventory.rs encoder; producer: ui_bank buy slot. Server acceptance not claimed; see docs/WRATH-INVENTORY.md. |
 | `0x01BA` | `SMSG_BUY_BANK_SLOT_RESULT` | S→C | handled | common | proven_send_site: `game/Handlers/BankHandler.cpp:149` | S→C: semantic-consumer — P/wrath_inventory.rs decode → BuyBankSlotResult → ui_bank BankErrors (OK code shows nothing); strict framing; see docs/WRATH-INVENTORY.md. |
-| `0x01BB` | `CMSG_PETITION_SHOWLIST` | C→S | missing | niche | AC receive: `HandlePetitionShowListOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01BC` | `SMSG_PETITION_SHOWLIST` | S→C | missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:923` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x01BD` | `CMSG_PETITION_BUY` | C→S | missing | niche | AC receive: `HandlePetitionBuyOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01BE` | `CMSG_PETITION_SHOW_SIGNATURES` | C→S | missing | niche | AC receive: `HandlePetitionShowSignOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01BF` | `SMSG_PETITION_SHOW_SIGNATURES` | S→C | missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:272` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x01C0` | `CMSG_PETITION_SIGN` | C→S | missing | niche | AC receive: `HandlePetitionSignOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01C1` | `SMSG_PETITION_SIGN_RESULTS` | S→C | missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:507` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x01C2` | `MSG_PETITION_DECLINE` | S→C / C→S | missing / missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:564` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01C3` | `CMSG_OFFER_PETITION` | C→S | missing | niche | AC receive: `HandleOfferPetitionOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01C4` | `CMSG_TURN_IN_PETITION` | C→S | missing | niche | AC receive: `HandleTurnInPetitionOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01C5` | `SMSG_TURN_IN_PETITION_RESULTS` | S→C | missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:706` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x01C6` | `CMSG_PETITION_QUERY` | C→S | missing | niche | AC receive: `HandlePetitionQueryOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01C7` | `SMSG_PETITION_QUERY_RESPONSE` | S→C | missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:332` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x01BB` | `CMSG_PETITION_SHOWLIST` | C→S | handled | niche | AC receive: `HandlePetitionShowListOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer the registrar click (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01BC` | `SMSG_PETITION_SHOWLIST` | S→C | handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:923` | S→C: Petitions — P/wrath_petition.rs → shared `PetitionShowList` for A/ui_petition. See docs/WRATH-PETITIONS.md. |
+| `0x01BD` | `CMSG_PETITION_BUY` | C→S | handled | niche | AC receive: `HandlePetitionBuyOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer `BuyGuildCharter` (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01BE` | `CMSG_PETITION_SHOW_SIGNATURES` | C→S | handled | niche | AC receive: `HandlePetitionShowSignOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer `OfferPetition`/the charter use (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01BF` | `SMSG_PETITION_SHOW_SIGNATURES` | S→C | handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:272` | S→C: Petitions — P/wrath_petition.rs → shared `PetitionShowSignatures` for A/ui_petition. See docs/WRATH-PETITIONS.md. |
+| `0x01C0` | `CMSG_PETITION_SIGN` | C→S | handled | niche | AC receive: `HandlePetitionSignOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer `SignPetition` (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01C1` | `SMSG_PETITION_SIGN_RESULTS` | S→C | handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:507` | S→C: Petitions — P/wrath_petition.rs → shared `PetitionSignResults` for A/ui_petition. See docs/WRATH-PETITIONS.md. |
+| `0x01C2` | `MSG_PETITION_DECLINE` | S→C / C→S | handled / handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:564` | S→C: shared `PetitionDeclined`. C→S: transport-only; `PetitionDecline` on the `NativePetition` route (no producer). See docs/WRATH-PETITIONS.md. |
+| `0x01C3` | `CMSG_OFFER_PETITION` | C→S | handled | niche | AC receive: `HandleOfferPetitionOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer `OfferPetition` (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01C4` | `CMSG_TURN_IN_PETITION` | C→S | handled | niche | AC receive: `HandleTurnInPetitionOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer `TurnInGuildCharter` (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01C5` | `SMSG_TURN_IN_PETITION_RESULTS` | S→C | handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:706` | S→C: Petitions — P/wrath_petition.rs → shared `TurnInPetitionResults` for A/ui_petition. See docs/WRATH-PETITIONS.md. |
+| `0x01C6` | `CMSG_PETITION_QUERY` | C→S | handled | niche | AC receive: `HandlePetitionQueryOpcode` (STATUS_LOGGEDIN). | C→S: Petitions — `NativePetition` route, P/wrath_petition.rs; producer the petition window (A/ui_petition). See docs/WRATH-PETITIONS.md. |
+| `0x01C7` | `SMSG_PETITION_QUERY_RESPONSE` | S→C | handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:332` | S→C: Petitions — P/wrath_petition.rs → shared `PetitionQueryResponse` for A/ui_petition. See docs/WRATH-PETITIONS.md. |
 | `0x01C8` | `SMSG_FISH_NOT_HOOKED` | S→C | handled | niche | proven_send_site: `game/Entities/GameObject/GameObject.cpp:1802` | S→C: semantic-consumer — P/wrath_world_objects.rs → FishNotHooked → ui_loot; strict framing; see docs/WRATH-WORLD-OBJECTS.md. |
 | `0x01C9` | `SMSG_FISH_ESCAPED` | S→C | handled | niche | proven_send_site: `game/Entities/GameObject/GameObject.cpp:635` | S→C: semantic-consumer — P/wrath_world_objects.rs → FishEscaped → ui_loot; strict framing; see docs/WRATH-WORLD-OBJECTS.md. |
 | `0x01CA` | `CMSG_BUG` | C→S | handled | niche | AC receive: `HandleBugOpcode` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeHelp`, P/wrath_help.rs encoder; no UI producer. See docs/WRATH-HELP.md. |
@@ -818,7 +816,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x02BE` | `CMSG_SET_EXPLORATION` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x02BF` | `CMSG_SET_ACTIONBAR_TOGGLES` | C→S | handled | common | AC receive: `HandleSetActionBarToggles` (STATUS_AUTHED). | C→S: Session — ACTIVE; A/net/io/wrath.rs NativeSessionMeta route, P/wrath_session_meta.rs encoder; producer: ui_unit. See docs/WRATH-SESSION-META.md. |
 | `0x02C0` | `UMSG_DELETE_GUILD_CHARTER` | internal | missing | common | Internal UMSG registry entry; not an external direction. | Internal registry entry, not an on-wire client/server feature. |
-| `0x02C1` | `MSG_PETITION_RENAME` | S→C / C→S | missing / missing | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:397` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x02C1` | `MSG_PETITION_RENAME` | S→C / C→S | handled / handled | niche | proven_send_site: `game/Handlers/PetitionsHandler.cpp:397` | S→C: shared `PetitionRenamed`. C→S: `PetitionRename` on the `NativePetition` route; producer `RenamePetition`. See docs/WRATH-PETITIONS.md. |
 | `0x02C2` | `SMSG_INIT_WORLD_STATES` | S→C | handled | core | proven_send_site: `game/Entities/Player/Player.cpp:8422` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:302; crates/benilla-protocol/src/wrath_misc.rs:20-32; crates/benilla-protocol/src/wrath_misc.rs:35; crates/benilla-app/src/net/objects.rs:57-74 |
 | `0x02C3` | `SMSG_UPDATE_WORLD_STATE` | S→C | handled | core | proven_send_site: `game/Battlegrounds/Battleground.cpp:817` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:302; crates/benilla-protocol/src/wrath_misc.rs:20-32; crates/benilla-protocol/src/wrath_misc.rs:35; crates/benilla-app/src/net/objects.rs:57-74 |
 | `0x02C4` | `CMSG_ITEM_NAME_QUERY` | C→S | handled | core | AC receive: `HandleItemNameQueryOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — transport-only; `ClientCommand::NativeInventory`, P/wrath_inventory.rs encoder; no UI producer. See docs/WRATH-INVENTORY.md. |

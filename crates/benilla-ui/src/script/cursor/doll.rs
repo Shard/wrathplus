@@ -25,7 +25,7 @@ pub(super) fn pickup_inventory_item(model: &mut Model, id: u32) -> bool {
     // (`0x4c7714`), any other payload staying held.
     let placing = matches!(
         model.cursor,
-        Some(CursorPayload::Item(_) | CursorPayload::Merchant(_))
+        Some(CursorPayload::Item(_) | CursorPayload::Merchant(_) | CursorPayload::GuildBankItem(_))
     );
     if !placing && (model.item_pick_armed || model.repair_mode) {
         let usable = model
@@ -99,6 +99,25 @@ pub(super) fn pickup_inventory_item(model: &mut Model, id: u32) -> bool {
             if let Some(entry) = entry {
                 model.merchant_slot_buys.push((EQUIPMENT_BAG, id, entry));
             }
+            queue_cursor_update(model);
+            true
+        }
+        // Mode 11, a guild bank item: the withdraw onto this slot, with the bank open. Labelled:
+        // the reference's arm (`0x5e85d0`) is unread; this mirrors the bag drop's.
+        Some(CursorPayload::GuildBankItem(held)) => {
+            if model.wrath_friends.bank.tabs.is_empty() {
+                model.cursor = Some(CursorPayload::GuildBankItem(held));
+                return false;
+            }
+            model
+                .wrath_friends
+                .requests
+                .push(crate::script::WrathGuildBankRequest::DropOnEquip {
+                    tab: held.tab,
+                    slot: held.slot,
+                    equip_slot: id,
+                    count: held.count,
+                });
             queue_cursor_update(model);
             true
         }
