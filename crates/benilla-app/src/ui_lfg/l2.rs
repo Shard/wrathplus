@@ -10,6 +10,7 @@
 
 use benilla_protocol::wrath_lfg::queue::{Packet as Queue, RoleMember};
 use benilla_protocol::wrath_lfg::{self, boot::Boot, completion::Reward, proposal::Proposal};
+use benilla_ui::script as q;
 use benilla_ui::script::ScriptValue as V;
 
 /// What one receipt does after its store, in order.
@@ -415,6 +416,146 @@ impl LfgQueue {
             out.push(Effect::Line(key, vec![]));
         } else if (!next.active && prev.active) || (!next.queued && prev.queued) {
             left(out);
+        }
+    }
+}
+
+impl LfgQueue {
+    /// Native UI's snapshot of these stores (`WrathLfgQueueSnapshot`), published before each
+    /// receipt's effects. Labelled: a boot victim's realm reads `None`, as on one realm; the
+    /// completion names its random dungeon, else the one done.
+    pub(super) fn snapshot(
+        &self,
+        name: &dyn Fn(u64) -> Option<String>,
+    ) -> q::WrathLfgQueueSnapshot {
+        let update = |side: &Side, update_type: Option<u8>, party: bool| {
+            update_type.map(|update_type| {
+                // The player's raw bytes are its two flags; the party's lead with its join byte.
+                let raw = if party {
+                    side.raw.get(1..).unwrap_or(&[])
+                } else {
+                    &side.raw[..]
+                };
+                let byte = |i: usize| raw.get(i).copied().unwrap_or(0);
+                q::WrathLfgUpdate {
+                    update_type,
+                    joined: side.joined,
+                    queued: side.queued,
+                    no_partial_clear: byte(0) != 0,
+                    achievements: byte(1) != 0,
+                    unknown: [byte(2), byte(3), byte(4)],
+                    dungeons: side.dungeons.clone(),
+                    comment: side.comment.clone(),
+                }
+            })
+        };
+        let queue = self.queue.as_ref().and_then(|(status, at)| match status {
+            Queue::QueueStatus {
+                dungeon,
+                average_wait,
+                wait,
+                tank_wait,
+                healer_wait,
+                dps_wait,
+                tanks,
+                healers,
+                dps,
+                ..
+            } => Some(q::WrathLfgQueueStatus {
+                dungeon: *dungeon,
+                avg_wait: *average_wait,
+                tank_wait: *tank_wait,
+                healer_wait: *healer_wait,
+                dps_wait: *dps_wait,
+                my_wait: *wait,
+                tank_needs: *tanks,
+                healer_needs: *healers,
+                dps_needs: *dps,
+                queued_at_ms: (at.max(0.0) * 1000.0) as u32,
+            }),
+            _ => None,
+        });
+        let role_check = self.role_check.as_ref().and_then(|r| match r {
+            Queue::RoleCheck {
+                state,
+                initializing,
+                dungeons,
+                members,
+            } => Some(q::WrathLfgRoleCheck {
+                state: *state,
+                is_beginning: *initializing != 0,
+                dungeons: dungeons.clone(),
+                members: members
+                    .iter()
+                    .map(|m| q::WrathLfgRoleCheckMember {
+                        guid: m.guid,
+                        ready: m.ready != 0,
+                        roles: m.roles as u8,
+                        level: m.level,
+                        name: name(m.guid),
+                    })
+                    .collect(),
+            }),
+            _ => None,
+        });
+        q::WrathLfgQueueSnapshot {
+            player: update(&self.player, self.player_update, false),
+            party: update(&self.party, self.party_update, true),
+            queue,
+            role_check,
+            proposal: self.proposal.as_ref().map(|p| q::WrathLfgProposal {
+                dungeon: p.entry,
+                state: p.state,
+                id: p.id,
+                completed_mask: p.encounter_mask,
+                silent: p.silent != 0,
+                rows: p
+                    .members
+                    .iter()
+                    .map(|m| q::WrathLfgProposalRow {
+                        roles: m.roles,
+                        is_self: m.is_self != 0,
+                        in_dungeon: m.in_dungeon != 0,
+                        same_group: m.same_group != 0,
+                        answered: m.answered != 0,
+                        accepted: m.accepted != 0,
+                    })
+                    .collect(),
+            }),
+            boot: self.boot.as_ref().map(|(b, _)| q::WrathLfgBoot {
+                in_progress: b.in_progress != 0,
+                did_vote: b.did_vote != 0,
+                my_vote: b.agree != 0,
+                victim: b.victim,
+                victim_name: name(b.victim),
+                victim_realm: None,
+                total_votes: b.votes,
+                boot_votes: b.agrees,
+                time_left: b.seconds_left as i32,
+                reason: b.reason.clone(),
+            }),
+            completion: self.completion.as_ref().map(|c| q::WrathLfgCompletion {
+                dungeon: if c.random_entry != 0 {
+                    c.random_entry
+                } else {
+                    c.actual_entry
+                },
+                strangers: c.extra,
+                money_base: c.money as i32,
+                xp_base: c.xp as i32,
+                money_var: c.variable_money as i32,
+                xp_var: c.variable_xp as i32,
+                items: c
+                    .items
+                    .iter()
+                    .map(|i| q::WrathLfgCompletionItem {
+                        item: i.item,
+                        display: i.display,
+                        count: i.count,
+                    })
+                    .collect(),
+            }),
+            disabled: self.disabled,
         }
     }
 }

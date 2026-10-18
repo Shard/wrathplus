@@ -18,6 +18,9 @@ pub(crate) struct NativeChatFeed {
     /// The recent lines a complaint can name (`ComplainChat`, [`crate::ui_static_popup`]),
     /// newest last, at most [`COMPLAINT_LINES`].
     lines: std::collections::VecDeque<ChatLine>,
+    /// Each held line's `(id, sender name, text)`, in step with `lines`: UnitPopup's
+    /// `CanComplainChat` names the line ([`crate::ui_unit_popup`]).
+    texts: std::collections::VecDeque<(u32, String, String)>,
 }
 
 /// The lines held for complaints.
@@ -37,6 +40,14 @@ impl NativeChatFeed {
     /// A line by its event id (arg 11), if still held.
     pub(crate) fn line(&self, id: u32) -> Option<&ChatLine> {
         self.lines.iter().rev().find(|l| l.id == id)
+    }
+
+    /// Every held line with its sender name and text, oldest first.
+    pub(crate) fn texts(&self) -> impl Iterator<Item = (&ChatLine, &str, &str)> {
+        self.lines
+            .iter()
+            .zip(&self.texts)
+            .map(|(l, (_, name, text))| (l, name.as_str(), text.as_str()))
     }
 
     /// The newest held line whose sender passes `named`.
@@ -293,7 +304,11 @@ pub(super) fn deliver(
     state.line = state.line.wrapping_add(1).max(1);
     if state.lines.len() >= COMPLAINT_LINES {
         state.lines.pop_front();
+        state.texts.pop_front();
     }
+    state
+        .texts
+        .push_back((state.line, event.sender.clone(), event.text.clone()));
     state.lines.push_back(ChatLine {
         id: state.line,
         sender: msg.sender_guid,

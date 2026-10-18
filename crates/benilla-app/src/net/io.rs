@@ -1017,6 +1017,7 @@ fn writer_loop(
                     | ClientCommand::NativeMirrorImageQuery { .. }
                     | ClientCommand::NativeMovementMisc(_)
                     | ClientCommand::NativeParty(_)
+                    | ClientCommand::NativePetCastSpell { .. }
                     | ClientCommand::NativeQuest(_)
                     | ClientCommand::NativeQuestsCompletedQuery
                     | ClientCommand::NativeRaidBrowser(_)

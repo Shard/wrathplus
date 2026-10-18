@@ -380,6 +380,10 @@ pub(super) fn feed_party(
                 members,
                 dungeon_difficulty: r.loot.as_ref().map(|l| l.dungeon_difficulty + 1),
                 raid_difficulty: r.loot.as_ref().map(|l| l.raid_difficulty + 1),
+                // `SMSG_GROUP_LIST`'s LFG block (group type `0x08`): its status byte and entry.
+                // Labelled: `lfg_flags` and `lfg_restricted` have no traced source and stay 0.
+                lfg_status: r.lfg.map_or(0, |l| l.0),
+                lfg_dungeon_entry: r.lfg.map_or(0, |l| l.1),
                 ..Default::default()
             }
         })

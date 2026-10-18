@@ -53,6 +53,8 @@ pub use wrath_calendar::{
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
+mod wrath_titles;
+pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -867,6 +869,7 @@ impl UiScript {
             wrath_guild_bank::install(&lua)?;
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
+            wrath_titles::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;

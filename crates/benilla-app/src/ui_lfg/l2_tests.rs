@@ -343,3 +343,65 @@ fn results_boots_rewards_offers_and_disabled() {
     assert_eq!(events(&fx), ["LFG_UPDATE", "ERR_SYSTEM_DISABLED"]);
     assert!(q.disabled && !q.player.joined && q.boot.is_none());
 }
+
+/// The snapshot carries each store in Native UI's fields: the wait's start in milliseconds, the
+/// role check's resolved names, the party's flag bytes past its join byte.
+#[test]
+fn the_snapshot_maps_the_stores() {
+    let mut q = LfgQueue::default();
+    q.apply(
+        &P::Queue(Queue::QueueStatus {
+            dungeon: 261,
+            average_wait: -1,
+            wait: 30,
+            tank_wait: 5,
+            healer_wait: 6,
+            dps_wait: 7,
+            tanks: 0,
+            healers: 0,
+            dps: 0,
+            queued_time: 40,
+        }),
+        &inputs(false),
+    );
+    q.apply(
+        &P::Queue(Queue::RoleCheck {
+            state: 2,
+            initializing: 1,
+            dungeons: vec![261],
+            members: vec![RoleMember {
+                guid: MATE,
+                ready: 1,
+                roles: 0b1010,
+                level: 80,
+            }],
+        }),
+        &inputs(true),
+    );
+    q.apply(
+        &P::Queue(Queue::UpdateParty {
+            update_type: 5,
+            extra_flag: 1,
+            extra: Some(PartyExtra {
+                join: 1,
+                queued: 1,
+                reserved: [1, 0, 7, 8, 9],
+                dungeons: vec![261],
+                comment: "hi".into(),
+            }),
+        }),
+        &inputs(true),
+    );
+    let s = q.snapshot(&name);
+    let queue = s.queue.unwrap();
+    assert_eq!((queue.queued_at_ms, queue.my_wait, queue.dps_needs), (60_000, 30, 1));
+    let role = s.role_check.unwrap();
+    assert!(role.is_beginning);
+    assert_eq!(role.members[0].name.as_deref(), Some("Mate"));
+    let party = s.party.unwrap();
+    assert_eq!(
+        (party.update_type, party.no_partial_clear, party.achievements, party.unknown),
+        (5, true, false, [7, 8, 9])
+    );
+    assert!(s.player.is_none() && !s.disabled);
+}

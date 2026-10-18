@@ -121,4 +121,5 @@ fn commands_encode_ac_read_order() {
         encode(&Command::UnlearnSkill { skill: 186 }),
         (0x202, w(186))
     );
+    assert_eq!(encode(&Command::SetPvp { on: 1 }), (0x253, vec![1]));
 }

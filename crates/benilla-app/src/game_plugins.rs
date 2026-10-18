@@ -69,6 +69,7 @@ use crate::ui_pet::UiPetPlugin;
 use crate::ui_pet_book::UiPetBookPlugin;
 use crate::ui_pet_doll::UiPetDollPlugin;
 use crate::ui_companions::UiCompanionsPlugin;
+use crate::ui_unit_popup::UiUnitPopupPlugin;
 use crate::ui_runes::UiRunesPlugin;
 use crate::ui_pet_stats::UiPetStatsPlugin;
 use crate::ui_petition::UiPetitionPlugin;
@@ -222,6 +223,7 @@ impl PluginGroup for GamePlugins {
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
             .add(UiCompanionsPlugin)
+            .add(UiUnitPopupPlugin)
             .add(UiRunesPlugin)
             .add(crate::ui_paperdoll::UiPaperDollPlugin)
             .add(UiPetDollPlugin)

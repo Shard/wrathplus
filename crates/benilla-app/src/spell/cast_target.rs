@@ -422,6 +422,19 @@ pub(super) fn unit_binds(
 
 /// The wire target for casting `def`. An unknown spell sends the selection as is, or no target
 /// without one, and the server validates.
+/// The targeting-cursor word a pet's spell raises, as [`resolve_cast_target`] raises ours: an
+/// implicit-target-16 spell or a location-only word; `None` where the pet's order names a unit
+/// (`CMSG_PET_ACTION`). Build 12340 then sends the commit as `CMSG_PET_CAST_SPELL` with the pet as
+/// caster (`0x80ac90`); that the bar raises the cursor for these is inferred, the press path
+/// untraced.
+pub(crate) fn pet_cursor_word(def: &SpellDisplay) -> Option<u16> {
+    let word = cast_target_mask(def);
+    if def.implicit_target_a1 == 16 {
+        return Some(word | TF_DEST_LOCATION);
+    }
+    (word & LOCATION_BITS != 0 && word & UNIT_BITS == 0).then_some(word)
+}
+
 pub(crate) fn resolve_cast_target(
     def: Option<&SpellDisplay>,
     cand: &CastCandidates,
@@ -757,6 +770,21 @@ mod tests {
             resolve_cast_target(Some(&both), &cands(None, Some(1)), true, &rel_none()),
             CastWireTarget::Targeting(LOCATION_BITS)
         );
+    }
+
+    /// A pet's location spell raises the cursor as ours would; a unit word stays a pet order.
+    #[test]
+    fn a_pet_spell_takes_the_cursor_only_for_a_location() {
+        assert_eq!(pet_cursor_word(&spell(0x40, 0)), Some(TF_DEST_LOCATION));
+        assert_eq!(pet_cursor_word(&spell(0x20, 15)), Some(TF_SOURCE_LOCATION));
+        assert_eq!(pet_cursor_word(&spell(0, 16)), Some(TF_DEST_LOCATION));
+        assert_eq!(pet_cursor_word(&spell(u32::from(TF_UNIT), 0)), None);
+        assert_eq!(
+            pet_cursor_word(&spell(0x42, 0)),
+            None,
+            "a unit bit beside the location"
+        );
+        assert_eq!(pet_cursor_word(&spell(0, 0)), None);
     }
 
     /// STRING (bit 13) has no seam; `0x42` (spell 28218) would bind its unit first in the
