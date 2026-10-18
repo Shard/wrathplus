@@ -85,7 +85,9 @@ mod creature_types;
 mod summon_properties;
 mod item_extended_cost;
 pub use item_extended_cost::{load_item_extended_costs, ExtendedCost, ExtendedCosts};
-pub use summon_properties::{load_summon_properties, SummonProperties, SUMMON_SLOT_MINIPET};
+pub use summon_properties::{
+    load_summon_properties, SummonProperties, SUMMON_FLAG_UNDISMISSABLE, SUMMON_SLOT_MINIPET,
+};
 pub use creature_types::{load_creature_type_flags, CreatureTypeFlags};
 /// The chat language scramble, the reference's `0x49b560`.
 mod garble;

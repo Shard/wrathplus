@@ -171,6 +171,7 @@ mod ui_pet;
 mod ui_pet_book;
 mod ui_pet_doll;
 mod ui_companions;
+mod ui_unit_popup;
 mod ui_runes;
 mod ui_pet_stats;
 mod ui_paperdoll;
