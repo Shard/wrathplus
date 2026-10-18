@@ -43,28 +43,28 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
 | S→C | 310 | 114 | 265 | 689 |
-| C→S | 344 | 0 | 380 | 724 |
+| C→S | 350 | 0 | 374 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 344 admitted numeric opcodes, 80 of them transport-only (no UI producer) and 264 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 350 admitted numeric opcodes, 86 of them transport-only (no UI producer) and 264 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (645 = 265 S→C + 380 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (639 = 265 S→C + 374 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
 | (a) in scope, Wire A: movement, flight, vehicle, taxi (M4) | 10 | 14 | 24 |
 | (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 14 | 7 | 21 |
-| (b) in scope, previously unowned: Wire B | 22 | 41 | 63 |
-| (b) in scope, previously unowned: Assets | 32 | 18 | 50 |
+| (b) in scope, previously unowned: Wire B | 22 | 36 | 58 |
+| (b) in scope, previously unowned: Assets | 32 | 17 | 49 |
 | (c) out of scope: GM/debug/dev | 53 | 138 | 191 |
 | (c) out of scope: voice chat | 11 | 14 | 25 |
 | (c) out of scope: AC Handle_NULL/STATUS_NEVER | 0 | 140 | 140 |
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
 | (c) out of scope: no AC sender (commented-out/doc reference only) | 5 | 0 | 5 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **78** | **80** | **158** |
-| All missing rows | 265 | 380 | 645 |
+| **True remaining (a + b)** | **78** | **74** | **152** |
+| All missing rows | 265 | 374 | 639 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
@@ -79,15 +79,15 @@ Spell, pet, rune and cooldown: `0x0152` SMSG_BREAK_TARGET, `0x0179` SMSG_PET_SPE
 Split by the manager: Assets owns game objects and world presentation (the dance-studio row included), GM tickets and help, refer-a-friend and session misc except `0x02D3` (BG, Wire B); Wire B owns the rest, guild bank and raid browser included.
 
 - **Guild management and emblem** (Wire B): `0x0081` CMSG_GUILD_CREATE, `0x008D` CMSG_GUILD_LEAVE, `0x008F` CMSG_GUILD_DISBAND, `0x0090` CMSG_GUILD_LEADER, `0x01F1` MSG_SAVE_GUILD_EMBLEM (S→C), `0x01F1` MSG_SAVE_GUILD_EMBLEM (C→S), `0x01F2` MSG_TABARDVENDOR_ACTIVATE (S→C), `0x01F2` MSG_TABARDVENDOR_ACTIVATE (C→S), `0x0231` CMSG_GUILD_RANK, `0x0232` CMSG_GUILD_ADD_RANK, `0x0233` CMSG_GUILD_DEL_RANK, `0x0234` CMSG_GUILD_SET_PUBLIC_NOTE, `0x0235` CMSG_GUILD_SET_OFFICER_NOTE, `0x02FC` CMSG_GUILD_INFO_TEXT, `0x03FF` MSG_GUILD_EVENT_LOG_QUERY (S→C), `0x03FF` MSG_GUILD_EVENT_LOG_QUERY (C→S).
-- **Guild bank (needs WRATH-GUILD-BANK-PLAN approval)** (Wire B): `0x03E6` CMSG_GUILD_BANKER_ACTIVATE, `0x03E8` SMSG_GUILD_BANK_LIST, `0x03E9` CMSG_GUILD_BANK_SWAP_ITEMS, `0x03EA` CMSG_GUILD_BANK_BUY_TAB, `0x03EB` CMSG_GUILD_BANK_UPDATE_TAB, `0x03EC` CMSG_GUILD_BANK_DEPOSIT_MONEY, `0x03ED` CMSG_GUILD_BANK_WITHDRAW_MONEY, `0x03EE` MSG_GUILD_BANK_LOG_QUERY (S→C), `0x03EE` MSG_GUILD_BANK_LOG_QUERY (C→S), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (S→C), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (C→S), `0x040B` CMSG_SET_GUILD_BANK_TEXT.
+- **Guild bank (needs WRATH-GUILD-BANK-PLAN approval)** (Wire B): `0x03E8` SMSG_GUILD_BANK_LIST, `0x03E9` CMSG_GUILD_BANK_SWAP_ITEMS, `0x03EB` CMSG_GUILD_BANK_UPDATE_TAB, `0x03EE` MSG_GUILD_BANK_LOG_QUERY (S→C), `0x03EE` MSG_GUILD_BANK_LOG_QUERY (C→S), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (S→C), `0x040A` MSG_QUERY_GUILD_BANK_TEXT (C→S), `0x040B` CMSG_SET_GUILD_BANK_TEXT.
 - **Petitions and charters** (Wire B): `0x01BB` CMSG_PETITION_SHOWLIST, `0x01BC` SMSG_PETITION_SHOWLIST, `0x01BD` CMSG_PETITION_BUY, `0x01BE` CMSG_PETITION_SHOW_SIGNATURES, `0x01BF` SMSG_PETITION_SHOW_SIGNATURES, `0x01C0` CMSG_PETITION_SIGN, `0x01C1` SMSG_PETITION_SIGN_RESULTS, `0x01C2` MSG_PETITION_DECLINE (S→C), `0x01C2` MSG_PETITION_DECLINE (C→S), `0x01C3` CMSG_OFFER_PETITION, `0x01C4` CMSG_TURN_IN_PETITION, `0x01C5` SMSG_TURN_IN_PETITION_RESULTS, `0x01C6` CMSG_PETITION_QUERY, `0x01C7` SMSG_PETITION_QUERY_RESPONSE, `0x02C1` MSG_PETITION_RENAME (S→C), `0x02C1` MSG_PETITION_RENAME (C→S).
 - **GM tickets, survey and complaints (Help Request UI)** (Assets): `0x01CA` CMSG_BUG, `0x0205` CMSG_GMTICKET_CREATE, `0x0206` SMSG_GMTICKET_CREATE, `0x0207` CMSG_GMTICKET_UPDATETEXT, `0x0208` SMSG_GMTICKET_UPDATETEXT, `0x0211` CMSG_GMTICKET_GETTICKET, `0x0212` SMSG_GMTICKET_GETTICKET, `0x0217` CMSG_GMTICKET_DELETETICKET, `0x0218` SMSG_GMTICKET_DELETETICKET, `0x021A` CMSG_GMTICKET_SYSTEMSTATUS, `0x021B` SMSG_GMTICKET_SYSTEMSTATUS, `0x032A` CMSG_GMSURVEY_SUBMIT, `0x03C7` CMSG_COMPLAIN, `0x03C8` SMSG_COMPLAIN_RESULT, `0x04EF` SMSG_GMRESPONSE_RECEIVED, `0x04F0` CMSG_GMRESPONSE_RESOLVE, `0x04F1` SMSG_GMRESPONSE_STATUS_UPDATE.
 - **Raid browser (LFR)** (Wire B): `0x035E` CMSG_SEARCH_LFG_JOIN, `0x035F` CMSG_SEARCH_LFG_LEAVE, `0x0360` SMSG_UPDATE_LFG_LIST, `0x0369` SMSG_LFG_UPDATE_SEARCH.
 - **Channels remainder** (Wire B): `0x03D4` CMSG_GET_CHANNEL_MEMBER_COUNT, `0x03D5` SMSG_CHANNEL_MEMBER_COUNT, `0x03F0` SMSG_USERLIST_ADD, `0x03F1` SMSG_USERLIST_REMOVE, `0x03F2` SMSG_USERLIST_UPDATE, `0x03F3` CMSG_CLEAR_CHANNEL_WATCH, `0x0410` CMSG_DECLINE_CHANNEL_INVITE.
-- **Barber shop, titles, appearance** (Wire B): `0x02B9` CMSG_SHOWING_HELM, `0x02BA` CMSG_SHOWING_CLOAK, `0x0373` SMSG_TITLE_EARNED, `0x0426` CMSG_ALTER_APPEARANCE, `0x0427` SMSG_ENABLE_BARBER_SHOP, `0x0428` SMSG_BARBER_SHOP_RESULT, `0x048A` CMSG_REMOVE_GLYPH.
+- **Barber shop, titles, appearance** (Wire B): `0x02B9` CMSG_SHOWING_HELM, `0x02BA` CMSG_SHOWING_CLOAK, `0x0373` SMSG_TITLE_EARNED, `0x0426` CMSG_ALTER_APPEARANCE, `0x0427` SMSG_ENABLE_BARBER_SHOP, `0x0428` SMSG_BARBER_SHOP_RESULT.
 - **Refer-a-friend** (Assets): `0x040D` CMSG_GRANT_LEVEL, `0x041F` SMSG_PROPOSE_LEVEL_GRANT, `0x0420` CMSG_ACCEPT_LEVEL_GRANT, `0x0421` SMSG_REFER_A_FRIEND_FAILURE.
 - **Game objects, fishing and world presentation** (Assets): `0x0032` SMSG_DESTRUCTIBLE_BUILDING_DAMAGE, `0x00B1` CMSG_GAMEOBJ_USE, `0x00B3` SMSG_GAMEOBJECT_CUSTOM_ANIM, `0x01C8` SMSG_FISH_NOT_HOOKED, `0x01C9` SMSG_FISH_ESCAPED, `0x01DF` SMSG_GAMEOBJECT_PAGETEXT, `0x0215` SMSG_GAMEOBJECT_DESPAWN_ANIM, `0x0222` SMSG_SPIRIT_HEALER_CONFIRM, `0x0277` SMSG_PLAY_MUSIC, `0x0278` SMSG_PLAY_OBJECT_SOUND, `0x0412` SMSG_OVERRIDE_LIGHT, `0x0455` SMSG_LEARNED_DANCE_MOVES, `0x0464` SMSG_TRIGGER_MOVIE, `0x047C` SMSG_SET_PHASE_SHIFT, `0x0481` CMSG_GAMEOBJ_REPORT_USE.
-- **Session and player misc** (Assets): `0x004A` CMSG_PLAYER_LOGOUT, `0x006B` CMSG_SET_CONTACT_NOTES, `0x0102` CMSG_EMOTE, `0x01CE` CMSG_QUERY_TIME, `0x01CF` SMSG_QUERY_TIME_RESPONSE, `0x01D9` SMSG_START_MIRROR_TIMER, `0x01DA` SMSG_PAUSE_MIRROR_TIMER, `0x01DB` SMSG_STOP_MIRROR_TIMER, `0x0202` CMSG_UNLEARN_SKILL, `0x02D3` CMSG_BATTLEFIELD_STATUS (Wire B), `0x02EF` SMSG_ADDON_INFO, `0x02F5` SMSG_PLAY_TIME_WARNING, `0x03C1` SMSG_CROSSED_INEBRIATION_THRESHOLD, `0x03C9` SMSG_FEATURE_SYSTEM_STATUS, `0x04AB` SMSG_CLIENTCACHE_VERSION.
+- **Session and player misc** (Assets): `0x004A` CMSG_PLAYER_LOGOUT, `0x0102` CMSG_EMOTE, `0x01CE` CMSG_QUERY_TIME, `0x01CF` SMSG_QUERY_TIME_RESPONSE, `0x01D9` SMSG_START_MIRROR_TIMER, `0x01DA` SMSG_PAUSE_MIRROR_TIMER, `0x01DB` SMSG_STOP_MIRROR_TIMER, `0x0202` CMSG_UNLEARN_SKILL, `0x02D3` CMSG_BATTLEFIELD_STATUS (Wire B), `0x02EF` SMSG_ADDON_INFO, `0x02F5` SMSG_PLAY_TIME_WARNING, `0x03C1` SMSG_CROSSED_INEBRIATION_THRESHOLD, `0x03C9` SMSG_FEATURE_SYSTEM_STATUS, `0x04AB` SMSG_CLIENTCACHE_VERSION.
 
 ### (c) Out of scope
 
@@ -219,7 +219,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0068` | `SMSG_FRIEND_STATUS` | S→C | handled | core | proven_send_site: `game/Entities/Player/SocialMgr.cpp:297` | S→C: semantic-consumer — P/wrath_contacts.rs (existing wrath_social/wrath_duel framing) → FriendStatus → ui_social; see docs/WRATH-CONTACTS-DUEL.md. |
 | `0x0069` | `CMSG_ADD_FRIEND` | C→S | handled | core | AC receive: `HandleAddFriendOpcode` (STATUS_LOGGEDIN). | C→S: Contacts/duel — ACTIVE; A/net/io/wrath.rs NativeContacts route, existing P/wrath_social.rs / wrath_duel.rs encoders; producer: ui_social. See docs/WRATH-CONTACTS-DUEL.md. |
 | `0x006A` | `CMSG_DEL_FRIEND` | C→S | handled | core | AC receive: `HandleDelFriendOpcode` (STATUS_LOGGEDIN). | C→S: Contacts/duel — ACTIVE; A/net/io/wrath.rs NativeContacts route, existing P/wrath_social.rs / wrath_duel.rs encoders; producer: ui_social. See docs/WRATH-CONTACTS-DUEL.md. |
-| `0x006B` | `CMSG_SET_CONTACT_NOTES` | C→S | missing | core | AC receive: `HandleSetContactNotesOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x006B` | `CMSG_SET_CONTACT_NOTES` | C→S | handled | core | AC receive: `HandleSetContactNotesOpcode` (STATUS_LOGGEDIN). | C→S: Contacts — transport-only; `ClientCommand::SetContactNotes { guid, note }` on the NativeContacts route, P/wrath_social.rs encoder; App wires the producer. See docs/WRATH-CONTACTS-DUEL.md. |
 | `0x006C` | `CMSG_ADD_IGNORE` | C→S | handled | core | AC receive: `HandleAddIgnoreOpcode` (STATUS_LOGGEDIN). | C→S: Contacts/duel — ACTIVE; A/net/io/wrath.rs NativeContacts route, existing P/wrath_social.rs / wrath_duel.rs encoders; producer: ui_social. See docs/WRATH-CONTACTS-DUEL.md. |
 | `0x006D` | `CMSG_DEL_IGNORE` | C→S | handled | core | AC receive: `HandleDelIgnoreOpcode` (STATUS_LOGGEDIN). | C→S: Contacts/duel — ACTIVE; A/net/io/wrath.rs NativeContacts route, existing P/wrath_social.rs / wrath_duel.rs encoders; producer: ui_social. See docs/WRATH-CONTACTS-DUEL.md. |
 | `0x006E` | `CMSG_GROUP_INVITE` | C→S | handled | common | AC receive: `HandleGroupInviteOpcode` (STATUS_LOGGEDIN). | C→S: Party / raid / group loot roll — ACTIVE; A/net/io/wrath.rs:1516–1540,1558–1566,1574–1577; P/wrath_group.rs:18–23; P/wrath_group/commands.rs:4–10; P/wrath_instance.rs:7; P/wrath_roll.rs:encode_vote. Producer status is explained in the family notes above. |
@@ -1110,14 +1110,14 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x03E3` | `SMSG_VOICE_CHAT_STATUS` | S→C | missing | core | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x03E4` | `CMSG_REPORT_PVP_AFK` | C→S | handled | common | AC receive: `HandleReportPvPAFK` (STATUS_LOGGEDIN). | C→S: BG — transport-only; `ClientCommand::NativeBattleground`, P/wrath_battleground.rs encoder; no UI producer. See docs/WRATH-BATTLEGROUND.md. |
 | `0x03E5` | `SMSG_REPORT_PVP_AFK_RESULT` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03E6` | `CMSG_GUILD_BANKER_ACTIVATE` | C→S | missing | common | AC receive: `HandleGuildBankerActivate` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03E6` | `CMSG_GUILD_BANKER_ACTIVATE` | C→S | handled | common | AC receive: `HandleGuildBankerActivate` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(Activate)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
 | `0x03E7` | `CMSG_GUILD_BANK_QUERY_TAB` | C→S | handled | common | AC receive: `HandleGuildBankQueryTab` (STATUS_LOGGEDIN). | C→S: Guild-bank read transport — TRANSPORT; A/net/io/wrath.rs:1573; P/wrath_guild_bank_query.rs:6–38; A/net.rs:2089–2090. Producer status is explained in the family notes above. |
 | `0x03E8` | `SMSG_GUILD_BANK_LIST` | S→C | missing | common | proven_send_site: `game/Guilds/Guild.cpp:2981` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x03E9` | `CMSG_GUILD_BANK_SWAP_ITEMS` | C→S | missing | common | AC receive: `HandleGuildBankSwapItems` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x03EA` | `CMSG_GUILD_BANK_BUY_TAB` | C→S | missing | common | AC receive: `HandleGuildBankBuyTab` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03EA` | `CMSG_GUILD_BANK_BUY_TAB` | C→S | handled | common | AC receive: `HandleGuildBankBuyTab` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(BuyTab)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
 | `0x03EB` | `CMSG_GUILD_BANK_UPDATE_TAB` | C→S | missing | common | AC receive: `HandleGuildBankUpdateTab` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x03EC` | `CMSG_GUILD_BANK_DEPOSIT_MONEY` | C→S | missing | common | AC receive: `HandleGuildBankDepositMoney` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x03ED` | `CMSG_GUILD_BANK_WITHDRAW_MONEY` | C→S | missing | common | AC receive: `HandleGuildBankWithdrawMoney` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03EC` | `CMSG_GUILD_BANK_DEPOSIT_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankDepositMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(DepositMoney)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
+| `0x03ED` | `CMSG_GUILD_BANK_WITHDRAW_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankWithdrawMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — transport-only; `ClientCommand::NativeGuildBank(WithdrawMoney)`, P/wrath_guild_bank_commands.rs encoder; App wires the StaticPopup producer. |
 | `0x03EE` | `MSG_GUILD_BANK_LOG_QUERY` | S→C / C→S | missing / missing | common | proven_send_site: `game/Guilds/Guild.cpp:1850` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03EF` | `CMSG_SET_CHANNEL_WATCH` | C→S | handled | common | AC receive: `HandleSetChannelWatch` (STATUS_LOGGEDIN). | C→S: Native channel display/watch — ACTIVE; A/net/io/wrath.rs:1586–1593; P/wrath_channel.rs:125–126; direct Wrath producer A/ui_chat/native_feed.rs:92–113. Producer status is explained in the family notes above. |
 | `0x03F0` | `SMSG_USERLIST_ADD` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1177` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
@@ -1274,7 +1274,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0487` | `SMSG_RESYNC_RUNES` | S→C | missing | niche | proven_send_site: `game/Entities/Player/Player.cpp:13755` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0488` | `SMSG_ADD_RUNE_POWER` | S→C | missing | niche | proven_send_site: `game/Entities/Player/Player.cpp:13762` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0489` | `CMSG_START_QUEST` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x048A` | `CMSG_REMOVE_GLYPH` | C→S | missing | niche | AC receive: `HandleRemoveGlyph` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x048A` | `CMSG_REMOVE_GLYPH` | C→S | handled | niche | AC receive: `HandleRemoveGlyph` (STATUS_LOGGEDIN). | C→S: Talents — transport-only; `ClientCommand::NativeInspect(RemoveGlyph { slot })` (u32 0-based slot), P/wrath_inspect.rs encoder; App wires the StaticPopup producer. See docs/WRATH-INSPECT-TALENTS.md. |
 | `0x048B` | `CMSG_DUMP_OBJECTS` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x048C` | `SMSG_DUMP_OBJECTS_DATA` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x048D` | `CMSG_DISMISS_CRITTER` | C→S | missing | niche | AC receive: `HandleDismissCritter` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |

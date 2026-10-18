@@ -2149,8 +2149,12 @@ pub(crate) enum ClientCommand {
     NativeDeath(benilla_protocol::wrath_death::Command),
     /// Native zone-update and account-data commands with no shared producer.
     NativeSessionMeta(benilla_protocol::wrath_session_meta::Command),
-    /// Native preview-talent learning; no UI producer.
+    /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
+    /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
+    NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command),
+    /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
+    SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.
