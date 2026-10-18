@@ -592,6 +592,10 @@ pub enum SessionEvent {
     /// Lossless arena-team transport; no inferred UI state.
     WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
+    /// A watched channel's roster deltas and channel member counts.
+    WrathChannelMembers { packet: crate::wrath_channel_members::Packet },
+    /// The raid browser's list and searching flag, raw.
+    WrathRaidBrowser { packet: crate::wrath_raid_browser::Packet },
     /// Appearance replies: titles earned or lost, the barber chair and its result.
     WrathAppearance { packet: crate::wrath_appearance::Packet },
     WrathGuild { packet: crate::wrath_guild::Packet },

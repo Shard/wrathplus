@@ -67,8 +67,6 @@ mod tests {
         assert!(native.receipts[1].entries.is_empty());
         assert!(native.receipts[2].entries.is_empty());
         assert_eq!(native.snapshot, Some(RaidInstanceInfo { entries: vec![] }));
-        assert!(group.saved_instances.is_empty(), "no Vanilla projection");
-        assert_eq!(group.saved_instances_answers, 0);
     }
 
     #[test]

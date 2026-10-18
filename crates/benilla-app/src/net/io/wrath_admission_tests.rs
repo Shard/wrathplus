@@ -74,6 +74,14 @@ fn every_wrath_writer_route_is_admitted() {
         ("SaveGuildEmblem", ClientCommand::SaveGuildEmblem { vendor: 1, design: [0; 5] }),
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
+        ("BattlefieldStatusRequest", ClientCommand::BattlefieldStatusRequest),
+        ("GetChannelMemberCount", ClientCommand::GetChannelMemberCount { name: "Trade".into() }),
+        ("ClearChannelWatch", ClientCommand::ClearChannelWatch { name: "Trade".into() }),
+        ("DeclineChannelInvite", ClientCommand::DeclineChannelInvite { name: "Trade".into() }),
+        (
+            "NativeRaidBrowser",
+            ClientCommand::NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command::Join { dungeon: 251 }),
+        ),
         ("PetitionShowList", ClientCommand::PetitionShowList { npc: 1 }),
         ("PetitionBuy", ClientCommand::PetitionBuy { npc: 1, name: "G".into() }),
         ("PetitionShowSignatures", ClientCommand::PetitionShowSignatures { item: 1 }),
@@ -895,13 +903,10 @@ fn every_wrath_writer_route_is_admitted() {
         );
         covered.insert(name);
     }
-    // Deliberate exclusions: deferred status has no wire effect; legacy un-tokened
-    // WorldportAck has no native route. NativeWorldportAck above is admitted, while
-    // the writer still requires a matching live transfer capability/epoch.
-    for command in [
-        ClientCommand::BattlefieldStatusRequest,
-        ClientCommand::WorldportAck,
-    ] {
+    // Deliberate exclusion: legacy un-tokened WorldportAck has no native route.
+    // NativeWorldportAck above is admitted, while the writer still requires a matching
+    // live transfer capability/epoch.
+    for command in [ClientCommand::WorldportAck] {
         assert!(!has_writer_route(&command));
         assert!(!commands.supports(crate::net::SessionDialect::Wrath12340, &command));
     }
@@ -935,7 +940,6 @@ fn every_wrath_writer_route_is_admitted() {
         .next()
         .unwrap();
     let disabled = [
-        "BattlefieldStatusRequest",
         "ForceSpeedAck",
         "WorldportAck",
         "MoveModeAck",

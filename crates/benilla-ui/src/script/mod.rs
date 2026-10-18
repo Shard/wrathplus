@@ -52,6 +52,7 @@ pub use wrath_calendar::{
     WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid, WrathCalendarRaidReset,
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
+pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -186,6 +187,7 @@ pub use wrath_achievements::{
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;
+mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
@@ -327,7 +329,7 @@ pub use merchant::{ItemStatsHead, MerchantItem, MerchantState, RepairCosts};
 pub(crate) use minimap::apply_model_attrs as apply_minimap_model_attrs;
 pub(crate) use model::Model;
 pub use model::{FontProbe, TextureProbe, TextureSizeProbe, WorldLocProjector};
-pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo, SavedInstanceInfo};
+pub use party::{PartyMemberInfo, PartyRequest, PartyState, RaidMemberInfo};
 pub use pet::{PetActionView, PetStats};
 pub use pvp::{HonorState, InspectHonorData};
 pub use quest::{
@@ -867,6 +869,7 @@ impl UiScript {
             wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
+            wrath_saved_instances::install(&lua)?;
         }
 
         let s = UiScript {

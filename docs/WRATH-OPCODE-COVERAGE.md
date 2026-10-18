@@ -48,20 +48,20 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 368 | 124 | 197 | 689 |
-| C→S | 413 | 0 | 311 | 724 |
+| S→C | 368 | 130 | 191 | 689 |
+| C→S | 419 | 0 | 305 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 413 admitted numeric opcodes, 101 of them transport-only (no UI producer) and 312 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 414 admitted numeric opcodes, 101 of them transport-only (no UI producer) and 313 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (508 = 197 S→C + 311 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (496 = 191 S→C + 305 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
 | (a) in scope, Wire A: movement, flight, vehicle, taxi (M5) | 0 | 4 | 4 |
 | (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 2 | 2 |
-| (b) in scope, previously unowned: Wire B | 6 | 6 | 12 |
+| (b) in scope, previously unowned: Wire B | 0 | 0 | 0 |
 | (b) in scope, previously unowned: Assets | 2 | 0 | 2 |
 | (c) out of scope: GM/debug/dev | 53 | 137 | 190 |
 | (c) out of scope: voice chat | 11 | 14 | 25 |
@@ -69,8 +69,8 @@ Every row still **missing** above, counted per direction like the totals (508 = 
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
 | (c) out of scope: no AC sender (commented-out/doc reference only) | 7 | 0 | 7 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **8** | **12** | **20** |
-| All missing rows | 197 | 311 | 508 |
+| **True remaining (a + b)** | **2** | **6** | **8** |
+| All missing rows | 191 | 305 | 496 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
@@ -84,9 +84,9 @@ Spell, pet, rune and cooldown: `0x0462` CMSG_UPDATE_MISSILE_TRAJECTORY, `0x04BE`
 
 Split by the manager: Assets owns game objects and world presentation (the dance-studio row included), GM tickets and help, refer-a-friend and session misc except `0x02D3` (BG, Wire B); Wire B owns the rest, guild bank and raid browser included.
 
-- **Raid browser (LFR)** (Wire B): `0x035E` CMSG_SEARCH_LFG_JOIN, `0x035F` CMSG_SEARCH_LFG_LEAVE, `0x0360` SMSG_UPDATE_LFG_LIST, `0x0369` SMSG_LFG_UPDATE_SEARCH.
-- **Channels remainder** (Wire B): `0x03D4` CMSG_GET_CHANNEL_MEMBER_COUNT, `0x03D5` SMSG_CHANNEL_MEMBER_COUNT, `0x03F0` SMSG_USERLIST_ADD, `0x03F1` SMSG_USERLIST_REMOVE, `0x03F2` SMSG_USERLIST_UPDATE, `0x03F3` CMSG_CLEAR_CHANNEL_WATCH, `0x0410` CMSG_DECLINE_CHANNEL_INVITE.
-- **Session and player misc** (Assets): `0x02D3` CMSG_BATTLEFIELD_STATUS (Wire B), `0x02EF` SMSG_ADDON_INFO, `0x04AB` SMSG_CLIENTCACHE_VERSION.
+- **Raid browser (LFR)** (Wire B): (none).
+- **Channels remainder** (Wire B): (none).
+- **Session and player misc** (Assets): `0x02EF` SMSG_ADDON_INFO, `0x04AB` SMSG_CLIENTCACHE_VERSION.
 
 ### (c) Out of scope
 
@@ -834,7 +834,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x02D0` | `CMSG_MOVE_WATER_WALK_ACK` | C→S | handled | core | AC receive: `HandleMoveFlagChangeOpcode` (STATUS_LOGGEDIN). | C→S: automatic reply — A/net/io/wrath.rs `send_mover_ack` → P/wrath_authority.rs ack encoder (AC handler read layout), sent only for the pending head order; the controller's own ACK command is a no-op (`WrathRoute::AuthorityAcked`). |
 | `0x02D1` | `CMSG_MOVE_NOT_ACTIVE_MOVER` | C→S | handled | core | AC receive: `HandleMoveNotActiveMover` (STATUS_LOGGEDIN). | C→S: our body's parting pose (`packed guid + MovementInfo`) when control passes to a vehicle or possessed unit (`Wow.exe` `0x729010`, player only, before `SET_ACTIVE_MOVER`) → `WrathRoute::NotActiveMover`; see `docs/WRATH-CONTROL.md`. |
 | `0x02D2` | `SMSG_PLAY_SOUND` | S→C | handled | niche | proven_send_site: `game/Maps/Map.cpp:3292` | S→C: semantic-consumer — P/wrath_chat.rs / wrath_chat_notices.rs → PlaySound; strict framing; see docs/WRATH-CHAT.md. |
-| `0x02D3` | `CMSG_BATTLEFIELD_STATUS` | C→S | missing | common | AC receive: `HandleBattlefieldStatusOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x02D3` | `CMSG_BATTLEFIELD_STATUS` | C→S | handled | common | AC receive: `HandleBattlefieldStatusOpcode` (STATUS_LOGGEDIN). | C→S: Battleground — `NativeBattleground(Status)`; producer the world-enter `BattlefieldStatusRequest` (12340 `0x54ca50`). See docs/WRATH-BATTLEGROUND.md. |
 | `0x02D4` | `SMSG_BATTLEFIELD_STATUS` | S→C | capture-only | common | proven_send_site: `game/Battlegrounds/BattlegroundMgr.cpp:203` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. |
 | `0x02D5` | `CMSG_BATTLEFIELD_PORT` | C→S | handled | common | AC receive: `HandleBattleFieldPortOpcode` (STATUS_LOGGEDIN). | C→S: BG — transport-only; `ClientCommand::NativeBattleground`, P/wrath_battleground.rs encoder; no UI producer. See docs/WRATH-BATTLEGROUND.md. |
 | `0x02D6` | `MSG_INSPECT_HONOR_STATS` | S→C / C→S | capture-only / handled | common | proven_send_site: `game/Handlers/MiscHandler.cpp:1048` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. C→S: BG — ACTIVE; NativeBattleground route; producer ui_honor. |
@@ -973,9 +973,9 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x035B` | `SMSG_ARENA_TEAM_STATS` | S→C | capture-only | common | proven_send_site: `game/Battlegrounds/ArenaTeam.cpp:513` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:213-218; crates/benilla-protocol/src/wrath_arena_team.rs:60-145; crates/benilla-app/src/ui_arena_team.rs:1-26 |
 | `0x035C` | `CMSG_LFG_JOIN` | C→S | handled | common | AC receive: `HandleLfgJoinOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
 | `0x035D` | `CMSG_LFG_LEAVE` | C→S | handled | common | AC receive: `HandleLfgLeaveOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
-| `0x035E` | `CMSG_SEARCH_LFG_JOIN` | C→S | missing | common | AC receive: `HandleLfrSearchJoinOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x035F` | `CMSG_SEARCH_LFG_LEAVE` | C→S | missing | common | AC receive: `HandleLfrSearchLeaveOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0360` | `SMSG_UPDATE_LFG_LIST` | S→C | missing | common | proven_send_site: `game/DungeonFinding/LFGMgr.cpp:1065` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x035E` | `CMSG_SEARCH_LFG_JOIN` | C→S | handled | common | AC receive: `HandleLfrSearchJoinOpcode` (STATUS_LOGGEDIN). | C→S: Raid browser — transport-only; `NativeRaidBrowser(Join)`. See docs/WRATH-RAID-BROWSER.md. |
+| `0x035F` | `CMSG_SEARCH_LFG_LEAVE` | C→S | handled | common | AC receive: `HandleLfrSearchLeaveOpcode` (STATUS_LOGGEDIN). | C→S: Raid browser — transport-only; `NativeRaidBrowser(Leave)`. See docs/WRATH-RAID-BROWSER.md. |
+| `0x0360` | `SMSG_UPDATE_LFG_LIST` | S→C | capture-only | common | proven_send_site: `game/DungeonFinding/LFGMgr.cpp:1065` | S→C: Raid browser — capture-only: the raw list → `NativeRaidBrowser` FIFO until Native UI's setter. See docs/WRATH-RAID-BROWSER.md. |
 | `0x0361` | `SMSG_LFG_PROPOSAL_UPDATE` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:610` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/proposal.rs:33; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
 | `0x0362` | `CMSG_LFG_PROPOSAL_RESULT` | C→S | handled | common | AC receive: `HandleLfgProposalResultOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
 | `0x0363` | `SMSG_LFG_ROLE_CHECK_UPDATE` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:438` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/queue.rs:80; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
@@ -984,7 +984,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0366` | `CMSG_SET_LFG_COMMENT` | C→S | handled | common | AC receive: `HandleLfgSetCommentOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
 | `0x0367` | `SMSG_LFG_UPDATE_PLAYER` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:336` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/queue.rs:80; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
 | `0x0368` | `SMSG_LFG_UPDATE_PARTY` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:380` | S→C: capture-only — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:244-249; crates/benilla-protocol/src/wrath_lfg/mod.rs:59-70; crates/benilla-protocol/src/wrath_lfg/mod.rs:94-110; crates/benilla-protocol/src/wrath_lfg/queue.rs:80; crates/benilla-app/src/ui_lfg/mod.rs:1-33 |
-| `0x0369` | `SMSG_LFG_UPDATE_SEARCH` | S→C | missing | common | proven_send_site: `game/Handlers/LFGHandler.cpp:618` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x0369` | `SMSG_LFG_UPDATE_SEARCH` | S→C | capture-only | common | proven_send_site: `game/Handlers/LFGHandler.cpp:618` | S→C: Raid browser — capture-only: the searching flag → `NativeRaidBrowser` FIFO. See docs/WRATH-RAID-BROWSER.md. |
 | `0x036A` | `CMSG_LFG_SET_ROLES` | C→S | handled | common | AC receive: `HandleLfgSetRolesOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
 | `0x036B` | `CMSG_LFG_SET_NEEDS` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x036C` | `CMSG_LFG_SET_BOOT_VOTE` | C→S | handled | common | AC receive: `HandleLfgSetBootVoteOpcode` (STATUS_LOGGEDIN). | C→S: LFG raw queue / proposal / vote / teleport — TRANSPORT; A/net/io/wrath.rs:997,1293–1301,1398–1403; P/wrath_lfg/commands.rs:7–14,48–135; A/net.rs:1906–1907. Producer status is explained in the family notes above. |
@@ -1091,8 +1091,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x03D1` | `CMSG_TARGET_SCRIPT_CAST` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03D2` | `CMSG_CHANNEL_DISPLAY_LIST` | C→S | handled | common | AC receive: `HandleChannelDisplayListQuery` (STATUS_LOGGEDIN). | C→S: Native channel display/watch — ACTIVE; A/net/io/wrath.rs:1586–1593; P/wrath_channel.rs:125–126; direct Wrath producer A/ui_chat/native_feed.rs:92–113. Producer status is explained in the family notes above. |
 | `0x03D3` | `CMSG_SET_ACTIVE_VOICE_CHANNEL` | C→S | missing | common | AC receive: `HandleSetActiveVoiceChannel` (STATUS_AUTHED). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x03D4` | `CMSG_GET_CHANNEL_MEMBER_COUNT` | C→S | missing | common | AC receive: `HandleGetChannelMemberCount` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x03D5` | `SMSG_CHANNEL_MEMBER_COUNT` | S→C | missing | common | proven_send_site: `game/Handlers/ChannelHandler.cpp:316` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
+| `0x03D4` | `CMSG_GET_CHANNEL_MEMBER_COUNT` | C→S | handled | common | AC receive: `HandleGetChannelMemberCount` (STATUS_LOGGEDIN). | C→S: Channels — transport-only; `GetChannelMemberCount` on the channel route. See docs/WRATH-CHAT.md. |
+| `0x03D5` | `SMSG_CHANNEL_MEMBER_COUNT` | S→C | capture-only | common | proven_send_site: `game/Handlers/ChannelHandler.cpp:316` | S→C: Channels — capture-only: P/wrath_channel_members.rs → `NativeChannelMembers` FIFO until Native UI's roster-delta setter. See docs/WRATH-CHAT.md. |
 | `0x03D6` | `CMSG_CHANNEL_VOICE_ON` | C→S | missing | common | AC receive: `HandleChannelVoiceOnOpcode` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03D7` | `CMSG_CHANNEL_VOICE_OFF` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x03D8` | `CMSG_DEBUG_LIST_TARGETS` | C→S | missing | GM-debug | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
@@ -1119,10 +1119,10 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x03ED` | `CMSG_GUILD_BANK_WITHDRAW_MONEY` | C→S | handled | common | AC receive: `HandleGuildBankWithdrawMoney` (STATUS_LOGGEDIN). | C→S: Guild bank — `NativeGuildBank(WithdrawMoney)`; producer `WithdrawGuildBankMoney` (A/net/wrath_sockets.rs drains the item-service intent). See docs/WRATH-GUILD-BANK.md. |
 | `0x03EE` | `MSG_GUILD_BANK_LOG_QUERY` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:1850` | S→C: Guild bank — the tab and money logs → `WrathGuildBankView`. C→S: `NativeGuildBankText(QueryLog)`; producer `QueryGuildBankLog`. See docs/WRATH-GUILD-BANK.md. |
 | `0x03EF` | `CMSG_SET_CHANNEL_WATCH` | C→S | handled | common | AC receive: `HandleSetChannelWatch` (STATUS_LOGGEDIN). | C→S: Native channel display/watch — ACTIVE; A/net/io/wrath.rs:1586–1593; P/wrath_channel.rs:125–126; direct Wrath producer A/ui_chat/native_feed.rs:92–113. Producer status is explained in the family notes above. |
-| `0x03F0` | `SMSG_USERLIST_ADD` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1177` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03F1` | `SMSG_USERLIST_REMOVE` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1193` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03F2` | `SMSG_USERLIST_UPDATE` | S→C | missing | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1210` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x03F3` | `CMSG_CLEAR_CHANNEL_WATCH` | C→S | missing | common | AC receive: `HandleClearChannelWatch` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x03F0` | `SMSG_USERLIST_ADD` | S→C | capture-only | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1177` | S→C: Channels — capture-only: P/wrath_channel_members.rs → `NativeChannelMembers` FIFO until Native UI's roster-delta setter. See docs/WRATH-CHAT.md. |
+| `0x03F1` | `SMSG_USERLIST_REMOVE` | S→C | capture-only | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1193` | S→C: Channels — capture-only: P/wrath_channel_members.rs → `NativeChannelMembers` FIFO until Native UI's roster-delta setter. See docs/WRATH-CHAT.md. |
+| `0x03F2` | `SMSG_USERLIST_UPDATE` | S→C | capture-only | niche | proven_send_site: `game/Chat/Channels/Channel.cpp:1210` | S→C: Channels — capture-only: P/wrath_channel_members.rs → `NativeChannelMembers` FIFO until Native UI's roster-delta setter. See docs/WRATH-CHAT.md. |
+| `0x03F3` | `CMSG_CLEAR_CHANNEL_WATCH` | C→S | handled | common | AC receive: `HandleClearChannelWatch` (STATUS_LOGGEDIN). | C→S: Channels — transport-only; `ClearChannelWatch` on the channel route. See docs/WRATH-CHAT.md. |
 | `0x03F4` | `SMSG_INSPECT_TALENT` | S→C | capture-only | common | proven_send_site: `game/Handlers/MiscHandler.cpp:1016` | S→C: capture-only — P/wrath_inspect.rs → A/net/wrath_inspect_capture.rs FIFO (talent groups, glyphs, equipped enchants); no UI feed; see docs/WRATH-INSPECT-TALENTS.md. |
 | `0x03F5` | `SMSG_GOGOGO_OBSOLETE` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x03F6` | `SMSG_ECHO_PARTY_SQUELCH` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
@@ -1151,7 +1151,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x040D` | `CMSG_GRANT_LEVEL` | C→S | handled | niche | AC receive: `HandleGrantLevel` (STATUS_LOGGEDIN). | C→S: Session — transport-only; `ClientCommand::NativeReferFriend`, P/wrath_refer_friend.rs encoder (packed guid); no UI producer. See docs/WRATH-REFER-A-FRIEND.md. |
 | `0x040E` | `CMSG_REFER_A_FRIEND` | C→S | missing | core | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x040F` | `MSG_GM_CHANGE_ARENA_RATING` | S→C / C→S | missing / missing | GM-debug | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0410` | `CMSG_DECLINE_CHANNEL_INVITE` | C→S | missing | common | AC receive: `HandleChannelDeclineInvite` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x0410` | `CMSG_DECLINE_CHANNEL_INVITE` | C→S | handled | common | AC receive: `HandleChannelDeclineInvite` (STATUS_LOGGEDIN). | C→S: Channels — transport-only; `DeclineChannelInvite` on the channel route. See docs/WRATH-CHAT.md. |
 | `0x0411` | `SMSG_GROUPACTION_THROTTLED` | S→C | missing | common | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0412` | `SMSG_OVERRIDE_LIGHT` | S→C | capture-only | niche | proven_send_site: `game/Maps/Map.cpp:3242` | S→C: capture-only — P/wrath_world_objects.rs → A/net/wrath_world_objects_capture.rs FIFO; see docs/WRATH-WORLD-OBJECTS.md. |
 | `0x0413` | `SMSG_TOTEM_CREATED` | S→C | capture-only | niche | proven_send_site: `game/Entities/Totem/Totem.cpp:69` | S→C: capture-only — P/wrath_spell_control.rs (strict AC framing) → P/wrath_events.rs `wrath_spell_control` arm → `Packet::TotemCreated` → `NativeSpellControlPackets`; no totem-bar consumer yet. |

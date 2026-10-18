@@ -238,6 +238,8 @@ fn malformed_flags_counts_and_unsent_opcodes_are_rejected() {
 fn commands_encode_ac_read_order() {
     for (command, opcode, body) in [
         (Command::List { bg_type: 2, from_where: 1, can_gain_xp: 1 }, 0x23c, cat(&[w(2), vec![1, 1]])),
+        (Command::Status, 0x2d3, vec![]),
+        (Command::BfQueueRequest { battle_id: 1 }, 0x4e3, w(1)),
         (Command::Join { battlemaster: 5, bg_type: 2, instance_id: 0, as_group: 1 }, 0x2ee, cat(&[q(5), w(2), w(0), vec![1]])),
         (
             Command::Port { arena_type: 0, raw_byte: 0, bg_type: 2, raw_word: 0x1f90, action: 1 },
