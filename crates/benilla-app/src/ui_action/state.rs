@@ -145,6 +145,20 @@ pub(super) fn feed_action_state(
         .unwrap_or(0);
     let casting_spell = me.and_then(|(_, _, _, c)| c.map(|c| c.spell_id));
     let current_cast = pending.current(now).or(casting_spell);
+    // Build 12340's `IsCurrentSpell` (`0x806030`): the same in-flight arms as `IsCurrentAction`
+    // without the form arm, plus the running auto-repeat and Attack (6603, the one
+    // `SPELL_EFFECT_ATTACK` spell a player knows) while engaged.
+    let current_spells: Vec<u32> = [
+        current_cast,
+        queued_melee.current(),
+        channel.current(now),
+        targeting.spell(),
+        auto_repeat.0,
+        engaged.then_some(6603),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     let caster = range_units.caster();
     let self_pos = me.map(|(_, t, _, _)| t.translation);
     // The target's reach, motion and squared distance (the reference tests dx²+dy²+dz²,
@@ -362,6 +376,7 @@ pub(super) fn feed_action_state(
         script.set_action_state(action, new.copied());
     }
     memory.pushed = fresh;
+    script.set_current_spells(current_spells);
 
     // The events in the reference's flush order, the `ACTIONBAR_*` one first.
     if gen_changed {

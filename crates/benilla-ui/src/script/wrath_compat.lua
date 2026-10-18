@@ -144,8 +144,6 @@ end
 -- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-function GetTotemInfo() return false, "", 0, 0, "" end
-GetTotemTimeLeft = zero
 
 -- ── languages ──────────────────────────────────────────────────────────────────────────────────
 function GetNumLanguages()

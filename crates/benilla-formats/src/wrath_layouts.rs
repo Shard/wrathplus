@@ -33,7 +33,7 @@ pub(crate) fn columns(
         "PetPersonality" => (19, 24, |m| {
             m.same(0, 1).loc(1, 1).run(10, 18, 6);
         }),
-        "Spell" => (186, 234, spell),
+        "Spell" => (187, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (22, 56, skill_line),
         "TalentTab" => (15, 24, talent_tab),
@@ -157,7 +157,8 @@ fn spell(m: &mut Map) {
         .run(163, 212, 10) // MaxAffectedTargets..RequiredAuraVision
         .run(173, 211, 1) // SpellFamilyFlags[2]
         .run(174, 122, 9) // EffectSpellClassMask[3], flag96 each
-        .run(183, 113, 3); // EffectMiscValueB[3]
+        .run(183, 113, 3) // EffectMiscValueB[3]
+        .run(186, 9, 1); // AttributesEx5
 }
 
 /// `SpellDispelType.dbc` 12 → 21: id, name, then ImmunityPossible (the aura name gate), not DispelMask,
@@ -277,7 +278,7 @@ mod tests {
         ("CreatureSoundData", 30, 38),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
-        ("Spell", 186, 234),
+        ("Spell", 187, 234),
         ("SpellDispelType", 12, 21),
         ("SkillLine", 22, 56),
         ("TalentTab", 15, 24),
@@ -314,12 +315,12 @@ mod tests {
                 assert!(seen.insert(*c), "{table}: column {c} mapped twice");
             }
         }
-        assert!(columns("Spell.dbc", 186, 234).is_some());
+        assert!(columns("Spell.dbc", 187, 234).is_some());
         assert!(
             columns("Spell.dbc", 173, 234).is_none(),
             "the 3.3.5-only slots are required"
         );
-        assert!(columns("Spell", 186, 186).is_none());
+        assert!(columns("Spell", 187, 187).is_none());
     }
 
     #[test]
@@ -381,7 +382,7 @@ mod tests {
 
     #[test]
     fn spell_columns_land_on_the_build_12340_fields() {
-        let m = columns("Spell", 186, 234).unwrap();
+        let m = columns("Spell", 187, 234).unwrap();
         for (vanilla, wrath) in [
             (18, 28),   // CastingTimeIndex
             (36, 46),   // rangeIndex
@@ -397,6 +398,7 @@ mod tests {
             (174, 122), // EffectSpellClassMask[0][0]
             (182, 130), // EffectSpellClassMask[2][2]
             (183, 113), // EffectMiscValueB[0]
+            (186, 9),   // AttributesEx5
             (185, 115), // EffectMiscValueB[2]
         ] {
             assert_eq!(m[vanilla], Some(wrath), "slot {vanilla}");

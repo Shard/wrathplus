@@ -445,6 +445,11 @@ pub(crate) struct Model {
     pub(crate) actions: HashMap<u32, ActionSlot>,
     /// Per action, its usable, range, current and cooldown state; an absent one reads cold.
     pub(crate) action_states: HashMap<u32, super::action::StoredActionState>,
+    /// Build 12340's `IsCurrentSpell` spells: the cast in flight, queued on the next swing,
+    /// channelled, awaiting its targeting click or auto-repeating, and Attack (6603) while engaged.
+    pub(crate) current_spells: Vec<u32>,
+    /// Build 12340's totem slots and multi-cast lists (`super::wrath_totems`).
+    pub(crate) totems: super::wrath_totems::TotemState,
     pub(crate) bonus_bar_offset: u8,
     /// `(action id, packed)` per slot `PickupAction`/`PlaceAction` changed, 0 clearing it: one
     /// `CMSG_SET_ACTION_BUTTON` each, so a drag swap is two sends.
@@ -1268,6 +1273,8 @@ impl Model {
             keybinds: super::keybind::KeybindState::default(),
             actions: HashMap::new(),
             action_states: HashMap::new(),
+            current_spells: Vec::new(),
+            totems: Default::default(),
             bonus_bar_offset: 0,
             action_sets: Vec::new(),
             ui_errors: Vec::new(),
