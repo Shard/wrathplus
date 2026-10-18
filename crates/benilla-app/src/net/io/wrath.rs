@@ -1559,6 +1559,7 @@ enum WrathRoute {
     NativeContacts,
     NativeDeath,
     NativeSessionMeta,
+    NativeAppearance,
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
@@ -1662,6 +1663,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::DuelAccepted { .. }
         | ClientCommand::DuelCancelled { .. }
         | ClientCommand::SetContactNotes { .. } => WrathRoute::NativeContacts,
+        ClientCommand::NativeAppearance(_) => WrathRoute::NativeAppearance,
         ClientCommand::NativeGuildBank(_)
         | ClientCommand::NativeGuildBankSwap(_)
         | ClientCommand::NativeGuildBankTab(_)
@@ -2127,6 +2129,11 @@ fn writer_loop(
                                 continue;
                             }
                         }
+                    }
+                    WrathRoute::NativeAppearance => {
+                        let ClientCommand::NativeAppearance(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_appearance::encode(&command);
+                        active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeSessionMeta => {
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));

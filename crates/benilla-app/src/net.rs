@@ -41,6 +41,7 @@ mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
+mod wrath_appearance;
 mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
@@ -159,6 +160,7 @@ impl Plugin for NetPlugin {
         wrath_inventory_capture::register(app);
         wrath_exchange_capture::register(app);
         wrath_achievement_capture::register(app);
+        wrath_appearance::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
@@ -2205,6 +2207,8 @@ pub(crate) enum ClientCommand {
     NativeGuildBankTab(benilla_protocol::wrath_guild_bank_tab::UpdateTab),
     /// The tab text and log queries and the text save.
     NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
+    /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
+    NativeAppearance(benilla_protocol::wrath_appearance::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),

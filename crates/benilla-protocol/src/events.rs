@@ -592,6 +592,8 @@ pub enum SessionEvent {
     /// Lossless arena-team transport; no inferred UI state.
     WrathArenaTeam { packet: crate::wrath_arena_team::Packet },
     /// Lossless core guild transport; native capture only.
+    /// Appearance replies: titles earned or lost, the barber chair and its result.
+    WrathAppearance { packet: crate::wrath_appearance::Packet },
     WrathGuild { packet: crate::wrath_guild::Packet },
     /// Raw native stable reply; no Vanilla loyalty or slot projection.
     WrathStable { packet: crate::wrath_stable::Packet },

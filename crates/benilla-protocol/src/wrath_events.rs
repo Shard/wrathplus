@@ -340,6 +340,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_appearance::OPCODES.contains(&opcode) => {
+                Ok(match crate::wrath_appearance::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathAppearance { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_guild::OPCODES.contains(&opcode) => {
                 Ok(match crate::wrath_guild::decode(opcode, body) {
                     Ok(packet) => handled(crate::wrath_guild::session_events(packet), Vec::new(), Vec::new()),
