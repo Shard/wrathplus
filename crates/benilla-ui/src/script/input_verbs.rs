@@ -41,6 +41,11 @@ pub enum HeldInput {
     TurnOrAction,
     /// `0x2`, `CameraOrSelectOrMoveStart`/`Stop` (`0x514190`/`0x5141d0`), the left button's.
     CameraOrSelectOrMove,
+    /// `0x400`, `PitchUpStart`/`Stop`: a swimmer's or flier's nose rises at the pitch rate
+    /// (build 12340 `0x989220(1)`, `MSG_MOVE_START_PITCH_UP`).
+    PitchUp,
+    /// `0x800`, `PitchDownStart`/`Stop` (`0x989220(0)`, `MSG_MOVE_START_PITCH_DOWN`).
+    PitchDown,
     /// Build 12340's ascend key, held from `JumpOrAscendStart` to `AscendStop`: a flier rises
     /// (`Wow.exe` `0x9898e0(1)`, `MSG_MOVE_START_ASCEND`).
     Ascend,
@@ -215,7 +220,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // Each Start/Stop is `0x494a50(0)`, then `0x515090(bit, set, time, 0)`; nothing is returned,
     // and no argument is read but `CameraOrSelectOrMoveStop`'s sticky flag (`0x5141f6`), which
     // nothing here acts on.
-    let held: [(&str, &str, HeldInput); 8] = [
+    let held: [(&str, &str, HeldInput); 10] = [
         (
             "MoveForwardStart",
             "MoveForwardStop",
@@ -228,6 +233,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         ),
         ("TurnLeftStart", "TurnLeftStop", HeldInput::TurnLeft),
         ("TurnRightStart", "TurnRightStop", HeldInput::TurnRight),
+        ("PitchUpStart", "PitchUpStop", HeldInput::PitchUp),
+        ("PitchDownStart", "PitchDownStop", HeldInput::PitchDown),
         ("StrafeLeftStart", "StrafeLeftStop", HeldInput::StrafeLeft),
         (
             "StrafeRightStart",
@@ -310,17 +317,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
-    // Not built, so these answer and do nothing: the pitch pair (`0x400`/`0x800`), since the
-    // mover has no keyboard pitch axis, so PITCHUP and PITCHDOWN (INSERT, DELETE) do nothing.
-    inert(
-        lua,
-        &[
-            "PitchUpStart",
-            "PitchUpStop",
-            "PitchDownStart",
-            "PitchDownStop",
-        ],
-    )?;
 
     // ── The camera table `0x84f7a0` ────────────────────────────────────────────────────────
     g.set(

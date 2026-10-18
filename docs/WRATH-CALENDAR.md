@@ -24,3 +24,44 @@ a guild announcement, as AC reads none), 042E update, 042F remove (AC reads only
 
 Not decoded: 0442 status alert and 0460/0461 invite notes (AC never sends them), 045F invite notes
 (AC `Handle_NULL`). The instance family's 0292 saved-instance extension is unchanged.
+
+## App reducer and the Lua calendar
+
+App (`crates/benilla-app/src/ui_calendar.rs`) is the sole reducer of `NativeCalendarPackets` and
+the sender of the `NativeCalendar` writers; Native UI's VM side
+(`crates/benilla-ui/src/script/wrath_calendar/`) holds the 96 build-12340 globals (every
+`Calendar*` the executable names, `OpenCalendar`, `CanEditGuildEvent`). Evidence: one headless
+Ghidra round over the bindings (`/tmp/azb-app-mig/ghidra/cal1.log`), AzerothCore for the wire's
+meaning, the stock `Blizzard_Calendar` for the shapes. App publishes one `WrathCalendarView`
+(listed rows with absolute server-local dates, raid resets, pending count, the open event or draft,
+the `LFGDungeons` texture lists); the VM keeps the client-local state (shown month, selections,
+clipboard, edited fields, invite sort, action-pending bit, the 2 s invite and 5 s add throttles).
+
+| Receipt | Effect |
+| --- | --- |
+| 0436 calendar | Replaces the rows: events with the player's invite, permanent lockouts (reset at server time + seconds left), raid resets (`relationTime + n·period`), holiday days (from `Holidays.dbc` names); the zone time fixes the server's zone. `CALENDAR_UPDATE_EVENT_LIST`. |
+| 0437 event | Get: opens the asked-for event (`CALENDAR_OPEN_EVENT(type)`), a resend `CALENDAR_UPDATE_EVENT` + `_INVITE_LIST`. Add/copy: listed, `CALENDAR_NEW_EVENT(isCopy)`; an add closes the draft. |
+| 0438/0439 members | Fill an open draft's invites. |
+| 043A/043B/043C/0445 | The open event's invitees (`CALENDAR_UPDATE_INVITE_LIST`); the player's own status and rank on the row. |
+| 043D result | Error → `CALENDAR_UPDATE_ERROR(line)`, the name filling `%s`. |
+| 043E/043F/0471 | Lockouts added, removed, moved. |
+| 0440/0441/0443/0444 | Row added, removed (the open event closes, `CALENDAR_CLOSE_EVENT`), updated (`CALENDAR_UPDATE_EVENT`). |
+| 0448 / 04BB | `CALENDAR_UPDATE_PENDING_INVITES`; the action-pending bit clears (also on 0437/043D). |
+
+Labelled, not traced or never sent:
+- the client's error-id table (AzerothCore's names matched to GlobalStrings);
+- the day list's order (holidays, then by time);
+- a holiday's day split (its first duration from each start date);
+- the raid-reset projection;
+- the status-option filter `0x5f26f0`;
+- the texture lists' row choice (every `LFGDungeons` raid, then dungeon);
+- `CalendarGetMaxCreateDate`/`MaxDate` (a year from today);
+- the guild filter's level cap (80);
+- the not-signed-up and sign-up constants `0x9f0df0`/`0x9e8ce8`;
+- invite sorting by party (falls back to status);
+- the member lists' byte;
+- an open server event ignoring a mass invite;
+- before the first calendar, today is the host's UTC clock.
+
+Never sent by AzerothCore: system events, 0442 status alert, invite notes, so no
+`CALENDAR_EVENT_ALARM`.

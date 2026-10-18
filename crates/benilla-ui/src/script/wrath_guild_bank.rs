@@ -7,6 +7,7 @@
 
 use mlua::{Lua, MultiValue, Value};
 
+use super::cursor::{CursorGuildBankItem, CursorPayload};
 use super::{Model, WrathGuildBankRequest};
 
 /// One occupied bank slot, as `SMSG_GUILD_BANK_LIST` carries it (AC `GuildBankItemInfo`), with
@@ -116,6 +117,31 @@ fn slot_at(model: &Model, tab: usize, slot: usize) -> Option<WrathGuildBankSlot>
         .cloned()
 }
 
+/// Whether the cursor holds the bank item at 0-based `(tab, slot)`.
+fn held_from(model: &Model, tab: Option<usize>, slot: Option<usize>) -> bool {
+    matches!((&model.cursor, tab, slot), (Some(CursorPayload::GuildBankItem(h)), Some(t), Some(s))
+        if usize::from(h.tab) == t + 1 && usize::from(h.slot) == s + 1)
+}
+
+/// The player's rank's flags on 0-based `tab` include `bit` (`0x5a41c0`: 1 view, 2 deposit).
+fn tab_right(model: &Model, tab: usize, bit: u32) -> bool {
+    usize::try_from(model.guild.rank_index)
+        .ok()
+        .and_then(|r| model.wrath_friends.bank.rank_rights.get(r))
+        .and_then(|r| r.tabs.get(tab))
+        .is_some_and(|(flags, _)| flags & bit != 0)
+}
+
+/// A kind-0 message: the global string as a system chat line.
+fn system_line(lua: &Lua, key: &str) -> mlua::Result<()> {
+    let message = match lua.globals().get::<Value>(key)? {
+        Value::String(s) => s.to_string_lossy(),
+        _ => key.to_string(),
+    };
+    super::tick::fire_event_into(lua, "CHAT_MSG_SYSTEM", vec![super::ScriptValue::Str(message)]);
+    Ok(())
+}
+
 /// Whether the player's rank holds `right` (AC `GuildRankRights`) with a daily gold allowance.
 fn rank_right(model: &Model, right: u32) -> bool {
     let guild = &model.guild;
@@ -150,7 +176,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Some(slot) if model.unit_guids.player != 0 => MultiValue::from_vec(vec![
                 s(lua, &slot.texture)?,
                 int(slot.count),
-                super::binding_abi::flag(slot.locked),
+                super::binding_abi::flag(slot.locked || held_from(&model, t, sl)),
             ]),
             _ => MultiValue::from_vec(vec![Value::Nil, int(0), Value::Nil]),
         })
@@ -215,33 +241,80 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             none()
         })?;
     }
-    for (global, usage) in [
-        (
-            "PickupGuildBankItem",
-            "Usage: PickupGuildBankItem(tab, slot)",
-        ),
-        (
-            "AutoStoreGuildBankItem",
-            "Usage: AutoStoreGuildBankItem(tab, slot)",
-        ),
-    ] {
-        set(lua, global, move |lua, args| {
-            let (t, sl) = two(lua, &args, usage)?;
-            if let Some((tab, slot)) = t.zip(sl).filter(|(t, s)| *t < 6 && *s < 98) {
-                let (tab, slot) = (tab as u8 + 1, slot as u8 + 1);
-                push(
-                    lua,
-                    if global == "PickupGuildBankItem" {
-                        R::PickupItem { tab, slot }
-                    } else {
-                        R::AutoStoreItem { tab, slot }
-                    },
-                );
+    // PickupGuildBankItem(tab, slot) (`0x5a6200`), for a player: a held bag item deposits
+    // (`0x5a50c0`, App's half); a held bank item moves (`0x5a5410`), refused with
+    // ERR_GUILD_PERMISSIONS (message 0x5f, kind 0) without deposit rights on the target tab; an
+    // empty cursor takes the slot's item as mode 11 (`0x520d30`), locking it client-side.
+    set(lua, "PickupGuildBankItem", move |lua, args| {
+        let (t, sl) = two(lua, &args, "Usage: PickupGuildBankItem(tab, slot)")?;
+        let Some((t, s)) = t.zip(sl).filter(|(t, s)| *t < 6 && *s < 98) else {
+            return none();
+        };
+        let (tab, slot) = (t as u8 + 1, s as u8 + 1);
+        let mut refused = false;
+        {
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if model.unit_guids.player == 0 {
+                return none();
             }
-            none()
-        })?;
-    }
-    // SplitGuildBankItem(tab, slot, amount) (`0x5a6600`): 1..stack of an unlocked slot.
+            match model.cursor.take() {
+                Some(CursorPayload::Item(held)) => {
+                    model.cursor = Some(CursorPayload::Item(held));
+                    model.wrath_friends.requests.push(R::PickupItem { tab, slot });
+                }
+                Some(CursorPayload::GuildBankItem(held)) => {
+                    if held.tab == tab && held.slot == slot {
+                        super::cursor::queue_cursor_update(&mut model);
+                    } else if !tab_right(&model, t, 2) {
+                        model.cursor = Some(CursorPayload::GuildBankItem(held));
+                        refused = true;
+                    } else {
+                        model.wrath_friends.requests.push(R::MoveItem {
+                            from_tab: held.tab,
+                            from_slot: held.slot,
+                            to_tab: tab,
+                            to_slot: slot,
+                            count: held.count,
+                        });
+                        super::cursor::queue_cursor_update(&mut model);
+                    }
+                }
+                None => {
+                    if let Some(item) = slot_at(&model, t, s).filter(|i| !i.locked) {
+                        model.cursor = Some(CursorPayload::GuildBankItem(CursorGuildBankItem {
+                            tab,
+                            slot,
+                            item_id: item.item_id,
+                            texture: item.texture,
+                            link: item.link,
+                            count: None,
+                        }));
+                        super::cursor::queue_cursor_update(&mut model);
+                    }
+                }
+                other => model.cursor = other,
+            }
+        }
+        if refused {
+            system_line(lua, "ERR_GUILD_PERMISSIONS")?;
+        }
+        none()
+    })?;
+    set(lua, "AutoStoreGuildBankItem", move |lua, args| {
+        let (t, sl) = two(lua, &args, "Usage: AutoStoreGuildBankItem(tab, slot)")?;
+        if let Some((tab, slot)) = t.zip(sl).filter(|(t, s)| *t < 6 && *s < 98) {
+            push(
+                lua,
+                R::AutoStoreItem {
+                    tab: tab as u8 + 1,
+                    slot: slot as u8 + 1,
+                },
+            );
+        }
+        none()
+    })?;
+    // SplitGuildBankItem(tab, slot, amount) (`0x5a6600`): 1..stack of an unlocked slot goes on the
+    // cursor as mode 11 with that count, the whole stack as a plain pickup; no request.
     set(lua, "SplitGuildBankItem", move |lua, args| {
         let (t, sl) = two(lua, &args, "Usage: SplitGuildBankItem(tab, slot, amount)")?;
         let Some(n) = lua.coerce_number(arg(&args, 2))? else {
@@ -250,25 +323,26 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ));
         };
         let amount = n.trunc() as i64;
-        let ok = {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            t.zip(sl)
-                .filter(|(t, s)| *t < 6 && *s < 98)
-                .and_then(|(t, s)| slot_at(&model, t, s).map(|slot| (t, s, slot)))
-                .filter(|(_, _, slot)| {
-                    !slot.locked && amount > 0 && amount <= i64::from(slot.count)
-                })
-                .map(|(t, s, _)| (t as u8 + 1, s as u8 + 1))
-        };
-        if let Some((tab, slot)) = ok {
-            push(
-                lua,
-                R::SplitItem {
-                    tab,
-                    slot,
-                    count: amount as u32,
-                },
-            );
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        if model.unit_guids.player == 0 {
+            return none();
+        }
+        let hit = t
+            .zip(sl)
+            .filter(|(t, s)| *t < 6 && *s < 98)
+            .and_then(|(t, s)| slot_at(&model, t, s).map(|slot| (t, s, slot)))
+            .filter(|(_, _, slot)| !slot.locked && amount > 0 && amount <= i64::from(slot.count));
+        if let Some((t, s, item)) = hit {
+            let count = (amount < i64::from(item.count)).then_some(amount as u32);
+            model.cursor = Some(CursorPayload::GuildBankItem(CursorGuildBankItem {
+                tab: t as u8 + 1,
+                slot: s as u8 + 1,
+                item_id: item.item_id,
+                texture: item.texture,
+                link: item.link,
+                count,
+            }));
+            super::cursor::queue_cursor_update(&mut model);
         }
         none()
     })?;
@@ -555,8 +629,7 @@ mod tests {
             5000.0
         );
         s.run(
-            "QueryGuildBankTab(1) PickupGuildBankItem(1, 5) SplitGuildBankItem(1, 5, 7) \
-             SplitGuildBankItem(1, 5, 99) AutoStoreGuildBankItem(2, 1) SetGuildBankText(1, 'x') \
+            "QueryGuildBankTab(1) AutoStoreGuildBankItem(2, 1) SetGuildBankText(1, 'x') \
              SetGuildBankTabInfo(2, 'Mats', 'INV_Box_01') QueryGuildBankLog(7) CloseGuildBankFrame()",
         )
         .unwrap();
@@ -565,12 +638,6 @@ mod tests {
             s.take_wrath_guild_bank_requests(),
             vec![
                 R::QueryTab { tab: 1 },
-                R::PickupItem { tab: 1, slot: 5 },
-                R::SplitItem {
-                    tab: 1,
-                    slot: 5,
-                    count: 7
-                },
                 R::AutoStoreItem { tab: 2, slot: 1 },
                 R::SetText {
                     tab: 1,
@@ -584,6 +651,84 @@ mod tests {
                 R::QueryLog { tab: 7 },
                 R::Close,
             ]
+        );
+    }
+
+    #[test]
+    fn bank_items_ride_the_cursor_as_mode_11() {
+        use crate::script::CursorPayload;
+        use WrathGuildBankRequest as R;
+        let mut s = vm();
+        // An empty cursor takes slot 5 locally: locked while held, reported as an item, not by
+        // CursorHasItem.
+        s.run("PickupGuildBankItem(1, 5)").unwrap();
+        assert!(s.take_wrath_guild_bank_requests().is_empty());
+        assert!(s
+            .eval::<bool>(
+                "local t, c, l = GetGuildBankItemInfo(1, 5) local k, id = GetCursorInfo() \
+                 return l == 1 and k == 'item' and id == 2589 and not CursorHasItem()"
+            )
+            .unwrap());
+        // Without deposit rights on tab 2 the move is refused and the item stays held.
+        s.run("PickupGuildBankItem(2, 1)").unwrap();
+        assert!(s.take_wrath_guild_bank_requests().is_empty());
+        assert!(matches!(s.cursor_payload(), Some(CursorPayload::GuildBankItem(_))));
+        {
+            let mut m = s.model_mut();
+            m.wrath_friends.bank.rank_rights = vec![crate::script::WrathGuildBankRankRights {
+                tabs: [(3, 0); 6],
+                ..Default::default()
+            }];
+        }
+        s.run("PickupGuildBankItem(2, 1)").unwrap();
+        assert_eq!(
+            s.take_wrath_guild_bank_requests(),
+            vec![R::MoveItem {
+                from_tab: 1,
+                from_slot: 5,
+                to_tab: 2,
+                to_slot: 1,
+                count: None
+            }]
+        );
+        assert!(s.cursor_payload().is_none());
+        // A split of 7 drops on a bag slot as a withdraw; the whole stack splits as a pickup.
+        s.run("SplitGuildBankItem(1, 5, 7) PickupContainerItem(0, 3)").unwrap();
+        s.run("SplitGuildBankItem(1, 5, 20) PickupInventoryItem(16)").unwrap();
+        assert_eq!(
+            s.take_wrath_guild_bank_requests(),
+            vec![
+                R::DropOnBag {
+                    tab: 1,
+                    slot: 5,
+                    bag: 0,
+                    bag_slot: 3,
+                    count: Some(7)
+                },
+                R::DropOnEquip {
+                    tab: 1,
+                    slot: 5,
+                    equip_slot: 16,
+                    count: None
+                },
+            ]
+        );
+        // A bag item on the cursor deposits: App reads it and clears.
+        s.set_cursor_for_test(CursorPayload::Item(crate::script::CursorItem {
+            bag: 0,
+            slot: 1,
+            item_id: 4,
+            texture: None,
+            link: None,
+            count: None,
+            quality: None,
+            equip_slots: Vec::new(),
+            bar_placeable: false,
+        }));
+        s.run("PickupGuildBankItem(1, 9)").unwrap();
+        assert_eq!(
+            s.take_wrath_guild_bank_requests(),
+            vec![R::PickupItem { tab: 1, slot: 9 }]
         );
     }
 

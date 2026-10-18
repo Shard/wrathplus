@@ -41,7 +41,8 @@ mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
-mod wrath_calendar_capture;
+mod wrath_appearance;
+pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
@@ -57,6 +58,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
 #[cfg(test)]
@@ -159,6 +161,7 @@ impl Plugin for NetPlugin {
         wrath_inventory_capture::register(app);
         wrath_exchange_capture::register(app);
         wrath_achievement_capture::register(app);
+        wrath_appearance::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
@@ -175,6 +178,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
         wrath_threat::register(app);
@@ -305,7 +309,10 @@ pub(crate) struct UnitSpeeds(pub(crate) MoveSpeeds);
 /// the post-create apply `0x5fad50` applies our own speed block as it does a remote one.
 pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     use crate::creature_anim::move_flags as f;
-    if flags & f::ANY_MOVE == 0 {
+    // A swimmer or flier on its ascend or descend key moves without a direction bit.
+    let vertical = flags & (f::SWIMMING | f::FLYING) != 0
+        && flags & (f::ASCENDING | f::DESCENDING) != 0;
+    if flags & f::ANY_MOVE == 0 && !vertical {
         return 0.0;
     }
     if flags & f::SWIMMING != 0 {
@@ -957,6 +964,10 @@ pub(crate) enum MoveKind {
     StopAscend,
     StartDescend,
     SetFly,
+    /// The pitch keys while swimming or flying (`0x6ef860` events 0xe/0xf/0x10).
+    StartPitchUp,
+    StartPitchDown,
+    StopPitch,
     /// The walk/run toggle: sent from the toggle handler (`ToggleRun 0x513d50` to `0x617de0`),
     /// not the move broadcaster, so it goes out standing still (`0x61a99d` gates the latter).
     SetWalkMode,
@@ -987,6 +998,9 @@ impl MoveKind {
             MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
             MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
             MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
+            MoveKind::StartPitchUp => wrath_ground::MSG_MOVE_START_PITCH_UP as u16,
+            MoveKind::StartPitchDown => wrath_ground::MSG_MOVE_START_PITCH_DOWN as u16,
+            MoveKind::StopPitch => wrath_ground::MSG_MOVE_STOP_PITCH as u16,
             MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
             MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
             MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
@@ -1168,6 +1182,9 @@ pub(crate) enum ClientCommand {
         orientation: f32,
         fall_time: u32,
     },
+    /// Build 12340: dismiss the vehicle we drive, or change seats on it. The writer adds the
+    /// vehicle's guid and halted pose.
+    NativeVehicleControl(benilla_protocol::wrath_authority::VehicleControl),
     /// `CMSG_FAR_SIGHT`: `true` on attach, `false` on release; neither names an object.
     FarSight {
         engage: bool,
@@ -2197,6 +2214,8 @@ pub(crate) enum ClientCommand {
     NativeGuildBankTab(benilla_protocol::wrath_guild_bank_tab::UpdateTab),
     /// The tab text and log queries and the text save.
     NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
+    /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
+    NativeAppearance(benilla_protocol::wrath_appearance::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),

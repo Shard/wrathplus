@@ -135,6 +135,7 @@ mod ui_char;
 mod ui_chat;
 mod ui_chat_verbs;
 mod ui_lfg;
+mod ui_calendar;
 mod ui_guild_bank;
 mod ui_arena_team;
 mod ui_native_chat;

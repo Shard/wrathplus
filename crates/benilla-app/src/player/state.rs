@@ -319,6 +319,8 @@ pub(crate) struct Player {
     /// for our own. Our body must then send nothing: outbound `MSG_MOVE_*` carry no guid, so the
     /// server applies them to whatever we last claimed.
     pub(crate) foreign_mover: Option<u64>,
+    /// Our own body's modes while [`Self::foreign_mover`] is driven, restored with control.
+    pub(crate) parked_modes: Option<MoveModes>,
     /// The driven body changed, and we drive nothing until its streamed pose is adopted, since
     /// `pos` and the facing still describe the last one. Set when the mover guid changes, cleared
     /// at the take-control edge.
@@ -511,6 +513,15 @@ impl Player {
     /// Take the jump a hover grant owes, clearing the latch: `Jump(0)` refuses only ROOT and
     /// FALLING (`0x7c625c`), skipping the hover test (`0x7c6236`), and a refused jump is dropped,
     /// not retried.
+    /// A vehicle aim request (`VehicleAimRequestNormAngle`): the driven unit's mover pitch, within
+    /// the mouse-look clamp.
+    pub(crate) fn set_aim_pitch(&mut self, pitch: f32) {
+        if pitch.is_finite() {
+            self.mover_pitch =
+                pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+        }
+    }
+
     pub(super) fn take_wire_jump(&mut self) -> bool {
         let fire = self.hover_launch && !self.modes.rooted && self.airborne_since.is_none();
         self.hover_launch = false;

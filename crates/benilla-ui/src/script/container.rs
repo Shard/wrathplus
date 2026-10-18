@@ -303,7 +303,7 @@ fn pickup_container_item(model: &mut super::Model, bag: i64, slot: u32) {
     // app's repair drain runs the arm's `ITEM_REPAIR` and send.
     let placing = matches!(
         model.cursor,
-        Some(CursorPayload::Item(_) | CursorPayload::Merchant(_))
+        Some(CursorPayload::Item(_) | CursorPayload::Merchant(_) | CursorPayload::GuildBankItem(_))
     );
     if !placing && (model.item_pick_armed || model.repair_mode) {
         let occupied = model
@@ -382,6 +382,25 @@ fn pickup_container_item(model: &mut super::Model, bag: i64, slot: u32) {
             if let Some(entry) = entry {
                 model.merchant_slot_buys.push((bag, slot, entry));
             }
+            cursor::queue_cursor_update(model);
+        }
+        // Mode 11, a guild bank item (`0x5d7ff0` tests `[0xbd0748] == 0xb`): with the banker still
+        // open (`0xc1dc10`) the withdraw into this slot (`0x6db880`), then the cursor clears.
+        Some(CursorPayload::GuildBankItem(held)) => {
+            if model.wrath_friends.bank.tabs.is_empty() {
+                model.cursor = Some(CursorPayload::GuildBankItem(held));
+                return;
+            }
+            model
+                .wrath_friends
+                .requests
+                .push(crate::script::WrathGuildBankRequest::DropOnBag {
+                    tab: held.tab,
+                    slot: held.slot,
+                    bag,
+                    bag_slot: slot,
+                    count: held.count,
+                });
             cursor::queue_cursor_update(model);
         }
         Some(

@@ -36,6 +36,11 @@ pub const MSG_MOVE_START_DESCEND: u32 = 0x03a7;
 /// Taking off and landing (`0x6ef860` events 0x2d/0x2e): FLYING set or cleared. AzerothCore
 /// `HandleMovementOpcodes` handles it as an ordinary movement packet.
 pub const CMSG_MOVE_SET_FLY: u32 = 0x0346;
+/// The pitch keys while swimming or flying (`0x6ef860` events 0xe/0xf/0x10): `STOP_PITCH` ends
+/// either.
+pub const MSG_MOVE_START_PITCH_UP: u32 = 0x00bf;
+pub const MSG_MOVE_START_PITCH_DOWN: u32 = 0x00c0;
+pub const MSG_MOVE_STOP_PITCH: u32 = 0x00c1;
 
 pub const MOVE_FORWARD: u32 = 0x0000_0001;
 pub const MOVE_BACKWARD: u32 = 0x0000_0002;
@@ -43,6 +48,13 @@ pub const MOVE_STRAFE_LEFT: u32 = 0x0000_0004;
 pub const MOVE_STRAFE_RIGHT: u32 = 0x0000_0008;
 pub const MOVE_TURN_LEFT: u32 = 0x0000_0010;
 pub const MOVE_TURN_RIGHT: u32 = 0x0000_0020;
+/// The pitch keys (`Wow.exe` `0x989220`): set only while SWIMMING or FLYING, one at a time.
+pub const MOVE_PITCH_UP: u32 = 0x0000_0040;
+pub const MOVE_PITCH_DOWN: u32 = 0x0000_0080;
+/// `MOVEMENTFLAG_ROOT`: a rooted mover reports it on every packet and may only turn (AzerothCore
+/// `VerifyMovementInfo` drops a rooted mover's packet without it or with any
+/// `MOVEMENTFLAG_MASK_MOVING` bit).
+pub const MOVE_ROOT: u32 = 0x0000_0800;
 pub const MOVE_WALKING: u32 = 0x0000_0100;
 pub const MOVE_FALLING: u32 = 0x0000_1000;
 pub const MOVE_FALLING_FAR: u32 = 0x0000_2000;
@@ -415,6 +427,29 @@ fn validate_movement(
             "SWIMMING/FLYING with an airborne flag or tail",
         ));
     }
+    let keys = flags & (MOVE_PITCH_UP | MOVE_PITCH_DOWN);
+    if keys != 0 && pitch.is_none() {
+        return Err(GroundError::OpcodeFlags(
+            "a pitch key outside SWIMMING/FLYING",
+        ));
+    }
+    if keys == MOVE_PITCH_UP | MOVE_PITCH_DOWN {
+        return Err(GroundError::ContradictoryFlags("pitch"));
+    }
+    // AzerothCore's `MOVEMENTFLAG_MASK_MOVING`: never beside ROOT.
+    const MOVING: u32 = MOVE_FORWARD
+        | MOVE_BACKWARD
+        | MOVE_STRAFE_LEFT
+        | MOVE_STRAFE_RIGHT
+        | MOVE_PITCH_UP
+        | MOVE_PITCH_DOWN
+        | MOVE_FALLING
+        | MOVE_FALLING_FAR
+        | MOVE_ASCENDING
+        | MOVE_DESCENDING;
+    if flags & MOVE_ROOT != 0 && flags & MOVING != 0 {
+        return Err(GroundError::OpcodeFlags("ROOT with a moving flag"));
+    }
     let vertical = flags & (MOVE_ASCENDING | MOVE_DESCENDING);
     if vertical != 0 && pitch.is_none() {
         return Err(GroundError::OpcodeFlags(
@@ -442,18 +477,40 @@ fn validate_movement(
                 "STOP_ASCEND retains a vertical key or left SWIMMING/FLYING",
             ));
         }
+        MSG_MOVE_START_PITCH_UP if keys != MOVE_PITCH_UP => {
+            return Err(GroundError::OpcodeFlags("START_PITCH_UP without PITCH_UP"));
+        }
+        MSG_MOVE_START_PITCH_DOWN if keys != MOVE_PITCH_DOWN => {
+            return Err(GroundError::OpcodeFlags(
+                "START_PITCH_DOWN without PITCH_DOWN",
+            ));
+        }
+        MSG_MOVE_STOP_PITCH if keys != 0 => {
+            return Err(GroundError::OpcodeFlags("STOP_PITCH retains a pitch key"));
+        }
         // The swim, vertical and flight edges carry no direction rule of their own.
         MSG_MOVE_START_SWIM
         | MSG_MOVE_STOP_SWIM
         | MSG_MOVE_START_ASCEND
         | MSG_MOVE_START_DESCEND
         | MSG_MOVE_STOP_ASCEND
+        | MSG_MOVE_START_PITCH_UP
+        | MSG_MOVE_START_PITCH_DOWN
+        | MSG_MOVE_STOP_PITCH
         | CMSG_MOVE_SET_FLY => MSG_MOVE_HEARTBEAT,
         other => other,
     };
     validate_on_foot(
         opcode,
-        flags & !(MOVE_SWIMMING | MOVE_FLYING | MOVE_CAN_FLY | MOVE_ASCENDING | MOVE_DESCENDING),
+        flags
+            & !(MOVE_SWIMMING
+                | MOVE_FLYING
+                | MOVE_CAN_FLY
+                | MOVE_ASCENDING
+                | MOVE_DESCENDING
+                | MOVE_PITCH_UP
+                | MOVE_PITCH_DOWN
+                | MOVE_ROOT),
         position,
         orientation,
         fall_time,

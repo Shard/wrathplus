@@ -173,6 +173,29 @@ fn swim_dead_reckon_folds_the_pitch_into_the_travel() {
 }
 
 #[test]
+fn a_relayed_flier_dead_reckons_pitched_and_climbs_on_its_ascend_key() {
+    // Build 12340: FLYING travels the pitched axis at the flight speed, as a swimmer at its own.
+    let pitch = 0.5_f32;
+    let mut rm = motion(move_flags::FLYING | move_flags::FORWARD, 0.0);
+    rm.pitch = pitch;
+    let s = speeds();
+    let (pos, _, _, speed) = rm.advance(s, 1.0);
+    assert!((speed - s.flight).abs() < 1e-5, "{speed}");
+    assert!((pos[0] - s.flight * pitch.cos()).abs() < 1e-4, "{}", pos[0]);
+    assert!((pos[2] - s.flight * pitch.sin()).abs() < 1e-4, "{}", pos[2]);
+    // The ascend key alone climbs straight up; descend sinks; neither without the medium.
+    let up = motion(move_flags::FLYING | move_flags::ASCENDING, 0.0);
+    let (pos, _, _, speed) = up.advance(s, 1.0);
+    assert_eq!((pos[0], speed), (0.0, s.flight));
+    assert!((pos[2] - s.flight).abs() < 1e-4, "{}", pos[2]);
+    let down = motion(move_flags::SWIMMING | move_flags::DESCENDING, 0.0);
+    let (pos, ..) = down.advance(s, 1.0);
+    assert!((pos[2] + s.swim).abs() < 1e-4, "{}", pos[2]);
+    let walker = motion(move_flags::ASCENDING, 0.0);
+    assert_eq!(walker.advance(s, 1.0).0, [0.0; 3]);
+}
+
+#[test]
 fn resolve_facing_angle_spot_and_target() {
     let none = |_g: u64| None;
     assert_eq!(

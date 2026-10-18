@@ -582,6 +582,20 @@ pub(super) fn control(
         // (`0x9883f0`), so its Space is the ascend alone.
         let ascend = binds.pressed(crate::bindings::Input::Ascend) && may_translate;
         let descend = binds.pressed(crate::bindings::Input::Descend) && may_translate;
+        // Climbing out of the water with the grant: a flier keeps flying through the surface, and
+        // a swimmer at the surface takes off (`0x989890` clears SWIMMING; the trigger is the same
+        // labelled inference as the air take-off, `super::flight`).
+        let surfacing = ascend
+            && player.modes.can_fly
+            && !player.modes.rooted
+            && (player.flying || (swimming && swim::at_surface(&player, surface_y)));
+        let swimming = if surfacing {
+            player.swimming = false;
+            player.flying = true;
+            false
+        } else {
+            swimming
+        };
         if swimming || knockback.is_some() || !player.modes.can_fly {
             flight::land(&mut player);
         }
@@ -592,6 +606,21 @@ pub(super) fn control(
         let vertical = flight::vertical(ascend, descend);
         if flying {
             want_jump = false;
+        }
+        // The pitch keys tilt a swimmer's or flier's nose at the pitch rate, clamped to ±π/2
+        // (`0x989220`; refused outside the medium, and a root stops them as it stops translation).
+        let pitched = (swimming || flying) && may_translate;
+        let pitch_key = flight::vertical(
+            pitched && binds.pressed(crate::bindings::Input::PitchUp),
+            pitched && binds.pressed(crate::bindings::Input::PitchDown),
+        );
+        if pitch_key != 0.0 {
+            let rate = mover_speeds
+                .map(|s| s.pitch_rate)
+                .filter(|r| *r > 0.0)
+                .unwrap_or(std::f32::consts::PI);
+            player.mover_pitch = (player.mover_pitch + pitch_key * rate * dt)
+                .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
         }
 
         // Read by the swim and flight movers and the flag build, so the two cannot disagree.
@@ -653,6 +682,7 @@ pub(super) fn control(
                 surface_y,
                 (move_fwd, move_right),
                 (swim_fwd, swim_side),
+                vertical,
                 mover_speeds,
                 move_speed,
                 if translating { drunk_wobble } else { 0.0 },
@@ -723,7 +753,7 @@ pub(super) fn control(
         );
         // The live flag word, the take-off-frozen one the animation reads, and the fall clock.
         let flags::FrameFlags {
-            wire: move_flags_now,
+            wire: mut move_flags_now,
             pose: pose_flags,
             landed,
             fall_time: wire_fall_time,
@@ -741,6 +771,18 @@ pub(super) fn control(
             now,
             launch_y,
         );
+        // A swimmer's ascend or descend key rides the wire as a flier's does (`0x9898e0`).
+        if swimming && vertical > 0.0 {
+            move_flags_now |= move_flags::ASCENDING;
+        } else if swimming && vertical < 0.0 {
+            move_flags_now |= move_flags::DESCENDING;
+        }
+        // The held pitch key rides the wire while in the medium (one at a time, as `0x989220`).
+        if pitch_key > 0.0 {
+            move_flags_now |= move_flags::PITCH_UP;
+        } else if pitch_key < 0.0 {
+            move_flags_now |= move_flags::PITCH_DOWN;
+        }
         if let Some(falling) = falling.as_deref_mut() {
             falling.0 = player.is_falling();
         }

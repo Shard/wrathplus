@@ -74,6 +74,19 @@ fn every_wrath_writer_route_is_admitted() {
         ("SaveGuildEmblem", ClientCommand::SaveGuildEmblem { vendor: 1, design: [0; 5] }),
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
+        ("PetitionShowList", ClientCommand::PetitionShowList { npc: 1 }),
+        ("PetitionBuy", ClientCommand::PetitionBuy { npc: 1, name: "G".into() }),
+        ("PetitionShowSignatures", ClientCommand::PetitionShowSignatures { item: 1 }),
+        ("PetitionSign", ClientCommand::PetitionSign { item: 1, byte: 1 }),
+        ("OfferPetition", ClientCommand::OfferPetition { item: 1, player: 2 }),
+        ("TurnInPetition", ClientCommand::TurnInPetition { item: 1 }),
+        ("PetitionQuery", ClientCommand::PetitionQuery { petition_id: 1, item: 1 }),
+        ("PetitionRename", ClientCommand::PetitionRename { item: 1, name: "N".into() }),
+        ("PetitionDecline", ClientCommand::PetitionDecline { item: 1 }),
+        (
+            "NativeAppearance",
+            ClientCommand::NativeAppearance(benilla_protocol::wrath_appearance::Command::ShowingHelm { show: true }),
+        ),
         (
             "NativeGuildBankSwap",
             ClientCommand::NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap {
@@ -376,6 +389,22 @@ fn every_wrath_writer_route_is_admitted() {
             ClientCommand::SetActiveMover {
                 guid: Default::default(),
             },
+        ),
+        (
+            "NotActiveMover",
+            ClientCommand::NotActiveMover {
+                guid: Default::default(),
+                flags: 0,
+                pos: [0.0; 3],
+                orientation: 0.0,
+                fall_time: 0,
+            },
+        ),
+        (
+            "NativeVehicleControl",
+            ClientCommand::NativeVehicleControl(
+                benilla_protocol::wrath_authority::VehicleControl::Dismiss,
+            ),
         ),
         ("Logout", ClientCommand::Logout),
         ("ForceLogout", ClientCommand::ForceLogout),
@@ -900,7 +929,6 @@ fn every_wrath_writer_route_is_admitted() {
     let disabled = [
         "BattlefieldStatusRequest",
         "ForceSpeedAck",
-        "NotActiveMover",
         "WorldportAck",
         "MoveModeAck",
         "KnockBackAck",

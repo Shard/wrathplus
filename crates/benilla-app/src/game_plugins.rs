@@ -259,6 +259,7 @@ impl PluginGroup for GamePlugins {
             .add(UiChatPlugin)
             .add(crate::ui_lfg::UiLfgPlugin)
             .add(crate::ui_guild_bank::UiGuildBankPlugin)
+            .add(crate::ui_calendar::UiCalendarPlugin)
             .add(crate::ui_arena_team::UiArenaTeamPlugin)
             .add(crate::ui_native_chat::UiNativeChatPlugin)
             .add(crate::ui_native_pet_name::UiNativePetNamePlugin)
@@ -709,12 +710,14 @@ pub(crate) mod schedule_tests {
     /// - a crate's interaction (`target::click::act_on_interact`) against what
     ///   `act_on_right_click` and the cursor classifier already pair with: it runs the click's
     ///   dispatchers over the classifier's reading of its object, and its attack leg
-    ///   selects as the click does, so it writes `Selection` where the click's drain does.
+    ///   selects as the click does, so it writes `Selection` where the click's drain does;
+    /// - the vehicle aim (`player::wire_in::apply_vehicle_aim`) against the other `Player` writers
+    ///   before `control`: it writes only `mover_pitch`, which none of them reads or writes.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_631;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_649;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

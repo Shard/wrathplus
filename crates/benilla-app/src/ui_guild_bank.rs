@@ -64,6 +64,13 @@ pub(crate) struct GuildBank {
     texts: BTreeMap<u8, String>,
 }
 
+impl GuildBank {
+    /// `BuyGuildBankTab`'s reads: the frame is open, the purchased tab count, the vault's money.
+    pub(crate) fn tab_purchase(&self) -> (bool, usize, u64) {
+        (self.open, self.tabs.len(), self.money)
+    }
+}
+
 pub(crate) struct UiGuildBankPlugin;
 impl Plugin for UiGuildBankPlugin {
     fn build(&self, app: &mut App) {
@@ -227,7 +234,12 @@ fn command(
             *open = GuildBankOpen::default();
             return None;
         }
-        R::PickupMoney { .. } | R::SplitItem { .. } | R::SummonFriend { .. } => return None,
+        // Native UI's mode-11 cursor requests, not sent yet.
+        R::PickupMoney { .. }
+        | R::MoveItem { .. }
+        | R::DropOnBag { .. }
+        | R::DropOnEquip { .. }
+        | R::SummonFriend { .. } => return None,
     })
 }
 

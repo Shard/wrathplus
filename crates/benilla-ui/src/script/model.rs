@@ -279,6 +279,7 @@ pub(crate) struct Model {
     pub(crate) wrath_ready_check: super::wrath_ready_check::State,
     /// `GetQuestsCompleted`'s stored reply and the undrained `QueryQuestsCompleted` calls.
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
+    pub(crate) wrath_calendar: super::wrath_calendar::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
@@ -897,6 +898,8 @@ pub(crate) struct Model {
     pub(crate) wrath_companions: super::WrathCompanions,
     /// The timed death-knight runes (`wrath_runes`).
     pub(crate) wrath_runes: super::WrathRunes,
+    /// The arena-team slots, rosters and the client's roster order (`wrath_arena`).
+    pub(crate) wrath_arena: super::wrath_arena::ArenaState,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1185,6 +1188,7 @@ impl Model {
             ready_check: party::ReadyCheckState::default(),
             wrath_ready_check: super::wrath_ready_check::State::default(),
             wrath_quests_completed: Default::default(),
+            wrath_calendar: Default::default(),
             wrath_inspect_talents: None,
             wrath_server_time_offset: None,
             saved_instances: Vec::new(),
@@ -1525,6 +1529,7 @@ impl Model {
             wrath_paperdoll_stats: Default::default(),
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
+            wrath_arena: Default::default(),
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

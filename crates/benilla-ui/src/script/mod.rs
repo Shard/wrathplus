@@ -47,6 +47,11 @@ mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_unit_popup;
+pub use wrath_calendar::{
+    WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
+    WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid, WrathCalendarRaidReset,
+    WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
+};
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -180,6 +185,7 @@ pub use wrath_achievements::{
 };
 mod wrath_tutorial;
 mod wrath_ready_check;
+mod wrath_calendar;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
@@ -200,6 +206,7 @@ mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
+mod wrath_arena;
 mod wrath_help_request;
 mod wrath_runes;
 mod wrath_merchant;
@@ -207,7 +214,9 @@ mod wrath_spellbook;
 mod wrath_skills;
 mod wrath_kb;
 mod wrath_options;
+mod wrath_secure;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
+pub use wrath_arena::{ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
@@ -216,7 +225,10 @@ pub use wrath_lfg::{
     set_wrath_lfg_request_clock, WrathLfgItemRequest, WrathLfgLockRequest,
     WrathLfgCatalog, WrathLfgDungeon, WrathLfgGroup, WrathLfgLock, WrathLfgLockSnapshot,
     WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
-    WrathLfgRewardItem,
+    WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
+    WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
+    WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
+    WrathLfgUpdate,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
@@ -258,7 +270,8 @@ pub use container::{
 pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
-    CursorAction, CursorItem, CursorMacro, CursorMerchantItem, CursorMoney, CursorPayload,
+    CursorAction, CursorGuildBankItem, CursorItem, CursorMacro, CursorMerchantItem, CursorMoney,
+    CursorPayload,
     CursorPetAction, CursorSpell, CursorStablePet, EnchantConfirm, WorldPick, EQUIPMENT_BAG,
 };
 pub use cvars::{small_cull_text, sstr_to_int};
@@ -818,11 +831,13 @@ impl UiScript {
             wrath_companions::install(&lua)?;
             wrath_help_request::install(&lua)?;
             wrath_runes::install(&lua)?;
+            wrath_arena::install(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
             wrath_skills::install(&lua)?;
             wrath_kb::install(&lua)?;
             wrath_options::install(&lua)?;
+            wrath_secure::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;
@@ -845,8 +860,10 @@ impl UiScript {
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
+            cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
+            wrath_calendar::install(&lua)?;
         }
 
         let s = UiScript {

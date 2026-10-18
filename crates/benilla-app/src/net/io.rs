@@ -985,10 +985,49 @@ fn writer_loop(
                     }
                     ClientCommand::LeaveChannel { name } => w.leave_channel(&name),
                     ClientCommand::ChannelList { name } => w.channel_list(&name),
-                    // Wrath-only display roster commands never leak onto the Vanilla wire.
-                    ClientCommand::SetChannelWatch { .. } | ClientCommand::ChannelDisplayList { .. }
-                    | ClientCommand::LfgRequestPlayerLockInfo | ClientCommand::LfgRequestPartyLockInfo
-                    | ClientCommand::LfgCommand(_) | ClientCommand::GuildBankQuery(_) | ClientCommand::ArenaTeamCommand(_) | ClientCommand::NativeQuestsCompletedQuery | ClientCommand::NativeUiTimerQuery | ClientCommand::NativeInstanceControl(_) | ClientCommand::NativeInventory(_) | ClientCommand::NativeExchange(_) | ClientCommand::NativeSpellControl(_) | ClientCommand::NativeMovementMisc(_) | ClientCommand::NativeInspectAchievements { .. } | ClientCommand::NativeCalendar(_) | ClientCommand::NativeQuest(_) | ClientCommand::NativeParty(_) | ClientCommand::NativeMirrorImageQuery { .. } | ClientCommand::NativeMailMutation(_) | ClientCommand::NativeChatCommand(_) | ClientCommand::NativeWhoCommand(_) | ClientCommand::NativeBattleground(_) | ClientCommand::NativeDeath(_) | ClientCommand::NativeSessionMeta(_) | ClientCommand::NativeSessionMisc(_) | ClientCommand::NativeInspect(_) | ClientCommand::NativeGuildBank(_) | ClientCommand::NativeGuildBankSwap(_) | ClientCommand::NativeGuildBankTab(_) | ClientCommand::NativeGuildBankText(_) | ClientCommand::NativeGuildRank(_) | ClientCommand::GuildEventLogQuery | ClientCommand::SetContactNotes { .. } | ClientCommand::NativeWorldportAck(_) | ClientCommand::NativeHelp(_) | ClientCommand::NativeWorldObjects(_) | ClientCommand::NativeReferFriend(_) => Ok(()),
+                    // Wrath-only commands never leak onto the Vanilla wire. One variant per line, in
+                    // alphabetical order, so concurrent additions merge.
+                    ClientCommand::ArenaTeamCommand(_)
+                    | ClientCommand::ChannelDisplayList { .. }
+                    | ClientCommand::GuildBankQuery(_)
+                    | ClientCommand::GuildEventLogQuery
+                    | ClientCommand::LfgCommand(_)
+                    | ClientCommand::LfgRequestPartyLockInfo
+                    | ClientCommand::LfgRequestPlayerLockInfo
+                    | ClientCommand::NativeAppearance(_)
+                    | ClientCommand::NativeBattleground(_)
+                    | ClientCommand::NativeCalendar(_)
+                    | ClientCommand::NativeChatCommand(_)
+                    | ClientCommand::NativeDeath(_)
+                    | ClientCommand::NativeExchange(_)
+                    | ClientCommand::NativeGuildBank(_)
+                    | ClientCommand::NativeGuildBankSwap(_)
+                    | ClientCommand::NativeGuildBankTab(_)
+                    | ClientCommand::NativeGuildBankText(_)
+                    | ClientCommand::NativeGuildRank(_)
+                    | ClientCommand::NativeHelp(_)
+                    | ClientCommand::NativeInspect(_)
+                    | ClientCommand::NativeInspectAchievements { .. }
+                    | ClientCommand::NativeInstanceControl(_)
+                    | ClientCommand::NativeInventory(_)
+                    | ClientCommand::NativeMailMutation(_)
+                    | ClientCommand::NativeMirrorImageQuery { .. }
+                    | ClientCommand::NativeMovementMisc(_)
+                    | ClientCommand::NativeParty(_)
+                    | ClientCommand::NativeQuest(_)
+                    | ClientCommand::NativeQuestsCompletedQuery
+                    | ClientCommand::NativeReferFriend(_)
+                    | ClientCommand::NativeSessionMeta(_)
+                    | ClientCommand::NativeSessionMisc(_)
+                    | ClientCommand::NativeSpellControl(_)
+                    | ClientCommand::NativeUiTimerQuery
+                    | ClientCommand::NativeVehicleControl(_)
+                    | ClientCommand::NativeWhoCommand(_)
+                    | ClientCommand::NativeWorldObjects(_)
+                    | ClientCommand::NativeWorldportAck(_)
+                    | ClientCommand::SetChannelWatch { .. }
+                    | ClientCommand::SetContactNotes { .. }
+                    => Ok(()),
                     ClientCommand::RandomRoll { min, max } => w.random_roll(min, max),
                     ClientCommand::ChannelOwner { name } => w.channel_owner(&name),
                     ClientCommand::ChannelSetOwner { name, player } => {

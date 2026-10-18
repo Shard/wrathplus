@@ -70,6 +70,10 @@ pub(crate) mod move_flags {
     /// The keyboard turn keys (with `TURN_RIGHT`), which rotate the facing (`0x7c4f30`).
     pub const TURN_LEFT: u32 = 0x10;
     pub const TURN_RIGHT: u32 = 0x20;
+    /// The pitch keys while swimming or flying (the same bits in 1.12 and build 12340, whose
+    /// `0x989220` sets one and clears the other).
+    pub const PITCH_UP: u32 = 0x40;
+    pub const PITCH_DOWN: u32 = 0x80;
     /// Walk mode: it scales only the rate numerator, never the id choice.
     pub const WALK_MODE: u32 = 0x100;
     /// `MOVEFLAG_LEVITATING`: the swim decision `0x6030c0` bails on it first (`0x6030d2`), so
@@ -103,14 +107,14 @@ pub(crate) mod move_flags {
     pub const ASCENDING: u32 = 0x0040_0000;
     pub const DESCENDING: u32 = 0x0080_0000;
     /// Build 12340's FLYING, held in a bit of its own: the Wrath wire's `0x0200_0000` is the shared
-    /// word's [`ON_TRANSPORT`], so `player::movement_net` maps this bit onto it at the boundary.
-    /// Outside [`SERVER_AUTHORED`]: the server never sets our flight in a merged pose.
+    /// word's [`ON_TRANSPORT`], so `player::movement_net` and the Wrath relay map between them at
+    /// the boundary. Inside [`SERVER_AUTHORED`]: a relayed flier's word carries it.
     pub const FLYING: u32 = 0x0800_0000;
 
     /// The bits a server-authored move packet owns, the reference's merge mask (`0x618c30` @
-    /// `0x618deb`). [`ON_TRANSPORT`] is outside it: a server pose relocates a rider but never
+    /// `0x618deb`), with build 12340's [`FLYING`] and [`ASCENDING`] (a relayed flier's state). [`ON_TRANSPORT`] is outside it: a server pose relocates a rider but never
     /// boards or deboards them.
-    pub const SERVER_AUTHORED: u32 = 0x75a0_7dff;
+    pub const SERVER_AUTHORED: u32 = 0x75a0_7dff | FLYING | ASCENDING;
 
     /// Merge a server-authored packet's flags under [`SERVER_AUTHORED`] (`0x618de7`), for our mover
     /// and every watched one: all thirty relay opcodes take this mask (`0x618f20`).
@@ -821,10 +825,14 @@ pub(crate) fn unify(
     creature_swimming: bool,
     modes: Option<&crate::net::UnitMoveModes>,
 ) -> MovementState {
-    // Every leg reads the flying spline live, as the selector does at select time (`0x5fd19c`).
+    // Every leg reads the flying spline live, as the selector does at select time (`0x5fd19c`);
+    // build 12340's FLYING mover takes the same Fly 135.
     let flying = spline.is_some_and(|s| !s.grounded);
     if let Some(m) = movement {
-        return MovementState { flying, ..*m };
+        return MovementState {
+            flying: flying || m.flags & move_flags::FLYING != 0,
+            ..*m
+        };
     }
     let granted = modes.map_or(0, |m| m.0);
     if let Some(r) = remote {
@@ -832,7 +840,7 @@ pub(crate) fn unify(
             speed: r.speed,
             flags: r.flags | granted,
             vertical_speed: r.vertical_velocity,
-            flying,
+            flying: flying || r.flags & move_flags::FLYING != 0,
             ..default()
         };
     }

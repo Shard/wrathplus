@@ -195,11 +195,11 @@ impl LfgMapDifficultyCatalog {
 
 // These tables have no Vanilla projection. Decode every word directly so that
 // locale offsets/masks and unlabelled fields survive alongside selected text.
-struct Table<'a, const N: usize> {
-    rows: Vec<[u32; N]>,
-    strings: &'a [u8],
+pub(crate) struct Table<'a, const N: usize> {
+    pub(crate) rows: Vec<[u32; N]>,
+    pub(crate) strings: &'a [u8],
 }
-fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
+pub(crate) fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
     ensure!(
         bytes.len() >= 20 && &bytes[..4] == b"WDBC",
         "invalid WDBC header"
@@ -229,7 +229,7 @@ fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
         strings: &bytes[end..],
     })
 }
-fn text(strings: &[u8], offset: u32) -> Result<String> {
+pub(crate) fn text(strings: &[u8], offset: u32) -> Result<String> {
     let tail = strings
         .get(offset as usize..)
         .context("string offset out of bounds")?;
@@ -241,7 +241,7 @@ fn text(strings: &[u8], offset: u32) -> Result<String> {
         .context("invalid DBC UTF-8")?
         .to_owned())
 }
-fn localized(strings: &[u8], offsets: &[u32], slot: usize) -> Result<String> {
+pub(crate) fn localized(strings: &[u8], offsets: &[u32], slot: usize) -> Result<String> {
     // Validate inactive locale offsets too; malformed overrides are errors,
     // not empty strings or a reason to fall back to a lower-precedence archive.
     for offset in offsets {
