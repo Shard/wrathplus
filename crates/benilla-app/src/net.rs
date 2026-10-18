@@ -48,6 +48,8 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
+mod wrath_refer_friend_capture;
+mod wrath_world_objects_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -163,6 +165,8 @@ impl Plugin for NetPlugin {
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
         wrath_help_capture::register(app);
+        wrath_refer_friend_capture::register(app);
+        wrath_world_objects_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
@@ -2175,6 +2179,10 @@ pub(crate) enum ClientCommand {
     /// Native Help Request commands with no shared producer: GM survey, response resolve,
     /// complaints and bug reports.
     NativeHelp(benilla_protocol::wrath_help::Command),
+    /// Native refer-a-friend level grant and accept; no UI producer yet.
+    NativeReferFriend(benilla_protocol::wrath_refer_friend::Command),
+    /// Native game-object report-use; `GameObjUse` is the shared use command.
+    NativeWorldObjects(benilla_protocol::wrath_world_objects::Command),
     /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.

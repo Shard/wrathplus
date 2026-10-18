@@ -1207,6 +1207,12 @@ pub enum SessionEvent {
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
     /// Capture-only native Help Request receipts: GM response, survey offer, complaint (`wrath_help`).
     WrathHelp { packet: crate::wrath_help::Packet },
+    /// Capture-only native refer-a-friend receipts: a level-grant proposal, a failure
+    /// (`wrath_refer_friend`).
+    WrathReferFriend { packet: crate::wrath_refer_friend::Packet },
+    /// Capture-only native world-presentation receipts without a shared event: page text, light
+    /// override, phase shift, movie, dance moves, building damage (`wrath_world_objects`).
+    WrathWorldObjects { packet: crate::wrath_world_objects::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).

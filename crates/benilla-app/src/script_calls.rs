@@ -129,9 +129,12 @@ pub(crate) fn apply_script_calls(
                     );
                 }
             }
-            // `DismissCompanion("CRITTER")`'s CMSG 0x48D has no wire command yet: capture-only.
-            other @ ScriptCall::DismissCritter { .. } => {
-                debug!("script call {other:?} not applied yet: capture-only");
+            // `DismissCompanion("CRITTER")`: CMSG_DISMISS_CRITTER with the critter's raw guid
+            // (AC `HandleDismissCritter`), Wire A's native spell-control writer.
+            ScriptCall::DismissCritter { critter } => {
+                let _ = appliers.p3().ladder.commands.0.send(crate::net::ClientCommand::NativeSpellControl(
+                    benilla_protocol::wrath_spell_control::Command::DismissCritter { critter },
+                ));
             }
         }
         // TryCast's attack pick can move the selection mid-cast (`0x6e4efb`), so a press held
@@ -936,6 +939,21 @@ mod tests {
         );
         assert_eq!(selected(&f), Some(NEW));
         assert_eq!(swings(&f).0, [NEW], "the swing reads the friend the call before selected");
+    }
+
+    /// `DismissCompanion("CRITTER")` sends `CMSG_DISMISS_CRITTER` with the critter's guid.
+    #[test]
+    fn dismiss_critter_sends_the_native_command() {
+        let mut f = frame(false);
+        apply(&mut f, vec![ScriptCall::DismissCritter { critter: 0xf130_0000_0000_0042 }]);
+        assert!(f.rx.try_iter().any(|c| matches!(
+            c,
+            ClientCommand::NativeSpellControl(
+                benilla_protocol::wrath_spell_control::Command::DismissCritter {
+                    critter: 0xf130_0000_0000_0042
+                }
+            )
+        )));
     }
 
     /// `Dismount()` sends `CMSG_CANCEL_MOUNT_AURA` off a flight path; `SetActiveTalentGroup` of the
