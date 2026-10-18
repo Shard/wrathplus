@@ -17,10 +17,10 @@ use crate::script::binding_abi::number_arg;
 use crate::script::Model;
 
 /// The native icon path when the display has no icon (`0x70a910`'s fallback under prefix 3).
-const FALLBACK_ICON: &str = "Interface\\Icons\\INV_Misc_QuestionMark";
+pub(super) const FALLBACK_ICON: &str = "Interface\\Icons\\INV_Misc_QuestionMark";
 
 /// Full packed entry: the row's type in the top byte, the id in the low 24 bits.
-fn full_entry(row: &WrathLfgDungeon) -> u32 {
+pub(super) fn full_entry(row: &WrathLfgDungeon) -> u32 {
     (row.dungeon_type as u32) << 24 | (row.id & 0xff_ffff)
 }
 
@@ -45,7 +45,7 @@ impl State {
         })
     }
 
-    fn row(&self, id: u32) -> Option<&WrathLfgDungeon> {
+    pub(super) fn row(&self, id: u32) -> Option<&WrathLfgDungeon> {
         self.catalog.dungeons.iter().find(|r| r.id == id)
     }
 

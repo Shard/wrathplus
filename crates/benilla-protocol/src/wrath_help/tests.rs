@@ -173,6 +173,15 @@ fn commands_encode_ac_read_order() {
         ),
         (Command::ResolveResponse, 0x4f0, vec![]),
         (
+            Command::ReportLag {
+                lag_type: 2,
+                map: 571,
+                pos: [1.0, 2.0, 3.0],
+            },
+            0x502,
+            [w(2), w(571), f(1.0), f(2.0), f(3.0)].concat(),
+        ),
+        (
             Command::ComplainMail {
                 spammer: 5,
                 mail_id: 12,

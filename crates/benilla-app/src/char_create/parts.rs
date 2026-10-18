@@ -11,10 +11,9 @@ pub(super) struct CharCreateUi {
 #[derive(Component)]
 pub(super) struct StatusLine;
 
-/// The three info panels.
+/// The two info panes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum InfoKind {
-    Faction,
     Race,
     Class,
 }
@@ -37,9 +36,9 @@ pub(super) enum DynText {
     Name,
     InfoTitle(InfoKind),
     InfoBody(InfoKind),
-    /// The race panel's ability lines, the reference's separate gold
-    /// `CharacterCreateRaceAbilityText`.
-    InfoAbilities,
+    /// A pane's gold lines over its flavor text: `CharacterCreateRaceAbilityText` and
+    /// `CharacterCreateClassRolesText`.
+    InfoAbilities(InfoKind),
     /// A class slot's hover label.
     ClassSlotLabel(u8),
 }

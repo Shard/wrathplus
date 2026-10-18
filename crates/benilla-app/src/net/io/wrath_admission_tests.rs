@@ -21,6 +21,12 @@ fn every_wrath_writer_route_is_admitted() {
         ("TutorialFlag", ClientCommand::TutorialFlag { id: 1 }),
         ("NativeHelp", ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ResolveResponse)),
         ("GameObjUse", ClientCommand::GameObjUse { guid: 0xf110_0000_0000_0007 }),
+        ("QueryTime", ClientCommand::QueryTime),
+        ("UnlearnSkill", ClientCommand::UnlearnSkill { skill_id: 186 }),
+        (
+            "NativeSessionMisc",
+            ClientCommand::NativeSessionMisc(benilla_protocol::wrath_session_misc::Command::Emote { emote: 3 }),
+        ),
         (
             "NativeWorldObjects",
             ClientCommand::NativeWorldObjects(benilla_protocol::wrath_world_objects::Command::ReportUse { object: 1 }),
@@ -68,6 +74,10 @@ fn every_wrath_writer_route_is_admitted() {
         ("SaveGuildEmblem", ClientCommand::SaveGuildEmblem { vendor: 1, design: [0; 5] }),
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
+        (
+            "NativeAppearance",
+            ClientCommand::NativeAppearance(benilla_protocol::wrath_appearance::Command::ShowingHelm { show: true }),
+        ),
         (
             "NativeGuildBankSwap",
             ClientCommand::NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap {

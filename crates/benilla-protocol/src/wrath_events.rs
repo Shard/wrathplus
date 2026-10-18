@@ -238,6 +238,10 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_session_misc::OPCODES.contains(&opcode) => Ok(match crate::wrath_session_misc::decode(opcode, body) {
+                Ok(events) => handled(events, Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_death::OPCODES.contains(&opcode) => Ok(match crate::wrath_death::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -337,6 +341,12 @@ impl WrathEventAdapter {
             0x034c | 0x034e | 0x0350 | 0x035b => {
                 Ok(match crate::wrath_arena_team::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathArenaTeam { packet }], Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
+            opcode if crate::wrath_appearance::OPCODES.contains(&opcode) => {
+                Ok(match crate::wrath_appearance::decode(opcode, body) {
+                    Ok(packet) => handled(vec![SessionEvent::WrathAppearance { packet }], Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }

@@ -177,6 +177,23 @@ fn drain_gm_ticket(
             GmTicketIntent::Ask => ClientCommand::GmTicketGet,
             GmTicketIntent::AskStatus => ClientCommand::GmTicketSystemStatus,
             GmTicketIntent::Delete => ClientCommand::GmTicketDelete,
+            // Build 12340 only: the globals behind these exist in the Wrath dialect alone.
+            GmTicketIntent::ReportLag { lag_type } => {
+                ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ReportLag {
+                    lag_type,
+                    map,
+                    pos,
+                })
+            }
+            GmTicketIntent::NeedMoreHelp { text } => {
+                ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::Create {
+                    map,
+                    pos,
+                    text,
+                    need_response: true,
+                    need_more_help: true,
+                })
+            }
             GmTicketIntent::Write(write) => {
                 let category = write.category;
                 match client_command_for(write, map, pos) {
