@@ -32,6 +32,7 @@ pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
 mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
+mod wrath_item_refunds;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
 mod wrath_notices;
