@@ -261,7 +261,9 @@ impl Plugin for UiSummonPlugin {
                 // After the social drain: the StaticPopup host reads the friend list it writes.
                 drain_summon
                     .after(UiInput)
-                    .after(crate::ui_social::feed::drain_social),
+                    .after(crate::ui_social::feed::drain_social)
+                    // And after our mover's control, whose falling bit it publishes.
+                    .after(crate::player::PlayerControlSet),
             ),
         );
     }

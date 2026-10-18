@@ -20,11 +20,16 @@
 //! `LEVEL_GRANT_PROPOSED` with their name once known; `AcceptLevelGrant` answers it (`0x420`).
 //! Labelled: `SMSG_REFER_A_FRIEND_FAILURE` stays in its capture (no error line yet).
 //!
-//! Not sent yet: the guild-bank tab purchase and money deposit (no
-//! guild-bank state: the banker and the tab count), and `PartyLFGStartBackfill` (`0x55a0c0` re-joins
-//! with the party's current dungeon, which the LFG reducer does not hold yet). Not built: glyph placement and the bound-tradeable, refund and trade-enchant
-//! confirmations (each resumes a pending cast), and the falling, out-of-bounds, can-teleport,
-//! cannot-be-resurrected, controlling and guild-bank tab-cost reads, which publish their defaults.
+//! Not sent yet: the guild-bank tab purchase and money deposit (the banker is Wire B's pending
+//! `GuildBankOpen`), and `PartyLFGStartBackfill` (`0x55a0c0` re-joins with the party's current
+//! dungeon, which the LFG reducer does not hold yet).
+//!
+//! The state: `IsFalling` (our mover airborne, not rooted), `IsOutOfBounds` (`PLAYER_FLAGS`
+//! `0x4000`), `PlayerCanTeleport` (no stun, confuse or flee flag) and `UnitIsControlling` (a charm
+//! or summon) are published. Not built: glyph placement and the bound-tradeable, refund and
+//! trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
+//! player byte, `+0xf47 & 4`, whose writer is untraced) and the guild-bank tab cost publish their
+//! defaults.
 
 use bevy::prelude::*;
 
@@ -110,6 +115,25 @@ pub(crate) fn take_lock_warning(
         _ => true,
     });
     lock
+}
+
+/// `IsOutOfBounds` (`0x6123c0`): `PLAYER_FLAGS_IS_OUT_OF_BOUNDS`.
+const PLAYER_FLAGS_OUT_OF_BOUNDS: u32 = 0x4000;
+/// `PlayerCanTeleport` (`0x60d8f0`): none of stunned, confused and fleeing in `UNIT_FIELD_FLAGS`.
+const TELEPORT_BLOCKERS: u32 = 0x4_0000 | 0x40_0000 | 0x80_0000;
+
+/// `UnitIsControlling` (`0x613c90`): the units whose `UNIT_FIELD_CHARM`, else `UNIT_FIELD_SUMMON`,
+/// is set, in query order.
+pub(crate) fn controlling<'a>(units: impl Iterator<Item = (u64, &'a ObjectStore)>) -> Vec<u64> {
+    units
+        .filter(|(_, s)| {
+            s.0.unit_charm()
+                .filter(|&g| g != 0)
+                .or(s.0.unit_summon())
+                .is_some_and(|g| g != 0)
+        })
+        .map(|(g, _)| g)
+        .collect()
 }
 
 /// The 1-based filled glyph sockets of the active talent group.
@@ -266,6 +290,9 @@ pub(crate) struct PopupInputs<'w, 's> {
     self_q: Query<'w, 's, &'static ObjectStore, With<SelfPlayer>>,
     objects: Objects<'w, 's>,
     lock: Option<ResMut<'w, InstanceLock>>,
+    /// `IsFalling`'s published bit; the units, for `UnitIsControlling`.
+    falling: Option<Res<'w, crate::player::Falling>>,
+    units: Query<'w, 's, (&'static crate::net::Guid, &'static ObjectStore)>,
     refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
     memo: Local<'s, crate::ui_script::VmMemo<Memo>>,
 }
@@ -283,6 +310,8 @@ pub(crate) fn drive(
     let PopupInputs {
         packets,
         refer,
+        falling,
+        units,
         progress,
         social,
         names,
@@ -392,7 +421,10 @@ pub(crate) fn drive(
     }
 
     let state = WrathPopupState {
-        can_teleport: true,
+        falling: falling.as_deref().is_some_and(|f| f.0),
+        out_of_bounds: store.is_some_and(|s| s.0.player_flags() & PLAYER_FLAGS_OUT_OF_BOUNDS != 0),
+        can_teleport: store.is_none_or(|s| s.0.unit_flags() & TELEPORT_BLOCKERS == 0),
+        controlling: controlling(units.iter().map(|(g, s)| (g.0, s))),
         instance_lock: lock.lock.map(PendingLock::view),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
         ..Default::default()
