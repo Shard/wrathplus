@@ -22,6 +22,11 @@ impl NativeGuild {
     pub(crate) fn rank(&self, rank: u32) -> Option<&Rank> {
         self.ranks.get(usize::try_from(rank).ok()?)
     }
+
+    /// Every rank's bank words, rank 0 (the guild master) first.
+    pub(crate) fn ranks(&self) -> &[Rank] {
+        &self.ranks
+    }
 }
 
 pub(super) fn register(app: &mut App) {

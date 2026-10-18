@@ -353,7 +353,10 @@ impl WrathEventAdapter {
                 })
             }
             crate::wrath_guild_bank::MSG_GUILD_PERMISSIONS
-            | crate::wrath_guild_bank::MSG_GUILD_BANK_MONEY_WITHDRAWN => {
+            | crate::wrath_guild_bank::MSG_GUILD_BANK_MONEY_WITHDRAWN
+            | crate::wrath_guild_bank::SMSG_GUILD_BANK_LIST
+            | crate::wrath_guild_bank_log::MSG_GUILD_BANK_LOG_QUERY
+            | crate::wrath_guild_bank_text::MSG_GUILD_BANK_QUERY_TEXT => {
                 Ok(match crate::wrath_guild_bank::decode(opcode, body) {
                     Ok(packet) => handled(vec![SessionEvent::WrathGuildBank { packet }], Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },

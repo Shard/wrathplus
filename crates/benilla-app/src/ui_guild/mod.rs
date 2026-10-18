@@ -20,6 +20,7 @@ mod feed;
 mod lines;
 mod sort;
 mod wrath;
+pub(crate) use wrath::NativeGuild;
 
 pub(crate) use sort::RosterRow;
 use sort::{SortField, SortStack};

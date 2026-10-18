@@ -2187,6 +2187,12 @@ pub(crate) enum ClientCommand {
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
     NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command),
+    /// `CMSG_GUILD_BANK_SWAP_ITEMS`: a deposit, move or withdrawal.
+    NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap),
+    /// `CMSG_GUILD_BANK_UPDATE_TAB`: a tab's name and icon.
+    NativeGuildBankTab(benilla_protocol::wrath_guild_bank_tab::UpdateTab),
+    /// The tab text and log queries and the text save.
+    NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
