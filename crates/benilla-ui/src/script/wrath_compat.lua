@@ -225,11 +225,6 @@ HasLFGRestrictions, IsPartyLFG, IsLFGDungeonJoinable = none, none, none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none
-CalendarGetNumPendingInvites = zero
-function CalendarGetDate()
-    local now = date("*t")
-    return now.wday, now.month, now.day, now.year
-end
 UnitHasVehicleUI, UnitInVehicle, UnitUsingVehicle, CanExitVehicle = none, none, none, none
 UnitVehicleSkin, UnitVehicleSeatInfo = none, none
 UnitVehicleSeatCount = zero

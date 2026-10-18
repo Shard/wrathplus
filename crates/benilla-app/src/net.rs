@@ -42,7 +42,7 @@ pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_appearance;
-mod wrath_calendar_capture;
+pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
