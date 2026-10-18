@@ -493,7 +493,7 @@ fn pet_feedback_family_parses_and_decodes() {
     for body in ["", "deadbeef"] {
         let p = messages::parse_server(opcode::SMSG_PET_NAME_INVALID, &hx(body)).unwrap();
         assert!(matches!(p, ServerPacket::PetNameInvalid), "body {body:?}");
-        assert!(matches!(decode(p)[..], [SessionEvent::PetNameInvalid]));
+        assert!(matches!(decode(p)[..], [SessionEvent::PetNameInvalid { .. }]));
 
         let p = messages::parse_server(opcode::SMSG_PET_BROKEN, &hx(body)).unwrap();
         assert!(matches!(p, ServerPacket::PetBroken), "body {body:?}");
