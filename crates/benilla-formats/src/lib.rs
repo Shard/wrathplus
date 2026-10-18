@@ -57,6 +57,7 @@ pub mod glyphs;
 pub mod item_limit_category;
 mod itemsets;
 pub mod gems;
+pub mod gm_survey;
 pub mod holidays;
 pub mod lfg;
 pub mod vehicles;

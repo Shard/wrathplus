@@ -467,3 +467,135 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
 
     Ok(())
 }
+
+/// Build 12340's additions (`/tmp/azb-app-mig/ghidra/ts*.log`): the description and recipe link,
+/// the level, name and makeable filters, the repeat stop, and the linked-window queries.
+///
+/// Labelled: no linked tradeskill window is ever opened here, so `IsTradeSkillLinked` answers
+/// nil, nil; `GetTradeSkillListLink`'s trade link (the known-recipe bitmask over
+/// `SkillLineAbility`, `0x5db060`) is not built and answers nil; the recipe link's prefix is the
+/// open line's name.
+pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    let g = lua.globals();
+    let index_arg = |lua: &Lua, args: &MultiValue| -> Option<usize> {
+        let n = lua.coerce_number(args.front()?.clone()).ok().flatten()?;
+        usize::try_from(n.round() as i64).ok()
+    };
+    g.set(
+        "GetTradeSkillDescription",
+        lua.create_function(move |lua, args: MultiValue| {
+            if args.front().is_none() {
+                return Err(mlua::Error::runtime("Usage: GetTradeSkillDescription(index)"));
+            }
+            let text = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                index_arg(lua, &args)
+                    .and_then(|i| recipe_at(&model, i))
+                    .and_then(|r| r.description.clone())
+            };
+            opt_str(lua, text.as_ref())
+        })?,
+    )?;
+    g.set(
+        "GetTradeSkillRecipeLink",
+        lua.create_function(move |lua, args: MultiValue| {
+            if args.front().is_none() {
+                return Err(mlua::Error::runtime("Usage: GetTradeSkillRecipeLink(index)"));
+            }
+            let link = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                let line = model.trade_skill.as_ref().map(|t| t.line_name.clone());
+                index_arg(lua, &args)
+                    .and_then(|i| recipe_at(&model, i))
+                    .map(|r| match &line {
+                        Some(line) if !line.is_empty() => format!(
+                            "|cffffd000|Henchant:{}|h[{}: {}]|h|r",
+                            r.spell_id, line, r.name
+                        ),
+                        _ => format!("|cffffd000|Henchant:{}|h[{}]|h|r", r.spell_id, r.name),
+                    })
+            };
+            Ok(match link {
+                Some(l) => MultiValue::from_vec(vec![Value::String(lua.create_string(&l)?)]),
+                None => MultiValue::new(),
+            })
+        })?,
+    )?;
+    g.set(
+        "GetTradeSkillListLink",
+        lua.create_function(|_, ()| Ok(Value::Nil))?,
+    )?;
+    g.set(
+        "IsTradeSkillLinked",
+        lua.create_function(|_, ()| Ok(MultiValue::from_vec(vec![Value::Nil, Value::Nil])))?,
+    )?;
+    // SetTradeSkillItemLevelFilter(minLevel, maxLevel) (`0x5dd090` → `0x5dd030`): a change
+    // rebuilds the list and fires `TRADE_SKILL_UPDATE`.
+    g.set(
+        "SetTradeSkillItemLevelFilter",
+        lua.create_function(|lua, args: MultiValue| {
+            let num = |i: usize| {
+                args.get(i)
+                    .and_then(|v| lua.coerce_integer(v.clone()).ok().flatten())
+            };
+            let (Some(min), Some(max)) = (num(0), num(1)) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: SetTradeSkillItemLevelFilter(minLevel, maxLevel)",
+                ));
+            };
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if model.trade_skill_level_filter != (min, max) {
+                model.trade_skill_level_filter = (min, max);
+                model.trade_skill_touched = true;
+            }
+            Ok(())
+        })?,
+    )?;
+    // SetTradeSkillItemNameFilter(text) (`0x5dd070` → `0x5dcf60`): nil or "" clears; a change
+    // fires `TRADE_SKILL_FILTER_UPDATE`.
+    g.set(
+        "SetTradeSkillItemNameFilter",
+        lua.create_function(|lua, args: MultiValue| {
+            let text = match args.front() {
+                Some(Value::String(s)) => Some(s.to_string_lossy()),
+                Some(v @ (Value::Integer(_) | Value::Number(_))) => lua
+                    .coerce_string(v.clone())
+                    .ok()
+                    .flatten()
+                    .map(|s| s.to_string_lossy()),
+                _ => None,
+            }
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_lowercase());
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if model.trade_skill_name_filter != text {
+                model.trade_skill_name_filter = text;
+                model.trade_skill_filter_touched = true;
+            }
+            Ok(())
+        })?,
+    )?;
+    // TradeSkillOnlyShowMakeable(flag) (`0x5dd3e0`).
+    g.set(
+        "TradeSkillOnlyShowMakeable",
+        lua.create_function(|lua, args: MultiValue| {
+            let on = binding_abi::bool_or_default(args.front(), false);
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if model.trade_skill_only_makeable != on {
+                model.trade_skill_only_makeable = on;
+                model.trade_skill_touched = true;
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "StopTradeSkillRepeat",
+        lua.create_function(|lua, ()| {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .trade_skill_stop_repeat = true;
+            Ok(())
+        })?,
+    )?;
+    Ok(())
+}

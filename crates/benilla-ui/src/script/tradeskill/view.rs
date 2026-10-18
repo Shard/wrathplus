@@ -85,8 +85,19 @@ fn passes_filters(model: &Model, r: &TradeSkillRecipe) -> bool {
         .group
         .as_ref()
         .map_or((u32::MAX, u32::MAX), |(c, s, _)| (*c, *s));
+    let (min, max) = model.trade_skill_level_filter;
+    // Build 12340's rebuild `0x5dcc40`: makeable only, then the level and name filters
+    // (`0x5dc110`). Labelled: the level is the product's ItemLevel and the name the recipe's, as
+    // `0x5dc110` is not traced.
+    let level = i64::from(r.product_item_level);
     !model.trade_skill_subclass_hidden.contains(&key)
         && inv_slot_mask(r.product_inv_type) & model.trade_skill_invslot_mask != 0
+        && (!model.trade_skill_only_makeable || r.num_available > 0)
+        && ((min, max) == (0, 0) || (min..=max).contains(&level))
+        && model
+            .trade_skill_name_filter
+            .as_ref()
+            .is_none_or(|f| r.name.to_lowercase().contains(f.as_str()))
 }
 
 /// One recipe group (`0x4fca20`), keyed by the product's `(ItemClass, ItemSubClass)` and rebuilt

@@ -52,6 +52,7 @@ pub use wrath_calendar::{
     WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid, WrathCalendarRaidReset,
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
+pub use wrath_gm_survey::{WrathGmSurvey, WrathGmSurveyQuestion, WrathGmSurveySubmit};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
@@ -194,6 +195,7 @@ pub use wrath_achievements::{
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;
+mod wrath_gm_survey;
 mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
@@ -251,7 +253,8 @@ pub use addon_enable::EnableHash;
 pub use addon_message::{AddonDistribution, AddonSend};
 pub use auction::{
     AuctionBid, AuctionCategory, AuctionHighBidder, AuctionItemRow, AuctionListState, AuctionQuery,
-    AuctionStartRequest, AuctionState, AuctionSubCategory, BIDDER, LIST, OWNER, SORT_KEYS,
+    AuctionSortOp, AuctionStartRequest, AuctionState, AuctionSubCategory, BIDDER, LIST, OWNER,
+    SORT_KEYS,
 };
 pub use aura::{AuraState, TrackingState};
 pub use backdrop::{inset_atlas_bleed, pieces, Backdrop, BackdropPiece, Insets};
@@ -892,6 +895,10 @@ impl UiScript {
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;
+            auction::install_wrath(&lua)?;
+            tradeskill::install_wrath(&lua)?;
+            trainer::install_wrath(&lua)?;
+            wrath_gm_survey::install(&lua)?;
         }
 
         let s = UiScript {

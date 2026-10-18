@@ -31,6 +31,7 @@ fn recipe(
             have: 10,
         }],
         tools: vec![("Anvil".into(), true)],
+        description: None,
     }
 }
 
@@ -865,4 +866,44 @@ fn the_link_verbs_answer_the_clients_shapes() {
         "{err}"
     );
     assert!(s.run("GetTradeSkillItemLink('x')").is_err());
+}
+
+/// Build 12340's filters hide by makeable count, name and level, each change owed its event;
+/// the description and recipe link read the visible row.
+#[test]
+fn wrath_filters_description_and_recipe_link() {
+    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let mut state = two_recipe_state();
+    state.recipes[0].description = Some("Weave a bolt.".into());
+    s.set_trade_skill(Some(state));
+    // Row 1 is the Cloth header, row 2 Simple Robe (tier 0), row 3 Bolt of Linen Cloth.
+    assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 3);
+    assert_eq!(
+        s.eval::<String>("return GetTradeSkillDescription(3)").unwrap(),
+        "Weave a bolt."
+    );
+    assert!(s.eval::<bool>("return GetTradeSkillDescription(2) == nil").unwrap());
+    assert_eq!(
+        s.eval::<String>("return GetTradeSkillRecipeLink(3)").unwrap(),
+        "|cffffd000|Henchant:2963|h[Tailoring: Bolt of Linen Cloth]|h|r"
+    );
+    s.run("TradeSkillOnlyShowMakeable(true)").unwrap();
+    assert!(s.take_trade_skill_touched());
+    assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 2, "the robe has 0");
+    s.run("TradeSkillOnlyShowMakeable(false) SetTradeSkillItemNameFilter('ROBE')")
+        .unwrap();
+    assert!(s.take_trade_skill_filter_touched());
+    assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 2);
+    s.run("SetTradeSkillItemNameFilter('') SetTradeSkillItemLevelFilter(5, 10)")
+        .unwrap();
+    assert_eq!(
+        s.eval::<i64>("return GetNumTradeSkills()").unwrap(),
+        0,
+        "both products are level 0, and an emptied group drops its header"
+    );
+    s.run("SetTradeSkillItemLevelFilter(0, 0) StopTradeSkillRepeat()").unwrap();
+    assert!(s.take_trade_skill_stop_repeat());
+    assert!(s
+        .eval::<bool>("local a, b = IsTradeSkillLinked() return a == nil and b == nil and GetTradeSkillListLink() == nil")
+        .unwrap());
 }

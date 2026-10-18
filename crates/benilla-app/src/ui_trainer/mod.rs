@@ -235,7 +235,28 @@ fn resolve_service(
         group_key,
         group_name,
         tooltip: service_tooltip(wire.spell, spells),
+        item_link: service_item_link(trainer_type, display, items, commands),
     }
+}
+
+/// `GetTrainerServiceItemLink` (`0x596290`): at a tradeskill trainer, a spell whose first effect
+/// is `CREATE_ITEM` (24), `CREATE_RANDOM_ITEM` (59) or `CREATE_ITEM_2` (157) links its item,
+/// once the template is cached (the link's level field is 0, as `0x61e360` writes it).
+fn service_item_link(
+    trainer_type: u32,
+    display: Option<&benilla_formats::SpellDisplay>,
+    items: &Items,
+    commands: &NetCommands,
+) -> Option<String> {
+    let d = display.filter(|_| trainer_type == TRAINER_TYPE_TRADESKILL)?;
+    let item = d.effect_item_type[0];
+    if !matches!(d.effects[0], 24 | 59 | 157) || item == 0 {
+        return None;
+    }
+    let t = items.template(item, 0, commands)?;
+    Some(crate::items::wrath_item_link(
+        item, &t.name, t.quality, [0; 4], 0, 0, 0,
+    ))
 }
 
 /// Build the Lua snapshot from [`TrainerOpen`] and the spell and skill catalogs.

@@ -227,6 +227,7 @@ fn resolve_recipe(
     commands: &NetCommands,
     cooldowns: &crate::spell::Cooldowns,
     now: Instant,
+    describe: &dyn Fn(&benilla_formats::SpellDisplay) -> Option<String>,
 ) -> Option<TradeSkillRecipe> {
     let d = spells.catalog.get(spell_id)?;
     let sla = skill_lines.catalog.ability(spell_id)?;
@@ -315,6 +316,7 @@ fn resolve_recipe(
         product_item_level,
         reagents,
         tools,
+        description: describe(d),
     })
 }
 
@@ -352,6 +354,29 @@ fn feed_trade_skill(
             .map(|l| l.name.clone())
             .unwrap_or_else(|| format!("Skill {line}"));
         let now = Instant::now();
+        // Build 12340's `GetTradeSkillDescription` (`0x5dbe10` → `0x57abc0`): the spell's own
+        // description with its tokens filled. Labelled: no caster spell modifiers apply.
+        let global = |key: &str| benilla_ui::strings::global(script.lua(), key);
+        let ctx = benilla_formats::TokenContext {
+            durations: &spells.durations,
+            radii: &spells.radii,
+            ranges: Some(&spells.ranges),
+            skill: &|id| {
+                crate::spell::spell_skill_value(Some(store), Some(&skill_lines.catalog), id)
+            },
+            lookup: &|id| spells.catalog.get(id),
+            mods: None,
+            unmodified_points: false,
+            home_area: &|| None,
+            global: &global,
+            printf: &crate::ui_script::token_printf,
+        };
+        let describe = |d: &benilla_formats::SpellDisplay| {
+            d.description
+                .as_deref()
+                .filter(|t| !t.is_empty())
+                .map(|t| benilla_formats::substitute(t, d, &ctx))
+        };
         let recipes: Vec<TradeSkillRecipe> = actions
             .spells
             .iter()
@@ -377,6 +402,7 @@ fn feed_trade_skill(
                     &commands,
                     &cooldowns,
                     now,
+                    &describe,
                 )
             })
             .collect();
@@ -483,6 +509,14 @@ fn drain_trade_skill(
     let touched = script.take_trade_skill_touched();
     if touched && open.line.is_some() {
         script.fire_event("TRADE_SKILL_UPDATE", vec![]);
+    }
+    // Build 12340's name filter fires `TRADE_SKILL_FILTER_UPDATE` (event `0x27d`, `0x5dcf60`).
+    if script.take_trade_skill_filter_touched() && open.line.is_some() {
+        script.fire_event("TRADE_SKILL_FILTER_UPDATE", vec![]);
+    }
+    // `StopTradeSkillRepeat`: the Create All loop ends after the cast in flight.
+    if script.take_trade_skill_stop_repeat() {
+        repeat.clear();
     }
 
     if script.take_trade_skill_close() {

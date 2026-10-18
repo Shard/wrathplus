@@ -645,6 +645,7 @@ fn trainer_service(spell_id: u32, name: &str, tooltip: TrainerTooltip) -> Traine
         category: TrainerServiceCategory::Available,
         group_key: 26,
         group_name: "Arms".into(),
+        item_link: None,
         ..Default::default()
     }
 }

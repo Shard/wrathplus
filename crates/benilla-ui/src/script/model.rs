@@ -283,6 +283,7 @@ pub(crate) struct Model {
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
     pub(crate) wrath_calendar: super::wrath_calendar::State,
     pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
+    pub(crate) wrath_gm_survey: super::wrath_gm_survey::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
@@ -707,6 +708,14 @@ pub(crate) struct Model {
     /// A filter or subclass collapse changed: `TRADE_SKILL_UPDATE` (`0x13a`) is owed this frame, as
     /// the client fires it inside the call (`0x4fd710`/`0x4fd730`/`0x4fd750`, `0x4fd180`).
     pub(crate) trade_skill_touched: bool,
+    /// Build 12340's item-level filter (`0xc235c0`/`0xc235c4`), `(0, 0)` off.
+    pub(crate) trade_skill_level_filter: (i64, i64),
+    /// Build 12340's lower-cased name filter (`0xc235bc`).
+    pub(crate) trade_skill_name_filter: Option<String>,
+    /// `TradeSkillOnlyShowMakeable` (`0xc235c8`).
+    pub(crate) trade_skill_only_makeable: bool,
+    pub(crate) trade_skill_filter_touched: bool,
+    pub(crate) trade_skill_stop_repeat: bool,
 
     /// The open craft window's recipes.
     pub(crate) craft: Option<craft::CraftState>,
@@ -785,7 +794,9 @@ pub(crate) struct Model {
     pub(crate) auction_bids: Vec<auction::AuctionBid>,
     pub(crate) auction_cancels: Vec<u32>,
     pub(crate) auction_start: Option<auction::AuctionStartRequest>,
-    pub(crate) auction_sorts: Vec<(usize, String)>,
+    pub(crate) auction_sorts: Vec<(usize, auction::AuctionSortOp)>,
+    /// `SetAuctionsTabShowing(bool)` (`0xc0f3f5`).
+    pub(crate) auctions_tab_showing: bool,
     pub(crate) auction_close: bool,
     /// The sell slot's item, resolved to its guid when `StartAuction` fires.
     pub(crate) auction_sell_item: Option<cursor::CursorItem>,
@@ -1188,6 +1199,7 @@ impl Model {
             wrath_quests_completed: Default::default(),
             wrath_calendar: Default::default(),
             wrath_saved_instances: Default::default(),
+            wrath_gm_survey: Default::default(),
             wrath_inspect_talents: None,
             wrath_server_time_offset: None,
             raid_selection: 0,
@@ -1391,6 +1403,11 @@ impl Model {
             trade_skill_last_line: 0,
             trade_skill_selected_spell: 0,
             trade_skill_touched: false,
+            trade_skill_level_filter: (0, 0),
+            trade_skill_name_filter: None,
+            trade_skill_only_makeable: false,
+            trade_skill_filter_touched: false,
+            trade_skill_stop_repeat: false,
             craft: None,
             craft_dos: Vec::new(),
             craft_selection: 0,
@@ -1440,6 +1457,7 @@ impl Model {
             auction_cancels: Vec::new(),
             auction_start: None,
             auction_sorts: Vec::new(),
+            auctions_tab_showing: false,
             auction_close: false,
             auction_sell_item: None,
             trade: None,
