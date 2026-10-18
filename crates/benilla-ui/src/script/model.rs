@@ -890,6 +890,8 @@ pub(crate) struct Model {
 
     /// The paper doll's combat stats, `None` until the first push.
     pub(crate) wrath_paperdoll_stats: super::WrathPaperDollStats,
+    /// The Wrath companion lists (`wrath_companions`).
+    pub(crate) wrath_companions: super::WrathCompanions,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1510,6 +1512,7 @@ impl Model {
             .into_iter()
             .collect(),
             wrath_paperdoll_stats: Default::default(),
+            wrath_companions: Default::default(),
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,

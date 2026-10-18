@@ -51,7 +51,7 @@ const SPELL: &str = "DBFilesClient\\Spell.dbc";
 
 /// The 1.12 record's 173 fields plus slots for the 3.3.5-only columns the build-12340 layout
 /// maps in (`wrath_layouts::spell`); a 1.12 file no longer parses.
-const SPELL_FIELDS: usize = 183;
+const SPELL_FIELDS: usize = 186;
 /// `SpellFamilyFlags[2]`, family bits 64-95 (3.3.5 column 211; AzerothCore `flag96
 /// SpellFamilyFlags`, 209-211).
 const COL_SPELL_FAMILY_FLAGS_2: usize = 173;
@@ -123,6 +123,9 @@ const COL_SPEED: usize = 37;
 const COL_EFFECT_1: usize = 61;
 /// `EffectMiscValue[0]`, `61 + 15 × 3`: the 16th `[3]` array from `Effect`.
 const COL_EFFECT_MISC_1: usize = 106;
+/// `EffectMiscValueB[3]` (3.3.5 columns 113-115), mapped past the 1.12 record: for a SUMMON
+/// effect, the `SummonProperties.dbc` row (`0x8009b0` reads `+0x1c4`).
+const COL_EFFECT_MISC_B_1: usize = 183;
 /// `EffectTriggerSpell[0]`, `61 + 16 × 3`.
 const COL_EFFECT_TRIGGER_1: usize = 109;
 /// `SPELL_EFFECT_LEARN_SPELL`: teaches its `EffectTriggerSpell`, as a trainer's wrapper does.
@@ -375,7 +378,7 @@ impl SpellCatalog {
     }
 }
 
-/// 183 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
+/// 186 slots, `u32` but for `Speed`, the four float effect arrays and the four enUS string heads;
 /// the signed columns stay `u32`, as [`i32_at`] reads the same bits.
 fn spell_schema() -> Schema {
     let mut s = Schema::new("Spell");
@@ -678,6 +681,9 @@ pub fn load_spell_catalog(chain: &mut Chain) -> Result<SpellCatalog> {
                 }),
                 effect_misc_value: std::array::from_fn(|i| {
                     i32_at(r, COL_EFFECT_MISC_1 + i).unwrap_or(0)
+                }),
+                effect_misc_value_b: std::array::from_fn(|i| {
+                    i32_at(r, COL_EFFECT_MISC_B_1 + i).unwrap_or(0)
                 }),
             },
         );

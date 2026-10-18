@@ -82,6 +82,8 @@ pub use factions::{
     FactionTemplate, Reaction,
 };
 mod creature_types;
+mod summon_properties;
+pub use summon_properties::{load_summon_properties, SummonProperties, SUMMON_SLOT_MINIPET};
 pub use creature_types::{load_creature_type_flags, CreatureTypeFlags};
 /// The chat language scramble, the reference's `0x49b560`.
 mod garble;

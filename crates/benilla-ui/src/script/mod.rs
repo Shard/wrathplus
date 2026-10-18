@@ -186,6 +186,8 @@ pub use wrath_item_services::{ItemRefundCost, ItemRefundView, ItemServiceRequest
 mod wrath_bag_portrait;
 mod wrath_paperdoll;
 mod wrath_character;
+mod wrath_companions;
+pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
 mod wrath_lfg;
 pub use wrath_lfg::{
@@ -791,6 +793,7 @@ impl UiScript {
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
             wrath_character::install(&lua)?;
+            wrath_companions::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;

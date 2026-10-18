@@ -36,11 +36,12 @@ impl Plugin for UiStablePlugin {
                     // Range-close first so the clear fires `PET_STABLE_CLOSED` the same frame.
                     close_npc_session_out_of_range::<StableOpen>.before(feed_stable),
                     feed_stable.in_set(UiFeed),
-                    drain_stable.after(UiInput),
+                    drain_stable.after(UiInput).before(StableBoothFeed),
                     // After the VM ticks: the selection is written by a click during `UiInput`
                     // and by `PetStable_Update`'s re-pick (`PetStable.lua:48-63`) inside the
                     // feed's events, so an earlier read shows the previous pet for a frame.
                     feed_stable_booth
+                        .in_set(StableBoothFeed)
                         .after(UiInput)
                         // Gated: the feed starts with a name lookup over every UI frame.
                         .run_if(
@@ -55,6 +56,11 @@ impl Plugin for UiStablePlugin {
             );
     }
 }
+
+/// The stable booth's feed; the companion preview (`ui_companions`) writes the booth after it
+/// whenever no stable is open.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct StableBoothFeed;
 
 /// The open stable: its master and the list's rows as the wire gave them, until a close or a
 /// disconnect.
