@@ -103,6 +103,18 @@ pub(crate) struct CalendarCatalog {
     holidays: HolidayCatalog,
     textures: [Vec<WrathCalendarTexture>; 2],
     difficulty_keys: HashMap<(i32, i32), String>,
+    max_players: HashMap<(i32, i32), i32>,
+}
+
+impl CalendarCatalog {
+    /// `MapDifficulty`'s string key and player cap for a map and difficulty.
+    pub(crate) fn difficulty(&self, map: u32, difficulty: u32) -> Option<(String, i32)> {
+        let key = (map as i32, difficulty as i32);
+        Some((
+            self.difficulty_keys.get(&key)?.clone(),
+            self.max_players.get(&key).copied().unwrap_or(0),
+        ))
+    }
 }
 
 /// One listed event and the player's invite to it.
@@ -189,6 +201,10 @@ fn load(mut catalog: ResMut<CalendarCatalog>, assets: Option<Res<benilla_assets:
                     .difficulty_keys
                     .entry((d.map_id(), d.difficulty()))
                     .or_insert_with(|| d.raw_string.clone());
+                catalog
+                    .max_players
+                    .entry((d.map_id(), d.difficulty()))
+                    .or_insert(d.max_players());
             }
             catalog.textures = textures(&lfg, &catalog.difficulty_keys);
         }
