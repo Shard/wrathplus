@@ -116,7 +116,29 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::XpGain, on_xp_gain)
             .net_handler(K::ExplorationXp, on_exploration_xp)
             .net_handler(K::LevelUp, on_level_up)
-            .net_handler(K::PvpCredit, on_pvp_credit);
+            .net_handler(K::PvpCredit, on_pvp_credit)
+            .net_handler(K::SpellStart, on_native_only)
+            .net_handler(K::SpellGo, on_native_only)
+            .net_handler(K::UnitAuras, on_native_only)
+            .net_handler(K::ObjectDestroyed, on_native_only)
+            .net_handler(K::ObjectsRemoved, on_native_only);
+    }
+}
+
+/// The kinds only the build-12340 log reads: casts, aura snapshots and a unit leaving (its aura
+/// snapshot goes). Our refused casts and steals record from their sole owners
+/// ([`crate::spell::native_failure`], [`crate::net::wrath_spell_log_capture`]).
+fn on_native_only(In(ev): In<SessionEvent>, native: Option<ResMut<native::NativeCombatLog>>) {
+    if let (
+        Some(mut native),
+        SessionEvent::SpellStart { .. }
+        | SessionEvent::SpellGo { .. }
+        | SessionEvent::UnitAuras { .. }
+        | SessionEvent::ObjectDestroyed(_)
+        | SessionEvent::ObjectsRemoved(_),
+    ) = (native, &ev)
+    {
+        native.record(&ev);
     }
 }
 
@@ -303,6 +325,7 @@ fn on_enchantment_log(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
 }
 
 fn on_spell_log_execute(In(ev): In<SessionEvent>, c: Ctx, mut l: Sinks) {
+    l.record_native(&ev);
     if let SessionEvent::SpellLogExecute(x) = ev {
         let ctx = c.ctx();
         chat::spell_log_execute(&x, &ctx, &l.stores, &l.poses, &mut l.log);
