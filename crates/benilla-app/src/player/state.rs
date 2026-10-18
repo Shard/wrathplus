@@ -553,6 +553,12 @@ impl Player {
         super::move_trace::settle(resident, waited, self.pos);
     }
 
+    /// Build 12340's `IsFalling` (`0x612430`): `FALLING` (`0x1000`) without `ROOT` (`0x800`), our
+    /// mover airborne and not rooted.
+    pub(crate) fn is_falling(&self) -> bool {
+        self.airborne_since.is_some() && !self.modes.rooted
+    }
+
     /// The movement flags as last streamed; the water foam tests `& 0xf` (translating) and `& 0x30`
     /// (turning) on them, as the reference's ripple driver `0x5fa760` does.
     pub(crate) fn move_flags(&self) -> u32 {
