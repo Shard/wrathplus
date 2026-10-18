@@ -116,6 +116,9 @@ pub struct PlayerReqState {
     /// Whether the spellbook holds a `SPELL_EFFECT_DUAL_WIELD` (40) spell, the client's
     /// `0xc4d770` (read at `0x5eab70`); without it an off-hand weapon reds its slot cell.
     pub can_dual_wield: bool,
+    /// `ChrClasses.dbc` relic flag (`UnitHasRelicSlot`): the ranged slot takes relics, and only
+    /// relics, in the Wrath flyout's fit test (`0x7082b0`).
+    pub has_relic_slot: bool,
     /// The highest lifetime honor rank (`PLAYER_FIELD_BYTES` byte 3).
     pub honor_rank: u8,
 }

@@ -33,6 +33,8 @@ pub struct WrathPaperDollStats {
     pub shield_block: u32,
     pub expertise: [u32; 2],
     pub mana_regen: [f32; 2],
+    /// `PLAYER_PET_SPELL_POWER`, `GetPetSpellBonusDamage` (`0x60e410` reads player word 1177).
+    pub pet_spell_power: i32,
     pub conversions: WrathStatConversions,
 }
 

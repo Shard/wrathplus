@@ -137,6 +137,7 @@ fn snapshot(f: &ObjectFields) -> WrathPaperDollStats {
             float(Field::UnitPowerRegenFlatModifier),
             float(Field::UnitPowerRegenInterruptedFlatModifier),
         ],
+        pet_spell_power: word(Field::PlayerPetSpellPower) as i32,
         // No fabricated rating/primary-stat ratios while GameTables are unavailable.
         conversions: Default::default(),
     }

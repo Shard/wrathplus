@@ -283,6 +283,35 @@ pub(super) fn clear_content(model: &mut Model, h: FrameHandle) {
             // and re-lays out nothing.
         }
     }
+    // `AddTexture`'s icons hide and their lines' indents return to the plain line anchor.
+    let textures = tip_mut(model, h)
+        .map(|t| std::mem::take(&mut t.texture_lines).len())
+        .unwrap_or(0);
+    let name = model.arena.frame(h).and_then(|f| f.name.clone());
+    if let (Some(name), true) = (name, textures > 0) {
+        for i in 1..=textures {
+            let rh = model
+                .region_names
+                .get(&format!("{name}Texture{i}"))
+                .and_then(|id| model.id_to_region.get(id))
+                .copied();
+            if let Some(d) = rh.and_then(|rh| model.region_data.get_mut(&rh)) {
+                d.hidden = true;
+            }
+        }
+        for rh in lefts_for_indent(model, h) {
+            if let Some(a) = model
+                .region_data
+                .get_mut(&rh)
+                .and_then(|d| d.anchors.first_mut())
+            {
+                if a.x_off != 0.0 {
+                    a.x_off = 0.0;
+                    model.touch_layout_region(rh);
+                }
+            }
+        }
+    }
     if let Ok(t) = tip_mut(model, h) {
         t.num_lines = 0;
         t.min_width = 0.0;
@@ -301,6 +330,14 @@ pub(super) fn clear_content(model: &mut Model, h: FrameHandle) {
         .and_then(|n| model.arena.lookup(&format!("{n}StatusBar")));
     if let Some(bar) = bar {
         model.arena.set_shown(bar, false);
+    }
+}
+
+/// Every pooled left cell after line 1, the ones an `AddTexture` indent can move.
+fn lefts_for_indent(model: &Model, h: FrameHandle) -> Vec<crate::widget::RegionHandle> {
+    match model.arena.frame(h).map(|f| &f.kind_state) {
+        Some(KindState::Tooltip(t)) => t.left_lines.iter().skip(1).copied().collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -626,11 +663,22 @@ pub(super) fn layout_tooltips(model: &mut Model) {
         let mut maxw: f32 = 0.0;
         let mut totalh: f32 = 0.0;
         let mut counted = 0usize;
-        for (l, r) in &rows {
+        // A Wrath `AddTexture` indent chains down the lines, so each line's left edge is the
+        // running sum of the offsets above it (0 everywhere else).
+        let mut indent: f32 = 0.0;
+        for (i, (l, r)) in rows.iter().enumerate() {
+            if i > 0 {
+                indent += model
+                    .region_data
+                    .get(&lefts[i])
+                    .and_then(|d| d.anchors.first())
+                    .map_or(0.0, |a| a.x_off);
+            }
             if l.is_none() && r.is_none() {
                 continue;
             }
             let (lw, lh) = l.unwrap_or((0.0, 0.0));
+            let lw = lw + indent.max(0.0);
             let (rw, rh_h) = r.map_or((0.0, 0.0), |(w, hgt)| (TOOLTIP_DOUBLE_GAP + w, hgt));
             if counted > 0 {
                 totalh += TOOLTIP_LINE_GAP;

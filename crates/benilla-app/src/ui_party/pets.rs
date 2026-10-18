@@ -958,6 +958,7 @@ pub(in crate::ui_party) mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 0,
+                modifiers: None,
             }),
         );
     }

@@ -215,6 +215,14 @@ pub type BankBagSlots = [Option<InvSlotView>; BANK_BAG_SLOT_COUNT];
 
 /// `PaperDollItemFrame.dbc`'s 36 rows as `(SlotName, SlotID, art suffix)`. The texture column
 /// shares strings between rows, so `BackSlot` shows the Chest art and `AmmoSlot` the Ranged.
+/// `SLOT_INFO`'s id for a slot name, case-folded as `GetInventorySlotInfo` matches.
+pub(super) fn slot_id_by_name(name: &str) -> Option<i64> {
+    SLOT_INFO
+        .iter()
+        .find(|(n, _, _)| n.eq_ignore_ascii_case(name))
+        .map(|(_, id, _)| *id)
+}
+
 const SLOT_INFO: [(&str, i64, &str); 36] = [
     ("AmmoSlot", 0, "Ranged"),
     ("HeadSlot", 1, "Head"),
