@@ -69,6 +69,10 @@ fn every_wrath_writer_route_is_admitted() {
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
         (
+            "NativeAppearance",
+            ClientCommand::NativeAppearance(benilla_protocol::wrath_appearance::Command::ShowingHelm { show: true }),
+        ),
+        (
             "NativeGuildBankSwap",
             ClientCommand::NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap {
                 banker: 1,

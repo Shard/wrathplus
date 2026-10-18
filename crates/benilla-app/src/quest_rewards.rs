@@ -52,6 +52,15 @@ impl QuestRewardTables {
         title_text(row, subject?)
     }
 
+    /// A title by its known-title bit, formatted for `subject` (`SMSG_TITLE_EARNED`).
+    pub(crate) fn title_by_bit(
+        &self,
+        bit_index: u32,
+        subject: &crate::npc_text::Subject,
+    ) -> Option<String> {
+        title_text(self.titles.as_ref()?.by_bit(bit_index)?, subject)
+    }
+
     pub(crate) fn xp(
         &self,
         quest_level: u32,
