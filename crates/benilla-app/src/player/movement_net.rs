@@ -308,7 +308,7 @@ pub(super) fn stream_self_movement_for_dialect(
         send_move!(MoveKind::StartDescend);
     } else if removed & VERTICAL != 0
         && wire_flags & VERTICAL == 0
-        && wire_flags & move_flags::FLYING != 0
+        && wire_flags & (move_flags::FLYING | move_flags::SWIMMING) != 0
     {
         send_move!(MoveKind::StopAscend);
     }

@@ -582,6 +582,20 @@ pub(super) fn control(
         // (`0x9883f0`), so its Space is the ascend alone.
         let ascend = binds.pressed(crate::bindings::Input::Ascend) && may_translate;
         let descend = binds.pressed(crate::bindings::Input::Descend) && may_translate;
+        // Climbing out of the water with the grant: a flier keeps flying through the surface, and
+        // a swimmer at the surface takes off (`0x989890` clears SWIMMING; the trigger is the same
+        // labelled inference as the air take-off, `super::flight`).
+        let surfacing = ascend
+            && player.modes.can_fly
+            && !player.modes.rooted
+            && (player.flying || (swimming && swim::at_surface(&player, surface_y)));
+        let swimming = if surfacing {
+            player.swimming = false;
+            player.flying = true;
+            false
+        } else {
+            swimming
+        };
         if swimming || knockback.is_some() || !player.modes.can_fly {
             flight::land(&mut player);
         }
@@ -668,6 +682,7 @@ pub(super) fn control(
                 surface_y,
                 (move_fwd, move_right),
                 (swim_fwd, swim_side),
+                vertical,
                 mover_speeds,
                 move_speed,
                 if translating { drunk_wobble } else { 0.0 },
@@ -756,6 +771,12 @@ pub(super) fn control(
             now,
             launch_y,
         );
+        // A swimmer's ascend or descend key rides the wire as a flier's does (`0x9898e0`).
+        if swimming && vertical > 0.0 {
+            move_flags_now |= move_flags::ASCENDING;
+        } else if swimming && vertical < 0.0 {
+            move_flags_now |= move_flags::DESCENDING;
+        }
         // The held pitch key rides the wire while in the medium (one at a time, as `0x989220`).
         if pitch_key > 0.0 {
             move_flags_now |= move_flags::PITCH_UP;

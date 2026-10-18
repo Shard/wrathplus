@@ -378,7 +378,8 @@ pub(in crate::net) fn extrapolate_remote_units(
         // only, since the arc owns its Z. A swimmer (the wire Z is its depth) and a transport rider
         // (a transport-local pose) are not resolved.
         let airborne = rm.flags & move_flags::FALLING != 0;
-        let afloat = rm.flags & move_flags::SWIMMING != 0;
+        // A build 12340 flier is not resolved either: its wire Z is its altitude.
+        let afloat = rm.flags & (move_flags::SWIMMING | move_flags::FLYING) != 0;
         // A flag-still mover is not integrated: `CMovement::Update`'s substep loop (`0x616e20`)
         // and the per-mover tick (`0x6166f5`) both bail on `0x20ff`, so its pose is the last
         // packet's. This also keeps a standing mover from sinking where a WMO floor collider has
@@ -447,7 +448,7 @@ pub(in crate::net) fn extrapolate_remote_units(
                 orientation = facing_lerp(orientation, ev.mv.orientation, dt, remaining_s);
                 // Predicted from the pre-frame state to the fire-time.
                 let (predicted, ..) = rm.advance(s, dt + remaining_s);
-                let swimming = ev.mv.flags & move_flags::SWIMMING != 0;
+                let swimming = ev.mv.flags & (move_flags::SWIMMING | move_flags::FLYING) != 0;
                 pos = reconcile_lerp(pos, predicted, ev.mv.position, swimming, dt, remaining_s);
             }
         }
@@ -601,9 +602,9 @@ impl RemoteMotion {
         }
         let orientation = self.orientation + turn * speeds.turn_rate * dt;
 
-        // Swimming, the forward axis is pitched: `0x7c5880` writes `(cosY cosP, sinY cosP, sinP)`;
-        // the strafe axis stays level.
-        let swimming = self.flags & move_flags::SWIMMING != 0;
+        // Swimming or flying, the forward axis is pitched: `0x7c5880` writes
+        // `(cosY cosP, sinY cosP, sinP)`; the strafe axis stays level.
+        let swimming = self.flags & (move_flags::SWIMMING | move_flags::FLYING) != 0;
         let (hp, vp) = if swimming {
             (self.pitch.cos(), self.pitch.sin())
         } else {
@@ -629,7 +630,17 @@ impl RemoteMotion {
         }
         let dx = fwd_amt * fwd[0] * hp + left_amt * left[0];
         let dy = fwd_amt * fwd[1] * hp + left_amt * left[1];
-        let dz = fwd_amt * vp;
+        // The ascend and descend keys climb or sink straight up or down (`0x9898e0`).
+        let vertical = if !swimming {
+            0.0
+        } else if self.flags & move_flags::ASCENDING != 0 {
+            1.0
+        } else if self.flags & move_flags::DESCENDING != 0 {
+            -1.0
+        } else {
+            0.0
+        };
+        let dz = fwd_amt * vp + vertical;
 
         let len = (dx * dx + dy * dy + dz * dz).sqrt();
         // `GetCurrentSpeed` (`0x7c4c90`), shared with the local controller; its walk arm
