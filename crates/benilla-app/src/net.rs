@@ -2187,6 +2187,12 @@ pub(crate) enum ClientCommand {
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
     NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command),
+    /// `CMSG_GUILD_BANK_SWAP_ITEMS`: a deposit, move or withdrawal.
+    NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap),
+    /// `CMSG_GUILD_BANK_UPDATE_TAB`: a tab's name and icon.
+    NativeGuildBankTab(benilla_protocol::wrath_guild_bank_tab::UpdateTab),
+    /// The tab text and log queries and the text save.
+    NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
     /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
     SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
@@ -2321,6 +2327,10 @@ pub(crate) enum ClientCommand {
     GuildInfoText {
         text: String,
     },
+    /// `QueryGuildEventLog()`: `MSG_GUILD_EVENT_LOG_QUERY`.
+    GuildEventLogQuery,
+    /// `GuildControlSaveRank` in 3.3.5: the rank with its bank money and tab rights.
+    NativeGuildRank(benilla_protocol::wrath_guild_rank::SaveRank),
     // ── Petitions (founding a guild) ──
     // A charter is addressed by its item guid except in the record query. A refusal is
     // `SMSG_GUILD_COMMAND_RESULT`; almost nothing is acked, so nothing is applied at the send.

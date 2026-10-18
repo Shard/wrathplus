@@ -1328,7 +1328,20 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. }
         | ClientCommand::GuildDemote { .. }
         | ClientCommand::GuildRemove { .. }
-        | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        | ClientCommand::GuildMotd { .. }
+        | ClientCommand::GuildCreate { .. }
+        | ClientCommand::GuildLeave
+        | ClientCommand::GuildDisband
+        | ClientCommand::GuildLeader { .. }
+        | ClientCommand::GuildAddRank { .. }
+        | ClientCommand::GuildDelRank
+        | ClientCommand::GuildSetPublicNote { .. }
+        | ClientCommand::GuildSetOfficerNote { .. }
+        | ClientCommand::GuildInfoText { .. }
+        | ClientCommand::SaveGuildEmblem { .. }
+        | ClientCommand::TabardVendorActivate { .. }
+        | ClientCommand::GuildEventLogQuery
+        | ClientCommand::NativeGuildRank(_) => WrathRoute::NativeGuild,
         ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
         ClientCommand::NativeInstanceControl(_) => WrathRoute::NativeInstanceControl,
         ClientCommand::NativeInventory(_)
@@ -1391,7 +1404,10 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::DuelAccepted { .. }
         | ClientCommand::DuelCancelled { .. }
         | ClientCommand::SetContactNotes { .. } => WrathRoute::NativeContacts,
-        ClientCommand::NativeGuildBank(_) => WrathRoute::NativeGuildBank,
+        ClientCommand::NativeGuildBank(_)
+        | ClientCommand::NativeGuildBankSwap(_)
+        | ClientCommand::NativeGuildBankTab(_)
+        | ClientCommand::NativeGuildBankText(_) => WrathRoute::NativeGuildBank,
         ClientCommand::NativeBattleground(_)
         | ClientCommand::BattlemasterHello { .. }
         | ClientCommand::AreaSpiritHealerQuery { .. }
@@ -1817,8 +1833,20 @@ fn writer_loop(
                         active.writer.send_raw(opcode, &body)
                     }
                     WrathRoute::NativeGuildBank => {
-                        let ClientCommand::NativeGuildBank(command) = command else { unreachable!() };
-                        active.writer.send_raw(command.opcode(), &command.encode())
+                        let packet = match command {
+                            ClientCommand::NativeGuildBank(c) => Ok((c.opcode(), c.encode())),
+                            ClientCommand::NativeGuildBankSwap(c) => Ok((c.opcode(), c.encode())),
+                            ClientCommand::NativeGuildBankTab(c) => c.encode().map(|b| (c.opcode(), b)),
+                            ClientCommand::NativeGuildBankText(c) => c.encode().map(|b| (c.opcode(), b)),
+                            _ => unreachable!(),
+                        };
+                        match packet {
+                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                            Err(error) => {
+                                bevy::log::warn!("net(wrath): invalid guild-bank command rejected before send: {error}");
+                                continue;
+                            }
+                        }
                     }
                     WrathRoute::NativeSessionMeta => {
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));
@@ -4600,6 +4628,28 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
         ClientCommand::GuildMotd { motd } => G::Motd {
             text: motd.into_bytes(),
         },
+        ClientCommand::GuildCreate { name } => G::Create { name: name.into_bytes() },
+        ClientCommand::GuildLeave => G::Leave,
+        ClientCommand::GuildDisband => G::Disband,
+        ClientCommand::GuildLeader { name } => G::Leader { name: name.into_bytes() },
+        ClientCommand::GuildAddRank { name } => G::AddRank { name: name.into_bytes() },
+        ClientCommand::GuildDelRank => G::DelRank,
+        ClientCommand::GuildSetPublicNote { name, note } => G::SetNote {
+            officer: false,
+            name: name.into_bytes(),
+            note: note.into_bytes(),
+        },
+        ClientCommand::GuildSetOfficerNote { name, note } => G::SetNote {
+            officer: true,
+            name: name.into_bytes(),
+            note: note.into_bytes(),
+        },
+        ClientCommand::GuildInfoText { text } => G::InfoText { text: text.into_bytes() },
+        ClientCommand::SaveGuildEmblem { vendor, design } => G::SaveEmblem { vendor, design },
+        ClientCommand::TabardVendorActivate { npc } => G::TabardVendorActivate { vendor: npc },
+        ClientCommand::GuildEventLogQuery => G::EventLogQuery,
+        // The rank save has its own codec (`wrath_guild_rank`): all six bank rows ride along.
+        ClientCommand::NativeGuildRank(rank) => return Ok((rank.opcode(), rank.encode()?)),
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

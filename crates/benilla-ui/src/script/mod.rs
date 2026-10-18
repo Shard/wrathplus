@@ -46,12 +46,14 @@ mod wrath_chat_verbs;
 mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
+mod wrath_unit_popup;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
+pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
 pub use wrath_combat_log::{WrathCombatLogEntry, WrathCombatLogUnit, WRATH_COMBAT_LOG_EVENTS};
 pub use wrath_unit_casts::WrathUnitCast;
@@ -200,6 +202,10 @@ mod wrath_character;
 mod wrath_companions;
 mod wrath_runes;
 mod wrath_merchant;
+mod wrath_spellbook;
+mod wrath_skills;
+mod wrath_kb;
+mod wrath_options;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
@@ -811,6 +817,10 @@ impl UiScript {
             wrath_companions::install(&lua)?;
             wrath_runes::install(&lua)?;
             wrath_merchant::install(&lua)?;
+            wrath_spellbook::install(&lua)?;
+            wrath_skills::install(&lua)?;
+            wrath_kb::install(&lua)?;
+            wrath_options::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;
@@ -821,6 +831,7 @@ impl UiScript {
             wrath_modifiers::install(&lua)?;
             wrath_achievements::install(&lua)?;
             wrath_achievement_progress::install(&lua)?;
+            guild::install_wrath(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
@@ -832,6 +843,7 @@ impl UiScript {
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
+            wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
         }
 
