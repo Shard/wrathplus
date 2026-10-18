@@ -471,7 +471,18 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     set(lua, "SetActiveVoiceChannelBySessionID", |_, _| none())?;
 
     // ── Battle.net: never connected ──
-    for global in ["BNReportPlayer", "BNSetAFK", "BNSetDND"] {
+    // BNCreateConversation (`0x535ce0`), BNGetConversationMemberInfo (`0x53a150`),
+    // BNGetMatureLanguageFilter (`0x5377c0`) and BNIsSelf (`0x5378a0`) take the same
+    // not-connected exit before their usage checks.
+    for global in [
+        "BNReportPlayer",
+        "BNSetAFK",
+        "BNSetDND",
+        "BNCreateConversation",
+        "BNGetConversationMemberInfo",
+        "BNGetMatureLanguageFilter",
+        "BNIsSelf",
+    ] {
         set(lua, global, |_, _| none())?;
     }
     // GetAutoCompletePresenceID(name) (`0x57b500`): the Battle.net auto-complete entry, none.

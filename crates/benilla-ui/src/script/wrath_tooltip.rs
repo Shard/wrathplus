@@ -246,6 +246,26 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // SetFrameStack(showHidden) (`0x626560`): the debug frame-stack listing. Labelled: native's
+    // builder `0x6230d0` is unread; this lists the mouse focus and its parents, topmost first,
+    // the hidden ones only with showHidden.
+    let frame_stack: mlua::Function = lua
+        .load(
+            r#"return function(self, showHidden)
+                self:ClearLines()
+                local frame = GetMouseFocus and GetMouseFocus()
+                while frame do
+                    if showHidden or frame:IsVisible() then
+                        self:AddLine(frame:GetName() or "<Anon>")
+                    end
+                    frame = frame:GetParent()
+                end
+                self:Show()
+            end"#,
+        )
+        .set_name("=[AzerothBench SetFrameStack]")
+        .call(())?;
+    m.set("SetFrameStack", frame_stack)?;
     // FontString:GetFieldSize() (`0x48bc70`): the text buffer's fixed size, 8191 (`0x9ead70`).
     let fontstrings: Table = lua.named_registry_value(super::REG_FONTSTRING_METHODS)?;
     fontstrings.set("GetFieldSize", lua.create_function(|_, _this: Table| Ok(8191.0))?)?;
@@ -356,5 +376,22 @@ mod widget_tests {
         assert!(s.run("T:SetAnchorType()").is_err());
         s.run("E:SetFocus()").unwrap();
         assert!(s.eval::<bool>("return E:HasFocus() == true").unwrap());
+    }
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use crate::script::{ScriptDialect, UiScript};
+
+    #[test]
+    fn frame_stack_lists_and_battle_net_stays_inert() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("P = CreateFrame('Frame', 'StackOwner') T = CreateFrame('GameTooltip', 'StackTip', P) T:SetOwner(P, 'ANCHOR_NONE') T:SetFrameStack(true)").unwrap();
+        for check in [
+            "select('#', BNIsSelf(1)) == 0 and select('#', BNGetMatureLanguageFilter()) == 0",
+            "select('#', BNCreateConversation()) == 0 and select('#', BNGetConversationMemberInfo()) == 0",
+        ] {
+            assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+        }
     }
 }
