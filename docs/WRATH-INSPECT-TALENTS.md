@@ -34,3 +34,5 @@ slot mask with entry, per-slot enchant ids, random property, packed creator and 
 
 Labelled: a talent's `requiredSpell` reads as met; a negative random property
 (`ItemRandomSuffix.dbc`) names no suffix; gems print as enchant lines; no inspected pet talents.
+
+048A remove glyph (`NativeInspect(RemoveGlyph { slot })`, a u32 0-based slot; AC `HandleRemoveGlyph` ignores slots from 6) is a transport-only writer; App wires the glyph StaticPopup producer.

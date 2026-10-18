@@ -32,6 +32,7 @@ pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
 pub(crate) mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
+mod wrath_achievements;
 mod wrath_equipment_sets;
 mod wrath_item_refunds;
 mod wrath_sockets;
@@ -2155,8 +2156,12 @@ pub(crate) enum ClientCommand {
     /// Native Help Request commands with no shared producer: GM survey, response resolve,
     /// complaints and bug reports.
     NativeHelp(benilla_protocol::wrath_help::Command),
-    /// Native preview-talent learning; no UI producer.
+    /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
+    /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
+    NativeGuildBank(benilla_protocol::wrath_guild_bank_commands::Command),
+    /// `CMSG_SET_CONTACT_NOTES`: a friend's note.
+    SetContactNotes { guid: u64, note: String },
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),
     ArenaTeamCommand(benilla_protocol::wrath_arena_team::Command),
     /// Native Wrath guild-bank read request; no UI producer until owner guards exist.

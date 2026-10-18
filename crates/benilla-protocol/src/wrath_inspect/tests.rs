@@ -93,6 +93,7 @@ fn commands_encode_ac_read_order() {
         (Command::Inspect { target: 9 }, 0x114, 9u64.to_le_bytes().to_vec()),
         (Command::LearnTalent { talent_id: 1001, rank: 2 }, 0x251, [w(1001), w(2)].concat()),
         (Command::TalentWipeConfirm { trainer: 9 }, 0x2aa, 9u64.to_le_bytes().to_vec()),
+        (Command::RemoveGlyph { slot: 2 }, 0x48a, 2u32.to_le_bytes().to_vec()),
         (Command::LearnPreviewTalents { talents: vec![(1001, 0), (1002, 1)] }, 0x4c1, [w(2), w(1001), w(0), w(1002), w(1)].concat()),
     ] {
         assert_eq!(encode(&command), (opcode, body), "{command:?}");
