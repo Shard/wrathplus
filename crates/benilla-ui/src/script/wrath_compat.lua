@@ -174,7 +174,6 @@ IsStereoVideoAvailable = IsStereoVideoAvailable or none
 MovieRecording_IsSupported = MovieRecording_IsSupported or none
 IsReferAFriendLinked = IsReferAFriendLinked or none
 CanSummonFriend = CanSummonFriend or none
-GetOptOutOfLoot = GetOptOutOfLoot or none
 
 -- ── maps and instances ─────────────────────────────────────────────────────────────────────────
 InitWorldMapPing = InitWorldMapPing or none

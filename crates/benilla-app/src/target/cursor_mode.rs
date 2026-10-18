@@ -196,6 +196,8 @@ pub(crate) const GO_TYPE_TEXT: i32 = 9;
 /// `0x80bd10` keeps `0x5f3070`.
 const GO_TYPE_RITUAL: i32 = 18;
 pub(super) const GO_TYPE_MAILBOX: i32 = 19;
+/// GUILD_BANK (34), the guild vault.
+pub(super) const GO_TYPE_GUILD_BANK: i32 = 34;
 const GO_TYPE_28: i32 = 28;
 /// Every other type's interact range: the NPC-service reach, standing in for the reference's
 /// per-type strategy constant (`[strat+0xc]`, compared squared by `usable 0x5f3130`; base 5.0,
