@@ -156,7 +156,7 @@ fn quest<'a>(
 /// The turn-in's coin string (`0x5dc511`-`0x5dc5fd`): each paid denomination as `"%d %s"` with
 /// its `GOLD`, `SILVER` or `COPPER` global, gold first. The reference's separator test yields
 /// `", , "` with a zero middle coin; this joins only the paid ones, with `", "`.
-fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
+pub(crate) fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
     // `0x6c6260`'s split by 10000, 100 and 1.
     let (g, s, c) = (copper / 10000, copper / 100 % 100, copper % 100);
     [(g, "GOLD"), (s, "SILVER"), (c, "COPPER")]

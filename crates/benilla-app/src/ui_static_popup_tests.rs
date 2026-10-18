@@ -68,6 +68,7 @@ fn answers_map_to_their_sends() {
     let look = |summoner| Lookups {
         team_id: &team,
         summoner,
+        granter: Some(0x55),
         refund_item: &item,
         friend: &friend,
         chat_line: &line,
@@ -166,4 +167,10 @@ fn answers_map_to_their_sends() {
         ))
     ));
     assert!(send(WrathPopupRequest::BuyGuildBankTab).is_none());
+    assert!(matches!(
+        send(WrathPopupRequest::AcceptLevelGrant),
+        Some(ClientCommand::NativeReferFriend(
+            benilla_protocol::wrath_refer_friend::Command::AcceptLevelGrant { granter: 0x55 }
+        ))
+    ));
 }
