@@ -1563,6 +1563,7 @@ enum WrathRoute {
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
+    NativeSessionMisc,
     NativeInspect,
     NativeGuildBank,
     NativeFaction,
@@ -1646,6 +1647,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GmTicketSystemStatus => WrathRoute::NativeHelp,
         ClientCommand::NativeReferFriend(_) => WrathRoute::NativeReferFriend,
         // Chests, doors, mailboxes, herbs, ore and fishing bobbers: build 12340 keeps the full guid.
+        ClientCommand::NativeSessionMisc(_)
+        | ClientCommand::QueryTime
+        | ClientCommand::UnlearnSkill { .. } => WrathRoute::NativeSessionMisc,
         ClientCommand::NativeWorldObjects(_) | ClientCommand::GameObjUse { .. } => {
             WrathRoute::NativeWorldObjects
         }
@@ -2146,6 +2150,17 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeSessionMisc => {
+                        use benilla_protocol::wrath_session_misc::Command as S;
+                        let command = match command {
+                            ClientCommand::NativeSessionMisc(command) => command,
+                            ClientCommand::QueryTime => S::QueryTime,
+                            ClientCommand::UnlearnSkill { skill_id } => S::UnlearnSkill { skill: skill_id },
+                            other => unreachable!("not a session-misc route: {other:?}"),
+                        };
+                        let (opcode, body) = benilla_protocol::wrath_session_misc::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeWorldObjects => {
                         use benilla_protocol::wrath_world_objects::Command as O;
                         let command = match command {
@@ -3709,7 +3724,7 @@ mod tests {
         );
         assert_eq!(
             route(&ClientCommand::QueryTime),
-            WrathRoute::DisabledGameAction
+            WrathRoute::NativeSessionMisc
         );
     }
 
@@ -3892,7 +3907,7 @@ mod tests {
         }
         assert_eq!(
             route(&ClientCommand::QueryTime),
-            WrathRoute::DisabledGameAction
+            WrathRoute::NativeSessionMisc
         );
         assert_eq!(
             route(&ClientCommand::WorldportAck),
@@ -3987,7 +4002,7 @@ mod tests {
         assert!(loot_packet(ClientCommand::AutostoreLootItem { slot: 18 }).is_err());
         assert_eq!(
             route(&ClientCommand::QueryTime),
-            WrathRoute::DisabledGameAction
+            WrathRoute::NativeSessionMisc
         );
     }
 

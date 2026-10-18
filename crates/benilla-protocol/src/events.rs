@@ -1215,6 +1215,9 @@ pub enum SessionEvent {
     /// Capture-only native world-presentation receipts without a shared event: page text, light
     /// override, phase shift, movie, dance moves, building damage (`wrath_world_objects`).
     WrathWorldObjects { packet: crate::wrath_world_objects::Packet },
+    /// Capture-only native session receipts without a shared event: daily-reset countdown,
+    /// play-time warning, inebriation, feature-system status (`wrath_session_misc`).
+    WrathSessionMisc { packet: crate::wrath_session_misc::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).
