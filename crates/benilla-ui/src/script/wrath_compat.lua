@@ -159,8 +159,6 @@ function GetNumLanguages()
 end
 
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-GetActiveTalentGroup = GetActiveTalentGroup or function() return 1 end
-GetNumTalentGroups = GetNumTalentGroups or function() return 1 end
 GetCurrentTitle = GetCurrentTitle or function() return -1 end
 GetNumTitles = GetNumTitles or zero
 GetTitleName = GetTitleName or none

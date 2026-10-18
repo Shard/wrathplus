@@ -215,6 +215,14 @@ const WRATH_CAST_FAIL_KEYS: [&str; 187] = [
     "SPELL_FAILED_TARGET_CANNOT_BE_RESURRECTED", // 0xba
 ];
 
+/// A build-12340 cast-failure reason's `SPELL_FAILED_*` key; `None` for success or past the table.
+pub(crate) fn wrath_key(reason: u8) -> Option<&'static str> {
+    WRATH_CAST_FAIL_KEYS
+        .get(usize::from(reason))
+        .copied()
+        .filter(|_| reason != 0)
+}
+
 /// A build-12340 cast-failure reason as the 1.12 code with the same `SPELL_FAILED_*` name, or
 /// `SPELL_FAILED_UNKNOWN`'s when 1.12 has no such failure.
 pub(crate) fn from_wrath(reason: u8) -> u8 {
