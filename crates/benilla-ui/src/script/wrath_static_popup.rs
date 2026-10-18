@@ -109,6 +109,13 @@ pub(crate) struct State {
     state: WrathPopupState,
 }
 
+impl State {
+    /// `IsFalling` as published, for the verbs that refuse while falling.
+    pub(crate) fn falling(&self) -> bool {
+        self.state.falling
+    }
+}
+
 impl super::UiScript {
     /// Drain StaticPopup's dialog answers in call order.
     pub fn take_wrath_popup_requests(&mut self) -> Vec<WrathPopupRequest> {

@@ -14,6 +14,15 @@ pub struct Group {
     pub members: Vec<Member>,
     pub dungeon_difficulty: Option<u8>,
     pub raid_difficulty: Option<u8>,
+    /// The group's LFG dungeon, a full packed entry, 0 for none (`DAT_00bd19a4`): IsPartyLFG,
+    /// IsInLFGDungeon and the backfill getters.
+    pub lfg_dungeon_entry: u32,
+    /// The LFG status (`DAT_00bd1998`); backfill needs 1..3.
+    pub lfg_status: u8,
+    /// The LFG flags byte (`DAT_00bd1989`); backfill needs bit 2 clear.
+    pub lfg_flags: u8,
+    /// HasLFGRestrictions (`DAT_00bd19a8`).
+    pub lfg_restricted: bool,
 }
 impl super::super::UiScript {
     pub fn set_wrath_group(&mut self, group: Group) {
@@ -134,6 +143,7 @@ mod tests {
             }],
             dungeon_difficulty: Some(2),
             raid_difficulty: Some(4),
+            ..Default::default()
         });
         assert!(s.eval::<bool>("local a,b,c,d,e,f,g,h,i,j,k=GetRaidRosterInfo(1); return a=='Ally' and j=='MAINTANK' and k==false and UnitGroupRolesAssigned('raid1')=='TANK' and GetDungeonDifficulty()==2 and GetRaidDifficulty()==4").unwrap());
         assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 11);
