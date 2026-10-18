@@ -849,7 +849,7 @@ pub(super) fn item_link_full(
 
 /// [`item_link_full`] with zero enchant, random-property and suffix ids, for a caller with no roll
 /// in hand; a rolled item's link carries the roll and its suffixed name (`0x5d8b00`).
-pub(crate) fn item_link(item_id: u32, name: &str, quality: u32) -> String {
+pub(super) fn item_link(item_id: u32, name: &str, quality: u32) -> String {
     item_link_full(item_id, 0, 0, 0, name, quality)
 }
 
