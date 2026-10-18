@@ -14,7 +14,7 @@ mod tests;
 
 use view::build_groups;
 
-pub(super) use api::install;
+pub(super) use api::{install, install_wrath};
 pub(crate) use view::recipe_at;
 
 /// A recipe's difficulty band, computed app-side: gray at or above trivialHigh, green from the
@@ -100,6 +100,9 @@ pub struct TradeSkillRecipe {
     pub reagents: Vec<TradeSkillReagent>,
     /// The Requirements line's `(tool name, have)` pairs.
     pub tools: Vec<(String, bool)>,
+    /// Build 12340's `GetTradeSkillDescription`: the spell's description, tokens filled; `None`
+    /// for an empty one.
+    pub description: Option<String>,
 }
 
 /// One open tradeskill window, pushed whole by the app.
@@ -176,5 +179,16 @@ impl super::UiScript {
     /// off that event.
     pub fn take_trade_skill_touched(&mut self) -> bool {
         std::mem::take(&mut self.model_mut().trade_skill_touched)
+    }
+
+    /// Whether the name filter changed since the last drain: build 12340 fires
+    /// `TRADE_SKILL_FILTER_UPDATE` (event `0x27d`) for it (`0x5dcf60`).
+    pub fn take_trade_skill_filter_touched(&mut self) -> bool {
+        std::mem::take(&mut self.model_mut().trade_skill_filter_touched)
+    }
+
+    /// Whether `StopTradeSkillRepeat` ran since the last drain: the Create All loop stops.
+    pub fn take_trade_skill_stop_repeat(&mut self) -> bool {
+        std::mem::take(&mut self.model_mut().trade_skill_stop_repeat)
     }
 }

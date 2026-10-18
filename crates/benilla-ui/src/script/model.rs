@@ -706,6 +706,14 @@ pub(crate) struct Model {
     /// A filter or subclass collapse changed: `TRADE_SKILL_UPDATE` (`0x13a`) is owed this frame, as
     /// the client fires it inside the call (`0x4fd710`/`0x4fd730`/`0x4fd750`, `0x4fd180`).
     pub(crate) trade_skill_touched: bool,
+    /// Build 12340's item-level filter (`0xc235c0`/`0xc235c4`), `(0, 0)` off.
+    pub(crate) trade_skill_level_filter: (i64, i64),
+    /// Build 12340's lower-cased name filter (`0xc235bc`).
+    pub(crate) trade_skill_name_filter: Option<String>,
+    /// `TradeSkillOnlyShowMakeable` (`0xc235c8`).
+    pub(crate) trade_skill_only_makeable: bool,
+    pub(crate) trade_skill_filter_touched: bool,
+    pub(crate) trade_skill_stop_repeat: bool,
 
     /// The open craft window's recipes.
     pub(crate) craft: Option<craft::CraftState>,
@@ -1391,6 +1399,11 @@ impl Model {
             trade_skill_last_line: 0,
             trade_skill_selected_spell: 0,
             trade_skill_touched: false,
+            trade_skill_level_filter: (0, 0),
+            trade_skill_name_filter: None,
+            trade_skill_only_makeable: false,
+            trade_skill_filter_touched: false,
+            trade_skill_stop_repeat: false,
             craft: None,
             craft_dos: Vec::new(),
             craft_selection: 0,

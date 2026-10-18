@@ -891,6 +891,7 @@ impl UiScript {
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;
             auction::install_wrath(&lua)?;
+            tradeskill::install_wrath(&lua)?;
         }
 
         let s = UiScript {
