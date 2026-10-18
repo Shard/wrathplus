@@ -229,6 +229,13 @@ pub(crate) struct Queue {
     requests: Vec<WrathLfgQueueRequest>,
 }
 
+impl Queue {
+    /// DungeonEncounter.dbc, shared with the raid browser's encounter getters.
+    pub(super) fn encounters(&self) -> &[WrathLfgEncounter] {
+        &self.encounters
+    }
+}
+
 impl UiScript {
     /// Publish App's L2 snapshot. Stores only; App fires the events.
     pub fn set_wrath_lfg_queue(&mut self, snapshot: Arc<WrathLfgQueueSnapshot>) {

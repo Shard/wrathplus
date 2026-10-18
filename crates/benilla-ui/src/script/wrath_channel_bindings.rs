@@ -258,6 +258,34 @@ mod tests {
         assert!(s.take_wrath_channel_roster_requests().is_empty());
     }
     #[test]
+    fn userlist_deltas_patch_the_selected_roster() {
+        use crate::script::WrathChannelRosterDelta as D;
+        let mut s = script();
+        s.run("GetNumChannelMembers(5)").unwrap();
+        assert!(s.apply_wrath_channel_roster_delta("World", D::Remove { guid: 1 }, 0, 0).is_none(), "before the roster");
+        let rev = s
+            .receive_wrath_channel_roster(
+                1,
+                "World",
+                0,
+                vec![WrathChannelRosterMember {
+                    guid: 2,
+                    flags: 0,
+                    name: Some("Zed".into()),
+                }],
+            )
+            .unwrap();
+        assert!(s.apply_wrath_channel_roster_delta("General", D::Add { guid: 3, flags: 0 }, 0, 2).is_none());
+        assert_eq!(s.apply_wrath_channel_roster_delta("world", D::Add { guid: 3, flags: 1 }, 0, 2), Some(rev));
+        s.run("assert(GetNumChannelMembers(5)==nil)").unwrap();
+        assert!(s.resolve_wrath_channel_roster_name(rev, 3, "Amy".into()));
+        s.apply_wrath_channel_roster_delta("World", D::Update { guid: 2, flags: 2 }, 0, 2);
+        s.run("assert(GetNumChannelMembers(5)==2); local n,o=GetChannelRosterInfo(5,1); assert(n=='Amy' and o==1); local n,o,m=GetChannelRosterInfo(5,2); assert(n=='Zed' and m==1)").unwrap();
+        s.apply_wrath_channel_roster_delta("World", D::Remove { guid: 3 }, 0, 1);
+        s.run("assert(GetNumChannelMembers(5)==1); assert(GetChannelRosterInfo(5,1)=='Zed')").unwrap();
+    }
+
+    #[test]
     fn native_arity_numeric_flags_names_and_pending_gate() {
         let mut s = script();
         s.run("assert(select('#',GetChannelRosterInfo())==0); assert(select('#',GetChannelRosterInfo(true,1))==0); assert(select('#',GetNumChannelMembers())==1); assert(GetNumChannelMembers()==nil); assert(GetNumChannelMembers('5')==nil)").unwrap();

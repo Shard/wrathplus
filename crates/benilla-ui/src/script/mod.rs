@@ -228,7 +228,8 @@ pub use wrath_lfg::{
     WrathLfgRewardItem, WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem,
     WrathLfgEncounter, WrathLfgProposal, WrathLfgProposalRow, WrathLfgQueueRequest,
     WrathLfgQueueSnapshot, WrathLfgQueueStatus, WrathLfgRoleCheck, WrathLfgRoleCheckMember,
-    WrathLfgUpdate,
+    WrathLfgUpdate, WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest,
+    WrathRaidBrowserStats, WrathRaidBrowserView,
 };
 pub use wrath_paperdoll::{WrathPaperDollStats, WrathStatConversions};
 mod zone_text;
@@ -251,7 +252,9 @@ pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
 pub use wrath_channel_display::WrathDisplayChannel;
-pub use wrath_channel_roster::{WrathChannelRosterMember, WrathChannelRosterRequest};
+pub use wrath_channel_roster::{
+    WrathChannelRosterDelta, WrathChannelRosterMember, WrathChannelRosterRequest,
+};
 pub use channel::{ChannelCommand, ZoneChannelRow};
 pub use char_stats::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, UnitCombatStats,
