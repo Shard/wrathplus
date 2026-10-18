@@ -894,6 +894,8 @@ pub(crate) struct Model {
     pub(crate) wrath_paperdoll_stats: super::WrathPaperDollStats,
     /// The Wrath companion lists (`wrath_companions`).
     pub(crate) wrath_companions: super::WrathCompanions,
+    /// The timed death-knight runes (`wrath_runes`).
+    pub(crate) wrath_runes: super::WrathRunes,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1516,6 +1518,7 @@ impl Model {
             .collect(),
             wrath_paperdoll_stats: Default::default(),
             wrath_companions: Default::default(),
+            wrath_runes: Default::default(),
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,

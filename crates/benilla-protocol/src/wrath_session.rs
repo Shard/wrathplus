@@ -342,7 +342,30 @@ fn spell_go(r: &mut Cursor<&[u8]>, self_guid: Option<u64>) -> io::Result<Vec<Ses
         misses.push((guid, condition));
     }
     let t = targets(r)?;
-    let mut events = Vec::with_capacity(2);
+    // The tail AzerothCore writes after the targets: the caster's power (`CAST_FLAG_POWER_LEFT_SELF`)
+    // then the rune list. A short tail drops the runes, never the spell-go itself.
+    let runes = (|| -> io::Result<Option<crate::wrath_spell_control::RunePacket>> {
+        if cast_flags & CAST_FLAG_POWER_LEFT_SELF != 0 {
+            u32_le(r)?;
+        }
+        if cast_flags & CAST_FLAG_RUNE_LIST == 0 {
+            return Ok(None);
+        }
+        let (before, after) = (u8_le(r)?, u8_le(r)?);
+        let passed = (0..6)
+            .filter(|i| before >> i & 1 == 1 && after >> i & 1 == 0)
+            .map(|_| u8_le(r))
+            .collect::<io::Result<_>>()?;
+        Ok(Some(crate::wrath_spell_control::RunePacket::Spend {
+            before,
+            after,
+            passed,
+        }))
+    })()
+    .ok()
+    .flatten()
+    .filter(|_| Some(caster) == self_guid);
+    let mut events = Vec::with_capacity(3);
     if count != 0 && Some(caster) == self_guid {
         events.push(SessionEvent::CastResult {
             spell_id,
@@ -364,8 +387,15 @@ fn spell_go(r: &mut Cursor<&[u8]>, self_guid: Option<u64>) -> io::Result<Vec<Ses
         item_caster: (item_or_caster != caster).then_some(item_or_caster),
         cast_count: Some(count),
     });
+    if let Some(packet) = runes {
+        events.push(SessionEvent::WrathRunes { packet });
+    }
     Ok(events)
 }
+
+/// AzerothCore `SpellCastFlags`: the power word and the rune list that follow a spell-go's targets.
+const CAST_FLAG_POWER_LEFT_SELF: u32 = 0x0000_0800;
+const CAST_FLAG_RUNE_LIST: u32 = 0x0020_0000;
 
 /// Caster guid, a flags byte, then `(spell, cooldown ms)` pairs.
 fn spell_cooldown(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
@@ -517,6 +547,45 @@ mod tests {
         assert_eq!(body, [1, 78, 0, 0, 0, 0, 2, 0, 0, 0, 0x01, 0x05]);
         let body = encode_cast_spell(2, 6603, &CastTarget::None);
         assert_eq!(body, [2, 0xCB, 0x19, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    /// A death knight's Plague Strike: power word, then runes 0b111111 before and 0b111010
+    /// after, so runes 0 and 2 went down with 0 and 51 of 255 run; an observer gets no runes.
+    #[test]
+    fn our_spell_go_rune_list_spends_runes() {
+        use crate::wrath_spell_control::RunePacket;
+        let mut body = vec![0x01, 0x10, 0x01, 0x10, 1];
+        body.extend(45462u32.to_le_bytes());
+        body.extend((0x100 | CAST_FLAG_POWER_LEFT_SELF | CAST_FLAG_RUNE_LIST).to_le_bytes());
+        body.extend(0u32.to_le_bytes());
+        body.extend([0, 0]); // no hits, no misses
+        body.extend(0u32.to_le_bytes()); // self-targeted: an empty target mask
+        body.extend(100u32.to_le_bytes()); // runic power left
+        body.extend([0b11_1111, 0b11_1010, 0, 51]);
+        let runes = |self_guid| -> Vec<RunePacket> {
+            decode(SMSG_SPELL_GO, &body, Some(self_guid))
+                .unwrap()
+                .into_iter()
+                .filter_map(|e| match e {
+                    SessionEvent::WrathRunes { packet } => Some(packet),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            runes(0x10),
+            [RunePacket::Spend {
+                before: 0b11_1111,
+                after: 0b11_1010,
+                passed: vec![0, 51]
+            }]
+        );
+        assert!(runes(0x99).is_empty());
+        // A truncated tail keeps the spell-go and drops the runes.
+        body.truncate(body.len() - 1);
+        let events = decode(SMSG_SPELL_GO, &body, Some(0x10)).unwrap();
+        assert!(events.iter().any(|e| matches!(e, SessionEvent::SpellGo { .. })));
+        assert!(!events.iter().any(|e| matches!(e, SessionEvent::WrathRunes { .. })));
     }
 
     #[test]

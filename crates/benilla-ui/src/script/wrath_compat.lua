@@ -144,10 +144,6 @@ end
 -- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-local runeTypes = { 1, 1, 2, 2, 3, 3 }
-function GetRuneType(rune) return runeTypes[rune] end
-function GetRuneCooldown() return 0, 0, true end
-function GetRuneCount() return 1 end
 function GetTotemInfo() return false, "", 0, 0, "" end
 GetTotemTimeLeft = zero
 
