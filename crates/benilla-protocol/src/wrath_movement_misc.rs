@@ -17,13 +17,31 @@ use crate::wire::{read_packed_guid, write_packed_guid};
 pub const SMSG_MULTIPLE_MOVES: u16 = 0x051e;
 pub const SMSG_MOUNTSPECIAL_ANIM: u16 = 0x0172;
 pub const SMSG_DISMOUNT: u16 = 0x03ac;
+/// The vehicle a unit rides as (`Unit::SetVehicleId` path, `packed guid, u32 vehicleId`; 0 leaves).
+pub const SMSG_PLAYER_VEHICLE_DATA: u16 = 0x04a7;
+/// Empty: a ride-vehicle aura the server expected was cancelled.
+pub const SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA: u16 = 0x049d;
 pub const CMSG_MOUNTSPECIAL_ANIM: u32 = 0x0171;
 pub const CMSG_MOVE_TIME_SKIPPED: u32 = 0x02ce;
+/// `/timetest`: `u8 on` (AzerothCore `HandleSetTaxiBenchmarkOpcode`: non-zero sets
+/// `PLAYER_FLAGS_TAXI_BENCHMARK`, zero clears it).
+pub const CMSG_SET_TAXI_BENCHMARK_MODE: u32 = 0x0389;
+/// Vehicle requests (AzerothCore VehicleHandler.cpp). Exit, previous and next seat have empty bodies;
+/// switch seat is `packed vehicle guid, u8 seat`; enter and eject name a raw guid. Dismiss
+/// (`046D`) and change seats (`049B`) carry the vehicle's `MovementInfo` and wait for vehicle driving.
+pub const CMSG_REQUEST_VEHICLE_EXIT: u32 = 0x0476;
+pub const CMSG_REQUEST_VEHICLE_PREV_SEAT: u32 = 0x0477;
+pub const CMSG_REQUEST_VEHICLE_NEXT_SEAT: u32 = 0x0478;
+pub const CMSG_REQUEST_VEHICLE_SWITCH_SEAT: u32 = 0x0479;
+pub const CMSG_PLAYER_VEHICLE_ENTER: u32 = 0x04a8;
+pub const CMSG_CONTROLLER_EJECT_PASSENGER: u32 = 0x04a9;
 
 /// Capture-only receipts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Packet {
     Dismount { unit: u64 },
+    PlayerVehicleData { unit: u64, vehicle_id: u32 },
+    CancelExpectedRideVehicleAura,
 }
 
 /// Requests, each with the body AzerothCore's handler reads.
@@ -31,10 +49,23 @@ pub enum Packet {
 pub enum Command {
     MountSpecialAnim,
     TimeSkipped { mover: u64, lag_ms: u32 },
+    TaxiBenchmark { on: bool },
+    VehicleExit,
+    VehiclePrevSeat,
+    VehicleNextSeat,
+    VehicleSwitchSeat { vehicle: u64, seat: u8 },
+    PlayerVehicleEnter { vehicle: u64 },
+    EjectPassenger { passenger: u64 },
 }
 
 pub const fn handles(opcode: u16) -> bool {
-    matches!(opcode, SMSG_MOUNTSPECIAL_ANIM | SMSG_DISMOUNT)
+    matches!(
+        opcode,
+        SMSG_MOUNTSPECIAL_ANIM
+            | SMSG_DISMOUNT
+            | SMSG_PLAYER_VEHICLE_DATA
+            | SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA
+    )
 }
 
 fn invalid(what: &'static str) -> io::Error {
@@ -59,6 +90,24 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             }
             SessionEvent::WrathMovement {
                 packet: Packet::Dismount { unit },
+            }
+        }
+        SMSG_PLAYER_VEHICLE_DATA => {
+            let mut input = body;
+            let unit = read_packed_guid(&mut input)?;
+            let id: [u8; 4] = input
+                .try_into()
+                .map_err(|_| invalid("vehicle data is guid + u32"))?;
+            SessionEvent::WrathMovement {
+                packet: Packet::PlayerVehicleData {
+                    unit,
+                    vehicle_id: u32::from_le_bytes(id),
+                },
+            }
+        }
+        SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA if body.is_empty() => {
+            SessionEvent::WrathMovement {
+                packet: Packet::CancelExpectedRideVehicleAura,
             }
         }
         _ => return Err(invalid("not a Wrath movement-misc opcode")),
@@ -96,6 +145,23 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             body.extend(lag_ms.to_le_bytes());
             (CMSG_MOVE_TIME_SKIPPED, body)
         }
+        Command::TaxiBenchmark { on } => (CMSG_SET_TAXI_BENCHMARK_MODE, vec![u8::from(on)]),
+        Command::VehicleExit => (CMSG_REQUEST_VEHICLE_EXIT, Vec::new()),
+        Command::VehiclePrevSeat => (CMSG_REQUEST_VEHICLE_PREV_SEAT, Vec::new()),
+        Command::VehicleNextSeat => (CMSG_REQUEST_VEHICLE_NEXT_SEAT, Vec::new()),
+        Command::VehicleSwitchSeat { vehicle, seat } => {
+            let mut body = Vec::new();
+            write_packed_guid(vehicle, &mut body).expect("Vec write");
+            body.push(seat);
+            (CMSG_REQUEST_VEHICLE_SWITCH_SEAT, body)
+        }
+        Command::PlayerVehicleEnter { vehicle } => {
+            (CMSG_PLAYER_VEHICLE_ENTER, vehicle.to_le_bytes().to_vec())
+        }
+        Command::EjectPassenger { passenger } => (
+            CMSG_CONTROLLER_EJECT_PASSENGER,
+            passenger.to_le_bytes().to_vec(),
+        ),
     }
 }
 
@@ -132,6 +198,48 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_notices_and_requests() {
+        let mut data = vec![0x01, 0x05];
+        data.extend(312u32.to_le_bytes());
+        assert!(matches!(
+            &decode(SMSG_PLAYER_VEHICLE_DATA, &data).unwrap()[..],
+            [SessionEvent::WrathMovement {
+                packet: Packet::PlayerVehicleData {
+                    unit: 5,
+                    vehicle_id: 312
+                }
+            }]
+        ));
+        assert!(decode(SMSG_PLAYER_VEHICLE_DATA, &data[..5]).is_err());
+        assert!(decode(SMSG_PLAYER_VEHICLE_DATA, &[data.as_slice(), &[0]].concat()).is_err());
+        assert!(matches!(
+            &decode(SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA, &[]).unwrap()[..],
+            [SessionEvent::WrathMovement {
+                packet: Packet::CancelExpectedRideVehicleAura
+            }]
+        ));
+        assert!(decode(SMSG_ON_CANCEL_EXPECTED_RIDE_VEHICLE_AURA, &[0]).is_err());
+        assert_eq!(encode(&Command::VehicleExit), (0x0476, vec![]));
+        assert_eq!(encode(&Command::VehiclePrevSeat), (0x0477, vec![]));
+        assert_eq!(encode(&Command::VehicleNextSeat), (0x0478, vec![]));
+        assert_eq!(
+            encode(&Command::VehicleSwitchSeat {
+                vehicle: 5,
+                seat: 2
+            }),
+            (0x0479, vec![0x01, 0x05, 2])
+        );
+        assert_eq!(
+            encode(&Command::PlayerVehicleEnter { vehicle: 5 }),
+            (0x04a8, 5u64.to_le_bytes().to_vec())
+        );
+        assert_eq!(
+            encode(&Command::EjectPassenger { passenger: 6 }),
+            (0x04a9, 6u64.to_le_bytes().to_vec())
+        );
+    }
+
+    #[test]
     fn mount_anim_dismount_and_requests() {
         assert!(matches!(
             decode(SMSG_MOUNTSPECIAL_ANIM, &0x42u64.to_le_bytes()).unwrap()[..],
@@ -152,6 +260,14 @@ mod tests {
                 lag_ms: 250
             }),
             (0x02ce, vec![0x01, 0x05, 250, 0, 0, 0])
+        );
+        assert_eq!(
+            encode(&Command::TaxiBenchmark { on: true }),
+            (0x0389, vec![1])
+        );
+        assert_eq!(
+            encode(&Command::TaxiBenchmark { on: false }),
+            (0x0389, vec![0])
         );
     }
 }

@@ -23,7 +23,7 @@ is pending, so nothing overtakes it. All orders share AzerothCore's one session 
   last pose reported to the server (`send_mover_ack`), as for root. It sends the speed or height
   verbatim (AzerothCore resets or kicks a mismatch), sets or clears the mode flag with
   `u32 applied` (gravity ACKs have none), and sends the knockback as its launch frame (FALLING,
-  zero fall time, the received down-positive tail). The controller still gets the shared event
+  zero fall time, the tail with its vertical speed turned positive-up as the Wrath jump tail carries it). The controller still gets the shared event
   where it models the state (`ForceSpeedChange` for the 1.12 speeds, `MoveMode` for water walk,
   feather fall and hover, `KnockBack`). Its own ACK commands are no-ops on this route
   (`WrathRoute::AuthorityAcked`).
@@ -80,7 +80,28 @@ pose were on-foot only.
 - Mount special anim both ways; `CMSG_MOVE_TIME_SKIPPED` admitted; `SMSG_DISMOUNT` capture-only (the
   descriptor carries the mount).
 
-**Not yet** (movement M4, controller-level): our own flight (flight physics; `WrathGroundLimit`
-holds the flyer), our own transport movement (the authority pose and outbound transport tail),
-vehicles (`046D`, `0476..0479`, `049B`, `04A8`, `04A9`, `04A7`, `049D`), `CMSG_MOVE_SET_FLY`,
-`CMSG_MOVE_CHNG_TRANSPORT`, `CMSG_MOVE_NOT_ACTIVE_MOVER` (possession).
+**Movement M4a: transports and foreign control.**
+- The authority pose and the outbound writer carry the `ON_TRANSPORT` tail (`wrath_ground::encode_full`,
+  `TransportTail`): guid, deck-local xyzo, a time and seat -1. AzerothCore `ReadMovementInfo` never
+  validates the time and overwrites the seat (`MovementHandler.cpp:628`), so the writer sends its
+  movement timestamp. The controller's shared ON_TRANSPORT (`0x0200_0000`) maps to Wrath `0x200` at
+  the command boundary, and `WrathGroundLimit` no longer holds a passenger. The flight check tests
+  only CAN_FLY, since `0x0200_0000` is ON_TRANSPORT in the shared word. A root keeps a passenger on
+  its deck.
+- Logging in or being moved in a state the writer does not report (flight) is no longer fatal: the
+  self create falls back to the world position and a server-authored self pose keeps the last
+  reported one.
+- Control of a non-player mover (a vehicle or possessed unit) holds our movement instead of ending
+  the session; control returning to our guid restores it. A `SET_ACTIVE_MOVER` claim for a non-player
+  is withheld. Vehicles still cannot be driven (M4b).
+
+**Movement M4b: the vehicle wire layer.** The simple requests are admitted transport-only through
+`ClientCommand::NativeMovementMisc`: exit, previous and next seat (empty), switch seat (`packed vehicle
+guid, u8 seat`), enter player vehicle and eject passenger (raw guid). Vehicle data (`packed guid, u32
+vehicleId`) and the cancelled ride-vehicle aura (empty) are capture-only. `CMSG_SET_TAXI_BENCHMARK_MODE`
+(`u8 on`) rides the same route for `/timetest`.
+
+**Not yet** (controller-level): our own flight (flight physics; `WrathGroundLimit` holds the flyer),
+driving vehicles and possession (`046D` and `049B` carry the vehicle's `MovementInfo`; the mover
+must be the vehicle), `CMSG_MOVE_SET_FLY`, `CMSG_MOVE_CHNG_TRANSPORT` (AzerothCore also boards from
+ordinary movement flags), `CMSG_MOVE_NOT_ACTIVE_MOVER` (possession).
