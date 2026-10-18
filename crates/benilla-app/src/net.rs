@@ -44,7 +44,7 @@ mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
-mod wrath_inspect_capture;
+pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
 mod wrath_spell_log_capture;
