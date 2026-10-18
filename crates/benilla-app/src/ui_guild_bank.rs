@@ -5,8 +5,8 @@
 //! frame's events fired here: `GUILDBANKFRAME_OPENED`/`CLOSED`, `GUILDBANKBAGSLOTS_CHANGED`,
 //! `GUILDBANK_UPDATE_MONEY`, `GUILDBANK_UPDATE_TABS`, `GUILDBANK_UPDATE_WITHDRAWMONEY`,
 //! `GUILDBANK_UPDATE_TEXT(tab)` and `GUILDBANKLOG_UPDATE`. The frame's gestures become the
-//! native queries and swaps. Labelled: no bank item reaches the cursor yet (Native UI's cursor
-//! mode), so a bank item leaves by right-click only; the frame does not close by distance.
+//! native queries and swaps; a held bank item (Native UI's mode-11 cursor) moves to another bank
+//! slot, a bag slot or a worn slot. Labelled: the frame does not close by distance.
 use std::collections::BTreeMap;
 
 use crate::names::NameCache;
@@ -229,17 +229,64 @@ fn command(
                 },
             })
         }
+        // A held bank item: another bank slot (`0x5a5410`), a bag slot, or a worn slot. The
+        // cursor already gave it up; count `None` moves the stack (AC treats 0 as no split).
+        R::MoveItem {
+            from_tab,
+            from_slot,
+            to_tab,
+            to_slot,
+            count,
+        } => ClientCommand::NativeGuildBankSwap(Swap {
+            banker,
+            transfer: Transfer::BankToBank {
+                destination: slot_of(to_tab, to_slot)?,
+                source: slot_of(from_tab, from_slot)?,
+                count: count.unwrap_or(0) as i32,
+            },
+        }),
+        R::DropOnBag {
+            tab,
+            slot,
+            bag,
+            bag_slot,
+            count,
+        } => {
+            let (container, container_slot) = crate::ui_items::wire_pos_for(
+                benilla_protocol::messages::FieldLayout::Wrath12340,
+                bag,
+                bag_slot,
+            )?;
+            ClientCommand::NativeGuildBankSwap(Swap {
+                banker,
+                transfer: Transfer::BankToInventory {
+                    source: slot_of(tab, slot)?,
+                    container,
+                    container_slot,
+                    stack_count: count.unwrap_or(0) as i32,
+                },
+            })
+        }
+        R::DropOnEquip {
+            tab,
+            slot,
+            equip_slot,
+            count,
+        } => ClientCommand::NativeGuildBankSwap(Swap {
+            banker,
+            transfer: Transfer::BankToInventory {
+                source: slot_of(tab, slot)?,
+                container: 255,
+                container_slot: u8::try_from(equip_slot.checked_sub(1)?).ok()?,
+                stack_count: count.unwrap_or(0) as i32,
+            },
+        }),
         R::Close => {
             *bank = GuildBank::default();
             *open = GuildBankOpen::default();
             return None;
         }
-        // Native UI's mode-11 cursor requests, not sent yet.
-        R::PickupMoney { .. }
-        | R::MoveItem { .. }
-        | R::DropOnBag { .. }
-        | R::DropOnEquip { .. }
-        | R::SummonFriend { .. } => return None,
+        R::PickupMoney { .. } | R::SummonFriend { .. } => return None,
     })
 }
 

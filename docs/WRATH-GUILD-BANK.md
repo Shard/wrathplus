@@ -29,6 +29,10 @@ Requests (Lua 1-based, wire 0-based): `QueryGuildBankTab` → 03E7, `QueryGuildB
 `WithdrawGuildBankMoney` → 03ED; buy tab and deposit money are App Migration's popups on the
 `NativeGuildBank` route, naming `GuildBankOpen::banker()`.
 
-Labelled: a bank item cannot reach the cursor yet (Native UI's guild-bank cursor mode), so it
-leaves by right-click only and splits and bank-to-bank moves have no producer; picking up money is
-not wired; slots are never shown locked; the frame does not close by distance.
+A held bank item (Native UI's mode-11 cursor, picked up or split client-side) becomes
+`MoveItem` → 03E9 bank-to-bank (destination first; count 0 the stack), `DropOnBag` → 03E9
+bank-to-inventory into the named bag slot, `DropOnEquip` → the same into the worn slot
+(container 255).
+
+Labelled: picking up money is not wired; slots are never shown locked; the frame does not close
+by distance.

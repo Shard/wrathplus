@@ -1,7 +1,8 @@
 //! Ordered capture of a watched channel's roster deltas and member counts
 //! (`wrath_channel_members`) and of the raid browser's list and searching flag
 //! (`wrath_raid_browser`), kept raw for Native UI's roster-delta and raid-browser setters.
-//! Capture-only until those land; both clear on Connected and Disconnected.
+//! `ui_chat`'s roster feed and `wrath_raid_browser_feed` drain them; both clear on Connected and
+//! Disconnected.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_channel_members, wrath_raid_browser, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -16,6 +17,7 @@ pub(crate) struct NativeRaidBrowser(pub(crate) VecDeque<wrath_raid_browser::Pack
 pub(super) fn register(app: &mut App) {
     app.init_resource::<NativeChannelMembers>()
         .init_resource::<NativeRaidBrowser>()
+        .init_resource::<super::wrath_raid_browser_feed::RaidBrowser>()
         .net_handler(SessionEventKind::WrathChannelMembers, receive_members)
         .net_handler(SessionEventKind::WrathRaidBrowser, receive_raid_browser)
         .net_handler(SessionEventKind::Connected, clear)
@@ -38,6 +40,7 @@ fn clear(
     In(event): In<SessionEvent>,
     mut members: ResMut<NativeChannelMembers>,
     mut raid: ResMut<NativeRaidBrowser>,
+    mut browser: ResMut<super::wrath_raid_browser_feed::RaidBrowser>,
 ) {
     if matches!(
         event,
@@ -45,6 +48,7 @@ fn clear(
     ) {
         members.0.clear();
         raid.0.clear();
+        super::wrath_raid_browser_feed::clear(&mut browser);
     }
 }
 
