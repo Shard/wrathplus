@@ -203,3 +203,30 @@ fn table_follows_descriptor_and_drops_strangers() {
     assert_eq!(table.roster(1).len(), 2);
     assert!(table.teams()[1].info.is_none());
 }
+
+#[test]
+fn a_refresh_by_team_name_asks_its_slot_under_the_throttle() {
+    let mut table = ArenaTable::default();
+    let mut fx = Effects::default();
+    let mut words = [[0; 7]; 3];
+    words[2] = [91, 5, 0, 0, 0, 0, 0];
+    table.sync_descriptor(words, 0.0, &mut fx);
+    table.apply(
+        Packet::Query {
+            team_id: 91,
+            name: b"Penta".to_vec(),
+            team_type: 5,
+            emblem: [0; 5],
+        },
+        &mut fx,
+    );
+    let mut fx = Effects::default();
+    table.refresh_team("Penta", 3.0, &mut fx);
+    table.refresh_team("Other", 30.0, &mut fx);
+    assert!(
+        fx.sends.is_empty(),
+        "inside the 10 s, and a stranger: nothing"
+    );
+    table.refresh_team("Penta", 10.0, &mut fx);
+    assert_eq!(fx.sends, [Command::Roster { team_id: 91 }]);
+}
