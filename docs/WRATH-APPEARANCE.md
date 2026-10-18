@@ -20,6 +20,9 @@ Codec: `P/wrath_appearance.rs`; App: `A/net/wrath_appearance.rs`, `A/ui_unit.rs`
   (`SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`, 4..6) after having sat in one.
 - **Titles.** 0373 prints `NEW_TITLE_EARNED` / `OLD_TITLE_LOST` as a system line with the
   `CharTitles.dbc` title for that bit, formatted with our name and gender. The known-title getters
-  are Native UI's; `SetCurrentTitle` is 0374 (`docs/WRATH-SESSION-META.md`).
+  are Native UI's (`wrath_titles.rs`); App feeds them the catalog once per VM
+  (`set_wrath_char_titles`) and the descriptor's three `PLAYER__FIELD_KNOWN_TITLES` words with
+  `PLAYER_CHOSEN_TITLE` when they move (`set_wrath_player_titles`). `SetCurrentTitle` is 0374
+  (`docs/WRATH-SESSION-META.md`).
 
 Labelled (untraced in the client): the barber events' order and the money line.

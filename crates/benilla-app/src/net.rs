@@ -60,6 +60,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
@@ -182,6 +183,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_bootstrap_capture::register(app);
         wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
@@ -1252,6 +1254,9 @@ pub(crate) enum ClientCommand {
         /// Build 12340 names the cast spell and the item GUID; AC checks both.
         spell_id: u32,
         item_guid: u64,
+        /// Build 12340's glyph socket, 0-based (`PlaceGlyphInSocket` `0x80c3e0` writes it to the
+        /// pending cast's `+0x12c`); 0 for every other use.
+        glyph_index: u32,
         target: benilla_protocol::messages::UseItemTarget,
     },
     /// `CMSG_OPEN_ITEM`: the server answers `SMSG_LOOT_RESPONSE` on the item's own guid; a wrapped
@@ -1326,6 +1331,13 @@ pub(crate) enum ClientCommand {
         spell_id: u32,
         target: benilla_protocol::messages::CorpseTarget,
         corpse_guid: u64,
+    },
+    /// Build 12340's `CMSG_PET_CAST_SPELL`: a cast whose caster is our pet, charm or possessed
+    /// unit, with the same targets block (the targeting cursor's pet commit).
+    NativePetCastSpell {
+        caster: u64,
+        spell_id: u32,
+        target: benilla_protocol::wrath_session::CastTarget,
     },
     /// `CMSG_CAST_SPELL` with `TARGET_FLAG_DEST_LOCATION`; `dest` in WoW coordinates.
     CastSpellAtDest {

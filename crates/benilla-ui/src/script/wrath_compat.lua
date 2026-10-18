@@ -144,8 +144,6 @@ end
 -- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
 function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
 GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-function GetTotemInfo() return false, "", 0, 0, "" end
-GetTotemTimeLeft = zero
 
 -- ── languages ──────────────────────────────────────────────────────────────────────────────────
 function GetNumLanguages()
@@ -588,7 +586,7 @@ UnitIsTappedByAllThreatList = UnitIsTappedByAllThreatList or none
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none
 FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
-IsEquippableItem, IsEquippedItem = IsEquippableItem or none, IsEquippedItem or none
+IsEquippableItem = IsEquippableItem or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none

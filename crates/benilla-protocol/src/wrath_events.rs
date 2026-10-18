@@ -472,6 +472,12 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
+            opcode if crate::wrath_bootstrap::handles(opcode) => {
+                Ok(match crate::wrath_bootstrap::decode(opcode, body) {
+                    Ok(events) => handled(events, Vec::new(), Vec::new()),
+                    Err(_) => WrathDispatch::Unhandled { opcode },
+                })
+            }
             opcode if crate::wrath_movement_misc::handles(opcode) => {
                 Ok(match crate::wrath_movement_misc::decode(opcode, body) {
                     Ok(events) => handled(events, Vec::new(), Vec::new()),

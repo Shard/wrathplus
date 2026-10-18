@@ -10,6 +10,7 @@ use bevy::prelude::*;
 
 use benilla_protocol::messages::{
     quest_flags, quest_slot_state, QuestLogSlot, QuestObjective, QuestTemplate,
+    QUEST_PVP_KILL_COUNTER,
 };
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::{
@@ -241,6 +242,34 @@ fn item_line(
     })
 }
 
+/// The PvP objective line, for a 3.3.5 template's `players_slain != 0`, counted in slot counter
+/// [`QUEST_PVP_KILL_COUNTER`]; `QUEST_PLAYERS_KILLED` composes the same sentence as the
+/// `ERR_QUEST_ADD_PLAYER_KILL_SII` toast. Unverified against the client: the line's place (last
+/// here) and its `type` string, which no stock frame reads.
+fn player_line(
+    players_slain: u32,
+    log_slot: &QuestLogSlot,
+    get: &dyn Fn(&str) -> Option<String>,
+) -> Option<QuestLogObjectiveView> {
+    if players_slain == 0 {
+        return None;
+    }
+    let cur = u32::from(log_slot.counters[QUEST_PVP_KILL_COUNTER]).min(players_slain);
+    let text = get("QUEST_PLAYERS_KILLED").map_or_else(String::new, |f| {
+        fill(
+            &f,
+            &[Arg::D(i64::from(cur)), Arg::D(i64::from(players_slain))],
+        )
+    });
+    Some(QuestLogObjectiveView {
+        text,
+        kind: "player".into(),
+        finished: cur >= players_slain,
+        cur,
+        req: players_slain,
+    })
+}
+
 /// The template's `money` as (required, reward): a negative value is demanded at turn-in.
 fn money_split(money: i32) -> (u32, u32) {
     if money < 0 {
@@ -332,6 +361,8 @@ fn build_objectives(
             objectives.push(line);
         }
     }
+    let players_slain = template.wrath.as_ref().map_or(0, |w| w.players_slain);
+    objectives.extend(player_line(players_slain, log_slot, get));
     objectives
 }
 
@@ -1108,6 +1139,7 @@ mod tests {
     fn probe_strings(key: &str) -> Option<String> {
         match key {
             "QUEST_MONSTERS_KILLED" => Some("<KILLED %s %d of %d>".into()),
+            "QUEST_PLAYERS_KILLED" => Some("<PLAYERS %d of %d>".into()),
             "QUEST_OBJECTS_FOUND" => Some("<FOUND %s %d of %d>".into()),
             "QUEST_ITEMS_NEEDED" => Some("<NEEDED %s %d of %d>".into()),
             _ => None,
@@ -1197,6 +1229,7 @@ mod tests {
             "QUEST_MONSTERS_KILLED",
             "QUEST_OBJECTS_FOUND",
             "QUEST_ITEMS_NEEDED",
+            "QUEST_PLAYERS_KILLED",
         ] {
             assert!(get(key).is_some(), "{key} missing");
         }
@@ -1295,6 +1328,58 @@ mod tests {
         assert!(!objectives[0].finished);
         assert_eq!(objectives[1].text, "<NEEDED ... 0 of 5>");
         assert_eq!(objectives[1].kind, "item");
+    }
+
+    /// A 3.3.5 PvP objective reads slot counter 0 and closes the list.
+    #[test]
+    fn a_pvp_objective_counts_in_slot_counter_zero_and_finishes_at_its_target() {
+        let mut template = quest_template([
+            obj(0, 0, 2000, 5, ""),
+            obj(0, 0, 0, 0, ""),
+            obj(0, 0, 0, 0, ""),
+            obj(0, 0, 0, 0, ""),
+        ]);
+        template.wrath = Some(benilla_protocol::messages::WrathQuestInfo {
+            players_slain: 10,
+            ..Default::default()
+        });
+        let mut log_slot = QuestLogSlot {
+            quest_id: 1,
+            counters: [4, 0, 0, 0],
+            state: 0,
+            timer: 0,
+        };
+        let store = ObjectFields::default();
+        let items = Items::default();
+        let mut objs = crate::ui_items::TestObjects::new();
+        let objects = objs.get();
+        let names = NameCache::default();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let commands = NetCommands(tx);
+        let build = |template: &QuestTemplate, slot: &QuestLogSlot| {
+            build_objectives(
+                template,
+                slot,
+                &store,
+                &objects,
+                &items,
+                &names,
+                &commands,
+                &probe_strings,
+            )
+        };
+        let lines = build(&template, &log_slot);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(
+            (lines[1].text.as_str(), lines[1].kind.as_str(), lines[1].finished),
+            ("<PLAYERS 4 of 10>", "player", false)
+        );
+        log_slot.counters[0] = 12;
+        let lines = build(&template, &log_slot);
+        assert_eq!((lines[1].cur, lines[1].finished), (10, true));
+        // A Vanilla-shaped or PvP-free template has no such line.
+        template.wrath = None;
+        assert_eq!(build(&template, &log_slot).len(), 1);
     }
 
     /// Creatures (`0x4e02d7`) and items (`0x4e04f4`) are separate passes, so a quad carrying both

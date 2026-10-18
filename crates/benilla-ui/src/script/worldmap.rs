@@ -423,6 +423,12 @@ impl super::UiScript {
         self.model_mut().world_loc_projector = Some(projector);
     }
 
+    /// The spirit healer's location after a death (`SMSG_DEATH_RELEASE_LOC`), `None` once it is
+    /// cleared; `GetDeathReleasePosition` projects it onto the displayed map.
+    pub fn set_death_release_location(&mut self, location: Option<(u32, f32, f32)>) {
+        self.model_mut().death_release = location;
+    }
+
     /// Moves the selection from the engine, as the zone updater `0x494780` calls the setter
     /// `0x4a67a0`: a fresh login shows the player's map before any Lua runs, not the world sheet,
     /// whose `GetPlayerMapPosition` is sheet UV (`0x4a7360`). It takes the resolver's whole
@@ -495,6 +501,32 @@ fn select_resolved(model: &mut Model, continent: u32, zone: u32, direct_area: Op
 }
 
 /// Register the world-map globals.
+/// The 3.3.5-only map binding: `GetDeathReleasePosition()` (WorldMapFrame.lua:908).
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    // GetDeathReleasePosition() → the release location's map UV through the same projection, or
+    // (0, 0), which WorldMapFrame.lua:909 hides.
+    lua.globals().set(
+        "GetDeathReleasePosition",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let wm = &model.worldmap;
+            let selection = (wm.selection.0, wm.selection.1, wm.direct_area);
+            let (u, v) = model
+                .death_release
+                .and_then(|(map, x, y)| {
+                    model
+                        .world_loc_projector
+                        .as_ref()
+                        .and_then(|project| project(selection, map, x, y))
+                })
+                .unwrap_or((0.0, 0.0));
+            Ok((f64::from(u), f64::from(v)))
+        })?,
+    )?;
+
+    Ok(())
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 

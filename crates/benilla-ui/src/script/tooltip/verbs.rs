@@ -366,6 +366,14 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     crate::script::tooltip_spell::install_methods(lua, &m)?;
     crate::script::talent::install_tooltip_method(lua, &m)?;
     crate::script::tooltip_unit::install_methods(lua, &m)?;
+    if lua
+        .app_data_ref::<crate::script::Model>()
+        .expect("model app_data")
+        .dialect
+        == crate::script::ScriptDialect::Wrath12340
+    {
+        crate::script::wrath_totems::install_tooltip_method(lua, &m)?;
+    }
 
     lua.set_named_registry_value(REG_TOOLTIP_METHODS, m)?;
     Ok(())

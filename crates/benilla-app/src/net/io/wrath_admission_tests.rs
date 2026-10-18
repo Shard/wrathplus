@@ -234,6 +234,7 @@ fn every_wrath_writer_route_is_admitted() {
                 spell_index: 0,
                 spell_id: 8690,
                 item_guid: 1,
+                glyph_index: 0,
                 target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
             },
         ),
@@ -406,6 +407,14 @@ fn every_wrath_writer_route_is_admitted() {
                 pos: [0.0; 3],
                 orientation: 0.0,
                 fall_time: 0,
+            },
+        ),
+        (
+            "NativePetCastSpell",
+            ClientCommand::NativePetCastSpell {
+                caster: 0x50,
+                spell_id: 1,
+                target: benilla_protocol::wrath_session::CastTarget::Dest([0.0; 3]),
             },
         ),
         (

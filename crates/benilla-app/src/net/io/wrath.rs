@@ -378,6 +378,9 @@ fn run(
         // Lossless handoff: send login, split immediately, announce the session, then consume every
         // queued packet through the Wrath adapter.
         session.begin_player_login(guid)?;
+        // The auth bootstrap the select screen kept (`SMSG_ADDON_INFO`, `SMSG_CLIENTCACHE_VERSION`).
+        let addon_reply = session.addon_reply_received();
+        let bootstrap = session.take_bootstrap_packets();
         let (mut reader, writer) = session.into_split()?;
         let session_clock = Arc::new(SessionClock::new());
         *next_epoch = next_epoch
@@ -418,11 +421,30 @@ fn run(
                 name,
                 billing_time_rested: 0,
                 tutorial_flags: None,
-                // `SMSG_ADDON_INFO` is not decoded on this route; the realm hides no addon, and
-                // without a reply the client's addon array stays empty and nothing can load.
-                addon_info: Some(Vec::new()),
+                // Our auth session names no addon, so `SMSG_ADDON_INFO` hides none: an empty list
+                // once it arrived, `None` (nothing loads) if the server never answered.
+                addon_info: addon_reply.then(Vec::new),
             },
         )?;
+        for packet in bootstrap {
+            match benilla_protocol::wrath_bootstrap::decode(packet.opcode, &packet.body) {
+                Ok(decoded) => {
+                    for event in decoded {
+                        send(events, event)?;
+                    }
+                }
+                Err(error) => {
+                    bevy::log::warn!("net(wrath): bootstrap {:#06x} dropped: {error}", packet.opcode);
+                    send(
+                        events,
+                        SessionEvent::PacketDropped {
+                            opcode: packet.opcode,
+                            unparseable: true,
+                        },
+                    )?;
+                }
+            }
+        }
         reader.set_read_timeout(Some(READ_SLICE))?;
         let mut adapter = WrathEventAdapter::new();
         let mut packet_recorder = recorder::Recorder::from_env();
@@ -1796,6 +1818,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetActionButton { .. }
         | ClientCommand::CastSpell { .. }
         | ClientCommand::CastSpellAtDest { .. }
+        | ClientCommand::NativePetCastSpell { .. }
         | ClientCommand::CastSpellAtSource { .. }
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
@@ -2895,6 +2918,20 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             cast(spell_id, target.map_or(CastTarget::None, CastTarget::Unit))
         }
         ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
+        // One counter with `CMSG_CAST_SPELL`: the server echoes it in the cast results.
+        ClientCommand::NativePetCastSpell {
+            caster,
+            spell_id,
+            target,
+        } => {
+            let count = CAST_COUNT
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                .wrapping_add(1);
+            (
+                s::CMSG_PET_CAST_SPELL,
+                s::encode_pet_cast_spell(caster, count, spell_id, &target),
+            )
+        }
         ClientCommand::CastSpellAtSource { spell_id, src } => {
             cast(spell_id, CastTarget::Source(src))
         }
@@ -2911,6 +2948,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             slot,
             spell_id,
             item_guid,
+            glyph_index,
             target,
             ..
         } => {
@@ -2918,7 +2956,13 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 .wrapping_add(1);
             benilla_protocol::wrath_inventory::encode_use_item(
-                count, bag_index, slot, spell_id, item_guid, &target,
+                count,
+                bag_index,
+                slot,
+                spell_id,
+                item_guid,
+                glyph_index,
+                &target,
             )
         }
         ClientCommand::CancelCast { spell_id } => {
@@ -3849,6 +3893,7 @@ mod tests {
             spell_index: 0,
             spell_id: 8690,
             item_guid: 0x4000_0000_0000_0001,
+            glyph_index: 0,
             target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
         };
         assert_eq!(route(&use_item()), WrathRoute::NativeSession);

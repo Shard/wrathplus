@@ -25,9 +25,13 @@ disabled game action, and the route tests now expect the native route. Transport
 `ClientCommand::NativeSessionMisc`: 004A player logout (empty; AC's handler does nothing, logging out
 is `CMSG_LOGOUT_REQUEST`), 0102 emote (AC acts only on 0 and 3, wave).
 
-**Still missing, with reason**: 02EF addon info and 04AB client-cache version arrive right after
-authentication, before `CMSG_PLAYER_LOGIN`, where the bootstrap character loop
-(`wrath_world::character_action_result`/enumeration) discards everything it is not waiting for.
-Addon info would be self-describing here, since our auth session declares no addons (only the
-banned-addon list follows), but reaching either needs a bootstrap change, which this unit does not
-make.
+**Bootstrap packets (Wire A, follow-up)**: 02EF addon info and 04AB client-cache version arrive
+right after authentication, before `CMSG_PLAYER_LOGIN`. `wrath_world::WrathWorldSession` now keeps
+both through its startup, roster and character-action loops, which used to discard them. It also
+remembers that the addon reply arrived, across re-logins on the session. At login, `net/io/wrath.rs`
+publishes them after `Connected` as `SessionEvent::WrathBootstrap` (`wrath_bootstrap.rs`, strict)
+into `net/wrath_bootstrap_capture.rs`.
+- **02EF:** handled. Our auth session declares no addons, so the packet is the banned-addon list
+  alone. `Connected.addon_info` is now the truth: an empty hidden list once the reply arrived,
+  `None` if it never did. Matching the banned MD5s against loaded addons is not built.
+- **04AB:** capture-only. There is no persistent `WDB` cache here for it to invalidate.

@@ -1,6 +1,6 @@
 //! Ordered native item/inventory receipts. Refund replies feed `wrath_item_refunds`,
-//! equipment-set traffic `wrath_equipment_sets` and socket results `wrath_sockets`; read and
-//! item-text receipts stay here.
+//! equipment-set traffic `wrath_equipment_sets` and socket results `wrath_sockets`; a letter's
+//! text goes to the item-text reader (`ui_item_text::LetterTexts`); read receipts stay here.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_inventory::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -14,14 +14,28 @@ pub(super) fn register(app: &mut App) {
     super::wrath_equipment_sets::register(app);
     super::wrath_sockets::register(app);
     app.init_resource::<NativeInventoryPackets>()
+        .init_resource::<crate::ui_item_text::LetterTexts>()
         .net_handler(SessionEventKind::WrathInventory, receive)
         .net_handler(SessionEventKind::Connected, clear)
         .net_handler(SessionEventKind::Disconnected, clear);
 }
 
-fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeInventoryPackets>) {
-    if let SessionEvent::WrathInventory { packet } = event {
-        packets.0.push_back(packet);
+fn receive(
+    In(event): In<SessionEvent>,
+    mut packets: ResMut<NativeInventoryPackets>,
+    mut letters: ResMut<crate::ui_item_text::LetterTexts>,
+) {
+    match event {
+        // A letter's text goes to the reader's cache, not the FIFO.
+        SessionEvent::WrathInventory {
+            packet: Packet::ItemText { text, .. },
+        } => match text {
+            Some((item_guid, text)) => letters.insert(item_guid, Some(text)),
+            // AC's "no text" carries no GUID: nothing to answer, and the ask stays pending.
+            None => {}
+        },
+        SessionEvent::WrathInventory { packet } => packets.0.push_back(packet),
+        _ => {}
     }
 }
 

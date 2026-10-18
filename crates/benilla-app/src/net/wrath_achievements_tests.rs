@@ -59,12 +59,21 @@ fn own_receipts_leave_the_capture_and_others_keep_their_order() {
             data: snapshot(&[(1, 1)], &[]),
         },
     ]);
-    let (earned, comparison) = absorb(&mut packets, &mut state, me);
+    let (earned, comparison, firsts) = absorb(&mut packets, &mut state, me);
     assert_eq!(earned, [8], "a repeated earn fires once");
     assert!(comparison.is_none(), "nobody asked for 0x30");
-    assert_eq!(packets.len(), 3);
+    assert_eq!(packets.len(), 2);
     assert_eq!(packets[0], other_earn);
-    assert_eq!(packets[1], first);
+    assert!(matches!(packets[1], Packet::Inspect { player: 0x30, .. }));
+    assert_eq!(
+        firsts,
+        [ServerFirst {
+            name: "Guild".into(),
+            player: 0x20,
+            achievement: 457,
+            raw_link: 1,
+        }]
+    );
     assert_eq!(
         state
             .earned
@@ -85,7 +94,7 @@ fn own_receipts_leave_the_capture_and_others_keep_their_order() {
         player: 0x30,
         data: snapshot(&[(1, 1)], &[(40, 9)]),
     }]);
-    let (_, comparison) = absorb(&mut packets, &mut state, me);
+    let (_, comparison, _) = absorb(&mut packets, &mut state, me);
     let (guid, data) = comparison.expect("the asked player");
     assert_eq!(guid, 0x30);
     let view = snapshot_progress(&data, -1);
@@ -99,4 +108,25 @@ fn races_map_to_the_achievement_factions() {
     assert_eq!(faction(Some(10)), 0, "blood elf is Horde");
     assert_eq!(faction(Some(11)), 1, "draenei is Alliance");
     assert_eq!(faction(None), -1);
+}
+
+#[test]
+fn a_server_first_is_an_achievement_line_named_by_its_earner() {
+    let line = server_first_line(
+        "|Hplayer:%s|h[%s]|h has earned the achievement $a!",
+        "Arthas",
+        0x20,
+        457,
+    );
+    assert_eq!(
+        (line.chat_type, line.sender_guid, line.achievement_id),
+        (0x30, 0x20, Some(457))
+    );
+    assert_eq!(line.sender_name.as_deref(), Some(&b"Arthas"[..]));
+    assert_eq!(
+        line.text,
+        b"|Hplayer:Arthas|h[Arthas]|h has earned the achievement $a!"
+    );
+    let guild = server_first_line("%s has earned the achievement $a!", "Guild", 0x20, 457);
+    assert_eq!(guild.text, b"Guild has earned the achievement $a!");
 }

@@ -95,3 +95,19 @@ fn bank_replies_feed_the_existing_bank_state() {
     );
     assert!(captured(&app).is_empty());
 }
+
+/// A letter's text reaches the item-text reader's cache, not the capture.
+#[test]
+fn letter_texts_go_to_the_reader() {
+    let mut app = App::new();
+    register(&mut app);
+    let mut adapter = WrathEventAdapter::new();
+    let mut body = vec![0u8];
+    body.extend(0x4000_0000_0000_0042u64.to_le_bytes());
+    body.extend(b"Dear friend\0");
+    dispatch(&mut app, &mut adapter, 0x244, &body);
+    dispatch(&mut app, &mut adapter, 0x244, &[1]);
+    assert!(captured(&app).is_empty());
+    let mut letters = app.world_mut().resource_mut::<crate::ui_item_text::LetterTexts>();
+    assert_eq!(letters.text(0x4000_0000_0000_0042).as_deref(), Some("Dear friend"));
+}

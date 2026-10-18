@@ -88,6 +88,8 @@ pub(crate) struct Model {
     pub(crate) texture_probe: Option<TextureProbe>,
     /// `GetWorldLocMapPosition`'s projection; `None` answers `(0, 0)`.
     pub(crate) world_loc_projector: Option<WorldLocProjector>,
+    /// `GetDeathReleasePosition`'s world location, `(map, x, y)` (`SMSG_DEATH_RELEASE_LOC`).
+    pub(crate) death_release: Option<(u32, f32, f32)>,
     /// A path's texel size, which an axis authored as 0 takes, one texel per unit, as the client's
     /// `GetWidth` (`0x770720`) and `GetHeight` (`0x770790`) do; `None` leaves it as authored.
     pub(crate) texture_size_probe: Option<TextureSizeProbe>,
@@ -443,6 +445,11 @@ pub(crate) struct Model {
     pub(crate) actions: HashMap<u32, ActionSlot>,
     /// Per action, its usable, range, current and cooldown state; an absent one reads cold.
     pub(crate) action_states: HashMap<u32, super::action::StoredActionState>,
+    /// Build 12340's `IsCurrentSpell` spells: the cast in flight, queued on the next swing,
+    /// channelled, awaiting its targeting click or auto-repeating, and Attack (6603) while engaged.
+    pub(crate) current_spells: Vec<u32>,
+    /// Build 12340's totem slots and multi-cast lists (`super::wrath_totems`).
+    pub(crate) totems: super::wrath_totems::TotemState,
     pub(crate) bonus_bar_offset: u8,
     /// `(action id, packed)` per slot `PickupAction`/`PlaceAction` changed, 0 clearing it: one
     /// `CMSG_SET_ACTION_BUTTON` each, so a drag swap is two sends.
@@ -464,6 +471,8 @@ pub(crate) struct Model {
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
+    /// The item id the last tooltip item lookup asked for, taken by the render that follows.
+    pub(crate) tooltip_viewed_item: Option<u32>,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -1103,6 +1112,7 @@ impl Model {
             measurer: None,
             texture_probe: None,
             world_loc_projector: None,
+            death_release: None,
             texture_size_probe: None,
             font_probe: None,
             addons_saved_account: None,
@@ -1263,6 +1273,8 @@ impl Model {
             keybinds: super::keybind::KeybindState::default(),
             actions: HashMap::new(),
             action_states: HashMap::new(),
+            current_spells: Vec::new(),
+            totems: Default::default(),
             bonus_bar_offset: 0,
             action_sets: Vec::new(),
             ui_errors: Vec::new(),
@@ -1275,6 +1287,7 @@ impl Model {
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
+            tooltip_viewed_item: None,
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),

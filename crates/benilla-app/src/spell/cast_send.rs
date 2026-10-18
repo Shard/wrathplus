@@ -34,6 +34,9 @@ use crate::ui_action::{reagent_totem_refusal, CastErrors, Spells};
 pub(crate) enum CastCommit {
     /// `CMSG_CAST_SPELL` (0x12e).
     Spell,
+    /// Build 12340's `CMSG_PET_CAST_SPELL` (0x1f0): our pet's, charm's or possessed unit's spell,
+    /// raised to the cursor by its bar ([`super::cast_target::pet_cursor_word`]).
+    Pet { caster: u64 },
     /// `CMSG_USE_ITEM` (0xab): the item's wire position and spell ordinal, plus a caller-bound
     /// GameObject.
     Item {
@@ -127,6 +130,9 @@ pub(crate) enum TargetedBind {
     Unit(u64),
     /// The world click's corpse guid and the corpse bit `BindTarget`'s corpse arm bound.
     Corpse(u64, benilla_protocol::messages::CorpseTarget),
+    /// Build 12340's glyph socket, 0-based: `PlaceGlyphInSocket` (`0x80c3e0`) fills the item
+    /// use's glyph index and the cast goes out self-implicit.
+    Glyph(u8),
 }
 
 impl CastLadder<'_, '_> {
@@ -139,7 +145,32 @@ impl CastLadder<'_, '_> {
         commit: CastCommit,
         bound: TargetedBind,
     ) {
+        if let CastCommit::Pet { caster } = commit {
+            // The pet's cast: its own counter, cooldowns and GCD, none of ours to arm.
+            use benilla_protocol::wrath_session::CastTarget;
+            let target = match bound {
+                TargetedBind::Dest(at) => CastTarget::Dest(at),
+                TargetedBind::Source(at) => CastTarget::Source(at),
+                TargetedBind::Item(guid) => CastTarget::Item(guid),
+                TargetedBind::Object(guid) => CastTarget::GameObject(guid),
+                TargetedBind::Unit(guid) => CastTarget::Unit(guid),
+                TargetedBind::Corpse(..) => {
+                    debug!("ui_action: pet cast {spell_id} at a corpse is not built; dropped");
+                    self.ground.clear();
+                    return;
+                }
+            };
+            let _ = self.commands.0.send(ClientCommand::NativePetCastSpell {
+                caster,
+                spell_id,
+                target,
+            });
+            self.ground.clear();
+            return;
+        }
         let cmd = match commit {
+            // Sent above.
+            CastCommit::Pet { .. } => return,
             // The same targets block under either opcode; the spell side has one builder per bind.
             CastCommit::Spell => match bound {
                 TargetedBind::Dest(dest) => ClientCommand::CastSpellAtDest { spell_id, dest },
@@ -161,6 +192,11 @@ impl CastLadder<'_, '_> {
                     target,
                     corpse_guid,
                 },
+                // A glyph is an item's spell; a spell press never waits on a socket.
+                TargetedBind::Glyph(_) => ClientCommand::CastSpell {
+                    spell_id,
+                    target: None,
+                },
             },
             CastCommit::Item {
                 bag_index,
@@ -174,6 +210,10 @@ impl CastLadder<'_, '_> {
                 spell_index,
                 spell_id,
                 item_guid,
+                glyph_index: match bound {
+                    TargetedBind::Glyph(socket) => u32::from(socket),
+                    _ => 0,
+                },
                 target: match bound {
                     TargetedBind::Dest(dest) => UseItemTarget::Dest(dest),
                     TargetedBind::Source(src) => UseItemTarget::Source(src),
@@ -181,6 +221,7 @@ impl CastLadder<'_, '_> {
                     TargetedBind::Object(guid) => UseItemTarget::Object(guid),
                     TargetedBind::Unit(guid) => UseItemTarget::Unit(guid),
                     TargetedBind::Corpse(guid, target) => UseItemTarget::Corpse(target, guid),
+                    TargetedBind::Glyph(_) => UseItemTarget::SelfImplicit,
                 },
             },
         };
@@ -453,7 +494,7 @@ fn send_spell_cast(
     let mut deferred_refusal = None;
     let explicit_object = match commit {
         CastCommit::Item { on_object, .. } => on_object,
-        CastCommit::Spell => bound_object,
+        CastCommit::Spell | CastCommit::Pet { .. } => bound_object,
     };
     let candidates = cast_target::CastCandidates {
         selection: ctx.selection_guid,
@@ -520,7 +561,7 @@ fn send_spell_cast(
     // `StartRecoveryCategory`. Local, because the server's NOT_READY fail clears the running GCD.
     let queried_item = match commit {
         CastCommit::Item { entry, .. } => entry,
-        CastCommit::Spell => 0,
+        CastCommit::Spell | CastCommit::Pet { .. } => 0,
     };
     if cooldowns.not_ready(spell_id, queried_item, def, now) {
         debug!("ui_action: cast {spell_id} refused locally — not ready (the validator's rung 1)");
@@ -665,6 +706,13 @@ fn send_spell_cast(
         return;
     }
     // The deferred cursor entry (`6e50c8`): every rung passed, the cursor waits for its click.
+    // Build 12340's glyph wait: `Targets & TARGET_FLAG_GLYPH_SLOT` (`0x20000`) holds the cast,
+    // past the validator, for `PlaceGlyphInSocket` (`0x80c3e0`) to name the socket and send.
+    if commit.is_item() && def.is_some_and(|d| d.targets & cast_target::TF_GLYPH_SLOT != 0) {
+        debug!("ui_action: cast {spell_id} awaits a glyph socket");
+        ground.enter_glyph(spell_id, commit);
+        return;
+    }
     if let Some(word) = pending_word {
         debug!("ui_action: cast {spell_id} awaits its click — targeting cursor up ({word:#06x})");
         ground.enter(spell_id, commit, word);
@@ -710,6 +758,8 @@ fn send_spell_cast(
     }
     // `SendCast 0x6e54f0`: one targets block, two opcodes.
     let _ = commands.0.send(match commit {
+        // A pet's spell reaches the wire only through its cursor commit.
+        CastCommit::Pet { .. } => return,
         CastCommit::Spell => match (explicit_object, item_target) {
             // A lock opener bound by its click; `BindTarget`'s GameObject arm fills the block.
             (Some(go_guid), _) => ClientCommand::CastSpellGameObject { spell_id, go_guid },
@@ -733,6 +783,7 @@ fn send_spell_cast(
             spell_index,
             spell_id,
             item_guid,
+            glyph_index: 0,
             target: match (on_object, item_target, target) {
                 (Some(go), _, _) => UseItemTarget::Object(go),
                 (None, Some(item), _) => UseItemTarget::Item(item),
