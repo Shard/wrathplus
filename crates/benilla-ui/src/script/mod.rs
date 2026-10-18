@@ -54,6 +54,7 @@ pub use wrath_calendar::{
 };
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
+mod wrath_tooltip;
 pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
@@ -871,6 +872,7 @@ impl UiScript {
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_titles::install(&lua)?;
+            wrath_tooltip::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;

@@ -83,6 +83,7 @@ pub use locks::{
 };
 
 mod queue;
+pub(crate) use queue::start_backfill;
 pub use queue::{
     WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem, WrathLfgEncounter, WrathLfgProposal,
     WrathLfgProposalRow, WrathLfgQueueRequest, WrathLfgQueueSnapshot, WrathLfgQueueStatus,
