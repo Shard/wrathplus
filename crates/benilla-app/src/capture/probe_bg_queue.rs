@@ -166,7 +166,7 @@ fn bg_queue_probe(
                 info!(
                     "PROBE bgqueue: QUEUED — slot {slot}, map {}, status {}, instance {} \
                      (the body stays queued; the next plain login is the measurement)",
-                    status.map_id, status.status, status.instance_id,
+                    status.map, status.status.status, status.status.client_instance,
                 );
                 probe.phase = Phase::Done;
             } else if now - sent_at > 15.0 {

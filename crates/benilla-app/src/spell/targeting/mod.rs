@@ -39,7 +39,7 @@ mod world;
 pub(crate) use corpse::fixture as corpse_fixture;
 pub(crate) use corpse::{corpse_pick_admits, publish_corpse_pick, CorpsePick};
 pub(crate) use cursor::{drive_targeting_cursor, ground_cast_radius};
-pub(crate) use item::{commit_item_cast_on_pick, EnchantConfirmItem};
+pub(crate) use item::{commit_item_cast_on_pick, EnchantConfirmItem, EnchantResume};
 pub(crate) use pick::{publish_unit_pick, PickChecks, UnitPick};
 pub(crate) use world::{commit_ground_cast_on_click, commit_object_cast_on_click};
 

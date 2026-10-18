@@ -553,7 +553,7 @@ fn bg_probe(
             // vmangos re-sends a stale queue's status at login.
             let ready = queue.slots().iter().position(|s| {
                 s.as_ref()
-                    .is_some_and(|(st, _)| st.status == 2 && st.map_id == arena.map)
+                    .is_some_and(|(st, _)| st.status.status == 2 && st.map == arena.map)
             });
             if let Some(index) = ready {
                 let slot = index + 1; // the verbs are 1-based
@@ -596,7 +596,7 @@ fn bg_probe(
                     .map(|s| {
                         s.as_ref().map_or_else(
                             || "-".into(),
-                            |(st, _)| format!("{}:{}", st.map_id, st.status),
+                            |(st, _)| format!("{}:{}", st.map, st.status.status),
                         )
                     })
                     .collect();

@@ -473,6 +473,8 @@ pub(crate) struct Model {
     pub(crate) wrath_titles: super::wrath_titles::State,
     /// The item id the last tooltip item lookup asked for, taken by the render that follows.
     pub(crate) tooltip_viewed_item: Option<u32>,
+    pub(crate) wrath_quest_poi: super::wrath_quest_poi::State,
+    pub(crate) wrath_barber: super::wrath_barber::State,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -520,8 +522,6 @@ pub(crate) struct Model {
     pub(crate) area_spirit_secs: u32,
     /// `AcceptAreaSpiritHeal()` calls, one `CMSG_AREA_SPIRIT_HEALER_QUEUE` each.
     pub(crate) area_spirit_accepts: u32,
-    /// `AcceptBattlefieldPort(index, accept)` calls: the 1-based slot and the normalised answer.
-    pub(crate) battlefield_port_requests: Vec<(u8, bool)>,
     /// The battleground scoreboard: pushed rows, faction filter, sort order.
     pub(crate) battlefield_board: super::battlefield_score::ScoreBoard,
     /// `GetBattlefieldInstanceRunTime()`, pushed each frame.
@@ -530,20 +530,8 @@ pub(crate) struct Model {
     pub(crate) battlefield_score_requests: u32,
     /// `LeaveBattlefield()` calls that passed the "ended" gate.
     pub(crate) battlefield_leave_requests: u32,
-    /// The battleground instance list and its scalars, as pushed.
-    pub(crate) battlefield_list: super::battlefield_queue::BattlefieldListView,
-    /// The selected instance id (`[0xb6eba0]`), not an index; written by `SetSelectedBattlefield`.
-    pub(crate) battlefield_selected: u32,
-    /// The three queue slots, pushed each frame with their clocks reduced to values. Zeroed
-    /// until the first push, as the reference's static slots (`0xb6e9d0`) are, so each answers
-    /// "none" from the first frame.
-    pub(crate) battlefield_slots: [super::battlefield_queue::BattlefieldQueueSlot; 3],
-    /// `GetBattlefieldInstanceExpiration()`, pushed each frame.
-    pub(crate) battlefield_instance_expiration_ms: u32,
-    /// `JoinBattlefield` calls, `(instance id, as group)`.
-    pub(crate) battlefield_join_requests: Vec<(u32, bool)>,
-    /// `ShowBattlefieldList` calls that passed their gates: the queued slot's map id.
-    pub(crate) battlefield_list_requests: Vec<u32>,
+    /// The battleground queue slots, type list, instance list, selection and world-PvP queue.
+    pub(crate) battlefield: super::battlefield_queue::QueueState,
     /// Teammates' map positions, the flag carrier, the icon scale and position requests.
     pub(crate) battlefield_positions: Vec<super::battlefield_positions::BattlefieldPositionView>,
     pub(crate) battlefield_flag: Option<super::battlefield_positions::BattlefieldFlagView>,
@@ -1288,6 +1276,8 @@ impl Model {
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
             tooltip_viewed_item: None,
+            wrath_quest_poi: Default::default(),
+            wrath_barber: Default::default(),
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
@@ -1310,17 +1300,11 @@ impl Model {
             area_spirit_healer_cached: false,
             area_spirit_secs: 0,
             area_spirit_accepts: 0,
-            battlefield_port_requests: Vec::new(),
             battlefield_board: Default::default(),
             battlefield_run_time_ms: 0,
             battlefield_score_requests: 0,
             battlefield_leave_requests: 0,
-            battlefield_list: Default::default(),
-            battlefield_selected: 0,
-            battlefield_slots: Default::default(),
-            battlefield_instance_expiration_ms: 0,
-            battlefield_join_requests: Vec::new(),
-            battlefield_list_requests: Vec::new(),
+            battlefield: Default::default(),
             battlefield_positions: Vec::new(),
             battlefield_flag: None,
             battlefield_icon_scale: 1.0,

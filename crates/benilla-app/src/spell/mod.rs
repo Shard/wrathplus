@@ -42,7 +42,8 @@ pub(crate) use mods::{OP_COOLDOWN, OP_RANGE};
 pub(crate) use range_units::{RangeUnits, DEFAULT_REACH};
 // `TargetingWants` is exported for the ground reticle, which draws for the location word alone.
 pub(crate) use targeting::{
-    ground_cast_radius, CorpsePick, PicksSelf, ScriptCursor, SpellTargeting, TargetingWants,
+    ground_cast_radius, CorpsePick, EnchantResume, PicksSelf, ScriptCursor, SpellTargeting,
+    TargetingWants,
 };
 
 /// A script cast's inputs, the cast tail the action bar uses, for the spellbook's and the stance
@@ -79,6 +80,7 @@ impl Plugin for SpellPlugin {
             )
             .init_resource::<HeldForPick>()
             .init_resource::<targeting::EnchantConfirmItem>()
+            .init_resource::<targeting::EnchantResume>()
             .init_resource::<targeting::PicksSelf>()
             .init_resource::<targeting::CorpsePick>()
             .init_resource::<targeting::UnitPick>()

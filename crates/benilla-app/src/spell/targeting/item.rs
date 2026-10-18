@@ -16,6 +16,16 @@ use super::TargetingWants;
 #[derive(Resource, Default)]
 pub(crate) struct EnchantConfirmItem(Option<u64>);
 
+/// Build 12340's `EndRefund(1)` / `EndBoundTradeable("itemenchant")` answers (`0x523370`,
+/// `0x5233d0` → `0x5210d0(item, 1)`), forwarded by the StaticPopup host: each re-runs the gate
+/// on the parked item, confirmed.
+#[derive(Resource, Default)]
+pub(crate) struct EnchantResume(pub(crate) u32);
+
+/// `ITEM_FIELD_FLAGS`: refundable, and bound but still tradeable.
+const ITEM_FLAG_REFUNDABLE: u32 = 0x0000_1000;
+const ITEM_FLAG_BOP_TRADEABLE: u32 = 0x0000_0100;
+
 /// The clicked item as `0x495d60` reads it: template type fields, the rest off the item object.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ClickedItem {
@@ -30,6 +40,10 @@ pub(crate) struct ClickedItem {
     /// `ITEM_FIELD_ENCHANTMENT` PERM (0) and TEMP (1); `None` for empty, a negative id, or an id
     /// with no `SpellItemEnchantment` row.
     pub(crate) existing_enchant: [Option<u32>; 2],
+    /// Build 12340: the item can still be refunded (`ITEM_FIELD_FLAGS & 0x1000`).
+    pub(crate) refundable: bool,
+    /// Build 12340: bound but still in its trade window (`ITEM_FIELD_FLAGS & 0x100`).
+    pub(crate) bound_tradeable: bool,
 }
 
 /// The enchant the cast would apply, `SpellItemEnchantment[EffectMiscValue]`.
@@ -54,6 +68,12 @@ pub(crate) enum ItemBind {
     /// Park the guid and fire `REPLACE_ENCHANT` (event 403, old name then new); its Yes,
     /// `ReplaceEnchant 0x48d300`, skips the gate and binds.
     ConfirmReplace { existing: u32, new: u32 },
+    /// Build 12340 (`0x5210d0`): park the guid and fire `END_REFUND(1)`; its Yes re-runs the
+    /// gate confirmed.
+    ConfirmRefund,
+    /// Build 12340 (`0x5210d0`): park the guid and fire `END_BOUND_TRADEABLE("itemenchant")`;
+    /// its Yes re-runs the gate confirmed.
+    ConfirmTradeable,
 }
 
 /// `0x495d60`, run at the click, for an `ENCHANT_ITEM` (53) or `ENCHANT_ITEM_TEMPORARY` (54)
@@ -98,6 +118,20 @@ pub(crate) fn item_bind_verdict(
         if new.binds && !item.already_bound && !confirmed && item.inventory_type != 0 {
             return ItemBind::ConfirmBind;
         }
+    }
+    // Build 12340's `0x5210d0`, between the bind and the replace: a refundable item (not for a
+    // temporary enchant), then a bound-tradeable one (not for a temporary enchant that does not
+    // bind). A confirmed re-run skips both. Labelled: the two-hour refund window is the
+    // server's, which clears the flag; the client also compares played time.
+    if !confirmed {
+        if item.refundable && perm {
+            return ItemBind::ConfirmRefund;
+        }
+        if item.bound_tradeable && (perm || new.is_some_and(|n| n.binds)) {
+            return ItemBind::ConfirmTradeable;
+        }
+    }
+    if let Some(new) = new {
         if let Some(existing) = item.existing_enchant[usize::from(!perm)] {
             return ItemBind::ConfirmReplace {
                 existing,
@@ -119,6 +153,7 @@ pub(crate) fn commit_item_cast_on_pick(
     enchants: Option<Res<crate::items::Enchants>>,
     mut parked: ResMut<EnchantConfirmItem>,
     mut ladder: crate::spell::CastLadder,
+    mut resume: ResMut<EnchantResume>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -138,6 +173,12 @@ pub(crate) fn commit_item_cast_on_pick(
             None => {
                 debug!("ui_action: item pick on an empty slot (bag {bag} slot {slot}) — mode kept")
             }
+        }
+    }
+    // The refund and trade-window prompts' Yes, forwarded by the StaticPopup host.
+    for _ in 0..std::mem::take(&mut resume.0) {
+        if let Some(guid) = parked.0 {
+            asks.push((guid, true));
         }
     }
     for answer in script.take_enchant_confirms() {
@@ -179,6 +220,7 @@ pub(crate) fn commit_item_cast_on_pick(
         };
         let cat = enchants.as_deref();
         let fields = ladder.objects.object(item_guid);
+        let flags = fields.and_then(|f| f.item_flags()).unwrap_or(0);
         let item = ClickedItem {
             class,
             subclass,
@@ -187,6 +229,8 @@ pub(crate) fn commit_item_cast_on_pick(
             already_bound: fields.is_some_and(|f| crate::items::already_bound(f, cat)),
             existing_enchant: [0u8, 1]
                 .map(|slot| fields.and_then(|f| crate::items::live_enchant(f, slot, cat))),
+            refundable: flags & ITEM_FLAG_REFUNDABLE != 0,
+            bound_tradeable: flags & ITEM_FLAG_BOP_TRADEABLE != 0,
         };
         // `EffectMiscValue` is signed; the reference rejects a negative one before the row lookup.
         let new = u32::try_from(def.effect_misc_value[0])
@@ -224,6 +268,17 @@ pub(crate) fn commit_item_cast_on_pick(
                         benilla_ui::script::ScriptValue::Str(name(existing)),
                         benilla_ui::script::ScriptValue::Str(name(new)),
                     ],
+                );
+            }
+            ItemBind::ConfirmRefund => {
+                parked.0 = Some(item_guid);
+                script.fire_event("END_REFUND", vec![benilla_ui::script::ScriptValue::Int(1)]);
+            }
+            ItemBind::ConfirmTradeable => {
+                parked.0 = Some(item_guid);
+                script.fire_event(
+                    "END_BOUND_TRADEABLE",
+                    vec![benilla_ui::script::ScriptValue::Str("itemenchant".into())],
                 );
             }
             ItemBind::Bind => {
@@ -485,6 +540,59 @@ mod tests {
         assert_eq!(
             item_bind_verdict(&bracer_only, &enchanted, binder, false),
             ItemBind::Refuse(crate::spell::cast_target::ERR_INVALID_TARGET)
+        );
+    }
+
+    /// Build 12340's `0x5210d0`: after the bind confirm, a refundable item asks `END_REFUND`, a
+    /// bound one still in its trade window `END_BOUND_TRADEABLE`, and a confirmed re-run passes
+    /// both; a temporary enchant skips the refund prompt.
+    #[test]
+    fn refundable_and_trade_window_items_ask_before_the_bind() {
+        use benilla_formats::SpellDisplay;
+        let mut perm = SpellDisplay::default();
+        perm.effects[0] = benilla_formats::SPELL_EFFECT_ENCHANT_ITEM;
+        let mut temp = SpellDisplay::default();
+        temp.effects[0] = benilla_formats::SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY;
+        let new = Some(NewEnchant {
+            id: 7,
+            binds: false,
+        });
+        let refundable = ClickedItem {
+            inventory_type: 13,
+            already_bound: true,
+            refundable: true,
+            ..Default::default()
+        };
+        let tradeable = ClickedItem {
+            inventory_type: 13,
+            already_bound: true,
+            bound_tradeable: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            item_bind_verdict(&perm, &refundable, new, false),
+            ItemBind::ConfirmRefund
+        );
+        assert_eq!(
+            item_bind_verdict(&perm, &refundable, new, true),
+            ItemBind::Bind
+        );
+        assert_eq!(
+            item_bind_verdict(&temp, &refundable, new, false),
+            ItemBind::Bind
+        );
+        assert_eq!(
+            item_bind_verdict(&perm, &tradeable, new, false),
+            ItemBind::ConfirmTradeable
+        );
+        assert_eq!(
+            item_bind_verdict(&temp, &tradeable, new, false),
+            ItemBind::Bind,
+            "a temporary enchant that does not bind"
+        );
+        assert_eq!(
+            item_bind_verdict(&perm, &tradeable, new, true),
+            ItemBind::Bind
         );
     }
 }

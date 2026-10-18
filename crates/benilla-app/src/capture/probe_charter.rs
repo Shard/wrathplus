@@ -22,9 +22,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
-    BAG_PLAYER_INVENTORY, CHARTER_ITEM_ENTRY, ITEM_FLAG_CHARTER, SLOT_BAG_FIRST, SLOT_PACK_FIRST,
-};
+use benilla_protocol::messages::{CHARTER_ITEM_ENTRY, ITEM_FLAG_CHARTER};
 use benilla_protocol::EntityKind;
 use benilla_ui::script::UiScript;
 
@@ -35,7 +33,7 @@ use crate::net::{
 };
 use crate::player::Player;
 use crate::ui_gossip::GossipState;
-use crate::ui_items::{find_item, ItemSearch, PACK_SLOTS};
+use crate::ui_items::{find_item, lua_bag_pos, ItemSearch};
 use crate::ui_petition::GuildRegistrarState;
 use crate::ui_session::NpcSession;
 
@@ -298,18 +296,6 @@ fn vm_num_names(script: &UiScript) -> i64 {
     script
         .eval::<i64>("return GetNumPetitionNames()")
         .unwrap_or(-1)
-}
-
-/// The inverse of [`crate::ui_items::wire_pos`] for the backpack (Lua container `0`) and the four
-/// equipped bags (`1..=4`); `None` anywhere else.
-fn lua_bag_pos(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
-    if bag_index == BAG_PLAYER_INVENTORY {
-        let inner = slot.checked_sub(SLOT_PACK_FIRST)?;
-        (inner < PACK_SLOTS).then_some((0, u32::from(inner) + 1))
-    } else {
-        let bag = bag_index.checked_sub(SLOT_BAG_FIRST)?;
-        (bag < 4 && slot < 36).then_some((i64::from(bag) + 1, u32::from(slot) + 1))
-    }
 }
 
 /// A fresh guild name: a 13-character prefix, a space and the low 8 digits of the wall clock, 22

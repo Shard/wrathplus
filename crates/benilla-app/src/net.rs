@@ -35,7 +35,7 @@ mod wrath_inventory_capture;
 mod wrath_achievements;
 mod wrath_equipment_sets;
 mod wrath_item_refunds;
-mod wrath_sockets;
+pub(crate) mod wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
@@ -45,9 +45,9 @@ mod wrath_appearance;
 pub(crate) mod wrath_social_lists_capture;
 mod wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
-mod wrath_quest_capture;
+mod wrath_quest_pois;
 mod wrath_chat_notice_capture;
-mod wrath_battleground_capture;
+pub(crate) mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
@@ -168,7 +168,7 @@ impl Plugin for NetPlugin {
         wrath_social_lists_capture::register(app);
         wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
-        wrath_quest_capture::register(app);
+        wrath_quest_pois::register(app);
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
@@ -1537,11 +1537,6 @@ pub(crate) enum ClientCommand {
     AreaSpiritHealerQuery {
         healer: u64,
     },
-    /// `AcceptBattlefieldPort(index, accept)`: `CMSG_BATTLEFIELD_PORT`.
-    BattlefieldPort {
-        map_id: u32,
-        accept: bool,
-    },
     /// `RequestBattlefieldScoreData()`: `MSG_PVP_LOG_DATA`.
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
@@ -1566,10 +1561,6 @@ pub(crate) enum ClientCommand {
     /// `ResetTutorials()`: `CMSG_TUTORIAL_RESET`.
     TutorialReset,
     // ── The battleground list window ──
-    /// `ShowBattlefieldList(index)`: `CMSG_BATTLEFIELD_LIST`.
-    BattlefieldList {
-        map_id: u32,
-    },
     /// `JoinBattlefield` when the list came from a battlemaster: `CMSG_BATTLEMASTER_JOIN`.
     BattlemasterJoin {
         battlemaster: u64,
@@ -1593,12 +1584,6 @@ pub(crate) enum ClientCommand {
     /// The ladder's BATTLEMASTER arm: `CMSG_BATTLEMASTER_HELLO`.
     BattlemasterHello {
         npc: u64,
-    },
-    /// `JoinBattlefield` when the list came without one: `CMSG_BATTLEFIELD_JOIN`.
-    BattlefieldJoin {
-        map_id: u32,
-        instance_id: u32,
-        as_group: bool,
     },
     /// The world-enter status request: `CMSG_BATTLEFIELD_STATUS`.
     BattlefieldStatusRequest,
