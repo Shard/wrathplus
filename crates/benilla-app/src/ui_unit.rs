@@ -3378,6 +3378,7 @@ mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 0,
+                modifiers: None,
             }),
         );
 
@@ -3472,6 +3473,7 @@ mod tests {
             civilian: false,
             racial_leader: false,
             display_id: 0,
+            modifiers: None,
         };
         let mut answered = NameCache::default();
         answered.insert_creature(ENTRY, Some(record(0)));
@@ -3775,6 +3777,7 @@ mod tests {
             civilian: false,
             racial_leader: false,
             display_id: 0,
+            modifiers: None,
         };
         let mut app = App::new();
         app.init_resource::<UnitFeedState>()

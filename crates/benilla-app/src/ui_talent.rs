@@ -323,6 +323,7 @@ fn drain_talent_learns(
     let Some(mut script) = script else {
         return;
     };
+    crate::ui_chat_verbs::drain(&mut script, self_q.single().ok(), &commands);
     let clicks = script.take_talent_learns();
     if clicks.is_empty() {
         return;

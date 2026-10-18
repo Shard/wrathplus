@@ -79,6 +79,11 @@ impl ObjectFields {
     pub fn container_slot(&self, i: u8) -> Option<u64> {
         (i < 36).then(|| self.get_field_guid(Field::ContainerSlot1, 2 * u16::from(i)))?
     }
+    /// `PLAYER_FIELD_ARENA_TEAM_INFO_1_1 + 7·slot`: the arena team id held in slot 0-2, `Some(0)`
+    /// for an empty slot; `None` without the field (build 12340 only).
+    pub fn player_arena_team_id(&self, slot: u8) -> Option<u32> {
+        (slot < 3).then(|| self.get_at(Field::PlayerArenaTeamInfo11, 7 * u16::from(slot)))?
+    }
     /// `PLAYER_VISIBLE_ITEM_<slot>_0`: the public entry worn in equipment slot `i`, which other
     /// clients render from; each slot is 12 dwords, the entry after a 2-dword creator.
     pub fn player_visible_item_entry(&self, i: u8) -> Option<u32> {

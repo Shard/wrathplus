@@ -203,6 +203,8 @@ pub struct TooltipState {
     pub padding: f32,
     /// Line 1 came from XML (`ShoppingTooltipTemplate`), so later lines clone the previous fonts.
     pub xml_declared_lines: bool,
+    /// Wrath `AddTexture`: the 0-based line each used `$parentTextureN` sits on, in use order.
+    pub texture_lines: Vec<usize>,
 }
 
 /// The plate's text inset: the stock template seats `TextLeft1` at TOPLEFT (10, −10).

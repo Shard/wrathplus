@@ -441,6 +441,8 @@ pub enum SessionEvent {
         civilian: bool,
         /// The tooltip's white LEADER line.
         racial_leader: bool,
+        /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::messages::CreatureQueryInfo`]).
+        modifiers: Option<[u32; 2]>,
     },
     /// `SMSG_GAMEOBJECT_QUERY_RESPONSE`, keyed by template `entry`; `data` is the type-specific
     /// raw tail. An unknown entry still fires, every field zero or empty.
