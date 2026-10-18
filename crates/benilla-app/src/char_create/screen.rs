@@ -39,7 +39,9 @@ pub(super) fn enter_create(
     mut add_mats: ResMut<Assets<crate::glue::add_material::AddUiMaterial>>,
     strings: Option<Res<GlueStrings>>,
     window: Query<&Window, With<PrimaryWindow>>,
+    roster: Res<crate::char_select::Roster>,
 ) {
+    sel.death_knight = roster.chars.iter().any(|c| c.level >= 55);
     sel.reset(catalog.as_deref());
     preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
     preview.look = Some(GlueLook::Create(sel.look()));
@@ -143,11 +145,9 @@ fn spawn_screen(
     canvas.with_children(|ui| {
         left_tower(ui, art, &font, s, strings);
 
-        // `CharacterCreateWoWLogo` (256×128 at (3,-7)), after the tower, as the reference's
-        // frame order draws it over the border art.
-        if let Some(logo) = &art.logo {
-            ui.spawn((ImageNode::new(logo.clone()), abs(s, 3.0, 7.0, 256.0, 128.0)));
-        }
+        // Labelled: build 12340's `CharacterCreateWoWLogo` (the WotLK logo at TOPRIGHT) and the
+        // race and class panes under it are not built; the 1.12 right-hand stack stands in, so no
+        // logo is drawn over the configuration frame.
 
         super::panels::right_stack(ui, art, &font, s);
         name_cluster(ui, art, &font, &edit_font, s, strings);
@@ -190,8 +190,10 @@ fn spawn_screen(
     });
 }
 
-/// The configuration tower, `CharacterCreateConfigurationFrame` (206×600 at TOPLEFT (28,-74)),
-/// every child at its authored offset.
+/// Build 12340's configuration frame, `CharacterCreateConfigurationFrame` (256×758 at TOPLEFT
+/// (9,-5)), every child at its authored offset: three `OuterBorder` pieces over the tooltip
+/// background, the banners, the two faction labels, two columns of five race buttons, the gender
+/// pair, two rows of five class buttons, then the five dials stacked up from Randomize.
 fn left_tower(
     ui: &mut ChildSpawnerCommands,
     art: &GlueArt,
@@ -200,58 +202,62 @@ fn left_tower(
     strings: &GlueStrings,
 ) {
     let px = |v: f32| Val::Px(v * s);
+    // A 38² button's left edge for a TOP anchor at `x` from the frame's 128 center.
+    let centered = |x: f32| 128.0 + x - 19.0;
     ui.spawn((Node {
         position_type: PositionType::Absolute,
-        left: px(28.0),
-        top: px(74.0),
-        width: px(206.0),
-        height: px(600.0),
+        left: px(9.0),
+        top: px(5.0),
+        width: px(256.0),
+        height: px(758.0),
         ..default()
     },))
         .with_children(|tower| {
-            // `UI-CharacterCreate-Background` behind three stacked `OuterBorder` pieces, 224 wide
-            // centered on the 206 frame (x -9).
-            if let Some(bg) = &art.tower_bg {
-                tower.spawn((ImageNode::new(bg.clone()), abs(s, -3.0, 0.0, 218.0, 680.0)));
+            // `CharacterCreateConfigurationBackground`: the tooltip background inset (10,8) from
+            // the border's corners.
+            if let Some(bg) = &art.tooltip_bg {
+                tower.spawn((ImageNode::new(bg.clone()), abs(s, 10.0, 8.0, 236.0, 742.0)));
             }
+            // The three `OuterBorder` pieces: the first flipped (top 1, bottom 0), the second
+            // cut at 0.9609375, the third whole.
             if let Some((border, size)) = &art.tower_border {
-                for (top, height, tc) in [
-                    (0.0, 236.0, [0.0, 0.875, 0.0, 0.9375]),
-                    (236.0, 240.0, [0.0, 0.875, 0.0, 0.9375]),
-                    (476.0, 210.0, [0.0, 0.875, 0.1796875, 1.0]),
+                for (top, height, tc, flip) in [
+                    (0.0, 256.0, [0.0, 1.0, 0.0, 1.0], true),
+                    (256.0, 246.0, [0.0, 1.0, 0.0, 0.9609375], false),
+                    (502.0, 256.0, [0.0, 1.0, 0.0, 1.0], false),
                 ] {
                     tower.spawn((
                         ImageNode {
                             image: border.clone(),
                             rect: Some(tc_rect(*size, tc)),
+                            flip_y: flip,
                             ..default()
                         },
-                        abs(s, -9.0, top, 224.0, height),
+                        abs(s, 0.0, top, 256.0, height),
                     ));
                 }
             }
-            // `CharacterCreateBanners`, 256×259 at TOP (-2,-60), behind the race grid.
+            // `CharacterCreateBanners`, 256×512 at TOP (0,-5).
             if let Some(banners) = &art.banners {
                 tower.spawn((
                     ImageNode::new(banners.clone()),
-                    abs(s, -27.0, 60.0, 256.0, 259.0),
+                    abs(s, 0.0, 5.0, 256.0, 512.0),
                 ));
             }
-            // The XML's `text="ALLIANCE"` is a GlueStrings key, shown as "Alliance".
-            for (key, fallback, center) in
-                [("ALLIANCE", "Alliance", 51.0), ("HORDE", "Horde", 151.0)]
-            {
+            // `FactionName_Shadow_Huge` at TOP (∓50,-20); the XML's `text="ALLIANCE"` is a
+            // GlueStrings key. Labelled: its size is taken as 20.
+            for (key, fallback, x) in [("ALLIANCE", "Alliance", -50.0), ("HORDE", "Horde", 50.0)] {
                 outlined_text(
                     tower,
                     Node {
                         justify_content: JustifyContent::Center,
-                        ..abs(s, center - 60.0, 40.0, 120.0, 17.0)
+                        ..abs(s, 128.0 + x - 60.0, 20.0, 120.0, 22.0)
                     },
                     (),
                     (),
                     GlueText {
                         text: strings.text(key, fallback),
-                        size: 15.0, // GlueFontNormal
+                        size: 20.0,
                         color: GOLD,
                         wrap: false,
                     },
@@ -260,15 +266,15 @@ fn left_tower(
                 );
             }
 
-            // Two columns of 48² buttons at (33,68) and (127,68), row pitch 48+5.
-            for (faction, left) in [(ALLIANCE, 33.0), (HORDE, 127.0)] {
+            // Race buttons 1 and 6 at TOP (∓50,-61), each next 21 below the last.
+            for (faction, x) in [(ALLIANCE, -50.0), (HORDE, 50.0)] {
                 tower
                     .spawn((Node {
                         position_type: PositionType::Absolute,
-                        left: px(left),
-                        top: px(68.0),
+                        left: px(centered(x)),
+                        top: px(61.0),
                         flex_direction: FlexDirection::Column,
-                        row_gap: px(5.0),
+                        row_gap: px(21.0),
                         ..default()
                     },))
                     .with_children(|col| {
@@ -288,18 +294,19 @@ fn left_tower(
                     });
             }
 
-            // The gender pair at race button 4's BOTTOMLEFT + (20,-28).
-            tower
-                .spawn((Node {
-                    position_type: PositionType::Absolute,
-                    left: px(53.0),
-                    top: px(303.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(5.0),
-                    ..default()
-                },))
-                .with_children(|g| {
-                    for (sex, key, fallback) in [(0u8, "MALE", "Male"), (1u8, "FEMALE", "Female")] {
+            // The gender pair at TOP (∓20,-392).
+            for (sex, key, fallback, x) in [
+                (0u8, "MALE", "Male", -20.0),
+                (1u8, "FEMALE", "Female", 20.0),
+            ] {
+                tower
+                    .spawn((Node {
+                        position_type: PositionType::Absolute,
+                        left: px(centered(x)),
+                        top: px(392.0),
+                        ..default()
+                    },))
+                    .with_children(|g| {
                         let icon = art.gender.as_ref().map(|(h, size)| {
                             let half = if sex == 0 {
                                 [0.0, 0.5, 0.0, 1.0]
@@ -319,23 +326,25 @@ fn left_tower(
                             art,
                             s,
                         );
-                    }
-                });
+                    });
+            }
 
-            // Three wide, columns at x 27/79/131; 8 slots, unused ones collapse.
+            // Class button 1 at TOP (-90,-463), the next four 6 right of each other; the second
+            // row 6 below the first.
             tower
                 .spawn((Node {
                     position_type: PositionType::Absolute,
-                    left: px(27.0),
-                    top: px(369.0),
-                    width: px(3.0 * 48.0 + 2.0 * 4.0),
+                    left: px(centered(-90.0)),
+                    top: px(463.0),
+                    width: px(5.0 * 38.0 + 4.0 * 6.0),
                     flex_direction: FlexDirection::Row,
                     flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(4.0),
+                    column_gap: px(6.0),
+                    row_gap: px(6.0),
                     ..default()
                 },))
                 .with_children(|grid| {
-                    for slot in 0..8u8 {
+                    for slot in 0..10u8 {
                         icon_button(
                             grid,
                             font,
@@ -350,13 +359,14 @@ fn left_tower(
                     }
                 });
 
-            // `CharacterCustomizationFrameTemplate`, 198×32 rows stacked from (4,480).
+            // The five 230×32 dials, `ButtonFrame5`'s BOTTOM at Randomize's TOP (-6,3), each
+            // earlier one on top of the next: frame 1's top is 683 - 4·32.
             tower
                 .spawn((Node {
                     position_type: PositionType::Absolute,
-                    left: px(4.0),
-                    top: px(480.0),
-                    width: px(198.0),
+                    left: px(128.0 - 6.0 - 115.0),
+                    top: px(683.0 - 4.0 * 32.0),
+                    width: px(230.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },))
@@ -366,14 +376,12 @@ fn left_tower(
                     }
                 });
 
-            // The XML anchors it 25 below the dials, but
-            // `CharacterCreate_UpdateFacialHairCustomization` re-anchors it on every race set,
-            // `SetPoint("TOP", Frame5, "BOTTOM", 0, -5)`, so the 1.12 client shows a 5 px gap.
+            // `CharCreateRandomizeButton`, 146×30 at BOTTOM (0,10).
             tower
                 .spawn((Node {
                     position_type: PositionType::Absolute,
-                    left: px(30.0),
-                    top: px(645.0),
+                    left: px(128.0 - 73.0),
+                    top: px(758.0 - 10.0 - 30.0),
                     ..default()
                 },))
                 .with_children(|r| {
@@ -406,18 +414,18 @@ fn dial_row(
         .spawn((
             DialRow(dial),
             Node {
-                width: px(198.0),
+                width: px(230.0),
                 height: px(32.0),
                 ..default()
             },
         ))
         .with_children(|row| {
-            // The 128×64 art's 25|78|25 slices: Left at x -5, Right ending at x 154 (RIGHT -44).
+            // The 128×64 art's 25|mid|25 slices: Left at x -5, Right ending at x 186 (RIGHT -44).
             if let Some((frame, size)) = &art.label_frame {
                 for (left, width, tc) in [
                     (-5.0, 25.0, [0.0, 0.1953125, 0.0, 1.0]),
-                    (20.0, 109.0, [0.1953125, 0.8046875, 0.0, 1.0]),
-                    (129.0, 25.0, [0.8046875, 1.0, 0.0, 1.0]),
+                    (20.0, 141.0, [0.1953125, 0.8046875, 0.0, 1.0]),
+                    (161.0, 25.0, [0.8046875, 1.0, 0.0, 1.0]),
                 ] {
                     row.spawn((
                         ImageNode {
@@ -435,7 +443,8 @@ fn dial_row(
                 Node {
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    ..abs(s, 20.0, 0.0, 109.0, 32.0)
+                    // Centered on the middle slice, 2 up.
+                    ..abs(s, 20.0, -2.0, 141.0, 32.0)
                 },
                 (),
                 DynText::DialLabel(dial),
@@ -452,8 +461,9 @@ fn dial_row(
                 row,
                 &art.arrow_left,
                 font,
+                // The left button's RIGHT at the right one's LEFT +3.
                 CreateAction::Dial(dial, -1),
-                137.0,
+                230.0 - 32.0 - 29.0,
                 "<",
                 s,
             );
@@ -462,7 +472,7 @@ fn dial_row(
                 &art.arrow_right,
                 font,
                 CreateAction::Dial(dial, 1),
-                166.0,
+                230.0 - 32.0,
                 ">",
                 s,
             );

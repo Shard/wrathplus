@@ -278,12 +278,19 @@ fn outlined_spans<W: Bundle, T: Bundle>(
     real
 }
 
-/// A 48² race/class/gender check-button: the `IconShadow`, the face, a `ButtonHilight-Square`
-/// lit on hover and locked while selected (the template's `CheckedTexture` is commented out), and
-/// the `HighlightText` name label at BOTTOM +1. `dyn_icon` and `label_dyn` are refresh markers.
+/// An icon button's `DisableTexture`, black at 0.75 while its button is disabled, clear otherwise
+/// (a tint, not a visibility, so the refresh writes no new component).
+#[derive(Component)]
+pub(crate) struct IconDisabled;
+
+/// A 38² race/class/gender check-button, build 12340's `CharacterCreateIconButtonTemplate`: the
+/// `IconShadow`, the face, the `BevelEdge`, the `DisableTexture`, the highlights sheet's ADD sheen
+/// lit on hover and locked while selected (labelled: the checked quarter reads as that sheen), and
+/// the name label at BOTTOM +1. `dyn_icon` and `label_dyn` are refresh markers.
 ///
-/// It carries its own [`LockHighlight`]: `SetCharacterRace`/`Class`/`Gender` lock these by hand
-/// (`CharacterCreate.lua` l.171/254/326), and the screen's query needs the component present.
+/// It carries its own [`LockHighlight`]: `SetCharacterRace`/`Class`/`Gender` check these by hand,
+/// and the screen's query needs the component present.
+
 pub(crate) fn icon_button<A: Component, I: Bundle, L: Bundle>(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -301,8 +308,8 @@ pub(crate) fn icon_button<A: Component, I: Bundle, L: Bundle>(
         Button,
         LockHighlight::default(),
         Node {
-            width: px(48.0),
-            height: px(48.0),
+            width: px(38.0),
+            height: px(38.0),
             ..default()
         },
     ));
@@ -310,11 +317,16 @@ pub(crate) fn icon_button<A: Component, I: Bundle, L: Bundle>(
         b.insert((FallbackFace, BackgroundColor(BTN_BG))); // no art: the label is the button face
     }
     b.with_children(|b| {
-        // The shadow: 64² centred, offset (2,−2), behind everything.
+        // `CharacterCreateIconButtonTemplate`'s shadow: 58² centred at alpha 0.85, behind
+        // everything.
         if let Some(shadow) = &art.icon_shadow {
             b.spawn((
-                ImageNode::new(shadow.clone()),
-                abs(s, -6.0, -6.0, 64.0, 64.0),
+                ImageNode {
+                    image: shadow.clone(),
+                    color: Color::WHITE.with_alpha(0.85),
+                    ..default()
+                },
+                abs(s, -10.0, -10.0, 58.0, 58.0),
             ));
         }
         // A dynamic face is transparent until the refresh assigns it, since a default
@@ -340,6 +352,19 @@ pub(crate) fn icon_button<A: Component, I: Bundle, L: Bundle>(
         if let Some(icon) = dyn_icon {
             face.insert(icon);
         }
+        // The `BevelEdge` overlay, the highlights sheet's bottom-left quarter.
+        if let Some((bevel, size)) = &art.icon_bevel {
+            b.spawn((
+                ImageNode {
+                    image: bevel.clone(),
+                    rect: Some(super::art::tc_rect(*size, [0.0, 0.5, 0.5, 1.0])),
+                    ..default()
+                },
+                overlay(),
+            ));
+        }
+        // The `DisableTexture`: black at 0.75 over a disabled button, clear otherwise.
+        b.spawn((IconDisabled, BackgroundColor(Color::NONE), overlay()));
         if let Some(hilight) = &art.hilight {
             b.spawn((
                 Hilight,
