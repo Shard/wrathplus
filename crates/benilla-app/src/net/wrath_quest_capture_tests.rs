@@ -28,7 +28,7 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
     assert_eq!(owners.len(), 1, "{owners:?}");
     assert!(owners[0].contains("wrath_quest_capture::receive"));
     let mut adapter = WrathEventAdapter::new();
-    let deleted = Packet::PvpKill { quest: 6, current: 0, required: 0 };
+    let empty = Packet::PoiResponse { quests: Vec::new() };
     for event in [
         SessionEvent::Connected {
             self_guid: 1,
@@ -42,12 +42,26 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
             end: benilla_protocol::SessionEnd::Lost,
         },
     ] {
-        dispatch(&mut app, &mut adapter, 0x46f, &[6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        dispatch(&mut app, &mut adapter, 0x46f, &[6, 0, 0]);
-        dispatch(&mut app, &mut adapter, 0x46f, &[6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        dispatch(&mut app, &mut adapter, 0x46f, &[6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(captured(&app), vec![deleted.clone(), deleted.clone()]);
+        dispatch(&mut app, &mut adapter, 0x1e4, &[0, 0, 0, 0]);
+        dispatch(&mut app, &mut adapter, 0x1e4, &[0, 0]);
+        dispatch(&mut app, &mut adapter, 0x1e4, &[0, 0, 0, 0, 0]);
+        dispatch(&mut app, &mut adapter, 0x1e4, &[0, 0, 0, 0]);
+        assert_eq!(captured(&app), vec![empty.clone(), empty.clone()]);
         crate::net::handlers::dispatch(app.world_mut(), vec![event]);
         assert!(captured(&app).is_empty());
     }
+}
+
+#[test]
+fn a_pvp_kill_tick_reasks_the_givers_and_is_not_captured() {
+    let mut app = crate::game_plugins::schedule_tests::headless_client();
+    let mut adapter = WrathEventAdapter::new();
+    let before = app.world().resource::<crate::ui_quest::QuestGiver>().reask_epoch();
+    let mut body = 6u32.to_le_bytes().to_vec();
+    body.extend(3u32.to_le_bytes());
+    body.extend(10u32.to_le_bytes());
+    dispatch(&mut app, &mut adapter, 0x46f, &body);
+    let after = app.world().resource::<crate::ui_quest::QuestGiver>().reask_epoch();
+    assert_eq!(after, before.wrapping_add(1));
+    assert!(captured(&app).is_empty());
 }

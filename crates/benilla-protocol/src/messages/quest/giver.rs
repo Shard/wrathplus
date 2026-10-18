@@ -50,7 +50,14 @@ pub struct WrathQuestInfo {
     pub title_id: u32,
     pub bonus_talents: u32,
     pub arena_points: u32,
+    /// The query response's `RequiredPlayerKills`, the PvP objective; its count is slot counter
+    /// [`QUEST_PVP_KILL_COUNTER`] (AzerothCore `QuestDef.h:43`).
+    pub players_slain: u32,
 }
+
+/// The quest-log slot counter a PvP objective counts in, `QUEST_PVP_KILL_SLOT`: the server bumps
+/// it beside `SMSG_QUESTUPDATE_ADD_PVP_KILL` (AzerothCore `PlayerQuest.cpp:2563`).
+pub const QUEST_PVP_KILL_COUNTER: usize = 0;
 
 /// One greeting-panel quest row; `icon` is a [`dialog_status`] value, a `u32` (`Quest.h:270`).
 #[derive(Debug, Clone, PartialEq)]
