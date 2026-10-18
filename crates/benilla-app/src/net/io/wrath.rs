@@ -1561,6 +1561,7 @@ enum WrathRoute {
     NativeSessionMeta,
     NativeAppearance,
     NativePetition,
+    NativeRaidBrowser,
     NativeHelp,
     NativeReferFriend,
     NativeWorldObjects,
@@ -1575,7 +1576,6 @@ enum WrathRoute {
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
-    DeferredReadOnlyQuery,
 }
 
 fn route(command: &ClientCommand) -> WrathRoute {
@@ -1692,7 +1692,11 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::RequestBattlefieldScoreData
         | ClientCommand::RequestBattlefieldPositions
         | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        ClientCommand::NativeRaidBrowser(_) => WrathRoute::NativeRaidBrowser,
         ClientCommand::JoinChannel { .. }
+        | ClientCommand::GetChannelMemberCount { .. }
+        | ClientCommand::ClearChannelWatch { .. }
+        | ClientCommand::DeclineChannelInvite { .. }
         | ClientCommand::LeaveChannel { .. }
         | ClientCommand::ChannelList { .. }
         | ClientCommand::ChannelOwner { .. }
@@ -1840,7 +1844,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
-        ClientCommand::BattlefieldStatusRequest => WrathRoute::DeferredReadOnlyQuery,
+        ClientCommand::BattlefieldStatusRequest => WrathRoute::NativeBattleground,
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
         ClientCommand::TeleportAck { .. } => WrathRoute::NativeTeleportAck,
         // The writer acknowledged these orders itself from the reported pose (`send_mover_ack`).
@@ -1864,7 +1868,6 @@ pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
         route(command),
         WrathRoute::DisabledMovement
             | WrathRoute::DisabledGameAction
-            | WrathRoute::DeferredReadOnlyQuery
             | WrathRoute::AuthorityAcked
     )
 }
@@ -2144,6 +2147,11 @@ fn writer_loop(
                             }
                         }
                     }
+                    WrathRoute::NativeRaidBrowser => {
+                        let ClientCommand::NativeRaidBrowser(command) = command else { unreachable!() };
+                        let (opcode, body) = benilla_protocol::wrath_raid_browser::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativePetition => {
                         let (opcode, body) = benilla_protocol::wrath_petition::encode(&petition_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -2352,13 +2360,6 @@ fn writer_loop(
                     }
                     WrathRoute::AuthorityAcked => {
                         bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
-                        continue;
-                    }
-                    WrathRoute::DeferredReadOnlyQuery => {
-                        if warned < SEND_WARN_CAP {
-                            bevy::log::warn!("net(wrath): query unavailable in this client; no request sent or result synthesized: {command:?}");
-                            warned += 1;
-                        }
                         continue;
                     }
                     // Not yet encoded for build 12340: dropped, never sent in Vanilla's format, and
@@ -2584,6 +2585,10 @@ fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
     match command {
         ClientCommand::NativeBattleground(command) => encode(&command),
+        // The world-enter reset's empty `CMSG_BATTLEFIELD_STATUS` (`0x54ca50`).
+        ClientCommand::BattlefieldStatusRequest => {
+            encode(&benilla_protocol::wrath_battleground::Command::Status)
+        }
         ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
         ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
         ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
@@ -2607,6 +2612,9 @@ fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notic
         ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
         ClientCommand::LeaveChannel { name } => C::Leave { name },
         ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
+        ClientCommand::GetChannelMemberCount { name } => C::Named { opcode: 0x03d4, name },
+        ClientCommand::ClearChannelWatch { name } => C::Named { opcode: 0x03f3, name },
+        ClientCommand::DeclineChannelInvite { name } => C::Named { opcode: 0x0410, name },
         ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
         ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
         ClientCommand::ChannelModerate { name } => C::Named { opcode: 0x00a8, name },
@@ -3933,10 +3941,9 @@ mod tests {
     }
 
     #[test]
-    fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
-        for command in [ClientCommand::BattlefieldStatusRequest] {
-            assert_eq!(route(&command), WrathRoute::DeferredReadOnlyQuery);
-        }
+    fn the_world_enter_status_request_is_native_and_other_queries_keep_their_routes() {
+        assert_eq!(route(&ClientCommand::BattlefieldStatusRequest), WrathRoute::NativeBattleground);
+        assert_eq!(battleground_packet(ClientCommand::BattlefieldStatusRequest), (0x02d3, Vec::new()));
         assert_eq!(
             route(&ClientCommand::QueryTime),
             WrathRoute::NativeSessionMisc
