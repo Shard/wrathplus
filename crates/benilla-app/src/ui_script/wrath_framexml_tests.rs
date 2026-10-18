@@ -228,6 +228,48 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
         "Wow.exe 12340 has only Get/SetSendMailCOD (string scan, /tmp/azb-ui-mail-helpers.log); \
          MoneyFrame.lua:96 calls it from the SEND_MAIL_COD MoneyTypeInfo pickup callback only",
     ),
+    (
+        "MovieRecording_DataRate",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:359 (MacOptionsFrame_UpdateTime) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
+    (
+        "MovieRecording_MaxLength",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:355 (MacOptionsFrame_UpdateTime) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
+    (
+        "MovieRecording_GetAspectRatio",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:137/149/316 (resolution dropdown, defaults) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
+    (
+        "MovieRecording_GetViewportWidth",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:138/150 (resolution dropdown) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
+    (
+        "MovieRecording_IsCodecSupported",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:280 (codec dropdown initializer) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
+    (
+        "MovieRecording_IsCursorRecordingSupported",
+        "Wow.exe 12340 has no MovieRecording_ string (raw byte scan, \
+         /tmp/azb-exp-movie-recording-scan.log); MacOptionsFrame.lua:86/302 (MacOptionsFrame_Load, _SetDefaults) \
+         runs only inside MacOptionsFrame, which opens only from GameMenuButtonMacOptions, hidden \
+         when not IsMacClient() (GameMenuFrame.xml:107-111); its dropdown OnLoads return off the Mac",
+    ),
 ];
 
 /// FrameXML-defined names (see [`scan_calls`]) that are also exact strings in `Wow.exe` 12340

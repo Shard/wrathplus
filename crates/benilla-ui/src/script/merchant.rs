@@ -37,6 +37,8 @@ pub struct MerchantItem {
     /// The template's `stackable`, `GetMerchantItemMaxStack`'s answer for a row sold singly;
     /// `None` while in flight and on a buyback row.
     pub max_stack: Option<u32>,
+    /// Build 12340's `ItemExtendedCost.dbc` record for the row; `None` for a gold-only row.
+    pub extended_cost: Option<super::wrath_merchant::ExtendedCostView>,
 }
 
 /// An item template's tooltip stat head, resolved per row by the app, which `SetMerchantItem` and
@@ -548,6 +550,7 @@ mod tests {
                     }),
                     link: Some("|cffffffff|Hitem:159:0:0:0|h[Refreshing Spring Water]|h|r".into()),
                     max_stack: Some(20),
+                    extended_cost: None,
                 },
                 // In flight: the list arrived, its item template has not.
                 MerchantItem {
@@ -560,6 +563,7 @@ mod tests {
                     stats: None,
                     link: None,
                     max_stack: None, // in flight, like `name` above
+                    extended_cost: None,
                 },
             ],
             ..Default::default()

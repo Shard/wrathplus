@@ -199,6 +199,8 @@ mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
 mod wrath_runes;
+mod wrath_merchant;
+pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
@@ -808,6 +810,7 @@ impl UiScript {
             wrath_character::install(&lua)?;
             wrath_companions::install(&lua)?;
             wrath_runes::install(&lua)?;
+            wrath_merchant::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_sockets::install(&lua)?;
