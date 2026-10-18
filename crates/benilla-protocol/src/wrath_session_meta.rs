@@ -171,6 +171,8 @@ pub enum Command {
     },
     /// `CMSG_READY_FOR_ACCOUNT_DATA_TIMES`: empty.
     ReadyForAccountDataTimes,
+    /// `CMSG_SET_TITLE`: a `CharTitles` bit index, -1 clears (AC `HandleSetTitleOpcode`).
+    SetTitle { title: i32 },
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {
@@ -185,6 +187,7 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
         Command::AreaTrigger { trigger_id } => word(0x00b4, *trigger_id),
         Command::ZoneUpdate { zone } => word(0x01f4, *zone),
         Command::ActionBarToggles { toggles } => (0x02bf, vec![*toggles]),
+        Command::SetTitle { title } => (0x0374, title.to_le_bytes().to_vec()),
         Command::RequestAccountData { kind } => word(0x020a, *kind),
         Command::UpdateAccountData {
             kind,

@@ -87,7 +87,7 @@ pub enum Packet {
         error: u32,
         cost: Option<RefundCost>,
     },
-    /// `SMSG_EQUIPMENT_SET_LIST`, at login and after a delete.
+    /// `SMSG_EQUIPMENT_SET_LIST`, only at login (`Player::SendInitialPacketsBeforeAddToMap`).
     EquipmentSetList { sets: Vec<EquipmentSet> },
     /// `SMSG_EQUIPMENT_SET_USE_RESULT`: 0 done, 4 bags full (AC).
     EquipmentSetUseResult { result: u8 },
