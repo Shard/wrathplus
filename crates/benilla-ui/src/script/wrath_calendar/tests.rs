@@ -1,0 +1,328 @@
+use std::sync::Arc;
+
+use super::date::{add_months, days_in_month, weekday};
+use super::*;
+use crate::script::{ScriptDialect, UiScript};
+
+const ME: u64 = 7;
+
+fn vm(view: WrathCalendarView) -> UiScript {
+    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    s.set_wrath_calendar(Arc::new(view));
+    s
+}
+
+fn today() -> WrathCalendarDate {
+    WrathCalendarDate::new(2010, 3, 15, 20, 30)
+}
+
+fn event_row(day: u8, hour: u8, rank: u8) -> WrathCalendarEntry {
+    WrathCalendarEntry {
+        kind: WrathCalendarKind::Player,
+        date: WrathCalendarDate::new(2010, 3, day, hour, 0),
+        title: "Naxx".into(),
+        event_id: 100,
+        invite_id: 200,
+        creator: if rank == 2 { ME } else { 9 },
+        invited_by: Some("Arthas".into()),
+        event_type: 0,
+        dungeon: -1,
+        invite: Some((0, rank)),
+        ..Default::default()
+    }
+}
+
+fn base() -> WrathCalendarView {
+    WrathCalendarView {
+        me: ME,
+        today: Some(today()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn dates_pack_and_count_like_the_wire() {
+    let d = WrathCalendarDate::new(2010, 3, 15, 20, 30);
+    assert_eq!(WrathCalendarDate::from_packed(d.packed()), Some(d));
+    assert_eq!(WrathCalendarDate::from_packed(0), None);
+    // 24 November 2004 was a Wednesday; February 2008 had 29 days.
+    assert_eq!(weekday(2004, 11, 24), 4);
+    assert_eq!(days_in_month(2008, 2), 29);
+    assert_eq!(add_months(2010, 1, -1), (2009, 12));
+    let t = d.seconds();
+    assert_eq!(WrathCalendarDate::from_seconds(t), d);
+}
+
+/// `CalendarGetMonth` and the two setters move the shown month off today.
+#[test]
+fn the_shown_month_starts_at_today_and_moves() {
+    let s = vm(base());
+    let month = |s: &UiScript, expr: &str| -> (i64, i64, i64, i64) {
+        s.eval(&format!("return {expr}")).unwrap()
+    };
+    assert_eq!(month(&s, "CalendarGetMonth()"), (3, 2010, 31, 2));
+    assert_eq!(month(&s, "CalendarGetMonth(-1)"), (2, 2010, 28, 2));
+    s.run("CalendarSetMonth(-3)").unwrap();
+    assert_eq!(month(&s, "CalendarGetMonth()"), (12, 2009, 31, 3));
+    s.run("CalendarSetAbsMonth(2, 2012)").unwrap();
+    assert_eq!(month(&s, "CalendarGetMonth()"), (2, 2012, 29, 4));
+    assert_eq!(
+        s.eval::<(i64, i64, i64, i64)>("return CalendarGetDate()")
+            .unwrap(),
+        (2, 3, 15, 2010)
+    );
+    assert_eq!(
+        s.eval::<(i64, i64, i64)>("local _, m, d, y = CalendarGetMinDate() return m, d, y")
+            .unwrap(),
+        (11, 24, 2004)
+    );
+}
+
+/// A day lists App's rows, then the raid resets that fall on it.
+#[test]
+fn a_day_lists_events_holidays_and_projected_resets() {
+    let mut view = base();
+    view.entries = vec![
+        WrathCalendarEntry {
+            kind: WrathCalendarKind::Holiday,
+            date: WrathCalendarDate::new(2010, 3, 15, 0, 0),
+            title: "Noblegarden".into(),
+            texture: "Calendar_Noblegarden".into(),
+            sequence: (2, 3, "ONGOING"),
+            holiday_description: "Eggs.".into(),
+            ..Default::default()
+        },
+        event_row(15, 19, 0),
+    ];
+    // Weekly from Tuesday 2 March 2010 05:00: Tuesday the 16th.
+    view.raid_resets = vec![WrathCalendarRaidReset {
+        map: 533,
+        name: "Naxxramas".into(),
+        first: WrathCalendarDate::new(2010, 3, 2, 5, 0).seconds(),
+        period: 7 * 86_400,
+        difficulty_key: String::new(),
+    }];
+    let s = vm(view);
+    assert_eq!(
+        s.eval::<i64>("return CalendarGetNumDayEvents(0, 15)")
+            .unwrap(),
+        2
+    );
+    let (title, hour, kind, seq, status, by): (String, i64, String, String, i64, String) = s
+        .eval(
+            "local t, h, m, k, q, e, x, mod, st, by = CalendarGetDayEvent(0, 15, 2)
+             return t, h, k, q, st, by",
+        )
+        .unwrap();
+    assert_eq!(
+        (
+            title.as_str(),
+            hour,
+            kind.as_str(),
+            seq.as_str(),
+            status,
+            by.as_str()
+        ),
+        ("Naxx", 19, "PLAYER", "", 1, "Arthas")
+    );
+    assert_eq!(
+        s.eval::<(String, String, String)>("return CalendarGetHolidayInfo(0, 15, 1)")
+            .unwrap(),
+        (
+            "Noblegarden".into(),
+            "Eggs.".into(),
+            "Calendar_Noblegarden".into()
+        )
+    );
+    assert_eq!(
+        s.eval::<i64>("return CalendarGetFirstPendingInvite(0, 15)")
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        s.eval::<i64>("return CalendarGetNumDayEvents(0, 16)")
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        s.eval::<(String, String, i64)>(
+            "local n, k, id, h = CalendarGetRaidInfo(0, 16, 1) return n, k, h"
+        )
+        .unwrap(),
+        ("Naxxramas".into(), "RAID_RESET".into(), 5)
+    );
+    assert_eq!(
+        s.eval::<i64>("return CalendarGetNumDayEvents(0, 17)")
+            .unwrap(),
+        0
+    );
+    // An empty slot answers the fifteen defaults.
+    assert_eq!(
+        s.eval::<i64>("return select('#', CalendarGetDayEvent(0, 17, 1))")
+            .unwrap(),
+        15
+    );
+}
+
+/// Opening a player event asks for it; its fields follow the server until edited, and the update
+/// sends the edits.
+#[test]
+fn an_opened_event_edits_and_updates() {
+    let mut view = base();
+    view.entries = vec![event_row(15, 19, 2)];
+    let mut s = vm(view.clone());
+    s.run("CalendarOpenEvent(0, 15, 1)").unwrap();
+    assert_eq!(
+        s.take_wrath_calendar_requests(),
+        [WrathCalendarRequest::GetEvent { event_id: 100 }]
+    );
+    view.event = Some(WrathCalendarEvent {
+        event_id: 100,
+        creator: ME,
+        creator_name: Some("Me".into()),
+        title: "Naxx".into(),
+        date: WrathCalendarDate::new(2010, 3, 15, 19, 0),
+        invitees: vec![WrathCalendarInvitee {
+            guid: ME,
+            name: Some("Me".into()),
+            level: 80,
+            rank: 2,
+            invite_id: 200,
+            status: 3,
+            ..Default::default()
+        }],
+        ..Default::default()
+    });
+    s.set_wrath_calendar(Arc::new(view.clone()));
+    assert_eq!(
+        s.eval::<(String, String, i64)>(
+            "local t, d, c = CalendarGetEventInfo() return t, c, select(25, CalendarGetEventInfo()) and 1 or 0"
+        )
+        .unwrap(),
+        ("Naxx".into(), "Me".into(), 1)
+    );
+    assert!(s.eval::<bool>("return CalendarEventCanEdit()").unwrap());
+    s.run("CalendarEventSetTitle('Naxx 25') CalendarEventSetTime(20, 15)")
+        .unwrap();
+    assert!(s
+        .eval::<bool>("return CalendarEventHaveSettingsChanged()")
+        .unwrap());
+    // A server refresh does not undo the edit.
+    view.event.as_mut().unwrap().revision = 1;
+    s.set_wrath_calendar(Arc::new(view));
+    s.run("CalendarUpdateEvent()").unwrap();
+    let requests = s.take_wrath_calendar_requests();
+    let [WrathCalendarRequest::UpdateEvent {
+        event_id: 100,
+        invite_id: 200,
+        fields,
+    }] = requests.as_slice()
+    else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(
+        (fields.title.as_str(), fields.date.hour, fields.date.minute),
+        ("Naxx 25", 20, 15)
+    );
+    assert!(s.eval::<bool>("return CalendarIsActionPending()").unwrap());
+    // Holiday and raid rows open at once, with their type.
+    s.run("CalendarCloseEvent()").unwrap();
+    assert_eq!(
+        s.take_wrath_calendar_requests(),
+        [WrathCalendarRequest::CloseEvent]
+    );
+}
+
+/// A draft begins with the gesture, takes its fields and is added once.
+#[test]
+fn a_draft_is_added_with_its_fields() {
+    let mut s = vm(base());
+    s.run(
+        "CalendarNewGuildEvent() CalendarEventSetTitle('Raid night')
+         CalendarEventSetType(1) CalendarEventSetDate(3, 20, 2010) CalendarEventSetLocked()",
+    )
+    .unwrap();
+    assert!(s.eval::<bool>("return CalendarCanAddEvent()").unwrap());
+    s.run("CalendarAddEvent()").unwrap();
+    let requests = s.take_wrath_calendar_requests();
+    assert_eq!(
+        requests[0],
+        WrathCalendarRequest::NewDraft {
+            flags: 0x400,
+            arena_slot: None
+        }
+    );
+    let WrathCalendarRequest::AddEvent(fields) = &requests[1] else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(
+        (
+            fields.title.as_str(),
+            fields.event_type,
+            fields.date.day,
+            fields.flags
+        ),
+        ("Raid night", 0, 20, 0x410)
+    );
+    // Pending until App clears it, so a second add waits.
+    assert!(!s.eval::<bool>("return CalendarCanAddEvent()").unwrap());
+    s.set_wrath_calendar_action_pending(false);
+    assert!(!s.eval::<bool>("return CalendarCanAddEvent()").unwrap());
+}
+
+/// The invite list sorts locally and fires its update; a non-moderator is refused the status
+/// options.
+#[test]
+fn invites_sort_and_status_options_need_a_moderator() {
+    let mut view = base();
+    view.entries = vec![event_row(15, 19, 0)];
+    view.event = Some(WrathCalendarEvent {
+        event_id: 100,
+        creator: 9,
+        invitees: ["Zed", "Amy"]
+            .iter()
+            .enumerate()
+            .map(|(k, n)| WrathCalendarInvitee {
+                guid: if k == 0 { ME } else { 20 },
+                name: Some(n.to_string()),
+                level: 70 + k as u8,
+                status: k as u8,
+                ..Default::default()
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let s = vm(view);
+    s.run(
+        "updates = 0
+         local f = CreateFrame('Frame')
+         f:RegisterEvent('CALENDAR_UPDATE_INVITE_LIST')
+         f:RegisterEvent('CALENDAR_UPDATE_ERROR')
+         f:SetScript('OnEvent', function(_, e, msg) if e == 'CALENDAR_UPDATE_ERROR' then err = msg else updates = updates + 1 end end)
+         CalendarOpenEvent(0, 15, 1)
+         CalendarEventSortInvites('name')",
+    )
+    .unwrap();
+    assert_eq!(s.eval::<i64>("return updates").unwrap(), 1);
+    assert_eq!(
+        s.eval::<(String, bool)>(
+            "local n, l, c, f, st, mod, mine = CalendarEventGetInvite(1) return n, mine"
+        )
+        .unwrap(),
+        ("Amy".into(), false)
+    );
+    assert_eq!(
+        s.eval::<(String, bool)>("return CalendarEventGetInviteSortCriterion()")
+            .unwrap()
+            .0,
+        "name"
+    );
+    assert_eq!(
+        s.eval::<i64>("return select('#', CalendarEventGetStatusOptions(1))")
+            .unwrap(),
+        0
+    );
+    assert!(s
+        .eval::<bool>("return err == (CALENDAR_ERROR_PERMISSIONS or 'CALENDAR_ERROR_PERMISSIONS')")
+        .unwrap());
+}

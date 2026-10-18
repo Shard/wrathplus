@@ -47,6 +47,11 @@ mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_unit_popup;
+pub use wrath_calendar::{
+    WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
+    WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid, WrathCalendarRaidReset,
+    WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
+};
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -180,6 +185,7 @@ pub use wrath_achievements::{
 };
 mod wrath_tutorial;
 mod wrath_ready_check;
+mod wrath_calendar;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
@@ -857,6 +863,7 @@ impl UiScript {
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
+            wrath_calendar::install(&lua)?;
         }
 
         let s = UiScript {
