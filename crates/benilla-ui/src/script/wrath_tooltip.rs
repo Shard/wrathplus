@@ -27,6 +27,37 @@ fn flag(on: bool) -> Value {
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let m: Table = lua.named_registry_value(REG_TOOLTIP_METHODS)?;
 
+    // GetMinimumWidth() (`0x61d0d0`) → the floor SetMinimumWidth set, and 1 while one is set
+    // (labelled: native's flag `+0x3dc` is read as "a floor is set").
+    m.set(
+        "GetMinimumWidth",
+        lua.create_function(|lua, this: Table| {
+            let h = frame_handle_of(lua, &this)?;
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let w = tip_mut(&mut model, h).map_or(0.0, |t| t.min_width);
+            Ok((f64::from(w), flag(w > 0.0)))
+        })?,
+    )?;
+    // SetAnchorType(anchorType [, x, y]) (`0x61d3d0`): re-places an owned tooltip under the mode,
+    // with the offsets, keeping its content; an unowned one keeps its mode.
+    m.set(
+        "SetAnchorType",
+        lua.create_function(|lua, (this, anchor, x, y): (Table, Value, Option<f32>, Option<f32>)| {
+            let Value::String(anchor) = anchor else {
+                return Err(mlua::Error::runtime(format!(
+                    "Usage: {}:SetAnchorType( anchorType [,Xoffset] [,Yoffset] )",
+                    tooltip_name(lua, &this)?
+                )));
+            };
+            let anchor = anchor.to_string_lossy();
+            let h = frame_handle_of(lua, &this)?;
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if let Some(owner) = tip_mut(&mut model, h).ok().and_then(|t| t.owner) {
+                super::tooltip::place(&mut model, h, owner, Some(&anchor), x, y)?;
+            }
+            Ok(())
+        })?,
+    )?;
     // GetItem() (`0x61ef10`) → name, link of the shown item; nothing without one.
     m.set(
         "GetItem",
@@ -215,6 +246,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // FontString:GetFieldSize() (`0x48bc70`): the text buffer's fixed size, 8191 (`0x9ead70`).
+    let fontstrings: Table = lua.named_registry_value(super::REG_FONTSTRING_METHODS)?;
+    fontstrings.set("GetFieldSize", lua.create_function(|_, _this: Table| Ok(8191.0))?)?;
+
     // IsEquippedItem(itemID | "name" | "link") (`0x51c690`) → 1 when the player wears it.
     lua.globals().set(
         "IsEquippedItem",
@@ -298,5 +333,28 @@ mod tests {
         assert!(s.eval::<bool>("return TIP:SetHyperlinkCompareItem('item:19019:0:0:0') == 1 and TIP:GetItem() == 'Thunderfury'").unwrap());
         assert!(s.eval::<bool>("return TIP:SetHyperlinkCompareItem('item:19019:0:0:0', 2) == nil and TIP:SetHyperlinkCompareItem('item:2589:0:0:0') == nil").unwrap());
         assert!(s.run("TIP:SetHyperlinkCompareItem()").is_err());
+    }
+}
+
+#[cfg(test)]
+mod widget_tests {
+    use crate::script::{ScriptDialect, UiScript};
+
+    #[test]
+    fn minimum_width_anchor_type_focus_field_size_and_region_parent() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.run("P = CreateFrame('Frame') T = CreateFrame('GameTooltip', 'WTip', P) T:SetOwner(P, 'ANCHOR_RIGHT') T:SetMinimumWidth(120) T:SetAnchorType('ANCHOR_LEFT', 5, 0) E = CreateFrame('EditBox', 'WBox', P) F = P:CreateFontString() G = P:CreateAnimationGroup() A = G:CreateAnimation('Alpha')").unwrap();
+        for check in [
+            "select(1, T:GetMinimumWidth()) == 120 and select(2, T:GetMinimumWidth()) == 1",
+            "T:GetAnchorType() == 'ANCHOR_LEFT'",
+            "E:HasFocus() == false",
+            "F:GetFieldSize() == 8191",
+            "A:GetRegionParent() == P",
+        ] {
+            assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+        }
+        assert!(s.run("T:SetAnchorType()").is_err());
+        s.run("E:SetFocus()").unwrap();
+        assert!(s.eval::<bool>("return E:HasFocus() == true").unwrap());
     }
 }

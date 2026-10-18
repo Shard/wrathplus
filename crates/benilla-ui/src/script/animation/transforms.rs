@@ -112,7 +112,7 @@ pub(super) fn apply(lua: &Lua, g: &Table, animations: &[Table]) -> mlua::Result<
         if !matches!(kind.as_str(), "Scale" | "Rotation") {
             continue;
         }
-        let p = a.raw_get::<f64>("_progress")? as f32;
+        let p = a.raw_get::<f64>("_smooth_progress")? as f32;
         ops.push(Transform {
             origin: a.raw_get("_origin")?,
             offset: (a.raw_get("_origin_x")?, a.raw_get("_origin_y")?),

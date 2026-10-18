@@ -89,7 +89,7 @@ use chain_beam::{simulate_chain_beams, spawn_chain_beams};
 // `equip_slot` is the one InventoryType → slot table; the dressing room places items by it.
 pub(crate) use attach::{equip_slot, BodyPartsDesc};
 pub(crate) use equipment::ItemDisplays;
-pub(crate) use equipment::{BoneAttach, Equipment};
+pub(crate) use equipment::{BarberPreview, BoneAttach, Equipment};
 // For the `WOW_DRESS_CENSUS` instrument: what a body wears against what it resolved.
 pub(crate) use equipment::{attach_id, DressKey, HeldAttached, ATTACH_SLOT_NAMES};
 // Only the tests that build a `DressKey` name this type.

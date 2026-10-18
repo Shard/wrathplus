@@ -256,6 +256,11 @@ fn animation(lua: &Lua, parent: Table, kind: String, name: Option<String>) -> ml
         scalar(lua, &t, key, suffix, initial)?;
     }
     t.raw_set("_smoothing", "NONE")?;
+    t.raw_set("_smooth_progress", 0.0)?;
+    t.set(
+        "GetSmoothProgress",
+        lua.create_function(|_, t: Table| t.raw_get::<f64>("_smooth_progress"))?,
+    )?;
     t.set(
         "SetSmoothing",
         lua.create_function(|_, (t, v): (Table, String)| t.raw_set("_smoothing", v))?,
@@ -281,6 +286,14 @@ fn animation(lua: &Lua, parent: Table, kind: String, name: Option<String>) -> ml
             })?,
         )?;
     }
+    // GetRegionParent() (`0x4a5a70`): the region that owns the animation's group.
+    t.set(
+        "GetRegionParent",
+        lua.create_function(|_, t: Table| {
+            t.raw_get::<Table>("_parent")?
+                .raw_get::<Option<Table>>("_parent")
+        })?,
+    )?;
     transforms::install(lua, &t, &kind)?;
     install_controls(lua, &t)?;
     let children: Table = parent.raw_get("_animations")?;
@@ -319,6 +332,22 @@ pub(super) fn install(lua: &Lua, methods: &Table) -> mlua::Result<()> {
     methods.set(
         "CreateAnimationGroup",
         lua.create_function(|lua, (t, name): (Table, Option<String>)| group(lua, t, name))?,
+    )?;
+    // StopAnimating(): every animation group the region owns stops (labelled: native's binding is
+    // unread; idle groups are left alone, so no stray OnStop fires).
+    methods.set(
+        "StopAnimating",
+        lua.create_function(|_, t: Table| {
+            if let Some(groups) = t.raw_get::<Option<Table>>("_animation_groups")? {
+                for g in groups.sequence_values::<Table>() {
+                    let g = g?;
+                    if g.raw_get::<bool>("_playing")? || g.raw_get::<bool>("_paused")? {
+                        g.call_method::<()>("Stop", ())?;
+                    }
+                }
+            }
+            Ok(())
+        })?,
     )?;
     methods.set(
         "GetAnimationGroups",
@@ -404,13 +433,16 @@ pub(super) fn tick(lua: &Lua, elapsed: f32) -> mlua::Result<()> {
             } else {
                 ((phase - start) / length).clamp(0.0, 1.0)
             };
+            // GetProgress answers the raw fraction, GetSmoothProgress the eased one, which the
+            // transforms apply.
+            a.raw_set("_progress", p)?;
             let p = match a.raw_get::<String>("_smoothing")?.as_str() {
                 "IN" => p * p,
                 "OUT" => 1.0 - (1.0 - p) * (1.0 - p),
                 "IN_OUT" => p * p * (3.0 - 2.0 * p),
                 _ => p,
             };
-            a.raw_set("_progress", p)?;
+            a.raw_set("_smooth_progress", p)?;
             if a.raw_get::<String>("_kind")? == "Translation" {
                 offset.0 += a.raw_get::<f64>("_x")? * p;
                 offset.1 += a.raw_get::<f64>("_y")? * p;

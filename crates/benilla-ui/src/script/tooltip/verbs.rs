@@ -7,7 +7,7 @@ use crate::script::binding_abi::optional_string;
 use crate::script::object::frame_handle_of;
 use crate::script::region::region_handle_of;
 use crate::script::Model;
-use crate::widget::{KindState, TooltipAnchor, TOOLTIP_LINE_GAP, TOOLTIP_PAD};
+use crate::widget::{FrameHandle, KindState, TooltipAnchor, TOOLTIP_LINE_GAP, TOOLTIP_PAD};
 
 use super::{
     append_line, bool_arg, clear_content, fire_cleared, full_alpha, hide_tooltip, now,
@@ -43,78 +43,7 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
                     clear_content(&mut model, h);
                     full_alpha(&mut model, h);
                     tip_mut(&mut model, h)?.owner = Some(owner_h);
-                    let owner_id = model.frame_id(owner_h);
-                    // Resolved once: the placement and `GetAnchorType` both read this value. The
-                    // warning on an unknown name is ours; the reference is silent, and Lua sees no
-                    // difference.
-                    let anchor = match anchor
-                        .as_deref()
-                        .map(str::to_ascii_uppercase)
-                        .as_deref()
-                        .unwrap_or("")
-                    {
-                        "ANCHOR_LEFT" => TooltipAnchor::Left,
-                        "ANCHOR_RIGHT" => TooltipAnchor::Right,
-                        "ANCHOR_BOTTOMLEFT" => TooltipAnchor::BottomLeft,
-                        "ANCHOR_BOTTOMRIGHT" => TooltipAnchor::BottomRight,
-                        "ANCHOR_TOPLEFT" => TooltipAnchor::TopLeft,
-                        "ANCHOR_TOPRIGHT" => TooltipAnchor::TopRight,
-                        "ANCHOR_CURSOR" => TooltipAnchor::Cursor,
-                        "ANCHOR_NONE" => TooltipAnchor::None,
-                        "ANCHOR_PRESERVE" => TooltipAnchor::Preserve,
-                        "" => TooltipAnchor::Left,
-                        other => {
-                            model.record_warning(format!(
-                                "SetOwner: unknown anchor '{other}' (mode 0, ANCHOR_LEFT)"
-                            ));
-                            TooltipAnchor::Left
-                        }
-                    };
-                    tip_mut(&mut model, h)?.anchor = anchor;
-                    let pts = match anchor {
-                        TooltipAnchor::Right => Some((Point::BottomLeft, Point::TopRight)),
-                        TooltipAnchor::Left => Some((Point::BottomRight, Point::TopLeft)),
-                        TooltipAnchor::TopRight => Some((Point::BottomRight, Point::TopRight)),
-                        TooltipAnchor::TopLeft => Some((Point::BottomLeft, Point::TopLeft)),
-                        TooltipAnchor::BottomRight => Some((Point::TopLeft, Point::BottomRight)),
-                        TooltipAnchor::BottomLeft => Some((Point::TopRight, Point::BottomLeft)),
-                        TooltipAnchor::Cursor | TooltipAnchor::None | TooltipAnchor::Preserve => {
-                            None
-                        }
-                    };
-                    // Modes 6 and 7 clear all points and stop. The clear lets
-                    // `GameTooltip_SetDefaultAnchor` (GameTooltip.lua:76-77) set one point with no
-                    // stale owner anchor; mode 6 is then placed per frame by `cursor_anchor`. The
-                    // drop is a named retarget to no targets, not a conservative touch.
-                    if matches!(anchor, TooltipAnchor::Cursor | TooltipAnchor::None) {
-                        let dropped = match model.layout_inputs.get_mut(&h) {
-                            Some(input) if !input.anchors.is_empty() => {
-                                Some(input.anchors.drain(..).map(|a| a.relative_to).collect())
-                            }
-                            _ => None,
-                        };
-                        if let Some(old_targets) = dropped {
-                            let old_targets: Vec<u32> = old_targets;
-                            model.touch_layout_retarget_frame(h, &old_targets, &[]);
-                        }
-                    }
-                    if let Some((own, rel)) = pts {
-                        let new =
-                            Anchor::new(own, owner_id, rel, x.unwrap_or(0.0), y.unwrap_or(0.0));
-                        let input = model.layout_inputs.entry(h).or_default();
-                        // No-op when unchanged, so the bag hover's per-frame SetOwner does not
-                        // dirty the layout.
-                        let same = input.anchors.len() == 1
-                            && crate::script::object::anchor_bits_eq(&input.anchors[0], &new);
-                        if !same {
-                            // A named retarget: the cached layout graph re-points this edge
-                            // instead of being rebuilt.
-                            let old_targets: Vec<u32> =
-                                input.anchors.iter().map(|a| a.relative_to).collect();
-                            input.anchors = vec![new];
-                            model.touch_layout_retarget_frame(h, &old_targets, &[owner_id]);
-                        }
-                    }
+                    place(&mut model, h, owner_h, anchor.as_deref(), x, y)?;
                 }
                 fire_cleared(lua, h);
                 Ok(())
@@ -377,5 +306,81 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     }
 
     lua.set_named_registry_value(REG_TOOLTIP_METHODS, m)?;
+    Ok(())
+}
+
+/// SetOwner's placement, shared with Wrath's `SetAnchorType`: the mode resolved from its name,
+/// stored for `GetAnchorType`, and the plate anchored to the owner with the offsets.
+pub(in crate::script) fn place(
+    model: &mut Model,
+    h: FrameHandle,
+    owner_h: FrameHandle,
+    anchor: Option<&str>,
+    x: Option<f32>,
+    y: Option<f32>,
+) -> mlua::Result<()> {
+    let owner_id = model.frame_id(owner_h);
+    // Resolved once: the placement and `GetAnchorType` both read this value. The
+    // warning on an unknown name is ours; the reference is silent, and Lua sees no
+    // difference.
+    let anchor = match anchor.map(str::to_ascii_uppercase).as_deref().unwrap_or("") {
+        "ANCHOR_LEFT" => TooltipAnchor::Left,
+        "ANCHOR_RIGHT" => TooltipAnchor::Right,
+        "ANCHOR_BOTTOMLEFT" => TooltipAnchor::BottomLeft,
+        "ANCHOR_BOTTOMRIGHT" => TooltipAnchor::BottomRight,
+        "ANCHOR_TOPLEFT" => TooltipAnchor::TopLeft,
+        "ANCHOR_TOPRIGHT" => TooltipAnchor::TopRight,
+        "ANCHOR_CURSOR" => TooltipAnchor::Cursor,
+        "ANCHOR_NONE" => TooltipAnchor::None,
+        "ANCHOR_PRESERVE" => TooltipAnchor::Preserve,
+        "" => TooltipAnchor::Left,
+        other => {
+            model.record_warning(format!(
+                "SetOwner: unknown anchor '{other}' (mode 0, ANCHOR_LEFT)"
+            ));
+            TooltipAnchor::Left
+        }
+    };
+    tip_mut(model, h)?.anchor = anchor;
+    let pts = match anchor {
+        TooltipAnchor::Right => Some((Point::BottomLeft, Point::TopRight)),
+        TooltipAnchor::Left => Some((Point::BottomRight, Point::TopLeft)),
+        TooltipAnchor::TopRight => Some((Point::BottomRight, Point::TopRight)),
+        TooltipAnchor::TopLeft => Some((Point::BottomLeft, Point::TopLeft)),
+        TooltipAnchor::BottomRight => Some((Point::TopLeft, Point::BottomRight)),
+        TooltipAnchor::BottomLeft => Some((Point::TopRight, Point::BottomLeft)),
+        TooltipAnchor::Cursor | TooltipAnchor::None | TooltipAnchor::Preserve => None,
+    };
+    // Modes 6 and 7 clear all points and stop. The clear lets
+    // `GameTooltip_SetDefaultAnchor` (GameTooltip.lua:76-77) set one point with no
+    // stale owner anchor; mode 6 is then placed per frame by `cursor_anchor`. The
+    // drop is a named retarget to no targets, not a conservative touch.
+    if matches!(anchor, TooltipAnchor::Cursor | TooltipAnchor::None) {
+        let dropped = match model.layout_inputs.get_mut(&h) {
+            Some(input) if !input.anchors.is_empty() => {
+                Some(input.anchors.drain(..).map(|a| a.relative_to).collect())
+            }
+            _ => None,
+        };
+        if let Some(old_targets) = dropped {
+            let old_targets: Vec<u32> = old_targets;
+            model.touch_layout_retarget_frame(h, &old_targets, &[]);
+        }
+    }
+    if let Some((own, rel)) = pts {
+        let new = Anchor::new(own, owner_id, rel, x.unwrap_or(0.0), y.unwrap_or(0.0));
+        let input = model.layout_inputs.entry(h).or_default();
+        // No-op when unchanged, so the bag hover's per-frame SetOwner does not
+        // dirty the layout.
+        let same = input.anchors.len() == 1
+            && crate::script::object::anchor_bits_eq(&input.anchors[0], &new);
+        if !same {
+            // A named retarget: the cached layout graph re-points this edge
+            // instead of being rebuilt.
+            let old_targets: Vec<u32> = input.anchors.iter().map(|a| a.relative_to).collect();
+            input.anchors = vec![new];
+            model.touch_layout_retarget_frame(h, &old_targets, &[owner_id]);
+        }
+    }
     Ok(())
 }

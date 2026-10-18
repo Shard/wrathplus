@@ -141,6 +141,10 @@ impl Plugin for UiQuestLogPlugin {
                 Update,
                 (
                     feed_quest_log.in_set(UnitFeed),
+                    feed_quest_special_items
+                        .in_set(UiFeed)
+                        .after(feed_quest_log)
+                        .run_if(crate::ui_script::ingame_ui_up),
                     // Before the script tick, so `QuestTimerFrame` reads this frame's clock.
                     feed_server_clock.in_set(UiFeed),
                     drain_quest_log_abandons.after(UiInput),
@@ -781,6 +785,53 @@ pub(crate) fn feed_quest_log(
         }
     }
     *last = fresh;
+}
+
+/// `set_wrath_quest_special_items`: each logged quest's usable item, as the Lua `(bag, slot)` of
+/// its first copy in the backpack or the four bags, which `GetQuestLogSpecialItemInfo`,
+/// `UseQuestLogSpecialItem` and their kin read. Labelled inferred: the reference picks the item in
+/// `0x5e0da0`, not traced; this takes the template's `SrcItemId`.
+fn feed_quest_special_items(
+    script: Option<NonSendMut<UiScript>>,
+    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    quest_log: Res<QuestLog>,
+    objects: crate::net::Objects,
+    commands: Res<NetCommands>,
+    mut last: Local<crate::ui_script::VmMemo<Option<Vec<(u32, i64, u32)>>>>,
+) {
+    let Some(mut script) = script else {
+        return;
+    };
+    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
+        return;
+    }
+    let Some(store) = self_q.iter().next() else {
+        return;
+    };
+    let mut seen = HashSet::new();
+    let items: Vec<(u32, i64, u32)> = (0..store.0.player_quest_log_slots())
+        .filter_map(|slot| store.0.player_quest_log(slot))
+        .filter(|s| s.quest_id != 0 && seen.insert(s.quest_id))
+        .filter_map(|s| {
+            let source = quest_log.template(s.quest_id, &commands)?.src_item_id;
+            if source == 0 {
+                return None;
+            }
+            let (bag, slot, _) = crate::ui_items::find_item(
+                &store.0,
+                &objects,
+                source,
+                crate::ui_items::ItemSearch::default(),
+            )?;
+            let (bag, slot) = crate::ui_items::lua_bag_pos(bag, slot)?;
+            Some((s.quest_id, bag, slot))
+        })
+        .collect();
+    let (last, reset) = last.get_reset(&script);
+    if reset || last.as_ref() != Some(&items) {
+        *last = Some(items.clone());
+        script.set_wrath_quest_special_items(items);
+    }
 }
 
 /// Every quest-log slot as `(quest id, state)`, the slot watcher's input.

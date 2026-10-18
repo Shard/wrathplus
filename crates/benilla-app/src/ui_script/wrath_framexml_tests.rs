@@ -229,6 +229,11 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
          caller, FriendsFrame.lua:1341, is FriendsFrameMuteButton_OnClick of 3.3.5's retired mute list",
     ),
     (
+        "VoiceChatButton_OnEvent",
+        "not in Wow.exe 12340 (raw byte search, 0 NUL-bounded hits) and defined by no installed \
+         FrameXML file; its only caller is VoiceChat.xml:60's OnEvent, a dangling reference",
+    ),
+    (
         "AddSendMailMoney",
         "Wow.exe 12340 has only Get/SetSendMailMoney (string scan, /tmp/azb-ui-mail-helpers.log); \
          MoneyFrame.lua:83 calls it from the SEND_MAIL MoneyTypeInfo drop callback only",
@@ -426,6 +431,20 @@ fn missing_surface(script: &UiScript) {
                     end
                 else
                     out[#out + 1] = "KIND:" .. kind
+                end
+            end
+            -- Animation groups and animations keep their methods on the object itself.
+            local frame = CreateFrame("Frame")
+            if frame.CreateAnimationGroup then
+                local group = frame:CreateAnimationGroup()
+                local objects = { group }
+                for _, kind in ipairs({ "Animation", "Alpha", "Translation", "Scale", "Rotation" }) do
+                    objects[#objects + 1] = group:CreateAnimation(kind)
+                end
+                for _, object in ipairs(objects) do
+                    for name, value in pairs(object) do
+                        if type(name) == "string" and type(value) == "function" then has[name] = true end
+                    end
                 end
             end
             for name in pairs(has) do out[#out + 1] = name end
