@@ -263,7 +263,10 @@ impl Plugin for UiSummonPlugin {
                     .after(UiInput)
                     .after(crate::ui_social::feed::drain_social)
                     // And after our mover's control, whose falling bit it publishes.
-                    .after(crate::player::PlayerControlSet),
+                    .after(crate::player::PlayerControlSet)
+                    // And after the targeting chain, whose vault click names the banker the
+                    // guild-bank answers send to.
+                    .after(crate::target::TargetUpdate),
             ),
         );
     }

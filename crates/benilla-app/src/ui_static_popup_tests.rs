@@ -72,6 +72,7 @@ fn answers_map_to_their_sends() {
         refund_item: &item,
         friend: &friend,
         chat_line: &line,
+        banker: Some(0x66),
     };
     let send = |request: WrathPopupRequest| answer(&request, &look(None));
     assert!(matches!(
@@ -166,7 +167,26 @@ fn answers_map_to_their_sends() {
             }
         ))
     ));
+    // The purchase is the host's (it may refuse with a line); the deposit names the banker.
     assert!(send(WrathPopupRequest::BuyGuildBankTab).is_none());
+    assert!(matches!(
+        send(WrathPopupRequest::DepositGuildBankMoney { copper: 250 }),
+        Some(ClientCommand::NativeGuildBank(
+            benilla_protocol::wrath_guild_bank_commands::Command::DepositMoney {
+                banker: 0x66,
+                amount: 250
+            }
+        ))
+    ));
+    let no_banker = Lookups {
+        banker: None,
+        ..look(None)
+    };
+    assert!(answer(
+        &WrathPopupRequest::DepositGuildBankMoney { copper: 250 },
+        &no_banker
+    )
+    .is_none());
     assert!(matches!(
         send(WrathPopupRequest::AcceptLevelGrant),
         Some(ClientCommand::NativeReferFriend(
@@ -192,4 +212,26 @@ fn controlling_units_hold_a_charm_or_a_summon() {
         controlling([(1, &charmer), (2, &summoner), (3, &neither)].into_iter()),
         [1, 2]
     );
+}
+
+/// `0x5a6b20`/`0x5a5d30`: the next tab's price by the purchased count; a purchase needs the
+/// frame open on a banker and the vault's money plus the player's to cover it.
+#[test]
+fn guild_bank_tabs_cost_by_count_and_buy_with_the_vault_and_purse() {
+    assert_eq!(tab_cost(0), Some(1_000_000));
+    assert_eq!(tab_cost(5), Some(50_000_000));
+    assert_eq!(tab_cost(6), None);
+    assert!(buy_tab(None, (true, 0, 0), u64::MAX).is_none());
+    assert!(buy_tab(Some(9), (false, 0, 0), u64::MAX).is_none());
+    assert!(buy_tab(Some(9), (true, 6, 0), u64::MAX).is_none());
+    assert!(matches!(
+        buy_tab(Some(9), (true, 1, 1_000_000), 1_499_999),
+        Some(Err("ERR_BANKSLOT_INSUFFICIENT_FUNDS"))
+    ));
+    assert!(matches!(
+        buy_tab(Some(9), (true, 1, 1_000_000), 1_500_000),
+        Some(Ok(ClientCommand::NativeGuildBank(
+            benilla_protocol::wrath_guild_bank_commands::Command::BuyTab { banker: 9, tab: 1 }
+        )))
+    ));
 }
