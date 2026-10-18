@@ -829,15 +829,20 @@ impl MovementAuthorityHandle {
             state.control_decided = true;
             bail!("Wrath self create named foreign mover {guid:#018x}");
         }
+        let reported = match movement {
+            MovementPosition::Living(movement) => OnFootPose::from_movement(movement).or_else(|error| {
+                // A state the writer does not report (flight): stand at the world position, so an
+                // order ACK cannot rewind us; the controller holds unsupported movement anyway.
+                bevy::log::warn!(
+                    "net(wrath): self create in an unreported movement state ({error}); ACKs report the world position"
+                );
+                GroundPose::stationary(&movement.position).map(Into::into)
+            }),
+            MovementPosition::Stationary(position) => GroundPose::stationary(position).map(Into::into),
+            _ => Err(wrath_authority::AuthorityCodecError::UnsupportedGroundState),
+        };
         state.ground_pose = Some(
-            match movement {
-                MovementPosition::Living(movement) => OnFootPose::from_movement(movement),
-                MovementPosition::Stationary(position) => {
-                    GroundPose::stationary(position).map(Into::into)
-                }
-                _ => Err(wrath_authority::AuthorityCodecError::UnsupportedGroundState),
-            }
-            .context("Wrath self create on-foot pose")?,
+            reported.context("Wrath self create pose")?,
         );
         state.self_created = true;
         // AzerothCore calls SetMover(this) before UpdateVisibilityForPlayer emits this player's
@@ -868,7 +873,12 @@ impl MovementAuthorityHandle {
         // ROOT is an authority bit, not locomotion. Its command/FIFO owns permission; an echo
         // updates current XYZO only and must never grant control or clear pending orders.
         movement.flags &= !wrath_authority::MOVEMENT_FLAG_ROOT;
-        state.ground_pose = Some(OnFootPose::from_movement(&movement)?);
+        // A server-authored pose in a state the writer does not report (flight) keeps the last
+        // reported pose rather than ending the session.
+        match OnFootPose::from_movement(&movement) {
+            Ok(pose) => state.ground_pose = Some(pose),
+            Err(error) => bevy::log::debug!("net(wrath): self pose not representable ({error}); last pose kept"),
+        }
         Ok(())
     }
 
@@ -878,9 +888,14 @@ impl MovementAuthorityHandle {
             return Ok(());
         }
         if mover != self.self_guid {
+            // A vehicle or possessed unit: we do not drive it, so our own movement stays held until
+            // control returns to our guid. Nothing was queued, so the authority state stays coherent.
+            bevy::log::warn!(
+                "net(wrath): control of non-player mover {mover:#018x} (allow {allow_move}) is not driven; our movement is held"
+            );
             state.self_control = false;
             state.control_decided = true;
-            bail!("unsupported Wrath control transfer to non-player mover {mover:#018x}");
+            return Ok(());
         }
         state.self_control = allow_move;
         state.control_decided = true;
@@ -1026,8 +1041,8 @@ impl MovementAuthorityHandle {
         let Some(mut pose) = state.ground_pose else {
             return Ok(UnsetAckResult::PendingSelfPose);
         };
-        // SWIMMING alone is not motion: a still swimmer needs no STOP before its root.
-        if rooted && pose.flags & !wrath_ground::MOVE_SWIMMING != 0 {
+        // SWIMMING and ON_TRANSPORT alone are not motion: a still swimmer or passenger needs no STOP.
+        if rooted && pose.flags & !(wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT) != 0 {
             pose = pose.halted();
             let stop = pose.encode(wrath_ground::MSG_MOVE_STOP, self.self_guid, timestamp)?;
             send(wrath_ground::MSG_MOVE_STOP, &stop)?;
@@ -1215,6 +1230,7 @@ impl MovementAuthorityHandle {
             fall_time: 0,
             fall: None,
             pitch: None,
+            transport: None,
         });
         let retired = state.pending_orders.pop_front();
         debug_assert_eq!(retired, Some(PendingAuthorityOrder::Mover(order)));
@@ -1675,11 +1691,9 @@ fn writer_loop(
                     WrathRoute::SetActiveMover => {
                         let ClientCommand::SetActiveMover { guid } = command else { unreachable!() };
                         if guid != active.authority.self_guid {
-                            active.authority.revoke();
-                            let _ = control_tx.send(WrathWriterControl::Fatal {
-                                epoch,
-                                reason: format!("unsupported Wrath active-mover transfer to {guid:#018x}"),
-                            });
+                            // The controller claims a vehicle or possessed unit we cannot drive: withhold
+                            // the claim rather than end the session; movement stays held (`observe_control`).
+                            bevy::log::warn!("net(wrath): active-mover claim for non-player {guid:#018x} withheld");
                             continue;
                         }
                         let authority = active.authority.clone();
@@ -2715,9 +2729,14 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
     else {
         unreachable!()
     };
-    if transport.is_some() {
-        bail!("Wrath movement refuses transport tails");
-    }
+    // The deck-local tail rides with Wrath ON_TRANSPORT (the controller's flags are already mapped).
+    let timestamp = active.clock.now_ms();
+    let transport = transport.map(|t| wrath_ground::TransportTail {
+        guid: t.guid,
+        position: [t.pos.x, t.pos.y, t.pos.z],
+        orientation: t.orientation,
+        time: timestamp,
+    });
     // Pitch rides only with SWIMMING (AzerothCore `ReadMovementInfo`); on foot it must be level.
     let swimming = flags & benilla_protocol::wrath_ground::MOVE_SWIMMING != 0;
     if !swimming && pitch != 0.0 {
@@ -2737,12 +2756,13 @@ fn send_ground_movement(active: &mut WrathWriterSwap, command: ClientCommand) ->
         fall_time,
         fall,
         pitch,
+        transport,
     };
     let authority = active.authority.clone();
     authority
         .with_on_foot_send(pose, || {
             let opcode = u32::from(kind.opcode());
-            let body = pose.encode(opcode, active.active_mover, active.clock.now_ms())?;
+            let body = pose.encode(opcode, active.active_mover, timestamp)?;
             active.writer.send_raw(opcode, &body)
         })
         .unwrap_or(Ok(()))
@@ -3643,15 +3663,67 @@ mod tests {
     }
 
     #[test]
-    fn foreign_mover_revokes_before_failing_closed() {
+    fn a_vehicle_or_possessed_mover_holds_our_movement_without_ending_the_session() {
         let shared = Arc::new(MovementAuthority::default());
         let authority = shared.install(3, 0x88);
         authority
             .observe_self_create(0x88, &test_self_position())
             .unwrap();
-        let error = authority.observe_control(0x99, true).unwrap_err();
-        assert!(error.to_string().contains("non-player mover"));
+        // Control of a unit we cannot drive: held, not fatal.
+        authority.observe_control(0x99, true).unwrap();
         assert!(authority.with_movement_send(|| ()).is_none());
+        assert!(authority.with_player_action(|| ()).is_none());
+        // Control returns to our own guid: movement resumes.
+        authority.observe_control(0x88, true).unwrap();
+        assert_eq!(authority.with_movement_send(|| 1), Some(1));
+    }
+
+    #[test]
+    fn a_rooted_passenger_keeps_its_deck_and_reports_from_it() {
+        let shared = Arc::new(MovementAuthority::default());
+        let authority = shared.install(4, 0x89);
+        authority
+            .observe_self_create(0x89, &test_self_position())
+            .unwrap();
+        let deck = wrath_ground::TransportTail {
+            guid: 0x1FC0_0000_0000_0042,
+            position: [1.0, 2.0, 3.0],
+            orientation: 0.5,
+            time: 7,
+        };
+        let riding = OnFootPose {
+            flags: wrath_ground::MOVE_ON_TRANSPORT | wrath_ground::MOVE_FORWARD,
+            position: [10.0, 20.0, 30.0],
+            orientation: 0.25,
+            fall_time: 0,
+            fall: None,
+            pitch: None,
+            transport: Some(deck),
+        };
+        assert!(authority.with_on_foot_send(riding, || Ok(())).unwrap().is_ok());
+        let root = ForceRootOrder {
+            mover_guid: 0x89,
+            counter: 30,
+        };
+        authority.raise_root_barrier(root, true).unwrap();
+        let mut sent = Vec::new();
+        authority
+            .send_root_ack(root, true, 9, |opcode, body| {
+                sent.push((opcode, body.to_vec()));
+                Ok(())
+            })
+            .unwrap();
+        // A STOP (still on the deck), then the ACK with ROOT | ON_TRANSPORT.
+        let [(stop, stop_body), (ack, ack_body)] = &sent[..] else {
+            panic!("{sent:?}")
+        };
+        assert_eq!((*stop, *ack), (wrath_ground::MSG_MOVE_STOP, wrath_authority::CMSG_FORCE_MOVE_ROOT_ACK));
+        let stop_movement = benilla_protocol::wrath_gameplay::OutboundMovement::from_bytes(stop_body).unwrap().movement;
+        assert_eq!(stop_movement.flags, wrath_ground::MOVE_ON_TRANSPORT);
+        assert_eq!(stop_movement.transport.unwrap().guid, deck.guid);
+        // 0x89 packs to two bytes, so the flags follow at byte 6.
+        let flags = u32::from_le_bytes(ack_body[6..10].try_into().unwrap());
+        assert_eq!(flags, wrath_authority::MOVEMENT_FLAG_ROOT | wrath_ground::MOVE_ON_TRANSPORT);
     }
 
     #[test]
@@ -3910,6 +3982,7 @@ mod tests {
                 horizontal_speed: 7.0,
             }),
             pitch: None,
+            transport: None,
         };
         authority
             .with_on_foot_send(pose, || Ok(()))
@@ -4796,6 +4869,7 @@ mod mover_order_tests {
             fall_time: 0,
             fall: None,
             pitch: Some(-0.3),
+            transport: None,
         };
         assert!(authority
             .with_on_foot_send(swimming, || Ok(()))

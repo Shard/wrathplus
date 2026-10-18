@@ -1,5 +1,6 @@
 //! Ordered native spell/aura log receipts without a shared event or chat family
-//! (`SMSG_SPELLSTEALLOG`). App owns any future reducer/UI feed; no stolen-aura line is invented.
+//! (`SMSG_SPELLSTEALLOG`). App's combat log records each
+//! steal as `SPELL_STOLEN`; no stolen-aura chat line is invented.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_logs::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -15,7 +16,15 @@ pub(super) fn register(app: &mut App) {
         .net_handler(SessionEventKind::Disconnected, clear);
 }
 
-fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeSpellLogPackets>) {
+fn receive(
+    In(event): In<SessionEvent>,
+    mut packets: ResMut<NativeSpellLogPackets>,
+    // The build-12340 combat log's `SPELL_STOLEN`, in wire order; `Option` for harnesses.
+    native: Option<ResMut<crate::combat_log::native::NativeCombatLog>>,
+) {
+    if let Some(mut native) = native {
+        native.record(&event);
+    }
     if let SessionEvent::WrathSpellLog { packet } = event {
         packets.0.push_back(packet);
     }

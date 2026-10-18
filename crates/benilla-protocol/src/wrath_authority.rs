@@ -45,6 +45,8 @@ pub struct OnFootPose {
     pub fall: Option<FallTail>,
     /// The swimming pitch, present exactly while `MOVE_SWIMMING` is set.
     pub pitch: Option<f32>,
+    /// The deck-local pose, present exactly while `MOVE_ON_TRANSPORT` is set.
+    pub transport: Option<wrath_ground::TransportTail>,
 }
 
 impl From<GroundPose> for OnFootPose {
@@ -56,6 +58,7 @@ impl From<GroundPose> for OnFootPose {
             fall_time: 0,
             fall: None,
             pitch: None,
+            transport: None,
         }
     }
 }
@@ -63,7 +66,7 @@ impl From<GroundPose> for OnFootPose {
 impl OnFootPose {
     pub fn from_movement(movement: &MovementInfo) -> Result<Self, AuthorityCodecError> {
         if movement.flags2 != 0
-            || movement.transport.is_some()
+            || movement.transport.as_ref().is_some_and(|t| t.time2.is_some())
             || movement.spline_elevation.is_some()
         {
             return Err(AuthorityCodecError::UnsupportedGroundState);
@@ -84,6 +87,12 @@ impl OnFootPose {
                 horizontal_speed: jump.horizontal_speed,
             }),
             pitch: movement.pitch,
+            transport: movement.transport.as_ref().map(|t| wrath_ground::TransportTail {
+                guid: t.guid,
+                position: [t.position.x, t.position.y, t.position.z],
+                orientation: t.position.orientation,
+                time: t.time,
+            }),
         };
         pose.validate()?;
         Ok(pose)
@@ -97,10 +106,11 @@ impl OnFootPose {
 
     /// A server root halts movement at the latest reported XYZ, not at an invented landing.
     /// ROOT cannot coexist with FALLING/FALLING_FAR in AzerothCore's moving-mask validation.
-    /// A rooted swimmer stays in the water: SWIMMING and its pitch survive.
+    /// A rooted swimmer stays in the water and a rooted passenger on its deck: SWIMMING and
+    /// ON_TRANSPORT survive with their tails.
     pub fn halted(self) -> Self {
         Self {
-            flags: self.flags & wrath_ground::MOVE_SWIMMING,
+            flags: self.flags & (wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT),
             fall: None,
             ..self
         }
@@ -113,13 +123,14 @@ impl OnFootPose {
         mover_guid: u64,
         timestamp: u32,
     ) -> Result<Vec<u8>, wrath_ground::GroundError> {
-        wrath_ground::encode_movement(
+        wrath_ground::encode_full(
             opcode,
             mover_guid,
             self.flags,
             timestamp,
             self.position,
             self.orientation,
+            self.transport,
             self.pitch,
             self.fall_time,
             self.fall,
@@ -145,8 +156,11 @@ fn encode_on_foot_ack(
         // The caller supplies the explicitly halted pose for ROOT. Never discard an airborne
         // tail implicitly while encoding an ACK that only changes a movement-authority bit.
         if rooted {
-            // A rooted swimmer keeps SWIMMING (and its pitch); nothing else may ride with ROOT.
-            if pose.flags & !wrath_ground::MOVE_SWIMMING != 0 || pose.fall.is_some() {
+            // A rooted swimmer or passenger keeps SWIMMING / ON_TRANSPORT (and their tails); nothing
+            // else may ride with ROOT.
+            if pose.flags & !(wrath_ground::MOVE_SWIMMING | wrath_ground::MOVE_ON_TRANSPORT) != 0
+                || pose.fall.is_some()
+            {
                 return Err(AuthorityCodecError::UnsupportedGroundState);
             }
             let flags = MOVEMENT_FLAG_ROOT | pose.flags;
@@ -759,8 +773,9 @@ pub fn encode_mode_ack(
 }
 
 /// `CMSG_MOVE_KNOCK_BACK_ACK`: the launch frame, the mover at its pose with `FALLING`, a zero fall
-/// time and the order's tail echoed as received (down-positive vertical speed, as the outbound
-/// jump tail writes it).
+/// time and the order's tail. The order's vertical speed is down-positive (AzerothCore writes
+/// `-speedZ`); the Wrath jump tail is positive-up (the controller negates at the command boundary,
+/// `player::movement_net::jump_for_dialect`), so the ACK negates it.
 pub fn encode_knock_back_ack(
     mover_guid: u64,
     counter: u32,
@@ -784,7 +799,7 @@ pub fn encode_knock_back_ack(
         pitch: None,
         fall_time: 0,
         fall: Some(FallTail {
-            vertical_speed,
+            vertical_speed: -vertical_speed,
             sin_angle,
             cos_angle,
             horizontal_speed,
@@ -888,6 +903,7 @@ mod tests {
                 horizontal_speed: 7.0,
             }),
             pitch: None,
+            transport: None,
         }
     }
 
@@ -961,6 +977,7 @@ mod tests {
             fall_time: 0,
             fall: None,
             pitch: None,
+            transport: None,
         }
     }
 
@@ -1107,7 +1124,8 @@ mod tests {
             .chunks(4)
             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
             .collect();
-        assert_eq!(floats, [-9.0, 0.8, 0.6, 12.0]);
+        // The order's down-positive -9 rises at 9 in the positive-up Wrath tail.
+        assert_eq!(floats, [9.0, 0.8, 0.6, 12.0]);
     }
 
     #[test]

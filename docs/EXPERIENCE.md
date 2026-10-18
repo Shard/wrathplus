@@ -50,7 +50,18 @@ supported GPU and MSAA off: enabling it at startup selects MSAA Off plus SMAA Hi
 Unsupported devices skip AO with a warning. **Restart after changing AO or pack settings**;
 AO's antialiasing choice and asset mounts are fixed at startup. Config-file edits for other
 features also take effect on the next launch; runtime developer switches do not save changes.
-There is no player-facing in-game Plus toggle yet.
+There is no player-facing in-game Plus toggle yet; dev builds have the console switch below.
+
+### Runtime switch (dev builds)
+
+`/console experience` prints the profile and every feature's effective state;
+`/console experience classic|plus` switches the profile and `/console experience <feature> on|off`
+sets one feature (config spellings, e.g. `colour_grading`). Changes are session-only and reach the
+renderer the same frame through `sync_lighting`/`sync_text`, so a side-by-side capture can flip
+Classic and Plus in one session (for example `WOW_PROBE_CHAT="/console experience plus"`).
+`asset_overrides` and `ambient_occlusion` print `(fixed at startup)`: packs mount and AO's
+antialiasing latch at boot. The command is registered only with the `dev` feature, so the player
+build keeps the stock console command set.
 
 To return to the stock look, set `profile = "classic"` and restart. Classic masks every graphics
 and text feature, even saved `true` entries. Leave `allow_classic_overrides = false` to use only
@@ -103,6 +114,26 @@ restart after changing pack configuration.
   direct archive handle in the sound mixer is likewise in its installed-data test module.
 - Addon-owned loose-file fallback is a separate existing mechanism, after the chain lookup; it
   does not shadow client archive files or enable a mod pack.
+
+### Real-asset pack (installed test and demo pack)
+
+`benilla-assets` `override_real_data` builds a pack from installed Wrath files into a temporary
+folder: Elwynn's `Lamppost.m2` (with its SKIN/ANIM siblings) becomes `Ballista.m2`, and the first
+`Tileset\Elwynn\*grass*.blp` becomes the first `Tileset\Durotar\` texture. Through the
+production `register_mpq_source_overrides` and Wrath loaders, the lamp loads with the ballista's
+geometry, the terrain texture with the Durotar pixels, `override_path` names the pack file, and an
+untouched model (`ElwynnCampfire.m2`) still loads from the archives. To stage the same pack for a
+live session (local only, never committed):
+
+```sh
+WOW_CLIENT_PROFILE=wrath WOW_LOCALE=enUS WOW_DATA=/Users/shannon/Games/Client/Data \
+  AZB_DEMO_PACK_OUT="$BENILLA_HOME/mods/azb-demo" \
+  cargo test -p benilla-assets --lib write_demo_pack -- --ignored --nocapture
+```
+
+then `[experience] profile = "plus"`, `packs = ["azb-demo"]` (or Classic with
+`allow_classic_overrides = true`) and restart. Goldshire's road lamps should be ballistas and
+Elwynn grass Durotar ground; the log shows `asset override` lines with each pack source.
 
 Live replacement captures (texture/model and Classic before/after) are performed by the manager;
 the worker does not launch the client. Synthetic tests cover policy resolution and the full Bevy
