@@ -1,7 +1,7 @@
-//! Build-12340 refund and socket APIs used by ContainerFrame/ItemSocketingUI.
+//! Build-12340 refund APIs used by ContainerFrame and the socketing window's open intents.
 //! Evidence: 5d8d80/5d8f70 and 5c49c0..5c5470. Refund absence is zero
-//! returns, not a fabricated free purchase. Socket presentation is unavailable until
-//! a host publishes it. Mutations below are capture-only host intents, not success.
+//! returns, not a fabricated free purchase. The socketing session itself is `wrath_sockets`.
+//! Mutations below are host intents, not success.
 use super::UiScript;
 use mlua::{Lua, MultiValue, Value};
 use std::collections::BTreeMap;
@@ -167,43 +167,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    // Truthful native closed/unavailable socket session. No open/update/success events,
-    // no optimistic gem state, and no transport request on AcceptSockets while closed.
-    g.set(
-        "GetSocketItemInfo",
-        lua.create_function(|_, ()| Ok((Value::Nil, Value::Nil, 0)))?,
-    )?;
-    g.set("GetNumSockets", lua.create_function(|_, ()| Ok(0))?)?;
-    g.set(
-        "GetSocketItemRefundable",
-        lua.create_function(|_, ()| Ok(Value::Nil))?,
-    )?;
-    for name in ["GetExistingSocketInfo", "GetNewSocketInfo"] {
-        g.set(
-            name,
-            lua.create_function(move |lua, index: Value| {
-                number(lua, index, &format!("Usage: {name}(index)"))?;
-                Ok((Value::Nil, Value::Nil, Value::Nil))
-            })?,
-        )?;
-    }
-    for name in [
-        "GetExistingSocketLink",
-        "GetNewSocketLink",
-        "GetSocketTypes",
-        "ClickSocketButton",
-    ] {
-        g.set(
-            name,
-            lua.create_function(move |lua, index: Value| {
-                number(lua, index, &format!("Usage: {name}(index)"))?;
-                Ok(MultiValue::new())
-            })?,
-        )?;
-    }
-    for name in ["CloseSocketInfo", "AcceptSockets"] {
-        g.set(name, lua.create_function(|_, ()| Ok(()))?)?;
-    }
     Ok(())
 }
 

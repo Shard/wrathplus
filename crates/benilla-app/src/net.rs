@@ -34,6 +34,7 @@ mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
 mod wrath_equipment_sets;
 mod wrath_item_refunds;
+mod wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
 mod wrath_notices;

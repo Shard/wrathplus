@@ -56,6 +56,7 @@ pub mod currencies;
 pub mod glyphs;
 pub mod item_limit_category;
 mod itemsets;
+pub mod gems;
 pub mod lfg;
 pub mod vehicles;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};

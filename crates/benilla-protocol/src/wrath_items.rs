@@ -12,7 +12,7 @@ use crate::messages::{ItemDamage, ItemInfo, ItemSpellEntry, ItemUseSpell};
 pub const MAX_ITEM_STATS: u32 = 10;
 const ITEM_DAMAGE_BLOCKS: usize = 2;
 const ITEM_SPELL_BLOCKS: usize = 5;
-const ITEM_SOCKET_BLOCKS: usize = 3;
+pub const ITEM_SOCKET_BLOCKS: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemCodecError {
@@ -60,11 +60,23 @@ pub struct RollMetadata {
     pub item_limit_category: u32,
 }
 
+/// The template's sockets, for the socketing window: per socket block its colour mask (0 none;
+/// AzerothCore `SocketColor`) and raw content word, the bonus enchant, and the gem's own
+/// `GemProperties` id (0 for an item that is no gem).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SocketMetadata {
+    pub colors: [u32; ITEM_SOCKET_BLOCKS],
+    pub raw_contents: [u32; ITEM_SOCKET_BLOCKS],
+    pub bonus: u32,
+    pub gem_properties: u32,
+}
+
 /// A lossless roll-metadata seam alongside the existing item projection.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NativeItemTemplate {
     pub info: ItemInfo,
     pub roll: RollMetadata,
+    pub sockets: SocketMetadata,
 }
 
 /// Decode the expansion-neutral projection without changing legacy callers.
@@ -207,12 +219,13 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
     let map = input.u32()?;
     let bag_family = input.u32()?;
     let _totem_category = input.u32()?;
-    for _ in 0..ITEM_SOCKET_BLOCKS {
-        let _socket_color = input.u32()?;
-        let _socket_content = input.u32()?;
+    let mut sockets = SocketMetadata::default();
+    for i in 0..ITEM_SOCKET_BLOCKS {
+        sockets.colors[i] = input.u32()?;
+        sockets.raw_contents[i] = input.u32()?;
     }
-    let _socket_bonus = input.u32()?;
-    let _gem_properties = input.u32()?;
+    sockets.bonus = input.u32()?;
+    sockets.gem_properties = input.u32()?;
     let required_disenchant_skill = input.i32()?;
     let _armor_damage_modifier = input.f32()?;
     let _duration = input.u32()?;
@@ -223,6 +236,7 @@ pub fn decode_native_item_query_response(body: &[u8]) -> Result<(u32, Option<Nat
     Ok((
         wire_entry,
         Some(NativeItemTemplate {
+            sockets,
             roll: RollMetadata {
                 flags2,
                 required_disenchant_skill,
