@@ -125,6 +125,10 @@ pub enum RunePacket {
     Resync { runes: Vec<(u8, u8)> },
     /// `u32 mask`: these runes are ready now.
     AddPower { mask: u32 },
+    /// Our own `SMSG_SPELL_GO`'s rune list (`CAST_FLAG_RUNE_LIST`, AzerothCore `Spell::SendSpellGo`):
+    /// the runes ready before and after the cast, and for each rune that went down (set in
+    /// `before`, clear in `after`, ascending) how far its new cooldown has run, 255 ready.
+    Spend { before: u8, after: u8, passed: Vec<u8> },
 }
 
 /// Requests, each with the body AC's handler reads.

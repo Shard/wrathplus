@@ -1,6 +1,7 @@
 //! Retained death-knight rune state from build 12340's rune packets (AzerothCore
 //! `Player::ConvertRune`, `ResyncRunes`, `AddRunePower`). No update field carries the runes, so this
-//! is their only source; a UI reader (`GetRuneType`, `GetRuneCooldown`) is the Native UI's to build.
+//! is their only source, with our own spell-go's rune list (`RunePacket::Spend`). The UI readers are
+//! `ui_runes`, which times each rune from these baselines.
 use super::NetHandlerApp;
 use benilla_protocol::wrath_spell_control::RunePacket;
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -49,6 +50,17 @@ fn receive(In(event): In<SessionEvent>, mut runes: ResMut<NativeRunes>) {
                 if mask >> i & 1 == 1 {
                     rune.passed = u8::MAX;
                 }
+            }
+        }
+        RunePacket::Spend {
+            before,
+            after,
+            passed,
+        } => {
+            // The runes that went down, ascending, each with the progress the server reports.
+            let spent = (0..RUNES).filter(|i| before >> i & 1 == 1 && after >> i & 1 == 0);
+            for (i, p) in spent.zip(passed) {
+                state[i].passed = p;
             }
         }
     }

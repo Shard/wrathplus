@@ -37,6 +37,10 @@ impl Plugin for GluePlugin {
                 crate::glue_strings::load_glue_strings.after(benilla_assets::AssetSet::Open),
             )
             .init_resource::<GlueClicks>()
+            .configure_sets(
+                Update,
+                (GlueScreens::Login, GlueScreens::Select, GlueScreens::Create).chain(),
+            )
             .init_resource::<dialog::GlueDialog>()
             .add_message::<dialog::GlueDialogAnswer>()
             .add_systems(PreUpdate, glue_clicks.after(bevy::ui::UiSystems::Focus))
@@ -55,6 +59,16 @@ impl Plugin for GluePlugin {
                 (art_swaps, glue_button_visuals, glue_hilights, sync_outlines).in_set(GlueVisuals),
             );
     }
+}
+
+/// The three glue screens' chains, in one order. Each holds its own copy of the dialog driver
+/// and writers of the one [`dialog::GlueDialog`]; ordering the chains, never the shared driver's
+/// own type set, keeps those writes from racing.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum GlueScreens {
+    Login,
+    Select,
+    Create,
 }
 
 /// The glue widgets whose click landed this frame, the reference's `OnClick`. Ask this, never

@@ -32,6 +32,9 @@ pub(super) enum SelectAction {
     ChangeRealm,
     /// Open the AddOns list (`CharacterSelectAddonsButton`).
     Addons,
+    /// A row's paid-service button (`CharSelectCharacterCustomize<n>` and its race and faction
+    /// siblings), by 0-based roster index.
+    PaidService(usize),
     RotateLeft,
     RotateRight,
 }
@@ -385,6 +388,7 @@ fn character_frame(
             // From TOPLEFT (24,-65); the nodes are the 55-tall hit shape.
             for row in 0..MAX_ROWS {
                 row_button(frame, art, font, row, s);
+                paid_button(frame, art, row, s);
             }
             // Create New Character at the frame's BOTTOM (0,15); the reference's per-free-row
             // anchor is commented out.
@@ -409,6 +413,47 @@ fn character_frame(
                         s,
                     );
                 });
+        });
+}
+
+/// A row's paid-service face; its quarter follows the row's service.
+#[derive(Component)]
+pub(super) struct PaidFace(pub(super) usize);
+
+/// Build 12340's 64² paid-service button, TOPRIGHT at its row's TOPLEFT (-15,+6), hidden until
+/// the row's customize flags offer a service; `ButtonHilight-Square` 46² lights on hover.
+fn paid_button(frame: &mut ChildSpawnerCommands, art: &GlueArt, row: usize, s: f32) {
+    let px = |v: f32| Val::Px(v * s);
+    frame
+        .spawn((
+            SelectAction::PaidService(row),
+            Button,
+            Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(24.0 - 15.0 - 64.0),
+                top: px(65.0 + row as f32 * ROW_PITCH - 6.0),
+                width: px(64.0),
+                height: px(64.0),
+                ..default()
+            },
+        ))
+        .with_children(|b| {
+            if let Some((sheet, _)) = &art.paid_service {
+                b.spawn((
+                    PaidFace(row),
+                    ImageNode::new(sheet.clone()),
+                    abs(s, 0.0, 0.0, 64.0, 64.0),
+                ));
+            }
+            if let Some(hi) = &art.square_hilight {
+                b.spawn((
+                    Hilight,
+                    Visibility::Hidden,
+                    MaterialNode(hi.clone()),
+                    abs(s, 9.0, 9.0, 46.0, 46.0),
+                ));
+            }
         });
 }
 

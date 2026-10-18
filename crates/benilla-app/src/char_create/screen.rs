@@ -40,9 +40,20 @@ pub(super) fn enter_create(
     strings: Option<Res<GlueStrings>>,
     window: Query<&Window, With<PrimaryWindow>>,
     roster: Res<crate::char_select::Roster>,
+    paid: Res<super::paid::PaidChange>,
 ) {
     sel.death_knight = roster.chars.iter().any(|c| c.level >= 55);
     sel.reset(catalog.as_deref());
+    // `CustomizeExistingCharacter` (`0x4e2330`): a paid service starts from the character's look
+    // and name (`PaidChange_GetName`).
+    if let Some(t) = &paid.0 {
+        sel.race = t.race;
+        sel.sex = t.sex;
+        sel.class = t.class;
+        sel.dials = t.dials;
+        sel.name.set_text(&t.name);
+        sel.clamp(catalog.as_deref());
+    }
     preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
     preview.look = Some(GlueLook::Create(sel.look()));
     preview.yaw = INITIAL_FACING;
@@ -619,10 +630,18 @@ pub(super) fn exit_create(
     mut commands: Commands,
     roots: Query<Entity, With<CharCreateUi>>,
     mut preview: ResMut<GluePreview>,
+    // A paid service ends with the screen, and its dialog does not follow (the tree is despawned
+    // here, as select's exit does).
+    (mut paid, mut dialog): (
+        ResMut<super::paid::PaidChange>,
+        ResMut<crate::glue::dialog::GlueDialog>,
+    ),
 ) {
     for e in &roots {
         commands.entity(e).despawn();
     }
+    paid.0 = None;
+    dialog.dismiss(&mut commands);
     // CharSelect's `OnEnter` runs after this and re-establishes both the same frame.
     preview.look = None;
     preview.scene = None;
