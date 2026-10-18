@@ -16,10 +16,36 @@ pub const LIST: usize = 0;
 pub const BIDDER: usize = 1;
 pub const OWNER: usize = 2;
 
-/// The eight sort keys the reference's column headers pass, in the API's order.
-pub const SORT_KEYS: [&str; 8] = [
-    "level", "quality", "bid", "duration", "buyout", "status", "name", "seller",
+/// Build 12340's eleven sort columns (`0x59a850`/`0x59a7c0`), by native column id.
+pub const SORT_KEYS: [&str; 11] = [
+    "level",
+    "quality",
+    "buyoutthenbid",
+    "duration",
+    "status",
+    "name",
+    "minbidbuyout",
+    "seller",
+    "bid",
+    "quantity",
+    "buyout",
 ];
+
+/// A sort gesture for one list, which App applies to its stack.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AuctionSortOp {
+    /// `SortAuctionItems(type, key)`: the header click.
+    Click(String),
+    /// `SortAuctionClearSort(type)` (`0x59ae70`).
+    Clear,
+    /// `SortAuctionSetSort(type, key[, reverse])` (`0x59af10`): the key moves to the front with
+    /// this direction.
+    Set { key: String, reversed: bool },
+    /// `SortAuctionApplySort(type)` (`0x59cab0`): re-sort the list and fire its update event
+    /// (`AUCTION_ITEM_LIST_UPDATE` 0x1a2, `AUCTION_OWNED_LIST_UPDATE` 0x1a3,
+    /// `AUCTION_BIDDER_LIST_UPDATE` 0x1a4).
+    Apply,
+}
 
 /// A list type's snapshot index, for the other modules (the tooltip's `SetAuctionItem`).
 pub(super) fn list_index_of(kind: &str) -> Option<usize> {
@@ -230,7 +256,7 @@ impl super::UiScript {
     }
 
     /// Drain the header clicks: `(list index, sort key)`, in click order. The app owns the stacks.
-    pub fn take_auction_sorts(&mut self) -> Vec<(usize, String)> {
+    pub fn take_auction_sorts(&mut self) -> Vec<(usize, AuctionSortOp)> {
         std::mem::take(&mut self.model_mut().auction_sorts)
     }
 
@@ -462,7 +488,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 ));
             }
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            model.auction_sorts.push((i, key));
+            model.auction_sorts.push((i, AuctionSortOp::Click(key)));
             Ok(())
         })?,
     )?;
@@ -809,6 +835,147 @@ fn click_auction_sell_item(model: &mut Model) {
     }
 }
 
+/// Build 12340's sort, cancel and sell verbs (`/tmp/azb-app-mig/ghidra/auction*.log`).
+///
+/// Labelled: `SetAuctionsTabShowing`'s flag has no consumer here; `CancelSell` drops a pending
+/// `StartAuction`, as the multi-stack sell it stops natively is not built; a sort set before its
+/// apply already orders the next push.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    let g = lua.globals();
+    let string_at = |lua: &Lua, args: &MultiValue, i: usize| -> Option<String> {
+        match args.get(i) {
+            Some(Value::String(s)) => Some(s.to_string_lossy()),
+            Some(v @ (Value::Integer(_) | Value::Number(_))) => lua
+                .coerce_string(v.clone())
+                .ok()
+                .flatten()
+                .map(|s| s.to_string_lossy()),
+            _ => None,
+        }
+    };
+    let push = |lua: &Lua, kind: &str, op: AuctionSortOp| {
+        if let Some(i) = list_index(kind) {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .auction_sorts
+                .push((i, op));
+        }
+    };
+    g.set(
+        "SortAuctionClearSort",
+        lua.create_function(move |lua, args: MultiValue| {
+            let Some(kind) = string_at(lua, &args, 0) else {
+                return Err(mlua::Error::runtime("Usage: SortAuctionClearSort(\"type\")"));
+            };
+            push(lua, &kind, AuctionSortOp::Clear);
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "SortAuctionSetSort",
+        lua.create_function(move |lua, args: MultiValue| {
+            let (Some(kind), Some(key)) = (string_at(lua, &args, 0), string_at(lua, &args, 1))
+            else {
+                return Err(mlua::Error::runtime(
+                    "Usage: SortAuctionAddSort(\"type\", \"sort\", \"reverse\")",
+                ));
+            };
+            // The direction only from a boolean third argument (`0x84deb0 == 1`).
+            let reversed = matches!(args.get(2), Some(Value::Boolean(true)));
+            if SORT_KEYS.contains(&key.as_str()) {
+                push(lua, &kind, AuctionSortOp::Set { key, reversed });
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "SortAuctionApplySort",
+        lua.create_function(move |lua, args: MultiValue| {
+            let Some(kind) = string_at(lua, &args, 0) else {
+                return Err(mlua::Error::runtime("Usage: SortAuctionApplySort(\"type\")"));
+            };
+            push(lua, &kind, AuctionSortOp::Apply);
+            Ok(())
+        })?,
+    )?;
+    // GetAuctionSort(type, index) (`0x59ad40`): the list's index-th criterion, its column name
+    // and 1/nil reversed; nil, nil past the stack.
+    g.set(
+        "GetAuctionSort",
+        lua.create_function(move |lua, args: MultiValue| {
+            let (Some(kind), Some(index)) = (
+                string_at(lua, &args, 0),
+                args.get(1)
+                    .and_then(|v| lua.coerce_integer(v.clone()).ok().flatten()),
+            ) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: GetAuctionSort(\"type\", \"index\")",
+                ));
+            };
+            let entry = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                list_index(&kind)
+                    .zip(model.auction.as_ref())
+                    .and_then(|(i, a)| {
+                        let k = usize::try_from(index - 1).ok().filter(|&k| k < 12)?;
+                        a.lists[i].sort.get(k).cloned()
+                    })
+            };
+            Ok(match entry {
+                Some((key, reversed)) => MultiValue::from_vec(vec![
+                    Value::String(lua.create_string(&key)?),
+                    flag(reversed),
+                ]),
+                None => MultiValue::from_vec(vec![Value::Nil, Value::Nil]),
+            })
+        })?,
+    )?;
+    g.set(
+        "SetAuctionsTabShowing",
+        lua.create_function(|lua, args: MultiValue| {
+            let Some(Value::Boolean(showing)) = args.front() else {
+                return Err(mlua::Error::runtime("Usage: SetAuctionsTabShowing(bool)"));
+            };
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .auctions_tab_showing = *showing;
+            Ok(())
+        })?,
+    )?;
+    // CanCancelAuction(index) (`0x59c9f0`): with an auctioneer, an owned row whose sale is not
+    // pending. Labelled: AzerothCore never marks a pending sale, so every owned row qualifies.
+    g.set(
+        "CanCancelAuction",
+        lua.create_function(|lua, args: MultiValue| {
+            let Some(index) = args
+                .front()
+                .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
+            else {
+                return Err(mlua::Error::runtime("Usage: CanCancelAuction(index)"));
+            };
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let Some(a) = model.auction.as_ref() else {
+                return Ok(MultiValue::new());
+            };
+            let k = (index.round() as i64 - 1).max(-1);
+            let ok = usize::try_from(k)
+                .ok()
+                .is_some_and(|k| k < a.lists[OWNER].rows.len());
+            Ok(MultiValue::from_vec(vec![flag(ok)]))
+        })?,
+    )?;
+    g.set(
+        "CancelSell",
+        lua.create_function(|lua, ()| {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .auction_start = None;
+            Ok(())
+        })?,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1078,5 +1245,47 @@ mod tests {
         assert!(list.reversed("quality"), "remembered, and reversed");
         assert!(!list.reversed("level"));
         assert!(!list.reversed("seller"), "never sorted by: not reversed");
+    }
+
+    /// Build 12340's sort verbs queue their ops; `GetAuctionSort` reads App's stack.
+    #[test]
+    fn the_wrath_sort_verbs_queue_and_read_the_stack() {
+        let mut s =
+            UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        s.run(
+            "SortAuctionClearSort('owner') SortAuctionSetSort('owner', 'duration', true) \
+             SortAuctionSetSort('list', 'nope') SortAuctionSetSort('list', 'quantity') \
+             SortAuctionApplySort('owner') SortAuctionApplySort('elsewhere')",
+        )
+        .unwrap();
+        assert_eq!(
+            s.take_auction_sorts(),
+            vec![
+                (OWNER, AuctionSortOp::Clear),
+                (
+                    OWNER,
+                    AuctionSortOp::Set {
+                        key: "duration".into(),
+                        reversed: true
+                    }
+                ),
+                (
+                    LIST,
+                    AuctionSortOp::Set {
+                        key: "quantity".into(),
+                        reversed: false
+                    }
+                ),
+                (OWNER, AuctionSortOp::Apply),
+            ]
+        );
+        assert!(s.run("SortAuctionSetSort('list')").is_err());
+        assert!(s.run("SetAuctionsTabShowing(1)").is_err());
+        s.run("SetAuctionsTabShowing(true)").unwrap();
+        // No auctioneer: CanCancelAuction answers nothing; GetAuctionSort nil, nil.
+        assert_eq!(s.eval::<i64>("return select('#', CanCancelAuction(1))").unwrap(), 0);
+        assert!(s
+            .eval::<bool>("local k, r = GetAuctionSort('owner', 1) return k == nil and r == nil")
+            .unwrap());
     }
 }

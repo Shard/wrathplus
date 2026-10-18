@@ -249,7 +249,8 @@ pub use addon_enable::EnableHash;
 pub use addon_message::{AddonDistribution, AddonSend};
 pub use auction::{
     AuctionBid, AuctionCategory, AuctionHighBidder, AuctionItemRow, AuctionListState, AuctionQuery,
-    AuctionStartRequest, AuctionState, AuctionSubCategory, BIDDER, LIST, OWNER, SORT_KEYS,
+    AuctionSortOp, AuctionStartRequest, AuctionState, AuctionSubCategory, BIDDER, LIST, OWNER,
+    SORT_KEYS,
 };
 pub use aura::{AuraState, TrackingState};
 pub use backdrop::{inset_atlas_bleed, pieces, Backdrop, BackdropPiece, Insets};
@@ -889,6 +890,7 @@ impl UiScript {
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;
+            auction::install_wrath(&lua)?;
         }
 
         let s = UiScript {

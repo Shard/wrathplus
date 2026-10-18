@@ -8,8 +8,9 @@ use super::AuctionRow;
 
 // The keys are `benilla_ui::script::SORT_KEYS`; the Lua binding refuses any other.
 
-/// The reference's eight slots per list; past that the oldest key is forgotten.
-const DEPTH: usize = 8;
+/// Build 12340's twelve criteria per list (`0xc0e608`, 12 × `(column, reversed, set)`); past that
+/// the oldest key is forgotten.
+const DEPTH: usize = 12;
 
 /// One list's sort state: the most-recently-clicked key first.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -31,6 +32,18 @@ impl SortStack {
             self.entries.insert(0, (key.to_string(), false));
             self.entries.truncate(DEPTH);
         }
+    }
+
+    /// `SortAuctionClearSort` (`0x59a5b0`/`0x59a660`/`0x59a710`).
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// `SortAuctionSetSort` (`0x59a5e0`): the key moves to the front with this direction.
+    pub(crate) fn set(&mut self, key: &str, reversed: bool) {
+        self.entries.retain(|(k, _)| k != key);
+        self.entries.insert(0, (key.to_string(), reversed));
+        self.entries.truncate(DEPTH);
     }
 
     /// The stack as pushed to Lua, where `IsAuctionSortReversed` reads it.
@@ -72,6 +85,11 @@ fn compare_by(key: &str, a: &AuctionRow, b: &AuctionRow) -> Ordering {
         "status" => b.player_holds_bid.cmp(&a.player_holds_bid),
         "name" => name_of(a).cmp(name_of(b)),
         "seller" => owner_of(a).cmp(owner_of(b)),
+        // Build 12340's three further columns. Labelled: the comparator `0x59b460` is not traced;
+        // these open lowest first.
+        "quantity" => a.count.cmp(&b.count),
+        "buyoutthenbid" => (a.buyout, a.displayed_bid()).cmp(&(b.buyout, b.displayed_bid())),
+        "minbidbuyout" => (a.start_bid, a.buyout).cmp(&(b.start_bid, b.buyout)),
         _ => Ordering::Equal,
     }
 }
@@ -131,16 +149,30 @@ mod tests {
     }
 
     #[test]
-    fn the_stack_is_eight_deep() {
+    fn every_column_fits_the_twelve_deep_stack() {
         let mut s = SortStack::default();
         for k in benilla_ui::script::SORT_KEYS {
             s.click(k);
         }
-        assert_eq!(s.pairs().len(), 8);
-        // Every key is one of the eight, so a re-click only reorders.
+        assert_eq!(s.pairs().len(), 11);
         s.click("level");
-        assert_eq!(s.pairs().len(), 8, "re-click reorders, never grows");
+        assert_eq!(s.pairs().len(), 11, "re-click reorders, never grows");
         assert_eq!(s.pairs()[0].0, "level");
+    }
+
+    /// `SortAuctionSetSort` moves a key to the front with the given direction; clear empties.
+    #[test]
+    fn set_moves_a_key_to_the_front_and_clear_empties() {
+        let mut s = SortStack::default();
+        s.set("bid", false);
+        s.set("quality", true);
+        s.set("bid", true);
+        assert_eq!(
+            s.pairs(),
+            vec![("bid".into(), true), ("quality".into(), true)]
+        );
+        s.clear();
+        assert!(s.pairs().is_empty());
     }
 
     #[test]

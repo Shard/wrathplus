@@ -788,9 +788,17 @@ fn drain_auction(
 
     // Header clicks last: a row pick above indexes last frame's order, so sorting first would
     // point it at another auction. A sort sends nothing.
-    for (which, key) in script.take_auction_sorts() {
-        if let Some(slot) = auction.lists.get_mut(which) {
-            slot.sort.click(&key);
+    for (which, op) in script.take_auction_sorts() {
+        use benilla_ui::script::AuctionSortOp as Op;
+        let Some(slot) = auction.lists.get_mut(which) else {
+            continue;
+        };
+        match op {
+            Op::Click(key) => slot.sort.click(&key),
+            Op::Clear => slot.sort.clear(),
+            Op::Set { key, reversed } => slot.sort.set(&key, reversed),
+            // The re-sorted page and its update event, next feed.
+            Op::Apply => auction.list_result_landed[which] = true,
         }
     }
 
