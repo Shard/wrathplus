@@ -397,6 +397,21 @@ fn send_join(lua: &Lua) {
     q.requests.push(request);
 }
 
+/// `PartyLFGStartBackfill` (`0x55a0c0`): the selection cleared, the group's LFG dungeon selected
+/// when set, then the native join send.
+pub(crate) fn start_backfill(lua: &Lua) {
+    {
+        let mut m = lua.app_data_mut::<Model>().expect("model app_data");
+        let entry = m.wrath_group.lfg_dungeon_entry;
+        let selection = &mut m.wrath_lfg.queue.selection;
+        selection.clear();
+        if entry != 0 {
+            selection.push(entry);
+        }
+    }
+    send_join(lua);
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     use WrathLfgQueueRequest as R;
 
@@ -1360,5 +1375,26 @@ mod tests {
         s.run("assert(LFGTeleport(false)==false)").unwrap();
         assert_eq!(s.take_ui_errors(), vec!["ERR_NOT_IN_COMBAT"]);
         assert_eq!(s.take_wrath_lfg_queue_requests(), vec![R::Teleport { out: true }]);
+
+        // Backfill: the group's dungeon becomes the selection and the join goes out again.
+        s.set_wrath_group(WrathGroup {
+            lfg_dungeon_entry: 1 << 24 | 7,
+            ..Default::default()
+        });
+        s.set_unit(
+            "player",
+            Some(UnitState {
+                guid: 1,
+                exists: true,
+                class_file: Some("WARRIOR".into()),
+                ..Default::default()
+            }),
+        );
+        s.set_now(200.0);
+        s.run("SetLFGDungeon(9) PartyLFGStartBackfill()").unwrap();
+        match s.take_wrath_lfg_queue_requests().as_slice() {
+            [R::Join { dungeons, roles, .. }] => assert_eq!((dungeons.clone(), *roles), (vec![1 << 24 | 7], 3)),
+            other => panic!("{other:?}"),
+        }
     }
 }

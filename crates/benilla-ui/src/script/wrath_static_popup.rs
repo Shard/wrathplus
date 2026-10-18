@@ -49,8 +49,6 @@ pub enum WrathPopupRequest {
     RefundItemPurchase { bag: i64, slot: u32, equipped: bool },
     /// `GMResponseResolve()` (`0x5ad1b0`).
     GmResponseResolve,
-    /// `PartyLFGStartBackfill()` (`0x55a0c0`).
-    PartyLfgStartBackfill,
     /// `PlaceGlyphInSocket(socket)` (`0x5b75a0`); 1-based socket.
     PlaceGlyphInSocket { socket: u8 },
     /// `RemoveGlyphFromSocket(socket)` (`0x5b7660`, CMSG `0x48A` with the 0-based socket); only
@@ -221,7 +219,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     verb(lua, "GMResponseResolve", R::GmResponseResolve)?;
     verb(lua, "ReplaceTradeEnchant", R::ReplaceTradeEnchant)?;
     verb(lua, "DeclineInvite", R::DeclineInvite)?;
-    verb(lua, "PartyLFGStartBackfill", R::PartyLfgStartBackfill)?;
+    // PartyLFGStartBackfill() (`0x55a0c0`): the group's dungeon becomes the whole selection and
+    // the ordinary join goes out (`wrath_lfg`'s queue).
+    set(lua, "PartyLFGStartBackfill", |lua, _| {
+        super::wrath_lfg::start_backfill(lua);
+        none()
+    })?;
     set(lua, "RespondInstanceLock", |lua, args| {
         push(
             lua,
