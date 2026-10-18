@@ -1792,6 +1792,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::SetActionButton { .. }
         | ClientCommand::CastSpell { .. }
         | ClientCommand::CastSpellAtDest { .. }
+        | ClientCommand::NativePetCastSpell { .. }
         | ClientCommand::CastSpellAtSource { .. }
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
@@ -2887,6 +2888,20 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             cast(spell_id, target.map_or(CastTarget::None, CastTarget::Unit))
         }
         ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
+        // One counter with `CMSG_CAST_SPELL`: the server echoes it in the cast results.
+        ClientCommand::NativePetCastSpell {
+            caster,
+            spell_id,
+            target,
+        } => {
+            let count = CAST_COUNT
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                .wrapping_add(1);
+            (
+                s::CMSG_PET_CAST_SPELL,
+                s::encode_pet_cast_spell(caster, count, spell_id, &target),
+            )
+        }
         ClientCommand::CastSpellAtSource { spell_id, src } => {
             cast(spell_id, CastTarget::Source(src))
         }

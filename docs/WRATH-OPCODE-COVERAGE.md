@@ -49,18 +49,18 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
 | S→C | 368 | 124 | 197 | 689 |
-| C→S | 412 | 0 | 312 | 724 |
+| C→S | 413 | 0 | 311 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 412 admitted numeric opcodes, 101 of them transport-only (no UI producer) and 311 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 413 admitted numeric opcodes, 101 of them transport-only (no UI producer) and 312 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (509 = 197 S→C + 312 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (508 = 197 S→C + 311 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
 | (a) in scope, Wire A: movement, flight, vehicle, taxi (M5) | 0 | 4 | 4 |
-| (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 3 | 3 |
+| (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 2 | 2 |
 | (b) in scope, previously unowned: Wire B | 6 | 6 | 12 |
 | (b) in scope, previously unowned: Assets | 2 | 0 | 2 |
 | (c) out of scope: GM/debug/dev | 53 | 137 | 190 |
@@ -69,8 +69,8 @@ Every row still **missing** above, counted per direction like the totals (509 = 
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
 | (c) out of scope: no AC sender (commented-out/doc reference only) | 7 | 0 | 7 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **8** | **13** | **21** |
-| All missing rows | 197 | 312 | 509 |
+| **True remaining (a + b)** | **8** | **12** | **20** |
+| All missing rows | 197 | 311 | 508 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
@@ -78,7 +78,7 @@ Out-of-scope rows stay **missing** in the table; this section only says why noth
 
 Movement, flight, vehicle, taxi: `0x00DB` MSG_MOVE_SET_PITCH (C→S), `0x02CA` CMSG_MOVE_FALL_RESET, `0x038D` CMSG_MOVE_CHNG_TRANSPORT, `0x0493` CMSG_ENABLETAXI.
 
-Spell, pet, rune and cooldown: `0x01F0` CMSG_PET_CAST_SPELL, `0x0462` CMSG_UPDATE_MISSILE_TRAJECTORY, `0x04BE` CMSG_UPDATE_PROJECTILE_POSITION.
+Spell, pet, rune and cooldown: `0x0462` CMSG_UPDATE_MISSILE_TRAJECTORY, `0x04BE` CMSG_UPDATE_PROJECTILE_POSITION.
 
 ### (b) Previously unowned, in scope: Wire B and Assets
 
@@ -607,7 +607,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x01ED` | `CMSG_AUTH_SESSION` | C→S | handled | core | AC receive: `Handle_EarlyProccess` (STATUS_NEVER). | C→S: Bootstrap / timer / lifecycle / automatic ACKs — ACTIVE; A/net/io/wrath.rs:264–347,444–477,1123–1124,1189–1201,1237–1263,1718–1802; P/wrath_world.rs:24–31,321–322,380–381,449–451; P/wrath_events.rs:47,510–524; P/wrath_authority.rs:14–18; P/wrath_taxi_ack.rs:5. Producer status is explained in the family notes above. |
 | `0x01EE` | `SMSG_AUTH_RESPONSE` | S→C | handled | core | proven_send_site: `game/Server/WorldSession.cpp:985` | S→C: bootstrap-consumer — crates/benilla-app/src/net/io/wrath.rs:264-298; crates/benilla-protocol/src/wrath_world.rs:296-410 — Handshake, roster, character-create routes, not WrathEventAdapter gameplay dispatch. |
 | `0x01EF` | `MSG_GM_SHOWLABEL` | S→C / C→S | missing / missing | GM-debug | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x01F0` | `CMSG_PET_CAST_SPELL` | C→S | missing | core | AC receive: `HandlePetCastSpellOpcode` (STATUS_LOGGEDIN). | C→S: not admitted — needs a native `SpellCastTargets` writer for the pet and a producer (pet casts go through `CMSG_PET_ACTION`). |
+| `0x01F0` | `CMSG_PET_CAST_SPELL` | C→S | handled | core | AC receive: `HandlePetCastSpellOpcode` (STATUS_LOGGEDIN). | C→S: a location-targeted pet, charm or possess-bar spell raises the targeting cursor (`spell::cast_target::pet_cursor_word`, from the bar press and the pet book's `CastSpell(id, "pet")`); its click commits `CastCommit::Pet` → `ClientCommand::NativePetCastSpell` → P/wrath_session.rs `encode_pet_cast_spell` (`u64 caster` + the cast body, one cast counter with `CMSG_CAST_SPELL`; `Wow.exe` `0x80ac90` opens 0x1F0 for a caster that is not the active player). Unit-targeted pet spells stay `CMSG_PET_ACTION`; see `docs/WRATH-SPELL-CONTROL.md`. |
 | `0x01F1` | `MSG_SAVE_GUILD_EMBLEM` | S→C / C→S | handled / handled | common | proven_send_site: `game/Guilds/Guild.cpp:126` | S→C: shared `SaveGuildEmblemResult` (A/ui_tabard). C→S: `NativeGuild` route; producer `TabardModel:Save()`. See docs/WRATH-GUILD.md. |
 | `0x01F2` | `MSG_TABARDVENDOR_ACTIVATE` | S→C / C→S | handled / handled | niche | proven_send_site: `game/Handlers/NPCHandler.cpp:71` | S→C: shared `TabardVendorActivate` (A/ui_tabard). C→S: `NativeGuild` route; producer the tabard-designer click. See docs/WRATH-GUILD.md. |
 | `0x01F3` | `SMSG_PLAY_SPELL_VISUAL` | S→C | handled | core | proven_send_site: `game/Entities/Unit/Unit.cpp:14757` | S→C: semantic-consumer — P/wrath_spell_control.rs (strict AC framing) → P/wrath_events.rs `wrath_spell_control` arm → A/creature_anim/net.rs kit playback. |
@@ -1233,7 +1233,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x045F` | `CMSG_CALENDAR_EVENT_INVITE_NOTES` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0460` | `SMSG_CALENDAR_EVENT_INVITE_NOTES` | S→C | missing | niche | not_proven_reference_only | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0461` | `SMSG_CALENDAR_EVENT_INVITE_NOTES_ALERT` | S→C | missing | niche | not_proven_reference_only | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x0462` | `CMSG_UPDATE_MISSILE_TRAJECTORY` | C→S | missing | niche | AC receive: `HandleUpdateMissileTrajectory` (STATUS_LOGGEDIN). | C→S: not admitted — missile trajectory needs aim/vehicle state the controller lacks. |
+| `0x0462` | `CMSG_UPDATE_MISSILE_TRAJECTORY` | C→S | missing | niche | AC receive: `HandleUpdateMissileTrajectory` (STATUS_LOGGEDIN). | C→S: not sent: the native cast carries the missile trajectory in its cast-flags `0x02` tail (elevation, speed, the mover's STOP; `0x80ac90`, AzerothCore `HandleClientCastFlags`), not built; a separate `0x462` is pushed at `0x6fd744`, outside the packet opener, untraced; see `docs/WRATH-SPELL-CONTROL.md`. |
 | `0x0463` | `SMSG_UPDATE_ACCOUNT_DATA_COMPLETE` | S→C | capture-only | common | proven_send_site: `game/Handlers/MiscHandler.cpp:827` | S→C: capture-only — P/wrath_session_meta.rs → A/net/wrath_session_meta_capture.rs FIFO (account data kept compressed); see docs/WRATH-SESSION-META.md. |
 | `0x0464` | `SMSG_TRIGGER_MOVIE` | S→C | capture-only | niche | proven_send_site: `game/Entities/Player/Player.cpp:5889` | S→C: capture-only — P/wrath_world_objects.rs → A/net/wrath_world_objects_capture.rs FIFO; see docs/WRATH-WORLD-OBJECTS.md. |
 | `0x0465` | `CMSG_COMPLETE_MOVIE` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
@@ -1325,7 +1325,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x04BB` | `SMSG_CALENDAR_CLEAR_PENDING_ACTION` | S→C | capture-only | niche | proven_send_site: `game/Calendar/CalendarMgr.cpp:692` | S→C: capture-only — P/wrath_calendar.rs `Packet` → A/net/wrath_calendar_capture.rs FIFO; no UI feed; see docs/WRATH-CALENDAR.md. |
 | `0x04BC` | `SMSG_EQUIPMENT_SET_LIST` | S→C | handled | common | proven_send_site: `game/Entities/Player/Player.cpp:14921` | S→C: Inventory — A/net/wrath_equipment_sets.rs: the login list becomes the gear manager sets (`GetNumEquipmentSets`/`GetEquipmentSetInfo`…, `EQUIPMENT_SETS_CHANGED`); see docs/WRATH-INVENTORY.md. |
 | `0x04BD` | `CMSG_EQUIPMENT_SET_SAVE` | C→S | handled | common | AC receive: `HandleEquipmentSetSave` (STATUS_LOGGEDIN). | C→S: Inventory — `ClientCommand::NativeInventory`; producer `SaveEquipmentSet` via A/net/wrath_equipment_sets.rs. See docs/WRATH-INVENTORY.md. |
-| `0x04BE` | `CMSG_UPDATE_PROJECTILE_POSITION` | C→S | missing | niche | AC receive: `HandleUpdateProjectilePosition` (STATUS_LOGGEDIN). | C→S: not admitted — projectile position needs aim/vehicle state the controller lacks. |
+| `0x04BE` | `CMSG_UPDATE_PROJECTILE_POSITION` | C→S | missing | niche | AC receive: `HandleUpdateProjectilePosition` (STATUS_LOGGEDIN). | C→S: not sent: pushed at `0x70364c`, outside the packet opener, untraced; AzerothCore moves a running spell's destination to the reported point; see `docs/WRATH-SPELL-CONTROL.md`. |
 | `0x04BF` | `SMSG_SET_PROJECTILE_POSITION` | S→C | capture-only | niche | proven_send_site: `game/Handlers/SpellHandler.cpp:871` | S→C: capture-only — P/wrath_spell_control.rs (`u64 caster, u8 cast count, f32 xyz`, strict) → `WrathSpellControl` → A/net/wrath_spell_control_capture.rs `NativeSpellControlPackets`, cleared on Connected/Disconnected; no projectile visual consumer. |
 | `0x04C0` | `SMSG_TALENTS_INFO` | S→C | capture-only | common | proven_send_site: `game/Entities/Player/Player.cpp:14848` | S→C: retained-state-no-ui-feed — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:308; crates/benilla-protocol/src/wrath_progress.rs:15-19; crates/benilla-protocol/src/wrath_progress.rs:31; crates/benilla-app/src/net/wrath_notices.rs:12-36 — WrathProgress maps retain talents/loot owners/criteria pending UI feeds; not complete gameplay UI, and not an ordered lossless FIFO. |
 | `0x04C1` | `CMSG_LEARN_PREVIEW_TALENTS` | C→S | handled | common | AC receive: `HandleLearnPreviewTalents` (STATUS_LOGGEDIN). | C→S: Talents — transport-only; `ClientCommand::NativeInspect`, P/wrath_inspect.rs encoder; no UI producer. See docs/WRATH-INSPECT-TALENTS.md. |

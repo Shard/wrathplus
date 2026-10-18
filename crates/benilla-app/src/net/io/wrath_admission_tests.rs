@@ -401,6 +401,14 @@ fn every_wrath_writer_route_is_admitted() {
             },
         ),
         (
+            "NativePetCastSpell",
+            ClientCommand::NativePetCastSpell {
+                caster: 0x50,
+                spell_id: 1,
+                target: benilla_protocol::wrath_session::CastTarget::Dest([0.0; 3]),
+            },
+        ),
+        (
             "NativeVehicleControl",
             ClientCommand::NativeVehicleControl(
                 benilla_protocol::wrath_authority::VehicleControl::Dismiss,

@@ -217,6 +217,15 @@ pub(crate) fn cast_pet_spell(p: &mut crate::ui_pet::PetPress, spell_id: u32, on_
             return;
         }
     }
+    // A location-targeted spell raises the cursor, as on the bar.
+    if let Some(word) = display.and_then(crate::spell::cast_target::pet_cursor_word) {
+        p.targeting.enter(
+            spell_id,
+            crate::spell::CastCommit::Pet { caster: pet_guid },
+            word,
+        );
+        return;
+    }
     // The word built for the send (`0x4b350a`-`0x4b3516`): type 1, the spell branch, autocast
     // bits clear; with no target passed it aims at the selection (`0x4b34af`).
     let packed = book_cast_word(spell_id, p.bar.native.is_some());
