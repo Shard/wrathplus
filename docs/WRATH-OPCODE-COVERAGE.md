@@ -48,50 +48,50 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 395 | 103 | 191 | 689 |
+| S→C | 396 | 104 | 189 | 689 |
 | C→S | 419 | 0 | 305 | 724 |
 
 Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 104 of them transport-only (no UI producer) and 314 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
-Every row still **missing** above, counted per direction like the totals (497 = 191 S→C + 306 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
+Every row still **missing** above, counted per direction like the totals (494 = 189 S→C + 305 C→S), falls in exactly one bucket. Classified at this revision from the table plus AzerothCore `Opcodes.cpp` registrations and send sites (`7f12e89e`). Reproduce: a C→S row is out of scope when AC registers it `STATUS_NEVER`, `Handle_NULL` or as a server opcode; an S→C row is out of scope when AC has no constructor or send (registry only, or only a commented-out reference).
 
 | Bucket | S→C | C→S | rows |
 |---|---:|---:|---:|
-| (a) in scope, Wire A: movement, flight, vehicle, taxi (M4) | 1 | 4 | 5 |
-| (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 1 | 3 | 4 |
+| (a) in scope, Wire A: movement, flight, vehicle, taxi (M5) | 0 | 4 | 4 |
+| (a) in scope, Wire A: spell, pet, rune and cooldown remainders | 0 | 2 | 2 |
 | (b) in scope, previously unowned: Wire B | 0 | 0 | 0 |
-| (b) in scope, previously unowned: Assets | 2 | 0 | 2 |
+| (b) in scope, previously unowned: Assets | 0 | 0 | 0 |
 | (c) out of scope: GM/debug/dev | 53 | 137 | 190 |
 | (c) out of scope: voice chat | 11 | 14 | 25 |
 | (c) out of scope: AC Handle_NULL/STATUS_NEVER | 0 | 140 | 140 |
 | (c) out of scope: no AC sender/handler (registry only) | 116 | 6 | 122 |
-| (c) out of scope: no AC sender (commented-out/doc reference only) | 5 | 0 | 5 |
+| (c) out of scope: no AC sender (commented-out/doc reference only) | 7 | 0 | 7 |
 | (c) out of scope: internal (anti-cheat/redirect) | 2 | 2 | 4 |
-| **True remaining (a + b)** | **4** | **7** | **11** |
-| All missing rows | 191 | 306 | 497 |
+| **True remaining (a + b)** | **0** | **6** | **6** |
+| All missing rows | 189 | 305 | 494 |
 
 Out-of-scope rows stay **missing** in the table; this section only says why nothing will close them. GM tickets are *not* GM/debug: the player Help Request UI sends them. Obsolete development opcodes sit under GM/debug (their table priority).
 
 ### (a) Wire A
 
-Movement, flight, vehicle, taxi: `0x00DB` MSG_MOVE_SET_PITCH (C→S), `0x00DC` MSG_MOVE_WORLDPORT_ACK (S→C), `0x02CA` CMSG_MOVE_FALL_RESET, `0x038D` CMSG_MOVE_CHNG_TRANSPORT, `0x0493` CMSG_ENABLETAXI.
+Movement, flight, vehicle, taxi: `0x00DB` MSG_MOVE_SET_PITCH (C→S), `0x02CA` CMSG_MOVE_FALL_RESET, `0x038D` CMSG_MOVE_CHNG_TRANSPORT, `0x0493` CMSG_ENABLETAXI.
 
-Spell, pet, rune and cooldown: `0x01F0` CMSG_PET_CAST_SPELL, `0x02B4` SMSG_FEIGN_DEATH_RESISTED, `0x0462` CMSG_UPDATE_MISSILE_TRAJECTORY, `0x04BE` CMSG_UPDATE_PROJECTILE_POSITION.
+Spell, pet, rune and cooldown: `0x0462` CMSG_UPDATE_MISSILE_TRAJECTORY, `0x04BE` CMSG_UPDATE_PROJECTILE_POSITION.
 
 ### (b) Previously unowned, in scope: Wire B and Assets
 
 Split by the manager: Assets owns game objects and world presentation (the dance-studio row included), GM tickets and help, refer-a-friend and session misc except `0x02D3` (BG, Wire B); Wire B owns the rest, guild bank and raid browser included.
 
-- **Session and player misc** (Assets): `0x02EF` SMSG_ADDON_INFO, `0x04AB` SMSG_CLIENTCACHE_VERSION.
+- **Session and player misc** (Assets): (none).
 
 ### (c) Out of scope
 
 - **GM/debug/dev** (190): `0x0001`, `0x0002`, `0x0003`, `0x0004`, `0x0005`, `0x0006`, `0x0007`, `0x0008`, `0x0009`, `0x000A`, `0x000B`, `0x000C`, `0x000D`, `0x000E`, `0x000F`, `0x0010`, `0x0011`, `0x0012`, `0x0013`, `0x0014`, `0x0016`, `0x0018`, `0x0019`, `0x001A`, `0x001B`, `0x001C`, `0x001D`, `0x001F`, `0x0020`, `0x0021`, `0x0022`, `0x0023`, `0x0024`, `0x0025`, `0x0026`, `0x0028`, `0x0029`, `0x002A`, `0x002B`, `0x002C`, `0x002D`, `0x002E`, `0x002F`, `0x0030`, `0x0031`, `0x0044`, `0x0045`, `0x0046`, `0x0047`, `0x0048`, `0x0049`, `0x00C6` S→C, `0x00C6` C→S, `0x00CC` S→C, `0x00CC` C→S, `0x00CE` S→C, `0x00CE` C→S, `0x00D0` S→C, `0x00D0` C→S, `0x00D2` S→C, `0x00D2` C→S, `0x00D4` S→C, `0x00D4` C→S, `0x00D6` S→C, `0x00D6` C→S, `0x00D7` S→C, `0x00D7` C→S, `0x00D9` S→C, `0x00D9` C→S, `0x00E0`, `0x00F8`, `0x0126`, `0x0140`, `0x01D8`, `0x01E1`, `0x01E6`, `0x01E8` S→C, `0x01E8` C→S, `0x01E9` S→C, `0x01E9` C→S, `0x01EF` S→C, `0x01EF` C→S, `0x01F9`, `0x01FA`, `0x0201`, `0x020F`, `0x0210`, `0x021D`, `0x0221`, `0x0223`, `0x0226`, `0x0228`, `0x0229`, `0x022A`, `0x022B`, `0x022C`, `0x022D`, `0x022E`, `0x022F`, `0x0230`, `0x024D`, `0x026C`, `0x026E` S→C, `0x026E` C→S, `0x0281`, `0x0287`, `0x0288`, `0x0289`, `0x028A`, `0x0294`, `0x0295`, `0x029A`, `0x02D8`, `0x02D9`, `0x02E5`, `0x030F`, `0x0310` S→C, `0x0310` C→S, `0x0311`, `0x0315`, `0x0316`, `0x0327`, `0x0328`, `0x032C`, `0x033C` S→C, `0x033C` C→S, `0x0341` S→C, `0x0341` C→S, `0x0342` S→C, `0x0342` C→S, `0x037B`, `0x037C`, `0x037D` S→C, `0x037D` C→S, `0x037F` S→C, `0x037F` C→S, `0x0395`, `0x0399`, `0x039A`, `0x039B`, `0x039C`, `0x03A8`, `0x03A9`, `0x03B2`, `0x03B4` S→C, `0x03B4` C→S, `0x03B5`, `0x03B6`, `0x03B7`, `0x03B8`, `0x03B9`, `0x03BA`, `0x03BB`, `0x03BC`, `0x03BD`, `0x03BE`, `0x03C2`, `0x03C3`, `0x03C4`, `0x03CA`, `0x03CB`, `0x03D8`, `0x03D9`, `0x03FA`, `0x03FB`, `0x0405`, `0x0406`, `0x040F` S→C, `0x040F` C→S, `0x045A` S→C, `0x045A` C→S, `0x046E`, `0x0470`, `0x0472`, `0x047E`, `0x048B`, `0x048C`, `0x0497`, `0x04C4`, `0x04C5`, `0x04C6`, `0x04CB`, `0x04CC`, `0x04DD`, `0x04FB`, `0x04FC`, `0x0507`, `0x051B`, `0x051C`, `0x051D`.
 - **no AC sender/handler (registry only)** (122): `0x0015`, `0x001E`, `0x0039`, `0x0043`, `0x0059`, `0x0071`, `0x0086`, `0x00C4` S→C, `0x00C4` C→S, `0x00C8` S→C, `0x00C8` C→S, `0x0113`, `0x0115`, `0x014B`, `0x014D`, `0x014F`, `0x0157`, `0x0164`, `0x016E`, `0x016F`, `0x0170`, `0x017A`, `0x0181`, `0x01B6`, `0x01D1`, `0x01D6`, `0x01E7`, `0x01FE`, `0x020E`, `0x021E`, `0x023F`, `0x0252`, `0x0261`, `0x027C`, `0x028D`, `0x0298`, `0x0299`, `0x02A7`, `0x02AD` S→C, `0x02AD` C→S, `0x02AF`, `0x02B6`, `0x02BC`, `0x02F1`, `0x02F6`, `0x02F7`, `0x02F9`, `0x02FB`, `0x0313`, `0x0314`, `0x031C`, `0x0326`, `0x032E` S→C, `0x032E` C→S, `0x0330`, `0x0332`, `0x0335`, `0x0337`, `0x0338`, `0x0339`, `0x033A`, `0x033E`, `0x033F`, `0x034A` S→C, `0x034A` C→S, `0x037A`, `0x0388`, `0x038A`, `0x038E` S→C, `0x038F`, `0x0397`, `0x03A3`, `0x03A4`, `0x03A5`, `0x03A6`, `0x03AA`, `0x03C5`, `0x03E0`, `0x03E1`, `0x03E2`, `0x03E5`, `0x03F5`, `0x0403`, `0x0404`, `0x0408`, `0x0411`, `0x041D`, `0x0424`, `0x044A`, `0x044C`, `0x044F`, `0x0452`, `0x0453`, `0x0469`, `0x0475`, `0x047F`, `0x048E`, `0x04A1`, `0x04A3`, `0x04A6`, `0x04C8`, `0x04CA`, `0x04CD`, `0x04D8`, `0x04DC`, `0x04E5`, `0x04E8`, `0x04ED`, `0x04EE`, `0x04F2`, `0x04F5`, `0x04F9` S→C, `0x04F9` C→S, `0x04FA`, `0x04FD`, `0x0504`, `0x050A`, `0x050D`, `0x050F`, `0x0511`, `0x0514`, `0x0515`.
 - **AC Handle_NULL/STATUS_NEVER** (140): `0x0017`, `0x0027`, `0x0033`, `0x0034`, `0x0035`, `0x0057`, `0x0070`, `0x00B2`, `0x00C5` C→S, `0x00CD` C→S, `0x00CF` C→S, `0x00D1` C→S, `0x00D3` C→S, `0x00D5` C→S, `0x00D8` C→S, `0x00E1`, `0x00EC` C→S, `0x00ED` C→S, `0x00F1` C→S, `0x00F7` C→S, `0x00F9`, `0x0106`, `0x0107`, `0x0109`, `0x0110`, `0x012D`, `0x0139` C→S, `0x013A` C→S, `0x014C`, `0x0153`, `0x0154`, `0x0156`, `0x01A6`, `0x01A7`, `0x01A8`, `0x01E5`, `0x01FD`, `0x0204`, `0x0213`, `0x021F`, `0x0220`, `0x0227`, `0x0237`, `0x023E`, `0x0240`, `0x0241`, `0x0242`, `0x027D`, `0x028B`, `0x02B0` C→S, `0x02B1` C→S, `0x02B2`, `0x02B5`, `0x02BE`, `0x02F0`, `0x02F8`, `0x0319` C→S, `0x031B`, `0x0323`, `0x0331`, `0x0334`, `0x0336`, `0x0340`, `0x0348`, `0x036B`, `0x037E` C→S, `0x0380` C→S, `0x0387`, `0x0392`, `0x0393`, `0x0394`, `0x03AB`, `0x03AD` C→S, `0x03AE` C→S, `0x03C0`, `0x03D0`, `0x03D1`, `0x03F7`, `0x0400`, `0x0407`, `0x040C`, `0x040E`, `0x0415`, `0x0416`, `0x041B`, `0x041C`, `0x0425`, `0x0449`, `0x044B`, `0x044D`, `0x044E`, `0x0450`, `0x0451`, `0x0454`, `0x0456`, `0x0457`, `0x0458`, `0x0459`, `0x045B` C→S, `0x045F`, `0x0465`, `0x0466`, `0x0467`, `0x047B`, `0x0489`, `0x04A0`, `0x04A2`, `0x04A4`, `0x04A5`, `0x04AC`, `0x04AD`, `0x04AE`, `0x04AF`, `0x04B0`, `0x04B1`, `0x04B8`, `0x04B9`, `0x04C3`, `0x04C9`, `0x04D2` C→S, `0x04D7`, `0x04DB`, `0x04E3`, `0x04E9`, `0x04EA`, `0x04EC`, `0x04F3`, `0x04F4`, `0x0503`, `0x0505`, `0x0508`, `0x0509`, `0x050C`, `0x050E`, `0x0510`, `0x0512`, `0x0513`, `0x0518` C→S, `0x0519`, `0x051A`.
-- **no AC sender (commented-out/doc reference only)** (5): `0x020D`, `0x0442`, `0x0460`, `0x0461`, `0x04AA`.
+- **no AC sender (commented-out/doc reference only)** (7): `0x00DC` S→C (handler only), `0x02B4` (senders commented out), `0x020D`, `0x0442`, `0x0460`, `0x0461`, `0x04AA`.
 - **internal (anti-cheat/redirect)** (4): `0x02E6`, `0x02E7`, `0x051F` C→S, `0x0520` S→C.
 - **voice chat** (25): `0x039E`, `0x039F`, `0x03A0`, `0x03A1`, `0x03A2`, `0x03AF`, `0x03B0`, `0x03B1`, `0x03CC`, `0x03CD`, `0x03CE`, `0x03CF`, `0x03D3`, `0x03D6`, `0x03D7`, `0x03DA`, `0x03DB`, `0x03DC`, `0x03DD`, `0x03DE`, `0x03DF` S→C, `0x03DF` C→S, `0x03E3`, `0x03F6`, `0x03FC`.
 
@@ -860,7 +860,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x02EC` | `SMSG_BATTLEGROUND_PLAYER_JOINED` | S→C | handled | common | proven_send_site: `game/Battlegrounds/BattlegroundMgr.cpp:264` | S→C: semantic-consumer — P/wrath_battleground.rs → BattlegroundPlayer joined (1.12 shape); see docs/WRATH-BATTLEGROUND.md. |
 | `0x02ED` | `SMSG_BATTLEGROUND_PLAYER_LEFT` | S→C | handled | common | proven_send_site: `game/Battlegrounds/BattlegroundMgr.cpp:258` | S→C: semantic-consumer — P/wrath_battleground.rs → BattlegroundPlayer left (1.12 shape); see docs/WRATH-BATTLEGROUND.md. |
 | `0x02EE` | `CMSG_BATTLEMASTER_JOIN` | C→S | handled | niche | AC receive: `HandleBattlemasterJoinOpcode` (STATUS_LOGGEDIN). | C→S: BG — transport-only; `ClientCommand::NativeBattleground`, P/wrath_battleground.rs encoder; no UI producer. See docs/WRATH-BATTLEGROUND.md. |
-| `0x02EF` | `SMSG_ADDON_INFO` | S→C | missing | core | proven_send_site: `game/Server/WorldSession.cpp:1417` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). Arrives before CMSG_PLAYER_LOGIN, where the bootstrap character loop discards it; the payload is self-describing here (our auth sends no addons), but reaching it needs a bootstrap change. See docs/WRATH-SESSION-MISC.md. |
+| `0x02EF` | `SMSG_ADDON_INFO` | S→C | handled | core | proven_send_site: `game/Server/WorldSession.cpp:1417` | S→C: semantic-consumer — sent right after `SMSG_AUTH_RESPONSE`; P/wrath_world.rs `WrathWorldSession` keeps it through the startup, roster and character-action loops (it used to skip it) and remembers that it arrived; P/wrath_bootstrap.rs decodes it strictly for our empty auth addon list (no per-addon records, then the banned list). `Connected.addon_info` is now the reply's truth (an empty hidden list once it arrived, `None` if never), and the packet lands in A/net/wrath_bootstrap_capture.rs; the banned-list MD5 match against loaded addons is not built. |
 | `0x02F0` | `CMSG_PET_UNLEARN` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x02F1` | `SMSG_PET_UNLEARN_CONFIRM` | S→C | missing | common | registry_only_no_source_refs | S→C: not actionable — registry only, no AC send site; deliberately undecoded (P/wrath_spell_control.rs `REGISTRY_ONLY`), no layout invented. See docs/WRATH-SPELL-CONTROL.md. |
 | `0x02F2` | `SMSG_PARTY_MEMBER_STATS_FULL` | S→C | handled | common | proven_send_site: `game/Handlers/GroupHandler.cpp:1016` | S→C: semantic-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-protocol/src/wrath_events.rs:274; crates/benilla-protocol/src/wrath_group.rs:132-141; crates/benilla-protocol/src/wrath_group.rs:143; crates/benilla-app/src/ui_party/net.rs:26-85 |
@@ -1304,7 +1304,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x04A8` | `CMSG_PLAYER_VEHICLE_ENTER` | C→S | handled | niche | AC receive: `HandleEnterPlayerVehicle` (STATUS_LOGGEDIN). | C→S: admitted native writer, transport-only — `ClientCommand::NativeMovementMisc(PlayerVehicleEnter)` → `WrathRoute::NativeMovementMisc` → P/wrath_movement_misc.rs (raw vehicle guid; AzerothCore VehicleHandler.cpp). No producer yet; vehicles cannot be driven (movement M4b), so no acceptance is claimed. |
 | `0x04A9` | `CMSG_CONTROLLER_EJECT_PASSENGER` | C→S | handled | common | AC receive: `HandleEjectPassenger` (STATUS_LOGGEDIN). | C→S: admitted native writer, transport-only — `ClientCommand::NativeMovementMisc(EjectPassenger)` → `WrathRoute::NativeMovementMisc` → P/wrath_movement_misc.rs (raw passenger guid; AzerothCore VehicleHandler.cpp). No producer yet; vehicles cannot be driven (movement M4b), so no acceptance is claimed. |
 | `0x04AA` | `SMSG_PET_GUIDS` | S→C | missing | common | not_proven_reference_only | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x04AB` | `SMSG_CLIENTCACHE_VERSION` | S→C | missing | niche | proven_send_site: `game/Handlers/AuthHandler.cpp:60` | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). Arrives before CMSG_PLAYER_LOGIN, where the bootstrap character loop discards it; the payload is self-describing here (our auth sends no addons), but reaching it needs a bootstrap change. See docs/WRATH-SESSION-MISC.md. |
+| `0x04AB` | `SMSG_CLIENTCACHE_VERSION` | S→C | capture-only | niche | proven_send_site: `game/Handlers/AuthHandler.cpp:60` | S→C: capture-only — kept through the select screen as `0x02EF` is, decoded strictly (`u32` cache version) by P/wrath_bootstrap.rs → A/net/wrath_bootstrap_capture.rs FIFO; there is no persistent `WDB` cache here to invalidate. |
 | `0x04AC` | `CMSG_CHANGE_GDF_ARENA_RATING` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x04AD` | `CMSG_SET_ARENA_TEAM_RATING_BY_INDEX` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x04AE` | `CMSG_SET_ARENA_TEAM_WEEKLY_GAMES` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
