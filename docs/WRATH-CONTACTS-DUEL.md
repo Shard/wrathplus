@@ -20,3 +20,5 @@ its codec with no command or producer.
 
 Stale rows corrected (code already native): 004E logout cancel and 004F its ack, 0036/0038/003C
 character create/delete, 00A9/01F6 (compressed) update object.
+
+006B set contact notes (`ClientCommand::SetContactNotes { guid, note }`, through the `wrath_social` encoder on the NativeContacts route) is a transport-only writer; App wires the producer.

@@ -61,6 +61,9 @@ pub enum ScriptCall {
     CancelShapeshiftForm,
     /// Build 12340 `Dismount()` (`0x51d170` → `0x7412e0`, CMSG `0x375`).
     Dismount,
+    /// Build 12340 `DismissCompanion("CRITTER")` (`0x53e6b0` → `0x802f80`): CMSG `0x48D`
+    /// (`CMSG_DISMISS_CRITTER`) with the player's `UNIT_FIELD_CRITTER` guid.
+    DismissCritter { critter: u64 },
     /// Build 12340 `SetActiveTalentGroup(group)` (`0x5c5e70`): cast the 1-based group's
     /// activation spell (63645/63644, table `0xad05e8`).
     ActivateTalentGroup { group: u8 },

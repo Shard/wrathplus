@@ -129,6 +129,10 @@ pub(crate) fn apply_script_calls(
                     );
                 }
             }
+            // `DismissCompanion("CRITTER")`'s CMSG 0x48D has no wire command yet: capture-only.
+            other @ ScriptCall::DismissCritter { .. } => {
+                debug!("script call {other:?} not applied yet: capture-only");
+            }
         }
         // TryCast's attack pick can move the selection mid-cast (`0x6e4efb`), so a press held
         // there is picked and resumed before the next call reads the selection.

@@ -98,19 +98,26 @@ const STABLE_SLOT: &str = "stable";
 /// stock file (`PaperDollFrame.xml`, `TabardFrame.xml`, `PetPaperDollFrame.xml`,
 /// `InspectPaperDollFrame.xml`, `PetStable.xml`, `DressUpFrame.xml`,
 /// `Blizzard_AuctionDressUp.xml`). A pane not in this table draws nothing.
-const MODEL_PANE_BOOTHS: [(&str, &str); 7] = [
+const MODEL_PANE_BOOTHS: [(&str, &str); 8] = [
     ("CharacterModelFrame", PAPERDOLL_SLOT),
     // The tabard designer's pane: the paper doll's bake, wearing the design under preview.
     ("TabardModel", PAPERDOLL_SLOT),
     ("PetModelFrame", PETDOLL_SLOT),
     ("InspectModelFrame", INSPECT_SLOT),
     ("PetStableModel", STABLE_SLOT),
+    // The companion tab's `SetCreature` preview: the stable booth, free whenever no stable is
+    // open, as `CharacterFrame` and `PetStableFrame` are exclusive left panels (`ui_companions`).
+    ("CompanionModelFrame", STABLE_SLOT),
     ("DressUpModel", dressup::DRESSUP_SLOT),
     // Deviation: the auction house's dressing room shares the one dressing-room booth, because the
     // app's `TryOn`/`Dress` intents are not per-widget; the reference's two widgets each clone
     // their own model.
     ("AuctionDressUpModel", dressup::DRESSUP_SLOT),
 ];
+
+/// The booth syncs' chain; a writer of a booth's inputs orders before it.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BoothSync;
 
 /// The booth a named model pane samples, or `None` for a pane no window has claimed.
 pub(crate) fn model_pane_booth(name: &str) -> Option<&'static str> {
@@ -803,7 +810,8 @@ impl Plugin for PortraitPlugin {
                     // Last: it reads the wake/pending state every sync above may have armed.
                     gate_booth_cameras,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(BoothSync),
             )
             // Re-face each booth's eye-glow cards to its own camera.
             .add_systems(Update, booth::face_booth_billboards)

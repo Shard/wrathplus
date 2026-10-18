@@ -49,8 +49,13 @@ impl SummonState {
         self.ask = true;
     }
 
-    fn pending(&self) -> Option<u64> {
+    pub(crate) fn pending(&self) -> Option<u64> {
         (self.summoner != 0).then_some(self.summoner)
+    }
+
+    /// Build 12340's `CancelSummon()` (`0x51b110`): the question is answered, so the latch goes.
+    pub(crate) fn cancel(&mut self) {
+        *self = Self::default();
     }
 
     /// `0x4963e0`: ms left, clamped at zero; the binding (`0x48b660`) truncates to seconds.
@@ -122,32 +127,38 @@ fn area_name(zone: u32, areas: Option<&AreaTableRes>) -> String {
         .to_string()
 }
 
-/// Turn each Accept into `CMSG_SUMMON_RESPONSE`, gated on a latched summoner, never the deadline.
+/// Turn each Accept into `CMSG_SUMMON_RESPONSE`, gated on a latched summoner, never the deadline;
+/// then build 12340's StaticPopup host ([`crate::ui_static_popup`]), whose `CancelSummon` answers
+/// this latch.
 fn drain_summon(
     script: Option<NonSendMut<UiScript>>,
-    summon: Res<SummonState>,
+    mut summon: ResMut<SummonState>,
     commands: Res<NetCommands>,
+    popups: crate::ui_static_popup::PopupInputs,
 ) {
     let Some(mut script) = script else {
         return;
     };
     let confirms = script.take_summon_confirms();
-    if confirms == 0 {
-        return;
+    if confirms > 0 {
+        match summon.pending() {
+            None => {
+                debug!("ui_summon: ConfirmSummon() with nothing latched — nothing to answer with")
+            }
+            Some(summoner) => {
+                if benilla_assets::trace::enabled_for("summon") {
+                    benilla_assets::trace::line(
+                        "summon",
+                        &format!("SEND CMSG_SUMMON_RESPONSE summoner={summoner:#x} n={confirms}"),
+                    );
+                }
+                for _ in 0..confirms {
+                    let _ = commands.0.send(ClientCommand::SummonResponse { summoner });
+                }
+            }
+        }
     }
-    let Some(summoner) = summon.pending() else {
-        debug!("ui_summon: ConfirmSummon() with nothing latched — nothing to answer with");
-        return;
-    };
-    if benilla_assets::trace::enabled_for("summon") {
-        benilla_assets::trace::line(
-            "summon",
-            &format!("SEND CMSG_SUMMON_RESPONSE summoner={summoner:#x} n={confirms}"),
-        );
-    }
-    for _ in 0..confirms {
-        let _ = commands.0.send(ClientCommand::SummonResponse { summoner });
-    }
+    crate::ui_static_popup::drive(&mut script, &commands, &mut summon, popups);
 }
 
 /// The latch dies with the session (the module's deviation), on `DisconnectedMessage`, which a
