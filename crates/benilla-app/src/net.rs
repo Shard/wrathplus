@@ -48,6 +48,8 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
+mod wrath_refer_friend_capture;
+mod wrath_world_objects_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -163,6 +165,8 @@ impl Plugin for NetPlugin {
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
         wrath_help_capture::register(app);
+        wrath_refer_friend_capture::register(app);
+        wrath_world_objects_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
@@ -307,6 +311,14 @@ pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
             s.swim_back.min(s.swim)
         } else {
             s.swim
+        };
+    }
+    // Build 12340's flight arm, shaped as the swim arm.
+    if flags & f::FLYING != 0 {
+        return if flags & f::BACKWARD != 0 {
+            s.flight_back.min(s.flight)
+        } else {
+            s.flight
         };
     }
     if flags & f::WALK_MODE != 0 {
@@ -937,6 +949,12 @@ pub(crate) enum MoveKind {
     FallLand,
     StartSwim,
     StopSwim,
+    /// Build 12340's flight edges (`Wow.exe` `0x6ef860`): the ascend and descend keys while flying
+    /// (`STOP_ASCEND` ends either) and taking off or landing (`CMSG_MOVE_SET_FLY`).
+    StartAscend,
+    StopAscend,
+    StartDescend,
+    SetFly,
     /// The walk/run toggle: sent from the toggle handler (`ToggleRun 0x513d50` to `0x617de0`),
     /// not the move broadcaster, so it goes out standing still (`0x61a99d` gates the latter).
     SetWalkMode,
@@ -948,6 +966,7 @@ pub(crate) enum MoveKind {
 impl MoveKind {
     pub(crate) fn opcode(self) -> u16 {
         use benilla_protocol::messages::opcode as op;
+        use benilla_protocol::wrath_ground;
         match self {
             MoveKind::StartForward => op::MSG_MOVE_START_FORWARD,
             MoveKind::StartBackward => op::MSG_MOVE_START_BACKWARD,
@@ -962,6 +981,10 @@ impl MoveKind {
             MoveKind::FallLand => op::MSG_MOVE_FALL_LAND,
             MoveKind::StartSwim => op::MSG_MOVE_START_SWIM,
             MoveKind::StopSwim => op::MSG_MOVE_STOP_SWIM,
+            MoveKind::StartAscend => wrath_ground::MSG_MOVE_START_ASCEND as u16,
+            MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
+            MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
+            MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
             MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
             MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
             MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
@@ -2156,6 +2179,10 @@ pub(crate) enum ClientCommand {
     /// Native Help Request commands with no shared producer: GM survey, response resolve,
     /// complaints and bug reports.
     NativeHelp(benilla_protocol::wrath_help::Command),
+    /// Native refer-a-friend level grant and accept; no UI producer yet.
+    NativeReferFriend(benilla_protocol::wrath_refer_friend::Command),
+    /// Native game-object report-use; `GameObjUse` is the shared use command.
+    NativeWorldObjects(benilla_protocol::wrath_world_objects::Command),
     /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
@@ -3005,6 +3032,9 @@ mod tests {
             swim: 4.722,
             swim_back: 2.5,
             turn_rate: std::f32::consts::PI,
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         }
     }
 
@@ -3053,6 +3083,9 @@ mod tests {
             swim: 4.0,
             swim_back: 9.0, // a swim-back above swim
             turn_rate: std::f32::consts::PI,
+            flight: 7.0,
+            flight_back: 4.5,
+            pitch_rate: std::f32::consts::PI,
         };
         assert_eq!(current_speed(&s, f::FORWARD | f::WALK_MODE), 7.0);
         assert_eq!(current_speed(&s, f::BACKWARD), 7.0);

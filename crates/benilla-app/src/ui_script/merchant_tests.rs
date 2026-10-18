@@ -77,6 +77,7 @@ fn shipped_merchant_frame_drives_end_to_end() {
                 stats: None,
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
             MerchantItem {
                 name: Some("Linen Bandage".into()),
@@ -88,6 +89,7 @@ fn shipped_merchant_frame_drives_end_to_end() {
                 stats: None,
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
         ],
         ..Default::default()
@@ -612,6 +614,7 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
                 }),
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
             MerchantItem {
                 name: Some("Chipped Buckler".into()),
@@ -636,6 +639,7 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
                 }),
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
         ],
         ..Default::default()
@@ -816,6 +820,7 @@ fn merchant_tabs_drive_buyback_page_and_repair_pair() {
             stats: None,
             link: None,
             max_stack: Some(1),
+            extended_cost: None,
         }],
         buyback: vec![
             buyback_item("Bandit Cloak", 116),
@@ -965,6 +970,7 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
                 stats: None,
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
             MerchantItem {
                 name: Some("Linen Bandage".into()),
@@ -976,6 +982,7 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
                 stats: None,
                 link: None,
                 max_stack: Some(1),
+                extended_cost: None,
             },
         ],
         ..Default::default()
@@ -1123,6 +1130,7 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
             // As `ui_merchant` builds it from the row's item template.
             link: Some(WATER_LINK.into()),
             max_stack: Some(1),
+            extended_cost: None,
         }],
         ..Default::default()
     }));

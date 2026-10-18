@@ -47,6 +47,16 @@ pub struct WrathGuildBankView {
     pub remaining_withdrawals: u32,
     /// Each rank's rights, rank 1 first; the rank being edited is staged from these.
     pub rank_rights: Vec<WrathGuildBankRankRights>,
+    /// Per purchased tab, its occupied slots (`super::wrath_guild_bank`).
+    pub slots: Vec<Vec<super::wrath_guild_bank::WrathGuildBankSlot>>,
+    /// The money log, newest first (25 rows natively).
+    pub money_log: Vec<super::wrath_guild_bank::WrathGuildBankMoneyLog>,
+    /// Per tab, its item log, newest first (25 rows natively).
+    pub tab_logs: Vec<Vec<super::wrath_guild_bank::WrathGuildBankItemLog>>,
+    /// Per tab, its info text.
+    pub tab_text: Vec<String>,
+    /// Copper the player may still withdraw today (`0xc1dc34`); -1 is unlimited.
+    pub withdraw_money_remaining: i64,
 }
 
 /// One guild event-log row (`0xc211e0`, stride 8 dwords).
@@ -69,15 +79,35 @@ pub enum WrathGuildBankRequest {
     PickupMoney { copper: u32 },
     /// `SummonFriend(name)` (`0x523260`): a recruited friend's summon.
     SummonFriend { name: String },
+    /// `QueryGuildBankTab(tab)` (`0x5a5ce0`), 1-based.
+    QueryTab { tab: u8 },
+    /// `QueryGuildBankText(tab)` (`0x5a7110`).
+    QueryText { tab: u8 },
+    /// `QueryGuildBankLog(tab)` (`0x5a6d50`); tab 7 is the money log.
+    QueryLog { tab: u8 },
+    /// `PickupGuildBankItem(tab, slot)` (`0x5a6200`), both 1-based: pick up, or place the held item.
+    PickupItem { tab: u8, slot: u8 },
+    /// `AutoStoreGuildBankItem(tab, slot)` (`0x5a63f0`): withdraw into the bags.
+    AutoStoreItem { tab: u8, slot: u8 },
+    /// `SplitGuildBankItem(tab, slot, count)` (`0x5a6600`).
+    SplitItem { tab: u8, slot: u8, count: u32 },
+    /// `SetGuildBankText(tab, text)` (`0x5a7180`).
+    SetText { tab: u8, text: String },
+    /// `SetGuildBankTabInfo(tab, name, icon)` (`0x5a6a00`).
+    SetTabInfo { tab: u8, name: String, icon: String },
+    /// `CloseGuildBankFrame()` (`0x5a4500`).
+    Close,
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct State {
-    bank: WrathGuildBankView,
+    pub(super) bank: WrathGuildBankView,
     events: Vec<WrathGuildEvent>,
     /// The staged rights of the rank being edited, by 0-based rank.
     staged: Vec<WrathGuildBankRankRights>,
-    requests: Vec<WrathGuildBankRequest>,
+    pub(super) requests: Vec<WrathGuildBankRequest>,
+    /// The selected bank tab, 0-based (`0xc1dc0d`).
+    pub(super) current_tab: u8,
 }
 
 impl super::UiScript {
@@ -415,7 +445,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         )]))
     })?;
     // GetGuildEventInfo(index) (`0x5ccd90`) → type, player1, player2, rank, then the time since
-    // as years, months, days, hours. Labelled: months are taken as 30 days and years as 365.
+    // as years, months, days, hours (the bank logs' 365/30-day split, `0x5a4e50`).
     set(lua, "GetGuildEventInfo", |lua, args| {
         let Some(n) = number(lua, &arg(&args, 0)) else {
             return Err(mlua::Error::runtime("Usage: GetGuildEventInfo(index)"));
@@ -438,10 +468,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             6 => "quit",
             _ => "none",
         };
-        let hours = i64::from(e.seconds_ago / 3600);
-        let (years, rest) = (hours / (24 * 365), hours % (24 * 365));
-        let (months, rest) = (rest / (24 * 30), rest % (24 * 30));
-        let (days, hours) = (rest / 24, rest % 24);
+        let (years, months, days, hours) = super::wrath_guild_bank::age(e.seconds_ago);
         Ok(MultiValue::from_vec(vec![
             Value::String(lua.create_string(kind)?),
             s(lua, &e.player1)?,
@@ -497,6 +524,7 @@ mod tests {
                 money_per_day: 250_000,
                 tabs: [(1 | 2, 10), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0)],
             }],
+            ..Default::default()
         }
     }
 
