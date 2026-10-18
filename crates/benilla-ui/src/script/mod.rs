@@ -53,6 +53,11 @@ pub use wrath_calendar::{
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
+mod wrath_titles;
+mod wrath_tooltip;
+mod wrath_quest_poi;
+pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
+pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
 pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
@@ -211,6 +216,7 @@ mod wrath_companions;
 mod wrath_arena;
 mod wrath_help_request;
 mod wrath_runes;
+mod wrath_totems;
 mod wrath_merchant;
 mod wrath_spellbook;
 mod wrath_skills;
@@ -220,6 +226,7 @@ mod wrath_secure;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_arena::{ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView};
 pub use wrath_runes::{RuneView, WrathRunes};
+pub use wrath_totems::{TotemState, TotemView};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
 mod wrath_surface;
 mod wrath_lfg;
@@ -248,8 +255,13 @@ pub use aura::{AuraState, TrackingState};
 pub use backdrop::{inset_atlas_bleed, pieces, Backdrop, BackdropPiece, Insets};
 pub use bank::BankState;
 pub use battlefield_positions::{BattlefieldFlagView, BattlefieldPositionView};
-pub use battlefield_queue::{BattlefieldListView, BattlefieldMapInfo, BattlefieldQueueSlot};
-pub use battlefield_score::{BattlefieldScoreRow, BattlefieldScores, BattlefieldStatColumn};
+pub use battlefield_queue::{
+    BattlefieldListView, BattlefieldQueueSlot, BattlefieldRequest, BattlegroundRewardsView,
+    BattlegroundTypeView, WorldPvpView,
+};
+pub use battlefield_score::{
+    BattlefieldScoreRow, BattlefieldScores, BattlefieldStatColumn, BattlefieldTeamView,
+};
 pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
@@ -836,7 +848,10 @@ impl UiScript {
             wrath_companions::install(&lua)?;
             wrath_help_request::install(&lua)?;
             wrath_runes::install(&lua)?;
+            wrath_totems::install(&lua)?;
             wrath_arena::install(&lua)?;
+            battlefield_queue::install_wrath(&lua)?;
+            battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
             wrath_skills::install(&lua)?;
@@ -854,6 +869,7 @@ impl UiScript {
             wrath_achievements::install(&lua)?;
             wrath_achievement_progress::install(&lua)?;
             guild::install_wrath(&lua)?;
+            worldmap::install_wrath(&lua)?;
             wrath_tutorial::install(&lua)?;
             wrath_ready_check::install(&lua)?;
             wrath_chat_window::install(&lua)?;
@@ -867,6 +883,9 @@ impl UiScript {
             wrath_guild_bank::install(&lua)?;
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
+            wrath_titles::install(&lua)?;
+            wrath_tooltip::install(&lua)?;
+            wrath_quest_poi::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;

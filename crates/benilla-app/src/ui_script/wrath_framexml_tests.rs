@@ -206,6 +206,18 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
 /// dead natively) in the same commit, and a listed name this VM answers fails the census.
 const NATIVE_ABSENT: &[(&str, &str)] = &[
     (
+        "MultiCastSummonSpellButtonFlyoutButton_OnClick",
+        "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
+         caller is MultiCastActionBarFrame.xml's hidden $parentFlyoutButton OnClick, a stock 3.3.5 \
+         dangling reference",
+    ),
+    (
+        "MultiCastSummonSpellButtonFlyoutButton_OnLeave",
+        "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
+         caller is MultiCastActionBarFrame.xml's hidden $parentFlyoutButton OnLeave, a stock 3.3.5 \
+         dangling reference",
+    ),
+    (
         "MutedList_Update",
         "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
          caller, FriendsFrame.lua:1341, is FriendsFrameMuteButton_OnClick of 3.3.5's retired mute list",
@@ -323,12 +335,18 @@ fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
     );
 }
 
+/// The `Blizzard_*` addons whose sources the census scans beside FrameXML.toc's files: every
+/// stock 3.3.5 addon, so "0 missing" covers the whole stock UI.
+const CENSUS_ADDONS: [&str; 24] = super::addons::WRATH_BLIZZARD_ADDONS;
+
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
 /// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
 fn missing_surface(script: &UiScript) {
     let core = super::reference_ui::core().expect("FrameXML.toc");
     let mut sources = Vec::new();
-    let mut queue: Vec<String> = core.toc.files.clone();
+    // Each scanned file's origin, FrameXML or its addon, for the per-addon breakdown.
+    let mut origins: Vec<&str> = Vec::new();
+    let mut queue: Vec<(String, &str)> = core.toc.files.iter().map(|f| (f.clone(), "FrameXML")).collect();
     if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
         for table in [
             "Languages", "ItemBagFamily", "TaxiNodes", "GMTicketCategory", "EmotesTextData",
@@ -347,16 +365,17 @@ fn missing_surface(script: &UiScript) {
                 let _ = std::fs::write(std::path::Path::new(&dir).join(file), bytes);
             }
         }
-        for name in ["Blizzard_TimeManager"] {
-            let dir = format!(r"Interface\AddOns\{name}");
-            if let Some(toc) = super::reference_ui::read(&format!(r"{dir}\{name}.toc")) {
-                let toc = benilla_ui::toc::Toc::parse(&benilla_ui::source::decode(&toc));
-                queue.extend(toc.files.iter().map(|f| format!(r"{dir}\{f}")));
-            }
+    }
+    // The stock addons whose sources are counted too, whatever the dump setting.
+    for name in CENSUS_ADDONS {
+        let dir = format!(r"Interface\AddOns\{name}");
+        if let Some(toc) = super::reference_ui::read(&format!(r"{dir}\{name}.toc")) {
+            let toc = benilla_ui::toc::Toc::parse(&benilla_ui::source::decode(&toc));
+            queue.extend(toc.files.iter().map(|f| (format!(r"{dir}\{f}"), name)));
         }
     }
     let mut seen = std::collections::HashSet::new();
-    while let Some(path) = queue.pop() {
+    while let Some((path, origin)) = queue.pop() {
         if !seen.insert(path.to_ascii_lowercase()) {
             continue;
         }
@@ -371,11 +390,12 @@ fn missing_surface(script: &UiScript) {
             let dir = path.rsplit_once('\\').map_or("", |(d, _)| d).to_string();
             for part in text.split("file=\"").skip(1) {
                 if let Some(file) = part.split('"').next() {
-                    queue.push(format!("{dir}\\{file}"));
+                    queue.push((format!("{dir}\\{file}"), origin));
                 }
             }
         }
         sources.push(census_lexer::executable_text(&text));
+        origins.push(origin);
     }
     script.clear_instruction_budget();
     let has: Vec<String> = script
@@ -547,6 +567,23 @@ fn missing_surface(script: &UiScript) {
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {
         eprintln!("NATIVE-ABSENT {name} {}: {evidence}", calls.get(*name).copied().unwrap_or(0));
+    }
+    // Per origin, the missing names its own files call.
+    let mut by_origin: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for (src, origin) in sources.iter().zip(&origins) {
+        let (mut d, mut m, mut c) = Default::default();
+        scan_calls(src, &mut d, &mut m, &mut c);
+        for line in &lines {
+            let name = line.split(' ').nth(1).unwrap_or("");
+            if m.contains_key(name) || c.contains_key(name) {
+                by_origin.entry(origin).or_default().insert(name.to_string());
+            }
+        }
+    }
+    for (origin, names) in &by_origin {
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        eprintln!("ORIGIN {origin} {}: {}", names.len(), names.join(" "));
     }
     eprintln!("missing surface: {} names", lines.len());
     for line in lines {

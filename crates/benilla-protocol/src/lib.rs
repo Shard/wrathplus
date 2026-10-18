@@ -8,6 +8,7 @@ pub mod messages;
 pub mod wire;
 pub mod world;
 pub mod wrath_auth;
+pub mod wrath_bootstrap;
 pub mod wrath_vehicle;
 pub mod wrath_environment;
 pub mod wrath_bind;

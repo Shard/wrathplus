@@ -69,6 +69,8 @@ use crate::ui_pet::UiPetPlugin;
 use crate::ui_pet_book::UiPetBookPlugin;
 use crate::ui_pet_doll::UiPetDollPlugin;
 use crate::ui_companions::UiCompanionsPlugin;
+use crate::ui_totems::UiTotemsPlugin;
+use crate::ui_unit_popup::UiUnitPopupPlugin;
 use crate::ui_runes::UiRunesPlugin;
 use crate::ui_pet_stats::UiPetStatsPlugin;
 use crate::ui_petition::UiPetitionPlugin;
@@ -222,6 +224,8 @@ impl PluginGroup for GamePlugins {
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
             .add(UiCompanionsPlugin)
+            .add(UiTotemsPlugin)
+            .add(UiUnitPopupPlugin)
             .add(UiRunesPlugin)
             .add(crate::ui_paperdoll::UiPaperDollPlugin)
             .add(UiPetDollPlugin)
@@ -711,11 +715,14 @@ pub(crate) mod schedule_tests {
     ///   selects as the click does, so it writes `Selection` where the click's drain does;
     /// - the vehicle aim (`player::wire_in::apply_vehicle_aim`) against the other `Player` writers
     ///   before `control`: it writes only `mover_pitch`, which none of them reads or writes.
+    /// - the native battlefield reducer and feed (`ui_battlefield::drain_native`,
+    ///   `feed_battlefield`) against the terrain stream's release and rescatter: they read the
+    ///   player's area through `WorldPoint`, which those systems only rebuild between frames' reads.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_649;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_653;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

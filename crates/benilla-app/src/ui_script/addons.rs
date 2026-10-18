@@ -366,7 +366,7 @@ const BLIZZARD_ADDONS: [&str; 12] = [
 ];
 
 /// Build 12340's `Blizzard_*` addons, carried in its archives the same way.
-const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
+pub(super) const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
     "Blizzard_AchievementUI",
     "Blizzard_ArenaUI",
     "Blizzard_AuctionUI",

@@ -28,6 +28,11 @@ impl super::UiScript {
     pub fn set_spell_catalog(&mut self, rows: impl IntoIterator<Item = SpellInfoView>) {
         self.model_mut().spell_catalog = rows.into_iter().map(|row| (row.spell_id, row)).collect();
     }
+
+    /// The spells `IsCurrentSpell` answers true for this frame.
+    pub fn set_current_spells(&mut self, spells: Vec<u32>) {
+        self.model_mut().current_spells = spells;
+    }
 }
 
 fn resolve(model: &Model, query: Value, book: Value) -> Option<SpellInfoView> {
@@ -135,6 +140,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::Number(row.min_range),
                 Value::Number(row.max_range),
             ]))
+        })?,
+    )?;
+    // `IsCurrentSpell(spell[, book])` (`0x541500` → `0x806030`): the spell is being cast, queued,
+    // channelled, targeted or repeated, or is Attack while engaged. The trade-skill arm (a
+    // TRADE_SKILL spell whose window is open) is not built.
+    lua.globals().set(
+        "IsCurrentSpell",
+        lua.create_function(|lua, (query, book): (Value, Value)| {
+            let model = lua.app_data_ref::<Model>().expect("model");
+            Ok(resolve(&model, query, book)
+                .is_some_and(|s| model.current_spells.contains(&s.spell_id)))
         })?,
     )?;
     lua.globals().set(

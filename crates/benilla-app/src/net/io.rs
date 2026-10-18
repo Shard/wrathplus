@@ -1017,6 +1017,7 @@ fn writer_loop(
                     | ClientCommand::NativeMirrorImageQuery { .. }
                     | ClientCommand::NativeMovementMisc(_)
                     | ClientCommand::NativeParty(_)
+                    | ClientCommand::NativePetCastSpell { .. }
                     | ClientCommand::NativeQuest(_)
                     | ClientCommand::NativeQuestsCompletedQuery
                     | ClientCommand::NativeRaidBrowser(_)
@@ -1205,9 +1206,6 @@ fn writer_loop(
                     ClientCommand::AreaSpiritHealerQuery { healer } => {
                         w.area_spirit_healer_query(healer)
                     }
-                    ClientCommand::BattlefieldPort { map_id, accept } => {
-                        w.battlefield_port(map_id, accept)
-                    }
                     ClientCommand::RequestBattlefieldScoreData => {
                         w.request_battlefield_score_data()
                     }
@@ -1218,7 +1216,6 @@ fn writer_loop(
                     ClientCommand::TutorialFlag { id } => w.tutorial_flag(id),
                     ClientCommand::TutorialClear => w.tutorial_clear(),
                     ClientCommand::TutorialReset => w.tutorial_reset(),
-                    ClientCommand::BattlefieldList { map_id } => w.battlefield_list(map_id),
                     ClientCommand::RequestBattlefieldPositions => {
                         w.request_battlefield_positions()
                     }
@@ -1233,11 +1230,6 @@ fn writer_loop(
                         instance_id,
                         as_group,
                     } => w.battlemaster_join(battlemaster, map_id, instance_id, as_group),
-                    ClientCommand::BattlefieldJoin {
-                        map_id,
-                        instance_id,
-                        as_group,
-                    } => w.battlefield_join(map_id, instance_id, as_group),
                     ClientCommand::BattlefieldStatusRequest => w.battlefield_status(),
                     ClientCommand::PetUnlearn { trainer } => w.pet_unlearn(trainer),
                     ClientCommand::BankerActivate { guid } => w.banker_activate(guid),

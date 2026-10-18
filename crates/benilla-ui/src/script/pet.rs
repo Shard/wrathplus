@@ -56,6 +56,10 @@ pub struct PetActionView {
     /// `SPELL_ATTR_PASSIVE` (`Attributes & 0x40`) on a spell slot: the drop silently refuses a
     /// passive source (`0x4bc9f8`-`0x4bca2e`).
     pub passive: bool,
+    /// Build 12340's per-slot half of `GetPetActionSlotUsable` (`0x5d3fd0`): `false` for a spell
+    /// no pet-bar unit may cast now; a token is always `true`. The bar's own usability
+    /// ([`PetBarState::actions_usable`]) is ANDed in by the global.
+    pub usable: bool,
 }
 
 /// [`PetActionView`] as stored, its cooldown converted to `GetTime` seconds at push time.
@@ -306,6 +310,21 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(flag(model.pet_bar.actions_usable))
         })?,
     )?;
+
+    // Build 12340's `GetPetActionSlotUsable(index)` (`0x5d5400` → `0x5d3fd0`): the bar's usability
+    // and the slot's own; an empty slot is usable.
+    if lua.app_data_ref::<Model>().expect("model app_data").dialect
+        == crate::script::ScriptDialect::Wrath12340
+    {
+        g.set(
+            "GetPetActionSlotUsable",
+            lua.create_function(move |lua, i: u32| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                let slot = slot_at(&model, i).is_none_or(|s| s.view.usable);
+                Ok(flag(model.pet_bar.actions_usable && slot))
+            })?,
+        )?;
+    }
 
     // An out-of-range index answers a single nil, which the Lua reads as an empty slot.
     g.set(

@@ -96,3 +96,29 @@ type, indexed by `0x5216f0`.
 - **`SMSG_FEIGN_DEATH_RESISTED` `0x02B4`**: both AzerothCore senders are commented out
   (`SpellAuraEffects.cpp:2954`, `:3039`). The row moves to the out-of-scope "no AC sender" bucket,
   and its decoder stays.
+
+## The pet's own cast and the missile reports
+
+One read-only Ghidra round on build 12340 `Wow.exe` found the senders by their packet opener
+`0x47b0a0`. The scripts and logs are in `/tmp/azb-wire-ghidra/petcast`.
+
+- **`CMSG_PET_CAST_SPELL` `0x01F0`.** `Spell_C`'s send (`0x80ac90`) opens `0x1F0` instead of
+  `CMSG_CAST_SPELL` `0x12E` when the cast's caster is not the active player, or when the spell has
+  flag `0x40000`.
+  - Body: the caster's full `u64` guid, then the same cast count, spell id, cast flags and
+    `SpellCastTargets` (AzerothCore `HandlePetCastSpellOpcode`).
+  - Here, a pet, charm or possess-bar spell whose targets are a location raises the targeting
+    cursor, as ours does: `spell::cast_target::pet_cursor_word`, an implicit-target-16 spell or a
+    location-only `Targets` word. It does so from the native bar press and from the pet book's
+    `CastSpell(id, "pet")`.
+  - The click commits `CastCommit::Pet { caster }` as `ClientCommand::NativePetCastSpell`. That
+    shares one cast counter with `CMSG_CAST_SPELL` and arms none of the player's cast state or GCD.
+  - Unit-targeted pet spells stay `CMSG_PET_ACTION`.
+  - Inferred: that the native bar raises the cursor for these. The bar's press path was not traced.
+- **Missile trajectory.** `0x80ac90` appends it to the cast itself: cast flags `0x02`, then
+  elevation and speed, then the active mover's `MSG_MOVE_STOP` block. This happens when the spell's
+  missile row has flag 1 and the caster is the active mover (AzerothCore `HandleClientCastFlags`).
+  The elevation and speed math (`0x7fe520`) is not built.
+- **`CMSG_UPDATE_MISSILE_TRAJECTORY` `0x0462` and `CMSG_UPDATE_PROJECTILE_POSITION` `0x04BE`.** No
+  sender opens either through `0x47b0a0`. A byte scan finds one `push` of each, at `0x6fd744` and
+  `0x70364c`, probably for an opcode-taking sender. Both stay missing and labelled.

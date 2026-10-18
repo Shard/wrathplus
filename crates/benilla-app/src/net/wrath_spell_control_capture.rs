@@ -34,6 +34,7 @@ struct Consumers<'w> {
     errors: Option<ResMut<'w, crate::ui_action::UiErrorKeys>>,
     vehicles: Option<Res<'w, super::wrath_vehicle::VehicleWorld>>,
     combo: Option<ResMut<'w, super::wrath_combo_points::NativeComboPoints>>,
+    totems: Option<ResMut<'w, crate::ui_totems::NativeTotems>>,
 }
 
 fn receive(
@@ -63,6 +64,16 @@ fn receive(
                 if let Some(message) = pet_book_message(learned, spells.catalog.get(spell_id)) {
                     errors.0.push(message);
                 }
+            }
+        }
+        Packet::TotemCreated {
+            slot,
+            totem,
+            duration_ms,
+            spell_id,
+        } => {
+            if let Some(totems) = out.totems.as_mut() {
+                totems.created(slot, totem, duration_ms, spell_id);
             }
         }
         Packet::PetComboPoints {

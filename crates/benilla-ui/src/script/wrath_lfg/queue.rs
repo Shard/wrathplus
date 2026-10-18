@@ -397,6 +397,21 @@ fn send_join(lua: &Lua) {
     q.requests.push(request);
 }
 
+/// `PartyLFGStartBackfill` (`0x55a0c0`): the selection cleared, the group's LFG dungeon selected
+/// when set, then the native join send.
+pub(crate) fn start_backfill(lua: &Lua) {
+    {
+        let mut m = lua.app_data_mut::<Model>().expect("model app_data");
+        let entry = m.wrath_group.lfg_dungeon_entry;
+        let selection = &mut m.wrath_lfg.queue.selection;
+        selection.clear();
+        if entry != 0 {
+            selection.push(entry);
+        }
+    }
+    send_join(lua);
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     use WrathLfgQueueRequest as R;
 
@@ -979,6 +994,55 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         Ok(MultiValue::from_vec(vec![Value::Boolean(true)]))
     })?;
 
+    // ── the reward tooltips (labelled: `GameTooltip:SetLFGDungeonReward`/`SetLFGCompletionReward`
+    // are unread; they show the item GetLFGDungeonRewardInfo / GetLFGCompletionRewardItem name,
+    // through the id-keyed item render) ──
+    let tooltip: mlua::Table = lua.named_registry_value(crate::script::tooltip::REG_TOOLTIP_METHODS)?;
+    tooltip.set(
+        "SetLFGDungeonReward",
+        lua.create_function(|lua, (this, id, index): (mlua::Table, Value, Value)| {
+            const USAGE: &str = "Usage: GameTooltip:SetLFGDungeonReward(dungeonID, lootIndex)";
+            let id = number_arg(lua, id, USAGE)?;
+            let index = number_arg(lua, index, USAGE)?;
+            let item = {
+                let m = lua.app_data_ref::<Model>().expect("model app_data");
+                let state = &m.wrath_lfg;
+                state
+                    .row(id as u32)
+                    .filter(|r| r.dungeon_type == 6 || r.flags & 4 != 0)
+                    .map(super::l1::full_entry)
+                    .and_then(|entry| super::l1::preview_item(state, entry, index.wrapping_sub(1)))
+                    .map(|i| i.item)
+            };
+            match item {
+                Some(item) => crate::script::tooltip_item::render_by_id(lua, &this, item, None, None),
+                None => Ok(()),
+            }
+        })?,
+    )?;
+    tooltip.set(
+        "SetLFGCompletionReward",
+        lua.create_function(|lua, (this, index): (mlua::Table, Value)| {
+            let index = number_arg(lua, index, "Usage: GameTooltip:SetLFGCompletionReward(lootIndex)")?;
+            let item = {
+                let m = lua.app_data_ref::<Model>().expect("model app_data");
+                usize::try_from(index.wrapping_sub(1)).ok().and_then(|i| {
+                    m.wrath_lfg
+                        .queue
+                        .snapshot
+                        .completion
+                        .as_ref()
+                        .and_then(|c| c.items.get(i))
+                        .map(|i| i.item)
+                })
+            };
+            match item {
+                Some(item) => crate::script::tooltip_item::render_by_id(lua, &this, item, None, None),
+                None => Ok(()),
+            }
+        })?,
+    )?;
+
     // ── deserter and random cooldown: the unit's aura 71041 / 71328 (`0x555840`/`0x555760`) ──
     for (global, spell) in [("UnitHasLFGDeserter", 71041u32), ("UnitHasLFGRandomCooldown", 71328)] {
         set(lua, global, move |lua, args| {
@@ -1194,6 +1258,8 @@ mod tests {
         ] {
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }
+        s.run("local p = CreateFrame('Frame') local t = CreateFrame('GameTooltip', 'LfgTip', p) t:SetOwner(p, 'ANCHOR_NONE') t:SetLFGCompletionReward(1) t:SetLFGCompletionReward(9) t:SetLFGDungeonReward(7, 1)").unwrap();
+        assert!(s.run("LfgTip:SetLFGDungeonReward(7)").is_err() && s.run("LfgTip:SetLFGCompletionReward()").is_err());
         for usage in ["GetLFGRoleUpdateSlot()", "GetLFGProposalEncounter('x')", "GetLFGCompletionRewardItem()", "GetLFGQueuedList(1)"] {
             assert!(s.run(usage).is_err(), "{usage}");
         }
@@ -1309,5 +1375,26 @@ mod tests {
         s.run("assert(LFGTeleport(false)==false)").unwrap();
         assert_eq!(s.take_ui_errors(), vec!["ERR_NOT_IN_COMBAT"]);
         assert_eq!(s.take_wrath_lfg_queue_requests(), vec![R::Teleport { out: true }]);
+
+        // Backfill: the group's dungeon becomes the selection and the join goes out again.
+        s.set_wrath_group(WrathGroup {
+            lfg_dungeon_entry: 1 << 24 | 7,
+            ..Default::default()
+        });
+        s.set_unit(
+            "player",
+            Some(UnitState {
+                guid: 1,
+                exists: true,
+                class_file: Some("WARRIOR".into()),
+                ..Default::default()
+            }),
+        );
+        s.set_now(200.0);
+        s.run("SetLFGDungeon(9) PartyLFGStartBackfill()").unwrap();
+        match s.take_wrath_lfg_queue_requests().as_slice() {
+            [R::Join { dungeons, roles, .. }] => assert_eq!((dungeons.clone(), *roles), (vec![1 << 24 | 7], 3)),
+            other => panic!("{other:?}"),
+        }
     }
 }

@@ -13,7 +13,7 @@ fn elwynn_campfire_has_one_warm_point_light() {
     let lights = parse_m2_lights(&bytes);
     assert_eq!(lights.len(), 1, "campfire has exactly one M2 light");
 
-    let l = lights[0];
+    let l = &lights[0];
     assert!(
         l.is_point(),
         "campfire light is type 1 (point), got type {}",
@@ -38,7 +38,7 @@ fn held_torch_casts_one_warm_point_light_up_the_shaft() {
 
     let lights = parse_m2_lights(&bytes);
     assert_eq!(lights.len(), 1, "the torch has exactly one M2 light");
-    let l = lights[0];
+    let l = &lights[0];
     assert!(l.casts(), "point + visibility-on: the torch really glows");
     assert_eq!(l.bone, 9, "the light hangs on the torch's own bone");
     assert!(

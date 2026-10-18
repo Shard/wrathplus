@@ -88,6 +88,8 @@ pub(crate) struct Model {
     pub(crate) texture_probe: Option<TextureProbe>,
     /// `GetWorldLocMapPosition`'s projection; `None` answers `(0, 0)`.
     pub(crate) world_loc_projector: Option<WorldLocProjector>,
+    /// `GetDeathReleasePosition`'s world location, `(map, x, y)` (`SMSG_DEATH_RELEASE_LOC`).
+    pub(crate) death_release: Option<(u32, f32, f32)>,
     /// A path's texel size, which an axis authored as 0 takes, one texel per unit, as the client's
     /// `GetWidth` (`0x770720`) and `GetHeight` (`0x770790`) do; `None` leaves it as authored.
     pub(crate) texture_size_probe: Option<TextureSizeProbe>,
@@ -443,6 +445,11 @@ pub(crate) struct Model {
     pub(crate) actions: HashMap<u32, ActionSlot>,
     /// Per action, its usable, range, current and cooldown state; an absent one reads cold.
     pub(crate) action_states: HashMap<u32, super::action::StoredActionState>,
+    /// Build 12340's `IsCurrentSpell` spells: the cast in flight, queued on the next swing,
+    /// channelled, awaiting its targeting click or auto-repeating, and Attack (6603) while engaged.
+    pub(crate) current_spells: Vec<u32>,
+    /// Build 12340's totem slots and multi-cast lists (`super::wrath_totems`).
+    pub(crate) totems: super::wrath_totems::TotemState,
     pub(crate) bonus_bar_offset: u8,
     /// `(action id, packed)` per slot `PickupAction`/`PlaceAction` changed, 0 clearing it: one
     /// `CMSG_SET_ACTION_BUTTON` each, so a drag swap is two sends.
@@ -463,6 +470,10 @@ pub(crate) struct Model {
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
+    pub(crate) wrath_titles: super::wrath_titles::State,
+    /// The item id the last tooltip item lookup asked for, taken by the render that follows.
+    pub(crate) tooltip_viewed_item: Option<u32>,
+    pub(crate) wrath_quest_poi: super::wrath_quest_poi::State,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -510,8 +521,6 @@ pub(crate) struct Model {
     pub(crate) area_spirit_secs: u32,
     /// `AcceptAreaSpiritHeal()` calls, one `CMSG_AREA_SPIRIT_HEALER_QUEUE` each.
     pub(crate) area_spirit_accepts: u32,
-    /// `AcceptBattlefieldPort(index, accept)` calls: the 1-based slot and the normalised answer.
-    pub(crate) battlefield_port_requests: Vec<(u8, bool)>,
     /// The battleground scoreboard: pushed rows, faction filter, sort order.
     pub(crate) battlefield_board: super::battlefield_score::ScoreBoard,
     /// `GetBattlefieldInstanceRunTime()`, pushed each frame.
@@ -520,20 +529,8 @@ pub(crate) struct Model {
     pub(crate) battlefield_score_requests: u32,
     /// `LeaveBattlefield()` calls that passed the "ended" gate.
     pub(crate) battlefield_leave_requests: u32,
-    /// The battleground instance list and its scalars, as pushed.
-    pub(crate) battlefield_list: super::battlefield_queue::BattlefieldListView,
-    /// The selected instance id (`[0xb6eba0]`), not an index; written by `SetSelectedBattlefield`.
-    pub(crate) battlefield_selected: u32,
-    /// The three queue slots, pushed each frame with their clocks reduced to values. Zeroed
-    /// until the first push, as the reference's static slots (`0xb6e9d0`) are, so each answers
-    /// "none" from the first frame.
-    pub(crate) battlefield_slots: [super::battlefield_queue::BattlefieldQueueSlot; 3],
-    /// `GetBattlefieldInstanceExpiration()`, pushed each frame.
-    pub(crate) battlefield_instance_expiration_ms: u32,
-    /// `JoinBattlefield` calls, `(instance id, as group)`.
-    pub(crate) battlefield_join_requests: Vec<(u32, bool)>,
-    /// `ShowBattlefieldList` calls that passed their gates: the queued slot's map id.
-    pub(crate) battlefield_list_requests: Vec<u32>,
+    /// The battleground queue slots, type list, instance list, selection and world-PvP queue.
+    pub(crate) battlefield: super::battlefield_queue::QueueState,
     /// Teammates' map positions, the flag carrier, the icon scale and position requests.
     pub(crate) battlefield_positions: Vec<super::battlefield_positions::BattlefieldPositionView>,
     pub(crate) battlefield_flag: Option<super::battlefield_positions::BattlefieldFlagView>,
@@ -1102,6 +1099,7 @@ impl Model {
             measurer: None,
             texture_probe: None,
             world_loc_projector: None,
+            death_release: None,
             texture_size_probe: None,
             font_probe: None,
             addons_saved_account: None,
@@ -1262,6 +1260,8 @@ impl Model {
             keybinds: super::keybind::KeybindState::default(),
             actions: HashMap::new(),
             action_states: HashMap::new(),
+            current_spells: Vec::new(),
+            totems: Default::default(),
             bonus_bar_offset: 0,
             action_sets: Vec::new(),
             ui_errors: Vec::new(),
@@ -1273,6 +1273,9 @@ impl Model {
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
+            wrath_titles: Default::default(),
+            tooltip_viewed_item: None,
+            wrath_quest_poi: Default::default(),
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
@@ -1295,17 +1298,11 @@ impl Model {
             area_spirit_healer_cached: false,
             area_spirit_secs: 0,
             area_spirit_accepts: 0,
-            battlefield_port_requests: Vec::new(),
             battlefield_board: Default::default(),
             battlefield_run_time_ms: 0,
             battlefield_score_requests: 0,
             battlefield_leave_requests: 0,
-            battlefield_list: Default::default(),
-            battlefield_selected: 0,
-            battlefield_slots: Default::default(),
-            battlefield_instance_expiration_ms: 0,
-            battlefield_join_requests: Vec::new(),
-            battlefield_list_requests: Vec::new(),
+            battlefield: Default::default(),
             battlefield_positions: Vec::new(),
             battlefield_flag: None,
             battlefield_icon_scale: 1.0,

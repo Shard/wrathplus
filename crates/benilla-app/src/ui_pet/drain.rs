@@ -34,6 +34,8 @@ pub(crate) struct PetPress<'w, 's> {
     ui_errors: ResMut<'w, crate::ui_action::UiErrorKeys>,
     pick: crate::target::AttackPick<'w, 's>,
     seam: crate::creature_anim::AttackSeam<'w, 's>,
+    /// A location-targeted pet spell raises the targeting cursor with the pet as caster.
+    pub(crate) targeting: ResMut<'w, crate::spell::targeting::SpellTargeting>,
 }
 
 impl PetPress<'_, '_> {
@@ -96,6 +98,16 @@ impl PetPress<'_, '_> {
                 pet_guid,
                 spell_id: id,
             });
+            return;
+        }
+        // A location-targeted spell waits for its click: the cursor's commit sends it as the
+        // pet's `CMSG_PET_CAST_SPELL` (`crate::spell::CastCommit::Pet`).
+        if let Some(word) = display
+            .filter(|_| is_spell)
+            .and_then(crate::spell::cast_target::pet_cursor_word)
+        {
+            self.targeting
+                .enter(id, crate::spell::CastCommit::Pet { caster: pet_guid }, word);
             return;
         }
         let possessing = possessing(Some(store), self.pet.self_guid.0);
@@ -165,6 +177,7 @@ impl PetPress<'_, '_> {
             ui_errors,
             pick,
             seam,
+            ..
         } = self;
         let Some(pet_store) = pet.usable_pet(bar) else {
             debug!("ui_pet: slot {slot} refused, the pet's actions are not usable — no packet");

@@ -270,6 +270,12 @@ pub struct WrathWorldSession {
     crypto: HeaderCrypto,
     read_failed: bool,
     write_failed: bool,
+    /// The auth bootstrap's `SMSG_ADDON_INFO` / `SMSG_CLIENTCACHE_VERSION`, which AzerothCore sends
+    /// right after `SMSG_AUTH_RESPONSE` (`WorldSession::SendAddonsInfo`, `SendClientCacheVersion`)
+    /// and the startup and roster loops would otherwise skip ([`crate::wrath_bootstrap`]).
+    bootstrap: Vec<WrathServerPacket>,
+    /// Whether this session's `SMSG_ADDON_INFO` arrived; kept across re-logins on the session.
+    addon_reply: bool,
 }
 
 impl WrathWorldSession {
@@ -331,6 +337,8 @@ impl WrathWorldSession {
             crypto,
             read_failed: false,
             write_failed: false,
+            bootstrap: Vec::new(),
+            addon_reply: false,
         };
         let mut queue_updates = 0usize;
         for _ in 0..MAX_STARTUP_PACKETS {
@@ -365,10 +373,31 @@ impl WrathWorldSession {
                     }
                 }
                 SMSG_WARDEN_DATA => return Err(WrathWardenRequired.into()),
-                _ => {} // AzerothCore may interleave cache/account setup packets.
+                // AzerothCore may interleave cache/account setup packets.
+                _ => session.keep_bootstrap(packet),
             }
         }
         bail!("no SMSG_AUTH_RESPONSE within {MAX_STARTUP_PACKETS} startup packets")
+    }
+
+    /// Keep a bootstrap packet the select-screen loops would skip; drop anything else.
+    fn keep_bootstrap(&mut self, packet: WrathServerPacket) {
+        if crate::wrath_bootstrap::handles(packet.opcode) {
+            if packet.opcode == crate::wrath_bootstrap::SMSG_ADDON_INFO {
+                self.addon_reply = true;
+            }
+            self.bootstrap.push(packet);
+        }
+    }
+
+    /// The bootstrap packets kept so far, in arrival order, for the gameplay stream to publish.
+    pub fn take_bootstrap_packets(&mut self) -> Vec<WrathServerPacket> {
+        std::mem::take(&mut self.bootstrap)
+    }
+
+    /// Whether this session's `SMSG_ADDON_INFO` arrived (it answers the auth session's addon list).
+    pub fn addon_reply_received(&self) -> bool {
+        self.addon_reply
     }
 
     /// Raw authenticated account expansion; not inferred from client build or character level.
@@ -389,7 +418,8 @@ impl WrathWorldSession {
             match packet.opcode {
                 SMSG_CHAR_ENUM => return parse_character_enum(&packet.body),
                 SMSG_WARDEN_DATA => return Err(WrathWardenRequired.into()),
-                _ => {} // Only a bounded set of startup packets is ignored.
+                // Only a bounded set of startup packets is ignored.
+                _ => self.keep_bootstrap(packet),
             }
         }
         bail!("no SMSG_CHAR_ENUM within {MAX_ENUM_PACKETS} packets")
@@ -428,7 +458,7 @@ impl WrathWorldSession {
                     return parse_single_result(&packet.body, "character action result")
                 }
                 SMSG_WARDEN_DATA => return Err(WrathWardenRequired.into()),
-                _ => {}
+                _ => self.keep_bootstrap(packet),
             }
         }
         bail!("no character action result {opcode:#x} within {MAX_CREATE_PACKETS} packets")
@@ -1291,6 +1321,8 @@ mod tests {
                 crypto: HeaderCrypto::from_session_key(TRANSPORT_KEY),
                 read_failed: false,
                 write_failed: false,
+                bootstrap: Vec::new(),
+                addon_reply: false,
             },
             server,
         )

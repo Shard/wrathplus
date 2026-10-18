@@ -440,6 +440,7 @@ pub fn encode_cancel_aura(spell_id: u32) -> Vec<u8> {
 }
 
 /// A cast's target block (`SpellCastTargets::Read`): the 32-bit mask, then what it names.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CastTarget {
     /// No explicit target: self or the spell's implicit targets.
     None,
@@ -456,6 +457,23 @@ const TARGET_FLAG_ITEM: u32 = 0x0010;
 const TARGET_FLAG_SOURCE_LOCATION: u32 = 0x0020;
 const TARGET_FLAG_DEST_LOCATION: u32 = 0x0040;
 const TARGET_FLAG_GAMEOBJECT: u32 = 0x0800;
+
+/// `CMSG_PET_CAST_SPELL`: a cast whose caster is not the active player, our pet, charm or
+/// possessed unit (`Wow.exe` `0x80ac90` opens it instead of `CMSG_CAST_SPELL` then). AzerothCore
+/// `HandlePetCastSpellOpcode` reads the caster's full guid, then the cast's own body.
+pub const CMSG_PET_CAST_SPELL: u32 = 0x01F0;
+
+/// `CMSG_PET_CAST_SPELL`: `u64 caster`, then [`encode_cast_spell`]'s body.
+pub fn encode_pet_cast_spell(
+    caster: u64,
+    cast_count: u8,
+    spell_id: u32,
+    target: &CastTarget,
+) -> Vec<u8> {
+    let mut body = caster.to_le_bytes().to_vec();
+    body.extend(encode_cast_spell(cast_count, spell_id, target));
+    body
+}
 
 /// `CMSG_CAST_SPELL`: cast count, spell, cast flags, then the target block.
 pub fn encode_cast_spell(cast_count: u8, spell_id: u32, target: &CastTarget) -> Vec<u8> {
@@ -664,6 +682,19 @@ mod tests {
         let [SessionEvent::SpellBook { cooldowns, .. }] = &events[..] else { panic!() };
         assert_eq!(cooldowns.len(), 1);
         assert_eq!((cooldowns[0].spell_id, cooldowns[0].spell_cd_ms), (59752, 95_000));
+    }
+
+    #[test]
+    fn a_pet_cast_is_the_casters_full_guid_then_the_cast_body() {
+        let at = [1.0f32, 2.0, 3.0];
+        let body = encode_pet_cast_spell(0xF140_0000_0000_0050, 7, 31707, &CastTarget::Dest(at));
+        assert_eq!(&body[..8], &0xF140_0000_0000_0050u64.to_le_bytes());
+        assert_eq!(&body[8..], encode_cast_spell(7, 31707, &CastTarget::Dest(at)).as_slice());
+        // count, spell, flags 0, DEST mask, a packed zero transport guid, xyz.
+        assert_eq!(body[8], 7);
+        assert_eq!(&body[13..18], &[0, 0x40, 0, 0, 0]);
+        assert_eq!(body[18], 0);
+        assert_eq!(body.len(), 8 + 1 + 4 + 1 + 4 + 1 + 12);
     }
 
     #[test]

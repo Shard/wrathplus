@@ -399,7 +399,7 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
     let flags = u32_le(r)?;
     native.flags = flags;
     native.title_id = u32_le(r)?;
-    let _players_slain = u32_le(r)?;
+    native.players_slain = u32_le(r)?;
     native.bonus_talents = u32_le(r)?;
     native.arena_points = u32_le(r)?;
     let _rep_show_mask = u32_le(r)?;
@@ -755,6 +755,34 @@ mod tests {
         assert_eq!((q.flags, q.suggested_players), (0x1000, 5));
         for cut in 0..b.len() {
             assert!(decode(SMSG_QUESTGIVER_REQUEST_ITEMS, &b[..cut]).is_err());
+        }
+    }
+
+    #[test]
+    fn a_quest_template_keeps_its_pvp_objective() {
+        // The 26 header columns: id, method, level, ..., title id 21, players slain 22.
+        let mut header = [0u32; 26];
+        header[0] = 9_001;
+        header[21] = 7;
+        header[22] = 10;
+        let mut b: Vec<u8> = header.iter().flat_map(|v| v.to_le_bytes()).collect();
+        b.extend([0u8; 4 * (8 + 12 + 15 + 4)]); // rewards, choices, reputations, the POI point
+        for s in ["Kill them", "objectives", "details", "", "end"] {
+            cstr(&mut b, s);
+        }
+        b.extend([0u8; 4 * (16 + 12)]); // objective quads, required items
+        for _ in 0..4 {
+            cstr(&mut b, "");
+        }
+        let events = decode(SMSG_QUEST_QUERY_RESPONSE, &b).unwrap();
+        let [SessionEvent::QuestTemplate(t)] = &events[..] else {
+            panic!("one template")
+        };
+        assert_eq!((t.quest_id, t.title.as_str()), (9_001, "Kill them"));
+        let native = t.wrath.as_ref().unwrap();
+        assert_eq!((native.title_id, native.players_slain), (7, 10));
+        for cut in 0..b.len() {
+            assert!(decode(SMSG_QUEST_QUERY_RESPONSE, &b[..cut]).is_err());
         }
     }
 }

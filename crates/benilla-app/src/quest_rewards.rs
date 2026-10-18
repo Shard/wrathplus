@@ -52,6 +52,11 @@ impl QuestRewardTables {
         title_text(row, subject?)
     }
 
+    /// The whole `CharTitles.dbc` catalog, if it loaded.
+    pub(crate) fn char_titles(&self) -> Option<&CharTitlesCatalog> {
+        self.titles.as_ref()
+    }
+
     /// A title by its known-title bit, formatted for `subject` (`SMSG_TITLE_EARNED`).
     pub(crate) fn title_by_bit(
         &self,

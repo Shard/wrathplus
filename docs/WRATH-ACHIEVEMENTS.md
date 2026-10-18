@@ -24,8 +24,14 @@ Outbound: 046B inspect query (packed GUID) as `ClientCommand::NativeInspectAchie
 The player's own receipts leave the FIFO: 047D seeds the earned list and criteria counters, 046A
 counters (retained by `wrath_notices`) override them, the player's own 0468 adds an earn and fires
 `ACHIEVEMENT_EARNED(id)` (once per achievement), 049F/049E remove rows, and the asked player's 046C
-becomes the comparison (`INSPECT_ACHIEVEMENT_READY`). Other players' 0468 and 0498 stay
-capture-only. Changed counters fire `CRITERIA_UPDATE`. The static metadata (`ui_achievements.rs`)
+becomes the comparison (`INSPECT_ACHIEVEMENT_READY`). A 0498 server first becomes an achievement
+chat line, as the reference's handler (`0x50b010`, from Native UI's chat Ghidra log) builds it.
+The template is `SERVER_FIRST_ACHIEVEMENT`, or `PLAYER_SERVER_FIRST_ACHIEVEMENT` when the link
+word is set. It is queued on the native chat FIFO as chat type `0x30` with the name as sender and
+the achievement id, so `CHAT_MSG_ACHIEVEMENT` fires with `$a` expanded. Labelled: the template's
+`%s` are filled with the name. The handler hands the name to its text lookup `0x819d40`, and the
+player variant's two `%s` would fail `ChatFrame`'s one-argument `format` otherwise, but that the
+lookup fills them is inferred. Other players' 0468 stay capture-only. Changed counters fire `CRITERIA_UPDATE`. The static metadata (`ui_achievements.rs`)
 now carries points, description, icon (`SpellIcon`), reward, faction, the series' previous step and
 the categories.
 

@@ -28,6 +28,26 @@ pub(crate) struct PageText {
     pub(crate) next: u32,
 }
 
+/// Build 12340's letter texts, by item GUID: `CMSG_ITEM_TEXT_QUERY` names the item and
+/// `SMSG_ITEM_TEXT_QUERY_RESPONSE` answers with it (AC `HandleItemTextQuery`); a `None` answer is
+/// an item the server has no text for.
+#[derive(Resource, Default)]
+pub(crate) struct LetterTexts {
+    texts: QueryCache<u64, String>,
+}
+
+impl LetterTexts {
+    /// Record an answer (`wrath_inventory_capture`).
+    pub(crate) fn insert(&mut self, item_guid: u64, text: Option<String>) {
+        self.texts.insert(item_guid, text);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn text(&mut self, item_guid: u64) -> Option<String> {
+        self.texts.get_or_ask(item_guid, || {}).cloned()
+    }
+}
+
 /// The ask-once page cache, the client's `PageText` dbcache (`0xc0e174`), keyed by page id.
 /// vmangos answers one query with the whole chain; a missing page is still asked for alone.
 #[derive(Resource, Default)]
@@ -165,6 +185,7 @@ impl Plugin for UiItemTextPlugin {
         crate::query_cache::register::<PageTexts>(app);
         app.init_resource::<ItemTextOpen>()
             .init_resource::<PageTexts>()
+            .init_resource::<LetterTexts>()
             .add_systems(
                 Update,
                 (
@@ -246,6 +267,7 @@ fn feed_item_text(
     script: Option<NonSendMut<UiScript>>,
     mut open: ResMut<ItemTextOpen>,
     mail: Res<MailOpen>,
+    letters: Res<LetterTexts>,
     pages: Res<PageTexts>,
     objects: Objects,
     items: Res<Items>,
@@ -317,16 +339,28 @@ fn feed_item_text(
                     None => return, // name query in flight
                 },
             };
-            // The body, from the client's one item-text cache, which mail shares.
-            let body = mail
-                .bodies
-                .get_or_ask(*text_id, || {
-                    let _ = commands.0.send(ClientCommand::ItemTextQuery {
-                        text_id: *text_id,
-                        mail_id: 0,
-                    });
-                })
-                .cloned();
+            // The body, from the client's one item-text cache, which mail shares. 12340 asks by
+            // the letter's GUID instead of its text id.
+            let body = if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+                let item_guid = sess.object_guid;
+                letters
+                    .texts
+                    .get_or_ask(item_guid, || {
+                        let _ = commands.0.send(ClientCommand::NativeInventory(
+                            benilla_protocol::wrath_inventory::Command::ItemTextQuery { item_guid },
+                        ));
+                    })
+                    .cloned()
+            } else {
+                mail.bodies
+                    .get_or_ask(*text_id, || {
+                        let _ = commands.0.send(ClientCommand::ItemTextQuery {
+                            text_id: *text_id,
+                            mail_id: 0,
+                        });
+                    })
+                    .cloned()
+            };
             let Some(text) = body else {
                 return; // body query in flight
             };

@@ -335,6 +335,8 @@ fn native_slot_view(
     let id = entry.id();
     let mut view = PetActionView {
         packed: entry.0,
+        // `0x5d3fd0`: a token or an empty slot leaves the answer to the bar's usability.
+        usable: true,
         ..Default::default()
     };
     if kind == 7 {
@@ -379,16 +381,49 @@ fn native_slot_view(
     };
     view.spell_id = Some(id);
     view.passive = spell.passive;
+    view.usable = store.is_none_or(|s| pet_may_cast(spell, s.0.unit_flags()));
     view.autocast_allowed = entry.0 & 0x8000_0000 != 0;
     view.autocast_enabled = entry.0 & 0x4000_0000 != 0;
     view.cooldown = cooldown;
     view
 }
 
+/// `0x5d3fd0`'s refusals for one pet-bar unit: stunned, fleeing or confused without the spell's
+/// matching `AttributesEx5` usable-while bit (`0x8`, `0x20000`, `0x40000`). The native client
+/// refuses only when every pet-bar unit refuses; the bar here drives one. Its further cast check
+/// (`0x80b5d0`) is not built.
+fn pet_may_cast(spell: &benilla_formats::SpellDisplay, unit_flags: u32) -> bool {
+    const STUNNED: u32 = 0x0004_0000;
+    const CONFUSED: u32 = 0x0040_0000;
+    const FLEEING: u32 = 0x0080_0000;
+    let ex5 = spell.attributes_ex5;
+    !(unit_flags & STUNNED != 0 && ex5 & 0x8 == 0
+        || unit_flags & FLEEING != 0 && ex5 & 0x2_0000 == 0
+        || unit_flags & CONFUSED != 0 && ex5 & 0x4_0000 == 0)
+}
+
 #[cfg(test)]
 mod native_view_tests {
     use super::*;
     use benilla_protocol::wrath_pet::{Action, PetSpells};
+
+    #[test]
+    fn a_stunned_feared_or_confused_pet_may_cast_only_spells_marked_for_it() {
+        let plain = benilla_formats::SpellDisplay::default();
+        assert!(pet_may_cast(&plain, 0));
+        for (flag, bit) in [
+            (0x0004_0000, 0x8),
+            (0x0080_0000, 0x2_0000),
+            (0x0040_0000, 0x4_0000),
+        ] {
+            assert!(!pet_may_cast(&plain, flag), "{flag:#x}");
+            let marked = benilla_formats::SpellDisplay {
+                attributes_ex5: bit,
+                ..Default::default()
+            };
+            assert!(pet_may_cast(&marked, flag), "{flag:#x} with {bit:#x}");
+        }
+    }
 
     #[test]
     fn native_view_keeps_full_id_and_raw_word() {

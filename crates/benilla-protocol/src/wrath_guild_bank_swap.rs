@@ -35,6 +35,14 @@ pub enum Transfer {
     /// Native 0x005a63f0 uses bank-only=0, auto-store=1, to-slot=1,
     /// stack-count=0. Count is retained bank-item count, not a guessed split.
     AutoStore { source: BankSlot, count: i32 },
+    /// A bank item into a named inventory slot (AC `HandleGuildBankSwapItems`: bank-only=0,
+    /// auto-store=0, the player's container and slot, to-char=1, the split amount; 0 the stack).
+    BankToInventory {
+        source: BankSlot,
+        container: u8,
+        container_slot: u8,
+        stack_count: i32,
+    },
 }
 
 impl Swap {
@@ -65,6 +73,17 @@ impl Swap {
                 body.push(0);
                 slot(&mut body, destination);
                 body.extend([0, container, container_slot, 0]);
+                body.extend(stack_count.to_le_bytes());
+            }
+            Transfer::BankToInventory {
+                source,
+                container,
+                container_slot,
+                stack_count,
+            } => {
+                body.push(0);
+                slot(&mut body, source);
+                body.extend([0, container, container_slot, 1]);
                 body.extend(stack_count.to_le_bytes());
             }
             Transfer::AutoStore { source, count } => {
@@ -98,6 +117,25 @@ mod tests {
         slot: 0,
         item: 0x80000000,
     };
+
+    #[test]
+    fn bank_to_inventory_names_the_slot_and_marks_it_to_char() {
+        let cmd = Swap {
+            banker: 7,
+            transfer: Transfer::BankToInventory {
+                source: DEST,
+                container: 255,
+                container_slot: 23,
+                stack_count: 5,
+            },
+        };
+        let mut want = 7u64.to_le_bytes().to_vec();
+        want.extend([0, 5, 97]);
+        want.extend(0x01020304u32.to_le_bytes());
+        want.extend([0, 255, 23, 1]);
+        want.extend(5i32.to_le_bytes());
+        assert_eq!(cmd.encode(), want);
+    }
 
     #[test]
     fn bank_to_bank_is_destination_first_and_preserves_signed_count() {

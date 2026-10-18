@@ -42,11 +42,12 @@ pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_appearance;
-mod wrath_social_lists_capture;
+pub(crate) mod wrath_social_lists_capture;
+mod wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
 mod wrath_quest_capture;
 mod wrath_chat_notice_capture;
-mod wrath_battleground_capture;
+pub(crate) mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
@@ -59,6 +60,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
@@ -164,6 +166,7 @@ impl Plugin for NetPlugin {
         wrath_achievement_capture::register(app);
         wrath_appearance::register(app);
         wrath_social_lists_capture::register(app);
+        wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_capture::register(app);
         wrath_chat_notice_capture::register(app);
@@ -180,6 +183,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_bootstrap_capture::register(app);
         wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
@@ -1328,6 +1332,13 @@ pub(crate) enum ClientCommand {
         target: benilla_protocol::messages::CorpseTarget,
         corpse_guid: u64,
     },
+    /// Build 12340's `CMSG_PET_CAST_SPELL`: a cast whose caster is our pet, charm or possessed
+    /// unit, with the same targets block (the targeting cursor's pet commit).
+    NativePetCastSpell {
+        caster: u64,
+        spell_id: u32,
+        target: benilla_protocol::wrath_session::CastTarget,
+    },
     /// `CMSG_CAST_SPELL` with `TARGET_FLAG_DEST_LOCATION`; `dest` in WoW coordinates.
     CastSpellAtDest {
         spell_id: u32,
@@ -1526,11 +1537,6 @@ pub(crate) enum ClientCommand {
     AreaSpiritHealerQuery {
         healer: u64,
     },
-    /// `AcceptBattlefieldPort(index, accept)`: `CMSG_BATTLEFIELD_PORT`.
-    BattlefieldPort {
-        map_id: u32,
-        accept: bool,
-    },
     /// `RequestBattlefieldScoreData()`: `MSG_PVP_LOG_DATA`.
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
@@ -1555,10 +1561,6 @@ pub(crate) enum ClientCommand {
     /// `ResetTutorials()`: `CMSG_TUTORIAL_RESET`.
     TutorialReset,
     // ── The battleground list window ──
-    /// `ShowBattlefieldList(index)`: `CMSG_BATTLEFIELD_LIST`.
-    BattlefieldList {
-        map_id: u32,
-    },
     /// `JoinBattlefield` when the list came from a battlemaster: `CMSG_BATTLEMASTER_JOIN`.
     BattlemasterJoin {
         battlemaster: u64,
@@ -1582,12 +1584,6 @@ pub(crate) enum ClientCommand {
     /// The ladder's BATTLEMASTER arm: `CMSG_BATTLEMASTER_HELLO`.
     BattlemasterHello {
         npc: u64,
-    },
-    /// `JoinBattlefield` when the list came without one: `CMSG_BATTLEFIELD_JOIN`.
-    BattlefieldJoin {
-        map_id: u32,
-        instance_id: u32,
-        as_group: bool,
     },
     /// The world-enter status request: `CMSG_BATTLEFIELD_STATUS`.
     BattlefieldStatusRequest,

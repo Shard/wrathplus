@@ -78,6 +78,8 @@ fn the_shape_ignores_edge_on_correct_and_degenerate_batches() {
         positions: vec![[0.0; 3]; normals.len()],
         normals,
         uvs: vec![[0.0; 2]; 0],
+        uvs2: vec![],
+        stage2: None,
         indices: vec![],
         texture: None,
         skin_slot: None,

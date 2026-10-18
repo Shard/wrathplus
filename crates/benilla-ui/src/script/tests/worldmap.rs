@@ -669,3 +669,15 @@ fn world_loc_map_position_projects_through_the_host() {
         );
     }
 }
+
+#[test]
+fn the_death_release_position_projects_like_a_world_location() {
+    let mut s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.0, 0.0));
+    s.set_death_release_location(Some((1, 10.0, 20.0)));
+    assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.0, 0.0), "no projector");
+    s.set_world_loc_projector(Box::new(|_, map, x, y| (map == 1 && x == 10.0 && y == 20.0).then_some((0.5, 0.25))));
+    assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.5, 0.25));
+    s.set_death_release_location(None);
+    assert_eq!(s.eval::<(f64, f64)>("return GetDeathReleasePosition()").unwrap(), (0.0, 0.0));
+}

@@ -283,6 +283,9 @@ pub(super) fn clear_content(model: &mut Model, h: FrameHandle) {
             // and re-lays out nothing.
         }
     }
+    if let Ok(t) = tip_mut(model, h) {
+        t.item = None;
+    }
     // `AddTexture`'s icons hide and their lines' indents return to the plain line anchor.
     let textures = tip_mut(model, h)
         .map(|t| std::mem::take(&mut t.texture_lines).len())
