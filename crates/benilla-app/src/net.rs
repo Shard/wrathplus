@@ -1878,13 +1878,12 @@ pub(crate) enum ClientCommand {
     /// `CMSG_AUCTION_SELL_ITEM`: `etime_minutes` is 120, 480 or 1440; the deposit is taken at once.
     AuctionSellItem {
         auctioneer: u64,
-        item_guid: u64,
+        /// Build 12340's `(item guid, count)` pairs, which together make one auction's stack
+        /// (`0x59ba80`); AC refuses a count above an item's stack.
+        items: Vec<(u64, u32)>,
         bid: u32,
         buyout: u32,
         etime_minutes: u32,
-        /// The stack size sold; build 12340 sends `(guid, count)` pairs and AC refuses a count
-        /// above the stack.
-        count: u32,
     },
     /// `CMSG_AUCTION_PLACE_BID`: a `price` at or above a nonzero buyout is the buyout.
     AuctionPlaceBid {

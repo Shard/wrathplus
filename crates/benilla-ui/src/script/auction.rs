@@ -189,8 +189,12 @@ pub struct AuctionStartRequest {
     pub min_bid: u32,
     /// `0` = no buyout.
     pub buyout: u32,
-    /// Minutes: 120, 480 or 1440, the only values the reference sends.
+    /// Minutes: build 12340's 720, 1440 or 2880.
     pub duration: u32,
+    /// Build 12340's `count`: items per auction, 0 for the held stack.
+    pub stack_size: u32,
+    /// Build 12340's `numStacks`: auctions to post, at least 1.
+    pub num_stacks: u32,
 }
 
 /// A drained `PlaceAuctionBid`.
@@ -255,9 +259,14 @@ impl super::UiScript {
         self.model_mut().auction_start.take()
     }
 
-    /// Drain the header clicks: `(list index, sort key)`, in click order. The app owns the stacks.
+    /// Drain the sort gestures: `(list index, op)`, in call order. The app owns the stacks.
     pub fn take_auction_sorts(&mut self) -> Vec<(usize, AuctionSortOp)> {
         std::mem::take(&mut self.model_mut().auction_sorts)
+    }
+
+    /// Whether `CancelSell` ran since the last drain.
+    pub fn take_auction_cancel_sell(&mut self) -> bool {
+        std::mem::take(&mut self.model_mut().auction_cancel_sell)
     }
 
     /// Whether `CloseAuctionHouse` was called since the last drain (and clear the flag).
@@ -694,6 +703,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 min_bid,
                 buyout,
                 duration,
+                stack_size: 0,
+                num_stacks: 1,
             });
             Ok(())
         })?,
@@ -964,16 +975,100 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
             Ok(MultiValue::from_vec(vec![flag(ok)]))
         })?,
     )?;
+    // CancelSell (`0x59b040`): stop a multi-stack sell after the auction in flight; no failure.
     g.set(
         "CancelSell",
         lua.create_function(|lua, ()| {
-            lua.app_data_mut::<Model>()
-                .expect("model app_data")
-                .auction_start = None;
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            model.auction_start = None;
+            model.auction_cancel_sell = true;
             Ok(())
         })?,
     )?;
+    // StartAuction(minBid, buyoutPrice, runTime, count, numStacks) (`0x59f990`): runTime is the
+    // 1-based duration index (720, 1440, 2880 minutes, else 1440); a buyout below the bid is
+    // raised to it.
+    g.set(
+        "StartAuction",
+        lua.create_function(|lua, args: MultiValue| {
+            let num = |i: usize| {
+                args.get(i)
+                    .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
+                    .map(|n| n.round() as i64)
+            };
+            let (Some(min_bid), Some(buyout), Some(run)) = (num(0), num(1), num(2)) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: StartAuction(minBid, buyoutPrice, runTime, count)",
+                ));
+            };
+            let min_bid = min_bid.max(0) as u32;
+            let mut buyout = buyout.max(0) as u32;
+            if buyout != 0 && buyout < min_bid {
+                buyout = min_bid;
+            }
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if model.auction.is_none() || model.auction_sell_item.is_none() {
+                return Ok(());
+            }
+            model.auction_start = Some(AuctionStartRequest {
+                min_bid,
+                buyout,
+                duration: run_minutes(run),
+                stack_size: num(3).unwrap_or(0).max(0) as u32,
+                num_stacks: num(4).unwrap_or(1).max(1) as u32,
+            });
+            Ok(())
+        })?,
+    )?;
+    // CalculateAuctionDeposit(runTime[, count]) (`0x59d270` → `0x76dde0`): the house rate × the
+    // vendor value of `count` items (else the held stack), × minutes / 240, at least 100.
+    g.set(
+        "CalculateAuctionDeposit",
+        lua.create_function(|lua, args: MultiValue| {
+            let num = |i: usize| {
+                args.get(i)
+                    .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
+                    .map(|n| n.round() as i64)
+            };
+            let Some(run) = num(0) else {
+                return Err(mlua::Error::runtime("Usage: CalculateAuctionDeposit(runTime)"));
+            };
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let Some(rate) = model.auction.as_ref().map(|a| a.deposit_percent) else {
+                return Ok(0);
+            };
+            let Some(it) = model.auction_sell_item.as_ref() else {
+                return Ok(0);
+            };
+            let count = num(1).map_or_else(|| cursor::held_count(&model, it), |c| c.max(0) as u32);
+            let unit = model
+                .item_templates
+                .get(&it.item_id)
+                .map_or(0, |t| t.sell_price);
+            Ok(i64::from(wrath_deposit(rate, unit.saturating_mul(count), run_minutes(run))))
+        })?,
+    )?;
     Ok(())
+}
+
+/// `StartAuction`'s duration table (`0xa15248`): index 1-3, else 1440.
+fn run_minutes(run: i64) -> u32 {
+    match run {
+        1 => 720,
+        2 => 1440,
+        3 => 2880,
+        _ => 1440,
+    }
+}
+
+/// `0x76dde0`: `round(minutes × floor(rate × value / 100) / 240)`, at least 100; a duration off the
+/// table pays 100.
+fn wrath_deposit(rate: u32, value: u32, minutes: u32) -> u32 {
+    if ![720, 1440, 2880].contains(&minutes) {
+        return 100;
+    }
+    let base = (u64::from(rate) * u64::from(value) / 100) as f64;
+    ((f64::from(minutes) * base * (1.0 / 240.0)).round() as u32).max(100)
 }
 
 #[cfg(test)]
@@ -1287,5 +1382,17 @@ mod tests {
         assert!(s
             .eval::<bool>("local k, r = GetAuctionSort('owner', 1) return k == nil and r == nil")
             .unwrap());
+    }
+
+    /// Build 12340's deposit (`0x76dde0`) and `StartAuction`'s duration index.
+    #[test]
+    fn the_wrath_deposit_and_run_times() {
+        assert_eq!(run_minutes(1), 720);
+        assert_eq!(run_minutes(3), 2880);
+        assert_eq!(run_minutes(9), 1440);
+        // 5% of 10000 is 500 a 12-hour unit: × 720 / 240 = 1500.
+        assert_eq!(wrath_deposit(5, 10_000, 720), 1500);
+        assert_eq!(wrath_deposit(5, 10, 720), 100, "at least 100");
+        assert_eq!(wrath_deposit(5, 10_000, 30), 100, "off the table");
     }
 }
