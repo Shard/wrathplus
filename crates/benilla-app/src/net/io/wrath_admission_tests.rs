@@ -69,6 +69,29 @@ fn every_wrath_writer_route_is_admitted() {
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
         (
+            "NativeGuildBankSwap",
+            ClientCommand::NativeGuildBankSwap(benilla_protocol::wrath_guild_bank_swap::Swap {
+                banker: 1,
+                transfer: benilla_protocol::wrath_guild_bank_swap::Transfer::AutoStore {
+                    source: benilla_protocol::wrath_guild_bank_swap::BankSlot { tab: 0, slot: 0, item: 1 },
+                    count: 1,
+                },
+            }),
+        ),
+        (
+            "NativeGuildBankTab",
+            ClientCommand::NativeGuildBankTab(benilla_protocol::wrath_guild_bank_tab::UpdateTab {
+                banker: 1,
+                tab: 0,
+                name: b"Mats".to_vec(),
+                icon: b"INV_Box_01".to_vec(),
+            }),
+        ),
+        (
+            "NativeGuildBankText",
+            ClientCommand::NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command::QueryText { tab: 0 }),
+        ),
+        (
             "NativeGuildRank",
             ClientCommand::NativeGuildRank(benilla_protocol::wrath_guild_rank::SaveRank {
                 rank: 1,

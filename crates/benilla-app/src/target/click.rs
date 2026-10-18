@@ -168,6 +168,7 @@ pub(crate) struct Feedback<'w> {
     errors: ResMut<'w, crate::ui_action::UiErrorKeys>,
     cast_errors: ResMut<'w, crate::ui_action::CastErrors>,
     mail: ResMut<'w, crate::ui_mail::MailOpen>,
+    guild_bank: ResMut<'w, crate::ui_guild_bank::GuildBankOpen>,
     item_text: ResMut<'w, crate::ui_item_text::ItemTextOpen>,
     // The opener queue: this system cannot also hold `CastLadder` (a second `Items` and
     // `CastErrors` borrow), so the lock verdict goes to `ui_action::drain::drain_go_openers`.
@@ -363,6 +364,17 @@ impl Dispatch<'_, '_> {
             if in_reach {
                 debug!("right-click mailbox: open mail window {guid:#x}");
                 self.feedback.mail.click(guid);
+            } else {
+                self.walk_to_object(entity, guid, go_type, walk);
+            }
+            return;
+        }
+        // GUILD_BANK (type 34) opens through `CMSG_GUILD_BANKER_ACTIVATE`, not `CMSG_GAMEOBJ_USE`;
+        // the bank feed sends it and the list's answer opens the frame.
+        if go_type == cursor_mode::GO_TYPE_GUILD_BANK {
+            if in_reach {
+                debug!("right-click guild vault: {guid:#x}");
+                self.feedback.guild_bank.open(guid);
             } else {
                 self.walk_to_object(entity, guid, go_type, walk);
             }
@@ -2153,6 +2165,7 @@ mod tests {
         world.init_resource::<crate::ui_loot::LootState>();
         world.init_resource::<crate::ui_loot::LootLatch>();
         world.init_resource::<crate::ui_mail::MailOpen>();
+        world.init_resource::<crate::ui_guild_bank::GuildBankOpen>();
         world.init_resource::<crate::ui_item_text::ItemTextOpen>();
         world.init_resource::<crate::ui_action::GoOpenerCasts>();
         world.init_resource::<Messages<crate::ui_dialog_verbs::MeetingStoneUse>>();
