@@ -896,6 +896,8 @@ pub(crate) struct Model {
     pub(crate) wrath_companions: super::WrathCompanions,
     /// The timed death-knight runes (`wrath_runes`).
     pub(crate) wrath_runes: super::WrathRunes,
+    /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
+    pub(crate) spellbook_highest_rank: Vec<u32>,
     pub(crate) wrath_currency: super::WrathCurrencySnapshot,
     pub(crate) player_combat_stats: Option<char_stats::UnitCombatStats>,
     /// The pet's combat stats, which the reference's pet sheet reads as `UnitStat("pet", …)`.
@@ -1519,6 +1521,7 @@ impl Model {
             wrath_paperdoll_stats: Default::default(),
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
+            spellbook_highest_rank: Vec::new(),
             wrath_currency: Default::default(),
             player_combat_stats: None,
             pet_combat_stats: None,
