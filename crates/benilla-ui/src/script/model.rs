@@ -283,6 +283,7 @@ pub(crate) struct Model {
     pub(crate) wrath_quests_completed: super::wrath_quests_completed::State,
     pub(crate) wrath_calendar: super::wrath_calendar::State,
     pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
+    pub(crate) wrath_gm_survey: super::wrath_gm_survey::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
@@ -1197,6 +1198,7 @@ impl Model {
             wrath_quests_completed: Default::default(),
             wrath_calendar: Default::default(),
             wrath_saved_instances: Default::default(),
+            wrath_gm_survey: Default::default(),
             wrath_inspect_talents: None,
             wrath_server_time_offset: None,
             raid_selection: 0,

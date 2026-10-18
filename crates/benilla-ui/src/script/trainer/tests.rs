@@ -29,6 +29,7 @@ fn svc(
         is_trade_skill: false,
         group_key,
         group_name: group_name.into(),
+        item_link: None,
     }
 }
 

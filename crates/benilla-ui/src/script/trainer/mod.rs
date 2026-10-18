@@ -130,6 +130,9 @@ pub struct TrainerService {
     /// type 2 `TRADESKILL_SERVICE_STEP`/`_LEARN`.
     pub group_name: String,
     pub tooltip: TrainerTooltip,
+    /// Build 12340's `GetTrainerServiceItemLink` (`0x596290`): at a tradeskill trainer, the link
+    /// of the item the spell's first effect creates, once its template is cached.
+    pub item_link: Option<String>,
 }
 
 /// One header and its services, built by [`UiScript::set_trainer`].
@@ -426,6 +429,29 @@ fn opt_str(lua: &Lua, s: Option<&String>) -> mlua::Result<Value> {
 }
 
 /// Register the trainer globals.
+/// Build 12340's `GetTrainerServiceItemLink(index)`: the visible service's product link, else nil.
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "GetTrainerServiceItemLink",
+        lua.create_function(|lua, args: mlua::MultiValue| {
+            let Some(index) = args
+                .front()
+                .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
+            else {
+                return Err(mlua::Error::runtime("Usage: GetTrainerServiceItemLink(index)"));
+            };
+            let link = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                usize::try_from(index.round() as i64)
+                    .ok()
+                    .and_then(|i| service(&model, i))
+                    .and_then(|s| s.item_link.clone())
+            };
+            opt_str(lua, link.as_ref())
+        })?,
+    )
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 

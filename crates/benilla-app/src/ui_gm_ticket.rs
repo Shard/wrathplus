@@ -8,8 +8,9 @@
 //! (`GMTicketHandler.cpp:91,106-113`), and a third `CMSG_GMTICKET_UPDATETEXT` in one world tick
 //! trips its anti-flood kick (`WorldSession.cpp:1316-1342`).
 //!
-//! `GMSURVEY_DISPLAY` is not fired: vmangos never sends its trigger, `SMSG_GM_TICKET_STATUS_UPDATE`
-//! status 3, and the survey window (`Blizzard_GMSurveyUI`) is not built.
+//! Build 12340's GM survey: `SMSG_GM_TICKET_STATUS_UPDATE` status 3 publishes the locale's current
+//! survey (`GMSurveyCurrentSurvey` → `GMSurveySurveys` → questions and answers) and fires
+//! `GMSURVEY_DISPLAY`; the window's `GMSurveySubmit` sends `CMSG_GMSURVEY_SUBMIT`.
 
 use benilla_ui::script::{GmTicketIntent, GmTicketWrite, ScriptValue, UiScript};
 use bevy::prelude::*;
@@ -39,6 +40,57 @@ pub(crate) struct GmTicketState {
     /// for Lua (`0x704fa6`), so `HelpFrame`'s `arg1 == -1` arm fires on `0xFFFFFFFF`.
     queue_status: i32,
     queue_answers: u32,
+    /// Status update 3, a GM's survey offer, counted: each fires `GMSURVEY_DISPLAY`.
+    survey_offers: u32,
+}
+
+/// Build 12340's GM survey tables.
+#[derive(Resource)]
+pub(crate) struct GmSurveyTables {
+    catalog: benilla_formats::gm_survey::GmSurveyCatalog,
+    /// The client's locale id, `GMSurveyCurrentSurvey`'s key.
+    locale_id: u32,
+}
+
+impl GmSurveyTables {
+    /// The current survey (`0x5ac530`'s first hop) with its questions and answers.
+    fn survey(&self) -> benilla_ui::script::WrathGmSurvey {
+        let c = &self.catalog;
+        let survey = c.current.get(&self.locale_id).copied().unwrap_or(0);
+        let slots = c.surveys.get(&survey).copied().unwrap_or_default();
+        benilla_ui::script::WrathGmSurvey {
+            survey,
+            questions: slots
+                .iter()
+                .map(|&id| benilla_ui::script::WrathGmSurveyQuestion {
+                    id,
+                    text: c.questions.get(&id).cloned().unwrap_or_default(),
+                    answers: c
+                        .answers
+                        .iter()
+                        .filter(|a| id != 0 && a.question == id)
+                        .map(|a| (a.sort, a.text.clone()))
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The client locale ids `GMSurveyCurrentSurvey` keys on. Labelled: the order is the build's
+/// locale index (`0xc5de9c`), enGB sharing enUS's.
+fn locale_id(locale: &str) -> u32 {
+    match locale {
+        "koKR" => 1,
+        "frFR" => 2,
+        "deDE" => 3,
+        "zhCN" => 4,
+        "zhTW" => 5,
+        "esES" => 6,
+        "esMX" => 7,
+        "ruRU" => 8,
+        _ => 0,
+    }
 }
 
 impl GmTicketState {
@@ -82,6 +134,7 @@ struct FedTicket {
     answers: u32,
     queue_answers: u32,
     categories_pushed: bool,
+    survey_offers: u32,
 }
 
 /// Fire `UPDATE_TICKET` and `UPDATE_GM_STATUS` for unheard answers; push the categories once.
@@ -90,6 +143,7 @@ fn feed_gm_ticket(
     state: Res<GmTicketState>,
     categories: Option<Res<GmTicketCategories>>,
     mut feed: ResMut<GmTicketFeedState>,
+    survey: Option<Res<GmSurveyTables>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -116,6 +170,15 @@ fn feed_gm_ticket(
     if fed.answers != state.answers {
         fed.answers = state.answers;
         script.fire_event("UPDATE_TICKET", update_ticket_args(state.ticket.as_deref()));
+    }
+
+    // Build 12340: a survey offer publishes the current survey and fires `GMSURVEY_DISPLAY`.
+    if fed.survey_offers != state.survey_offers {
+        fed.survey_offers = state.survey_offers;
+        if let Some(tables) = survey.as_deref() {
+            script.set_wrath_gm_survey(std::sync::Arc::new(tables.survey()));
+            script.fire_event("GMSURVEY_DISPLAY", vec![]);
+        }
     }
 }
 
@@ -155,6 +218,26 @@ fn drain_gm_ticket(
     // The engine's re-asks first: they answer a push that arrived before this frame's input.
     for _ in 0..reask.take_reasks() {
         let _ = commands.0.send(ClientCommand::GmTicketGet);
+    }
+
+    // `GMSurveySubmit`: `CMSG_GMSURVEY_SUBMIT` with each answered slot.
+    for submit in script.take_wrath_gm_survey_submits() {
+        use benilla_protocol::wrath_help::{Command, SurveyAnswer};
+        let _ = commands
+            .0
+            .send(ClientCommand::NativeHelp(Command::SurveySubmit {
+                survey: submit.survey,
+                answers: submit
+                    .answers
+                    .into_iter()
+                    .map(|(question, rank, comment)| SurveyAnswer {
+                        question,
+                        rank,
+                        comment,
+                    })
+                    .collect(),
+                comment: submit.comment,
+            }));
     }
 
     for _ in 0..script.take_stuck_casts() {
@@ -270,6 +353,13 @@ fn load_gm_ticket_dbc(
         }
         Err(e) => warn!("gm ticket: GMTicketCategory.dbc failed to load: {e:#}"),
     }
+    if let benilla_formats::DataProfile::Wrath { locale } = chain.profile() {
+        let locale_id = locale_id(locale);
+        match benilla_formats::gm_survey::load_gm_survey(&mut chain) {
+            Ok(catalog) => commands.insert_resource(GmSurveyTables { catalog, locale_id }),
+            Err(e) => warn!("gm survey: DBCs failed to load: {e:#}"),
+        }
+    }
 }
 
 /// The GM ticket's packet handlers.
@@ -357,7 +447,7 @@ pub(crate) mod net {
     }
 
     /// `SMSG_GM_TICKET_STATUS_UPDATE`: 1 (updated) re-asks, the reference's `0x5e7932`; 2 (closed)
-    /// shows on the next poll; 3 (survey offered) is logged, as the survey window is not built.
+    /// shows on the next poll; 3 offers the GM survey (`GMSURVEY_DISPLAY`).
     pub(crate) fn status_update(status: u32, ticket: &mut super::GmTicketState) {
         match status {
             1 => {
@@ -366,7 +456,8 @@ pub(crate) mod net {
             }
             2 => debug!("gm ticket: a GM closed the ticket"),
             3 => {
-                debug!("gm ticket: a GM survey was offered — the survey window is deferred")
+                debug!("gm ticket: a GM survey was offered");
+                ticket.survey_offers = ticket.survey_offers.wrapping_add(1);
             }
             other => debug!("gm ticket: unknown status update {other}"),
         }
