@@ -607,17 +607,7 @@ GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none
 ProcessQuestLogRewardFactions = ProcessQuestLogRewardFactions or none
-GetQuestLogSpecialItemInfo = GetQuestLogSpecialItemInfo or none
-GetQuestLogSpecialItemCooldown = GetQuestLogSpecialItemCooldown or none
-IsQuestLogSpecialItemInRange = IsQuestLogSpecialItemInRange or none
-UseQuestLogSpecialItem = UseQuestLogSpecialItem or none
 GetQuestLogSpellLink, GetQuestSpellLink = GetQuestLogSpellLink or none, GetQuestSpellLink or none
 GetQuestSortIndex = GetQuestSortIndex or function() return 0 end
 GetQuestWorldMapAreaID = GetQuestWorldMapAreaID or function() return 0 end
-SortQuestWatches = SortQuestWatches or none
-QuestMapUpdateAllQuests = QuestMapUpdateAllQuests or zero
-QuestPOIUpdateIcons = QuestPOIUpdateIcons or none
-QuestPOIGetIconInfo = QuestPOIGetIconInfo or none
-QuestPOIGetQuestIDByVisibleIndex = QuestPOIGetQuestIDByVisibleIndex or none
-GetQuestPOILeaderBoard = GetQuestPOILeaderBoard or none
 
