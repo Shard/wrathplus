@@ -8,7 +8,7 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use crate::wrath_gameplay::{JumpInfo, MovementInfo, OutboundMovement, Position};
+use crate::wrath_gameplay::{JumpInfo, MovementInfo, OutboundMovement, Position, TransportInfo};
 
 pub const MSG_MOVE_START_FORWARD: u32 = 0x00b5;
 pub const MSG_MOVE_START_BACKWARD: u32 = 0x00b6;
@@ -44,6 +44,20 @@ pub const MOVE_WATER_WALKING: u32 = 0x1000_0000;
 pub const MOVE_FALLING_SLOW: u32 = 0x2000_0000;
 /// `MOVEMENTFLAG_SWIMMING`: the mover reports its pitch (`MovementInfo` pitch field) while set.
 pub const MOVE_SWIMMING: u32 = 0x0020_0000;
+/// `MOVEMENTFLAG_ONTRANSPORT`: the mover reports its deck-local pose ([`TransportTail`]).
+pub const MOVE_ON_TRANSPORT: u32 = 0x0000_0200;
+
+/// The `ON_TRANSPORT` tail a mover writes: the transport, its deck-local pose and a time. AzerothCore
+/// `ReadMovementInfo` reads `guid, x, y, z, o, u32 time, i8 seat`; it never validates the time and
+/// overwrites the seat from its own vehicle state (`MovementHandler.cpp:628`), so the writer sends
+/// its movement timestamp and seat -1 (no vehicle seat) and no interpolated `time2`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TransportTail {
+    pub guid: u64,
+    pub position: [f32; 3],
+    pub orientation: f32,
+    pub time: u32,
+}
 
 const DIRECTION_MASK: u32 = MOVE_FORWARD
     | MOVE_BACKWARD
@@ -205,7 +219,54 @@ pub fn encode_movement(
     fall_time: u32,
     fall: Option<FallTail>,
 ) -> Result<Vec<u8>, GroundError> {
-    validate_movement(opcode, flags, position, orientation, pitch, fall_time, fall)?;
+    encode_full(
+        opcode,
+        mover_guid,
+        flags,
+        timestamp,
+        position,
+        orientation,
+        None,
+        pitch,
+        fall_time,
+        fall,
+    )
+}
+
+/// [`encode_movement`] plus the `ON_TRANSPORT` tail: the flag and the tail travel together.
+#[allow(clippy::too_many_arguments)]
+pub fn encode_full(
+    opcode: u32,
+    mover_guid: u64,
+    flags: u32,
+    timestamp: u32,
+    position: [f32; 3],
+    orientation: f32,
+    transport: Option<TransportTail>,
+    pitch: Option<f32>,
+    fall_time: u32,
+    fall: Option<FallTail>,
+) -> Result<Vec<u8>, GroundError> {
+    if (flags & MOVE_ON_TRANSPORT != 0) != transport.is_some() {
+        return Err(GroundError::OpcodeFlags("ON_TRANSPORT flag/tail mismatch"));
+    }
+    if transport.is_some_and(|t| {
+        !t.position
+            .into_iter()
+            .chain([t.orientation])
+            .all(f32::is_finite)
+    }) {
+        return Err(GroundError::NonFinitePose);
+    }
+    validate_movement(
+        opcode,
+        flags & !MOVE_ON_TRANSPORT,
+        position,
+        orientation,
+        pitch,
+        fall_time,
+        fall,
+    )?;
     Ok(OutboundMovement {
         mover_guid,
         movement: MovementInfo {
@@ -218,7 +279,18 @@ pub fn encode_movement(
                 z: position[2],
                 orientation,
             },
-            transport: None,
+            transport: transport.map(|t| TransportInfo {
+                guid: t.guid,
+                position: Position {
+                    x: t.position[0],
+                    y: t.position[1],
+                    z: t.position[2],
+                    orientation: t.orientation,
+                },
+                time: t.time,
+                seat: -1,
+                time2: None,
+            }),
             pitch,
             fall_time,
             jump: fall.map(|fall| JumpInfo {
@@ -551,12 +623,71 @@ mod tests {
             cos_angle: 1.0,
             horizontal_speed: 0.0,
         };
-        for flags in [0x200, 0x0200_0000, 0x0800_0000] {
+        for flags in [0x0200_0000, 0x0800_0000] {
             assert!(matches!(
                 encode_on_foot(MSG_MOVE_HEARTBEAT, 1, flags, 0, [0.0; 3], 0.0, 0, None),
                 Err(GroundError::UnsupportedFlags(_))
             ));
         }
+        // ON_TRANSPORT travels with its tail: guid, deck xyzo, time, seat -1, no time2.
+        let deck = TransportTail {
+            guid: 0x1FC0_0000_0000_0042,
+            position: [1.0, 2.0, 3.0],
+            orientation: 0.5,
+            time: 77,
+        };
+        let body = encode_full(
+            MSG_MOVE_HEARTBEAT,
+            1,
+            MOVE_ON_TRANSPORT | MOVE_FORWARD,
+            5,
+            [10.0, 20.0, 30.0],
+            0.25,
+            Some(deck),
+            None,
+            0,
+            None,
+        )
+        .unwrap();
+        let decoded = OutboundMovement::from_bytes(&body).unwrap().movement;
+        let t = decoded.transport.unwrap();
+        assert_eq!(
+            (
+                t.guid,
+                t.position.x,
+                t.position.orientation,
+                t.time,
+                t.seat,
+                t.time2
+            ),
+            (0x1FC0_0000_0000_0042, 1.0, 0.5, 77, -1, None)
+        );
+        assert!(encode_full(
+            MSG_MOVE_HEARTBEAT,
+            1,
+            MOVE_ON_TRANSPORT,
+            5,
+            [0.0; 3],
+            0.0,
+            None,
+            None,
+            0,
+            None
+        )
+        .is_err());
+        assert!(encode_full(
+            MSG_MOVE_HEARTBEAT,
+            1,
+            0,
+            5,
+            [0.0; 3],
+            0.0,
+            Some(deck),
+            None,
+            0,
+            None
+        )
+        .is_err());
         // Swimming is admitted only with its pitch, and never with an airborne tail.
         assert!(matches!(
             encode_on_foot(
