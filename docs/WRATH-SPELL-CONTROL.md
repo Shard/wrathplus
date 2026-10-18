@@ -33,10 +33,9 @@ Strict framing throughout: a short body or a trailing byte is `Unhandled`, never
   through `banked()` by `GetComboPoints`/`PLAYER_COMBO_POINTS`, the usable gate and the cast ladder.
   Cleared on Connected and Disconnected.
 
-**Partial** (rows stay missing): 0266/0267 spell modifiers decode losslessly (`u8 bit, u8 op,
-i32 total`), but build 12340's family mask is 96 bits and `spell/mods.rs` holds 64 rows, reading
-`SpellFamilyFlags` low/high only. Bits 64..95 are dropped with a warning until benilla-formats reads
-the third family word (assets).
+**Spell modifiers**: 0266/0267 decode losslessly (`u8 bit, u8 op, i32 total`) into `spell/mods.rs`,
+whose tables now hold all 96 family bits (`SpellDisplay::has_family_bit`, from Assets' third
+family word, ba707306). The tooltip dependency mask widened with them (`u128`).
 
 **Capture-only** (`NativeSpellControlPackets`, `net/wrath_spell_control_capture.rs`, ordered with
 duplicates, cleared on Connected and Disconnected): 01F7 spell

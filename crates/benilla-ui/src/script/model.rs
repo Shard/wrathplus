@@ -754,8 +754,8 @@ pub(crate) struct Model {
     pub(crate) mail_send: Option<(String, String, String)>,
     pub(crate) mail_send_money: u32,
     pub(crate) mail_send_cod: u32,
-    /// The Send tab's attached item, resolved to its guid when the send fires.
-    pub(crate) mail_send_item: Option<cursor::CursorItem>,
+    /// Build 12340's twelve send attachment slots (`0xbeb038`, stride 0x18), 0-based.
+    pub(crate) mail_send_items: [Option<cursor::CursorItem>; super::mail::SEND_SLOTS],
     /// The usable stationery, in the picker's order.
     pub(crate) mail_stationeries: Vec<mail::StationeryView>,
     /// `SelectStationery`'s `Stationery.dbc` id; 0 is none, which silences `SendMail`.
@@ -1402,7 +1402,7 @@ impl Model {
             mail_send: None,
             mail_send_money: 0,
             mail_send_cod: 0,
-            mail_send_item: None,
+            mail_send_items: Default::default(),
             mail_stationeries: Vec::new(),
             mail_stationery: 0,
             mail_packages: Vec::new(),
