@@ -5,6 +5,11 @@
 //! (`SOCK_ENCHANTMENT_SLOT`) named back to their gem item through `SpellItemEnchantment`; a gem
 //! placed from the cursor is held as a new gem until `AcceptSockets` sends `CMSG_SOCKET_GEMS`, and
 //! `SMSG_SOCKET_GEMS_RESULT` (`Item::SendUpdateSockets`, success only) clears the new gems.
+//!
+//! Build 12340's `AcceptSockets` first asks about a refundable item (`END_REFUND(2)`) or a bound
+//! one still in its trade window (`END_BOUND_TRADEABLE("gem")`); their Yes, `EndRefund(2)` /
+//! `EndBoundTradeable("gem")` (`0x523370`, `0x5233d0` → `0x5c4ff0`), sends `CMSG_SOCKET_GEMS`.
+//! Labelled: which prompt `AcceptSockets` checks first is not traced (refund first here).
 use super::wrath_inventory_capture::NativeInventoryPackets;
 use super::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, Objects, SelfPlayer};
 use benilla_formats::gems::{
@@ -14,8 +19,8 @@ use benilla_protocol::wrath_inventory::{Command, Packet};
 use benilla_protocol::wrath_items::{SocketMetadata, ITEM_SOCKET_BLOCKS};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{
-    ItemServiceRequest, ScriptDialect, SocketGemView, SocketRequest, SocketSessionView,
-    SocketSlotView, UiScript,
+    ItemServiceRequest, ScriptDialect, ScriptValue, SocketGemView, SocketRequest,
+    SocketSessionView, SocketSlotView, UiScript,
 };
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -38,6 +43,10 @@ pub(crate) struct SocketTemplates(HashMap<u32, SocketMetadata>);
 #[derive(Resource)]
 pub(crate) struct Gems(GemCatalog);
 
+/// `EndRefund(2)` / `EndBoundTradeable("gem")` answers the StaticPopup host forwarded.
+#[derive(Resource, Default)]
+pub(crate) struct SocketResume(pub(crate) u32);
+
 #[derive(Resource, Default)]
 pub(crate) struct SocketSession {
     /// The item being socketed, while the window is open.
@@ -49,6 +58,7 @@ pub(crate) struct SocketSession {
 pub(super) fn register(app: &mut App) {
     app.init_resource::<SocketTemplates>()
         .init_resource::<SocketSession>()
+        .init_resource::<SocketResume>()
         .net_handler(SessionEventKind::WrathItemSocketMetadata, on_template)
         .add_systems(Startup, load.after(benilla_assets::AssetSet::Open))
         .add_systems(
@@ -149,6 +159,7 @@ pub(super) fn feed_sockets(
     commands: Res<NetCommands>,
     guild_bank: Res<crate::ui_guild_bank::GuildBankOpen>,
     mut last: Local<crate::ui_script::VmMemo<Option<Option<SocketSessionView>>>>,
+    mut resume: ResMut<SocketResume>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -195,13 +206,35 @@ pub(super) fn feed_sockets(
             };
         }
     }
+    let held = |bag, slot| {
+        walker_cursor_slot(bag, slot)
+            .and_then(|at| carried.get(&at))
+            .copied()
+    };
     for request in script.take_socket_requests() {
-        let held = |bag, slot| {
-            walker_cursor_slot(bag, slot)
-                .and_then(|at| carried.get(&at))
-                .copied()
-        };
+        if request == SocketRequest::AcceptSockets {
+            let flags = session
+                .item
+                .and_then(|guid| objects.object(guid))
+                .and_then(|o| o.item_flags())
+                .unwrap_or(0);
+            if session.new.iter().any(Option::is_some) {
+                if flags & ITEM_FIELD_FLAG_REFUNDABLE != 0 {
+                    script.fire_event("END_REFUND", vec![ScriptValue::Int(2)]);
+                    continue;
+                }
+                if flags & ITEM_FIELD_FLAG_BOP_TRADEABLE != 0 {
+                    script.fire_event("END_BOUND_TRADEABLE", vec![ScriptValue::Str("gem".into())]);
+                    continue;
+                }
+            }
+        }
         if let Some(command) = apply(&mut session, request, held) {
+            let _ = commands.0.send(ClientCommand::NativeInventory(command));
+        }
+    }
+    for _ in 0..std::mem::take(&mut resume.0) {
+        if let Some(command) = apply(&mut session, SocketRequest::AcceptSockets, held) {
             let _ = commands.0.send(ClientCommand::NativeInventory(command));
         }
     }

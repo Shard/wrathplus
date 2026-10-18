@@ -35,8 +35,10 @@
 //! The state: `IsFalling` (our mover airborne, not rooted), `IsOutOfBounds` (`PLAYER_FLAGS`
 //! `0x4000`), `PlayerCanTeleport` (no stun, confuse or flee flag) and `UnitIsControlling` (a charm
 //! or summon) are published. `PlaceGlyphInSocket` forwards to the cast path's glyph wait
-//! ([`crate::spell::targeting::glyph`]). Not built: the
-//! bound-tradeable, refund and trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
+//! ([`crate::spell::targeting::glyph`]). `EndRefund` and `EndBoundTradeable` resume the item
+//! enchant (`crate::spell::EnchantResume`) or the sockets (`SocketResume`), whose prompts those
+//! seams raise. Not built: `ReplaceTradeEnchant` (`0x80c5f0`, the trade window's untraded slot as
+//! an enchant's target, which no seam binds yet) and the "spellenchant" resume; `CannotBeResurrected` (a client-only
 //! player byte, `+0xf47 & 4`, whose writer is untraced) publishes its default.
 
 use bevy::prelude::*;
@@ -344,6 +346,11 @@ pub(crate) struct PopupInputs<'w, 's> {
     refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
     /// `PlaceGlyphInSocket`'s forward to the cast path.
     placements: Option<ResMut<'w, crate::spell::targeting::glyph::GlyphPlacements>>,
+    /// `EndRefund` / `EndBoundTradeable`'s resumes: the item enchant and the sockets.
+    resumes: (
+        Option<ResMut<'w, crate::spell::EnchantResume>>,
+        Option<ResMut<'w, crate::net::wrath_sockets::SocketResume>>,
+    ),
     /// The vault and its open banker, for the tab purchase and deposit.
     bank: (
         Option<Res<'w, crate::ui_guild_bank::GuildBank>>,
@@ -371,6 +378,7 @@ pub(crate) fn drive(
         packets,
         refer,
         mut placements,
+        resumes: (mut enchant_resume, mut socket_resume),
         falling,
         units,
         progress,
@@ -478,6 +486,26 @@ pub(crate) fn drive(
         if let WrathPopupRequest::PlaceGlyphInSocket { socket } = request {
             if let Some(p) = placements.as_mut() {
                 p.0.push(socket.saturating_sub(1));
+            }
+            continue;
+        }
+        // `EndRefund(type)` (`0x523370`) and `EndBoundTradeable("type")` (`0x5233d0`): the item
+        // enchant (1, "itemenchant") or the sockets (2, "gem") resume confirmed. Labelled:
+        // "spellenchant", a cast-time item target's prompt, is never raised here.
+        let resume = match &request {
+            WrathPopupRequest::EndRefund { kind: 1 } => Some(true),
+            WrathPopupRequest::EndRefund { kind: 2 } => Some(false),
+            WrathPopupRequest::EndBoundTradeable { kind } if kind == "itemenchant" => Some(true),
+            WrathPopupRequest::EndBoundTradeable { kind } if kind == "gem" => Some(false),
+            _ => None,
+        };
+        if let Some(enchant) = resume {
+            if enchant {
+                if let Some(r) = enchant_resume.as_mut() {
+                    r.0 += 1;
+                }
+            } else if let Some(r) = socket_resume.as_mut() {
+                r.0 += 1;
             }
             continue;
         }

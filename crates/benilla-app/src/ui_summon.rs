@@ -266,7 +266,9 @@ impl Plugin for UiSummonPlugin {
                     .after(crate::player::PlayerControlSet)
                     // And after the targeting chain, whose vault click names the banker the
                     // guild-bank answers send to.
-                    .after(crate::target::TargetUpdate),
+                    .after(crate::target::TargetUpdate)
+                    // And after the item bind, whose refund and trade-window prompts it resumes.
+                    .after(crate::spell::targeting::commit_item_cast_on_pick),
             ),
         );
     }
