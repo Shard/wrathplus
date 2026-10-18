@@ -1415,6 +1415,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::PetRename { .. }
         | ClientCommand::CancelAutoRepeat
         | ClientCommand::CancelChannelling { .. }
+        | ClientCommand::FarSight { .. }
         | ClientCommand::ResurrectResponse { .. } => WrathRoute::NativeSpellControl,
         ClientCommand::NativeMirrorImageQuery { .. } => WrathRoute::NativeMirrorImageQuery,
         ClientCommand::NativeUiTimerQuery => WrathRoute::NativeUiTimerQuery,
@@ -2214,6 +2215,7 @@ fn spell_control_command(command: ClientCommand) -> benilla_protocol::wrath_spel
         ClientCommand::CancelAutoRepeat => C::CancelAutoRepeatSpell,
         ClientCommand::CancelChannelling { spell_id } => C::CancelChannelling { spell_id },
         ClientCommand::ResurrectResponse { caster, accept } => C::ResurrectResponse { caster, accept },
+        ClientCommand::FarSight { engage } => C::FarSight { engage },
         _ => unreachable!("not a spell-control route"),
     }
 }
