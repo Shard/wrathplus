@@ -1,5 +1,6 @@
-//! Ordered native item/inventory receipts. Refund replies feed `wrath_item_refunds` and
-//! equipment-set traffic `wrath_equipment_sets`; socket, read and item-text receipts stay here.
+//! Ordered native item/inventory receipts. Refund replies feed `wrath_item_refunds`,
+//! equipment-set traffic `wrath_equipment_sets` and socket results `wrath_sockets`; read and
+//! item-text receipts stay here.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_inventory::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -11,6 +12,7 @@ pub(crate) struct NativeInventoryPackets(pub(crate) VecDeque<Packet>);
 pub(super) fn register(app: &mut App) {
     super::wrath_item_refunds::register(app);
     super::wrath_equipment_sets::register(app);
+    super::wrath_sockets::register(app);
     app.init_resource::<NativeInventoryPackets>()
         .net_handler(SessionEventKind::WrathInventory, receive)
         .net_handler(SessionEventKind::Connected, clear)
@@ -28,6 +30,7 @@ fn clear(
     mut packets: ResMut<NativeInventoryPackets>,
     mut refunds: ResMut<super::wrath_item_refunds::ItemRefunds>,
     mut sets: ResMut<super::wrath_equipment_sets::EquipmentSets>,
+    mut sockets: ResMut<super::wrath_sockets::SocketSession>,
 ) {
     if matches!(
         event,
@@ -36,6 +39,7 @@ fn clear(
         packets.0.clear();
         super::wrath_item_refunds::clear(&mut refunds);
         super::wrath_equipment_sets::clear(&mut sets);
+        super::wrath_sockets::clear(&mut sockets);
     }
 }
 

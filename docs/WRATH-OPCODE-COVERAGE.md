@@ -42,10 +42,10 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 303 | 119 | 267 | 689 |
+| S→C | 304 | 118 | 267 | 689 |
 | C→S | 337 | 0 | 387 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 337 admitted numeric opcodes, 75 of them transport-only (no UI producer) and 262 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 337 admitted numeric opcodes, 74 of them transport-only (no UI producer) and 263 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -950,7 +950,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0344` | `SMSG_MOVE_UNSET_CAN_FLY` | S→C | missing | core | proven_send_site: `game/Entities/Unit/Unit.cpp:16173` | S→C: partial-protocol-consumer — crates/benilla-app/src/net/io/wrath.rs:479-489; crates/benilla-app/src/net/io/wrath.rs:444-478; crates/benilla-protocol/src/wrath_authority.rs:1 — Validated orders raise barriers and enqueue single-writer ACK handling; not full flight/movement support. |
 | `0x0345` | `CMSG_MOVE_SET_CAN_FLY_ACK` | C→S | handled | core | AC receive: `HandleMoveFlagChangeOpcode` (STATUS_LOGGEDIN). | C→S: Bootstrap / timer / lifecycle / automatic ACKs — ACTIVE; A/net/io/wrath.rs:264–347,444–477,1123–1124,1189–1201,1237–1263,1718–1802; P/wrath_world.rs:24–31,321–322,380–381,449–451; P/wrath_events.rs:47,510–524; P/wrath_authority.rs:14–18; P/wrath_taxi_ack.rs:5. Producer status is explained in the family notes above. |
 | `0x0346` | `CMSG_MOVE_SET_FLY` | C→S | missing | core | AC receive: `HandleMovementOpcodes` (STATUS_LOGGEDIN). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
-| `0x0347` | `CMSG_SOCKET_GEMS` | C→S | handled | niche | AC receive: `HandleSocketOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — transport-only; `ClientCommand::NativeInventory`, P/wrath_inventory.rs encoder; no UI producer. See docs/WRATH-INVENTORY.md. |
+| `0x0347` | `CMSG_SOCKET_GEMS` | C→S | handled | niche | AC receive: `HandleSocketOpcode` (STATUS_LOGGEDIN). | C→S: Inventory — `ClientCommand::NativeInventory`; producer `AcceptSockets` via A/net/wrath_sockets.rs. See docs/WRATH-INVENTORY.md. |
 | `0x0348` | `CMSG_ARENA_TEAM_CREATE` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0349` | `SMSG_ARENA_TEAM_COMMAND_RESULT` | S→C | capture-only | common | proven_send_site: `game/Handlers/ArenaTeamHandler.cpp:413` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. |
 | `0x034A` | `MSG_MOVE_UPDATE_CAN_TRANSITION_BETWEEN_SWIM_AND_FLY` | S→C / C→S | missing / missing | core | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
@@ -1402,7 +1402,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0508` | `CMSG_SET_ALLOW_LOW_LEVEL_RAID1` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0509` | `CMSG_SET_ALLOW_LOW_LEVEL_RAID2` | C→S | missing | common | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x050A` | `SMSG_CAMERA_SHAKE` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
-| `0x050B` | `SMSG_SOCKET_GEMS_RESULT` | S→C | capture-only | niche | proven_send_site: `game/Entities/Item/Item.cpp:1076` | S→C: capture-only — P/wrath_inventory.rs `Packet` → A/net/wrath_inventory_capture.rs FIFO (socket enchants); no UI feed; see docs/WRATH-INVENTORY.md. |
+| `0x050B` | `SMSG_SOCKET_GEMS_RESULT` | S→C | handled | niche | proven_send_site: `game/Entities/Item/Item.cpp:1076` | S→C: Inventory — A/net/wrath_sockets.rs clears the socketing window's accepted new gems; see docs/WRATH-INVENTORY.md. |
 | `0x050C` | `CMSG_SET_CHARACTER_MODEL` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x050D` | `SMSG_REDIRECT_CLIENT` | S→C | missing | niche | registry_only_no_source_refs | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x050E` | `CMSG_REDIRECTION_FAILED` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |

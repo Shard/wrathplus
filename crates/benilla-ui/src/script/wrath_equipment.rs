@@ -275,6 +275,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    // This and `EquipmentSetContainsLockedItems` push Lua booleans; whether build 12340 pushes
+    // 1/nil instead is untraced.
     globals.set(
         "EquipmentManagerIsSlotIgnoredForSave",
         lua.create_function(|lua, slot: Value| {

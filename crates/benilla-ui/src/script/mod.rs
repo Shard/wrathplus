@@ -175,6 +175,8 @@ pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
 mod wrath_item_spell;
 mod wrath_items;
 mod wrath_item_services;
+mod wrath_sockets;
+pub use wrath_sockets::{SocketGemView, SocketRequest, SocketSessionView, SocketSlotView};
 pub use wrath_equipment::{
     EQUIPMENT_SET_IGNORED_SLOT, EQUIPMENT_SET_SLOTS, EquipmentSetRequest, EquipmentSetView,
 };
@@ -787,6 +789,7 @@ impl UiScript {
             wrath_paperdoll::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
+            wrath_sockets::install(&lua)?;
             wrath_bag_portrait::install(&lua)?;
             wrath_item_spell::install(&lua)?;
             wrath_currency::install(&lua)?;
