@@ -466,6 +466,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // SetActiveVoiceChannel(id) (`0x500ae0`): only a voice-enabled channel activates, and none is
     // with voice off. Labelled: id 0 also writes console line `0x225`, not modelled.
     set(lua, "SetActiveVoiceChannel", |_, _| none())?;
+    // SetActiveVoiceChannelBySessionID(id) (VoiceChat.lua:259): the same with voice off; no
+    // session exists to activate (labelled: its binding is unread).
+    set(lua, "SetActiveVoiceChannelBySessionID", |_, _| none())?;
 
     // ── Battle.net: never connected ──
     for global in ["BNReportPlayer", "BNSetAFK", "BNSetDND"] {

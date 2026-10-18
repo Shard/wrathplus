@@ -223,6 +223,11 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
          caller, FriendsFrame.lua:1341, is FriendsFrameMuteButton_OnClick of 3.3.5's retired mute list",
     ),
     (
+        "VoiceChatButton_OnEvent",
+        "not in Wow.exe 12340 (raw byte search, 0 NUL-bounded hits) and defined by no installed \
+         FrameXML file; its only caller is VoiceChat.xml:60's OnEvent, a dangling reference",
+    ),
+    (
         "AddSendMailMoney",
         "Wow.exe 12340 has only Get/SetSendMailMoney (string scan, /tmp/azb-ui-mail-helpers.log); \
          MoneyFrame.lua:83 calls it from the SEND_MAIL MoneyTypeInfo drop callback only",
