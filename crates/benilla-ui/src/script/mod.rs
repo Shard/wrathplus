@@ -166,6 +166,7 @@ pub use wrath_achievements::{WrathAchievement, WrathAchievementCriterion, WrathA
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_quests_completed;
+mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
 mod wrath_server_time;
 pub use wrath_tutorial::WrathTutorialRequest;
 pub use wrath_currency::{WrathCurrencyEntry, WrathCurrencySnapshot};
