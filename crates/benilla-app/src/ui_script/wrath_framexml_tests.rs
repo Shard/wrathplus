@@ -427,6 +427,20 @@ fn missing_surface(script: &UiScript) {
                     out[#out + 1] = "KIND:" .. kind
                 end
             end
+            -- Animation groups and animations keep their methods on the object itself.
+            local frame = CreateFrame("Frame")
+            if frame.CreateAnimationGroup then
+                local group = frame:CreateAnimationGroup()
+                local objects = { group }
+                for _, kind in ipairs({ "Animation", "Alpha", "Translation", "Scale", "Rotation" }) do
+                    objects[#objects + 1] = group:CreateAnimation(kind)
+                end
+                for _, object in ipairs(objects) do
+                    for name, value in pairs(object) do
+                        if type(name) == "string" and type(value) == "function" then has[name] = true end
+                    end
+                end
+            end
             for name in pairs(has) do out[#out + 1] = name end
             return out
             "##,
