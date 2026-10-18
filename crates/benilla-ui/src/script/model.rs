@@ -457,6 +457,8 @@ pub(crate) struct Model {
     pub(crate) wrath_unit_casts: super::wrath_unit_casts::State,
     /// The combat-log store, filters and retention.
     pub(crate) wrath_combat_log: super::wrath_combat_log::State,
+    /// ChatFrame.lua's 12340 command intents for App.
+    pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -1250,6 +1252,7 @@ impl Model {
             wrath_lfg: Default::default(),
             wrath_unit_casts: Default::default(),
             wrath_combat_log: Default::default(),
+            wrath_chat_verbs: Vec::new(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),

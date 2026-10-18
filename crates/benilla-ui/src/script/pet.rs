@@ -241,6 +241,23 @@ fn slot_at(model: &Model, i: u32) -> Option<&StoredPetAction> {
         .and_then(|n| model.pet_bar.slots.get(n))
 }
 
+/// The 1-based pet action slot holding the spell named `name` (case-insensitive).
+pub(super) fn slot_index_by_name(model: &Model, name: &str) -> Option<u32> {
+    model
+        .pet_bar
+        .slots
+        .iter()
+        .position(|s| s.view.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(name)))
+        .map(|i| i as u32 + 1)
+}
+
+/// A slot's autocast state, `None` when it cannot autocast.
+pub(super) fn autocast_state(model: &Model, i: u32) -> Option<bool> {
+    slot_at(model, i)
+        .filter(|s| s.view.autocast_allowed)
+        .map(|s| s.view.autocast_enabled)
+}
+
 /// Register the pet-bar globals.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
