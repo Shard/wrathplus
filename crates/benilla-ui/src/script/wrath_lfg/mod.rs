@@ -52,6 +52,8 @@ pub(crate) struct State {
     requests: Vec<WrathLfgLockRequest>,
     /// Uncached reward-item lookups for App's completion queue, in call order.
     item_requests: Vec<WrathLfgItemRequest>,
+    /// L2: the queue snapshot, L0 selection and verbs (`queue`).
+    queue: queue::Queue,
 }
 
 impl UiScript {
@@ -78,6 +80,13 @@ pub use locks::{
     WrathLfgPresentation, WrathLfgPreview, WrathLfgRewardItem,
 };
 
+mod queue;
+pub use queue::{
+    WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem, WrathLfgEncounter, WrathLfgProposal,
+    WrathLfgProposalRow, WrathLfgQueueRequest, WrathLfgQueueSnapshot, WrathLfgQueueStatus,
+    WrathLfgRoleCheck, WrathLfgRoleCheckMember, WrathLfgUpdate,
+};
+
 mod choices;
 mod order;
 mod preferences;
@@ -89,6 +98,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     requests::install(lua)?;
     choices::install(lua)?;
     order::install(lua)?;
+    queue::install(lua)?;
     lua.globals().set(
         "GetLFGDungeonInfo",
         lua.create_function(|lua, id: Value| {
