@@ -364,8 +364,6 @@ pub(super) fn mark_read(
     ))
 }
 
-/// `CMSG_SEND_MAIL` in this build: attachments are `(slot, GUID)` pairs, the package word and the
-/// two trailing constants are 0 (AC reads and ignores them).
 /// `CMSG_SEND_MAIL` as 12340 writes it (`0x570910`): the stationery, the package (only with an
 /// item), then each attachment as its 0-based send slot and item GUID, in slot order.
 #[allow(clippy::too_many_arguments)]
