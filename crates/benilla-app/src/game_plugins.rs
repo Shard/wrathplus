@@ -678,6 +678,9 @@ pub(crate) mod schedule_tests {
     ///   (chained after it through the equipment-set feed), against the same two and
     ///   `entities::evict_display_caches`: they read item templates for icons and links, which
     ///   none of those write, and their one push each commutes with theirs;
+    /// - `ui_guild::wrath::feed_events` (after the guild feed) against `ui_dressup::feed_dressup`
+    ///   and `ui_unit::feed_units`: it reads the name cache and our guild's rank names, which
+    ///   neither writes, and its one `set_wrath_guild_events` push commutes with theirs;
     /// - `script_calls::apply_script_calls`, in the target chain, against the `.after(UiInput)`
     ///   drains of gestures that are not such script calls (the ATTACKTARGET binding, the
     ///   item-pick commit, the GameObject openers, the chat, party, duel, trade and death drains)
@@ -708,7 +711,7 @@ pub(crate) mod schedule_tests {
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_733;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_628;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

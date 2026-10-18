@@ -13,6 +13,7 @@ use super::Player;
 /// Physical movement outside the Wrath writer's deliberately bounded on-foot subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WrathGroundLimit {
+    /// GM levitation and hover (Wrath DISABLE_GRAVITY / HOVER), which the writer does not report.
     Flight,
 }
 
@@ -25,13 +26,14 @@ impl WrathGroundLimit {
 
     pub(super) const fn description(self) -> &'static str {
         match self {
-            Self::Flight => "flight and hover movement",
+            Self::Flight => "levitation and hover movement",
         }
     }
 }
 
-/// The unsupported mode already present before input is integrated. Swimming is supported: the
-/// Wrath writer reports SWIMMING with its pitch (`wrath_ground::encode_movement`).
+/// The unsupported mode already present before input is integrated. Swimming and CAN_FLY flight are
+/// supported: the Wrath writer reports SWIMMING or FLYING with its pitch
+/// (`wrath_ground::encode_movement`).
 pub(super) fn wrath_ground_limit(
     dialect: SessionDialect,
     player: &Player,
@@ -40,11 +42,7 @@ pub(super) fn wrath_ground_limit(
     if dialect != SessionDialect::Wrath12340 {
         return None;
     }
-    // CAN_FLY in the Wrath movement word. Wrath FLYING (`0x0200_0000`) is the shared ON_TRANSPORT
-    // bit, so it is never tested here: the relay drops it and maps Wrath ON_TRANSPORT onto it.
-    const WRATH_FLIGHT_FLAGS: u32 = 0x0100_0000;
-    if player.modes.levitating || player.modes.hover || player.move_flags & WRATH_FLIGHT_FLAGS != 0
-    {
+    if player.modes.levitating || player.modes.hover {
         return Some(WrathGroundLimit::Flight);
     }
     None
@@ -76,7 +74,13 @@ const OUTBOUND_FLAG_MASK: u32 = move_flags::FORWARD
     | move_flags::WATER_WALKING
     | move_flags::SAFE_FALL
     | move_flags::HOVER
-    | move_flags::ON_TRANSPORT;
+    | move_flags::ON_TRANSPORT
+    // Build 12340 flight: the grant rides every packet like the other modes; FLYING carries the
+    // pitch, and the vertical keys their edges.
+    | move_flags::CAN_FLY
+    | move_flags::FLYING
+    | move_flags::ASCENDING
+    | move_flags::DESCENDING;
 
 /// The bits under which the position changes every frame and the move stream carries it; the
 /// position reconcile runs only with none set. Turning is absent: a turn in place moves nothing.
@@ -84,6 +88,7 @@ const IN_MOTION: u32 = move_flags::ANY_MOVE
     | move_flags::FALLING
     | move_flags::FALLING_FAR
     | move_flags::SWIMMING
+    | move_flags::FLYING
     | move_flags::ON_TRANSPORT;
 
 /// This frame's input to the `CMSG_MOVE_TIME_SKIPPED` report ([`stream_skipped_time`]).
@@ -286,6 +291,25 @@ pub(super) fn stream_self_movement_for_dialect(
     } else if landed {
         send_move!(MoveKind::FallLand);
     }
+    // `CMSG_MOVE_SET_FLY` (0x346) goes out the frame FLYING flips, taking off or landing (`0x6ef860`
+    // events 0x2d/0x2e), ahead of the vertical edges the drain sends after it.
+    if (added | removed) & move_flags::FLYING != 0 {
+        send_move!(MoveKind::SetFly);
+    }
+    // The vertical keys while flying (events 6/7/8): `START_ASCEND` (0x359), `START_DESCEND` (0x3a7),
+    // and `STOP_ASCEND` (0x35a) for either released while still flying. Landing clears them with
+    // the SET_FLY above.
+    const VERTICAL: u32 = move_flags::ASCENDING | move_flags::DESCENDING;
+    if added & move_flags::ASCENDING != 0 {
+        send_move!(MoveKind::StartAscend);
+    } else if added & move_flags::DESCENDING != 0 {
+        send_move!(MoveKind::StartDescend);
+    } else if removed & VERTICAL != 0
+        && wire_flags & VERTICAL == 0
+        && wire_flags & move_flags::FLYING != 0
+    {
+        send_move!(MoveKind::StopAscend);
+    }
     // `START_SWIM` (0xca) and `STOP_SWIM` (0xcb) go out the frame `SWIMMING` flips, enqueued by
     // the swim decision `0x6030c0`; airborne and swimming never overlap, so the arc cannot race.
     if added & move_flags::SWIMMING != 0 {
@@ -342,7 +366,11 @@ pub(super) fn stream_self_movement_for_dialect(
     // The heartbeat runs while any sent flag is set; the reference's (`0x616620`) runs only while
     // `flags & 0x200f`, the directions and FALLING (`0x616725`). Every send re-arms its deadline
     // (`0x600a30` → `0x615b80`), hence the stamp on any send below.
-    if !sent && wire_flags != 0 && now - player.last_heartbeat >= HEARTBEAT_INTERVAL {
+    // A standing CAN_FLY grant is no motion: a flying mount on the ground sends nothing extra.
+    if !sent
+        && wire_flags & !move_flags::CAN_FLY != 0
+        && now - player.last_heartbeat >= HEARTBEAT_INTERVAL
+    {
         send_move!(MoveKind::Heartbeat);
     }
     // At rest, a position change goes out the frame it happens: the resolver settles a resting
@@ -367,8 +395,11 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     }
     // The shared controller keeps Vanilla's internal arc bits. Wrath 12340 moved FALLING and
     // FALLING_FAR down one bit; convert only at the command boundary.
-    let mut wrath =
-        flags & !(move_flags::FALLING | move_flags::FALLING_FAR | move_flags::ON_TRANSPORT);
+    let mut wrath = flags
+        & !(move_flags::FALLING
+            | move_flags::FALLING_FAR
+            | move_flags::ON_TRANSPORT
+            | move_flags::FLYING);
     if flags & move_flags::FALLING != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_FALLING;
     }
@@ -378,6 +409,11 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     // The shared ON_TRANSPORT (`0x0200_0000`) is Wrath FLYING; Wrath ON_TRANSPORT is `0x200`.
     if flags & move_flags::ON_TRANSPORT != 0 {
         wrath |= benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT;
+    }
+    // ...and the controller's own FLYING bit is Wrath FLYING. CAN_FLY, ASCENDING and DESCENDING
+    // are already the Wrath bits.
+    if flags & move_flags::FLYING != 0 {
+        wrath |= benilla_protocol::wrath_ground::MOVE_FLYING;
     }
     wrath
 }
@@ -815,6 +851,93 @@ mod tests {
         assert_eq!(flags, move_flags::FORWARD);
         assert_eq!(fall_time, 1_234);
         assert_eq!(jump, None);
+    }
+
+    #[test]
+    fn wrath_flight_sends_set_fly_and_the_vertical_edges_as_valid_packets() {
+        use benilla_protocol::wrath_ground as g;
+        let (raw_tx, rx) = crossbeam_channel::unbounded();
+        let tx = CommandSender::Raw(raw_tx);
+        let mut player = Player {
+            move_flags: move_flags::CAN_FLY | move_flags::FALLING,
+            ..Default::default()
+        };
+        let frame = |player: &mut Player, flags: u32, now: f32| {
+            stream_self_movement_for_dialect(
+                &tx,
+                player,
+                flags,
+                0.25,
+                ArcEdges {
+                    jumped: false,
+                    wire_launch: false,
+                    air_nudged: false,
+                    landed: false,
+                    fall_time: 0,
+                },
+                now,
+                &[],
+                None,
+                None,
+                no_skip(),
+                SessionDialect::Wrath12340,
+            );
+            rx.try_iter()
+                .map(|command| {
+                    let ClientCommand::Move {
+                        kind, flags, pitch, ..
+                    } = command
+                    else {
+                        panic!("expected Move, got {command:?}");
+                    };
+                    // Every packet passes the Wrath writer's validation.
+                    let pitched = flags & (g::MOVE_SWIMMING | g::MOVE_FLYING) != 0;
+                    g::encode_movement(
+                        u32::from(kind.opcode()),
+                        1,
+                        flags,
+                        0,
+                        [0.0; 3],
+                        0.0,
+                        pitched.then_some(pitch),
+                        0,
+                        None,
+                    )
+                    .unwrap_or_else(|e| panic!("{kind:?} {flags:#x}: {e}"));
+                    (kind, flags)
+                })
+                .collect::<Vec<_>>()
+        };
+        let flying = move_flags::CAN_FLY | move_flags::FLYING;
+        // Take-off with the ascend key held: SET_FLY, then START_ASCEND.
+        let sent = frame(&mut player, flying | move_flags::ASCENDING, 1.0);
+        assert_eq!(
+            sent,
+            vec![
+                (
+                    MoveKind::SetFly,
+                    g::MOVE_CAN_FLY | g::MOVE_FLYING | g::MOVE_ASCENDING
+                ),
+                (
+                    MoveKind::StartAscend,
+                    g::MOVE_CAN_FLY | g::MOVE_FLYING | g::MOVE_ASCENDING
+                ),
+            ]
+        );
+        assert_eq!(MoveKind::SetFly.opcode(), 0x0346);
+        assert_eq!(MoveKind::StartAscend.opcode(), 0x0359);
+        // Released: STOP_ASCEND; then descend.
+        let sent = frame(&mut player, flying, 1.1);
+        assert_eq!(
+            sent,
+            vec![(MoveKind::StopAscend, g::MOVE_CAN_FLY | g::MOVE_FLYING)]
+        );
+        let sent = frame(&mut player, flying | move_flags::DESCENDING, 1.2);
+        assert_eq!(sent[0].0, MoveKind::StartDescend);
+        assert_eq!(MoveKind::StartDescend.opcode(), 0x03a7);
+        // Landing with the key still held: one SET_FLY, FLYING and the key cleared, no STOP_ASCEND.
+        let sent = frame(&mut player, move_flags::CAN_FLY, 1.3);
+        assert_eq!(sent, vec![(MoveKind::SetFly, g::MOVE_CAN_FLY)]);
     }
 
     #[test]

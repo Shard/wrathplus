@@ -157,6 +157,9 @@ pub(crate) struct MoveModes {
     /// `MOVEFLAG_LEVITATING` (GM `.cheat fly`), merged unacked from a server-authored move: the
     /// swim decision does not run while it is set (`0x6030d2`), so a server-set swim is flight.
     pub(crate) levitating: bool,
+    /// Build 12340's CAN_FLY (`SMSG_MOVE_SET_CAN_FLY`): the jump key may start flight
+    /// (`0x989890`); the bit rides every outbound packet while granted.
+    pub(crate) can_fly: bool,
 }
 
 impl MoveModes {
@@ -167,6 +170,7 @@ impl MoveModes {
             MoveMode::WaterWalk => self.water_walking = apply,
             MoveMode::FeatherFall => self.feather_fall = apply,
             MoveMode::Hover => self.hover = apply,
+            MoveMode::CanFly => self.can_fly = apply,
         }
     }
 
@@ -190,6 +194,9 @@ impl MoveModes {
         }
         if self.levitating {
             flags |= f::LEVITATING;
+        }
+        if self.can_fly {
+            flags |= f::CAN_FLY;
         }
         flags
     }
@@ -420,6 +427,10 @@ pub(crate) struct Player {
     /// Swimming (`MOVEFLAG_SWIMMING`): the water over the feet crossed the swim-enter depth,
     /// latched with hysteresis ([`super::swim::update_swimming`]).
     pub(crate) swimming: bool,
+    /// Build 12340's FLYING: with CAN_FLY granted, the ascend key held in the air took off
+    /// (`Wow.exe` `0x989890`), and ground contact, water, a knockback or the grant's loss lands
+    /// (`0x98c240`). The mover flies gravity-free along its pitched facing ([`super::flight`]).
+    pub(crate) flying: bool,
     /// Our body's collision height, of which every swim depth line is a fraction. The component's
     /// own type, so `Player::default()` gives [`DEFAULT_COLLISION_HEIGHT`] rather than 0, which
     /// would swim on dry land.
@@ -847,6 +858,7 @@ mod move_mode_tests {
             (MoveMode::WaterWalk, f::WATER_WALKING),
             (MoveMode::FeatherFall, f::SAFE_FALL),
             (MoveMode::Hover, f::HOVER),
+            (MoveMode::CanFly, f::CAN_FLY),
         ] {
             let mut modes = MoveModes::default();
             assert_eq!(modes.wire_flags(), 0);

@@ -2,6 +2,7 @@
 //! driving the `"create"` preview booth, with art, captions and sounds read from the player's
 //! install. This file holds the selection state, input and the wire.
 
+pub(crate) mod paid;
 mod panels;
 mod parts;
 mod refresh;
@@ -45,6 +46,7 @@ pub(crate) struct CharCreatePlugin;
 impl Plugin for CharCreatePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CreateSelection>()
+            .init_resource::<paid::PaidChange>()
             .add_systems(OnEnter(ClientState::CharCreate), screen::enter_create)
             .add_systems(OnExit(ClientState::CharCreate), screen::exit_create)
             .add_systems(Update, debug_enter)
@@ -64,8 +66,11 @@ impl Plugin for CharCreatePlugin {
                     refresh::scroll_drive,
                     refresh::scroll_visuals,
                     create_result,
+                    // The paid services' confirm and status (the one `GlueDialog`).
+                    crate::glue::dialog::drive_glue_dialog,
                 )
                     .chain()
+                    .in_set(crate::glue::GlueScreens::Create)
                     .before(crate::glue::GlueVisuals)
                     .run_if(in_state(ClientState::CharCreate))
                     .after(benilla_world::schedule::WorldStage::Net),
@@ -370,7 +375,18 @@ fn create_input(
     mut next: ResMut<NextState<ClientState>>,
     mut sounds: MessageWriter<GlueSound>,
     mut rng: Local<u64>,
+    // The paid service being made, the dialog its Accept asks through, and the question's text.
+    (paid, mut dialog, strings): (
+        Res<paid::PaidChange>,
+        ResMut<crate::glue::dialog::GlueDialog>,
+        Option<Res<GlueStrings>>,
+    ),
 ) {
+    // A dialog owns the input while it is up.
+    if dialog.is_open() {
+        keyboard.clear();
+        return;
+    }
     let mods = textinput::mods_now(&keys);
     let wl = textinput::wayland_display(raw_handle.iter().next());
     // The create screen has one field and no focus model, so it is always focused while up.
@@ -387,9 +403,12 @@ fn create_input(
         match *action {
             CreateAction::Race(r) => {
                 // The reference always clicks; a real switch resets the class to the race's first
-                // and the facing to -15°.
+                // and the facing to -15°. A race a paid service does not offer is disabled.
                 sounds.write(GlueSound("gsCharacterCreationClass"));
-                if sel.race != r {
+                let offered = paid.0.as_ref().is_none_or(|t| {
+                    t.race_allowed(r, |race, class| class_allowed(cat, race, class))
+                });
+                if sel.race != r && offered {
                     sel.race = r;
                     // Labelled: the class survives a switch when the race allows it, else the
                     // race's first (the C++ `SetSelectedRace` is not traced).
@@ -410,7 +429,9 @@ fn create_input(
                 // `CharacterClass_OnClick` clicks, then switches only to a valid class; a disabled
                 // button's `OnClick` does nothing (`self.enable`).
                 if let Some(&class) = CLASS_SLOTS.get(slot as usize) {
-                    if class_enabled(cat, &sel, class) {
+                    // A paid service keeps the class (`CharacterChangeFixup`).
+                    let kept = paid.0.as_ref().is_none_or(|t| t.class == class);
+                    if class_enabled(cat, &sel, class) && kept {
                         sounds.write(GlueSound("gsCharacterCreationClass"));
                         if sel.class != class {
                             sel.class = class;
@@ -464,9 +485,19 @@ fn create_input(
     }
 
     if do_create && !sel.creating {
-        sel.creating = true;
         sounds.write(GlueSound("gsCharacterCreationCreateChar"));
-        let _ = pick.0.send(CharRequest::Create(sel.request()));
+        if paid.0.is_some() {
+            // `CharacterCreate_Okay`: a paid service asks first.
+            let empty = GlueStrings::default();
+            let strings = strings.as_deref().unwrap_or(&empty);
+            dialog.open_confirm(strings.text(
+                "CONFIRM_PAID_SERVICE",
+                "Are you sure you are done changing your character?",
+            ));
+        } else {
+            sel.creating = true;
+            let _ = pick.0.send(CharRequest::Create(sel.request()));
+        }
     }
     if changed_look {
         preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
@@ -533,6 +564,73 @@ fn rotate_model(
     }
 }
 
+/// The paid service's dialog answers and reply. Done on `CONFIRM_PAID_SERVICE` runs the request
+/// ([`paid::PaidTarget::request`]): a refused name opens the error with its key, else the request
+/// goes out under its status. Cancel on the confirm closes it; on the status, closes it
+/// (labelled: native `StatusDialogClick` for state 9 is not traced). An applied change (the
+/// transport publishes the roster first, `2163ca6b`) returns to select; a refusal replaces the
+/// status with its key's dialog.
+#[allow(clippy::too_many_arguments)]
+fn paid_flow(
+    paid: &mut paid::PaidChange,
+    dialog: &mut crate::glue::dialog::GlueDialog,
+    answers: &mut MessageReader<crate::glue::dialog::GlueDialogAnswer>,
+    services: Option<ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>>,
+    pick: &CharPick,
+    sel: &CreateSelection,
+    strings: &GlueStrings,
+    next: &mut NextState<ClientState>,
+) {
+    use crate::glue::dialog::DialogKind;
+    for answer in answers.read() {
+        match answer.kind {
+            DialogKind::Confirm if answer.button1 => {
+                dialog.close();
+                let Some(target) = paid.0.as_ref() else {
+                    continue;
+                };
+                match target.request(&sel.name.text, sel.race, sel.sex, sel.dials) {
+                    Err(key) => dialog.open_error(strings.text(key, key)),
+                    Ok((command, status)) => {
+                        info!(
+                            "char create: paid service {:?} for {}",
+                            target.service, target.name
+                        );
+                        let _ = pick.0.send(CharRequest::Service(command));
+                        dialog.open_status(strings.text(status, status));
+                    }
+                }
+            }
+            DialogKind::Confirm | DialogKind::Status => dialog.close(),
+            _ => {}
+        }
+    }
+    let Some(mut services) = services else {
+        return;
+    };
+    if paid.0.is_none() {
+        return;
+    }
+    for reply in services.0.drain(..).collect::<Vec<_>>() {
+        use benilla_protocol::wrath_char_services::Reply;
+        let code = match &reply {
+            _ if reply.changed_roster() => {
+                dialog.close();
+                paid.0 = None;
+                next.set(ClientState::CharSelect);
+                continue;
+            }
+            Reply::Rename { result, .. }
+            | Reply::Customize { result, .. }
+            | Reply::ChangeRace { result, .. } => *result,
+            _ => continue,
+        };
+        let key = crate::char_select::wrath_char_result_key(code).unwrap_or("RESPONSE_FAILURE");
+        info!("char create: paid service refused (code {code:#04x}) — {key}");
+        dialog.open_error(strings.text(key, "Character change failed"));
+    }
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────────────────────────
 
 /// Surface each create result in the status line; a success returns to select with the row armed.
@@ -547,7 +645,25 @@ fn create_result(
     mut next: ResMut<NextState<ClientState>>,
     mut status: Query<&mut Text, With<parts::StatusLine>>,
     strings: Res<GlueStrings>,
+    // The paid service: its confirm's answer, the request, and the reply.
+    (mut paid, mut dialog, mut answers, services, pick): (
+        ResMut<paid::PaidChange>,
+        ResMut<crate::glue::dialog::GlueDialog>,
+        MessageReader<crate::glue::dialog::GlueDialogAnswer>,
+        Option<ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>>,
+        Res<CharPick>,
+    ),
 ) {
+    paid_flow(
+        &mut paid,
+        &mut dialog,
+        &mut answers,
+        services,
+        &pick,
+        &sel,
+        &strings,
+        &mut next,
+    );
     for msg in native
         .into_iter()
         .flat_map(|mut r| r.read().copied().collect::<Vec<_>>())
@@ -721,8 +837,16 @@ mod tests {
 
     #[test]
     fn race_columns_match_the_reference_screen() {
-        assert_eq!(ALLIANCE, [1, 3, 4, 7, 11], "Human, Dwarf, Night Elf, Gnome, Draenei");
-        assert_eq!(HORDE, [2, 5, 6, 8, 10], "Orc, Scourge, Tauren, Troll, Blood Elf");
+        assert_eq!(
+            ALLIANCE,
+            [1, 3, 4, 7, 11],
+            "Human, Dwarf, Night Elf, Gnome, Draenei"
+        );
+        assert_eq!(
+            HORDE,
+            [2, 5, 6, 8, 10],
+            "Orc, Scourge, Tauren, Troll, Blood Elf"
+        );
         let mut all: Vec<u8> = ALLIANCE.iter().chain(&HORDE).copied().collect();
         all.sort_unstable();
         assert_eq!(all, [1, 2, 3, 4, 5, 6, 7, 8, 10, 11]);

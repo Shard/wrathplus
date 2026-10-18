@@ -40,6 +40,7 @@ pub(super) fn refresh_dynamic(
     >,
     mut dial_rows: Query<(&DialRow, &mut Node), Without<Button>>,
     slots: Query<(&CreateAction, &Children), With<Button>>,
+    paid: Res<super::paid::PaidChange>,
     mut shades: Query<
         &mut BackgroundColor,
         (With<crate::glue::widgets::IconDisabled>, Without<DynTint>),
@@ -53,6 +54,15 @@ pub(super) fn refresh_dynamic(
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
     let alliance = ALLIANCE.contains(&sel.race);
+    // `CharacterChangeFixup`: a paid service keeps the class and narrows the races.
+    let class_live = |class: u8| {
+        class_enabled(cat, &sel, class) && paid.0.as_ref().is_none_or(|t| t.class == class)
+    };
+    let race_live = |race: u8| {
+        paid.0
+            .as_ref()
+            .is_none_or(|t| t.race_allowed(race, |r, c| super::class_allowed(cat, r, c)))
+    };
     let file = cat
         .and_then(|c| c.0.race_file(sel.race))
         .unwrap_or("Human")
@@ -158,7 +168,7 @@ pub(super) fn refresh_dynamic(
                 .to_string(),
             // A disabled class's tooltip is its `<FILE>_DISABLED` line.
             DynText::ClassSlotLabel(i) => match CLASS_SLOTS.get(*i as usize) {
-                Some(&c) if class_enabled(cat, &sel, c) => class_name(c).to_string(),
+                Some(&c) if class_live(c) => class_name(c).to_string(),
                 Some(&c) => strings
                     .get(&format!("{}_DISABLED", class_file(c)))
                     .map(str::to_string)
@@ -205,14 +215,16 @@ pub(super) fn refresh_dynamic(
         }
     }
 
-    // Every class keeps its button; one the race cannot be shows its `DisableTexture`.
+    // Every class keeps its button; one the race cannot be shows its `DisableTexture`, as does a
+    // race a paid service does not offer.
     for (action, children) in &slots {
-        let CreateAction::ClassSlot(i) = action else {
-            continue;
+        let enabled = match action {
+            CreateAction::ClassSlot(i) => {
+                CLASS_SLOTS.get(*i as usize).is_some_and(|&c| class_live(c))
+            }
+            CreateAction::Race(r) => race_live(*r),
+            _ => continue,
         };
-        let enabled = CLASS_SLOTS
-            .get(*i as usize)
-            .is_some_and(|&c| class_enabled(cat, &sel, c));
         for child in children {
             if let Ok(mut shade) = shades.get_mut(*child) {
                 let want = if enabled {

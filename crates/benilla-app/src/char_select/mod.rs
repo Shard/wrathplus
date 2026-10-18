@@ -119,6 +119,7 @@ impl Plugin for CharSelectPlugin {
                         debug_select_shot,
                     )
                         .chain()
+                        .in_set(crate::glue::GlueScreens::Select)
                         .before(crate::glue::GlueVisuals)
                         // After the UI tick: the addons panel holds the VM, and a glue screen
                         // has no push the tick must see, so the chain takes the drain side.

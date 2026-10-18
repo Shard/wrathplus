@@ -91,11 +91,20 @@ pub(crate) fn seed_spell_catalog(world: &World, script: &mut UiScript) {
         return;
     }
     if let Some(spells) = world.get_resource::<Spells>() {
-        script.set_spell_catalog(spells.catalog.iter().map(|(id, def)| catalog_row(id, def, spells)));
+        script.set_spell_catalog(
+            spells
+                .catalog
+                .iter()
+                .map(|(id, def)| catalog_row(id, def, spells)),
+        );
     }
 }
 
-fn catalog_row(id: u32, def: &benilla_formats::SpellDisplay, spells: &Spells) -> benilla_ui::script::SpellInfoView {
+fn catalog_row(
+    id: u32,
+    def: &benilla_formats::SpellDisplay,
+    spells: &Spells,
+) -> benilla_ui::script::SpellInfoView {
     let range = spells.ranges.get(def.range_index);
     benilla_ui::script::SpellInfoView {
         spell_id: id,
@@ -105,7 +114,9 @@ fn catalog_row(id: u32, def: &benilla_formats::SpellDisplay, spells: &Spells) ->
         cost: def.mana_cost,
         funnel: def.tooltip_channeled() && def.mana_per_second != 0,
         power_type: def.power_type as i32,
-        cast_time_ms: spells.cast_times.get(def.casting_time_index)
+        cast_time_ms: spells
+            .cast_times
+            .get(def.casting_time_index)
             .map_or(0, |row| row.base_ms.max(0) as u32),
         min_range: range.map_or(0.0, |r| f64::from(r.min)),
         max_range: range.map_or(0.0, |r| f64::from(r.max)),
@@ -268,6 +279,13 @@ fn feed_spellbook(
             fresh.slots.len()
         );
         script.set_spellbook(fresh.clone());
+        // Build 12340's highest-rank list (`0xbe5d88`): the book's spells no known higher rank
+        // supersedes, by `KnownHigherRank` (`0x60c8d0`), the `ShowAllSpellRanks` off view.
+        script.set_spellbook_highest_rank(highest_rank_slots(
+            &fresh,
+            skill_lines.as_deref().map(|s| &s.catalog),
+            &actions.spells,
+        ));
         memory.pushed = fresh;
         if book_changed {
             script.fire_event("SPELLS_CHANGED", vec![]);
@@ -334,6 +352,20 @@ fn tab_flash_index(
 
 /// Build the book, and the skill-line id behind each published tab in order, for
 /// [`LearnedInTab`]'s index: one tab ordering, never recomputed.
+/// The 0-based book slots no known higher rank supersedes, in book order.
+fn highest_rank_slots(
+    book: &SpellBookState,
+    skill_lines: Option<&SkillLineCatalog>,
+    known: &BTreeSet<u32>,
+) -> Vec<u32> {
+    (0..book.slots.len() as u32)
+        .filter(|&i| {
+            let spell = book.slots[i as usize].spell_id;
+            !skill_lines.is_some_and(|s| s.higher_rank_known(spell, known))
+        })
+        .collect()
+}
+
 fn build_book(
     known: &BTreeSet<u32>,
     catalog: &SpellCatalog,
@@ -498,6 +530,32 @@ pub(crate) fn cast_spell(cast: &mut crate::spell::ScriptCast, spell_id: u32, on_
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rank view keeps a chain's highest known rank and every unchained spell.
+    #[test]
+    fn the_highest_rank_list_drops_superseded_ranks() {
+        use benilla_formats::SlaInfo;
+        let row = |forward| SlaInfo {
+            skill_id: 8,
+            req_skill_value: 0,
+            forward_spell_id: forward,
+            trivial_low: 0,
+            trivial_high: 0,
+        };
+        let lines =
+            SkillLineCatalog::from_abilities([(133, row(143)), (143, row(145)), (145, row(0))]);
+        let slot = |spell_id| SpellSlotView {
+            spell_id,
+            ..Default::default()
+        };
+        let book = SpellBookState {
+            tabs: Vec::new(),
+            slots: vec![slot(6603), slot(133), slot(143)],
+        };
+        let known = BTreeSet::from([6603, 133, 143]);
+        assert_eq!(highest_rank_slots(&book, Some(&lines), &known), [0, 2]);
+        assert_eq!(highest_rank_slots(&book, None, &known), [0, 1, 2]);
+    }
     use benilla_formats::SpellDisplay;
     use std::collections::HashMap;
 
@@ -513,23 +571,44 @@ mod tests {
         def.range_index = 3;
         let spells = Spells {
             catalog: SpellCatalog::from_displays([(42, def)].into_iter().collect()),
-            cast_times: benilla_formats::SpellCastTimeCatalog::from_rows([(2,
-                benilla_formats::SpellCastTime { base_ms: 1500, per_level_ms: 0, minimum_ms: 0 })]),
-            ranges: benilla_formats::SpellRangeCatalog::from_rows([(3,
-                benilla_formats::SpellRange { min: 5.0, max: 30.0, flags: 0 })].into_iter().collect()),
+            cast_times: benilla_formats::SpellCastTimeCatalog::from_rows([(
+                2,
+                benilla_formats::SpellCastTime {
+                    base_ms: 1500,
+                    per_level_ms: 0,
+                    minimum_ms: 0,
+                },
+            )]),
+            ranges: benilla_formats::SpellRangeCatalog::from_rows(
+                [(
+                    3,
+                    benilla_formats::SpellRange {
+                        min: 5.0,
+                        max: 30.0,
+                        flags: 0,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+            ),
             ..Spells::empty_for_tests()
         };
         let mut world = World::new();
         world.insert_resource(spells);
         for _ in 0..2 {
-            let mut script = UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+            let mut script =
+                UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
             seed_spell_catalog(&world, &mut script);
-            script.run(r#"
+            script
+                .run(
+                    r#"
                 local n,r,i,c,f,p,t,min,max = GetSpellInfo(42)
                 assert(n == 'Unlearned' and r == 'Rank 2' and i == 'Interface\\Icons\\Test')
                 assert(c == 27 and f and p == -2 and t == 1500 and min == 5 and max == 30)
                 assert(IsPassiveSpell(42) and GetSpellInfo('Unlearned') == nil)
-            "#).unwrap();
+            "#,
+                )
+                .unwrap();
         }
         let mut vanilla = UiScript::new().unwrap();
         seed_spell_catalog(&world, &mut vanilla);

@@ -54,6 +54,9 @@ pub(crate) enum DialogKind {
     /// The realmlist editor, on the reference's `hasEditBox` dialog shape (`GlueDialog.lua`). The
     /// 1.12 client has no realmlist dialog.
     Realmlist,
+    /// A two-button question, build 12340's `CONFIRM_PAID_SERVICE` (`DONE`/`CANCEL`); the screen
+    /// that opened it answers.
+    Confirm,
 }
 
 impl DialogKind {
@@ -70,6 +73,10 @@ impl DialogKind {
             DialogKind::Error => (strings.text("OKAY", "Okay"), None),
             DialogKind::Realmlist => (
                 strings.text("OKAY", "Okay"),
+                Some(strings.text("CANCEL", "Cancel")),
+            ),
+            DialogKind::Confirm => (
+                strings.text("DONE", "Done"),
                 Some(strings.text("CANCEL", "Cancel")),
             ),
         }
@@ -89,9 +96,10 @@ fn dialog_keys(kind: DialogKind, on_screen: bool, enter: bool, escape: bool) -> 
         // The status and queue dialogs' one button is Cancel, so ESCAPE is it.
         DialogKind::Status | DialogKind::Queued => escape,
         DialogKind::Error => escape || enter,
-        DialogKind::Realmlist => enter,
+        DialogKind::Realmlist | DialogKind::Confirm => enter,
     };
-    (button1, kind == DialogKind::Realmlist && escape)
+    let button2 = matches!(kind, DialogKind::Realmlist | DialogKind::Confirm) && escape;
+    (button1, button2)
 }
 
 /// The glue layer's one dialog, the reference's shared `GlueDialog`.
@@ -121,6 +129,11 @@ impl GlueDialog {
     /// The glue screens' modal test: while a dialog is up, the screen behind it takes no input.
     pub(crate) fn is_open(&self) -> bool {
         self.kind.is_some()
+    }
+
+    pub(crate) fn open_confirm(&mut self, text: &str) {
+        self.kind = Some(DialogKind::Confirm);
+        self.set_text(text);
     }
 
     pub(crate) fn open_status(&mut self, text: &str) {

@@ -18,6 +18,8 @@ pub struct VendorItem {
     pub max_durability: u32,
     /// Stack size delivered per purchase (`item_template.buy_count`).
     pub buy_count: u32,
+    /// Build 12340's `ItemExtendedCost.dbc` id, 0 for a gold-only row (1.12 has none).
+    pub extended_cost: u32,
 }
 
 /// `BuyResult` (vmangos `ItemDefines.h:120-141`): the `u8` reason on `SMSG_BUY_FAILED`.
@@ -126,6 +128,7 @@ pub(super) fn read_list_inventory(r: &mut &[u8]) -> io::Result<(u64, Vec<VendorI
             price: read_u32_le(r)?,
             max_durability: read_u32_le(r)?,
             buy_count: read_u32_le(r)?,
+            extended_cost: 0,
         });
     }
     Ok((vendor_guid, items))
