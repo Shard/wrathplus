@@ -72,12 +72,13 @@ pub(crate) enum ScanSide {
 }
 
 impl ScanSide {
-    /// The side a `TargetNearest*` call's mode names.
+    /// The side a `TargetNearest*` call's mode names. The 12340 player-only modes never reach the
+    /// scan yet (`script_calls` holds them back as capture-only); they name their side here.
     pub(crate) fn of(mode: benilla_ui::script::NearestMode) -> Self {
         use benilla_ui::script::NearestMode;
         match mode {
-            NearestMode::Enemy => Self::Enemy,
-            NearestMode::Friend => Self::Friend,
+            NearestMode::Enemy | NearestMode::EnemyPlayer => Self::Enemy,
+            NearestMode::Friend | NearestMode::FriendPlayer => Self::Friend,
             NearestMode::PartyMember => Self::Party,
             NearestMode::RaidMember => Self::Raid,
         }

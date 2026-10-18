@@ -56,6 +56,65 @@ pub(super) fn executable_text(src: &str) -> String {
     String::from_utf8(out).expect("masked UTF-8")
 }
 
+/// The names a chunk binds with `local` (`local a, b = …`, `local function f`), read from
+/// executable text: a call to one of them in the same chunk is a call to the chunk's own value,
+/// not an engine global (StaticPopup.lua's `local OnCancel = info.OnCancel`). Scope is the
+/// chunk, not the block: a same-named global called elsewhere in that chunk is not counted.
+pub(super) fn local_names(src: &str) -> std::collections::HashSet<String> {
+    let b = src.as_bytes();
+    let ident = |i: usize| {
+        b.get(i)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_')
+    };
+    let word_at = |mut i: usize| -> (usize, usize) {
+        let start = i;
+        while ident(i) {
+            i += 1;
+        }
+        (start, i)
+    };
+    let skip_ws = |mut i: usize| {
+        while b.get(i).is_some_and(|c| *c == b' ' || *c == b'\t') {
+            i += 1;
+        }
+        i
+    };
+    let mut out = std::collections::HashSet::new();
+    let mut i = 0;
+    while i < b.len() {
+        let boundary = i == 0 || !ident(i - 1);
+        if boundary && b[i..].starts_with(b"local") && !ident(i + 5) {
+            let mut j = skip_ws(i + 5);
+            let (s0, e0) = word_at(j);
+            if &src[s0..e0] == "function" {
+                let (s1, e1) = word_at(skip_ws(e0));
+                if e1 > s1 {
+                    out.insert(src[s1..e1].to_string());
+                }
+                i = e1.max(e0);
+                continue;
+            }
+            loop {
+                let (s1, e1) = word_at(j);
+                if e1 == s1 {
+                    break;
+                }
+                out.insert(src[s1..e1].to_string());
+                j = skip_ws(e1);
+                if b.get(j) == Some(&b',') {
+                    j = skip_ws(j + 1);
+                } else {
+                    break;
+                }
+            }
+            i = j.max(i + 5);
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
 fn long_end(b: &[u8], start: usize) -> Option<usize> {
     if b.get(start) != Some(&b'[') {
         return None;
@@ -85,6 +144,17 @@ fn long_end(b: &[u8], start: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn local_bindings_are_collected_per_chunk() {
+        let names = local_names(
+            "local OnCancel = info.OnCancel\nlocal a, b = 1, 2\nlocal function Helper() end\nlocalize = 1",
+        );
+        for n in ["OnCancel", "a", "b", "Helper"] {
+            assert!(names.contains(n), "{n}");
+        }
+        assert!(!names.contains("localize") && !names.contains("info"));
+    }
+
     #[test]
     fn broken_short_strings_do_not_hide_next_line_calls() {
         for src in ["x = 'oops\nRealCall()", "x = \"oops\r\nRealCall()"] {

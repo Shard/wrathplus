@@ -1517,9 +1517,9 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::ForceSpeedAck { .. }
         | ClientCommand::MoveModeAck { .. }
         | ClientCommand::KnockBackAck { .. } => WrathRoute::AuthorityAcked,
-        ClientCommand::MountSpecial | ClientCommand::MoveTimeSkipped { .. } => {
-            WrathRoute::NativeMovementMisc
-        }
+        ClientCommand::MountSpecial
+        | ClientCommand::MoveTimeSkipped { .. }
+        | ClientCommand::NativeMovementMisc(_) => WrathRoute::NativeMovementMisc,
         ClientCommand::NotActiveMover { .. } | ClientCommand::WorldportAck => {
             WrathRoute::DisabledMovement
         }
@@ -1932,6 +1932,7 @@ fn writer_loop(
                         let native = match command {
                             ClientCommand::MountSpecial => Command::MountSpecialAnim,
                             ClientCommand::MoveTimeSkipped { guid, lag_ms } => Command::TimeSkipped { mover: guid, lag_ms },
+                            ClientCommand::NativeMovementMisc(native) => native,
                             _ => unreachable!(),
                         };
                         let (opcode, body) = encode(&native);

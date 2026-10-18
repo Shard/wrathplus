@@ -95,7 +95,13 @@ pose were on-foot only.
   the session; control returning to our guid restores it. A `SET_ACTIVE_MOVER` claim for a non-player
   is withheld. Vehicles still cannot be driven (M4b).
 
-**Not yet** (movement M4b): our own flight (flight physics; `WrathGroundLimit` holds the flyer),
-driving vehicles and possession (`046D`, `049B` carry the vehicle's `MovementInfo`), the simple
-vehicle requests (`0476..0479`, `04A8`, `04A9`) and notices (`04A7`, `049D`), `CMSG_MOVE_SET_FLY`,
-`CMSG_MOVE_CHNG_TRANSPORT`, `CMSG_MOVE_NOT_ACTIVE_MOVER`.
+**Movement M4b: the vehicle wire layer.** The simple requests are admitted transport-only through
+`ClientCommand::NativeMovementMisc`: exit, previous and next seat (empty), switch seat (`packed vehicle
+guid, u8 seat`), enter player vehicle and eject passenger (raw guid). Vehicle data (`packed guid, u32
+vehicleId`) and the cancelled ride-vehicle aura (empty) are capture-only. `CMSG_SET_TAXI_BENCHMARK_MODE`
+(`u8 on`) rides the same route for `/timetest`.
+
+**Not yet** (controller-level): our own flight (flight physics; `WrathGroundLimit` holds the flyer),
+driving vehicles and possession (`046D` and `049B` carry the vehicle's `MovementInfo`; the mover
+must be the vehicle), `CMSG_MOVE_SET_FLY`, `CMSG_MOVE_CHNG_TRANSPORT` (AzerothCore also boards from
+ordinary movement flags), `CMSG_MOVE_NOT_ACTIVE_MOVER` (possession).

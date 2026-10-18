@@ -2,8 +2,9 @@
 //! Wow.exe round: `/tmp/azb-ui-chatframe-native.log`, `/tmp/azb-ui-chatframe-rest4.log`).
 //!
 //! Where a 1.12 request already carries the intent, the 12340 binding feeds it (party, guild,
-//! friends, container use). The rest go out as [`WrathChatVerbRequest`]s, labelled capture-only
-//! until App sends them. Battle.net bindings answer the closed session a 3.3.5a realm always
+//! friends, container use). Verbs that read or move the selection or cast go in call order with
+//! casts, as `ScriptCall`s; the pure sends go out as [`WrathChatVerbRequest`]s, labelled
+//! capture-only until App sends them. Battle.net bindings answer the closed session a 3.3.5a realm always
 //! leaves: every check before their usage lines asks for a connected session, so they do nothing.
 
 use mlua::{Lua, MultiValue, Value};
@@ -22,22 +23,6 @@ pub enum WrathChatVerbRequest {
     ArenaTeamUninvite { team: u8, name: String },
     /// `ArenaTeamSetLeaderByName(team, name)` (`0x515ff0`, CMSG `0x356`).
     ArenaTeamSetLeader { team: u8, name: String },
-    /// `CancelShapeshiftForm()` (`0x53de60` → `0x726ce0`).
-    CancelShapeshiftForm,
-    /// `Dismount()` (`0x51d170` → `0x7412e0`).
-    Dismount,
-    /// `StartAttack([unit])` (`0x523090`): the named unit, else the target.
-    StartAttack { unit: Option<String> },
-    /// `StopAttack()` (`0x51d0b0`).
-    StopAttack,
-    /// `TargetLastFriend()` (`0x525e50`).
-    TargetLastFriend,
-    /// `TargetNearestEnemyPlayer([reverse])` (`0x525b10`).
-    TargetNearestEnemyPlayer { reverse: bool },
-    /// `TargetNearestFriendPlayer([reverse])` (`0x525b90`).
-    TargetNearestFriendPlayer { reverse: bool },
-    /// `SetActiveTalentGroup(group)` (`0x5c5e70`): casts the 1-based group's activation spell.
-    ActivateTalentGroup { group: u8 },
     /// `SetCurrentTitle(titleMaskID)` (`0x522e30`, CMSG `0x374`). Labelled: native's rate limit
     /// (more than ten calls in a short window raise an error) is not modelled.
     SetTitle { title: i32 },
@@ -50,6 +35,13 @@ impl super::UiScript {
     pub fn take_wrath_chat_verb_requests(&mut self) -> Vec<WrathChatVerbRequest> {
         std::mem::take(&mut self.model_mut().wrath_chat_verbs)
     }
+}
+
+fn call(lua: &Lua, c: super::ScriptCall) {
+    lua.app_data_mut::<Model>()
+        .expect("model app_data")
+        .script_calls
+        .push(c);
 }
 
 fn push(lua: &Lua, r: WrathChatVerbRequest) {
@@ -287,26 +279,26 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // ── actions ──
     set(lua, "CancelShapeshiftForm", |lua, _| {
         if has_player(lua) {
-            push(lua, R::CancelShapeshiftForm);
+            call(lua, super::ScriptCall::CancelShapeshiftForm);
         }
         none()
     })?;
     set(lua, "Dismount", |lua, _| {
         if has_player(lua) {
-            push(lua, R::Dismount);
+            call(lua, super::ScriptCall::Dismount);
         }
         none()
     })?;
     set(lua, "StartAttack", |lua, args| {
         if has_player(lua) {
             let unit = text(lua, &arg(&args, 0))?.filter(|u| !u.is_empty());
-            push(lua, R::StartAttack { unit });
+            call(lua, super::ScriptCall::StartAttack { unit });
         }
         none()
     })?;
     set(lua, "StopAttack", |lua, _| {
         if has_player(lua) {
-            push(lua, R::StopAttack);
+            call(lua, super::ScriptCall::StopAttack);
         }
         none()
     })?;
@@ -314,17 +306,29 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // nothing.
     set(lua, "StopMacro", |_, _| none())?;
     set(lua, "TargetLastFriend", |lua, _| {
-        push(lua, R::TargetLastFriend);
+        call(lua, super::ScriptCall::TargetLastFriend);
         none()
     })?;
     set(lua, "TargetNearestEnemyPlayer", |lua, args| {
         let reverse = super::binding_abi::bool_or_default(args.front(), false);
-        push(lua, R::TargetNearestEnemyPlayer { reverse });
+        call(
+            lua,
+            super::ScriptCall::TargetNearest {
+                mode: super::NearestMode::EnemyPlayer,
+                reverse,
+            },
+        );
         none()
     })?;
     set(lua, "TargetNearestFriendPlayer", |lua, args| {
         let reverse = super::binding_abi::bool_or_default(args.front(), false);
-        push(lua, R::TargetNearestFriendPlayer { reverse });
+        call(
+            lua,
+            super::ScriptCall::TargetNearest {
+                mode: super::NearestMode::FriendPlayer,
+                reverse,
+            },
+        );
         none()
     })?;
     // Enable/DisableSpellAutocast(spell) (`0x541140`/`0x5411a0`): the pet action slot holding the
@@ -399,15 +403,18 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ));
         }
         let group = lua.coerce_number(g)?.unwrap_or(0.0).round_ties_even() as i64;
-        let call = |name: &str| -> mlua::Result<i64> {
+        let ask = |name: &str| -> mlua::Result<i64> {
             match lua.globals().get::<Value>(name)? {
                 Value::Function(f) => Ok(f.call::<Option<i64>>(())?.unwrap_or(1)),
                 _ => Ok(1),
             }
         };
-        let (active, count) = (call("GetActiveTalentGroup")?, call("GetNumTalentGroups")?);
+        let (active, count) = (ask("GetActiveTalentGroup")?, ask("GetNumTalentGroups")?);
         if group != active && group >= 1 && group <= count.min(2) {
-            push(lua, R::ActivateTalentGroup { group: group as u8 });
+            call(
+                lua,
+                super::ScriptCall::ActivateTalentGroup { group: group as u8 },
+            );
         }
         none()
     })?;
@@ -605,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn command_intents_go_to_the_outbox() {
+    fn command_intents_split_between_call_order_and_the_outbox() {
         let mut s = vm();
         s.run(
             "ArenaTeamInviteByName(2, 'Hal') ArenaTeamInviteByName(1, '') ArenaTeamLeave(4) \
@@ -622,19 +629,28 @@ mod tests {
                     name: "Hal".into()
                 },
                 R::ArenaTeamLeave { team: 0 },
-                R::CancelShapeshiftForm,
-                R::Dismount,
-                R::StartAttack { unit: None },
-                R::StartAttack {
-                    unit: Some("target".into())
-                },
-                R::StopAttack,
-                R::TargetLastFriend,
-                R::TargetNearestEnemyPlayer { reverse: true },
                 R::SetTitle { title: 42 },
                 R::TaxiBenchmarkMode { on: true },
+            ]
+        );
+        use crate::script::{NearestMode, ScriptCall as C};
+        assert_eq!(
+            s.model_mut().script_calls.clone(),
+            vec![
+                C::CancelShapeshiftForm,
+                C::Dismount,
+                C::StartAttack { unit: None },
+                C::StartAttack {
+                    unit: Some("target".into())
+                },
+                C::StopAttack,
+                C::TargetLastFriend,
+                C::TargetNearest {
+                    mode: NearestMode::EnemyPlayer,
+                    reverse: true
+                },
             ],
-            "one talent group: SetActiveTalentGroup(2) casts nothing"
+            "selection, swing and cancel verbs go in call order; one talent group casts nothing"
         );
         assert!(s.run("ArenaTeamLeave()").is_err());
         assert!(s.run("SetCurrentTitle('x')").is_err());

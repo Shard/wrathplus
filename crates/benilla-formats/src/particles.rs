@@ -478,7 +478,7 @@ fn shape_of(v: u16) -> ParticleShape {
 /// Build 12340 (MD20 version 264) emitters: 0x1DC-byte records at header +0x128/+0x12C. Tracks
 /// are 20 bytes with per-sequence nested arrays whose times restart at 0, so each sequence's band
 /// is `(0, duration)`; a sequence whose keys live in an `.anim` file (flags bit 0x20 clear) reads
-/// as unkeyed. The over-life curves are fake-animation blocks (`u16` life fraction keys)
+/// them from that file's bytes when the caller supplies it, else as unkeyed. The over-life curves are fake-animation blocks (`u16` life fraction keys)
 /// resampled onto 1.12's three-point form.
 mod wrath {
     use super::*;
@@ -500,13 +500,32 @@ mod wrath {
             .collect()
     }
 
+    /// The buffer each sequence's keys live in: the model itself for an inline sequence, its
+    /// `.anim` file for an external one, `None` when that file was not supplied.
+    fn sequence_sources<'a>(
+        bytes: &'a [u8],
+        inline: &[bool],
+        external: &[Option<&'a [u8]>],
+    ) -> Vec<Option<&'a [u8]>> {
+        (0..inline.len().max(1))
+            .map(|seq| {
+                if inline.get(seq).copied().unwrap_or(seq == 0) {
+                    Some(bytes)
+                } else {
+                    external.get(seq).copied().flatten()
+                }
+            })
+            .collect()
+    }
+
     /// One nested track as the flat form [`EmitTiming`] reads: concatenated keys, per-sequence
-    /// index ranges, times relative to each sequence's start.
+    /// index ranges, times relative to each sequence's start. The per-sequence key arrays are
+    /// read from `sources[seq]`; a global-sequence track keeps its keys in the model.
     pub(super) fn track(
         b: &[u8],
         at: usize,
         elem: usize,
-        inline: &[bool],
+        sources: &[Option<&[u8]>],
         read: impl Fn(&[u8], usize) -> f32,
     ) -> M2ScalarTrack {
         let mut out = M2ScalarTrack {
@@ -524,16 +543,18 @@ mod wrath {
             return out;
         }
         for seq in 0..tn {
-            let keyed_here = out.gseq != 0xffff || inline.get(seq).copied().unwrap_or(seq == 0);
+            let src = if out.gseq != 0xffff { Some(b) } else { sources.get(seq).copied().flatten() };
             let (kn, ko) = arr(b, to + seq * 8);
             let (xn, xo) = arr(b, vo + seq * 8);
-            if !keyed_here || kn == 0 || kn != xn || ko + kn * 4 > b.len() || xo + xn * elem > b.len() {
+            let Some(src) = src.filter(|src| {
+                kn != 0 && kn == xn && ko + kn * 4 <= src.len() && xo + xn * elem <= src.len()
+            }) else {
                 out.ranges.push((u32::MAX, 0));
                 continue;
-            }
+            };
             let start = out.keys.len() as u32;
             for k in 0..kn {
-                out.keys.push((le_u32(b, ko + k * 4), read(b, xo + k * elem)));
+                out.keys.push((le_u32(src, ko + k * 4), read(src, xo + k * elem)));
             }
             out.ranges.push((start, out.keys.len() as u32 - 1));
         }
@@ -572,7 +593,7 @@ mod wrath {
         [at(0.0), at(mid), at(1.0)]
     }
 
-    pub(super) fn parse(bytes: &[u8]) -> Vec<ParticleEmitterDef> {
+    pub(super) fn parse(bytes: &[u8], external: &[Option<&[u8]>]) -> Vec<ParticleEmitterDef> {
         let textures: Vec<Option<String>> =
             match benilla_m2::wrath::parse_wrath_m2(&mut Cursor::new(bytes)) {
                 Ok(m) => m
@@ -591,6 +612,7 @@ mod wrath {
             return Vec::new();
         }
         let inline = inline_sequences(bytes);
+        let sources = sequence_sources(bytes, &inline, external);
         let mut seq_slots: Vec<SeqSlot> = {
             let (n, o) = arr(bytes, 0x1c);
             (0..n)
@@ -613,7 +635,7 @@ mod wrath {
                 .map_while(|i| (o + i * 4 + 4 <= bytes.len()).then(|| le_u32(bytes, o + i * 4)))
                 .collect()
         };
-        let t = |e: usize, o: usize| track(bytes, e + o, 4, &inline, le_f32);
+        let t = |e: usize, o: usize| track(bytes, e + o, 4, &sources, le_f32);
         let mut out = Vec::with_capacity(count);
         for i in 0..count {
             let e = base + i * STRIDE;
@@ -682,7 +704,7 @@ mod wrath {
                 head_tail: bytes[e + 0x2c],
                 timing: EmitTiming::bake(
                     &t(e, 0xb0),
-                    &track(bytes, e + 0x1c8, 1, &inline, |b, o| f32::from(b[o] != 0)),
+                    &track(bytes, e + 0x1c8, 1, &sources, |b, o| f32::from(b[o] != 0)),
                     &seq_slots,
                     &gseq,
                 ),
@@ -734,8 +756,18 @@ mod wrath {
 /// The M2's particle emitters, textures resolved through `benilla-m2`'s textures table; empty for
 /// a model with none or a file that is not MD20. Build 12340 files take [`wrath::parse`].
 pub fn parse_m2_particle_emitters(bytes: &[u8]) -> Result<Vec<ParticleEmitterDef>> {
+    parse_m2_particle_emitters_with_animations(bytes, &[])
+}
+
+/// As [`parse_m2_particle_emitters`], with a v264 model's external `.anim` files by sequence slot
+/// (as the asset loader resolves them for bones), so emitter tracks keyed inside external
+/// sequences keep their keys.
+pub fn parse_m2_particle_emitters_with_animations(
+    bytes: &[u8],
+    external: &[Option<&[u8]>],
+) -> Result<Vec<ParticleEmitterDef>> {
     if bytes.len() >= 8 && &bytes[..4] == b"MD20" && le_u32(bytes, 4) == 264 {
-        return Ok(wrath::parse(bytes));
+        return Ok(wrath::parse(bytes, external));
     }
     let textures: Vec<Option<String>> = match parse_m2(&mut Cursor::new(bytes)) {
         Ok(fmt) => fmt

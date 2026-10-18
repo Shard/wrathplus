@@ -503,6 +503,7 @@ pub(super) fn feed_player_req(
     factions: Option<Res<crate::target::Factions>>,
     actions: Res<crate::ui_action::PlayerActions>,
     spells: Option<Res<crate::ui_action::Spells>>,
+    classes: Option<Res<crate::chr_classes::ChrClassTable>>,
     mut last: Local<crate::ui_script::VmMemo<Option<benilla_ui::script::PlayerReqState>>>,
 ) {
     let Some(mut script) = script else {
@@ -516,6 +517,7 @@ pub(super) fn feed_player_req(
     let factions_changed = factions.as_ref().is_some_and(|r| r.is_changed());
     let actions_changed = actions.is_changed();
     let spells_changed = spells.as_ref().is_some_and(|r| r.is_changed());
+    let classes_changed = classes.as_ref().is_some_and(|r| r.is_changed());
     gate::trace(
         "feed_player_req",
         &[
@@ -526,6 +528,7 @@ pub(super) fn feed_player_req(
             ("factions", factions_changed),
             ("actions", actions_changed),
             ("spells", spells_changed),
+            ("classes", classes_changed),
         ],
     );
     let gate = gate::Gate::new(
@@ -535,7 +538,8 @@ pub(super) fn feed_player_req(
             || reps_changed
             || factions_changed
             || actions_changed
-            || spells_changed,
+            || spells_changed
+            || classes_changed,
     );
     if gate.skip() {
         return;
@@ -589,6 +593,9 @@ pub(super) fn feed_player_req(
         rep_ranks,
         can_dual_wield,
         honor_rank: store.0.player_honor_rank().unwrap_or(0),
+        has_relic_slot: classes
+            .as_deref()
+            .is_some_and(|t| t.0.has_relic_slot(u32::from(class))),
     };
     if last.as_ref() != Some(&state) {
         gate.audit("feed_player_req", "the player-requirement state");

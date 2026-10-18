@@ -161,6 +161,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             // Eight rows: long names for the wrap, mixed prices for the coins. The last two
@@ -220,6 +221,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             gossip.npc = Some(NPC_GUID);
@@ -277,6 +279,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: true,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             // Vault items (bank slots 0, 1, 2, 7 at fields 564+2i) and the bank bag in bag slot 0
@@ -381,6 +384,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             // A QUEST_DETAILS view (the accept panel): description, objectives, two choice rewards,
@@ -426,6 +430,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             // The multi-quest greeting: two available quests, bullet rows under "Available Quests".
@@ -473,6 +478,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             // The item objective and reward rows; log icons come from the template's
@@ -956,6 +962,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             let wolf = commands
@@ -1324,6 +1331,7 @@ pub(super) fn seed_ui_fixture(
                     civilian: false,
                     racial_leader: false,
                     display_id: 0,
+                    modifiers: None,
                 }),
             );
             commands.spawn((

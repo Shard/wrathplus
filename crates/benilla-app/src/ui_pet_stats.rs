@@ -150,15 +150,43 @@ fn stats_for(
             family,
             icon,
             food_types,
+            // Filled by `modifiers_for`, which has the creature cache.
+            ..PetStats::default()
         },
     )
+}
+
+/// `GetUnitHealthModifier`/`GetUnitPowerModifier` for the pet (`0x71b8d0`/`0x71b960`): a pet
+/// whose `UNIT_FIELD_CREATEDBY` is a hunter answers 1; otherwise the cached creature template's
+/// HealthModifier/PowerModifier, 0 with no record. Only our own creator resolves here (the
+/// reference looks any creator up), and the bindings' pet-number gate is `has_ui`.
+fn modifiers_for(
+    pet: Option<&ObjectStore>,
+    self_store: Option<(&ObjectStore, Option<&crate::net::Guid>)>,
+    names: &NameCache,
+) -> (f32, f32) {
+    let Some(fields) = pet.map(|s| &s.0) else {
+        return (0.0, 0.0);
+    };
+    let creator_is_hunter_self = self_store.is_some_and(|(store, guid)| {
+        guid.is_some_and(|g| fields.unit_created_by() == Some(g.0))
+            && ((store.0.unit_bytes_0().unwrap_or(0) >> 8) & 0xff) as u8 == CLASS_HUNTER
+    });
+    if creator_is_hunter_self {
+        return (1.0, 1.0);
+    }
+    fields
+        .object_entry()
+        .and_then(|entry| names.creature_record(entry))
+        .and_then(|r| r.modifiers)
+        .map_or((0.0, 0.0), |[h, p]| (h, p))
 }
 
 fn feed_pet_stats(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
     pet: PetUnit,
-    self_store: Query<&ObjectStore, With<crate::net::SelfPlayer>>,
+    self_store: Query<(&ObjectStore, Option<&crate::net::Guid>), With<crate::net::SelfPlayer>>,
     tables: Option<Res<PetStatTables>>,
     family_tables: Option<Res<PetFamilyTables>>,
     names: Res<NameCache>,
@@ -171,7 +199,9 @@ fn feed_pet_stats(
     let last = last.get(&script);
     let store = pet.store(bar.guid());
     let family = family_for(store, &names, &commands, family_tables.as_deref());
-    let fresh = stats_for(store, self_store.iter().next(), tables.as_deref(), family);
+    let me = self_store.iter().next();
+    let mut fresh = stats_for(store, me.map(|(s, _)| s), tables.as_deref(), family);
+    (fresh.1.health_modifier, fresh.1.power_modifier) = modifiers_for(store, me, &names);
     if last.as_ref() == Some(&fresh) {
         return;
     }
@@ -295,6 +325,44 @@ mod tests {
         })
     }
 
+    /// `0x71b8d0`/`0x71b960`: our own hunter's pet answers 1; a warlock's minion, or a pet whose
+    /// creator is not us, answers its template's modifiers; no record answers 0.
+    #[test]
+    fn pet_modifiers_follow_the_creator_and_the_template() {
+        const CREATED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+        let me = crate::net::Guid(0x77);
+        let imp = ObjectStore(ObjectFields::from_pairs(&[
+            (ENTRY, IMP_ENTRY),
+            (PETNUMBER, 9),
+            (CREATED_BY, 0x77),
+        ]));
+        let mut names = cache_with(IMP_ENTRY, 23);
+        assert_eq!(
+            modifiers_for(Some(&imp), Some((&warlock(), Some(&me))), &names),
+            (0.0, 0.0)
+        );
+        assert_eq!(
+            modifiers_for(Some(&imp), Some((&hunter(), Some(&me))), &names),
+            (1.0, 1.0)
+        );
+        let mut record = names.creature_record(IMP_ENTRY).unwrap().clone();
+        record.modifiers = Some([0.3, 1.1]);
+        names.insert_creature(IMP_ENTRY, Some(record));
+        assert_eq!(
+            modifiers_for(Some(&imp), Some((&warlock(), Some(&me))), &names),
+            (0.3, 1.1)
+        );
+        let other = crate::net::Guid(0x78);
+        assert_eq!(
+            modifiers_for(Some(&imp), Some((&hunter(), Some(&other))), &names),
+            (0.3, 1.1)
+        );
+        assert_eq!(
+            modifiers_for(None, Some((&hunter(), Some(&me))), &names),
+            (0.0, 0.0)
+        );
+    }
+
     fn no_family() -> (Option<String>, Option<String>, Vec<String>) {
         (None, None, Vec::new())
     }
@@ -314,6 +382,7 @@ mod tests {
                 civilian: false,
                 racial_leader: false,
                 display_id: 0,
+                modifiers: None,
             }),
         );
         names

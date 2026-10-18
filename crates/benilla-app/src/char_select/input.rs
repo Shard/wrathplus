@@ -35,7 +35,11 @@ pub(super) fn select_input(
     mut next: ResMut<NextState<ClientState>>,
     mut sounds: MessageWriter<GlueSound>,
     mut intent: ResMut<crate::login::LoginIntent>,
-    glue_dialog: Res<crate::glue::dialog::GlueDialog>,
+    // The glue dialog, and the raise Enter World's lock refusals go out through.
+    (glue_dialog, mut raise): (
+        Res<crate::glue::dialog::GlueDialog>,
+        MessageWriter<super::GlueRaise>,
+    ),
     time: Res<Time>,
     mut last_click: Local<Option<(usize, f32)>>,
 ) {
@@ -136,12 +140,51 @@ pub(super) fn select_input(
     }
 
     if enter_world && roster.pending_pick.is_none() {
-        let target = roster.selected_char().map(|c| (c.guid, c.name.clone()));
-        if let Some((guid, name)) = target {
-            info!("char select: entering world as {name}");
-            sounds.write(GlueSound("gsCharacterSelectionEnterWorld"));
-            send_pick(&mut roster, &pick, guid);
+        let target = roster
+            .selected_char()
+            .map(|c| (c.guid, c.name.clone(), c.flags));
+        if let Some((guid, name, flags)) = target {
+            match enter_world_gate(flags) {
+                EnterGate::Enter => {
+                    info!("char select: entering world as {name}");
+                    sounds.write(GlueSound("gsCharacterSelectionEnterWorld"));
+                    send_pick(&mut roster, &pick, guid);
+                }
+                EnterGate::Locked(key) => {
+                    info!("char select: {name} is locked ({key})");
+                    raise.write(super::GlueRaise::Error(key));
+                }
+                EnterGate::Rename => {
+                    info!("char select: {name} is flagged for rename");
+                    dialog.open_rename(guid, name, "CHAR_RENAME_DESCRIPTION");
+                }
+            }
         }
+    }
+}
+
+/// Enter World's character checks (`0x4d9bd0`), in its order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum EnterGate {
+    Enter,
+    /// The status dialog with this `RESPONSE_*` key: locked for a transfer (`0x4`, code `0x54`)
+    /// or by billing (`0x1000000`, `0x55`).
+    Locked(&'static str),
+    /// `CHARACTER_FLAG_RENAME` (`0x4000`): `FORCE_RENAME_CHARACTER("CHAR_RENAME_DESCRIPTION")`.
+    Rename,
+}
+
+/// Labelled: the declined-names prompt (`0x2000000` clear and a declension locale, event `0x18`)
+/// and the expansion gate (code `0x52`) are not built.
+pub(super) fn enter_world_gate(flags: u32) -> EnterGate {
+    if flags & 0x4 != 0 {
+        EnterGate::Locked(super::wrath_char_result_key(0x54).unwrap_or("RESPONSE_FAILURE"))
+    } else if flags & 0x100_0000 != 0 {
+        EnterGate::Locked(super::wrath_char_result_key(0x55).unwrap_or("RESPONSE_FAILURE"))
+    } else if flags & benilla_protocol::CHARACTER_FLAG_RENAME != 0 {
+        EnterGate::Rename
+    } else {
+        EnterGate::Enter
     }
 }
 

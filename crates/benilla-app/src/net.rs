@@ -2132,6 +2132,8 @@ pub(crate) enum ClientCommand {
     /// Native spell-control and pet requests with no Vanilla twin (spell click, totem destroy,
     /// cancel mount or growth aura, pet info, pet talents); transport does not claim acceptance.
     NativeSpellControl(benilla_protocol::wrath_spell_control::Command),
+    /// Native movement requests with no Vanilla twin (`/timetest`); transport does not claim acceptance.
+    NativeMovementMisc(benilla_protocol::wrath_movement_misc::Command),
     /// `CMSG_QUERY_INSPECT_ACHIEVEMENTS`; no UI producer yet, the reply is capture-only.
     NativeInspectAchievements { player: u64 },
     /// Native calendar commands; no UI producer yet, replies are capture-only.
