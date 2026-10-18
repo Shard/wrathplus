@@ -1576,7 +1576,6 @@ enum WrathRoute {
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
-    DeferredReadOnlyQuery,
 }
 
 fn route(command: &ClientCommand) -> WrathRoute {
@@ -1845,7 +1844,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::ChannelDisplayList { .. }
         | ClientCommand::QueryNextMailTime => WrathRoute::NativeSession,
         // Deferred Wrath feature queries have no wire effect and never fabricate server state.
-        ClientCommand::BattlefieldStatusRequest => WrathRoute::DeferredReadOnlyQuery,
+        ClientCommand::BattlefieldStatusRequest => WrathRoute::NativeBattleground,
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
         ClientCommand::TeleportAck { .. } => WrathRoute::NativeTeleportAck,
         // The writer acknowledged these orders itself from the reported pose (`send_mover_ack`).
@@ -1869,7 +1868,6 @@ pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
         route(command),
         WrathRoute::DisabledMovement
             | WrathRoute::DisabledGameAction
-            | WrathRoute::DeferredReadOnlyQuery
             | WrathRoute::AuthorityAcked
     )
 }
@@ -2364,13 +2362,6 @@ fn writer_loop(
                         bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
                         continue;
                     }
-                    WrathRoute::DeferredReadOnlyQuery => {
-                        if warned < SEND_WARN_CAP {
-                            bevy::log::warn!("net(wrath): query unavailable in this client; no request sent or result synthesized: {command:?}");
-                            warned += 1;
-                        }
-                        continue;
-                    }
                     // Not yet encoded for build 12340: dropped, never sent in Vanilla's format, and
                     // never fatal: the stock UI issues many of these routinely.
                     WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction => {
@@ -2594,6 +2585,10 @@ fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
     let guid = |opcode, guid: u64| (opcode, guid.to_le_bytes().to_vec());
     match command {
         ClientCommand::NativeBattleground(command) => encode(&command),
+        // The world-enter reset's empty `CMSG_BATTLEFIELD_STATUS` (`0x54ca50`).
+        ClientCommand::BattlefieldStatusRequest => {
+            encode(&benilla_protocol::wrath_battleground::Command::Status)
+        }
         ClientCommand::BattlemasterHello { npc } => guid(0x02d7, npc),
         ClientCommand::AreaSpiritHealerQuery { healer } => guid(0x02e2, healer),
         ClientCommand::AreaSpiritHealerQueue { healer } => guid(0x02e3, healer),
@@ -3946,10 +3941,9 @@ mod tests {
     }
 
     #[test]
-    fn deferred_queries_are_a_narrow_nonfatal_route_not_a_game_action_bypass() {
-        for command in [ClientCommand::BattlefieldStatusRequest] {
-            assert_eq!(route(&command), WrathRoute::DeferredReadOnlyQuery);
-        }
+    fn the_world_enter_status_request_is_native_and_other_queries_keep_their_routes() {
+        assert_eq!(route(&ClientCommand::BattlefieldStatusRequest), WrathRoute::NativeBattleground);
+        assert_eq!(battleground_packet(ClientCommand::BattlefieldStatusRequest), (0x02d3, Vec::new()));
         assert_eq!(
             route(&ClientCommand::QueryTime),
             WrathRoute::NativeSessionMisc

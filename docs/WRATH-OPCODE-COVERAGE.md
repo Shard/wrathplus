@@ -51,7 +51,7 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 | S→C | 362 | 137 | 190 | 689 |
 | C→S | 418 | 0 | 306 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 107 of them transport-only (no UI producer) and 311 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 418 admitted numeric opcodes, 106 of them transport-only (no UI producer) and 312 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -832,7 +832,7 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x02D0` | `CMSG_MOVE_WATER_WALK_ACK` | C→S | handled | core | AC receive: `HandleMoveFlagChangeOpcode` (STATUS_LOGGEDIN). | C→S: automatic reply — A/net/io/wrath.rs `send_mover_ack` → P/wrath_authority.rs ack encoder (AC handler read layout), sent only for the pending head order; the controller's own ACK command is a no-op (`WrathRoute::AuthorityAcked`). |
 | `0x02D1` | `CMSG_MOVE_NOT_ACTIVE_MOVER` | C→S | handled | core | AC receive: `HandleMoveNotActiveMover` (STATUS_LOGGEDIN). | C→S: our body's parting pose (`packed guid + MovementInfo`) when control passes to a vehicle or possessed unit (`Wow.exe` `0x729010`, player only, before `SET_ACTIVE_MOVER`) → `WrathRoute::NotActiveMover`; see `docs/WRATH-CONTROL.md`. |
 | `0x02D2` | `SMSG_PLAY_SOUND` | S→C | handled | niche | proven_send_site: `game/Maps/Map.cpp:3292` | S→C: semantic-consumer — P/wrath_chat.rs / wrath_chat_notices.rs → PlaySound; strict framing; see docs/WRATH-CHAT.md. |
-| `0x02D3` | `CMSG_BATTLEFIELD_STATUS` | C→S | handled | common | AC receive: `HandleBattlefieldStatusOpcode` (STATUS_LOGGEDIN). | C→S: Battleground — transport-only; `NativeBattleground(Status)`. See docs/WRATH-BATTLEGROUND.md. |
+| `0x02D3` | `CMSG_BATTLEFIELD_STATUS` | C→S | handled | common | AC receive: `HandleBattlefieldStatusOpcode` (STATUS_LOGGEDIN). | C→S: Battleground — `NativeBattleground(Status)`; producer the world-enter `BattlefieldStatusRequest` (12340 `0x54ca50`). See docs/WRATH-BATTLEGROUND.md. |
 | `0x02D4` | `SMSG_BATTLEFIELD_STATUS` | S→C | capture-only | common | proven_send_site: `game/Battlegrounds/BattlegroundMgr.cpp:203` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. |
 | `0x02D5` | `CMSG_BATTLEFIELD_PORT` | C→S | handled | common | AC receive: `HandleBattleFieldPortOpcode` (STATUS_LOGGEDIN). | C→S: BG — transport-only; `ClientCommand::NativeBattleground`, P/wrath_battleground.rs encoder; no UI producer. See docs/WRATH-BATTLEGROUND.md. |
 | `0x02D6` | `MSG_INSPECT_HONOR_STATS` | S→C / C→S | capture-only / handled | common | proven_send_site: `game/Handlers/MiscHandler.cpp:1048` | S→C: capture-only — P/wrath_battleground.rs → A/net/wrath_battleground_capture.rs FIFO; no UI feed; see docs/WRATH-BATTLEGROUND.md. C→S: BG — ACTIVE; NativeBattleground route; producer ui_honor. |

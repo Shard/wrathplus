@@ -544,6 +544,9 @@ pub enum Command {
     /// `CMSG_BATTLEFIELD_STATUS`, empty: the status of every queue (AC
     /// `HandleBattlefieldStatusOpcode`).
     Status,
+    /// `CMSG_BATTLEFIELD_MGR_QUEUE_REQUEST` (`0x54d590`): a battle id. AC registers it
+    /// `STATUS_NEVER`/`Handle_NULL`, so it is sent and ignored.
+    BfQueueRequest { battle_id: u32 },
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {
@@ -594,6 +597,10 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             0x0358
         }
         Command::Status => 0x02d3,
+        Command::BfQueueRequest { battle_id } => {
+            b.extend(battle_id.to_le_bytes());
+            0x04e3
+        }
         Command::ReportAfk { player } => {
             b.extend(player.to_le_bytes());
             0x03e4
