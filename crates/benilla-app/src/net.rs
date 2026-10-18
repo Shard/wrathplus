@@ -30,7 +30,7 @@ mod session;
 mod world;
 pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
-mod wrath_instance_control_capture;
+pub(crate) mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
 mod wrath_equipment_sets;
 mod wrath_item_refunds;

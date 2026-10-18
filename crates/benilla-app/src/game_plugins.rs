@@ -210,6 +210,7 @@ impl PluginGroup for GamePlugins {
             // After UiActionPlugin, whose `Spells` catalog it shares.
             .add(UiTalentPlugin)
             .add(UiTalentWipePlugin)
+            .add(crate::ui_static_popup::UiStaticPopupPlugin)
             // The form list by the reference's admission and order (`0x4b25b0`, `0x4b2bb0`); after
             // UiActionPlugin (`Spells`) and SpellPlugin (the cast tail).
             .add(UiShapeshiftPlugin)
