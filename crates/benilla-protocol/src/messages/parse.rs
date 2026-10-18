@@ -1179,6 +1179,7 @@ fn parse_server_body(
                         display_id,
                         civilian,
                         racial_leader,
+                        modifiers: None,
                     }),
                 }
             }

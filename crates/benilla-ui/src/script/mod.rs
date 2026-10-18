@@ -181,6 +181,7 @@ pub use wrath_equipment::{
 pub use wrath_item_services::{ItemRefundCost, ItemRefundView, ItemServiceRequest};
 mod wrath_bag_portrait;
 mod wrath_paperdoll;
+mod wrath_character;
 mod wrath_surface;
 mod wrath_lfg;
 pub use wrath_lfg::{
@@ -785,6 +786,7 @@ impl UiScript {
             // The mature implementation above, with the Wrath ABI and trusted secure environment.
             wrath_surface::install(&lua)?;
             wrath_paperdoll::install(&lua)?;
+            wrath_character::install(&lua)?;
             wrath_items::install(&lua)?;
             wrath_item_services::install(&lua)?;
             wrath_bag_portrait::install(&lua)?;
