@@ -230,6 +230,14 @@ impl WrathEventAdapter {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
             }),
+            opcode if crate::wrath_refer_friend::OPCODES.contains(&opcode) => Ok(match crate::wrath_refer_friend::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
+            opcode if crate::wrath_world_objects::OPCODES.contains(&opcode) => Ok(match crate::wrath_world_objects::decode(opcode, body) {
+                Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
+                Err(_) => WrathDispatch::Unhandled { opcode },
+            }),
             opcode if crate::wrath_death::OPCODES.contains(&opcode) => Ok(match crate::wrath_death::decode(opcode, body) {
                 Ok(event) => handled(vec![event], Vec::new(), Vec::new()),
                 Err(_) => WrathDispatch::Unhandled { opcode },
@@ -332,9 +340,9 @@ impl WrathEventAdapter {
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }
-            0x0055 | 0x0083 | 0x0088 | 0x008a | 0x0092 | 0x0093 => {
+            opcode if crate::wrath_guild::OPCODES.contains(&opcode) => {
                 Ok(match crate::wrath_guild::decode(opcode, body) {
-                    Ok(packet) => handled(vec![SessionEvent::WrathGuild { packet }], Vec::new(), Vec::new()),
+                    Ok(packet) => handled(crate::wrath_guild::session_events(packet), Vec::new(), Vec::new()),
                     Err(_) => WrathDispatch::Unhandled { opcode },
                 })
             }

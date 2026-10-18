@@ -10,12 +10,14 @@ use benilla_protocol::messages::{
 };
 use benilla_ui::script::{
     GuildMemberInfo, GuildRankInfo, GuildRequest, GuildState as VmGuild, ScriptValue, UiScript,
+    WrathGuildBankRankRights,
 };
 use bevy::prelude::*;
 
 use crate::area::AreaTableRes;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
 use crate::ui_unit::class_names;
+use benilla_protocol::wrath_guild_rank::{SaveRank, TabPermission};
 
 use super::{last_online, GuildState, Identity, RosterRow, ROSTER_REQUEST_THROTTLE_SECS};
 
@@ -282,6 +284,7 @@ pub(super) fn index_of(order: &[u64], guid: u64) -> u32 {
 pub(super) fn drain_guild(
     script: Option<NonSendMut<UiScript>>,
     mut guild: ResMut<GuildState>,
+    native: Res<super::wrath::NativeGuild>,
     commands: Res<NetCommands>,
     time: Res<Time<Real>>,
 ) {
@@ -354,13 +357,30 @@ pub(super) fn drain_guild(
                 rights,
                 name,
             } => {
-                if let Some(name) = capped_rank_name(name) {
+                let Some(name) = capped_rank_name(name) else {
+                    continue;
+                };
+                if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+                    let bank = rank_bank(&script, &native, rank_index);
+                    let _ = commands.0.send(ClientCommand::NativeGuildRank(SaveRank {
+                        rank: rank_index,
+                        flags: rights,
+                        name: name.into_bytes(),
+                        money_limit: bank.money_per_day,
+                        tabs: bank
+                            .tabs
+                            .map(|(rights, item_limit)| TabPermission { rights, item_limit }),
+                    }));
+                } else {
                     let _ = commands.0.send(ClientCommand::GuildRank {
                         rank_id: rank_index,
                         rights,
                         name,
                     });
                 }
+            }
+            GuildRequest::QueryEventLog => {
+                let _ = commands.0.send(ClientCommand::GuildEventLogQuery);
             }
             GuildRequest::AddRank(name) => {
                 // Ten ranks at most, and more than five to remove one, as the reference's
@@ -382,6 +402,26 @@ pub(super) fn drain_guild(
             GuildRequest::Sort(field) => guild.sort_by(&field),
         }
     }
+}
+
+/// The bank rights a 3.3.5 rank save carries: the guild-control pane's staged edit
+/// (`wrath_guild_bank_staged_rights`), else the rank's words from the last roster, so a rank
+/// saved without touching the bank keeps them.
+fn rank_bank(
+    script: &UiScript,
+    native: &super::wrath::NativeGuild,
+    rank: u32,
+) -> WrathGuildBankRankRights {
+    script
+        .wrath_guild_bank_staged_rights(rank)
+        .unwrap_or_else(|| {
+            native
+                .rank(rank)
+                .map_or_else(Default::default, |r| WrathGuildBankRankRights {
+                    money_per_day: r.money_limit,
+                    tabs: r.tabs,
+                })
+        })
 }
 
 /// A note verb: resolve the row to the member, write the note locally, and send only if it

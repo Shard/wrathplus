@@ -13,8 +13,36 @@ use benilla_ui::script::{ScriptValue as V, UiScript};
 use bevy::prelude::*;
 
 #[derive(Resource, Default)]
-pub(super) struct NativeChatFeed {
+pub(crate) struct NativeChatFeed {
     line: u32,
+    /// The recent lines a complaint can name (`ComplainChat`, [`crate::ui_static_popup`]),
+    /// newest last, at most [`COMPLAINT_LINES`].
+    lines: std::collections::VecDeque<ChatLine>,
+}
+
+/// The lines held for complaints.
+const COMPLAINT_LINES: usize = 128;
+
+/// What `CMSG_COMPLAIN`'s chat arm reports about one line.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ChatLine {
+    pub(crate) id: u32,
+    pub(crate) sender: u64,
+    pub(crate) language: u32,
+    pub(crate) chat_type: u8,
+    pub(crate) at: std::time::Instant,
+}
+
+impl NativeChatFeed {
+    /// A line by its event id (arg 11), if still held.
+    pub(crate) fn line(&self, id: u32) -> Option<&ChatLine> {
+        self.lines.iter().rev().find(|l| l.id == id)
+    }
+
+    /// The newest held line whose sender passes `named`.
+    pub(crate) fn latest_where(&self, named: impl Fn(u64) -> bool) -> Option<&ChatLine> {
+        self.lines.iter().rev().find(|l| named(l.sender))
+    }
 }
 
 /// AzerothCore SharedDefines.h ChatMsg (12340), not messages::CHAT_MSG_* (5875).
@@ -263,6 +291,16 @@ pub(super) fn deliver(
     };
     channels.stamp_channel(&mut event);
     state.line = state.line.wrapping_add(1).max(1);
+    if state.lines.len() >= COMPLAINT_LINES {
+        state.lines.pop_front();
+    }
+    state.lines.push_back(ChatLine {
+        id: state.line,
+        sender: msg.sender_guid,
+        language: msg.language,
+        chat_type: msg.chat_type,
+        at: std::time::Instant::now(),
+    });
     let mut args = event.script_args();
     args.push(V::Int(i64::from(state.line)));
     args.push(V::Str(format!("0x{:016X}", msg.sender_guid)));

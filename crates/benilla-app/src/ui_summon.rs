@@ -258,7 +258,12 @@ impl Plugin for UiSummonPlugin {
                 // Before the feed, so the frame a session ends feeds nothing from it.
                 end_session_summon.before(feed_summon),
                 feed_summon.in_set(UiFeed),
-                drain_summon.after(UiInput),
+                // After the social drain: the StaticPopup host reads the friend list it writes.
+                drain_summon
+                    .after(UiInput)
+                    .after(crate::ui_social::feed::drain_social)
+                    // And after our mover's control, whose falling bit it publishes.
+                    .after(crate::player::PlayerControlSet),
             ),
         );
     }

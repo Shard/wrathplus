@@ -678,6 +678,9 @@ pub(crate) mod schedule_tests {
     ///   (chained after it through the equipment-set feed), against the same two and
     ///   `entities::evict_display_caches`: they read item templates for icons and links, which
     ///   none of those write, and their one push each commutes with theirs;
+    /// - `ui_guild::wrath::feed_events` (after the guild feed) against `ui_dressup::feed_dressup`
+    ///   and `ui_unit::feed_units`: it reads the name cache and our guild's rank names, which
+    ///   neither writes, and its one `set_wrath_guild_events` push commutes with theirs;
     /// - `script_calls::apply_script_calls`, in the target chain, against the `.after(UiInput)`
     ///   drains of gestures that are not such script calls (the ATTACKTARGET binding, the
     ///   item-pick commit, the GameObject openers, the chat, party, duel, trade and death drains)
@@ -703,15 +706,14 @@ pub(crate) mod schedule_tests {
     /// - a crate's interaction (`target::click::act_on_interact`) against what
     ///   `act_on_right_click` and the cursor classifier already pair with: it runs the click's
     ///   dispatchers over the classifier's reading of its object, and its attack leg
-    ///   selects as the click does, so it writes `Selection` where the click's drain does.
-    ///
+    ///   selects as the click does, so it writes `Selection` where the click's drain does;
     /// - the vehicle aim (`player::wire_in::apply_vehicle_aim`) against the other `Player` writers
-    ///   before `control`: it writes only `mover_pitch`, which none of them reads or writes;
+    ///   before `control`: it writes only `mover_pitch`, which none of them reads or writes.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_644;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_646;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

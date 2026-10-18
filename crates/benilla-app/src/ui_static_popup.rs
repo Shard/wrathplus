@@ -12,15 +12,29 @@
 //! encounter total (`DungeonEncounter.dbc` for the map) reads 0. The filled glyph sockets are the
 //! active talent group's non-zero glyphs.
 //!
-//! Not sent yet (no writer): the level grant, guild-bank tab purchase and money deposit, chat
-//! complaints, GM-response resolve, glyph removal (`0x48A`), friend notes (`0x6B`, no route) and
-//! LFG backfill. Not built: glyph placement and the bound-tradeable, refund and trade-enchant
-//! confirmations (each resumes a pending cast), and the falling, out-of-bounds, can-teleport,
-//! cannot-be-resurrected, controlling and guild-bank tab-cost reads, which publish their defaults.
+//! Also sent: `GMResponseResolve` (`0x4F0`), glyph removal (`0x48A`), friend notes (`0x6B`, by row
+//! or name) and chat complaints (`0x3C7`, the line by id or the newest from the named sender, held
+//! by the native chat feed; the channel id reads 0).
+//!
+//! The refer-a-friend grant: `SMSG_PROPOSE_LEVEL_GRANT` latches the granter and fires
+//! `LEVEL_GRANT_PROPOSED` with their name once known; `AcceptLevelGrant` answers it (`0x420`).
+//! Labelled: `SMSG_REFER_A_FRIEND_FAILURE` stays in its capture (no error line yet).
+//!
+//! Not sent yet: the guild-bank tab purchase and money deposit (the banker is Wire B's pending
+//! `GuildBankOpen`), and `PartyLFGStartBackfill` (`0x55a0c0` re-joins with the party's current
+//! dungeon, which the LFG reducer does not hold yet).
+//!
+//! The state: `IsFalling` (our mover airborne, not rooted), `IsOutOfBounds` (`PLAYER_FLAGS`
+//! `0x4000`), `PlayerCanTeleport` (no stun, confuse or flee flag) and `UnitIsControlling` (a charm
+//! or summon) are published. Not built: glyph placement and the bound-tradeable, refund and
+//! trade-enchant confirmations (each resumes a pending cast); `CannotBeResurrected` (a client-only
+//! player byte, `+0xf47 & 4`, whose writer is untraced) and the guild-bank tab cost publish their
+//! defaults.
 
 use bevy::prelude::*;
 
 use benilla_protocol::wrath_instance_control::Packet;
+use benilla_ui::script::ScriptValue as V;
 use benilla_ui::script::{
     ScriptDialect, UiScript, WrathInstanceLock, WrathPopupRequest, WrathPopupState,
 };
@@ -42,16 +56,22 @@ impl Plugin for UiStaticPopupPlugin {
     }
 }
 
-/// The lock dies with the session.
-fn end_session(In(event): In<benilla_protocol::SessionEvent>, mut lock: ResMut<InstanceLock>) {
+/// The lock and the grant die with the session.
+fn end_session(In(event): In<benilla_protocol::SessionEvent>, mut held: ResMut<InstanceLock>) {
     if matches!(event, benilla_protocol::SessionEvent::Disconnected { .. }) {
-        lock.0 = None;
+        *held = InstanceLock::default();
     }
 }
 
-/// The pending instance lock, `None` when nothing asks.
+/// The session's pending questions: the instance lock, and a refer-a-friend level grant's
+/// granter (`SMSG_PROPOSE_LEVEL_GRANT`), with whether its `LEVEL_GRANT_PROPOSED` is still owed
+/// (it fires once the granter's name is known).
 #[derive(Resource, Default)]
-pub(crate) struct InstanceLock(Option<PendingLock>);
+pub(crate) struct InstanceLock {
+    lock: Option<PendingLock>,
+    granter: Option<u64>,
+    grant_owed: bool,
+}
 
 /// A pending instance lock: when it forces (`GetTime` seconds), whether accepting extends, and
 /// the completed-encounter mask.
@@ -97,6 +117,25 @@ pub(crate) fn take_lock_warning(
     lock
 }
 
+/// `IsOutOfBounds` (`0x6123c0`): `PLAYER_FLAGS_IS_OUT_OF_BOUNDS`.
+const PLAYER_FLAGS_OUT_OF_BOUNDS: u32 = 0x4000;
+/// `PlayerCanTeleport` (`0x60d8f0`): none of stunned, confused and fleeing in `UNIT_FIELD_FLAGS`.
+const TELEPORT_BLOCKERS: u32 = 0x4_0000 | 0x40_0000 | 0x80_0000;
+
+/// `UnitIsControlling` (`0x613c90`): the units whose `UNIT_FIELD_CHARM`, else `UNIT_FIELD_SUMMON`,
+/// is set, in query order.
+pub(crate) fn controlling<'a>(units: impl Iterator<Item = (u64, &'a ObjectStore)>) -> Vec<u64> {
+    units
+        .filter(|(_, s)| {
+            s.0.unit_charm()
+                .filter(|&g| g != 0)
+                .or(s.0.unit_summon())
+                .is_some_and(|g| g != 0)
+        })
+        .map(|(g, _)| g)
+        .collect()
+}
+
 /// The 1-based filled glyph sockets of the active talent group.
 pub(crate) fn filled_glyph_sockets(
     progress: Option<&crate::net::wrath_notices::WrathProgress>,
@@ -117,13 +156,36 @@ pub(crate) fn filled_glyph_sockets(
         .unwrap_or_default()
 }
 
+/// What an answer reads besides itself.
+pub(crate) struct Lookups<'a> {
+    /// A 1-based arena slot's team id, 0 for none.
+    pub(crate) team_id: &'a dyn Fn(u8) -> u32,
+    /// The latched summoner `CancelSummon` answers.
+    pub(crate) summoner: Option<u64>,
+    /// The latched level-grant granter `AcceptLevelGrant` answers.
+    pub(crate) granter: Option<u64>,
+    /// `ContainerRefundItemPurchase`'s item: bag, 1-based slot, equipped.
+    pub(crate) refund_item: &'a dyn Fn(i64, u32, bool) -> Option<u64>,
+    /// `SetFriendNotes`' friend: a row index or a name.
+    pub(crate) friend: &'a dyn Fn(Option<u32>, Option<&str>) -> Option<u64>,
+    /// `ComplainChat`'s line: by its id, else the newest from the named sender.
+    pub(crate) chat_line: &'a dyn Fn(Option<i32>, Option<&str>) -> Option<ComplaintLine>,
+}
+
+/// `CMSG_COMPLAIN`'s chat arm for one line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ComplaintLine {
+    pub(crate) sender: u64,
+    pub(crate) language: u32,
+    pub(crate) chat_type: u32,
+    pub(crate) seconds_since: u32,
+}
+
 /// One answer's command, or `None` for one with no writer or nothing to answer.
-fn answer(
-    request: &WrathPopupRequest,
-    team_id: &dyn Fn(u8) -> u32,
-    summoner: Option<u64>,
-    refund_item: &dyn Fn(i64, u32, bool) -> Option<u64>,
-) -> Option<ClientCommand> {
+fn answer(request: &WrathPopupRequest, look: &Lookups) -> Option<ClientCommand> {
+    let team_id = look.team_id;
+    let summoner = look.summoner;
+    let refund_item = look.refund_item;
     use benilla_protocol::wrath_arena_team::Command as Arena;
     use benilla_protocol::wrath_battleground::Command as Bg;
     use WrathPopupRequest as R;
@@ -167,6 +229,44 @@ fn answer(
         R::SetLfgBootVote { yes } => ClientCommand::LfgCommand(
             benilla_protocol::wrath_lfg::commands::Command::SetBootVote { agree: *yes },
         ),
+        // `AcceptLevelGrant()` (`0x523360` → `0x521b00`): CMSG `0x420` with the proposer.
+        R::AcceptLevelGrant => ClientCommand::NativeReferFriend(
+            benilla_protocol::wrath_refer_friend::Command::AcceptLevelGrant {
+                granter: look.granter?,
+            },
+        ),
+        // `GMResponseResolve()` (`0x5ad1b0`): CMSG `0x4F0`, empty.
+        R::GmResponseResolve => {
+            ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ResolveResponse)
+        }
+        // `RemoveGlyphFromSocket(socket)` (`0x5b7660`): CMSG `0x48A` with the 0-based socket.
+        R::RemoveGlyphFromSocket { socket } => {
+            ClientCommand::NativeInspect(benilla_protocol::wrath_inspect::Command::RemoveGlyph {
+                slot: u32::from(socket.checked_sub(1)?),
+            })
+        }
+        // `SetFriendNotes(index | name, notes)` (`0x6b7c90`): CMSG `0x6B` for the friend.
+        R::SetFriendNotes { index, name, note } => ClientCommand::SetContactNotes {
+            guid: (look.friend)(*index, name.as_deref())?,
+            note: note.clone(),
+        },
+        // `ComplainChat(lineID)` or `ComplainChat(name [, text])` (`0x50ed00`): the line's sender,
+        // language, chat type and age. Labelled: the channel id reads 0.
+        R::ComplainChat {
+            line_id,
+            name,
+            text,
+        } => {
+            let line = (look.chat_line)(*line_id, name.as_deref())?;
+            ClientCommand::NativeHelp(benilla_protocol::wrath_help::Command::ComplainChat {
+                spammer: line.sender,
+                language: line.language,
+                message_type: line.chat_type,
+                channel_id: 0,
+                seconds_since: line.seconds_since,
+                description: text.clone().unwrap_or_default(),
+            })
+        }
         _ => return None,
     })
 }
@@ -184,9 +284,16 @@ pub(crate) struct PopupInputs<'w, 's> {
         ResMut<'w, crate::net::wrath_instance_control_capture::NativeInstanceControlPackets>,
     >,
     progress: Option<Res<'w, crate::net::wrath_notices::WrathProgress>>,
+    social: Option<Res<'w, crate::ui_social::SocialState>>,
+    names: Option<Res<'w, crate::names::NameCache>>,
+    chat: Option<Res<'w, crate::ui_chat::native_message::NativeChatFeed>>,
     self_q: Query<'w, 's, &'static ObjectStore, With<SelfPlayer>>,
     objects: Objects<'w, 's>,
     lock: Option<ResMut<'w, InstanceLock>>,
+    /// `IsFalling`'s published bit; the units, for `UnitIsControlling`.
+    falling: Option<Res<'w, crate::player::Falling>>,
+    units: Query<'w, 's, (&'static crate::net::Guid, &'static ObjectStore)>,
+    refer: Option<ResMut<'w, crate::net::wrath_refer_friend_capture::NativeReferFriendPackets>>,
     memo: Local<'s, crate::ui_script::VmMemo<Memo>>,
 }
 
@@ -202,7 +309,13 @@ pub(crate) fn drive(
     }
     let PopupInputs {
         packets,
+        refer,
+        falling,
+        units,
         progress,
+        social,
+        names,
+        chat,
         self_q,
         objects,
         lock,
@@ -212,8 +325,32 @@ pub(crate) fn drive(
         return;
     };
     if let Some(warning) = packets.and_then(|mut p| take_lock_warning(&mut p.0, script.now())) {
-        lock.0 = Some(warning);
+        lock.lock = Some(warning);
         script.fire_event("INSTANCE_LOCK_START", Vec::new());
+    }
+
+    // `SMSG_PROPOSE_LEVEL_GRANT`: the newest granter is latched; every other receipt stays.
+    if let Some(mut refer) = refer {
+        use benilla_protocol::wrath_refer_friend::Packet as Refer;
+        refer.0.retain(|packet| match *packet {
+            Refer::ProposeLevelGrant { granter } => {
+                lock.granter = Some(granter);
+                lock.grant_owed = true;
+                false
+            }
+            _ => true,
+        });
+    }
+    // `LEVEL_GRANT_PROPOSED(name)`, once the granter's name has landed.
+    if lock.grant_owed {
+        let name = lock
+            .granter
+            .and_then(|g| names.as_deref().and_then(|n| n.resolve(g, commands)))
+            .map(str::to_string);
+        if let Some(name) = name {
+            lock.grant_owed = false;
+            script.fire_event("LEVEL_GRANT_PROPOSED", vec![V::Str(name)]);
+        }
     }
 
     let store = self_q.single().ok();
@@ -234,14 +371,46 @@ pub(crate) fn drive(
             crate::ui_items::slot_guid(&store.0, bag, slot0, &objects)
         }
     };
+    let friend = |index: Option<u32>, name: Option<&str>| {
+        social
+            .as_deref()
+            .zip(names.as_deref())
+            .and_then(|(social, names)| social.friend_guid(index, name, names))
+    };
+    let chat_line = |line_id: Option<i32>, name: Option<&str>| {
+        let chat = chat.as_deref()?;
+        let line = match (line_id, name) {
+            (Some(id), _) => chat.line(u32::try_from(id).ok()?),
+            (None, Some(name)) => {
+                let names = names.as_deref()?;
+                chat.latest_where(|g| names.peek(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+            }
+            (None, None) => None,
+        }?;
+        Some(ComplaintLine {
+            sender: line.sender,
+            language: line.language,
+            chat_type: u32::from(line.chat_type),
+            seconds_since: line.at.elapsed().as_secs() as u32,
+        })
+    };
     for request in script.take_wrath_popup_requests() {
-        match answer(&request, &team_id, summon.pending(), &refund_item) {
+        let look = Lookups {
+            team_id: &team_id,
+            summoner: summon.pending(),
+            granter: lock.granter,
+            refund_item: &refund_item,
+            friend: &friend,
+            chat_line: &chat_line,
+        };
+        match answer(&request, &look) {
             Some(command) => {
                 let _ = commands.0.send(command);
                 match request {
                     WrathPopupRequest::CancelSummon => summon.cancel(),
+                    WrathPopupRequest::AcceptLevelGrant => lock.granter = None,
                     WrathPopupRequest::RespondInstanceLock { .. } => {
-                        lock.0 = None;
+                        lock.lock = None;
                         script.fire_event("INSTANCE_LOCK_STOP", Vec::new());
                     }
                     _ => {}
@@ -252,8 +421,11 @@ pub(crate) fn drive(
     }
 
     let state = WrathPopupState {
-        can_teleport: true,
-        instance_lock: lock.0.map(PendingLock::view),
+        falling: falling.as_deref().is_some_and(|f| f.0),
+        out_of_bounds: store.is_some_and(|s| s.0.player_flags() & PLAYER_FLAGS_OUT_OF_BOUNDS != 0),
+        can_teleport: store.is_none_or(|s| s.0.unit_flags() & TELEPORT_BLOCKERS == 0),
+        controlling: controlling(units.iter().map(|(g, s)| (g.0, s))),
+        instance_lock: lock.lock.map(PendingLock::view),
         filled_glyph_sockets: filled_glyph_sockets(progress.as_deref()),
         ..Default::default()
     };

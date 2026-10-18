@@ -288,6 +288,14 @@ pub(crate) struct State {
     requests: Vec<WrathTutorialRequest>,
 }
 
+impl State {
+    /// Whether any tutorial-seen bit is set: `CanResetTutorials`' test (`0x530700` scans the
+    /// flag words `[0xbd1aec]` for a nonzero one).
+    pub(super) fn any_seen(&self) -> bool {
+        self.seen.as_ref().is_some_and(|s| s.iter().any(|&b| b != 0))
+    }
+}
+
 pub(super) fn initialize_from_seed(model: &mut super::Model) {
     if model.dialect != super::ScriptDialect::Wrath12340 || model.wrath_tutorial.initialized {
         return;

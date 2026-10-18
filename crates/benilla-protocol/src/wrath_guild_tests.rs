@@ -178,3 +178,72 @@ fn strict_framing_counts_strings_and_event_guids() {
     assert!(decode(0x8a, &b).is_err());
     assert!(decode(0xffff, &[]).is_err());
 }
+
+#[test]
+fn emblem_tabard_and_event_log_replies_decode_strictly() {
+    assert_eq!(decode(0x1f1, &3u32.to_le_bytes()).unwrap(), Packet::EmblemResult { error: 3 });
+    assert_eq!(
+        decode(0x1f2, &7u64.to_le_bytes()).unwrap(),
+        Packet::TabardVendor { vendor: 7 }
+    );
+    let mut log = vec![3u8];
+    // A leave has no second player; a demote carries the rank; an invite has both players.
+    log.push(6);
+    log.extend(1u64.to_le_bytes());
+    log.extend(10u32.to_le_bytes());
+    log.push(4);
+    log.extend(2u64.to_le_bytes());
+    log.extend(3u64.to_le_bytes());
+    log.push(5);
+    log.extend(20u32.to_le_bytes());
+    log.push(1);
+    log.extend(4u64.to_le_bytes());
+    log.extend(5u64.to_le_bytes());
+    log.extend(30u32.to_le_bytes());
+    let Packet::EventLog { entries } = decode(0x3ff, &log).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        entries,
+        [
+            EventLogEntry { kind: 6, player: 1, other: None, rank: None, seconds_ago: 10 },
+            EventLogEntry { kind: 4, player: 2, other: Some(3), rank: Some(5), seconds_ago: 20 },
+            EventLogEntry { kind: 1, player: 4, other: Some(5), rank: None, seconds_ago: 30 },
+        ]
+    );
+    for end in 0..log.len() {
+        assert!(decode(0x3ff, &log[..end]).is_err(), "{end}");
+    }
+    assert!(decode(0x3ff, &[log.clone(), vec![0]].concat()).is_err());
+}
+
+#[test]
+fn replies_map_onto_the_shared_guild_events() {
+    use crate::SessionEvent as E;
+    let info = Packet::Info {
+        name: b"G".to_vec(),
+        // 2009-10-17: years since 2000, 0-based month and day.
+        packed_date: (9 << 24) | (9 << 20) | (16 << 14),
+        members: 5,
+        accounts: 3,
+    };
+    let [E::GuildInfo(info)] = &session_events(info)[..] else { panic!() };
+    assert_eq!((info.created_day, info.created_month, info.created_year), (17, 10, 2009));
+    assert!(matches!(
+        &session_events(Packet::EmblemResult { error: 0 })[..],
+        [E::SaveGuildEmblemResult(0)]
+    ));
+    assert!(matches!(
+        &session_events(Packet::TabardVendor { vendor: 9 })[..],
+        [E::TabardVendorActivate(9)]
+    ));
+    let event = Packet::Event { event: 12, params: vec![b"Bob".to_vec()], guid: Some(5) };
+    let [E::GuildEvent(notice)] = &session_events(event)[..] else { panic!() };
+    assert_eq!((notice.event, notice.params[0].as_str(), notice.guid), (12, "Bob", Some(5)));
+    let Packet::Roster { .. } = decode(0x8a, &roster()).unwrap() else { panic!() };
+    let events = session_events(decode(0x8a, &roster()).unwrap());
+    let [E::GuildRoster(shared), E::WrathGuild { .. }] = &events[..] else { panic!() };
+    assert_eq!(shared.members.len(), 2);
+    assert_eq!(shared.members[1].last_online_days, 0.0, "online members carry no time");
+    assert!(shared.members[0].last_online_days.is_nan(), "the raw bits survive as the float");
+}

@@ -205,6 +205,11 @@ pub(super) type TransportQuery<'w, 's> = Query<
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct PlayerControlSet;
 
+/// Build 12340's `IsFalling` (`0x612430`), as [`controller::control`] last saw our mover:
+/// airborne and not rooted. Read by [`crate::ui_static_popup`] after [`PlayerControlSet`].
+#[derive(Resource, Default)]
+pub(crate) struct Falling(pub(crate) bool);
+
 /// The player and camera: spawns the camera and avatar resources, and runs the controller.
 pub(crate) struct PlayerPlugin;
 
@@ -263,6 +268,7 @@ impl Plugin for PlayerPlugin {
         .add_systems(Update, setup::gate_world_camera)
         // Off in capture mode, where the harness pins the camera, and in world only, so the glue
         // screens keep the cursor and send no movement.
+        .init_resource::<Falling>()
         .add_systems(
             Update,
             control

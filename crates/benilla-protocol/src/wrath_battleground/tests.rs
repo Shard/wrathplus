@@ -227,8 +227,10 @@ fn malformed_flags_counts_and_unsent_opcodes_are_rejected() {
     assert!(decode(0x357, &[1, 4]).is_err());
     assert!(decode(0x357, &[1, 0, 1, 2, 3]).is_err(), "only a full GUID may trail");
     assert!(decode(0x2d4, &cat(&[w(1), q(1)])).is_err(), "a cleared slot is all zero");
+    // 0x222 is `wrath_world_objects`' (AC sends it from spell_generic.cpp); 0x170 and 0x14b have
+    // no AC sender. None is this family's.
     for opcode in [0x222, 0x170, 0x14b] {
-        assert!(decode(opcode, &q(9)).is_err(), "{opcode:#x} has no AC sender");
+        assert!(decode(opcode, &q(9)).is_err(), "{opcode:#x} is not a battleground reply");
     }
 }
 

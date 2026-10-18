@@ -1560,6 +1560,8 @@ enum WrathRoute {
     NativeDeath,
     NativeSessionMeta,
     NativeHelp,
+    NativeReferFriend,
+    NativeWorldObjects,
     NativeInspect,
     NativeGuildBank,
     NativeFaction,
@@ -1584,7 +1586,20 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GuildPromote { .. }
         | ClientCommand::GuildDemote { .. }
         | ClientCommand::GuildRemove { .. }
-        | ClientCommand::GuildMotd { .. } => WrathRoute::NativeGuild,
+        | ClientCommand::GuildMotd { .. }
+        | ClientCommand::GuildCreate { .. }
+        | ClientCommand::GuildLeave
+        | ClientCommand::GuildDisband
+        | ClientCommand::GuildLeader { .. }
+        | ClientCommand::GuildAddRank { .. }
+        | ClientCommand::GuildDelRank
+        | ClientCommand::GuildSetPublicNote { .. }
+        | ClientCommand::GuildSetOfficerNote { .. }
+        | ClientCommand::GuildInfoText { .. }
+        | ClientCommand::SaveGuildEmblem { .. }
+        | ClientCommand::TabardVendorActivate { .. }
+        | ClientCommand::GuildEventLogQuery
+        | ClientCommand::NativeGuildRank(_) => WrathRoute::NativeGuild,
         ClientCommand::NativeQuestsCompletedQuery => WrathRoute::NativeQuestsCompletedQuery,
         ClientCommand::NativeInstanceControl(_) => WrathRoute::NativeInstanceControl,
         ClientCommand::NativeInventory(_)
@@ -1628,6 +1643,11 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::GmTicketGet
         | ClientCommand::GmTicketDelete
         | ClientCommand::GmTicketSystemStatus => WrathRoute::NativeHelp,
+        ClientCommand::NativeReferFriend(_) => WrathRoute::NativeReferFriend,
+        // Chests, doors, mailboxes, herbs, ore and fishing bobbers: build 12340 keeps the full guid.
+        ClientCommand::NativeWorldObjects(_) | ClientCommand::GameObjUse { .. } => {
+            WrathRoute::NativeWorldObjects
+        }
         ClientCommand::NativeDeath(_)
         | ClientCommand::RepopRequest
         | ClientCommand::CorpseQuery
@@ -2104,6 +2124,23 @@ fn writer_loop(
                             continue;
                         }
                     },
+                    WrathRoute::NativeWorldObjects => {
+                        use benilla_protocol::wrath_world_objects::Command as O;
+                        let command = match command {
+                            ClientCommand::NativeWorldObjects(command) => command,
+                            ClientCommand::GameObjUse { guid } => O::Use { object: guid },
+                            other => unreachable!("not a world-object route: {other:?}"),
+                        };
+                        let (opcode, body) = benilla_protocol::wrath_world_objects::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
+                    WrathRoute::NativeReferFriend => {
+                        let ClientCommand::NativeReferFriend(command) = command else {
+                            unreachable!("not a refer-a-friend route")
+                        };
+                        let (opcode, body) = benilla_protocol::wrath_refer_friend::encode(&command);
+                        active.writer.send_raw(opcode, &body)
+                    }
                     WrathRoute::NativeDeath => {
                         let (opcode, body) = benilla_protocol::wrath_death::encode(&death_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -5023,6 +5060,28 @@ fn guild_packet(command: ClientCommand) -> std::io::Result<(u32, Vec<u8>)> {
         ClientCommand::GuildMotd { motd } => G::Motd {
             text: motd.into_bytes(),
         },
+        ClientCommand::GuildCreate { name } => G::Create { name: name.into_bytes() },
+        ClientCommand::GuildLeave => G::Leave,
+        ClientCommand::GuildDisband => G::Disband,
+        ClientCommand::GuildLeader { name } => G::Leader { name: name.into_bytes() },
+        ClientCommand::GuildAddRank { name } => G::AddRank { name: name.into_bytes() },
+        ClientCommand::GuildDelRank => G::DelRank,
+        ClientCommand::GuildSetPublicNote { name, note } => G::SetNote {
+            officer: false,
+            name: name.into_bytes(),
+            note: note.into_bytes(),
+        },
+        ClientCommand::GuildSetOfficerNote { name, note } => G::SetNote {
+            officer: true,
+            name: name.into_bytes(),
+            note: note.into_bytes(),
+        },
+        ClientCommand::GuildInfoText { text } => G::InfoText { text: text.into_bytes() },
+        ClientCommand::SaveGuildEmblem { vendor, design } => G::SaveEmblem { vendor, design },
+        ClientCommand::TabardVendorActivate { npc } => G::TabardVendorActivate { vendor: npc },
+        ClientCommand::GuildEventLogQuery => G::EventLogQuery,
+        // The rank save has its own codec (`wrath_guild_rank`): all six bank rows ride along.
+        ClientCommand::NativeGuildRank(rank) => return Ok((rank.opcode(), rank.encode()?)),
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

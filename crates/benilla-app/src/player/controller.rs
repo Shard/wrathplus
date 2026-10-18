@@ -82,6 +82,8 @@ pub(super) fn control(
         // The loading cover blanks input at the source; a gesture in flight is unwound below.
         Res<crate::loading_screen::LoadingScreen>,
         Res<crate::net::SessionDialect>,
+        // `IsFalling`'s bit, published for the StaticPopup host; `Option` for harnesses.
+        Option<ResMut<super::Falling>>,
     ),
     mut commands: Commands,
     mut player: ResMut<Player>,
@@ -128,6 +130,7 @@ pub(super) fn control(
     let scoped = &speed_capsule.8;
     let covered = speed_capsule.9.covering();
     let dialect = *speed_capsule.10;
+    let mut falling = speed_capsule.11;
     // Far sight turns the auto-follow off: our facing is not "behind" for a body we only watch.
     let follow_cfg = camera::FollowConfig {
         style: if view_subject.remote.is_some() {
@@ -758,6 +761,9 @@ pub(super) fn control(
             move_flags_now |= move_flags::PITCH_UP;
         } else if pitch_key < 0.0 {
             move_flags_now |= move_flags::PITCH_DOWN;
+        }
+        if let Some(falling) = falling.as_deref_mut() {
+            falling.0 = player.is_falling();
         }
         let anim_flags = gait::drive_body_heading(
             &mut player,
