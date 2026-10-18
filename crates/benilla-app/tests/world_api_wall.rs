@@ -99,6 +99,9 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("doodad_anim::TintLoop", "record"),
     ("doodad_anim::UvLoops", "record"),
     ("doodad_anim::register_entity_uv", "record"),
+    // Stage-two UV registration on the shared lane, which glue scenes use as stage one does
+    // (docs/WRATH-TWO-STAGE.md, "Second weight and off-world lanes").
+    ("doodad_anim::register_entity_uv_stage2", "record"),
     ("doodad_anim::register_fx_uv", "record"),
     ("doodad_anim::register_tint", "record"),
     ("doodad_anim::spawn_anim_host", "record"),
@@ -133,6 +136,9 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("model_render::ModelKind", "record"),
     ("model_render::ModelPart", "record"),
     ("model_render::lazy::realize", "record"),
+    // An off-world lane's stage-two UV loops, seeded on its material: the documented entry for
+    // UI tiles and glue scenes (docs/WRATH-TWO-STAGE.md, "Second weight and off-world lanes").
+    ("model_render::second_stage_loops", "record"),
     ("modkeys::SyntheticHold", "wall"),
     ("particles::ParticleTuning", "record"),
     ("particles::ViewThrottled", "record"),
