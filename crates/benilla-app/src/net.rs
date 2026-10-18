@@ -46,6 +46,7 @@ mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
+mod wrath_help_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -160,6 +161,7 @@ impl Plugin for NetPlugin {
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
+        wrath_help_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
@@ -2150,6 +2152,9 @@ pub(crate) enum ClientCommand {
     NativeDeath(benilla_protocol::wrath_death::Command),
     /// Native zone-update and account-data commands with no shared producer.
     NativeSessionMeta(benilla_protocol::wrath_session_meta::Command),
+    /// Native Help Request commands with no shared producer: GM survey, response resolve,
+    /// complaints and bug reports.
+    NativeHelp(benilla_protocol::wrath_help::Command),
     /// Native preview-talent learning; no UI producer.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     NativeMailMutation(benilla_protocol::wrath_mail_mutations::Command),

@@ -1279,6 +1279,7 @@ enum WrathRoute {
     NativeContacts,
     NativeDeath,
     NativeSessionMeta,
+    NativeHelp,
     NativeInspect,
     NativeFaction,
     NativeWorldportAck,
@@ -1340,6 +1341,12 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::CompleteCinematic
         | ClientCommand::AreaTrigger { .. }
         | ClientCommand::SetActionBarToggles { .. } => WrathRoute::NativeSessionMeta,
+        ClientCommand::NativeHelp(_)
+        | ClientCommand::GmTicketCreate { .. }
+        | ClientCommand::GmTicketUpdate { .. }
+        | ClientCommand::GmTicketGet
+        | ClientCommand::GmTicketDelete
+        | ClientCommand::GmTicketSystemStatus => WrathRoute::NativeHelp,
         ClientCommand::NativeDeath(_)
         | ClientCommand::RepopRequest
         | ClientCommand::CorpseQuery
@@ -1781,6 +1788,13 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_session_meta::encode(&session_meta_command(command));
                         active.writer.send_raw(opcode, &body)
                     }
+                    WrathRoute::NativeHelp => match benilla_protocol::wrath_help::encode(&help_command(command)) {
+                        Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
+                        Err(error) => {
+                            bevy::log::warn!("net(wrath): invalid help request rejected before send: {error}");
+                            continue;
+                        }
+                    },
                     WrathRoute::NativeDeath => {
                         let (opcode, body) = benilla_protocol::wrath_death::encode(&death_command(command));
                         active.writer.send_raw(opcode, &body)
@@ -2069,6 +2083,27 @@ fn chat_line(command: ClientCommand, own_language: u32) -> std::io::Result<(u32,
         other => unreachable!("not a chat line: {other:?}"),
     };
     encode(&command)
+}
+
+/// The native Help Request command for a [`WrathRoute::NativeHelp`] route. The shared ticket
+/// commands lose their 1.12 category (this build has none); a filed ticket asks for a response.
+fn help_command(command: ClientCommand) -> benilla_protocol::wrath_help::Command {
+    use benilla_protocol::wrath_help::Command as H;
+    match command {
+        ClientCommand::NativeHelp(command) => command,
+        ClientCommand::GmTicketCreate { map, pos, text, .. } => H::Create {
+            map,
+            pos,
+            text,
+            need_response: true,
+            need_more_help: false,
+        },
+        ClientCommand::GmTicketUpdate { text, .. } => H::UpdateText { text },
+        ClientCommand::GmTicketGet => H::GetTicket,
+        ClientCommand::GmTicketDelete => H::DeleteTicket,
+        ClientCommand::GmTicketSystemStatus => H::SystemStatus,
+        other => unreachable!("not a help-request route: {other:?}"),
+    }
 }
 
 /// The native session-metadata command for a [`WrathRoute::NativeSessionMeta`] route.

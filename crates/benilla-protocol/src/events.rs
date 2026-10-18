@@ -1197,6 +1197,8 @@ pub enum SessionEvent {
     WrathDeath { packet: crate::wrath_death::Packet },
     /// Capture-only native account-data receipts (`wrath_session_meta`).
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
+    /// Capture-only native Help Request receipts: GM response, survey offer, complaint (`wrath_help`).
+    WrathHelp { packet: crate::wrath_help::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).
