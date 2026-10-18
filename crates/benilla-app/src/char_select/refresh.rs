@@ -25,6 +25,11 @@ pub(super) fn refresh_list(
     mut name: Query<&mut Text, (With<SelectedName>, Without<RealmBanner>, Without<RowText>)>,
     mut banner: Query<&mut Text, (With<RealmBanner>, Without<SelectedName>, Without<RowText>)>,
     spawned: Query<Ref<SelectAction>>,
+    // The paid-service faces' quarters and the sheet's size.
+    (mut faces, art): (
+        Query<(&super::screen::PaidFace, &mut ImageNode)>,
+        Res<crate::glue::art::GlueArt>,
+    ),
 ) {
     let fresh = spawned.iter().any(|r| r.is_added());
     if !roster.is_changed() && !fresh && !status.is_changed() {
@@ -33,13 +38,30 @@ pub(super) fn refresh_list(
     let empty = GlueStrings::default();
     let strings = strings.as_deref().unwrap_or(&empty);
 
+    let offered = |i: usize| {
+        roster
+            .chars
+            .get(i)
+            .and_then(|c| crate::char_create::paid::PaidService::offered(c.customize_flags))
+    };
     for (action, mut vis) in &mut rows {
-        if let SelectAction::Row(i) = action {
-            *vis = if *i < roster.chars.len() {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
+        let shown = match action {
+            SelectAction::Row(i) => *i < roster.chars.len(),
+            // `UpdateCharacterList`'s paid-service buttons: one per row with a service.
+            SelectAction::PaidService(i) => offered(*i).is_some(),
+            _ => continue,
+        };
+        *vis = if shown {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+    if let Some((_, size)) = &art.paid_service {
+        for (face, mut image) in &mut faces {
+            if let Some(service) = offered(face.0) {
+                image.rect = Some(crate::glue::art::tc_rect(*size, service.tc()));
+            }
         }
     }
     // Info is `CHARACTER_SELECT_INFO` "Level %d %s" (class only; the ghost variant appends
