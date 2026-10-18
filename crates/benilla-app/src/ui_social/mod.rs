@@ -13,7 +13,7 @@ use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
 
-mod feed;
+pub(crate) mod feed;
 mod native_who;
 mod query;
 
@@ -71,6 +71,26 @@ impl SocialState {
     /// chat and text emotes drop silently (`0x49dbe0`), and their duel is declined (`0x4d4a33`).
     pub(crate) fn is_ignored(&self, guid: u64) -> bool {
         guid != 0 && self.ignores.contains(&guid)
+    }
+
+    /// `SetFriendNotes(index | name, notes)`' friend: the 1-based row as last shown, else the
+    /// friend whose known name matches, case-insensitively.
+    pub(crate) fn friend_guid(
+        &self,
+        index: Option<u32>,
+        name: Option<&str>,
+        names: &crate::names::NameCache,
+    ) -> Option<u64> {
+        if let Some(i) = index {
+            return (i as usize)
+                .checked_sub(1)
+                .and_then(|i| self.display_order.get(i).copied());
+        }
+        let name = name?;
+        self.friends
+            .iter()
+            .map(|f| f.guid)
+            .find(|&g| names.peek(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
     }
 
     /// Is `guid` on the friend list? The reference's `FindFriendSlot` (`0x5ae810`), which keeps the
