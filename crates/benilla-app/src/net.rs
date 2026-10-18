@@ -50,6 +50,7 @@ mod wrath_session_meta_capture;
 mod wrath_help_capture;
 mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
+mod wrath_session_misc_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -167,6 +168,7 @@ impl Plugin for NetPlugin {
         wrath_help_capture::register(app);
         wrath_refer_friend_capture::register(app);
         wrath_world_objects_capture::register(app);
+        wrath_session_misc_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
@@ -2164,6 +2166,8 @@ pub(crate) enum ClientCommand {
     NativeReferFriend(benilla_protocol::wrath_refer_friend::Command),
     /// Native game-object report-use; `GameObjUse` is the shared use command.
     NativeWorldObjects(benilla_protocol::wrath_world_objects::Command),
+    /// Native player-logout and emote commands with no shared producer.
+    NativeSessionMisc(benilla_protocol::wrath_session_misc::Command),
     /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.
@@ -2675,6 +2679,8 @@ mod tests {
                 slot: 0,
             },
             ClientCommand::CancelAutoRepeat,
+            // `CMSG_QUERY_TIME` has a native route (session misc).
+            ClientCommand::QueryTime,
             // `CMSG_MOVE_TIME_SKIPPED` has a native route (movement M3).
             ClientCommand::MoveTimeSkipped {
                 guid: 1057,
@@ -2686,7 +2692,6 @@ mod tests {
         for command in [
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
-            ClientCommand::QueryTime,
             ClientCommand::AutostoreLootItem { slot: 18 },
         ] {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));
