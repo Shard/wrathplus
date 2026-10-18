@@ -305,7 +305,10 @@ pub(crate) struct UnitSpeeds(pub(crate) MoveSpeeds);
 /// the post-create apply `0x5fad50` applies our own speed block as it does a remote one.
 pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     use crate::creature_anim::move_flags as f;
-    if flags & f::ANY_MOVE == 0 {
+    // A swimmer or flier on its ascend or descend key moves without a direction bit.
+    let vertical = flags & (f::SWIMMING | f::FLYING) != 0
+        && flags & (f::ASCENDING | f::DESCENDING) != 0;
+    if flags & f::ANY_MOVE == 0 && !vertical {
         return 0.0;
     }
     if flags & f::SWIMMING != 0 {

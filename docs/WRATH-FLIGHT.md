@@ -89,10 +89,17 @@ the ground verb and holds the vertical key, and the engine picks by state.
 **Observers.** `MSG_MOVE_SET_FLIGHT_SPEED`, `_FLIGHT_BACK_SPEED` and `_PITCH_RATE` (relays), and
 their `SMSG_SPLINE_SET_*` forms, decode into `SpeedChanged` (`wrath_speed`).
 
-**Not modelled (labelled):**
-- The swimmer's ascend and descend keys. `0x9898e0` accepts SWIMMING too, but the swim jump
-  stays the 1.12 breach.
-- Taking off from the water.
-- A flier's remote extrapolation. The relay still drops observers' FLYING, because it collides
-  with the shared ON_TRANSPORT.
-- Flying animation selection.
+**M6 additions.**
+- **Swimming:** the ascend and descend keys climb or sink a swimmer too (`0x9898e0` takes SWIMMING
+  as it takes FLYING). The climb is still capped at the rest line, and the edges go out as in flight.
+  A swimmer's descend key never sits. The swim jump stays the breach.
+- **Taking off from the water:** with the grant, the ascend key at the surface cap takes off and
+  clears SWIMMING (`0x989890`). A flier climbing out keeps flying. The trigger is the same labelled
+  inference as the air take-off.
+- **Observers:** the relay maps Wrath FLYING onto the shared word's own FLYING (`0x0800_0000`) and
+  keeps CAN_FLY, ASCENDING and DESCENDING. The merge mask admits them. A relayed flier dead-reckons
+  along its pitched axis at its flight speed, climbs or sinks on its vertical keys, and is not
+  ground-resolved.
+- **Animation:** a FLYING mover plays Fly (135), as a flying spline does, for us and for observers.
+
+**Not modelled (labelled):** a dedicated flying idle (the selector has none traced; Fly plays).
