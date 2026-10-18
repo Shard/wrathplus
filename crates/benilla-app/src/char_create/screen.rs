@@ -108,6 +108,8 @@ fn spawn_screen(
     let font = wow_font(assets);
     // The edit box types in `GlueEditBoxFont`, ARIALN, not FRIZQT (`GlueFonts.xml`).
     let edit_font: Handle<Font> = assets.load("mpq://Fonts/ARIALN.ttf");
+    // The pane labels' `FactionName_Shadow_Huge`.
+    let title_font: Handle<Font> = assets.load("mpq://Fonts/MORPHEUS.ttf");
     let model_image = match portraits.0.get(GLUE_SLOT) {
         Some(PortraitSource::Live(h)) => Some(h.clone()),
         _ => None,
@@ -156,48 +158,52 @@ fn spawn_screen(
     canvas.with_children(|ui| {
         left_tower(ui, art, &font, s, strings);
 
-        // Labelled: build 12340's `CharacterCreateWoWLogo` (the WotLK logo at TOPRIGHT) and the
-        // race and class panes under it are not built; the 1.12 right-hand stack stands in, so no
-        // logo is drawn over the configuration frame.
-
-        super::panels::right_stack(ui, art, &font, s);
+        super::panels::logo(ui, art, s);
+        super::panels::right_stack(ui, art, &font, &title_font, s);
         name_cluster(ui, art, &font, &edit_font, s, strings);
         rotate_cluster(ui, art, &font, s);
 
-        // `CharCreateOkayButton` 160×35 over `BackButton` 120×30 at BOTTOMRIGHT (-50,20).
-        ui.spawn((Node {
-            position_type: PositionType::Absolute,
-            right: px(50.0),
-            bottom: px(20.0),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(5.0),
-            ..default()
-        },))
-            .with_children(|actions| {
-                glue_button(
-                    actions,
-                    art,
-                    &font,
-                    CreateAction::Create,
-                    strings.text("CHARACTER_CREATE_ACCEPT", "Accept"),
-                    160.0,
-                    35.0,
-                    GlueBtnKind::Normal,
-                    s,
-                );
-                glue_button(
-                    actions,
-                    art,
-                    &font,
-                    CreateAction::Back,
-                    strings.text("BACK", "Back"),
-                    120.0,
-                    30.0,
-                    GlueBtnKind::Small,
-                    s,
-                );
-            });
+        // `CharCreateOkayButton` 160×35, TOP at the class pane's BOTTOM (4,−3), over
+        // `CharCreateBackButton` 120×30, TOP at its BOTTOM (4,3): centers 143 and 139 from the
+        // canvas's right edge.
+        for (action, key, fallback, (w, h), kind, (right, top)) in [
+            (
+                CreateAction::Create,
+                "CHARACTER_CREATE_ACCEPT",
+                "Accept",
+                (160.0, 35.0),
+                GlueBtnKind::Normal,
+                (63.0, 705.0),
+            ),
+            (
+                CreateAction::Back,
+                "BACK",
+                "Back",
+                (120.0, 30.0),
+                GlueBtnKind::Small,
+                (79.0, 737.0),
+            ),
+        ] {
+            ui.spawn((Node {
+                position_type: PositionType::Absolute,
+                right: px(right),
+                top: px(top),
+                ..default()
+            },))
+                .with_children(|slot| {
+                    glue_button(
+                        slot,
+                        art,
+                        &font,
+                        action,
+                        strings.text(key, fallback),
+                        w,
+                        h,
+                        kind,
+                        s,
+                    );
+                });
+        }
     });
 }
 
