@@ -75,6 +75,9 @@ pub struct Character {
     pub position: Vector3d,
     /// `CHARACTER_FLAG_*` bits.
     pub flags: u32,
+    /// Build 12340's `CHAR_CUSTOMIZE_FLAG_*`: `0x1` customize, `0x10000` faction change,
+    /// `0x100000` race change (`GetCharacterInfo` `0x4e3170`); 0 on 1.12.
+    pub customize_flags: u32,
     /// Equipment order: head, neck, shoulders, shirt, chest, waist, legs, feet, wrists, hands,
     /// finger x2, trinket x2, back, main hand, off hand, ranged, tabard.
     pub equipment: [CharEnumItem; 19],
@@ -131,6 +134,7 @@ impl Character {
             map,
             position,
             flags,
+            customize_flags: 0,
             equipment,
             pet_display_id,
             pet_level,

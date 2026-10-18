@@ -2999,6 +2999,7 @@ fn normalize_character(character: WrathCharacter) -> Character {
             z: character.position[2],
         },
         flags: character.flags,
+        customize_flags: character.customization_flags,
         equipment,
         pet_display_id: character.pet_display_id,
         pet_level: character.pet_level,

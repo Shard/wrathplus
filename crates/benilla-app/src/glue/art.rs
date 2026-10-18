@@ -92,12 +92,12 @@ pub(crate) struct GlueArt {
     pub(crate) button_down: Option<(Handle<Image>, Vec2)>,
     pub(crate) button_dis: Option<(Handle<Image>, Vec2)>,
     pub(crate) button_hi: Option<Handle<AddUiMaterial>>,
-    /// The tower frame: `UI-CharacterCreate-Background` (stretched) under three stacked
-    /// `UI-CharacterCreate-OuterBorder` pieces.
-    pub(crate) tower_bg: Option<Handle<Image>>,
+    /// The configuration frame's three stacked `UI-CharacterCreate-OuterBorder` pieces.
     pub(crate) tower_border: Option<(Handle<Image>, Vec2)>,
     /// The 64² shadow behind every race/class/gender icon.
     pub(crate) icon_shadow: Option<Handle<Image>>,
+    /// `UI-CharacterCreate-Highlights`, for the icon buttons' `BevelEdge` quarter.
+    pub(crate) icon_bevel: Option<(Handle<Image>, Vec2)>,
     /// The dial rows' `CharacterCreate-LabelFrame`: 128×64, a 25|stretch|25 horizontal 3-slice.
     pub(crate) label_frame: Option<(Handle<Image>, Vec2)>,
     /// `UI-RotationRight-Big-*`; the left rotate button is this art mirrored.
@@ -234,15 +234,17 @@ impl GlueArt {
         self.gender = sized(assets, &format!("{CC}Gender"), images);
         self.factions = sized(assets, &format!("{CC}Factions"), images);
         self.banners = assets.sprite_texture(&format!("{CC}Banners"), images);
-        // No `CheckButtonHilight`: the template's `CheckedTexture` is commented out in 1.12
-        // GlueXML, so the selected look is the locked highlight alone.
+        // `CharacterCreateIconButtonTemplate`'s ADD sheen, `UI-CharacterCreate-Highlights`' top-left
+        // quarter; the checked quarter beside it is labelled as the same sheen, locked.
         self.hilight = add_overlay(
             assets,
-            "Interface\\Buttons\\ButtonHilight-Square",
-            FULL_TC,
+            &format!("{CC}Highlights"),
+            [0.0, 0.5, 0.0, 0.5],
             images,
             add_mats,
         );
+        // Its `BevelEdge` overlay, the bottom-left quarter.
+        self.icon_bevel = sized(assets, &format!("{CC}Highlights"), images);
         self.logo = assets.sprite_texture("Interface\\Glues\\Common\\Glues-WoW-Logo", images);
         self.arrow_left = arrow(assets, "Left", images, add_mats);
         self.arrow_right = arrow(assets, "Right", images, add_mats);
@@ -256,7 +258,6 @@ impl GlueArt {
             images,
             add_mats,
         );
-        self.tower_bg = assets.sprite_texture(&format!("{CC}Background"), images);
         self.tower_border = sized(assets, &format!("{CC}OuterBorder"), images);
         self.icon_shadow = assets.sprite_texture(&format!("{CC}IconShadow"), images);
         self.label_frame = sized(
@@ -486,7 +487,7 @@ impl GlueArt {
             self.button_down.is_some(),
             self.button_dis.is_some(),
             self.button_hi.is_some(),
-            self.tower_bg.is_some(),
+            self.icon_bevel.is_some(),
             self.tower_border.is_some(),
             self.icon_shadow.is_some(),
             self.label_frame.is_some(),
@@ -532,17 +533,20 @@ fn add_overlay(
 
 // ── The icon-cell tables (CharacterCreate.lua's *_ICON_TCOORDS, verbatim) ────────────────────────
 
-/// A race's cell in `UI-CharacterCreate-Races` (col, row; female is row + 2), `RACE_ICON_TCOORDS`.
+/// A race's cell in build 12340's `UI-CharacterCreate-Races`, eight cells across (col, row;
+/// female is row + 2), `RACE_ICON_TCOORDS`.
 fn race_cell(race: u8) -> Option<(f32, f32)> {
     Some(match race {
-        1 => (0.0, 0.0), // Human
-        3 => (1.0, 0.0), // Dwarf
-        7 => (2.0, 0.0), // Gnome
-        4 => (3.0, 0.0), // Night Elf
-        6 => (0.0, 1.0), // Tauren
-        5 => (1.0, 1.0), // Scourge
-        8 => (2.0, 1.0), // Troll
-        2 => (3.0, 1.0), // Orc
+        1 => (0.0, 0.0),  // Human
+        3 => (1.0, 0.0),  // Dwarf
+        7 => (2.0, 0.0),  // Gnome
+        4 => (3.0, 0.0),  // Night Elf
+        11 => (4.0, 0.0), // Draenei
+        6 => (0.0, 1.0),  // Tauren
+        5 => (1.0, 1.0),  // Scourge
+        8 => (2.0, 1.0),  // Troll
+        2 => (3.0, 1.0),  // Orc
+        10 => (4.0, 1.0), // Blood Elf
         _ => return None,
     })
 }
@@ -550,7 +554,7 @@ fn race_cell(race: u8) -> Option<(f32, f32)> {
 pub(crate) fn race_tc(race: u8, sex: u8) -> Option<[f32; 4]> {
     let (c, r) = race_cell(race)?;
     let r = r + if sex == 1 { 2.0 } else { 0.0 };
-    Some([c * 0.25, (c + 1.0) * 0.25, r * 0.25, (r + 1.0) * 0.25])
+    Some([c * 0.125, (c + 1.0) * 0.125, r * 0.25, (r + 1.0) * 0.25])
 }
 
 /// A class icon's texcoords in `UI-CharacterCreate-Classes`, `CLASS_ICON_TCOORDS` verbatim.
@@ -565,6 +569,7 @@ pub(crate) fn class_tc(class: u8) -> Option<[f32; 4]> {
         5 => [0.49609375, 0.7421875, 0.25, 0.5],  // Priest
         9 => [0.7421875, 0.98828125, 0.25, 0.5],  // Warlock
         2 => [0.0, 0.25, 0.5, 0.75],              // Paladin
+        6 => [0.25, 0.49609375, 0.5, 0.75],       // Death Knight
         _ => return None,
     })
 }
