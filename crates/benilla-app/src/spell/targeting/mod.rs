@@ -30,6 +30,7 @@
 
 mod corpse;
 mod cursor;
+pub(crate) mod glyph;
 mod item;
 mod pick;
 mod world;
@@ -233,6 +234,8 @@ struct Targeting {
     commit: super::cast_send::CastCommit,
     /// The standing flag_word `0xcecac0`; more than one seam can answer yes to it.
     word: u16,
+    /// Build 12340's glyph wait (`0xd3f4e0 & 0x20000`): only `PlaceGlyphInSocket` commits it.
+    glyph: bool,
 }
 
 impl SpellTargeting {
@@ -295,7 +298,26 @@ impl SpellTargeting {
             spell_id,
             commit,
             word,
+            glyph: false,
         });
+    }
+
+    /// Hold a glyph's item cast for its socket.
+    pub(crate) fn enter_glyph(&mut self, spell_id: u32, commit: super::cast_send::CastCommit) {
+        self.0 = Some(Targeting {
+            spell_id,
+            commit,
+            word: 0,
+            glyph: true,
+        });
+    }
+
+    /// The glyph wait's spell and commit.
+    pub(crate) fn glyph_wait(&self) -> Option<(u32, super::cast_send::CastCommit)> {
+        self.0
+            .as_ref()
+            .filter(|t| t.glyph)
+            .map(|t| (t.spell_id, t.commit))
     }
 
     /// The pending cast when the standing word answers `wants`, so no commit fires on a word its

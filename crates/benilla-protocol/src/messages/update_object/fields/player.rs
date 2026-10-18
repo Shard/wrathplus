@@ -84,6 +84,19 @@ impl ObjectFields {
     pub fn player_arena_team_id(&self, slot: u8) -> Option<u32> {
         (slot < 3).then(|| self.get_at(Field::PlayerArenaTeamInfo11, 7 * u16::from(slot)))?
     }
+    /// `PLAYER_FIELD_GLYPH_SLOTS_1 + i`: the `GlyphSlot.dbc` id socket `i` (0-5) offers (build
+    /// 12340 only).
+    pub fn player_glyph_slot(&self, i: u8) -> Option<u32> {
+        (i < 6).then(|| self.get_at(Field::PlayerGlyphSlots1, u16::from(i)))?
+    }
+    /// `PLAYER_FIELD_GLYPHS_1 + i`: the `GlyphProperties.dbc` id in socket `i` (0-5), 0 for none.
+    pub fn player_glyph(&self, i: u8) -> Option<u32> {
+        (i < 6).then(|| self.get_at(Field::PlayerGlyphs1, u16::from(i)))?
+    }
+    /// `PLAYER_GLYPHS_ENABLED`: one bit per unlocked socket.
+    pub fn player_glyphs_enabled(&self) -> Option<u32> {
+        self.get(Field::PlayerGlyphsEnabled)
+    }
     /// `PLAYER_VISIBLE_ITEM_<slot>_0`: the public entry worn in equipment slot `i`, which other
     /// clients render from; each slot is 12 dwords, the entry after a 2-dword creator.
     pub fn player_visible_item_entry(&self, i: u8) -> Option<u32> {

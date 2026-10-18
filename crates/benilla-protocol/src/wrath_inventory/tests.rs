@@ -325,7 +325,7 @@ fn use_item_carries_header_guid_glyph_and_each_target_block() {
         (UseItemTarget::Source(at), [vec![0x20, 0, 0, 0, 0], coords.clone()].concat()),
     ];
     for (target, tail) in rows {
-        let (opcode, body) = encode_use_item(9, 255, 23, 8690, 0x0400_0000_0000_0102, &target);
+        let (opcode, body) = encode_use_item(9, 255, 23, 8690, 0x0400_0000_0000_0102, 0, &target);
         assert_eq!(opcode, 0x0ab);
         assert_eq!(body, [head(9), tail].concat(), "{target:?}");
     }

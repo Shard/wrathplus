@@ -113,5 +113,6 @@ the current snapshot and replays no events.
   (`benilla_formats::lfg::load_dungeon_encounters`).
 - `set_wrath_lfg_location` is `CurrentMap` with the latest `SMSG_INSTANCE_DIFFICULTY`.
 - `WrathGroup` takes `lfg_status`/`lfg_dungeon_entry` from `SMSG_GROUP_LIST`'s LFG block.
-- Labelled: `lfg_flags` and `lfg_restricted` have no traced source and read 0. Backfill
-  (`0x55a0c0`) is still not sent.
+- Labelled: `lfg_flags` and `lfg_restricted` have no traced source and read 0.
+- Backfill (`0x55a0c0`) is Native UI's binding (916b2fd8): it reselects
+  `lfg_dungeon_entry` and its join reaches this outbox.

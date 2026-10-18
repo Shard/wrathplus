@@ -234,6 +234,7 @@ fn every_wrath_writer_route_is_admitted() {
                 spell_index: 0,
                 spell_id: 8690,
                 item_guid: 1,
+                glyph_index: 0,
                 target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
             },
         ),

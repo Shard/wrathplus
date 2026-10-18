@@ -36,6 +36,16 @@ pub struct GlyphCatalog {
 }
 
 impl GlyphCatalog {
+    /// A catalog from rows already read, for hosts and tests.
+    pub fn from_rows(
+        properties: impl IntoIterator<Item = GlyphProperty>,
+        slots: impl IntoIterator<Item = GlyphSlot>,
+    ) -> Self {
+        Self {
+            properties: properties.into_iter().map(|p| (p.id, p)).collect(),
+            slots: slots.into_iter().map(|s| (s.id, s)).collect(),
+        }
+    }
     pub fn property(&self, id: u32) -> Option<&GlyphProperty> {
         self.properties.get(&id)
     }

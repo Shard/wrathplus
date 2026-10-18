@@ -39,18 +39,46 @@ pub(crate) fn drop_item_on_unit(
     press: Res<crate::target::PressPick>,
     mut clicks: MessageReader<benilla_world::interact::WorldClick>,
     mut ladder: crate::spell::CastLadder,
+    // `PlaceGlyphInSocket`, the other script-asked targeted commit (`0x80c3e0`).
+    glyphs: (
+        Option<ResMut<crate::spell::targeting::glyph::GlyphPlacements>>,
+        Option<Res<crate::spell::targeting::glyph::GlyphTables>>,
+    ),
+    // The glyph wait `USE_GLYPH` last reported.
+    mut glyph_wait: Local<crate::ui_script::VmMemo<Option<u32>>>,
 ) {
     let Some(mut script) = script else {
         clicks.clear();
         return;
     };
+    // `USE_GLYPH(spellID)` when a glyph cast begins waiting for its socket, which opens the
+    // glyph frame (Labelled: the reference's fire site is not traced).
+    let waiting = ladder.ground.glyph_wait().map(|(spell, _)| spell);
+    let reported = glyph_wait.get(&script);
+    if waiting != *reported {
+        *reported = waiting;
+        if let Some(spell) = waiting {
+            script.fire_event(
+                "USE_GLYPH",
+                vec![benilla_ui::script::ScriptValue::Int(i64::from(spell))],
+            );
+        }
+    }
+    if let Some(mut placements) = glyphs.0.filter(|p| !p.0.is_empty()) {
+        let player = self_q.iter().next().map(|(_, s)| &s.0);
+        crate::spell::targeting::glyph::place(
+            &mut placements,
+            glyphs.1.as_deref(),
+            player,
+            &mut ladder,
+        );
+    }
     let hovered = press.hovered;
     let mut tokens = script.take_drop_item_on_unit();
     // The world entry: a click whose press-time pick is the pet. That is the pick the click
     // selects from; the live hover can differ after a drag.
-    let clicked_pet = clicks.read().count() > 0
-        && pet_bar.guid() != 0
-        && hovered.guid == Some(pet_bar.guid());
+    let clicked_pet =
+        clicks.read().count() > 0 && pet_bar.guid() != 0 && hovered.guid == Some(pet_bar.guid());
     if clicked_pet {
         tokens.push("pet".to_string());
     }

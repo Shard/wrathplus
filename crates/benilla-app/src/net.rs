@@ -1250,6 +1250,9 @@ pub(crate) enum ClientCommand {
         /// Build 12340 names the cast spell and the item GUID; AC checks both.
         spell_id: u32,
         item_guid: u64,
+        /// Build 12340's glyph socket, 0-based (`PlaceGlyphInSocket` `0x80c3e0` writes it to the
+        /// pending cast's `+0x12c`); 0 for every other use.
+        glyph_index: u32,
         target: benilla_protocol::messages::UseItemTarget,
     },
     /// `CMSG_OPEN_ITEM`: the server answers `SMSG_LOOT_RESPONSE` on the item's own guid; a wrapped

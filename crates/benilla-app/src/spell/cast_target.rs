@@ -68,6 +68,8 @@ const TF_SOURCE_LOCATION: u16 = 0x0020;
 const LOCATION_BITS: u16 = TF_SOURCE_LOCATION | TF_DEST_LOCATION;
 /// The item bit, asked by the bag and paper-doll click seams (`TargetingWantsItem 0x6e6330`).
 const TF_ITEM: u16 = 0x0010;
+/// Build 12340's `TARGET_FLAG_GLYPH_SLOT`, above the 16-bit word: the cast waits for a socket.
+pub(crate) const TF_GLYPH_SLOT: u32 = 0x2_0000;
 /// `TARGET_FLAG_LOCKED`: in both the item mask `0x4010` and the GameObject mask `0x4800`, so one
 /// lock spell ends on a bag item or a world object. It never reaches the wire: `BindTarget`
 /// writes ITEM (`0x6e5f2e`) or GAMEOBJECT (`0x6e5f69`) instead, which vmangos accepts for a

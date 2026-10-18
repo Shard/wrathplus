@@ -72,6 +72,11 @@ impl Plugin for SpellPlugin {
             .init_resource::<crate::net::wrath_combo_points::NativeComboPoints>()
             .init_resource::<AutoSelfCast>()
             .init_resource::<SpellTargeting>()
+            .init_resource::<targeting::glyph::GlyphPlacements>()
+            .add_systems(
+                Startup,
+                targeting::glyph::load.after(benilla_assets::AssetSet::Open),
+            )
             .init_resource::<HeldForPick>()
             .init_resource::<targeting::EnchantConfirmItem>()
             .init_resource::<targeting::PicksSelf>()
