@@ -473,6 +473,7 @@ pub(crate) struct Model {
     pub(crate) wrath_titles: super::wrath_titles::State,
     /// The item id the last tooltip item lookup asked for, taken by the render that follows.
     pub(crate) tooltip_viewed_item: Option<u32>,
+    pub(crate) wrath_quest_poi: super::wrath_quest_poi::State,
     /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
     pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
@@ -1288,6 +1289,7 @@ impl Model {
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
             tooltip_viewed_item: None,
+            wrath_quest_poi: Default::default(),
             wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
