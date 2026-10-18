@@ -5,6 +5,64 @@ use benilla_ui::script::{ScriptDialect, UiScript, UnitState};
 #[path = "wrath_census_lexer.rs"]
 mod census_lexer;
 
+/// One chunk's `Name(` sites: `function Name(` definitions, `:Name(` methods, and bare global
+/// calls, less the names the chunk binds with `local` ([`census_lexer::local_names`]).
+fn scan_calls(
+    src: &str,
+    defined: &mut std::collections::HashSet<String>,
+    methods: &mut std::collections::BTreeMap<String, usize>,
+    calls: &mut std::collections::BTreeMap<String, usize>,
+) {
+    let locals = census_lexer::local_names(src);
+    let bytes = src.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c.is_ascii_alphabetic() || c == b'_' {
+            let start = i;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let name = &src[start..i];
+            let mut j = i;
+            while j < bytes.len() && bytes[j] == b' ' {
+                j += 1;
+            }
+            let before = if start > 0 { bytes[start - 1] } else { b' ' };
+            let preceded_by_function = src[..start].trim_end().ends_with("function");
+            if j < bytes.len() && bytes[j] == b'(' && name.as_bytes()[0].is_ascii_uppercase() {
+                if preceded_by_function {
+                    defined.insert(name.to_string());
+                } else if before == b':' {
+                    *methods.entry(name.to_string()).or_default() += 1;
+                } else if before != b'.' && before != b'"' && before != b'\'' && !locals.contains(name) {
+                    *calls.entry(name.to_string()).or_default() += 1;
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/// A `local` binding hides only its own chunk's calls: the same name called as a global in
+/// another chunk still counts.
+#[test]
+fn census_skips_a_chunks_locals_but_counts_the_same_name_elsewhere() {
+    let mut defined = std::collections::HashSet::new();
+    let mut methods = std::collections::BTreeMap::new();
+    let mut calls = std::collections::BTreeMap::new();
+    let popup = census_lexer::executable_text(
+        "local OnCancel = info.OnCancel\nif OnCancel then OnCancel(self) end\nSendMail(a)",
+    );
+    let other = census_lexer::executable_text("OnCancel(frame)");
+    scan_calls(&popup, &mut defined, &mut methods, &mut calls);
+    assert!(!calls.contains_key("OnCancel"), "the chunk's local");
+    assert_eq!(calls.get("SendMail"), Some(&1));
+    scan_calls(&other, &mut defined, &mut methods, &mut calls);
+    assert_eq!(calls.get("OnCancel"), Some(&1), "a global call in another chunk");
+}
+
 /// Every distinct failure, error and warning, with a count, printed for triage.
 fn census(script: &mut UiScript, failures: &[String]) -> usize {
     let mut seen: Vec<(String, usize)> = Vec::new();
@@ -225,35 +283,7 @@ fn missing_surface(script: &UiScript) {
     let mut methods = std::collections::BTreeMap::<String, usize>::new();
     let mut calls = std::collections::BTreeMap::<String, usize>::new();
     for src in &sources {
-        let bytes = src.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            let c = bytes[i];
-            if c.is_ascii_alphabetic() || c == b'_' {
-                let start = i;
-                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-                    i += 1;
-                }
-                let name = &src[start..i];
-                let mut j = i;
-                while j < bytes.len() && bytes[j] == b' ' {
-                    j += 1;
-                }
-                let before = if start > 0 { bytes[start - 1] } else { b' ' };
-                let preceded_by_function = src[..start].trim_end().ends_with("function");
-                if j < bytes.len() && bytes[j] == b'(' && name.as_bytes()[0].is_ascii_uppercase() {
-                    if preceded_by_function {
-                        defined.insert(name.to_string());
-                    } else if before == b':' {
-                        *methods.entry(name.to_string()).or_default() += 1;
-                    } else if before != b'.' && before != b'"' && before != b'\'' {
-                        *calls.entry(name.to_string()).or_default() += 1;
-                    }
-                }
-            } else {
-                i += 1;
-            }
-        }
+        scan_calls(src, &mut defined, &mut methods, &mut calls);
     }
     // ALL_CAPS globals read but never assigned in the source: engine-provided constants.
     let mut constants = std::collections::BTreeMap::<String, usize>::new();
