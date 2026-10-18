@@ -40,6 +40,10 @@ Movement M3, observers (flight and transport relays, mode/knockback/collision/ti
 
 Movement M5a, flight: CAN_FLY/FLYING controller mode with the ascend/descend keys, `CMSG_MOVE_SET_FLY` and the vertical edges, flight speeds into the controller, and the flight and pitch-rate observer echoes; see `docs/WRATH-FLIGHT.md`. Gates: Protocol **644 passed, 0 failed**; App **4,743 passed, 0 failed, 12 ignored**; UI **1,881 passed, 0 failed, 1 ignored**. No live client was launched.
 
+Movement M5b, control hand-over, vehicles, root and pitch keys: the active mover follows `SMSG_CLIENT_CONTROL_UPDATE`, a vehicle or possessed unit is driven and acked from its own pose, roots reach the controller and the wire reports ROOT, `NOT_ACTIVE_MOVER`/dismiss/change-seats writers, the pitch keys, and the vehicle UI feed (`net/wrath_vehicle.rs`); see `docs/WRATH-CONTROL.md`. Gates: Protocol **654 passed, 0 failed**; App **4,782 passed, 0 failed, 12 ignored**; UI **1,912 passed, 0 failed, 1 ignored**. No live client was launched.
+
+Movement M6, polish: swim ascend/descend, take-off from the water, relayed fliers (Wrath FLYING onto the shared FLYING bit, pitched dead reckoning, Fly 135), and a second Ghidra round narrowing the four labelled C→S rows (none proven far enough to emit); see `docs/WRATH-FLIGHT.md` and `docs/WRATH-CONTROL.md`. No row changes status. Gates: Protocol **654 passed, 0 failed**; App **4,785 passed, 0 failed, 12 ignored**. No live client was launched.
+
 ## Coverage totals
 
 | Direction | handled | capture-only | missing | total |
