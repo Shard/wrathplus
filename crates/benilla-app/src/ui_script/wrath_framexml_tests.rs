@@ -204,6 +204,11 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
 /// dead natively) in the same commit, and a listed name this VM answers fails the census.
 const NATIVE_ABSENT: &[(&str, &str)] = &[
     (
+        "MutedList_Update",
+        "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
+         caller, FriendsFrame.lua:1341, is FriendsFrameMuteButton_OnClick of 3.3.5's retired mute list",
+    ),
+    (
         "AddSendMailMoney",
         "Wow.exe 12340 has only Get/SetSendMailMoney (string scan, /tmp/azb-ui-mail-helpers.log); \
          MoneyFrame.lua:83 calls it from the SEND_MAIL MoneyTypeInfo drop callback only",
