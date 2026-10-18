@@ -462,6 +462,8 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
+    /// FriendsFrame's guild bank, guild log and recruit-a-friend state.
+    pub(crate) wrath_friends: super::wrath_friends_frame::State,
     pub(crate) wrath_known_spells: super::wrath_surface::wrath_spell_queries::KnownSpells,
     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
     pub(crate) pet_book: spellbook::PetBookState,
@@ -1258,6 +1260,7 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
+            wrath_friends: Default::default(),
             wrath_known_spells: Default::default(),
             pet_book: spellbook::PetBookState::default(),
             macros: macros::MacroState::default(),
