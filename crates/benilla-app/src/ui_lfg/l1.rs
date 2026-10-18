@@ -51,6 +51,8 @@ pub(crate) struct LfgL1 {
     /// Interests whose template the host held: asked into the VM this frame, answered next.
     host_held: Vec<u32>,
     host_held_next: Vec<u32>,
+    /// L2's stores ([`super::l2`]), reset with the session.
+    queue: super::l2::LfgQueue,
 }
 
 /// The OS boot-relative millisecond count as `u32`, the reference's `GetTickCount` input to the
@@ -204,6 +206,15 @@ fn presentation(
     out
 }
 
+/// L2's inputs beside L1's.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(super) struct L2Inputs<'w> {
+    /// The system lines' chat log; `Option` for harnesses, as the group and catalog.
+    chat: Option<ResMut<'w, crate::ui_chat::ChatLog>>,
+    group: Option<Res<'w, crate::ui_party::GroupState>>,
+    catalog: Option<Res<'w, super::catalog::Catalog>>,
+}
+
 /// The per-frame L1 feed, after `feed_item_stats` so an answered template is in the VM before its
 /// callback events.
 #[allow(clippy::too_many_arguments)]
@@ -218,6 +229,7 @@ pub(super) fn feed(
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     icons: Option<Res<ItemDisplays>>,
     mut memo: Local<VmMemo<()>>,
+    mut l2: L2Inputs,
 ) {
     let Some(mut script) = script else {
         return;
@@ -281,22 +293,48 @@ pub(super) fn feed(
         }
     }
 
-    // Receipts, in order; other families stay queued for their owners.
+    // Receipts, in order: L1's lock stores, then L2's; other families stay queued for their owners.
     let mut rest = VecDeque::with_capacity(packets.0.len());
     while let Some(packet) = packets.0.pop_front() {
         let mut snapshot = (*l1.snapshot).clone();
-        match apply(&mut snapshot, &packet) {
-            Some(fire) => {
-                l1.snapshot = Arc::new(snapshot);
-                l1.presentation = derive(&l1.snapshot, &items);
-                script.set_wrath_lfg_lock_snapshot(Arc::clone(&l1.snapshot));
-                script.set_wrath_lfg_presentation(Arc::clone(&l1.presentation));
-                if fire {
-                    script.fire_event("LFG_LOCK_INFO_RECEIVED", vec![]);
-                    script.fire_event("LFG_UPDATE_RANDOM_INFO", vec![]);
-                }
+        let locks = apply(&mut snapshot, &packet);
+        if let Some(fire) = locks {
+            l1.snapshot = Arc::new(snapshot);
+            l1.presentation = derive(&l1.snapshot, &items);
+            script.set_wrath_lfg_lock_snapshot(Arc::clone(&l1.snapshot));
+            script.set_wrath_lfg_presentation(Arc::clone(&l1.presentation));
+            if fire {
+                script.fire_event("LFG_LOCK_INFO_RECEIVED", vec![]);
+                script.fire_event("LFG_UPDATE_RANDOM_INFO", vec![]);
             }
-            None => rest.push_back(packet),
+        }
+        let name = |guid: u64| {
+            names
+                .as_deref()
+                .and_then(|n| n.resolve(guid, &commands))
+                .map(str::to_string)
+        };
+        let dungeon = |entry: u32| {
+            l2.catalog.as_deref().and_then(|c| {
+                c.0.dungeons
+                    .iter()
+                    .find(|d| d.id == entry & 0xff_ffff)
+                    .map(|d| (d.name.clone(), d.id, d.dungeon_type as u32))
+            })
+        };
+        let inputs = super::l2::Inputs {
+            me,
+            in_group: l2.group.as_ref().is_some_and(|g| g.in_group),
+            now: script.now(),
+            name: &name,
+            dungeon: &dungeon,
+        };
+        let queue = l1.queue.apply(&packet, &inputs);
+        if let Some(effects) = &queue {
+            super::l2::run(&mut script, l2.chat.as_deref_mut(), effects);
+        }
+        if locks.is_none() && queue.is_none() {
+            rest.push_back(packet);
         }
     }
     packets.0 = rest;
