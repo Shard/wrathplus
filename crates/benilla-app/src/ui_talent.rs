@@ -1,5 +1,6 @@
 //! The talent window feed: the class's pages from `Talent.dbc` and `TalentTab.dbc`, the known
-//! spells and `PLAYER_CHARACTER_POINTS1/2`, and `LearnTalent` clicks as `CMSG_LEARN_TALENT`. A
+//! spells and `PLAYER_CHARACTER_POINTS1/2`, `LearnTalent` clicks as `CMSG_LEARN_TALENT` and
+//! `LearnPreviewTalents` as `CMSG_LEARN_PREVIEW_TALENTS`. A
 //! talent's rank is its highest known rank spell (learning grants every lower rank, vmangos
 //! `Player::LearnTalent`); an unlearned one wears rank 1's name and icon.
 //!
@@ -265,6 +266,7 @@ pub(crate) fn build_pages_by(
                         tier: p.row + 1,
                         column: p.col + 1,
                         learnable,
+                        rank: need,
                     });
                     if !learnable {
                         let p_name = spells
@@ -282,6 +284,7 @@ pub(crate) fn build_pages_by(
             // frame's gold, green and gray come from the stock Lua.
             let learnable = rank < max_rank && points.0 > 0;
             views.push(TalentView {
+                id: t.id,
                 name: d.map(|d| d.name.clone()).unwrap_or_default(),
                 texture: d.and_then(|d| d.icon.clone()),
                 tier: t.row + 1,
@@ -324,6 +327,13 @@ fn drain_talent_learns(
         return;
     };
     crate::ui_chat_verbs::drain(&mut script, self_q.single().ok(), &commands);
+    // `LearnPreviewTalents` (`0x5c6a10`): the VM built the pairs in send order.
+    for talents in script.take_talent_preview_learns() {
+        debug!("ui_talent: learn {} preview talent(s)", talents.len());
+        let _ = commands.0.send(ClientCommand::NativeInspect(
+            benilla_protocol::wrath_inspect::Command::LearnPreviewTalents { talents },
+        ));
+    }
     let clicks = script.take_talent_learns();
     if clicks.is_empty() {
         return;
@@ -404,5 +414,47 @@ mod tests {
         let spent: BTreeSet<u32> = [14522, 14788, 14789].into_iter().collect();
         assert_eq!(rank_of(&t, &spent), 3);
         assert_eq!(rank_of(&t, &BTreeSet::new()), 0);
+    }
+
+    /// `LearnPreviewTalents` reaches the wire as `CMSG_LEARN_PREVIEW_TALENTS`' pairs.
+    #[test]
+    fn a_learned_preview_sends_its_pairs() {
+        use crate::net::NetCommands;
+        use bevy::ecs::system::RunSystemOnce;
+
+        let mut world = World::new();
+        let mut script =
+            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).expect("VM");
+        script.set_talents(TalentUiState {
+            tabs: vec![TalentTabView::default()],
+            talents: vec![vec![TalentView {
+                id: 2232,
+                name: "Improved Heroic Strike".into(),
+                tier: 1,
+                column: 1,
+                max_rank: 3,
+                meets_prereq: true,
+                ..Default::default()
+            }]],
+            points: (2, 0),
+        });
+        script
+            .run("AddPreviewTalentPoints(1, 1, 2) LearnPreviewTalents()")
+            .expect("lua");
+        world.insert_non_send_resource(script);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        world.insert_resource(NetCommands(tx));
+        world.init_resource::<PlayerActions>();
+        world.run_system_once(drain_talent_learns).expect("drain");
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [ClientCommand::NativeInspect(
+                    benilla_protocol::wrath_inspect::Command::LearnPreviewTalents { talents }
+                )] if talents == &vec![(2232, 1)]
+            ),
+            "{sent:?}"
+        );
     }
 }

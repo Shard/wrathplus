@@ -539,3 +539,4 @@ mod tests;
 pub use resolve::{parse_unit_token, parse_unit_token_in, UnitBase, UnitGuids, UnitTokenParse};
 
 pub(super) use bindings::install;
+pub(super) use bindings::class_pair;

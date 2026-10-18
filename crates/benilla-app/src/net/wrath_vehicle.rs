@@ -160,7 +160,7 @@ fn derive(world: &VehicleWorld, me: Option<u64>, driven: Option<u64>) -> Vehicle
     }
 }
 
-fn derive_vehicle_state(
+pub(crate) fn derive_vehicle_state(
     mut world: ResMut<VehicleWorld>,
     me: Res<SelfGuid>,
     mut control: MessageReader<super::ClientControlMessage>,

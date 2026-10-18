@@ -528,6 +528,7 @@ pub(crate) fn class_names(class: u8) -> Option<(&'static str, &'static str)> {
         3 => ("Hunter", "HUNTER"),
         4 => ("Rogue", "ROGUE"),
         5 => ("Priest", "PRIEST"),
+        6 => ("Death Knight", "DEATHKNIGHT"),
         7 => ("Shaman", "SHAMAN"),
         8 => ("Mage", "MAGE"),
         9 => ("Warlock", "WARLOCK"),

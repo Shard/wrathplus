@@ -373,6 +373,7 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
         == crate::script::ScriptDialect::Wrath12340
     {
         crate::script::wrath_totems::install_tooltip_method(lua, &m)?;
+        crate::script::wrath_glyphs::install_tooltip_method(lua, &m)?;
     }
 
     lua.set_named_registry_value(REG_TOOLTIP_METHODS, m)?;

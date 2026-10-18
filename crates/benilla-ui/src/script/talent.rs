@@ -38,11 +38,16 @@ pub struct TalentPrereqView {
     pub column: u32,
     /// The prerequisite is learned to its required rank.
     pub learnable: bool,
+    /// That required rank, 1-based; the preview walk (`isPreviewLearnable`) compares it with the
+    /// prerequisite's preview rank.
+    pub rank: u32,
 }
 
 /// One talent button: `GetTalentInfo`'s source and the tooltip's context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TalentView {
+    /// The `Talent.dbc` id, `GetTalentLink`'s and `LearnPreviewTalents`' talent.
+    pub id: u32,
     pub name: String,
     pub texture: Option<String>,
     pub tier: u32,
@@ -80,7 +85,9 @@ pub struct TalentUiState {
 impl super::UiScript {
     /// Push the whole talent snapshot.
     pub fn set_talents(&mut self, state: TalentUiState) {
-        self.model_mut().talents = state;
+        let mut model = self.model_mut();
+        super::wrath_talent_preview::on_pages(&mut model, &state);
+        model.talents = state;
     }
 
     /// Drain the queued `LearnTalent(tab, index)` clicks, both 1-based.

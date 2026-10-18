@@ -82,6 +82,16 @@ pub struct VehicleCatalog {
 }
 
 impl VehicleCatalog {
+    /// A catalog from rows already read, for hosts and tests.
+    pub fn from_rows(
+        vehicles: impl IntoIterator<Item = Vehicle>,
+        seats: impl IntoIterator<Item = VehicleSeat>,
+    ) -> Self {
+        Self {
+            vehicles: vehicles.into_iter().map(|v| (v.id, v)).collect(),
+            seats: seats.into_iter().map(|s| (s.id, s)).collect(),
+        }
+    }
     pub fn vehicle(&self, id: u32) -> Option<&Vehicle> {
         self.vehicles.get(&id)
     }

@@ -206,6 +206,12 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
 /// dead natively) in the same commit, and a listed name this VM answers fails the census.
 const NATIVE_ABSENT: &[(&str, &str)] = &[
     (
+        "AchievementMicroButton_Update",
+        "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
+         caller, Blizzard_AchievementUI.lua:671 (AchievementFrame_OnEvent), runs only while \
+         AchievementMicroButton is hidden, a stock 3.3.5 dangling reference",
+    ),
+    (
         "MultiCastSummonSpellButtonFlyoutButton_OnClick",
         "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
          caller is MultiCastActionBarFrame.xml's hidden $parentFlyoutButton OnClick, a stock 3.3.5 \

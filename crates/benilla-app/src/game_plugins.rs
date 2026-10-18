@@ -70,6 +70,8 @@ use crate::ui_pet_book::UiPetBookPlugin;
 use crate::ui_pet_doll::UiPetDollPlugin;
 use crate::ui_companions::UiCompanionsPlugin;
 use crate::ui_totems::UiTotemsPlugin;
+use crate::ui_glyphs::UiGlyphsPlugin;
+use crate::ui_raid_vehicles::UiRaidVehiclesPlugin;
 use crate::ui_unit_popup::UiUnitPopupPlugin;
 use crate::ui_runes::UiRunesPlugin;
 use crate::ui_pet_stats::UiPetStatsPlugin;
@@ -225,6 +227,9 @@ impl PluginGroup for GamePlugins {
             .add(UiPetStatsPlugin)
             .add(UiCompanionsPlugin)
             .add(UiTotemsPlugin)
+            .add(UiGlyphsPlugin)
+            .add(crate::wrath_vehicle_seats::VehicleSeatsPlugin)
+            .add(UiRaidVehiclesPlugin)
             .add(UiUnitPopupPlugin)
             .add(UiRunesPlugin)
             .add(crate::ui_paperdoll::UiPaperDollPlugin)
