@@ -9,6 +9,7 @@ use std::collections::VecDeque;
 pub(crate) struct NativeInventoryPackets(pub(crate) VecDeque<Packet>);
 
 pub(super) fn register(app: &mut App) {
+    super::wrath_item_refunds::register(app);
     app.init_resource::<NativeInventoryPackets>()
         .net_handler(SessionEventKind::WrathInventory, receive)
         .net_handler(SessionEventKind::Connected, clear)
@@ -21,12 +22,17 @@ fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeInventoryPacke
     }
 }
 
-fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeInventoryPackets>) {
+fn clear(
+    In(event): In<SessionEvent>,
+    mut packets: ResMut<NativeInventoryPackets>,
+    mut refunds: ResMut<super::wrath_item_refunds::ItemRefunds>,
+) {
     if matches!(
         event,
         SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
     ) {
         packets.0.clear();
+        super::wrath_item_refunds::clear(&mut refunds);
     }
 }
 
