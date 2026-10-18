@@ -20,12 +20,14 @@ pub(super) struct FrameFlags {
     pub fall_time: u32,
 }
 
-/// Builds this frame's two flag words. `swim` is `Some((fwd, side))` while swimming, the netted
-/// amounts that drove the mover.
+/// Builds this frame's two flag words. `swim` is `Some((fwd, side))` while swimming or flying, the
+/// netted amounts that drove the mover; `flight` is `Some(vertical)` while flying, the ascend (+1)
+/// or descend (-1) key.
 pub(super) fn this_frame(
     player: &mut Player,
     axes: &input::MoveAxes,
     swim: Option<(f32, f32)>,
+    flight: Option<f32>,
     airborne: bool,
     jumped: bool,
     held: bool,
@@ -59,7 +61,14 @@ pub(super) fn this_frame(
         // amounts, which the swim gait selector cascades on (`0x5fd100`: turn 41, strafe 43/44,
         // back 45, forward 42, idle 41). Space sets nothing: its swim role is the breach
         // (`0x7c6230`). No FALLING, and the arc is cleared.
-        move_flags_now |= move_flags::SWIMMING;
+        // Flying is the same frame with FLYING for SWIMMING (the pitch rides with either) and the
+        // vertical key's ASCENDING or DESCENDING (`0x9898e0`).
+        move_flags_now |= match flight {
+            None => move_flags::SWIMMING,
+            Some(v) if v > 0.0 => move_flags::FLYING | move_flags::ASCENDING,
+            Some(v) if v < 0.0 => move_flags::FLYING | move_flags::DESCENDING,
+            Some(_) => move_flags::FLYING,
+        };
         if swim_fwd < 0.0 {
             move_flags_now |= move_flags::BACKWARD;
         } else if swim_fwd > 0.0 {
@@ -190,6 +199,7 @@ mod tests {
                 &mut player,
                 &axes,
                 None,
+                None,
                 false,
                 false,
                 held,
@@ -236,6 +246,7 @@ mod tests {
             &mut runner,
             &axes,
             None,
+            None,
             false,
             false,
             false,
@@ -249,6 +260,41 @@ mod tests {
     }
 
     #[test]
+    fn a_flier_streams_flying_with_its_vertical_key_and_no_arc() {
+        let frame = |vertical: f32| {
+            let mut player = Player {
+                airborne_since: Some(0.5),
+                ..Default::default()
+            };
+            let f = this_frame(
+                &mut player,
+                &still(),
+                Some((1.0, 0.0)),
+                Some(vertical),
+                false,
+                false,
+                false,
+                false,
+                true,
+                true,
+                1.0,
+                0.0,
+            );
+            assert!(player.airborne_since.is_none(), "taking off ends the arc");
+            f.wire
+        };
+        let level = frame(0.0);
+        assert_eq!(
+            level & (move_flags::FLYING | move_flags::SWIMMING | move_flags::FALLING),
+            move_flags::FLYING
+        );
+        assert!(level & move_flags::FORWARD != 0);
+        assert_eq!(level & (move_flags::ASCENDING | move_flags::DESCENDING), 0);
+        assert!(frame(1.0) & move_flags::ASCENDING != 0);
+        assert!(frame(-1.0) & move_flags::DESCENDING != 0);
+    }
+
+    #[test]
     fn a_knockback_arc_plants_forward_on_the_wire() {
         let mut player = Player {
             knock_arc: true,
@@ -258,6 +304,7 @@ mod tests {
         let f = this_frame(
             &mut player,
             &still(),
+            None,
             None,
             true,
             false,
@@ -285,6 +332,7 @@ mod tests {
         let f = this_frame(
             &mut plain,
             &still(),
+            None,
             None,
             true,
             false,

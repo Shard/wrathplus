@@ -82,6 +82,10 @@ pub enum SpeedKind {
     Swim,
     SwimBack,
     TurnRate,
+    /// Build 12340's flight, flight-back and pitch-rate speeds; 1.12 never orders them.
+    Flight,
+    FlightBack,
+    PitchRate,
 }
 
 impl SpeedKind {
@@ -95,6 +99,10 @@ impl SpeedKind {
             SpeedKind::Swim => opcode::CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
             SpeedKind::SwimBack => opcode::CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,
             SpeedKind::TurnRate => opcode::CMSG_FORCE_TURN_RATE_CHANGE_ACK,
+            // Build 12340 (AzerothCore `Opcodes.h`); never reached on 1.12.
+            SpeedKind::Flight => 0x0382,
+            SpeedKind::FlightBack => 0x0384,
+            SpeedKind::PitchRate => 0x045D,
         }
     }
 }
@@ -110,6 +118,8 @@ pub enum MoveMode {
     WaterWalk,
     FeatherFall,
     Hover,
+    /// Build 12340's CAN_FLY (`SMSG_MOVE_SET_CAN_FLY`); 1.12 has no flight.
+    CanFly,
 }
 
 impl MoveMode {
@@ -120,6 +130,7 @@ impl MoveMode {
             MoveMode::WaterWalk => 0x1000_0000,
             MoveMode::FeatherFall => 0x2000_0000,
             MoveMode::Hover => 0x4000_0000,
+            MoveMode::CanFly => 0x0100_0000,
         }
     }
 
@@ -133,6 +144,8 @@ impl MoveMode {
             (MoveMode::WaterWalk, _) => opcode::CMSG_MOVE_WATER_WALK_ACK,
             (MoveMode::FeatherFall, _) => opcode::CMSG_MOVE_FEATHER_FALL_ACK,
             (MoveMode::Hover, _) => opcode::CMSG_MOVE_HOVER_ACK,
+            // `CMSG_MOVE_SET_CAN_FLY_ACK`, build 12340 only.
+            (MoveMode::CanFly, _) => 0x0345,
         }
     }
 
