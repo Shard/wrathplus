@@ -378,6 +378,9 @@ fn run(
         // Lossless handoff: send login, split immediately, announce the session, then consume every
         // queued packet through the Wrath adapter.
         session.begin_player_login(guid)?;
+        // The auth bootstrap the select screen kept (`SMSG_ADDON_INFO`, `SMSG_CLIENTCACHE_VERSION`).
+        let addon_reply = session.addon_reply_received();
+        let bootstrap = session.take_bootstrap_packets();
         let (mut reader, writer) = session.into_split()?;
         let session_clock = Arc::new(SessionClock::new());
         *next_epoch = next_epoch
@@ -418,11 +421,30 @@ fn run(
                 name,
                 billing_time_rested: 0,
                 tutorial_flags: None,
-                // `SMSG_ADDON_INFO` is not decoded on this route; the realm hides no addon, and
-                // without a reply the client's addon array stays empty and nothing can load.
-                addon_info: Some(Vec::new()),
+                // Our auth session names no addon, so `SMSG_ADDON_INFO` hides none: an empty list
+                // once it arrived, `None` (nothing loads) if the server never answered.
+                addon_info: addon_reply.then(Vec::new),
             },
         )?;
+        for packet in bootstrap {
+            match benilla_protocol::wrath_bootstrap::decode(packet.opcode, &packet.body) {
+                Ok(decoded) => {
+                    for event in decoded {
+                        send(events, event)?;
+                    }
+                }
+                Err(error) => {
+                    bevy::log::warn!("net(wrath): bootstrap {:#06x} dropped: {error}", packet.opcode);
+                    send(
+                        events,
+                        SessionEvent::PacketDropped {
+                            opcode: packet.opcode,
+                            unparseable: true,
+                        },
+                    )?;
+                }
+            }
+        }
         reader.set_read_timeout(Some(READ_SLICE))?;
         let mut adapter = WrathEventAdapter::new();
         let mut packet_recorder = recorder::Recorder::from_env();

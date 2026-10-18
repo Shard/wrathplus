@@ -60,6 +60,7 @@ mod wrath_faction_capture;
 mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
+mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
@@ -182,6 +183,7 @@ impl Plugin for NetPlugin {
         wrath_spell_log_capture::register(app);
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
+        wrath_bootstrap_capture::register(app);
         wrath_vehicle::register(app);
         wrath_combo_points::register(app);
         wrath_runes::register(app);
