@@ -48,7 +48,7 @@ mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
-mod wrath_refer_friend_capture;
+pub(crate) mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
@@ -2321,6 +2321,10 @@ pub(crate) enum ClientCommand {
     GuildInfoText {
         text: String,
     },
+    /// `QueryGuildEventLog()`: `MSG_GUILD_EVENT_LOG_QUERY`.
+    GuildEventLogQuery,
+    /// `GuildControlSaveRank` in 3.3.5: the rank with its bank money and tab rights.
+    NativeGuildRank(benilla_protocol::wrath_guild_rank::SaveRank),
     // ── Petitions (founding a guild) ──
     // A charter is addressed by its item guid except in the record query. A refusal is
     // `SMSG_GUILD_COMMAND_RESULT`; almost nothing is acked, so nothing is applied at the send.

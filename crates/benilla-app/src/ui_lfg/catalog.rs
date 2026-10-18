@@ -8,7 +8,7 @@ use super::auth::NativeAccountExpansion;
 use crate::ui_script::VmMemo;
 
 #[derive(Resource)]
-pub(super) struct Catalog(Arc<WrathLfgCatalog>);
+pub(super) struct Catalog(pub(super) Arc<WrathLfgCatalog>);
 
 pub(super) fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
     use benilla_assets::LockRecover;

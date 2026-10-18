@@ -32,7 +32,7 @@ mod language;
 /// `LoggingChat`/`LoggingCombat`: the two log files `/chatlog` and `/combatlog` toggle.
 pub(crate) mod logging;
 mod native_feed;
-mod native_message;
+pub(crate) mod native_message;
 mod native_membership;
 pub(crate) mod native_roster;
 mod net;
