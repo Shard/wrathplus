@@ -416,3 +416,165 @@ fn dispatch_routes_the_family_and_leaves_registry_only_rows_undecoded() {
         );
     }
 }
+
+#[test]
+fn spell_and_pet_remainders_are_captured_with_strict_framing() {
+    let cases: Vec<(u16, Vec<u8>, Packet)> = vec![
+        (
+            SMSG_PET_LEARNED_SPELL,
+            17u32.to_le_bytes().to_vec(),
+            Packet::PetLearnedSpell { spell_id: 17 },
+        ),
+        (
+            SMSG_PET_UNLEARNED_SPELL,
+            18u32.to_le_bytes().to_vec(),
+            Packet::PetUnlearnedSpell { spell_id: 18 },
+        ),
+        (
+            SMSG_PET_UPDATE_COMBO_POINTS,
+            vec![0x01, 0x05, 3],
+            Packet::PetComboPoints {
+                target: 5,
+                points: 3,
+            },
+        ),
+        (
+            SMSG_MODIFY_COOLDOWN,
+            [
+                &133u32.to_le_bytes()[..],
+                &ME.to_le_bytes(),
+                &(-2000i32).to_le_bytes(),
+            ]
+            .concat(),
+            Packet::ModifyCooldown {
+                spell_id: 133,
+                unit: ME,
+                delta_ms: -2000,
+            },
+        ),
+        (
+            SMSG_FEIGN_DEATH_RESISTED,
+            [&ME.to_le_bytes()[..], &[0]].concat(),
+            Packet::FeignDeathResisted { unit: ME, flag: 0 },
+        ),
+        (
+            SMSG_BREAK_TARGET,
+            vec![0x01, 0x05],
+            Packet::BreakTarget { unit: 5 },
+        ),
+        (
+            SMSG_CLEAR_TARGET,
+            PET.to_le_bytes().to_vec(),
+            Packet::ClearTarget { caster: PET },
+        ),
+        (
+            SMSG_SET_PROJECTILE_POSITION,
+            [
+                &ME.to_le_bytes()[..],
+                &[2],
+                &1.0f32.to_le_bytes(),
+                &2.0f32.to_le_bytes(),
+                &3.0f32.to_le_bytes(),
+            ]
+            .concat(),
+            Packet::ProjectilePosition {
+                caster: ME,
+                cast_count: 2,
+                position: [1.0, 2.0, 3.0],
+            },
+        ),
+    ];
+    for (opcode, body, expected) in cases {
+        let SessionEvent::WrathSpellControl { packet } = one(opcode, &body) else {
+            panic!("{opcode:#x}")
+        };
+        assert_eq!(packet, expected, "{opcode:#x}");
+    }
+    let mut unlearn = 2u32.to_le_bytes().to_vec();
+    words(&mut unlearn, &[100, 200]);
+    let SessionEvent::WrathSpellControl { packet } = one(SMSG_SEND_UNLEARN_SPELLS, &unlearn) else {
+        panic!()
+    };
+    assert_eq!(
+        packet,
+        Packet::UnlearnSpells {
+            spell_ids: vec![100, 200]
+        }
+    );
+    // A count that disagrees with the body is rejected, empty included.
+    assert!(decode(SMSG_SEND_UNLEARN_SPELLS, &[3, 0, 0, 0]).is_err());
+    assert!(decode(SMSG_SEND_UNLEARN_SPELLS, &[0, 0, 0, 0]).is_ok());
+}
+
+#[test]
+fn runes_decode_to_retained_state_events() {
+    assert!(matches!(
+        one(SMSG_CONVERT_RUNE, &[4, 3]),
+        SessionEvent::WrathRunes {
+            packet: RunePacket::Convert {
+                index: 4,
+                rune_type: 3
+            }
+        }
+    ));
+    let mut resync = 2u32.to_le_bytes().to_vec();
+    resync.extend([0, 255, 2, 51]);
+    let SessionEvent::WrathRunes { packet } = one(SMSG_RESYNC_RUNES, &resync) else {
+        panic!()
+    };
+    assert_eq!(
+        packet,
+        RunePacket::Resync {
+            runes: vec![(0, 255), (2, 51)]
+        }
+    );
+    assert!(decode(SMSG_RESYNC_RUNES, &[3, 0, 0, 0, 0, 0]).is_err());
+    assert!(matches!(
+        one(SMSG_ADD_RUNE_POWER, &0x24u32.to_le_bytes()),
+        SessionEvent::WrathRunes {
+            packet: RunePacket::AddPower { mask: 0x24 }
+        }
+    ));
+}
+
+#[test]
+fn remainder_requests_write_the_bodies_ac_reads() {
+    assert_eq!(
+        encode(&Command::FarSight { engage: true }).unwrap(),
+        (CMSG_FAR_SIGHT, vec![1])
+    );
+    assert_eq!(
+        encode(&Command::DismissCritter { critter: PET }).unwrap(),
+        (CMSG_DISMISS_CRITTER, PET.to_le_bytes().to_vec())
+    );
+    assert_eq!(
+        encode(&Command::StableRevivePet {
+            npc: PET,
+            pet_number: 9
+        })
+        .unwrap(),
+        (
+            CMSG_STABLE_REVIVE_PET,
+            [&PET.to_le_bytes()[..], &9u32.to_le_bytes()].concat()
+        )
+    );
+    assert_eq!(
+        encode(&Command::LearnPreviewTalentsPet {
+            pet: PET,
+            talents: vec![(2107, 0), (2109, 1)]
+        })
+        .unwrap(),
+        (
+            CMSG_LEARN_PREVIEW_TALENTS_PET,
+            [
+                &PET.to_le_bytes()[..],
+                &2u32.to_le_bytes(),
+                &2107u32.to_le_bytes(),
+                &0u32.to_le_bytes(),
+                &2109u32.to_le_bytes(),
+                &1u32.to_le_bytes(),
+            ]
+            .concat()
+        )
+    );
+}

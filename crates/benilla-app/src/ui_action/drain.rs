@@ -108,6 +108,46 @@ impl AttackPress<'_, '_> {
         );
     }
 
+    /// Build 12340's `StartAttack([unit])` (`0x523090`): the named unit, else the selection,
+    /// through the attack validator, then the local start (`0x5ecb70`). Already swinging, it does
+    /// nothing (labelled: the player flag `+0x1858 & 2` read as attacking; `0x71af90` not traced).
+    pub(crate) fn start_attack(&mut self, passed: Option<u64>) {
+        if self.pick.engaged() {
+            return;
+        }
+        let Some(guid) = self.validate(passed) else {
+            return;
+        };
+        let Self { seam, .. } = self;
+        let Ok(e) = seam.me.single() else {
+            return;
+        };
+        crate::creature_anim::start_attack_local(
+            *seam.dialect,
+            e,
+            guid,
+            false,
+            false,
+            &mut seam.auto_repeat,
+            &mut seam.sheath,
+            &mut seam.ecs,
+            &seam.net,
+        );
+    }
+
+    /// Build 12340's `StopAttack()` (`0x51d0b0`): the local stop (`0x5ecac0`), which also cancels a
+    /// queued next-swing strike.
+    pub(crate) fn stop_attack(&mut self) {
+        let engaged = self.pick.engaged();
+        let seam = &mut self.seam;
+        crate::creature_anim::stop_attack_local(
+            *seam.dialect,
+            engaged,
+            &mut seam.queued_melee,
+            &seam.net,
+        );
+    }
+
     /// TryCast's attack pick (`0x6e4efb`) for a spell press held there
     /// ([`crate::spell::HeldForPick`]): the validator alone, with no swing after it. Whether the
     /// cast goes on, at the unit the pick left selected.

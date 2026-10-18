@@ -1197,6 +1197,8 @@ pub enum SessionEvent {
     WrathDeath { packet: crate::wrath_death::Packet },
     /// Capture-only native account-data receipts (`wrath_session_meta`).
     WrathSessionMeta { packet: crate::wrath_session_meta::Packet },
+    /// Capture-only native Help Request receipts: GM response, survey offer, complaint (`wrath_help`).
+    WrathHelp { packet: crate::wrath_help::Packet },
     /// Capture-only native inspect replies (`wrath_inspect`).
     WrathInspect { packet: crate::wrath_inspect::Packet },
     /// Capture-only native forced faction reactions (`wrath_faction`).
@@ -1205,6 +1207,8 @@ pub enum SessionEvent {
     WrathSpellLog { packet: crate::wrath_logs::Packet },
     /// Capture-only native spell-control receipts without a shared event (`wrath_spell_control`).
     WrathSpellControl { packet: crate::wrath_spell_control::Packet },
+    /// Retained native death-knight rune state (`wrath_spell_control::RunePacket`).
+    WrathRunes { packet: crate::wrath_spell_control::RunePacket },
     /// Capture-only native movement notices without a shared event (`wrath_movement_misc`).
     WrathMovement { packet: crate::wrath_movement_misc::Packet },
     /// Build 12340's combo points (`SMSG_UPDATE_COMBO_POINTS`), which no update field carries:

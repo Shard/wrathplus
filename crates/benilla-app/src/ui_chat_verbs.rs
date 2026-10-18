@@ -1,14 +1,14 @@
-//! Build 12340's slash-command sends that read no selection and cast nothing
-//! ([`WrathChatVerbRequest`], `/tmp/azb-app-mig/ghidra/chatverbs.log`): the arena-team verbs. The
-//! selection, swing and cast verbs apply in call order with the script calls
-//! ([`crate::script_calls`]).
+//! Build 12340's slash-command verbs App applies (`/tmp/azb-app-mig/ghidra/chatverbs.log`).
 //!
-//! `ArenaTeamInviteByName` (`0x515cc0`), `ArenaTeamLeave` (`0x515dd0`) and the uninvite and leader
-//! bindings send their team slot's id, 0 for a slot out of 1-3, which still goes out. A name must
-//! be non-empty and under 49 characters; a longer one is the binding's "Name too long" error,
-//! which this drain logs (labelled). Labelled: the team id is read off the descriptor's
-//! `ARENA_TEAM_INFO` slot, where native reads its own arena-team table (`0xc0f840`). Pending a
-//! writer: `SetCurrentTitle` (CMSG `0x374`) and `SetTaxiBenchmarkMode` (CMSG `0x389`).
+//! - The arena-team sends ([`WrathChatVerbRequest`]): `ArenaTeamInviteByName` (`0x515cc0`),
+//!   `ArenaTeamLeave` (`0x515dd0`) and the uninvite and leader bindings send their team slot's id,
+//!   0 for a slot out of 1-3, which still goes out. A name must be non-empty and under 49
+//!   characters; a longer one is the binding's "Name too long" error, which this drain logs
+//!   (labelled). Labelled: the team id is read off the descriptor's `ARENA_TEAM_INFO` slot, where
+//!   native reads its own arena-team table (`0xc0f840`).
+//! - `SetCurrentTitle` (CMSG `0x374`) and `SetTaxiBenchmarkMode` (CMSG `0x389`) send as they are.
+//! - The cast-order verbs, applied in call order by [`crate::script_calls`]: [`cancel_form`],
+//!   [`dismount`] and [`activate_talent_group`].
 
 use bevy::prelude::*;
 
@@ -49,6 +49,85 @@ pub(crate) fn arena_command(
     })
 }
 
+/// `CancelShapeshiftForm()` (`0x53de60` → `0x726ce0`): with a form up, each helpful aura whose
+/// spell applies `MOD_SHAPESHIFT` (36) into the current form is cancelled (`CMSG_CANCEL_AURA`).
+pub(crate) fn cancel_form(
+    cast: &mut crate::spell::ScriptCast,
+    auras: &crate::net::wrath_auras::PacketAuras,
+    me: u64,
+) {
+    let Some(store) = cast.targeting.self_store.iter().next() else {
+        return;
+    };
+    let form = u32::from(store.0.unit_shapeshift_form());
+    let Some(spells) = cast.ladder.spells.as_ref() else {
+        return;
+    };
+    if form == 0 {
+        return;
+    }
+    for held in auras.by_guid.get(&me).into_iter().flatten() {
+        let spell_id = held.aura.spell_id;
+        let in_form = spells
+            .catalog
+            .get(spell_id)
+            .is_some_and(|d| d.shapeshift_form == Some(form));
+        if held.aura.is_helpful() && in_form {
+            debug!("CancelShapeshiftForm: cancel aura {spell_id}");
+            let _ = cast
+                .ladder
+                .commands
+                .0
+                .send(ClientCommand::CancelAura { spell_id });
+        }
+    }
+}
+
+/// `UNIT_FLAG_TAXI_FLIGHT`: `0x7412e0` refuses on a flight path.
+const UNIT_FLAG_TAXI_FLIGHT: u32 = 0x10_0000;
+
+/// `Dismount()` (`0x51d170` → `0x7412e0`): off a flight path, `CMSG_CANCEL_MOUNT_AURA` (`0x375`).
+/// Labelled: the local flying-mount fall handling after the send is not modelled.
+pub(crate) fn dismount(cast: &mut crate::spell::ScriptCast) {
+    let on_taxi = cast
+        .targeting
+        .self_store
+        .iter()
+        .next()
+        .is_some_and(|s| s.0.unit_flags() & UNIT_FLAG_TAXI_FLIGHT != 0);
+    if on_taxi {
+        return;
+    }
+    let _ = cast
+        .ladder
+        .commands
+        .0
+        .send(ClientCommand::NativeSpellControl(
+            benilla_protocol::wrath_spell_control::Command::CancelMountAura,
+        ));
+}
+
+/// The activation spells `SetActiveTalentGroup` casts by 1-based group (table `0xad05e8`).
+const TALENT_GROUP_SPELLS: [u32; 2] = [63645, 63644];
+
+/// `SetActiveTalentGroup(group)` (`0x5c5e70`): another group the player has, of the first two,
+/// casts its activation spell on the player; the active group or one past the count does nothing.
+pub(crate) fn activate_talent_group(
+    cast: &mut crate::spell::ScriptCast,
+    progress: &crate::net::wrath_notices::WrathProgress,
+    group: u8,
+) {
+    let Some((_, active, groups)) = progress.talents.get(&false) else {
+        return;
+    };
+    let Some(index) = group.checked_sub(1) else {
+        return;
+    };
+    if index != *active && usize::from(index) < groups.len() && usize::from(index) < 2 {
+        crate::ui_spellbook::cast_spell(cast, TALENT_GROUP_SPELLS[usize::from(index)], true);
+    }
+}
+
 /// Drain the frame's sends. Folded into [`crate::ui_talent`]'s learn drain, which reads the same
 /// VM, self store and commands, so it adds no schedule edge of its own.
 pub(crate) fn drain(script: &mut UiScript, store: Option<&ObjectStore>, commands: &NetCommands) {
@@ -64,12 +143,22 @@ pub(crate) fn drain(script: &mut UiScript, store: Option<&ObjectStore>, commands
             .unwrap_or(0)
     };
     for request in requests {
-        match arena_command(&request, team_id) {
-            Some(command) => {
-                let _ = commands.0.send(ClientCommand::ArenaTeamCommand(command));
-            }
-            None => debug!("chat verb {request:?}: not sent (refused name or no writer yet)"),
-        }
+        let command = match request {
+            WrathChatVerbRequest::SetTitle { title } => ClientCommand::NativeSessionMeta(
+                benilla_protocol::wrath_session_meta::Command::SetTitle { title },
+            ),
+            WrathChatVerbRequest::TaxiBenchmarkMode { on } => ClientCommand::NativeMovementMisc(
+                benilla_protocol::wrath_movement_misc::Command::TaxiBenchmark { on },
+            ),
+            ref arena => match arena_command(arena, team_id) {
+                Some(command) => ClientCommand::ArenaTeamCommand(command),
+                None => {
+                    debug!("chat verb {request:?}: not sent (a refused name)");
+                    continue;
+                }
+            },
+        };
+        let _ = commands.0.send(command);
     }
 }
 

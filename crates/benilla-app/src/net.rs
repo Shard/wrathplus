@@ -30,7 +30,7 @@ mod session;
 mod world;
 pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
-mod wrath_instance_control_capture;
+pub(crate) mod wrath_instance_control_capture;
 mod wrath_inventory_capture;
 mod wrath_achievements;
 mod wrath_equipment_sets;
@@ -38,7 +38,7 @@ mod wrath_item_refunds;
 mod wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
-mod wrath_notices;
+pub(crate) mod wrath_notices;
 mod wrath_quests_completed_capture;
 mod wrath_achievement_capture;
 mod wrath_calendar_capture;
@@ -47,6 +47,7 @@ mod wrath_chat_notice_capture;
 mod wrath_battleground_capture;
 mod wrath_death_capture;
 mod wrath_session_meta_capture;
+mod wrath_help_capture;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -54,6 +55,7 @@ mod wrath_spell_log_capture;
 mod wrath_spell_control_capture;
 mod wrath_movement_capture;
 pub(crate) mod wrath_combo_points;
+pub(crate) mod wrath_runes;
 #[cfg(test)]
 mod wrath_stream_tests;
 mod wrath_threat;
@@ -160,6 +162,7 @@ impl Plugin for NetPlugin {
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
         wrath_session_meta_capture::register(app);
+        wrath_help_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
         wrath_faction_capture::register(app);
@@ -167,6 +170,7 @@ impl Plugin for NetPlugin {
         wrath_spell_control_capture::register(app);
         wrath_movement_capture::register(app);
         wrath_combo_points::register(app);
+        wrath_runes::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
         app.insert_resource(dialect)
@@ -2149,6 +2153,9 @@ pub(crate) enum ClientCommand {
     NativeDeath(benilla_protocol::wrath_death::Command),
     /// Native zone-update and account-data commands with no shared producer.
     NativeSessionMeta(benilla_protocol::wrath_session_meta::Command),
+    /// Native Help Request commands with no shared producer: GM survey, response resolve,
+    /// complaints and bug reports.
+    NativeHelp(benilla_protocol::wrath_help::Command),
     /// Native preview-talent learning and glyph removal.
     NativeInspect(benilla_protocol::wrath_inspect::Command),
     /// Native guild-bank mutations: banker activate, buy tab, deposit and withdraw money.

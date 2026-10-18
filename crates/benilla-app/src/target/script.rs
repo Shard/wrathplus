@@ -17,6 +17,8 @@ pub(crate) struct ScriptSelect<'w, 's> {
     tokens: crate::ui_unit::UnitTokens<'w, 's>,
     /// `TargetLastEnemy`'s memory (`[0xb4e2e8]`), stamped by `scan::remember_last_enemy`.
     last_enemy: Res<'w, scan::LastEnemy>,
+    /// `TargetLastFriend`'s memory, stamped beside it.
+    last_friend: Res<'w, scan::LastFriend>,
     /// The SetSelection tail shared with the world click, `/target` and `/assist`, classification
     /// included.
     commit: SelectCommit<'w, 's>,
@@ -104,6 +106,26 @@ impl ScriptSelect<'_, '_> {
         }
     }
 
+    /// A unit token's guid, as the selection calls resolve it; `None` names nothing streamed.
+    pub(crate) fn token_guid(&self, token: &str) -> Option<u64> {
+        self.tokens
+            .resolve(token, &self.commit.selection)
+            .map(|(_, guid)| guid)
+    }
+
+    /// Build 12340's `TargetLastFriend()` (`0x525e50`): the remembered friend, committed when
+    /// streamed; empty memory or an unstreamed friend is a no-op, as `TargetLastEnemy` is.
+    pub(crate) fn target_last_friend(&mut self) {
+        let Some(guid) = self.last_friend.0 else {
+            info!("TargetLastFriend: no friend has been targeted yet; no-op");
+            return;
+        };
+        match self.tokens.held(guid) {
+            Some((entity, guid)) => self.commit.commit(entity, guid),
+            None => info!("TargetLastFriend: {guid:#x} is no longer streamed; no-op"),
+        }
+    }
+
     /// `ClearTarget()` (`0x489ff0`): deselect whatever the calls before it left selected.
     pub(crate) fn clear_target(&mut self) {
         self.commit.clear();
@@ -134,6 +156,7 @@ mod tests {
         world.init_resource::<super::super::AssistAttack>();
         world.init_resource::<super::super::Selection>();
         world.init_resource::<scan::LastEnemy>();
+        world.init_resource::<scan::LastFriend>();
         world.init_resource::<crate::names::NameCache>();
         world.init_resource::<scan::TabHistory>();
         world.init_resource::<Time>();

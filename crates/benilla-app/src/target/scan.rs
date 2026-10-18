@@ -69,16 +69,23 @@ pub(crate) enum ScanSide {
     /// Mode 4 (`0x493f15`): not us, then `0x4918e0`, party (`0x4e7f70`) or raid roster
     /// (`0x4baee0`).
     Raid,
+    /// Build 12340's `TargetNearestEnemyPlayer` (`0x525b10` → `0x524fc0`): mode 1's test on a
+    /// player. Labelled: the player cycler `0x524fc0` is read as the TAB cycler with a player
+    /// filter, not traced.
+    EnemyPlayer,
+    /// `TargetNearestFriendPlayer` (`0x525b90`): mode 2's test on a player, likewise.
+    FriendPlayer,
 }
 
 impl ScanSide {
-    /// The side a `TargetNearest*` call's mode names. The 12340 player-only modes never reach the
-    /// scan yet (`script_calls` holds them back as capture-only); they name their side here.
+    /// The side a `TargetNearest*` call's mode names.
     pub(crate) fn of(mode: benilla_ui::script::NearestMode) -> Self {
         use benilla_ui::script::NearestMode;
         match mode {
-            NearestMode::Enemy | NearestMode::EnemyPlayer => Self::Enemy,
-            NearestMode::Friend | NearestMode::FriendPlayer => Self::Friend,
+            NearestMode::Enemy => Self::Enemy,
+            NearestMode::Friend => Self::Friend,
+            NearestMode::EnemyPlayer => Self::EnemyPlayer,
+            NearestMode::FriendPlayer => Self::FriendPlayer,
             NearestMode::PartyMember => Self::Party,
             NearestMode::RaidMember => Self::Raid,
         }
@@ -240,7 +247,16 @@ impl TargetScan<'_, '_> {
         store: Option<&ObjectStore>,
         self_store: Option<&ObjectStore>,
     ) -> bool {
+        let player = store.is_some_and(|s| {
+            s.0.object_type() == Some(benilla_protocol::messages::ObjectType::Player)
+        });
         match side {
+            ScanSide::EnemyPlayer => {
+                player && self.is_valid(ScanSide::Enemy, guid, store, self_store)
+            }
+            ScanSide::FriendPlayer => {
+                player && self.is_valid(ScanSide::Friend, guid, store, self_store)
+            }
             // Mode 1 (`0x493e73`): the reads-dead triple `0x605f90`, then `CanAttack`.
             ScanSide::Enemy => {
                 if store.is_some_and(|s| s.0.unit_reads_dead()) {
@@ -351,6 +367,8 @@ impl TargetScan<'_, '_> {
                         ScanSide::Friend => "REJECT dead-or-unassistable",
                         ScanSide::Party => "REJECT not-in-party",
                         ScanSide::Raid => "REJECT not-in-party-or-raid",
+                        ScanSide::EnemyPlayer => "REJECT not-an-attackable-player",
+                        ScanSide::FriendPlayer => "REJECT not-an-assistable-player",
                     },
                 );
                 continue;
@@ -728,6 +746,12 @@ pub(crate) struct AttackNearestRequest;
 #[derive(Resource, Default)]
 pub(crate) struct LastEnemy(pub(crate) Option<u64>);
 
+/// Build 12340's `TargetLastFriend` memory (`0x525e50`), the assistable counterpart of
+/// [`LastEnemy`]. Labelled: the binding is not a defined function in the reference's analysis, so
+/// the stamp mirrors [`remember_last_enemy`]'s with `CanAssist` and never names us.
+#[derive(Resource, Default)]
+pub(crate) struct LastFriend(pub(crate) Option<u64>);
+
 /// Stamp [`LastEnemy`] behind the five-conjunct gate `0x49372f`–`0x493778`. Runs before
 /// `ring::update_ring`'s death-clear: a hostile that dies while selected stays remembered.
 ///
@@ -741,7 +765,7 @@ pub(super) fn remember_last_enemy(
     reputations: Res<Reputations>,
     index: Option<Res<GuidIndex>>,
     names: Option<Res<NameCache>>,
-    mut last: ResMut<LastEnemy>,
+    (mut last, mut last_friend): (ResMut<LastEnemy>, ResMut<LastFriend>),
 ) {
     let Some((entity, guid)) = selection.target.zip(selection.guid) else {
         return;
@@ -774,6 +798,16 @@ pub(super) fn remember_last_enemy(
         relations,
     ) {
         last.0 = Some(guid);
+    } else if !self_store.contains(entity)
+        && can_assist(
+            store,
+            factions.as_deref(),
+            &reputations,
+            Some(me),
+            relations,
+        )
+    {
+        last_friend.0 = Some(guid);
     }
 }
 
@@ -1561,6 +1595,7 @@ mod tests {
         world.init_resource::<Reputations>();
         world.init_resource::<Selection>();
         world.init_resource::<LastEnemy>();
+        world.init_resource::<LastFriend>();
         world.spawn((
             SelfPlayer,
             store(&[
