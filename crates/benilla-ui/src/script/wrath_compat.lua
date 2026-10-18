@@ -183,12 +183,7 @@ end
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none
-GetWorldPVPQueueStatus = GetWorldPVPQueueStatus or none
 GetNumWorldPVPAreas = GetNumWorldPVPAreas or zero
-GetNumBattlegroundTypes = GetNumBattlegroundTypes or zero
-GetBattlegroundInfo = GetBattlegroundInfo or none
-IsActiveBattlefieldArena = IsActiveBattlefieldArena or none
-GetCurrentArenaSeason = GetCurrentArenaSeason or zero
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -494,7 +489,6 @@ IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
 GetReadyCheckStatus = GetReadyCheckStatus or none
-GetPreviousArenaSeason = GetPreviousArenaSeason or zero
 GetAvailableRoles = GetAvailableRoles or function() return true, true, true end
 do
     local dimensions, positions = {}, {}

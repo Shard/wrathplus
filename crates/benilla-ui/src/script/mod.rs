@@ -255,8 +255,13 @@ pub use aura::{AuraState, TrackingState};
 pub use backdrop::{inset_atlas_bleed, pieces, Backdrop, BackdropPiece, Insets};
 pub use bank::BankState;
 pub use battlefield_positions::{BattlefieldFlagView, BattlefieldPositionView};
-pub use battlefield_queue::{BattlefieldListView, BattlefieldMapInfo, BattlefieldQueueSlot};
-pub use battlefield_score::{BattlefieldScoreRow, BattlefieldScores, BattlefieldStatColumn};
+pub use battlefield_queue::{
+    BattlefieldListView, BattlefieldQueueSlot, BattlefieldRequest, BattlegroundRewardsView,
+    BattlegroundTypeView, WorldPvpView,
+};
+pub use battlefield_score::{
+    BattlefieldScoreRow, BattlefieldScores, BattlefieldStatColumn, BattlefieldTeamView,
+};
 pub use bind_confirm::PendingEquipAnswer;
 pub use calls::{NearestMode, ScriptCall};
 pub use camera_view::{CameraViewRequest, CAMERA_VIEW_COUNT};
@@ -845,6 +850,8 @@ impl UiScript {
             wrath_runes::install(&lua)?;
             wrath_totems::install(&lua)?;
             wrath_arena::install(&lua)?;
+            battlefield_queue::install_wrath(&lua)?;
+            battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;
             wrath_spellbook::install(&lua)?;
             wrath_skills::install(&lua)?;

@@ -223,6 +223,13 @@ fn every_event_we_fire_carries_the_reference_s_arguments() {
             checked += 1;
             continue;
         }
+        // 1.12's status producer is argumentless; build 12340's (`0x54ae40`) pushes the 1-based
+        // slot ("%d", `0x9e289c`), which stock BattlefieldFrame.lua reads.
+        if at.ends_with("/ui_dialog_verbs.rs") && name == "UPDATE_BATTLEFIELD_STATUS" {
+            assert_eq!(kinds, &vec!['n'], "Wrath UPDATE_BATTLEFIELD_STATUS ABI changed");
+            checked += 1;
+            continue;
+        }
         let Some(row) = table.get(name) else { continue };
         checked += 1;
         let fits = row.shapes.iter().any(|want| {

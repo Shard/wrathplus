@@ -42,6 +42,17 @@ impl BattlefieldPositions {
         self.packet = Some(packet);
     }
 
+    /// Build 12340's `MSG_BATTLEGROUND_PLAYER_POSITIONS` (`0x54b3f0`), from the native reducer.
+    /// Unresolved, labelled: the reference keeps two flag carriers (`0xbea170`); the view keeps
+    /// the first.
+    pub(crate) fn apply_wrath(&mut self, players: Vec<(u64, f32, f32)>, carriers: Vec<(u64, f32, f32)>) {
+        let at = |(guid, x, y): (u64, f32, f32)| BattlefieldPosition { guid, x, y };
+        self.apply(PositionsPacket {
+            players: players.into_iter().map(at).collect(),
+            carrier: carriers.into_iter().next().map(at),
+        });
+    }
+
     fn clear(&mut self) {
         self.packet = None;
         self.pending_names.clear();
@@ -84,7 +95,7 @@ fn flag_token(faction: Option<&str>) -> Option<&'static str> {
     }
 }
 
-fn feed_battlefield_positions(
+pub(crate) fn feed_battlefield_positions(
     script: Option<NonSendMut<UiScript>>,
     mut state: ResMut<BattlefieldPositions>,
     queue: Res<BattlefieldQueue>,
@@ -194,7 +205,7 @@ fn drain_battlefield_positions(
     }
 }
 
-fn reset_on_world_enter(
+pub(crate) fn reset_on_world_enter(
     mut entered: MessageReader<EnteredWorldMessage>,
     mut state: ResMut<BattlefieldPositions>,
 ) {
