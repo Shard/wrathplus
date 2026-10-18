@@ -73,6 +73,8 @@ pub(crate) use wrath_relations::{
 // The attack validator's target half, run in the call that asks, for the player's Attack and the
 // pet bar's; the melee probe's press with nothing selected.
 pub(crate) use scan::{AttackNearestRequest, AttackPick};
+#[cfg(test)]
+pub(crate) use scan::LastFriend;
 // The chat layer's by-name asks (`/target`, `/assist`).
 pub(crate) use by_name::{AssistRequest, PlayerLookup, TargetByNameRequest};
 // The one SetSelection path, for the loot response's select (`0x48f3a0`).
@@ -304,6 +306,7 @@ impl Plugin for TargetPlugin {
             .init_resource::<CombatFlash>()
             .init_resource::<scan::TabHistory>()
             .init_resource::<scan::LastEnemy>()
+            .init_resource::<scan::LastFriend>()
             .add_message::<AttackNearestRequest>()
             .add_message::<TargetByNameRequest>()
             .add_message::<AssistRequest>()
