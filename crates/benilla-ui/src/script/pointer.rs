@@ -265,6 +265,7 @@ impl UiScript {
             model.buttons_down.retain(|b| b != button);
             if down {
                 model.buttons_down.push(button.to_string());
+                model.last_mouse_button = Some(button.to_string());
             }
         }
         let hit_id = self.hit_test(x, y);

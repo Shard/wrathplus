@@ -11,5 +11,6 @@ pub(crate) mod wrath_quest_pois;
 pub(crate) mod wrath_quests_completed_capture;
 pub(crate) mod wrath_raid_browser_feed;
 pub(crate) mod wrath_sockets;
+pub(crate) mod wrath_state_feed;
 pub(crate) mod wrath_threat;
 pub(crate) mod wrath_ui_timer_capture;

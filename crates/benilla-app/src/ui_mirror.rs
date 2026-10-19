@@ -116,6 +116,29 @@ fn feed_mirror_timers(
                 _ => {}
             }
         }
+        // Build 12340's slot table (`0xbd0b80`), keyed by the wire type, for
+        // `GetMirrorTimerInfo` and `GetMirrorTimerProgress`.
+        let slot = raw as usize;
+        match edge {
+            MirrorTimerEdge::Start(start) => {
+                let started = script.now();
+                script.set_wrath_mirror_timer(
+                    slot,
+                    Some(benilla_ui::script::WrathMirrorTimer {
+                        value: start.remaining_ms as i32,
+                        max_value: start.duration_ms as i32,
+                        scale: start.scale,
+                        paused: start.paused,
+                        label: caption(kind, spell_name(start.spell_id).as_deref()),
+                        started,
+                    }),
+                );
+            }
+            MirrorTimerEdge::Pause { paused, .. } => {
+                script.set_wrath_mirror_timer_paused(slot, paused)
+            }
+            MirrorTimerEdge::Stop { .. } => script.set_wrath_mirror_timer(slot, None),
+        }
         let name = ScriptValue::Str(script_name(kind).into());
         let (event, args): (&str, Vec<ScriptValue>) = match edge {
             MirrorTimerEdge::Start(start) => (

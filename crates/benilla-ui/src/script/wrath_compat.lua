@@ -28,122 +28,7 @@ function ChangeActionBarPage(page)
         fire("ACTIONBAR_PAGE_CHANGED")
     end
 end
-GetBonusBarOffset = GetBonusBarOffset or zero
-GetActionBarToggles = GetActionBarToggles or none
 
--- ── modified clicks ────────────────────────────────────────────────────────────────────────────
-local modifiedClicks = {
-    AUTOLOOTTOGGLE = "SHIFT", CHATLINK = "SHIFT", COMPAREITEMS = "SHIFT", DRESSUP = "CTRL",
-    FOCUSCAST = "NONE", OPENALLBAGS = "SHIFT", PICKUPACTION = "SHIFT", QUESTWATCHTOGGLE = "SHIFT",
-    SELFCAST = "ALT", SHOWITEMFLYOUT = "ALT", SOCKETITEM = "SHIFT", SPLITSTACK = "SHIFT",
-    STICKYCAMERA = "CTRL", TOKENWATCHTOGGLE = "SHIFT",
-}
-local function modifierHeld(modifier)
-    local shift, ctrl, alt = IsShiftKeyDown(), IsControlKeyDown(), IsAltKeyDown()
-    if modifier == "NONE" then return false end
-    if modifier == "SHIFT" then return shift and not ctrl and not alt end
-    if modifier == "CTRL" then return ctrl and not shift and not alt end
-    if modifier == "ALT" then return alt and not shift and not ctrl end
-    local want = {}
-    for part in modifier:gmatch("[^%-]+") do want[part] = true end
-    return (not not want.SHIFT) == (not not shift) and (not not want.CTRL) == (not not ctrl)
-        and (not not want.ALT) == (not not alt)
-end
-function IsModifiedClick(action)
-    if action then
-        local modifier = modifiedClicks[action]
-        return modifier and modifierHeld(modifier) and 1 or nil
-    end
-    return (IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()) and 1 or nil
-end
-function GetModifiedClick(action) return modifiedClicks[action] end
-function SetModifiedClick(action, modifier) modifiedClicks[action] = modifier end
-function GetModifiedClickAction(index)
-    local i = 0
-    for action in pairs(modifiedClicks) do
-        i = i + 1
-        if i == index then return action end
-    end
-end
-function GetNumModifiedClickActions()
-    local n = 0
-    for _ in pairs(modifiedClicks) do n = n + 1 end
-    return n
-end
-SaveBindings = SaveBindings or none
-
--- ── macro conditionals ([mod:shift,target=focus] a; b) ─────────────────────────────────────────
-local function conditionHolds(condition, target)
-    local name, args = condition:match("^%s*(%a+)%s*:?%s*(.-)%s*$")
-    if not name then return true end
-    name = name:lower()
-    local negate = name:sub(1, 2) == "no"
-    if negate then name = name:sub(3) end
-    local result
-    if name == "mod" or name == "modifier" then
-        if args == "" then
-            result = IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()
-        else
-            result = false
-            for mod in args:gmatch("[^/]+") do
-                mod = mod:upper()
-                if (mod == "SHIFT" and IsShiftKeyDown()) or (mod == "CTRL" and IsControlKeyDown())
-                    or (mod == "ALT" and IsAltKeyDown()) then
-                    result = true
-                end
-            end
-        end
-    elseif name == "combat" then
-        result = UnitAffectingCombat("player")
-    elseif name == "exists" then
-        result = UnitExists(target)
-    elseif name == "dead" then
-        result = UnitIsDead(target) or UnitIsGhost(target)
-    elseif name == "harm" then
-        result = UnitCanAttack("player", target)
-    elseif name == "help" then
-        result = UnitIsFriend("player", target)
-    elseif name == "button" or name == "btn" then
-        result = args == "" or args:find("1") ~= nil
-    else
-        -- Unknown conditions (stance, group, vehicle, ...) do not exclude the clause.
-        result = true
-    end
-    if negate then return not result end
-    return result and true or false
-end
-
--- Clauses are tried in order; a clause's bracket groups are alternatives, and every condition
--- in a group must hold. Returns the first matching clause's value and its target unit.
-function SecureCmdOptionParse(options)
-    for clause in (options .. ";"):gmatch("([^;]*);") do
-        local groups, value = {}, clause
-        while true do
-            local group, after = value:match("^%s*%[(.-)%](.*)$")
-            if not group then break end
-            groups[#groups + 1], value = group, after
-        end
-        value = value:match("^%s*(.-)%s*$")
-        if #groups == 0 then return value, nil end
-        for _, group in ipairs(groups) do
-            local target, holds = nil, true
-            for condition in (group .. ","):gmatch("([^,]*),") do
-                local unit = condition:match("^%s*target%s*=%s*(.-)%s*$")
-                    or condition:match("^%s*@%s*(.-)%s*$")
-                if unit then
-                    target = unit
-                elseif condition:match("%S") and not conditionHolds(condition, target or "target") then
-                    holds = false
-                end
-            end
-            if holds then return value, target end
-        end
-    end
-end
-
--- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
-function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
-GetMirrorTimerProgress = GetMirrorTimerProgress or zero
 
 -- ── languages ──────────────────────────────────────────────────────────────────────────────────
 function GetNumLanguages()
@@ -157,30 +42,19 @@ UnitIsAFK = UnitIsAFK or none
 UnitIsDND = UnitIsDND or none
 UnitIsSameServer = UnitIsSameServer or function() return 1 end
 UnitIsRaidOfficer = UnitIsRaidOfficer or none
-UnitGroupRolesAssigned = UnitGroupRolesAssigned or function() return false, false, false end
-UnitThreatSituation = UnitThreatSituation or none
-UnitDetailedThreatSituation = UnitDetailedThreatSituation or none
 IsXPUserDisabled = IsXPUserDisabled or none
 GetAccountExpansionLevel = GetAccountExpansionLevel or function() return 2 end
 GetExpansionLevel = GetExpansionLevel or function() return 2 end
 GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
-MovieRecording_IsSupported = MovieRecording_IsSupported or none
 IsReferAFriendLinked = IsReferAFriendLinked or none
 CanSummonFriend = CanSummonFriend or none
 
 -- ── maps and instances ─────────────────────────────────────────────────────────────────────────
 InitWorldMapPing = InitWorldMapPing or none
-function GetInstanceInfo()
-    local name = GetRealZoneText and GetRealZoneText() or ""
-    local inInstance, kind = false, "none"
-    if IsInInstance then inInstance, kind = IsInInstance() end
-    return name, kind or "none", 1, "", 0, 0, false
-end
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none
-GetNumWorldPVPAreas = GetNumWorldPVPAreas or zero
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -205,14 +79,11 @@ Sound_GameSystem_GetOutputDriverNameByIndex = none
 IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
-CanShowAchievementUI = none
 
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
 IsThreatWarningEnabled = IsThreatWarningEnabled or none
 GetSummonFriendCooldown = GetSummonFriendCooldown or function() return 0, 0 end
 GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
-GetDungeonDifficulty = GetDungeonDifficulty or function() return 1 end
-GetRaidDifficulty = GetRaidDifficulty or function() return 1 end
 UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
 CanHearthAndResurrectFromArea = none
@@ -480,7 +351,6 @@ end
 IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
-GetReadyCheckStatus = GetReadyCheckStatus or none
 GetAvailableRoles = GetAvailableRoles or function() return true, true, true end
 do
     local dimensions, positions = {}, {}
@@ -498,8 +368,6 @@ end
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
 RegisterStaticConstants = RegisterStaticConstants or none
-GetMultiCastBarOffset = GetMultiCastBarOffset or zero
-HasCompletedAnyAchievement = HasCompletedAnyAchievement or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 function GetContainerNumFreeSlots(bag)
     local free = 0
@@ -511,8 +379,6 @@ end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
 TriggerTutorial = TriggerTutorial or none
-HasDebugZoneMap = HasDebugZoneMap or none
-QueryGuildEventLog = QueryGuildEventLog or none
 RefreshLFGList = RefreshLFGList or none
 do
     -- Wrath's GetNumFriends answers the online count too.
@@ -529,7 +395,6 @@ end
 UnitIsTalking = UnitIsTalking or none
 
 -- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
-GetCurrentCombatTextEventInfo = GetCurrentCombatTextEventInfo or none
 COMBATLOG_OBJECT_AFFILIATION_MINE, COMBATLOG_OBJECT_AFFILIATION_PARTY = 0x1, 0x2
 COMBATLOG_OBJECT_AFFILIATION_RAID, COMBATLOG_OBJECT_AFFILIATION_OUTSIDER = 0x4, 0x8
 COMBATLOG_OBJECT_AFFILIATION_MASK = 0xF
@@ -545,8 +410,6 @@ COMBATLOG_OBJECT_MAINTANK, COMBATLOG_OBJECT_MAINASSIST = 0x40000, 0x80000
 for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
-IsPVPTimerRunning = IsPVPTimerRunning or none
-debuginfo = debuginfo or none
 CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
 
 -- ── unit selection colour (the target frame's name background) ─────────────────────────────────
@@ -579,8 +442,6 @@ GetNumQuestItemDrops = GetNumQuestItemDrops or function() return 0 end
 GetQuestLogItemDrop = GetQuestLogItemDrop or none
 GetContainerItemQuestInfo = GetContainerItemQuestInfo or function() return nil, nil, nil end
 GetDailyQuestsCompleted = GetDailyQuestsCompleted or function() return 0 end
-GetMaxDailyQuests = GetMaxDailyQuests or function() return 25 end
-GetQuestResetTime = GetQuestResetTime or function() return 0 end
 GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none

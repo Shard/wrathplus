@@ -26,6 +26,8 @@ pub struct MapCatalog {
     /// `InstanceType` (field 2, `+0x8`, read at `0x48a772`, `0x495cb9`, `0x495d33`): 0 none,
     /// 1 party, 2 raid, 3 battleground, as `IsInInstance` spells them (`0x83de58`, guarded `< 4`).
     instance_types: HashMap<u32, u32>,
+    /// Build 12340 `Flags`, 0 on a 1.12 file.
+    flags: HashMap<u32, u32>,
     /// The battleground columns of every row, since the client resolves map 0's too.
     battleground: HashMap<u32, MapBattlegroundColumns>,
 }
@@ -93,6 +95,11 @@ impl MapCatalog {
 
     /// Whether `map_id` is a party dungeon, the reference's lockout test rather than "is an
     /// instance": `cmp [rec+8],1` gates `SMSG_UPDATE_LAST_INSTANCE` and `CanShowResetInstances`.
+    /// Build 12340 `Flags` for a map; 0 for a map with no row.
+    pub fn flags(&self, map_id: u32) -> u32 {
+        self.flags.get(&map_id).copied().unwrap_or(0)
+    }
+
     pub fn is_party_dungeon(&self, map_id: u32) -> bool {
         self.instance_type(map_id) == Some(1)
     }
@@ -127,6 +134,8 @@ const BRACKET_SPAN_FIELD: usize = 39;
 const GROUP_QUEUE_FIELD: usize = 40;
 const MINIMAP_ICON_SCALE_FIELD: usize = 41;
 
+/// Build 12340 `Flags` (`+0xc`): bit `0x100` is `GetInstanceInfo`'s `isDynamic` (`0x51a8c0`).
+const WRATH_FLAGS_FIELD: usize = 3;
 const WRATH_MAP_NAME_FIELD: usize = 5;
 const WRATH_DESCRIPTION_0_FIELD: usize = 23;
 const WRATH_DESCRIPTION_1_FIELD: usize = 40;
@@ -224,6 +233,7 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
     let mut loading_screens = HashMap::new();
     let mut instance_types = HashMap::with_capacity(rs.records().len());
     let mut battleground = HashMap::with_capacity(rs.records().len());
+    let mut flags = HashMap::new();
     for r in rs.records() {
         let Some(id) = u32_at(r, 0) else { continue };
         battleground.insert(
@@ -278,6 +288,9 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
         if let Some(name) = str_at(&rs, r, name).filter(|n| !n.is_empty()) {
             names.insert(id, name);
         }
+        if wrath {
+            flags.insert(id, u32_at(r, WRATH_FLAGS_FIELD).unwrap_or(0));
+        }
         // Type 0 is recorded too, so `None` means only that no such map exists.
         if let Some(ty) = u32_at(r, INSTANCE_TYPE_FIELD) {
             instance_types.insert(id, ty);
@@ -293,6 +306,7 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
         names,
         loading_screens,
         instance_types,
+        flags,
         battleground,
     })
 }
