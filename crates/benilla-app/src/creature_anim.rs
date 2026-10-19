@@ -231,18 +231,12 @@ pub(crate) fn start_attack_local(
         return false;
     }
     let wants_send = !engaged || stop_in_flight;
-    // Preserve Vanilla's setter order. The bounded Wrath path publishes no local setter
-    // requests if a required swing could not even enter the command endpoint.
-    if dialect == crate::net::SessionDialect::Vanilla5875 {
-        commands.write_message(crate::player::StandStateRequest { state: 0 });
-    }
+    // No local setter requests if a required swing could not even enter the command endpoint.
     let sent = wants_send && net.0.send(swing).is_ok();
-    if dialect == crate::net::SessionDialect::Wrath12340 && wants_send && !sent {
+    if wants_send && !sent {
         return false;
     }
-    if dialect == crate::net::SessionDialect::Wrath12340 {
-        commands.write_message(crate::player::StandStateRequest { state: 0 });
-    }
+    commands.write_message(crate::player::StandStateRequest { state: 0 });
     // Idempotent, matching `0x5ecd80`'s unconditional call.
     sheath.write(SheathRequest {
         entity,
@@ -963,8 +957,7 @@ mod attack_stand_tests {
     /// jumps past the stand to `0x5ecd78` and sends no `CMSG_ATTACKSWING`.
     #[test]
     fn starting_an_attack_stands_you_even_when_the_swing_is_skipped() {
-        let (sent, mut app) =
-            start_once(crate::net::SessionDialect::Vanilla5875, true, false, true);
+        let (sent, mut app) = start_once(crate::net::SessionDialect::Wrath12340, true, false, true);
         assert!(!sent, "the already-engaged tail did not enqueue a swing");
 
         let stands: Vec<u8> = app
@@ -978,17 +971,6 @@ mod attack_stand_tests {
             vec![0],
             "StartAttack asks for stand state 0 exactly once, even on the leg that sends no swing"
         );
-    }
-
-    #[test]
-    fn start_receipt_requires_an_actual_swing_enqueue() {
-        let (sent, app) = start_once(crate::net::SessionDialect::Vanilla5875, false, false, false);
-        assert!(!sent, "a disconnected command channel is not an enqueue");
-        assert_eq!(
-            app.world().resource::<crate::spell::AutoRepeatActive>().0,
-            None
-        );
-        assert_eq!(app.world().resource::<Messages<SheathRequest>>().len(), 1);
     }
 
     #[test]

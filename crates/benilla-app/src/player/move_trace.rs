@@ -11,7 +11,7 @@
 //! - `knb`: a knockback ([`knockback`]), flown or refused.
 //! - `snd`: an outbound `MSG_MOVE_*` ([`sent`]), diffable against a 1.12.1 capture's client
 //!   stream; `net::motion`'s `rly` is the receive side.
-//! - `sett`: how the settle hold ended ([`settle`]) and the time it skipped ([`skipped_time`]).
+//! - `sett`: how the settle hold ended ([`settle`]).
 //! - `rid`: a frame of a self-spline ride ([`ride`]).
 //!
 //! The anim driver writes `anim` lines into the same file on the same clock, and
@@ -154,17 +154,6 @@ pub(super) fn swim(feet_y: f32, surface_y: f32, swimming: bool, h: f32) {
             "y {feet_y:9.3} surf {surface_y:9.3} depth {depth:6.3} {band} [{exit:.3}..{enter:.3}] h {h:.3} mode={}",
             if swimming { "swim" } else { "walk" }
         ),
-    );
-}
-
-/// One `sett` line per `CMSG_MOVE_TIME_SKIPPED` we send: the ms the settle hold skipped, and whose.
-pub(super) fn skipped_time(guid: u64, lag_ms: u32) {
-    if !trace::enabled() {
-        return;
-    }
-    trace::line(
-        "sett",
-        &format!("skipped {lag_ms:5} ms for mover {guid:#x}"),
     );
 }
 

@@ -4,7 +4,7 @@
 //! its flags, so a flag left set is a phantom walk on every other screen.
 
 use crate::creature_anim::move_flags;
-use crate::net::{ClientCommand, CommandSender, MoveKind, SessionDialect};
+use crate::net::{ClientCommand, CommandSender, MoveKind};
 use benilla_assets::coords::bevy_to_wow;
 use benilla_protocol::{JumpInfo, TransportPose};
 
@@ -35,13 +35,9 @@ impl WrathGroundLimit {
 /// supported: the Wrath writer reports SWIMMING or FLYING with its pitch
 /// (`wrath_ground::encode_movement`).
 pub(super) fn wrath_ground_limit(
-    dialect: SessionDialect,
     player: &Player,
     _liquid_surface: Option<f32>,
 ) -> Option<WrathGroundLimit> {
-    if dialect != SessionDialect::Wrath12340 {
-        return None;
-    }
     if player.modes.levitating || player.modes.hover {
         return Some(WrathGroundLimit::Flight);
     }
@@ -93,16 +89,6 @@ const IN_MOTION: u32 = move_flags::ANY_MOVE
     | move_flags::FLYING
     | move_flags::ON_TRANSPORT;
 
-/// This frame's input to the `CMSG_MOVE_TIME_SKIPPED` report ([`stream_skipped_time`]).
-pub(super) struct SkipClock {
-    /// The frame's length in seconds.
-    pub(super) dt: f32,
-    /// The mover held instead of stepping ([`super::Player::settling`]): nothing integrated `dt`.
-    pub(super) held: bool,
-    /// The active mover, a possessed unit or our own body; `None` until the server names one.
-    pub(super) mover: Option<u64>,
-}
-
 /// This frame's airborne edges, as the send rules read them.
 pub(super) struct ArcEdges {
     /// A take-off launched this frame.
@@ -128,7 +114,11 @@ pub(super) struct ArcEdges {
 /// frame the facing changes off the turn axis, and a heartbeat every 500 ms while moving. Airborne,
 /// the forward, back and strafe transitions go silent and their live bits ride the packets that do
 /// go out. Sends are fire-and-forget; updates `player`'s last-sent flags, facing and heartbeat.
-#[cfg(test)]
+///
+/// A settle hold sends no `CMSG_MOVE_TIME_SKIPPED`: the build-12340 writer does not admit it (its
+/// packed-GUID body, AzerothCore `MovementHandler.cpp::HandleMoveTimeSkippedOpcode`), so the held
+/// time is dropped.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn stream_self_movement(
     sender: &CommandSender,
     player: &mut Player,
@@ -139,36 +129,6 @@ pub(super) fn stream_self_movement(
     speed_acks: &[crate::net::SpeedChangeMessage],
     knock_ack: Option<super::state::PendingKnockback>,
     transport: Option<TransportPose>,
-    skip: SkipClock,
-) {
-    stream_self_movement_for_dialect(
-        sender,
-        player,
-        move_flags_now,
-        swim_pitch,
-        arc,
-        now,
-        speed_acks,
-        knock_ack,
-        transport,
-        skip,
-        SessionDialect::Vanilla5875,
-    );
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(super) fn stream_self_movement_for_dialect(
-    sender: &CommandSender,
-    player: &mut Player,
-    move_flags_now: u32,
-    swim_pitch: f32,
-    arc: ArcEdges,
-    now: f32,
-    speed_acks: &[crate::net::SpeedChangeMessage],
-    knock_ack: Option<super::state::PendingKnockback>,
-    transport: Option<TransportPose>,
-    skip: SkipClock,
-    dialect: SessionDialect,
 ) {
     let ArcEdges {
         jumped,
@@ -177,7 +137,6 @@ pub(super) fn stream_self_movement_for_dialect(
         landed,
         fall_time,
     } = arc;
-    stream_skipped_time(sender, player, skip, dialect);
     let wow_pos = bevy_to_wow(player.pos);
     // `face_yaw` is unbounded; the reference sends [0, 2π), and vmangos drops a packet with
     // `|o| > 4π` unrelayed (`VerifyMovementInfo`, `GridDefines.h:203`), a stop included.
@@ -259,13 +218,13 @@ pub(super) fn stream_self_movement_for_dialect(
             super::move_trace::sent($kind, wire_flags, facing, wow_pos);
             let _ = sender.send(ClientCommand::Move {
                 kind: $kind,
-                flags: flags_for_dialect(wire_flags, dialect),
+                flags: to_wire_flags(wire_flags),
                 pos: wow_pos,
                 orientation: facing,
                 // Written only while SWIMMING is set.
                 pitch: swim_pitch,
                 fall_time,
-                jump: jump_for_dialect(wire_jump, dialect),
+                jump: to_wire_jump(wire_jump),
                 // Written only with ON_TRANSPORT: the rider's deck-local pose.
                 transport,
             });
@@ -405,10 +364,7 @@ pub(super) fn stream_self_movement_for_dialect(
     player.move_flags = wire_flags;
 }
 
-fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
-    if dialect != SessionDialect::Wrath12340 {
-        return flags;
-    }
+fn to_wire_flags(flags: u32) -> u32 {
     // The shared controller keeps Vanilla's internal arc bits. Wrath 12340 moved FALLING and
     // FALLING_FAR down one bit; convert only at the command boundary.
     let mut wrath = flags
@@ -442,10 +398,7 @@ fn flags_for_dialect(flags: u32, dialect: SessionDialect) -> u32 {
 
 /// Translate a Wrath on-foot echo back into the shared controller's established internal bits.
 #[cfg(test)]
-pub(super) fn flags_from_dialect(flags: u32, dialect: SessionDialect) -> u32 {
-    if dialect != SessionDialect::Wrath12340 {
-        return flags;
-    }
+pub(super) fn from_wire_flags(flags: u32) -> u32 {
     let falling = flags & benilla_protocol::wrath_ground::MOVE_FALLING != 0;
     let falling_far = flags & benilla_protocol::wrath_ground::MOVE_FALLING_FAR != 0;
     let on_transport = flags & benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT != 0;
@@ -465,53 +418,13 @@ pub(super) fn flags_from_dialect(flags: u32, dialect: SessionDialect) -> u32 {
     shared
 }
 
-fn jump_for_dialect(jump: Option<JumpInfo>, dialect: SessionDialect) -> Option<JumpInfo> {
+fn to_wire_jump(jump: Option<JumpInfo>) -> Option<JumpInfo> {
+    // Build 12340 relays `zspeed` positive-up; the controller builds it down-positive, so the
+    // command boundary reverses it.
     jump.map(|mut jump| {
-        if dialect == SessionDialect::Wrath12340 {
-            // Wrath relays `zspeed` positive-up; the established Vanilla command stores its
-            // historical down-positive value, so only the Wrath command boundary reverses it.
-            jump.zspeed = -jump.zspeed;
-        }
+        jump.zspeed = -jump.zspeed;
         jump
     })
-}
-
-/// `CMSG_MOVE_TIME_SKIPPED`: the milliseconds the mover advanced through without integrating. The
-/// reference's common senders are its no-geometry pair (`0x634154`, `0x635742`), time with no
-/// world to resolve against, which is our settle hold; its long-frame site (`0x616642`) has no
-/// counterpart, as we integrate a long frame whole. Deviation: a hold is summed and sent once on
-/// release, without the send's `[mgr+0x130] += lag` heartbeat push, because ours lasts seconds
-/// where the reference's lasts a substep.
-fn stream_skipped_time(
-    sender: &CommandSender,
-    player: &mut Player,
-    skip: SkipClock,
-    dialect: SessionDialect,
-) {
-    // The bounded Wrath writer does not admit this command. Its packed-GUID body differs from
-    // Vanilla (AzerothCore MovementHandler.cpp::HandleMoveTimeSkippedOpcode); never enqueue the
-    // legacy report after a terrain settle hold or retain it for another session/dialect.
-    if dialect == SessionDialect::Wrath12340 {
-        player.skipped_ms = 0.0;
-        return;
-    }
-    if skip.held {
-        player.skipped_ms += skip.dt * 1000.0;
-        return;
-    }
-    // The release edge sends the whole hold in whole ms; the residue is dropped.
-    let lag_ms = player.skipped_ms as u32;
-    player.skipped_ms = 0.0;
-    if lag_ms == 0 {
-        return;
-    }
-    let Some(guid) = skip.mover else {
-        return;
-    };
-    // The reference's builder `0x600be0` sends only for the active mover (`0x600bec`/`0x600bfb`
-    // against `[0xc4da98]`/`[0xc4da9c]`); we name only the one we drive.
-    super::move_trace::skipped_time(guid, lag_ms);
-    let _ = sender.send(ClientCommand::MoveTimeSkipped { guid, lag_ms });
 }
 
 /// Sends one flag-less `MSG_MOVE_STOP` when the controller stops driving the avatar (free-fly),
@@ -538,16 +451,10 @@ pub(super) fn park_mover(sender: &CommandSender, player: &mut Player) {
     player.last_facing = facing;
 }
 
-/// Park only when the dialect can honestly describe the current pose as ground movement. Vanilla
-/// keeps its established behavior; Wrath never fabricates a flag-less ground STOP for another mode.
-pub(super) fn park_mover_for_dialect(
-    sender: &CommandSender,
-    player: &mut Player,
-    dialect: SessionDialect,
-) {
-    if dialect == SessionDialect::Vanilla5875
-        || wrath_ground_limit(dialect, player, player.liquid_surface).is_none()
-    {
+/// Park only when the pose is ground movement: a flag-less ground STOP is never fabricated for
+/// another mode.
+pub(super) fn park_mover_on_ground(sender: &CommandSender, player: &mut Player) {
+    if wrath_ground_limit(player, player.liquid_surface).is_none() {
         park_mover(sender, player);
     }
 }
@@ -569,49 +476,8 @@ pub(super) fn wire_transport(player: &Player) -> Option<TransportPose> {
     })
 }
 
-/// Acks forced speed changes on a frame the controller does not drive (a server spline, a fear, a
-/// mover hand-off), as the reference's per-mover drain acks whoever drives (`0x616142`,
-/// `0x61812d`). Unacked, vmangos enforces the change after 4 s, counts the miss for anticheat and
-/// holds the graveyard repop (`Player.cpp:1332`). The payload is our last reported flags minus the
-/// airborne pair, as no arc runs on these frames.
-pub(super) fn ack_speeds_undriven(
-    sender: &CommandSender,
-    player: &Player,
-    acks: &[crate::net::SpeedChangeMessage],
-) {
-    let transport = wire_transport(player);
-    let mut flags =
-        player.move_flags & OUTBOUND_FLAG_MASK & !(move_flags::FALLING | move_flags::FALLING_FAR);
-    if transport.is_none() {
-        flags &= !move_flags::ON_TRANSPORT; // flag and tail travel together
-    }
-    for ack in acks {
-        let _ = sender.send(ClientCommand::ForceSpeedAck {
-            kind: ack.kind,
-            guid: ack.guid,
-            counter: ack.counter,
-            speed: ack.speed,
-            flags,
-            pos: bevy_to_wow(player.pos),
-            orientation: player.face_yaw.rem_euclid(std::f32::consts::TAU),
-            pitch: 0.0,
-            fall_time: 0,
-            jump: None,
-            transport: transport.filter(|_| flags & move_flags::ON_TRANSPORT != 0),
-        });
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    fn no_skip() -> SkipClock {
-        SkipClock {
-            dt: 0.0,
-            held: false,
-            mover: None,
-        }
-    }
-
     use super::*;
     use crate::net::CommandSender;
     use std::f32::consts::TAU;
@@ -675,7 +541,7 @@ mod tests {
                     let surface = super::super::swim::surface_over_feet(&point, player.pos);
                     assert_eq!(surface, None, "Abbey's dry room has no swim surface");
                     assert_eq!(
-                        wrath_ground_limit(SessionDialect::Wrath12340, &player, surface),
+                        wrath_ground_limit(&player, surface),
                         None,
                         "a dry indoor Abbey anchor must allow Wrath ground movement"
                     );
@@ -687,47 +553,28 @@ mod tests {
     #[test]
     fn wrath_gate_refuses_unsupported_modes_without_changing_vanilla() {
         let player = Player::default();
-        assert_eq!(
-            wrath_ground_limit(SessionDialect::Vanilla5875, &player, None),
-            None
-        );
 
         // Deep water and swimming are reported natively now, not held.
         let surface =
             player.pos.y + super::super::swim_enter_depth(player.collision_height.0) + 0.1;
-        assert_eq!(
-            wrath_ground_limit(SessionDialect::Wrath12340, &player, Some(surface)),
-            None
-        );
+        assert_eq!(wrath_ground_limit(&player, Some(surface)), None);
         let swimmer = Player {
             swimming: true,
             ..Player::default()
         };
-        assert_eq!(
-            wrath_ground_limit(SessionDialect::Wrath12340, &swimmer, Some(surface)),
-            None
-        );
+        assert_eq!(wrath_ground_limit(&swimmer, Some(surface)), None);
         // A passenger on a deck is reported natively too (Wrath ON_TRANSPORT plus the tail).
         let rider = Player {
             move_flags: move_flags::ON_TRANSPORT,
             ..Player::default()
         };
+        assert_eq!(wrath_ground_limit(&rider, None), None);
         assert_eq!(
-            wrath_ground_limit(SessionDialect::Wrath12340, &rider, None),
-            None
-        );
-        assert_eq!(
-            flags_for_dialect(
-                move_flags::ON_TRANSPORT | move_flags::FORWARD,
-                SessionDialect::Wrath12340
-            ),
+            to_wire_flags(move_flags::ON_TRANSPORT | move_flags::FORWARD),
             benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT | move_flags::FORWARD
         );
         assert_eq!(
-            flags_from_dialect(
-                benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT,
-                SessionDialect::Wrath12340
-            ),
+            from_wire_flags(benilla_protocol::wrath_ground::MOVE_ON_TRANSPORT),
             move_flags::ON_TRANSPORT
         );
         let levitating = {
@@ -736,7 +583,7 @@ mod tests {
             p
         };
         assert_eq!(
-            wrath_ground_limit(SessionDialect::Wrath12340, &levitating, None),
+            wrath_ground_limit(&levitating, None),
             Some(WrathGroundLimit::Flight)
         );
     }
@@ -745,25 +592,16 @@ mod tests {
     fn wrath_converts_only_its_airborne_flags_and_vertical_sign() {
         let flags = move_flags::FORWARD | move_flags::FALLING | move_flags::FALLING_FAR;
         assert_eq!(
-            flags_for_dialect(flags, SessionDialect::Vanilla5875),
-            flags,
-            "the Vanilla movement word is unchanged"
-        );
-        assert_eq!(
-            flags_for_dialect(flags, SessionDialect::Wrath12340),
+            to_wire_flags(flags),
             move_flags::FORWARD
                 | benilla_protocol::wrath_ground::MOVE_FALLING
                 | benilla_protocol::wrath_ground::MOVE_FALLING_FAR
         );
-        let wrath = flags_for_dialect(flags, SessionDialect::Wrath12340);
+        let wrath = to_wire_flags(flags);
         assert_eq!(
-            flags_from_dialect(wrath, SessionDialect::Wrath12340),
+            from_wire_flags(wrath),
             flags,
             "a self echo restores the controller's internal arc bits"
-        );
-        assert_eq!(
-            flags_from_dialect(flags, SessionDialect::Vanilla5875),
-            flags
         );
         let jump = JumpInfo {
             zspeed: -7.955_547,
@@ -771,16 +609,7 @@ mod tests {
             sin_angle: 0.5,
             xy_speed: 7.0,
         };
-        assert_eq!(
-            jump_for_dialect(Some(jump), SessionDialect::Vanilla5875),
-            Some(jump)
-        );
-        assert_eq!(
-            jump_for_dialect(Some(jump), SessionDialect::Wrath12340)
-                .unwrap()
-                .zspeed,
-            7.955_547
-        );
+        assert_eq!(to_wire_jump(Some(jump)).unwrap().zspeed, 7.955_547);
     }
 
     #[test]
@@ -792,7 +621,7 @@ mod tests {
             horiz_vel: bevy::prelude::Vec3::new(0.0, 0.0, -7.0),
             ..Default::default()
         };
-        stream_self_movement_for_dialect(
+        stream_self_movement(
             &tx,
             &mut player,
             move_flags::FORWARD | move_flags::FALLING,
@@ -808,8 +637,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
-            SessionDialect::Wrath12340,
         );
         let ClientCommand::Move {
             kind,
@@ -836,7 +663,7 @@ mod tests {
         assert_eq!(jump.xy_speed, 7.0);
 
         while rx.try_recv().is_ok() {}
-        stream_self_movement_for_dialect(
+        stream_self_movement(
             &tx,
             &mut player,
             move_flags::FORWARD,
@@ -852,8 +679,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
-            SessionDialect::Wrath12340,
         );
         let ClientCommand::Move {
             kind,
@@ -885,7 +710,7 @@ mod tests {
             ..Default::default()
         };
         let frame = |player: &mut Player, flags: u32, now: f32| {
-            stream_self_movement_for_dialect(
+            stream_self_movement(
                 &tx,
                 player,
                 flags,
@@ -901,8 +726,6 @@ mod tests {
                 &[],
                 None,
                 None,
-                no_skip(),
-                SessionDialect::Wrath12340,
             );
             rx.try_iter()
                 .map(|command| {
@@ -963,106 +786,6 @@ mod tests {
     }
 
     #[test]
-    fn a_settle_hold_reports_its_skipped_milliseconds_once_on_release() {
-        const MOVER: u64 = 0x0000_0000_0000_002a;
-        let (raw_tx, rx) = crossbeam_channel::unbounded();
-        let tx = CommandSender::Raw(raw_tx);
-        let mut player = Player::default();
-        let held = |dt: f32| SkipClock {
-            dt,
-            held: true,
-            mover: Some(MOVER),
-        };
-        let released = || SkipClock {
-            dt: 0.016,
-            held: false,
-            mover: Some(MOVER),
-        };
-        // Four held frames, 0.5 s in all.
-        for _ in 0..3 {
-            stream_skipped_time(&tx, &mut player, held(0.1), SessionDialect::Vanilla5875);
-        }
-        stream_skipped_time(&tx, &mut player, held(0.2), SessionDialect::Vanilla5875);
-        assert!(
-            rx.try_recv().is_err(),
-            "a hold in progress sends nothing — the reference's own captures show one packet per \
-             skip, not one per frame"
-        );
-        stream_skipped_time(&tx, &mut player, released(), SessionDialect::Vanilla5875);
-        match rx.try_recv().expect("the release edge reports") {
-            ClientCommand::MoveTimeSkipped { guid, lag_ms } => {
-                assert_eq!(guid, MOVER, "the packet names the mover we were driving");
-                assert_eq!(lag_ms, 500, "0.1+0.1+0.1+0.2 s of un-integrated simulation");
-            }
-            other => panic!("expected MoveTimeSkipped, got {other:?}"),
-        }
-        stream_skipped_time(&tx, &mut player, released(), SessionDialect::Vanilla5875);
-        assert!(
-            rx.try_recv().is_err(),
-            "the report is an edge; a running mover skips nothing and says nothing"
-        );
-    }
-
-    #[test]
-    fn wrath_settle_hold_never_enqueues_unsupported_time_skipped_and_releases_movement() {
-        let (raw_tx, rx) = crossbeam_channel::unbounded();
-        let tx = CommandSender::Raw(raw_tx);
-        let mut player = Player {
-            skipped_ms: 2_210.0,
-            ..Player::default()
-        };
-        for held in [true, false] {
-            stream_self_movement_for_dialect(
-                &tx,
-                &mut player,
-                if held { 0 } else { move_flags::FORWARD },
-                0.0,
-                ArcEdges {
-                    jumped: false,
-                    wire_launch: false,
-                    air_nudged: false,
-                    landed: false,
-                    fall_time: 0,
-                },
-                3.0,
-                &[],
-                None,
-                None,
-                SkipClock {
-                    dt: 2.210,
-                    held,
-                    mover: Some(1057),
-                },
-                SessionDialect::Wrath12340,
-            );
-            assert_eq!(player.skipped_ms, 0.0);
-        }
-        let commands: Vec<_> = rx.try_iter().collect();
-        assert!(commands
-            .iter()
-            .all(|command| !matches!(command, ClientCommand::MoveTimeSkipped { .. })));
-        assert!(commands.iter().any(|command| matches!(
-            command,
-            ClientCommand::Move {
-                kind: MoveKind::StartForward,
-                ..
-            }
-        )));
-        // Unsupported Wrath holds must not leave a report to leak into a later Vanilla epoch.
-        stream_skipped_time(
-            &tx,
-            &mut player,
-            SkipClock {
-                dt: 0.016,
-                held: false,
-                mover: Some(1057),
-            },
-            SessionDialect::Vanilla5875,
-        );
-        assert!(rx.try_recv().is_err());
-    }
-
-    #[test]
     fn the_walk_toggle_sends_its_own_opcode_with_no_movement_at_all() {
         let (raw_tx, rx) = crossbeam_channel::unbounded();
         let tx = CommandSender::Raw(raw_tx);
@@ -1085,7 +808,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, flags, .. } =
             rx.try_recv().expect("a standing walk toggle still sends")
@@ -1097,18 +819,7 @@ mod tests {
         assert_eq!(flags & move_flags::WALK_MODE, move_flags::WALK_MODE);
 
         // Leaving it: MSG_MOVE_SET_RUN_MODE (0xc2).
-        stream_self_movement(
-            &tx,
-            &mut player,
-            0,
-            0.0,
-            arc(),
-            0.0,
-            &[],
-            None,
-            None,
-            no_skip(),
-        );
+        stream_self_movement(&tx, &mut player, 0, 0.0, arc(), 0.0, &[], None, None);
         let ClientCommand::Move { kind, flags, .. } =
             rx.try_recv().expect("the run half sends too")
         else {
@@ -1128,7 +839,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         while let Ok(ClientCommand::Move { kind, .. }) = rx.try_recv() {
             assert_eq!(kind, MoveKind::SetWalkMode, "the re-entry edge only");
@@ -1143,7 +853,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         assert!(
             rx.try_recv().is_err(),
@@ -1175,7 +884,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let kinds: Vec<_> = rx
             .try_iter()
@@ -1214,7 +922,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
 
         let ClientCommand::Move { orientation, .. } = rx
@@ -1256,7 +963,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
 
         let ClientCommand::Move {
@@ -1297,7 +1003,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         assert!(rx.try_recv().is_err(), "a mid-air release sends nothing");
         assert_eq!(
@@ -1322,7 +1027,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, flags, .. } = rx.try_recv().expect("the landing packet")
         else {
@@ -1359,7 +1063,6 @@ mod tests {
                 &[],
                 None,
                 None,
-                no_skip(),
             );
         };
 
@@ -1386,7 +1089,7 @@ mod tests {
         };
         assert_eq!(kind, MoveKind::Heartbeat);
         assert_ne!(
-            flags & move_flags::FALLING,
+            flags & benilla_protocol::wrath_ground::MOVE_FALLING,
             0,
             "and it carries the arc, so observers learn of a long fall in progress"
         );
@@ -1418,7 +1121,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move {
             kind, flags, jump, ..
@@ -1427,7 +1129,11 @@ mod tests {
             panic!("expected a Move command");
         };
         assert_eq!(kind, MoveKind::StartForward);
-        assert_ne!(flags & move_flags::FALLING, 0, "it rides the arc");
+        assert_ne!(
+            flags & benilla_protocol::wrath_ground::MOVE_FALLING,
+            0,
+            "it rides the arc"
+        );
         let tail = jump.expect("an airborne packet carries the ballistic tail");
         assert!(
             (tail.xy_speed - 2.5).abs() < 1.0e-3,
@@ -1458,7 +1164,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         assert!(
             rx.try_recv().is_err(),
@@ -1490,7 +1195,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, flags, .. } =
             rx.try_recv().expect("a mid-air turn broadcasts")
@@ -1498,7 +1202,11 @@ mod tests {
             panic!("expected a Move command");
         };
         assert_eq!(kind, MoveKind::StartTurnLeft);
-        assert_ne!(flags & move_flags::FALLING, 0, "the packet rides the arc");
+        assert_ne!(
+            flags & benilla_protocol::wrath_ground::MOVE_FALLING,
+            0,
+            "the packet rides the arc"
+        );
         assert!(rx.try_recv().is_err(), "the turn axis carries the facing");
         // A mouse turn as the turn key releases, past the heartbeat deadline: the heartbeat is
         // `!sent`-gated, so only the StopTurn and the SET_FACING go out.
@@ -1519,7 +1227,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let kinds: Vec<_> = rx
             .try_iter()
@@ -1560,7 +1267,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, flags, .. } = rx
             .try_recv()
@@ -1595,7 +1301,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         assert!(rx.try_recv().is_err(), "an unchanged facing is silent");
     }
@@ -1626,7 +1331,6 @@ mod tests {
                 &[],
                 None,
                 None,
-                no_skip(),
             );
             assert!(
                 rx.try_recv().is_err(),
@@ -1650,7 +1354,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, .. } = rx.try_recv().expect("the STOP_TURN") else {
             panic!("expected a Move command");
@@ -1687,7 +1390,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let kinds: Vec<_> = rx
             .try_iter()
@@ -1718,7 +1420,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
     }
 
@@ -1799,68 +1500,6 @@ mod tests {
     }
 
     #[test]
-    fn a_speed_change_is_acked_while_not_driving() {
-        let (raw_tx, rx) = crossbeam_channel::unbounded();
-        let tx = CommandSender::Raw(raw_tx);
-        let ack = crate::net::SpeedChangeMessage {
-            guid: 7,
-            kind: benilla_protocol::SpeedKind::Run,
-            counter: 3,
-            speed: 3.5,
-        };
-
-        // A spline ride reporting FORWARD, off any deck, with a stale ON_TRANSPORT bit.
-        let player = Player {
-            move_flags: move_flags::FORWARD | move_flags::FALLING | move_flags::ON_TRANSPORT,
-            face_yaw: -1.0,
-            ..Default::default()
-        };
-        ack_speeds_undriven(&tx, &player, &[ack]);
-        let Ok(ClientCommand::ForceSpeedAck {
-            counter,
-            speed,
-            flags,
-            orientation,
-            transport,
-            jump,
-            ..
-        }) = rx.try_recv()
-        else {
-            panic!("the change is acked");
-        };
-        assert_eq!((counter, speed), (3, 3.5), "the ack echoes the change");
-        assert_eq!(
-            flags,
-            move_flags::FORWARD,
-            "FORWARD kept; FALLING and a tailless ON_TRANSPORT dropped"
-        );
-        assert!(transport.is_none() && jump.is_none());
-        assert!((0.0..TAU).contains(&orientation));
-        assert!(rx.try_recv().is_err(), "one ack per change");
-
-        // On a deck.
-        let player = Player {
-            move_flags: move_flags::ON_TRANSPORT,
-            ride: Some(super::super::state::PlayerRide {
-                entity: bevy::ecs::entity::Entity::PLACEHOLDER,
-                guid: 0x1F,
-                local_pos: bevy::math::Vec3::ZERO,
-                boat_yaw: 0.0,
-            }),
-            ..Default::default()
-        };
-        ack_speeds_undriven(&tx, &player, &[ack]);
-        let Ok(ClientCommand::ForceSpeedAck {
-            flags, transport, ..
-        }) = rx.try_recv()
-        else {
-            panic!("the change is acked");
-        };
-        assert_eq!(flags, move_flags::ON_TRANSPORT);
-        assert_eq!(transport.map(|t| t.guid), Some(0x1F));
-    }
-
-    #[test]
     fn a_knockback_acks_and_sends_no_jump() {
         let (raw_tx, rx) = crossbeam_channel::unbounded();
         let tx = CommandSender::Raw(raw_tx);
@@ -1897,7 +1536,6 @@ mod tests {
                 launch,
             }),
             None,
-            no_skip(),
         );
 
         let ClientCommand::KnockBackAck {
@@ -1958,7 +1596,6 @@ mod tests {
             &[],
             None,
             None,
-            no_skip(),
         );
         let ClientCommand::Move { kind, jump, .. } =
             rx.try_recv().expect("a jump take-off is announced")
@@ -1968,8 +1605,8 @@ mod tests {
         assert_eq!(kind, MoveKind::Jump);
         let tail = jump.expect("the JUMP carries the ballistic tail");
         assert!(
-            (tail.zspeed + 7.955547).abs() < 1.0e-4,
-            "the wire zspeed is down-positive: a rising jump reports negative, got {}",
+            (tail.zspeed - 7.955547).abs() < 1.0e-4,
+            "the build-12340 wire zspeed is up-positive: a rising jump reports positive, got {}",
             tail.zspeed
         );
     }
