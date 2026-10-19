@@ -298,8 +298,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ]))
         })?,
     )?;
-    // GetContainerNumFreeSlots(bag) (`0x5d7590`): the empty slots and the bag's `BagFamily`.
-    // Labelled: the vault (-1) reads as pushed, where the client also needs the bank open.
+    // GetContainerNumFreeSlots(bag) (`0x5d7590`): the backpack's empty slots and 0, always; a bag
+    // 1..11 that exists, its empty slots and `BagFamily`; the open bank's (-1) empty slots and 0;
+    // anything else (an empty bag slot, the keyring, the closed bank) a lone 0. Labelled: the bank
+    // is open when App has published container -1.
     g.set(
         "GetContainerNumFreeSlots",
         lua.create_function(|lua, args: MultiValue| {
@@ -307,18 +309,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .map(|n| n as i64)
                 .ok_or_else(|| mlua::Error::runtime("Usage: GetContainerFreeSlots(index)"))?;
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let Some(c) = model.containers.get(&bag) else {
-                return Ok(MultiValue::from_vec(vec![Value::Number(0.0)]));
+            let lone = || Ok(MultiValue::from_vec(vec![Value::Number(0.0)]));
+            let c = model.containers.get(&bag);
+            let free = match (bag, c) {
+                (0, None) => 16,
+                (-1..=11, Some(c)) => (1..=c.num_slots).filter(|s| !c.slots.contains_key(s)).count(),
+                _ => return lone(),
             };
-            let free = (1..=c.num_slots)
-                .filter(|s| !c.slots.contains_key(s))
-                .count();
-            let family = model
-                .wrath_state
-                .bag_families
-                .get(&bag)
-                .copied()
-                .unwrap_or(0);
+            let family = match bag {
+                1..=11 => model.wrath_state.bag_families.get(&bag).copied().unwrap_or(0),
+                _ => 0,
+            };
             Ok(MultiValue::from_vec(vec![
                 Value::Number(free as f64),
                 Value::Number(f64::from(family)),
@@ -548,5 +549,35 @@ mod tests {
             )
             .unwrap());
         assert!(s.run("GetContainerNumFreeSlots()").is_err());
+    }
+
+    /// `0x5d7590`: the backpack answers its empty slots and family 0 even before App publishes
+    /// it; the keyring and the closed bank answer a lone 0, the open bank its slots and 0.
+    #[test]
+    fn free_slots_follow_the_native_container_cases() {
+        let mut s = vm();
+        let free = |s: &UiScript, bag: i32| {
+            s.eval::<Vec<f64>>(&format!("return {{ GetContainerNumFreeSlots({bag}) }}")).unwrap()
+        };
+        assert_eq!(free(&s, 0), vec![16.0, 0.0]);
+        assert_eq!(free(&s, -2), vec![0.0]);
+        assert_eq!(free(&s, -1), vec![0.0]);
+        assert_eq!(free(&s, 4), vec![0.0]);
+        let mut slots = std::collections::HashMap::new();
+        slots.insert(1, crate::script::ContainerSlot::default());
+        for bag in [-2, -1, 0] {
+            s.set_container(
+                bag,
+                Some(crate::script::ContainerState {
+                    name: None,
+                    num_slots: 28,
+                    slots: slots.clone(),
+                }),
+            );
+        }
+        s.set_wrath_bag_family(-1, 8);
+        assert_eq!(free(&s, 0), vec![27.0, 0.0]);
+        assert_eq!(free(&s, -1), vec![27.0, 0.0], "the bank's family is 0");
+        assert_eq!(free(&s, -2), vec![0.0], "the keyring answers a lone 0");
     }
 }

@@ -1,7 +1,7 @@
 //! Runtime `SetParent` (`0x7a1550`): strata and level re-assignment, the hide and show round-trip,
 //! and the binding's errors.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 /// `strata := parent.strata`, `level := parent.level + 1` (`0x76ab5a`/`0x76ab65`); the subtree's
 /// levels are not re-based (`propagate = 0`), so a child can land below its own parent.
@@ -112,7 +112,7 @@ fn a_visible_reparent_refires_onhide_then_onshow() {
 /// `ebx`), so a hidden frame moved under a visible parent stays invisible until shown.
 #[test]
 fn a_hidden_reparent_fires_nothing_and_leaves_visibility_stale() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         fired = 0

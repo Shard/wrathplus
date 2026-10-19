@@ -65,7 +65,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             });
             let master = {
                 let model = lua.app_data_ref::<Model>().expect("model");
-                model.party.master_looter.is_some_and(|i| i == n as u32)
+                let guid = model.party.master_looter_guid;
+                usize::try_from(n.wrapping_sub(1))
+                    .ok()
+                    .and_then(|i| model.party.raid.get(i))
+                    .is_some_and(|r| guid != 0 && r.guid == guid)
             };
             values.push_back(Value::Boolean(master));
             Ok(values)

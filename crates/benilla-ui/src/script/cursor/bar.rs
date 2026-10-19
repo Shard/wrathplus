@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn showgrid_hidegrid_fire_on_gain_and_loss_not_on_a_hop() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_action(1, Some(action_slot("Interface\\Icons\\Spell_A", 0x00, 111)));
         s.set_action(2, Some(action_slot("Interface\\Icons\\Spell_B", 0x00, 222)));
         s.run(

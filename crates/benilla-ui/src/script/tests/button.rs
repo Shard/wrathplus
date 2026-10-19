@@ -1,6 +1,6 @@
 //! Button / CheckButton: method sets, state textures, click registration, additive highlight.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::*;
 
 #[test]
@@ -326,7 +326,7 @@ fn set_button_state_drives_the_pushed_visual() {
 
 #[test]
 fn disabled_button_swallows_clicks_checkbutton_toggles_before_onclick() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -391,7 +391,7 @@ fn default_registration_is_left_click_only_right_click_reaches_nothing() {
 
 #[test]
 fn register_for_clicks_grows_right_click_and_carries_the_button_name() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -423,7 +423,7 @@ fn register_for_clicks_grows_right_click_and_carries_the_button_name() {
 
 #[test]
 fn down_registration_fires_on_press_and_toggles_checked_once() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

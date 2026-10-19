@@ -82,6 +82,9 @@ pub struct PartyState {
     /// The master looter as a party index (`0` the player, `1..=4` a `members` slot),
     /// `GetLootMethod`'s second return.
     pub master_looter: Option<u32>,
+    /// The master looter's guid (`0xbd1970`), `0` for none: `GetLootMethod`'s third return finds
+    /// it in [`Self::raid`] and `GetRaidRosterInfo`'s eleventh compares it.
+    pub master_looter_guid: u64,
     /// `GetLootThreshold`'s item quality, `2..=4` once grouped.
     pub loot_threshold: u32,
 }
@@ -369,7 +372,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetLootMethod() → lootmethod, masterlooterPartyID: two returns in 1.12.
+    // GetLootMethod() (`0x52cd90`) → method, partyMaster, raidMaster: always three. partyMaster is
+    // 0 for the player or a party slot 1..4; raidMaster the raid roster index (`0xbeb568`); each
+    // nil when the master is not there.
     g.set(
         "GetLootMethod",
         lua.create_function(|lua, ()| {
@@ -385,7 +390,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Some(idx) => Value::Integer(i64::from(idx)),
                 None => Value::Nil,
             };
-            Ok((Value::String(lua.create_string(method)?), master))
+            let guid = model.party.master_looter_guid;
+            let raid = match model.party.raid.iter().position(|m| guid != 0 && m.guid == guid) {
+                Some(i) => Value::Integer(i as i64 + 1),
+                None => Value::Nil,
+            };
+            Ok((Value::String(lua.create_string(method)?), master, raid))
         })?,
     )?;
 
@@ -734,6 +744,7 @@ mod tests {
             raid: Vec::new(),
             loot_method: "group".into(),
             master_looter: None,
+            master_looter_guid: 0,
             loot_threshold: 2,
         }
     }
@@ -774,10 +785,26 @@ mod tests {
         let mut party = two_member_party();
         party.loot_method = "master".into();
         party.master_looter = Some(2); // Bob (party2)
-        s.set_party(party);
+        s.set_party(party.clone());
         let (method, master) = s.eval::<(String, i64)>("return GetLootMethod()").unwrap();
         assert_eq!(method, "master");
         assert_eq!(master, 2);
+        // Build 12340's third return: the master's raid roster index, nil outside the roster.
+        assert_eq!(s.arity("GetLootMethod()").unwrap(), 3);
+        assert_eq!(
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            None
+        );
+        party.master_looter_guid = 0xb0b;
+        party.raid = vec![
+            super::RaidMemberInfo { guid: 0xa, ..Default::default() },
+            super::RaidMemberInfo { guid: 0xb0b, ..Default::default() },
+        ];
+        s.set_party(party);
+        assert_eq!(
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            Some(2)
+        );
     }
 
     #[test]
@@ -827,7 +854,7 @@ mod tests {
     /// Every return site in `0x4bb560` is `mov eax,9`, the miss arm `0x4bb7b9` included.
     #[test]
     fn get_raid_roster_info_returns_nine_values_on_every_path() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_party(ten_player_raid());
 
         for index in ["1", "10", "0", "-1", "41", "9999"] {
@@ -837,7 +864,7 @@ mod tests {
                 "index {index} must still be a nine-value answer"
             );
         }
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 9);
     }
 
@@ -921,7 +948,7 @@ mod tests {
     /// The raise at `0x4bb591` goes through `0x6f4940`, which never returns.
     #[test]
     fn get_raid_roster_info_raises_only_on_a_non_number() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let err = s.arity("GetRaidRosterInfo({})").unwrap_err();
         assert!(
             format!("{err}").contains("Usage: GetRaidRosterInfo(index)"),
@@ -1353,13 +1380,14 @@ mod tests {
             ],
             loot_method: "group".into(),
             master_looter: None,
+            master_looter_guid: 0,
             loot_threshold: 2,
         }
     }
 
     #[test]
     fn the_leaders_check_times_out_into_the_afk_list_and_disarms() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);
@@ -1389,7 +1417,7 @@ mod tests {
     /// The answer that leaves nobody pending closes the check at once (`0x4ba4d9`).
     #[test]
     fn an_answer_clears_its_member_and_the_last_one_closes_the_check_at_once() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);
@@ -1413,7 +1441,7 @@ mod tests {
     /// The leader arm stores a constant 0 whatever the status byte (`0x4ba40e`).
     #[test]
     fn a_not_ready_answer_prints_its_line_and_still_clears_the_member() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.run(r#"RAID_MEMBER_NOT_READY = "%s is not ready""#)
             .unwrap();
@@ -1443,7 +1471,7 @@ mod tests {
     /// (`0x4bb3a8`).
     #[test]
     fn an_offline_member_never_blocks_the_close_but_is_still_listed() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut party = raid_we_lead(&s);
         party
             .raid
@@ -1477,7 +1505,7 @@ mod tests {
 
     #[test]
     fn a_roster_change_with_nobody_left_pending_closes_the_check() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party.clone());
         s.set_now(100.0);
@@ -1496,7 +1524,7 @@ mod tests {
     /// A party has no raid roster, so `DoReadyCheck` flags nobody.
     #[test]
     fn the_leaders_own_echo_closes_an_empty_check_at_once() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut party = raid_we_lead(&s);
         party.raid.clear();
         s.set_party(party);
@@ -1512,7 +1540,7 @@ mod tests {
     /// Both keys are read raw from `_G` with an empty default.
     #[test]
     fn a_missing_summary_string_prints_an_empty_line() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);

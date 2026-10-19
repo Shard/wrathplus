@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn keyring_button_ids_map_past_the_buyback_band() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID(1)")
                 .unwrap(),
@@ -197,7 +197,7 @@ mod tests {
     /// (`ContainerFrame.lua:617`) reads a key through `GetInventoryItem*` and the tooltip.
     #[test]
     fn a_key_reads_through_its_inventory_slot() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_container(-2, Some(keyring_with_key()));
         assert_eq!(
             s.eval::<Option<String>>(
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn inventory_sell_cursor_buys_over_a_worn_item_only() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut slots: crate::script::InventorySlots = Default::default();
         slots[16] = Some(InvSlotView {
             item_id: 2361,

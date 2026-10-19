@@ -765,22 +765,17 @@ mod tests {
     use benilla_protocol::messages::mail_message_type;
 
     #[test]
-    fn next_mail_query_uses_each_dialects_native_writer_and_updates_pending() {
-        use crossbeam_channel::TryRecvError;
-
-        for (dialect, expected) in [(SessionDialect::Wrath12340, true)] {
-            let (tx, rx) = crossbeam_channel::unbounded();
-            let mut pending = MailPending::default();
-            pending.apply_query_reply(0.0);
-            let _ = pending.take_notify();
-            let commands = NetCommands(tx);
-            query_next_mail_time(&commands, dialect, &mut pending);
-            assert_eq!(pending.has_new_mail(), !expected);
-            match (expected, rx.try_recv()) {
-                (true, Ok(ClientCommand::QueryNextMailTime)) => {}
-                (false, Err(TryRecvError::Empty)) => {}
-                (_, result) => panic!("unexpected {dialect:?} producer result: {result:?}"),
-            }
+    fn next_mail_query_uses_the_native_writer_and_updates_pending() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut pending = MailPending::default();
+        pending.apply_query_reply(0.0);
+        let _ = pending.take_notify();
+        let commands = NetCommands(tx);
+        query_next_mail_time(&commands, SessionDialect::Wrath12340, &mut pending);
+        assert!(!pending.has_new_mail());
+        match rx.try_recv() {
+            Ok(ClientCommand::QueryNextMailTime) => {}
+            result => panic!("unexpected producer result: {result:?}"),
         }
     }
 

@@ -1034,7 +1034,7 @@ pub(crate) mod purse_fixture {
 
     /// A VM with the sword at live id 16, backpack slot 1 and bank slot 1, and a tooltip `TT`.
     pub(crate) fn sword_vm() -> UiScript {
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         let mut inv: benilla_ui::script::InventorySlots = Default::default();
         inv[16] = Some(benilla_ui::script::InvSlotView {
             item_id: SWORD_ENTRY,
@@ -1199,7 +1199,7 @@ mod tests {
                 (FIELD_UNIT_FLAGS, 0x1000),
             ])),
         ));
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_merchant(Some(MerchantState {
             can_repair: true,
             ..Default::default()
@@ -1247,7 +1247,7 @@ mod tests {
         }
         app.world_mut()
             .spawn((SelfPlayer, Guid(0x5e1f), player(slot_field, money)));
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         record_errors(&script);
         app.insert_non_send_resource(script);
         app.world_mut().run_system_once(feed_merchant).unwrap();

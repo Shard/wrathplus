@@ -1434,7 +1434,7 @@ mod tests {
     /// The count is the assertion: `(GetSpellTabInfo(0)) == nil` holds for a single nil too.
     #[test]
     fn out_of_range_answers_four_values() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         for idx in ["0", "1", "99", "-1", "0.5"] {
             assert_eq!(
                 s.arity(&format!("GetSpellTabInfo({idx})")).unwrap(),

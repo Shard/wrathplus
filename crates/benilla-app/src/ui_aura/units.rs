@@ -428,7 +428,7 @@ mod tests {
     fn native_feed_rechecks_catalog_and_context_without_packet_changes() {
         use crate::net::wrath_auras::{PacketAuras, StampedAura};
         let mut cache = super::UnitAuras::default();
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         let packets = PacketAuras {
             by_guid: std::collections::HashMap::from([(
                 MEMBER,
@@ -514,7 +514,7 @@ mod tests {
             .init_resource::<GroupState>()
             .insert_resource(NetCommands(tx))
             .add_plugins(super::super::UiAuraPlugin);
-        app.insert_non_send_resource(UiScript::new().unwrap());
+        app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
         app.world_mut()
             .non_send_resource::<UiScript>()
             .run(

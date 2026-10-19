@@ -6,6 +6,10 @@ fn script() -> UiScript {
     UiScript::new().expect("construct UiScript")
 }
 
+fn vanilla_script() -> UiScript {
+    UiScript::new_vanilla().expect("construct UiScript")
+}
+
 /// UP and DOWN, which recall history in a single-line box.
 const UP: EditAction = EditAction::Move {
     unit: EditUnit::Row,
@@ -663,7 +667,7 @@ fn typing_fires_the_generic_on_char_with_what_was_inserted() {
     // The box's input vtable does not chain to the base, but Insert fires the generic `OnChar`
     // (`+0x180`) at `0x77c13c`, through the varargs firer `0x7026f0` (not the fixed-arity
     // `0x702690`) with the inserted string.
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         got = {}
@@ -1561,7 +1565,7 @@ fn set_max_bytes_caps_the_buffer_in_bytes_with_minus_one_unlimited() {
 /// distance down.
 #[test]
 fn the_caret_flush_fires_on_cursor_changed_with_the_references_four_args() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

@@ -1012,7 +1012,7 @@ mod tests {
     /// The values are exact in `f32`, so the assertions compare equal.
     #[test]
     fn the_avoidance_verbs_are_player_implicit_and_answer_one_number() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         // Before anything streams: 0, not nil.
         assert_eq!(s.eval::<f64>("return GetDodgeChance()").unwrap(), 0.0);
         s.set_player_combat_stats(Some(UnitCombatStats {
@@ -1501,7 +1501,7 @@ mod tests {
     /// container in a bank bag slot 0 before the DBC is read.
     #[test]
     fn get_inventory_item_count_forks_on_the_container_bit_and_the_slot() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let bag = |contents: Option<u32>| {
             Some(InvSlotView {
                 item_id: 4496,
@@ -1664,7 +1664,7 @@ mod tests {
 
     #[test]
     fn get_inventory_slot_info_serves_the_dbc_rows() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<(i64, String)>(r#"return GetInventorySlotInfo("HeadSlot")"#)
                 .unwrap(),

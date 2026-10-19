@@ -1,7 +1,7 @@
 //! The `toplevel` flag and the raise: `SetToplevel`/`IsToplevel`, `Raise`/`Lower`, and the raise
 //! on show, press and drag, gated on occlusion. Tests assert `GetFrameLevel()` and the paint order.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::{QuadContent, UiScript};
 
 /// Texture paths in paint order: the list `extract` returns is the draw order.
@@ -623,7 +623,7 @@ fn a_chorded_press_raises_the_held_frame_not_the_one_under_the_cursor() {
 /// hit sweep gives the tie to the earlier-linked `Close`.
 #[test]
 fn a_raise_with_a_hidden_child_keeps_the_windows_own_siblings_level() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

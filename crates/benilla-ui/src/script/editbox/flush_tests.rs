@@ -37,6 +37,13 @@ fn script() -> UiScript {
     s
 }
 
+fn vanilla_script() -> UiScript {
+    let mut s = UiScript::new_vanilla().expect("construct UiScript");
+    s.set_screen_size(800.0, 600.0);
+    s.set_text_measurer(Box::new(Mono));
+    s
+}
+
 /// The `LOG` entries since the last call, joined by spaces.
 fn take_log(s: &UiScript) -> String {
     s.eval::<String>("local l = table.concat(LOG, ' ') LOG = {} return l")
@@ -75,7 +82,7 @@ fn logged_box(s: &mut UiScript) {
 /// (`0x77d498`); a frame walked after the box updates after all three.
 #[test]
 fn the_flush_follows_the_boxs_own_on_update_cursor_then_text() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(r#"E:SetText("abc")"#).unwrap();
     s.tick(0.016);
@@ -97,7 +104,7 @@ fn the_flush_follows_the_boxs_own_on_update_cursor_then_text() {
 /// the same tick.
 #[test]
 fn an_edit_in_the_boxs_own_on_update_fires_its_events_the_same_tick() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"
@@ -227,7 +234,7 @@ fn each_re_seat_of_the_text_fires_one_on_text_changed_at_the_next_flush() {
 /// loops inside one; `SetText` of an equal text raises nothing (`0x77be4b`), which ends it.
 #[test]
 fn an_on_text_changed_that_sets_its_own_text_fires_once_more_next_frame() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"
@@ -252,7 +259,7 @@ fn an_on_text_changed_that_sets_its_own_text_fires_once_more_next_frame() {
 /// not reported again; the text it inserts keeps bit 0 for the next frame.
 #[test]
 fn a_caret_moved_by_on_cursor_changed_is_cleared_with_the_bit() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"
@@ -279,7 +286,7 @@ fn a_caret_moved_by_on_cursor_changed_is_cleared_with_the_bit() {
 /// `OnCursorChanged` at its next flush, the one that lost the keyboard included.
 #[test]
 fn a_focus_change_runs_the_caret_leg_of_both_boxes() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         LOG = {}
@@ -310,7 +317,7 @@ fn a_focus_change_runs_the_caret_leg_of_both_boxes() {
 /// nothing.
 #[test]
 fn a_caret_move_that_goes_nowhere_raises_nothing() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(r#"E:SetText("ab") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -348,7 +355,7 @@ fn a_caret_move_that_goes_nowhere_raises_nothing() {
 /// script, so `OnEnterPressed` sees the `OnTextChanged` of the text it ends.
 #[test]
 fn a_key_flushes_the_box_before_it_acts() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"
@@ -380,7 +387,7 @@ fn a_key_flushes_the_box_before_it_acts() {
 /// the caret bit stays down, so no `OnCursorChanged` fires at the flush.
 #[test]
 fn highlight_text_and_ctrl_a_fire_no_on_cursor_changed() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(r#"E:SetText("hello") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -415,7 +422,7 @@ fn highlight_text_and_ctrl_a_fire_no_on_cursor_changed() {
 /// solid, whatever phase it lost it in.
 #[test]
 fn taking_the_keyboard_restarts_the_caret_blink() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(r#"E:SetText("ab") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -445,7 +452,7 @@ fn taking_the_keyboard_restarts_the_caret_blink() {
 /// row pitch down (`0x77db31`); a single-line box would recall history instead.
 #[test]
 fn up_and_down_move_a_multi_line_boxs_caret_by_rows() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"
@@ -487,7 +494,7 @@ fn up_and_down_move_a_multi_line_boxs_caret_by_rows() {
 /// Lua prints as "0", never "-0".
 #[test]
 fn on_cursor_changed_reports_the_first_row_at_plus_zero() {
-    let mut s = script();
+    let mut s = vanilla_script();
     logged_box(&mut s);
     s.run(
         r#"

@@ -456,11 +456,23 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     lua.globals().set(
         "GetBinding",
-        lua.create_function(|lua, i: usize| {
+        // GetBinding(index[, mode]) (`0x55e8d0`) → the command, then each key bound to it. An
+        // index past the list answers the empty command alone. Labelled: `mode` picks one of four
+        // binding sets; this VM keeps one.
+        lua.create_function(|lua, args: MultiValue| {
+            let i = super::binding_abi::number_arg(
+                lua,
+                args.front().cloned().unwrap_or(Value::Nil),
+                "Usage: GetBinding(index[, mode])",
+            )?;
             let model = lua.app_data_mut::<Model>().expect("model app_data");
             let kb = &model.keybinds;
-            let Some(row) = i.checked_sub(1).and_then(|i| kb.visible().nth(i)) else {
-                return Ok(MultiValue::new());
+            let row = usize::try_from(i)
+                .ok()
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| kb.visible().nth(i));
+            let Some(row) = row else {
+                return Ok(MultiValue::from_vec(vec![Value::String(lua.create_string("")?)]));
             };
             let mut out = Vec::new();
             match row {
@@ -611,9 +623,12 @@ mod tests {
         // Every key, not two.
         s.run(r#"SetBinding("F", "JUMP")"#).unwrap();
         assert_eq!(rows(&s)[2], row(&["JUMP", "SPACE", "NUMPAD0", "F"]));
+        // Past the list: the empty command alone (`0x55e8d0`).
         assert!(s
-            .eval::<bool>("return GetBinding(0) == nil and GetBinding(6) == nil")
+            .eval::<bool>("return GetBinding(0) == '' and GetBinding(6) == ''")
             .unwrap());
+        assert_eq!(s.arity("GetBinding(6)").unwrap(), 1);
+        assert!(s.run("GetBinding()").is_err());
         assert_eq!(
             s.eval::<String>(r#"return GetBindingAction("NUMPAD0")"#)
                 .unwrap(),

@@ -6,7 +6,7 @@ use crate::script::{PlateGeometry, PlateState, UiScript};
 
 /// A VM with a `WorldFrame` to hang plates off, all [`UiScript::sync_nameplates`] requires.
 fn vm() -> UiScript {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.run(r#"WorldFrame = CreateFrame("WorldFrame", "WorldFrame") WorldFrame:SetAllPoints()"#)
         .unwrap();

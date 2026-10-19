@@ -606,7 +606,7 @@ mod tests {
     /// In the pick queue `LootSlot` would loot any row an addon named, which the reference refuses.
     #[test]
     fn loot_slot_queues_confirms_not_picks() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_loot(Some(loot()));
         s.run("LootSlot(2)").unwrap();
         assert!(

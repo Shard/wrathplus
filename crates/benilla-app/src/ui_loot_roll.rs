@@ -983,7 +983,7 @@ mod tests {
             .insert_resource(NetCommands(tx))
             .add_systems(Update, feed_loot_rolls);
 
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 "STARTS = {}\n\

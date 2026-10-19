@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn flag_tutorial_takes_a_one_based_number_and_bails_silently_off_the_fifty() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run("FlagTutorial(1) FlagTutorial(50) FlagTutorial('42') FlagTutorial(7.9) FlagTutorial(0) FlagTutorial(51) FlagTutorial(-3)")
             .unwrap();
         assert_eq!(

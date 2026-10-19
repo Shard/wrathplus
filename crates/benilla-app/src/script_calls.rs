@@ -291,7 +291,7 @@ mod tests {
                 ..Default::default()
             };
         }
-        let mut script = UiScript::new().expect("a VM");
+        let mut script = UiScript::new_vanilla().expect("a VM");
         script.set_spellbook(SpellBookState {
             tabs: vec![SpellTabView {
                 name: "Holy".into(),

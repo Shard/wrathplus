@@ -62,7 +62,7 @@ fn app_with_food_on_the_bar() -> (App, crossbeam_channel::Receiver<ClientCommand
             ItemDisplayCatalog::from_displays(displays),
         ))
         .insert_resource(NetCommands(tx));
-    app.insert_non_send_resource(UiScript::new().unwrap());
+    app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
     app.add_systems(Update, feed_actions);
     (app, rx)
 }
@@ -284,7 +284,7 @@ fn a_macro_slot_shows_the_macros_own_icon_and_follows_an_edit() {
         .init_resource::<crate::ui_chat::ChatLog>()
         .init_resource::<crate::sound::MessageSounds>()
         .insert_resource(NetCommands(tx));
-    let mut script = UiScript::new().unwrap();
+    let mut script = UiScript::new_vanilla().unwrap();
     script.set_macros(MacroState {
         account: vec![MacroView {
             name: "Ambush".into(),
@@ -478,7 +478,7 @@ fn a_pets_refused_cast_writes_no_combat_log_line() {
         .init_resource::<crate::ui_chat::ChatLog>()
         .init_resource::<crate::sound::MessageSounds>()
         .insert_resource(NetCommands(tx));
-    let script = UiScript::new().unwrap();
+    let script = UiScript::new_vanilla().unwrap();
     // Only what the log line needs; the red line's text has its own tests.
     script
         .run(r#"SPELL_FAILED_ROOTED = "You are unable to move";"#)

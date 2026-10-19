@@ -142,7 +142,7 @@ fn wrath_power_reads_zero_before_the_snapshot_and_keeps_vanilla_surface() {
         }),
     );
     assert_eq!(wrath.eval::<u32>("return UnitPower('player')").unwrap(), 0);
-    let vanilla = UiScript::new().unwrap();
+    let vanilla = UiScript::new_vanilla().unwrap();
     assert!(vanilla
         .eval::<bool>("return UnitPower==nil and UnitPowerMax==nil")
         .unwrap());

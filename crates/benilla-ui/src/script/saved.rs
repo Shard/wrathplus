@@ -205,7 +205,7 @@ mod tests {
     /// Bagnon's shape: a saved bag list sorted with the keyring (-2) last, laid out by `pairs`.
     #[test]
     fn a_saved_list_still_walks_in_index_order_after_a_restart() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             r#"
             BAGS = { -2, 0, 1, 2, 3, 4 }
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(walk(&s), "0,1,2,3,4,-2,", "the live table, before any save");
 
         let text = s.saved_variables_bytes();
-        let fresh = UiScript::new().unwrap();
+        let fresh = UiScript::new_vanilla().unwrap();
         fresh.run_chunk(&text).unwrap();
         assert_eq!(
             walk(&fresh),

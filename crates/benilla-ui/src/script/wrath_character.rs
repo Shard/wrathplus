@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn the_new_globals_are_wrath_only() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             "assert(GetInventoryItemsForSlot == nil and GetPetSpellBonusDamage == nil) \
              assert(GetUnitHealthModifier == nil and CreateFrame('GameTooltip').AddTexture == nil)",

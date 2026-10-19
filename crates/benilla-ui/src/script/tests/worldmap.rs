@@ -1,7 +1,7 @@
 //! The world-map bindings: catalog and feed pushes, the engine-owned selection, and the deferred
 //! `WORLD_MAP_UPDATE` queue.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::*;
 
 /// A two-continent catalog shaped like the real one: Kalimdor first, since the push order defines
@@ -159,7 +159,7 @@ fn push_direct_areas(s: &mut UiScript) {
 /// folder `Blizzard_BattlefieldMinimap.lua:83` needs before it draws.
 #[test]
 fn a_direct_area_is_the_third_selection_state() {
-    let mut s = script();
+    let mut s = vanilla_script();
     push_catalog(&mut s);
     push_direct_areas(&mut s);
 
@@ -261,7 +261,7 @@ fn an_instance_map_shows_no_overlays() {
 /// dropdown expects, arguments clamp, and `GetMapInfo` names the art folder (nil at world level).
 #[test]
 fn worldmap_navigation_and_map_info() {
-    let mut s = script();
+    let mut s = vanilla_script();
     push_catalog(&mut s);
 
     s.run(
@@ -367,7 +367,7 @@ fn worldmap_current_zone_and_player_feed() {
 /// every exit ends in the `SetMap` setter `0x4a67a0`.
 #[test]
 fn the_engine_can_select_a_zone_with_no_lua_call() {
-    let mut s = script();
+    let mut s = vanilla_script();
     push_catalog(&mut s);
 
     assert_eq!(

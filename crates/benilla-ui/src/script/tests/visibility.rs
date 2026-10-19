@@ -1,6 +1,6 @@
 //! Show and Hide fire OnShow/OnHide only on effective transitions; OnUpdate runs only when visible.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 #[test]
 fn show_hide_fires_only_on_effective_transitions() {
@@ -42,7 +42,7 @@ fn mid_tree_hide_fires_onhide_for_the_subtree() {
 
 #[test]
 fn tick_runs_onupdate_only_when_effectively_visible() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         ticks, last = 0, 0

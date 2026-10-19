@@ -157,7 +157,7 @@ mod tests {
             seed(&world, &mut script);
             script.run("assert(GetAchievementCategory(1)==42); assert(GetAchievementNumCriteria(1)==2); local d,t,c,q,r,n,f,a,s,id=GetAchievementCriteriaInfo(1,1); assert(id==12 and c==false and q==0 and r==8 and n==nil)").unwrap();
         }
-        let mut vanilla = UiScript::new().unwrap();
+        let mut vanilla = UiScript::new_vanilla().unwrap();
         seed(&world, &mut vanilla);
         vanilla.run("assert(GetAchievementCategory==nil)").unwrap();
     }

@@ -497,7 +497,7 @@ mod tests {
     /// The numeric test: `0` is not the modifier, though Lua would call it true.
     #[test]
     fn use_actions_third_argument_is_the_self_cast_modifier() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run("UseAction(1)").unwrap();
         s.run("UseAction(2, 0)").unwrap();
         s.run("UseAction(3, 0, 0)").unwrap();
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn change_action_bar_page_fires_the_event_and_nothing_else() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             "CURRENT_ACTIONBAR_PAGE = 3 \
              local f = CreateFrame('Frame') f:RegisterEvent('ACTIONBAR_PAGE_CHANGED') \
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn action_snapshot_reads_and_use_queues() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert!(!s.eval::<bool>("return HasAction(73)").unwrap());
         assert!(s
             .eval::<bool>("return GetActionTexture(73) == nil")
@@ -586,7 +586,7 @@ mod tests {
     fn use_action_check_cursor_routes_to_place_or_use() {
         use crate::script::cursor::{CursorAction, CursorPayload};
 
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_cursor_for_test(CursorPayload::Action(CursorAction {
             src_slot: 1,
             kind: 0x00,

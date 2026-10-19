@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn vanilla_has_none_of_these() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         for name in [
             "SetChatWindowUninteractable",
             "ResetChatWindows",

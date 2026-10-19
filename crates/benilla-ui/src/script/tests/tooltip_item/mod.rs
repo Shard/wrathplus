@@ -2,7 +2,7 @@
 //! sell price (`OnTooltipAddMoney` at an open merchant, for a real instance, out of repair mode)
 //! and the fallback for a template still in flight.
 
-use super::common::script as bare_script;
+use super::common::{script as bare_script, vanilla_script as bare_vanilla_script};
 use crate::script::*;
 
 /// Stand-in `GlobalStrings.lua` values, each named after its key with the shipped hole shape:
@@ -116,6 +116,19 @@ fn seed_item_strings(s: &mut UiScript) {
 /// test VM's door onto the id-keyed render the engine's item hovers call from Rust.
 fn script() -> UiScript {
     let mut s = bare_script();
+    seed_item_strings(&mut s);
+    let f = s
+        .lua()
+        .create_function(|lua, (tt, id): (mlua::Table, u32)| {
+            crate::script::tooltip_item::render_by_id(lua, &tt, id, None, None)
+        })
+        .unwrap();
+    s.lua().globals().set("SetItemByIdForTest", f).unwrap();
+    s
+}
+
+fn vanilla_script() -> UiScript {
+    let mut s = bare_vanilla_script();
     seed_item_strings(&mut s);
     let f = s
         .lua()

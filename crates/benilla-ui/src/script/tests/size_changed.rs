@@ -3,12 +3,12 @@
 //! Deviation: the client fires per rect application; we fire once per resolve on the size before
 //! and after, because our solver settles the whole graph to a fixpoint.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 /// `OnSizeChanged(self, width, height)` carries the new size.
 #[test]
 fn a_resize_fires_on_size_changed_and_a_move_does_not() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -51,7 +51,7 @@ fn a_resize_fires_on_size_changed_and_a_move_does_not() {
 /// Addons watch frames sized by their anchors; only the solve knows this child moved.
 #[test]
 fn an_anchor_driven_resize_fires_it_too() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -85,7 +85,7 @@ fn an_anchor_driven_resize_fires_it_too() {
 /// handler that resizes its own frame costs one fire per resolve instead of hanging.
 #[test]
 fn a_handler_that_resizes_its_own_frame_settles_instead_of_spinning() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

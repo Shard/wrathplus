@@ -1391,7 +1391,7 @@ mod tests {
 
     #[test]
     fn container_id_to_inventory_id_is_two_lines_with_no_clamp() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let slot = |id: &str| {
             s.eval::<i64>(&format!("return ContainerIDToInventoryID({id})"))
                 .unwrap()

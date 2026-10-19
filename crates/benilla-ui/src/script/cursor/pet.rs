@@ -353,7 +353,7 @@ mod tests {
     }
 
     fn bar_script() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_pet_actions(true, true, true, hunter_bar());
         s
     }

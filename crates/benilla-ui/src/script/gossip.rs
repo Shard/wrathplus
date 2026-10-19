@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn the_two_gossip_quest_lists_split_by_active_and_select_within_themselves() {
         use super::GossipQuestRow;
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         // No menu: `arg.n == 0`, not a nil.
         assert_eq!(s.arity("GetGossipAvailableQuests()").unwrap(), 0);
         assert_eq!(s.arity("GetGossipActiveQuests()").unwrap(), 0);

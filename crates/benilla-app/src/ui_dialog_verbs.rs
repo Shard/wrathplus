@@ -1570,7 +1570,7 @@ mod tests {
         app.update();
         assert_eq!(queries(&rx), 0, "no VM, no bring-up");
 
-        app.insert_non_send_resource(UiScript::new().expect("VM"));
+        app.insert_non_send_resource(UiScript::new_vanilla().expect("VM"));
         app.update();
         assert_eq!(queries(&rx), 1, "the first VM asks the server");
         app.update();
@@ -1582,7 +1582,7 @@ mod tests {
         app.world_mut().resource_mut::<MeetingStone>().dirty = false;
 
         // `ReloadUI()`: a fresh VM, with no world leave.
-        app.insert_non_send_resource(UiScript::new().expect("VM"));
+        app.insert_non_send_resource(UiScript::new_vanilla().expect("VM"));
         app.update();
         assert_eq!(
             queries(&rx),
