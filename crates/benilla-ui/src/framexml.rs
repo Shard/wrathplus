@@ -18,9 +18,33 @@ pub struct Element {
     pub body: String,
 }
 
+thread_local! {
+    /// The attribute names the loader has asked for while recording, case-folded.
+    static QUERIED_ATTRIBUTES: std::cell::RefCell<Option<HashSet<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Start (or stop) recording every attribute name [`Element::attr`] is asked for on this thread,
+/// for the census's unhandled-attribute audit.
+pub fn record_queried_attributes(on: bool) {
+    QUERIED_ATTRIBUTES.with(|q| *q.borrow_mut() = on.then(HashSet::new));
+}
+
+/// The case-folded attribute names asked for since recording started.
+pub fn queried_attributes() -> HashSet<String> {
+    QUERIED_ATTRIBUTES.with(|q| q.borrow().clone().unwrap_or_default())
+}
+
 impl Element {
     /// Case-insensitive attribute lookup.
     pub fn attr(&self, name: &str) -> Option<&str> {
+        QUERIED_ATTRIBUTES.with(|q| {
+            if let Some(set) = q.borrow_mut().as_mut() {
+                if !set.contains(name) {
+                    set.insert(name.to_ascii_lowercase());
+                }
+            }
+        });
         self.attrs
             .iter()
             .find(|(k, _)| k.eq_ignore_ascii_case(name))

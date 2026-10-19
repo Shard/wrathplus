@@ -36,3 +36,16 @@ bank-to-inventory into the named bag slot, `DropOnEquip` → the same into the w
 
 Labelled: picking up money is not wired; slots are never shown locked; the frame does not close
 by distance.
+
+## Tooltips, tab icons and the log scroll
+
+- `GameTooltip:SetGuildBankItem(tab, slot)` (`0x6304a0`) shows the slot's item through its link.
+  The link carries the suffix, enchant and gems that the reference reads from the slot. It errors
+  "Invalid tab or slot in SetGuildBankItem" without two numbers.
+- `GetNumMacroItemIcons`/`GetMacroItemIconInfo` (`0x5664e0`/`0x564f60`) list the tab-icon
+  chooser's item icons. `GetMacroItemIconInfo` answers `Interface\Icons\<name>`, or "" out of
+  range. App builds the list once per VM: every `ItemDisplayInfo.dbc` inventory icon, each name
+  once, by display id. Labelled: the reference's builder `0x565840` is untraced.
+- `ScrollingMessageFrame:SetScrollOffset(offset)` (`0x973470`) sets the log's scroll, counted in
+  lines up from the newest. Labelled: its clamp is untraced, so it keeps the other scroll entries'
+  range.

@@ -259,6 +259,7 @@ impl PluginGroup for GamePlugins {
             .add(UiTrainerPlugin)
             .add(UiTaxiPlugin)
             .add(UiTradeSkillPlugin)
+            .add(crate::ui_native::wrath_state_feed::WrathStateFeedPlugin)
             .add(UiCraftPlugin)
             .add(UiLootPlugin)
             .add(UiLootRollPlugin)
@@ -728,13 +729,20 @@ pub(crate) mod schedule_tests {
     /// - the arena lines' drain (`net::wrath_arena_lines::drain_arena_lines`) against the arena
     ///   reducer (`ui_arena_team::feed_arena`) over `ArenaRosterRefresh`: a queue of team names the
     ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
+    /// - the arena petition vendor (`ui_petition::vendor`): its walk-away guard against the
+    ///   motion, transport and net systems the guild registrar's guard already pairs with (the
+    ///   guard reads the NPC's `Transform` through `GuidIndex`, as that one does); and its feed and
+    ///   `ui_guild_bank::feed_item_icons` against the template-cache readers and the display-cache
+    ///   eviction, the classes `feed_guild_bank` is argued for above (the item and display caches
+    ///   only fill or evict between their reads), and the drain against the collider finish over
+    ///   the object stores it reads only.
     /// - the vehicle UI feed (`ui_vehicle::feed_vehicles`) against the camera-pose load: the feed
     ///   reads only `Player::mover_pitch`, which the load never writes.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_655;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_671;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

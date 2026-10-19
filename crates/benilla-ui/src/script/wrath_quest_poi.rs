@@ -76,8 +76,7 @@ fn icon(m: &Model, quest_id: u32) -> Option<(bool, f32, f32, i32)> {
     let complete = mask == u32::MAX;
     let poi = m.wrath_quest_poi.pois.iter().find(|p| p.quest_id == quest_id)?;
     let project = m.world_loc_projector.as_ref()?;
-    let wm = &m.worldmap;
-    let selection = (wm.selection.0, wm.selection.1, wm.direct_area);
+    let selection = m.map_selection();
     poi.blobs
         .iter()
         .filter(|b| {

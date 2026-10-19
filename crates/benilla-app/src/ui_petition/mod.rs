@@ -26,6 +26,9 @@ use crate::ui_session::NpcSession;
 
 mod feed;
 mod lines;
+mod vendor;
+
+pub(crate) use vendor::ArenaPetitionVendor;
 
 /// The open registrar, apart from [`PetitionState`] so the walk-away guard closes only it.
 #[derive(Resource, Default)]
@@ -47,9 +50,12 @@ const REGISTRAR_NPC_FLAGS: u32 = crate::target::cursor_mode::npc_flags::PETITION
     | crate::target::cursor_mode::npc_flags::TABARDDESIGNER;
 
 impl GuildRegistrarState {
-    /// `SMSG_PETITION_SHOWLIST` (`0x5eeb80`) opens the registrar only if the NPC resolves as a
-    /// unit (`0x5eec1a`) with both [`REGISTRAR_NPC_FLAGS`] and entry\[0\], never the first visible
-    /// row, has `entryFlags & 1` (`0x5eec42`); anything else is dropped silently.
+    /// `SMSG_PETITION_SHOWLIST` opens the registrar only if the NPC resolves as a unit with both
+    /// [`REGISTRAR_NPC_FLAGS`], priced by its one row; anything else is dropped silently. 3.3.5's
+    /// row word that 1.12 read as `entryFlags & 1` is the charter type, 0 for a guild charter
+    /// (AC `SendPetitionShowList`), so it is not read. Labelled: the build-12340 dispatch between
+    /// this and the petition vendor ([`vendor`]) is untraced; this follows AC's tabard-designer
+    /// test.
     fn open(&mut self, list: &PetitionShowList, npc_flags: Option<u32>) -> bool {
         if npc_flags.is_none_or(|f| f & REGISTRAR_NPC_FLAGS != REGISTRAR_NPC_FLAGS) {
             debug!(
@@ -58,8 +64,8 @@ impl GuildRegistrarState {
             );
             return false;
         }
-        let Some(first) = list.entries.first().filter(|e| e.entry_flags & 1 != 0) else {
-            debug!("ui_petition: showlist entry[0] not flagged visible — dropped");
+        let Some(first) = list.entries.first() else {
+            debug!("ui_petition: showlist without rows — dropped");
             return false;
         };
         self.open = Some(Registrar {
@@ -259,6 +265,7 @@ impl Plugin for UiPetitionPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
         crate::query_cache::register::<PetitionState>(app);
+        vendor::register(app);
         app.init_resource::<GuildRegistrarState>()
             .init_resource::<PetitionState>()
             .add_systems(
@@ -303,15 +310,18 @@ pub(crate) mod net {
         In(_): In<SessionEvent>,
         mut petition: ResMut<PetitionState>,
         mut registrar: ResMut<GuildRegistrarState>,
+        mut vendor: ResMut<super::vendor::ArenaPetitionVendor>,
     ) {
         petition.clear_session();
         registrar.close();
+        vendor.close();
     }
 
     /// The flags gate reads the live NPC; an unstreamed guid fails, as the client's resolve does.
     fn on_show_list(
         In(ev): In<SessionEvent>,
         mut registrar: ResMut<GuildRegistrarState>,
+        mut vendor: ResMut<super::vendor::ArenaPetitionVendor>,
         index: Res<GuidIndex>,
         stores: Query<&ObjectStore>,
     ) {
@@ -333,7 +343,7 @@ pub(crate) mod net {
                         0
                     })
                 });
-            show_list(&mut registrar, list, flags);
+            show_list(&mut registrar, &mut vendor, list, flags);
         }
     }
 
@@ -400,13 +410,21 @@ pub(crate) mod net {
         }
     }
 
-    /// `SMSG_PETITION_SHOWLIST`; `npc_flags` is the NPC's live `UNIT_NPC_FLAGS`.
+    /// `SMSG_PETITION_SHOWLIST`; `npc_flags` is the NPC's live `UNIT_NPC_FLAGS`: a tabard designer
+    /// is the guild registrar, a petitioner without it the arena registrar's petition vendor.
     pub(crate) fn show_list(
         registrar: &mut GuildRegistrarState,
+        vendor: &mut super::vendor::ArenaPetitionVendor,
         list: PetitionShowList,
         npc_flags: Option<u32>,
     ) {
-        registrar.open(&list, npc_flags);
+        use crate::target::cursor_mode::npc_flags::{PETITIONER, TABARDDESIGNER};
+        match npc_flags {
+            Some(f) if f & PETITIONER != 0 && f & TABARDDESIGNER == 0 => vendor.open(list),
+            _ => {
+                registrar.open(&list, npc_flags);
+            }
+        }
     }
 
     /// `SMSG_PETITION_SHOW_SIGNATURES`: our charter or one offered to us. An ignored owner
@@ -556,21 +574,18 @@ mod tests {
         }
     }
 
-    /// vmangos always sends one flagged row, so only a hidden first row tells entry\[0\] apart
-    /// from the first visible row.
+    /// AC's guild row carries charter type 0 where 1.12 read a visibility flag.
     #[test]
-    fn the_registrar_gates_on_entry_zero_and_on_both_npc_flags() {
+    fn the_registrar_gates_on_both_npc_flags_and_prices_by_its_row() {
         let both = Some(REGISTRAR_NPC_FLAGS);
 
         let mut r = GuildRegistrarState::default();
-        assert!(r.open(&show_list(0x2a1f, &[(1000, 1)]), both));
-        assert_eq!(r.cost(), 1000, "entry[0]'s price, in copper");
+        assert!(r.open(&show_list(0x2a1f, &[(1000, 0)]), both));
+        assert_eq!(r.cost(), 1000, "the row's price, in copper");
         assert_eq!(r.npc(), Some(0x2a1f));
 
-        // Entry[0] hidden: the whole packet is dropped, though row 1 is visible.
         let mut r = GuildRegistrarState::default();
-        assert!(!r.open(&show_list(0x2a1f, &[(9999, 0), (1000, 1)]), both));
-        assert_eq!(r.npc(), None, "no window at all — entry[0] is not visible");
+        assert!(!r.open(&show_list(0x2a1f, &[]), both), "no row, no window");
 
         // Either flag alone fails; the client tests both.
         for flags in [

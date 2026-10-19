@@ -1538,13 +1538,13 @@ fn writer_loop(
                     ClientCommand::GuildInfoText { text } => w.guild_info_text(&text),
                     // Petitions: founding a guild.
                     ClientCommand::PetitionShowList { npc } => w.petition_show_list(npc),
-                    ClientCommand::PetitionBuy { npc, name } => w.petition_buy(npc, &name),
+                    ClientCommand::PetitionBuy { npc, name, .. } => w.petition_buy(npc, &name),
                     ClientCommand::PetitionShowSignatures { item } => {
                         w.petition_show_signatures(item)
                     }
                     ClientCommand::PetitionSign { item, byte } => w.petition_sign(item, byte),
                     ClientCommand::OfferPetition { item, player } => w.offer_petition(item, player),
-                    ClientCommand::TurnInPetition { item } => w.turn_in_petition(item),
+                    ClientCommand::TurnInPetition { item, .. } => w.turn_in_petition(item),
                     ClientCommand::PetitionQuery { petition_id, item } => {
                         w.petition_query(petition_id, item)
                     }

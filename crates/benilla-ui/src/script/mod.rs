@@ -53,13 +53,16 @@ pub use wrath_calendar::{
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
 pub use wrath_gm_survey::{WrathGmSurvey, WrathGmSurveyQuestion, WrathGmSurveySubmit};
+pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
+mod wrath_petition_vendor;
 mod wrath_quest_poi;
 mod wrath_barber;
 mod wrath_region_attrs;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
+pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
 pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
@@ -184,6 +187,7 @@ mod video_pairs;
 mod weapon_enchant;
 mod who_sort;
 mod worldmap;
+mod wrath_worldmap;
 mod worldstate;
 mod worn_display;
 mod wrath_currency;
@@ -197,6 +201,10 @@ mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;
 mod wrath_gm_survey;
+mod wrath_state_queries;
+mod wrath_modified_click;
+mod wrath_macro_options;
+mod wrath_engine_constants;
 mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
@@ -404,8 +412,8 @@ pub use unit::{
 pub use weapon_enchant::WeaponEnchant;
 pub use who_sort::{WhoSortChain, WhoSortKey};
 pub use worldmap::{
-    WorldMapContinentView, WorldMapLandmarkView, WorldMapOverlayView, WorldMapState,
-    WorldMapZoneView,
+    DungeonFloorView, MapSelection, WorldMapAreaView, WorldMapContinentView, WorldMapLandmarkView,
+    WorldMapOverlayView, WorldMapState, WorldMapZoneView,
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;
@@ -907,6 +915,7 @@ impl UiScript {
             wrath_titles::install(&lua)?;
             wrath_tooltip::install(&lua)?;
             wrath_quest_poi::install(&lua)?;
+            wrath_petition_vendor::install(&lua)?;
             wrath_barber::install(&lua)?;
             wrath_region_attrs::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
@@ -916,6 +925,10 @@ impl UiScript {
             tradeskill::install_wrath(&lua)?;
             trainer::install_wrath(&lua)?;
             wrath_gm_survey::install(&lua)?;
+            wrath_state_queries::install(&lua)?;
+            wrath_modified_click::install(&lua)?;
+            wrath_macro_options::install(&lua)?;
+            wrath_engine_constants::install(&lua)?;
         }
 
         let s = UiScript {

@@ -229,3 +229,25 @@ fn balance_currents_are_independent_optional_unsigned_values_with_fixed_caps() {
     assert_eq!(s.model_ref().wrath_currency.arena_current, Some(0));
     s.run("local c,m=GetHonorCurrency(); assert(c==0 and m==75000) local a,b=GetArenaCurrency(); assert(a==0 and b==10000) assert(select('#',GetHonorCurrency())==2 and select('#',GetArenaCurrency())==2)").unwrap();
 }
+
+#[test]
+fn the_token_tooltips_show_the_rows_item() {
+    let mut s = script();
+    s.set_wrath_currency_snapshot(snapshot());
+    s.run(
+        r#"
+        local tip = CreateFrame("GameTooltip", "TokenTip", UIParent)
+        local shown = {}
+        tip.SetHyperlink = function(_, link) shown[#shown + 1] = link end
+        tip:SetCurrencyToken(1)   -- the header: nothing
+        tip:SetCurrencyToken(3)   -- token 2
+        tip:SetBackpackToken(1)   -- nothing watched yet
+        SetCurrencyBackpack(4, 1)
+        tip:SetBackpackToken(1)   -- token 3
+        tip:SetCurrencyToken(9)   -- out of range
+        assert(#shown == 2 and shown[1] == 'item:102' and shown[2] == 'item:103', table.concat(shown, ','))
+        assert(not pcall(tip.SetCurrencyToken, tip))
+    "#,
+    )
+    .unwrap();
+}

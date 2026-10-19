@@ -196,6 +196,29 @@ const DEBUG_LOCK_NOTICE_PREFIX: &str = "(Debug-Only Lock Notice) ";
 
 /// A template's `%s`: the `Map.dbc` name, or the id in decimal when there is no row, as the
 /// reference prints it (`0x49e228`, `"%d"` at `0x835154`, when `[0xc0daa8][id]` is null).
+/// `GetInstanceInfo`'s row for the current map (`0x51a8c0`): `Map.dbc`'s name, type and
+/// `Flags & 0x100`, the latest instance difficulty and its `MapDifficulty` row. `None` for a map
+/// with no `Map.dbc` row. Labelled: the difficulty is the latest `SMSG_INSTANCE_DIFFICULTY`'s, 0
+/// before one; its other writer (`0x52b550`) is not decompiled.
+fn instance_info(
+    map: u32,
+    maps: Option<&benilla_assets::MapCatalogRes>,
+    lock: Option<&crate::ui_static_popup::InstanceLock>,
+    difficulties: Option<&crate::ui_calendar::CalendarCatalog>,
+) -> Option<benilla_ui::script::WrathInstanceInfo> {
+    let maps = &maps?.0;
+    let instance_type = maps.instance_type(map)?;
+    let difficulty = lock.and_then(|l| l.difficulty).unwrap_or(0);
+    Some(benilla_ui::script::WrathInstanceInfo {
+        name: maps.name(map).unwrap_or_default().to_string(),
+        instance_type,
+        difficulty,
+        map_difficulty: difficulties.and_then(|d| d.difficulty(map, difficulty)),
+        dynamic_difficulty: lock.map_or(0, |l| l.dynamic_difficulty),
+        is_dynamic: maps.flags(map) & 0x100 != 0,
+    })
+}
+
 fn map_name(map: u32, catalog: Option<&benilla_assets::MapCatalogRes>) -> String {
     catalog
         .and_then(|c| c.0.name(map))
@@ -392,6 +415,8 @@ fn feed_instance(
     maps: Option<Res<benilla_assets::MapCatalogRes>>,
     current_map: Option<Res<benilla_world::world_map::CurrentMap>>,
     time: Res<Time<Real>>,
+    lock: Option<Res<crate::ui_static_popup::InstanceLock>>,
+    difficulties: Option<Res<crate::ui_calendar::CalendarCatalog>>,
 ) {
     let Some(mut script) = script else {
         // No VM (an engine-only run): drop the queue rather than let it grow; a real session seats
@@ -419,6 +444,11 @@ fn feed_instance(
     }
 
     script.set_instance_type(here.and_then(|m| maps.as_ref().and_then(|c| c.0.instance_type(m))));
+    script.set_wrath_instance_info(
+        here.and_then(|m| {
+            instance_info(m, maps.as_deref(), lock.as_deref(), difficulties.as_deref())
+        }),
+    );
     let party_dungeon = |m: u32| maps.as_ref().is_some_and(|c| c.0.is_party_dungeon(m));
     script.set_can_reset_instances(state.can_reset(here, &party_dungeon, now));
 }

@@ -62,6 +62,8 @@ fn update(s: &mut UiScript) {
 
 fn landmark(name: &str, icon: u32, uv: (f32, f32)) -> WorldMapLandmarkView {
     WorldMapLandmarkView {
+        map_link: 0,
+        battle_map: false,
         name: name.into(),
         description: String::new(),
         texture_index: icon,

@@ -5,8 +5,8 @@
 
 use std::io::{self, Cursor, Read};
 
-use crate::events::{decode as session_decode, SessionEvent};
-use crate::messages::{ActionButton, CreatureQueryInfo, ServerPacket, SpellCooldown};
+use crate::events::SessionEvent;
+use crate::messages::{ActionButton, SpellCooldown};
 use crate::wire::read_packed_guid;
 
 pub const SMSG_NAME_QUERY_RESPONSE: u16 = 0x0051;
@@ -91,8 +91,45 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
                 .collect::<io::Result<Vec<_>>>()?;
             vec![SessionEvent::ReputationDelta { standings }]
         }
-        SMSG_LOG_XPGAIN | SMSG_PARTYKILLLOG | SMSG_EXPLORATION_EXPERIENCE => {
-            session_decode(crate::messages::parse_server_with_tail(opcode, body)?.0)
+        // AC `Player::SendLogXPGain`: victim, total, type (0 kill), for a kill the award before
+        // the rested bonus and the group-bonus float, then the refer-a-friend byte 1.12 lacked.
+        SMSG_LOG_XPGAIN => {
+            let victim = u64_le(&mut r)?;
+            let total = u32_le(&mut r)?;
+            let kill = u8_le(&mut r)? == 0;
+            let base = if kill {
+                let base = u32_le(&mut r)?;
+                let _group_bonus = f32_le(&mut r)?;
+                base
+            } else {
+                total
+            };
+            let _recruit_a_friend = u8_le(&mut r)?;
+            strict(&r, body, "LOG_XPGAIN")?;
+            vec![SessionEvent::XpGain(crate::messages::XpGain {
+                victim,
+                total,
+                base,
+                kill,
+            })]
+        }
+        // AC `Unit::Kill`: the killing blow's player and the victim.
+        SMSG_PARTYKILLLOG => {
+            let log = crate::messages::PartyKillLog {
+                killer: u64_le(&mut r)?,
+                victim: u64_le(&mut r)?,
+            };
+            strict(&r, body, "PARTYKILLLOG")?;
+            vec![SessionEvent::PartyKillLog(log)]
+        }
+        // AC `Player::CheckAreaExploreAndOutdoor`: the area and the XP.
+        SMSG_EXPLORATION_EXPERIENCE => {
+            let xp = crate::messages::ExplorationXp {
+                area_id: u32_le(&mut r)?,
+                xp: u32_le(&mut r)?,
+            };
+            strict(&r, body, "EXPLORATION_EXPERIENCE")?;
+            vec![SessionEvent::ExplorationXp(xp)]
         }
         SMSG_CAST_FAILED => cast_failed(&mut r)?,
         SMSG_SPELL_START => spell_start(&mut r)?,
@@ -126,7 +163,7 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
             }
         }
         SMSG_NAME_QUERY_RESPONSE => name_query(&mut r)?,
-        SMSG_CREATURE_QUERY_RESPONSE => session_decode(creature_query(&mut r)?),
+        SMSG_CREATURE_QUERY_RESPONSE => creature_query(&mut r)?,
         SMSG_ACTION_BUTTONS => action_buttons(&mut r)?,
         SMSG_INITIAL_SPELLS => initial_spells(&mut r)?,
         SMSG_LEARNED_SPELL => vec![SessionEvent::SpellLearned { spell_id: u32_le(&mut r)? }],
@@ -158,11 +195,27 @@ fn name_query(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
 }
 
 /// Entry (high bit: no such template), four names, title, icon, then the template words.
-fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<ServerPacket> {
+fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<Vec<SessionEvent>> {
     let raw = u32_le(r)?;
     let entry = raw & 0x7fff_ffff;
+    let unknown = |r: &Cursor<&[u8]>| -> io::Result<Vec<SessionEvent>> {
+        strict(r, r.get_ref(), "CREATURE_QUERY_RESPONSE")?;
+        Ok(vec![SessionEvent::CreatureName {
+            entry,
+            name: None,
+            subname: None,
+            creature_type: None,
+            pet_family: 0,
+            rank: 0,
+            type_flags: 0,
+            display_id: 0,
+            civilian: false,
+            racial_leader: false,
+            modifiers: None,
+        }])
+    };
     if raw & 0x8000_0000 != 0 {
-        return Ok(ServerPacket::CreatureQueryResponse { entry, info: None });
+        return unknown(r);
     }
     let name = cstring(r)?;
     for _ in 0..3 {
@@ -181,22 +234,26 @@ fn creature_query(r: &mut Cursor<&[u8]>) -> io::Result<ServerPacket> {
     }
     let modifiers = [u32_le(r)?, u32_le(r)?];
     let racial_leader = u8_le(r)? != 0;
-    Ok(ServerPacket::CreatureQueryResponse {
+    // `MAX_CREATURE_QUEST_ITEMS` quest drops and the `CreatureMovementInfo` id, unread here.
+    for _ in 0..7 {
+        u32_le(r)?;
+    }
+    strict(r, r.get_ref(), "CREATURE_QUERY_RESPONSE")?;
+    Ok(vec![SessionEvent::CreatureName {
         entry,
-        info: Some(CreatureQueryInfo {
-            name,
-            subname,
-            creature_type,
-            pet_family,
-            rank,
-            type_flags,
-            // 3.3.5 carries no civilian word; the flag lives server-side.
-            civilian: false,
-            racial_leader,
-            display_id,
-            modifiers: Some(modifiers),
-        }),
-    })
+        name: Some(name),
+        // An empty subname is none: the reference draws no line for it (`0x608f50`).
+        subname: Some(subname).filter(|s| !s.is_empty()),
+        creature_type: Some(creature_type),
+        pet_family,
+        rank,
+        type_flags,
+        display_id,
+        // 3.3.5 carries no civilian word; the flag lives server-side.
+        civilian: false,
+        racial_leader,
+        modifiers: Some(modifiers),
+    }])
 }
 
 /// A state byte (2: clear the bars, nothing follows), then 144 packed `action | type << 24`.
@@ -539,6 +596,14 @@ pub(crate) fn u64_le(r: &mut impl Read) -> io::Result<u64> {
     Ok(u64::from_le_bytes(b))
 }
 
+/// A body read to its end: trailing bytes are a layout this decoder does not know.
+fn strict(r: &Cursor<&[u8]>, body: &[u8], what: &'static str) -> io::Result<()> {
+    if r.position() as usize != body.len() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, what));
+    }
+    Ok(())
+}
+
 pub(crate) fn f32_le(r: &mut impl Read) -> io::Result<f32> {
     Ok(f32::from_bits(u32_le(r)?))
 }
@@ -719,5 +784,85 @@ mod tests {
             assert!(decode(SMSG_SPELL_FAILED_OTHER, &body[..end], None).is_err(), "prefix {end}");
         }
         assert!(decode(SMSG_SPELL_FAILED_OTHER, &[body.as_slice(), &[0]].concat(), None).is_err());
+    }
+
+    #[test]
+    fn xp_gain_reads_the_recruit_a_friend_byte_and_party_kill_and_exploration_are_strict() {
+        let mut kill = 0x42u64.to_le_bytes().to_vec();
+        kill.extend(120u32.to_le_bytes());
+        kill.push(0);
+        kill.extend(100u32.to_le_bytes());
+        kill.extend(1.0f32.to_le_bytes());
+        kill.push(0); // refer-a-friend
+        let [SessionEvent::XpGain(x)] = &decode(SMSG_LOG_XPGAIN, &kill, None).unwrap()[..] else {
+            panic!("one gain")
+        };
+        assert_eq!((x.victim, x.total, x.base, x.kill), (0x42, 120, 100, true));
+        let mut other = 0u64.to_le_bytes().to_vec();
+        other.extend(50u32.to_le_bytes());
+        other.extend([1, 0]);
+        let [SessionEvent::XpGain(x)] = &decode(SMSG_LOG_XPGAIN, &other, None).unwrap()[..] else {
+            panic!("one gain")
+        };
+        assert_eq!((x.total, x.base, x.kill), (50, 50, false));
+        // The 1.12 shape (no refer-a-friend byte) and an extra byte are both refused.
+        assert!(decode(SMSG_LOG_XPGAIN, &other[..other.len() - 1], None).is_err());
+        assert!(decode(SMSG_LOG_XPGAIN, &[&other[..], &[0]].concat(), None).is_err());
+
+        let pk = [1u64.to_le_bytes(), 2u64.to_le_bytes()].concat();
+        assert!(matches!(
+            &decode(SMSG_PARTYKILLLOG, &pk, None).unwrap()[..],
+            [SessionEvent::PartyKillLog(l)] if (l.killer, l.victim) == (1, 2)
+        ));
+        let ex = [12u32.to_le_bytes(), 300u32.to_le_bytes()].concat();
+        assert!(matches!(
+            &decode(SMSG_EXPLORATION_EXPERIENCE, &ex, None).unwrap()[..],
+            [SessionEvent::ExplorationXp(e)] if (e.area_id, e.xp) == (12, 300)
+        ));
+        assert!(decode(SMSG_EXPLORATION_EXPERIENCE, &ex[..7], None).is_err());
+    }
+
+    #[test]
+    fn a_creature_query_reads_acs_whole_body_and_the_unknown_entry() {
+        let mut b = 3100u32.to_le_bytes().to_vec();
+        for text in ["Kobold Vermin", "", "", "", "", "Directions"] {
+            b.extend(text.as_bytes());
+            b.push(0);
+        }
+        for v in [0x10u32, 7, 0, 1, 0, 0, 3140, 0, 0, 0] {
+            b.extend(v.to_le_bytes());
+        }
+        b.extend(1.0f32.to_le_bytes());
+        b.extend(1.0f32.to_le_bytes());
+        b.push(0);
+        let short = b.clone();
+        for v in [0u32; 6].iter().chain(&[100]) {
+            b.extend(v.to_le_bytes());
+        }
+        let events = decode(SMSG_CREATURE_QUERY_RESPONSE, &b, None).unwrap();
+        let [SessionEvent::CreatureName {
+            entry: 3100,
+            name: Some(name),
+            subname: None,
+            creature_type: Some(7),
+            rank: 1,
+            display_id: 3140,
+            ..
+        }] = &events[..]
+        else {
+            panic!("one creature: {events:?}")
+        };
+        assert_eq!(name, "Kobold Vermin");
+        assert!(
+            decode(SMSG_CREATURE_QUERY_RESPONSE, &short, None).is_err(),
+            "the quest items and movement id are part of the body"
+        );
+        assert!(decode(SMSG_CREATURE_QUERY_RESPONSE, &[&b[..], &[0]].concat(), None).is_err());
+        let gone = decode(SMSG_CREATURE_QUERY_RESPONSE, &(3100u32 | 0x8000_0000).to_le_bytes(), None)
+            .unwrap();
+        assert!(matches!(
+            &gone[..],
+            [SessionEvent::CreatureName { entry: 3100, name: None, .. }]
+        ));
     }
 }

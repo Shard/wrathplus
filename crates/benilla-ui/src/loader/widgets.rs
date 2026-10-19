@@ -281,6 +281,21 @@ impl Loader<'_> {
                 }
             }
         }
+        // `registerForClicks="AnyUp, RightButtonDown"`: RegisterForClicks with each token.
+        if let Some(list) = el.attr("registerForClicks") {
+            if has("RegisterForClicks") {
+                let tokens: Vec<String> = list
+                    .split(|c: char| c == ',' || c.is_whitespace())
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_string)
+                    .collect();
+                if let Err(e) =
+                    wrapper.call_method::<()>("RegisterForClicks", mlua::Variadic::from_iter(tokens))
+                {
+                    self.report.errors.push(format!("{dbg}: RegisterForClicks: {e}"));
+                }
+            }
+        }
         if let Some(offset) = children_named(el, "PushedTextOffset").last() {
             let (x, y) = abs_dim(offset);
             if has("SetPushedTextOffset") {

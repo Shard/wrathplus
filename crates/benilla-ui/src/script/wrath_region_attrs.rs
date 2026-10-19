@@ -142,7 +142,7 @@ mod tests {
     fn button_offsets_motion_and_stored_widget_flags_from_xml() {
         let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         let doc = crate::framexml::parse(
-            r#"<Ui><Button name="FlagButton" motionScriptsWhileDisabled="true"><PushedTextOffset><AbsDimension x="2" y="-3"/></PushedTextOffset></Button>
+            r#"<Ui><Button name="FlagButton" motionScriptsWhileDisabled="true" registerForClicks="AnyUp"><PushedTextOffset><AbsDimension x="2" y="-3"/></PushedTextOffset></Button>
                <StatusBar name="FlagBar" rotatesTexture="true"/><EditBox name="FlagBox" countInvisibleLetters="true"/></Ui>"#,
         )
         .unwrap();

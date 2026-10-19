@@ -1,22 +1,44 @@
 //! The world-map data feed behind the stock `WorldMapFrame.xml` and benilla-ui's map verbs:
 //!
 //! - [`seed_world_map_catalog`], at world entry: the static catalog from `WorldMapArea`,
-//!   `AreaTable`, `WorldMapContinent`, `Map` and the `.zmp` bitmaps, built as the reference's
-//!   `0x4a5d00` builds it, with the instance maps no continent owns beside it.
-//! - [`feed_world_map`], every frame: the player's selection (`0x4a6650`), the blips projected
-//!   onto the displayed map, and the landmark list (`0x4a67a0`), rebuilt when its inputs change.
+//!   `AreaTable`, `WorldMapContinent`, `Map` and the `.zmp` bitmaps, with the instance maps no
+//!   continent owns beside it, plus build 12340's dungeon-map tables
+//!   ([`benilla_formats::world_map_wrath`]): a zone belongs to the continent its `DisplayMapID`
+//!   names (Eversong on the Eastern Kingdoms), else its own map's.
+//! - [`feed_world_map`], every frame: the player's selection, the blips projected onto the
+//!   displayed map, and the landmark list, rebuilt when its inputs change.
 //! - [`dev_map_jump`]: Alt+click the map to go there.
+//!
+//! Build 12340's projection (`0x544140`, `/tmp/azb-wire-ghidra/worldmap`) first moves a position
+//! through `WorldMapTransforms` (`0x543920`). The world sheet, a continent and its own art then
+//! read the moved position; a zone reads the original, on the original or moved map. An instance
+//! map projects through its displayed floor's `DungeonMap` rect when the position is on that floor,
+//! hides it when it is on another, and uses the area rect when no floor is shown.
+//!
+//! Labelled, untraced:
+//! - The floor a position is on (`0x5439e0`, from the player's WMO group and the position's
+//!   height) is read here from `DungeonMapChunk.dbc`: the chunk of the player's group on that map
+//!   with the highest `MinZ` at or under the height.
+//! - `SetMapToCurrentZone`'s resolver (`0x547170`) is this one: the continent drawn with the
+//!   player's moved map and its zone, a zone opening on a floor as that floor's instance map;
+//!   else the instance map on the player's map, on the player's floor, else its default floor.
 
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
 
 use benilla_assets::coords::bevy_to_wow;
+use std::collections::HashMap;
+
+use benilla_formats::world_map_wrath::{
+    AreaPoiLinks, DungeonMapChunk, WorldMapTransform, WrathMapTables,
+};
 use benilla_formats::{
     load_world_map_area_catalog, load_world_map_continent_catalog, load_world_map_overlay_catalog,
     load_zone_map, WorldMapArea,
 };
 use benilla_ui::script::{
-    UiScript, WorldMapContinentView, WorldMapLandmarkView, WorldMapOverlayView, WorldMapZoneView,
+    DungeonFloorView, MapSelection, UiScript, WorldMapAreaView, WorldMapContinentView,
+    WorldMapLandmarkView, WorldMapOverlayView, WorldMapZoneView,
 };
 
 use crate::net::{ObjectStore, SelfPlayer};
@@ -35,11 +57,41 @@ pub(crate) struct WorldMapUiData {
     /// The instance maps no continent owns, `0x4a5d00`'s third array in `WorldMapArea.dbc` file
     /// order, unsorted: what the `-2` direct-area selection resolves against.
     direct: Vec<DirectAreaEntry>,
+    /// Every `WorldMapArea` row by id, for a selection by id (`SetMapByID`, a floor's map).
+    rows: HashMap<u32, RowEntry>,
+    /// `DungeonMap.dbc`, file order.
+    floors: Vec<FloorEntry>,
+    chunks: Vec<DungeonMapChunk>,
+    transforms: Vec<WorldMapTransform>,
+    /// `AreaPOI.dbc`'s icons and map links by row id.
+    poi_links: HashMap<u32, AreaPoiLinks>,
+    /// What the engine is handed for its own walks.
+    area_views: HashMap<u32, WorldMapAreaView>,
+    floor_views: Vec<DungeonFloorView>,
+}
+
+#[derive(Clone)]
+struct RowEntry {
+    map_id: u32,
+    area_id: u32,
+    rect: ZoneRect,
+    default_floor: i32,
+}
+
+#[derive(Clone)]
+struct FloorEntry {
+    id: u32,
+    map_id: u32,
+    floor_index: u32,
+    /// The floor's `DungeonMap` rect as a loc rect: `MaxX`/`MinX` are its left and right edges,
+    /// `MaxY`/`MinY` its top and bottom (`0x544140`).
+    rect: ZoneRect,
 }
 
 #[derive(Clone)]
 pub(crate) struct ContinentEntry {
     map_id: u32,
+    wma_id: u32,
     proj: Option<WorldProj>,
     rect: ZoneRect,
     zones: Vec<ZoneEntry>,
@@ -47,8 +99,11 @@ pub(crate) struct ContinentEntry {
 
 #[derive(Clone)]
 struct ZoneEntry {
+    wma_id: u32,
     area_id: u32,
     rect: ZoneRect,
+    /// `DefaultDungeonFloor`: a zone opening on a floor (Dalaran) is that floor's instance map.
+    default_floor: i32,
 }
 
 /// One instance map, selected directly rather than through a continent and zone; 1.12 ships
@@ -87,6 +142,7 @@ fn map_row_view(
 ) -> WorldMapZoneView {
     WorldMapZoneView {
         name,
+        wma_id,
         area_id: a.area_id,
         map_file: a.name.clone(),
         loc_rect: (a.loc_left, a.loc_right, a.loc_top, a.loc_bottom),
@@ -106,6 +162,13 @@ fn map_row_view(
                     .filter(|&&aid| aid != 0)
                     .filter_map(|&aid| areas.get(aid).map(|r| r.explore_flag))
                     .collect(),
+                // An area row with a negative `ExplorationLevel` reveals without exploring
+                // (`0x546310`'s overlay walk).
+                always: o
+                    .area_id
+                    .iter()
+                    .filter(|&&aid| aid != 0)
+                    .any(|&aid| areas.get(aid).is_some_and(|r| r.exploration_level < 0)),
                 hit_rect: (
                     o.hit_rect_top,
                     o.hit_rect_left,
@@ -139,6 +202,21 @@ pub(crate) fn build_catalog(
             return None;
         }
     };
+    let wrath = if matches!(chain.profile(), benilla_formats::DataProfile::Wrath { .. }) {
+        benilla_formats::world_map_wrath::load_wrath_map_tables(&mut *chain).unwrap_or_else(|e| {
+            warn!("world map: dungeon-map tables failed to load, no floors: {e:#}");
+            WrathMapTables::default()
+        })
+    } else {
+        WrathMapTables::default()
+    };
+    let link = |id: u32| wrath.area_links.get(&id).copied();
+    // The continent a row is drawn with: `DisplayMapID`, else its own map (`0x546c50`).
+    let drawn_on = |id: u32, a: &WorldMapArea| match link(id).map(|l| l.display_map_id) {
+        Some(m) if m >= 0 => m as u32,
+        _ => a.map_id,
+    };
+    let default_floor = |id: u32| link(id).map_or(0, |l| l.default_dungeon_floor);
 
     // Continents: the areaId 0 rows in WorldMapArea file order, the Lua continent index
     // (`0x4a5d00`'s walk).
@@ -146,12 +224,12 @@ pub(crate) fn build_catalog(
 
     let mut entries = Vec::with_capacity(cont_rows.len());
     let mut views = Vec::with_capacity(cont_rows.len());
-    for (_, cont) in cont_rows {
-        // Zones: this continent's other rows, sorted case-insensitively by AreaTable name, the
-        // Lua zone index (`0x4a6390`'s `SStrCmpI`).
+    for (cont_id, cont) in cont_rows {
+        // Zones: the other rows drawn with this continent, sorted case-insensitively by AreaTable
+        // name, the Lua zone index (`0x4a6390`'s `SStrCmpI`).
         let mut zones: Vec<(u32, &WorldMapArea, String)> = wma
             .iter()
-            .filter(|(_, a)| a.map_id == cont.map_id && a.area_id != 0)
+            .filter(|&(id, a)| a.area_id != 0 && drawn_on(id, a) == cont.map_id)
             .map(|(id, a)| {
                 let name = areas.name(a.area_id).unwrap_or(a.name.as_str()).to_string();
                 (id, a, name)
@@ -209,7 +287,20 @@ pub(crate) fn build_catalog(
             }
         };
 
+        // `GetMapInfo`'s continent-level height, off the tile bounds (`0x543cd0`).
+        let texture_height = wmc.get(cont.map_id).map_or(0, |c| {
+            let w = c.right_boundary as f32 - c.left_boundary as f32 + 1.0;
+            let h = c.bottom_boundary as f32 - c.top_boundary as f32 + 1.0;
+            if w == 0.0 || h == 0.0 {
+                0
+            } else {
+                ((h * 1002.0) / w).round_ties_even() as i64 as u32
+            }
+        });
         views.push(WorldMapContinentView {
+            map_id: cont.map_id,
+            wma_id: cont_id,
+            texture_height,
             // Map.dbc's localized name, never the art folder (`0x4a65a0`).
             name: maps
                 .0
@@ -227,13 +318,16 @@ pub(crate) fn build_catalog(
         });
         entries.push(ContinentEntry {
             map_id: cont.map_id,
+            wma_id: cont_id,
             proj,
             rect,
             zones: zones
                 .iter()
-                .map(|(_, a, _)| ZoneEntry {
+                .map(|(id, a, _)| ZoneEntry {
+                    wma_id: *id,
                     area_id: a.area_id,
                     rect: zone_rect(a),
+                    default_floor: default_floor(*id),
                 })
                 .collect(),
         });
@@ -245,7 +339,7 @@ pub(crate) fn build_catalog(
     let continent_maps: Vec<u32> = entries.iter().map(|c| c.map_id).collect();
     let direct: Vec<DirectAreaEntry> = wma
         .iter()
-        .filter(|(_, a)| a.area_id != 0 && !continent_maps.contains(&a.map_id))
+        .filter(|&(id, a)| a.area_id != 0 && !continent_maps.contains(&drawn_on(id, a)))
         .map(|(id, a)| DirectAreaEntry {
             id,
             map_id: a.map_id,
@@ -260,11 +354,78 @@ pub(crate) fn build_catalog(
         })
         .collect();
 
+    let rows = wma
+        .iter()
+        .map(|(id, a)| {
+            (
+                id,
+                RowEntry {
+                    map_id: a.map_id,
+                    area_id: a.area_id,
+                    rect: zone_rect(a),
+                    default_floor: default_floor(id),
+                },
+            )
+        })
+        .collect();
+    let area_views = wma
+        .iter()
+        .map(|(id, a)| {
+            let l = link(id);
+            (
+                id,
+                WorldMapAreaView {
+                    id,
+                    map_id: a.map_id,
+                    area_id: a.area_id,
+                    map_file: a.name.clone(),
+                    loc_rect: (a.loc_left, a.loc_right, a.loc_top, a.loc_bottom),
+                    display_map: l.map_or(-1, |l| l.display_map_id),
+                    default_floor: l.map_or(0, |l| l.default_dungeon_floor),
+                    parent: l.map_or(0, |l| l.parent_world_map_id),
+                },
+            )
+        })
+        .collect();
+    let floors = wrath
+        .floors
+        .iter()
+        .map(|f| FloorEntry {
+            id: f.id,
+            map_id: f.map_id,
+            floor_index: f.floor_index,
+            rect: ZoneRect {
+                left: f.max_x,
+                right: f.min_x,
+                top: f.max_y,
+                bottom: f.min_y,
+            },
+        })
+        .collect();
+    let floor_views = wrath
+        .floors
+        .iter()
+        .map(|f| DungeonFloorView {
+            id: f.id,
+            map_id: f.map_id,
+            floor_index: f.floor_index,
+            rect: (f.min_x, f.max_x, f.min_y, f.max_y),
+            parent: f.parent_world_map_id,
+        })
+        .collect();
+
     Some((
         views,
         WorldMapUiData {
             continents: entries,
             direct,
+            rows,
+            floors,
+            chunks: wrath.chunks,
+            transforms: wrath.transforms,
+            poi_links: wrath.poi_links,
+            area_views,
+            floor_views,
         },
     ))
 }
@@ -304,6 +465,7 @@ pub(crate) fn seed_world_map_catalog(world: &mut World, script: &mut UiScript) {
                 .map(|d| (d.id, d.view.clone()))
                 .collect::<Vec<_>>(),
         );
+        script.set_world_map_areas(data.area_views.clone(), data.floor_views.clone());
     }
 }
 
@@ -316,176 +478,226 @@ fn build_catalog_from_world(world: &World) -> Option<(Vec<WorldMapContinentView>
     build_catalog(&mut chain, &areas.0, maps)
 }
 
-/// The displayed level the landmark gates branch on, from the selection cells `[0x84506c]`,
-/// `[0x845070]` and `[0x845074]`. An instance map is `Zone`: both gates treat it as zone level
-/// (`0x4a79de`; `0x4a8856`/`0x4a885f` fall through to `0x4a8868`).
+/// The displayed level the landmark gates branch on, from the selection cells.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum MapLevel {
-    /// Both continents on one sheet (the reference's `continent == -1`).
+    /// Both continents on one sheet (continent `-1`).
     World,
     /// One continent, no zone selected (`continent >= 0, zone == -1`).
     Continent,
-    /// One zone (`continent >= 0, zone >= 0`), or an instance map (`continent == -2`).
+    /// One zone (`continent >= 0, zone >= 0`).
     Zone,
+    /// An instance map or the cosmic sheet (continent `-2`).
+    MinusTwo,
 }
 
 impl MapLevel {
-    /// From the engine's selection, the 1-based `(continent, zone)` with 0 for whole plus the
-    /// direct area, which is read first because it shares the world sheet's `(0, 0)`.
-    fn of((continent, zone, direct): (u32, u32, Option<u32>)) -> Self {
-        match (continent, zone, direct) {
-            (_, _, Some(_)) => Self::Zone,
-            (0, _, None) => Self::World,
-            (_, 0, None) => Self::Continent,
-            _ => Self::Zone,
+    fn of(sel: MapSelection) -> Self {
+        if sel.direct.is_some() || sel.cosmic {
+            Self::MinusTwo
+        } else if sel.continent == 0 {
+            Self::World
+        } else if sel.zone == 0 {
+            Self::Continent
+        } else {
+            Self::Zone
         }
     }
 }
 
-/// The inputs the landmark list is a pure function of. `0x4a67a0` rebuilds only on these: a
-/// selection change, a world-state push (`0x48fa0d`), a `PLAYER_EXPLORED_ZONES` change
-/// (`0x4a6477`, an UpdateFields callback on byte `0xe6c`) and the gossip marker's set and clear.
+/// The inputs the landmark list is a pure function of: a selection change, a world-state push, a
+/// `PLAYER_EXPLORED_ZONES` change, the gossip marker's set and clear, and the player's WMO group,
+/// which picks a position's floor.
 #[derive(PartialEq, Eq)]
 struct LandmarkKey {
-    /// All three selection cells, the direct area's included.
-    selection: (u32, u32, Option<u32>),
+    selection: MapSelection,
     map: u32,
     states: u64,
     explored: Vec<u32>,
     /// The guard-directions marker `(continent, pos, icon)`, the position as raw `f32` bits: it is
     /// copied from the packet, so a bit compare is exact.
     marker: Option<(u32, [u32; 3], u32)>,
+    group: Option<u32>,
 }
 
-impl LandmarkKey {
-    fn matches(
-        &self,
-        selection: (u32, u32, Option<u32>),
-        map: u32,
-        states: u64,
-        explored: &[u32],
-        marker: Option<(u32, [u32; 3], u32)>,
-    ) -> bool {
-        self.selection == selection
-            && self.map == map
-            && self.states == states
-            && self.marker == marker
-            && self.explored == explored
-    }
-}
-
-/// The builder's near-zero skip (`0x4a6868`/`0x4a687a`, epsilon `2.384e-7`): a UV of 0 on both
-/// axes is off the displayed map, which is how POIs are filtered by continent; a POI on a rect's
-/// edge has one non-zero axis and stays.
+/// The builder's near-zero skip (epsilon `2.384e-7`, `_DAT_009ea27c`): a UV of 0 on both axes is
+/// off the displayed map; a POI on a rect's edge has one non-zero axis and stays.
 fn is_degenerate(uv: (f32, f32)) -> bool {
     const EPS: f32 = 2.384e-7;
     uv.0.abs() < EPS && uv.1.abs() < EPS
 }
 
-/// `0x4a67a0`'s AreaPOI gates, in the reference's order:
-///
-/// 1. Level flag (`0x4a79b0`): `0x04` at zone level, `0x08` at continent, and both `0x10` and
-///    `0x08` at world level, since the chain falls through rather than switching.
-/// 2. Exploration (`0x4a6890`-`0x4a68f3`): a signed `AreaID > 0` (`-1` is continent-wide) whose
-///    `AreaTable` row has `ExplorationLevel >= 0` must be discovered.
-/// 3. World state (`0x4a6903`): a row with a `WorldStateID` shows only while that state is
-///    non-zero; the Eastern Plaguelands towers are one row per tower, owner and state.
-///
-/// The loop reads no `ContinentID`, `Importance`, `FactionID` or `Icon`.
-fn landmark_gates_pass(
+/// The landmark walk's selection gates (`0x5445f0`), before the projection:
+/// - an instance map, the cosmic sheet or a zone wants `Flags & 0x04`;
+/// - the world sheet wants `0x10`;
+/// - the world and continent sheets and the cosmic sheet want `0x08`;
+/// - a row with `0x400` shows only on the map whose `WorldMapArea` row has its area and map.
+fn landmark_level_gates(
     poi: &benilla_formats::AreaPoi,
-    level: MapLevel,
+    sel: MapSelection,
+    displayed: Option<&RowEntry>,
+) -> bool {
+    let level = MapLevel::of(sel);
+    let a = matches!(level, MapLevel::World | MapLevel::Continent) || poi.flags & 0x04 != 0;
+    let b = level != MapLevel::World || poi.flags & 0x10 != 0;
+    let c = level == MapLevel::Zone || sel.direct.is_some() || poi.flags & 0x08 != 0;
+    let d = poi.flags & 0x400 == 0
+        || displayed.is_some_and(|r| r.area_id == poi.area_id && r.map_id == poi.continent_id);
+    a && b && c && d
+}
+
+/// The walk's state gates after the projection (`0x546310`): a signed `AreaID > 0` needs its
+/// `AreaTable` row and, unless its `ExplorationLevel` is negative, its explore bit; a row with a
+/// `WorldStateID` shows only while that state is non-zero.
+fn landmark_state_gates(
+    poi: &benilla_formats::AreaPoi,
     areas: &benilla_formats::AreaTableCatalog,
     explored: &[u32],
     world_states: &crate::world_state::WorldStates,
 ) -> bool {
-    let level_ok = match level {
-        MapLevel::Zone => poi.flags & 0x04 != 0,
-        MapLevel::Continent => poi.flags & 0x08 != 0,
-        MapLevel::World => poi.flags & 0x10 != 0 && poi.flags & 0x08 != 0,
-    };
-    if !level_ok {
-        return false;
-    }
-    // A row the table does not carry passes: the bounds check on `[0xc0e048]`/`[0xc0e04c]`
-    // guards the read, not the landmark.
     if poi.area_id as i32 > 0 {
-        if let Some(area) = areas.get(poi.area_id) {
-            if area.exploration_level >= 0 && !explored_bit(explored, area.explore_flag) {
-                return false;
-            }
+        let Some(area) = areas.get(poi.area_id) else {
+            return false;
+        };
+        if area.exploration_level >= 0 && !explored_bit(explored, area.explore_flag) {
+            return false;
         }
     }
     poi.world_state_id == 0 || world_states.get(poi.world_state_id) != 0
 }
 
-/// `PLAYER_EXPLORED_ZONES` bit `bit`, which `0x4a9a40` reads bytewise; the little-endian dword
-/// slots hold the same bits.
+/// `PLAYER_EXPLORED_ZONES` bit `bit`; the little-endian dword slots hold the bytes' bits.
 fn explored_bit(explored: &[u32], bit: u32) -> bool {
     let (slot, within) = (bit as usize / 32, bit % 32);
     explored.get(slot).is_some_and(|w| w & (1 << within) != 0)
 }
 
-/// `GetMapLandmarkInfo`'s `textureIndex` (`0x4a8848`-`0x4a8877`): the row's `Icon`, but cell 15
-/// at zone level for a row without `Flags & 0x80`, which the shipped data sets on exactly the
-/// world-state rows.
-fn landmark_texture_index(poi: &benilla_formats::AreaPoi, level: MapLevel) -> u32 {
-    /// The generic zone-level POI cell of `Interface\Minimap\POIIcons`.
-    const ZONE_SUBSTITUTE: u32 = 15;
-    match poi.flags & 0x80 != 0 || level != MapLevel::Zone {
-        true => poi.icon,
-        false => ZONE_SUBSTITUTE,
+/// `GetMapLandmarkInfo`'s `textureIndex` (`0x545a30`): `Icon[state - 1]` for a world-state row
+/// (state 1-9, else the first), but 0 on a zone or an instance map for a row without
+/// `Flags & 0x80`.
+fn landmark_texture_index(
+    poi: &benilla_formats::AreaPoi,
+    links: Option<&AreaPoiLinks>,
+    level: MapLevel,
+    world_states: &crate::world_state::WorldStates,
+) -> u32 {
+    let shown = poi.flags & 0x80 != 0 || matches!(level, MapLevel::World | MapLevel::Continent);
+    if !shown {
+        return 0;
     }
+    let slot = if poi.world_state_id != 0 {
+        usize::try_from(world_states.get(poi.world_state_id) - 1)
+            .ok()
+            .filter(|&i| i < 9)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    links.map_or(poi.icon, |l| l.icons[slot])
 }
 
-/// Which map the player's position selects (`0x4a6650`), in the Lua-visible encoding; at most one
-/// leg is set, since the instance-map loop runs only on a continent miss (`0x4a66c3`).
+/// Which map the player's position selects, in the Lua-visible encoding; at most one leg is set.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 struct PlayerSelection {
-    /// The 1-based `(continent, zone)`, zone 0 for the continent map: `SetMap(continent, -1)`,
-    /// which `GetCurrentMapZone` (`0x4a7f00`) reads back as 0.
+    /// The 1-based `(continent, zone)`, zone 0 for the continent map.
     zone: Option<(u32, u32)>,
     /// The `WorldMapArea` row id of the instance map the player is on.
     direct: Option<u32>,
+    /// The `DungeonMap` floor of [`Self::direct`].
+    floor: Option<u32>,
 }
 
-/// `SetMapToCurrentZone`'s resolver `0x4a6650` (`0x4a7e20`), which the engine's world-enter sync
-/// `0x4947ac` also calls: the continent carrying the player's map, then its zone, where a zone
-/// miss leaves the continent map; only on a continent miss, the first instance map on the
-/// player's map (`SetMap(-2, id)`, `0x4a6717`); else the world view.
+/// `0x543920`: the first `WorldMapTransforms` region holding the position moves it onto its new
+/// map, offset, with that region's floor; else it stays, with no floor.
+fn transform(data: &WorldMapUiData, map: u32, x: f32, y: f32) -> (u32, f32, f32, Option<u32>) {
+    data.transforms
+        .iter()
+        .find(|t| t.holds(map, x, y))
+        .map_or((map, x, y, None), |t| {
+            (
+                t.new_map_id,
+                x + t.offset_x,
+                y + t.offset_y,
+                (t.new_dungeon_map_id != 0).then_some(t.new_dungeon_map_id),
+            )
+        })
+}
+
+/// The floor a position is on (labelled: `0x5439e0` is untraced): the `DungeonMapChunk` of the
+/// player's WMO group on that map with the highest `MinZ` at or under the height.
+fn floor_at(data: &WorldMapUiData, map: u32, group: Option<u32>, z: f32) -> Option<u32> {
+    let group = group?;
+    data.chunks
+        .iter()
+        .filter(|c| c.map_id == map && c.wmo_group_id == group && c.min_z <= z)
+        .max_by(|a, b| a.min_z.total_cmp(&b.min_z))
+        .map(|c| c.dungeon_map_id)
+}
+
+/// `SetMapToCurrentZone`'s resolver (labelled: `0x547170` is untraced; see the module note).
 fn resolve_player_selection(
     data: &WorldMapUiData,
     map_id: u32,
+    pos: (f32, f32),
     top_zone: Option<u32>,
+    floor: Option<u32>,
 ) -> PlayerSelection {
-    if let Some(ci) = data.continents.iter().position(|c| c.map_id == map_id) {
-        let zone = top_zone
-            .and_then(|top| {
-                data.continents[ci]
-                    .zones
-                    .iter()
-                    .position(|z| z.area_id == top)
-            })
-            .map_or(0, |zi| zi as u32 + 1);
+    let (drawn, ..) = transform(data, map_id, pos.0, pos.1);
+    let on_map = |row: &RowEntry| {
+        floor.filter(|f| {
+            data.floors
+                .iter()
+                .any(|x| x.id == *f && x.map_id == row.map_id)
+        })
+    };
+    if let Some(ci) = data.continents.iter().position(|c| c.map_id == drawn) {
+        let zone = top_zone.and_then(|top| {
+            data.continents[ci]
+                .zones
+                .iter()
+                .position(|z| z.area_id == top)
+        });
+        if let Some(zi) = zone {
+            let z = &data.continents[ci].zones[zi];
+            if z.default_floor >= 1 {
+                let row = data.rows.get(&z.wma_id);
+                return PlayerSelection {
+                    zone: None,
+                    direct: Some(z.wma_id),
+                    floor: row.and_then(on_map).or(Some(z.default_floor as u32)),
+                };
+            }
+        }
         return PlayerSelection {
-            zone: Some((ci as u32 + 1, zone)),
+            zone: Some((ci as u32 + 1, zone.map_or(0, |zi| zi as u32 + 1))),
             direct: None,
+            floor: None,
         };
     }
+    let Some(d) = data.direct.iter().find(|d| d.map_id == map_id) else {
+        return PlayerSelection::default();
+    };
+    let row = data.rows.get(&d.id);
+    let floor = row
+        .and_then(on_map)
+        .or_else(|| match row.map_or(0, |r| r.default_floor) {
+            f if f >= 1 => Some(f as u32),
+            -1 => None,
+            _ => data
+                .floors
+                .iter()
+                .find(|f| f.map_id == map_id && f.floor_index == 1)
+                .map(|f| f.id),
+        });
     PlayerSelection {
         zone: None,
-        direct: data
-            .direct
-            .iter()
-            .find(|d| d.map_id == map_id)
-            .map(|d| d.id),
+        direct: Some(d.id),
+        floor,
     }
 }
 
-/// The engine's world-enter sync, `0x494780`'s `old == 0` leg into `0x4a6650`, which fires once
-/// per session: it waits for a known zone (`0x67e510` bails on 0), then applies whatever the
-/// resolver answers, its failure legs' world view (`0x4a667e`/`0x4a670b`) and an instance map
-/// included.
+/// The engine's world-enter sync, which fires once per session: it waits for a known zone, then
+/// applies whatever the resolver answers, the world view and an instance map included.
 fn world_enter_selection(
     synced: bool,
     top_zone: Option<u32>,
@@ -494,43 +706,94 @@ fn world_enter_selection(
     (!synced && top_zone.is_some()).then_some(player)
 }
 
-/// A position's UV on the displayed map (`0x4a7360`), `None` off it, which Lua sees as the
-/// `(0, 0)` hide: the world sheet projects through the position's own continent constants, a
-/// continent or zone through its rect, an instance map through its row's rect (`0x4a73e0`). The
-/// last two require the position's own map (`0x4a7437`; `0x4a7870` passes the unit's).
+/// The displayed `WorldMapArea` row id, `None` on the world and cosmic sheets.
+fn displayed_row(data: &WorldMapUiData, sel: MapSelection) -> Option<u32> {
+    if sel.cosmic {
+        return None;
+    }
+    if let Some(id) = sel.direct {
+        return Some(id);
+    }
+    let cont = data
+        .continents
+        .get(sel.continent.checked_sub(1)? as usize)?;
+    match sel.zone {
+        0 => Some(cont.wma_id),
+        z => cont.zones.get(z as usize - 1).map(|z| z.wma_id),
+    }
+}
+
+/// A position's UV on the displayed map (`0x544140`), `None` off it, which Lua sees as the
+/// `(0, 0)` hide; the position's floor is unknown, as for a body with no WMO group.
 pub(crate) fn project_on_displayed(
     data: &WorldMapUiData,
-    selection: (u32, u32, Option<u32>),
+    selection: MapSelection,
     pos_map: u32,
     px: f32,
     py: f32,
 ) -> Option<(f32, f32)> {
-    match selection {
-        // The direct cell first: it shares the `(0, 0)` pair with the world sheet.
-        (_, _, Some(id)) => data
-            .direct
-            .iter()
-            .find(|d| d.id == id && d.map_id == pos_map)
-            .map(|d| map_proj::zone_uv(d.rect, px, py)),
-        (0, _, None) => data
-            .continents
-            .iter()
-            .find(|cont| cont.map_id == pos_map)
-            .and_then(|cont| cont.proj)
-            .map(|p| map_proj::world_uv(p, px, py)),
-        (c, z, None) => data
-            .continents
-            .get(c as usize - 1)
-            .filter(|cont| cont.map_id == pos_map)
-            .and_then(|cont| match z {
-                0 => Some(cont.rect),
-                z => cont.zones.get(z as usize - 1).map(|zone| zone.rect),
-            })
-            .map(|rect| map_proj::zone_uv(rect, px, py)),
-    }
+    project_on_floor(data, selection, pos_map, px, py, None)
 }
 
-/// Hand the engine `GetWorldLocMapPosition`'s projection (`0x4a7360`) over a copy of the catalog.
+/// [`project_on_displayed`] for a position on a known `DungeonMap` floor.
+fn project_on_floor(
+    data: &WorldMapUiData,
+    sel: MapSelection,
+    pos_map: u32,
+    px: f32,
+    py: f32,
+    pos_floor: Option<u32>,
+) -> Option<(f32, f32)> {
+    /// `0x212`: Outland has no place on the Azeroth sheet.
+    const OUTLAND: u32 = 530;
+    let (drawn, tx, ty, t_floor) = transform(data, pos_map, px, py);
+    if !sel.cosmic && sel.direct.is_none() && sel.continent == 0 {
+        if drawn == OUTLAND {
+            return None;
+        }
+        return data
+            .continents
+            .iter()
+            .find(|cont| cont.map_id == drawn)
+            .and_then(|cont| cont.proj)
+            .map(|p| map_proj::world_uv(p, tx, ty));
+    }
+    if sel.direct.is_none()
+        && data
+            .continents
+            .get(sel.continent.checked_sub(1)? as usize)
+            .is_none_or(|c| c.map_id != drawn)
+    {
+        return None;
+    }
+    let row = data.rows.get(&displayed_row(data, sel)?)?;
+    if row.map_id != pos_map && row.map_id != drawn {
+        return None;
+    }
+    // A zone reads the original position; a continent and an instance map the moved one.
+    let (x, y) = if sel.direct.is_none() && sel.zone != 0 {
+        (px, py)
+    } else {
+        (tx, ty)
+    };
+    let shown = sel.floor;
+    let floor_rect = |id: Option<u32>| {
+        id.and_then(|id| data.floors.iter().find(|f| f.id == id))
+            .map(|f| f.rect)
+    };
+    let rect = if pos_floor == shown {
+        floor_rect(shown).unwrap_or(row.rect)
+    } else if t_floor.is_some() && t_floor == shown {
+        floor_rect(shown).unwrap_or(row.rect)
+    } else if shown.is_some() {
+        return None;
+    } else {
+        row.rect
+    };
+    Some(map_proj::zone_uv(rect, x, y))
+}
+
+/// Hand the engine `GetWorldLocMapPosition`'s projection over a copy of the catalog.
 fn install_world_loc_projector(script: &mut UiScript, data: &WorldMapUiData) {
     let copy = data.clone();
     script.set_world_loc_projector(Box::new(move |selection, map, x, y| {
@@ -588,11 +851,14 @@ fn feed_world_map(
         }
     }
     let wow = bevy_to_wow(player.pos);
-    let (wx, wy) = (wow[0], wow[1]);
+    let (wx, wy, wz) = (wow[0], wow[1], wow[2]);
+    // The player's WMO group, which picks every position's floor (`DAT_00bd0814`).
+    let wmo_group = world.interior().map(|k| k.group_area_id);
+    let player_floor = floor_at(&data, map.0, wmo_group, wz);
 
     // CurrentArea is the MCNK leaf; its top zone is the zone-level area the reference matches.
     let top_zone = world.area().and_then(|aid| areas.0.top_zone(aid));
-    let player_sel = resolve_player_selection(&data, map.0, top_zone);
+    let player_sel = resolve_player_selection(&data, map.0, (wx, wy), top_zone, player_floor);
 
     // First world enter: the zone updater `0x494780` (`crate::area`), finding the cached zone id
     // 0, selects the player's zone itself through `0x4a6650` and the setter `0x4a67a0` before any
@@ -602,7 +868,7 @@ fn feed_world_map(
         if let Some(sel) = world_enter_selection(memo.map_synced, top_zone, player_sel) {
             memo.map_synced = true;
             let (c, z) = sel.zone.unwrap_or((0, 0));
-            script.sync_world_map_to_player_zone(c, z, sel.direct);
+            script.sync_world_map_to_player_zone(c, z, sel.direct, sel.floor);
         }
     }
 
@@ -619,13 +885,25 @@ fn feed_world_map(
     let selection = script.world_map_selection();
     let project =
         |pos_map: u32, px: f32, py: f32| project_on_displayed(&data, selection, pos_map, px, py);
-    let uv = project(map.0, wx, wy);
+    // A position's floor is read with the player's WMO group and its own height (`0x544140`).
+    let project_z = |pos_map: u32, px: f32, py: f32, pz: f32| {
+        project_on_floor(
+            &data,
+            selection,
+            pos_map,
+            px,
+            py,
+            floor_at(&data, pos_map, wmo_group, pz),
+        )
+    };
+    let uv = project_z(map.0, wx, wy, wz);
     // The corpse at the query answer's display position, a dungeon corpse at its entrance.
     let corpse_uv = death_net.corpse.and_then(|cp| {
-        project(
+        project_z(
             u32::try_from(cp.display_map).unwrap_or(u32::MAX),
             cp.position[0],
             cp.position[1],
+            cp.position[2],
         )
     });
 
@@ -634,32 +912,43 @@ fn feed_world_map(
         .on_map(map.0)
         .map(|m| (m.continent_id, m.pos.map(f32::to_bits), m.icon));
     let states_gen = world_states.generation();
-    let unchanged = memo
-        .get(&script)
-        .landmarks
-        .as_ref()
-        .is_some_and(|k| k.matches(selection, map.0, states_gen, &explored, marker));
+    let unchanged = memo.get(&script).landmarks.as_ref().is_some_and(|k| {
+        *k == LandmarkKey {
+            selection,
+            map: map.0,
+            states: states_gen,
+            explored: explored.clone(),
+            marker,
+            group: wmo_group,
+        }
+    });
     if !unchanged {
         let level = MapLevel::of(selection);
+        let displayed = displayed_row(&data, selection).and_then(|id| data.rows.get(&id));
         let mut landmarks = Vec::new();
-        // The DBC rows first, in file order, the Lua landmark index (`0x4a6819`'s walk of
-        // `[0xc0e054]`).
+        // The DBC rows first, in file order, the Lua landmark index (`0x546310`'s walk).
         if let Some(pois) = pois.as_ref() {
-            for (_, poi) in pois.0.rows() {
-                if !landmark_gates_pass(poi, level, &areas.0, &explored, &world_states) {
+            for (id, poi) in pois.0.rows() {
+                if !landmark_level_gates(poi, selection, displayed) {
                     continue;
                 }
-                let Some(uv) = project(poi.continent_id, poi.pos[0], poi.pos[1]) else {
+                let Some(uv) = project_z(poi.continent_id, poi.pos[0], poi.pos[1], poi.pos[2])
+                else {
                     continue;
                 };
-                if is_degenerate(uv) {
+                if is_degenerate(uv)
+                    || !landmark_state_gates(poi, &areas.0, &explored, &world_states)
+                {
                     continue;
                 }
+                let links = data.poi_links.get(&id);
                 landmarks.push(WorldMapLandmarkView {
                     name: poi.name.clone(),
                     description: poi.description.clone(),
-                    texture_index: landmark_texture_index(poi, level),
+                    texture_index: landmark_texture_index(poi, links, level, &world_states),
                     uv,
+                    map_link: links.map_or(0, |l| l.world_map_link),
+                    battle_map: poi.flags & 0x200 != 0,
                 });
             }
         }
@@ -673,6 +962,8 @@ fn feed_world_map(
                         description: poi.description.clone(),
                         texture_index: poi.icon,
                         uv,
+                        map_link: 0,
+                        battle_map: false,
                     });
                 }
             }
@@ -683,6 +974,7 @@ fn feed_world_map(
             states: states_gen,
             explored: explored.clone(),
             marker,
+            group: wmo_group,
         });
         script.set_world_map_landmarks(landmarks);
     }
@@ -727,7 +1019,7 @@ fn feed_world_map(
     );
     // The instance-map leg for `SetMapToCurrentZone`, which the battlefield minimap calls on
     // `PLAYER_ENTERING_WORLD` (`Blizzard_BattlefieldMinimap.lua:58-62`).
-    script.set_world_map_player_direct_area(player_sel.direct);
+    script.set_world_map_player_direct_area(player_sel.direct, player_sel.floor);
 }
 
 /// Alt+click the world map to go there, a dev jump: the click's UV back through the displayed
@@ -764,11 +1056,17 @@ fn dev_map_jump(
     else {
         return;
     };
-    let (c, z, direct) = script.world_map_selection();
-    // An instance map inverts like a zone, through `0x4a7100`'s zone mode.
-    let (rect, map_id) = match direct {
-        Some(id) => match data.direct.iter().find(|d| d.id == id) {
-            Some(d) => (d.rect, d.map_id),
+    let sel = script.world_map_selection();
+    let (c, z) = (sel.continent, sel.zone);
+    // An instance map inverts like a zone, through its floor's rect when one is shown.
+    let (rect, map_id) = match sel.direct {
+        Some(id) => match data.rows.get(&id) {
+            Some(row) => (
+                sel.floor
+                    .and_then(|f| data.floors.iter().find(|x| x.id == f))
+                    .map_or(row.rect, |f| f.rect),
+                row.map_id,
+            ),
             None => return,
         },
         None => {
@@ -848,64 +1146,89 @@ mod tests {
         benilla_formats::AreaTableCatalog::from_rows(Vec::new())
     }
 
+    fn sel(continent: u32, zone: u32, direct: Option<u32>) -> MapSelection {
+        MapSelection {
+            continent,
+            zone,
+            direct,
+            ..Default::default()
+        }
+    }
+
     #[test]
-    fn the_level_flag_chain_falls_through_at_world_level() {
-        let (areas, states, explored) = (empty_areas(), WorldStates::default(), Vec::new());
-        let pass = |flags, level| {
-            landmark_gates_pass(&poi(flags, 0, 0), level, &areas, &explored, &states)
+    fn the_level_flags_gate_each_sheet() {
+        let pass = |flags, s| landmark_level_gates(&poi(flags, 0, 0), s, None);
+        let (world, cont, zone, inst) = (
+            sel(0, 0, None),
+            sel(2, 0, None),
+            sel(2, 5, None),
+            sel(0, 0, Some(535)),
+        );
+
+        // A town (0x0d = 0x01|0x04|0x08): zone, continent and instance map, not the world sheet.
+        assert!(pass(0x0d, zone) && pass(0x0d, cont) && pass(0x0d, inst));
+        assert!(!pass(0x0d, world));
+        // A capital (0x1d = 0x0d|0x10): every sheet.
+        assert!(pass(0x1d, world) && pass(0x1d, cont) && pass(0x1d, zone));
+        // An Eastern Plaguelands tower (0x87): zone only.
+        assert!(pass(0x87, zone) && !pass(0x87, cont) && !pass(0x87, world));
+        // `0x10` alone: the world sheet still wants `0x08`.
+        assert!(!pass(0x10, world) && !pass(0x10, cont) && !pass(0x10, zone));
+        // The cosmic sheet wants both `0x04` and `0x08`.
+        let cosmic = MapSelection {
+            cosmic: true,
+            ..Default::default()
         };
+        assert!(pass(0x0c, cosmic) && !pass(0x08, cosmic) && !pass(0x04, cosmic));
+    }
 
-        // A town (0x0d = 0x01|0x04|0x08): zone and continent, not the world sheet.
-        assert!(pass(0x0d, MapLevel::Zone));
-        assert!(pass(0x0d, MapLevel::Continent));
-        assert!(!pass(0x0d, MapLevel::World));
-
-        // A capital (0x1d = 0x0d|0x10): all three.
-        assert!(pass(0x1d, MapLevel::Zone));
-        assert!(pass(0x1d, MapLevel::Continent));
-        assert!(pass(0x1d, MapLevel::World));
-
-        // An Eastern Plaguelands tower (0x87 = 0x01|0x02|0x04|0x80): zone only.
-        assert!(pass(0x87, MapLevel::Zone));
-        assert!(!pass(0x87, MapLevel::Continent));
-        assert!(!pass(0x87, MapLevel::World));
-
-        // `0x10` alone, which 1.12 does not ship: world level still wants `0x08`.
-        assert!(!pass(0x10, MapLevel::World));
-        assert!(!pass(0x10, MapLevel::Continent));
-        assert!(!pass(0x10, MapLevel::Zone));
+    #[test]
+    fn a_map_bound_row_shows_only_on_its_own_area_map() {
+        let mut p = poi(0x404, 4395, 0);
+        p.continent_id = 571;
+        let dalaran = RowEntry {
+            map_id: 571,
+            area_id: 4395,
+            rect: ZoneRect {
+                left: 1.0,
+                right: 0.0,
+                top: 1.0,
+                bottom: 0.0,
+            },
+            default_floor: 27,
+        };
+        let other = RowEntry {
+            area_id: 65,
+            ..dalaran.clone()
+        };
+        let s = sel(0, 0, Some(504));
+        assert!(landmark_level_gates(&p, s, Some(&dalaran)));
+        assert!(!landmark_level_gates(&p, s, Some(&other)));
+        assert!(!landmark_level_gates(&p, s, None));
     }
 
     #[test]
     fn a_world_state_row_appears_only_while_its_key_is_set() {
         let (areas, explored) = (empty_areas(), Vec::new());
         let mut states = WorldStates::default();
-        // 2372 / 2373 are the real pair for Northpass Tower: Alliance-held / Horde-held.
         let alliance = poi(0x87, 0, 2372);
         let horde = poi(0x87, 0, 2373);
         let plain = poi(0x87, 0, 0);
-        let pass = |p: &AreaPoi, st: &WorldStates| {
-            landmark_gates_pass(p, MapLevel::Zone, &areas, &explored, st)
-        };
+        let pass = |p: &AreaPoi, st: &WorldStates| landmark_state_gates(p, &areas, &explored, st);
 
         assert!(
             pass(&plain, &states),
             "an ungated row is always a candidate"
         );
-        assert!(!pass(&alliance, &states), "nothing received yet");
-        assert!(!pass(&horde, &states));
-
+        assert!(!pass(&alliance, &states) && !pass(&horde, &states));
         states.write(&[(2372, 1)]);
-        assert!(pass(&alliance, &states));
-        assert!(!pass(&horde, &states));
-
+        assert!(pass(&alliance, &states) && !pass(&horde, &states));
         states.write(&[(2372, 0), (2373, 1)]);
-        assert!(!pass(&alliance, &states));
-        assert!(pass(&horde, &states));
+        assert!(!pass(&alliance, &states) && pass(&horde, &states));
     }
 
     #[test]
-    fn the_exploration_gate_reads_the_right_bit_and_exempts_the_right_rows() {
+    fn the_exploration_gate_reads_the_right_bit_and_needs_the_row() {
         use benilla_formats::AreaTableRow;
         let row = |explore_flag, exploration_level| AreaTableRow {
             map_id: 0,
@@ -917,19 +1240,14 @@ mod tests {
             name: String::new(),
         };
         let areas = benilla_formats::AreaTableCatalog::from_rows(vec![
-            (139, row(40, 0)),  // gated
-            (200, row(41, -1)), // exempt by ExplorationLevel
+            (139, row(40, 0)),
+            (200, row(41, -1)),
         ]);
         let states = WorldStates::default();
-        // Bit 40 → slot 1, bit 8 within it.
         let unexplored = vec![0u32; 4];
-        let explored = {
-            let mut v = vec![0u32; 4];
-            v[1] = 1 << 8;
-            v
-        };
-        let pass =
-            |p: &AreaPoi, ex: &[u32]| landmark_gates_pass(p, MapLevel::Zone, &areas, ex, &states);
+        let mut explored = vec![0u32; 4];
+        explored[1] = 1 << 8;
+        let pass = |p: &AreaPoi, ex: &[u32]| landmark_state_gates(p, &areas, ex, &states);
 
         assert!(!pass(&poi(0x04, 139, 0), &unexplored), "not discovered yet");
         assert!(pass(&poi(0x04, 139, 0), &explored));
@@ -939,32 +1257,53 @@ mod tests {
         );
         assert!(
             pass(&poi(0x04, u32::MAX, 0), &unexplored),
-            "AreaID -1 (continent-wide) is not > 0, so no gate"
+            "AreaID -1 is not > 0"
         );
         assert!(pass(&poi(0x04, 0, 0), &unexplored), "AreaID 0 likewise");
         assert!(
-            pass(&poi(0x04, 999, 0), &unexplored),
-            "an AreaID the table does not carry cannot be tested"
+            !pass(&poi(0x04, 999, 0), &unexplored),
+            "build 12340 drops a row whose area the table lacks"
         );
     }
 
     #[test]
-    fn the_zone_level_icon_substitution_spares_the_world_state_rows() {
+    fn the_texture_index_reads_the_world_state_icon_and_blanks_zone_rows() {
+        let mut links = AreaPoiLinks::default();
+        links.icons = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+        let mut states = WorldStates::default();
         let town = poi(0x0d, 0, 0);
         let tower = poi(0x87, 0, 2372);
-        assert_eq!(landmark_texture_index(&town, MapLevel::Zone), 15);
         assert_eq!(
-            landmark_texture_index(&town, MapLevel::Continent),
-            town.icon
+            landmark_texture_index(&town, Some(&links), MapLevel::Zone, &states),
+            0
         );
-        assert_eq!(landmark_texture_index(&town, MapLevel::World), town.icon);
-        for level in [MapLevel::Zone, MapLevel::Continent, MapLevel::World] {
-            assert_eq!(
-                landmark_texture_index(&tower, level),
-                tower.icon,
-                "Flags & 0x80 escapes the substitution at every level"
-            );
-        }
+        assert_eq!(
+            landmark_texture_index(&town, Some(&links), MapLevel::MinusTwo, &states),
+            0
+        );
+        assert_eq!(
+            landmark_texture_index(&town, Some(&links), MapLevel::Continent, &states),
+            10
+        );
+        assert_eq!(
+            landmark_texture_index(&town, None, MapLevel::World, &states),
+            4
+        );
+        // State 3 picks the third icon; an unset or out-of-range state the first.
+        assert_eq!(
+            landmark_texture_index(&tower, Some(&links), MapLevel::Zone, &states),
+            10
+        );
+        states.write(&[(2372, 3)]);
+        assert_eq!(
+            landmark_texture_index(&tower, Some(&links), MapLevel::Zone, &states),
+            12
+        );
+        states.write(&[(2372, 12)]);
+        assert_eq!(
+            landmark_texture_index(&tower, Some(&links), MapLevel::Zone, &states),
+            10
+        );
     }
 
     #[test]
@@ -977,126 +1316,16 @@ mod tests {
     }
 
     #[test]
-    fn the_selection_pair_maps_onto_the_reference_levels() {
-        assert_eq!(MapLevel::of((0, 0, None)), MapLevel::World);
+    fn the_selection_maps_onto_the_reference_levels() {
+        assert_eq!(MapLevel::of(sel(0, 0, None)), MapLevel::World);
         assert_eq!(
-            MapLevel::of((0, 3, None)),
+            MapLevel::of(sel(0, 3, None)),
             MapLevel::World,
             "continent 0 wins"
         );
-        assert_eq!(MapLevel::of((2, 0, None)), MapLevel::Continent);
-        assert_eq!(MapLevel::of((2, 7, None)), MapLevel::Zone);
-        assert_eq!(MapLevel::of((0, 0, Some(443))), MapLevel::Zone);
-    }
-
-    #[test]
-    fn the_real_table_gates_the_epl_towers_and_the_city_icons() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("chain");
-        let pois = benilla_formats::load_area_poi_catalog(&mut chain).expect("AreaPOI");
-        let areas = benilla_formats::load_area_table_catalog(&mut chain).expect("AreaTable");
-        let nothing_explored = vec![0u32; 64];
-
-        // The towers: Northpass Tower's Alliance-held row.
-        let (_, tower) = pois
-            .rows()
-            .find(|(id, _)| *id == 1768)
-            .expect("AreaPOI 1768");
-        assert_eq!(tower.name, "Northpass Tower");
-        assert_eq!(tower.world_state_id, 2372);
-        assert_eq!(
-            tower.flags & 0x80,
-            0x80,
-            "escapes the level-15 substitution"
-        );
-        assert_eq!(tower.area_id, 139, "Eastern Plaguelands");
-
-        let mut states = WorldStates::default();
-        let explored_epl = {
-            let bit = areas.get(139).expect("EPL area row").explore_flag;
-            let mut v = vec![0u32; 64];
-            v[bit as usize / 32] |= 1 << (bit % 32);
-            v
-        };
-        let tower_shows = |st: &WorldStates, ex: &[u32]| {
-            landmark_gates_pass(tower, MapLevel::Zone, &areas, ex, st)
-        };
-        assert!(
-            !tower_shows(&states, &explored_epl),
-            "no world states received — no tower icon (this IS the reported bug)"
-        );
-        states.write(&[(2372, 1)]);
-        assert!(tower_shows(&states, &explored_epl), "Alliance holds it");
-        assert!(
-            !tower_shows(&states, &nothing_explored),
-            "and it still needs the zone discovered"
-        );
-        assert!(
-            !landmark_gates_pass(tower, MapLevel::Continent, &areas, &explored_epl, &states),
-            "a tower is a zone-level row (Flags 0x87 carries no 0x08)"
-        );
-
-        // The capitals: continent level and exploration-exempt.
-        let states = WorldStates::default();
-        for (id, name) in [
-            (16u32, "Stormwind"),
-            (8, "Ironforge"),
-            (18, "The Undercity"),
-        ] {
-            let (_, city) = pois.rows().find(|(r, _)| *r == id).expect("city row");
-            assert_eq!(city.name, name);
-            assert_eq!(
-                city.area_id,
-                u32::MAX,
-                "continent-wide, so no exploration gate"
-            );
-            for level in [MapLevel::World, MapLevel::Continent, MapLevel::Zone] {
-                assert!(
-                    landmark_gates_pass(city, level, &areas, &nothing_explored, &states),
-                    "{name} shows at every level on a fresh character"
-                );
-            }
-            assert_eq!(
-                landmark_texture_index(city, MapLevel::Continent),
-                city.icon,
-                "the city icon is its own at continent level"
-            );
-            assert_eq!(
-                landmark_texture_index(city, MapLevel::Zone),
-                15,
-                "and the generic cell inside a zone map"
-            );
-        }
-    }
-
-    #[test]
-    fn the_catalog_preserves_dbc_file_order() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("chain");
-        let a: Vec<u32> = benilla_formats::load_area_poi_catalog(&mut chain)
-            .expect("AreaPOI")
-            .rows()
-            .map(|(id, _)| id)
-            .collect();
-        let b: Vec<u32> = benilla_formats::load_area_poi_catalog(&mut chain)
-            .expect("AreaPOI")
-            .rows()
-            .map(|(id, _)| id)
-            .collect();
-        assert_eq!(
-            a, b,
-            "two loads agree — the order is the file's, not a hash's"
-        );
-        assert!(a.len() > 300);
-        assert_ne!(
-            a,
-            {
-                let mut sorted = a.clone();
-                sorted.sort_unstable();
-                sorted
-            },
-            "and it is genuinely file order, not id order"
-        );
+        assert_eq!(MapLevel::of(sel(2, 0, None)), MapLevel::Continent);
+        assert_eq!(MapLevel::of(sel(2, 7, None)), MapLevel::Zone);
+        assert_eq!(MapLevel::of(sel(0, 0, Some(443))), MapLevel::MinusTwo);
     }
 }
 
@@ -1113,78 +1342,247 @@ mod player_zone_tests {
         }
     }
 
-    /// Kalimdor (map 1), Azeroth (map 0) with Elwynn at index 9 (Lua zone 10), and Warsong
-    /// Gulch's real row (`WorldMapArea` 443, map 489) as the one instance map.
+    fn row(map_id: u32, area_id: u32, default_floor: i32) -> RowEntry {
+        RowEntry {
+            map_id,
+            area_id,
+            rect: rect(),
+            default_floor,
+        }
+    }
+
+    fn sel(continent: u32, zone: u32, direct: Option<u32>, floor: Option<u32>) -> MapSelection {
+        MapSelection {
+            continent,
+            zone,
+            direct,
+            floor,
+            cosmic: false,
+        }
+    }
+
+    /// Kalimdor (map 1), Azeroth (map 0) with Elwynn at index 9 (Lua zone 10) and Eversong
+    /// (WMA 462, map 530, drawn on Azeroth) at index 3, Warsong Gulch (443, map 489) and
+    /// Naxxramas (535, map 533, floors 56 and 57) as instance maps. Eversong's region of map 530
+    /// moves by (-100, +100) onto map 0.
     fn data() -> WorldMapUiData {
+        let zones: Vec<ZoneEntry> = (0..10)
+            .map(|i| ZoneEntry {
+                wma_id: match i {
+                    9 => 30,
+                    3 => 462,
+                    i => 900 + i,
+                },
+                area_id: match i {
+                    9 => 12,
+                    3 => 3430,
+                    i => 900 + i,
+                },
+                rect: rect(),
+                default_floor: 0,
+            })
+            .collect();
+        let view = |name: &str, area_id, map_file: &str| WorldMapZoneView {
+            name: name.into(),
+            area_id,
+            map_file: map_file.into(),
+            loc_rect: (1.0, -1.0, 1.0, -1.0),
+            ..Default::default()
+        };
+        let mut rows = HashMap::from([
+            (13, row(1, 0, 0)),
+            (14, row(0, 0, 0)),
+            (30, row(0, 12, 0)),
+            (462, row(530, 3430, 0)),
+            (443, row(489, 3277, 0)),
+            (535, row(533, 3456, 0)),
+        ]);
+        for i in 0..10 {
+            rows.entry(900 + i).or_insert(row(0, 900 + i, 0));
+        }
+        let floor_rect = |left| ZoneRect {
+            left,
+            right: -1.0,
+            top: 1.0,
+            bottom: -1.0,
+        };
         WorldMapUiData {
             continents: vec![
                 ContinentEntry {
                     map_id: 1,
+                    wma_id: 13,
                     proj: None,
                     rect: rect(),
                     zones: Vec::new(),
                 },
                 ContinentEntry {
                     map_id: 0,
+                    wma_id: 14,
                     proj: None,
                     rect: rect(),
-                    zones: (0..10)
-                        .map(|i| ZoneEntry {
-                            // index 9 is Elwynn's areaId 12; the rest are filler ids.
-                            area_id: if i == 9 { 12 } else { 900 + i },
-                            rect: rect(),
-                        })
-                        .collect(),
+                    zones,
                 },
             ],
-            direct: vec![DirectAreaEntry {
-                id: 443,
-                map_id: 489,
-                rect: rect(),
-                view: WorldMapZoneView {
-                    name: "Warsong Gulch".into(),
-                    area_id: 3277,
-                    map_file: "WarsongGulch".into(),
-                    loc_rect: (1.0, -1.0, 1.0, -1.0),
-                    overlays: Vec::new(),
+            direct: vec![
+                DirectAreaEntry {
+                    id: 443,
+                    map_id: 489,
+                    rect: rect(),
+                    view: view("Warsong Gulch", 3277, "WarsongGulch"),
                 },
+                DirectAreaEntry {
+                    id: 535,
+                    map_id: 533,
+                    rect: rect(),
+                    view: view("Naxxramas", 3456, "Naxxramas"),
+                },
+            ],
+            rows,
+            floors: vec![
+                FloorEntry {
+                    id: 56,
+                    map_id: 533,
+                    floor_index: 1,
+                    rect: floor_rect(1.0),
+                },
+                FloorEntry {
+                    id: 57,
+                    map_id: 533,
+                    floor_index: 2,
+                    rect: floor_rect(3.0),
+                },
+            ],
+            chunks: vec![DungeonMapChunk {
+                id: 1,
+                map_id: 533,
+                wmo_group_id: 7000,
+                dungeon_map_id: 57,
+                min_z: 100.0,
             }],
+            transforms: vec![WorldMapTransform {
+                id: 2,
+                map_id: 530,
+                min_x: 50.0,
+                min_y: -150.0,
+                max_x: 150.0,
+                max_y: -50.0,
+                new_map_id: 0,
+                offset_x: -100.0,
+                offset_y: 100.0,
+                new_dungeon_map_id: 0,
+            }],
+            poi_links: HashMap::new(),
+            area_views: HashMap::new(),
+            floor_views: Vec::new(),
         }
     }
 
     #[test]
     fn an_unresolved_zone_falls_back_to_the_continent_not_the_world() {
         let d = data();
-        let on_continent = |c, z| PlayerSelection {
+        let on = |c, z| PlayerSelection {
             zone: Some((c, z)),
-            direct: None,
+            ..Default::default()
         };
-
-        // Elwynn is continent 2, zone 10.
         assert_eq!(
-            resolve_player_selection(&d, 0, Some(12)),
-            on_continent(2, 10)
+            resolve_player_selection(&d, 0, (0.0, 0.0), Some(12), None),
+            on(2, 10)
         );
-
-        // An area the catalog has no row for.
         assert_eq!(
-            resolve_player_selection(&d, 0, Some(4242)),
-            on_continent(2, 0),
-            "SetMap(continent, -1); GetCurrentMapZone reads that back as 0"
+            resolve_player_selection(&d, 0, (0.0, 0.0), Some(4242), None),
+            on(2, 0)
         );
-
-        // The area feed has not answered yet.
         assert_eq!(
-            resolve_player_selection(&d, 0, None),
-            on_continent(2, 0),
-            "a zone we do not know YET is still this continent"
+            resolve_player_selection(&d, 0, (0.0, 0.0), None, None),
+            on(2, 0)
         );
-
-        // Map 389, Ragefire Chasm, has no `WorldMapArea` row: the world view, `SetMap(-1, -1)`.
+        // Map 389 has no `WorldMapArea` row: the world view.
         assert_eq!(
-            resolve_player_selection(&d, 389, Some(12)),
+            resolve_player_selection(&d, 389, (0.0, 0.0), Some(12), None),
             PlayerSelection::default()
         );
+        // Eversong's map 530 moves onto Azeroth, where its zone row is.
+        assert_eq!(
+            resolve_player_selection(&d, 530, (100.0, -100.0), Some(3430), None),
+            on(2, 4)
+        );
+    }
+
+    #[test]
+    fn an_instance_map_opens_on_the_players_floor_else_floor_one() {
+        let d = data();
+        let inst = |floor| PlayerSelection {
+            zone: None,
+            direct: Some(535),
+            floor,
+        };
+        assert_eq!(
+            resolve_player_selection(&d, 533, (0.0, 0.0), None, None),
+            inst(Some(56))
+        );
+        let floor = floor_at(&d, 533, Some(7000), 150.0);
+        assert_eq!(floor, Some(57));
+        assert_eq!(
+            floor_at(&d, 533, Some(7000), 50.0),
+            None,
+            "under the chunk's MinZ"
+        );
+        assert_eq!(floor_at(&d, 533, None, 150.0), None, "no WMO group");
+        assert_eq!(
+            resolve_player_selection(&d, 533, (0.0, 0.0), None, floor),
+            inst(Some(57))
+        );
+        // A battleground has no floors.
+        assert_eq!(
+            resolve_player_selection(&d, 489, (0.0, 0.0), Some(3277), None),
+            PlayerSelection {
+                zone: None,
+                direct: Some(443),
+                floor: None,
+            }
+        );
+    }
+
+    #[test]
+    fn the_projection_moves_transformed_regions_and_keeps_floors_apart() {
+        let d = data();
+        // Eversong on the Azeroth continent map: the moved position (0, 0) is the rect centre.
+        assert_eq!(
+            project_on_displayed(&d, sel(2, 0, None, None), 530, 100.0, -100.0),
+            Some((0.5, 0.5))
+        );
+        // Eversong's own zone map reads the original position, which is off its rect.
+        assert_eq!(
+            project_on_displayed(&d, sel(2, 4, None, None), 530, 100.0, -100.0),
+            Some((0.0, 0.0))
+        );
+        assert_eq!(
+            project_on_displayed(&d, sel(2, 4, None, None), 530, 0.0, 0.0),
+            None,
+            "outside the transform the position stays on map 530, off the Azeroth continent"
+        );
+        // Floor 2 is shown: a body on floor 2 projects through floor 2's rect; one on no floor
+        // or on floor 1 hides.
+        let naxx2 = sel(0, 0, Some(535), Some(57));
+        // The area rect would put (0, 1) on its edge, (0.0, 0.5); floor 2's is wider.
+        assert_eq!(
+            project_on_floor(&d, naxx2, 533, 0.0, 1.0, Some(57)),
+            Some((0.5, 0.5))
+        );
+        assert_eq!(project_on_floor(&d, naxx2, 533, 0.0, 0.0, None), None);
+        assert_eq!(project_on_floor(&d, naxx2, 533, 0.0, 0.0, Some(56)), None);
+        // No floor shown: the area rect, whatever floor the body is on.
+        let bare = sel(0, 0, Some(535), None);
+        assert_eq!(
+            project_on_floor(&d, bare, 533, 0.0, 0.0, Some(56)),
+            Some((0.5, 0.5))
+        );
+        // The cosmic sheet shows nobody.
+        let cosmic = MapSelection {
+            cosmic: true,
+            ..Default::default()
+        };
+        assert_eq!(project_on_displayed(&d, cosmic, 0, 0.0, 0.0), None);
     }
 
     /// The engine's `GetWorldLocMapPosition` answers what the feed's own projection answers, on
@@ -1193,8 +1591,8 @@ mod player_zone_tests {
     fn world_loc_map_position_projects_on_the_displayed_map() {
         let mut script = UiScript::new().unwrap();
         install_world_loc_projector(&mut script, &data());
-        script.sync_world_map_to_player_zone(0, 0, Some(443));
-        assert_eq!(script.world_map_selection(), (0, 0, Some(443)));
+        script.sync_world_map_to_player_zone(0, 0, Some(443), None);
+        assert_eq!(script.world_map_selection(), sel(0, 0, Some(443), None));
         assert_eq!(
             script
                 .eval::<(f64, f64)>("return GetWorldLocMapPosition(489, 0, 0)")
@@ -1210,83 +1608,23 @@ mod player_zone_tests {
         );
     }
 
-    #[test]
-    fn a_battleground_takes_the_orphan_leg_and_projects_on_its_own_rect() {
-        let d = data();
-
-        assert_eq!(
-            resolve_player_selection(&d, 489, Some(3277)),
-            PlayerSelection {
-                zone: None,
-                direct: Some(443),
-            },
-            "the orphan leg selects the WorldMapArea row id"
-        );
-        assert_eq!(
-            resolve_player_selection(&d, 0, Some(12)).direct,
-            None,
-            "a continent match short-circuits before the orphan loop"
-        );
-
-        // The fixture rect is [-1, 1] on both axes, so the origin is its centre.
-        let sel = (0, 0, Some(443));
-        assert_eq!(
-            project_on_displayed(&d, sel, 489, 0.0, 0.0),
-            Some((0.5, 0.5)),
-            "a body in the battleground lands on the battleground map"
-        );
-        assert_eq!(
-            project_on_displayed(&d, sel, 0, 0.0, 0.0),
-            None,
-            "`0x4a7437`: a body on another map is refused, which is the (0,0) hide sentinel"
-        );
-        assert_eq!(
-            project_on_displayed(&d, (0, 0, Some(9999)), 489, 0.0, 0.0),
-            None,
-            "an id no row carries resolves to nothing rather than indexing anything"
-        );
-        assert_eq!(
-            project_on_displayed(&d, (0, 0, None), 489, 0.0, 0.0),
-            None,
-            "the world sheet has no continent for map 489 at all"
-        );
-        assert_eq!(MapLevel::of(sel), MapLevel::Zone);
-        assert_eq!(MapLevel::of((0, 0, None)), MapLevel::World);
-    }
-
-    /// `0x494780` calls `0x4a6650` at `0x4947ac` when the cached zone id `[0xb4e314]` was 0.
+    /// `0x494780` calls the resolver once per session, when the cached zone id was 0.
     #[test]
     fn the_engine_selects_the_players_zone_on_first_world_enter() {
-        let on_continent = |c, z| PlayerSelection {
+        let on = |c, z| PlayerSelection {
             zone: Some((c, z)),
-            direct: None,
+            ..Default::default()
         };
-        // No area yet: `0x67e510` bails before `0x494780` on a zero zone id.
-        assert_eq!(world_enter_selection(false, None, on_continent(2, 0)), None);
-
+        assert_eq!(world_enter_selection(false, None, on(2, 0)), None);
         assert_eq!(
-            world_enter_selection(false, Some(12), on_continent(2, 10)),
-            Some(on_continent(2, 10))
+            world_enter_selection(false, Some(12), on(2, 10)),
+            Some(on(2, 10))
         );
-
-        // Never again: only the world-session teardown `0x491180` re-zeroes `[0xb4e314]`.
-        assert_eq!(
-            world_enter_selection(true, Some(40), on_continent(2, 22)),
-            None
-        );
-
-        // An unresolvable player still syncs, to the world view: every exit of `0x4a6650` writes.
+        assert_eq!(world_enter_selection(true, Some(40), on(2, 22)), None);
         assert_eq!(
             world_enter_selection(false, Some(12), PlayerSelection::default()),
             Some(PlayerSelection::default())
         );
-
-        // Logging straight into a battleground: the one sync carries the instance map.
-        let bg = PlayerSelection {
-            zone: None,
-            direct: Some(443),
-        };
-        assert_eq!(world_enter_selection(false, Some(3277), bg), Some(bg));
     }
 }
 
@@ -1297,7 +1635,7 @@ mod direct_area_tests {
     /// The real catalog off the player's own chain, or a skip.
     fn real_catalog() -> Option<(Vec<WorldMapContinentView>, WorldMapUiData)> {
         let data = benilla_formats::wow_data_or_skip!(None);
-        let mut chain = benilla_formats::open_chain(&data).expect("chain");
+        let mut chain = benilla_formats::open_configured_chain(&data).expect("chain");
         let areas = benilla_formats::load_area_table_catalog(&mut chain).expect("AreaTable");
         let maps = benilla_assets::MapCatalogRes(
             benilla_formats::load_map_catalog(&mut chain).expect("Map"),
@@ -1305,71 +1643,50 @@ mod direct_area_tests {
         Some(build_catalog(&mut chain, &areas, &maps).expect("the real catalog"))
     }
 
+    /// Build 12340's four continents, with the Burning Crusade starting zones drawn on the old
+    /// continents, and the instance maps (battlegrounds and Northrend dungeons) beside them.
     #[test]
-    fn the_real_dbc_carries_exactly_the_three_battleground_orphans() {
+    fn the_real_catalog_draws_zones_on_their_display_continent() {
         let Some((views, data)) = real_catalog() else {
             return;
         };
-
         assert_eq!(
-            data.direct
+            views
                 .iter()
-                .map(|d| (d.id, d.map_id, d.view.map_file.as_str()))
+                .map(|c| (c.map_id, c.wma_id))
                 .collect::<Vec<_>>(),
-            vec![
-                (401, 30, "AlteracValley"),
-                (443, 489, "WarsongGulch"),
-                (461, 529, "ArathiBasin"),
-            ],
-            "file order, no sort — the reference's fill pass appends as it walks"
+            vec![(1, 13), (0, 14), (530, 466), (571, 485)]
         );
-
-        for d in &data.direct {
-            assert!(
-                !views
-                    .iter()
-                    .any(|c| c.zones.iter().any(|z| z.map_file == d.view.map_file)),
-                "{} is no continent's child",
-                d.view.map_file
-            );
+        let zone_on =
+            |cont: usize, file: &str| views[cont].zones.iter().any(|z| z.map_file == file);
+        assert!(zone_on(1, "EversongWoods") && zone_on(1, "SilvermoonCity"));
+        assert!(zone_on(0, "AzuremystIsle") && zone_on(0, "TheExodar"));
+        assert!(!zone_on(2, "EversongWoods"));
+        assert!(zone_on(3, "Dalaran"));
+        let direct: Vec<u32> = data.direct.iter().map(|d| d.id).collect();
+        for id in [443, 535, 529] {
+            assert!(direct.contains(&id), "{id} is an instance map");
         }
-        assert!(
-            data.continents
-                .iter()
-                .all(|c| c.map_id == 0 || c.map_id == 1),
-            "and the continents are still only Azeroth and Kalimdor"
-        );
-
-        // Only Alterac Valley has overlay art, 3 rows on WMA 401.
-        let overlays = |folder: &str| {
-            data.direct
-                .iter()
-                .find(|d| d.view.map_file == folder)
-                .map(|d| d.view.overlays.len())
-        };
-        assert_eq!(overlays("AlteracValley"), Some(3));
-        assert_eq!(overlays("WarsongGulch"), Some(0));
-        assert_eq!(overlays("ArathiBasin"), Some(0));
+        assert!(!direct.contains(&504), "Dalaran is a Northrend zone");
+        assert!(data
+            .floors
+            .iter()
+            .any(|f| f.map_id == 533 && f.floor_index == 1));
+        assert!(!data.transforms.is_empty());
     }
 
-    /// `GetMapInfo()` must answer `"WarsongGulch"` for `Blizzard_BattlefieldMinimap.lua:83-86` to
-    /// draw; the continent reads back -1 (`-2 + 1`) and the zone 0.
+    /// `GetMapInfo()` must answer `"WarsongGulch"` for the battlefield minimap to draw; the
+    /// continent reads back -1 and the zone 0.
     #[test]
     fn a_body_in_warsong_gulch_lands_on_the_warsong_gulch_map() {
         let Some((views, data)) = real_catalog() else {
             return;
         };
+        let player = resolve_player_selection(&data, 489, (0.0, 0.0), Some(3277), None);
+        assert_eq!(player.direct, Some(443));
 
-        let player = resolve_player_selection(&data, 489, Some(3277));
-        assert_eq!(
-            player,
-            PlayerSelection {
-                zone: None,
-                direct: Some(443),
-            }
-        );
-
-        let mut script = UiScript::new().expect("a bare engine");
+        let mut script =
+            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).expect("VM");
         script.set_world_map_catalog(views);
         script.set_world_map_direct_areas(
             data.direct
@@ -1377,59 +1694,57 @@ mod direct_area_tests {
                 .map(|d| (d.id, d.view.clone()))
                 .collect::<Vec<_>>(),
         );
-        // The engine's world-enter sync (`0x4947ac`).
+        script.set_world_map_areas(data.area_views.clone(), data.floor_views.clone());
         let (c, z) = player.zone.unwrap_or((0, 0));
-        script.sync_world_map_to_player_zone(c, z, player.direct);
-
+        script.sync_world_map_to_player_zone(c, z, player.direct, player.floor);
         assert_eq!(
             script
-                .eval::<(String, i64, i64)>(
-                    "return GetMapInfo(), GetCurrentMapContinent(), GetCurrentMapZone()"
+                .eval::<(String, i64, i64, i64)>(
+                    "return GetMapInfo(), GetCurrentMapContinent(), GetCurrentMapZone(), \
+                     GetCurrentMapAreaID()"
                 )
                 .expect("the getters answer"),
-            ("WarsongGulch".into(), -1, 0)
+            ("WarsongGulch".into(), -1, 0, 444)
         );
-
-        // The blip: the rect centre is the middle of the map, and a body on Azeroth hides.
         let wsg = data
             .direct
             .iter()
             .find(|d| d.id == 443)
-            .expect("the Warsong Gulch row");
+            .expect("Warsong Gulch");
         let (wx, wy) = (
             (wsg.rect.top + wsg.rect.bottom) / 2.0,
             (wsg.rect.left + wsg.rect.right) / 2.0,
         );
         let selection = script.world_map_selection();
-        assert_eq!(selection, (0, 0, Some(443)));
         let uv = project_on_displayed(&data, selection, 489, wx, wy).expect("inside the rect");
         assert!(
             (uv.0 - 0.5).abs() < 1e-5 && (uv.1 - 0.5).abs() < 1e-5,
-            "the rect centre is the middle of the battle map, got {uv:?}"
+            "{uv:?}"
         );
         assert_eq!(project_on_displayed(&data, selection, 0, wx, wy), None);
 
-        // A world-state push or an exploration update re-selects, keeping the instance map: the
-        // reference re-passes `direct != -1 ? direct : zone` at all five in-place refresh sites.
-        script.set_world_map_explored(vec![u32::MAX; 64]);
-        script.set_world_map_player_direct_area(player.direct);
-        script
-            .run("SetMapToCurrentZone()")
-            .expect("the OnShow verb");
+        // SetMapByID reaches Dalaran's floor and Naxxramas' first floor.
+        script.run("SetMapByID(504)").expect("SetMapByID");
         assert_eq!(
             script
-                .eval::<(String, i64)>("return GetMapInfo(), GetCurrentMapContinent()")
-                .expect("the getters answer"),
-            ("WarsongGulch".into(), -1),
-            "the instance selection survives every refresh path"
+                .eval::<(i64, i64)>("return GetCurrentMapAreaID(), GetCurrentMapDungeonLevel()")
+                .unwrap(),
+            (505, 1)
         );
-
-        // A continent selection clears it: `0x4a67a0`'s other legs store -1 there.
+        script.run("SetMapByID(535)").expect("SetMapByID");
+        assert!(
+            script
+                .eval::<i64>("return GetNumDungeonMapLevels()")
+                .unwrap()
+                >= 4
+        );
         script.run("SetMapZoom(1)").expect("SetMapZoom");
         assert_eq!(
             script.world_map_selection(),
-            (1, 0, None),
-            "selecting a continent clears the direct cell"
+            MapSelection {
+                continent: 1,
+                ..Default::default()
+            }
         );
     }
 }
