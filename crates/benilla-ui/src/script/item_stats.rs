@@ -56,6 +56,8 @@ pub struct ItemTemplateView {
     pub max_durability: u32,
     /// "Requires Level N", printed only for N > 1 (`0x52d2cf`).
     pub required_level: u32,
+    /// The template's `ItemLevel`, `GetItemInfo`'s fourth return.
+    pub item_level: u32,
     /// Class and race masks: `<= 0` prints no line, and a line missing the player's bit is red.
     pub allowable_class: i32,
     pub allowable_race: i32,
@@ -354,7 +356,20 @@ fn reference_atoi(s: &str) -> i64 {
 /// string `lua_isnumber` (`0x6f34d0`) coerces, is the id alone; another string (`0x6f3510`) must
 /// pass `strnicmp(s, "item:", 5)` (`0x64a4c0`) for its four fields, else it is id 0, so a name or
 /// a hyperlink finds nothing; anything else raises the usage error (`0x842d24`, via `0x6f4940`).
-fn parse_item_arg(v: &Value) -> mlua::Result<(i64, u32, u32, u32)> {
+/// `GetItemInfo`'s argument (`0x516c60`).
+enum ItemArg {
+    /// An id with the item string's enchant, random property and suffix fields.
+    Id(i64, u32, u32, u32),
+    /// A name, looked up among the cached templates (`0x709de0`).
+    Name(String),
+}
+
+const ITEM_INFO_USAGE: &str = "Usage: GetItemInfo(itemID|\"name\"|\"itemlink\")";
+
+/// A number (or numeric string) is an id; a string holding `item:` anywhere is build 12340's item
+/// string (`id:enchant:gem1:gem2:gem3:gem4:suffix:unique:level`), so a full hyperlink parses;
+/// any other string is a name.
+fn parse_item_arg(v: &Value) -> mlua::Result<ItemArg> {
     let as_number = match v {
         Value::Integer(i) => Some(*i as f64),
         Value::Number(n) => Some(*n),
@@ -362,28 +377,24 @@ fn parse_item_arg(v: &Value) -> mlua::Result<(i64, u32, u32, u32)> {
         _ => None,
     };
     if let Some(n) = as_number {
-        return Ok((n as i64, 0, 0, 0));
+        return Ok(ItemArg::Id(n as i64, 0, 0, 0));
     }
-    // An `item:` string; any other string is id 0.
     let Value::String(s) = v else {
-        return Err(mlua::Error::RuntimeError(
-            "Usage: GetItemInfo(itemID|\"itemlink\")".into(),
-        ));
+        return Err(mlua::Error::RuntimeError(ITEM_INFO_USAGE.into()));
     };
-    let s = s
-        .to_str()
-        .map_err(|_| mlua::Error::RuntimeError("Usage: GetItemInfo(itemID|\"itemlink\")".into()))?;
-    let Some(rest) = s
-        .get(..5)
-        .filter(|p| p.eq_ignore_ascii_case("item:"))
-        .map(|_| &s[5..])
-    else {
-        return Ok((0, 0, 0, 0));
+    let s = s.to_string_lossy();
+    let Some(at) = s.to_ascii_lowercase().find("item:") else {
+        return Ok(ItemArg::Name(s));
     };
-    let mut fields = rest.splitn(4, ':').map(reference_atoi);
-    let id = fields.next().unwrap_or(0);
-    let mut next = || u32::try_from(fields.next().unwrap_or(0)).unwrap_or(0);
-    Ok((id, next(), next(), next()))
+    let fields: Vec<i64> = s[at + 5..]
+        .split(['|', '['])
+        .next()
+        .unwrap_or("")
+        .split(':')
+        .map(reference_atoi)
+        .collect();
+    let field = |i: usize| u32::try_from(fields.get(i).copied().unwrap_or(0)).unwrap_or(0);
+    Ok(ItemArg::Id(fields.first().copied().unwrap_or(0), field(1), field(6), field(7)))
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -408,18 +419,28 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetItemInfo(itemID | "item:id:enchant:randomProperty:suffix") → itemName, itemLink,
-    // itemQuality, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture:
-    // nine values (`0x48e070` ends `mov eax,0x9`); later clients insert `itemLevel` at 4. The name
-    // is the bare template name, where the reference appends the random suffix (`0x5d8b00`); the
-    // link is the item string (`0x48e1c9`, literal `0x842d4c`), not a hyperlink; the level is the
-    // required one (`[record+0x3c]`; `ItemLevel` at `+0x38` is never pushed). An uncached
-    // template answers no values and records the ask, as the reference's lookup (`0x55ba30`)
-    // queries and returns null, sending the binding to `xor eax,eax; ret`.
+    // GetItemInfo(itemID | "name" | "itemlink") (`0x516c60`) → name, link, quality, itemLevel,
+    // requiredLevel, type, subType, stackCount, equipLoc, texture, sellPrice: eleven. The link is
+    // build 12340's nine-field hyperlink (`0x61e290`) carrying the player's level. Labelled: the
+    // name is the bare template name, where the client appends the random suffix (`0x706d70`). An
+    // uncached template answers nothing and records the ask.
     lua.globals().set(
         "GetItemInfo",
         lua.create_function(|lua, arg: Value| {
-            let (id, enchant, random_property, suffix) = parse_item_arg(&arg)?;
+            let (id, enchant, random_property, suffix) = match parse_item_arg(&arg)? {
+                ItemArg::Id(id, e, r, x) => (id, e, r, x),
+                ItemArg::Name(name) => {
+                    let model = lua.app_data_ref::<Model>().expect("model app_data");
+                    match model
+                        .item_templates
+                        .iter()
+                        .find(|(_, t)| !name.is_empty() && t.name.eq_ignore_ascii_case(&name))
+                    {
+                        Some((id, _)) => (i64::from(*id), 0, 0, 0),
+                        None => return Ok(MultiValue::new()),
+                    }
+                }
+            };
             let Ok(item_id) = u32::try_from(id) else {
                 return Ok(MultiValue::new()); // no record holds a negative or past-u32 id
             };
@@ -435,12 +456,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 return Ok(MultiValue::new());
             };
             let str_or_empty = |s: &Option<String>| s.clone().unwrap_or_default();
+            let level = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .unit("player")
+                .map_or(0, |u| u.level);
+            let hex = QUALITY_COLORS
+                .get(v.quality.min(6) as usize)
+                .map_or("|cffffffff", |c| c.3);
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&v.name)?),
                 Value::String(lua.create_string(format!(
-                    "item:{item_id}:{enchant}:{random_property}:{suffix}"
+                    "{hex}|Hitem:{item_id}:{enchant}:0:0:0:0:{random_property}:{suffix}:{level}|h[{}]|h|r",
+                    v.name
                 ))?),
                 Value::Integer(i64::from(v.quality)),
+                Value::Integer(i64::from(v.item_level)),
                 Value::Integer(i64::from(v.required_level)),
                 Value::String(lua.create_string(str_or_empty(&v.item_type))?),
                 Value::String(lua.create_string(str_or_empty(&v.item_sub_type))?),
@@ -452,6 +483,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     Some(icon) => Value::String(lua.create_string(icon)?),
                     None => Value::Nil,
                 },
+                Value::Integer(i64::from(v.sell_price)),
             ]))
         })?,
     )?;
@@ -599,8 +631,10 @@ mod get_item_info_tests {
             item_type: Some("Weapon".into()),
             // VerboseName, not the tooltip cell's "Sword" (`0x48e311`).
             item_sub_type: Some("One-Handed Swords".into()),
-            // Required level 1 against item level 2 makes position 4 falsifiable.
+            // Required level 1 against item level 2 makes positions 4 and 5 falsifiable.
             required_level: 1,
+            item_level: 2,
+            sell_price: 7,
             stackable: 1,
             max_count: 0,
             icon: Some("Interface\\Icons\\INV_Sword_04".into()),
@@ -608,46 +642,32 @@ mod get_item_info_tests {
         }
     }
 
-    /// The arity catches a later client's shape, which inserts `itemLevel` at position 4.
+    /// Build 12340's eleven (`0x516c60` returns 0xb).
     #[test]
-    fn get_item_info_returns_the_1_12_nine_value_shape() {
+    fn get_item_info_returns_build_12340s_eleven() {
         let mut s = UiScript::new().unwrap();
         s.set_item_template(25, worn_shortsword());
-
-        assert_eq!(
-            s.arity("GetItemInfo(25)").unwrap(),
-            9,
-            "1.12 returns nine values (`mov eax,0x9` at 0x48e303) — a tenth means the modern shape"
-        );
-
-        let (name, link, quality, min_level, ty, sub_ty, stack, equip, texture): (
-            String,
-            String,
-            i64,
-            i64,
-            String,
-            String,
-            i64,
-            String,
-            Option<String>,
-        ) = s
-            .eval("local a,b,c,d,e,f,g,h,i = GetItemInfo(25) return a,b,c,d,e,f,g,h,i")
+        assert_eq!(s.arity("GetItemInfo(25)").unwrap(), 11);
+        let (name, link, quality, ilvl, req, ty, sub_ty): (String, String, i64, i64, i64, String, String) = s
+            .eval("local a,b,c,d,e,f,g = GetItemInfo(25) return a,b,c,d,e,f,g")
             .unwrap();
         assert_eq!(name, "Worn Shortsword");
-        // The item string (`0x842d4c`); a number argument leaves the other fields 0.
-        assert_eq!(link, "item:25:0:0:0");
-        assert_eq!(quality, 1);
-        assert_eq!(min_level, 1);
-        assert_eq!(ty, "Weapon");
-        assert_eq!(sub_ty, "One-Handed Swords");
+        // The nine-field hyperlink (`0x61e290`), carrying the player's level (0: none here).
+        assert_eq!(link, "|cffffffff|Hitem:25:0:0:0:0:0:0:0:0|h[Worn Shortsword]|h|r");
+        assert_eq!((quality, ilvl, req), (1, 2, 1));
+        assert_eq!((ty.as_str(), sub_ty.as_str()), ("Weapon", "One-Handed Swords"));
+        let (stack, equip, texture, price): (i64, String, Option<String>, i64) = s
+            .eval("local _,_,_,_,_,_,_,h,i,j,k = GetItemInfo(25) return h,i,j,k")
+            .unwrap();
         assert_eq!(stack, 1);
         assert_eq!(equip, "INVTYPE_WEAPONMAINHAND");
         assert_eq!(texture.as_deref(), Some("Interface\\Icons\\INV_Sword_04"));
+        assert_eq!(price, 7);
     }
 
     /// Ashbringer, item 13262: required level 60, item level 76 in vmangos `item_template`.
     #[test]
-    fn position_four_is_the_required_level_not_the_item_level() {
+    fn positions_four_and_five_are_the_item_and_required_levels() {
         let mut s = UiScript::new().unwrap();
         s.set_item_template(
             13262,
@@ -659,27 +679,27 @@ mod get_item_info_tests {
                 inventory_type: 17,
                 item_type: Some("Weapon".into()),
                 item_sub_type: Some("Two-Handed Swords".into()),
-                required_level: 60, // item level 76 is never returned
+                required_level: 60,
+                item_level: 76,
                 max_count: 1,
                 stackable: 1,
                 ..Default::default()
             },
         );
         assert_eq!(
-            s.eval::<i64>("local _, _, _, minLevel = GetItemInfo(13262) return minLevel")
+            s.eval::<(i64, i64)>("local _, _, _, ilvl, req = GetItemInfo(13262) return ilvl, req")
                 .unwrap(),
-            60,
-            "position 4 is RequiredLevel ([record+0x3c]); ItemLevel lives at +0x38 and is not pushed"
+            (76, 60),
+            "ItemLevel (+0x34) then RequiredLevel (+0x38)"
         );
         assert_eq!(
-            s.eval::<String>("local _, _, _, _, itemType = GetItemInfo(13262) return itemType")
+            s.eval::<String>("local _, _, _, _, _, itemType = GetItemInfo(13262) return itemType")
                 .unwrap(),
-            "Weapon",
-            "position 5 is itemType — a modern shape would put a NUMBER (itemMinLevel) here"
+            "Weapon"
         );
         assert_eq!(
             s.eval::<String>(
-                "local _, _, _, _, _, _, _, equipLoc = GetItemInfo(13262) return equipLoc"
+                "local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(13262) return equipLoc"
             )
             .unwrap(),
             "INVTYPE_2HWEAPON"
@@ -688,7 +708,7 @@ mod get_item_info_tests {
 
     /// Linen Cloth, item 2589: `max_count 0, stackable 20` in vmangos `item_template`.
     #[test]
-    fn position_seven_is_the_stack_size_not_the_unique_cap() {
+    fn position_eight_is_the_stack_size_not_the_unique_cap() {
         let mut s = UiScript::new().unwrap();
         s.set_item_template(
             2589,
@@ -705,9 +725,9 @@ mod get_item_info_tests {
             },
         );
         let (stack, equip): (i64, String) = s
-            .eval("local _,_,_,_,_,_,g,h = GetItemInfo(2589) return g,h")
+            .eval("local _,_,_,_,_,_,_,h,i = GetItemInfo(2589) return h,i")
             .unwrap();
-        assert_eq!(stack, 20, "Stackable (+0x60), never MaxCount (+0x5c)");
+        assert_eq!(stack, 20, "Stackable (+0x5c), never MaxCount");
         // InventoryType 0 answers "", not nil.
         assert_eq!(equip, "");
     }
@@ -758,41 +778,38 @@ mod get_item_info_tests {
             );
         }
 
-        // An item string's other fields echo into return 2 verbatim.
+        // An item string's enchant, suffix and unique fields carry into the link.
         let (name, link): (String, String) = s
-            .eval("local a,b = GetItemInfo(\"item:25:2564:7:0\") return a,b")
+            .eval("local a,b = GetItemInfo(\"item:25:2564:0:0:0:0:7:3:80\") return a,b")
             .unwrap();
         assert_eq!(name, "Worn Shortsword");
-        assert_eq!(link, "item:25:2564:7:0");
-        // A case-insensitive prefix, and a short string still parses.
-        assert_eq!(
-            s.eval::<String>("local _, link = GetItemInfo(\"ITEM:25\") return link")
-                .unwrap(),
-            "item:25:0:0:0"
-        );
-
-        // A bare name and a full hyperlink are id 0: no values and no ask.
+        assert_eq!(link, "|cffffffff|Hitem:25:2564:0:0:0:0:7:3:0|h[Worn Shortsword]|h|r");
+        // Case-insensitive, short, inside a full hyperlink, or a cached name.
         for arg in [
-            "\"Worn Shortsword\"",
-            "\"|cffffffff|Hitem:25:0:0:0|h[Worn Shortsword]|h|r\"",
-            "\"\"",
+            "\"ITEM:25\"",
+            "\"|cffffffff|Hitem:25:0:0:0:0:0:0:0:80|h[Worn Shortsword]|h|r\"",
+            "\"worn shortsword\"",
         ] {
             assert_eq!(
-                s.arity(&format!("GetItemInfo({arg})")).unwrap(),
-                0,
-                "argument {arg} resolves to item id 0"
+                s.eval::<String>(&format!("return (GetItemInfo({arg}))")).unwrap(),
+                "Worn Shortsword",
+                "argument {arg}"
             );
+        }
+        // An unknown name or the empty string: no values and no ask.
+        for arg in ["\"Nothing Such\"", "\"\""] {
+            assert_eq!(s.arity(&format!("GetItemInfo({arg})")).unwrap(), 0, "argument {arg}");
         }
         assert!(s.take_item_stat_asks().is_empty());
 
-        // Neither a number nor a string raises the usage error (`0x842d24`).
+        // Neither a number nor a string raises the usage error.
         let err = s
             .eval::<mlua::Value>("return GetItemInfo(nil)")
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("Usage: GetItemInfo(itemID|\"itemlink\")"),
-            "expected the reference's usage error, got {err}"
+            err.contains("Usage: GetItemInfo(itemID|\"name\"|\"itemlink\")"),
+            "expected the client's usage error, got {err}"
         );
     }
 
