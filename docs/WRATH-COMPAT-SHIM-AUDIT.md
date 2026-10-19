@@ -15,7 +15,7 @@ Verdicts:
 - **real**: a real build-12340 binding still served by the shim; each needs a native binding
   (the suggested owner in brackets), or a recorded no-op where the client has no such service.
 
-## Native now (16)
+## Native now (17)
 
 | Global | Address | Native behaviour |
 |---|---|---|
@@ -33,10 +33,12 @@ Verdicts:
 | `GetMultiCastBarOffset` | `0x5b71e0` | 6 (`0xa0b708`); the shim answered 0 |
 | `GetNumMapDebugObjects` | `0x608560` | 0 |
 | `HasDebugZoneMap` | `0x8e5250` | no results |
+| `GetQuestWorldMapAreaID` | `0x5e56c0` → `0x5e2b60` | the marked POI blob on the shown map and floor, else the shown continent's nearest floor then nearest the player, else the first; no blob: the header's top zone's `WorldMapArea` row, floor 0 |
 
 Unresolved, labelled in code: the writers of the reset, the mirror table and the PvP end; the chord
 matcher `0x55d6b0`; the condition compiler `0x5f0040` and its handlers (each asks the native Lua
-reader of the same state).
+reader of the same state); `GetQuestWorldMapAreaID`'s blob point (taken as the centroid), header-zone
+row order (lowest id) and its pre-pass `0x547170(0)`.
 
 ## Dead lines deleted (13)
 
@@ -56,7 +58,7 @@ string in `Wow.exe`, no caller in stock `Blizzard_CombatText.lua`, `WorldStateFr
 The `COMBATLOG_OBJECT_*` block (masks, `RAIDTARGET1..8`): stock `Constants.lua` defines all 33.
 It goes with the file.
 
-## Real bindings still on the shim (61)
+## Real bindings still on the shim (60)
 
 ### Quests and gossip [App Migration]
 
@@ -67,7 +69,6 @@ It goes with the file.
 | `GetQuestLink` | `0x5e51d0` | a quest-log row's `quest:` link off the quest cache (`0x67de90`) |
 | `GetNumQuestLogRewardFactions`, `GetQuestLogRewardFactionInfo`, `ProcessQuestLogRewardFactions` | `0x5df910`, `0x5df940`, `0x5df8a0` | the selected quest's reputation rewards (cache `+0x28b8`), staged at `0xc0173c`/`0xc01840` |
 | `GetQuestSortIndex` | `0x5dfa10` | a quest-log row's sort index + 1 (`0x5deae0`) |
-| `GetQuestWorldMapAreaID` | `0x5e56c0` | a quest's POI map area and floor (`0x5e2b60`) |
 | `QuestFlagsPVP` | `0x58c3e0` | the detail quest's flags `& 0x2000`, gated on `0xb2f998` |
 | `ForceGossip` | `0x58ab50` | whether the gossip NPC forces the gossip window (`0x715e10`) |
 | `GetContainerItemQuestInfo` | `0x5d9400` | a bag item's quest-starter fields off its item template |
@@ -161,12 +162,6 @@ Still on the shim:
   `GetExistingLocales`, `GetCVarBool`, `RegisterStaticConstants`, `TriggerTutorial`,
   `CombatTextSetActiveUnit`.
 - Proposed to route:
-  - `GetQuestWorldMapAreaID` (`0x5e56c0` → `0x5e2b60`) to Wire A. It picks a quest POI blob by the
-    objective mask `0x5e2950` (creature, item and drop objectives not yet met, exploration, or -1
-    once complete), then the blob on the player's map area and floor, else the nearest floor on
-    the same continent, else the first. With no POI it falls back to the quest's top zone's
-    `WorldMapArea` row. That is the world map's player area (`0x543770`) over Native UI's POI
-    model.
   - `IsLFGDungeonJoinable` (`0x55a040` → `0x559c90`) and `RefreshLFGList` (`0x55d280`, a thunk)
     to Native UI. They are false only when the player's, or else a party member's, derived lock
     record for the packed entry (`id | type << 24`, type 2 skipping the party) is set (`+0xd`).

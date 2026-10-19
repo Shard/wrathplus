@@ -59,7 +59,7 @@ const HOOK: &str = r#"
         f:RegisterEvent("MERCHANT_SHOW")
         f:RegisterEvent("MERCHANT_UPDATE")
         f:RegisterEvent("MERCHANT_CLOSED")
-        f:SetScript("OnEvent", function()
+        f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
             table.insert(ProbeVendorSwapLog,
                 event .. "|" .. tostring(UnitName("npc")) .. "|" .. tostring(MerchantNameText:GetText()))
         end)

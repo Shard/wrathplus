@@ -363,8 +363,7 @@ pub(super) fn seed_ui_fixture(
                     "BankFrame:SetScript(\"OnUpdate\", function()\n\
                          if not benillaBankPopoutDone and GetContainerNumSlots(5) > 0 then\n\
                              benillaBankPopoutDone = 1\n\
-                             this = getglobal(\"BankFrameBag1\")\n\
-                             BankFrameItemButtonBag_OnClick(\"LeftButton\")\n\
+                             BankFrameItemButtonBag_OnClick(getglobal(\"BankFrameBag1\"), \"LeftButton\")\n\
                          end\n\
                      end)",
                 ) {
