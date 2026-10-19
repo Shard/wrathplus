@@ -925,6 +925,9 @@ pub(crate) struct Model {
     pub(crate) vehicle_indicators:
         std::collections::HashMap<u32, super::VehicleIndicatorView>,
     pub(crate) vehicle_calls: Vec<super::VehicleCall>,
+    /// `GetPetTalentTree` and `IsAtStableMaster` (`wrath_pet_stable`).
+    pub(crate) pet_talent_tree: Option<String>,
+    pub(crate) at_stable_master: bool,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1578,6 +1581,8 @@ impl Model {
             wrath_vehicles: Default::default(),
             vehicle_indicators: Default::default(),
             vehicle_calls: Vec::new(),
+            pet_talent_tree: None,
+            at_stable_master: false,
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

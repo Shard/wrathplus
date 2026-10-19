@@ -180,6 +180,8 @@ mod wrath_vehicle_seats;
 mod ui_unit_popup;
 mod ui_runes;
 mod ui_pet_stats;
+mod ui_pet_talent_tree;
+mod ui_vehicle;
 mod ui_paperdoll;
 mod ui_petition;
 mod quest_rewards;
