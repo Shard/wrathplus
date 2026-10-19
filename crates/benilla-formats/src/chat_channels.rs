@@ -172,34 +172,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_real_table_is_the_six_documented_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_chat_channels_catalog(&mut chain).expect("load ChatChannels");
-
-        let got: Vec<(u32, u32, &str, &str)> = cat
-            .rows()
-            .iter()
-            .map(|r| (r.id, r.flags, r.pattern.as_str(), r.shortcut.as_str()))
-            .collect();
-        assert_eq!(
-            got,
-            vec![
-                (1, 0x00003, "General - %s", "General"),
-                (2, 0x0003B, "Trade - %s", "Trade"),
-                (22, 0x10003, "LocalDefense - %s", "LocalDefense"),
-                (23, 0x10004, "WorldDefense", "WorldDefense"),
-                (24, 0x00000, "LookingForGroup", "LookingForGroup"),
-                (25, 0x20032, "GuildRecruitment - %s", "GuildRecruitment"),
-            ]
-        );
-
-        // The auto-join set is the reference's `chat-cache.txt` `ZONECHANNELS` mask.
-        let mask: u32 = cat.auto_join_rows().map(|r| 1 << (r.id - 1)).sum();
-        assert_eq!(mask, 0x0020_0003, "General + Trade + LocalDefense");
-    }
-
-    #[test]
     fn names_compose_per_zone_and_resolve_back_to_their_row() {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");

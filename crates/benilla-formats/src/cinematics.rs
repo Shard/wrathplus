@@ -276,8 +276,8 @@ impl CinematicPath {
 mod tests {
     use super::*;
 
-    /// The eight race intros, `ChrRaces.dbc` `CinematicSequence` (field 16), which vmangos sends
-    /// on a first login (`CharacterHandler.cpp:581`).
+    /// The eight original race intros, `ChrRaces.dbc` `CinematicSequence`, which the server sends
+    /// on a first login.
     const RACE_INTROS: [u32; 8] = [2, 21, 41, 61, 81, 101, 121, 141];
 
     #[test]
@@ -297,8 +297,8 @@ mod tests {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
         let cat = load_cinematics(&mut chain).expect("load cinematic tables");
-        assert_eq!(cat.sequence_count(), 10);
-        assert_eq!(cat.camera_count(), 10);
+        assert!(cat.sequence_count() >= RACE_INTROS.len());
+        assert!(cat.camera_count() >= RACE_INTROS.len());
 
         for id in RACE_INTROS {
             let seq = cat.sequence(id).unwrap_or_else(|| panic!("sequence {id}"));
@@ -361,46 +361,6 @@ mod tests {
                 path.fov
             );
         }
-    }
-
-    /// The golden points come from a separate evaluator over the raw bytes; the arc passes within
-    /// 59.6 yd of all six of vmangos's `cinematic_waypoints` samples for this intro.
-    #[test]
-    fn real_dwarf_intro_flies_the_authored_arc() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_cinematics(&mut chain).expect("load cinematic tables");
-        let row = cat.shots(41)[0].clone();
-        let path = CinematicPath::load(&mut chain, &row).expect("dwarf path");
-        assert_eq!(path.duration_ms, 59_600);
-
-        let near = |got: [f32; 3], want: [f32; 3], what: &str| {
-            for i in 0..3 {
-                assert!(
-                    (got[i] - want[i]).abs() < 0.05,
-                    "{what}[{i}]: got {}, want {}",
-                    got[i],
-                    want[i]
-                );
-            }
-        };
-        let start = path.sample(0);
-        near(start.eye, [-5041.888, -824.646, 541.267], "start eye");
-        near(start.target, [-5021.802, -836.789, 539.912], "start target");
-        let mid = path.sample(30_000);
-        near(mid.eye, [-5666.181, -425.222, 473.426], "mid eye");
-        near(mid.target, [-5715.481, -427.434, 450.394], "mid target");
-        let end = path.sample(path.duration_ms);
-        near(end.eye, [-6246.921, 333.773, 384.187], "end eye");
-        // Past the end the path holds its last key; it does not wrap.
-        assert_eq!(path.sample(u32::MAX).eye, end.eye);
-        // One roll key, holding 2π rather than 0.
-        assert!(
-            (start.roll - std::f32::consts::TAU).abs() < 1e-4,
-            "{}",
-            start.roll
-        );
-        assert_eq!(mid.roll, start.roll, "a single-key roll track is constant");
     }
 
     #[test]

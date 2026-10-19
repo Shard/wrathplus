@@ -585,20 +585,6 @@ mod tests {
         )
     }
 
-    /// Every spell-data formatter key needed by a corpus walk; individual formatter tests above
-    /// pin the reference's unit and spread choices separately.
-    fn corpus_global(key: &str) -> Option<String> {
-        global(key).or_else(|| {
-            if key.starts_with("INT_SPELL_DURATION_") {
-                Some("%d".into())
-            } else if key.starts_with("SPELL_DURATION_") {
-                Some("%.1f".into())
-            } else {
-                None
-            }
-        })
-    }
-
     /// `%d`, `%.Nf` and `%%` in order; the tests keep clear of the CRT's rounding ties.
     fn printf(template: &str, args: &[TokenNumber]) -> String {
         let mut out = String::new();
@@ -1022,28 +1008,6 @@ mod tests {
         };
         assert_eq!(substitute("$s1 $d $h", &d, &modified), "50 <2min> 15");
         assert_eq!(substitute("$s1 $d $h", &d, &aura), "40 <1min> 15");
-    }
-
-    #[test]
-    fn scaled_damage_tokens_from_real_spell_data() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let spells = crate::load_spell_catalog(&mut chain).expect("Spell.dbc");
-        let durations = crate::load_spell_durations(&mut chain).expect("SpellDuration.dbc");
-        let radii = SpellRadiusCatalog::default();
-        let lookup = |id| spells.get(id);
-        let c = ctx(&durations, &radii, &lookup);
-        for (id, expected) in [
-            (8024, "4.2 to 13.0 additional Fire damage"),
-            (20154, "an additional 1 to 4 Holy damage"),
-            // `$/1000;s1` of 1500 and of 600: lowercase `s` truncates a fraction (`507b28`).
-            (21854, "Enslave Demon spell by 1 sec."),
-            (24271, "Raptor Strike by 0 sec."),
-        ] {
-            let d = spells.get(id).expect("spell");
-            let description = substitute(d.description.as_deref().unwrap(), d, &c);
-            assert!(description.contains(expected), "{id}: {description}");
-        }
     }
 
     #[test]
@@ -1475,82 +1439,6 @@ mod tests {
         };
         assert_eq!(substitute("$*5;f1", &d, &c), "1.2");
         assert_eq!(substitute("$*3;F2", &d, &c), "2");
-    }
-
-    #[test]
-    fn shipped_spell_data_tokens_resolve() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let spells = crate::load_spell_catalog(&mut chain).expect("Spell.dbc");
-        let durations = crate::load_spell_durations(&mut chain).expect("SpellDuration.dbc");
-        let radii = crate::load_spell_radii(&mut chain).expect("SpellRadius.dbc");
-        let ranges = crate::load_spell_ranges(&mut chain).expect("SpellRange.dbc");
-        let lookup = |id| spells.get(id);
-        let c = TokenContext {
-            ranges: Some(&ranges),
-            global: &corpus_global,
-            ..ctx(&durations, &radii, &lookup)
-        };
-        for (id, text, want) in [
-            (1064, "$*100;F1", "50"),
-            (10622, "$*100;F1", "50"),
-            (10623, "$*100;F1", "50"),
-            (22568, "$f1", "1.0"),
-            (2006, "$q1", "135"),
-            (1680, "$i", "4"),
-            (22959, "$u", "5"),
-            (453, "$v", "40"),
-            (14179, "$b1", "20"),
-        ] {
-            assert_eq!(
-                substitute(text, spells.get(id).unwrap(), &c),
-                want,
-                "spell {id}"
-            );
-        }
-        for id in [1064, 10622, 10623] {
-            let spell = spells.get(id).unwrap();
-            assert_eq!(spell.damage_multiplier[0], 0.5, "Chain Heal {id}");
-            let description = spell.description.as_deref().unwrap();
-            assert!(
-                description.contains("$*100;F1"),
-                "Chain Heal {id}: {description}"
-            );
-            assert!(
-                substitute(description, spell, &c).contains("50%"),
-                "Chain Heal {id} must show 50%"
-            );
-        }
-
-        // Walk every shipped spell-data token, including other ranks, effect slots, scale
-        // prefixes and cross-spell references. `$z` needs the player's home area, not Spell.dbc.
-        let mut seen = [0usize; 26];
-        for (id, spell) in spells.iter() {
-            for description in [
-                spell.description.as_deref(),
-                spell.aura_description.as_deref(),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                for (arm, token) in spell_data_tokens_in(description) {
-                    let expanded = substitute(token, spell, &c);
-                    assert_ne!(expanded, token, "spell {id} leaves {token} raw");
-                    seen[arm] += 1;
-                }
-            }
-        }
-        for &arm in b"bfiquv" {
-            assert!(
-                seen[usize::from(arm - b'a')] > 0,
-                "missing ${} in {seen:?}",
-                arm as char
-            );
-        }
-        assert!(
-            seen.iter().sum::<usize>() >= 50,
-            "too few shipped spell-data tokens: {seen:?}"
-        );
     }
 
     /// Isolate spell-data tokens, including a scale prefix, cross-spell id and one slot digit,

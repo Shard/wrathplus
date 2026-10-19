@@ -36,7 +36,8 @@ pub struct PetPersonality {
     pub thresholds: [u32; 3],
     /// Damage multiplier per bucket as stored (`0.75` is 75%).
     pub damage: [f32; 3],
-    /// Loyalty gain rate per bucket, negative for an unhappy pet.
+    /// Loyalty gain rate per bucket, negative for an unhappy pet; `0.0` in build 12340, whose
+    /// `PetPersonality.dbc` has no loyalty columns.
     pub loyalty_rate: [f32; 3],
 }
 
@@ -163,8 +164,12 @@ pub fn load_pet_personalities(chain: &mut Chain) -> Result<PetPersonalities> {
     Ok(PetPersonalities(by_id))
 }
 
-/// Load `PetLoyalty.dbc` from the patch chain.
+/// Load `PetLoyalty.dbc` from the patch chain. Build 12340 ships no such table (pet loyalty was
+/// removed), so an absent file is an empty table: every level answers nil.
 pub fn load_pet_loyalty_names(chain: &mut Chain) -> Result<PetLoyaltyNames> {
+    if !chain.contains(PET_LOYALTY) {
+        return Ok(PetLoyaltyNames(HashMap::new()));
+    }
     let bytes = chain
         .read_file(PET_LOYALTY)
         .with_context(|| format!("reading {PET_LOYALTY}"))?;
@@ -189,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn the_real_personality_rows_carry_vanillas_own_happiness_numbers() {
+    fn the_real_personality_rows_carry_their_happiness_numbers() {
         let Some(mut chain) = chain() else { return };
         let t = load_pet_personalities(&mut chain).expect("load PetPersonality.dbc");
         assert_eq!(
@@ -201,7 +206,7 @@ mod tests {
         let one = t.for_pet(Some(1)).expect("id 1");
         assert_eq!(one.thresholds, [0, 333_000, 666_000]);
         assert_eq!(one.damage, [0.75, 1.0, 1.25]);
-        assert_eq!(one.loyalty_rate, [-10.0, 5.0, 20.0]);
+        assert_eq!(one.loyalty_rate, [0.0; 3], "12340 has no loyalty columns");
 
         let three = t.for_pet(Some(3)).expect("id 3");
         assert_eq!(three.thresholds, [0, 250_000, 750_000]);
@@ -229,12 +234,6 @@ mod tests {
             let h = p.happiness(raw);
             assert_eq!((h.bucket, h.damage_percentage), (bucket, dmg), "raw {raw}");
         }
-        assert_eq!(
-            p.happiness(0).loyalty_rate,
-            -10.0,
-            "an unhappy pet LOSES loyalty"
-        );
-        assert_eq!(p.happiness(1_000_000).loyalty_rate, 20.0);
     }
 
     /// Bucket 0 is reachable only through a row whose first threshold is above the raw value.
@@ -250,19 +249,13 @@ mod tests {
         assert_eq!((h.damage_percentage, h.loyalty_rate), (100.0, 0.0));
     }
 
-    /// The paper doll shows the shipped `"(Loyalty Level N) "` prefix: the client never strips it.
+    /// Build 12340 ships no `PetLoyalty.dbc`: the table loads empty and every level is nil.
     #[test]
-    fn the_real_loyalty_levels_are_named_verbatim() {
+    fn the_installed_build_has_no_loyalty_table() {
         let Some(mut chain) = chain() else { return };
-        let n = load_pet_loyalty_names(&mut chain).expect("load PetLoyalty.dbc");
-        assert_eq!(n.len(), 8);
-        assert_eq!(n.name(1), Some("(Loyalty Level 1) Rebellious"));
-        assert_eq!(n.name(3), Some("(Loyalty Level 3) Submissive"));
-        assert_eq!(n.name(6), Some("(Loyalty Level 6) Best Friend"));
-        assert_eq!(n.name(7), Some("(Loyalty Level 7) Loyalty Cap"));
-        assert_eq!(n.name(8), Some("(Loyalty Level 8) Unused"));
-        // Level 0 is "no loyalty yet" and the client answers nil, not the first row.
-        assert_eq!(n.name(0), None);
-        assert_eq!(n.name(9), None);
+        assert!(!chain.contains(PET_LOYALTY));
+        let n = load_pet_loyalty_names(&mut chain).expect("an absent table loads empty");
+        assert!(n.is_empty());
+        assert_eq!(n.name(1), None);
     }
 }

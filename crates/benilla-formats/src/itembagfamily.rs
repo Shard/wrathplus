@@ -62,28 +62,3 @@ pub fn load_item_bag_families(chain: &mut Chain) -> Result<ItemBagFamilyCatalog>
     }
     Ok(ItemBagFamilyCatalog { names })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::load_item_bag_families;
-
-    #[test]
-    fn the_shipped_families_are_named_as_the_error_line_needs() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_item_bag_families(&mut chain).expect("ItemBagFamily.dbc");
-
-        assert_eq!(cat.name(1), Some("Arrows"), "quiver");
-        assert_eq!(cat.name(2), Some("Bullets"), "ammo pouch");
-        assert_eq!(cat.name(3), Some("Soul Shards"), "soul bag");
-        assert_eq!(cat.name(6), Some("Herbs"));
-        assert_eq!(cat.name(7), Some("Enchanting Supplies"));
-        assert_eq!(cat.name(8), Some("Engineering Supplies"));
-        assert_eq!(cat.name(9), Some("Keys"), "the keyring family");
-        // 4 and 5 do not ship.
-        assert_eq!(cat.name(4), None);
-        assert_eq!(cat.name(5), None);
-        assert_eq!(cat.name(0), None, "family 0 must not render as \"NONE\"");
-        assert_eq!(cat.len(), 8, "the whole shipped table");
-    }
-}

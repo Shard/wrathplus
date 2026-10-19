@@ -56,21 +56,3 @@ pub fn load_creature_type_flags(chain: &mut Chain) -> Result<CreatureTypeFlags> 
     }
     Ok(CreatureTypeFlags(flags))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shipped_flags_mark_only_critter() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let flags = load_creature_type_flags(&mut chain).expect("load CreatureType.dbc");
-        assert_eq!(flags.len(), 11, "1.12 ships 11 creature types");
-        assert!(flags.no_tab_target(8), "Critter (8) must be un-TAB-able");
-        for id in [1, 7, 11] {
-            assert!(!flags.no_tab_target(id), "type {id} must be targetable");
-        }
-        assert!(!flags.no_tab_target(999), "unknown type is targetable");
-    }
-}

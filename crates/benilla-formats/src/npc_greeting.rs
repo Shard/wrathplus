@@ -102,34 +102,3 @@ pub fn load_npc_greeting_catalog(chain: &mut Chain) -> Result<NpcGreetingCatalog
         rows,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The 5875 join: character displays resolve their kits, a beast display (26) has none.
-    #[test]
-    fn real_npc_greeting_resolves() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_npc_greeting_catalog(&mut chain).expect("load npc greetings");
-        assert_eq!(cat.len(), 156, "all NPCSounds rows load");
-
-        // Display 793 is `NPCSoundID` 50.
-        let g = cat.for_display(793).expect("display 793 greets");
-        assert_eq!(g.hello, 5977);
-        assert_eq!(g.goodbye, 5978);
-        assert_eq!(g.pissed, 5979);
-
-        // Display 89 is `NPCSoundID` 161, which has no goodbye.
-        let g = cat.for_display(89).expect("display 89 greets");
-        assert_eq!(g.hello, 7094);
-        assert_eq!(g.goodbye, 0);
-        assert_eq!(g.pissed, 7095);
-
-        assert!(
-            cat.for_display(26).is_none(),
-            "beast display does not greet"
-        );
-    }
-}

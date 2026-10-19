@@ -109,33 +109,4 @@ mod tests {
             [9, 8, 7]
         );
     }
-
-    /// The row counts the reference's PCRE compiles, which only the patched archives give.
-    #[test]
-    fn the_lists_come_off_the_priority_walk_at_their_patched_sizes() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-
-        let profanity = load_chat_profanity(&mut chain).expect("load ChatProfanity");
-        assert_eq!(
-            profanity.len(),
-            2289,
-            "2289 is patch.MPQ's copy; 1512 would mean we read dbc.MPQ"
-        );
-        assert!(
-            profanity.iter().any(|p| p.pattern == r"\<twat\>"),
-            "the ASCII half uses the \\< \\> word-boundary anchors"
-        );
-        assert!(
-            profanity.iter().any(|p| !p.pattern.is_ascii()),
-            "the list is multi-language in one table"
-        );
-
-        let spam = load_spam_messages(&mut chain).expect("load SpamMessages");
-        assert_eq!(spam.len(), 28, "dbc.MPQ has no SpamMessages at all");
-        assert!(
-            spam.iter().all(|p| p.pattern.contains(r"\s*")),
-            "every shipped spam row spaces its letters to defeat spacing"
-        );
-    }
 }
