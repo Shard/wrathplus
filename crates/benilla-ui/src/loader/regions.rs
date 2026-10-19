@@ -193,6 +193,20 @@ impl Loader<'_> {
                 self.call_region(wrapper, "SetHeight", h, dbg);
             }
         }
+        // Wrath's wrap and tiling flags, forwarded where the dialect has the setter.
+        for (attr, method) in [
+            ("nonspacewrap", "SetNonSpaceWrap"),
+            ("wordwrap", "SetWordWrap"),
+            ("indented", "SetIndentedWordWrap"),
+            ("horizTile", "SetHorizTile"),
+            ("vertTile", "SetVertTile"),
+        ] {
+            if let Some(on) = region.attr_bool_opt(attr) {
+                if wrapper.get::<Option<mlua::Function>>(method).ok().flatten().is_some() {
+                    self.call_region(wrapper, method, on, dbg);
+                }
+            }
+        }
         if font_attrs == FontAttrs::Own {
             if let Some(j) = region.attr("justifyH") {
                 self.call_region(wrapper, "SetJustifyH", j.to_string(), dbg);
