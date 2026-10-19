@@ -125,6 +125,24 @@ pub struct VehicleIndicatorView {
     pub seats: Vec<(u32, f32, f32)>,
 }
 
+/// One battlefield vehicle (`0xbea5b8` list, `GetBattlefieldVehicleInfo` `0x54c4d0`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BattlefieldVehicleView {
+    /// The position on the displayed map, `None` off it (the getter then answers nothing).
+    pub uv: Option<(f32, f32)>,
+    pub name: Option<String>,
+    /// `UNIT_FLAG_POSSESSED`.
+    pub possessed: bool,
+    /// `"Drive"`, `"Fly"`, `"Idle"`, `"Airship Horde"` or `"Airship Alliance"` by the vehicle's UI
+    /// locomotion type, for a vehicle whose `Vehicle.dbc` flags have `0x10000000`; else `None`.
+    pub vehicle_type: Option<String>,
+    /// The facing, radians.
+    pub facing: f32,
+    /// The vehicle is the player's own.
+    pub is_player: bool,
+    pub alive: bool,
+}
+
 /// What the app pushes.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WrathVehicles {
@@ -138,6 +156,10 @@ pub struct WrathVehicles {
     pub aim: Option<VehicleAimView>,
     /// There is an active mover (`[0xca1238]`).
     pub has_mover: bool,
+    /// The battlefield vehicle list, at most 40.
+    pub battlefield: Vec<BattlefieldVehicleView>,
+    /// The possess bar's spell (`0xc234e0`, picked by `0x5d62a0`), `None` without one.
+    pub possess_spell: Option<u32>,
 }
 
 /// A vehicle request for the app's outbox.
@@ -551,6 +573,80 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    set("GetNumBattlefieldVehicles", |lua, _| {
+        let model = lua.app_data_ref::<Model>().expect("model");
+        one(Value::Integer(model.wrath_vehicles.battlefield.len() as i64))
+    })?;
+    // x, y, name, isPossessed, vehicleType, orientation, isPlayer, isAlive; nothing for a vehicle
+    // off the displayed map or an index off the list (`0x54c4d0`).
+    set("GetBattlefieldVehicleInfo", |lua, args| {
+        let Some(i) = index(lua, &arg(&args, 0))? else {
+            return Err(mlua::Error::runtime(
+                "Usage: GetBattlefieldVehicleInfo(index)",
+            ));
+        };
+        let model = lua.app_data_ref::<Model>().expect("model");
+        let Some((v, (x, y))) = usize::try_from(i - 1)
+            .ok()
+            .and_then(|i| model.wrath_vehicles.battlefield.get(i))
+            .and_then(|v| Some((v, v.uv?)))
+        else {
+            return Ok(MultiValue::new());
+        };
+        let text = |s: &Option<String>| -> mlua::Result<Value> {
+            Ok(match s {
+                Some(t) => Value::String(lua.create_string(t)?),
+                None => Value::Nil,
+            })
+        };
+        Ok(MultiValue::from_vec(vec![
+            Value::Number(f64::from(x)),
+            Value::Number(f64::from(y)),
+            text(&v.name)?,
+            Value::Boolean(v.possessed),
+            text(&v.vehicle_type)?,
+            Value::Number(f64::from(v.facing)),
+            Value::Boolean(v.is_player),
+            Value::Boolean(v.alive),
+        ]))
+    })?;
+    // GameTooltip:SetPossession(slot) (`0x6257c0`): slot 1 shows the possess spell; 1 when it
+    // renders, else nil.
+    let tooltips: mlua::Table = lua.named_registry_value(super::tooltip::REG_TOOLTIP_METHODS)?;
+    tooltips.set(
+        "SetPossession",
+        lua.create_function(|lua, (this, slot): (mlua::Table, Value)| {
+            let Some(slot) = index(lua, &slot)? else {
+                let name: Option<String> = this
+                    .get::<mlua::Function>("GetName")
+                    .and_then(|f| f.call::<Option<String>>(this.clone()))
+                    .ok()
+                    .flatten();
+                return Err(mlua::Error::runtime(format!(
+                    "Usage: {}:SetPossession(slot)",
+                    name.as_deref().unwrap_or("<unnamed>")
+                )));
+            };
+            let spell = lua
+                .app_data_ref::<Model>()
+                .expect("model")
+                .wrath_vehicles
+                .possess_spell;
+            let Some(spell) = spell.filter(|_| slot == 1) else {
+                return Ok(Value::Nil);
+            };
+            let known = super::tooltip_spell::spell_view_of(lua, spell, false).is_some();
+            super::tooltip_spell::set_spell_by_id(
+                lua,
+                &this,
+                spell,
+                None,
+                super::tooltip_spell::SpellRenderOpts::default(),
+                None,
+            )?;
+            Ok(flag(known))
+        })?,
+    )?;
     for name in [
         "VehicleAimUpStart",
         "VehicleAimUpStop",
@@ -643,6 +739,8 @@ mod tests {
                 pitch: 0.5,
             }),
             has_mover: true,
+            battlefield: Vec::new(),
+            possess_spell: None,
         });
         let mut ind = HashMap::new();
         ind.insert(
@@ -683,6 +781,59 @@ mod tests {
             "##,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn battlefield_vehicles_answer_only_on_the_map() {
+        let mut s = vm();
+        let mut v = s.model_mut().wrath_vehicles.clone();
+        v.battlefield = vec![
+            BattlefieldVehicleView {
+                uv: Some((0.25, 0.5)),
+                name: Some("Siege Engine".into()),
+                possessed: true,
+                vehicle_type: Some("Drive".into()),
+                facing: 1.5,
+                is_player: false,
+                alive: true,
+            },
+            BattlefieldVehicleView::default(),
+        ];
+        s.set_wrath_vehicles(v);
+        s.run(
+            r##"
+            assert(GetNumBattlefieldVehicles() == 2)
+            local x, y, n, p, t, o, me, alive = GetBattlefieldVehicleInfo(1)
+            assert(x == 0.25 and y == 0.5 and n == "Siege Engine" and p == true and t == "Drive")
+            assert(o == 1.5 and me == false and alive == true)
+            assert(select("#", GetBattlefieldVehicleInfo(2)) == 0)
+            assert(select("#", GetBattlefieldVehicleInfo(3)) == 0)
+            assert(not pcall(GetBattlefieldVehicleInfo))
+            "##,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn set_possession_shows_slot_one_only() {
+        let mut s = vm();
+        s.run("T = CreateFrame('GameTooltip', 'PossTip', UIParent, 'GameTooltipTemplate')")
+            .ok();
+        s.run("T = T or CreateFrame('GameTooltip', 'PossTip')")
+            .unwrap();
+        assert!(
+            s.eval::<bool>("return T:SetPossession(1) == nil").unwrap(),
+            "no spell"
+        );
+        let mut v = s.model_mut().wrath_vehicles.clone();
+        v.possess_spell = Some(5);
+        s.set_wrath_vehicles(v);
+        assert!(
+            s.eval::<bool>("return T:SetPossession(2) == nil").unwrap(),
+            "slot 2 shows nothing"
+        );
+        s.run("T:SetPossession(1)").unwrap();
+        assert!(s.run("T:SetPossession()").is_err());
     }
 
     #[test]

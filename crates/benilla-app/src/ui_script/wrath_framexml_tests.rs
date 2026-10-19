@@ -5,6 +5,9 @@ use benilla_ui::script::{ScriptDialect, UiScript, UnitState};
 #[path = "wrath_census_lexer.rs"]
 mod census_lexer;
 
+#[path = "wrath_census_arity.rs"]
+mod census_arity;
+
 /// One chunk's `Name(` sites: `function Name(` definitions, `:Name(` methods, and bare global
 /// calls, less the names the chunk binds with `local` ([`census_lexer::local_names`]).
 fn scan_calls(
@@ -193,10 +196,13 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
             .unwrap_or_else(|e| panic!("installed addon {i}/{addon_count} load raised: {e}"));
         eprintln!("LOAD {:>8.1} ms  {row}", started.elapsed().as_secs_f64() * 1000.0);
     }
-    missing_surface(&script);
+    let (wants, defined) = missing_surface(&script);
     let shown = script
         .eval::<bool>("return PlayerFrame ~= nil and PlayerFrame:IsShown() and TargetFrame ~= nil")
         .unwrap_or(false);
+    // Last: the probes call bindings with made-up arguments and may change the VM's state.
+    script.clear_instruction_budget();
+    census_arity::audit(&script, &wants, &defined);
     eprintln!("hard failures: {hard}; PlayerFrame shown with TargetFrame built: {shown}");
     assert!(shown);
     assert!(!failures.iter().any(|f| f.contains("instruction budget")));
@@ -206,6 +212,14 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
 /// the call too: reported as their own count and excluded from "missing". A name enters only
 /// with its evidence (a string scan of the pinned `Wow.exe` plus the caller that shows the call is
 /// dead natively) in the same commit, and a listed name this VM answers fails the census.
+/// The Mac client's movie recorder: the Windows build has none of its bindings.
+const MOVIE_RECORDING_ABSENT: &str =
+    "no \"MovieRecording\" string anywhere in the Windows Wow.exe 12340 (raw byte scan, \
+     /tmp/azb-exp-movie-recording-scan.log); its callers are MacOptionsFrame (shown only by \
+     GameMenuButtonMacOptions, hidden unless IsMacClient()), MovieRecordingProgress's OnUpdate \
+     (shown by MOVIE_COMPRESSING_PROGRESS) and Minimap.xml's MOVIE_RECORDING_PROGRESS handler, \
+     events the Windows client never fires";
+
 const NATIVE_ABSENT: &[(&str, &str)] = &[
     (
         "AchievementMicroButton_Update",
@@ -213,6 +227,15 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
          caller, Blizzard_AchievementUI.lua:671 (AchievementFrame_OnEvent), runs only while \
          AchievementMicroButton is hidden, a stock 3.3.5 dangling reference",
     ),
+    ("MovieRecording_Cancel", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_DeleteMovie", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_GetMovieFullPath", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_GetProgress", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_IsCompressing", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_IsRecording", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_IsSupported", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_QueueMovieToCompress", MOVIE_RECORDING_ABSENT),
+    ("MovieRecording_SearchUncompressedMovie", MOVIE_RECORDING_ABSENT),
     (
         "MultiCastSummonSpellButtonFlyoutButton_OnClick",
         "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
@@ -433,11 +456,12 @@ const CENSUS_ADDONS: [&str; 24] = super::addons::WRATH_BLIZZARD_ADDONS;
 
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
 /// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
-fn missing_surface(script: &UiScript) {
+fn missing_surface(script: &UiScript) -> (census_arity::Wants, std::collections::HashSet<String>) {
     let core = super::reference_ui::core().expect("FrameXML.toc");
     let mut sources = Vec::new();
     // Each scanned file's origin, FrameXML or its addon, for the per-addon breakdown.
     let mut origins: Vec<&str> = Vec::new();
+    let mut paths: Vec<String> = Vec::new();
     let mut queue: Vec<(String, &str)> = core.toc.files.iter().map(|f| (f.clone(), "FrameXML")).collect();
     if let Some(dir) = std::env::var_os("AZB_FRAMEXML_DUMP") {
         for table in [
@@ -492,6 +516,7 @@ fn missing_surface(script: &UiScript) {
         }
         sources.push(census_lexer::executable_text(&text));
         origins.push(origin);
+        paths.push(path);
     }
     script.clear_instruction_budget();
     let has: Vec<String> = script
@@ -707,4 +732,9 @@ fn missing_surface(script: &UiScript) {
     for line in lines {
         eprintln!("{line}");
     }
+    let mut wants = census_arity::Wants::new();
+    for (src, path) in sources.iter().zip(&paths) {
+        census_arity::scan(src, path, &census_lexer::local_names(src), &mut wants);
+    }
+    (wants, defined)
 }

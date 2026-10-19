@@ -197,17 +197,6 @@ fn wrath_feign_death_holds_then_releases_when_the_server_flag_clears() {
 }
 
 #[test]
-fn vanilla_death_preserves_its_existing_model_looping_hint() {
-    let mut app = fixture(SessionDialect::Vanilla5875);
-    let unit = witnessed_death(&mut app, 1.0);
-    advance(&mut app, 1200);
-    let active = death(&app, unit);
-    assert_eq!(active.repeat_mode(), RepeatAnimation::Forever);
-    assert!(!active.is_finished());
-    assert!(active.seek_time() < 1.0);
-}
-
-#[test]
 fn installed_wrath_wolf_death_residency_cannot_request_perpetual_corpse_playback() {
     let data = benilla_formats::wow_data_or_skip!();
     let chain = benilla_formats::Chain::open_wrath(&data, "enUS").expect("read-only chain");

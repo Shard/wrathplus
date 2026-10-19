@@ -594,17 +594,11 @@ pub(super) fn drive_animations(
                     };
                     let active =
                         tr.play(&mut player, c.node, Duration::from_secs_f32(c.blend_time));
-                    if dialect == SessionDialect::Wrath12340 {
-                        // v264 0x20 is in-model residency, not a repeat request. Death's
-                        // play-once/hold policy must not inherit that legacy loader hint.
-                        active.set_repeat(bevy::animation::RepeatAnimation::Never);
-                        if first {
-                            active.seek_to(c.duration); // streamed corpse: already settled
-                        }
-                    } else if c.looping {
-                        active.repeat();
-                    } else if first {
-                        active.seek_to(c.duration); // streamed in dead: settled, not replayed
+                    // v264 0x20 is in-model residency, not a repeat request. Death's
+                    // play-once/hold policy must not inherit that loader hint.
+                    active.set_repeat(bevy::animation::RepeatAnimation::Never);
+                    if first {
+                        active.seek_to(c.duration); // streamed corpse: already settled
                     }
                 }
                 // A blended bone-0 arm overwrites bone 0's secondary slot: it evicts a full-body
@@ -1116,14 +1110,9 @@ pub(super) fn drive_animations(
         if let Some(ov) = drv.overlay {
             let done = if ov.looping {
                 false // a cast-hold loop: the hold block below owns its release
-            } else if dialect == SessionDialect::Vanilla5875
-                && find_resolved(anims, ov.id, catalog).is_some_and(|c| c.looping)
-            {
-                // Wrath's legacy looping hint is v264 residency, not a release policy: its
-                // one-shots finish on their armed Never/Count clock. Preserve Vanilla's hold-less
-                // looping clip release on movement (untraced); a Special leaves the key bone alone.
-                moving
             } else {
+                // The looping hint is v264 residency, not a release policy: a one-shot finishes on
+                // its armed Never/Count clock.
                 player.animation(ov.node).is_none_or(|a| a.is_finished())
             };
             if done {

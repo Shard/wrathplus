@@ -35,8 +35,10 @@ impl<'a, F: Fn(u64) -> Option<&'a ObjectStore> + Sync> StoreLookup for ByGuid<'a
 }
 
 /// No object streamed: every referenced owner stays missing.
+#[cfg(test)]
 struct NoStores;
 
+#[cfg(test)]
 impl StoreLookup for NoStores {
     fn store(&self, _: u64) -> Option<&ObjectStore> {
         None
@@ -96,7 +98,8 @@ pub(crate) struct Context<'a> {
 
 impl<'a> Context<'a> {
     /// No template cache and no streamed owner: creature metadata contributes no flags and every
-    /// controller hop misses.
+    /// controller hop misses. For tests.
+    #[cfg(test)]
     pub(crate) fn none() -> Self {
         Self {
             names: None,

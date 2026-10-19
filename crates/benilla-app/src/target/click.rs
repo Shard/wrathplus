@@ -506,19 +506,12 @@ impl Dispatch<'_, '_> {
             return;
         }
         debug!("right-click loot: {guid:#x}");
-        if *self.seam.dialect == SessionDialect::Wrath12340 {
-            crate::ui_loot::begin_wrath_corpse_loot(
-                &mut self.seam.loot,
-                &mut self.seam.loot_latch,
-                &self.seam.net,
-                guid,
-            );
-            return;
-        }
-        let _ = self.seam.net.0.send(ClientCommand::Loot { guid });
-        // Predicted at the send, as the reference's sender (`0x5df253`) arms `[player+0x1d28]` and
-        // kneels before any reply; the anim driver reads the latch.
-        self.seam.loot_latch.0 = Some(guid);
+        crate::ui_loot::begin_wrath_corpse_loot(
+            &mut self.seam.loot,
+            &mut self.seam.loot_latch,
+            &self.seam.net,
+            guid,
+        );
     }
 
     /// `0x5f05e0`: the skin cast at a body. Out of reach it walks there when `walk`, and either way
@@ -735,10 +728,6 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     // highlightable (our `Point` cursor, silent), then usable (`0x5f3130`), whose lock arm toasts
     // first, even out of range.
     if go_is_nearest(hovered, hovered_object) {
-        if *dispatch.seam.dialect == SessionDialect::Wrath12340 {
-            warn!("Wrath gameobject interaction unavailable; no action or approach issued");
-            return;
-        }
         // Traced (tag `use`): a `Point` cursor refuses silently; the range gray raises
         // `ERR_USE_TOO_FAR`.
         if benilla_assets::trace::enabled_for("use") {
@@ -783,10 +772,6 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     // skin cast (`0x5f05e0`). Your own corpse takes neither: the resurrect prompt comes from the
     // 40 yd `CORPSE_IN_RANGE` poll (`0x492130`), never a click.
     if let (Some(entity), Some(guid)) = (hovered.corpse, hovered.corpse_guid) {
-        if *dispatch.seam.dialect == SessionDialect::Wrath12340 {
-            warn!("Wrath corpse interaction unavailable; no loot/skin action or prediction issued");
-            return;
-        }
         let store = dispatch.stores.get(entity).ok().map(|(s, _)| s);
         if benilla_assets::trace::enabled_for("use") {
             benilla_assets::trace::line(
@@ -904,10 +889,6 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
         Select::OnAttack(_) => scan::CommitOutcome::default(),
     };
     let branch = unit_branch(attack, dead_fork, leg);
-    if !interaction_supported(*dispatch.seam.dialect, branch) {
-        warn!("Wrath unit skin interaction unavailable; selection only");
-        return;
-    }
     match branch {
         UnitBranch::Attack => {
             // `0x60c22b`, past the dead and mounted gates (`0x60c1a1`, `0x60c1bc`) and before
@@ -984,15 +965,6 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
     }
 }
 
-/// Only verified build-specific interaction families may enter the producer's side-effect ladder.
-fn interaction_supported(dialect: SessionDialect, branch: UnitBranch) -> bool {
-    dialect == SessionDialect::Vanilla5875
-        || matches!(
-            branch,
-            UnitBranch::Attack | UnitBranch::Dead(DeadUnitLeg::Loot) | UnitBranch::Service
-        )
-}
-
 /// Interact with an object by running its own virtual dispatcher (slot `+0x60`): `0x60bea0` for a
 /// unit or player, `0x5d6bf0` for a corpse, `0x5f8660` for a GameObject. It skips the world click's
 /// select-first entry (`0x492820`); the attack leg selects through StartAttack (`0x5ecb70`), and
@@ -1044,13 +1016,6 @@ pub(super) fn act_on_arrival(
     let Some((verb, guid)) = dispatch.auto.approach.arrived.take() else {
         return;
     };
-    // Arrival is a terminal producer boundary too: an old approach must never borrow a
-    // replacement Wrath session's writer for an unimplemented service/loot/use/skin action.
-    if *dispatch.seam.dialect == SessionDialect::Wrath12340
-        && !matches!(verb, ApproachVerb::Loot | ApproachVerb::Talk)
-    {
-        return;
-    }
     let Some(&entity) = index.0.get(&guid) else {
         return;
     };
@@ -1065,11 +1030,10 @@ pub(super) fn act_on_arrival(
         ApproachVerb::Talk if unit => dispatch.talk(entity, guid, d2 <= SERVICE_RANGE_SQ, false),
         // `0x5df2a0`'s own lootable test (`0x6003a0`), which the click's dead fork made earlier.
         ApproachVerb::Loot if unit => {
-            if (*dispatch.seam.dialect != SessionDialect::Wrath12340
-                || dispatch
-                    .stores
-                    .get(entity)
-                    .is_ok_and(|(s, _)| s.0.unit_is_dead()))
+            if dispatch
+                .stores
+                .get(entity)
+                .is_ok_and(|(s, _)| s.0.unit_is_dead())
                 && dispatch
                     .stores
                     .get(entity)
@@ -1575,29 +1539,6 @@ mod tests {
     use super::*;
     use benilla_protocol::messages::{Field, FieldLayout};
 
-    #[test]
-    fn wrath_interaction_ladder_admits_melee_loot_and_service_and_preserves_vanilla() {
-        assert!(interaction_supported(
-            SessionDialect::Wrath12340,
-            UnitBranch::Attack
-        ));
-        assert!(interaction_supported(
-            SessionDialect::Wrath12340,
-            UnitBranch::Service
-        ));
-        assert!(interaction_supported(
-            SessionDialect::Wrath12340,
-            UnitBranch::Dead(DeadUnitLeg::Loot)
-        ));
-        for branch in [
-            UnitBranch::Dead(DeadUnitLeg::Skin),
-            UnitBranch::Dead(DeadUnitLeg::Nothing),
-        ] {
-            assert!(!interaction_supported(SessionDialect::Wrath12340, branch));
-            assert!(interaction_supported(SessionDialect::Vanilla5875, branch));
-        }
-    }
-
     /// The `0x5f3427..` toast routing on real data: Peacebloom (lock 29: skill slot, LockType 2,
     /// Skill 0), a rank-155 vein (lock 42: LockType 3), a keyed door, a padlocked chest.
     #[test]
@@ -2064,7 +2005,7 @@ mod tests {
             let (tx, _rx) = crossbeam_channel::unbounded();
             let mut world = World::new();
             world.insert_resource(NetCommands(tx));
-            world.insert_resource(crate::net::SessionDialect::Vanilla5875);
+            world.insert_resource(crate::net::SessionDialect::Wrath12340);
             world.init_resource::<InspectMode>();
             world.init_resource::<crate::spell::QueuedMeleeSpell>();
             world.init_resource::<crate::spell::AutoRepeatActive>();
@@ -2141,7 +2082,7 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
+        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<Messages<WorldRightClick>>();
         world.init_resource::<PressPick>();
         world.init_resource::<Selection>();
@@ -3138,5 +3079,218 @@ mod tests {
                 "payload held {held}"
             );
         }
+    }
+
+    // ── Build 12340 interaction regressions: the clicks the Wrath dialect used to refuse ──────────
+
+    /// A right-click in reach of a chest (GO type 3, as an herb or mineral node is), a door (0) or
+    /// a goober (10) sends `CMSG_GAMEOBJ_USE` on a Wrath session.
+    #[test]
+    fn wrath_right_click_uses_chests_doors_and_goobers() {
+        for go_type in [3, 0, 10] {
+            let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
+            assert_eq!(
+                *world.resource::<crate::net::SessionDialect>(),
+                crate::net::SessionDialect::Wrath12340
+            );
+            let object = spawn_object(&mut world, go_type, Vec3::new(2.0, 0.0, 0.0));
+            *world.resource_mut::<PressPick>() = PressPick {
+                object: HoveredObject {
+                    target: Some(object),
+                    guid: Some(CHEST),
+                    distance: 2.0,
+                },
+                cursor: WorldCursor {
+                    kind: cursor_mode::CursorKind::Interact,
+                    unable: false,
+                },
+                ..PressPick::default()
+            };
+            world
+                .resource_mut::<Messages<WorldRightClick>>()
+                .write(WorldRightClick);
+            world.run_system_once(act_on_right_click).unwrap();
+            let sent: Vec<ClientCommand> = rx.try_iter().collect();
+            assert!(
+                sent.iter()
+                    .any(|c| matches!(c, ClientCommand::GameObjUse { guid: CHEST })),
+                "type {go_type}: {sent:?}"
+            );
+        }
+    }
+
+    /// A right-click on a lootable corpse object, and on a dead lootable unit, sends `CMSG_LOOT`.
+    #[test]
+    fn wrath_corpse_and_dead_unit_clicks_send_loot() {
+        const BODY: u64 = 0xB0D7;
+        const CORPSE: u64 = 0xC0D5;
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+        let click = |world: &mut World, hovered: Hovered| {
+            *world.resource_mut::<PressPick>() = PressPick {
+                hovered,
+                cursor: WorldCursor {
+                    kind: cursor_mode::CursorKind::Pickup,
+                    unable: false,
+                },
+                ..PressPick::default()
+            };
+            world
+                .resource_mut::<Messages<WorldRightClick>>()
+                .write(WorldRightClick);
+            world.run_system_once(act_on_right_click).unwrap();
+        };
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
+        let corpse = world
+            .spawn((
+                Guid(CORPSE),
+                store(&[(benilla_protocol::field::FIELD_CORPSE_DYNAMIC_FLAGS, 0x1)]),
+                Transform::from_xyz(1.0, 0.0, 0.0),
+            ))
+            .id();
+        click(
+            &mut world,
+            Hovered {
+                corpse: Some(corpse),
+                corpse_guid: Some(CORPSE),
+                distance: 1.0,
+                ..Hovered::default()
+            },
+        );
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(
+            sent.iter()
+                .any(|c| matches!(c, ClientCommand::Loot { guid: CORPSE })),
+            "corpse: {sent:?}"
+        );
+
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
+        let body = world
+            .spawn((
+                Guid(BODY),
+                store(&[(F_HEALTH, 0), (F_MAXHEALTH, 100), (F_DYNAMIC_FLAGS, 0x1)]),
+                Transform::from_xyz(1.0, 0.0, 0.0),
+            ))
+            .id();
+        click(
+            &mut world,
+            Hovered {
+                target: Some(body),
+                guid: Some(BODY),
+                distance: 1.0,
+                ..Hovered::default()
+            },
+        );
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(
+            sent.iter()
+                .any(|c| matches!(c, ClientCommand::Loot { guid: BODY })),
+            "dead unit: {sent:?}"
+        );
+    }
+
+    /// A dead, unlootable, skinnable unit takes the skin cast when we know Skinning, and every
+    /// arrival verb fires: the chest's use, the body's loot and the skin cast.
+    #[test]
+    fn wrath_skin_clicks_and_arrival_verbs_reach_the_wire() {
+        const BODY: u64 = 0xB0D7;
+        const SKINNING: u32 = 8613;
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+        const F_UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+        let skinnable = |world: &mut World| {
+            world
+                .spawn((
+                    Guid(BODY),
+                    store(&[
+                        (F_HEALTH, 0),
+                        (F_MAXHEALTH, 100),
+                        (F_UNIT_FLAGS, cursor_mode::UNIT_FLAG_SKINNABLE),
+                    ]),
+                    Transform::from_xyz(1.0, 0.0, 0.0),
+                    crate::net::NetEntity {
+                        kind: benilla_protocol::EntityKind::Unit,
+                        display_id: None,
+                        scale: 1.0,
+                    },
+                ))
+                .id()
+        };
+        let index = |world: &mut World, guid: u64, entity: Entity| {
+            world
+                .resource_mut::<crate::net::GuidIndex>()
+                .0
+                .insert(guid, entity);
+        };
+        let casts_skinning = |sent: &[ClientCommand]| {
+            sent.iter().any(|c| {
+                matches!(
+                    c,
+                    ClientCommand::CastSpell {
+                        spell_id: SKINNING,
+                        target: Some(BODY),
+                        ..
+                    }
+                )
+            })
+        };
+
+        // The right-click's dead fork.
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
+        world
+            .resource_mut::<crate::ui_action::LearnedAbilities>()
+            .skinning = Some(SKINNING);
+        let body = skinnable(&mut world);
+        index(&mut world, BODY, body);
+        interact_with(&mut world, body);
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(casts_skinning(&sent), "skin click: {sent:?}");
+
+        // The arrivals.
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), true);
+        world
+            .resource_mut::<crate::ui_action::LearnedAbilities>()
+            .skinning = Some(SKINNING);
+        let body = skinnable(&mut world);
+        index(&mut world, BODY, body);
+        world.resource_mut::<crate::player::Approach>().arrived =
+            Some((crate::player::ApproachVerb::Skin, BODY));
+        world.run_system_once(act_on_arrival).unwrap();
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(casts_skinning(&sent), "skin arrival: {sent:?}");
+
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), true);
+        spawn_chest(&mut world, Vec3::new(2.0, 0.0, 0.0));
+        world.resource_mut::<crate::player::Approach>().arrived =
+            Some((crate::player::ApproachVerb::Use, CHEST));
+        world.run_system_once(act_on_arrival).unwrap();
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(
+            sent.iter()
+                .any(|c| matches!(c, ClientCommand::GameObjUse { guid: CHEST })),
+            "use arrival: {sent:?}"
+        );
+
+        let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), true);
+        let body = world
+            .spawn((
+                Guid(BODY),
+                store(&[(F_HEALTH, 0), (F_MAXHEALTH, 100), (F_DYNAMIC_FLAGS, 0x1)]),
+                Transform::from_xyz(1.0, 0.0, 0.0),
+                crate::net::NetEntity {
+                    kind: benilla_protocol::EntityKind::Unit,
+                    display_id: None,
+                    scale: 1.0,
+                },
+            ))
+            .id();
+        index(&mut world, BODY, body);
+        world.resource_mut::<crate::player::Approach>().arrived =
+            Some((crate::player::ApproachVerb::Loot, BODY));
+        world.run_system_once(act_on_arrival).unwrap();
+        let sent: Vec<ClientCommand> = rx.try_iter().collect();
+        assert!(
+            sent.iter()
+                .any(|c| matches!(c, ClientCommand::Loot { guid: BODY })),
+            "loot arrival: {sent:?}"
+        );
     }
 }
