@@ -1070,7 +1070,7 @@ mod tests {
     use benilla_protocol::messages::{Field, FieldLayout};
     use bevy::ecs::system::RunSystemOnce;
 
-    const BANK_BAG_LIVE_FIRST: u32 = 64;
+    const BANK_BAG_LIVE_FIRST: u32 = 68;
 
     /// The reference's split (`0x5ea460`); a value-0 line skips the permanent add (`0x5ea4b4`).
     #[test]
@@ -1113,7 +1113,7 @@ mod tests {
     }
 
     /// `PLAYER_FIELD_BANK_BAG_SLOT_1`, bank bag slot 0's guid pair.
-    const F_BANK_BAG_1: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerBankbagSlot1);
+    const F_BANK_BAG_1: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerBankbagSlot1);
     /// `OBJECT_FIELD_ENTRY` on the item object.
     const F_OBJECT_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
     /// `ITEM_FIELD_STACK_COUNT`, one of the six item fields the reference's watcher covers.
@@ -1146,11 +1146,17 @@ mod tests {
             .init_resource::<crate::names::NameCache>()
             .insert_resource(NetCommands(tx));
         let fields = match bag {
-            Some(g) => ObjectFields::from_pairs(&[
-                (F_BANK_BAG_1, g as u32),
-                (F_BANK_BAG_1 + 1, (g >> 32) as u32),
-            ]),
-            None => ObjectFields::from_pairs(&[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)]),
+            Some(g) => ObjectFields::from_native_pairs(
+                FieldLayout::Wrath12340,
+                &[
+                    (F_BANK_BAG_1, g as u32),
+                    (F_BANK_BAG_1 + 1, (g >> 32) as u32),
+                ],
+            ),
+            None => ObjectFields::from_native_pairs(
+                FieldLayout::Wrath12340,
+                &[(F_BANK_BAG_1, 0), (F_BANK_BAG_1 + 1, 0)],
+            ),
         };
         app.world_mut().spawn((SelfPlayer, ObjectStore(fields)));
         if let Some(g) = bag {
@@ -1166,7 +1172,7 @@ mod tests {
                 Some(crate::items::test_template("Traveler's Backpack")),
             );
         }
-        let script = UiScript::new_vanilla().unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 r#"
@@ -1174,7 +1180,7 @@ mod tests {
                 local f = CreateFrame("Frame")
                 f:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
                 f:RegisterEvent("UNIT_INVENTORY_CHANGED")
-                f:SetScript("OnEvent", function()
+                f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
                     table.insert(SEEN, event .. " " .. tostring(arg1))
                 end)
             "#,
@@ -1188,19 +1194,9 @@ mod tests {
     #[test]
     fn bank_bag_lock_identity_follows_descriptor_geometry() {
         use benilla_protocol::messages::{Field, FieldLayout};
-        for (layout, live, slot) in [
-            (FieldLayout::Vanilla5875, 64, 0),
-            (FieldLayout::Vanilla5875, 69, 5),
-            (FieldLayout::Wrath12340, 68, 0),
-            (FieldLayout::Wrath12340, 74, 6),
-        ] {
+        let layout = FieldLayout::Wrath12340;
+        for (live, slot) in [(68, 0), (74, 6)] {
             let mut app = world_with_bank_bag(Some(BAG));
-            if layout == FieldLayout::Wrath12340 {
-                app.insert_non_send_resource(
-                    UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
-                        .unwrap(),
-                );
-            }
             let first = layout.resolve(Field::PlayerBankbagSlot1).unwrap().index + 2 * slot as u16;
             let mut q = app
                 .world_mut()
@@ -1218,9 +1214,6 @@ mod tests {
                     let memo = state.vm.get(world.non_send_resource::<UiScript>());
                     let bags = memo.last_bank_bags.as_ref().unwrap();
                     assert!(bags[slot].as_ref().unwrap().locked);
-                    if layout == FieldLayout::Vanilla5875 {
-                        assert!(bags[6].is_none());
-                    }
                 });
             assert!(app
                 .world()
@@ -1299,12 +1292,15 @@ mod tests {
                 .world_mut()
                 .query_filtered::<&mut ObjectStore, With<SelfPlayer>>();
             let mut store = q.single_mut(app.world_mut()).unwrap();
-            *store = ObjectStore(ObjectFields::from_pairs(&[
-                (F_BANK_BAG_1, a as u32),
-                (F_BANK_BAG_1 + 1, (a >> 32) as u32),
-                (F_BANK_BAG_1 + 2, b as u32),
-                (F_BANK_BAG_1 + 3, (b >> 32) as u32),
-            ]));
+            *store = ObjectStore(ObjectFields::from_native_pairs(
+                FieldLayout::Wrath12340,
+                &[
+                    (F_BANK_BAG_1, a as u32),
+                    (F_BANK_BAG_1 + 1, (a >> 32) as u32),
+                    (F_BANK_BAG_1 + 2, b as u32),
+                    (F_BANK_BAG_1 + 3, (b >> 32) as u32),
+                ],
+            ));
         };
         set_slots(&mut app, BAG, BAG2);
         crate::items::test_spawn_item(
@@ -1374,7 +1370,7 @@ mod tests {
         assert!(
             app.world_mut()
                 .non_send_resource_mut::<UiScript>()
-                .eval::<bool>(r#"return IsInventoryItemLocked(64) and true or false"#)
+                .eval::<bool>(r#"return IsInventoryItemLocked(68) and true or false"#)
                 .unwrap(),
             "in flight, the slot reads locked"
         );
@@ -1389,7 +1385,7 @@ mod tests {
         assert!(
             !app.world_mut()
                 .non_send_resource_mut::<UiScript>()
-                .eval::<bool>(r#"return IsInventoryItemLocked(64) and true or false"#)
+                .eval::<bool>(r#"return IsInventoryItemLocked(68) and true or false"#)
                 .unwrap(),
             "the unlock has to reach the VM in the same frame it happened"
         );

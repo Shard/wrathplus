@@ -347,14 +347,14 @@ mod tests {
     use bevy::input::mouse::MouseScrollUnit;
 
     fn wheel_pane() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_screen_size(1024.0, 768.0);
         s.run(
             r#"
             local f = CreateFrame("Frame", "WheelProbe")
             f:SetWidth(200) f:SetHeight(200) f:SetPoint("CENTER", nil, "CENTER", 0, 0)
             f:EnableMouseWheel(true)
-            f:SetScript("OnMouseWheel", function()
+            f:SetScript("OnMouseWheel", function(self, arg1)
                 WheelCalls = (WheelCalls or 0) + 1
                 WheelSum = (WheelSum or 0) + arg1
             end)

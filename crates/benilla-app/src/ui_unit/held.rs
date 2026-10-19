@@ -273,7 +273,7 @@ mod tests {
             .insert_resource(NetCommands(tx))
             .add_plugins(crate::ui_aura::UiAuraPlugin)
             .add_systems(Update, feed_chain_units.after(crate::ui_aura::AuraEvents));
-        app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
+        app.insert_non_send_resource(UiScript::new().unwrap());
         {
             let mut names = app.world_mut().resource_mut::<NameCache>();
             for (guid, name) in [(ME, "Meg"), (A, "Alia"), (B, "Bram"), (C, "Cole")] {

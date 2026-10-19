@@ -1448,13 +1448,13 @@ mod tests {
     /// The handler's container ids reach the VM as `BAG_OPEN`'s `arg1`.
     #[test]
     fn a_server_opened_bag_fires_bag_open_with_its_container_id() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
              f:RegisterEvent('BAG_OPEN') \
              f:RegisterEvent('BAG_UPDATE') \
-             f:SetScript('OnEvent', function() \
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) \
                  table.insert(SEEN, event .. ' ' .. tostring(arg1)) end)",
         )
         .unwrap();
@@ -1487,12 +1487,12 @@ mod tests {
     /// items swapped fire the argless one twice though the views are equal.
     #[test]
     fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
              f:RegisterEvent('PLAYERBANKSLOTS_CHANGED') \
-             f:SetScript('OnEvent', function() \
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) \
                  table.insert(SEEN, event .. ' ' .. tostring(arg1)) end)",
         )
         .unwrap();
@@ -1617,13 +1617,13 @@ mod tests {
     /// two identical bags swapped still close both windows.
     #[test]
     fn bag_closed_fires_on_the_bag_guid_moving_and_only_off_a_non_empty_slot() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
              f:RegisterEvent('BAG_CLOSED') \
              f:RegisterEvent('BAG_UPDATE') \
-             f:SetScript('OnEvent', function() \
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) \
                  table.insert(SEEN, event .. ' ' .. tostring(arg1)) end)",
         )
         .unwrap();
@@ -1757,7 +1757,7 @@ mod tests {
             "BAG_EVENTS = 0 \
              local f = CreateFrame('Frame') \
              f:RegisterEvent('BAG_UPDATE') \
-             f:SetScript('OnEvent', function() BAG_EVENTS = BAG_EVENTS + 1 end)",
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) BAG_EVENTS = BAG_EVENTS + 1 end)",
         )
         .unwrap();
         let bag0 = ContainerState {
@@ -1812,13 +1812,13 @@ mod tests {
     fn a_stack_ticking_down_fires_item_lock_changed_before_bag_update() {
         use benilla_ui::script::ContainerSlot;
 
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "ORDER = {} \
              local f = CreateFrame('Frame') \
              f:RegisterEvent('ITEM_LOCK_CHANGED') \
              f:RegisterEvent('BAG_UPDATE') \
-             f:SetScript('OnEvent', function() \
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) \
                  table.insert(ORDER, event .. ':' .. tostring(arg1) .. ',' .. tostring(arg2)) \
              end)",
         )

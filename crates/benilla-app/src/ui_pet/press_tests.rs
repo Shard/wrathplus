@@ -121,7 +121,7 @@ pub(super) struct Rig {
 
 /// A VM whose listener records every event the pet's lists fire into `SEEN`, in order.
 pub(super) fn listening_vm() -> benilla_ui::script::UiScript {
-    let script = benilla_ui::script::UiScript::new_vanilla().expect("a VM");
+    let script = benilla_ui::script::UiScript::new().expect("a VM");
     listen(&script);
     script
 }
@@ -137,7 +137,7 @@ pub(super) fn listen(script: &benilla_ui::script::UiScript) {
             f:RegisterEvent("PET_BAR_UPDATE_COOLDOWN")
             f:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
             f:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-            f:SetScript("OnEvent", function() table.insert(SEEN, event) end)
+            f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN, event) end)
         "#,
         )
         .expect("the listener registers");

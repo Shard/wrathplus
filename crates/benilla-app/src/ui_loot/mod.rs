@@ -1232,7 +1232,7 @@ mod tests {
                 5,
                 Vec::new(),
             );
-            let script = UiScript::new_vanilla().unwrap();
+            let script = UiScript::new().unwrap();
             script
                 .run(r#"CreateFrame("Frame", "LootHost"):CreateTexture("LootTex")"#)
                 .unwrap();
@@ -1277,7 +1277,7 @@ mod tests {
                 vec![item(3, TOUGH_JERKY, 1)],
             );
 
-            let script = UiScript::new_vanilla().unwrap();
+            let script = UiScript::new().unwrap();
             script
                 .run(
                     "OPENS = 0\n\
@@ -2226,7 +2226,7 @@ mod tests {
                 })
                 .collect()
         };
-        app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
+        app.insert_non_send_resource(UiScript::new().unwrap());
         let close_loot = |app: &mut App| {
             app.world_mut()
                 .non_send_resource_mut::<UiScript>()

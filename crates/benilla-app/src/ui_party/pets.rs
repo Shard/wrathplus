@@ -326,7 +326,7 @@ pub(in crate::ui_party) mod tests {
                                      "UNIT_NAME_UPDATE" }) do
                     f:RegisterEvent(e)
                 end
-                f:SetScript("OnEvent", function()
+                f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
                     table.insert(SEEN, event .. ":" .. tostring(arg1))
                 end)
                 "#,
@@ -338,7 +338,7 @@ pub(in crate::ui_party) mod tests {
     }
 
     pub(in crate::ui_party) fn app() -> App {
-        app_with(UiScript::new_vanilla().unwrap())
+        app_with(UiScript::new().unwrap())
     }
 
     /// A party of `n`, each `online` on the wire and in its record, the record naming pet `i`.
@@ -876,7 +876,7 @@ pub(in crate::ui_party) mod tests {
     #[test]
     fn the_stock_party_frame_shows_and_hides_its_pet_frame() {
         benilla_formats::wow_data_or_skip!();
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let failures = crate::ui_script::load_default_ui(&script);
         assert!(failures.is_empty(), "load failures: {failures:?}");

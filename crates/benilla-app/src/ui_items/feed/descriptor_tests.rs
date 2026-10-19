@@ -86,8 +86,8 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
         (FieldLayout::Wrath12340, 28, 7, 32),
     ] {
         let mut app = crate::game_plugins::schedule_tests::headless_client();
-        let script = UiScript::new_vanilla().unwrap();
-        script.run("SEEN = {}; local f=CreateFrame('Frame'); f:RegisterEvent('BAG_OPEN'); f:RegisterEvent('BAG_CLOSED'); f:RegisterEvent('BAG_UPDATE'); f:RegisterEvent('PLAYERBANKSLOTS_CHANGED'); f:SetScript('OnEvent',function() table.insert(SEEN,event..' '..tostring(arg1)) end)").unwrap();
+        let script = UiScript::new().unwrap();
+        script.run("SEEN = {}; local f=CreateFrame('Frame'); f:RegisterEvent('BAG_OPEN'); f:RegisterEvent('BAG_CLOSED'); f:RegisterEvent('BAG_UPDATE'); f:RegisterEvent('PLAYERBANKSLOTS_CHANGED'); f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN,event..' '..tostring(arg1)) end)").unwrap();
         app.world_mut().insert_non_send_resource(script);
         let player = app
             .world_mut()
