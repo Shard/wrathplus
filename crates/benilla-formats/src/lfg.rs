@@ -218,6 +218,8 @@ pub(crate) fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
         end.checked_add(word(16) as usize) == Some(bytes.len()),
         "WDBC size mismatch"
     );
+    // `as_chunks::<{ N * 4 }>` needs `generic_const_exprs`, unstable.
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     let rows = bytes[20..end]
         .chunks_exact(N * 4)
         .map(|r| {

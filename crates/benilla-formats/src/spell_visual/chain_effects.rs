@@ -144,7 +144,7 @@ fn wrath_packed(bytes: &[u8]) -> Result<LoadedChains> {
         effects: HashMap::with_capacity(count),
         raw: HashMap::with_capacity(count),
     };
-    for row in bytes[20..strings_at].chunks_exact(SIZE) {
+    for row in bytes[20..strings_at].as_chunks::<SIZE>().0 {
         let w = |at: usize| u32::from_le_bytes(row[at..at + 4].try_into().unwrap());
         let f = |at| f32::from_bits(w(at));
         let offset = w(28) as usize;

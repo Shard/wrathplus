@@ -106,7 +106,7 @@ pub struct WrathMapTables {
 fn schema(name: &str, fields: &[FieldType]) -> Schema {
     let mut s = Schema::new(name);
     for (i, t) in fields.iter().enumerate() {
-        s.add_field(SchemaField::new(format!("c{i}"), t.clone()));
+        s.add_field(SchemaField::new(format!("c{i}"), *t));
     }
     s
 }
@@ -208,7 +208,7 @@ fn transforms(bytes: &[u8]) -> Result<Vec<WorldMapTransform>> {
 fn poi_links(bytes: &[u8]) -> Result<HashMap<u32, AreaPoiLinks>> {
     let rs = parse(
         bytes,
-        schema("AreaPOI 12340", &vec![U; 54]),
+        schema("AreaPOI 12340", &[U; 54]),
         "AreaPOI 12340",
     )?;
     let mut out = HashMap::new();

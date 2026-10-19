@@ -79,7 +79,7 @@ pub fn parse_item_limit_categories(bytes: &[u8], locale: &str) -> Result<ItemLim
     );
     let strings = &bytes[end..];
     let mut rows = Vec::new();
-    for record in bytes[20..end].chunks_exact(80) {
+    for record in bytes[20..end].as_chunks::<80>().0 {
         let raw = std::array::from_fn(|i| {
             u32::from_le_bytes(record[i * 4..i * 4 + 4].try_into().unwrap())
         });
