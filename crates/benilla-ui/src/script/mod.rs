@@ -884,6 +884,7 @@ impl UiScript {
             wrath_arena::install(&lua)?;
             wrath_vehicle::install(&lua)?;
             wrath_pet_stable::install(&lua)?;
+            tabard::install_wrath(&lua)?;
             battlefield_queue::install_wrath(&lua)?;
             battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;
