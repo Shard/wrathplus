@@ -18,6 +18,7 @@
 //!   `GetNumDungeonMapLevels` (`0x546190`) and `DungeonUsesTerrainMap` (`0x544c40`). A row with
 //!   `DefaultDungeonFloor -1` counts its terrain as level 1, and its floors from 2.
 //! - `ClickLandmark(mapLinkID)` (`0x546ef0`): the instance map on that floor's map, on that floor.
+//! - `InitWorldMapPing(parent)` (`0x545ff0`) checks its frame.
 //! - `GetMapDebugObjectInfo`, `TeleportToDebugObject` and `GetDebugZoneMap` share one stub,
 //!   `xor eax,eax; ret` (`0x8e5250`): no returns. `GetNumMapDebugObjects` (`0x608560`) is 0.
 
@@ -345,6 +346,24 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
+    // InitWorldMapPing(parent) (`0x545ff0`): `parent` must be a frame; the client records half
+    // its `WorldMapPing` child's size for the engine's ping placement (`0x542f80`). Labelled: no
+    // engine ping reads that size here, as FrameXML seats and fades the ping model itself.
+    g.set(
+        "InitWorldMapPing",
+        lua.create_function(|lua, args: MultiValue| {
+            let Some(Value::Table(parent)) = args.get(0).cloned() else {
+                return Err(mlua::Error::runtime("Usage: InitWorldMapPing(parent)"));
+            };
+            if super::object::frame_handle_of(lua, &parent).is_err() {
+                return Err(mlua::Error::runtime(
+                    "InitWorldMapPing(): Couldn't find 'this' in parent object",
+                ));
+            }
+            Ok(())
+        })?,
+    )?;
+
     for stub in [
         "GetMapDebugObjectInfo",
         "TeleportToDebugObject",
@@ -623,6 +642,9 @@ mod tests {
             0
         );
         assert_eq!(s.eval::<i64>("return GetNumMapDebugObjects()").unwrap(), 0);
+        s.run("InitWorldMapPing(CreateFrame('Frame'))").unwrap();
+        assert!(s.run("InitWorldMapPing()").is_err());
+        assert!(s.run("InitWorldMapPing({})").is_err());
     }
 
     #[test]
