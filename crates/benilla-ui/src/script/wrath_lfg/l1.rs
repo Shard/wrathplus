@@ -31,6 +31,28 @@ pub(super) struct Derived {
     pub best: Option<u32>,
 }
 
+/// `0x559c90`: unlocked unless the valid self block, or (outside raids, type 2) a valid party
+/// member, holds an active lock (the node's `+0xd` byte) on the full entry.
+fn joinable(
+    self_valid: bool,
+    player: &[Node],
+    party: &Option<Vec<(u64, Vec<Node>)>>,
+    entry: u32,
+) -> bool {
+    let locked = |nodes: &[Node]| nodes.iter().any(|n| n.entry == entry && n.active);
+    if self_valid && locked(player) {
+        return false;
+    }
+    if entry & 0xff00_0000 != 0x0200_0000 {
+        if let Some(party) = party {
+            if party.iter().any(|(_, nodes)| locked(nodes)) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 impl State {
     fn player_nodes(&self) -> Option<Vec<Node>> {
         self.locks.player.as_ref().map(derived::player)
@@ -73,22 +95,7 @@ impl State {
             })
             .map(full_entry)
             .collect();
-        // `0x559c90`: unlocked unless the valid self block, or (outside raids) a valid party
-        // member, holds an active lock on the entry.
-        let unlocked = |entry: u32| {
-            let locked = |nodes: &[Node]| nodes.iter().any(|n| n.entry == entry && n.active);
-            if self.locks.player.is_some() && locked(&player) {
-                return false;
-            }
-            if entry & 0xff00_0000 != 0x0200_0000 {
-                if let Some(party) = &party {
-                    if party.iter().any(|(_, nodes)| locked(nodes)) {
-                        return false;
-                    }
-                }
-            }
-            true
-        };
+        let unlocked = |entry: u32| joinable(self.locks.player.is_some(), &player, &party, entry);
         let mut best: Option<&WrathLfgDungeon> = None;
         for entry in &random {
             let Some(row) = self.row(entry & 0xff_ffff) else {
@@ -146,6 +153,24 @@ pub(super) fn preview_item(state: &State, entry: u32, index: i32) -> Option<supe
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+
+    // IsLFGDungeonJoinable(dungeonID) (`0x55a040`): a listed LFGDungeons row answers
+    // `0x559c90(type << 24 | id)`; an unknown id answers nothing.
+    g.set(
+        "IsLFGDungeonJoinable",
+        lua.create_function(|lua, id: Value| {
+            let id = number_arg(lua, id, "Usage: IsLFGDungeonJoinable(dungeonID)")?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let state = &model.wrath_lfg;
+            let Some(row) = u32::try_from(id).ok().and_then(|id| state.row(id)) else {
+                return Ok(MultiValue::new());
+            };
+            let player = state.player_nodes().unwrap_or_default();
+            let party = state.party_nodes();
+            let ok = joinable(state.locks.player.is_some(), &player, &party, full_entry(row));
+            Ok(MultiValue::from_vec(vec![Value::Boolean(ok)]))
+        })?,
+    )?;
 
     // GetLFDLockInfo(dungeonID, index) → name, reason. Index 1 is the player (self validity),
     // 2.. the party members in receipt order (party validity); invalid or out of range answers
@@ -691,5 +716,45 @@ mod tests {
         // Both blocks invalid: the previous derivation stands.
         publish(&mut s, None, None);
         assert_eq!(s.eval::<i64>("return GetNumRandomDungeons()").unwrap(), 3);
+    }
+
+    #[test]
+    fn joinable_reads_self_then_party_locks_outside_raids() {
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.set_wrath_lfg_catalog(
+            Arc::new(WrathLfgCatalog {
+                dungeons: vec![
+                    row(7, 1, 0, 0, [15, 15, 21]),
+                    row(13, 1, 0, 0, [80, 80, 80]),
+                    row(14, 2, 0, 2, [80, 80, 80]),
+                ],
+                ..Default::default()
+            }),
+            Some(2),
+        );
+        let joinable = |s: &UiScript, id: u32| {
+            s.eval::<Option<bool>>(&format!("return IsLFGDungeonJoinable({id})")).unwrap()
+        };
+        assert_eq!(s.eval::<i64>("return select('#', IsLFGDungeonJoinable(99))").unwrap(), 0);
+        assert!(s.run("IsLFGDungeonJoinable()").is_err());
+        assert_eq!(joinable(&s, 7), Some(true), "no lock block: joinable");
+        publish(
+            &mut s,
+            Some(WrathLfgPlayerLocks {
+                // A zero reason is still an active lock.
+                locks: vec![lock(0x0100_0007, 0)],
+                previews: vec![],
+            }),
+            Some(vec![WrathLfgMemberLocks {
+                guid: 77,
+                locks: vec![lock(0x0100_000d, 3), lock(0x0200_000e, 3)],
+            }]),
+        );
+        assert_eq!(joinable(&s, 7), Some(false), "the player's own lock");
+        assert_eq!(joinable(&s, 13), Some(false), "a party member's dungeon lock");
+        assert_eq!(joinable(&s, 14), Some(true), "party locks are not read for raids");
+        publish(&mut s, Some(WrathLfgPlayerLocks::default()), None);
+        assert_eq!(joinable(&s, 7), Some(true));
+        assert_eq!(joinable(&s, 13), Some(true), "no valid party block");
     }
 }

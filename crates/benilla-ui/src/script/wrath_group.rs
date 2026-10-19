@@ -29,17 +29,6 @@ impl super::super::UiScript {
         self.model_mut().wrath_group = group;
     }
 }
-fn role(bits: u8) -> &'static str {
-    if bits & 2 != 0 {
-        "TANK"
-    } else if bits & 4 != 0 {
-        "HEALER"
-    } else if bits & 8 != 0 {
-        "DAMAGER"
-    } else {
-        "NONE"
-    }
-}
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     let roster: Function = g.get("GetRaidRosterInfo")?;
@@ -84,14 +73,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     g.set(
         "UnitGroupRolesAssigned",
+        // UnitGroupRolesAssigned(unit) → isTank, isHealer, isDamage: build 12340's three booleans
+        // (PartyMemberFrame.lua:223, PlayerFrame.lua:250), from the member's role bits 2, 4, 8.
         lua.create_function(|lua, token: Option<String>| {
             super::super::unit::check_unit_token(lua, &token)?;
             let model = lua.app_data_ref::<Model>().expect("model");
             let guid = token.as_ref().and_then(|t| model.unit(t)).map(|u| u.guid);
-            Ok(role(
-                guid.and_then(|g| model.wrath_group.members.iter().find(|m| m.guid == g))
-                    .map_or(0, |m| m.roles),
-            ))
+            let bits = guid
+                .and_then(|g| model.wrath_group.members.iter().find(|m| m.guid == g))
+                .map_or(0, |m| m.roles);
+            Ok((bits & 2 != 0, bits & 4 != 0, bits & 8 != 0))
         })?,
     )?;
     for (name, raid) in [("GetDungeonDifficulty", false), ("GetRaidDifficulty", true)] {
@@ -145,12 +136,12 @@ mod tests {
             raid_difficulty: Some(4),
             ..Default::default()
         });
-        assert!(s.eval::<bool>("local a,b,c,d,e,f,g,h,i,j,k=GetRaidRosterInfo(1); return a=='Ally' and j=='MAINTANK' and k==false and UnitGroupRolesAssigned('raid1')=='TANK' and GetDungeonDifficulty()==2 and GetRaidDifficulty()==4").unwrap());
+        assert!(s.eval::<bool>("local a,b,c,d,e,f,g,h,i,j,k=GetRaidRosterInfo(1); return a=='Ally' and j=='MAINTANK' and k==false and select('#', UnitGroupRolesAssigned('raid1'))==3 and UnitGroupRolesAssigned('raid1')==true and select(2, UnitGroupRolesAssigned('raid1'))==false and GetDungeonDifficulty()==2 and GetRaidDifficulty()==4").unwrap());
         assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 11);
         s.set_wrath_group(Default::default());
         assert!(s
             .eval::<bool>(
-                "return GetDungeonDifficulty()==nil and UnitGroupRolesAssigned('raid1')=='NONE'"
+                "return GetDungeonDifficulty()==nil and not (UnitGroupRolesAssigned('raid1') or select(2, UnitGroupRolesAssigned('raid1')) or select(3, UnitGroupRolesAssigned('raid1')))"
             )
             .unwrap());
     }
