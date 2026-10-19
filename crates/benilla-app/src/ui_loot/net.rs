@@ -19,6 +19,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::LootClearMoney, on_clear_money)
         .net_handler(K::LootReleaseResponse, on_release_response)
         .net_handler(K::LootMasterList, on_master_list)
+        .net_handler(K::WrathLootRoll, on_roll_resolved)
         .net_handler(K::FishNotHooked, on_fish_verdict)
         .net_handler(K::FishEscaped, on_fish_verdict)
         .net_handler(K::ItemPushResult, on_item_push_result)
@@ -212,6 +213,22 @@ fn on_release_response(
             .then(|| super::close_interaction(&mut loot, &mut latch, None))
             .flatten();
         dead.after_close(closed);
+    }
+}
+
+/// `SMSG_LOOT_ROLL_WON` and `SMSG_LOOT_ALL_PASSED` (`0x6fbb10`, `0x6fb600` → `0x6dc770`): when the
+/// latch names the roll's source, its row turns lootable. The roll frames are `ui_loot_roll`'s.
+fn on_roll_resolved(In(ev): In<SessionEvent>, latch: Res<LootLatch>, mut loot: ResMut<LootState>) {
+    use benilla_protocol::wrath_roll::Roll;
+    let SessionEvent::WrathLootRoll(Roll::Won { item, .. } | Roll::AllPassed { item }) = ev else {
+        return;
+    };
+    if latch.0 != Some(item.guid) {
+        return;
+    }
+    // The client bounds the slot to its 18 rows (`0x6dc770`).
+    if let Ok(slot) = u8::try_from(item.slot) {
+        loot.release_roll(item.guid, slot);
     }
 }
 
@@ -633,6 +650,61 @@ mod tests {
             rx.try_iter().collect::<Vec<_>>()[..],
             [ClientCommand::Loot { .. }, ClientCommand::LootRelease { guid }] if guid == CORPSE
         ));
+    }
+
+    /// `SMSG_LOOT_ALL_PASSED` and `SMSG_LOOT_ROLL_WON` (`0x6dc770`) release the row only while the
+    /// latch names the roll's source.
+    #[test]
+    fn a_resolved_roll_releases_the_latched_window_row() {
+        use benilla_protocol::messages::slot_type;
+        use benilla_protocol::wrath_roll::{Item, Roll};
+        let row = benilla_protocol::messages::LootItem {
+            slot: 2,
+            item_id: 25,
+            count: 1,
+            display_info_id: 1,
+            random_property_id: 0,
+            slot_type: slot_type::ROLL_ONGOING,
+        };
+        let item = Item {
+            guid: CORPSE,
+            slot: 2,
+            entry: 25,
+            suffix_factor: 0,
+            random_property: 0,
+        };
+        for (latched, roll, released) in [
+            (None, Roll::AllPassed { item: item.clone() }, false),
+            (Some(CORPSE), Roll::AllPassed { item: item.clone() }, true),
+            (
+                Some(CORPSE),
+                Roll::Won {
+                    item,
+                    player: 7,
+                    number: 99,
+                    kind: 1,
+                },
+                true,
+            ),
+        ] {
+            let mut world = World::new();
+            world.insert_resource(LootLatch(latched));
+            let mut loot = LootState::default();
+            loot.open(CORPSE, 1, 0, vec![row]);
+            world.insert_resource(loot);
+            world
+                .run_system_once_with(on_roll_resolved, SessionEvent::WrathLootRoll(roll))
+                .expect("the handler runs as a one-shot system");
+            let want = if released {
+                slot_type::ALLOW_LOOT
+            } else {
+                slot_type::ROLL_ONGOING
+            };
+            assert!(matches!(
+                world.resource::<LootState>().action_at(1),
+                Some(super::super::LootAction::Item { slot_type, .. }) if slot_type == want
+            ));
+        }
     }
 
     /// A live creature: `TYPEMASK_OBJECT | TYPEMASK_UNIT`, so it is the Tab target.

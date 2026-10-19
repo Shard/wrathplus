@@ -3,7 +3,7 @@
 //! Layouts follow AzerothCore `LootHandler.cpp`, `Player::SendLoot*`,
 //! `LootMgr.cpp::operator<<(LootView)`, and `Player::SendNewItem`. Every loot type the server
 //! writes decodes (`Player::SendLoot` folds insignia into skinning and fishing holes and junk
-//! into fishing); group/master rows remain outside this codec.
+//! into fishing). Every `LootSlotType` `operator<<(LootView)` writes decodes, group rows included.
 
 use std::fmt;
 
@@ -30,7 +30,10 @@ const LOOT_SLOT_ALLOW: u8 = 0;
 pub const LOOT_SLOT_OWNER: u8 = 4;
 const LOOT_ROW_BYTES: usize = 22;
 
-/// The two manually takeable rows in the bounded solo slice; roll/master/locked remain excluded.
+/// AzerothCore `LootMgr.h` `LootSlotType`: allow, roll ongoing, master, locked, owner.
+const LOOT_SLOT_TYPE_MAX: u8 = LOOT_SLOT_OWNER;
+
+/// The rows `LootSlot` takes (`0x589140`): roll-ongoing, master and locked rows branch away first.
 pub fn is_solo_loot_slot(slot_type: u8) -> bool {
     matches!(slot_type, LOOT_SLOT_ALLOW | LOOT_SLOT_OWNER)
 }
@@ -274,7 +277,7 @@ pub fn decode_loot_response(body: &[u8]) -> Result<LootResponse> {
             random_property_id: input.u32()?,
             slot_type: input.u8()?,
         };
-        if !is_solo_loot_slot(item.slot_type) {
+        if item.slot_type > LOOT_SLOT_TYPE_MAX {
             return Err(LootCodecError::UnsupportedSlotType(item.slot_type));
         }
         items.push(item);
