@@ -181,7 +181,7 @@ fn snapshot(
 }
 
 /// Push the stable into the VM and fire its events on a change.
-fn feed_stable(
+pub(crate) fn feed_stable(
     script: Option<NonSendMut<UiScript>>,
     // Mutable only to take the fresh-list latch.
     mut open: ResMut<StableOpen>,

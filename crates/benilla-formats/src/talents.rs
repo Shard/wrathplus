@@ -27,11 +27,14 @@ const COL_T_PREREQ_RANK: usize = 16;
 const COL_T_FLAGS: usize = 19;
 const COL_T_REQUIRED_SPELL: usize = 20;
 
-const TALENT_TAB_FIELDS: usize = 15;
+const TALENT_TAB_FIELDS: usize = 16;
 const COL_TT_NAME_ENUS: usize = 1;
 const COL_TT_RACE_MASK: usize = 11;
 const COL_TT_CLASS_MASK: usize = 12;
 const COL_TT_BACKGROUND: usize = 14;
+/// Build 12340's pet talent mask (`+0x14`), appended past the 1.12 width and mapped by
+/// [`crate::wrath_layouts`].
+const COL_TT_PET_MASK: usize = 15;
 
 /// The vanilla rank ceiling (`MAX_TALENT_RANK`, vmangos `DBCStructure.h`).
 pub const MAX_TALENT_RANK: usize = 5;
@@ -74,6 +77,8 @@ pub struct TalentTabInfo {
     /// match (511 is every race in the shipped data).
     pub race_mask: u32,
     pub class_mask: u32,
+    /// The pet talent types the tab serves, bit `1 << type` (`GetPetTalentTree` `0x5d3d80`).
+    pub pet_talent_mask: u32,
     /// The `Interface\TalentFrame\<background>-…` art base ("MageFire").
     pub background: String,
 }
@@ -93,6 +98,16 @@ impl TalentCatalog {
             by_tab.entry(t.tab).or_default().push(t);
         }
         Self { tabs, by_tab }
+    }
+
+    /// The name of the first tab, in file order, whose pet mask has the pet talent type's bit
+    /// (`GetPetTalentTree` `0x5d3d80`); `None` for a negative type or no tab.
+    pub fn pet_tab_name(&self, pet_talent_type: i32) -> Option<&str> {
+        let bit = 1u32.checked_shl(u32::try_from(pet_talent_type).ok()?)?;
+        self.tabs
+            .iter()
+            .find(|t| t.pet_talent_mask & bit != 0)
+            .map(|t| t.name.as_str())
     }
 
     /// A race and class's tabs (unit bytes, 1-based) in file order, as `0x4f2e50` filters them.
@@ -165,6 +180,7 @@ pub fn load_talent_catalog(chain: &mut Chain) -> Result<TalentCatalog> {
             name: str_at(&tab_set, r, COL_TT_NAME_ENUS).unwrap_or_default(),
             race_mask: u32_at(r, COL_TT_RACE_MASK).unwrap_or(0),
             class_mask: u32_at(r, COL_TT_CLASS_MASK).unwrap_or(0),
+            pet_talent_mask: u32_at(r, COL_TT_PET_MASK).unwrap_or(0),
             background: str_at(&tab_set, r, COL_TT_BACKGROUND).unwrap_or_default(),
         });
     }
@@ -199,6 +215,23 @@ pub fn load_talent_catalog(chain: &mut Chain) -> Result<TalentCatalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The three hunter-pet trees answer their type's bit (`GetPetTalentTree` `0x5d3d80`).
+    #[test]
+    fn installed_pet_tabs_answer_their_talent_type() {
+        let data = crate::wow_data_or_skip!();
+        let profile = crate::DataProfile::from_env().expect("profile");
+        if !matches!(profile, crate::DataProfile::Wrath { .. }) {
+            return;
+        }
+        let mut chain = Chain::open_profile(&data, &profile).expect("open chain");
+        let cat = load_talent_catalog(&mut chain).expect("load Talent/TalentTab");
+        assert_eq!(cat.pet_tab_name(0), Some("Ferocity"));
+        assert_eq!(cat.pet_tab_name(1), Some("Tenacity"));
+        assert_eq!(cat.pet_tab_name(2), Some("Cunning"));
+        assert_eq!(cat.pet_tab_name(-1), None);
+        assert_eq!(cat.pet_tab_name(5), None);
+    }
 
     #[test]
     fn real_talent_tables_hold_the_grid_and_prereq_invariants() {

@@ -220,6 +220,7 @@ mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
 mod wrath_arena;
+mod wrath_pet_stable;
 mod wrath_vehicle;
 mod wrath_help_request;
 mod wrath_runes;
@@ -868,6 +869,7 @@ impl UiScript {
             wrath_raid_units::install(&lua)?;
             wrath_arena::install(&lua)?;
             wrath_vehicle::install(&lua)?;
+            wrath_pet_stable::install(&lua)?;
             battlefield_queue::install_wrath(&lua)?;
             battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;

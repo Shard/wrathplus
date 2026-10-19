@@ -36,13 +36,13 @@ pub(crate) fn columns(
         "Spell" => (187, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
         "SkillLine" => (23, 56, skill_line),
-        "TalentTab" => (15, 24, talent_tab),
+        "TalentTab" => (16, 24, talent_tab),
         "SpellShapeshiftForm" => (14, 35, spell_shapeshift_form),
         "Faction" => (37, 57, faction),
         "ChrRaces" => (29, 69, chr_races),
         "ChrClasses" => (17, 60, chr_classes),
         "CreatureDisplayInfo" => (12, 16, creature_display_info),
-        "CreatureFamily" => (18, 28, creature_family),
+        "CreatureFamily" => (19, 28, creature_family),
         "SpellItemEnchantment" => (24, 38, spell_item_enchantment),
         "AreaTable" => (25, 36, area_table),
         "WorldMapArea" => (8, 11, |m| {
@@ -174,9 +174,14 @@ fn skill_line(m: &mut Map) {
     m.same(0, 3).loc(3, 3).loc(12, 20).run(21, 37, 1).run(22, 55, 1);
 }
 
-/// `TalentTab.dbc` 15 → 24: id, name, icon, race mask, class mask, order, background.
+/// `TalentTab.dbc` 15 → 24: id, name, icon, race mask, class mask, order, background; slot 15,
+/// past the 1.12 width, is build 12340's pet talent mask.
 fn talent_tab(m: &mut Map) {
-    m.run(0, 0, 1).loc(1, 1).run(10, 18, 3).run(13, 22, 2);
+    m.run(0, 0, 1)
+        .loc(1, 1)
+        .run(10, 18, 3)
+        .run(13, 22, 2)
+        .run(15, 21, 1);
 }
 
 /// `SpellShapeshiftForm.dbc` 14 → 35: id, bonus action bar, name, flags, creature type,
@@ -213,9 +218,10 @@ fn creature_display_info(m: &mut Map) {
     m.same(0, 9).run(9, 10, 3);
 }
 
-/// `CreatureFamily.dbc` 18 → 28: pet talent type and category precede the name.
+/// `CreatureFamily.dbc` 18 → 28: pet talent type and category precede the name; slot 18, past
+/// the 1.12 width, is the pet talent type.
 fn creature_family(m: &mut Map) {
-    m.same(0, 8).loc(8, 10).run(17, 27, 1);
+    m.same(0, 8).loc(8, 10).run(17, 27, 1).run(18, 8, 1);
 }
 
 /// `SpellItemEnchantment.dbc` 24 → 38: a charges column precedes the effects.
@@ -282,13 +288,13 @@ mod tests {
         ("Spell", 187, 234),
         ("SpellDispelType", 12, 21),
         ("SkillLine", 23, 56),
-        ("TalentTab", 15, 24),
+        ("TalentTab", 16, 24),
         ("SpellShapeshiftForm", 14, 35),
         ("Faction", 37, 57),
         ("ChrRaces", 29, 69),
         ("ChrClasses", 17, 60),
         ("CreatureDisplayInfo", 12, 16),
-        ("CreatureFamily", 18, 28),
+        ("CreatureFamily", 19, 28),
         ("SpellItemEnchantment", 24, 38),
         ("AreaTable", 25, 36),
         ("WorldMapArea", 8, 11),

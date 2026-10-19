@@ -225,6 +225,8 @@ impl PluginGroup for GamePlugins {
             .add(ChrClassesPlugin)
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
+            .add(crate::ui_pet_talent_tree::UiPetTalentTreePlugin)
+            .add(crate::ui_vehicle::UiVehiclePlugin)
             .add(UiCompanionsPlugin)
             .add(UiTotemsPlugin)
             .add(UiGlyphsPlugin)
@@ -726,11 +728,13 @@ pub(crate) mod schedule_tests {
     /// - the arena lines' drain (`net::wrath_arena_lines::drain_arena_lines`) against the arena
     ///   reducer (`ui_arena_team::feed_arena`) over `ArenaRosterRefresh`: a queue of team names the
     ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
+    /// - the vehicle UI feed (`ui_vehicle::feed_vehicles`) against the camera-pose load: the feed
+    ///   reads only `Player::mover_pitch`, which the load never writes.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_654;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_655;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
