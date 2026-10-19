@@ -148,6 +148,41 @@ pub(crate) fn lua_bag_pos(bag_index: u8, slot: u8) -> Option<(i64, u32)> {
     }
 }
 
+/// The inverse of [`wire_pos_for`] over every place an item with sockets can sit: worn and the bag
+/// slots themselves ([`EQUIPMENT_BAG`], 1-based inventory id), the backpack and bags, the bank and
+/// the bank bags; the keyring is left out.
+pub(crate) fn lua_pos_for(
+    layout: benilla_protocol::messages::FieldLayout,
+    bag_index: u8,
+    slot: u8,
+) -> Option<(i64, u32)> {
+    let storage = StorageSlots::for_layout(layout);
+    if bag_index == BAG_PLAYER_INVENTORY {
+        return match slot {
+            s if s < SLOT_PACK_FIRST => Some((EQUIPMENT_BAG, u32::from(s) + 1)),
+            s if s < SLOT_PACK_FIRST + PACK_SLOTS => lua_bag_pos(bag_index, s),
+            s if (BANK_SLOT_FIRST..BANK_SLOT_FIRST + storage.bank_slots).contains(&s) => {
+                Some((BANK_CONTAINER, u32::from(s - BANK_SLOT_FIRST) + 1))
+            }
+            s if (storage.bank_bag_first..storage.bank_bag_first + storage.bank_bags)
+                .contains(&s) =>
+            {
+                Some((EQUIPMENT_BAG, u32::from(s) + 1))
+            }
+            _ => None,
+        };
+    }
+    if (storage.bank_bag_first..storage.bank_bag_first + storage.bank_bags).contains(&bag_index) {
+        return (slot < 36).then(|| {
+            (
+                BANK_BAG_ID_FIRST + i64::from(bag_index - storage.bank_bag_first),
+                u32::from(slot) + 1,
+            )
+        });
+    }
+    lua_bag_pos(bag_index, slot)
+}
+
 pub(crate) fn wire_pos_for(
     layout: benilla_protocol::messages::FieldLayout,
     bag: i64,
@@ -1066,8 +1101,8 @@ impl Plugin for UiItemsPlugin {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_equip_slot, item_use_route, keyring_size, lua_bag_pos, wire_pos, ItemUse,
-        ItemUseRoute, KEYRING_CONTAINER,
+        find_equip_slot, item_use_route, keyring_size, lua_bag_pos, lua_pos_for, wire_pos,
+        wire_pos_for, ItemUse, ItemUseRoute, BANK_BAG_ID_FIRST, BANK_CONTAINER, KEYRING_CONTAINER,
     };
     use benilla_ui::script::EQUIPMENT_BAG;
 
@@ -1094,6 +1129,26 @@ mod tests {
             "97 is past KEYRING_SLOT_END — not a position on this wire"
         );
         assert_eq!(wire_pos(KEYRING_CONTAINER, 0), None);
+    }
+
+    /// `lua_pos_for` inverts the Wrath `wire_pos_for` everywhere a socketed item can sit.
+    #[test]
+    fn lua_pos_for_inverts_the_wrath_wire_positions() {
+        let wrath = benilla_protocol::messages::FieldLayout::Wrath12340;
+        for (bag, slot) in [
+            (EQUIPMENT_BAG, 1),
+            (EQUIPMENT_BAG, 19),
+            (0, 16),
+            (4, 36),
+            (BANK_CONTAINER, 28),
+            (BANK_BAG_ID_FIRST, 1),
+            (BANK_BAG_ID_FIRST + 6, 36),
+        ] {
+            let (b, s) = wire_pos_for(wrath, bag, slot).unwrap();
+            assert_eq!(lua_pos_for(wrath, b, s), Some((bag, slot)), "{bag} {slot}");
+        }
+        let (b, s) = wire_pos_for(wrath, KEYRING_CONTAINER, 1).unwrap();
+        assert_eq!(lua_pos_for(wrath, b, s), None, "the keyring");
     }
 
     /// `lua_bag_pos` inverts `wire_pos` over the backpack and the four bags, and nowhere else.

@@ -63,12 +63,67 @@ pub(crate) fn register(app: &mut App) {
         .add_systems(Startup, load.after(benilla_assets::AssetSet::Open))
         .add_systems(
             Update,
-            feed_sockets
-                .after(crate::net::wrath_equipment_sets::feed_equipment_sets)
-                .after(crate::ui_guild_bank::feed_guild_bank)
+            (
+                feed_sockets
+                    .after(crate::net::wrath_equipment_sets::feed_equipment_sets)
+                    .after(crate::ui_guild_bank::feed_guild_bank),
+                feed_item_gems,
+            )
                 .in_set(crate::ui_script::UiFeed)
                 .run_if(crate::ui_script::ingame_ui_up),
         );
+}
+
+/// One slot's gems for `GetContainerItemGems`/`GetInventoryItemGems`: the Lua `(bag, slot)` and
+/// each socket's gem item, from the item's socket enchant slots 2-4 (`SOCK_ENCHANTMENT_SLOT`)
+/// through `SpellItemEnchantment`'s source item.
+type ItemGems = (i64, u32, [Option<u32>; 3]);
+
+/// Every carried, worn or banked item with a gem in a socket, in the walker's order. A slot without
+/// one is left out; the getters answer three nils for it, as the reference's empty sockets do.
+fn item_gems(store: &ObjectStore, objects: &Objects, gems: &GemCatalog) -> Vec<ItemGems> {
+    let layout = store.0.layout();
+    crate::ui_items::collect_inventory(
+        &store.0,
+        objects,
+        crate::ui_items::InventoryScope::QUEST_ITEMS,
+    )
+    .into_iter()
+    .filter_map(|(bag, slot, guid)| {
+        let item = objects.object(guid)?;
+        let socketed = [2u8, 3, 4].map(|enchant_slot| {
+            item.item_enchant(enchant_slot)
+                .and_then(|id| gems.gem_of_enchant(id.unsigned_abs()))
+        });
+        socketed.iter().any(Option::is_some).then_some(())?;
+        let (bag, slot) = crate::ui_items::lua_pos_for(layout, bag, slot)?;
+        Some((bag, slot, socketed))
+    })
+    .collect()
+}
+
+fn feed_item_gems(
+    script: Option<NonSendMut<UiScript>>,
+    self_q: Query<&ObjectStore, With<SelfPlayer>>,
+    objects: Objects,
+    gems: Option<Res<Gems>>,
+    mut last: Local<crate::ui_script::VmMemo<Option<Vec<ItemGems>>>>,
+) {
+    let (Some(mut script), Some(gems)) = (script, gems) else {
+        return;
+    };
+    if script.dialect() != ScriptDialect::Wrath12340 {
+        return;
+    }
+    let Some(store) = self_q.iter().next() else {
+        return;
+    };
+    let rows = item_gems(store, &objects, &gems.0);
+    let (last, reset) = last.get_reset(&script);
+    if reset || last.as_ref() != Some(&rows) {
+        *last = Some(rows.clone());
+        script.set_wrath_item_gems(rows);
+    }
 }
 
 fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
