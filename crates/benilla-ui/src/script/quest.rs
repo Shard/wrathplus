@@ -55,6 +55,9 @@ pub struct QuestRewardSpell {
 /// Wrath greeting metadata, parallel to the corresponding title list.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestGreetingInfo {
+    /// `GetActiveTitle`'s second return (`0x58bcb0`). Labelled: App has no traced source yet and
+    /// feeds `false`.
+    pub complete: bool,
     pub trivial: bool,
     pub daily: bool,
     pub repeatable: bool,
@@ -359,7 +362,27 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )
     }
-    install_title(lua, "GetActiveTitle", true)?;
+    // GetActiveTitle(index) (`0x58bed0`) → the title (nil out of range) and its completion.
+    g.set(
+        "GetActiveTitle",
+        lua.create_function(|lua, i: Value| {
+            let i = super::binding_abi::number_arg(lua, i, "Usage: GetActiveTitle(index)")?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let at = usize::try_from(i).ok().and_then(|i| i.checked_sub(1));
+            let quest = model.quest.as_ref();
+            let title = quest.and_then(|q| at.and_then(|n| q.active_titles.get(n)));
+            let complete = quest
+                .and_then(|q| at.and_then(|n| q.active_info.get(n)))
+                .is_some_and(|info| info.complete);
+            Ok((
+                match title {
+                    Some(t) => Value::String(lua.create_string(t)?),
+                    None => Value::Nil,
+                },
+                complete,
+            ))
+        })?,
+    )?;
     install_title(lua, "GetAvailableTitle", false)?;
 
     // GetQuestItemInfo(type, index) → name, texture, numItems, quality, isUsable (`0x501f80`): five
@@ -579,7 +602,7 @@ mod tests {
             available_info: vec![super::QuestGreetingInfo {
                 trivial: true,
                 daily: true,
-                repeatable: false,
+                ..Default::default()
             }],
             active_info: vec![super::QuestGreetingInfo {
                 trivial: true,
@@ -779,6 +802,12 @@ mod tests {
             s.eval::<String>("return GetActiveTitle(1)").unwrap(),
             "Report to Goldshire"
         );
+        // `0x58bed0`: the title (nil out of range) and its completion, always two.
+        assert_eq!(s.arity("GetActiveTitle(1)").unwrap(), 2);
+        assert!(s
+            .eval::<bool>("local t, c = GetActiveTitle(2) return t == nil and c == false")
+            .unwrap());
+        assert!(s.run("GetActiveTitle()").is_err());
         assert_eq!(
             s.eval::<String>("return GetAvailableTitle(2)").unwrap(),
             "Kobold Camp Cleanup"

@@ -290,7 +290,7 @@ pub(super) fn feed_party(
             .position(|m| m.guid == group.leader)
             .map_or(0, |i| i as u32 + 1)
     };
-    let (loot_method, master_looter, loot_threshold) = match &group.loot {
+    let (loot_method, master_looter, master_looter_guid, loot_threshold) = match &group.loot {
         Some(loot) => {
             let method = match loot.method {
                 0 => "freeforall",
@@ -315,9 +315,10 @@ pub(super) fn feed_party(
                     }
                 })
                 .flatten();
-            (method.to_string(), master, u32::from(loot.threshold))
+            let master_guid = if loot.method == 2 { loot.master } else { 0 };
+            (method.to_string(), master, master_guid, u32::from(loot.threshold))
         }
-        None => ("group".to_string(), None, 0),
+        None => ("group".to_string(), None, 0, 0),
     };
     // The raid roster, the one list `GetNumRaidMembers`, `GetRaidRosterInfo` and `UnitInRaid` read.
     let me = self_pair.map(|(_, g, store)| RaidSelf {
@@ -354,6 +355,7 @@ pub(super) fn feed_party(
         raid,
         loot_method,
         master_looter,
+        master_looter_guid,
         loot_threshold,
     };
     let native = group
