@@ -91,6 +91,24 @@ pub struct WrathCamera {
     pub roll: WrathTrack<f32>,
 }
 
+/// A version-264 animation event: the positional record of [`M2EventMarker`] plus its nested
+/// `enabled` track (`+0x18`), which has timestamps and no values. Each outer array is one
+/// sequence's trigger times in ms from that sequence's start; an external sequence's inner arrays
+/// live in its `.anim` file, as bone keys do.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WrathEvent {
+    /// The identifier 4CC, stored forward (`*b"$BWR"`).
+    pub ident: [u8; 4],
+    /// The payload (`+0x04`): a SoundEntries id for `$SND`/`$DSL`/`$DSO`, else 0.
+    pub data: u32,
+    pub bone: u16,
+    /// Model-space position, raw WoW axes.
+    pub position: [f32; 3],
+    pub global_sequence: u16,
+    /// Trigger times per file sequence slot; an absent external sequence reads empty.
+    pub times: Vec<Vec<u32>>,
+}
+
 /// A parsed version-264 model plus semantics that the vanilla [`M2Model`] cannot represent.
 pub struct WrathM2 {
     format: M2Format,
@@ -102,6 +120,7 @@ pub struct WrathM2 {
     texture_combiner_combos: Vec<u16>,
     lights: Vec<WrathLight>,
     ribbons: Vec<WrathRibbon>,
+    events: Vec<WrathEvent>,
 }
 
 /// A decoded external Wrath skin profile. Its records reuse the established skin semantics; the
@@ -145,6 +164,12 @@ impl WrathM2 {
     /// Parallel to [`M2Model::bones`].
     pub fn bone_tracks(&self) -> &[WrathBoneTracks] {
         &self.bone_tracks
+    }
+
+    /// Animation events with their per-sequence trigger times, in file order. Records whose bone
+    /// is out of range are dropped, as in [`M2Model::event_markers`].
+    pub fn events(&self) -> &[WrathEvent] {
+        &self.events
     }
 
     pub fn lights(&self) -> &[WrathLight] {
@@ -492,6 +517,40 @@ fn nested_wrath_track<V: Clone>(
         global_sequence,
         sequences,
     })
+}
+
+/// Read a v264 timestamp-only nested track (an event's `enabled`): outer arrays per sequence,
+/// payloads sourced like [`nested_track`]'s.
+fn nested_times(
+    b: &[u8],
+    at: usize,
+    what: &'static str,
+    sources: &SequenceSources<'_>,
+) -> Result<(u16, Vec<Vec<u32>>)> {
+    let global_sequence = b.u16_at(at + 2).ok_or(WrathError::Truncated(what))?;
+    let times_outer = array(b, at + 4, what)?;
+    let times_desc = table(b, times_outer, 8, what)?;
+    let mut sequences = Vec::with_capacity(times_outer.0);
+    for sequence in 0..times_outer.0 {
+        let (descriptor_sequence, payload) = if global_sequence == u16::MAX {
+            let (source, payload) = sources.payload(b, sequence)?;
+            if payload.is_empty() {
+                sequences.push(Vec::new());
+                continue;
+            }
+            (source, payload)
+        } else {
+            (sequence, b)
+        };
+        let ta = array(times_desc, descriptor_sequence * 8, what)?;
+        let times = table(payload, ta, 4, what)?;
+        sequences.push(
+            (0..ta.0)
+                .map(|key| times.u32_at(key * 4).ok_or(WrathError::Truncated(what)))
+                .collect::<Result<Vec<_>>>()?,
+        );
+    }
+    Ok((global_sequence, sequences))
 }
 
 fn camera_vec3_track(
@@ -871,6 +930,7 @@ fn parse_wrath_m2_impl<'a>(
     // differs. Preserve the represented positional semantics and validate every complete record.
     let events_raw = table(b, events_arr, 36, "event table")?;
     let mut event_markers = Vec::with_capacity(events_arr.0);
+    let mut events = Vec::with_capacity(events_arr.0);
     for i in 0..events_arr.0 {
         let e = record(events_raw, i, 36, "event record")?;
         let bone = e.u32_at(8).ok_or(WrathError::Truncated("event bone"))?;
@@ -880,10 +940,22 @@ fn parse_wrath_m2_impl<'a>(
         if bone as usize >= bones.len() {
             continue;
         }
+        let ident = [e[0], e[1], e[2], e[3]];
+        let position = vec3(e, 12, "event position")?;
         event_markers.push(M2EventMarker {
-            ident: [e[0], e[1], e[2], e[3]],
+            ident,
             bone,
-            position: vec3(e, 12, "event position")?,
+            position,
+        });
+        let (global_sequence, times) =
+            nested_times(b, events_arr.1 + i * 36 + 24, "event timestamps", &sources)?;
+        events.push(WrathEvent {
+            ident,
+            data: e.u32_at(4).ok_or(WrathError::Truncated("event data"))?,
+            bone,
+            position,
+            global_sequence,
+            times,
         });
     }
 
@@ -966,6 +1038,7 @@ fn parse_wrath_m2_impl<'a>(
         texture_combiner_combos,
         lights,
         ribbons,
+        events,
     })
 }
 

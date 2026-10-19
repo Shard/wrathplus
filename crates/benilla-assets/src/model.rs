@@ -306,6 +306,21 @@ pub(crate) fn upper_subtree_root(skel: &Skeleton) -> Option<usize> {
     bone_with(4).or_else(|| bone_with(6))
 }
 
+/// The finger key-bones per hand `(right, left)`, 8-12 and 13-17: the reference's `CloseHand`
+/// targets, posed with `HandsClosed` (AnimationData 15) while that hand holds a weapon
+/// (`0x479660`/`0x60b590`). Empty for a model without them.
+pub(crate) fn finger_subtree_roots(skel: &Skeleton) -> [Vec<usize>; 2] {
+    let roots = |lo: i16, hi: i16| -> Vec<usize> {
+        skel.bones
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| (lo..=hi).contains(&b.key_bone))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    [roots(8, 12), roots(13, 17)]
+}
+
 /// Whether bone `i` is `root` or one of its descendants.
 pub(crate) fn in_subtree(skel: &Skeleton, i: usize, root: usize) -> bool {
     let mut cur = i;
@@ -474,6 +489,29 @@ pub(crate) fn build_animation_clip(
         clip.set_duration(anim.duration.max(1e-3));
     }
     (clip, pose, any)
+}
+
+/// The weapon-grip overlay: one constant rotation per finger bone, played masked to one hand.
+pub(crate) fn build_grip_clip(poses: &[(u16, [f32; 4])]) -> (AnimationClip, PoseClip) {
+    let r = wow_to_bevy_quat();
+    let mut clip = AnimationClip::default();
+    let mut pose = PoseClip::default();
+    for &(bone, q) in poses {
+        let rot = r * Quat::from_xyzw(q[0], q[1], q[2], q[3]) * r.inverse();
+        if let Some(c) = keyframe_curve(0.033, vec![(0.0, rot)]) {
+            clip.add_curve_to_target(
+                bone_target_id(bone),
+                AnimatableCurve::new(animated_field!(Transform::rotation), c),
+            );
+            pose.push(PoseBone {
+                bone,
+                translation: PoseTrack::default(),
+                rotation: PoseTrack::new(&[(0.0, rot)]),
+                scale: PoseTrack::default(),
+            });
+        }
+    }
+    (clip, pose)
 }
 
 /// A global-sequence bone channel in Bevy space, a free-running loop; times in seconds.
@@ -822,5 +860,4 @@ mod tests {
         let id = r * Quat::IDENTITY * r.inverse();
         assert!(id.dot(Quat::IDENTITY).abs() > 0.9999, "got {id:?}");
     }
-
 }
