@@ -85,6 +85,14 @@ Crate `benilla-ui` (`script/*`), reading data the app pushes into the `Model`.
   to the `Model` setters; WS4 or the manager wires the app side.
 - Done when: the census lists no FrameXML-called global or method; stock frames open without Lua
   errors in a headless census with fixture data; vanilla UI tests green.
+- Arity audit (`wrath_census_arity.rs`, fixtures in `wrath_census_fixtures.rs`): after the load,
+  every name the stock Lua unpacks into two or more values is probed against seeded state; a hit
+  narrower than the widest unpack (SHORT) or a name no probe reaches (UNPROBED) must sit in a
+  reviewed list with its reason, and a listed name that no longer applies fails too.
+- Harness note: Lua 5.1.5's `pcall` pushes its status past `ci->top` when the callee returns more
+  than `LUA_MINSTACK` (20) values, which aborts a `LUA_USE_APICHECK` (debug) build. Count results
+  inside the protected function, never `select('#', pcall(f))` on a 21+-value getter
+  (`CalendarGetEventInfo` answers 25). Stock FrameXML never does this.
 
 ### WS4: wire boundary, server messages and client commands (parallel)
 Crates `benilla-protocol` (`wrath_*.rs` codecs), `benilla-app/src/net/io/wrath.rs`, `net.rs`.

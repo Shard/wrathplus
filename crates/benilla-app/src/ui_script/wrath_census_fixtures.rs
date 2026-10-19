@@ -1,0 +1,567 @@
+//! Representative state for the arity audit: one row per list the stock 3.3.5 Lua unpacks, so a
+//! getter answers a hit rather than its miss shape. Seeded through the public setters, which only
+//! store; nothing here fires an event. Values are plausible, not a recording.
+
+use std::collections::HashMap;
+
+use benilla_ui::script::*;
+
+/// The player's guid in the fixtures.
+const ME: u64 = 0x0100_0000_0000_0001;
+
+fn slot(item_id: u32, name: &str) -> ContainerSlot {
+    ContainerSlot {
+        texture: Some(r"Interface\Icons\INV_Misc_Bag_08".into()),
+        count: 1,
+        quality: Some(2),
+        item_id,
+        link: Some(format!("|cff1eff00|Hitem:{item_id}:0:0:0:0:0:0:0:80|h[{name}]|h|r")),
+        durability: Some((40, 50)),
+        ..Default::default()
+    }
+}
+
+fn template(name: &str) -> ItemTemplateView {
+    ItemTemplateView {
+        name: name.into(),
+        quality: 2,
+        class: 4,
+        subclass: 1,
+        inventory_type: 5,
+        item_type: Some("Armor".into()),
+        item_sub_type: Some("Cloth".into()),
+        max_durability: 50,
+        stackable: 1,
+        sell_price: 100,
+        icon: Some(r"Interface\Icons\INV_Chest_Cloth_17".into()),
+        ..Default::default()
+    }
+}
+
+/// Seeds every list the audit's probes read with one representative row.
+pub(super) fn seed(s: &mut UiScript) {
+    // Items, bags and the backpack.
+    s.set_item_template(6948, template("Hearthstone"));
+    s.set_item_template(2589, template("Linen Cloth"));
+    for bag in [0i64, 1] {
+        let mut slots = HashMap::new();
+        slots.insert(1, slot(6948, "Hearthstone"));
+        s.set_container(
+            bag,
+            Some(ContainerState {
+                name: Some("Bag".into()),
+                num_slots: 16,
+                slots,
+            }),
+        );
+    }
+
+    // The player resolves by guid, as the aura readers need.
+    s.set_unit_guids(&UnitGuids {
+        player: ME,
+        wrath: true,
+        ..Default::default()
+    });
+
+    // Mail: build 12340's inbox, a letter with one attachment.
+    let header = MailInboxRow {
+            package_icon: Some(r"Interface\Icons\INV_Letter_15".into()),
+            sender: Some("Benchtwo".into()),
+            subject: "Hello".into(),
+            money: 100,
+            days_left: 29.5,
+            item_count: 1,
+            can_reply: true,
+            body: Some("Body".into()),
+            has_body: true,
+            text_created: true,
+            item_id: 6948,
+            item_name: Some("Hearthstone".into()),
+            item_texture: Some(r"Interface\Icons\INV_Misc_Rune_01".into()),
+            item_quality: Some(1),
+            can_delete: true,
+            ..Default::default()
+    };
+    s.set_wrath_mail(Some(WrathMailInbox {
+        total_count: 1,
+        rows: vec![WrathMailRow {
+            header,
+            attachments: vec![WrathMailAttachment {
+                slot: 0,
+                entry: 6948,
+                count: 1,
+                name: Some("Hearthstone".into()),
+                texture: Some(r"Interface\Icons\INV_Misc_Rune_01".into()),
+                quality: Some(1),
+                ..Default::default()
+            }],
+            kind: 0,
+            sender_guid: 0x0100_0000_0000_0002,
+        }],
+    }));
+
+    // A trade window with one item each side.
+    let traded = TradeSlotItem {
+        item_id: 2589,
+        name: Some("Linen Cloth".into()),
+        texture: Some(r"Interface\Icons\INV_Fabric_Linen_01".into()),
+        count: 5,
+        quality: Some(1),
+        ..Default::default()
+    };
+    let mut trade = TradeState::default();
+    trade.player.slots[0] = Some(traded.clone());
+    trade.target.slots[0] = Some(traded);
+    s.set_trade(Some(trade));
+
+    // The quest log: a header, then a quest with an objective and a reward spell.
+    s.set_quest_log(QuestLogState {
+        entries: vec![
+            QuestLogEntryView {
+                title: "Elwynn Forest".into(),
+                is_header: true,
+                ..Default::default()
+            },
+            QuestLogEntryView {
+                quest_id: 55,
+                title: "A Threat Within".into(),
+                level: 1,
+                objectives: vec![QuestLogObjectiveView {
+                    text: "Kobold Vermin slain: 0/10".into(),
+                    kind: "monster".into(),
+                    finished: false,
+                    ..Default::default()
+                }],
+                detail: Some(QuestLogDetail {
+                    description: "Go".into(),
+                    objectives_text: "Kill".into(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    });
+
+    // Friends, who, ignores and the guild roster.
+    s.set_social(SocialState {
+        friends: vec![FriendInfo {
+            name: "Benchtwo".into(),
+            level: 80,
+            class: "Mage".into(),
+            area: "Dalaran".into(),
+            connected: true,
+            status: String::new(),
+        }],
+        who: vec![WhoInfo {
+            name: "Benchthree".into(),
+            guild: "Bench".into(),
+            level: 80,
+            race: "Human".into(),
+            class: "Priest".into(),
+            zone: "Dalaran".into(),
+        }],
+        who_total: 1,
+        ..Default::default()
+    });
+    s.set_guild(GuildState {
+        in_guild: true,
+        name: "Bench".into(),
+        rank_name: "Member".into(),
+        roster: vec![GuildMemberInfo {
+            name: "Benchtwo".into(),
+            rank: "Member".into(),
+            level: 80,
+            class: "Mage".into(),
+            zone: "Dalaran".into(),
+            online: true,
+            ..Default::default()
+        }],
+        num_members: 1,
+        ..Default::default()
+    });
+
+    // Macros, spells, forms and auras.
+    s.set_macros(MacroState {
+        account: vec![MacroView {
+            name: "Hello".into(),
+            texture: Some(r"Interface\Icons\INV_Misc_QuestionMark".into()),
+            body: "/wave".into(),
+            local_only: false,
+        }],
+        character: vec![],
+    });
+    s.set_spell_catalog([SpellInfoView {
+        spell_id: 6603,
+        name: "Attack".into(),
+        rank: Some(String::new()),
+        texture: Some(r"Interface\Icons\INV_Sword_04".into()),
+        max_range: 5.0,
+        ..Default::default()
+    }]);
+    s.set_spellbook(SpellBookState {
+        tabs: vec![SpellTabView {
+            name: "General".into(),
+            texture: Some(r"Interface\Icons\INV_Misc_Book_09".into()),
+            offset: 0,
+            num_spells: 1,
+        }],
+        slots: vec![SpellSlotView {
+            spell_id: 6603,
+            name: "Attack".into(),
+            rank: Some(String::new()),
+            texture: Some(r"Interface\Icons\INV_Sword_04".into()),
+            ..Default::default()
+        }],
+    });
+    s.set_shapeshift_forms(vec![ShapeshiftFormView {
+        spell_id: 71,
+        texture: Some(r"Interface\Icons\Ability_Warrior_DefensiveStance".into()),
+        name: "Defensive Stance".into(),
+        active: true,
+        castable: true,
+        cooldown: None,
+    }]);
+    s.set_player_auras(vec![
+        AuraState {
+            spell_id: 1243,
+            name: Some("Power Word: Fortitude".into()),
+            icon: Some(r"Interface\Icons\Spell_Holy_WordFortitude".into()),
+            count: 1,
+            duration: 1800.0,
+            expiration_time: 1900.0,
+            helpful: true,
+            cancelable: true,
+            ..Default::default()
+        },
+        AuraState {
+            spell_id: 589,
+            name: Some("Shadow Word: Pain".into()),
+            icon: Some(r"Interface\Icons\Spell_Shadow_ShadowWordPain".into()),
+            count: 1,
+            debuff_type: Some("Magic".into()),
+            duration: 18.0,
+            expiration_time: 118.0,
+            ..Default::default()
+        },
+    ]);
+
+    // Gossip and the questgiver greeting.
+    s.set_gossip(Some(GossipMenu {
+        greeting: "Greetings".into(),
+        quests: vec![],
+        options: vec![GossipOptionView {
+            label: "Train me".into(),
+            icon_type: "trainer".into(),
+        }],
+    }));
+
+    // The trainer.
+    s.set_trainer(Some(TrainerState {
+        services: vec![TrainerService {
+            spell_id: 100,
+            name: Some("Charge".into()),
+            subtext: Some("Rank 1".into()),
+            texture: Some(r"Interface\Icons\Ability_Warrior_Charge".into()),
+            cost: 10,
+            level_req: 4,
+            skill_req: Some(TrainerSkillReq {
+                name: "Arms".into(),
+                rank: 1,
+                met: true,
+            }),
+            ability_reqs: vec![TrainerAbilityReq {
+                name: "Battle Stance".into(),
+                met: true,
+            }],
+            group_key: 1,
+            group_name: "Arms".into(),
+            ..Default::default()
+        }],
+        greeting: "Hello".into(),
+        ..Default::default()
+    }));
+
+    // The questgiver greeting: one active and one available quest.
+    s.set_quest(Some(QuestState {
+        panel: QuestPanel::Greeting,
+        greeting: "Hello".into(),
+        active_titles: vec!["A Threat Within".into()],
+        available_titles: vec!["Kobold Camp Cleanup".into()],
+        active_info: vec![QuestGreetingInfo::default()],
+        available_info: vec![QuestGreetingInfo::default()],
+        ..Default::default()
+    }));
+
+    // Currency: a header and a token.
+    s.set_wrath_currency_snapshot(WrathCurrencySnapshot {
+        entries: vec![
+            WrathCurrencyEntry {
+                name: Some("Dungeon and Raid".into()),
+                category_id: 22,
+                is_header: true,
+                is_expanded: true,
+                ..Default::default()
+            },
+            WrathCurrencyEntry {
+                name: Some("Emblem of Frost".into()),
+                category_id: 22,
+                is_watched: true,
+                count: 12,
+                icon: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
+                item_id: 49426,
+                ..Default::default()
+            },
+        ],
+        honor_current: Some(100),
+        arena_current: Some(10),
+    });
+
+    // The player's cast and channel.
+    let cast = WrathUnitCast {
+        spell_id: 133,
+        name: "Fireball".into(),
+        rank: "Rank 1".into(),
+        icon: r"Interface\Icons\Spell_Fire_FlameBolt".into(),
+        start_ms: 1000,
+        end_ms: 2500,
+        ..Default::default()
+    };
+    s.set_wrath_unit_casts(
+        HashMap::from([(ME, cast.clone())]),
+        HashMap::from([(ME, cast)]),
+    );
+
+    // A loot roll, a companion, a weapon enchant and an action button.
+    s.set_loot_rolls(LootRollsState {
+        rolls: vec![LootRollEntry {
+            roll_id: 1,
+            name: Some("Hearthstone".into()),
+            texture: Some(r"Interface\Icons\INV_Misc_Rune_01".into()),
+            quantity: 1,
+            quality: Some(3),
+            time_left_ms: 60_000,
+            item_id: 6948,
+            ..Default::default()
+        }],
+    });
+    s.set_wrath_companions(WrathCompanions {
+        lists: [
+            vec![CompanionView {
+                creature_id: 7389,
+                creature_name: Some("Senegal".into()),
+                spell_id: 10684,
+                icon: Some(r"Interface\Icons\Spell_Nature_ForceOfNature".into()),
+                ..Default::default()
+            }],
+            vec![],
+        ],
+        critter_guid: 0,
+    });
+    s.set_weapon_enchants(
+        Some(WeaponEnchant {
+            remaining_ms: Some(60_000),
+            charges: 0,
+        }),
+        None,
+    );
+    s.set_action(
+        1,
+        Some(ActionSlot {
+            texture: Some(r"Interface\Icons\INV_Sword_04".into()),
+            kind: 0,
+            action: 6603,
+            count: 0,
+            consumable: false,
+        }),
+    );
+
+    // The dungeon finder: a catalog row, a queue and a proposal.
+    s.set_wrath_lfg_catalog(
+        std::sync::Arc::new(WrathLfgCatalog {
+            dungeons: vec![WrathLfgDungeon {
+                id: 1,
+                name: "Ragefire Chasm".into(),
+                dungeon_type: 1,
+                min_level: 15,
+                target_min_level: 15,
+                target_max_level: 21,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        Some(2),
+    );
+    s.set_wrath_lfg_lock_snapshot(std::sync::Arc::new(WrathLfgLockSnapshot {
+        player: Some(WrathLfgPlayerLocks {
+            locks: vec![WrathLfgLock { entry: 0x0100_0001, reason: 2 }],
+            previews: vec![],
+        }),
+        party: None,
+    }));
+    s.set_wrath_lfg_queue(std::sync::Arc::new(WrathLfgQueueSnapshot {
+        queue: Some(WrathLfgQueueStatus {
+            dungeon: 0x0100_0001,
+            avg_wait: 300,
+            my_wait: 120,
+            tank_needs: 1,
+            healer_needs: 1,
+            dps_needs: 3,
+            ..Default::default()
+        }),
+        proposal: Some(WrathLfgProposal {
+            dungeon: 0x0100_0001,
+            state: 1,
+            id: 7,
+            rows: vec![WrathLfgProposalRow {
+                roles: 2,
+                is_self: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        ..Default::default()
+    }));
+
+    // A merchant row with an extended cost, and a world-state line.
+    s.set_merchant(Some(MerchantState {
+        items: vec![MerchantItem {
+            name: Some("Linen Cloth".into()),
+            texture: Some(r"Interface\Icons\INV_Fabric_Linen_01".into()),
+            price: 10,
+            quantity: 1,
+            num_available: -1,
+            item_id: 2589,
+            extended_cost: Some(ExtendedCostView {
+                honor: 0,
+                arena: 0,
+                items: vec![CostItemView {
+                    item_id: 49426,
+                    count: 2,
+                    texture: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
+                    link: Some("|cffa335ee|Hitem:49426:0:0:0:0:0:0:0:80|h[Emblem of Frost]|h|r".into()),
+                }],
+                rating_ok: true,
+            }),
+            ..Default::default()
+        }],
+        buyback: vec![],
+        can_repair: true,
+    }));
+    s.set_world_state_ui(vec![WorldStateUiView {
+        ui_type: 0,
+        ui_state: 1,
+        text: "Bases: 2".into(),
+        icon: r"Interface\TargetingFrame\UI-PVP-Alliance".into(),
+        tooltip: "Bases".into(),
+        ..Default::default()
+    }]);
+
+    // A worn chest piece, the pet's spellbook and the quest log's item extras.
+    let mut worn: InventorySlots = Default::default();
+    worn[5] = Some(InvSlotView {
+        item_id: 6948,
+        icon: Some(r"Interface\Icons\INV_Chest_Cloth_17".into()),
+        count: 1,
+        quality: 2,
+        name: Some("Hearthstone".into()),
+        durability: Some((40, 50)),
+        ..Default::default()
+    });
+    s.set_inventory_slots(worn);
+    s.set_pet_book(PetBookState {
+        token: Some("PET".into()),
+        slots: vec![SpellSlotView {
+            spell_id: 3110,
+            name: "Firebolt".into(),
+            rank: Some("Rank 1".into()),
+            texture: Some(r"Interface\Icons\Spell_Fire_FireBolt".into()),
+            autocast: Some((true, true)),
+            ..Default::default()
+        }],
+    });
+    s.set_wrath_quest_item_drops(HashMap::from([(55, (1, vec![(6948, 1)]))]));
+    s.set_wrath_quest_special_items(vec![(55, 0, 1)]);
+
+    // A profession with one recipe and its reagent.
+    s.set_trade_skill(Some(TradeSkillState {
+        line: 197,
+        line_name: "Tailoring".into(),
+        rank: 1,
+        max_rank: 75,
+        recipes: vec![TradeSkillRecipe {
+            group: None,
+            spell_id: 2387,
+            name: "Linen Cloak".into(),
+            difficulty: TradeSkillDifficulty::Optimal,
+            num_available: 1,
+            icon: Some(r"Interface\Icons\INV_Misc_Cape_01".into()),
+            min_made: 1,
+            max_made: 1,
+            cooldown_secs: None,
+            product_item: 2570,
+            product_inv_type: 16,
+            product_item_level: 5,
+            reagents: vec![TradeSkillReagent {
+                item: 2589,
+                name: Some("Linen Cloth".into()),
+                icon: Some(r"Interface\Icons\INV_Fabric_Linen_01".into()),
+                need: 2,
+                have: 5,
+            }],
+            tools: vec![],
+            description: None,
+        }],
+        repeat_count: 1,
+        linked: None,
+        list_link: None,
+    }));
+
+    // Achievement 1 in category 1, with one criterion, earned.
+    let mut metadata = WrathAchievementMetadata::default();
+    metadata.achievements.insert(
+        1,
+        WrathAchievement {
+            id: 1,
+            name: "Level 10".into(),
+            category_id: 1,
+            required_criteria_count: 1,
+            required_faction: -1,
+            description: "Reach level 10.".into(),
+            points: 10,
+            icon: r"Interface\Icons\Achievement_Level_10".into(),
+            ..Default::default()
+        },
+    );
+    metadata.criteria.insert(
+        1,
+        WrathAchievementCriterion {
+            id: 1,
+            achievement_id: 1,
+            criteria_type: 5,
+            asset_id: 0,
+            required_quantity: 10,
+            description: "Level 10".into(),
+            flags: 0,
+        },
+    );
+    metadata.linked_criteria.insert(1, vec![1]);
+    metadata.categories.push(WrathAchievementCategory {
+        id: 1,
+        parent_id: -1,
+        name: "General".into(),
+    });
+    s.set_wrath_achievement_metadata(metadata);
+    s.set_wrath_achievement_progress(WrathAchievementProgress {
+        earned: vec![(1, 0)],
+        criteria: std::collections::BTreeMap::from([(1, 10)]),
+        faction: 1,
+    });
+
+    // Equipment sets and companions.
+    s.set_equipment_sets(vec![EquipmentSetView {
+        name: "Tank".into(),
+        icon: r"Interface\Icons\INV_Shield_06".into(),
+        ..Default::default()
+    }]);
+}
