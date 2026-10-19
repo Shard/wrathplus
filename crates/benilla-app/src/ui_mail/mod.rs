@@ -699,6 +699,7 @@ fn drain_mail(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::mail_message_type;
 
     #[test]
     fn next_mail_query_uses_each_dialects_native_writer_and_updates_pending() {
