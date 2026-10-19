@@ -12,7 +12,7 @@
 //! `CMSG_ALTER_APPEARANCE`, and the preview dresses our own body
 //! ([`crate::entities::BarberPreview`]). Labelled: `CancelBarberShop` (`0x52e9f0`, untraced) stands
 //! the player up here, which closes the window as getting up does.
-use super::{NetHandlerApp, ObjectStore, SelfGuid, SelfPlayer};
+use crate::net::{NetHandlerApp, ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_appearance::Packet;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{ScriptDialect, UiScript};
@@ -55,7 +55,7 @@ fn chair_step(chair: &mut BarberChair, stand_state: Option<u8>) -> bool {
     }
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<AppearanceReceipts>()
         .init_resource::<BarberChair>()
         .net_handler(SessionEventKind::WrathAppearance, receive)
@@ -144,7 +144,7 @@ fn barber_shop(
 }
 
 /// The barber verb's packet: `Apply` sends `CMSG_ALTER_APPEARANCE`; `Cancel` stands up.
-fn barber_command(request: benilla_ui::script::WrathBarberRequest) -> super::ClientCommand {
+fn barber_command(request: benilla_ui::script::WrathBarberRequest) -> crate::net::ClientCommand {
     use benilla_protocol::wrath_appearance::Command;
     use benilla_ui::script::WrathBarberRequest;
     match request {
@@ -153,13 +153,13 @@ fn barber_command(request: benilla_ui::script::WrathBarberRequest) -> super::Cli
             hair_color,
             facial_hair,
             skin_color,
-        } => super::ClientCommand::NativeAppearance(Command::AlterAppearance {
+        } => crate::net::ClientCommand::NativeAppearance(Command::AlterAppearance {
             hair,
             hair_color,
             facial_hair,
             skin_color,
         }),
-        WrathBarberRequest::Cancel => super::ClientCommand::StandStateChange { state: 0 },
+        WrathBarberRequest::Cancel => crate::net::ClientCommand::StandStateChange { state: 0 },
     }
 }
 
@@ -170,7 +170,7 @@ fn feed_barber(
     tables: Option<Res<BarberTables>>,
     races: Option<Res<crate::entities::CharCreate>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
-    commands: Res<super::NetCommands>,
+    commands: Res<crate::net::NetCommands>,
     mut preview: ResMut<crate::entities::BarberPreview>,
     mut last: Local<crate::ui_script::VmMemo<Option<Option<benilla_ui::script::WrathBarberShop>>>>,
 ) {
@@ -256,7 +256,7 @@ fn feed_appearance(
     mut receipts: ResMut<AppearanceReceipts>,
     tables: Option<Res<crate::quest_rewards::QuestRewardTables>>,
     names: Res<crate::names::NameCache>,
-    commands: Res<super::NetCommands>,
+    commands: Res<crate::net::NetCommands>,
     self_guid: Res<SelfGuid>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     mut chat: ResMut<crate::ui_chat::ChatLog>,

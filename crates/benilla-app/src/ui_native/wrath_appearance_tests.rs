@@ -132,7 +132,7 @@ fn apply_sends_alter_appearance_and_cancel_stands_up() {
         format!("{apply:?}"),
         format!(
             "{:?}",
-            super::super::ClientCommand::NativeAppearance(
+            crate::net::ClientCommand::NativeAppearance(
                 benilla_protocol::wrath_appearance::Command::AlterAppearance {
                     hair: 2,
                     hair_color: 7,
@@ -144,6 +144,6 @@ fn apply_sends_alter_appearance_and_cancel_stands_up() {
     );
     assert!(matches!(
         barber_command(WrathBarberRequest::Cancel),
-        super::super::ClientCommand::StandStateChange { state: 0 }
+        crate::net::ClientCommand::StandStateChange { state: 0 }
     ));
 }

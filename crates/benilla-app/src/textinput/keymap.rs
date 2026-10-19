@@ -22,13 +22,13 @@ pub(crate) struct Mods {
 /// What a keypress means for the focused box.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Chord {
-    /// A semantic edit for `UiScript::editbox_action`.
+    /// A semantic edit for the VM's `editbox_action`.
     Edit(EditAction),
-    /// Copy the selection to the OS clipboard (`UiScript::editbox_copy` + host write).
+    /// Copy the selection to the OS clipboard (the VM's `editbox_copy` + host write).
     Copy,
     /// Copy, then delete the selection.
     Cut,
-    /// Paste the OS clipboard (host read + `UiScript::paste`).
+    /// Paste the OS clipboard (host read + the VM's `paste`).
     Paste,
 }
 

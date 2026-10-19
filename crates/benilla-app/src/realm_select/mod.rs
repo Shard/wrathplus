@@ -68,7 +68,7 @@ pub(crate) struct Realms {
     /// case-folds the `realmName` CVar (`0x46ef9e`, via `0x5ab7d0` on the handle from `0x63db90`)
     /// against the realm name, and `ConnectToRealm` (`0x46b217`) writes the CVar before it dials.
     /// Ours is set when we answer a park and seeded from the persisted CVar, because benilla
-    /// writes `realmName` only at world entry (`benilla_ui::script::UiScript::set_realm_name`).
+    /// writes `realmName` only at world entry (the VM's `set_realm_name`).
     current: Option<String>,
     /// Seconds until the next refresh request.
     refresh_in: f32,
