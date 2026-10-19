@@ -234,6 +234,11 @@ impl Queue {
     pub(super) fn encounters(&self) -> &[WrathLfgEncounter] {
         &self.encounters
     }
+
+    /// The current map and difficulty, `None` while unknown.
+    pub(super) fn location(&self) -> Option<(i32, i32)> {
+        self.location
+    }
 }
 
 impl UiScript {
