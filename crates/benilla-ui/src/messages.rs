@@ -53,7 +53,7 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
 /// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
 /// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 82] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 83] = [
     MessageRecord { id: 0x1e0, key: "ERR_BATTLEGROUND_TOO_MANY_QUEUES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e1, key: "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e2, key: "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -90,6 +90,7 @@ pub static WRATH_SUPPLEMENT: [MessageRecord; 82] = [
     MessageRecord { id: 0x222, key: "ERR_ARENA_TEAMS_LOCKED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x22d, key: "ERR_SYSTEM_DISABLED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x231, key: "ERR_USER_SQUELCHED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x252, key: "ERR_LOOT_CANT_LOOT_THAT", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x255, key: "ERR_ALREADY_PICKPOCKETED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x280, key: "ERR_PET_LEARN_ABILITY_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },

@@ -56,6 +56,8 @@ pub struct LootRow {
     /// against [`super::Model::random_properties`]. A loot slot is no item object, so this is its
     /// only enchant source (`SetLootItem 0x533470` copies it from the loot record's `+0x14`).
     pub random_property_id: u32,
+    /// A `LOCKED` row (slot type 3): build 12340's fifth `GetLootSlotInfo` return.
+    pub locked: bool,
 }
 
 /// One open loot window, pushed whole by the app; `None` means no loot is open.
@@ -402,6 +404,7 @@ mod tests {
                     is_coin: true,
                     link: None,
                     random_property_id: 0,
+                    locked: false,
                 }),
                 Some(LootRow {
                     item_id: 0,
@@ -412,6 +415,7 @@ mod tests {
                     is_coin: false,
                     link: Some("|cffffffff|Hitem:2589:0:0:0|h[Wool Cloth]|h|r".into()),
                     random_property_id: 0,
+                    locked: false,
                 }),
                 // In flight: the loot arrived, its item template has not.
                 Some(LootRow {
@@ -423,6 +427,7 @@ mod tests {
                     is_coin: false,
                     link: None,
                     random_property_id: 0,
+                    locked: false,
                 }),
             ],
             fishing: false,

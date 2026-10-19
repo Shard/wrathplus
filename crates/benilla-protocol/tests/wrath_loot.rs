@@ -154,7 +154,7 @@ fn solo_owner_rows_decode_and_keep_their_type_in_both_adapter_surfaces() {
 }
 
 #[test]
-fn response_fences_non_solo_shapes_errors_and_oversized_counts() {
+fn response_fences_unknown_shapes_errors_and_oversized_counts() {
     let mut error = CORPSE.to_le_bytes().to_vec();
     error.extend([0, 4]); // LOOT_NONE, LOOT_ERROR_TOO_FAR
     assert_eq!(
@@ -187,11 +187,11 @@ fn response_fences_non_solo_shapes_errors_and_oversized_counts() {
         );
     }
 
-    for slot_type in [1, 2, 3, 5, u8::MAX] {
-        let mut group_slot = corpse_response();
-        *group_slot.last_mut().unwrap() = slot_type;
+    for slot_type in [5, 6, u8::MAX] {
+        let mut bad_slot = corpse_response();
+        *bad_slot.last_mut().unwrap() = slot_type;
         assert_eq!(
-            decode_loot_response(&group_slot).unwrap_err(),
+            decode_loot_response(&bad_slot).unwrap_err(),
             LootCodecError::UnsupportedSlotType(slot_type)
         );
     }
@@ -204,6 +204,21 @@ fn response_fences_non_solo_shapes_errors_and_oversized_counts() {
         decode_loot_response(&oversized).unwrap_err(),
         LootCodecError::ItemCountOutOfRange(19)
     );
+}
+
+#[test]
+fn group_rows_decode_with_their_slot_type() {
+    // `operator<<(LootView)`: roll ongoing, master and locked under group permissions.
+    for slot_type in [1u8, 2, 3] {
+        let mut body = corpse_response();
+        *body.last_mut().unwrap() = slot_type;
+        let Ok(LootResponse::Window { items, .. }) = decode_loot_response(&body) else {
+            panic!("slot type {slot_type} decodes")
+        };
+        assert_eq!(items[1].slot_type, slot_type);
+        assert_eq!(items[1].neutral().slot_type, slot_type);
+        assert!(!wrath_loot::is_solo_loot_slot(slot_type));
+    }
 }
 
 #[test]

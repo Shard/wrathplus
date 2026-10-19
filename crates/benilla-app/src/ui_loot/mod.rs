@@ -20,12 +20,15 @@ mod wrath;
 
 pub(crate) use wrath::begin_wrath_corpse_loot;
 
-/// `ItemBondingType::BIND_WHEN_PICKED_UP`, the first conjunct of the `LOOT_BIND` confirm: the
-/// client compares `item_template + 0x194` against 1.
+/// `ItemBondingType::BIND_WHEN_PICKED_UP`, the first conjunct of the `LOOT_BIND` confirm
+/// (`0x589140`: the template's bonding against 1).
 const BIND_WHEN_PICKED_UP: u32 = 1;
 
-/// The second conjunct: uncommon or better (`0x4c28fb cmp [tmpl+0x1c], 2`).
+/// The second conjunct: uncommon or better (`1 < quality`).
 const BIND_CONFIRM_MIN_QUALITY: u32 = 2;
+
+/// The third: `ITEM_FLAG_MULTI_DROP` (0x800) clear, a shared drop asks nothing.
+const ITEM_FLAG_MULTI_DROP: u32 = 0x800;
 
 /// The coin row's quality, 0, so its text is grey: `0x4c23a0`'s coin guard returns 0 at
 /// `0x4c23de`, and `LootFrame_Update` has no coin case (`LootFrame.lua:81-85`).
@@ -158,6 +161,17 @@ impl LootState {
             self.taken.push(wire_slot);
         }
         self.arm_auto_release();
+    }
+
+    /// A roll that resolved (`SMSG_LOOT_ROLL_WON`, `SMSG_LOOT_ALL_PASSED` → `0x6dc770`): the row's
+    /// slot type drops to `ALLOW_LOOT` while the window is open on the roll's source.
+    pub(crate) fn release_roll(&mut self, source: u64, wire_slot: u8) {
+        if self.source != Some(source) {
+            return;
+        }
+        if let Some(it) = self.items.iter_mut().find(|it| it.slot == wire_slot) {
+            it.slot_type = slot_type::ALLOW_LOOT;
+        }
     }
 
     /// `SMSG_LOOT_CLEAR_MONEY`: the coin row becomes a gap; an emptied window arms the auto-close.
@@ -482,6 +496,8 @@ fn resolve_item(
         link,
         // The raw id, as the client's loot record keeps it; the tooltip resolves it (`0x52b7bf`).
         random_property_id: item.random_property_id,
+        // `GetLootSlotInfo`'s fifth return (`0x588570`): a `LOCKED` row only.
+        locked: item.slot_type == slot_type::LOCKED,
     }
 }
 
@@ -521,6 +537,7 @@ fn snapshot(
             // No item behind it: a modified click finds nil.
             link: None,
             random_property_id: 0,
+            locked: false,
         }));
     }
     for it in &loot.items {
@@ -752,7 +769,7 @@ fn feed_loot(
                         }) if slot_type == slot_type::ALLOW_LOOT => {
                             // A hand click's bind gate plus a one-shot latch (`0x4c21c2`,
                             // `0x4c21e2`): later bind-on-pickup rows stay, untaken and unasked.
-                            if bind_confirm_required(&items, &commands, item_id) {
+                            if bind_confirm_required(&items, &commands, item_id, slot_type) {
                                 if bind_confirm_fired {
                                     continue;
                                 }
@@ -794,12 +811,21 @@ fn feed_loot(
     *last = fresh;
 }
 
-/// Whether a take must raise `LOOT_BIND_CONFIRM` first (`0x4c28f2`/`0x4c28fb`): bind on pickup
-/// and uncommon or better. An unresolved template answers false, as the reference's cache peek.
-fn bind_confirm_required(items: &Items, commands: &NetCommands, item_id: u32) -> bool {
-    items
-        .template(item_id, 0, commands)
-        .is_some_and(|t| t.bonding == BIND_WHEN_PICKED_UP && t.quality >= BIND_CONFIRM_MIN_QUALITY)
+/// Whether a take must raise `LOOT_BIND_CONFIRM` first (`0x589140`): bind on pickup, uncommon or
+/// better, not a multi-drop item, and not an `OWNER` row, whose permission already settled the
+/// binding. An unresolved template answers false, as the reference's cache peek.
+fn bind_confirm_required(
+    items: &Items,
+    commands: &NetCommands,
+    item_id: u32,
+    slot_type: u8,
+) -> bool {
+    slot_type != slot_type::OWNER
+        && items.template(item_id, 0, commands).is_some_and(|t| {
+            t.bonding == BIND_WHEN_PICKED_UP
+                && t.quality >= BIND_CONFIRM_MIN_QUALITY
+                && t.flags & ITEM_FLAG_MULTI_DROP == 0
+        })
 }
 
 /// `CloseInteraction 0x48f200` past its early returns, the one close every loot close shares: the
@@ -902,6 +928,7 @@ fn drain_loot(
     // The move-start close runs before the VM check: it needs no Lua.
     mut move_start: ResMut<LootMoveStart>,
     mut dead: DeadUnitDeselect,
+    mut errors: ResMut<crate::ui_action::UiErrorKeys>,
 ) {
     if std::mem::take(&mut move_start.0) {
         if let Some(guid) = loot.source() {
@@ -914,17 +941,31 @@ fn drain_loot(
     };
     for index in script.take_loot_picks() {
         match loot.action_at(index) {
-            // A master-loot row opens the candidate dropdown instead: the dispatcher branches on
-            // the slot type (`0x4c28a9`), and the Lua `OnClick` has already stashed the anchor.
+            // `LootSlot 0x589140` branches on the slot type first: a row under a group roll and a
+            // locked row only answer a message.
+            Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::ROLL_ONGOING => {
+                errors
+                    .0
+                    .push(crate::ui_action::UiError::key("ERR_LOOT_ROLL_PENDING"));
+                // 0x1bb
+            }
+            Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::LOCKED => {
+                errors
+                    .0
+                    .push(crate::ui_action::UiError::key("ERR_LOOT_CANT_LOOT_THAT"));
+                // 0x252
+            }
+            // A master-loot row opens the candidate dropdown instead (event `0x1b8`), and the Lua
+            // `OnClick` has already stashed the anchor.
             Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::MASTER => {
                 debug!("ui_loot: row {index} is master-loot — opening the candidate list");
                 script.fire_event("OPEN_MASTER_LOOT_LIST", vec![]);
             }
             // The bind-on-pickup deferral (`0x4c28f2`-`0x4c2920`): stash the row, fire the event,
             // send nothing.
-            Some(LootAction::Item { item_id, .. })
-                if bind_confirm_required(&items, &commands, item_id) =>
-            {
+            Some(LootAction::Item {
+                item_id, slot_type, ..
+            }) if bind_confirm_required(&items, &commands, item_id, slot_type) => {
                 debug!("ui_loot: row {index} binds on pickup — confirming");
                 loot.pending_bind_confirm = Some(index);
                 script.fire_event(
@@ -1143,6 +1184,7 @@ mod tests {
             .init_resource::<GroupState>()
             .init_resource::<Items>()
             .init_resource::<crate::net::GuidIndex>()
+            .init_resource::<crate::ui_action::UiErrorKeys>()
             .insert_resource(NetCommands(tx));
 
         let mut items = app.world_mut().resource_mut::<Items>();
@@ -1355,6 +1397,83 @@ mod tests {
             vec![1],
             "the event carries the row out, 1-based and display-side"
         );
+    }
+
+    /// `item` with a group `slot_type`.
+    fn group_item(slot: u8, entry: u32, slot_type: u8) -> LootItem {
+        LootItem {
+            slot_type,
+            ..item(slot, entry, 1)
+        }
+    }
+
+    fn errors(app: &mut App) -> Vec<crate::ui_action::UiError> {
+        std::mem::take(
+            &mut app
+                .world_mut()
+                .resource_mut::<crate::ui_action::UiErrorKeys>()
+                .0,
+        )
+    }
+
+    /// `LootSlot 0x589140`: a row under a group roll and a locked row answer
+    /// `ERR_LOOT_ROLL_PENDING` (`0x1bb`) and `ERR_LOOT_CANT_LOOT_THAT` (`0x252`), sending nothing.
+    #[test]
+    fn a_roll_row_and_a_locked_row_answer_a_message_and_send_nothing() {
+        for (slot_type, key) in [
+            (slot_type::ROLL_ONGOING, "ERR_LOOT_ROLL_PENDING"),
+            (slot_type::LOCKED, "ERR_LOOT_CANT_LOOT_THAT"),
+        ] {
+            let (mut app, rx) =
+                drain_with(0, vec![group_item(0, TOUGH_JERKY, slot_type)], &[1], "");
+            assert!(sent(&rx).is_empty(), "{key}");
+            assert_eq!(errors(&mut app), [crate::ui_action::UiError::key(key)]);
+            assert_eq!(pending_confirm(&app), None);
+        }
+    }
+
+    /// The bind gate skips an `OWNER` row: its permission already settled the binding (`0x589140`).
+    #[test]
+    fn an_owner_row_takes_a_bind_on_pickup_item_outright() {
+        let (app, rx) = drain_with(
+            0,
+            vec![group_item(5, FELSTRIKER, slot_type::OWNER)],
+            &[1],
+            "",
+        );
+        assert!(matches!(
+            sent(&rx)[..],
+            [ClientCommand::AutostoreLootItem { slot: 5 }]
+        ));
+        assert_eq!(pending_confirm(&app), None);
+    }
+
+    /// A resolved roll's row turns lootable only on the window it belongs to.
+    #[test]
+    fn a_resolved_roll_releases_its_row_on_the_matching_source_only() {
+        let mut loot = LootState::default();
+        loot.open(
+            0x42,
+            loot_type::CORPSE,
+            0,
+            vec![group_item(3, FELSTRIKER, slot_type::ROLL_ONGOING)],
+        );
+        loot.release_roll(0x43, 3);
+        assert!(matches!(
+            loot.action_at(1),
+            Some(LootAction::Item {
+                slot_type: slot_type::ROLL_ONGOING,
+                ..
+            })
+        ));
+        loot.release_roll(0x42, 3);
+        assert!(matches!(
+            loot.action_at(1),
+            Some(LootAction::Item {
+                slot_type: slot_type::ALLOW_LOOT,
+                ..
+            })
+        ));
     }
 
     /// The confirm arm (`0x4c27c0`).
@@ -2173,6 +2292,7 @@ mod tests {
             .init_resource::<GroupState>()
             .init_resource::<Items>()
             .init_resource::<crate::net::GuidIndex>()
+            .init_resource::<crate::ui_action::UiErrorKeys>()
             .insert_resource(NetCommands(tx))
             .add_systems(Update, drain_loot);
         for (guid, health) in [(CORPSE, 0), (LIVE, 100)] {
