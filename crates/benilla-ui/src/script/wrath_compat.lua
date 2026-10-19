@@ -58,7 +58,6 @@ Sound_GameSystem_GetNumOutputDrivers = Sound_GameSystem_GetNumOutputDrivers or z
 Sound_GameSystem_GetOutputDriverNameByIndex = none
 
 -- ── dungeon finder, achievements, calendar, companions, vehicles ───────────────────────────────
-IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 
@@ -350,7 +349,6 @@ IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
 TriggerTutorial = TriggerTutorial or none
-RefreshLFGList = RefreshLFGList or none
 do
     -- Wrath's GetNumFriends answers the online count too.
     local numFriends = GetNumFriends

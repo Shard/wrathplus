@@ -532,6 +532,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         fire_update(lua);
         Ok(MultiValue::new())
     })?;
+    // RefreshLFGList() (`0x55d280`): copies the staged list (`0xbeaa98`) over the displayed one
+    // (`0xbeab20`, `0x55b1a0`) and fires UPDATE_LFG_LIST; no request. Every list update already
+    // makes the same copy (`0x55b700`), so the published view stands and only the event fires.
+    set(lua, "RefreshLFGList", |lua, _| {
+        fire_update(lua);
+        Ok(MultiValue::new())
+    })?;
     Ok(())
 }
 
@@ -655,5 +662,23 @@ mod tests {
         );
         assert!(s.eval::<bool>("return select('#', SearchLFGGetJoinedID()) == 0 and SearchLFGGetNumResults() == 0").unwrap());
         assert!(s.run("SearchLFGSort()").is_err() && s.run("SearchLFGJoin(2)").is_err());
+    }
+
+    #[test]
+    fn refresh_fires_update_lfg_list_over_the_current_list_without_a_request() {
+        let mut s = vm();
+        s.set_wrath_raid_browser(Arc::new(WrathRaidBrowserView {
+            dungeon: 2 << 24 | 50,
+            players: vec![member("Amy", 75, 2)],
+            ..Default::default()
+        }));
+        s.run("n = 0 local f = CreateFrame('Frame') f:RegisterEvent('UPDATE_LFG_LIST') \
+               f:SetScript('OnEvent', function() n = n + 1 end)")
+            .unwrap();
+        assert_eq!(s.eval::<i64>("return select('#', RefreshLFGList())").unwrap(), 0);
+        s.tick(0.0);
+        assert_eq!(s.eval::<i64>("return n").unwrap(), 1);
+        assert_eq!(s.eval::<String>("return SearchLFGGetResults(1)").unwrap(), "Amy");
+        assert!(s.take_wrath_raid_browser_requests().is_empty());
     }
 }
