@@ -53,6 +53,14 @@ pub struct WrathQuestInfo {
     /// The query response's `RequiredPlayerKills`, the PvP objective; its count is slot counter
     /// [`QUEST_PVP_KILL_COUNTER`] (AzerothCore `QuestDef.h:43`).
     pub players_slain: u32,
+    /// The query response's reputation rewards by slot: `RewardFactionId`, `RewardFactionValueId`
+    /// and `RewardFactionValueIdOverride`, sent as three runs of five (AzerothCore
+    /// `QuestDef.cpp:391-398`).
+    pub reward_factions: [(u32, i32, i32); 5],
+    /// `RewardRepShowMask`, which AzerothCore always sends 0 (`QuestDef.cpp:368`).
+    pub reward_rep_show_mask: u32,
+    /// The objectives' `ItemDrop` and `ItemDropQuantity`, the source items the quest log lists.
+    pub item_drops: [(u32, u32); 4],
 }
 
 /// The quest-log slot counter a PvP objective counts in, `QUEST_PVP_KILL_SLOT`: the server bumps

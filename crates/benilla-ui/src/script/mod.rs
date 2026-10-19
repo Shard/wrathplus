@@ -207,6 +207,7 @@ mod wrath_state_queries;
 mod wrath_modified_click;
 mod wrath_macro_options;
 mod wrath_engine_constants;
+mod wrath_quest_queries;
 mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
@@ -935,6 +936,7 @@ impl UiScript {
             wrath_macro_options::install(&lua)?;
             wrath_engine_constants::install(&lua)?;
             unit::wrath_queries::install(&lua)?;
+            wrath_quest_queries::install(&lua)?;
         }
 
         let s = UiScript {

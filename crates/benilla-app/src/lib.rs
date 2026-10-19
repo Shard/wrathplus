@@ -185,6 +185,7 @@ mod ui_vehicle;
 mod ui_paperdoll;
 mod ui_petition;
 mod quest_rewards;
+mod quest_reputation;
 mod ui_quest;
 mod ui_quest_log;
 mod ui_quest_share;
