@@ -209,7 +209,7 @@ fn every_wrath_writer_route_is_admitted() {
         ),
         ("AuctionListOwnerItems", ClientCommand::AuctionListOwnerItems { auctioneer: 1, list_from: 0 }),
         ("AuctionListBidderItems", ClientCommand::AuctionListBidderItems { auctioneer: 1, list_from: 0, auction_ids: vec![2] }),
-        ("AuctionSellItem", ClientCommand::AuctionSellItem { auctioneer: 1, item_guid: 2, bid: 3, buyout: 4, etime_minutes: 720, count: 1 }),
+        ("AuctionSellItem", ClientCommand::AuctionSellItem { auctioneer: 1, items: vec![(2, 1)], bid: 3, buyout: 4, etime_minutes: 720 }),
         ("AuctionPlaceBid", ClientCommand::AuctionPlaceBid { auctioneer: 1, auction_id: 2, price: 3 }),
         ("AuctionRemoveItem", ClientCommand::AuctionRemoveItem { auctioneer: 1, auction_id: 2 }),
         ("LootMasterGive", ClientCommand::LootMasterGive { guid: 1, slot: 0, target: 2 }),

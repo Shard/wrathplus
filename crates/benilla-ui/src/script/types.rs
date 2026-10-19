@@ -396,6 +396,16 @@ pub(crate) struct RegionData {
     /// `SetNonSpaceWrap`/`CanNonSpaceWrap` (`0x79e9f0`/`0x79ead0`), `None` on. Stored, not applied:
     /// the reference's flag `0x40` drives a mid-word wrap and the ellipsis fit count (`0x771ec0`).
     pub(crate) non_space_wrap: Option<bool>,
+    /// Wrath `SetWordWrap`/`CanWordWrap` and XML `wordwrap=`, `None` on: off measures and draws the
+    /// string on one line (no wrap width).
+    pub(crate) word_wrap: Option<bool>,
+    /// Wrath `SetIndentedWordWrap` and XML `indented=`. Stored, not applied: the wrapped lines'
+    /// indent is not drawn.
+    pub(crate) indented_word_wrap: bool,
+    /// Wrath `SetHorizTile`/`SetVertTile` and XML `horizTile=`/`vertTile=`. Stored, not applied:
+    /// the renderer stretches the texture instead of repeating it.
+    pub(crate) horiz_tile: bool,
+    pub(crate) vert_tile: bool,
     /// The client's dword at `CSimpleFontString+0x120`: bits 0-2 horizontal, 3-5 vertical, `0x212`
     /// from the constructor. A cleared axis answers `"UNKNOWN"` to the getter and draws centred.
     pub(crate) justify: crate::justify::Justify,
@@ -492,7 +502,10 @@ impl RegionData {
         self.font_path.hash(&mut hasher);
         self.font_height.map(f32::to_bits).hash(&mut hasher);
         self.text_height.map(f32::to_bits).hash(&mut hasher);
-        let wrap_width = self.size.map(|s| s.0).filter(|w| *w > 0.0);
+        let wrap_width = self
+            .size
+            .map(|s| s.0)
+            .filter(|w| *w > 0.0 && self.word_wrap != Some(false));
         wrap_width.map(f32::to_bits).hash(&mut hasher);
         // The outline changes the measure: a THICK one steps each glyph 1 px further
         // (`GlyphStepBase 0x5ca2b0`).

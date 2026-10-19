@@ -70,26 +70,42 @@ impl SortStack {
     }
 }
 
-/// One key's order on a first click, per `0x4cd940`'s arms: quality, buyout and status open
-/// highest first; level, bid, duration, name and seller open lowest first.
+/// One key's order on a first click, build 12340's comparator `0x59b460` by column. Quality and
+/// status open highest first; every other column opens lowest first. Labelled: the comparator's
+/// two sides are anchored on quality opening highest first, as in 1.12; duration compares the
+/// time-left bucket where the reference uses the exact deadline (after a pending-sale flag
+/// AzerothCore never sets).
 fn compare_by(key: &str, a: &AuctionRow, b: &AuctionRow) -> Ordering {
+    // The buyout, else the effective bid: the price `buyoutthenbid` and `minbidbuyout` compare.
+    let price = |r: &AuctionRow| {
+        if r.buyout != 0 {
+            r.buyout
+        } else {
+            r.displayed_bid()
+        }
+    };
+    // Status: our own bid, then anyone's, then none.
+    let status = |r: &AuctionRow| {
+        if r.player_holds_bid {
+            2
+        } else {
+            u8::from(r.current_bid != 0)
+        }
+    };
     match key {
         "level" => a.level.cmp(&b.level),
         "quality" => b.quality.cmp(&a.quality),
-        "bid" => a.displayed_bid().cmp(&b.displayed_bid()),
-        // The bucket; the reference compares the exact deadline.
+        "buyoutthenbid" => price(a)
+            .cmp(&price(b))
+            .then_with(|| a.displayed_bid().cmp(&b.displayed_bid())),
         "duration" => a.time_left.cmp(&b.time_left),
-        // Highest first, which also sinks a 0 (no buyout) to the bottom.
-        "buyout" => b.buyout.cmp(&a.buyout),
-        // Our own bids first; the reference also ranks another bidder's above no bid.
-        "status" => b.player_holds_bid.cmp(&a.player_holds_bid),
+        "status" => status(b).cmp(&status(a)),
         "name" => name_of(a).cmp(name_of(b)),
+        "minbidbuyout" => price(a).cmp(&price(b)),
         "seller" => owner_of(a).cmp(owner_of(b)),
-        // Build 12340's three further columns. Labelled: the comparator `0x59b460` is not traced;
-        // these open lowest first.
+        "bid" => a.displayed_bid().cmp(&b.displayed_bid()),
         "quantity" => a.count.cmp(&b.count),
-        "buyoutthenbid" => (a.buyout, a.displayed_bid()).cmp(&(b.buyout, b.displayed_bid())),
-        "minbidbuyout" => (a.start_bid, a.buyout).cmp(&(b.start_bid, b.buyout)),
+        "buyout" => a.buyout.cmp(&b.buyout),
         _ => Ordering::Equal,
     }
 }
@@ -190,11 +206,12 @@ mod tests {
         assert_eq!(got, vec!["Charlie", "Alpha", "Bravo"], "level, then bid");
     }
 
-    /// The comparator's buyout arm is `0x4cdaf2`.
+    /// Build 12340's buyout arm opens lowest first, a no-buyout row first; `buyoutthenbid` falls
+    /// back to the bid.
     #[test]
-    fn buyout_opens_highest_first_and_no_buyout_sinks() {
+    fn buyout_opens_lowest_first_and_buyoutthenbid_falls_back_to_the_bid() {
         let mut rows = vec![
-            row(1, 0, 0, "NoBuyout"),
+            row(1, 300, 0, "NoBuyout"),
             row(1, 0, 100, "Cheap"),
             row(1, 0, 5000, "Pricey"),
         ];
@@ -202,7 +219,12 @@ mod tests {
         s.click("buyout");
         s.apply(&mut rows);
         let got: Vec<_> = rows.iter().map(|r| r.name.clone().unwrap()).collect();
-        assert_eq!(got, vec!["Pricey", "Cheap", "NoBuyout"]);
+        assert_eq!(got, vec!["NoBuyout", "Cheap", "Pricey"]);
+        let mut s = SortStack::default();
+        s.click("buyoutthenbid");
+        s.apply(&mut rows);
+        let got: Vec<_> = rows.iter().map(|r| r.name.clone().unwrap()).collect();
+        assert_eq!(got, vec!["Cheap", "NoBuyout", "Pricey"], "300 bid between");
     }
 
     /// Both open highest first in the reference's comparator (`0x4cd940`).

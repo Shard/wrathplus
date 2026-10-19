@@ -53,7 +53,7 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
 /// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
 /// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 80] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 81] = [
     MessageRecord { id: 0x1e0, key: "ERR_BATTLEGROUND_TOO_MANY_QUEUES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e1, key: "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e2, key: "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -134,6 +134,7 @@ pub static WRATH_SUPPLEMENT: [MessageRecord; 80] = [
     MessageRecord { id: 0x2d0, key: "ERR_ARENA_TEAM_PARTY_SIZE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2d2, key: "ERR_IN_RANDOM_BG", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2d3, key: "ERR_IN_NON_RANDOM_BG", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2d4, key: "ERR_AUCTION_ENOUGH_ITEMS", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
 ];
 
 /// The record for a `GlobalStrings` key; keys are unique (the generator refuses a duplicate),
