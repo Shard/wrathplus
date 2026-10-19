@@ -32,6 +32,7 @@ fn recipe(
         }],
         tools: vec![("Anvil".into(), true)],
         description: None,
+        alt_verb: None,
     }
 }
 
@@ -942,4 +943,27 @@ fn wrath_linked_window_and_list_link_read_the_pushed_state() {
     s.run("CreateFrame('GameTooltip', 'TT'):SetHyperlink('trade:2259:75:150:2A:D')")
         .unwrap();
     assert_eq!(s.take_trade_link_clicks(), ["trade:2259:75:150:2A:D"]);
+}
+
+/// `0x5db2a0`: five values on every path, the fifth a recipe's altVerb, and a non-number index
+/// raises.
+#[test]
+fn get_trade_skill_info_answers_five_values_and_the_alt_verb() {
+    let mut s = UiScript::new().unwrap();
+    let mut state = two_recipe_state();
+    state.recipes[0].alt_verb = Some("Enchant".into());
+    s.set_trade_skill(Some(state));
+    for check in [
+        "select('#', GetTradeSkillInfo(1)) == 5 and select(2, GetTradeSkillInfo(1)) == 'header' \
+         and select(4, GetTradeSkillInfo(1)) == 1 and select(5, GetTradeSkillInfo(1)) == nil",
+        "select('#', GetTradeSkillInfo(2)) == 5 and GetTradeSkillInfo(2) == 'Simple Robe' \
+         and select(5, GetTradeSkillInfo(2)) == nil",
+        "GetTradeSkillInfo(3) == 'Bolt of Linen Cloth' and select(5, GetTradeSkillInfo(3)) == 'Enchant'",
+        "select('#', GetTradeSkillInfo(9)) == 5 and GetTradeSkillInfo(9) == nil \
+         and select(3, GetTradeSkillInfo(9)) == 0",
+        "select('#', GetTradeSkillInfo(0)) == 5",
+    ] {
+        assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
+    }
+    assert!(s.run("GetTradeSkillInfo('x')").is_err());
 }

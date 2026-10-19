@@ -73,6 +73,7 @@ fn recipe(
         }],
         tools: vec![("Anvil".into(), true)],
         description: None,
+        alt_verb: None,
     }
 }
 

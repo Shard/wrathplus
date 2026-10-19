@@ -511,6 +511,7 @@ pub(super) fn seed(s: &mut UiScript) {
             }],
             tools: vec![],
             description: None,
+            alt_verb: None,
         }],
         repeat_count: 1,
         linked: None,
