@@ -51,7 +51,6 @@ IsReferAFriendLinked = IsReferAFriendLinked or none
 CanSummonFriend = CanSummonFriend or none
 
 -- ── maps and instances ─────────────────────────────────────────────────────────────────────────
-InitWorldMapPing = InitWorldMapPing or none
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none

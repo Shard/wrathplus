@@ -14,6 +14,11 @@ use super::{Model, ScriptValue};
 /// One 12340 command intent for App, in call order. Capture-only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WrathChatVerbRequest {
+    /// `CancelItemTempEnchantment(slot)` (`0x8021d0` → `0x6d7120`): 1 the main hand, 2 the off
+    /// hand, whose temporary enchant is cancelled.
+    CancelTempEnchantment { slot: u8 },
+    /// `Sound_GameSystem_RestartSoundSystem()` (`0x985d30`): the sound system restarts.
+    RestartSoundSystem,
     /// `ArenaTeamInviteByName(team, name)` (`0x515cc0`, CMSG `0x34F`); `team` is the 1-based
     /// arena-team slot App resolves to its team id (0 when the slot holds none).
     ArenaTeamInvite { team: u8, name: String },
@@ -57,6 +62,10 @@ fn has_player(lua: &Lua) -> bool {
         .unit_guids
         .player
         != 0
+}
+
+fn number(lua: &Lua, v: &Value) -> Option<f64> {
+    lua.coerce_number(v.clone()).ok().flatten()
 }
 
 fn arg(args: &MultiValue, i: usize) -> Value {
@@ -413,6 +422,61 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     // ── chat and lookups ──
     // SendSystemMessage(message) (`0x50d8a0`): a system chat line.
+    // CancelItemTempEnchantment(slot) (`0x8021d0`): 1 or 2, the main or off hand, holding an item.
+    // Labelled: the temporary-enchant check `0x518b30` is the server's to refuse here.
+    set(lua, "CancelItemTempEnchantment", |lua, args| {
+        let has_player = lua.app_data_ref::<Model>().expect("model app_data").unit_guids.player != 0;
+        if !has_player {
+            return none();
+        }
+        let slot = number(lua, &arg(&args, 0)).map(|n| n.trunc() as i64);
+        let Some(slot) = slot.filter(|s| (1..=2).contains(s)) else {
+            return Err(mlua::Error::runtime("Usage: CancelItemTempEnchantment(slot)"));
+        };
+        let held = {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            model
+                .inv_slot("player", 15 + slot as usize)
+                .is_some_and(|s| s.item_id != 0)
+        };
+        if held {
+            push(lua, WrathChatVerbRequest::CancelTempEnchantment { slot: slot as u8 });
+        }
+        none()
+    })?;
+    // IsDressableItem(item) (`0x517530`) → 1 for an item with a display (labelled: read as a cached
+    // template with an icon; native's pet-summon fallback for a displayless item is not read).
+    set(lua, "IsDressableItem", |lua, args| {
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        let first = arg(&args, 0);
+        let id = match &first {
+            Value::Integer(_) | Value::Number(_) => number(lua, &first).map(|n| n as u32),
+            Value::String(s) => {
+                let s = s.to_string_lossy();
+                s.split("item:")
+                    .nth(1)
+                    .and_then(|r| r.split(|c: char| !c.is_ascii_digit()).next())
+                    .and_then(|d| d.parse().ok())
+                    .or_else(|| {
+                        model
+                            .item_templates
+                            .iter()
+                            .find(|(_, t)| t.name.eq_ignore_ascii_case(&s))
+                            .map(|(id, _)| *id)
+                    })
+            }
+            _ => None,
+        };
+        let dressable = id
+            .and_then(|id| model.item_templates.get(&id))
+            .is_some_and(|t| t.icon.is_some());
+        Ok(MultiValue::from_vec(vec![super::binding_abi::flag(dressable)]))
+    })?;
+    // Sound_GameSystem_RestartSoundSystem() (`0x985d30`): the host restarts its sound system.
+    set(lua, "Sound_GameSystem_RestartSoundSystem", |lua, _| {
+        push(lua, WrathChatVerbRequest::RestartSoundSystem);
+        none()
+    })?;
     set(lua, "SendSystemMessage", |lua, args| {
         let Some(message) = text(lua, &arg(&args, 0))? else {
             return Err(mlua::Error::runtime(
@@ -780,4 +844,23 @@ mod tests {
             )
             .unwrap());
     }
+    #[test]
+    fn temp_enchant_cancel_dressable_and_sound_restart() {
+        use crate::script::{InvSlotView, ItemTemplateView};
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.model_mut().unit_guids.player = 0x10;
+        s.set_unit("player", Some(crate::script::UnitState { guid: 0x10, exists: true, ..Default::default() }));
+        let mut slots: crate::script::InventorySlots = Default::default();
+        slots[16] = Some(InvSlotView { item_id: 7, ..Default::default() });
+        s.set_inventory_slots(slots);
+        s.set_item_template(7, ItemTemplateView { name: "Blade".into(), icon: Some("I".into()), ..Default::default() });
+        s.run("CancelItemTempEnchantment(1) CancelItemTempEnchantment(2) Sound_GameSystem_RestartSoundSystem()").unwrap();
+        assert!(s.run("CancelItemTempEnchantment(3)").is_err());
+        assert!(s.eval::<bool>("return IsDressableItem(7) == 1 and IsDressableItem('Blade') == 1 and IsDressableItem(8) == nil").unwrap());
+        assert_eq!(
+            s.take_wrath_chat_verb_requests(),
+            vec![R::CancelTempEnchantment { slot: 1 }, R::RestartSoundSystem]
+        );
+    }
+
 }

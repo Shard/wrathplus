@@ -479,6 +479,8 @@ pub(crate) struct Model {
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
+    /// Socketed gems by `(bag, slot)`, [`super::cursor::EQUIPMENT_BAG`] for worn items.
+    pub(crate) wrath_item_gems: Vec<(i64, u32, [Option<u32>; 3])>,
     /// The item id the last tooltip item lookup asked for, taken by the render that follows.
     pub(crate) tooltip_viewed_item: Option<u32>,
     pub(crate) wrath_quest_poi: super::wrath_quest_poi::State,
@@ -925,6 +927,9 @@ pub(crate) struct Model {
     pub(crate) vehicle_indicators:
         std::collections::HashMap<u32, super::VehicleIndicatorView>,
     pub(crate) vehicle_calls: Vec<super::VehicleCall>,
+    /// `GetPetTalentTree` and `IsAtStableMaster` (`wrath_pet_stable`).
+    pub(crate) pet_talent_tree: Option<String>,
+    pub(crate) at_stable_master: bool,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1312,6 +1317,7 @@ impl Model {
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
+            wrath_item_gems: Vec::new(),
             tooltip_viewed_item: None,
             wrath_quest_poi: Default::default(),
             wrath_barber: Default::default(),
@@ -1578,6 +1584,8 @@ impl Model {
             wrath_vehicles: Default::default(),
             vehicle_indicators: Default::default(),
             vehicle_calls: Vec::new(),
+            pet_talent_tree: None,
+            at_stable_master: false,
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

@@ -1017,9 +1017,9 @@ pub enum SessionEvent {
         mode: crate::messages::MoveMode,
         apply: bool,
     },
-    /// Any unit's movement mode (the twelve `SMSG_SPLINE_MOVE_*`), no ack; on vmangos, a unit the
-    /// server drives. `apply` sets the mode's `MOVEMENTFLAGS` bit, and the reference then re-runs
-    /// the unit's gait selector (`0x6014ec`).
+    /// Any unit's movement mode (the sixteen `SMSG_SPLINE_MOVE_*` toggles, [`crate::wrath_spline`]),
+    /// no ack; a unit the server drives. `apply` sets the mode's `MOVEMENTFLAGS` bit, and the
+    /// reference then re-runs the unit's gait selector (`0x6014ec`).
     SplineMoveMode {
         guid: u64,
         mode: crate::messages::SplineMode,

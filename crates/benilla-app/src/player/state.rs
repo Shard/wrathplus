@@ -501,6 +501,11 @@ pub(super) struct PendingKnockback {
 }
 
 impl Player {
+    /// The mover pitch (radians, +up), the aiming unit's angle the vehicle aim getters read.
+    pub(crate) fn mover_pitch(&self) -> f32 {
+        self.mover_pitch
+    }
+
     /// A player whose last streamed movement word is `flags`, for the gates that read it.
     #[cfg(test)]
     pub(crate) fn with_move_flags(flags: u32) -> Self {

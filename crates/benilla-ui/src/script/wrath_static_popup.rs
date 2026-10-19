@@ -77,6 +77,9 @@ pub struct WrathInstanceLock {
     pub extending: bool,
     pub encounters_completed: u32,
     pub encounters_total: u32,
+    /// The lock's completed encounters, one bit per DungeonEncounter.dbc bit index, for
+    /// `GetInstanceLockTimeRemainingEncounter`.
+    pub completed_mask: u32,
 }
 
 /// The state StaticPopup's dialogs read, as the host publishes it.
@@ -479,6 +482,39 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         ]))
     })?;
 
+    // GetInstanceLockTimeRemainingEncounter(index) (`0x516410` → `0x5538b0`): the current map
+    // and difficulty's index-th encounter under the pending lock's mask; three nils past the end
+    // or without a lock.
+    set(lua, "GetInstanceLockTimeRemainingEncounter", |lua, args| {
+        let Some(n) = number(lua, &arg(&args, 0)) else {
+            return Err(mlua::Error::runtime(
+                "Usage: GetInstanceLockTimeRemainingEncounter(encounterIndex)",
+            ));
+        };
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        let hit = model
+            .wrath_popup
+            .state
+            .instance_lock
+            .as_ref()
+            .filter(|l| l.expires_at > model.now)
+            .and_then(|l| {
+                let i = usize::try_from(n.trunc() as i64 - 1).ok()?;
+                super::wrath_lfg::lock_encounter(&model, i, l.completed_mask)
+            });
+        Ok(MultiValue::from_vec(match hit {
+            Some((name, icon, killed)) => vec![
+                Value::String(lua.create_string(&name)?),
+                match icon {
+                    Some(i) => Value::String(lua.create_string(&i)?),
+                    None => Value::Nil,
+                },
+                Value::Boolean(killed),
+            ],
+            None => vec![Value::Nil, Value::Nil, Value::Nil],
+        }))
+    })?;
+
     // ── loot and strings ──
     // ConfirmLootSlot(slot) (`0x589590`) is LootSlot's confirmation path (same usage line).
     set(lua, "ConfirmLootSlot", |lua, args| {
@@ -607,10 +643,19 @@ mod tests {
                 extending: true,
                 encounters_completed: 2,
                 encounters_total: 5,
+                completed_mask: 0b11,
             }),
             filled_glyph_sockets: vec![2],
             ..Default::default()
         });
+        s.set_wrath_lfg_location(Some((533, 1)));
+        s.set_wrath_lfg_encounters(std::sync::Arc::new(vec![
+            crate::script::WrathLfgEncounter { map: 533, difficulty: 1, bit: 1, name: "Patchwerk".into(), icon: None },
+            crate::script::WrathLfgEncounter { map: 533, difficulty: 1, bit: 2, name: "Grobbulus".into(), icon: None },
+        ]));
+        assert!(s
+            .eval::<bool>("return select(1, GetInstanceLockTimeRemainingEncounter(1)) == 'Patchwerk' and select(3, GetInstanceLockTimeRemainingEncounter(1)) == true and select(3, GetInstanceLockTimeRemainingEncounter(2)) == false and select('#', GetInstanceLockTimeRemainingEncounter(3)) == 3")
+            .unwrap());
         assert_eq!(
             s.eval::<i64>("return GetGuildBankTabCost()").unwrap(),
             1_000_000
