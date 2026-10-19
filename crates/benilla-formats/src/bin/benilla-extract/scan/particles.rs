@@ -377,7 +377,7 @@ pub fn partcensus(chain: &mut Chain, prefix: Option<&str>) -> Result<()> {
 /// backwards, which a `clamp` into it panics on; `TAIL-RAMP`, a tail ramp (`+0x174`) unlike the
 /// head's (`+0x168`); `PAST-ATLAS`, a cell past `rows·cols`, which the reference wraps to row 0
 /// (it masks the column only); `REPEAT`, a segment repeat other than 1; `NON-POW2` and `MID`,
-/// shapes the reference degrades on (a 1×1 fallback, a NaN sampler), none in 1.12.1.
+/// shapes the reference degrades on (a 1×1 fallback, a NaN sampler).
 pub fn cellscan(chain: &mut Chain) -> Result<()> {
     let names = super::m2_names(chain, None)?;
 

@@ -69,6 +69,8 @@ pub mod testing {
                 head_cells: [CellRamp::new(0, 0); 2],
                 tail_cells: [CellRamp::new(0, 0); 2],
                 repeat: [1.0; 2],
+                head_track: Vec::new(),
+                tail_track: Vec::new(),
             },
         }
     }

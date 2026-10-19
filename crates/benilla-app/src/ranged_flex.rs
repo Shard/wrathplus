@@ -504,4 +504,155 @@ mod tests {
             "the reset skips a prop that is releasing — otherwise the blast dies at birth"
         );
     }
+
+    /// A v264 weapon model off the installed chain, with its profile-zero skin.
+    fn installed_weapon(
+        chain: &mut benilla_formats::Chain,
+        path: &str,
+    ) -> (Vec<u8>, benilla_formats::WrathRenderModel) {
+        let bytes = chain
+            .read_file(path)
+            .unwrap_or_else(|e| panic!("{path}: {e}"));
+        let stem = path.strip_suffix(".m2").expect("an .m2 path");
+        let skin = chain
+            .read_file(&format!("{stem}00.skin"))
+            .unwrap_or_else(|e| panic!("{stem}00.skin: {e}"));
+        let model = benilla_formats::parse_wrath_render_model(&bytes, &skin, "", &[])
+            .unwrap_or_else(|e| panic!("{path}: {e:#}"));
+        (bytes, model)
+    }
+
+    /// On the installed 3.3.5 chain: a firearm's muzzle blast is authored only on BowRelease(161).
+    #[test]
+    fn installed_firearms_muzzle_blast_is_authored_only_on_bowrelease() {
+        let data = benilla_formats::wow_data_or_skip!();
+        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        let path = "Item\\ObjectComponents\\Weapon\\Firearm_2H_Rifle_A_01.m2";
+        let (bytes, model) = installed_weapon(&mut chain, path);
+
+        let ids: Vec<u16> = model.animations.iter().map(|s| s.anim_id).collect();
+        assert_eq!(
+            ids,
+            vec![STAND, BOW_RELEASE],
+            "the rifle authors exactly Stand and BowRelease"
+        );
+        assert!(model.animations[0].looping, "Stand loops");
+        assert!(
+            !model.animations[1].looping,
+            "BowRelease clamps (sequence flag 0x1) — one blast per arm"
+        );
+
+        let emitters = benilla_formats::parse_m2_particle_emitters(&bytes).expect("emitters");
+        assert_eq!(emitters.len(), 7, "the muzzle bank");
+        // Each emitter holds a constant rate in both sequences and keys only `enabled`: shut across
+        // Stand, open from the head of BowRelease for its own window.
+        for (i, em) in emitters.iter().enumerate() {
+            assert!(
+                em.timing.rate(Some(0), 0.0, 0.0) > 0.0,
+                "emitter {i} holds a rate on Stand — it is the gate that is shut"
+            );
+            for step in 0..8 {
+                let t = step as f32 * 0.04;
+                assert!(
+                    !em.timing.emitting(Some(0), t, 0.0),
+                    "emitter {i} is gated shut on Stand (t={t})"
+                );
+            }
+            assert!(
+                em.timing.emitting(Some(1), 0.0, 0.0),
+                "emitter {i} opens at the head of BowRelease — this is the blast"
+            );
+            assert!(
+                !em.timing.emitting(Some(1), 1.0, 0.0),
+                "emitter {i} is over well before BowRelease's 2 s band ends"
+            );
+        }
+    }
+
+    /// Bows and crossbows author both flex clips and a melee weapon neither, which pins the
+    /// attach's `flexes` gate to data. All three bow clips clamp.
+    #[test]
+    fn installed_ranged_weapon_models_author_the_flex_clips() {
+        let data = benilla_formats::wow_data_or_skip!();
+        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        for path in [
+            "Item\\ObjectComponents\\Weapon\\Bow_1H_Standard_A_01.m2",
+            "Item\\ObjectComponents\\Weapon\\Bow_2H_Crossbow_A_01.m2",
+        ] {
+            let (_, model) = installed_weapon(&mut chain, path);
+            let ids: Vec<u16> = model.animations.iter().map(|s| s.anim_id).collect();
+            assert_eq!(
+                ids,
+                vec![STAND, BOW_PULL, BOW_RELEASE],
+                "{path} draws AND releases"
+            );
+            assert!(
+                model.animations.iter().all(|s| !s.looping),
+                "{path}: a bow's clips all clamp"
+            );
+        }
+        let (_, sword) = installed_weapon(
+            &mut chain,
+            "Item\\ObjectComponents\\Weapon\\Sword_2H_AhnQiraj_D_01.m2",
+        );
+        assert!(
+            sword
+                .animations
+                .iter()
+                .all(|s| s.anim_id != BOW_PULL && s.anim_id != BOW_RELEASE),
+            "a melee weapon authors no flex clip"
+        );
+    }
+
+    /// The body side: a 3.3.5 player model keys `$BWP` on LoadBow/LoadRifle and `$BWR` on
+    /// AttackBow/AttackRifle, the events [`flex_ranged_props`] forks on.
+    #[test]
+    fn installed_player_model_keys_the_flex_events_on_the_ranged_family() {
+        let data = benilla_formats::wow_data_or_skip!();
+        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        let stem = "Character\\Human\\Male\\HumanMale";
+        let bytes = chain
+            .read_file(&format!("{stem}.m2"))
+            .expect("HumanMale.m2");
+        let skin = chain
+            .read_file(&format!("{stem}00.skin"))
+            .expect("HumanMale00.skin");
+        let deps = benilla_formats::wrath_render_animation_dependencies(&bytes).expect("deps");
+        let mut external = vec![None; deps.iter().map(|d| d.sequence_index + 1).max().unwrap_or(0)];
+        for d in &deps {
+            let anim = format!("{stem}{:04}-{:02}.anim", d.animation_id, d.variation_index);
+            external[d.sequence_index] = Some(chain.read_file(&anim).expect("anim"));
+        }
+        let refs: Vec<Option<&[u8]>> = external.iter().map(|e| e.as_deref()).collect();
+        let model = benilla_formats::parse_wrath_render_model_with_animations(
+            &bytes,
+            &skin,
+            &refs,
+            "",
+            &[],
+        )
+        .expect("HumanMale parses");
+        let keyed = |ident: &[u8; 4]| -> Vec<u16> {
+            let mut ids: Vec<u16> = model
+                .animations
+                .iter()
+                .filter(|a| a.events.iter().any(|e| e.ident == *ident))
+                .map(|a| a.anim_id)
+                .collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
+        assert_eq!(
+            keyed(b"$BWP"),
+            vec![105, 106],
+            "LoadBow and LoadRifle key the draw"
+        );
+        assert_eq!(
+            keyed(b"$BWR"),
+            vec![46, 49],
+            "AttackBow and AttackRifle key the release"
+        );
+        assert!(BOW_FAMILY.contains(&105) && RIFLE_FAMILY.contains(&106));
+    }
 }
