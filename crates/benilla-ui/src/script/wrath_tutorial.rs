@@ -34,7 +34,7 @@ impl History {
             .split(|&byte| byte == 0)
             .next()
             .unwrap_or_default()
-            .chunks_exact(3)
+            .as_chunks::<3>().0
         {
             let value = triple.iter().fold(0u32, |value, &digit| {
                 value

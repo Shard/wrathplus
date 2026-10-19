@@ -48,7 +48,7 @@ pub(crate) fn drain_latest(packets: &mut VecDeque<Packet>) -> Option<Reply> {
                 items,
             },
         })
-        .last()
+        .next_back()
 }
 
 /// The pushed talents: each group's pages built from its (talent, 0-based rank) pairs for the

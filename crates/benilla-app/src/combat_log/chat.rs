@@ -1171,8 +1171,8 @@ fn environmental_damage_fields(
         Fills {
             amount: i64::from(damage),
             trailers: Some(combat::Trailers {
-                absorbed: absorbed,
-                resisted: resisted,
+                absorbed,
+                resisted,
                 // The environmental call site passes zero for both.
                 blocked: 0,
                 hit_info: 0,

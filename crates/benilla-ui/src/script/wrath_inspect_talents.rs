@@ -55,12 +55,12 @@ use super::wrath_talent_preview as preview;
 use super::Model;
 
 /// Which pages a getter reads: the player's (group 1 only), or an inspected group's.
-fn pages<'m>(
-    model: &'m Model,
+fn pages(
+    model: &Model,
     inspect: bool,
     pet: bool,
     group: Option<i64>,
-) -> Option<&'m super::TalentUiState> {
+) -> Option<&super::TalentUiState> {
     if pet {
         return None;
     }

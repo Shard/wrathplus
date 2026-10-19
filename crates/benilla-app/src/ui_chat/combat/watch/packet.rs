@@ -70,7 +70,7 @@ pub(super) fn aura_lines(
             let next: Vec<_> = snapshot.iter().map(|a| a.aura.clone()).collect();
             // First snapshot compares against empty, matching the former synthesized add edges.
             let previous = shadow.insert(guid, next.clone()).unwrap_or_default();
-            let class = ctx.classify(guid, &stores);
+            let class = ctx.classify(guid, stores);
             for change in packet_aura_changes(&previous, &next) {
                 let (spell_id, kind, family, amount) = match change {
                     PacketAuraChange::Added(spell, helpful) => (

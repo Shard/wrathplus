@@ -54,7 +54,7 @@ impl super::UiScript {
 }
 
 /// The socket behind a 1-based index in group 1.
-fn socket<'m>(model: &'m Model, index: i64, group: i64) -> Option<&'m GlyphSocketView> {
+fn socket(model: &Model, index: i64, group: i64) -> Option<&GlyphSocketView> {
     if group != 1 || !(1..=6).contains(&index) {
         return None;
     }
