@@ -663,20 +663,15 @@ mod ui_error_tests {
         assert_eq!(t(&UiError::key("ABSENT")), None);
     }
 
-    /// Vanilla keeps the reference-compatible silent miss. Wrath has no authored root to render
-    /// that line yet, so the declared key and available arguments survive as host diagnostics.
+    /// Wrath has no authored root to render a missing key yet, so the declared key and available
+    /// arguments survive as host diagnostics.
     #[test]
     fn missing_key_is_preserved_only_for_wrath() {
-        let vanilla = UiScript::new_vanilla().expect("Vanilla VM");
         let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM");
         let error = UiError::args(
             "TEST_MISSING_SD",
             vec![FillArg::S("Mining".into()), FillArg::D(155)],
         );
-
-        assert_eq!(ui_error_text_for_script(&error, &vanilla), None);
-        assert!(keyed_line(&vanilla, "TEST_MISSING").is_none());
-        assert!(keyed_line_s(&vanilla, "TEST_MISSING_S", &["Mining"]).is_none());
 
         assert_eq!(
             ui_error_text_for_script(&error, &wrath).as_deref(),
@@ -697,13 +692,10 @@ mod ui_error_tests {
     }
 
     #[test]
-    fn an_explicitly_empty_key_remains_silent_in_both_dialects() {
-        let vanilla = UiScript::new().expect("Vanilla VM");
+    fn an_explicitly_empty_key_remains_silent() {
         let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM");
-        vanilla.run("TEST_EMPTY = ''").expect("set Vanilla key");
         wrath.run("TEST_EMPTY = ''").expect("set Wrath key");
 
-        assert!(keyed_line(&vanilla, "TEST_EMPTY").is_none());
         assert!(keyed_line(&wrath, "TEST_EMPTY").is_none());
     }
 

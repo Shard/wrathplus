@@ -8,6 +8,9 @@ mod census_lexer;
 #[path = "wrath_census_arity.rs"]
 mod census_arity;
 
+#[path = "wrath_census_fixtures.rs"]
+mod census_fixtures;
+
 /// One chunk's `Name(` sites: `function Name(` definitions, `:Name(` methods, and bare global
 /// calls, less the names the chunk binds with `local` ([`census_lexer::local_names`]).
 fn scan_calls(
@@ -202,6 +205,7 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
         .unwrap_or(false);
     // Last: the probes call bindings with made-up arguments and may change the VM's state.
     script.clear_instruction_budget();
+    census_fixtures::seed(&mut script);
     census_arity::audit(&script, &wants, &defined);
     eprintln!("hard failures: {hard}; PlayerFrame shown with TargetFrame built: {shown}");
     assert!(shown);

@@ -2,12 +2,60 @@
 //! (`local a, b, c = Name(…)`, `a, b = obj:Name(…)`, `select(n, Name(…))`), the widest
 //! unpack across its call sites against what this VM returns.
 //!
-//! Report-only. A probe calls the binding with a few argument shapes against the census VM's
+//! Asserted against two reviewed lists, the [`NATIVE_ABSENT`](super) pattern: a SHORT or UNPROBED
+//! name missing from its list fails the census, and so does a listed name that no longer is one,
+//! so both lists only shrink. A probe calls the binding with a few argument shapes against the census VM's
 //! state, so a getter whose list is empty there answers its miss shape: an answer with no
 //! non-nil value is UNPROBED (its width printed as `miss`), not a pass. A hit narrower than the
 //! widest unpack is SHORT, a mismatch candidate.
 
 use std::collections::{BTreeMap, HashSet};
+
+/// Names answering narrower than the stock Lua unpacks, each with why: a 12340 shape (evidence) or
+/// a pending fix (owner).
+const SHORT_REVIEWED: &[(&str, &str)] = &[
+    ("GetBinding", "0x55e8d0: the command, then each bound key; an unbound command answers one"),
+    ("GetLFGBootProposal", "0x554a60: false alone when no vote is in progress"),
+    ("GetQuestLogTitle", "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set"),
+    ("UnitPowerType", "0x60f100: five only for a vehicle with a PowerDisplay row, else two"),
+    ("GetQuestWorldMapAreaID", "pending App Migration: the native binding replaces the shim"),
+    ("GetAchievementInfoFromCriteria", "pending Native UI: a short hit"),
+    ("GetContainerItemInfo", "pending Native UI: a short hit"),
+    ("GetFriendInfo", "pending Native UI: a short hit"),
+    ("GetGuildRosterInfo", "pending Native UI: a short hit"),
+    ("GetItemInfo", "pending Native UI: a short hit"),
+    ("GetTradeSkillInfo", "pending Native UI: a short hit"),
+    ("GetWhoInfo", "pending Native UI: a short hit"),
+];
+
+/// Names no probe reaches with a hit or a full-width miss, by reason.
+const UNPROBED_REVIEWED: &[&str] = &[
+    // No Battle.net service in a 3.3.5 session.
+    "BNGetBlockedInfo", "BNGetBlockedToonInfo", "BNGetConversationMemberInfo",
+    "BNGetCustomMessageTable", "BNGetFOFInfo", "BNGetFriendInfo", "BNGetFriendInfoByID",
+    "BNGetFriendInviteInfo", "BNGetFriendToonInfo", "BNGetInfo", "BNGetNumFOF", "BNGetToonInfo",
+    // No knowledge-base service.
+    "KBArticle_GetData", "KBSetup_GetCategoryData", "KBSetup_GetSubCategoryData",
+    // No debug zone map or debug objects in a retail client.
+    "GetDebugZoneMap", "GetMapDebugObjectInfo",
+    // Fixture pending: the state each reads is not seeded yet.
+    "GetAchievementComparisonInfo", "GetBarberShopStyleInfo", "GetBattlefieldInfo",
+    "GetBattlefieldVehicleInfo", "GetBattlegroundInfo", "GetBindingKey", "GetChannelRosterInfo",
+    "GetChatWindowSavedDimensions", "GetChatWindowSavedPosition", "GetContainerItemPurchaseInfo",
+    "GetContainerItemPurchaseItem", "GetCursorInfo", "GetGlyphSocketInfo",
+    "GetGuildBankTransaction", "GetGuildEventInfo", "GetInspectArenaTeamData",
+    "GetInventoryItemGems", "GetInventorySlotInfo", "GetLFGCompletionReward",
+    "GetLFGCompletionRewardItem", "GetLFGDungeonRewardInfo", "GetLFGQueueStats",
+    "GetLFGRandomDungeonInfo", "GetLFGRoleUpdateSlot", "GetLatestThreeSenders",
+    "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPartyLFGBackfillInfo", "GetPlayerInfoByGUID",
+    "GetPossessInfo", "GetQuestLogRewardSpell", "GetRewardSpell", "GetTrainerServiceStepReq",
+    "GetVehicleUIIndicator", "GetVehicleUIIndicatorSeat", "GetVoiceSessionInfo", "GetZonePVPInfo",
+    "QuestPOIGetIconInfo", "QuestPOIGetQuestIDByVisibleIndex", "SearchLFGGetEncounterResults",
+    "SearchLFGGetPartyResults", "SearchLFGGetResults", "UnitDetailedThreatSituation",
+    "UnitVehicleSeatInfo",
+    // Widget methods whose object the probe does not populate.
+    "GetItem", "GetMessageInfo", "UpdateMouseOverTooltip",
+];
 
 /// The widest unpack seen for one name: values wanted, where, and how many unpacking sites.
 #[derive(Debug, Default, Clone)]
@@ -140,8 +188,13 @@ pub(super) fn scan(src: &str, path: &str, locals: &HashSet<String>, wants: &mut 
     }
 }
 
-/// Probes every unpacked name and prints `ARITY …` lines; returns (short, unprobed).
-pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, defined: &HashSet<String>) -> (usize, usize) {
+/// Probes every unpacked name, prints `ARITY …` lines and asserts them against the reviewed
+/// lists; returns (short, unprobed).
+pub(super) fn audit(
+    script: &benilla_ui::script::UiScript,
+    wants: &Wants,
+    defined: &HashSet<String>,
+) -> (usize, usize) {
     let probe = script
         .lua()
         .load(
@@ -156,6 +209,10 @@ pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, define
                 for _, kind in ipairs(kinds) do
                     local ok, frame = pcall(CreateFrame, kind)
                     if ok and frame then
+                        -- Anchored and sized, so the geometry getters answer a hit.
+                        pcall(frame.SetPoint, frame, "CENTER", UIParent, "CENTER", 0, 0)
+                        pcall(frame.SetWidth, frame, 10)
+                        pcall(frame.SetHeight, frame, 10)
                         local group = frame.CreateAnimationGroup and frame:CreateAnimationGroup()
                         for _, o in ipairs({ frame, frame:CreateTexture(), frame:CreateFontString(),
                                 group, group and group:CreateAnimation("Alpha") }) do
@@ -182,7 +239,12 @@ pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, define
                 return n, false
             end
             local best, miss, errors = 0, 0, 0
-            for _, args in ipairs({ {}, { 1 }, { "player" }, { 1, 1 }, { 1, 1, 1 }, { "player", 1 } }) do
+            -- Indexes, unit tokens, bag/slot pairs, aura filters, item and spell ids, quest-item types.
+            local ladder = { {}, { 1 }, { "player" }, { 1, 1 }, { 1, 1, 1 }, { "player", 1 },
+                { 0, 1 }, { "player", 1, "HELPFUL" }, { "player", 1, "HARMFUL" }, { 6948 },
+                { "item:6948" }, { 6603 }, { "reward", 1 }, { "choice", 1 }, { "required", 1 },
+                { 2, 1 }, { 1, 1, 1, 1 }, { 1, 2 }, { "CRITTER", 1 }, { "MOUNT", 1 }, { 2 } }
+            for _, args in ipairs(ladder) do
                 local ok, n, hit
                 if method then
                     ok, n, hit = pcall(function() return count(fn(target, unpack(args))) end)
@@ -204,6 +266,7 @@ pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, define
         .expect("arity probe");
     let (mut short, mut unprobed) = (0, 0);
     let mut lines = Vec::new();
+    let (mut short_names, mut unprobed_names) = (Vec::new(), Vec::new());
     for ((method, name), w) in wants {
         if w.want < 2 || (!*method && defined.contains(name)) {
             continue;
@@ -217,14 +280,20 @@ pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, define
         if kind == "absent" {
             continue;
         }
+        // An all-nil answer as wide as the widest unpack shows the width too.
+        if got == 0 && miss >= w.want {
+            continue;
+        }
         if got == 0 {
             unprobed += 1;
+            unprobed_names.push(name.clone());
             lines.push(format!(
                 "ARITY UNPROBED {kind} {name} want={} miss={miss} sites={} at {} errors={errors}",
                 w.want, w.sites, w.at
             ));
         } else if got < w.want {
             short += 1;
+            short_names.push(name.clone());
             lines.push(format!("ARITY SHORT {kind} {name} want={} got={got} sites={} at {}", w.want, w.sites, w.at));
         }
     }
@@ -232,6 +301,19 @@ pub(super) fn audit(script: &benilla_ui::script::UiScript, wants: &Wants, define
     for line in lines {
         eprintln!("{line}");
     }
+    let unlisted: Vec<&String> = short_names
+        .iter()
+        .filter(|n| !SHORT_REVIEWED.iter().any(|(r, _)| r == n))
+        .chain(unprobed_names.iter().filter(|n| !UNPROBED_REVIEWED.contains(&n.as_str())))
+        .collect();
+    assert!(unlisted.is_empty(), "arity rows missing from the reviewed lists: {unlisted:?}");
+    let stale: Vec<&str> = SHORT_REVIEWED
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !short_names.iter().any(|s| s == n))
+        .chain(UNPROBED_REVIEWED.iter().copied().filter(|n| !unprobed_names.iter().any(|s| s == n)))
+        .collect();
+    assert!(stale.is_empty(), "reviewed arity rows that no longer apply: {stale:?}");
     (short, unprobed)
 }
 

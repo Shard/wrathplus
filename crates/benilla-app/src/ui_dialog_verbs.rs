@@ -1554,55 +1554,6 @@ mod tests {
     }
 
     #[test]
-    fn a_rebuilt_vm_re_asks_the_server_for_the_meeting_stone_queue() {
-        let (tx, rx) = crossbeam_channel::unbounded();
-        let mut app = App::new();
-        app.init_resource::<MeetingStone>()
-            .insert_resource(NetCommands(tx))
-            .add_systems(Update, meeting_stone_enter_world);
-
-        let queries = |rx: &crossbeam_channel::Receiver<ClientCommand>| {
-            rx.try_iter()
-                .filter(|c| matches!(c, ClientCommand::MeetingStoneStatusQuery))
-                .count()
-        };
-
-        app.update();
-        assert_eq!(queries(&rx), 0, "no VM, no bring-up");
-
-        app.insert_non_send_resource(UiScript::new_vanilla().expect("VM"));
-        app.update();
-        assert_eq!(queries(&rx), 1, "the first VM asks the server");
-        app.update();
-        app.update();
-        assert_eq!(queries(&rx), 0, "…and does not ask again on later frames");
-
-        // The server answers: the player is queued.
-        app.world_mut().resource_mut::<MeetingStone>().area = 1519;
-        app.world_mut().resource_mut::<MeetingStone>().dirty = false;
-
-        // `ReloadUI()`: a fresh VM, with no world leave.
-        app.insert_non_send_resource(UiScript::new_vanilla().expect("VM"));
-        app.update();
-        assert_eq!(
-            queries(&rx),
-            1,
-            "a rebuilt VM re-asks — the reference's UI teardown clears the run-once byte, so \
-             `UI_Init` re-sends `CMSG 0x296` (0x490a8d / 0x490168)"
-        );
-
-        let stone = app.world().resource::<MeetingStone>();
-        assert!(
-            stone.dirty,
-            "the bring-up re-armed the push, so the fresh VM is told the queued area again"
-        );
-        assert_eq!(
-            stone.area, 1519,
-            "the queued area itself is untouched, matching `[0xb72038]` surviving the reload"
-        );
-    }
-
-    #[test]
     fn spell_2584_never_trips_the_cancel_gate() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");

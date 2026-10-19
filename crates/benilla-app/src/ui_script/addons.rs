@@ -1205,23 +1205,23 @@ mod tests {
         write_addon(
             &home,
             "Alpha",
-            "## Interface: 11200\n## Title: zebra\n",
+            "## Interface: 30300\n## Title: zebra\n",
             &[],
         );
         write_addon(
             &home,
             "Mike",
-            "## Interface: 11200\n## Title: Middle\n",
+            "## Interface: 30300\n## Title: Middle\n",
             &[],
         );
         write_addon(
             &home,
             "Zulu",
-            "## Interface: 11200\n## Title: aardvark\n",
+            "## Interface: 30300\n## Title: aardvark\n",
             &[],
         );
         // No `## Title`: sorts under its folder name.
-        write_addon(&home, "bravo", "## Interface: 11200\n", &[]);
+        write_addon(&home, "bravo", "## Interface: 30300\n", &[]);
 
         let rows = installed_rows();
         assert_eq!(
@@ -1253,10 +1253,10 @@ mod tests {
         write_addon(
             &home,
             &collide,
-            "## Interface: 11200\n## Title: Impostor\n",
+            "## Interface: 30300\n## Title: Impostor\n",
             &[],
         );
-        write_addon(&home, "Loose", "## Interface: 11200\n", &[]);
+        write_addon(&home, "Loose", "## Interface: 30300\n", &[]);
 
         let found = discover();
         let names: Vec<&str> = found.iter().map(|a| a.name.as_str()).collect();
@@ -1428,7 +1428,7 @@ mod tests {
         std::fs::write(root.join("Probe/Probe.lua"), "PROBE_RAN = 1").unwrap();
         let addon = Addon {
             name: "Probe".into(),
-            toc: Toc::parse("## Interface: 11200\nBindings.xml\nProbe.lua\n"),
+            toc: Toc::parse("## Interface: 30300\nBindings.xml\nProbe.lua\n"),
             source: Source::Dir(root),
         };
 
@@ -1469,7 +1469,7 @@ mod tests {
             r#"<Ui><Script file="viaxml.lua"/></Ui>"#,
         )
         .unwrap();
-        let toc = "## Interface: 11200\nlisted.lua\nCore\\doc.xml\n";
+        let toc = "## Interface: 30300\nlisted.lua\nCore\\doc.xml\n";
         let addon = Addon {
             name: "Probe".into(),
             toc: Toc::parse(toc),
@@ -1515,7 +1515,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let all = vec![
-            dir_addon(&tmp, "Alone", "## Interface: 11200\n"),
+            dir_addon(&tmp, "Alone", "## Interface: 30300\n"),
             dir_addon(&tmp, "NeedsGhost", "## Dependencies: Ghost\n"),
             dir_addon(&tmp, "WantsGhost", "## OptionalDeps: Ghost\n"),
         ];
@@ -1556,7 +1556,7 @@ mod tests {
         // reaches a sibling file by bare name and a shared library addon by `..\..`.
         std::fs::write(
             dir.join("ProbeAddon.toc"),
-            "## Interface: 11200\n## Title: Probe\nsrc\\main.xml\n",
+            "## Interface: 30300\n## Title: Probe\nsrc\\main.xml\n",
         )
         .unwrap();
         std::fs::write(
@@ -1654,7 +1654,7 @@ mod tests {
         // `Bump.xml` counts its own runs, so a second load is observable.
         let shared = tmp.join("Shared");
         std::fs::create_dir_all(&shared).unwrap();
-        std::fs::write(shared.join("Shared.toc"), "## Interface: 11200\nBump.xml\n").unwrap();
+        std::fs::write(shared.join("Shared.toc"), "## Interface: 30300\nBump.xml\n").unwrap();
         std::fs::write(
             shared.join("Bump.xml"),
             "<Ui><Script>SharedLoads = (SharedLoads or 0) + 1</Script></Ui>",
@@ -1737,7 +1737,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(tmp.join("Cased")).unwrap();
         std::fs::create_dir_all(tmp.join("Bare")).unwrap();
-        std::fs::write(tmp.join("Cased/cased.TOC"), "## Interface: 11200\n").unwrap();
+        std::fs::write(tmp.join("Cased/cased.TOC"), "## Interface: 30300\n").unwrap();
         std::fs::write(tmp.join("Bare/notes.txt"), "not an addon").unwrap();
         assert!(manifest_in(&tmp.join("Cased"), "Cased").is_some());
         assert!(manifest_in(&tmp.join("Bare"), "Bare").is_none());
@@ -1751,14 +1751,14 @@ mod tests {
     fn recorder_xml(events: &[&str]) -> String {
         let registers: String = events
             .iter()
-            .map(|e| format!("this:RegisterEvent(\"{e}\");"))
+            .map(|e| format!("self:RegisterEvent(\"{e}\");"))
             .collect();
         format!(
             r#"<Ui>
   <Frame name="EventProbeFrame" parent="UIParent">
     <Scripts>
       <OnLoad>{registers}</OnLoad>
-      <OnEvent>table.insert(EventLog, event .. ":" .. tostring(arg1));</OnEvent>
+      <OnEvent>local arg1 = ...; table.insert(EventLog, event .. ":" .. tostring(arg1));</OnEvent>
     </Scripts>
   </Frame>
 </Ui>"#
@@ -1782,7 +1782,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("EventProbe.toc"),
-            "## Interface: 11200\nprobe.lua\nprobe.xml\n",
+            "## Interface: 30300\nprobe.lua\nprobe.xml\n",
         )
         .unwrap();
         // File-scope Lua runs before the event; its marker proves the order.
@@ -1798,7 +1798,7 @@ mod tests {
             toc: Toc::parse(&std::fs::read_to_string(dir.join("EventProbe.toc")).unwrap()),
             source: Source::Dir(tmp.clone()),
         }];
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let mut w = Walk::default();
         let _ = w.load(&mut script, &all, "EventProbe");
@@ -1825,12 +1825,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("EventProbe.toc"),
-            "## Interface: 11200\nprobe.xml\n",
+            "## Interface: 30300\nprobe.xml\n",
         )
         .unwrap();
         std::fs::write(dir.join("probe.xml"), recorder_xml(&["ADDON_LOADED"])).unwrap();
 
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script.run("EventLog = {}").unwrap();
 
@@ -1872,7 +1872,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("EventProbe.toc"),
-            "## Interface: 11200\nprobe.xml\n",
+            "## Interface: 30300\nprobe.xml\n",
         )
         .unwrap();
         std::fs::write(
@@ -1886,10 +1886,10 @@ mod tests {
         let _h =
             crate::local_state::test_env::EnvGuard::set("BENILLA_HOME", home.to_str().unwrap());
 
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script.run("EventLog = {}").unwrap();
-        let failures = load_third_party(&mut script, None, &[], true);
+        let failures = load_wrath_third_party(&mut script, None, &[], true);
         assert!(failures.is_empty(), "load errors: {failures:?}");
         crate::ui_script::finish_ui_load(&mut script);
 
@@ -1932,7 +1932,7 @@ mod tests {
         write_addon(
             &home,
             "Fresh",
-            "## Interface: 11200\nmain.lua\n",
+            "## Interface: 30300\nmain.lua\n",
             &[("main.lua", "FreshRan = true\n")],
         );
         write_addon(
@@ -1950,12 +1950,12 @@ mod tests {
         write_addon(
             &home,
             "NeedsOld",
-            "## Interface: 11200\n## Dependencies: Old\nmain.lua\n",
+            "## Interface: 30300\n## Dependencies: Old\nmain.lua\n",
             &[("main.lua", "NeedsOldRan = true\n")],
         );
 
         let mut script = UiScript::new().unwrap();
-        let failures = load_third_party(&mut script, None, &[], true);
+        let failures = load_wrath_third_party(&mut script, None, &[], true);
         assert!(
             failures.iter().any(|f| f.contains("NeedsOld")),
             "the gated dependency is the dependent's failure: {failures:?}"
@@ -1979,7 +1979,7 @@ mod tests {
 
         // Force-load: the same folder, with the checkbox's other state.
         let mut open = UiScript::new().unwrap();
-        let failures = load_third_party(&mut open, None, &[], false);
+        let failures = load_wrath_third_party(&mut open, None, &[], false);
         assert!(failures.is_empty(), "force-load load errors: {failures:?}");
         assert_eq!(
             open.eval::<bool>(
@@ -2020,7 +2020,7 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (home, _guard) = hermetic_root("encoding");
         // `## Title:` holds a cp1252 a-umlaut (0xE4).
-        let mut toc = b"## Interface: 11200\n## Title: Sch\xE4tze\nlocale.lua\nboot.lua\n".to_vec();
+        let mut toc = b"## Interface: 30300\n## Title: Sch\xE4tze\nlocale.lua\nboot.lua\n".to_vec();
         toc.splice(0..0, [0xEFu8, 0xBB, 0xBF]); // and a BOM on the manifest too
         write_addon_bytes(
             &home,
@@ -2037,7 +2037,7 @@ mod tests {
         );
 
         let mut script = UiScript::new().unwrap();
-        let failures = load_third_party(&mut script, None, &[], true);
+        let failures = load_wrath_third_party(&mut script, None, &[], true);
         assert!(failures.is_empty(), "load errors: {failures:?}");
 
         // Discovery found it. One, not thirteen: `SMSG_ADDON_INFO` answers status 2 for the
@@ -2121,11 +2121,11 @@ mod tests {
         write_addon(
             &home,
             "Probe",
-            "## Interface: 11200\n## Title: Probe Title\n## Notes: What it does\n## URL: http://example\n## Version: 1.2\n",
+            "## Interface: 30300\n## Title: Probe Title\n## Notes: What it does\n## URL: http://example\n## Version: 1.2\n",
             &[],
         );
         let mut script = UiScript::new().unwrap();
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
 
         // One, not thirteen: the chain's twelve secure addons are hidden by the reply.
         seat_stock_addon_reply(&mut script);
@@ -2199,13 +2199,13 @@ mod tests {
         write_addon(
             &home,
             "Off",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "OffRan = true")],
         );
         write_addon(
             &home,
             "On",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "OnRan = true")],
         );
         // "On" is absent from the file.
@@ -2214,7 +2214,7 @@ mod tests {
 
         let mut script = UiScript::new().unwrap();
         let id = ("Realm".to_string(), "Char".to_string());
-        let failures = load_third_party(&mut script, Some(&id), &[], true);
+        let failures = load_wrath_third_party(&mut script, Some(&id), &[], true);
 
         assert!(
             failures.is_empty(),
@@ -2253,20 +2253,20 @@ mod tests {
         write_addon(
             &home,
             "Demand",
-            "## Interface: 11200\n## Title: Demand\n## LoadOnDemand: 1\nlate.lua\nlate.xml\n",
+            "## Interface: 30300\n## Title: Demand\n## LoadOnDemand: 1\nlate.lua\nlate.xml\n",
             &[
                 ("late.lua", "DemandRan = true"),
                 (
                     "late.xml",
                     "<Ui><Frame name=\"DemandFrame\" parent=\"UIParent\"><Scripts>\
-                     <OnEvent>DemandEvent = arg1</OnEvent></Scripts></Frame>\
+                     <OnEvent>DemandEvent = ...</OnEvent></Scripts></Frame>\
                      <Script>DemandFrame:RegisterEvent(\"ADDON_LOADED\")</Script></Ui>",
                 ),
             ],
         );
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
 
         // Discovered and described, not run; one row, the chain's twelve hidden by the reply.
         seat_stock_addon_reply(&mut script);
@@ -2518,12 +2518,12 @@ mod tests {
         write_addon(
             &home,
             "Demand",
-            "## Interface: 11200\n## LoadOnDemand: 1\nlate.xml\ngone.xml\ngone.lua\n",
+            "## Interface: 30300\n## LoadOnDemand: 1\nlate.xml\ngone.xml\ngone.lua\n",
             &[("late.xml", "<Ui><Include file=\"nope.xml\"/></Ui>")],
         );
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
         seat_stock_addon_reply(&mut script);
         assert!(script.take_load_log_writes().is_empty());
         script.run("LoadAddOn('Demand')").unwrap();
@@ -2562,18 +2562,18 @@ mod tests {
         write_addon(
             &home,
             "Base",
-            "## Interface: 11200\n## Title: Base\nbase.lua\n",
+            "## Interface: 30300\n## Title: Base\nbase.lua\n",
             &[("base.lua", "BaseRan = true")],
         );
         write_addon(
             &home,
             "BaseOptions",
-            "## Interface: 11200\n## Title: Base Options\n## Dependencies: Base\n             ## LoadOnDemand: 1\nopts.lua\n",
+            "## Interface: 30300\n## Title: Base Options\n## Dependencies: Base\n             ## LoadOnDemand: 1\nopts.lua\n",
             &[("opts.lua", "OptsRan = BaseRan")],
         );
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
 
         assert_eq!(
             script.eval::<bool>("return IsAddOnLoaded('Base') == 1").ok(),
@@ -2612,14 +2612,14 @@ mod tests {
         write_addon(
             &home,
             "Holey",
-            "## Interface: 11200\n## Title: Holey\n## LoadOnDemand: 1\n\
+            "## Interface: 30300\n## Title: Holey\n## LoadOnDemand: 1\n\
              Locale-koKR.lua\nreal.lua\n",
             // `Locale-koKR.lua` is listed and not written.
             &[("real.lua", "HoleyRan = true")],
         );
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
 
         assert_eq!(
             script
@@ -2663,11 +2663,11 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
         let (home, _h) = hermetic_root("reasons");
-        write_addon(&home, "Plain", "## Interface: 11200\n", &[]);
+        write_addon(&home, "Plain", "## Interface: 30300\n", &[]);
         write_addon(
             &home,
             "Off",
-            "## Interface: 11200\n## LoadOnDemand: 1\n",
+            "## Interface: 30300\n## LoadOnDemand: 1\n",
             &[],
         );
         std::fs::create_dir_all(home.join("addons")).unwrap();
@@ -2675,7 +2675,7 @@ mod tests {
 
         let mut script = UiScript::new().unwrap();
         let id = ("Realm".to_string(), "Char".to_string());
-        let _ = load_third_party(&mut script, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
 
         for (call, want) in [
             ("LoadAddOn('NoSuchAddon')", "MISSING"),
@@ -2707,13 +2707,13 @@ mod tests {
         write_addon(
             &home,
             "Shunned",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "ShunnedRan = true")],
         );
         write_addon(
             &home,
             "Contested",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "ContestedRan = true")],
         );
         // Two characters with files: both turned `Shunned` off, they disagree about `Contested`.
@@ -2736,7 +2736,7 @@ mod tests {
             "the premise: a newly created character has written nothing"
         );
         let mut script = UiScript::new().unwrap();
-        let _ = load_third_party(&mut script, Some(&fresh), &roster, true);
+        let _ = load_wrath_third_party(&mut script, Some(&fresh), &roster, true);
 
         assert_eq!(
             script.eval::<bool>("return ShunnedRan == nil").ok(),
@@ -2761,11 +2761,11 @@ mod tests {
         let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
         let (home, _h) = hermetic_root("unknown-char");
         // `OptIn` ships `DefaultState: disabled`, so the epilogue's two outcomes differ.
-        write_addon(&home, "Shunned", "## Interface: 11200\n", &[]);
+        write_addon(&home, "Shunned", "## Interface: 30300\n", &[]);
         write_addon(
             &home,
             "OptIn",
-            "## Interface: 11200\n## DefaultState: disabled\n",
+            "## Interface: 30300\n## DefaultState: disabled\n",
             &[],
         );
         for who in ["Onemage", "Onerogue"] {
@@ -2802,17 +2802,17 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
         let (home, _h) = hermetic_root("roundtrip");
-        write_addon(&home, "Keep", "## Interface: 11200\n", &[]);
+        write_addon(&home, "Keep", "## Interface: 30300\n", &[]);
         write_addon(
             &home,
             "Drop",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "DropRan = true")],
         );
         let id = ("Realm".to_string(), "Char".to_string());
 
         let mut script = UiScript::new().unwrap();
-        let _ = load_third_party(&mut script, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
         script.run("DisableAddOn('Drop')").unwrap();
         save_enable_state(&script, Some(&id));
 
@@ -2824,7 +2824,7 @@ mod tests {
         );
 
         let mut next = UiScript::new().unwrap();
-        let _ = load_third_party(&mut next, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut next, Some(&id), &[], true);
         assert_eq!(
             next.eval::<bool>("return DropRan == nil").ok(),
             Some(true),
@@ -2844,11 +2844,11 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
         let (home, _h) = hermetic_root("untouched");
-        write_addon(&home, "Keep", "## Interface: 11200\n", &[]);
-        write_addon(&home, "Off", "## Interface: 11200\n", &[]);
+        write_addon(&home, "Keep", "## Interface: 30300\n", &[]);
+        write_addon(&home, "Off", "## Interface: 30300\n", &[]);
         let fresh = ("Realm".to_string(), "Fresh".to_string());
         let mut script = UiScript::new().unwrap();
-        let _ = load_third_party(&mut script, Some(&fresh), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&fresh), &[], true);
         crate::ui_script::shutdown_ui_state(&mut script, Some(&fresh), true);
         assert!(
             !enable_state_path(Some(&fresh)).unwrap().exists(),
@@ -2868,7 +2868,7 @@ mod tests {
             ),
         ] {
             let mut script = UiScript::new().unwrap();
-            let _ = load_third_party(&mut script, Some(&id), &[], true);
+            let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
             script.run(lua).unwrap();
             crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
             assert_eq!(
@@ -2893,7 +2893,7 @@ mod tests {
         write_addon(
             &home,
             "Shared",
-            "## Interface: 11200\nran.lua\n",
+            "## Interface: 30300\nran.lua\n",
             &[("ran.lua", "SharedRan = true")],
         );
         let roster = ["Alice".to_string(), "Bob".to_string()];
@@ -2901,7 +2901,7 @@ mod tests {
             let id = ("Realm".to_string(), who.to_string());
             let mut script = UiScript::new().unwrap();
             script.set_screen_size(1024.0, 768.0);
-            let _ = load_third_party(&mut script, Some(&id), roster, true);
+            let _ = load_wrath_third_party(&mut script, Some(&id), roster, true);
             let ran = script.eval::<bool>("return SharedRan == true").unwrap();
             script.run(lua).unwrap();
             crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
@@ -2935,7 +2935,7 @@ mod tests {
         write_addon(
             &home,
             "Keeper",
-            "## Interface: 11200\n## SavedVariables: KeeperDB\n\
+            "## Interface: 30300\n## SavedVariables: KeeperDB\n\
              ## SavedVariablesPerCharacter: KeeperChar\nkeeper.lua\nkeeper.xml\n",
             &[
                 (
@@ -2955,7 +2955,7 @@ mod tests {
         // ── session one: defaults, then the addon changes them ──
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let failures = load_third_party(&mut script, Some(&id), &[], true);
+        let failures = load_wrath_third_party(&mut script, Some(&id), &[], true);
         assert!(failures.is_empty(), "{failures:?}");
         assert_eq!(
             script.eval::<i64>("return KeeperSawAtEvent").ok(),
@@ -2970,7 +2970,7 @@ mod tests {
         // ── session two: a fresh VM reads them back ──
         let mut next = UiScript::new().unwrap();
         next.set_screen_size(1024.0, 768.0);
-        let failures = load_third_party(&mut next, Some(&id), &[], true);
+        let failures = load_wrath_third_party(&mut next, Some(&id), &[], true);
         assert!(failures.is_empty(), "{failures:?}");
         assert_eq!(
             next.eval::<i64>("return KeeperDB.count").ok(),
@@ -3008,13 +3008,13 @@ mod tests {
         write_addon(
             &home,
             "Gram",
-            "## Interface: 11200\n## SavedVariables: GramDB\n\
+            "## Interface: 30300\n## SavedVariables: GramDB\n\
              ## SavedVariablesPerCharacter: GramChar\ngram.lua\n",
             &[("gram.lua", "GramDB = {}\nGramChar = 0\n")],
         );
         let id = ("Realm".to_string(), "Char".to_string());
         let mut script = UiScript::new().unwrap();
-        let _ = load_third_party(&mut script, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
         script
             .run("GramDB = { ['on'] = true, ['n'] = 2, ['s'] = 'a\\\"b', ['t'] = { 1 } } GramChar = 5")
             .unwrap();
@@ -3056,7 +3056,7 @@ mod tests {
         write_addon(
             &home,
             "Last",
-            "## Interface: 11200\n## SavedVariables: LastDB\nlast.lua\nlast.xml\n",
+            "## Interface: 30300\n## SavedVariables: LastDB\nlast.lua\nlast.xml\n",
             &[
                 ("last.lua", "LastDB = 'unset'"),
                 (
@@ -3071,7 +3071,7 @@ mod tests {
         let id = ("Realm".to_string(), "Char".to_string());
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
         crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
 
         let written = std::fs::read_to_string(home.join("saved/Last.lua")).unwrap();
@@ -3095,7 +3095,7 @@ mod tests {
         write_addon(
             &home,
             "MyAddon",
-            "## Interface: 11200\nmain.lua\n",
+            "## Interface: 30300\nmain.lua\n",
             &[("main.lua", "MyAddonRan = true")],
         );
         let id = ("Realm".to_string(), "Char".to_string());
@@ -3105,7 +3105,7 @@ mod tests {
 
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let _ = load_third_party(&mut script, Some(&id), &[], true);
+        let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
         script.eval::<()>("DisableAddOn('MyAddon')").unwrap();
         save_enable_state(&script, Some(&id));
 
@@ -3147,7 +3147,7 @@ mod tests {
         write_addon(
             &home,
             "Ping",
-            "## Interface: 11200\n## LoadOnDemand: 1\n## Dependencies: Pong\nping.lua\n",
+            "## Interface: 30300\n## LoadOnDemand: 1\n## Dependencies: Pong\nping.lua\n",
             &[(
                 "ping.lua",
                 "PingRan = true Order = (Order or '') .. 'Ping,'",
@@ -3156,25 +3156,25 @@ mod tests {
         write_addon(
             &home,
             "Pong",
-            "## Interface: 11200\n## LoadOnDemand: 1\n## Dependencies: Ping\npong.lua\n",
+            "## Interface: 30300\n## LoadOnDemand: 1\n## Dependencies: Ping\npong.lua\n",
             &[(
                 "pong.lua",
                 "PongRan = true Order = (Order or '') .. 'Pong,' \
                  PingSeenLoaded = IsAddOnLoaded('Ping')",
             )],
         );
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script
             .eval::<()>(
                 "AddonOrder = '' \
              CycleWatch = CreateFrame('Frame') \
              CycleWatch:RegisterEvent('ADDON_LOADED') \
-             CycleWatch:SetScript('OnEvent', function() \
+             CycleWatch:SetScript('OnEvent', function(self, event, arg1) \
                  AddonOrder = AddonOrder .. arg1 .. ',' end)",
             )
             .unwrap();
-        let _ = load_third_party(&mut script, None, &[], true);
+        let _ = load_wrath_third_party(&mut script, None, &[], true);
 
         // Neither ran at startup: the walk skips LoadOnDemand.
         assert_eq!(

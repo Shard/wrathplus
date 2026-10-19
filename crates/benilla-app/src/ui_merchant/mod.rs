@@ -1034,7 +1034,7 @@ pub(crate) mod purse_fixture {
 
     /// A VM with the sword at live id 16, backpack slot 1 and bank slot 1, and a tooltip `TT`.
     pub(crate) fn sword_vm() -> UiScript {
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         let mut inv: benilla_ui::script::InventorySlots = Default::default();
         inv[16] = Some(benilla_ui::script::InvSlotView {
             item_id: SWORD_ENTRY,
@@ -1072,7 +1072,7 @@ pub(crate) mod purse_fixture {
                 BENILLA_TEST_LINES = {{}}
                 local f = CreateFrame("Frame")
                 f:RegisterEvent("UI_ERROR_MESSAGE")
-                f:SetScript("OnEvent", function() table.insert(BENILLA_TEST_LINES, arg1) end)
+                f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(BENILLA_TEST_LINES, arg1) end)
                 "#
             ))
             .unwrap();
@@ -1199,7 +1199,7 @@ mod tests {
                 (FIELD_UNIT_FLAGS, 0x1000),
             ])),
         ));
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_merchant(Some(MerchantState {
             can_repair: true,
             ..Default::default()
@@ -1247,7 +1247,7 @@ mod tests {
         }
         app.world_mut()
             .spawn((SelfPlayer, Guid(0x5e1f), player(slot_field, money)));
-        let script = UiScript::new_vanilla().unwrap();
+        let script = UiScript::new().unwrap();
         record_errors(&script);
         app.insert_non_send_resource(script);
         app.world_mut().run_system_once(feed_merchant).unwrap();
