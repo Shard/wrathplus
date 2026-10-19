@@ -1,4 +1,4 @@
-//! The parsed M2 record types and the [`M2Model`] that `crate::parse_m2` builds.
+//! The parsed M2 record types and the [`M2Model`] that [`crate::wrath::parse_wrath_m2`] builds.
 
 use std::ffi::CString;
 
@@ -255,9 +255,6 @@ pub struct M2Model {
     pub animation_lookup: Vec<u16>,
     /// The PlayableAnimationLookup: row `i` is the model's substitute for requested id `i`.
     pub playable_animation_lookup: Vec<M2PlayableAnim>,
-    /// The embedded skin profiles' `(count, file_offset)`.
-    pub(crate) views: (u32, u32),
-    pub(crate) version: u32,
 }
 
 impl M2Model {

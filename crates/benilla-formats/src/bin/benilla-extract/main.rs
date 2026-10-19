@@ -11,13 +11,9 @@ use clap::{Parser, Subcommand};
 mod chaincensus;
 mod charatlas;
 mod charprocs;
-mod glueextent;
 mod kitanim;
-mod m2dump;
 mod scan;
-mod shakecensus;
 mod spellvis;
-mod thudcensus;
 
 /// Read WoW 1.12.1 asset archives (MPQ).
 #[derive(Parser)]
@@ -91,12 +87,6 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Measure each shipped glue scene's art extent and the window aspects where it runs out.
-    Glueextent {
-        /// Also print every batch's footprint: front, back and clipped triangles and its extents.
-        #[arg(long)]
-        batches: bool,
-    },
     /// Dump a DBC table to CSV using our schema for it (headers included).
     Dbc {
         /// Internal path to the `.dbc` (forward or back slashes accepted).
@@ -111,78 +101,10 @@ enum Command {
     },
     /// Census the beam system: `SpellChainEffects` and every `SpellVisualKit` that draws a beam.
     Chaincensus,
-    /// Census the camera-shake system: the 24 `CameraShakes.dbc` presets and all that names one.
-    Shakecensus,
-    /// Census the death thud a corpse makes on landing (`$DTH`, `0x6236e0`): the
-    /// `DeathThudLookups.dbc` grid and which creature models key a `$DTH`.
-    Thudcensus,
     /// Census the `SpellVisualKit` CharProc columns, a kit's effect on the body, by stage.
     Charprocs,
     /// Census the `SpellVisualKit` animation column (field 2), a clip on the unit's body, by stage.
     Kitanim,
-    /// Dump an M2's collision hull: counts and the model-space AABB (WoW axes, Z up), unscaled.
-    M2coll {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's sequences in file order: anim id, loop or clamp, duration, design speed (the
-    /// rate divisor), variation frequency and replay range; sequences sharing an id are variations.
-    M2seq {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's camera table by raw file index, the index `Model:SetCamera(n)` selects by;
-    /// the portrait bake selects through `cameraLookup` instead, printed beside it.
-    M2cam {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's animation event keyframes per sequence; whether `$CPP` precedes the impact
-    /// tag decides defense animation or flinch.
-    M2events {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's attachment points (id and bone); a placement on an absent id hangs nothing.
-    M2attach {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's animation channels, texture transforms and every particle emitter in full.
-    M2anim {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's bone table, with the parent channels each bone ignores (`flags & 0x7`).
-    M2bones {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's render batches as the renderer sees them.
-    M2batch {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump an M2's per-sequence material alpha: each colour-alpha and transparency track, then
-    /// every batch's combined factor per sequence band. `HIDE` marks a batch the reference skips
-    /// in that sequence: `A <= 0` culls before the blend mode is read (`0x707b3a`-`0x707b5c`).
-    M2alpha {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Dump one M2's particle emitters in full, with each one's derived count, reach and size.
-    M2part {
-        /// Internal path to the `.m2` (forward or back slashes accepted).
-        internal_path: String,
-    },
-    /// Sweep every `.m2` for where addressing an attachment by id through AttachLookup
-    /// (`0x710310`) disagrees with scanning its records; item glows hang on the item's ids 0..4.
-    Attachscan {
-        /// Optional path prefix to restrict the sweep (e.g. `Item\ObjectComponents\Weapon`).
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and list the models carrying ribbon emitters (header `0x134`).
-    Ribbonscan,
     /// Sweep every `.m2` and census particle flipbook fields: backward ramps (`begin > end`, legal
     /// and shipped), tail ramps unlike the head's, indices past the atlas (the reference wraps the
     /// column, the row runs off), repeat counts, and the reference's two degenerate fallbacks.
@@ -192,83 +114,6 @@ enum Command {
     Blendscan {
         /// Internal-path prefix filter (e.g. `item\objectcomponents\weapon`), case-insensitive;
         /// all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and classify its billboards: which arms it authors (spherical, lock-X,
-    /// -Y or -Z) and whether geometry is skinned to the billboard bone or rides a descendant.
-    Bbscan {
-        /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and classify each billboard batch by facing: a billboard bone turns +X to
-    /// the viewer, so a single-sided batch facing -X is culled by the reference from every angle.
-    Bbfacescan {
-        /// Internal-path prefix filter (e.g. `world\generic`), case-insensitive; all if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for flat ground-plane batches (every vertex at model-space z≈0), which
-    /// sloped terrain buries; `QUAD-1BONE` is Battle Shout's crescent shape, a quad on one bone.
-    Groundscan {
-        /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for batches with zero authored vertex normals: the reference takes one as
-    /// is and its order-2 SH collapses to the flat DC term, so the surface draws lit, where
-    /// `normalize()` gives NaN and a black batch. `ALL` marks a batch degenerate at every vertex.
-    Normalscan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and measure how far its header bounds, the all-animation extent the
-    /// reference derives its doodad cull sphere from (`rec+0x5c`/`rec+0x68`), reach past its
-    /// bind-pose extent; `SHORT` marks bind-pose geometry outside the header box.
-    Animboundscan {
-        /// Internal-path prefix filter (e.g. `world\critter`), case-insensitive; all if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for geometry a non-character spawn draws that the reference may not:
-    /// multi-geoset models (only the character compositor picks among geosets), untextured batches
-    /// and tiny ones (at most 2 faces).
-    Geosetscan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `GameObjectDisplayInfo` model and resolve what the reference's GameObject
-    /// animation arm plays per reachable state and anim-progress substate (substate table
-    /// `0x5f3c30`, LUT `0x8607e4`, missing-sequence remap `0x5f3972`) against the loader's seed
-    /// (`0x710153`, animation 0 through `playableAnimationLookup`); a model whose every substate
-    /// lands on the seed's sequence is state-blind.
-    Goanimscan,
-    /// Sweep every `.m2` and census each `M2Event`'s `bone` and `position`: the reference's
-    /// dispatchers play at the event's own world point, so per 4CC it counts the records off the
-    /// origin and those on a bone some sequence keys.
-    Eventmarkerscan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Census `GameObjectDisplayInfo.Sound[0..9]`: only `0x5f4010` reads them, called only from
-    /// the GameObject anim-event dispatcher (`0x5f3e20`), `$GO0..5` to slots 0-5 and `$GC0..3` to
-    /// 6-9. Per slot: filled, tagged by the display's model, on an armable sequence, and naming a
-    /// looping kit (0x200, which picks `0x5f4010`'s emitter-pool lane over its one-shot lane).
-    Goslotscan,
-    /// Sweep every `.m2` for batches whose visibility changes per sequence, drawn in one
-    /// animation and culled by `A <= 0` in another.
-    Alphascan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for the effect lifecycle `Stand`(0), `Hold`(158), `Decay`(159): arming
-    /// only the clamping Stand freezes the effect on its last frame instead of pulsing in Hold.
-    Fxlifescan {
-        /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and measure our skeletal parse against the reference's sampler, per bone
-    /// track and band: empty bands (our nearest-key clamp, its `interpolation_ranges` window), held
-    /// band edges (our hold, its lerp toward the next key) and step tracks (`interp == 0`, which it
-    /// copies and we interpolate). It also checks no band's keys fall outside the searched window.
-    Bonescan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
         prefix: Option<String>,
     },
     /// Sweep every `.m2` and census each particle-emitter feature the corpus authors.
@@ -283,108 +128,12 @@ enum Command {
         /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
         prefix: Option<String>,
     },
-    /// Sweep every `.m2` for batches the bake routes to a per-placement material, whose UV or
-    /// M2Color tint loop differs across file sequence slots, read from the bake itself (`uv_seq`
-    /// and `rgb_seq` are `Some` exactly when `SeqLoops::uniform()` refuses the shared lane) and
-    /// bucketed by why: `DEAD-0`, `WRAP-ONLY`, `KEYS-EPSILON` or `REAL-DIFFERS`. Only placed
-    /// doodads and WMO props reach the lane; creatures, spells and GameObjects use the entity lane.
-    Uvslotscan {
-        /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for models animated entirely outside the bone tracks: no sequence keys a
-    /// bone, so a clock riding a bone clip leaves every per-sequence consumer at slot 0, t = 0.
-    /// `[GO]` marks a `GameObjectDisplayInfo` model, where the freeze is total.
-    Seqclockscan {
-        /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for batches whose texture is authored clamp on an axis (`M2Texture.flags`
-    /// bit 0 or 1 clear) while their UVs run outside 0..1 there on purpose: clamped they fade into
-    /// the sheet's transparent border, wrapped they draw solid with a seam where they cross.
-    Uvwrapscan {
-        /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every model the spell-visual chain reaches (kit effect slots, missile and
-    /// dest-anchored models) for batches whose texture transform animates, classed by what a
-    /// consumer running none of it draws, from the texture's alpha through its address mode:
-    /// `INVISIBLE` (frozen, it samples only transparent texels while the scroll reaches painted
-    /// ones), `FROZEN`, `HELD`, `NEVER` or `UNKNOWN`. It closes with the `INVISIBLE` batches joined
-    /// to the spells that reach them.
-    Fxuvscan {
-        /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all reachable effect
-        /// models if omitted.
-        prefix: Option<String>,
-    },
-    /// `fxuvscan`'s census over the entity lane's models, as the tables reach them: every
-    /// `CreatureDisplayInfo` body (players included), `GameObjectDisplayInfo` model,
-    /// `ItemDisplayInfo` model in whichever `Item\ObjectComponents\` folder holds it (a helm as its
-    /// 16 race and sex files) and `<Race><Sex>DeathSkeleton`. A creature's `Monster1/2/3` sheet is
-    /// filled per display from `textureVariation`, so each skin is judged. The clock column is
-    /// `GSEQ` (a global sequence, which the reference anchors once per instance at attach), `BAND`
-    /// (the instance's own play head), `MIXED` or `HOLD`. It then repeats for the M2Color tint
-    /// (`BLACK`, `STRONG`, `SLIGHT`, `NEGLIGIBLE`), with the alpha channel counted beside it.
-    Entityuvscan {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all reachable entity
-        /// models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for batches whose texture coordinates are generated, the sphere-map
-    /// stages (`texture_unit_lookup[texCoordSet] > 2`, the reference's gate at `0x70b8bd`). Their
-    /// UVs go unused by design; `DEGENERATE` marks those collapsed to one point, which a renderer
-    /// reading vertex UVs paints as one texel.
-    Envmapscan {
-        /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and report the sampler address modes the corpus asks of each texture
-    /// path, and how many paths are asked for more than one.
-    Texmodescan {
-        /// Internal-path prefix filter, case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` and count both halves of the owner-last draw order: each model's effects
-    /// (particle emitters and ribbons) and its own transparent-pass batches, with reach and rung.
-    Fxordercensus {
-        /// Internal-path prefix filter (e.g. `creature`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for 3-D model particles, emitters whose shards draw a geometry model's
-    /// submeshes at the owner's draw-order rung: per (owner, geometry) pair, the rung, reach and
-    /// material family tuples the shard materials are built from.
-    Shardcensus {
-        /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for models whose loader-idle sequence is not file slot 0 while benilla's
-    /// render content gate leaves them unarmed, so every per-sequence bake reads slot 0, a sequence
-    /// the instance is not playing; on `DuelingFlag`-shaped GameObjects that is the Spawn flourish.
-    Idleslotscan {
-        /// Internal-path prefix filter (e.g. `world`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for animation sound markers (`$DSL` doodad loop, `$DSE` its release,
-    /// `$DSO` doodad one-shot, `$SND` one-shot) with each kit's 3-D parameters, and whether the
-    /// carrying sequence is rest-posed, one the render content gate builds no rig for.
-    Soundeventscan {
-        /// Internal-path prefix to limit the sweep (e.g. `world`); all models if omitted.
-        prefix: Option<String>,
-    },
     /// Sweep every `.m2` and list the models whose particle emitters carry any of the given
     /// file-flag bits (`M2ParticleEmitter+0x04`).
     Partscan {
         /// The flag mask to match, hex or decimal (e.g. `0x1000`).
         mask: String,
         /// Internal-path prefix filter (e.g. `spells`), case-insensitive; all models if omitted.
-        prefix: Option<String>,
-    },
-    /// Sweep every `.m2` for M2 dynamic lights (`0x718960`): per model its point (`type==1`) and
-    /// directional light counts, each point light's bone, position, colour, attenuation and
-    /// visibility gate, then totals by content family and a diffuse-palette tally.
-    M2lightscan {
-        /// Internal-path prefix filter (e.g. `item\objectcomponents`), case-insensitive; all
-        /// models if omitted.
         prefix: Option<String>,
     },
     /// Sweep every WMO root and cross-tab its MOSB skybox model against its groups' `0x40000`
@@ -453,20 +202,6 @@ enum Command {
         z: f32,
         /// Game minute-of-day (0..1440; 720 = noon).
         minute: u32,
-    },
-    /// Scan placed doodads (MDDF) and WMO doodad-set-0 props (MODF, MODS, MODD) over a
-    /// `(2·tile_radius+1)²` block of ADT tiles around a position, and report how much animates.
-    Doodadscan {
-        /// Map directory name (e.g. `Azeroth`).
-        map: String,
-        /// World-space center X (may be negative).
-        #[arg(allow_hyphen_values = true)]
-        center_x: f32,
-        /// World-space center Y (may be negative).
-        #[arg(allow_hyphen_values = true)]
-        center_y: f32,
-        /// ADT tile radius around the center tile to scan (0 = just the containing tile).
-        tile_radius: u32,
     },
     /// Dump a WMO root's placed props: each MODD doodad with its MODS sets and the groups whose
     /// MODR names it. The reference creates props only from a group's MODR refs (`0x695aa0`), so
@@ -539,14 +274,6 @@ fn parse_u32_maybe_hex(s: &str) -> Result<u32> {
     match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
         Some(hex) => u32::from_str_radix(hex, 16).context("invalid hex"),
         None => s.parse().context("invalid decimal"),
-    }
-}
-
-fn yn(b: bool) -> &'static str {
-    if b {
-        "yes"
-    } else {
-        "-"
     }
 }
 
@@ -692,54 +419,15 @@ fn main() -> Result<()> {
                 output.display()
             );
         }
-        Command::Glueextent { batches } => glueextent::glueextent(&mut chain, batches)?,
-        Command::M2coll { internal_path } => m2dump::m2coll(&mut chain, &internal_path)?,
-        Command::M2cam { internal_path } => m2dump::m2cam(&mut chain, &internal_path)?,
-        Command::M2seq { internal_path } => m2dump::m2seq(&mut chain, &internal_path)?,
-        Command::M2events { internal_path } => m2dump::m2events(&mut chain, &internal_path)?,
-        Command::M2attach { internal_path } => m2dump::m2attach(&mut chain, &internal_path)?,
-        Command::M2anim { internal_path } => m2dump::m2anim(&mut chain, &internal_path)?,
-        Command::M2bones { internal_path } => m2dump::m2bones(&mut chain, &internal_path)?,
-        Command::M2batch { internal_path } => m2dump::m2batch(&mut chain, &internal_path)?,
-        Command::M2alpha { internal_path } => m2dump::m2alpha(&mut chain, &internal_path)?,
-        Command::M2part { internal_path } => m2dump::m2part(&mut chain, &internal_path)?,
-        Command::Attachscan { prefix } => scan::attachscan(&mut chain, prefix.as_deref())?,
-        Command::Ribbonscan => scan::ribbonscan(&mut chain)?,
         Command::Cellscan => scan::cellscan(&mut chain)?,
         Command::Blendscan { prefix } => scan::blendscan(&mut chain, prefix.as_deref())?,
-        Command::Bbscan { prefix } => scan::bbscan(&mut chain, prefix.as_deref())?,
-        Command::Bbfacescan { prefix } => scan::bbfacescan(&mut chain, prefix.as_deref())?,
-        Command::Groundscan { prefix } => scan::groundscan(&mut chain, prefix.as_deref())?,
-        Command::Normalscan { prefix } => scan::normalscan(&mut chain, prefix.as_deref())?,
-        Command::Animboundscan { prefix } => scan::animboundscan(&mut chain, prefix.as_deref())?,
-        Command::Geosetscan { prefix } => scan::geosetscan(&mut chain, prefix.as_deref())?,
-        Command::Alphascan { prefix } => scan::alphascan(&mut chain, prefix.as_deref())?,
-        Command::Fxlifescan { prefix } => scan::fxlifescan(&mut chain, prefix.as_deref())?,
-        Command::Goanimscan => scan::goanimscan(&mut chain)?,
-        Command::Eventmarkerscan { prefix } => {
-            scan::eventmarkerscan(&mut chain, prefix.as_deref())?
-        }
-        Command::Goslotscan => scan::goslotscan(&mut chain)?,
-        Command::Bonescan { prefix } => scan::bonescan(&mut chain, prefix.as_deref())?,
         Command::Partcensus { prefix } => scan::partcensus(&mut chain, prefix.as_deref())?,
         Command::Partslotscan { prefix } => scan::partslotscan(&mut chain, prefix.as_deref())?,
-        Command::Uvslotscan { prefix } => scan::uvslotscan(&mut chain, prefix.as_deref())?,
-        Command::Seqclockscan { prefix } => scan::seqclockscan(&mut chain, prefix.as_deref())?,
-        Command::Uvwrapscan { prefix } => scan::uvwrapscan(&mut chain, prefix.as_deref())?,
-        Command::Fxuvscan { prefix } => scan::fxuvscan(&mut chain, prefix.as_deref())?,
-        Command::Entityuvscan { prefix } => scan::entityuvscan(&mut chain, prefix.as_deref())?,
-        Command::Envmapscan { prefix } => scan::envmapscan(&mut chain, prefix.as_deref())?,
-        Command::Texmodescan { prefix } => scan::texmodescan(&mut chain, prefix.as_deref())?,
-        Command::Fxordercensus { prefix } => scan::fxordercensus(&mut chain, prefix.as_deref())?,
-        Command::Shardcensus { prefix } => scan::shardcensus(&mut chain, prefix.as_deref())?,
-        Command::Idleslotscan { prefix } => scan::idleslotscan(&mut chain, prefix.as_deref())?,
-        Command::Soundeventscan { prefix } => scan::soundeventscan(&mut chain, prefix.as_deref())?,
         Command::Partscan { mask, prefix } => {
             let mask = parse_u32_maybe_hex(&mask)
                 .with_context(|| format!("parsing flag mask '{mask}'"))?;
             scan::partscan(&mut chain, mask, prefix.as_deref())?;
         }
-        Command::M2lightscan { prefix } => scan::m2lightscan(&mut chain, prefix.as_deref())?,
         Command::Skyboxscan => scan::skyboxscan(&mut chain)?,
         Command::Lightbands {
             map,
@@ -788,17 +476,9 @@ fn main() -> Result<()> {
             tile_radius,
             filter,
         } => scan::placescan(&mut chain, &map, center_x, center_y, tile_radius, &filter)?,
-        Command::Doodadscan {
-            map,
-            center_x,
-            center_y,
-            tile_radius,
-        } => scan::doodadscan(&mut chain, &map, center_x, center_y, tile_radius)?,
         Command::Shadeat { map, x, y } => scan::shadeat(&mut chain, &map, x, y)?,
         Command::Spellvis { spell_id } => spellvis::run(&mut chain, spell_id)?,
         Command::Chaincensus => chaincensus::run(&mut chain)?,
-        Command::Shakecensus => shakecensus::shakecensus(&mut chain)?,
-        Command::Thudcensus => thudcensus::thudcensus(&mut chain)?,
         Command::Charprocs => charprocs::run(&mut chain)?,
         Command::Kitanim => kitanim::run(&mut chain)?,
     }

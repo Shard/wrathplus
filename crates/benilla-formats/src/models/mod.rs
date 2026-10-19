@@ -8,12 +8,11 @@ use anyhow::Result;
 use crate::Chain;
 
 mod anim;
-mod anim_summary;
 mod art_extent;
 mod bounds;
 mod collision;
 mod key_anim;
-mod m2_batches;
+pub(crate) mod m2_batches;
 mod mat_anim;
 mod records;
 mod tex_anim;
@@ -22,7 +21,6 @@ mod wmo;
 pub mod wrath;
 mod wrath_effects;
 pub use anim::*;
-pub use anim_summary::*;
 pub use art_extent::*;
 pub use bounds::*;
 pub use collision::*;
@@ -119,18 +117,6 @@ pub(crate) fn model_path(raw: &str) -> String {
         Some(stem) => format!("{stem}.m2"),
         None => lower,
     }
-}
-
-/// Panicking little-endian reads at a byte offset, for the raw walks not on
-/// `benilla_bytes::ByteExt`.
-pub(crate) fn le_u16(b: &[u8], o: usize) -> u16 {
-    u16::from_le_bytes([b[o], b[o + 1]])
-}
-pub(crate) fn le_u32(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
-pub(crate) fn le_f32(b: &[u8], o: usize) -> f32 {
-    f32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
 }
 
 /// Load a GameObject display model by path: a `.wmo` through [`load_wmo`], anything else as an M2.

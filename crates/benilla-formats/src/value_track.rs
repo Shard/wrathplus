@@ -1,15 +1,5 @@
-//! The keyed M2Track sampler shared by the particle and ribbon parsers. Sequence-timeline keys
-//! (`gseq == 0xffff`) sit in each sequence's absolute `[start, end]` band, as bone keys do: an
-//! effect whose sequence 0 spans `[1000, 2600]` bursts at 1000 ms, its first instant. Parsing
-//! rebases them onto sequence 0's band, the one an effect or doodad plays, so seconds since spawn
-//! sample them directly; a model keying an emitter per sequence is sampled on sequence 0 alone.
-
-fn le_u16(b: &[u8], o: usize) -> u16 {
-    u16::from_le_bytes([b[o], b[o + 1]])
-}
-fn le_u32(b: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
-}
+//! The keyed M2Track sampler shared by the particle and ribbon readers: one lane per sequence
+//! slot, keys in sequence-local ms, plus an optional global-sequence clock.
 
 /// A value a track can hold and lerp: `f32` scalars and the ribbon colour track's `[f32; 3]`.
 pub trait TrackValue: Copy {
@@ -44,14 +34,6 @@ pub struct ValueTrack<V = f32> {
 }
 
 impl<V: TrackValue> ValueTrack<V> {
-    /// A single-key constant track (the parse fallback shape).
-    pub(crate) fn constant(v: V) -> Self {
-        Self {
-            keys: vec![(0, v)],
-            interp: 0,
-        }
-    }
-
     /// The first key's value, for constant-track parameters and diagnostics.
     pub fn first(&self) -> V {
         self.keys.first().map_or(V::ZERO, |&(_, v)| v)
@@ -180,16 +162,6 @@ pub struct SeqTrack<V = f32> {
 }
 
 impl<V: TrackValue> SeqTrack<V> {
-    /// One lane read on every slot, as the 1.12 parse rebases a track onto sequence 0.
-    pub(crate) fn single(track: ValueTrack<V>, default: V) -> Self {
-        Self {
-            global_period_ms: None,
-            slots: vec![track],
-            default,
-            unkeyed: default,
-        }
-    }
-
     /// Whether any lane is keyed.
     pub fn is_keyed(&self) -> bool {
         self.slots.iter().any(|t| !t.keys.is_empty())
@@ -235,83 +207,6 @@ impl SeqTrack<f32> {
     }
 }
 
-/// Rebase a track from the global timeline onto a sequence's `[start, end]` band: in-band keys
-/// shift by `-start`, the last key at or before `start` becomes `t = 0`, and the first at or
-/// after `end` closes the band at `end - start`.
-pub(crate) fn rebase_keys_to_band<V: Copy>(keys: &mut Vec<(u32, V)>, start: u32, end: u32) {
-    if keys.is_empty() || (start == 0 && keys.last().is_some_and(|&(t, _)| t <= end)) {
-        return; // already 0-based and in band, the common ambient-prop shape
-    }
-    let mut out: Vec<(u32, V)> = Vec::with_capacity(keys.len());
-    for &(t, v) in keys.iter() {
-        if t <= start {
-            // Collapse everything at or before the band start to the t=0 key (last one wins).
-            match out.first_mut() {
-                Some(first) if first.0 == 0 => *first = (0, v),
-                _ => out.insert(0, (0, v)),
-            }
-        } else if t < end {
-            out.push((t - start, v));
-        } else {
-            out.push((end - start, v));
-            break; // first key at/past the end closes the band
-        }
-    }
-    *keys = out;
-}
-
-/// The first sequence's absolute time band; a sequence-less model gets the whole timeline.
-pub(crate) fn seq0_band(bytes: &[u8]) -> (u32, u32) {
-    let (n_seq, o_seq) = (le_u32(bytes, 0x1c) as usize, le_u32(bytes, 0x20) as usize);
-    if n_seq > 0 && o_seq + 0x44 <= bytes.len() {
-        (le_u32(bytes, o_seq + 4), le_u32(bytes, o_seq + 8))
-    } else {
-        (0, u32::MAX)
-    }
-}
-
-/// A vanilla M2Track's `(gseq, n, timestamps offset, values offset)`.
-fn track_arrays(b: &[u8], track: usize) -> Option<(u16, usize, usize, usize)> {
-    if track + 0x1c > b.len() {
-        return None;
-    }
-    let gseq = le_u16(b, track + 0x02);
-    let tn = le_u32(b, track + 0x0c) as usize;
-    let tofs = le_u32(b, track + 0x10) as usize;
-    let vn = le_u32(b, track + 0x14) as usize;
-    let vofs = le_u32(b, track + 0x18) as usize;
-    let n = tn.min(vn);
-    (n > 0 && tofs + n * 4 <= b.len()).then_some((gseq, n, tofs, vofs))
-}
-
-/// Read an M2Track's keys, `elem`-byte values decoded by `read`; sequence keys are rebased to
-/// `band`, global-sequence ones keep their clock, and an empty or truncated track is `default`.
-pub(crate) fn track_keys_with<V: TrackValue>(
-    b: &[u8],
-    track: usize,
-    default: V,
-    band: (u32, u32),
-    elem: usize,
-    read: impl Fn(&[u8], usize) -> V,
-) -> ValueTrack<V> {
-    let Some((gseq, n, tofs, vofs)) = track_arrays(b, track) else {
-        return ValueTrack::constant(default);
-    };
-    if vofs + n * elem > b.len() {
-        return ValueTrack::constant(default);
-    }
-    let mut keys: Vec<(u32, V)> = (0..n)
-        .map(|i| (le_u32(b, tofs + i * 4), read(b, vofs + i * elem)))
-        .collect();
-    if gseq == 0xffff {
-        rebase_keys_to_band(&mut keys, band.0, band.1);
-    }
-    ValueTrack {
-        keys,
-        interp: le_u16(b, track),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,7 +225,10 @@ mod tests {
         assert_eq!(t.sample_ms(500.0), 0.0); // clamp past last key
         assert_eq!(t.peak(), 200.0);
         assert_eq!(t.first(), 0.0);
-        let c = ValueTrack::constant(7.5);
+        let c = ValueTrack {
+            keys: vec![(0, 7.5)],
+            interp: 0,
+        };
         assert_eq!(c.sample_ms(0.0), 7.5);
         assert_eq!(c.sample_ms(9999.0), 7.5);
         assert_eq!(ValueTrack::<f32>::default().sample_ms(10.0), 0.0);
@@ -394,25 +292,5 @@ mod tests {
         assert!((mid[1] - 0.5).abs() < 1e-6);
         assert!((mid[2] - 0.25).abs() < 1e-6);
         assert_eq!(t.sample_ms(500.0), [0.0, 1.0, 0.5]);
-    }
-
-    #[test]
-    fn band_rebase_collapses_and_shifts() {
-        // MoltenBlast_Impact_Chest em0's shape: seq band [1000, 2600], burst keyed at its start.
-        let mut keys = vec![(1000u32, 0.0f32), (1133, 60.0)];
-        rebase_keys_to_band(&mut keys, 1000, 2600);
-        assert_eq!(keys, vec![(0, 0.0), (133, 60.0)]);
-        // A constant single key at t=0 with a late band (Fire_Cast_Hand's rate): hold survives.
-        let mut keys = vec![(0u32, 21.4f32)];
-        rebase_keys_to_band(&mut keys, 3333, 4333);
-        assert_eq!(keys, vec![(0, 21.4)]);
-        // Multiple pre-band keys: only the last one (the band-start value) survives, at t=0.
-        let mut keys = vec![(0u32, 1.0f32), (500, 2.0), (1200, 3.0), (3000, 4.0)];
-        rebase_keys_to_band(&mut keys, 1000, 2000);
-        assert_eq!(keys, vec![(0, 2.0), (200, 3.0), (1000, 4.0)]);
-        // 0-based in-band track (BloodSpurt): identity.
-        let mut keys = vec![(0u32, 100.0f32), (500, -100.0), (667, -100.0)];
-        rebase_keys_to_band(&mut keys, 0, 667);
-        assert_eq!(keys, vec![(0, 100.0), (500, -100.0), (667, -100.0)]);
     }
 }

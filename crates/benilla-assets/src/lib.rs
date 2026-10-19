@@ -37,7 +37,7 @@ pub use model::{
 mod adt;
 mod terrain;
 mod wdt;
-pub use adt::{chunk_to_mesh, chunks_to_mesh, AdtLoader, AdtTile, ChunkShading, WrathAdtLoader};
+pub use adt::{chunk_to_mesh, chunks_to_mesh, AdtTile, ChunkShading, WrathAdtLoader};
 pub use wdt::{WdtIndex, WdtIndexLoader};
 mod blp;
 pub use blp::{BlpImageLoader, BlpLoaderSettings, BlpVariant};
@@ -48,7 +48,7 @@ mod tex_filter;
 pub use tex_filter::{publish_tex_filter, tex_filter, TexFilterSetting, ANISO_RANGE};
 mod m2;
 pub use m2::{
-    EmitterBillboard, M2Model, M2ModelLoader, M2SequenceInfo, ModelEmitter, ModelLight,
+    EmitterBillboard, M2Model, M2SequenceInfo, ModelEmitter, ModelLight,
     ModelRibbon, PortraitCamera, WrathM2ModelLoader,
 };
 mod wmo;
@@ -598,7 +598,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         let (geometries, textured, has_bounds) =
-            info.expect("the campfire M2 should load via mpq:// + M2ModelLoader within 600 ticks");
+            info.expect("the campfire M2 should load via mpq:// within 600 ticks");
         assert!(
             !geometries.is_empty(),
             "campfire should have render batches"
@@ -709,7 +709,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         let (cells, n_shading, layer_h, alpha_h, shadow_h, n_doodads) =
-            info.expect("the ADT tile should load via mpq:// + AdtLoader");
+            info.expect("the ADT tile should load via mpq:// + WrathAdtLoader");
 
         // One mesh per drawn MCNK chunk, a 145-vertex 9×9 + 8×8 grid.
         assert_eq!(n_shading, cells.len(), "one ChunkShading per decoded chunk");
