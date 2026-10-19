@@ -140,7 +140,7 @@ impl Plugin for NetPlugin {
                 "network backend/data snapshot dialect mismatch"
             );
         }
-        let handles = io::spawn_net(self.connect, dialect);
+        let handles = io::spawn_net(self.connect);
         if !self.connect {
             app.insert_resource(NetOffline);
         }
@@ -528,6 +528,7 @@ pub(crate) struct NetCommandsRaw(pub(crate) CommandSender);
 pub(crate) type NetCommands = NetCommandsRaw;
 
 #[allow(non_snake_case)]
+#[cfg(test)]
 pub(crate) fn NetCommands(sender: Sender<ClientCommand>) -> NetCommands {
     NetCommandsRaw(CommandSender::Raw(sender))
 }
@@ -536,6 +537,7 @@ pub(crate) fn NetCommands(sender: Sender<ClientCommand>) -> NetCommands {
 /// Wrath backend stamps the epoch in this `send` call made by the actual ECS producer.
 #[derive(Clone)]
 pub(crate) enum CommandSender {
+    /// A fixture's raw channel, or the offline (capture mode) sink.
     Raw(Sender<ClientCommand>),
     Session(SessionCommandSender),
 }
@@ -1020,9 +1022,8 @@ impl MoveKind {
     }
 }
 
-/// The `ChatMsg` type an addon broadcast rides: the client's four-lane whitelist
-/// (`0x49fa3f`-`0x49fa4e`).
-/// [`addon_wire_chat_type`] in build 12340's `ChatMsg` numbering.
+/// The `ChatMsg` type an addon broadcast rides, in build 12340's numbering: the client's lane
+/// whitelist (`0x49fa3f`-`0x49fa4e`).
 pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
     use benilla_ui::script::AddonDistribution as D;
     match distribution {
@@ -1031,19 +1032,6 @@ pub(crate) fn wrath_addon_chat_type(distribution: benilla_ui::script::AddonDistr
         D::Guild => 0x04,
         D::Battleground => 0x2c,
         D::Whisper => 0x07,
-    }
-}
-
-pub(crate) fn addon_wire_chat_type(distribution: benilla_ui::script::AddonDistribution) -> u32 {
-    use benilla_protocol::messages as m;
-    use benilla_ui::script::AddonDistribution as D;
-    match distribution {
-        D::Party => m::CHAT_TYPE_PARTY,
-        D::Raid => m::CHAT_TYPE_RAID,
-        D::Guild => m::CHAT_TYPE_GUILD,
-        D::Battleground => m::CHAT_TYPE_BATTLEGROUND,
-        // Only the 12340 binding produces it; 1.12 has no whispered addon message.
-        D::Whisper => m::CHAT_TYPE_WHISPER,
     }
 }
 
@@ -1105,27 +1093,6 @@ impl ChatKind {
         }
     }
 
-    /// The `CMSG_MESSAGECHAT` `type` field.
-    pub(crate) fn chat_type(self) -> u32 {
-        use benilla_protocol::messages as m;
-        match self {
-            Self::Say => m::CHAT_TYPE_SAY,
-            Self::Yell => m::CHAT_TYPE_YELL,
-            Self::Emote => m::CHAT_TYPE_EMOTE,
-            Self::Whisper => m::CHAT_TYPE_WHISPER,
-            Self::Party => m::CHAT_TYPE_PARTY,
-            Self::Raid => m::CHAT_TYPE_RAID,
-            Self::RaidLeader => m::CHAT_TYPE_RAID_LEADER,
-            Self::RaidWarning => m::CHAT_TYPE_RAID_WARNING,
-            Self::Guild => m::CHAT_TYPE_GUILD,
-            Self::Officer => m::CHAT_TYPE_OFFICER,
-            Self::Battleground => m::CHAT_TYPE_BATTLEGROUND,
-            Self::BattlegroundLeader => m::CHAT_TYPE_BATTLEGROUND_LEADER,
-            Self::Afk => m::CHAT_TYPE_AFK,
-            Self::Dnd => m::CHAT_TYPE_DND,
-            Self::Channel => m::CHAT_TYPE_CHANNEL,
-        }
-    }
 }
 
 /// `WOW_CAST_TRACE=1`: log our own cast packets and every outbound movement packet. vmangos
@@ -1135,6 +1102,9 @@ pub(crate) static CAST_TRACE: std::sync::LazyLock<bool> =
 
 /// A message to the server through the write thread, carrying any pose it needs.
 #[derive(Debug)]
+// The 1.12-only variants and fields go with `SessionDialect::Vanilla5875` (Vanilla removal step 4);
+// the deleted 1.12 writer was their last reader.
+#[allow(dead_code)]
 pub(crate) enum ClientCommand {
     /// A self-movement packet. Each tail is written iff its flag is set (`JUMPING`, `SWIMMING`,
     /// `ON_TRANSPORT`): a flag without its tail desyncs the server's parse.
@@ -3175,43 +3145,14 @@ mod tests {
         );
     }
 
-    /// The whitelist at `0x49fa3f`-`0x49fa4e`. vmangos would accept `LANG_ADDON` on the refused
-    /// lanes too; the client never sends on them.
+    /// The whitelist at `0x49fa3f`-`0x49fa4e`, in build 12340's `ChatMsg` numbering.
     #[test]
-    fn addon_distributions_map_to_the_clients_own_four_wire_types() {
-        use benilla_protocol::messages as m;
+    fn addon_distributions_map_to_the_clients_own_wire_types() {
         use benilla_ui::script::AddonDistribution as D;
-
-        assert_eq!(addon_wire_chat_type(D::Party), 0x01, "CHAT_MSG_PARTY");
-        assert_eq!(addon_wire_chat_type(D::Raid), 0x02, "CHAT_MSG_RAID");
-        assert_eq!(addon_wire_chat_type(D::Guild), 0x03, "CHAT_MSG_GUILD");
         assert_eq!(
-            addon_wire_chat_type(D::Battleground),
-            0x5C,
-            "CHAT_MSG_BATTLEGROUND"
+            [D::Party, D::Raid, D::Guild, D::Battleground, D::Whisper].map(wrath_addon_chat_type),
+            [0x02, 0x03, 0x04, 0x2c, 0x07]
         );
-
-        // No distribution reaches a lane the reference refuses.
-        let image: Vec<u32> = [D::Party, D::Raid, D::Guild, D::Battleground]
-            .into_iter()
-            .map(addon_wire_chat_type)
-            .collect();
-        for refused in [
-            m::CHAT_TYPE_SAY,
-            m::CHAT_TYPE_YELL,
-            m::CHAT_TYPE_WHISPER,
-            m::CHAT_TYPE_EMOTE,
-            m::CHAT_TYPE_OFFICER,
-            m::CHAT_TYPE_CHANNEL,
-            m::CHAT_TYPE_RAID_LEADER,
-            m::CHAT_TYPE_RAID_WARNING,
-            m::CHAT_TYPE_BATTLEGROUND_LEADER,
-        ] {
-            assert!(
-                !image.contains(&refused),
-                "{refused:#04x} is a lane the client never sends addon data on"
-            );
-        }
     }
 
     #[test]

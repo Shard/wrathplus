@@ -249,7 +249,7 @@ impl ChatLog {
             Some(i) => (text[..i].to_string(), text[i + 1..].to_string()),
             None => (text.to_string(), String::new()),
         };
-        // The protocol's constants, the same ones `crate::net::addon_wire_chat_type` sends.
+        // The protocol's `CHAT_TYPE_*` constants.
         let distribution = {
             use benilla_protocol::messages as m;
             match u32::from(chat_type) {
