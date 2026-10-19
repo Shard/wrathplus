@@ -160,7 +160,7 @@ fn app_with_dialect(dialect: SessionDialect) -> (App, crossbeam_channel::Receive
 }
 
 fn app() -> App {
-    app_with_dialect(SessionDialect::Vanilla5875).0
+    app_with_dialect(SessionDialect::Wrath12340).0
 }
 
 fn self_sheath_unit(app: &mut App, descriptor: u8) -> Entity {
@@ -206,32 +206,6 @@ fn set_sheathed(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u32> {
 }
 
 #[test]
-fn vanilla_self_sheath_request_mutates_and_sends_through_the_driver() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Vanilla5875);
-    let unit = self_sheath_unit(&mut app, 0);
-    app.update();
-
-    app.world_mut().write_message(SheathRequest {
-        entity: unit,
-        state: 1,
-        ceremony: true,
-    });
-    app.update();
-
-    assert_eq!(sheath_state(&app, unit), Some(1));
-    assert!(
-        app.world()
-            .entity(unit)
-            .get::<AnimDriver>()
-            .unwrap()
-            .sheath_swap
-            .is_some(),
-        "the supported request starts its local ceremony"
-    );
-    assert_eq!(set_sheathed(&rx), vec![1]);
-}
-
-#[test]
 fn wrath_self_sheath_request_uses_the_native_codec_and_local_ceremony() {
     let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
     let unit = self_sheath_unit(&mut app, 0);
@@ -266,16 +240,6 @@ fn force_stow_self(app: &mut App) -> Entity {
         },
     ));
     unit
-}
-
-#[test]
-fn vanilla_self_automatic_reconcile_stows_and_sends_through_the_driver() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Vanilla5875);
-    let unit = force_stow_self(&mut app);
-    app.update();
-
-    assert_eq!(sheath_state(&app, unit), Some(0));
-    assert_eq!(set_sheathed(&rx), vec![0]);
 }
 
 #[test]

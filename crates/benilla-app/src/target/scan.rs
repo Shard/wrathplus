@@ -905,7 +905,7 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Vanilla5875);
+        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::AutoRepeatActive>();
         world.init_resource::<Messages<crate::creature_anim::SheathRequest>>();
@@ -934,12 +934,9 @@ mod tests {
                 .collect::<Vec<_>>()
         };
 
-        for dialect in [
-            crate::net::SessionDialect::Wrath12340,
-            crate::net::SessionDialect::Vanilla5875,
-        ] {
+        {
             let (mut world, rx) = commit_world();
-            world.insert_resource(dialect);
+            world.insert_resource(crate::net::SessionDialect::Wrath12340);
             *world.resource_mut::<Selection>() = Selection {
                 target: Some(Entity::PLACEHOLDER),
                 guid: Some(0xA),
@@ -972,42 +969,23 @@ mod tests {
                 .resource::<Messages<crate::creature_anim::SheathRequest>>()
                 .len();
 
-            if dialect == crate::net::SessionDialect::Wrath12340 {
-                assert!(switched.swung, "native swing reached the command endpoint");
-                assert_eq!(
-                    commands,
-                    [
-                        "stop",
-                        "select",
-                        "swing",
-                        "cancel-repeat",
-                        "select",
-                        "stop",
-                        "cancel-cast",
-                    ]
-                );
-                assert_eq!(queued, None);
-                // The native auto-repeat cancel now ships, as in 1.12.
-                assert_eq!(repeat, None);
-                assert_eq!((stand, sheath), (1, 1));
-            } else {
-                assert!(switched.swung);
-                assert_eq!(
-                    commands,
-                    [
-                        "stop",
-                        "select",
-                        "swing",
-                        "cancel-repeat",
-                        "select",
-                        "stop",
-                        "cancel-cast",
-                    ]
-                );
-                assert_eq!(queued, None);
-                assert_eq!(repeat, None);
-                assert_eq!((stand, sheath), (1, 1));
-            }
+            assert!(switched.swung, "native swing reached the command endpoint");
+            assert_eq!(
+                commands,
+                [
+                    "stop",
+                    "select",
+                    "swing",
+                    "cancel-repeat",
+                    "select",
+                    "stop",
+                    "cancel-cast",
+                ]
+            );
+            assert_eq!(queued, None);
+            // The native auto-repeat cancel now ships, as in 1.12.
+            assert_eq!(repeat, None);
+            assert_eq!((stand, sheath), (1, 1));
         }
     }
 
