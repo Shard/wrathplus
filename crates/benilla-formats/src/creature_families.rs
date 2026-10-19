@@ -14,13 +14,13 @@ use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
 use crate::chain::Chain;
-use crate::dbc::{f32_at, parse, str_at, u32_at};
+use crate::dbc::{f32_at, i32_at, parse, str_at, u32_at};
 
 const CREATURE_FAMILY: &str = "DBFilesClient\\CreatureFamily.dbc";
 const ITEM_PET_FOOD: &str = "DBFilesClient\\ItemPetFood.dbc";
 
 /// `CreatureFamily.dbc`'s field count, which `benilla-dbc` checks against the header.
-const FAMILY_FIELDS: usize = 18;
+const FAMILY_FIELDS: usize = 19;
 const FOOD_FIELDS: usize = 10;
 
 const FAMILY_MIN_SCALE_FIELD: usize = 1;
@@ -32,6 +32,9 @@ const FAMILY_FOOD_MASK_FIELD: usize = 0x1c / 4;
 const FAMILY_NAME_FIELD: usize = 0x20 / 4;
 /// `iconFile`, after the name block's locale flags.
 const FAMILY_ICON_FIELD: usize = 0x44 / 4;
+/// Build 12340's pet talent type (`+0x20`, `GetPetTalentTree` `0x5d3d80`), appended past the 1.12
+/// width and mapped by [`crate::wrath_layouts`]; -1 for a family without pet talents.
+const FAMILY_PET_TALENT_TYPE_FIELD: usize = 18;
 /// `ItemPetFood.dbc`'s enUS name.
 const FOOD_NAME_FIELD: usize = 1;
 
@@ -52,6 +55,8 @@ pub struct CreatureFamily {
     pub min_scale_level: u32,
     pub max_scale: f32,
     pub max_scale_level: u32,
+    /// The pet talent type, the `TalentTab` pet-mask bit; -1 for none.
+    pub pet_talent_type: i32,
 }
 
 impl CreatureFamily {
@@ -191,6 +196,7 @@ pub fn load_creature_families(chain: &mut Chain) -> Result<CreatureFamilies> {
                 min_scale_level: u32_at(r, FAMILY_MIN_SCALE_LEVEL_FIELD).unwrap_or(0),
                 max_scale: f32_at(r, FAMILY_MAX_SCALE_FIELD).unwrap_or(1.0),
                 max_scale_level: u32_at(r, FAMILY_MAX_SCALE_LEVEL_FIELD).unwrap_or(0),
+                pet_talent_type: i32_at(r, FAMILY_PET_TALENT_TYPE_FIELD).unwrap_or(-1),
             },
         );
     }
@@ -220,6 +226,27 @@ mod tests {
     fn chain() -> Option<Chain> {
         let data = crate::wow_data_or_skip!(None);
         Some(crate::open_chain(&data).expect("open chain"))
+    }
+
+    /// Build 12340's pet talent type: Ferocity 0, Tenacity 1, Cunning 2; -1 off the hunter pets.
+    #[test]
+    fn installed_families_carry_their_pet_talent_type() {
+        let data = crate::wow_data_or_skip!();
+        let profile = crate::DataProfile::from_env().expect("profile");
+        if !matches!(profile, crate::DataProfile::Wrath { .. }) {
+            return;
+        }
+        let mut chain = Chain::open_profile(&data, &profile).expect("open chain");
+        let fams = load_creature_families(&mut chain).expect("families");
+        let ty = |id| fams.get(id).map(|f| f.pet_talent_type);
+        assert_eq!(ty(1), Some(0), "Wolf is Ferocity");
+        assert_eq!(ty(21), Some(1), "Turtle is Tenacity");
+        assert_eq!(ty(20), Some(1), "Scorpid is Tenacity in build 12340");
+        assert_eq!(ty(23), Some(-1), "the Imp has no pet talents");
+        assert!(
+            (1..=60).any(|id| ty(id) == Some(2)),
+            "some family is Cunning"
+        );
     }
 
     /// Field 17 sits behind locale slots typed as dwords, so a column slip reads an empty path.

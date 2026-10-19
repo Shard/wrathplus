@@ -225,6 +225,8 @@ impl PluginGroup for GamePlugins {
             .add(ChrClassesPlugin)
             .add(UiPetBookPlugin)
             .add(UiPetStatsPlugin)
+            .add(crate::ui_pet_talent_tree::UiPetTalentTreePlugin)
+            .add(crate::ui_vehicle::UiVehiclePlugin)
             .add(UiCompanionsPlugin)
             .add(UiTotemsPlugin)
             .add(UiGlyphsPlugin)
@@ -734,11 +736,13 @@ pub(crate) mod schedule_tests {
     ///   eviction, the classes `feed_guild_bank` is argued for above (the item and display caches
     ///   only fill or evict between their reads), and the drain against the collider finish over
     ///   the object stores it reads only.
+    /// - the vehicle UI feed (`ui_vehicle::feed_vehicles`) against the camera-pose load: the feed
+    ///   reads only `Player::mover_pitch`, which the load never writes.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_670;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_671;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {
