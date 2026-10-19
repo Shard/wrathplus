@@ -442,6 +442,8 @@ fn set_trade_skill_item_indexes_visible_rows_not_raw_recipes() {
             ts_recipe(4, "Alpha Cloak", (2, 1, "Cloak")),
         ],
         repeat_count: 1,
+        linked: None,
+        list_link: None,
     }));
     assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 6);
 

@@ -268,6 +268,14 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
     m.set(
         "SetHyperlink",
         lua.create_function(|lua, (this, link): (Table, String)| {
+            // Build 12340's trade link opens the linker's TradeSkill window (`0x5de120`), no tooltip.
+            if link.starts_with("trade:") || link.contains("|Htrade:") {
+                lua.app_data_mut::<Model>()
+                    .expect("model app_data")
+                    .trade_link_clicks
+                    .push(link);
+                return Ok(());
+            }
             // The only other link it takes, the craft window's `|Henchant:<spellId>|h[name]|h`
             // (`GetCraftItemLink`): the spell's own tooltip, behind its producer's castUI gate
             // (`0x532243`).

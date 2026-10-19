@@ -117,6 +117,12 @@ pub struct TradeSkillState {
     pub recipes: Vec<TradeSkillRecipe>,
     /// Remaining Create All repeats (`0x500230`), decremented by the app as each cast resolves.
     pub repeat_count: u32,
+    /// The linked window's owner (`IsTradeSkillLinked`, `0x5da310`): their name, empty until the
+    /// name cache answers; `None` for our own book.
+    pub linked: Option<String>,
+    /// `GetTradeSkillListLink` (`0x5dc0b0`): our own trade link for the open line's opener, `None`
+    /// when the line cannot link or we lack the skill.
+    pub list_link: Option<String>,
 }
 
 impl super::UiScript {
@@ -190,5 +196,11 @@ impl super::UiScript {
     /// Whether `StopTradeSkillRepeat` ran since the last drain: the Create All loop stops.
     pub fn take_trade_skill_stop_repeat(&mut self) -> bool {
         std::mem::take(&mut self.model_mut().trade_skill_stop_repeat)
+    }
+
+    /// The trade links clicked since the last drain, each a raw `trade:…` or escaped link; the app
+    /// opens the linked window (`0x5de120`).
+    pub fn take_trade_link_clicks(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.model_mut().trade_link_clicks)
     }
 }

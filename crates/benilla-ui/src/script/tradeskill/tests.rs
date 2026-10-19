@@ -59,6 +59,8 @@ fn two_recipe_state() -> TradeSkillState {
             ),
         ],
         repeat_count: 3,
+        linked: None,
+        list_link: None,
     }
 }
 
@@ -109,6 +111,8 @@ fn state() -> TradeSkillState {
             recipe(6, "Mystery Item", TradeSkillDifficulty::Easy, 1, None),
         ],
         repeat_count: 3,
+        linked: None,
+        list_link: None,
     }
 }
 
@@ -778,6 +782,8 @@ fn same_tier_recipes_order_by_product_item_level_before_name() {
         max_rank: 75,
         recipes: vec![aaa, zzz, mid],
         repeat_count: 0,
+        linked: None,
+        list_link: None,
     }));
     // Header, then: Mmm(10) before Zzz(10) by name, both before Aaa(30) despite the alphabet.
     let names: Vec<String> = (1..=4)
@@ -879,17 +885,25 @@ fn wrath_filters_description_and_recipe_link() {
     // Row 1 is the Cloth header, row 2 Simple Robe (tier 0), row 3 Bolt of Linen Cloth.
     assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 3);
     assert_eq!(
-        s.eval::<String>("return GetTradeSkillDescription(3)").unwrap(),
+        s.eval::<String>("return GetTradeSkillDescription(3)")
+            .unwrap(),
         "Weave a bolt."
     );
-    assert!(s.eval::<bool>("return GetTradeSkillDescription(2) == nil").unwrap());
+    assert!(s
+        .eval::<bool>("return GetTradeSkillDescription(2) == nil")
+        .unwrap());
     assert_eq!(
-        s.eval::<String>("return GetTradeSkillRecipeLink(3)").unwrap(),
+        s.eval::<String>("return GetTradeSkillRecipeLink(3)")
+            .unwrap(),
         "|cffffd000|Henchant:2963|h[Tailoring: Bolt of Linen Cloth]|h|r"
     );
     s.run("TradeSkillOnlyShowMakeable(true)").unwrap();
     assert!(s.take_trade_skill_touched());
-    assert_eq!(s.eval::<i64>("return GetNumTradeSkills()").unwrap(), 2, "the robe has 0");
+    assert_eq!(
+        s.eval::<i64>("return GetNumTradeSkills()").unwrap(),
+        2,
+        "the robe has 0"
+    );
     s.run("TradeSkillOnlyShowMakeable(false) SetTradeSkillItemNameFilter('ROBE')")
         .unwrap();
     assert!(s.take_trade_skill_filter_touched());
@@ -901,9 +915,31 @@ fn wrath_filters_description_and_recipe_link() {
         0,
         "both products are level 0, and an emptied group drops its header"
     );
-    s.run("SetTradeSkillItemLevelFilter(0, 0) StopTradeSkillRepeat()").unwrap();
+    s.run("SetTradeSkillItemLevelFilter(0, 0) StopTradeSkillRepeat()")
+        .unwrap();
     assert!(s.take_trade_skill_stop_repeat());
     assert!(s
         .eval::<bool>("local a, b = IsTradeSkillLinked() return a == nil and b == nil and GetTradeSkillListLink() == nil")
         .unwrap());
+}
+
+#[test]
+fn wrath_linked_window_and_list_link_read_the_pushed_state() {
+    let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+    let link = "|cffffd000|Htrade:2259:75:150:2A:D|h[Alchemy]|h|r";
+    s.set_trade_skill(Some(TradeSkillState {
+        linked: Some("Brewmaster".into()),
+        list_link: Some(link.into()),
+        ..state()
+    }));
+    assert_eq!(
+        s.eval::<String>("return GetTradeSkillListLink()").unwrap(),
+        link
+    );
+    assert!(s
+        .eval::<bool>("local a, b = IsTradeSkillLinked() return a == 1 and b == 'Brewmaster'")
+        .unwrap());
+    s.run("CreateFrame('GameTooltip', 'TT'):SetHyperlink('trade:2259:75:150:2A:D')")
+        .unwrap();
+    assert_eq!(s.take_trade_link_clicks(), ["trade:2259:75:150:2A:D"]);
 }

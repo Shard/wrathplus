@@ -251,7 +251,9 @@ pub use spells::{
 };
 mod skill_lines;
 pub use skill_lines::{
-    load_skill_line_catalog, SkillLineCatalog, SkillLineInfo, SkillRaceClass, SlaInfo,
+    decode_trade_mask, encode_trade_mask, load_skill_line_catalog, parse_trade_link,
+    race_class_admits, trade_link, trade_mask_len, LineAbility, SkillLineCatalog, SkillLineInfo,
+    SkillRaceClass, SlaInfo, TradeLink,
 };
 mod spell_focus;
 mod spell_mechanic;
