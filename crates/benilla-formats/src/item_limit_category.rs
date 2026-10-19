@@ -97,9 +97,7 @@ pub fn parse_item_limit_categories(bytes: &[u8], locale: &str) -> Result<ItemLim
 
 /// Uses the boot-resolved chain only. Required read/decode failures propagate.
 pub fn load_item_limit_categories(chain: &mut Chain) -> Result<ItemLimitCategoryCatalog> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("ItemLimitCategory requires Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let bytes = chain
         .read_file("DBFilesClient\\ItemLimitCategory.dbc")

@@ -1,4 +1,4 @@
-//! The vanilla patch chain: a priority-ordered set of MPQ archives, read through `benilla-mpq`. A
+//! The 3.3.5a patch chain: a priority-ordered set of MPQ archives, read through `benilla-mpq`. A
 //! read resolves a name to the highest-priority archive holding it, so a patch wins; base archives
 //! carry no `(listfile)`, so resolution is by name hash.
 
@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use benilla_mpq::Archive;
-
-use crate::VANILLA_BASE_ORDER;
 
 /// One entry from a chain listing: an internal path and its uncompressed size.
 pub struct ChainEntry {
@@ -22,43 +20,6 @@ pub struct Chain {
     archives: Vec<Archive>,
     overrides: crate::AssetOverrides,
     profile: crate::DataProfile,
-}
-
-/// `patch-?.MPQ` as the reference's `FindFirstFileW` glob matches it (template `0x82edbc`, wrapper
-/// `0x42ad10`): `?` is exactly one character, any case, so `patch-10.MPQ` never mounts.
-fn is_patch_glob_match(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    let Some(mid) = lower
-        .strip_prefix("patch-")
-        .and_then(|rest| rest.strip_suffix(".mpq"))
-    else {
-        return false;
-    };
-    mid.chars().count() == 1
-}
-
-/// The reference's mount order over a `Data` listing, ascending priority (`0x403740`): the ten
-/// [`VANILLA_BASE_ORDER`] archives, `patch.MPQ`, every `patch-?.MPQ` by case-folded name (the
-/// reference sorts descending with `strnicmp` and walks backwards), then `speech2.MPQ`. Names
-/// match case-insensitively and come back as found on disk.
-fn mount_order(dir_names: &[String]) -> Vec<String> {
-    let find = |want: &str| {
-        dir_names
-            .iter()
-            .find(|n| n.eq_ignore_ascii_case(want))
-            .cloned()
-    };
-    let mut order: Vec<String> = VANILLA_BASE_ORDER.iter().filter_map(|b| find(b)).collect();
-    order.extend(find("patch.MPQ"));
-    let mut patches: Vec<String> = dir_names
-        .iter()
-        .filter(|n| is_patch_glob_match(n))
-        .cloned()
-        .collect();
-    patches.sort_by_key(|n| n.to_ascii_lowercase());
-    order.extend(patches);
-    order.extend(find("speech2.MPQ"));
-    order
 }
 
 const WRATH_ROOT_BASE_ORDER: &[&str] = &[
@@ -176,50 +137,24 @@ fn wrath_mount_plan(path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
 }
 
 impl Chain {
-    /// Open a `Data` directory's archives in [`mount_order`], or a single `.MPQ` file.
-    ///
-    /// Deviation: an archive that fails to open is an error, where the reference logs
-    /// `"Failed to open archive"` and goes on, because a skipped corrupt archive surfaces only as
-    /// missing files far downstream.
+    /// Open a `Data` directory's archives in the default profile's mount plan
+    /// ([`Chain::open_wrath`], `enUS`), or a single `.MPQ` file.
     pub fn open(path: &Path) -> Result<Self> {
-        let mut archives = Vec::new();
         if path.is_dir() {
-            let mut names: Vec<String> = std::fs::read_dir(path)
-                .with_context(|| format!("listing {}", path.display()))?
-                .filter_map(|entry| {
-                    let entry = entry.ok()?;
-                    // `path().is_file()` follows symlinks (`read_dir`'s file_type doesn't).
-                    entry.path().is_file().then(|| entry.file_name())
-                })
-                .filter_map(|name| name.into_string().ok())
-                .collect();
-            // read_dir order is arbitrary; sort so case-variant ties resolve deterministically.
-            names.sort();
-            for name in mount_order(&names) {
-                let mpq = path.join(&name);
-                archives.push(
-                    Archive::open(&mpq).with_context(|| format!("opening {}", mpq.display()))?,
-                );
-            }
-            if archives.is_empty() {
-                bail!("no known vanilla MPQs found in {}", path.display());
-            }
-        } else {
-            archives.push(
-                Archive::open(path).with_context(|| format!("opening MPQ {}", path.display()))?,
-            );
+            return Self::open_profile(path, &crate::DataProfile::default());
         }
         Ok(Self {
-            archives,
+            archives: vec![
+                Archive::open(path).with_context(|| format!("opening MPQ {}", path.display()))?
+            ],
             overrides: crate::AssetOverrides::default(),
-            profile: crate::DataProfile::Vanilla,
+            profile: crate::DataProfile::default(),
         })
     }
 
     /// Open using an explicit dialect without probing or guessing from archive names.
     pub fn open_profile(path: &Path, profile: &crate::DataProfile) -> Result<Self> {
         match profile {
-            crate::DataProfile::Vanilla => Self::open(path),
             crate::DataProfile::Wrath { locale } => Self::open_wrath(path, locale),
         }
     }
@@ -428,66 +363,6 @@ mod tests {
                     .replace('\\', "/")
             })
             .collect()
-    }
-
-    #[test]
-    fn patch_glob_matches_exactly_one_character_case_insensitively() {
-        assert!(is_patch_glob_match("patch-2.MPQ"));
-        assert!(is_patch_glob_match("patch-3.MPQ"));
-        assert!(is_patch_glob_match("PATCH-A.mpq"));
-        assert!(!is_patch_glob_match("patch-.MPQ"));
-        assert!(!is_patch_glob_match("patch-10.MPQ"));
-        assert!(!is_patch_glob_match("patch-33.MPQ"));
-        assert!(!is_patch_glob_match("patch.MPQ"));
-        assert!(!is_patch_glob_match("patch-2.MPQ.bak"));
-        assert!(!is_patch_glob_match("mypatch-2.MPQ"));
-    }
-
-    #[test]
-    fn mount_order_is_the_carved_law() {
-        // base.MPQ is telemetry-only in the reference and never mounts.
-        let dir = owned(&[
-            "patch-2.MPQ",
-            "backup.MPQ",
-            "model.MPQ",
-            "base.MPQ",
-            "dbc.MPQ",
-            "patch.MPQ",
-            "eula.html",
-            "patch-3.MPQ",
-            "speech2.MPQ",
-            "texture.MPQ",
-        ]);
-        assert_eq!(
-            mount_order(&dir),
-            owned(&[
-                "dbc.MPQ",
-                "texture.MPQ",
-                "model.MPQ",
-                "patch.MPQ",
-                "patch-2.MPQ",
-                "patch-3.MPQ",
-                "speech2.MPQ",
-            ])
-        );
-    }
-
-    #[test]
-    fn patch_sort_is_ascending_and_case_folded() {
-        let dir = owned(&["patch-B.MPQ", "patch-3.MPQ", "patch-a.MPQ", "patch-2.MPQ"]);
-        assert_eq!(
-            mount_order(&dir),
-            owned(&["patch-2.MPQ", "patch-3.MPQ", "patch-a.MPQ", "patch-B.MPQ"])
-        );
-    }
-
-    #[test]
-    fn base_archives_are_found_case_insensitively() {
-        let dir = owned(&["DBC.mpq", "Model.MPQ", "PATCH.mpq"]);
-        assert_eq!(
-            mount_order(&dir),
-            owned(&["DBC.mpq", "Model.MPQ", "PATCH.mpq"])
-        );
     }
 
     #[test]

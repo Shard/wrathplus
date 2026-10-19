@@ -118,7 +118,6 @@ fn schema(name: &str, fields: usize, strings: impl Fn(usize) -> bool) -> Schema 
 pub fn load_battlemasters(chain: &mut Chain) -> Result<Battlemasters> {
     let locale = match chain.profile() {
         DataProfile::Wrath { locale } => locale.clone(),
-        DataProfile::Vanilla => anyhow::bail!("BattlemasterList.dbc is a Wrath table"),
     };
     let slot = crate::cfg_categories::locale_slot(&locale)?;
     let bytes = chain

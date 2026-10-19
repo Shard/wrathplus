@@ -50,7 +50,7 @@ pub struct NpcAppearance {
     /// Worn `ItemDisplayInfo` ids (fields 8..17), 0 = empty, by body slot: head, shoulder, shirt,
     /// chest, belt, pants, boots, wrist, gloves, tabard (no cloak column).
     pub equipment: [u32; 10],
-    /// Wrath's eleventh NPC item display, the cloak slot. Vanilla has no column and yields 0.
+    /// The eleventh NPC item display, the cloak slot.
     pub cloak: u32,
     /// The baked body atlas under `Textures\BakedNpcTextures\`; `None` composites the body live.
     pub bake_name: Option<String>,
@@ -274,7 +274,7 @@ impl CreatureCatalog {
     }
 }
 
-/// CreatureModelData.dbc: 16 fields in build 5875 (no `mountHeight`).
+/// CreatureModelData.dbc: 28 fields in build 12340.
 pub(crate) fn creature_model_data_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureModelData");
     for (name, ty) in [
@@ -318,7 +318,7 @@ pub(crate) fn creature_model_data_schema(profile: &DataProfile) -> Schema {
     s
 }
 
-/// CreatureDisplayInfo.dbc: 12 fields in build 5875.
+/// CreatureDisplayInfo.dbc: 16 fields in build 12340.
 pub(crate) fn creature_display_info_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureDisplayInfo");
     for (name, ty) in [
@@ -331,9 +331,9 @@ pub(crate) fn creature_display_info_schema(profile: &DataProfile) -> Schema {
         ("TextureVariation0", FieldType::String),
         ("TextureVariation1", FieldType::String),
         ("TextureVariation2", FieldType::String),
-        ("VanillaSizeClassOrWrathPortrait", FieldType::UInt32),
-        ("VanillaBloodLevelOrWrathSizeClass", FieldType::UInt32),
-        ("VanillaNPCSoundOrWrathBloodID", FieldType::UInt32),
+        ("PortraitTexture", FieldType::UInt32),
+        ("SizeClass", FieldType::UInt32),
+        ("BloodID", FieldType::UInt32),
     ] {
         s.add_field(SchemaField::new(name, ty));
     }
@@ -350,7 +350,7 @@ pub(crate) fn creature_display_info_schema(profile: &DataProfile) -> Schema {
     s
 }
 
-/// CreatureDisplayInfoExtra.dbc: 19 fields, 76-byte records in 5875 (vmangos `DBCStructure.h`).
+/// CreatureDisplayInfoExtra.dbc: 21 fields in build 12340.
 pub(crate) fn creature_display_info_extra_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CreatureDisplayInfoExtra");
     for (name, ty) in [
@@ -369,7 +369,6 @@ pub(crate) fn creature_display_info_extra_schema(profile: &DataProfile) -> Schem
         s.add_field(SchemaField::new(format!("Equipment{i}"), FieldType::UInt32));
     }
     match profile {
-        DataProfile::Vanilla => s.add_field(SchemaField::new("BakeName", FieldType::String)),
         DataProfile::Wrath { .. } => {
             s.add_field(SchemaField::new("CloakDisplay", FieldType::UInt32));
             s.add_field(SchemaField::new("Flags", FieldType::UInt32));
@@ -435,24 +434,8 @@ pub fn load_creature_catalog(chain: &mut Chain) -> Result<CreatureCatalog> {
                         extended_id: u32_at(r, 3).unwrap_or(0),
                         scale: f32_at(r, 4).unwrap_or(1.0),
                         textures: [str_at(&rs, r, 6), str_at(&rs, r, 7), str_at(&rs, r, 8)],
-                        blood_level: u32_at(
-                            r,
-                            if matches!(profile, DataProfile::Vanilla) {
-                                10
-                            } else {
-                                11
-                            },
-                        )
-                        .unwrap_or(0),
-                        size_class: u32_at(
-                            r,
-                            if matches!(profile, DataProfile::Vanilla) {
-                                9
-                            } else {
-                                10
-                            },
-                        )
-                        .map_or(-1, |v| v as i32),
+                        blood_level: u32_at(r, 11).unwrap_or(0),
+                        size_class: u32_at(r, 10).map_or(-1, |v| v as i32),
                         model_alpha: u32_at(r, 5).unwrap_or(255),
                     },
                 );
@@ -496,20 +479,8 @@ fn load_creature_display_info_extra(chain: &mut Chain) -> Result<HashMap<u32, Np
                     hair_color: u32_at(r, 6).unwrap_or(0) as u8,
                     facial_hair: u32_at(r, 7).unwrap_or(0) as u8,
                     equipment: std::array::from_fn(|i| u32_at(r, 8 + i).unwrap_or(0)),
-                    cloak: if matches!(profile, DataProfile::Wrath { .. }) {
-                        u32_at(r, 18).unwrap_or(0)
-                    } else {
-                        0
-                    },
-                    bake_name: str_at(
-                        &rs,
-                        r,
-                        if matches!(profile, DataProfile::Vanilla) {
-                            18
-                        } else {
-                            20
-                        },
-                    ),
+                    cloak: u32_at(r, 18).unwrap_or(0),
+                    bake_name: str_at(&rs, r, 20),
                 },
             );
         }

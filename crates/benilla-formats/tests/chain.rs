@@ -1163,13 +1163,7 @@ fn filtered_macro_icon_listing_matches_the_full_listing() {
     };
 
     let data = benilla_formats::wow_data_or_skip!();
-    let profile = match std::env::var("WOW_CLIENT_PROFILE").as_deref() {
-        Ok("wrath") => benilla_formats::DataProfile::Wrath {
-            locale: std::env::var("WOW_LOCALE").unwrap_or_else(|_| "enUS".into()),
-        },
-        Ok("vanilla") | Err(_) => benilla_formats::DataProfile::Vanilla,
-        Ok(other) => panic!("unsupported timing-probe profile: {other}"),
-    };
+    let profile = benilla_formats::DataProfile::from_env().expect("timing-probe profile");
     let chain = Chain::open_profile(&data, &profile).expect("open explicit-profile patch chain");
     let full_started = Instant::now();
     let mut full_resolved = 0usize;
