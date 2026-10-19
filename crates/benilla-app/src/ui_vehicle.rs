@@ -17,13 +17,13 @@ use bevy::prelude::*;
 
 use benilla_formats::vehicles::VehicleCatalog;
 use benilla_ui::script::{
-    UiScript, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
-    WrathVehicles,
+    BattlefieldVehicleView, UiScript, UnitVehicleView, VehicleAimView, VehicleCall,
+    VehicleIndicatorView, VehicleSeatView, WrathVehicles,
 };
 
 use crate::names::NameCache;
 use crate::net::wrath_vehicle::{VehicleOutbox, VehicleRequest, VehicleState, VehicleWorld};
-use crate::net::{Objects, SelfGuid};
+use crate::net::{GuidIndex, NetEntity, ObjectStore, Objects, SelfGuid};
 use crate::player::Player;
 use crate::ui_party::GroupState;
 use crate::ui_script::{UiFeed, UiInput};
@@ -89,6 +89,42 @@ fn flatten(
     }
 }
 
+/// The possess bar's spell (`0x5d62a0`): the first of the player's non-negative auras, in slot
+/// order, whose spell applies possess (2), charm (6) or possess-pet (128), or vehicle control (236)
+/// while we control our vehicle; else one that summons (28) a puppet (`SummonProperties` Control 3).
+fn possess_spell(
+    auras: &[crate::net::wrath_auras::StampedAura],
+    spells: Option<&crate::ui_action::Spells>,
+    summons: Option<&crate::ui_companions::SummonSlots>,
+    controlling: bool,
+) -> Option<u32> {
+    let spells = spells?;
+    let mut sorted: Vec<_> = auras.iter().map(|a| &a.aura).collect();
+    sorted.sort_by_key(|a| a.slot);
+    sorted
+        .into_iter()
+        .filter(|a| a.flags & 0x80 == 0)
+        .find(|a| {
+            let Some(s) = spells.catalog.get(a.spell_id) else {
+                return false;
+            };
+            let aura = s
+                .effect_apply_aura
+                .iter()
+                .any(|&t| matches!(t, 2 | 6 | 128) || (t == 236 && controlling));
+            aura || (0..3).any(|i| {
+                s.effects[i] == 28
+                    && summons.is_some_and(|t| {
+                        u32::try_from(s.effect_misc_value_b[i])
+                            .ok()
+                            .and_then(|id| t.0.control(id))
+                            == Some(benilla_formats::SUMMON_CONTROL_PUPPET)
+                    })
+            })
+        })
+        .map(|a| a.spell_id)
+}
+
 /// The seat record a riding unit sits in.
 fn rider_seat<'a>(
     world: &VehicleWorld,
@@ -101,6 +137,23 @@ fn rider_seat<'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The battlefield list's inputs: streamed bodies and the displayed map.
+#[derive(bevy::ecs::system::SystemParam)]
+struct MapBodies<'w, 's> {
+    guids: Res<'w, GuidIndex>,
+    bodies: Query<'w, 's, (&'static ObjectStore, &'static GlobalTransform), With<NetEntity>>,
+    map: Option<Res<'w, benilla_world::world_map::CurrentMap>>,
+    map_data: Option<Res<'w, crate::ui_world_map::WorldMapUiData>>,
+}
+
+/// The possess spell's inputs.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PossessInputs<'w> {
+    auras: Res<'w, crate::net::wrath_auras::PacketAuras>,
+    spells: Option<Res<'w, crate::ui_action::Spells>>,
+    summons: Option<Res<'w, crate::ui_companions::SummonSlots>>,
+}
+
 fn feed_vehicles(
     script: Option<NonSendMut<UiScript>>,
     state: Res<VehicleState>,
@@ -111,6 +164,8 @@ fn feed_vehicles(
     objects: Objects,
     names: Res<NameCache>,
     player: Res<Player>,
+    bodies: MapBodies,
+    possess: PossessInputs,
     mut last: Local<crate::ui_script::VmMemo<Option<WrathVehicles>>>,
 ) {
     let (Some(mut script), Some(seats)) = (script, seats) else {
@@ -121,9 +176,18 @@ fn feed_vehicles(
         objects.object(g).and_then(|f| f.object_type())
             == Some(benilla_protocol::messages::ObjectType::Player)
     };
-    // Unresolved, labelled: the reference names a creature occupant too (`0x72a000`); the
-    // player-name cache answers players only.
-    let name = |g: u64| names.peek(g).map(str::to_string);
+    let unit = |g: u64| {
+        bodies
+            .guids
+            .0
+            .get(&g)
+            .and_then(|&e| bodies.bodies.get(e).ok())
+    };
+    let name = |g: u64| {
+        names
+            .peek_unit(g, unit(g).map(|(s, _)| s))
+            .map(str::to_string)
+    };
     let mut units: HashMap<u64, UnitVehicleView> = HashMap::new();
     for (&rider, &(vehicle, _)) in &world.riders {
         let controlling = objects.object(rider).and_then(|f| f.unit_charm()) == Some(vehicle);
@@ -184,12 +248,68 @@ fn feed_vehicles(
             pitch_max: v.pitch_max,
             pitch: player.mover_pitch(),
         });
+    // The battlefield vehicle list (`0xbea5b8`): Unresolved, labelled: the client's add site
+    // (`0x54aba0`, from `0x723a2d`/`0x7401b0`) is untraced; this lists every streamed vehicle,
+    // by guid, up to the client's 40.
+    let selection = script.world_map_selection();
+    let mut kits: Vec<_> = world.kits.iter().collect();
+    kits.sort_by_key(|(g, _)| **g);
+    let battlefield = kits
+        .into_iter()
+        .take(40)
+        .filter_map(|(&guid, &kit)| {
+            let (store, tf) = unit(guid)?;
+            let row = seats.vehicle(kit);
+            let wow = benilla_assets::coords::bevy_to_wow(tf.translation());
+            let uv = bodies
+                .map
+                .as_deref()
+                .zip(bodies.map_data.as_deref())
+                .and_then(|(m, d)| {
+                    crate::ui_world_map::project_on_displayed(d, selection, m.0, wow[0], wow[1])
+                });
+            // `0xad6b14`, indexed by the UI locomotion type when the row's flag `0x10000000` is set.
+            const TYPES: [&str; 5] = ["Drive", "Fly", "Idle", "Airship Horde", "Airship Alliance"];
+            let vehicle_type = row
+                .filter(|r| r.flags & 0x1000_0000 != 0)
+                .and_then(|r| TYPES.get(r.ui_locomotion_type as usize))
+                .map(|t| t.to_string());
+            Some(BattlefieldVehicleView {
+                uv,
+                name: names.peek_unit(guid, Some(store)).map(str::to_string),
+                possessed: store.0.unit_flags() & 0x0100_0000 != 0,
+                vehicle_type,
+                facing: tf
+                    .to_scale_rotation_translation()
+                    .1
+                    .to_euler(EulerRot::YXZ)
+                    .0,
+                is_player: state.vehicle == Some(guid),
+                alive: store.0.unit_health().is_some_and(|h| h > 0),
+            })
+        })
+        .collect();
+    let possess_spell = me.0.and_then(|g| {
+        possess_spell(
+            possess
+                .auras
+                .by_guid
+                .get(&g)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            possess.spells.as_deref(),
+            possess.summons.as_deref(),
+            state.controlling,
+        )
+    });
     let fresh = WrathVehicles {
         units,
         player_seat_flags: my_seat.map(|s| s.flags),
         drives_root,
         aim,
         has_mover: me.0.is_some(),
+        battlefield,
+        possess_spell,
     };
     let last = last.get(&script);
     if last.as_ref() != Some(&fresh) {

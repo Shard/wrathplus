@@ -325,13 +325,9 @@ pub(super) fn control(
 
     // Wrath currently has an explicit ground-only contract. Refuse unsupported physical modes
     // before input or integration so local motion can never outrun a silently dropped packet.
-    let wrath_surface = (dialect == crate::net::SessionDialect::Wrath12340)
-        .then(|| swim::surface_over_feet(world, player.pos))
-        .flatten();
-    if dialect == crate::net::SessionDialect::Wrath12340 {
-        player.liquid_surface = wrath_surface;
-    }
-    let wrath_limit = movement_net::wrath_ground_limit(dialect, &player, wrath_surface);
+    let wrath_surface = swim::surface_over_feet(world, player.pos);
+    player.liquid_surface = wrath_surface;
+    let wrath_limit = movement_net::wrath_ground_limit(&player, wrath_surface);
 
     if player.active && !player.detached {
         // Not driving, while the camera stays on the body and input, physics and the stream yield:
@@ -391,11 +387,7 @@ pub(super) fn control(
             );
             // Flush a stale run once, but never under a ride, whose FORWARD is deliberate.
             if !player.server_riding {
-                movement_net::park_mover_for_dialect(&net.0 .0, &mut player, dialect);
-            }
-            // Wrath cannot encode these acks until its full movement dialect is integrated.
-            if dialect == crate::net::SessionDialect::Vanilla5875 {
-                movement_net::ack_speeds_undriven(&net.0 .0, &player, &speed_acks);
+                movement_net::park_mover_on_ground(&net.0 .0, &mut player);
             }
             return;
         }
@@ -539,11 +531,7 @@ pub(super) fn control(
         let mut want_jump = binds.fired(crate::bindings::Input::Jump) && may_translate;
 
         // Swim or walk, latched with hysteresis at the `0x6030c0` boundary against flicker.
-        let surface_y = if dialect == crate::net::SessionDialect::Wrath12340 {
-            wrath_surface
-        } else {
-            swim::surface_over_feet(world, player.pos)
-        };
+        let surface_y = wrath_surface;
         // For the camera's water corridor, which reads it a frame late, as `0x670630` does.
         player.liquid_surface = surface_y;
         let swimming = swim::update_swimming(&mut player, surface_y, time.elapsed_secs());
@@ -891,13 +879,7 @@ pub(super) fn control(
         // Stream the movement: a `MSG_MOVE_*` per axis transition, the jump and fall edges and a
         // 500 ms heartbeat, which vmangos relays to nearby players.
         let wire_transport = movement_net::wire_transport(&player);
-        // A held frame is simulation time skipped; the mover named is the one we drive.
-        let skip = movement_net::SkipClock {
-            dt,
-            held: player.settling,
-            mover: player.foreign_mover.or(self_guid),
-        };
-        movement_net::stream_self_movement_for_dialect(
+        movement_net::stream_self_movement(
             &net.0 .0,
             &mut player,
             move_flags_now,
@@ -916,13 +898,11 @@ pub(super) fn control(
             // Acked only if flown: under root the reference drops the record unacked (`0x615c71`).
             knockback.filter(|_| knocked),
             wire_transport,
-            skip,
-            dialect,
         );
     } else {
         // Free fly. Park the mover first, so a detach mid-move leaves no stale flags for observers
         // to extrapolate; a no-op once stopped.
-        movement_net::park_mover_for_dialect(&net.0 .0, &mut player, dialect);
+        movement_net::park_mover_on_ground(&net.0 .0, &mut player);
         camera::fly_free(dt, &keys, typing, &mut rig, &mut cam, &mut cam_t);
     }
 }
