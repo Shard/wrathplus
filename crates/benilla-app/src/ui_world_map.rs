@@ -116,7 +116,9 @@ struct DirectAreaEntry {
     /// Matched against the player's map by the resolver (`0x4a66f6`); the projection admits only a
     /// body on this map (`0x4a7437`).
     map_id: u32,
-    /// The row's loc rect, which `0x4a7360`'s direct-area leg projects through as a zone's.
+    /// The row's loc rect, which `0x4a7360`'s direct-area leg projects through as a zone's. Only
+    /// the projection tests read it: the leg goes through the selected row's rect.
+    #[cfg(test)]
     rect: ZoneRect,
     /// What the engine is handed for this row (`GetMapInfo`'s art folder, the overlays).
     view: WorldMapZoneView,
@@ -343,6 +345,7 @@ pub(crate) fn build_catalog(
         .map(|(id, a)| DirectAreaEntry {
             id,
             map_id: a.map_id,
+            #[cfg(test)]
             rect: zone_rect(a),
             view: map_row_view(
                 id,
@@ -781,9 +784,7 @@ fn project_on_floor(
         id.and_then(|id| data.floors.iter().find(|f| f.id == id))
             .map(|f| f.rect)
     };
-    let rect = if pos_floor == shown {
-        floor_rect(shown).unwrap_or(row.rect)
-    } else if t_floor.is_some() && t_floor == shown {
+    let rect = if pos_floor == shown || (t_floor.is_some() && t_floor == shown) {
         floor_rect(shown).unwrap_or(row.rect)
     } else if shown.is_some() {
         return None;

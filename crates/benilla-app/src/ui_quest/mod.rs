@@ -38,9 +38,10 @@ pub(crate) struct QuestGiver {
     pub(crate) view: Option<QuestView>,
     /// The reference's latch `0xbe0824`, written by DETAILS and OFFER_REWARD (`0x500ef0`) and by
     /// REQUEST_ITEMS' `closeOnCancel` (`0x501070`), and zeroed only on world enter (`0x500af0`).
-    /// Non-zero turns a plain unit's decline into the silent teardown ([`decline_leg`]). vmangos
-    /// sends 1 on every DETAILS and OFFER_REWARD; REQUEST_ITEMS carries 1 on a single-quest
-    /// auto-open and 0 on `COMPLETE_QUEST` (`QuestHandler.cpp:390-395`).
+    /// Non-zero turns a plain unit's decline into the silent teardown
+    /// ([`decline_leg_native`]). vmangos sends 1 on every DETAILS and OFFER_REWARD; REQUEST_ITEMS
+    /// carries 1 on a single-quest auto-open and 0 on `COMPLETE_QUEST`
+    /// (`QuestHandler.cpp:390-395`).
     pub(crate) close_on_cancel: u32,
     /// The reference's already-acted latch `0xbe0844`, set by `AcceptQuest` and by a re-opening
     /// `DeclineQuest`, which keeps the panel up; both refuse while it is set (`0x5013a8`,
@@ -623,21 +624,6 @@ fn decline_leg_native(
         return DeclineLeg::Teardown;
     }
     DeclineLeg::QuestgiverHello
-}
-
-#[cfg(test)]
-fn decline_leg(npc: u64, acted: bool, close_on_cancel: u32, flags: Option<u32>) -> DeclineLeg {
-    decline_leg_native(
-        npc,
-        acted,
-        close_on_cancel,
-        flags.map(|bits| {
-            benilla_protocol::messages::NpcFlags::from_bits(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
-                bits,
-            )
-        }),
-    )
 }
 
 /// Drain the Lua intents: greeting-row selects and the panel buttons, each to its `CMSG`.

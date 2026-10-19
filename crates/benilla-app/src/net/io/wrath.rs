@@ -1169,6 +1169,7 @@ impl MovementAuthorityHandle {
         }
     }
 
+    #[cfg(test)]
     fn with_movement_send<T>(&self, send: impl FnOnce() -> T) -> Option<T> {
         let state = self.shared.state.lock().unwrap_or_else(|p| p.into_inner());
         if state.epoch != self.epoch
