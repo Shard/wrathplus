@@ -28,24 +28,16 @@ fn honor_state() -> HonorState {
     }
 }
 
-/// The inspect reply's twelve, distinct in return order, so the ninth (the standing) cannot hide
-/// behind the eighth.
+/// The inspect reply's six, distinct in return order.
 fn inspect_state() -> InspectHonorData {
     InspectHonorData {
         guid: 0xDEAD_BEEF,
-        session_hk: 61,
-        session_dk: 62,
+        today_hk: 61,
+        today_honor: 62,
         yesterday_hk: 63,
         yesterday_honor: 64,
-        this_week_hk: 65,
-        this_week_honor: 66,
-        last_week_hk: 67,
-        last_week_honor: 68,
-        last_week_standing: 69,
         lifetime_hk: 70,
-        lifetime_dk: 71,
-        highest_rank: 12,
-        rank_bar: 255,
+        lifetime_rank: 12,
     }
 }
 
@@ -240,13 +232,6 @@ fn the_rank_bar_multiplies_by_the_f32_reciprocal_and_never_clamps() {
     }));
     assert!(bar(&s) > 1.0, "255 * K = 1.0000000091389835, unclamped");
     assert_ne!(bar(&s), 1.0);
-
-    // The inspect twin runs the identical kernel over the reply's byte (`0x51ab04`).
-    s.set_inspect_honor(Some(inspect_state())); // rank_bar 255
-    assert_eq!(
-        s.eval::<f64>("return GetInspectPVPRankProgress()").unwrap(),
-        255.0 * RANK_BAR_SCALE
-    );
 }
 
 /// Runs the panes' own `NONE` fallback, not just the nil.
@@ -855,63 +840,38 @@ fn has_inspect_honor_data_latches_on_the_push_and_clears_with_it() {
     assert!(!s.eval::<bool>(held()).unwrap());
 }
 
-/// The reference's own twelve-wide destructure, and the standing sitting ninth.
+/// Build 12340's six, in `InspectPVPFrame.lua:157`'s order.
 #[test]
-fn get_inspect_honor_data_returns_the_twelve_in_the_reference_order() {
+fn get_inspect_honor_data_returns_the_six_in_the_reference_order() {
     let mut s = seated();
     s.set_inspect_honor(Some(inspect_state()));
-
-    assert_eq!(s.arity("GetInspectHonorData()").unwrap(), 12);
+    assert_eq!(s.arity("GetInspectHonorData()").unwrap(), 6);
     let got = s
         .eval::<Vec<i64>>(
-            "local sessionHK, sessionDK, yesterdayHK, yesterdayHonor, thisweekHK, \
-             thisweekHonor, lastweekHK, lastweekHonor, lastweekStanding, lifetimeHK, \
-             lifetimeDK, lifetimeRank = GetInspectHonorData() \
-             return {sessionHK, sessionDK, yesterdayHK, yesterdayHonor, thisweekHK, \
-             thisweekHonor, lastweekHK, lastweekHonor, lastweekStanding, lifetimeHK, \
-             lifetimeDK, lifetimeRank}",
+            "local todayHK, todayHonor, yesterdayHK, yesterdayHonor, lifetimeHK, lifetimeRank \
+             = GetInspectHonorData() \
+             return {todayHK, todayHonor, yesterdayHK, yesterdayHonor, lifetimeHK, lifetimeRank}",
         )
         .unwrap();
-    assert_eq!(got, [61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 12]);
-
-    assert_eq!(
-        s.eval::<f64>("return GetInspectPVPRankProgress()").unwrap(),
-        255.0 * RANK_BAR_SCALE,
-        "the reply's own rankBar byte, not the player's"
-    );
+    assert_eq!(got, [61, 62, 63, 64, 70, 12]);
 }
 
-/// `0x4c9620` is ungated and reads zero-initialised slots; a short return would paint blank rows
-/// where the reference paints zeros.
+/// `0x5e77c0` is ungated: six zeros with no reply held, and again after a clear.
 #[test]
-fn get_inspect_honor_data_answers_twelve_zeros_when_no_reply_is_held() {
+fn get_inspect_honor_data_answers_six_zeros_when_no_reply_is_held() {
     let mut s = seated();
-    assert_eq!(
-        s.arity("GetInspectHonorData()").unwrap(),
-        12,
-        "ungated: twelve on every path"
-    );
+    assert_eq!(s.arity("GetInspectHonorData()").unwrap(), 6);
     assert_eq!(
         s.eval::<Vec<i64>>("return {GetInspectHonorData()}")
             .unwrap(),
-        vec![0; 12]
+        vec![0; 6]
     );
-    assert!(s
-        .eval::<bool>("return (GetInspectHonorData()) == 0")
-        .unwrap());
-    assert_eq!(
-        s.eval::<f64>("return GetInspectPVPRankProgress()").unwrap(),
-        0.0
-    );
-
-    // Zeros again after a clear; the reference would still hold the previous target's numbers
-    // (`0x4c6f70` zeroes only the flags).
     s.set_inspect_honor(Some(inspect_state()));
     s.set_inspect_honor(None);
     assert_eq!(
         s.eval::<Vec<i64>>("return {GetInspectHonorData()}")
             .unwrap(),
-        vec![0; 12]
+        vec![0; 6]
     );
 }
 

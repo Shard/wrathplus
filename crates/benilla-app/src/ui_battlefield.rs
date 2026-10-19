@@ -80,15 +80,8 @@ pub(crate) struct InspectArenaTeams(
     pub(crate) std::collections::HashMap<u64, [Option<InspectedArenaTeam>; 3]>,
 );
 
-/// The last `MSG_INSPECT_HONOR_STATS` answer (`0x2d6`), raw, for `GetInspectHonorData`
-/// (InspectUI, Experience's next pass). Zeroed at session end.
-#[allow(dead_code)]
-#[derive(Resource, Default)]
-pub(crate) struct InspectHonor(pub(crate) Option<Packet>);
-
 /// One inspected team as `0x377` carries it: the id and the stats; the name, size and emblem
-/// come from the team-query cache. The InspectUI getters (Experience's next pass) read it.
-#[allow(dead_code)]
+/// come from the team-query cache ([`crate::ui_arena_team`] joins them).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct InspectedArenaTeam {
     pub(crate) team_id: u32,
@@ -444,7 +437,7 @@ pub(crate) fn drain_native(
     mut world_pvp: ResMut<WorldPvp>,
     mut rest: ResMut<NativeBattlegroundRest>,
     mut inspect: ResMut<InspectArenaTeams>,
-    mut honor: ResMut<InspectHonor>,
+    mut honor: ResMut<crate::ui_honor::InspectHonor>,
     maps: Option<Res<MapCatalogRes>>,
     areas: Option<Res<AreaTableRes>>,
     world: benilla_world::world_point::WorldPoint,
@@ -508,7 +501,23 @@ pub(crate) fn drain_native(
                     });
                 }
             }
-            p @ Packet::InspectHonor { .. } => honor.0 = Some(p),
+            Packet::InspectHonor {
+                guid,
+                raw_points,
+                kills,
+                today_honor,
+                yesterday_honor,
+                lifetime_kills,
+            } => {
+                honor.0 = Some(crate::ui_honor::InspectHonorReply {
+                    player_guid: guid,
+                    lifetime_rank: raw_points,
+                    kills,
+                    today_honor,
+                    yesterday_honor,
+                    lifetime_hk: lifetime_kills,
+                })
+            }
             other => rest.0.push_back(other),
         }
     }
@@ -792,7 +801,7 @@ mod net {
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 
-    use super::{Battlefield, InspectArenaTeams, InspectHonor, NativeBattlegroundRest, WorldPvp};
+    use super::{Battlefield, InspectArenaTeams, NativeBattlegroundRest, WorldPvp};
     use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
@@ -837,13 +846,11 @@ mod net {
         mut world_pvp: ResMut<WorldPvp>,
         mut rest: ResMut<NativeBattlegroundRest>,
         mut inspect: ResMut<InspectArenaTeams>,
-        mut honor: ResMut<InspectHonor>,
     ) {
         battlefield.clear_session();
         *world_pvp = WorldPvp::default();
         rest.0.clear();
         inspect.0.clear();
-        honor.0 = None;
     }
 }
 
@@ -856,7 +863,6 @@ impl Plugin for BattlefieldPlugin {
             .init_resource::<WorldPvp>()
             .init_resource::<NativeBattlegroundRest>()
             .init_resource::<InspectArenaTeams>()
-            .init_resource::<InspectHonor>()
             .add_systems(Startup, load_battlemasters.after(AssetSet::Open))
             .add_systems(
                 Update,

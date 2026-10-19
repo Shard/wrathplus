@@ -245,7 +245,9 @@ mod wrath_kb;
 mod wrath_options;
 mod wrath_secure;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
-pub use wrath_arena::{ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView};
+pub use wrath_arena::{
+    ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView, InspectArenaTeamView,
+};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_vehicle::{
     BattlefieldVehicleView, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
