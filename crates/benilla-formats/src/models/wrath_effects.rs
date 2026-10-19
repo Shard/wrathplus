@@ -128,7 +128,7 @@ pub(super) fn lights(wrath: &WrathM2) -> Vec<M2Light> {
                     ),
                     visibility: {
                         let mut v =
-                            seq_track(globals, &light.visibility, 1.0, 1.0, |b| f32::from(b));
+                            seq_track(globals, &light.visibility, 1.0, 1.0, f32::from);
                         // A byte track: `0x82b270` copies `values[k0]`, never lerps.
                         for lane in &mut v.slots {
                             lane.interp = 0;
@@ -161,13 +161,13 @@ pub(super) fn ribbons(
     dir: &str,
     skins: &[Option<String>],
 ) -> Result<Vec<RibbonEmitterDef>> {
-    Ok(wrath.ribbons().iter().enumerate().filter_map(|(index, r)| {
+    wrath.ribbons().iter().enumerate().filter_map(|(index, r)| {
         if let Some(reason) = unsupported_ribbon(r) {
             eprintln!("WARN: skipping Wrath ribbon {index} (id {}): {reason}; model geometry retained", r.id);
             return None;
         }
         Some(adapt_ribbon(wrath, r, dir, skins))
-    }).collect::<Result<Vec<_>>>()?)
+    }).collect::<Result<Vec<_>>>()
 }
 
 fn unsupported_ribbon(r: &WrathRibbon) -> Option<&'static str> {
