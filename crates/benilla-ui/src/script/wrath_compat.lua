@@ -28,79 +28,7 @@ function ChangeActionBarPage(page)
         fire("ACTIONBAR_PAGE_CHANGED")
     end
 end
-GetBonusBarOffset = GetBonusBarOffset or zero
-GetActionBarToggles = GetActionBarToggles or none
 
-SaveBindings = SaveBindings or none
-
--- ── macro conditionals ([mod:shift,target=focus] a; b) ─────────────────────────────────────────
-local function conditionHolds(condition, target)
-    local name, args = condition:match("^%s*(%a+)%s*:?%s*(.-)%s*$")
-    if not name then return true end
-    name = name:lower()
-    local negate = name:sub(1, 2) == "no"
-    if negate then name = name:sub(3) end
-    local result
-    if name == "mod" or name == "modifier" then
-        if args == "" then
-            result = IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()
-        else
-            result = false
-            for mod in args:gmatch("[^/]+") do
-                mod = mod:upper()
-                if (mod == "SHIFT" and IsShiftKeyDown()) or (mod == "CTRL" and IsControlKeyDown())
-                    or (mod == "ALT" and IsAltKeyDown()) then
-                    result = true
-                end
-            end
-        end
-    elseif name == "combat" then
-        result = UnitAffectingCombat("player")
-    elseif name == "exists" then
-        result = UnitExists(target)
-    elseif name == "dead" then
-        result = UnitIsDead(target) or UnitIsGhost(target)
-    elseif name == "harm" then
-        result = UnitCanAttack("player", target)
-    elseif name == "help" then
-        result = UnitIsFriend("player", target)
-    elseif name == "button" or name == "btn" then
-        result = args == "" or args:find("1") ~= nil
-    else
-        -- Unknown conditions (stance, group, vehicle, ...) do not exclude the clause.
-        result = true
-    end
-    if negate then return not result end
-    return result and true or false
-end
-
--- Clauses are tried in order; a clause's bracket groups are alternatives, and every condition
--- in a group must hold. Returns the first matching clause's value and its target unit.
-function SecureCmdOptionParse(options)
-    for clause in (options .. ";"):gmatch("([^;]*);") do
-        local groups, value = {}, clause
-        while true do
-            local group, after = value:match("^%s*%[(.-)%](.*)$")
-            if not group then break end
-            groups[#groups + 1], value = group, after
-        end
-        value = value:match("^%s*(.-)%s*$")
-        if #groups == 0 then return value, nil end
-        for _, group in ipairs(groups) do
-            local target, holds = nil, true
-            for condition in (group .. ","):gmatch("([^,]*),") do
-                local unit = condition:match("^%s*target%s*=%s*(.-)%s*$")
-                    or condition:match("^%s*@%s*(.-)%s*$")
-                if unit then
-                    target = unit
-                elseif condition:match("%S") and not conditionHolds(condition, target or "target") then
-                    holds = false
-                end
-            end
-            if holds then return value, target end
-        end
-    end
-end
 
 -- ── languages ──────────────────────────────────────────────────────────────────────────────────
 function GetNumLanguages()
@@ -114,15 +42,11 @@ UnitIsAFK = UnitIsAFK or none
 UnitIsDND = UnitIsDND or none
 UnitIsSameServer = UnitIsSameServer or function() return 1 end
 UnitIsRaidOfficer = UnitIsRaidOfficer or none
-UnitGroupRolesAssigned = UnitGroupRolesAssigned or function() return false, false, false end
-UnitThreatSituation = UnitThreatSituation or none
-UnitDetailedThreatSituation = UnitDetailedThreatSituation or none
 IsXPUserDisabled = IsXPUserDisabled or none
 GetAccountExpansionLevel = GetAccountExpansionLevel or function() return 2 end
 GetExpansionLevel = GetExpansionLevel or function() return 2 end
 GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
-MovieRecording_IsSupported = MovieRecording_IsSupported or none
 IsReferAFriendLinked = IsReferAFriendLinked or none
 CanSummonFriend = CanSummonFriend or none
 
@@ -134,7 +58,6 @@ SetDungeonMapLevel = SetDungeonMapLevel or none
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none
-GetNumWorldPVPAreas = GetNumWorldPVPAreas or zero
 PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -159,14 +82,11 @@ Sound_GameSystem_GetOutputDriverNameByIndex = none
 IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
-CanShowAchievementUI = none
 
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
 IsThreatWarningEnabled = IsThreatWarningEnabled or none
 GetSummonFriendCooldown = GetSummonFriendCooldown or function() return 0, 0 end
 GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
-GetDungeonDifficulty = GetDungeonDifficulty or function() return 1 end
-GetRaidDifficulty = GetRaidDifficulty or function() return 1 end
 UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
 CanHearthAndResurrectFromArea = none
@@ -435,7 +355,6 @@ end
 IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
-GetReadyCheckStatus = GetReadyCheckStatus or none
 GetAvailableRoles = GetAvailableRoles or function() return true, true, true end
 do
     local dimensions, positions = {}, {}
@@ -453,8 +372,6 @@ end
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
 RegisterStaticConstants = RegisterStaticConstants or none
-GetMultiCastBarOffset = GetMultiCastBarOffset or zero
-HasCompletedAnyAchievement = HasCompletedAnyAchievement or none
 IsZoomOutAvailable = IsZoomOutAvailable or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 function GetContainerNumFreeSlots(bag)
@@ -467,8 +384,6 @@ end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
 TriggerTutorial = TriggerTutorial or none
-HasDebugZoneMap = HasDebugZoneMap or none
-QueryGuildEventLog = QueryGuildEventLog or none
 RefreshLFGList = RefreshLFGList or none
 do
     -- Wrath's GetNumFriends answers the online count too.
@@ -483,10 +398,8 @@ do
     end
 end
 UnitIsTalking = UnitIsTalking or none
-GetNumMapDebugObjects = GetNumMapDebugObjects or zero
 
 -- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
-GetCurrentCombatTextEventInfo = GetCurrentCombatTextEventInfo or none
 COMBATLOG_OBJECT_AFFILIATION_MINE, COMBATLOG_OBJECT_AFFILIATION_PARTY = 0x1, 0x2
 COMBATLOG_OBJECT_AFFILIATION_RAID, COMBATLOG_OBJECT_AFFILIATION_OUTSIDER = 0x4, 0x8
 COMBATLOG_OBJECT_AFFILIATION_MASK = 0xF
@@ -502,7 +415,6 @@ COMBATLOG_OBJECT_MAINTANK, COMBATLOG_OBJECT_MAINASSIST = 0x40000, 0x80000
 for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
-debuginfo = debuginfo or none
 CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
 
 -- ── unit selection colour (the target frame's name background) ─────────────────────────────────
@@ -535,7 +447,6 @@ GetNumQuestItemDrops = GetNumQuestItemDrops or function() return 0 end
 GetQuestLogItemDrop = GetQuestLogItemDrop or none
 GetContainerItemQuestInfo = GetContainerItemQuestInfo or function() return nil, nil, nil end
 GetDailyQuestsCompleted = GetDailyQuestsCompleted or function() return 0 end
-GetMaxDailyQuests = GetMaxDailyQuests or function() return 25 end
 GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none
