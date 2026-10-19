@@ -131,6 +131,8 @@ impl LootState {
     /// Opens or replaces the window; quest items ride the same rows at `slot = items.len() + i`.
     pub(crate) fn open(&mut self, source: u64, loot_type: u8, gold: u32, items: Vec<LootItem>) {
         self.source = Some(source);
+        // An open window is an active build-12340 session; a response admission already made it one.
+        self.wrath.adopt_response(source);
         self.gold = gold;
         self.coin_slot = gold > 0; // fixed for the window's lifetime
         self.items = items;
@@ -897,21 +899,13 @@ fn drain_loot(
     mut pickup: MessageWriter<crate::sound::LootPickupSound>,
     group: Res<GroupState>,
     items: Res<Items>,
-    dialect: Option<Res<crate::net::SessionDialect>>,
     // The move-start close runs before the VM check: it needs no Lua.
     mut move_start: ResMut<LootMoveStart>,
     mut dead: DeadUnitDeselect,
 ) {
     if std::mem::take(&mut move_start.0) {
-        if dialect
-            .as_deref()
-            .copied()
-            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
-            == crate::net::SessionDialect::Wrath12340
-        {
-            if let Some(guid) = loot.source() {
-                loot.wrath.begin_release(guid);
-            }
+        if let Some(guid) = loot.source() {
+            loot.wrath.begin_release(guid);
         }
         dead.after_close(close_on_move_start(&mut loot, &mut latch, &commands));
     }
@@ -919,55 +913,36 @@ fn drain_loot(
         return;
     };
     for index in script.take_loot_picks() {
-        if dialect
-            .as_deref()
-            .copied()
-            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
-            == crate::net::SessionDialect::Wrath12340
-        {
-            match loot.action_at(index) {
-                Some(action) => {
-                    let _ = wrath::send_pick(&mut loot, &commands, action);
-                }
-                None => debug!("ui_loot: Wrath row {index} clicked out of range — ignored"),
-            }
-            continue;
-        }
         match loot.action_at(index) {
-            Some(LootAction::Money) => {
-                // No sound here: the coinage watcher (`sound::money`) plays it as the purse rises.
-                debug!("ui_loot: loot coin (row {index})");
-                let _ = commands.0.send(ClientCommand::LootMoney);
-            }
             // A master-loot row opens the candidate dropdown instead: the dispatcher branches on
             // the slot type (`0x4c28a9`), and the Lua `OnClick` has already stashed the anchor.
             Some(LootAction::Item { slot_type, .. }) if slot_type == slot_type::MASTER => {
                 debug!("ui_loot: row {index} is master-loot — opening the candidate list");
                 script.fire_event("OPEN_MASTER_LOOT_LIST", vec![]);
             }
-            Some(LootAction::Item {
-                wire_slot,
-                display_id,
-                item_id,
-                ..
-            }) => {
-                // The bind-on-pickup deferral (`0x4c28f2`-`0x4c2920`): stash the row, fire the
-                // event, send nothing, not even the pickup sound.
-                if bind_confirm_required(&items, &commands, item_id) {
-                    debug!("ui_loot: row {index} (wire {wire_slot}) binds on pickup — confirming");
-                    loot.pending_bind_confirm = Some(index);
-                    script.fire_event(
-                        "LOOT_BIND_CONFIRM",
-                        vec![ScriptValue::Int(i64::from(index))],
-                    );
-                    continue;
-                }
-                debug!("ui_loot: autostore row {index} (wire slot {wire_slot})");
-                let _ = commands
-                    .0
-                    .send(ClientCommand::AutostoreLootItem { slot: wire_slot });
+            // The bind-on-pickup deferral (`0x4c28f2`-`0x4c2920`): stash the row, fire the event,
+            // send nothing.
+            Some(LootAction::Item { item_id, .. })
+                if bind_confirm_required(&items, &commands, item_id) =>
+            {
+                debug!("ui_loot: row {index} binds on pickup — confirming");
+                loot.pending_bind_confirm = Some(index);
+                script.fire_event(
+                    "LOOT_BIND_CONFIRM",
+                    vec![ScriptValue::Int(i64::from(index))],
+                );
+            }
+            Some(action) => {
+                let display_id = match action {
+                    LootAction::Item { display_id, .. } => Some(display_id),
+                    LootAction::Money => None,
+                };
                 // At the click, before any answer (`0x4c2926`): the item's ItemGroupSounds kit 0.
-                pickup.write(crate::sound::LootPickupSound { display_id });
+                if wrath::send_pick(&mut loot, &commands, action) {
+                    if let Some(display_id) = display_id {
+                        pickup.write(crate::sound::LootPickupSound { display_id });
+                    }
+                }
             }
             None => debug!("ui_loot: row {index} clicked out of range — ignored"),
         }
@@ -980,11 +955,13 @@ fn drain_loot(
             debug!("ui_loot: LootSlot({index}) is not the pending bind confirm — ignored");
             continue;
         }
-        let Some(LootAction::Item {
-            wire_slot,
-            display_id,
-            ..
-        }) = loot.action_at(index)
+        let Some(
+            action @ LootAction::Item {
+                wire_slot,
+                display_id,
+                ..
+            },
+        ) = loot.action_at(index)
         else {
             // The row went under the dialog: bail without clearing the stash, as `0x4c27d7` does.
             debug!("ui_loot: bind confirm for row {index} — the row is gone, nothing sent");
@@ -992,10 +969,9 @@ fn drain_loot(
         };
         loot.pending_bind_confirm = None;
         debug!("ui_loot: bind-confirmed row {index} (wire slot {wire_slot})");
-        let _ = commands
-            .0
-            .send(ClientCommand::AutostoreLootItem { slot: wire_slot });
-        pickup.write(crate::sound::LootPickupSound { display_id });
+        if wrath::send_pick(&mut loot, &commands, action) {
+            pickup.write(crate::sound::LootPickupSound { display_id });
+        }
     }
     // `GiveMasterLoot(slot, candidateIndex)`, both 1-based; one that does not resolve is dropped.
     for (index, candidate) in script.take_loot_master_gives() {
@@ -1031,15 +1007,8 @@ fn drain_loot(
     }
     // `CloseLoot` (`0x4c2ec0` → `0x48f200(cl=1, dl=0)`), which stock `LootFrame_OnHide` calls.
     if script.take_loot_close() {
-        if dialect
-            .as_deref()
-            .copied()
-            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
-            == crate::net::SessionDialect::Wrath12340
-        {
-            if let Some(guid) = loot.source() {
-                loot.wrath.begin_release(guid);
-            }
+        if let Some(guid) = loot.source() {
+            loot.wrath.begin_release(guid);
         }
         let closed = close_interaction(&mut loot, &mut latch, Some(&commands));
         if let Some(guid) = closed {
@@ -1050,15 +1019,8 @@ fn drain_loot(
     // The last-row auto-close (`0x4c1f8d`, `0x4c2785` → `0x48f200(cl=1, dl=0)`). The feed then
     // fires `LOOT_CLOSED`, and the `CloseLoot()` from `OnHide` finds no source.
     if loot.take_auto_release() {
-        if dialect
-            .as_deref()
-            .copied()
-            .unwrap_or(crate::net::SessionDialect::Vanilla5875)
-            == crate::net::SessionDialect::Wrath12340
-        {
-            if let Some(guid) = loot.source() {
-                loot.wrath.begin_release(guid);
-            }
+        if let Some(guid) = loot.source() {
+            loot.wrath.begin_release(guid);
         }
         let closed = close_interaction(&mut loot, &mut latch, Some(&commands));
         if let Some(guid) = closed {

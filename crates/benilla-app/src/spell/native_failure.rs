@@ -115,14 +115,8 @@ fn clear(In(event): In<SessionEvent>, mut receipts: ResMut<NativeFailures>) {
         receipts.0.clear();
     }
 }
-fn connected(
-    In(event): In<SessionEvent>,
-    dialect: Option<Res<crate::net::SessionDialect>>,
-    mut receipts: ResMut<NativeFailures>,
-) {
-    if matches!(event, SessionEvent::Connected { .. })
-        && dialect.as_deref() == Some(&crate::net::SessionDialect::Wrath12340)
-    {
+fn connected(In(event): In<SessionEvent>, mut receipts: ResMut<NativeFailures>) {
+    if matches!(event, SessionEvent::Connected { .. }) {
         receipts.0.clear();
     }
 }
@@ -173,19 +167,6 @@ mod tests {
             crate::net::handlers::dispatch(app.world_mut(), session_events);
         }
         assert_eq!(app.world().resource::<NativeFailures>().0, expected);
-        app.insert_resource(crate::net::SessionDialect::Vanilla5875);
-        crate::net::handlers::dispatch(
-            app.world_mut(),
-            vec![SessionEvent::Connected {
-                self_guid: 42,
-                name: "Synthetic".into(),
-                billing_time_rested: 0,
-                tutorial_flags: None,
-                addon_info: None,
-            }],
-        );
-        assert_eq!(app.world().resource::<NativeFailures>().0, expected);
-        app.insert_resource(crate::net::SessionDialect::Wrath12340);
         crate::net::handlers::dispatch(
             app.world_mut(),
             vec![SessionEvent::Connected {

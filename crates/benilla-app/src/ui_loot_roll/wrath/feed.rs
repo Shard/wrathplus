@@ -2,7 +2,7 @@
 use super::{lifecycle::Lifecycle, NativeRollTemplates, NativeRolls};
 use crate::{
     items::Items,
-    net::{NetCommands, Objects, SelfGuid, SessionDialect},
+    net::{NetCommands, Objects, SelfGuid},
 };
 use benilla_ui::script::{
     wrath_loot_roll_reasons as native_reasons, ScriptDialect, ScriptValue, UiScript,
@@ -62,7 +62,6 @@ fn capacity(
 
 pub(super) fn feed(
     script: Option<NonSendMut<UiScript>>,
-    dialect: Res<SessionDialect>,
     mut presentation: ResMut<Presentation>,
     mut inbox: ResMut<NativeRolls>,
     mut templates: ResMut<NativeRollTemplates>,
@@ -78,9 +77,6 @@ pub(super) fn feed(
     loot: Res<crate::ui_loot::LootConfig>,
     mut memo: Local<crate::ui_script::VmMemo<State>>,
 ) {
-    if *dialect != SessionDialect::Wrath12340 {
-        return;
-    }
     let Presentation {
         lifecycle,
         published,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::net::SessionDialect;
 #[test]
 fn independent_limits_short_circuit_without_fabricating_unknown_counts() {
     assert_eq!(

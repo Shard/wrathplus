@@ -176,7 +176,6 @@ fn on_cast_result(
     mut ladder: CastLadder,
     targeting: CastTargeting,
     mut r: Reply,
-    dialect: Res<crate::net::SessionDialect>,
 ) {
     if let SessionEvent::CastResult {
         spell_id,
@@ -186,16 +185,11 @@ fn on_cast_result(
     } = ev
     {
         // Build 12340 renumbered `SpellCastResult`; the tables below are 1.12's.
-        let reason = match *dialect {
-            crate::net::SessionDialect::Wrath12340 => {
-                reason.map(crate::ui_action::cast_fail::from_wrath)
-            }
-            crate::net::SessionDialect::Vanilla5875 => reason,
-        };
+        let reason = reason.map(crate::ui_action::cast_fail::from_wrath);
         // A 3.3.5 server sends `SMSG_SPELL_COOLDOWN` for a player's own cast only when a modifier
         // changed it (AzerothCore `Player::AddSpellAndCategoryCooldowns`); the client starts the
         // `Spell.dbc` recovery itself when its cast goes off.
-        if success && *dialect == crate::net::SessionDialect::Wrath12340 {
+        if success {
             if let Some(display) = ladder
                 .spells
                 .as_deref()
@@ -1772,7 +1766,7 @@ mod tests {
                                 None,
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Vanilla5875,
+                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),
@@ -2029,7 +2023,7 @@ mod tests {
                                 Some(&spells),
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Vanilla5875,
+                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),
@@ -2196,7 +2190,7 @@ mod tests {
                             Some(&spells),
                             &mut items,
                             &net_commands,
-                            crate::net::SessionDialect::Vanilla5875,
+                            crate::net::SessionDialect::Wrath12340,
                             &mut pet_bar,
                             &mods,
                         ),
@@ -2408,7 +2402,7 @@ mod tests {
                             None,
                             &mut items,
                             &net_commands,
-                            crate::net::SessionDialect::Vanilla5875,
+                            crate::net::SessionDialect::Wrath12340,
                             &mut pet_bar,
                             &crate::spell::SpellModifiers::default(),
                         ),
@@ -2796,7 +2790,7 @@ mod tests {
                                 Some(&spells),
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Vanilla5875,
+                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),
