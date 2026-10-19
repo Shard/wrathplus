@@ -59,6 +59,7 @@ fn arrow_facts(s: &mut UiScript) {
 
 fn overlay(texture: &str, w: u32, h: u32, ox: u32, oy: u32, bit: u32) -> WorldMapOverlayView {
     WorldMapOverlayView {
+        always: false,
         texture: format!("Interface\\WorldMap\\WarsongGulch\\{texture}"),
         width: w,
         height: h,
@@ -75,12 +76,16 @@ fn overlay(texture: &str, w: u32, h: u32, ox: u32, oy: u32, bit: u32) -> WorldMa
 /// `WarsongLumberMill` (256×256) zeroes both `mod`s, leaving it to the `== 0 then 256` guard.
 fn catalog() -> Vec<WorldMapContinentView> {
     vec![WorldMapContinentView {
+        map_id: 0,
+        wma_id: 0,
+        texture_height: 0,
         name: "Kalimdor".into(),
         map_file: "Kalimdor".into(),
         world_rect: (0.0, 0.0, 1.0, 1.0),
         loc_rect: (10000.0, -10000.0, 10000.0, -10000.0),
         zone_grid: Vec::new(),
         zones: vec![WorldMapZoneView {
+            wma_id: 0,
             name: "Warsong Gulch".into(),
             area_id: 3277,
             map_file: "WarsongGulch".into(),
@@ -412,6 +417,8 @@ fn the_poi_pool_grows_from_the_landmarks_and_parks_its_tail() {
     assert_eq!(s.eval::<i64>("return NUM_BATTLEFIELDMAP_POIS").unwrap(), 0);
 
     let landmark = |name: &str, icon: u32, uv: (f32, f32)| WorldMapLandmarkView {
+        map_link: 0,
+        battle_map: false,
         name: name.into(),
         description: String::new(),
         texture_index: icon,

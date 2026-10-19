@@ -186,6 +186,7 @@ mod video_pairs;
 mod weapon_enchant;
 mod who_sort;
 mod worldmap;
+mod wrath_worldmap;
 mod worldstate;
 mod worn_display;
 mod wrath_currency;
@@ -405,8 +406,8 @@ pub use unit::{
 pub use weapon_enchant::WeaponEnchant;
 pub use who_sort::{WhoSortChain, WhoSortKey};
 pub use worldmap::{
-    WorldMapContinentView, WorldMapLandmarkView, WorldMapOverlayView, WorldMapState,
-    WorldMapZoneView,
+    DungeonFloorView, MapSelection, WorldMapAreaView, WorldMapContinentView, WorldMapLandmarkView,
+    WorldMapOverlayView, WorldMapState, WorldMapZoneView,
 };
 pub use worldstate::WorldStateUiView;
 pub use worn_display::WornDisplay;

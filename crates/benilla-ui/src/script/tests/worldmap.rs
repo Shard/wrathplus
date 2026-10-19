@@ -17,6 +17,9 @@ fn push_catalog(s: &mut UiScript) {
     ek_grid[9060] = 1;
     s.set_world_map_catalog(vec![
         WorldMapContinentView {
+            map_id: 0,
+            wma_id: 0,
+            texture_height: 0,
             name: "Kalimdor".into(),
             map_file: "Kalimdor".into(),
             world_rect: (0.08882, 0.07910, 0.40020, 0.86952),
@@ -24,6 +27,7 @@ fn push_catalog(s: &mut UiScript) {
             zone_grid: Vec::new(),
             zones: vec![
                 WorldMapZoneView {
+                    wma_id: 0,
                     name: "Durotar".into(),
                     area_id: 14,
                     map_file: "Durotar".into(),
@@ -31,6 +35,7 @@ fn push_catalog(s: &mut UiScript) {
                     overlays: Vec::new(),
                 },
                 WorldMapZoneView {
+                    wma_id: 0,
                     name: "The Barrens".into(),
                     area_id: 17,
                     map_file: "Barrens".into(),
@@ -40,6 +45,9 @@ fn push_catalog(s: &mut UiScript) {
             ],
         },
         WorldMapContinentView {
+            map_id: 0,
+            wma_id: 0,
+            texture_height: 0,
             name: "Eastern Kingdoms".into(),
             map_file: "Azeroth".into(),
             world_rect: (0.62375, 0.02695, 0.92315, 0.87126),
@@ -47,6 +55,7 @@ fn push_catalog(s: &mut UiScript) {
             zone_grid: ek_grid,
             zones: vec![
                 WorldMapZoneView {
+                    wma_id: 0,
                     name: "Elwynn Forest".into(),
                     area_id: 12,
                     map_file: "Elwynn".into(),
@@ -57,6 +66,7 @@ fn push_catalog(s: &mut UiScript) {
                     // is unresolvable (bit 126) and overlaps Northshire: the hover walks past it.
                     overlays: vec![
                         WorldMapOverlayView {
+                            always: false,
                             texture: "Interface\\WorldMap\\Elwynn\\STONECAIRNLAKE".into(),
                             width: 128,
                             height: 128,
@@ -67,6 +77,7 @@ fn push_catalog(s: &mut UiScript) {
                             area_name: None,
                         },
                         WorldMapOverlayView {
+                            always: false,
                             texture: "Interface\\WorldMap\\Elwynn\\NORTHSHIREVALLEY".into(),
                             width: 200,
                             height: 176,
@@ -77,6 +88,7 @@ fn push_catalog(s: &mut UiScript) {
                             area_name: Some("Northshire Valley".into()),
                         },
                         WorldMapOverlayView {
+                            always: false,
                             texture: "Interface\\WorldMap\\Elwynn\\GOLDSHIRE".into(),
                             width: 172,
                             height: 128,
@@ -90,6 +102,7 @@ fn push_catalog(s: &mut UiScript) {
                 },
                 // A city peer of Elwynn, which the reference treats as a zone (`0x4a67a0`).
                 WorldMapZoneView {
+                    wma_id: 0,
                     name: "Stormwind City".into(),
                     area_id: 1519,
                     map_file: "StormwindCity".into(),
@@ -107,6 +120,7 @@ fn push_catalog(s: &mut UiScript) {
 fn push_direct_areas(s: &mut UiScript) {
     let row = |name: &str, area_id: u32, folder: &str, overlays: Vec<WorldMapOverlayView>| {
         WorldMapZoneView {
+            wma_id: 0,
             name: name.into(),
             area_id,
             map_file: folder.into(),
@@ -123,6 +137,7 @@ fn push_direct_areas(s: &mut UiScript) {
                 2597,
                 "AlteracValley",
                 vec![WorldMapOverlayView {
+                    always: false,
                     texture: "Interface\\WorldMap\\AlteracValley\\DUNBALDAR".into(),
                     width: 128,
                     height: 128,
@@ -151,7 +166,7 @@ fn a_direct_area_is_the_third_selection_state() {
     // In Warsong Gulch `0x4a6650`'s continent loop misses (map 489 is no continent's) and the
     // orphan loop selects the row's own id.
     s.set_world_map_feed(None, Some((0.5, 0.5)), 0.0, None, Vec::new(), Vec::new());
-    s.set_world_map_player_direct_area(Some(443));
+    s.set_world_map_player_direct_area(Some(443), None);
     s.run("SetMapToCurrentZone()").unwrap();
 
     assert_eq!(
@@ -195,7 +210,7 @@ fn a_direct_area_is_the_third_selection_state() {
     s.set_world_map_explored(vec![u32::MAX; 64]);
     s.set_world_map_landmarks(Vec::new());
     s.run("SetMapToCurrentZone()").unwrap();
-    s.sync_world_map_to_player_zone(0, 0, Some(443));
+    s.sync_world_map_to_player_zone(0, 0, Some(443), None);
     assert_eq!(
         s.eval::<(String, i64)>("return GetMapInfo(), GetCurrentMapContinent()")
             .unwrap(),
@@ -227,37 +242,19 @@ fn a_direct_area_is_the_third_selection_state() {
     );
 }
 
-/// An instance map's overlays, keyed by the direct area, pass the zone's explored-bit gate
-/// (`0x4a67a0`'s overlay half, `0x4a6b10` to `0x4a6b3d`), with no free reveal for a battleground.
+/// Build 12340 lists overlays for a zone only: an instance map shows none, explored or not
+/// (`0x546310`'s overlay walk runs only for a continent index, never `-2`).
 #[test]
-fn an_instance_map_reveals_its_overlays_under_the_zone_gate() {
+fn an_instance_map_shows_no_overlays() {
     let mut s = script();
     push_catalog(&mut s);
     push_direct_areas(&mut s);
 
-    s.set_world_map_player_direct_area(Some(401));
-    s.run("SetMapToCurrentZone()").unwrap();
-    assert_eq!(
-        s.eval::<i64>("return GetNumMapOverlays()").unwrap(),
-        0,
-        "nothing explored — the gate applies exactly as on a zone map"
-    );
-
-    // AreaBit 954 = word 29, bit 26.
-    let mut explored = vec![0u32; 64];
-    explored[29] = 1 << 26;
-    s.set_world_map_explored(explored);
-    assert_eq!(s.eval::<i64>("return GetNumMapOverlays()").unwrap(), 1);
-    assert_eq!(
-        s.eval::<String>("return GetMapOverlayInfo(1)").unwrap(),
-        "Interface\\WorldMap\\AlteracValley\\DUNBALDAR"
-    );
-
-    // Warsong Gulch keys no `WorldMapOverlay` rows, so even fully explored it shows none.
-    s.set_world_map_player_direct_area(Some(443));
+    s.set_world_map_player_direct_area(Some(401), None);
     s.run("SetMapToCurrentZone()").unwrap();
     s.set_world_map_explored(vec![u32::MAX; 64]);
     assert_eq!(s.eval::<i64>("return GetNumMapOverlays()").unwrap(), 0);
+    assert!(s.eval::<bool>("return GetMapOverlayInfo(1) == nil").unwrap());
 }
 
 /// Lists come from the catalog, `SetMapZoom` reads back in the same call stack as the reference's
@@ -379,7 +376,7 @@ fn the_engine_can_select_a_zone_with_no_lua_call() {
         (0, 0)
     );
 
-    s.sync_world_map_to_player_zone(1, 2, None);
+    s.sync_world_map_to_player_zone(1, 2, None, None);
 
     assert_eq!(
         s.eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
@@ -396,7 +393,7 @@ fn the_engine_can_select_a_zone_with_no_lua_call() {
     );
 
     // It clamps through the same tail as the Lua verbs (`0x4a67a0` range-checks the zone).
-    s.sync_world_map_to_player_zone(99, 99, None);
+    s.sync_world_map_to_player_zone(99, 99, None, None);
     let (c, _) = s
         .eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
         .unwrap();
@@ -655,7 +652,19 @@ fn world_loc_map_position_projects_through_the_host() {
         (0.0, 0.0)
     );
     let seen = seen.borrow();
-    assert_eq!(seen[0], ((2, 1, None), 0, -8913.2f32, 554.6f32));
+    assert_eq!(
+        seen[0],
+        (
+            crate::script::MapSelection {
+                continent: 2,
+                zone: 1,
+                ..Default::default()
+            },
+            0,
+            -8913.2f32,
+            554.6f32
+        )
+    );
     assert_eq!(seen[1].1, u32::MAX, "a negative map id matches nothing");
     for call in [
         "GetWorldLocMapPosition(0, 1)",

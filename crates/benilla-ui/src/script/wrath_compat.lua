@@ -171,9 +171,6 @@ CanSummonFriend = CanSummonFriend or none
 
 -- ── maps and instances ─────────────────────────────────────────────────────────────────────────
 InitWorldMapPing = InitWorldMapPing or none
-GetCurrentMapDungeonLevel = GetCurrentMapDungeonLevel or zero
-GetNumDungeonMapLevels = GetNumDungeonMapLevels or zero
-SetDungeonMapLevel = SetDungeonMapLevel or none
 function GetInstanceInfo()
     local name = GetRealZoneText and GetRealZoneText() or ""
     local inInstance, kind = false, "none"
@@ -219,7 +216,6 @@ GetRaidDifficulty = GetRaidDifficulty or function() return 1 end
 UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
 CanHearthAndResurrectFromArea = none
-DungeonUsesTerrainMap = none
 
 -- ── the stock UI's CVars, at build 12340's defaults, for any the host has not registered ────────
 do
@@ -504,7 +500,6 @@ end
 RegisterStaticConstants = RegisterStaticConstants or none
 GetMultiCastBarOffset = GetMultiCastBarOffset or zero
 HasCompletedAnyAchievement = HasCompletedAnyAchievement or none
-IsZoomOutAvailable = IsZoomOutAvailable or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 function GetContainerNumFreeSlots(bag)
     local free = 0
@@ -532,7 +527,6 @@ do
     end
 end
 UnitIsTalking = UnitIsTalking or none
-GetNumMapDebugObjects = GetNumMapDebugObjects or zero
 
 -- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
 GetCurrentCombatTextEventInfo = GetCurrentCombatTextEventInfo or none

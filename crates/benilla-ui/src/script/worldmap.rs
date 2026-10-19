@@ -18,6 +18,8 @@ use super::Model;
 pub struct WorldMapZoneView {
     /// `AreaTable.dbc`'s localized name, "Elwynn Forest".
     pub name: String,
+    /// The `WorldMapArea.dbc` row id, `GetCurrentMapAreaID`'s answer less one.
+    pub wma_id: u32,
     /// The `AreaTable.dbc` id the feed's player-zone resolution joins on.
     pub area_id: u32,
     /// The `Interface\WorldMap\<file>\` art folder, `WorldMapArea`'s internal name ("Elwynn").
@@ -39,6 +41,10 @@ pub struct WorldMapLandmarkView {
     pub texture_index: u32,
     /// Position on the displayed map, UV from its top-left.
     pub uv: (f32, f32),
+    /// `AreaPOI.dbc`'s `WorldMapLink`, the `DungeonMap.dbc` id `ClickLandmark` opens; 0 for none.
+    pub map_link: u32,
+    /// `Flags & 0x200`, `GetMapLandmarkInfo`'s seventh return.
+    pub battle_map: bool,
 }
 
 /// A sub-area's map art, drawn over the base tiles once any of its explore bits is set.
@@ -53,6 +59,8 @@ pub struct WorldMapOverlayView {
     pub offset_y: u32,
     /// The `AreaTable.dbc` exploreFlag bits that reveal it, any one sufficing; empty never shows.
     pub explore_bits: Vec<u32>,
+    /// One of its areas has a negative `ExplorationLevel`, so it shows unexplored (`0x546310`).
+    pub always: bool,
     /// The DBC's `HitRect*` `(top, left, bottom, right)` in detail-frame pixels, which the
     /// zone-level hover tests with both edges inclusive (`0x4a7ffc..0x4a80ea`).
     pub hit_rect: (u32, u32, u32, u32),
@@ -66,6 +74,13 @@ pub struct WorldMapOverlayView {
 pub struct WorldMapContinentView {
     /// `Map.dbc`'s localized MapName, the dropdown label (`0x4a65a0`), not the art folder.
     pub name: String,
+    /// The `Map.dbc` id.
+    pub map_id: u32,
+    /// The continent's `WorldMapArea.dbc` row (`AreaID` 0).
+    pub wma_id: u32,
+    /// `GetMapInfo`'s texture height at continent level, from the `WorldMapContinent.dbc` tile
+    /// bounds (`0x543cd0`): `round((bottom - top + 1) · 1002 / (right - left + 1))`.
+    pub texture_height: u32,
     pub map_file: String,
     /// The rect on the world sheet in UV `(u0, v0, u1, v1)`, from the `WorldMapContinent` tile
     /// bounds (`0x4a5d00`); a world-level click takes the first that holds it (`0x4a7100`).
@@ -116,7 +131,7 @@ fn area_grid_cell(loc: (f32, f32, f32, f32), u: f32, v: f32) -> Option<usize> {
 fn grid_area(state: &WorldMapState, u: f32, v: f32) -> Option<u16> {
     // An instance map has no grid (`0x4a6ec0` opens `cmp esi,-2; je 0x4a70ed`); tested apart from
     // `c == 0`, which the world sheet shares.
-    if state.direct_area.is_some() {
+    if minus_two(state) {
         return None;
     }
     let (c, z) = state.selection;
@@ -148,6 +163,50 @@ fn next_pow2(n: i64) -> i64 {
     p
 }
 
+/// One `WorldMapArea.dbc` row with build 12340's link columns, which `SetMapByID`, `ZoomOut` and
+/// the dungeon-level calls read.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorldMapAreaView {
+    pub id: u32,
+    pub map_id: u32,
+    pub area_id: u32,
+    /// The art folder, `GetMapInfo`'s first return.
+    pub map_file: String,
+    /// The loc rect `(left, right, top, bottom)`.
+    pub loc_rect: (f32, f32, f32, f32),
+    /// `DisplayMapID`, `-1` for the row's own map.
+    pub display_map: i32,
+    /// `DefaultDungeonFloor`: a `DungeonMap.dbc` id, `-1` for terrain as floor 0, `0` for none.
+    pub default_floor: i32,
+    /// `ParentWorldMapID`, `0` for none.
+    pub parent: u32,
+}
+
+/// One `DungeonMap.dbc` floor, in file order (the client's walks stop past a map's run).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DungeonFloorView {
+    pub id: u32,
+    pub map_id: u32,
+    /// 1-based.
+    pub floor_index: u32,
+    /// `(min_x, max_x, min_y, max_y)`.
+    pub rect: (f32, f32, f32, f32),
+    /// The `WorldMapArea.dbc` row `ZoomOut` returns to, `0` for none.
+    pub parent: u32,
+}
+
+/// The displayed map's selection cells, as the projection reads them: the 1-based continent and
+/// zone (0 for none), an instance map's `WorldMapArea.dbc` id, its displayed `DungeonMap.dbc`
+/// floor, and the cosmic sheet (`SetMapZoom(-1)`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MapSelection {
+    pub continent: u32,
+    pub zone: u32,
+    pub direct: Option<u32>,
+    pub floor: Option<u32>,
+    pub cosmic: bool,
+}
+
 /// The engine-side world-map state: the pushed catalog and feed, and the selection.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorldMapState {
@@ -162,6 +221,16 @@ pub struct WorldMapState {
     /// beside continent `[0x84506c]` (then -2) and zone `[0x845070]`. The setter `0x4a67a0` keeps
     /// it exclusive with the pair (`0x4a67c1`, `0x4a67ea`); [`store_selection`] is the one writer.
     pub direct_area: Option<u32>,
+    /// The displayed `DungeonMap.dbc` floor of [`Self::direct_area`] (`[0xaccf0c]`).
+    pub floor: Option<u32>,
+    /// The cosmic sheet: build 12340's continent `-2` with no map (`SetMapZoom(-1)`).
+    pub cosmic: bool,
+    /// Every `WorldMapArea.dbc` row by id.
+    pub areas: std::collections::HashMap<u32, WorldMapAreaView>,
+    /// `DungeonMap.dbc` in file order.
+    pub floors: Vec<DungeonFloorView>,
+    /// The player's floor on [`Self::player_direct_area`], where `SetMapToCurrentZone` lands.
+    pub player_floor: Option<u32>,
     /// The player's `(continent, zone)`, where `SetMapToCurrentZone` lands.
     pub player_zone: Option<(u32, u32)>,
     /// The resolver's orphan leg, the `WorldMapArea` row id on the player's map. `0x4a6650`
@@ -276,7 +345,7 @@ fn continent_hover(cont: &WorldMapContinentView, zone: &WorldMapZoneView) -> Opt
 /// continent highlight the reference draws there is not built here.
 fn hover(wm: &WorldMapState, x: f32, y: f32) -> Hover {
     // An instance map resolves no area (`0x4a7620` opens `cmp esi,-2; je 0x4a76d7`).
-    if wm.direct_area.is_some() {
+    if minus_two(wm) {
         return Hover::Miss;
     }
     let (c, z) = wm.selection;
@@ -329,20 +398,30 @@ fn current_zone(state: &WorldMapState) -> Option<&WorldMapZoneView> {
         .get(z as usize - 1)
 }
 
-/// The displayed zone's revealed overlays in catalog order, the i-th `GetMapOverlayInfo(i)`.
+/// The displayed zone's revealed overlays in catalog order, the i-th `GetMapOverlayInfo(i)`. Build
+/// 12340 lists them for a zone only, never an instance map (`0x546310`'s `param_1 != -2`).
 fn revealed_overlays(state: &WorldMapState) -> Vec<&WorldMapOverlayView> {
+    if minus_two(state) {
+        return Vec::new();
+    }
     current_zone(state)
         .map(|zone| {
             zone.overlays
                 .iter()
                 .filter(|o| {
-                    o.explore_bits
-                        .iter()
-                        .any(|&b| explored_bit(&state.explored, b))
+                    o.always
+                        || o.explore_bits
+                            .iter()
+                            .any(|&b| explored_bit(&state.explored, b))
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Build 12340's continent cell `-2`: an instance map, or the cosmic sheet.
+pub(super) fn minus_two(state: &WorldMapState) -> bool {
+    state.direct_area.is_some() || state.cosmic
 }
 
 impl super::UiScript {
@@ -364,9 +443,27 @@ impl super::UiScript {
             .push(("WORLD_MAP_UPDATE".to_string(), Vec::new()));
     }
 
-    /// Pushes the resolver's orphan leg; the continent leg rides [`Self::set_world_map_feed`].
-    pub fn set_world_map_player_direct_area(&mut self, direct_area: Option<u32>) {
-        self.model_mut().worldmap.player_direct_area = direct_area;
+    /// Pushes the resolver's orphan leg and the player's floor on it; the continent leg rides
+    /// [`Self::set_world_map_feed`].
+    pub fn set_world_map_player_direct_area(
+        &mut self,
+        direct_area: Option<u32>,
+        floor: Option<u32>,
+    ) {
+        let mut model = self.model_mut();
+        model.worldmap.player_direct_area = direct_area;
+        model.worldmap.player_floor = floor;
+    }
+
+    /// Pushes every `WorldMapArea.dbc` row and `DungeonMap.dbc` floor, beside the catalog.
+    pub fn set_world_map_areas(
+        &mut self,
+        areas: std::collections::HashMap<u32, WorldMapAreaView>,
+        floors: Vec<DungeonFloorView>,
+    ) {
+        let mut model = self.model_mut();
+        model.worldmap.areas = areas;
+        model.worldmap.floors = floors;
     }
 
     /// Pushes the discovery bitset; a change queues `WORLD_MAP_UPDATE` so an open map fills in.
@@ -410,12 +507,9 @@ impl super::UiScript {
         model.worldmap.raid_uv = raid_uv;
     }
 
-    /// The selection's three cells, which the app reads each frame to project the feed: continent,
-    /// zone, and the direct-area id that overrides them when `Some`. The pair alone reads an
-    /// instance map as the world sheet.
-    pub fn world_map_selection(&self) -> (u32, u32, Option<u32>) {
-        let wm = &self.model_ref().worldmap;
-        (wm.selection.0, wm.selection.1, wm.direct_area)
+    /// The selection's cells, which the app reads each frame to project the feed.
+    pub fn world_map_selection(&self) -> MapSelection {
+        self.model_ref().map_selection()
     }
 
     /// Install the host's world-to-map projection behind `GetWorldLocMapPosition`.
@@ -438,9 +532,10 @@ impl super::UiScript {
         continent: u32,
         zone: u32,
         direct_area: Option<u32>,
+        floor: Option<u32>,
     ) {
         let mut model = self.model_mut();
-        select_resolved(&mut model, continent, zone, direct_area);
+        select_resolved(&mut model, continent, zone, direct_area, floor);
     }
 
     /// The map UV at UI point `(x, y)`, or `None` off the art, normalized over `WorldMapButton`
@@ -462,14 +557,76 @@ impl super::UiScript {
     }
 }
 
-/// The one writer of the three selection cells, as the setter `0x4a67a0` is: every leg but
-/// `ecx == -2` clears the direct cell (`0x4a67ea`), and that one stores the id (`0x4a67c1`).
-fn store_selection(model: &mut Model, selection: (u32, u32), direct_area: Option<u32>) {
+impl Model {
+    /// The selection cells the projection reads.
+    pub(crate) fn map_selection(&self) -> MapSelection {
+        let wm = &self.worldmap;
+        MapSelection {
+            continent: wm.selection.0,
+            zone: wm.selection.1,
+            direct: wm.direct_area,
+            floor: wm.direct_area.and(wm.floor),
+            cosmic: wm.cosmic,
+        }
+    }
+}
+
+/// The one writer of the selection cells, as the setter (`0x4a67a0`, build 12340's `0x546310`)
+/// is: every leg but `ecx == -2` clears the direct cell and the floor, and that one stores them.
+fn store_selection(
+    model: &mut Model,
+    selection: (u32, u32),
+    direct_area: Option<u32>,
+    floor: Option<u32>,
+    cosmic: bool,
+) {
     model.worldmap.selection = selection;
     model.worldmap.direct_area = direct_area;
+    model.worldmap.floor = direct_area.and(floor);
+    model.worldmap.cosmic = cosmic && direct_area.is_none();
     model
         .pending_events
         .push(("WORLD_MAP_UPDATE".to_string(), Vec::new()));
+}
+
+/// Build 12340's setter `0x546310(continent, zone or id, floor)`, in the client's cells:
+/// - a continent index `>= 0` takes a zone index, `-1` or out of range for the continent map. A
+///   zone whose `WorldMapArea` row opens on a floor (`DefaultDungeonFloor >= 1`, Dalaran) becomes
+///   that row's instance map on that floor;
+/// - `-1` is the world sheet;
+/// - `-2` takes a `WorldMapArea` id and a `DungeonMap` floor, `-1` each for none; with no id it is
+///   the cosmic sheet.
+pub(super) fn set_map(model: &mut Model, continent: i64, zone_or_id: i64, floor: i64) {
+    let floor_of = |f: i64| u32::try_from(f).ok().filter(|&f| f >= 1);
+    if let Ok(ci) = usize::try_from(continent) {
+        if let Some(cont) = model.worldmap.continents.get(ci) {
+            let zone = usize::try_from(zone_or_id)
+                .ok()
+                .filter(|&z| z < cont.zones.len());
+            if let Some(zi) = zone {
+                let wma = cont.zones[zi].wma_id;
+                let opens = model
+                    .worldmap
+                    .areas
+                    .get(&wma)
+                    .map_or(0, |a| a.default_floor);
+                if opens >= 1 {
+                    store_selection(model, (0, 0), Some(wma), floor_of(i64::from(opens)), false);
+                    return;
+                }
+            }
+            let z = zone.map_or(0, |z| z as u32 + 1);
+            store_selection(model, (ci as u32 + 1, z), None, None, false);
+            return;
+        }
+    }
+    match continent {
+        -2 => match u32::try_from(zone_or_id) {
+            Ok(id) => store_selection(model, (0, 0), Some(id), floor_of(floor), false),
+            Err(_) => store_selection(model, (0, 0), None, None, true),
+        },
+        _ => store_selection(model, (0, 0), None, None, false),
+    }
 }
 
 /// Clamps and stores a continent and zone, clearing the direct area: the tail of `SetMapZoom`,
@@ -482,26 +639,32 @@ fn select(model: &mut Model, continent: i64, zone: i64) {
         let n = model.worldmap.continents[c as usize - 1].zones.len() as i64;
         zone.clamp(0, n) as u32
     };
-    store_selection(model, (c, z), None);
+    store_selection(model, (c, z), None, None, false);
 }
 
 /// Selects an instance map, `0x4a67a0` with `ecx == -2`: the zone cell goes to -1 (our 0) and the
 /// row id is stored unchecked, as every reader bound-checks it ([`direct_row`]).
-fn select_direct(model: &mut Model, wma_id: u32) {
-    store_selection(model, (0, 0), Some(wma_id));
+fn select_direct(model: &mut Model, wma_id: u32, floor: Option<u32>) {
+    store_selection(model, (0, 0), Some(wma_id), floor, false);
 }
 
 /// Applies the resolver `0x4a6650`'s answer, the tail of `SetMapToCurrentZone` and of the login
 /// sync (`0x4947ac`).
-fn select_resolved(model: &mut Model, continent: u32, zone: u32, direct_area: Option<u32>) {
+fn select_resolved(
+    model: &mut Model,
+    continent: u32,
+    zone: u32,
+    direct_area: Option<u32>,
+    floor: Option<u32>,
+) {
     match direct_area {
-        Some(id) => select_direct(model, id),
+        Some(id) => select_direct(model, id, floor),
         None => select(model, i64::from(continent), i64::from(zone)),
     }
 }
 
-/// Register the world-map globals.
-/// The 3.3.5-only map binding: `GetDeathReleasePosition()` (WorldMapFrame.lua:908).
+/// The 3.3.5-only map bindings: `GetDeathReleasePosition()` (WorldMapFrame.lua:908), then
+/// [`super::wrath_worldmap`]'s, which replace the 1.12 selection calls.
 pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     // GetDeathReleasePosition() → the release location's map UV through the same projection, or
     // (0, 0), which WorldMapFrame.lua:909 hides.
@@ -509,8 +672,7 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         "GetDeathReleasePosition",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let wm = &model.worldmap;
-            let selection = (wm.selection.0, wm.selection.1, wm.direct_area);
+            let selection = model.map_selection();
             let (u, v) = model
                 .death_release
                 .and_then(|(map, x, y)| {
@@ -524,7 +686,7 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    Ok(())
+    super::wrath_worldmap::install(lua)
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -603,7 +765,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
             let (c, z) = model.worldmap.player_zone.unwrap_or((0, 0));
             let direct = model.worldmap.player_direct_area;
-            select_resolved(&mut model, c, z, direct);
+            let floor = model.worldmap.player_floor;
+            select_resolved(&mut model, c, z, direct, floor);
             Ok(())
         })?,
     )?;
@@ -658,8 +821,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             // The truncating cast, then the map id compared as an unsigned dword.
             let map = map as i64 as i32 as u32;
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let wm = &model.worldmap;
-            let selection = (wm.selection.0, wm.selection.1, wm.direct_area);
+            let selection = model.map_selection();
             let (u, v) = model
                 .world_loc_projector
                 .as_ref()
@@ -711,7 +873,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
             // An instance map swallows the click (`0x4a7540` opens `cmp esi,-2; je 0x4a760d`),
             // tested first as it shares the world sheet's `continent == 0`.
-            if model.worldmap.direct_area.is_some() {
+            if minus_two(&model.worldmap) {
                 return Ok(());
             }
             if model.worldmap.selection.0 == 0 {
