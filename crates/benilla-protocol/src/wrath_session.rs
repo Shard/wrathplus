@@ -91,8 +91,45 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
                 .collect::<io::Result<Vec<_>>>()?;
             vec![SessionEvent::ReputationDelta { standings }]
         }
-        SMSG_LOG_XPGAIN | SMSG_PARTYKILLLOG | SMSG_EXPLORATION_EXPERIENCE => {
-            session_decode(crate::messages::parse_server_with_tail(opcode, body)?.0)
+        // AC `Player::SendLogXPGain`: victim, total, type (0 kill), for a kill the award before
+        // the rested bonus and the group-bonus float, then the refer-a-friend byte 1.12 lacked.
+        SMSG_LOG_XPGAIN => {
+            let victim = u64_le(&mut r)?;
+            let total = u32_le(&mut r)?;
+            let kill = u8_le(&mut r)? == 0;
+            let base = if kill {
+                let base = u32_le(&mut r)?;
+                let _group_bonus = f32_le(&mut r)?;
+                base
+            } else {
+                total
+            };
+            let _recruit_a_friend = u8_le(&mut r)?;
+            strict(&r, body, "LOG_XPGAIN")?;
+            vec![SessionEvent::XpGain(crate::messages::XpGain {
+                victim,
+                total,
+                base,
+                kill,
+            })]
+        }
+        // AC `Unit::Kill`: the killing blow's player and the victim.
+        SMSG_PARTYKILLLOG => {
+            let log = crate::messages::PartyKillLog {
+                killer: u64_le(&mut r)?,
+                victim: u64_le(&mut r)?,
+            };
+            strict(&r, body, "PARTYKILLLOG")?;
+            vec![SessionEvent::PartyKillLog(log)]
+        }
+        // AC `Player::CheckAreaExploreAndOutdoor`: the area and the XP.
+        SMSG_EXPLORATION_EXPERIENCE => {
+            let xp = crate::messages::ExplorationXp {
+                area_id: u32_le(&mut r)?,
+                xp: u32_le(&mut r)?,
+            };
+            strict(&r, body, "EXPLORATION_EXPERIENCE")?;
+            vec![SessionEvent::ExplorationXp(xp)]
         }
         SMSG_CAST_FAILED => cast_failed(&mut r)?,
         SMSG_SPELL_START => spell_start(&mut r)?,
@@ -539,6 +576,14 @@ pub(crate) fn u64_le(r: &mut impl Read) -> io::Result<u64> {
     Ok(u64::from_le_bytes(b))
 }
 
+/// A body read to its end: trailing bytes are a layout this decoder does not know.
+fn strict(r: &Cursor<&[u8]>, body: &[u8], what: &'static str) -> io::Result<()> {
+    if r.position() as usize != body.len() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, what));
+    }
+    Ok(())
+}
+
 pub(crate) fn f32_le(r: &mut impl Read) -> io::Result<f32> {
     Ok(f32::from_bits(u32_le(r)?))
 }
@@ -719,5 +764,41 @@ mod tests {
             assert!(decode(SMSG_SPELL_FAILED_OTHER, &body[..end], None).is_err(), "prefix {end}");
         }
         assert!(decode(SMSG_SPELL_FAILED_OTHER, &[body.as_slice(), &[0]].concat(), None).is_err());
+    }
+
+    #[test]
+    fn xp_gain_reads_the_recruit_a_friend_byte_and_party_kill_and_exploration_are_strict() {
+        let mut kill = 0x42u64.to_le_bytes().to_vec();
+        kill.extend(120u32.to_le_bytes());
+        kill.push(0);
+        kill.extend(100u32.to_le_bytes());
+        kill.extend(1.0f32.to_le_bytes());
+        kill.push(0); // refer-a-friend
+        let [SessionEvent::XpGain(x)] = &decode(SMSG_LOG_XPGAIN, &kill, None).unwrap()[..] else {
+            panic!("one gain")
+        };
+        assert_eq!((x.victim, x.total, x.base, x.kill), (0x42, 120, 100, true));
+        let mut other = 0u64.to_le_bytes().to_vec();
+        other.extend(50u32.to_le_bytes());
+        other.extend([1, 0]);
+        let [SessionEvent::XpGain(x)] = &decode(SMSG_LOG_XPGAIN, &other, None).unwrap()[..] else {
+            panic!("one gain")
+        };
+        assert_eq!((x.total, x.base, x.kill), (50, 50, false));
+        // The 1.12 shape (no refer-a-friend byte) and an extra byte are both refused.
+        assert!(decode(SMSG_LOG_XPGAIN, &other[..other.len() - 1], None).is_err());
+        assert!(decode(SMSG_LOG_XPGAIN, &[&other[..], &[0]].concat(), None).is_err());
+
+        let pk = [1u64.to_le_bytes(), 2u64.to_le_bytes()].concat();
+        assert!(matches!(
+            &decode(SMSG_PARTYKILLLOG, &pk, None).unwrap()[..],
+            [SessionEvent::PartyKillLog(l)] if (l.killer, l.victim) == (1, 2)
+        ));
+        let ex = [12u32.to_le_bytes(), 300u32.to_le_bytes()].concat();
+        assert!(matches!(
+            &decode(SMSG_EXPLORATION_EXPERIENCE, &ex, None).unwrap()[..],
+            [SessionEvent::ExplorationXp(e)] if (e.area_id, e.xp) == (12, 300)
+        ));
+        assert!(decode(SMSG_EXPLORATION_EXPERIENCE, &ex[..7], None).is_err());
     }
 }

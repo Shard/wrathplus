@@ -4,16 +4,18 @@
 //! (`GossipDef.cpp`, `QuestPackets.cpp`, `QuestHandler.cpp`, `MiscHandler.cpp`).
 //!
 //! The messages whose body is unchanged since 1.12 (NPC text, gossip complete and POI, the quest
-//! update notices, invalid/failed, the log-full notice) go through the Vanilla parser.
+//! update notices, invalid/failed, the log-full notice, the push result) decode here too, strictly:
+//! a body must end where its layout does. `SMSG_QUESTUPDATE_ADD_ITEM` is empty from AzerothCore
+//! (`Player::SendQuestUpdateAddItem`), where 1.12 carried the item and count.
 
 use std::io::{self, Cursor};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::events::{decode as session_decode, SessionEvent};
-use crate::messages::parse_server_with_tail;
+use crate::events::SessionEvent;
 use crate::messages::{
-    GossipOption, QuestComplete, QuestDetails, QuestGiverList, QuestListEntry, QuestObjective,
-    QuestOfferReward, QuestRequestItems, QuestRewardItem, QuestTemplate, WrathQuestInfo,
+    GossipOption, GossipPoi, NpcTextBlock, QuestComplete, QuestConfirmAccept, QuestDetails,
+    QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestRequestItems,
+    QuestRewardItem, QuestShareMsg, QuestTemplate, WrathQuestInfo,
 };
 use crate::wrath_session::{cstring, f32_le, u32_le, u64_le, u8_le};
 
@@ -123,9 +125,115 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                 &mut r,
             )?))]
         }
-        // Unchanged since 1.12.
-        _ => session_decode(parse_server_with_tail(opcode, body)?.0),
+        SMSG_GOSSIP_COMPLETE => end(&r, vec![SessionEvent::GossipComplete])?,
+        SMSG_NPC_TEXT_UPDATE => {
+            let text_id = u32_le(&mut r)?;
+            let blocks = npc_text_blocks(&mut r)?;
+            end(&r, vec![SessionEvent::NpcGreeting { text_id, blocks }])?
+        }
+        SMSG_QUESTGIVER_QUEST_INVALID => {
+            let reason = u32_le(&mut r)?;
+            end(&r, vec![SessionEvent::QuestGiverInvalid { reason }])?
+        }
+        SMSG_QUESTGIVER_QUEST_FAILED => {
+            let (quest_id, reason) = (u32_le(&mut r)?, u32_le(&mut r)?);
+            end(&r, vec![SessionEvent::QuestGiverFailed { quest_id, reason }])?
+        }
+        SMSG_QUESTLOG_FULL => end(&r, vec![SessionEvent::QuestLogFull])?,
+        SMSG_QUESTUPDATE_FAILED | SMSG_QUESTUPDATE_FAILEDTIMER => {
+            let quest_id = u32_le(&mut r)?;
+            let timed = opcode == SMSG_QUESTUPDATE_FAILEDTIMER;
+            end(&r, vec![SessionEvent::QuestFailed { quest_id, timed }])?
+        }
+        SMSG_QUESTUPDATE_COMPLETE => {
+            let quest_id = u32_le(&mut r)?;
+            end(&r, vec![SessionEvent::QuestObjectivesComplete { quest_id }])?
+        }
+        SMSG_QUESTUPDATE_ADD_KILL => {
+            let (quest_id, entry, count, required) = (
+                u32_le(&mut r)?,
+                u32_le(&mut r)?,
+                u32_le(&mut r)?,
+                u32_le(&mut r)?,
+            );
+            // The killed unit; the toast keys on the entry.
+            let _guid = u64_le(&mut r)?;
+            end(
+                &r,
+                vec![SessionEvent::QuestObjectiveKill {
+                    quest_id,
+                    entry,
+                    count,
+                    required,
+                }],
+            )?
+        }
+        // Empty from AC; an item and a count when a server fills the optional payload.
+        SMSG_QUESTUPDATE_ADD_ITEM => {
+            let (item_id, count) = if body.is_empty() {
+                (0, 0)
+            } else {
+                (u32_le(&mut r)?, u32_le(&mut r)?)
+            };
+            end(&r, vec![SessionEvent::QuestObjectiveItem { item_id, count }])?
+        }
+        SMSG_QUEST_CONFIRM_ACCEPT => {
+            let confirm = QuestConfirmAccept {
+                quest_id: u32_le(&mut r)?,
+                title: cstring(&mut r)?,
+                sender: u64_le(&mut r)?,
+            };
+            end(&r, vec![SessionEvent::QuestConfirmAccept(confirm)])?
+        }
+        SMSG_GOSSIP_POI => {
+            let flags = u32_le(&mut r)?;
+            let pos = [f32_le(&mut r)?, f32_le(&mut r)?];
+            let poi = GossipPoi {
+                flags,
+                pos,
+                icon: u32_le(&mut r)?,
+                data: u32_le(&mut r)?,
+                name: cstring(&mut r)?,
+            };
+            end(&r, vec![SessionEvent::GossipPoi(poi)])?
+        }
+        MSG_QUEST_PUSH_RESULT => {
+            let member = u64_le(&mut r)?;
+            let msg = QuestShareMsg(u8_le(&mut r)?);
+            end(&r, vec![SessionEvent::QuestPushResult { member, msg }])?
+        }
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "not an NPC opcode")),
     })
+}
+
+/// The events of a body read to its end; trailing bytes are a layout this decoder does not know.
+fn end(r: &Cursor<&[u8]>, events: Vec<SessionEvent>) -> io::Result<Vec<SessionEvent>> {
+    if r.position() as usize != r.get_ref().len() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "NPC message trailing bytes"));
+    }
+    Ok(events)
+}
+
+/// `SMSG_NPC_TEXT_UPDATE`'s eight blocks (AC `QueryHandler.cpp:284-356`): probability, the two
+/// gendered texts, the language and three `(delay, emote)` pairs each.
+fn npc_text_blocks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<NpcTextBlock>> {
+    (0..crate::messages::NPC_TEXT_BLOCKS)
+        .map(|_| {
+            let probability = f32_le(r)?;
+            let male = cstring(r)?;
+            let female = cstring(r)?;
+            let _language = u32_le(r)?;
+            for _ in 0..3 {
+                let _delay = u32_le(r)?;
+                let _emote = u32_le(r)?;
+            }
+            Ok(NpcTextBlock {
+                probability,
+                male,
+                female,
+            })
+        })
+        .collect()
 }
 
 /// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::messages::dialog_status`] values. 3.3.5
@@ -784,5 +892,103 @@ mod tests {
         for cut in 0..b.len() {
             assert!(decode(SMSG_QUEST_QUERY_RESPONSE, &b[..cut]).is_err());
         }
+    }
+
+    #[test]
+    fn the_former_1_12_arms_decode_strictly_and_add_item_is_empty_from_ac() {
+        macro_rules! same {
+            ($a:expr, $b:expr) => {
+                assert_eq!(format!("{:?}", $a), format!("{:?}", $b))
+            };
+        }
+        use SessionEvent as E;
+        let one = |op: u16, body: &[u8]| decode(op, body).unwrap();
+        same!(one(SMSG_GOSSIP_COMPLETE, &[]), [E::GossipComplete]);
+        assert!(decode(SMSG_GOSSIP_COMPLETE, &[0]).is_err());
+        same!(one(SMSG_QUESTLOG_FULL, &[]), [E::QuestLogFull]);
+        same!(
+            one(SMSG_QUESTGIVER_QUEST_INVALID, &13u32.to_le_bytes()),
+            [E::QuestGiverInvalid { reason: 13 }]
+        );
+        same!(
+            one(
+                SMSG_QUESTGIVER_QUEST_FAILED,
+                &[5u32.to_le_bytes(), 4u32.to_le_bytes()].concat()
+            ),
+            [E::QuestGiverFailed { quest_id: 5, reason: 4 }]
+        );
+        same!(
+            one(SMSG_QUESTUPDATE_FAILEDTIMER, &5u32.to_le_bytes()),
+            [E::QuestFailed { quest_id: 5, timed: true }]
+        );
+        same!(
+            one(SMSG_QUESTUPDATE_FAILED, &5u32.to_le_bytes()),
+            [E::QuestFailed { quest_id: 5, timed: false }]
+        );
+        same!(
+            one(SMSG_QUESTUPDATE_COMPLETE, &5u32.to_le_bytes()),
+            [E::QuestObjectivesComplete { quest_id: 5 }]
+        );
+        let mut kill = Vec::new();
+        for v in [5u32, 0x8000_0010, 2, 6] {
+            kill.extend(v.to_le_bytes());
+        }
+        kill.extend(0x99u64.to_le_bytes());
+        same!(
+            one(SMSG_QUESTUPDATE_ADD_KILL, &kill),
+            [E::QuestObjectiveKill {
+                quest_id: 5,
+                entry: 0x8000_0010,
+                count: 2,
+                required: 6
+            }]
+        );
+        assert!(decode(SMSG_QUESTUPDATE_ADD_KILL, &kill[..16]).is_err(), "no guid");
+        same!(
+            one(SMSG_QUESTUPDATE_ADD_ITEM, &[]),
+            [E::QuestObjectiveItem { item_id: 0, count: 0 }]
+        );
+        same!(
+            one(
+                SMSG_QUESTUPDATE_ADD_ITEM,
+                &[2589u32.to_le_bytes(), 3u32.to_le_bytes()].concat()
+            ),
+            [E::QuestObjectiveItem { item_id: 2589, count: 3 }]
+        );
+        let mut confirm = 5u32.to_le_bytes().to_vec();
+        cstr(&mut confirm, "Escort");
+        confirm.extend(0x77u64.to_le_bytes());
+        assert!(matches!(
+            &one(SMSG_QUEST_CONFIRM_ACCEPT, &confirm)[..],
+            [E::QuestConfirmAccept(c)] if (c.quest_id, c.title.as_str(), c.sender) == (5, "Escort", 0x77)
+        ));
+        let mut poi = 99u32.to_le_bytes().to_vec();
+        poi.extend(1.5f32.to_le_bytes());
+        poi.extend((-2.0f32).to_le_bytes());
+        poi.extend(6u32.to_le_bytes());
+        poi.extend(0u32.to_le_bytes());
+        cstr(&mut poi, "Bank");
+        assert!(matches!(
+            &one(SMSG_GOSSIP_POI, &poi)[..],
+            [E::GossipPoi(p)] if p.pos == [1.5, -2.0] && p.icon == 6 && p.name == "Bank"
+        ));
+        let push = [&0x66u64.to_le_bytes()[..], &[3]].concat();
+        assert!(matches!(
+            &one(MSG_QUEST_PUSH_RESULT, &push)[..],
+            [E::QuestPushResult { member: 0x66, msg }] if msg.0 == 3
+        ));
+        let mut text = 77u32.to_le_bytes().to_vec();
+        for i in 0..8 {
+            text.extend((if i == 0 { 1.0f32 } else { 0.0 }).to_le_bytes());
+            cstr(&mut text, if i == 0 { "Hello $N" } else { "" });
+            cstr(&mut text, "");
+            text.extend([0u8; 4 + 24]);
+        }
+        let events = one(SMSG_NPC_TEXT_UPDATE, &text);
+        let [E::NpcGreeting { text_id: 77, blocks }] = &events[..] else {
+            panic!("one greeting")
+        };
+        same!((blocks.len(), blocks[0].male.as_str()), (8, "Hello $N"));
+        assert!(decode(SMSG_NPC_TEXT_UPDATE, &[&text[..], &[0]].concat()).is_err());
     }
 }
