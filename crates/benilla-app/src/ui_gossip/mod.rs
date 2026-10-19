@@ -260,6 +260,14 @@ fn feed_gossip(
     let last = last.get(&script);
     let last_name = last_name.get(&script);
     let last_npc = last_npc.get(&script);
+    // Build 12340's `ForceGossip` (`0x58ab50` → `0x715e10`): the gossip NPC's creature record,
+    // `type_flags` bit 27. The entry is the guid's bits 24-51 (`0x802d24`).
+    let force = state.npc.is_some_and(|g| {
+        names
+            .creature_record(((g >> 24) & 0x0fff_ffff) as u32)
+            .is_some_and(|r| r.type_flags & 0x0800_0000 != 0)
+    });
+    script.set_wrath_force_gossip(force);
     // The NPC's name rides `GOSSIP_SHOW` as arg1, and its landing alone re-fires the event; the
     // reference fires `GOSSIP_SHOW` bare (`0x4e22b0`), and stock `GossipFrame.lua:33` titles with
     // `UnitName("npc")`. Asked before the hold, so the name query goes out beside the text query.

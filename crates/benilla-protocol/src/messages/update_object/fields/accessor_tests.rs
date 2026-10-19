@@ -1707,3 +1707,17 @@ fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
         (None, None, None)
     );
 }
+
+#[test]
+fn daily_quest_slots_are_native_only() {
+    let wrath = ObjectFields::from_field_slots(
+        FieldLayout::Wrath12340,
+        &[(Field::PlayerDailyQuests1, 0, 11389), (Field::PlayerDailyQuests1, 24, 13240)],
+    );
+    assert_eq!(
+        (wrath.player_daily_quest(0), wrath.player_daily_quest(24), wrath.player_daily_quest(25)),
+        (Some(11389), Some(13240), None)
+    );
+    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
+    assert_eq!(vanilla.player_daily_quest(0), None);
+}

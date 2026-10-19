@@ -67,7 +67,6 @@ GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
 UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
-CanHearthAndResurrectFromArea = none
 
 -- ── the stock UI's CVars, at build 12340's defaults, for any the host has not registered ────────
 do
@@ -349,13 +348,6 @@ end
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
 RegisterStaticConstants = RegisterStaticConstants or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
-function GetContainerNumFreeSlots(bag)
-    local free = 0
-    for slot = 1, GetContainerNumSlots(bag) or 0 do
-        if not GetContainerItemInfo(bag, slot) then free = free + 1 end
-    end
-    return free, 0
-end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
 TriggerTutorial = TriggerTutorial or none
@@ -408,19 +400,15 @@ end
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none
 FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
-IsEquippableItem = IsEquippableItem or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
-ForceGossip = ForceGossip or function() return nil end
 QuestFlagsPVP = QuestFlagsPVP or function() return nil end
 GetNumQuestItemDrops = GetNumQuestItemDrops or function() return 0 end
 GetQuestLogItemDrop = GetQuestLogItemDrop or none
-GetContainerItemQuestInfo = GetContainerItemQuestInfo or function() return nil, nil, nil end
-GetDailyQuestsCompleted = GetDailyQuestsCompleted or function() return 0 end
 GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none
