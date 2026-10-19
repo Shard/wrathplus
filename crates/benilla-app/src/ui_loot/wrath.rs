@@ -166,6 +166,11 @@ pub(crate) fn begin_wrath_corpse_loot(
     true
 }
 
+/// The slot types `LootSlot` and the auto-loot sweep take (`0x589140`, `0x588f90`): allow and owner.
+pub(super) fn is_takeable(slot_type: u8) -> bool {
+    benilla_protocol::wrath_loot::is_solo_loot_slot(slot_type)
+}
+
 pub(super) fn send_pick(loot: &mut LootState, net: &NetCommands, action: LootAction) -> bool {
     match action {
         LootAction::Money => {
