@@ -135,3 +135,41 @@ answers with the service offline are the target: `BNGetNumFriends` (`0x534590`),
 
 The file also carries non-global shims: frame methods and the action-bar page state. They are
 outside this census and go with the file.
+
+## Status, 2026-10-19 (native/app-migration b05eeb9b)
+
+Native since the audit, with their shims deleted:
+
+- App Migration, units and player (23a38832): `UnitIsAFK`, `UnitIsDND`, `IsXPUserDisabled`,
+  `UnitIsTappedByAllThreatList`, `IsReferAFriendLinked`, `CanSummonFriend`,
+  `GetSummonFriendCooldown`, `UnitIsRaidOfficer`, `UnitInBattleground`, `UnitIsSameServer`,
+  `PlayerIsPVPInactive`, `GetAvailableRoles`, `IsThreatWarningEnabled`, `GetNumLanguages`.
+- App Migration, items, areas and gossip (3b00e835): `GetContainerNumFreeSlots`,
+  `IsEquippableItem`, `CanHearthAndResurrectFromArea`, `GetDailyQuestsCompleted`,
+  `GetContainerItemQuestInfo`, `ForceGossip`.
+- App Migration, quests (4d80da91, b05eeb9b): `GetQuestLink`, `GetQuestSortIndex`,
+  `GetNumQuestItemDrops`, `GetQuestLogItemDrop`, `QuestFlagsPVP`,
+  `ProcessQuestLogRewardFactions`, `GetNumQuestLogRewardFactions`,
+  `GetQuestLogRewardFactionInfo`.
+- Wire A, world map (f0fe2fbe, b37c0919): `GetCurrentMapDungeonLevel`, `GetNumDungeonMapLevels`,
+  `SetDungeonMapLevel`, `DungeonUsesTerrainMap`, `IsZoomOutAvailable`, `InitWorldMapPing`.
+
+Still on the shim:
+
+- Native UI (assigned): `IsStackableAction`, `IsPetAttackAction`, `GetPossessInfo`,
+  `GetActionBarPage`/`ChangeActionBarPage`, `GetAccountExpansionLevel`/`GetExpansionLevel`,
+  `GetExistingLocales`, `GetCVarBool`, `RegisterStaticConstants`, `TriggerTutorial`,
+  `CombatTextSetActiveUnit`.
+- Proposed to route:
+  - `GetQuestWorldMapAreaID` (`0x5e56c0` → `0x5e2b60`) to Wire A. It picks a quest POI blob by the
+    objective mask `0x5e2950` (creature, item and drop objectives not yet met, exploration, or -1
+    once complete), then the blob on the player's map area and floor, else the nearest floor on
+    the same continent, else the first. With no POI it falls back to the quest's top zone's
+    `WorldMapArea` row. That is the world map's player area (`0x543770`) over Native UI's POI
+    model.
+  - `IsLFGDungeonJoinable` (`0x55a040` → `0x559c90`) and `RefreshLFGList` (`0x55d280`, a thunk)
+    to Native UI. They are false only when the player's, or else a party member's, derived lock
+    record for the packed entry (`id | type << 24`, type 2 skipping the party) is set (`+0xd`).
+    That is `wrath_lfg`'s derived lock state.
+- Offline services, the intended end state: the Battle.net, voice and sound-driver rows,
+  `UnitIsTalking`, `IsStereoVideoAvailable`, `IsPlayerResolutionAvailable`.
