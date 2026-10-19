@@ -6,7 +6,7 @@
 use std::io::Cursor;
 
 use anyhow::Result;
-use benilla_m2::{parse_m2, M2ScalarTrack};
+use benilla_m2::M2ScalarTrack;
 
 use crate::emit_timing::{EmitParams, EmitTiming};
 use crate::models::SeqSlot;
@@ -386,10 +386,6 @@ impl ParticleEmitterDef {
     }
 }
 
-const STRIDE: usize = 0x1f8;
-const HDR_COUNT: usize = 0x13c;
-const HDR_PTR: usize = 0x140;
-
 fn le_u16(b: &[u8], o: usize) -> u16 {
     u16::from_le_bytes([b[o], b[o + 1]])
 }
@@ -401,46 +397,6 @@ fn le_f32(b: &[u8], o: usize) -> f32 {
 }
 fn le_vec3(b: &[u8], o: usize) -> [f32; 3] {
     [le_f32(b, o), le_f32(b, o + 4), le_f32(b, o + 8)]
-}
-
-/// One raw 28-byte vanilla M2Track at `track`: absolute key times and the per-sequence `ranges`;
-/// `read` decodes one `elem`-byte value.
-fn read_raw_track(
-    b: &[u8],
-    track: usize,
-    elem: usize,
-    read: impl Fn(&[u8], usize) -> f32,
-) -> M2ScalarTrack {
-    let mut out = M2ScalarTrack {
-        gseq: 0xffff,
-        ..M2ScalarTrack::default()
-    };
-    if track + 0x1c > b.len() {
-        return out;
-    }
-    out.interp = le_u16(b, track);
-    out.gseq = le_u16(b, track + 2);
-    let (rn, ro) = (le_u32(b, track + 4) as usize, le_u32(b, track + 8) as usize);
-    let (tn, to) = (
-        le_u32(b, track + 0x0c) as usize,
-        le_u32(b, track + 0x10) as usize,
-    );
-    let (vn, vo) = (
-        le_u32(b, track + 0x14) as usize,
-        le_u32(b, track + 0x18) as usize,
-    );
-    if ro + rn * 8 <= b.len() {
-        out.ranges = (0..rn)
-            .map(|i| (le_u32(b, ro + i * 8), le_u32(b, ro + i * 8 + 4)))
-            .collect();
-    }
-    let n = tn.min(vn);
-    if n > 0 && to + n * 4 <= b.len() && vo + n * elem <= b.len() {
-        out.keys = (0..n)
-            .map(|i| (le_u32(b, to + i * 4), read(b, vo + i * elem)))
-            .collect();
-    }
-    out
 }
 
 fn blend_of(v: u8) -> ParticleBlend {
@@ -543,7 +499,11 @@ mod wrath {
             return out;
         }
         for seq in 0..tn {
-            let src = if out.gseq != 0xffff { Some(b) } else { sources.get(seq).copied().flatten() };
+            let src = if out.gseq != 0xffff {
+                Some(b)
+            } else {
+                sources.get(seq).copied().flatten()
+            };
             let (kn, ko) = arr(b, to + seq * 8);
             let (xn, xo) = arr(b, vo + seq * 8);
             let Some(src) = src.filter(|src| {
@@ -554,7 +514,8 @@ mod wrath {
             };
             let start = out.keys.len() as u32;
             for k in 0..kn {
-                out.keys.push((le_u32(src, ko + k * 4), read(src, xo + k * elem)));
+                out.keys
+                    .push((le_u32(src, ko + k * 4), read(src, xo + k * elem)));
             }
             out.ranges.push((start, out.keys.len() as u32 - 1));
         }
@@ -562,30 +523,52 @@ mod wrath {
     }
 
     /// A fake-animation block's `(life fraction, value)` keys.
-    fn block<V>(b: &[u8], at: usize, elem: usize, read: impl Fn(&[u8], usize) -> V) -> Vec<(f32, V)> {
+    fn block<V>(
+        b: &[u8],
+        at: usize,
+        elem: usize,
+        read: impl Fn(&[u8], usize) -> V,
+    ) -> Vec<(f32, V)> {
         let (tn, to) = arr(b, at);
         let (vn, vo) = arr(b, at + 8);
         if tn == 0 || tn != vn || to + tn * 2 > b.len() || vo + vn * elem > b.len() {
             return Vec::new();
         }
         (0..tn)
-            .map(|k| (f32::from(le_u16(b, to + k * 2)) / 32767.0, read(b, vo + k * elem)))
+            .map(|k| {
+                (
+                    f32::from(le_u16(b, to + k * 2)) / 32767.0,
+                    read(b, vo + k * elem),
+                )
+            })
             .collect()
     }
 
     /// Three points at 0, `mid` and 1 from a block's keys, linear between them.
-    fn three<V: Copy>(keys: &[(f32, V)], lerp: impl Fn(V, V, f32) -> V, mid: f32, default: V) -> [V; 3] {
+    fn three<V: Copy>(
+        keys: &[(f32, V)],
+        lerp: impl Fn(V, V, f32) -> V,
+        mid: f32,
+        default: V,
+    ) -> [V; 3] {
         let at = |u: f32| -> V {
             match keys {
                 [] => default,
                 [(_, v)] => *v,
                 _ => {
-                    let i = keys.iter().position(|&(t, _)| t >= u).unwrap_or(keys.len() - 1);
+                    let i = keys
+                        .iter()
+                        .position(|&(t, _)| t >= u)
+                        .unwrap_or(keys.len() - 1);
                     if i == 0 {
                         return keys[0].1;
                     }
                     let ((t0, v0), (t1, v1)) = (keys[i - 1], keys[i]);
-                    let f = if t1 > t0 { ((u - t0) / (t1 - t0)).clamp(0.0, 1.0) } else { 1.0 };
+                    let f = if t1 > t0 {
+                        ((u - t0) / (t1 - t0)).clamp(0.0, 1.0)
+                    } else {
+                        1.0
+                    };
                     lerp(v0, v1, f)
                 }
             }
@@ -601,7 +584,12 @@ mod wrath {
                     .textures
                     .iter()
                     .map(|t| {
-                        let f = t.filename.string.to_string_lossy().trim_end_matches('\0').to_string();
+                        let f = t
+                            .filename
+                            .string
+                            .to_string_lossy()
+                            .trim_end_matches('\0')
+                            .to_string();
                         (!f.is_empty()).then_some(f)
                     })
                     .collect(),
@@ -627,7 +615,11 @@ mod wrath {
                 .collect()
         };
         if seq_slots.is_empty() {
-            seq_slots.push(SeqSlot { index: 0, band: (0, u32::MAX), looping: true });
+            seq_slots.push(SeqSlot {
+                index: 0,
+                band: (0, u32::MAX),
+                looping: true,
+            });
         }
         let gseq: Vec<u32> = {
             let (n, o) = arr(bytes, 0x14);
@@ -645,7 +637,9 @@ mod wrath {
                 if n < 2 || ofs + n > bytes.len() {
                     return None;
                 }
-                let s = String::from_utf8_lossy(&bytes[ofs..ofs + n]).trim_end_matches('\0').to_string();
+                let s = String::from_utf8_lossy(&bytes[ofs..ofs + n])
+                    .trim_end_matches('\0')
+                    .to_string();
                 (!s.is_empty()).then_some(s)
             };
             let spline = (shape == ParticleShape::Spline)
@@ -663,7 +657,9 @@ mod wrath {
                 _ => (1, 1),
             };
             let colors = block(bytes, e + 0x104, 12, le_vec3);
-            let alphas = block(bytes, e + 0x114, 2, |b, o| f32::from(le_u16(b, o)) / 32767.0);
+            let alphas = block(bytes, e + 0x114, 2, |b, o| {
+                f32::from(le_u16(b, o)) / 32767.0
+            });
             let scales = block(bytes, e + 0x124, 8, le_f32);
             let mid = colors
                 .get(1)
@@ -671,7 +667,8 @@ mod wrath {
                 .or(scales.get(1).map(|&(t, _)| t))
                 .unwrap_or(0.5)
                 .clamp(0.001, 1.0);
-            let lerp3 = |a: [f32; 3], b: [f32; 3], f: f32| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * f);
+            let lerp3 =
+                |a: [f32; 3], b: [f32; 3], f: f32| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * f);
             let lerp1 = |a: f32, b: f32, f: f32| a + (b - a) * f;
             let rgb = three(&colors, lerp3, mid, [255.0; 3]);
             let alpha = three(&alphas, lerp1, mid, 1.0);
@@ -682,7 +679,9 @@ mod wrath {
                     [] => ([CellRamp::new(0, 0), CellRamp::new(0, 0)], 1.0),
                     [(_, a)] => ([CellRamp::new(*a, *a), CellRamp::new(*a, *a)], 1.0),
                     [(_, a), (_, b)] => ([CellRamp::new(*a, *b), CellRamp::new(*b, *b)], 1.0),
-                    [(_, a), (_, b), (_, c), ..] => ([CellRamp::new(*a, *b), CellRamp::new(*b, *c)], 1.0),
+                    [(_, a), (_, b), (_, c), ..] => {
+                        ([CellRamp::new(*a, *b), CellRamp::new(*b, *c)], 1.0)
+                    }
                 }
             };
             let (head_cells, head_repeat) = cells(0x13c);
@@ -698,7 +697,10 @@ mod wrath {
                 recursion_model: model_path(0x20),
                 blend: blend_of(bytes[e + 0x28]),
                 lit: lit_of(flags, bytes[e + 0x28]),
-                texture: textures.get(usize::from(le_u16(bytes, e + 0x16))).cloned().flatten(),
+                texture: textures
+                    .get(usize::from(le_u16(bytes, e + 0x16)))
+                    .cloned()
+                    .flatten(),
                 tile_rows: tiles.0,
                 tile_cols: tiles.1,
                 head_tail: bytes[e + 0x2c],
@@ -740,7 +742,12 @@ mod wrath {
                 over_life: OverLife {
                     mid,
                     color: [0, 1, 2].map(|k| {
-                        [rgb[k][0] / 255.0, rgb[k][1] / 255.0, rgb[k][2] / 255.0, alpha[k]]
+                        [
+                            rgb[k][0] / 255.0,
+                            rgb[k][1] / 255.0,
+                            rgb[k][2] / 255.0,
+                            alpha[k],
+                        ]
                     }),
                     scale,
                     head_cells,
@@ -753,8 +760,7 @@ mod wrath {
     }
 }
 
-/// The M2's particle emitters, textures resolved through `benilla-m2`'s textures table; empty for
-/// a model with none or a file that is not MD20. Build 12340 files take [`wrath::parse`].
+/// The M2's particle emitters; empty for a model with none or a file that is not a v264 MD20.
 pub fn parse_m2_particle_emitters(bytes: &[u8]) -> Result<Vec<ParticleEmitterDef>> {
     parse_m2_particle_emitters_with_animations(bytes, &[])
 }
@@ -769,188 +775,7 @@ pub fn parse_m2_particle_emitters_with_animations(
     if bytes.len() >= 8 && &bytes[..4] == b"MD20" && le_u32(bytes, 4) == 264 {
         return Ok(wrath::parse(bytes, external));
     }
-    let textures: Vec<Option<String>> = match parse_m2(&mut Cursor::new(bytes)) {
-        Ok(fmt) => fmt
-            .model()
-            .textures
-            .iter()
-            .map(|t| {
-                let f = t
-                    .filename
-                    .string
-                    .to_string_lossy()
-                    .trim_end_matches('\0')
-                    .to_string();
-                (!f.is_empty()).then_some(f)
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-
-    if bytes.len() < HDR_PTR + 4 || &bytes[..4] != b"MD20" {
-        return Ok(Vec::new());
-    }
-    let count = le_u32(bytes, HDR_COUNT) as usize;
-    let base = le_u32(bytes, HDR_PTR) as usize;
-    if count == 0 || count > 256 || base + count * STRIDE > bytes.len() {
-        return Ok(Vec::new());
-    }
-
-    // Each sequence's band and loop flag (flags bit 0 clear loops); a model with none gets one
-    // whole-timeline slot so its tracks still bake.
-    let mut seq_slots: Vec<SeqSlot> = {
-        let (n, o) = (le_u32(bytes, 0x1c) as usize, le_u32(bytes, 0x20) as usize);
-        (0..n)
-            .map_while(|i| {
-                let e = o + i * 0x44;
-                (e + 0x44 <= bytes.len()).then(|| SeqSlot {
-                    index: i,
-                    band: (le_u32(bytes, e + 0x04), le_u32(bytes, e + 0x08)),
-                    looping: le_u32(bytes, e + 0x10) & 1 == 0,
-                })
-            })
-            .collect()
-    };
-    if seq_slots.is_empty() {
-        seq_slots.push(SeqSlot {
-            index: 0,
-            band: (0, u32::MAX),
-            looping: true,
-        });
-    }
-    // Global-sequence durations (header +0x14/+0x18): a gseq-tagged track loops on its own clock.
-    let gseq: Vec<u32> = {
-        let (n, o) = (le_u32(bytes, 0x14) as usize, le_u32(bytes, 0x18) as usize);
-        (0..n)
-            .map_while(|i| (o + i * 4 + 4 <= bytes.len()).then(|| le_u32(bytes, o + i * 4)))
-            .collect()
-    };
-
-    let color_key = |o: usize| -> [f32; 4] {
-        let v = le_u32(bytes, o);
-        [
-            ((v >> 16) & 0xff) as f32 / 255.0, // R
-            ((v >> 8) & 0xff) as f32 / 255.0,  // G
-            (v & 0xff) as f32 / 255.0,         // B
-            ((v >> 24) & 0xff) as f32 / 255.0, // A
-        ]
-    };
-
-    let mut out = Vec::with_capacity(count);
-    for i in 0..count {
-        let e = base + i * STRIDE;
-        let tex_index = le_u16(bytes, e + 0x16) as usize;
-        let texture = textures.get(tex_index).cloned().flatten();
-        let shape = shape_of(le_u16(bytes, e + 0x2a));
-        // The geometry and recursion model paths (`M2Array<char>`, file-relative offsets).
-        let model_path = |cnt_off: usize| -> Option<String> {
-            let n = le_u32(bytes, e + cnt_off) as usize;
-            let ofs = le_u32(bytes, e + cnt_off + 4) as usize;
-            if n < 2 || ofs + n > bytes.len() {
-                return None;
-            }
-            let s = String::from_utf8_lossy(&bytes[ofs..ofs + n])
-                .trim_end_matches('\0')
-                .to_string();
-            (!s.is_empty()).then_some(s)
-        };
-        let geometry_model = model_path(0x18);
-        let recursion_model = model_path(0x20);
-        let spline = (shape == ParticleShape::Spline)
-            .then(|| {
-                let q = le_u32(bytes, e + 0x1d4) as usize;
-                let ofs = le_u32(bytes, e + 0x1d8) as usize;
-                let n = 3 * (q / 3) + 1;
-                if q < 3 || ofs + n * 12 > bytes.len() {
-                    return None;
-                }
-                SplineData::new((0..n).map(|p| le_vec3(bytes, ofs + p * 12)).collect())
-            })
-            .flatten();
-        let tiles = match (le_u16(bytes, e + 0x30), le_u16(bytes, e + 0x32)) {
-            (r, c) if r.is_power_of_two() && c.is_power_of_two() => (r, c),
-            _ => (1, 1),
-        };
-        let over_life = OverLife {
-            mid: le_f32(bytes, e + 0x14c),
-            color: [
-                color_key(e + 0x150),
-                color_key(e + 0x154),
-                color_key(e + 0x158),
-            ],
-            scale: [
-                le_f32(bytes, e + 0x15c),
-                le_f32(bytes, e + 0x160),
-                le_f32(bytes, e + 0x164),
-            ],
-            // Ten u16s at +0x168..+0x17b (`0x70ebd0`), a repeat count after each head pair, not
-            // the eight wowdev's `*UVAnim` names imply.
-            head_cells: [
-                CellRamp::new(le_u16(bytes, e + 0x168), le_u16(bytes, e + 0x16a)),
-                CellRamp::new(le_u16(bytes, e + 0x16e), le_u16(bytes, e + 0x170)),
-            ],
-            tail_cells: [
-                CellRamp::new(le_u16(bytes, e + 0x174), le_u16(bytes, e + 0x176)),
-                CellRamp::new(le_u16(bytes, e + 0x178), le_u16(bytes, e + 0x17a)),
-            ],
-            repeat: [
-                f32::from(le_u16(bytes, e + 0x16c)),
-                f32::from(le_u16(bytes, e + 0x172)),
-            ],
-        };
-        out.push(ParticleEmitterDef {
-            flags: le_u32(bytes, e + 0x04),
-            position: le_vec3(bytes, e + 0x08),
-            bone: le_u16(bytes, e + 0x14),
-            shape,
-            spline,
-            geometry_model,
-            recursion_model,
-            blend: blend_of(bytes[e + 0x28]),
-            lit: lit_of(le_u32(bytes, e + 0x04), bytes[e + 0x28]),
-            texture,
-            tile_rows: tiles.0,
-            tile_cols: tiles.1,
-            head_tail: bytes[e + 0x2c],
-            timing: EmitTiming::bake(
-                &read_raw_track(bytes, e + 0xdc, 4, le_f32),
-                &read_raw_track(bytes, e + 0x1dc, 1, |b, o| f32::from(b[o] != 0)),
-                &seq_slots,
-                &gseq,
-            ),
-            params: EmitParams::bake(
-                [
-                    &read_raw_track(bytes, e + 0x34, 4, le_f32),  // speed
-                    &read_raw_track(bytes, e + 0x50, 4, le_f32),  // speedVar
-                    &read_raw_track(bytes, e + 0x6c, 4, le_f32),  // latitude
-                    &read_raw_track(bytes, e + 0x88, 4, le_f32),  // longitude
-                    &read_raw_track(bytes, e + 0xa4, 4, le_f32),  // gravity
-                    &read_raw_track(bytes, e + 0xc0, 4, le_f32),  // lifespan
-                    &read_raw_track(bytes, e + 0xf8, 4, le_f32),  // areaLength
-                    &read_raw_track(bytes, e + 0x114, 4, le_f32), // areaWidth
-                    &read_raw_track(bytes, e + 0x130, 4, le_f32), // zSource
-                ],
-                &seq_slots,
-                &gseq,
-            ),
-            drag: le_f32(bytes, e + 0x194),
-            tail_time: le_f32(bytes, e + 0x17c),
-            angular_velocity_min: le_vec3(bytes, e + 0x19c),
-            angular_velocity_max: le_vec3(bytes, e + 0x1a8),
-            inherit_scale: le_f32(bytes, e + 0x190),
-            follow_speed1: le_f32(bytes, e + 0x1c4),
-            follow_scale1: le_f32(bytes, e + 0x1c8),
-            follow_speed2: le_f32(bytes, e + 0x1cc),
-            follow_scale2: le_f32(bytes, e + 0x1d0),
-            twinkle_speed: le_f32(bytes, e + 0x180),
-            twinkle_percent: le_f32(bytes, e + 0x184),
-            twinkle_min: le_f32(bytes, e + 0x188),
-            twinkle_max: le_f32(bytes, e + 0x18c),
-            spin: le_f32(bytes, e + 0x198),
-            over_life,
-        });
-    }
-    Ok(out)
+    Ok(Vec::new())
 }
 
 #[cfg(test)]

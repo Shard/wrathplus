@@ -1,7 +1,7 @@
 //! The rigid bone spin collector (`m2_bone_spins`) and its sampler, which turn Caverns of Time's
 //! asteroid belts without a skinning palette.
 
-use benilla_formats::{load_m2_bone_spins, m2_bone_spins, BoneSpin, Chain};
+use benilla_formats::{load_m2_bone_spins, BoneSpin, Chain};
 
 fn about_z(deg: f32) -> [f32; 4] {
     let h = deg.to_radians() * 0.5;
@@ -86,7 +86,7 @@ fn the_slerp_takes_the_short_way_round() {
 #[test]
 fn the_caverns_of_time_sky_spins_exactly_its_three_belt_bones() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = Chain::open(&data).expect("open vanilla patch chain");
+    let mut chain = Chain::open(&data).expect("open patch chain");
     let spins = load_m2_bone_spins(&mut chain, "Environments\\Stars\\CavernsOfTimeSky.m2")
         .expect("read CavernsOfTimeSky.m2");
 
@@ -133,12 +133,11 @@ fn the_caverns_of_time_sky_spins_exactly_its_three_belt_bones() {
 #[test]
 fn the_stratholme_sky_spins_nothing() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = Chain::open(&data).expect("open vanilla patch chain");
-    let bytes = chain
-        .read_file("Environments\\Stars\\StratholmeSkybox.m2")
+    let mut chain = Chain::open(&data).expect("open patch chain");
+    let spins = load_m2_bone_spins(&mut chain, "Environments\\Stars\\StratholmeSkybox.m2")
         .expect("read StratholmeSkybox.m2");
     assert!(
-        m2_bone_spins(&bytes).is_empty(),
+        spins.is_empty(),
         "Stratholme's sky authors no bone animation"
     );
 }

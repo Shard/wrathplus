@@ -660,7 +660,6 @@ fn parse_wrath_m2_impl<'a>(
     require_external: bool,
 ) -> Result<WrathM2> {
     validate_header(b)?;
-    let version = VERSION;
 
     // Exact v264 offsets. In particular, +0x44 is a scalar skin count, not an M2Array/M2View.
     let global_sequences_arr = array(b, 0x14, "global sequences")?;
@@ -954,8 +953,6 @@ fn parse_wrath_m2_impl<'a>(
             playable_animation_lookup: Vec::new(),
             // Kept only as metadata. Calling the vanilla embedded-skin parser remains impossible
             // because v264 has no view offset and parse_wrath_skin is the explicit API.
-            views: (skin_count, 0),
-            version,
         },
     };
 

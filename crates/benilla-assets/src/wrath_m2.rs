@@ -17,10 +17,7 @@ use crate::model::{
     in_subtree, skeleton_pivots, upper_subtree_root, AnimClip, ModelAnimations, ModelSubmesh,
 };
 
-/// Bevy [`AssetLoader`] for explicitly selected Wrath v264 `*.m2` assets.
-///
-/// Registration is profile-specific: this loader and [`super::M2ModelLoader`] both claim `m2`, so
-/// an application must register exactly one of them.
+/// Bevy [`AssetLoader`] for v264 `*.m2` assets.
 #[derive(Default, TypePath)]
 pub struct WrathM2ModelLoader;
 

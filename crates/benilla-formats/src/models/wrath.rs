@@ -82,7 +82,7 @@ pub fn wrath_render_animation_dependencies(
 /// Parse and adapt an `MD20` v264 model together with one external `SKIN` profile.
 ///
 /// `dir` resolves hardcoded and creature-variation texture names and `skins` supplies the optional
-/// `Monster1/2/3` basenames, matching [`super::parse_m2_render_submeshes`]. Multi-texture
+/// `Monster1/2/3` basenames. Multi-texture
 /// batches preserve both stages in one draw, including their native combiner and coordinate lookup.
 pub fn parse_wrath_render_model(
     m2_bytes: &[u8],
@@ -388,7 +388,7 @@ fn global_sequence_bones(wrath: &WrathM2) -> Result<Vec<GlobalSeqBone>> {
     Ok(out)
 }
 
-fn bounds(wrath: &WrathM2) -> M2Bounds {
+pub(crate) fn bounds(wrath: &WrathM2) -> M2Bounds {
     let model = wrath.model();
     let header = &model.header;
     let vert_max_from_origin = model
@@ -444,7 +444,7 @@ fn bounds(wrath: &WrathM2) -> M2Bounds {
     }
 }
 
-fn collision(model: &M2Model) -> Result<CollisionMesh> {
+pub(crate) fn collision(model: &M2Model) -> Result<CollisionMesh> {
     let positions = model
         .raw_data
         .bounding_vertices

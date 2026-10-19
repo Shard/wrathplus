@@ -279,7 +279,7 @@ pub use particles::{
     OverLifeSample, ParticleBlend, ParticleEmitterDef, ParticleShape, SplineData,
 };
 mod ribbons;
-pub use ribbons::{parse_m2_ribbon_emitters, RibbonEmitterDef, RibbonVisibility};
+pub use ribbons::{RibbonEmitterDef, RibbonVisibility};
 mod value_track;
 pub use value_track::{SeqClock, SeqTable, SeqTrack, TrackValue, ValueTrack};
 mod models;
@@ -290,29 +290,23 @@ pub use models::wrath::{
 pub use models::{
     accumulate_wmo_group_camera_collision, accumulate_wmo_group_camera_only_collision,
     accumulate_wmo_group_collision, authored_half_height, batch_footprint, glue_art_extent,
-    hand_grip_finger_poses, load_m2_animation_summary, load_m2_bone_spins, load_m2_bounds,
-    load_m2_collision_hull, load_m2_mesh, load_m2_mesh_skinned, load_object_model, load_wmo,
-    load_wmo_collision_tris, m2_bone_spins, m2_owner_reach, m2_ribbon_emitter_count,
-    m2_sequence_visible_textures, m2_texture_transform_count, non_separable_billboard_bones,
-    owner_last_rung, owner_last_rung_bucket, parse_m2_animation_lookup, parse_m2_animation_summary,
-    parse_m2_animations, parse_m2_attachments, parse_m2_bounds, parse_m2_camera,
-    parse_m2_cch_marker, parse_m2_collision_hull, parse_m2_event_markers,
-    parse_m2_global_sequence_bones, parse_m2_lights, parse_m2_pane_cameras,
-    parse_m2_playable_animation_lookup, parse_m2_portrait_camera, parse_m2_render_submeshes,
-    parse_m2_skeleton, parse_m2_string_anchors, parse_wmo_fogs, parse_wmo_lights,
+    load_m2_bone_spins, load_m2_bounds, load_m2_collision_hull, load_m2_mesh, load_m2_mesh_skinned,
+    load_object_model, load_wmo, load_wmo_collision_tris, m2_bone_spins, m2_owner_reach,
+    owner_last_rung, owner_last_rung_bucket, parse_m2_bounds, parse_m2_camera,
+    parse_m2_collision_hull, parse_m2_portrait_camera, parse_wmo_fogs, parse_wmo_lights,
     parse_wmo_portals, parse_wmo_root, rotation_2x2, shipped_glue_art_extent, uv_transform,
     wmo_group_doodad_refs, wmo_group_fixed_colors, wmo_group_footprint_tris, wmo_group_header,
     wmo_group_light_refs, wmo_group_liquid_mesh, wmo_group_raw_colors, wmo_group_submeshes,
     wmo_root_id, AlphaAnim, AlphaMap, AlphaSeq, AnimEvent, ArtExtent, BatchFootprint, Billboard,
     BillboardKind, BoneKeys, BoneScaleAnim, BoneSpin, CharSkinSlot, CollisionMesh, Coverage,
-    CoverageReader, EmitterBoneLink, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
-    GlobalSeqChannel, GroundQuad, KeyAnim, M2AnimSummary, M2Attachment, M2Bounds, M2CameraTracks,
-    M2Light, M2LightAnim, M2PaneCamera, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm,
-    ParentBasis, PlayableAnim, RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene,
-    Skeleton, SkeletonBone, StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad,
-    WmoDoodadSet, WmoFog, WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef,
-    WmoPortals, WmoRoot, ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT,
-    NO_GROUP_LIQUID, OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
+    CoverageReader, EventMarker, FogPolicy, FootprintTris, GlobalSeqBone,
+    GlobalSeqChannel, GroundQuad, KeyAnim, M2Attachment, M2Bounds, M2CameraTracks, M2Light,
+    M2LightAnim, M2PortraitCamera, ModelAnimation, ModelBlend, ParentArm, ParentBasis, PlayableAnim,
+    RenderSubmesh, RgbAnim, ScalarAnim, SeqLoops, ShippedGlueScene, Skeleton, SkeletonBone,
+    StringAnchors, UvAnim, UvRotAnim, WmoBatchClass, WmoDoodad, WmoDoodadSet, WmoFog,
+    WmoGroupHeader, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef, WmoPortals, WmoRoot,
+    ALPHA_KEY_REF, DEGENERATE_RING_FOOTPRINT, GLUE_AUTHORED_ASPECT, NO_GROUP_LIQUID,
+    OWNER_RUNG_BUCKETS, SHIPPED_GLUE_SCENES,
 };
 pub use models::{
     resolve_wrath_wmo_liquid_id, wmo_group_wrath_liquid, wmo_root_flags, WrathWmoLiquidGrid,
