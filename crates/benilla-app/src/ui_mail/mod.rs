@@ -328,30 +328,8 @@ fn resolve_row(
         .and_then(|a| items.template(a.entry, 0, commands))
         .map(|t| t.name.clone());
     // Until the item template lands, the raw triplet stands.
-    let subject = match (auction, &notice_item_name) {
-        (Some(a), Some(name)) => invoice::subject_key(a.result)
-            .and_then(get_text)
-            .map(|t| t.replace("%s", name))
-            .unwrap_or_else(|| entry.subject.clone()),
-        _ => entry.subject.clone(),
-    };
-    let auction_invoice = auction
-        .filter(|a| matches!(a.result, auction_mail::WON | auction_mail::SOLD))
-        .and_then(|a| {
-            let seller = a.result == auction_mail::SOLD;
-            let n = invoice::parse_body(raw_body?, seller)?;
-            // An unresolved counterparty fills in when its name lands, as in the reference.
-            let player_name = names.resolve(n.player_guid, commands)?.to_string();
-            Some(benilla_ui::script::MailInvoice {
-                seller,
-                item_name: notice_item_name.clone()?,
-                player_name,
-                bid: n.bid,
-                buyout: n.buyout,
-                deposit: n.deposit,
-                consignment: n.consignment,
-            })
-        });
+    let subject = auction_subject(&entry.subject, auction, notice_item_name.as_ref(), get_text);
+    let auction_invoice = auction_invoice(auction, raw_body, notice_item_name.clone(), names, commands);
 
     MailInboxRow {
         package_icon: item_texture.clone(),
@@ -379,8 +357,7 @@ fn resolve_row(
         stationery_texture,
         // Won and sold notices only, not every auction mail: the reference's `isInvoice` reads
         // what its subject parser persists for those two alone.
-        is_invoice: auction
-            .is_some_and(|a| matches!(a.result, auction_mail::WON | auction_mail::SOLD)),
+        is_invoice: auction.is_some_and(|a| is_invoice_result(a.result)),
         invoice: auction_invoice,
         has_body: entry.item_text_id != 0,
         item_id,
@@ -390,6 +367,60 @@ fn resolve_row(
         item_quality,
         can_delete,
     }
+}
+
+/// The notices that carry an invoice: won, sold, and build 12340's sale pending payment.
+fn is_invoice_result(result: u32) -> bool {
+    matches!(
+        result,
+        auction_mail::WON | auction_mail::SOLD | auction_mail::SALE_PENDING
+    )
+}
+
+/// An auction notice's displayed subject (`AUCTION_*_MAIL_SUBJECT` with the item's name) once the
+/// item template lands, else the raw subject.
+fn auction_subject(
+    raw: &str,
+    auction: Option<invoice::AuctionSubject>,
+    item_name: Option<&String>,
+    get_text: &dyn Fn(&str) -> Option<String>,
+) -> String {
+    match (auction, item_name) {
+        (Some(a), Some(name)) => invoice::subject_key(a.result)
+            .and_then(get_text)
+            .map(|t| t.replace("%s", name))
+            .unwrap_or_else(|| raw.to_string()),
+        _ => raw.to_string(),
+    }
+}
+
+/// A won, sold or sale-pending notice's invoice, once its body and counterparty are known.
+fn auction_invoice(
+    auction: Option<invoice::AuctionSubject>,
+    raw_body: Option<&String>,
+    item_name: Option<String>,
+    names: &NameCache,
+    commands: &NetCommands,
+) -> Option<benilla_ui::script::MailInvoice> {
+    let a = auction.filter(|a| is_invoice_result(a.result))?;
+    let seller = a.result != auction_mail::WON;
+    let n = invoice::parse_body(raw_body?, seller)?;
+    // An unresolved counterparty fills in when its name lands, as in the reference.
+    let player_name = names.resolve(n.player_guid, commands)?.to_string();
+    let (eta_hour, eta_min) = n.eta_hour_min();
+    Some(benilla_ui::script::MailInvoice {
+        seller,
+        item_name: item_name?,
+        player_name,
+        bid: n.bid,
+        buyout: n.buyout,
+        deposit: n.deposit,
+        consignment: n.consignment,
+        pending: a.result == auction_mail::SALE_PENDING,
+        money_delay: n.money_delay,
+        eta_hour,
+        eta_min,
+    })
 }
 
 /// The usable stationery list (`0x4ad970`): rows always available (`Flags & 1`) or whose item the
@@ -616,18 +647,23 @@ fn feed_mail(
     let closed = last_mailbox.is_some() && mail.mailbox.is_none();
     let show_requested = std::mem::take(&mut mail.show_requested);
     let changed = if *dialect == SessionDialect::Wrath12340 {
-        let native = wrath::snapshot(
-            &mail,
-            &items,
-            icons.as_deref(),
-            &names,
-            &commands,
-            rolls,
-            self_q
-                .single()
-                .ok()
-                .and_then(|(store, _)| store.0.unit_level()),
-        );
+        let native = {
+            // Scoped, as above: the resolver borrows the VM.
+            let get_text = |key: &str| script.lua().globals().get::<String>(key).ok();
+            wrath::snapshot(
+                &mail,
+                &items,
+                icons.as_deref(),
+                &names,
+                &commands,
+                rolls,
+                self_q
+                    .single()
+                    .ok()
+                    .and_then(|(store, _)| store.0.unit_level()),
+                &get_text,
+            )
+        };
         let changed = native != *last_wrath;
         if changed {
             script.set_wrath_mail(native.clone());

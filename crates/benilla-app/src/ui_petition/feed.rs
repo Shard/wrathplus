@@ -80,6 +80,8 @@ pub(super) fn feed_petition(
         Some(PetitionRecordView {
             petition_type: if r.is_charter {
                 PETITION_TYPE_CHARTER
+            } else if r.is_arena {
+                benilla_ui::script::PETITION_TYPE_ARENA
             } else {
                 PETITION_TYPE_PETITION
             }
@@ -87,6 +89,8 @@ pub(super) fn feed_petition(
             title: r.name.clone(),
             body_text: r.body_text.clone(),
             max_signatures: r.required,
+            max_named: r.maximum,
+            min_signatures: r.required,
             // Nil until the name lands, and not waited for.
             originator: names.resolve(o.owner, &commands).map(str::to_string),
             // The record's owner, which the binding compares (`0x4f447a`), not the packet's.

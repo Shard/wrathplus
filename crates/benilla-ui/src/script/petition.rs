@@ -17,6 +17,9 @@ pub const PETITION_TYPE_CHARTER: &str = "charter";
 /// only charters, but `CanSignPetition`'s guild and full-charter refusals test the same bit.
 pub const PETITION_TYPE_PETITION: &str = "petition";
 
+/// Build 12340's arena-team charter type, `GetPetitionInfo`'s `"arena"` (`PetitionFrame.lua:13`).
+pub const PETITION_TYPE_ARENA: &str = "arena";
+
 /// The cached `CGPetition` record `[0xbdce28]`, as `GetPetitionInfo` reads it; `None` in
 /// [`PetitionState::record`] is the no-record leg.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -34,6 +37,10 @@ pub struct PetitionRecordView {
     pub originator: Option<String>,
     /// Whether the active player owns the record (`0x4f447a`, `0x4f4481`).
     pub is_originator: bool,
+    /// Build 12340: the packet's signature cap (`maxSignatures`) and the signatures required
+    /// (`minSignatures`, `PetitionFrame.lua:8`; an arena charter's team size is it plus one).
+    pub max_named: i32,
+    pub min_signatures: i32,
 }
 
 /// What the two charter windows read, mirroring the reference module's `.data` state.
@@ -152,29 +159,44 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // ── The petition window ──────────────────────────────────────────────────────────────────
     // GetPetitionInfo() (`0x4f43d0`): six values on both legs (`0x4f4493`, `0x4f44d4`), in the
     // order `PetitionFrame.lua:9` destructures them; with no record, `nil, nil, nil, 0, nil, nil`,
-    // the fourth the number 0 (`0x4f44b4`).
+    // the fourth the number 0 (`0x4f44b4`). Build 12340 names the type `"guild"` or `"arena"`,
+    // answers the packet's cap fourth and adds `minSignatures` seventh (`PetitionFrame.lua:8`).
+    // Labelled: its miss leg is taken as 1.12's plus a 0.
     g.set(
         "GetPetitionInfo",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let wrath = model.dialect == super::ScriptDialect::Wrath12340;
             let Some(r) = model.petition.record.as_ref() else {
-                return Ok(MultiValue::from_vec(vec![
+                let mut miss = vec![
                     Value::Nil,
                     Value::Nil,
                     Value::Nil,
                     Value::Integer(0),
                     Value::Nil,
                     Value::Nil,
-                ]));
+                ];
+                if wrath {
+                    miss.push(Value::Integer(0));
+                }
+                return Ok(MultiValue::from_vec(miss));
             };
-            Ok(MultiValue::from_vec(vec![
-                Value::String(lua.create_string(&r.petition_type)?),
+            let kind = match r.petition_type.as_str() {
+                PETITION_TYPE_CHARTER if wrath => "guild",
+                other => other,
+            };
+            let mut out = vec![
+                Value::String(lua.create_string(kind)?),
                 Value::String(lua.create_string(&r.title)?),
                 Value::String(lua.create_string(&r.body_text)?),
-                Value::Integer(i64::from(r.max_signatures)),
+                Value::Integer(i64::from(if wrath { r.max_named } else { r.max_signatures })),
                 name_value(lua, r.originator.as_ref())?,
                 binding_abi::flag(r.is_originator),
-            ]))
+            ];
+            if wrath {
+                out.push(Value::Integer(i64::from(r.min_signatures)));
+            }
+            Ok(MultiValue::from_vec(out))
         })?,
     )?;
 
@@ -313,7 +335,36 @@ mod tests {
             max_signatures: 9,
             originator: Some("Founder".into()),
             is_originator: false,
+            max_named: 9,
+            min_signatures: 9,
         }
+    }
+
+    /// Build 12340 names a guild charter `"guild"`, an arena one `"arena"`, and adds the minimum.
+    #[test]
+    fn a_wrath_petition_answers_seven_values_with_the_native_types() {
+        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(s.eval::<i64>("return select('#', GetPetitionInfo())").unwrap(), 7);
+        s.set_petition(PetitionState {
+            record: Some(PetitionRecordView {
+                petition_type: PETITION_TYPE_ARENA.into(),
+                max_named: 1,
+                min_signatures: 1,
+                ..record()
+            }),
+            ..Default::default()
+        });
+        assert!(s
+            .eval::<bool>(
+                "local t, _, _, max, _, _, min = GetPetitionInfo() \
+                 return t == 'arena' and max == 1 and min == 1"
+            )
+            .unwrap());
+        s.set_petition(PetitionState {
+            record: Some(record()),
+            ..Default::default()
+        });
+        assert_eq!(s.eval::<String>("return (GetPetitionInfo())").unwrap(), "guild");
     }
 
     fn open(script: &mut UiScript, r: PetitionRecordView, signers: Vec<Option<String>>) {

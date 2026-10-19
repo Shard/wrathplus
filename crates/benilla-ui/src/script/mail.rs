@@ -62,7 +62,7 @@ pub struct MailInboxRow {
 
 /// One auction invoice, `GetInboxInvoiceInfo`'s answer, parsed by the app from the mail's subject
 /// and body text as the reference `sscanf`s them (`0x4af360`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MailInvoice {
     /// `"seller"` (your auction sold) or `"buyer"` (you won), literal tokens, not global strings.
     pub seller: bool,
@@ -76,6 +76,13 @@ pub struct MailInvoice {
     pub deposit: u32,
     /// The auction house's cut, seller invoices only.
     pub consignment: u32,
+    /// Build 12340's sale-pending notice (result 6): `"seller_temp_invoice"`, money not yet sent.
+    pub pending: bool,
+    /// The body's payment delay, in seconds as the server wrote it (`moneyDelay`).
+    pub money_delay: u32,
+    /// The payment's estimated arrival, the body's packed game time unpacked (`etaHour`, `etaMin`).
+    pub eta_hour: u32,
+    pub eta_min: u32,
 }
 
 /// The open mailbox's inbox, pushed whole by the app; `set_mail(None)` means no mailbox is open.
@@ -444,38 +451,45 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetInboxInvoiceInfo(index) (`MailFrame.lua:302`): always seven values (`0x4af5a1`), a miss
-    // being three nils and four zeros (`0x4af559`).
+    // GetInboxInvoiceInfo(index) (`MailFrame.lua:302`): seven values in 1.12 (`0x4af5a1`), a miss
+    // being three nils and four zeros (`0x4af559`). Build 12340 adds `moneyDelay, etaHour,
+    // etaMin` (`MailFrame.lua:348`) and the sale-pending type `"seller_temp_invoice"`; a miss
+    // there pads with zeros too (labelled: the 12340 miss path is untraced).
     g.set(
         "GetInboxInvoiceInfo",
         lua.create_function(|lua, index: usize| {
-            let row = {
+            let (row, wrath) = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                row_at(&model, index)
+                (row_at(&model, index), model.dialect == super::ScriptDialect::Wrath12340)
             };
-            let miss = || {
-                MultiValue::from_vec(vec![
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Integer(0),
-                    Value::Integer(0),
-                    Value::Integer(0),
-                    Value::Integer(0),
-                ])
-            };
+            let width = if wrath { 10 } else { 7 };
             let Some(inv) = row.and_then(|r| r.invoice) else {
-                return Ok(miss());
+                let mut miss = vec![Value::Nil, Value::Nil, Value::Nil];
+                miss.resize(width, Value::Integer(0));
+                return Ok(MultiValue::from_vec(miss));
             };
-            Ok(MultiValue::from_vec(vec![
-                Value::String(lua.create_string(if inv.seller { "seller" } else { "buyer" })?),
+            let kind = match (inv.seller, inv.pending && wrath) {
+                (true, true) => "seller_temp_invoice",
+                (true, false) => "seller",
+                (false, _) => "buyer",
+            };
+            let mut out = vec![
+                Value::String(lua.create_string(kind)?),
                 Value::String(lua.create_string(&inv.item_name)?),
                 Value::String(lua.create_string(&inv.player_name)?),
                 Value::Integer(i64::from(inv.bid)),
                 Value::Integer(i64::from(inv.buyout)),
                 Value::Integer(i64::from(inv.deposit)),
                 Value::Integer(i64::from(inv.consignment)),
-            ]))
+            ];
+            if wrath {
+                out.extend([
+                    Value::Integer(i64::from(inv.money_delay)),
+                    Value::Integer(i64::from(inv.eta_hour)),
+                    Value::Integer(i64::from(inv.eta_min)),
+                ]);
+            }
+            Ok(MultiValue::from_vec(out))
         })?,
     )?;
 
@@ -1056,6 +1070,7 @@ mod tests {
             buyout: 10_000,
             deposit: 25,
             consignment: 500,
+            ..Default::default()
         });
         s.set_mail(Some(st));
 
@@ -1142,6 +1157,7 @@ mod tests {
             buyout: 10_000,
             deposit: 0,
             consignment: 0,
+            ..Default::default()
         });
         s.set_mail(Some(st));
         assert_eq!(
@@ -1624,5 +1640,53 @@ mod stationery_tests {
         s.reset_compose_tab_silently();
         s.run("SendMail(\"Bob\", \"hi\", \"body\")").unwrap();
         assert!(s.take_mail_send().is_none());
+    }
+
+    /// Build 12340 answers ten values, and a sale pending is `"seller_temp_invoice"`.
+    #[test]
+    fn a_wrath_invoice_has_ten_values_and_the_pending_type() {
+        use super::{MailInboxRow, MailInvoice};
+        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let header = MailInboxRow {
+            is_invoice: true,
+            invoice: Some(MailInvoice {
+                seller: true,
+                item_name: "Linen Cloth".into(),
+                player_name: "Buyer".into(),
+                bid: 9000,
+                buyout: 10_000,
+                deposit: 25,
+                consignment: 450,
+                pending: true,
+                money_delay: 3600,
+                eta_hour: 14,
+                eta_min: 35,
+            }),
+            ..Default::default()
+        };
+        s.set_wrath_mail(Some(super::wrath::Inbox {
+            total_count: 1,
+            rows: vec![super::wrath::Row {
+                header,
+                ..Default::default()
+            }],
+        }));
+        assert!(s
+            .eval::<bool>(
+                "local t, _, p, _, _, _, c, d, h, m = GetInboxInvoiceInfo(1) \
+                 return select('#', GetInboxInvoiceInfo(1)) == 10 and t == 'seller_temp_invoice' \
+                 and p == 'Buyer' and c == 450 and d == 3600 and h == 14 and m == 35 \
+                 and select('#', GetInboxInvoiceInfo(2)) == 10"
+            )
+            .unwrap());
+        // The 1.12 VM has no `select`: count the returns from here.
+        let vanilla = UiScript::new().unwrap();
+        assert_eq!(
+            vanilla
+                .eval::<mlua::MultiValue>("return GetInboxInvoiceInfo(1)")
+                .unwrap()
+                .len(),
+            7
+        );
     }
 }

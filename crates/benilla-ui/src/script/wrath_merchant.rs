@@ -114,7 +114,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
     // itemTexture, itemValue, itemLink for the record's n-th nonzero item; a template in flight
-    // answers (nil, count), a missing one (nil, 0).
+    // answers (nil, count), a missing one (nil, 0): two values on those legs, as the reference's
+    // `return 2` at `0x5848e3` (Experience's `/tmp/azb-exp-merchant-bindings.log`).
     g.set(
         "GetMerchantItemCostItem",
         lua.create_function(|lua, (a, b): (Value, Value)| {

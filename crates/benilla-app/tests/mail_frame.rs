@@ -586,6 +586,7 @@ fn an_auction_invoice_renders_as_a_receipt() {
         buyout: 10_000,
         deposit: 25,
         consignment: 500,
+        ..Default::default()
     });
     assert!(
         s.eval::<bool>("return OpenMailInvoiceFrame:IsShown()")
@@ -624,6 +625,7 @@ fn an_auction_invoice_renders_as_a_receipt() {
         buyout: 10_000,
         deposit: 0,
         consignment: 0,
+        ..Default::default()
     });
     assert!(s
         .eval::<bool>("return OpenMailInvoiceFrame:IsShown()")

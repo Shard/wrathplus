@@ -4,6 +4,11 @@
 //! The subject `<itemEntry>:<randomProperty>:<resultCode>` names the outcome and is displayed
 //! through the matching `AUCTION_*_MAIL_SUBJECT` string, never raw. Only won and sold notices carry
 //! a body, the invoice's numbers, fetched when the letter is opened.
+//!
+//! AzerothCore (build 12340) appends the auction id and the item count to the subject
+//! (`AuctionEntry::BuildAuctionMailSubject`), adds result 6 for a sale pending payment, and always
+//! writes the body's seven fields: guid, bid, buyout, deposit, cut, the payment delay and its
+//! packed-time ETA (`BuildAuctionMailBody`). Both shapes parse.
 
 /// The subject's `resultCode` (vmangos `Mail.h:102`); the client bounds it to `0..=5` for a
 /// six-entry table (`0x4acf62`, `0x4acfec`).
@@ -14,6 +19,8 @@ pub(crate) mod auction_mail {
     pub(crate) const EXPIRED: u32 = 3;
     pub(crate) const CANCELLED_TO_BIDDER: u32 = 4;
     pub(crate) const CANCELLED: u32 = 5;
+    /// Build 12340's sale pending payment (AC `AUCTION_SALE_PENDING`): `"seller_temp_invoice"`.
+    pub(crate) const SALE_PENDING: u32 = 6;
 }
 
 /// A parsed auction-mail subject.
@@ -34,7 +41,14 @@ pub(crate) fn parse_subject(subject: &str) -> Option<AuctionSubject> {
     let entry: u32 = parts.next()?.trim().parse().ok()?;
     let random_property: i32 = parts.next()?.trim().parse().ok()?;
     let result: u32 = parts.next()?.trim().parse().ok()?;
-    if parts.next().is_some() || result > auction_mail::CANCELLED {
+    // AC's tail, the auction id and the item count, both numbers or neither.
+    let tail: Vec<&str> = parts.collect();
+    let tail_ok = match tail.as_slice() {
+        [] => true,
+        [id, count] => id.trim().parse::<u32>().is_ok() && count.trim().parse::<u32>().is_ok(),
+        _ => false,
+    };
+    if !tail_ok || result > auction_mail::SALE_PENDING {
         return None;
     }
     Some(AuctionSubject {
@@ -55,6 +69,7 @@ pub(crate) fn subject_key(result: u32) -> Option<&'static str> {
         auction_mail::CANCELLED_TO_BIDDER | auction_mail::CANCELLED => {
             "AUCTION_REMOVED_MAIL_SUBJECT"
         }
+        auction_mail::SALE_PENDING => "AUCTION_INVOICE_MAIL_SUBJECT",
         _ => return None,
     })
 }
@@ -70,14 +85,28 @@ pub(crate) struct InvoiceNumbers {
     pub(crate) deposit: u32,
     /// Seller bodies only: the auction house's cut.
     pub(crate) consignment: u32,
+    /// The seven-field body's payment delay, in seconds.
+    pub(crate) money_delay: u32,
+    /// The seven-field body's ETA, a packed game time (`ByteBuffer::AppendPackedTime`).
+    pub(crate) eta: u32,
+}
+
+impl InvoiceNumbers {
+    /// The packed ETA's hour and minute: minutes in bits 0-5, hours in 6-10.
+    pub(crate) fn eta_hour_min(&self) -> (u32, u32) {
+        ((self.eta >> 6) & 0x1f, self.eta & 0x3f)
+    }
 }
 
 /// Parses an invoice body with the reference's `sscanf` formats, `%16I64X:%d:%d:%d:%d` for a
 /// seller and `%16I64X:%d:%d` for a buyer. Deviation: a wrong field count is no invoice, because
 /// the reference would read the missing fields uninitialised.
+/// AzerothCore's seven-field body is read whole, for either side: a buyer's carries zeros where
+/// a seller's has the deposit, cut, delay and ETA.
 pub(crate) fn parse_body(body: &str, seller: bool) -> Option<InvoiceNumbers> {
     let fields: Vec<&str> = body.trim().split(':').map(str::trim).collect();
-    if fields.len() != if seller { 5 } else { 3 } {
+    let native = fields.len() == 7;
+    if !native && fields.len() != if seller { 5 } else { 3 } {
         return None;
     }
     let player_guid = u64::from_str_radix(fields[0], 16).ok()?;
@@ -88,12 +117,19 @@ pub(crate) fn parse_body(body: &str, seller: bool) -> Option<InvoiceNumbers> {
     } else {
         (0, 0)
     };
+    let (money_delay, eta) = if native {
+        (fields[5].parse().ok()?, fields[6].parse().ok()?)
+    } else {
+        (0, 0)
+    };
     Some(InvoiceNumbers {
         player_guid,
         bid,
         buyout,
         deposit,
         consignment,
+        money_delay,
+        eta,
     })
 }
 
@@ -124,7 +160,7 @@ mod tests {
         assert_eq!(parse_subject("Hi there"), None);
         assert_eq!(parse_subject("4428:0"), None, "two fields");
         assert_eq!(parse_subject("4428:0:1:9"), None, "four fields");
-        assert_eq!(parse_subject("4428:0:6"), None, "result code out of range");
+        assert_eq!(parse_subject("4428:0:7"), None, "result code out of range");
         assert_eq!(parse_subject(""), None);
     }
 
@@ -157,5 +193,26 @@ mod tests {
     fn a_space_padded_guid_still_parses() {
         let b = parse_body("              6C:10000:10000", false).expect("padded");
         assert_eq!(b.player_guid, 0x6C);
+    }
+
+    /// AzerothCore's shapes: a five-field subject and the seven-field body for every notice.
+    #[test]
+    fn acs_subject_tail_sale_pending_and_seven_field_body_parse() {
+        let pending = parse_subject("4428:0:6:917:20").expect("sale pending");
+        assert_eq!((pending.entry, pending.result), (4428, auction_mail::SALE_PENDING));
+        assert_eq!(subject_key(pending.result), Some("AUCTION_INVOICE_MAIL_SUBJECT"));
+        assert!(parse_subject("4428:0:1:917").is_none(), "an id without a count");
+        assert!(parse_subject("4428:0:7:917:20").is_none(), "no result past 6");
+        // `%16X` right-aligned guid, then bid, buyout, deposit, cut, delay, packed ETA.
+        let eta = (14 << 6) | 35;
+        let body = format!("             2a:9000:10000:25:450:3600:{eta}");
+        let n = parse_body(&body, true).expect("seller body");
+        assert_eq!(
+            (n.player_guid, n.bid, n.buyout, n.deposit, n.consignment, n.money_delay),
+            (0x2a, 9000, 10000, 25, 450, 3600)
+        );
+        assert_eq!(n.eta_hour_min(), (14, 35));
+        let won = parse_body("             2a:9000:10000:0:0:0:0", false).expect("buyer body");
+        assert_eq!((won.bid, won.deposit, won.consignment), (9000, 0, 0));
     }
 }
