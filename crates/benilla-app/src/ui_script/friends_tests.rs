@@ -19,6 +19,7 @@ fn who(name: &str, level: u32, class: &str, zone: &str) -> WhoInfo {
         race: "Human".to_string(),
         class: class.to_string(),
         zone: zone.to_string(),
+        class_file: String::new(),
     }
 }
 
@@ -35,6 +36,8 @@ fn friend(name: &str, level: u32, class: &str, area: &str, connected: bool) -> F
         area: area.to_string(),
         connected,
         status: String::new(),
+        note: None,
+        refer_a_friend: false,
     }
 }
 
@@ -336,6 +339,7 @@ fn who_rows_fill_their_columns() {
                 race: "Human".to_string(),
                 class: "Rogue".to_string(),
                 zone: "Westfall".to_string(),
+                class_file: String::new(),
             }],
             who_total: 1,
             ..Default::default()
@@ -388,6 +392,7 @@ fn the_who_dropdown_switches_the_variable_column() {
                 race: "Human".to_string(),
                 class: "Rogue".to_string(),
                 zone: "Westfall".to_string(),
+                class_file: String::new(),
             }],
             who_total: 1,
             ..Default::default()
@@ -730,6 +735,7 @@ fn the_who_list_reaches_its_last_row_at_the_bars_end() {
             race: "Human".to_string(),
             class: "Warrior".to_string(),
             zone: "Elwynn Forest".to_string(),
+            class_file: String::new(),
         })
         .collect();
     push(

@@ -1133,6 +1133,12 @@ pub enum SessionEvent {
     MirrorTimerStop { kind: u32 },
     /// The whole friend list (`SMSG_FRIEND_LIST`), replacing what is held; no names on the wire.
     FriendList { friends: Vec<FriendEntry> },
+    /// Build 12340's contact notes (`SMSG_CONTACT_LIST`, an added friend's `SMSG_FRIEND_STATUS`):
+    /// `replace` swaps the whole set, as a list does; otherwise the pairs patch it.
+    WrathContactNotes {
+        notes: Vec<(u64, String)>,
+        replace: bool,
+    },
     /// The whole ignore list (`SMSG_IGNORE_LIST`), replacing what is held; guids only.
     IgnoreList { guids: Vec<u64> },
     /// A friend/ignore result (`SMSG_FRIEND_STATUS`): an add/remove ack or a friend's login or

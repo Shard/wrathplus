@@ -228,6 +228,9 @@ fn row(
         guid: m.guid,
         last_online_days: m.last_online_days,
         info: GuildMemberInfo {
+            class_file: class_names(m.class)
+                .map(|(_, file)| file.to_string())
+                .unwrap_or_default(),
             name: m.name.clone(),
             rank: identity
                 .map(|i| i.rank_name(m.rank_id).to_string())

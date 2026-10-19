@@ -95,6 +95,8 @@ pub struct GuildRankInfo {
 /// last-online time.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GuildMemberInfo {
+    /// The class file name, `GetGuildRosterInfo`'s eleventh; empty reads nil.
+    pub class_file: String,
     /// On the wire in the roster itself, so it never waits on a name query.
     pub name: String,
     /// The rank's name.
@@ -356,8 +358,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetGuildRosterInfo",
         lua.create_function(|lua, index: i64| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
+            // `0x5cc9c0`: eleven; a miss answers nil, nil, 0, 0, five nils, "", nil.
             let Some(m) = member_at(&model.guild.roster, index) else {
-                return Ok(MultiValue::from_vec(vec![Value::Nil; 10]));
+                let mut v = vec![Value::Nil, Value::Nil, Value::Integer(0), Value::Integer(0)];
+                v.extend(std::iter::repeat_n(Value::Nil, 5));
+                v.extend([Value::String(lua.create_string("")?), Value::Nil]);
+                return Ok(MultiValue::from_vec(v));
             };
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&m.name)?),
@@ -370,6 +376,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::String(lua.create_string(&m.officer_note)?),
                 binding_abi::flag(m.online),
                 Value::String(lua.create_string(&m.status)?),
+                if m.class_file.is_empty() {
+                    Value::Nil
+                } else {
+                    Value::String(lua.create_string(&m.class_file)?)
+                },
             ]))
         })?,
     )?;

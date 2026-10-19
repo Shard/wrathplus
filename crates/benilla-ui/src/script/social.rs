@@ -4,7 +4,7 @@
 //! `+0x720`, read back by `0x5ad260` and `0x5ae510`), so a set changes the snapshot at once and
 //! queues the change for the app.
 
-use mlua::{Lua, Value};
+use mlua::{Lua, MultiValue, Value};
 
 use super::binding_abi::string_arg;
 use super::who_sort::WhoSortChain;
@@ -13,6 +13,10 @@ use super::Model;
 /// One friend row in `GetFriendInfo`'s order; offline, the level is 0 and class and area empty.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FriendInfo {
+    /// The contact note, `GetFriendInfo`'s seventh; `None` reads nil.
+    pub note: Option<String>,
+    /// A Recruit-A-Friend link (status bit 3), the eighth.
+    pub refer_a_friend: bool,
     /// From the name cache; empty while the name query is in flight.
     pub name: String,
     pub level: u32,
@@ -28,6 +32,8 @@ pub struct FriendInfo {
 /// wire has class first.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WhoInfo {
+    /// The class file name (`ChrClasses` `+0x1c`), `GetWhoInfo`'s seventh; empty reads nil.
+    pub class_file: String,
     pub name: String,
     pub guild: String,
     pub level: u32,
@@ -115,30 +121,55 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // FrameXML tests `if ( not name )`.
     g.set(
         "GetFriendInfo",
-        lua.create_function(|lua, index: i64| {
+        // GetFriendInfo(index or name) (`0x6b4130`) → name, level, class, area, connected,
+        // status, note, RAF: eight; a miss answers nil, 0, nil, nil, nil, "", nil, nil.
+        lua.create_function(|lua, arg: Value| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let Some(friend) = friend_at(&model.social.friends, index) else {
-                return Ok((
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                ));
+            let friend = match &arg {
+                Value::Integer(_) | Value::Number(_) => {
+                    let n = lua.coerce_integer(arg.clone())?.unwrap_or(0);
+                    friend_at(&model.social.friends, n)
+                }
+                Value::String(s) => {
+                    let name = s.to_string_lossy();
+                    model
+                        .social
+                        .friends
+                        .iter()
+                        .find(|f| f.name.eq_ignore_ascii_case(&name))
+                }
+                _ => {
+                    return Err(mlua::Error::runtime("Usage: GetFriendInfo(index or name)"));
+                }
             };
-            Ok((
+            let Some(friend) = friend else {
+                let mut v = vec![
+                    Value::Nil,
+                    Value::Integer(0),
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Nil,
+                ];
+                v.extend([
+                    Value::String(lua.create_string("")?),
+                    Value::Nil,
+                    Value::Nil,
+                ]);
+                return Ok(MultiValue::from_vec(v));
+            };
+            Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&friend.name)?),
                 Value::Integer(i64::from(friend.level)),
                 Value::String(lua.create_string(&friend.class)?),
                 Value::String(lua.create_string(&friend.area)?),
-                if friend.connected {
-                    Value::Integer(1)
-                } else {
-                    Value::Nil
-                },
+                super::binding_abi::flag(friend.connected),
                 Value::String(lua.create_string(&friend.status)?),
-            ))
+                match &friend.note {
+                    Some(n) if !n.is_empty() => Value::String(lua.create_string(n)?),
+                    _ => Value::Nil,
+                },
+                super::binding_abi::flag(friend.refer_a_friend),
+            ]))
         })?,
     )?;
 
@@ -379,24 +410,26 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let row = usize::try_from(index - 1)
                 .ok()
                 .and_then(|i| model.social.who.get(i));
+            // `0x6b4a80`: seven; the class file is nil without a class row, and a miss answers
+            // nil, nil, 0, then nils.
             let Some(row) = row else {
-                return Ok((
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                ));
+                let mut v = vec![Value::Nil, Value::Nil, Value::Integer(0)];
+                v.extend([Value::Nil, Value::Nil, Value::Nil, Value::Nil]);
+                return Ok(MultiValue::from_vec(v));
             };
-            Ok((
+            Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&row.name)?),
                 Value::String(lua.create_string(&row.guild)?),
                 Value::Integer(i64::from(row.level)),
                 Value::String(lua.create_string(&row.race)?),
                 Value::String(lua.create_string(&row.class)?),
                 Value::String(lua.create_string(&row.zone)?),
-            ))
+                if row.class_file.is_empty() {
+                    Value::Nil
+                } else {
+                    Value::String(lua.create_string(&row.class_file)?)
+                },
+            ]))
         })?,
     )?;
 
@@ -480,6 +513,7 @@ mod tests {
             race: "Human".to_string(),
             class: "Warrior".to_string(),
             zone: zone.to_string(),
+            class_file: String::new(),
         }
     }
 
