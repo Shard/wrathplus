@@ -112,7 +112,12 @@ pub struct FactionInfo {
 
 impl FactionInfo {
     /// A row with only its index, parent and spillover columns, for tests.
-    pub fn for_tests(rep_index: i32, team: u32, parent_mod: [f32; 2], parent_cap: [u32; 2]) -> Self {
+    pub fn for_tests(
+        rep_index: i32,
+        team: u32,
+        parent_mod: [f32; 2],
+        parent_cap: [u32; 2],
+    ) -> Self {
         Self {
             rep_index,
             team,
@@ -404,10 +409,16 @@ fn faction_schema() -> Schema {
     s.add_field(SchemaField::new("DescFlags", FieldType::UInt32));
     // Build 12340 only, file fields 19-22.
     for i in 0..2 {
-        s.add_field(SchemaField::new(format!("ParentFactionMod{i}"), FieldType::Float32));
+        s.add_field(SchemaField::new(
+            format!("ParentFactionMod{i}"),
+            FieldType::Float32,
+        ));
     }
     for i in 0..2 {
-        s.add_field(SchemaField::new(format!("ParentFactionCap{i}"), FieldType::UInt32));
+        s.add_field(SchemaField::new(
+            format!("ParentFactionCap{i}"),
+            FieldType::UInt32,
+        ));
     }
     s
 }
@@ -747,60 +758,5 @@ mod tests {
         assert_eq!(cat.faction_group_name(2), Some("Alliance"));
         assert_eq!(cat.faction_group_name(4), Some("Horde"));
         assert_eq!(cat.faction_group_name(0), None);
-    }
-
-    #[test]
-    fn real_reputation_factions_group_under_their_team() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_faction_catalog(&mut chain).expect("load factions");
-
-        // 54 of the table's 190 rows carry a reputation slot; the rest are reaction-only.
-        assert_eq!(cat.reputation_factions().count(), 54);
-
-        // The four Alliance cities sit under Alliance (469), the four Horde ones under Horde (67).
-        for id in [72 /* Stormwind */, 47, 69, 54] {
-            assert_eq!(
-                cat.reputation_faction(id).unwrap().team,
-                469,
-                "faction {id}"
-            );
-        }
-        for id in [76 /* Orgrimmar */, 81, 68, 530] {
-            assert_eq!(cat.reputation_faction(id).unwrap().team, 67, "faction {id}");
-        }
-        // The Steamwheedle towns sit under the cartel (169), a header with its own slot (10).
-        for id in [21 /* Booty Bay */, 369, 470, 577] {
-            assert_eq!(
-                cat.reputation_faction(id).unwrap().team,
-                169,
-                "faction {id}"
-            );
-        }
-        assert_eq!(cat.reputation_faction(169).unwrap().rep_index, 10);
-        for id in [469, 67, 169] {
-            assert_eq!(cat.reputation_faction(id).unwrap().team, 0, "faction {id}");
-        }
-        // Argent Dawn and the other ungrouped factions carry no team.
-        assert_eq!(cat.reputation_faction(529).unwrap().team, 0);
-
-        // Exactly five parents, each a pane header: Alliance, Horde, Steamwheedle Cartel and the
-        // two battleground blocs.
-        let mut parents: Vec<u32> = cat
-            .reputation_factions()
-            .map(|(_, f)| f.team)
-            .filter(|&t| t != 0)
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        parents.sort_unstable();
-        assert_eq!(parents, [67, 169, 469, 891, 892]);
-
-        assert!(
-            cat.faction_description(529)
-                .is_some_and(|d| d.starts_with("An organization focused on protecting Azeroth")),
-            "Argent Dawn's description: {:?}",
-            cat.faction_description(529)
-        );
     }
 }

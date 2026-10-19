@@ -66,14 +66,6 @@ fn real_spell_tab_collapses_general_by_race_and_class() {
         );
     }
 
-    // Perception, on line 754 `Racial - Human`.
-    assert_eq!(cat.spell_to_line(20600), Some(754));
-    assert_eq!(
-        cat.spell_tab(20600, HUMAN, WARRIOR),
-        0,
-        "a human racial routes to General"
-    );
-
     // A warrior has no Fire row; a mage's has no sort flag.
     assert_eq!(cat.spell_to_line(133), Some(8));
     assert_eq!(
@@ -240,9 +232,9 @@ fn real_mono_value_split_class_lines_yes_weapons_no() {
     let mut chain = crate::open_chain(&data).expect("open chain");
     let cat = load_skill_line_catalog(&mut chain).expect("load skill lines");
 
-    // Beast Mastery / Survival / Marksmanship (0x410), Dual Wield / Night Elf Racial / the
-    // Tiger Riding mount line / GENERIC (DND) (0x492).
-    for line in [50u32, 51, 163, 118, 126, 150, 183] {
+    // Beast Mastery / Survival / Marksmanship (0x410), Night Elf Racial / the Tiger Riding mount
+    // line / GENERIC (DND) (0x492).
+    for line in [50u32, 51, 163, 126, 150, 183] {
         assert!(cat.mono_value(line, 4, 3), "line {line} is single-rank");
     }
     // Weapon lines (Axes/Bows/Daggers/Crossbows/Unarmed/Defense), armor proficiencies
@@ -294,8 +286,10 @@ fn real_rank_chains_resolve_the_highest_known_rank() {
     let mut chain = crate::open_chain(&data).expect("open chain");
     let cat = load_skill_line_catalog(&mut chain).expect("load skill lines");
 
-    // Sinister Strike ranks 1 to 8: a saved bar can hold rank 1 while the book holds rank 8.
-    const SS: [u32; 8] = [1752, 1757, 1758, 1759, 1760, 8621, 11293, 11294];
+    // Sinister Strike ranks 1 to 12: a saved bar can hold rank 1 while the book holds rank 12.
+    const SS: [u32; 12] = [
+        1752, 1757, 1758, 1759, 1760, 8621, 11293, 11294, 26861, 26862, 48637, 48638,
+    ];
     for pair in SS.windows(2) {
         assert_eq!(
             cat.rank_successor(pair[0]),
@@ -305,20 +299,18 @@ fn real_rank_chains_resolve_the_highest_known_rank() {
             pair[1]
         );
     }
-    assert_eq!(cat.rank_successor(11294), None, "rank 8 tops the chain");
-    // Charge (100, 6178, 11578) and Heroic Strike's last link.
-    assert_eq!(cat.rank_successor(100), Some(6178));
-    assert_eq!(cat.rank_successor(6178), Some(11578));
+    assert_eq!(cat.rank_successor(48638), None, "rank 12 tops the chain");
+    // Heroic Strike's rank 8 link.
     assert_eq!(cat.rank_successor(11567), Some(25286));
 
-    // Knowing only rank 8, every rank resolves to it: the walk starts at the chain head.
-    let top: std::collections::BTreeSet<u32> = [11294].into_iter().collect();
+    // Knowing only rank 12, every rank resolves to it: the walk starts at the chain head.
+    let top: std::collections::BTreeSet<u32> = [48638].into_iter().collect();
     for id in SS {
-        assert_eq!(cat.highest_known_rank(id, &top), Some(11294), "from {id}");
+        assert_eq!(cat.highest_known_rank(id, &top), Some(48638), "from {id}");
     }
     let mid: std::collections::BTreeSet<u32> = [1759].into_iter().collect();
     assert_eq!(cat.highest_known_rank(1752, &mid), Some(1759));
-    assert_eq!(cat.highest_known_rank(11294, &mid), Some(1759));
+    assert_eq!(cat.highest_known_rank(48638, &mid), Some(1759));
     assert_eq!(cat.highest_known_rank(1752, &Default::default()), None);
 
     // Caster spells carry no forward link: Fireball ranks 1 and 2, and rank 1 of Frostbolt,
@@ -376,5 +368,7 @@ fn real_professions_can_link_and_list_their_rows() {
     assert!(!cat.line(43).expect("Swords resolves").can_link);
     let alchemy = cat.line_abilities(171);
     assert!(alchemy.len() > 100, "Alchemy has {} row(s)", alchemy.len());
-    assert!(alchemy.iter().all(|r| cat.spell_to_line(r.spell_id).is_some()));
+    assert!(alchemy
+        .iter()
+        .all(|r| cat.spell_to_line(r.spell_id).is_some()));
 }

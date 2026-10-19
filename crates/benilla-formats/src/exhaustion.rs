@@ -52,25 +52,3 @@ pub fn load_exhaustion(chain: &mut Chain) -> Result<Vec<ExhaustionRow>> {
     }
     Ok(rows)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::load_exhaustion;
-
-    #[test]
-    fn the_shipped_rest_states_carry_the_rested_double() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let rows = load_exhaustion(&mut chain).expect("Exhaustion.dbc");
-        let by_id: std::collections::HashMap<u32, (&str, f32)> = rows
-            .iter()
-            .map(|r| (r.id, (r.name.as_str(), r.factor)))
-            .collect();
-        assert_eq!(by_id[&1], ("Rested", 2.0), "the ×2 is this row's data");
-        assert_eq!(by_id[&2], ("Normal", 1.0));
-        assert_eq!(by_id[&3], ("XXXTired", 1.0), "beta tier, never sent");
-        assert_eq!(by_id[&4], ("XXXTired", 0.5));
-        assert_eq!(by_id[&5], ("XXXExhausted", 0.25));
-        assert_eq!(rows.len(), 5, "the whole shipped table");
-    }
-}

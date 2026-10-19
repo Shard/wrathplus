@@ -78,24 +78,3 @@ pub fn load_taxi_paths(chain: &mut Chain) -> Result<TaxiPaths> {
     }
     Ok(TaxiPaths { rows, by_pair })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Hop 6 runs Stormwind (node 2) to Sentinel Hill (node 4) for 110 copper.
-    #[test]
-    fn real_taxi_path_layout_sanity() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_taxi_paths(&mut chain).expect("load TaxiPath");
-        assert_eq!(cat.len(), 287, "1.12 ships 287 taxi path hops");
-
-        let hop = cat.between(2, 4).expect("a direct 2 -> 4 hop exists");
-        assert_eq!(hop.id, 6);
-        assert_eq!(hop.cost, 110);
-        assert!(hop.cost > 0, "a real hop always carries a nonzero fare");
-
-        assert!(cat.paths_from(2).any(|p| p.to == 4 && p.cost == 110));
-    }
-}

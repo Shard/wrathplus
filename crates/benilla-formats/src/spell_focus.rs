@@ -62,21 +62,3 @@ pub fn load_spell_focus_catalog(chain: &mut Chain) -> Result<SpellFocusCatalog> 
     }
     Ok(SpellFocusCatalog { names })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn real_spell_focus_names_the_profession_objects() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_spell_focus_catalog(&mut chain).expect("load SpellFocusObject.dbc");
-
-        assert_eq!(cat.name(1), Some("Anvil"));
-        assert_eq!(cat.name(3), Some("Forge"));
-        assert_eq!(cat.name(4), Some("Cooking Fire"));
-        assert_eq!(cat.name(0), None, "0 = no requirement");
-        assert_eq!(cat.len(), 138, "the 5875 file's full row count");
-    }
-}

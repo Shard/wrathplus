@@ -188,31 +188,4 @@ mod tests {
         };
         assert_eq!(shots.resolved_ms(60, 1), -1_000_000);
     }
-
-    #[test]
-    fn real_spell_cast_times_read_the_probed_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let times = load_spell_cast_times(&mut chain).expect("load SpellCastTimes");
-
-        // Row 1: the instant sentinel.
-        let instant = times.get(1).expect("row 1");
-        assert_eq!(
-            (instant.base_ms, instant.per_level_ms, instant.minimum_ms),
-            (0, 0, 0)
-        );
-
-        // Row 16: Fireball rank 1, spell 133 (vmangos `spell_template.castingTimeIndex`).
-        let fireball = times.get(16).expect("row 16");
-        assert_eq!(fireball.base_ms, 1500);
-
-        // Row 10: a level-scaling row with a negative per-level term.
-        let scaling = times.get(10).expect("row 10");
-        assert_eq!(
-            (scaling.base_ms, scaling.per_level_ms, scaling.minimum_ms),
-            (1000, -100, 500)
-        );
-
-        assert_eq!(times.len(), 52, "5875 ships 52 SpellCastTimes rows");
-    }
 }

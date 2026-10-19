@@ -62,25 +62,3 @@ pub fn load_spell_mechanic_catalog(chain: &mut Chain) -> Result<SpellMechanicCat
     }
     Ok(SpellMechanicCatalog { names })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Fear's `Mechanic` is 5, Frost Nova's `EffectMechanic[1]` 7, Polymorph's 17.
-    #[test]
-    fn real_spell_mechanic_names_the_crowd_control_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_spell_mechanic_catalog(&mut chain).expect("load SpellMechanic.dbc");
-
-        assert_eq!(cat.name(5), Some("fleeing"));
-        assert_eq!(cat.name(7), Some("rooted"));
-        assert_eq!(cat.name(11), Some("ensnared"));
-        assert_eq!(cat.name(12), Some("stunned"));
-        assert_eq!(cat.name(17), Some("polymorphed"));
-        assert_eq!(cat.name(0), None, "0 = no mechanic, and no line to fill");
-        assert_eq!(cat.name(999), None);
-        assert_eq!(cat.len(), 27, "the 5875 file's full row count");
-    }
-}

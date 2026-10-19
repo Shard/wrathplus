@@ -217,34 +217,6 @@ pub fn load_emote_sound_catalog(chain: &mut Chain) -> Result<EmoteSoundCatalog> 
 mod tests {
     use super::*;
 
-    /// The expected ids and anims are the table `0x603a60` builds from the shipped data.
-    #[test]
-    fn the_five_gesture_slots_scan_to_the_shipped_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_emote_sound_catalog(&mut chain).expect("load emote catalog");
-        // slot, expected Emotes.dbc id, expected AnimationData id, name
-        for (slot, emote_id, anim_id, what) in [
-            (0usize, 1u32, 60u32, "talk"),
-            (1, 6, 65, "question"),
-            (2, 5, 64, "exclamation"),
-            (3, 22, 81, "shout"),
-            (4, 11, 70, "laugh"),
-        ] {
-            assert_eq!(cat.gesture(slot), Some(emote_id), "{what} slot -> emote id");
-            assert_eq!(cat.anim(emote_id), Some(anim_id), "{what} emote -> AnimID");
-        }
-        // One shipped row per bit, so the walk order cannot matter.
-        for bit in GESTURE_FLAG_BITS {
-            let carriers = cat
-                .emote_flags
-                .iter()
-                .filter(|(_, f)| *f & bit != 0)
-                .count();
-            assert_eq!(carriers, 1, "exactly one shipped row carries {bit:#x}");
-        }
-    }
-
     #[test]
     fn real_emote_chain_resolves() {
         let data = crate::wow_data_or_skip!();

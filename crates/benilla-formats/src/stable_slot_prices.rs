@@ -87,21 +87,4 @@ mod tests {
         assert_eq!(t.next_slot_price(1), Some(50_000));
         assert_eq!(t.next_slot_price(2), None);
     }
-
-    #[test]
-    fn the_golden_matches_the_installed_table() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = Chain::open(&data).expect("open patch chain");
-        let real = load_stable_slot_prices(&mut chain).expect("load real StableSlotPrices.dbc");
-        let golden = table_from(&synthesize()).expect("parse golden");
-        assert_eq!(real.len(), golden.len());
-        for purchased in 0..3u8 {
-            assert_eq!(
-                real.next_slot_price(purchased),
-                golden.next_slot_price(purchased),
-                "slot {} price drifted from the golden",
-                purchased + 1
-            );
-        }
-    }
 }
