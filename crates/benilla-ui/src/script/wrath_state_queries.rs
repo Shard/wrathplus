@@ -51,6 +51,14 @@ pub(crate) struct State {
     /// `None` without a player.
     pvp: Option<PvpTimer>,
     instance: Option<WrathInstanceInfo>,
+    /// Each bag's `BagFamily`, `GetContainerNumFreeSlots`'s second value.
+    bag_families: std::collections::HashMap<i64, u32>,
+    /// The current area's `AreaTable` flag `0x8000000`.
+    can_hearth_and_resurrect: bool,
+    /// The non-zero `PLAYER_FIELD_DAILY_QUESTS` slots.
+    daily_quests_completed: u32,
+    /// The gossip NPC's creature `type_flags & 0x8000000`.
+    force_gossip: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -106,6 +114,29 @@ impl UiScript {
     /// player.
     pub fn set_wrath_pvp_timer(&mut self, timer: Option<(bool, Option<f64>)>) {
         self.model_mut().wrath_state.pvp = timer.map(|(running, ends)| PvpTimer { running, ends });
+    }
+
+    /// A bag's `BagFamily`.
+    pub fn set_wrath_bag_family(&mut self, bag: i64, family: u32) {
+        self.model_mut()
+            .wrath_state
+            .bag_families
+            .insert(bag, family);
+    }
+
+    /// `CanHearthAndResurrectFromArea`'s answer for the current area.
+    pub fn set_wrath_can_hearth_and_resurrect(&mut self, can: bool) {
+        self.model_mut().wrath_state.can_hearth_and_resurrect = can;
+    }
+
+    /// `ForceGossip`'s answer for the open gossip NPC.
+    pub fn set_wrath_force_gossip(&mut self, force: bool) {
+        self.model_mut().wrath_state.force_gossip = force;
+    }
+
+    /// `GetDailyQuestsCompleted`'s count.
+    pub fn set_wrath_daily_quests_completed(&mut self, n: u32) {
+        self.model_mut().wrath_state.daily_quests_completed = n;
     }
 
     /// The current map's instance row; `None` for a map with no `Map.dbc` row.
@@ -267,6 +298,130 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ]))
         })?,
     )?;
+    // GetContainerNumFreeSlots(bag) (`0x5d7590`): the empty slots and the bag's `BagFamily`.
+    // Labelled: the vault (-1) reads as pushed, where the client also needs the bank open.
+    g.set(
+        "GetContainerNumFreeSlots",
+        lua.create_function(|lua, args: MultiValue| {
+            let bag = number(lua, &args, 0)
+                .map(|n| n as i64)
+                .ok_or_else(|| mlua::Error::runtime("Usage: GetContainerFreeSlots(index)"))?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let Some(c) = model.containers.get(&bag) else {
+                return Ok(MultiValue::from_vec(vec![Value::Number(0.0)]));
+            };
+            let free = (1..=c.num_slots)
+                .filter(|s| !c.slots.contains_key(s))
+                .count();
+            let family = model
+                .wrath_state
+                .bag_families
+                .get(&bag)
+                .copied()
+                .unwrap_or(0);
+            Ok(MultiValue::from_vec(vec![
+                Value::Number(free as f64),
+                Value::Number(f64::from(family)),
+            ]))
+        })?,
+    )?;
+    // IsEquippableItem(item) (`0x511150`): the template's `InventoryType` is not 0. Labelled: read
+    // as `GetItemInfo`'s equip location, which is empty for type 0.
+    g.set(
+        "IsEquippableItem",
+        lua.create_function(|lua, item: Value| {
+            let Ok(info) = lua.globals().get::<mlua::Function>("GetItemInfo") else {
+                return Ok(Value::Nil);
+            };
+            let v: MultiValue = info.call(item).unwrap_or_default();
+            let equip = v.get(8).and_then(|x| match x {
+                Value::String(s) => Some(s.to_string_lossy()),
+                _ => None,
+            });
+            Ok(if equip.is_some_and(|e| !e.is_empty()) {
+                Value::Number(1.0)
+            } else {
+                Value::Nil
+            })
+        })?,
+    )?;
+    g.set(
+        "CanHearthAndResurrectFromArea",
+        lua.create_function(|lua, ()| {
+            let can = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .wrath_state
+                .can_hearth_and_resurrect;
+            Ok(can.then_some(1.0))
+        })?,
+    )?;
+    g.set(
+        "GetDailyQuestsCompleted",
+        lua.create_function(|lua, ()| {
+            Ok(f64::from(
+                lua.app_data_ref::<Model>()
+                    .expect("model app_data")
+                    .wrath_state
+                    .daily_quests_completed,
+            ))
+        })?,
+    )?;
+    g.set(
+        "ForceGossip",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .wrath_state
+                .force_gossip)
+        })?,
+    )?;
+    // GetContainerItemQuestInfo(bag, slot) (`0x5d9400`): the item's template, `Bonding` 4 for a
+    // quest item and its `StartQuest`, and whether that quest is in the log (`0x5e11d0`).
+    // Labelled: `0x5e11d0` is read as the quest's presence in the quest log.
+    g.set(
+        "GetContainerItemQuestInfo",
+        lua.create_function(|lua, args: MultiValue| {
+            let (Some(bag), Some(slot)) = (number(lua, &args, 0), number(lua, &args, 1)) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: GetContainerItemQuestInfo(bag, slot)",
+                ));
+            };
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let template = model
+                .containers
+                .get(&(bag as i64))
+                .and_then(|c| c.slots.get(&(slot as u32)))
+                .and_then(|s| model.item_templates.get(&s.item_id));
+            let Some(t) = template else {
+                return Ok(MultiValue::from_vec(vec![
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Nil,
+                ]));
+            };
+            let quest_item = if t.bonding == 4 {
+                Value::Boolean(true)
+            } else {
+                Value::Nil
+            };
+            Ok(MultiValue::from_vec(if t.start_quest == 0 {
+                vec![quest_item, Value::Nil, Value::Nil]
+            } else {
+                let active = model
+                    .quest_log
+                    .entries
+                    .iter()
+                    .any(|e| !e.is_header && e.quest_id == t.start_quest);
+                vec![
+                    quest_item,
+                    Value::Number(f64::from(t.start_quest)),
+                    Value::Boolean(active),
+                ]
+            }))
+        })?,
+    )?;
     Ok(())
 }
 
@@ -367,5 +522,31 @@ mod tests {
                  and m == 25 and dy == 0 and isd == false"
             )
             .unwrap());
+    }
+
+    #[test]
+    fn the_bag_area_and_daily_readers_read_the_pushed_state() {
+        let mut s = vm();
+        let mut slots = std::collections::HashMap::new();
+        slots.insert(2, crate::script::ContainerSlot::default());
+        s.set_container(
+            1,
+            Some(crate::script::ContainerState {
+                name: None,
+                num_slots: 4,
+                slots,
+            }),
+        );
+        s.set_wrath_bag_family(1, 8);
+        s.set_wrath_can_hearth_and_resurrect(true);
+        s.set_wrath_daily_quests_completed(3);
+        assert!(s
+            .eval::<bool>(
+                "local f, fam = GetContainerNumFreeSlots(1) \
+                 return f == 3 and fam == 8 and GetContainerNumFreeSlots(3) == 0 \
+                 and CanHearthAndResurrectFromArea() == 1 and GetDailyQuestsCompleted() == 3"
+            )
+            .unwrap());
+        assert!(s.run("GetContainerNumFreeSlots()").is_err());
     }
 }

@@ -48,10 +48,10 @@ Movement M6, polish: swim ascend/descend, take-off from the water, relayed flier
 
 | Direction | handled | capture-only | missing | total |
 |---|---:|---:|---:|---:|
-| S→C | 404 | 96 | 189 | 689 |
-| C→S | 419 | 0 | 305 | 724 |
+| S→C | 405 | 95 | 189 | 689 |
+| C→S | 420 | 0 | 304 | 724 |
 
-Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 419 admitted numeric opcodes, 84 of them transport-only (no UI producer) and 335 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
+Totals count bidirectional MSG once in each direction; internal UMSG are excluded. Recounted from the table. Outbound: 420 admitted numeric opcodes, 84 of them transport-only (no UI producer) and 336 with producers, automatic replies or producer gates (the original audit's three producer-gated and four stable mutations with incomplete native feedback among them). “Handled” outbound does not mean any of those gates may be removed without owner approval.
 
 ## Remaining work
 
@@ -1233,8 +1233,8 @@ Each implementation is a bounded unit with codec/adapter tests and full protocol
 | `0x0461` | `SMSG_CALENDAR_EVENT_INVITE_NOTES_ALERT` | S→C | missing | niche | not_proven_reference_only | S→C: No reachable semantic dispatch found; world catch-all drops (bootstrap loops may discard). |
 | `0x0462` | `CMSG_UPDATE_MISSILE_TRAJECTORY` | C→S | missing | niche | AC receive: `HandleUpdateMissileTrajectory` (STATUS_LOGGEDIN). | C→S: not sent: the native cast carries the missile trajectory in its cast-flags `0x02` tail (elevation, speed, the mover's STOP; `0x80ac90`, AzerothCore `HandleClientCastFlags`), not built; a separate `0x462` is pushed at `0x6fd744`, outside the packet opener, untraced; see `docs/WRATH-SPELL-CONTROL.md`. |
 | `0x0463` | `SMSG_UPDATE_ACCOUNT_DATA_COMPLETE` | S→C | capture-only | common | proven_send_site: `game/Handlers/MiscHandler.cpp:827` | S→C: capture-only — P/wrath_session_meta.rs → A/net/wrath_session_meta_capture.rs FIFO (account data kept compressed); see docs/WRATH-SESSION-META.md. |
-| `0x0464` | `SMSG_TRIGGER_MOVIE` | S→C | capture-only | niche | proven_send_site: `game/Entities/Player/Player.cpp:5889` | S→C: capture-only — P/wrath_world_objects.rs → A/net/wrath_world_objects_capture.rs FIFO; see docs/WRATH-WORLD-OBJECTS.md. |
-| `0x0465` | `CMSG_COMPLETE_MOVIE` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
+| `0x0464` | `SMSG_TRIGGER_MOVIE` | S→C | handled | niche | proven_send_site: `game/Entities/Player/Player.cpp:5889` | S→C: Movie — A/ui_native/wrath_movie.rs drains it from the world-objects capture: pending movie, `PLAY_MOVIE(name, volume)` from `Movie.dbc`, or an immediate finish for an unknown id (`0x51d710`); the stock MovieFrame finishes it, as benilla plays no movie. See docs/WRATH-WORLD-OBJECTS.md. |
+| `0x0465` | `CMSG_COMPLETE_MOVIE` | C→S | handled | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Movie — `NativeWorldObjects(CompleteMovie)`, empty, P/wrath_world_objects.rs; producer `GameMovieFinished()` while a movie is pending (`0x518870`), A/ui_native/wrath_movie.rs. AC ignores it. See docs/WRATH-WORLD-OBJECTS.md. |
 | `0x0466` | `CMSG_SET_GLYPH_SLOT` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0467` | `CMSG_SET_GLYPH` | C→S | missing | niche | AC receive: `Handle_NULL` (STATUS_NEVER). | C→S: Not admitted by native writer/automatic bootstrap/control paths; generic framing is not support. |
 | `0x0468` | `SMSG_ACHIEVEMENT_EARNED` | S→C | handled | common | proven_send_site: `game/Achievements/AchievementMgr.cpp:770` | S→C: Achievements — the player's own earn: A/net/wrath_achievements.rs → `ACHIEVEMENT_EARNED`, the window's progress; other players' stay capture-only in the FIFO; see docs/WRATH-ACHIEVEMENTS.md. |

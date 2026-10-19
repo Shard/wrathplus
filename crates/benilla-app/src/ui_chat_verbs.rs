@@ -7,6 +7,8 @@
 //!   (labelled). Labelled: the team id is read off the descriptor's `ARENA_TEAM_INFO` slot, where
 //!   native reads its own arena-team table (`0xc0f840`).
 //! - `SetCurrentTitle` (CMSG `0x374`) and `SetTaxiBenchmarkMode` (CMSG `0x389`) send as they are.
+//! - `CancelItemTempEnchantment` sends `CMSG_CANCEL_TEMP_ENCHANTMENT` (`0x379`) for equipment slot
+//!   15 or 16; `Sound_GameSystem_RestartSoundSystem` is a labelled no-op.
 //! - The cast-order verbs, applied in call order by [`crate::script_calls`]: [`cancel_form`],
 //!   [`dismount`] and [`activate_talent_group`].
 
@@ -150,6 +152,20 @@ pub(crate) fn drain(script: &mut UiScript, store: Option<&ObjectStore>, commands
             WrathChatVerbRequest::TaxiBenchmarkMode { on } => ClientCommand::NativeMovementMisc(
                 benilla_protocol::wrath_movement_misc::Command::TaxiBenchmark { on },
             ),
+            // `CancelItemTempEnchantment` (`0x8021d0`) hands `0x6d7120` the equipment slot, the
+            // argument plus 14 (15 main hand, 16 off hand). Labelled: `0x6d7120`'s body is not
+            // decompiled; it is taken as the `CMSG_CANCEL_TEMP_ENCHANTMENT` send of that slot.
+            WrathChatVerbRequest::CancelTempEnchantment { slot } => ClientCommand::NativeInventory(
+                benilla_protocol::wrath_inventory::Command::CancelTempEnchantment {
+                    slot: u32::from(slot) + 14,
+                },
+            ),
+            // `Sound_GameSystem_RestartSoundSystem` (`0x985d30`) re-opens the sound device. Labelled
+            // no-op: benilla's audio output follows the system default device and has no restart.
+            WrathChatVerbRequest::RestartSoundSystem => {
+                debug!("chat verb RestartSoundSystem: no audio restart (labelled no-op)");
+                continue;
+            }
             ref arena => match arena_command(arena, team_id) {
                 Some(command) => ClientCommand::ArenaTeamCommand(command),
                 None => {
