@@ -20,13 +20,20 @@ pub const SUMMON_SLOT_MINIPET: u32 = 5;
 /// `0x5d3820`).
 pub const SUMMON_FLAG_UNDISMISSABLE: u32 = 0x20;
 
-/// SummonProperties ID → (Slot, Flags).
+/// The `Control` value of a puppet summon (`SUMMON_CATEGORY_PUPPET`), which the possess bar's
+/// spell pick (`0x5d62a0`) admits.
+pub const SUMMON_CONTROL_PUPPET: u32 = 3;
+
+/// SummonProperties ID → (Slot, Flags), and each row's Control.
 #[derive(Debug, Default, Clone)]
-pub struct SummonProperties(HashMap<u32, (u32, u32)>);
+pub struct SummonProperties(HashMap<u32, (u32, u32)>, HashMap<u32, u32>);
 
 impl SummonProperties {
     pub fn from_slots(rows: impl IntoIterator<Item = (u32, u32)>) -> Self {
-        Self(rows.into_iter().map(|(id, slot)| (id, (slot, 0))).collect())
+        Self(
+            rows.into_iter().map(|(id, slot)| (id, (slot, 0))).collect(),
+            HashMap::new(),
+        )
     }
 
     /// Rows as `(ID, Slot, Flags)`.
@@ -35,7 +42,19 @@ impl SummonProperties {
             rows.into_iter()
                 .map(|(id, slot, flags)| (id, (slot, flags)))
                 .collect(),
+            HashMap::new(),
         )
+    }
+
+    /// The same, with each row's Control set from `(ID, Control)` pairs.
+    pub fn with_controls(mut self, rows: impl IntoIterator<Item = (u32, u32)>) -> Self {
+        self.1.extend(rows);
+        self
+    }
+
+    /// The row's Control (`row+4`); `None` for an ID with no row.
+    pub fn control(&self, id: u32) -> Option<u32> {
+        self.1.get(&id).copied()
     }
 
     /// The row's Slot; `None` for an ID with no row, which `0x8009b0` treats as no companion.
@@ -70,15 +89,11 @@ pub fn load_summon_properties(chain: &mut Chain) -> Result<SummonProperties> {
         .read_file(SUMMON_PROPERTIES)
         .with_context(|| format!("reading {SUMMON_PROPERTIES}"))?;
     let rs = parse(&bytes, schema(), "SummonProperties")?;
-    Ok(SummonProperties::from_rows(rs.records().iter().filter_map(
-        |r| {
-            Some((
-                u32_at(r, 0)?,
-                u32_at(r, 4).unwrap_or(0),
-                u32_at(r, 5).unwrap_or(0),
-            ))
-        },
-    )))
+    let rows = || rs.records().iter().filter_map(|r| Some((r, u32_at(r, 0)?)));
+    Ok(SummonProperties::from_rows(
+        rows().map(|(r, id)| (id, u32_at(r, 4).unwrap_or(0), u32_at(r, 5).unwrap_or(0))),
+    )
+    .with_controls(rows().map(|(r, id)| (id, u32_at(r, 1).unwrap_or(0)))))
 }
 
 #[cfg(test)]
