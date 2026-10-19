@@ -4,12 +4,12 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{ThreatTable, UiScript};
 use bevy::prelude::*;
 
-use super::NetHandlerApp;
+use crate::net::NetHandlerApp;
 
 #[derive(Resource, Default)]
 pub(crate) struct ThreatStore(pub ThreatTable);
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.init_resource::<ThreatStore>()
         .net_handler(K::ThreatUpdate, on_threat)
@@ -86,9 +86,9 @@ fn on_threat(In(event): In<SessionEvent>, mut state: ResMut<ThreatStore>) {
 
 fn feed(
     state: Res<ThreatStore>,
-    index: Res<super::GuidIndex>,
+    index: Res<crate::net::GuidIndex>,
     // Threat distances belong to streamed units, never off-screen portrait cameras.
-    units: Query<(&Transform, &super::ObjectStore), Without<crate::portrait::BoothCam>>,
+    units: Query<(&Transform, &crate::net::ObjectStore), Without<crate::portrait::BoothCam>>,
     script: Option<NonSendMut<UiScript>>,
 ) {
     let Some(mut script) = script else { return };
@@ -125,7 +125,7 @@ mod tests {
         use benilla_world::schedule::WorldStage;
 
         fn packet(world: &mut World) {
-            super::super::handlers::dispatch(
+            crate::net::handlers::dispatch(
                 world,
                 vec![SessionEvent::ThreatUpdate {
                     guid: 2,
@@ -150,7 +150,7 @@ mod tests {
         });
         let mut app = App::new();
         app.insert_non_send_resource(script)
-            .init_resource::<super::super::GuidIndex>()
+            .init_resource::<crate::net::GuidIndex>()
             .configure_sets(Update, (WorldStage::Net, UiFeed, UiInput).chain());
         register(&mut app);
         app.add_systems(Update, packet.in_set(WorldStage::Net))

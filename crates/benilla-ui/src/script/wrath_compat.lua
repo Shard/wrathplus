@@ -206,10 +206,6 @@ IsLFGDungeonJoinable = none
 GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 CanShowAchievementUI = none
-UnitHasVehicleUI, UnitInVehicle, UnitUsingVehicle, CanExitVehicle = none, none, none, none
-UnitVehicleSkin, UnitVehicleSeatInfo = none, none
-UnitVehicleSeatCount = zero
-IsVehicleAimAngleAdjustable, IsVehicleAimPowerAdjustable = none, none
 
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
 IsThreatWarningEnabled = IsThreatWarningEnabled or none
@@ -514,10 +510,6 @@ function GetContainerNumFreeSlots(bag)
 end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
-VehicleExit, VehicleAimUpStart, VehicleAimUpStop = none, none, none
-VehicleAimDownStart, VehicleAimDownStop = none, none
-VehicleAimIncrement, VehicleAimDecrement, VehicleAimRequestAngle = none, none, none
-VehicleNextSeat, VehiclePrevSeat, CanSwitchVehicleSeats = none, none, none
 TriggerTutorial = TriggerTutorial or none
 HasDebugZoneMap = HasDebugZoneMap or none
 QueryGuildEventLog = QueryGuildEventLog or none

@@ -157,6 +157,58 @@ pub(crate) struct AuctionOpen {
     pending_owner_refresh: bool,
     pending_bidder_refresh: bool,
     pub(crate) wire: AuctionWireLog,
+    /// Build 12340's multi-stack sell (`0xc0e740`-`0xc0e764`), while it runs.
+    multisell: Option<MultiSell>,
+    /// The events the command results owe the drain, in order.
+    multisell_events: Vec<(&'static str, Vec<i64>)>,
+    /// A stack was accepted: the drain sends the next or finishes.
+    multisell_next: bool,
+}
+
+/// One multi-stack sell (`StartAuction`'s `count × numStacks`, `0x59f990`): the same-entry bag
+/// stacks it draws from (`0x59f640`), each auction cut from the end (`0x59ba80`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MultiSell {
+    auctioneer: u64,
+    pool: Vec<(u64, u32)>,
+    stack: u32,
+    remaining: u32,
+    total: u32,
+    bid: u32,
+    buyout: u32,
+    minutes: u32,
+}
+
+impl MultiSell {
+    /// The next auction's `(guid, count)` pairs, `stack` items taken from the pool's end; `None`
+    /// when the pool runs short (`0x59ba80`'s underflow arm).
+    fn take_stack(&mut self) -> Option<Vec<(u64, u32)>> {
+        let mut need = self.stack;
+        let mut items = Vec::new();
+        while need > 0 {
+            let (guid, count) = self.pool.last_mut()?;
+            if *count <= need {
+                items.push((*guid, *count));
+                need -= *count;
+                self.pool.pop();
+            } else {
+                items.push((*guid, need));
+                *count -= need;
+                need = 0;
+            }
+        }
+        Some(items)
+    }
+
+    fn command(&self, items: Vec<(u64, u32)>) -> ClientCommand {
+        ClientCommand::AuctionSellItem {
+            auctioneer: self.auctioneer,
+            items,
+            bid: self.bid,
+            buyout: self.buyout,
+            etime_minutes: self.minutes,
+        }
+    }
 }
 
 /// One of the reference's twenty auction message rows: the twelve refusals (`0x16c`-`0x177`) are
@@ -223,6 +275,33 @@ impl AuctionOpen {
         self.sell_slot_taken = true;
     }
 
+    /// Whether a multi-stack sell is running (`0xc0f434`).
+    pub(crate) fn multiselling(&self) -> bool {
+        self.multisell.is_some()
+    }
+
+    /// A multi-stack sell's auction was accepted: `AUCTION_MULTISELL_UPDATE(created, total)`
+    /// (event `0x2a0`), then the next stack (`0x59ffb0`).
+    pub(crate) fn multisell_stack_landed(&mut self) {
+        if let Some(m) = &self.multisell {
+            self.multisell_events.push((
+                "AUCTION_MULTISELL_UPDATE",
+                vec![i64::from(m.total - m.remaining), i64::from(m.total)],
+            ));
+            self.multisell_next = true;
+        }
+    }
+
+    /// A multi-stack sell's auction was refused, or its pool ran short: the sell ends, the slot
+    /// clears and `AUCTION_MULTISELL_FAILURE` fires (`0x59ab20(0)`, event `0x2a1`).
+    pub(crate) fn multisell_failed(&mut self) {
+        if self.multisell.take().is_some() {
+            self.sell_slot_taken = true;
+            self.multisell_events
+                .push(("AUCTION_MULTISELL_FAILURE", Vec::new()));
+        }
+    }
+
     /// Re-query our listings next frame, only if we hold them: the reference patches its cached
     /// rows, so a list it never fetched announces nothing.
     pub(crate) fn refresh_owner(&mut self) {
@@ -246,6 +325,8 @@ impl AuctionOpen {
         self.pending_bidder_refresh = false;
         self.list_result_landed = [false; 3];
         self.sell_slot_taken = false;
+        self.multisell = None;
+        self.multisell_next = false;
     }
 
     pub(crate) fn clear_session(&mut self) {
@@ -760,29 +841,105 @@ fn drain_auction(
         }
     }
 
+    // The multi-stack sell's owed events, its cancel and its next stack.
+    for (event, args) in std::mem::take(&mut auction.multisell_events) {
+        script.fire_event(
+            event,
+            args.into_iter()
+                .map(benilla_ui::script::ScriptValue::Int)
+                .collect(),
+        );
+    }
+    // `CancelSell`: the auction in flight stands; no failure event.
+    if script.take_auction_cancel_sell() && auction.multisell.take().is_some() {
+        auction.sell_slot_taken();
+    }
+    if std::mem::take(&mut auction.multisell_next) {
+        send_next_stack(&mut auction, &commands);
+    }
+
     // The `(bag, slot)` resolves at send time, as the reference re-reads the slot on create.
     if let Some(req) = script.take_auction_start() {
+        let store = self_q.iter().next().map(|(store, _)| store);
         let item_guid = script
             .auction_sell_item()
             .and_then(|(bag, slot)| {
-                self_q.iter().next().and_then(|(store, _)| {
+                store.and_then(|store| {
                     crate::ui_items::slot_guid(&store.0, bag, (slot.max(1) - 1) as u8, &objects)
                 })
             })
             .unwrap_or(0);
-        if item_guid != 0 {
+        let held = objects
+            .object(item_guid)
+            .and_then(|o| o.item_stack_count())
+            .unwrap_or(1)
+            .max(1);
+        let stack = if req.stack_size == 0 {
+            held
+        } else {
+            req.stack_size
+        };
+        if item_guid == 0 {
+        } else if req.num_stacks < 2 && stack <= held {
+            // `0x59f990`'s direct arm: one auction of the held item.
             let _ = commands.0.send(ClientCommand::AuctionSellItem {
                 auctioneer,
-                item_guid,
+                items: vec![(item_guid, stack)],
                 bid: req.min_bid,
                 buyout: req.buyout,
                 etime_minutes: req.duration,
-                count: objects
-                    .object(item_guid)
-                    .and_then(|o| o.item_stack_count())
-                    .unwrap_or(1)
-                    .max(1),
             });
+        } else {
+            // `0x59f640`: every carried stack of the entry. Labelled: the walk's order is the
+            // bags' (`0x7546f0` untraced); auctions are cut from its end.
+            let entry = objects.object(item_guid).and_then(|o| o.object_entry());
+            let pool: Vec<(u64, u32)> = store
+                .map(|store| {
+                    crate::ui_items::collect_inventory(
+                        &store.0,
+                        &objects,
+                        crate::ui_items::InventoryScope::DEFAULT,
+                    )
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(_, _, guid)| {
+                    let o = objects.object(guid)?;
+                    (o.object_entry() == entry)
+                        .then(|| (guid, o.item_stack_count().unwrap_or(1).max(1)))
+                })
+                .collect();
+            let have: u64 = pool.iter().map(|&(_, c)| u64::from(c)).sum();
+            if have < u64::from(stack) * u64::from(req.num_stacks) {
+                auction
+                    .messages
+                    .push(AuctionMessage::error("ERR_AUCTION_ENOUGH_ITEMS"));
+            } else {
+                auction.multisell = Some(MultiSell {
+                    auctioneer,
+                    pool,
+                    stack,
+                    remaining: req.num_stacks,
+                    total: req.num_stacks,
+                    bid: req.min_bid,
+                    buyout: req.buyout,
+                    minutes: req.duration,
+                });
+                if req.num_stacks > 1 {
+                    script.fire_event(
+                        "AUCTION_MULTISELL_START",
+                        vec![benilla_ui::script::ScriptValue::Int(i64::from(
+                            req.num_stacks,
+                        ))],
+                    );
+                }
+                send_next_stack(&mut auction, &commands);
+                // A single stack larger than the held one is no multi-sell (`0xc0f434` stays 0).
+                if req.num_stacks < 2 {
+                    auction.multisell = None;
+                    auction.sell_slot_taken();
+                }
+            }
         }
     }
 
@@ -804,6 +961,26 @@ fn drain_auction(
 
     if script.take_auction_close() {
         auction.clear();
+    }
+}
+
+/// `0x59ba80`: with no stack left the sell ends and the slot clears; otherwise the next auction
+/// goes out, or a short pool fails the sell.
+fn send_next_stack(auction: &mut AuctionOpen, commands: &NetCommands) {
+    let Some(m) = auction.multisell.as_mut() else {
+        return;
+    };
+    if m.remaining == 0 {
+        auction.multisell = None;
+        auction.sell_slot_taken();
+        return;
+    }
+    match m.take_stack() {
+        Some(items) => {
+            m.remaining -= 1;
+            let _ = commands.0.send(m.command(items));
+        }
+        None => auction.multisell_failed(),
     }
 }
 
@@ -1164,5 +1341,39 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(bid.displayed_bid(), 7500);
+    }
+
+    /// `0x59ba80` cuts each auction from the pool's end, splitting the last item it needs; a
+    /// short pool fails with `AUCTION_MULTISELL_FAILURE`, and each accepted stack is owed its
+    /// update.
+    #[test]
+    fn a_multisell_cuts_stacks_from_the_end_and_reports_each() {
+        let mut m = MultiSell {
+            auctioneer: 7,
+            pool: vec![(1, 20), (2, 5), (3, 12)],
+            stack: 15,
+            remaining: 2,
+            total: 2,
+            bid: 10,
+            buyout: 20,
+            minutes: 720,
+        };
+        assert_eq!(m.take_stack(), Some(vec![(3, 12), (2, 3)]));
+        assert_eq!(m.take_stack(), Some(vec![(2, 2), (1, 13)]));
+        assert_eq!(m.take_stack(), None, "7 left of 15");
+        let mut open = AuctionOpen::default();
+        open.multisell = Some(MultiSell {
+            remaining: 1,
+            ..m.clone()
+        });
+        open.multisell_stack_landed();
+        assert_eq!(
+            open.multisell_events,
+            [("AUCTION_MULTISELL_UPDATE", vec![1, 2])]
+        );
+        assert!(open.multisell_next);
+        open.multisell_failed();
+        assert!(open.multisell.is_none() && open.sell_slot_taken);
+        assert_eq!(open.multisell_events[1].0, "AUCTION_MULTISELL_FAILURE");
     }
 }

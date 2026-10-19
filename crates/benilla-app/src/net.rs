@@ -31,29 +31,32 @@ mod world;
 pub(crate) mod wrath_auras;
 mod wrath_exchange_capture;
 pub(crate) mod wrath_instance_control_capture;
-mod wrath_inventory_capture;
-mod wrath_achievements;
-mod wrath_equipment_sets;
-mod wrath_item_refunds;
-pub(crate) mod wrath_sockets;
+pub(crate) mod wrath_inventory_capture;
+pub(crate) use crate::ui_native::wrath_achievements;
+pub(crate) use crate::ui_native::wrath_equipment_sets;
+pub(crate) use crate::ui_native::wrath_item_refunds;
+pub(crate) use crate::ui_native::wrath_sockets;
 mod wrath_mail_capture;
 mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
-mod wrath_quests_completed_capture;
-mod wrath_achievement_capture;
-mod wrath_appearance;
+pub(crate) use crate::ui_native::wrath_quests_completed_capture;
+pub(crate) mod wrath_achievement_capture;
+pub(crate) use crate::ui_native::wrath_appearance;
 pub(crate) mod wrath_social_lists_capture;
-mod wrath_raid_browser_feed;
+pub(crate) use crate::ui_native::wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
-mod wrath_quest_pois;
+pub(crate) use crate::ui_native::wrath_quest_pois;
+mod wrath_arena_lines;
 mod wrath_chat_notice_capture;
 pub(crate) mod wrath_battleground_capture;
-mod wrath_death_capture;
+pub(crate) use crate::ui_native::wrath_death_capture;
 mod wrath_session_meta_capture;
 mod wrath_help_capture;
 pub(crate) mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
 mod wrath_session_misc_capture;
+#[cfg(test)]
+mod capture_replay_tests;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
@@ -66,8 +69,8 @@ pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
 #[cfg(test)]
 mod wrath_stream_tests;
-mod wrath_threat;
-mod wrath_ui_timer_capture;
+pub(crate) use crate::ui_native::wrath_threat;
+pub(crate) use crate::ui_native::wrath_ui_timer_capture;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
@@ -169,6 +172,7 @@ impl Plugin for NetPlugin {
         wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_pois::register(app);
+        wrath_arena_lines::register(app);
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
@@ -1878,13 +1882,12 @@ pub(crate) enum ClientCommand {
     /// `CMSG_AUCTION_SELL_ITEM`: `etime_minutes` is 120, 480 or 1440; the deposit is taken at once.
     AuctionSellItem {
         auctioneer: u64,
-        item_guid: u64,
+        /// Build 12340's `(item guid, count)` pairs, which together make one auction's stack
+        /// (`0x59ba80`); AC refuses a count above an item's stack.
+        items: Vec<(u64, u32)>,
         bid: u32,
         buyout: u32,
         etime_minutes: u32,
-        /// The stack size sold; build 12340 sends `(guid, count)` pairs and AC refuses a count
-        /// above the stack.
-        count: u32,
     },
     /// `CMSG_AUCTION_PLACE_BID`: a `price` at or above a nonzero buyout is the buyout.
     AuctionPlaceBid {

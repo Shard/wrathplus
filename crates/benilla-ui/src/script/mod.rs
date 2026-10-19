@@ -58,6 +58,7 @@ mod wrath_titles;
 mod wrath_tooltip;
 mod wrath_quest_poi;
 mod wrath_barber;
+mod wrath_region_attrs;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
 pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_titles::WrathCharTitle;
@@ -220,6 +221,7 @@ mod wrath_paperdoll;
 mod wrath_character;
 mod wrath_companions;
 mod wrath_arena;
+mod wrath_vehicle;
 mod wrath_help_request;
 mod wrath_runes;
 mod wrath_totems;
@@ -234,6 +236,10 @@ mod wrath_secure;
 pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_arena::{ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView};
 pub use wrath_runes::{RuneView, WrathRunes};
+pub use wrath_vehicle::{
+    UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
+    WrathVehicles,
+};
 pub use wrath_totems::{TotemState, TotemView};
 pub use wrath_glyphs::{GlyphSocketView, GlyphView};
 pub use wrath_companions::{CompanionView, WrathCompanions, COMPANION_TYPES};
@@ -862,6 +868,7 @@ impl UiScript {
             wrath_glyphs::install(&lua)?;
             wrath_raid_units::install(&lua)?;
             wrath_arena::install(&lua)?;
+            wrath_vehicle::install(&lua)?;
             battlefield_queue::install_wrath(&lua)?;
             battlefield_score::install_wrath(&lua)?;
             wrath_merchant::install(&lua)?;
@@ -900,6 +907,7 @@ impl UiScript {
             wrath_tooltip::install(&lua)?;
             wrath_quest_poi::install(&lua)?;
             wrath_barber::install(&lua)?;
+            wrath_region_attrs::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;

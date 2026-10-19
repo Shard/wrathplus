@@ -89,6 +89,8 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("build_id::BuildId", "record"),
     ("build_id::banner", "record"),
     ("collision::ColliderEpoch", "record"),
+    // The collider provenance a WMO prop's collider is spawned with.
+    ("collision::ColliderSource", "record"),
     ("collision::MoverTraceExclusions", "record"),
     ("collision::WorldCollision", "record"),
     ("decal::WorldDecal", "record"),
@@ -99,6 +101,9 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("doodad_anim::TintLoop", "record"),
     ("doodad_anim::UvLoops", "record"),
     ("doodad_anim::register_entity_uv", "record"),
+    // Stage-two UV registration on the shared lane, which glue scenes use as stage one does
+    // (docs/WRATH-TWO-STAGE.md, "Second weight and off-world lanes").
+    ("doodad_anim::register_entity_uv_stage2", "record"),
     ("doodad_anim::register_fx_uv", "record"),
     ("doodad_anim::register_tint", "record"),
     ("doodad_anim::spawn_anim_host", "record"),
@@ -107,13 +112,27 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("ffx_glow::FfxSwitches", "record"),
     ("ffx_glow::GlueFfx", "record"),
     ("final_pass::FinalPassTarget", "record"),
+    // A spell effect's ground decal, spawned by spell_fx.
+    ("ground_fx::spawn_ground_fx_decal", "record"),
     ("instance_tint::InstanceTintMirrors", "record"),
     ("instance_tint::InstanceTints", "record"),
+    // The creature pick volume target/hover tests the cursor against.
+    ("interact::CreaturePickPart", "record"),
+    // The game-object pick volume target/hover tests the cursor against.
+    ("interact::GoPickPart", "record"),
     ("interact::PickMesh", "record"),
+    // The pick-part set a hover query walks.
+    ("interact::PickParts", "record"),
     ("interact::WorldObject", "record"),
     ("interact::WorldPick", "record"),
     ("interact::cast_pick_ray", "record"),
+    // The bounds pass of the engine's mouse pick, as target/hover runs it.
+    ("interact::ray_mesh_bounds", "record"),
+    // The posed-triangle pass of the engine's mouse pick.
+    ("interact::ray_posed_mesh", "record"),
     ("interior::NodeAmbient", "record"),
+    // An animated M2 light's driver, inserted by carried-light spawners (docs: M2 lights unit).
+    ("light_anim::LightAnimator", "record"),
     ("lighting::LightBlob", "record"),
     ("lighting::WorldTime", "record"),
     ("lighting::WowLighting", "record"),
@@ -122,10 +141,16 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("mat_anim_table::MatAnimTable", "record"),
     ("mat_anim_table::affine_row", "record"),
     ("mesh_tag::HIGHLIGHT_BIT", "record"),
+    // The per-mesh tag every model spawner stamps (portraits, markers, UI tiles, entities).
+    ("mesh_tag::spawn_tag", "record"),
     ("model_fade::ModelFade", "record"),
     ("model_fade::ParentModel", "record"),
     ("model_fade::RenderFade", "record"),
+    // The self fade's distance window, read with self_model_fade_alpha.
+    ("model_fade::SELF_FADE_WINDOW", "record"),
     ("model_fade::UnitRenderAlpha", "wall"),
+    // The camera-distance self fade the player camera applies.
+    ("model_fade::self_model_fade_alpha", "record"),
     ("model_forms::ModelForms", "record"),
     ("model_render::BatchVariants", "record"),
     ("model_render::EntityUvLane", "record"),
@@ -133,6 +158,13 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("model_render::ModelKind", "record"),
     ("model_render::ModelPart", "record"),
     ("model_render::lazy::realize", "record"),
+    // An off-world lane's stage-two UV loops, seeded on its material: the documented entry for
+    // UI tiles and glue scenes (docs/WRATH-TWO-STAGE.md, "Second weight and off-world lanes").
+    ("model_render::second_stage_loops", "record"),
+    // The Plus lighting preset the experience profile toggles (WS7).
+    ("modern_lighting::ModernLighting", "record"),
+    // The shadow sync set the composition root orders against (WS7).
+    ("modern_shadows::ShadowSyncSet", "record"),
     ("modkeys::SyntheticHold", "wall"),
     ("particles::ParticleTuning", "record"),
     ("particles::ViewThrottled", "record"),
@@ -145,8 +177,12 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("rig_anim::RigAnchor", "wall"),
     ("rig_anim::RigFrame", "wall"),
     ("rig_anim::RigPose", "wall"),
+    // The rig-world ordering anchor trails and markers schedule after.
+    ("rig_anim::finalize_rig_worlds", "record"),
     ("rig_palette::RigPalettes", "record"),
     ("rig_palette::RigSkin", "record"),
+    // The joint-palette spawn equipment and spell effects ride.
+    ("rig_palette::spawn_joints", "record"),
     ("rig_rider::RigRider", "record"),
     ("schedule::WorldLive", "record"),
     ("schedule::WorldStage", "record"),
@@ -157,6 +193,10 @@ const PUBLISHED: &[(&str, &str)] = &[
     ("thread_qos::QosClass", "record"),
     ("thread_qos::ThreadQosPlugin", "wall"),
     ("thread_qos::promote_current_thread", "record"),
+    // The camera far plane the player camera is built with.
+    ("view::CAM_FAR", "record"),
+    // The MSAA sample range the video settings clamp to.
+    ("view::MSAA_RANGE", "record"),
     ("view::MsaaFormats", "record"),
     ("view::MsaaSetting", "record"),
     ("view::ViewDistance", "record"),
@@ -183,6 +223,10 @@ const PUBLISHED: &[(&str, &str)] = &[
 /// `CLOSE/move-engine`: engine code in a game file moves engine-side; `CLOSE/move-game`: gameplay
 /// moves out of the engine. Closing a leak is deleting its row.
 const SORTED_LEAKS: &[(&str, &str)] = &[
+    // As ArtSlot.
+    ("art_scope::ArtScope", "CLOSE/absorb"),
+    // Entities.rs names an instrument's slot; a facade in the instrument should take the call.
+    ("art_scope::ArtSlot", "CLOSE/absorb"),
     ("billboard::BillboardJointRig", "CLOSE/absorb"),
     ("billboard::BillboardPlace", "CLOSE/absorb"),
     ("billboard::billboard_basis", "CLOSE/move-engine"),
@@ -190,6 +234,8 @@ const SORTED_LEAKS: &[(&str, &str)] = &[
     ("clutter::ClutterConfig", "CLOSE/absorb"),
     ("collision::PickOccluder", "CLOSE/absorb"),
     ("decal::DecalFrame", "CLOSE/absorb"),
+    // Sound/kit and showcase_capture read the dev debug state; the engine should publish the flag.
+    ("dev_state::DebugState", "CLOSE/invert"),
     ("doodad_anim::DoodadAnimTier", "CLOSE/absorb"),
     ("doodad_anim::TintAnimMaterials", "CLOSE/move-engine"),
     ("doodad_anim::UvAnimMaterials", "CLOSE/move-engine"),
@@ -277,13 +323,19 @@ const SORTED_LEAKS: &[(&str, &str)] = &[
     ("view::CAM_FOVY", "CLOSE/absorb"),
     ("view::FARCLIP_RANGE", "CLOSE/absorb"),
     ("view::NEARCLIP_DEFAULT", "CLOSE/absorb"),
+    // The minimap's indoor ground probe should be one engine query.
+    ("wmo_portal::INTERIOR_PROBE_HEIGHT", "CLOSE/absorb"),
     ("wmo_portal::UnitWmoRoom", "CLOSE/absorb"),
     ("wmo_portal::WmoPortalInstance", "CLOSE/absorb"),
     ("wmo_portal::WmoPvsSet", "CLOSE/absorb"),
+    // As INTERIOR_PROBE_HEIGHT.
+    ("wmo_portal::down_ray_seeds", "CLOSE/absorb"),
+    // As INTERIOR_PROBE_HEIGHT.
+    ("wmo_portal::terrain_z_local", "CLOSE/absorb"),
 ];
 
 /// The gate on the leak count. Lower it when a leak closes.
-const LEAK_CEILING: usize = 107;
+const LEAK_CEILING: usize = 94;
 
 /// How far under [`LEAK_CEILING`] the count may sit before the test asks for the ceiling to be
 /// lowered: one closure does not fail the gate, a whole stage of work cannot go unrecorded.

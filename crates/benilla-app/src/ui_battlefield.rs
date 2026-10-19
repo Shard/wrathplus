@@ -67,11 +67,37 @@ const AREA_FLAG_PVP_POI: u32 = 0x8000;
 #[derive(Resource)]
 pub(crate) struct BattlemasterTable(pub(crate) Battlemasters);
 
-/// The native receipts this reducer does not consume (honor and arena-team inspects, the arena
+/// The native receipts this reducer does not consume (the arena
 /// command/event/error replies, arena-unit destroys), in arrival order, for their own consumer;
 /// cleared with the capture at connect and disconnect.
 #[derive(Resource, Default)]
 pub(crate) struct NativeBattlegroundRest(pub(crate) std::collections::VecDeque<Packet>);
+
+/// `MSG_INSPECT_ARENA_TEAMS` answers by inspected player, slot 0-2, for `GetInspectArenaTeamData`
+/// (InspectUI); the last answer per slot wins. Zeroed at session end.
+#[derive(Resource, Default)]
+pub(crate) struct InspectArenaTeams(
+    pub(crate) std::collections::HashMap<u64, [Option<InspectedArenaTeam>; 3]>,
+);
+
+/// The last `MSG_INSPECT_HONOR_STATS` answer (`0x2d6`), raw, for `GetInspectHonorData`
+/// (InspectUI, Experience's next pass). Zeroed at session end.
+#[allow(dead_code)]
+#[derive(Resource, Default)]
+pub(crate) struct InspectHonor(pub(crate) Option<Packet>);
+
+/// One inspected team as `0x377` carries it: the id and the stats; the name, size and emblem
+/// come from the team-query cache. The InspectUI getters (Experience's next pass) read it.
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct InspectedArenaTeam {
+    pub(crate) team_id: u32,
+    pub(crate) rating: u32,
+    pub(crate) season_games: u32,
+    pub(crate) season_wins: u32,
+    pub(crate) member_games: u32,
+    pub(crate) personal_rating: u32,
+}
 
 /// The list window's state.
 #[derive(Resource, Default)]
@@ -409,7 +435,7 @@ fn load_battlemasters(mut commands: Commands, assets: Option<Res<WorldAssets>>) 
 
 /// The reducer: every native battleground receipt in arrival order, to its table.
 #[allow(clippy::too_many_arguments)]
-fn drain_native(
+pub(crate) fn drain_native(
     mut packets: ResMut<NativeBattlegroundPackets>,
     mut state: ResMut<Battlefield>,
     mut queue: ResMut<BattlefieldQueue>,
@@ -417,6 +443,8 @@ fn drain_native(
     mut positions: ResMut<BattlefieldPositions>,
     mut world_pvp: ResMut<WorldPvp>,
     mut rest: ResMut<NativeBattlegroundRest>,
+    mut inspect: ResMut<InspectArenaTeams>,
+    mut honor: ResMut<InspectHonor>,
     maps: Option<Res<MapCatalogRes>>,
     areas: Option<Res<AreaTableRes>>,
     world: benilla_world::world_point::WorldPoint,
@@ -454,6 +482,33 @@ fn drain_native(
             | Packet::BfQueueResponse { .. }
             | Packet::BfEjected { .. }
             | Packet::BfQueueInvite { .. }) => world_pvp.apply(&p, in_zone),
+            Packet::InspectArenaTeam {
+                guid,
+                slot,
+                team_id,
+                rating,
+                season_games,
+                season_wins,
+                member_games,
+                personal_rating,
+            } => {
+                if let Some(cell) = inspect
+                    .0
+                    .entry(guid)
+                    .or_default()
+                    .get_mut(usize::from(slot))
+                {
+                    *cell = Some(InspectedArenaTeam {
+                        team_id,
+                        rating,
+                        season_games,
+                        season_wins,
+                        member_games,
+                        personal_rating,
+                    });
+                }
+            }
+            p @ Packet::InspectHonor { .. } => honor.0 = Some(p),
             other => rest.0.push_back(other),
         }
     }
@@ -737,7 +792,7 @@ mod net {
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 
-    use super::{Battlefield, NativeBattlegroundRest, WorldPvp};
+    use super::{Battlefield, InspectArenaTeams, InspectHonor, NativeBattlegroundRest, WorldPvp};
     use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
@@ -781,10 +836,14 @@ mod net {
         mut battlefield: ResMut<Battlefield>,
         mut world_pvp: ResMut<WorldPvp>,
         mut rest: ResMut<NativeBattlegroundRest>,
+        mut inspect: ResMut<InspectArenaTeams>,
+        mut honor: ResMut<InspectHonor>,
     ) {
         battlefield.clear_session();
         *world_pvp = WorldPvp::default();
         rest.0.clear();
+        inspect.0.clear();
+        honor.0 = None;
     }
 }
 
@@ -796,6 +855,8 @@ impl Plugin for BattlefieldPlugin {
         app.init_resource::<Battlefield>()
             .init_resource::<WorldPvp>()
             .init_resource::<NativeBattlegroundRest>()
+            .init_resource::<InspectArenaTeams>()
+            .init_resource::<InspectHonor>()
             .add_systems(Startup, load_battlemasters.after(AssetSet::Open))
             .add_systems(
                 Update,

@@ -723,6 +723,11 @@ pub struct ButtonState {
     pub disabled_color: Option<[f32; 4]>,
     /// `LockHighlight()`: highlighted regardless of hover, both the texture and the label font.
     pub locked_highlight: bool,
+    /// Wrath `SetPushedTextOffset`/`<PushedTextOffset>`: the label's shift while pushed.
+    pub pushed_text_offset: (f32, f32),
+    /// Wrath `SetMotionScriptsWhileDisabled`/`motionScriptsWhileDisabled=`: a disabled button
+    /// still runs OnEnter/OnLeave.
+    pub motion_while_disabled: bool,
     /// The shown state texture (`+0x4c4`), written only by `set_state` and `set_state_slot`.
     shown: Option<RegionHandle>,
     /// The state (`+0x328`), a latch moved only by edges: the enter and leave notifies
@@ -755,6 +760,8 @@ impl Default for ButtonState {
             highlight_color: None,
             disabled_color: None,
             locked_highlight: false,
+            pushed_text_offset: (0.0, 0.0),
+            motion_while_disabled: false,
             shown: None,
             state: ButtonVisualState::Normal,
         }

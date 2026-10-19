@@ -2,7 +2,7 @@
 //! `QueryQuestsCompleted` calls go out as `CMSG 0x500`, and each reply replaces
 //! `GetQuestsCompleted`'s list, then fires `QUEST_QUERY_COMPLETE` (`0x5b5190`, event `0x296`).
 //! No quest-log mutation or inferred completion state.
-use super::{ClientCommand, NetCommands, NetHandlerApp};
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use benilla_protocol::{wrath_quests_completed::Packet, SessionEvent, SessionEventKind};
 use benilla_ui::script::{ScriptDialect, UiScript};
 use bevy::prelude::*;
@@ -21,7 +21,7 @@ pub(crate) struct QuestsCompleted {
 #[derive(Resource, Default)]
 pub(crate) struct NativeQuestsCompletedPackets(pub(crate) VecDeque<Packet>);
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<NativeQuestsCompletedPackets>()
         .init_resource::<QuestsCompleted>()
         // In the feed phase, and not before the in-game UI exists: a reply that lands earlier

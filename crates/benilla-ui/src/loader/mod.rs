@@ -225,6 +225,52 @@ pub fn apply_template(lua: &mlua::Lua, wrapper: &Table, kind: &str, template: &s
     out
 }
 
+/// Apply a `<FontString>` or `<Texture>` template to a region `CreateFontString`/`CreateTexture`
+/// made, their third argument when it names a template rather than a font object: the region's
+/// XML pass, as a `<Layer>` child with that `inherits=` gets it (layout, font, visual,
+/// animations). Returns the warnings, then the errors.
+pub fn apply_region_template(lua: &mlua::Lua, wrapper: &Table, texture: bool, template: &str) -> Vec<String> {
+    let no_files = |_: &str| -> Option<Vec<u8>> { None };
+    let mut loader = Loader {
+        lua,
+        files: &no_files,
+        path: String::new(),
+        status_root: "",
+        report: LoadReport::default(),
+        warned: HashSet::new(),
+        deferred_anchors: Vec::new(),
+        active_paths: HashSet::new(),
+        include_depth: 0,
+        addon_owner: None,
+    };
+    let kind = if texture { "Texture" } else { "FontString" };
+    let dbg = format!("Create{kind}(inherits=\"{template}\")");
+    let parent_name = wrapper
+        .call_method::<Option<Table>>("GetParent", ())
+        .ok()
+        .flatten()
+        .map(|p| loader.frame_names(&p).0.unwrap_or_default())
+        .unwrap_or_default();
+    let region = loader.expand(&framexml::inherits_node(kind, template));
+    if region.attr_bool("hidden") {
+        if let Err(e) = wrapper.call_method::<()>("Hide", ()) {
+            loader.report.errors.push(format!("{dbg}: region Hide: {e}"));
+        }
+    }
+    if let Some(a) = region.attr("alpha").and_then(|v| v.trim().parse::<f32>().ok()) {
+        loader.call_region(wrapper, "SetAlpha", a, &dbg);
+    }
+    loader.apply_region_layout(&region, wrapper, &parent_name, &dbg, regions::FontAttrs::Own);
+    if !texture {
+        loader.apply_fontstring_font(&region, wrapper, &dbg);
+    }
+    loader.apply_region_visual(&region, wrapper, texture, &dbg);
+    loader.apply_animations(&region, wrapper, &parent_name, &dbg);
+    let mut out = loader.report.warnings;
+    out.extend(loader.report.errors);
+    out
+}
+
 /// Join a FrameXML reference to its file's directory, lexically: `\` and `/` both separate, `..`
 /// walks up. A `..` above the root is kept, not clamped, so the provider can refuse the escape.
 pub fn join_ref(base: &str, path: &str) -> String {
@@ -775,6 +821,7 @@ impl Loader<'_> {
         self.apply_colorselect(el, wrapper, self_name, dbg_name);
         self.apply_button(el, wrapper, self_name, dbg_name);
         self.apply_editbox(el, wrapper, dbg_name);
+        self.apply_wrath_frame_flags(el, wrapper, dbg_name);
         self.apply_messageframe(el, wrapper, dbg_name);
         self.apply_simplehtml(el, wrapper, dbg_name);
         self.apply_minimap(el, wrapper, dbg_name);

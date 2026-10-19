@@ -263,6 +263,37 @@ impl Loader<'_> {
     /// rest off (`0x779a29`, `0x77a0b3`), so flags are read presence-aware: `autoFocus="false"`
     /// clears. The reference also skips an empty `autoFocus` (`0x77a0b8`), which clears here.
     /// `blinkSpeed` is the caret half-period (`E+0x370`).
+    /// Wrath's frame flags and `<PushedTextOffset>`, forwarded where the frame has the setter.
+    pub(super) fn apply_wrath_frame_flags(&mut self, el: &Element, wrapper: &Table, dbg: &str) {
+        let has = |m: &str| wrapper.get::<Option<mlua::Function>>(m).ok().flatten().is_some();
+        for (attr, method) in [
+            ("motionScriptsWhileDisabled", "SetMotionScriptsWhileDisabled"),
+            ("reverse", "SetReverse"),
+            ("drawEdge", "SetDrawEdge"),
+            ("rotatesTexture", "SetRotatesTexture"),
+            ("countInvisibleLetters", "SetCountInvisibleLetters"),
+        ] {
+            if let Some(on) = el.attr_bool_opt(attr) {
+                if has(method) {
+                    if let Err(e) = wrapper.call_method::<()>(method, on) {
+                        self.report.errors.push(format!("{dbg}: {method}: {e}"));
+                    }
+                }
+            }
+        }
+        if let Some(offset) = children_named(el, "PushedTextOffset").last() {
+            let (x, y) = abs_dim(offset);
+            if has("SetPushedTextOffset") {
+                if let Err(e) = wrapper.call_method::<()>(
+                    "SetPushedTextOffset",
+                    (x.unwrap_or(0.0), y.unwrap_or(0.0)),
+                ) {
+                    self.report.errors.push(format!("{dbg}: SetPushedTextOffset: {e}"));
+                }
+            }
+        }
+    }
+
     pub(super) fn apply_editbox(&mut self, el: &Element, wrapper: &Table, dbg: &str) {
         if !el.tag.eq_ignore_ascii_case("EditBox") {
             return;

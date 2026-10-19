@@ -3,8 +3,8 @@
 //! client keeps its own copy: a save or delete updates it at once, and `SMSG_EQUIPMENT_SET_SAVED`
 //! brings a new set's GUID (`Player::SetEquipmentSet`). A set use's
 //! `SMSG_EQUIPMENT_SET_USE_RESULT` (0 done, 4 bags full) becomes `EQUIPMENT_SWAP_FINISHED`.
-use super::wrath_inventory_capture::NativeInventoryPackets;
-use super::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
+use crate::net::wrath_inventory_capture::NativeInventoryPackets;
+use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_protocol::wrath_inventory::{Command, EquipmentSet, Packet, EQUIPMENT_SLOTS};
 use benilla_ui::script::{
     EquipmentSetRequest, EquipmentSetView, ScriptDialect, UiScript, EQUIPMENT_SET_IGNORED_SLOT,
@@ -29,18 +29,18 @@ pub(crate) struct EquipmentSets {
     pending_delete: Vec<u32>,
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<EquipmentSets>().add_systems(
         Update,
         feed_equipment_sets
-            .after(super::wrath_item_refunds::feed_item_refunds)
+            .after(crate::net::wrath_item_refunds::feed_item_refunds)
             .in_set(crate::ui_script::UiFeed)
             .run_if(crate::ui_script::ingame_ui_up),
     );
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn feed_equipment_sets(
+pub(crate) fn feed_equipment_sets(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
     mut sets: ResMut<EquipmentSets>,
@@ -219,7 +219,7 @@ fn apply(
 }
 
 /// A session boundary forgets the sets; the next login's list brings them back.
-pub(super) fn clear(sets: &mut EquipmentSets) {
+pub(crate) fn clear(sets: &mut EquipmentSets) {
     *sets = EquipmentSets::default();
 }
 

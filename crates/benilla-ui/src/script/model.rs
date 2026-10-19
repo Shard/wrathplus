@@ -803,6 +803,7 @@ pub(crate) struct Model {
     pub(crate) auction_sorts: Vec<(usize, auction::AuctionSortOp)>,
     /// `SetAuctionsTabShowing(bool)` (`0xc0f3f5`).
     pub(crate) auctions_tab_showing: bool,
+    pub(crate) auction_cancel_sell: bool,
     pub(crate) auction_close: bool,
     /// The sell slot's item, resolved to its guid when `StartAuction` fires.
     pub(crate) auction_sell_item: Option<cursor::CursorItem>,
@@ -914,6 +915,12 @@ pub(crate) struct Model {
     pub(crate) wrath_runes: super::WrathRunes,
     /// The arena-team slots, rosters and the client's roster order (`wrath_arena`).
     pub(crate) wrath_arena: super::wrath_arena::ArenaState,
+    /// The vehicle view, the seat-indicator table and the vehicle verbs' requests
+    /// (`wrath_vehicle`).
+    pub(crate) wrath_vehicles: super::WrathVehicles,
+    pub(crate) vehicle_indicators:
+        std::collections::HashMap<u32, super::VehicleIndicatorView>,
+    pub(crate) vehicle_calls: Vec<super::VehicleCall>,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1467,6 +1474,7 @@ impl Model {
             auction_start: None,
             auction_sorts: Vec::new(),
             auctions_tab_showing: false,
+            auction_cancel_sell: false,
             auction_close: false,
             auction_sell_item: None,
             trade: None,
@@ -1555,6 +1563,9 @@ impl Model {
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
             wrath_arena: Default::default(),
+            wrath_vehicles: Default::default(),
+            vehicle_indicators: Default::default(),
+            vehicle_calls: Vec::new(),
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

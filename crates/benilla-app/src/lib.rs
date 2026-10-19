@@ -136,6 +136,7 @@ mod ui_chat;
 mod ui_chat_verbs;
 mod ui_lfg;
 mod ui_calendar;
+mod ui_native;
 mod ui_guild_bank;
 mod ui_arena_team;
 mod ui_native_chat;
@@ -303,7 +304,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     // two full scans of the rows the tracking exists to skip, and this scene is static-heavy. It
     // costs more only when most rows move in one frame (a load burst into a near-empty world).
     app.insert_resource(bevy::transform::systems::StaticTransformOptimizations::enabled());
-    // Update runs single-threaded: most per-frame Update systems are non-Send (mlua's `UiScript`,
+    // Update runs single-threaded: most per-frame Update systems are non-Send (mlua's Lua VM,
     // kira's audio handles) and serialize through the multi-threaded executor anyway, so its
     // dispatch is pure overhead (measured faster, tails flat). `WOW_MT_UPDATE=1` restores it.
     if std::env::var_os("WOW_MT_UPDATE").is_none() {

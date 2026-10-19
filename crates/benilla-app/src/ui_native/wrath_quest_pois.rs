@@ -6,7 +6,7 @@
 //! traced (the quest module's only `push 0x297` is `0x5e7628`, unverified). A PvP-kill tick
 //! re-asks the givers' markers, as `SMSG_QUESTUPDATE_ADD_KILL` does; its count lives in the
 //! quest-log slot (`crate::ui_quest_log`), whose diff toasts it.
-use super::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, SelfPlayer};
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, SelfPlayer};
 use benilla_protocol::wrath_quest::{Command, Packet, Poi, MAX_POI_QUERY};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{ScriptDialect, UiScript, WrathQuestPoi, WrathQuestPoiBlob};
@@ -60,7 +60,7 @@ impl QuestPois {
     }
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<QuestPois>()
         .net_handler(SessionEventKind::WrathQuest, receive)
         .net_handler(SessionEventKind::Connected, clear)
