@@ -15,6 +15,9 @@ use crate::ui_unit::{class_names, race_names};
 
 use super::{name_pushes, result_key, status_flag_key, SocialState};
 
+/// AzerothCore's `FRIEND_STATUS_RAF`, the status bit `GetFriendInfo`'s eighth return reads.
+const FRIEND_STATUS_RAF: u8 = 0x08;
+
 /// The chat-routed `/who` templates. FrameXML never names them: the engine prints these lines
 /// itself. None is a message-catalog row, so they go out through `Shown::unkeyed`, since
 /// `Shown::keyed` turns an unknown key's line red.
@@ -266,6 +269,8 @@ fn friend_rows(
                         .to_string(),
                     connected: online,
                     status: away(entry.status),
+                    note: social.notes.get(&entry.guid).cloned(),
+                    refer_a_friend: entry.status & FRIEND_STATUS_RAF != 0,
                 },
             )
         })
@@ -336,6 +341,10 @@ fn who_wire_rows(social: &SocialState, areas: Option<&AreaTableCatalog>) -> Vec<
 /// One `/who` row, ids resolved; the wire carries class before race, the Lua API race first.
 fn who_row(entry: &WhoEntry, areas: Option<&AreaTableCatalog>) -> WhoInfo {
     WhoInfo {
+        class_file: class_names(entry.class as u8)
+            .map(|(_, file)| file)
+            .unwrap_or_default()
+            .to_string(),
         name: entry.name.clone(),
         guild: entry.guild.clone(),
         level: entry.level,
@@ -638,6 +647,7 @@ mod tests {
                 race: race.into(),
                 class: class.into(),
                 zone: zone.into(),
+                class_file: String::new(),
             };
         let lines: Vec<String> = who_lines(
             &[

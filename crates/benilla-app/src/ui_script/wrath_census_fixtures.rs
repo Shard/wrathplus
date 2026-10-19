@@ -152,6 +152,8 @@ pub(super) fn seed(s: &mut UiScript) {
             area: "Dalaran".into(),
             connected: true,
             status: String::new(),
+            note: Some("Bench partner".into()),
+            refer_a_friend: false,
         }],
         who: vec![WhoInfo {
             name: "Benchthree".into(),
@@ -160,6 +162,7 @@ pub(super) fn seed(s: &mut UiScript) {
             race: "Human".into(),
             class: "Priest".into(),
             zone: "Dalaran".into(),
+            class_file: "PRIEST".into(),
         }],
         who_total: 1,
         ..Default::default()
@@ -175,6 +178,7 @@ pub(super) fn seed(s: &mut UiScript) {
             class: "Mage".into(),
             zone: "Dalaran".into(),
             online: true,
+            class_file: "MAGE".into(),
             ..Default::default()
         }],
         num_members: 1,
@@ -511,6 +515,7 @@ pub(super) fn seed(s: &mut UiScript) {
             }],
             tools: vec![],
             description: None,
+            alt_verb: None,
         }],
         repeat_count: 1,
         linked: None,
@@ -564,4 +569,72 @@ pub(super) fn seed(s: &mut UiScript) {
         icon: r"Interface\Icons\INV_Shield_06".into(),
         ..Default::default()
     }]);
+
+    // The guild bank's logs and the guild event log.
+    s.set_wrath_guild_bank(WrathGuildBankView {
+        money: 1_000_000,
+        tabs: vec![WrathGuildBankTab {
+            name: "Tab 1".into(),
+            viewable: true,
+            ..Default::default()
+        }],
+        money_log: vec![WrathGuildBankMoneyLog {
+            kind: 4,
+            player: Some("Arthas".into()),
+            copper: 500,
+            seconds_ago: 7_200,
+        }],
+        tab_logs: vec![vec![WrathGuildBankItemLog {
+            kind: 3,
+            player: Some("Arthas".into()),
+            link: None,
+            count: 2,
+            other_tab: 2,
+            seconds_ago: 90_000,
+        }]],
+        ..Default::default()
+    });
+    s.set_wrath_guild_events(vec![WrathGuildEvent {
+        kind: 3,
+        player1: Some("Arthas".into()),
+        player2: Some("Jaina".into()),
+        rank: Some("Officer".into()),
+        seconds_ago: 3_600,
+    }]);
+
+    // The raid browser on the catalog's dungeon: one group of two and one lone player, and an
+    // encounter of the dungeon's map.
+    let member = |guid: u64, name: &str| WrathRaidBrowserMember {
+        guid,
+        name: Some(name.into()),
+        class_name: Some("Mage".into()),
+        class_file: Some("MAGE".into()),
+        level: 80,
+        area: Some("Dalaran".into()),
+        comment: "LF healer".into(),
+        roles: 8,
+        ..Default::default()
+    };
+    s.set_wrath_raid_browser(std::sync::Arc::new(WrathRaidBrowserView {
+        dungeon: 0x0100_0001,
+        groups: vec![WrathRaidBrowserGroup {
+            guid: 0x0100_0000_0000_0010,
+            comment: "LF healer".into(),
+            encounter_mask: 1,
+            members: vec![
+                member(0x0100_0000_0000_0010, "Jaina"),
+                member(0x0100_0000_0000_0011, "Thrall"),
+            ],
+        }],
+        players: vec![member(0x0100_0000_0000_0012, "Sylvanas")],
+        total_groups: 1,
+        total_players: 1,
+    }));
+    s.set_wrath_lfg_encounters(std::sync::Arc::new(vec![WrathLfgEncounter {
+        map: 0,
+        difficulty: 0,
+        bit: 0,
+        name: "Taragaman the Hungerer".into(),
+        icon: None,
+    }]));
 }

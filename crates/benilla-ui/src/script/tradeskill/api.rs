@@ -111,17 +111,31 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetTradeSkillInfo(index): (name, "header", 0, isExpanded) for a header, (name, difficulty,
-    // numAvailable, nil) for a recipe, one nil out of range.
+    // GetTradeSkillInfo(index) (`0x5db2a0`), five values on every path: (name, "header", 0,
+    // isExpanded, nil) for a header, (name, difficulty, numAvailable, nil, altVerb) for a recipe,
+    // and (nil, nil, 0, nil, nil) for a miss. A non-number index raises.
     g.set(
         "GetTradeSkillInfo",
-        lua.create_function(|lua, index: usize| {
+        lua.create_function(|lua, index: Value| {
+            let index = lua
+                .coerce_number(index)?
+                .ok_or_else(|| mlua::Error::runtime("Usage: GetTradeSkillInfo(index)"))?;
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let Some(n) = index.checked_sub(1) else {
-                return Ok(MultiValue::from_vec(vec![Value::Nil]));
+            let miss = || {
+                MultiValue::from_vec(vec![
+                    Value::Nil,
+                    Value::Nil,
+                    Value::Integer(0),
+                    Value::Nil,
+                    Value::Nil,
+                ])
             };
-            let Some(row) = rows(&model).get(n).cloned() else {
-                return Ok(MultiValue::from_vec(vec![Value::Nil]));
+            let row = (index.round_ties_even() as i64)
+                .checked_sub(1)
+                .and_then(|n| usize::try_from(n).ok())
+                .and_then(|n| rows(&model).get(n).cloned());
+            let Some(row) = row else {
+                return Ok(miss());
             };
             match row {
                 Row::Header { key, name } => {
@@ -131,6 +145,7 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
                         Value::String(lua.create_string("header")?),
                         Value::Integer(0),
                         binding_abi::flag(expanded),
+                        Value::Nil,
                     ]))
                 }
                 Row::Entry(ei) => {
@@ -144,6 +159,10 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
                         Value::String(lua.create_string(r.difficulty.as_str())?),
                         Value::Integer(i64::from(r.num_available)),
                         Value::Nil,
+                        match &r.alt_verb {
+                            Some(verb) => Value::String(lua.create_string(verb)?),
+                            None => Value::Nil,
+                        },
                     ]))
                 }
             }

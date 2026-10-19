@@ -178,6 +178,7 @@ mod tests {
             race: "Human".to_string(),
             class: class.to_string(),
             zone: zone.to_string(),
+            class_file: String::new(),
         }
     }
 

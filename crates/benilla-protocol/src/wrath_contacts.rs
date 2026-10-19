@@ -4,8 +4,9 @@
 //! `DuelComplete`/`SendDuelCountdown`, SpellEffects.cpp `EffectDuel`); this module only maps.
 //!
 //! One `SMSG_CONTACT_LIST` becomes the shared friend list and ignore list, split by the contact
-//! flag bits (1 friend, 2 ignored); notes and the mute bit have no place there. The duel countdown
-//! is AC's milliseconds (3000) as the shared whole seconds; a winner mode of 1 is a retreat.
+//! flag bits (1 friend, 2 ignored), and the friends' notes ride `WrathContactNotes`; the mute bit
+//! has no place there. The duel countdown is AC's milliseconds (3000) as the shared whole
+//! seconds; a winner mode of 1 is a retreat.
 use crate::messages::{FriendEntry, FriendOnline, FriendStatusUpdate};
 use crate::SessionEvent;
 use std::io;
@@ -44,26 +45,45 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
                     .filter(|c| c.flags & CONTACT_IGNORED != 0)
                     .map(|c| c.guid)
                     .collect();
+                let notes = contacts
+                    .iter()
+                    .filter(|c| c.flags & CONTACT_FRIEND != 0 && !c.note.is_empty())
+                    .map(|c| (c.guid, lossy(c.note.clone())))
+                    .collect();
                 vec![
                     SessionEvent::FriendList { friends },
+                    SessionEvent::WrathContactNotes {
+                        notes,
+                        replace: true,
+                    },
                     SessionEvent::IgnoreList { guids },
                 ]
             }
             S::FriendStatus {
-                result, guid, online, ..
-            } => vec![SessionEvent::FriendStatus(FriendStatusUpdate {
                 result,
                 guid,
-                online: online.and_then(|f| {
-                    let p = f.presence?;
-                    Some(FriendOnline {
-                        status: f.status,
-                        area: p.area,
-                        level: p.level,
-                        class: p.class,
-                    })
-                }),
-            })],
+                note,
+                online,
+            } => {
+                let note = note.map(|note| SessionEvent::WrathContactNotes {
+                    notes: vec![(guid, lossy(note))],
+                    replace: false,
+                });
+                let status = SessionEvent::FriendStatus(FriendStatusUpdate {
+                    result,
+                    guid,
+                    online: online.and_then(|f| {
+                        let p = f.presence?;
+                        Some(FriendOnline {
+                            status: f.status,
+                            area: p.area,
+                            level: p.level,
+                            class: p.class,
+                        })
+                    }),
+                });
+                std::iter::once(status).chain(note).collect()
+            }
         });
     }
     Ok(vec![match crate::wrath_duel::decode(opcode, body)? {

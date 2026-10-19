@@ -31,6 +31,7 @@ fn contacts_split_into_friends_and_ignores_and_statuses_keep_their_tail() {
                 FriendEntry { guid: 2, status: 0, area: 0, level: 0, class: 0 },
             ],
         },
+        SessionEvent::WrathContactNotes { notes: vec![(1, "note".into())], replace: true },
         SessionEvent::IgnoreList { guids: vec![3] },
     ];
     assert_eq!(debug(&decode(0x67, &list).unwrap()), debug(&expected));
@@ -49,6 +50,15 @@ fn contacts_split_into_friends_and_ignores_and_statuses_keep_their_tail() {
         debug(&[SessionEvent::FriendStatus(FriendStatusUpdate { result: 5, guid: 9, online: None })])
     );
     assert!(decode(0x68, &[removed.clone(), vec![0]].concat()).is_err());
+    // An added-offline friend carries its note (`SocialMgr.cpp` `SendFriendStatus`).
+    let added = [vec![7], q(9), b"raid healer\0".to_vec()].concat();
+    assert_eq!(
+        debug(&decode(0x68, &added).unwrap()),
+        debug(&[
+            SessionEvent::FriendStatus(FriendStatusUpdate { result: 7, guid: 9, online: None }),
+            SessionEvent::WrathContactNotes { notes: vec![(9, "raid healer".into())], replace: false },
+        ])
+    );
 }
 
 #[test]
