@@ -120,6 +120,8 @@ fn census(script: &mut UiScript, failures: &[String]) -> usize {
 #[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
 fn installed_wrath_framexml_builds_the_stock_hud() {
     let _ = benilla_formats::wow_data_or_skip!();
+    // Every attribute name the loader reads, for the unhandled-attribute audit.
+    benilla_ui::framexml::record_queried_attributes(true);
     let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     // A live VM receives its display modes before FrameXML; UIParent uses their aspect ratio.
     script.set_screen_size(1600.0, 1000.0);
@@ -361,6 +363,70 @@ fn shadow_guard_keeps_an_unanswered_engine_name_counted() {
     );
 }
 
+/// Stock XML attributes the loader deliberately does not read, each with its reason. Any other
+/// attribute the loader never asks for fails the census; a row the loader now reads is stale.
+const ACCEPTED_ATTRS: &[(&str, &str)] = &[
+    ("xmlns", "the XML namespace declaration, not a widget attribute"),
+    ("xsi:schemaLocation", "the schema hint, not a widget attribute"),
+    ("xmlns:xsi", "the schema namespace, not a widget attribute"),
+    ("protected", "the secure-frame flag; the UI is trusted, nothing is protected"),
+    ("dontSavePosition", "the layout-cache opt-out; no layout cache is kept"),
+    ("nonBlocking", "an asynchronous texture-load hint with no visible effect"),
+    ("bytes", "a FontString's text buffer size; text is not truncated to it (labelled)"),
+    ("monochrome", "a Font's monochrome raster flag; glyphs are not drawn monochrome (labelled)"),
+];
+
+/// Every attribute the stock XML uses that the loader never asked for, less [`ACCEPTED_ATTRS`]:
+/// printed, then the census fails on any.
+fn unhandled_attributes(xml_texts: &[String]) {
+    use benilla_ui::framexml::{Element, TopLevel};
+    let queried = benilla_ui::framexml::queried_attributes();
+    let mut found: std::collections::BTreeMap<String, (usize, std::collections::BTreeSet<String>)> =
+        Default::default();
+    fn walk(
+        e: &Element,
+        queried: &std::collections::HashSet<String>,
+        found: &mut std::collections::BTreeMap<String, (usize, std::collections::BTreeSet<String>)>,
+    ) {
+        for (k, _) in e.attrs() {
+            if !queried.contains(&k.to_ascii_lowercase()) {
+                let slot = found.entry(k.clone()).or_default();
+                slot.0 += 1;
+                slot.1.insert(e.tag.clone());
+            }
+        }
+        for c in &e.children {
+            walk(c, queried, found);
+        }
+    }
+    for text in xml_texts {
+        let Ok(doc) = benilla_ui::framexml::parse(text) else { continue };
+        for item in &doc.items {
+            if let TopLevel::Font(e) | TopLevel::Template(e) | TopLevel::Instance(e) = item {
+                walk(e, &queried, &mut found);
+            }
+        }
+    }
+    let accepted = |n: &str| ACCEPTED_ATTRS.iter().any(|(a, _)| a.eq_ignore_ascii_case(n));
+    let mut failing = Vec::new();
+    for (name, (n, tags)) in &found {
+        let tags: Vec<&str> = tags.iter().map(String::as_str).collect();
+        if accepted(name) {
+            eprintln!("ACCEPTED-ATTR {name} {n} ({})", tags.join(" "));
+        } else {
+            eprintln!("UNHANDLED-ATTR {name} {n} ({})", tags.join(" "));
+            failing.push(name.clone());
+        }
+    }
+    let stale: Vec<&str> = ACCEPTED_ATTRS
+        .iter()
+        .map(|(a, _)| *a)
+        .filter(|a| !a.contains(':') && *a != "xmlns" && queried.contains(&a.to_ascii_lowercase()))
+        .collect();
+    assert!(stale.is_empty(), "ACCEPTED_ATTRS rows the loader now reads: {stale:?}");
+    assert!(failing.is_empty(), "stock XML attributes the loader never reads: {failing:?}");
+}
+
 /// The `Blizzard_*` addons whose sources the census scans beside FrameXML.toc's files: every
 /// stock 3.3.5 addon, so "0 missing" covers the whole stock UI.
 const CENSUS_ADDONS: [&str; 24] = super::addons::WRATH_BLIZZARD_ADDONS;
@@ -400,6 +466,7 @@ fn missing_surface(script: &UiScript) {
             queue.extend(toc.files.iter().map(|f| (format!(r"{dir}\{f}"), name)));
         }
     }
+    let mut xml_texts: Vec<String> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     while let Some((path, origin)) = queue.pop() {
         if !seen.insert(path.to_ascii_lowercase()) {
@@ -419,6 +486,9 @@ fn missing_surface(script: &UiScript) {
                     queue.push((format!("{dir}\\{file}"), origin));
                 }
             }
+        }
+        if path.to_ascii_lowercase().ends_with(".xml") {
+            xml_texts.push(text.clone());
         }
         sources.push(census_lexer::executable_text(&text));
         origins.push(origin);
@@ -615,6 +685,7 @@ fn missing_surface(script: &UiScript) {
         let n = calls.get(*name).or_else(|| methods.get(*name)).copied().unwrap_or(0);
         eprintln!("NATIVE-ABSENT {name} {n}: {evidence}");
     }
+    unhandled_attributes(&xml_texts);
     // Per origin, the missing names its own files call.
     let mut by_origin: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
         std::collections::BTreeMap::new();
