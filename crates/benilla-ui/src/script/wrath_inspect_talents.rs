@@ -43,14 +43,15 @@ impl super::UiScript {
 // (`/tmp/azb-ui-talent-native.log`): GetNumTalentTabs `0x5c5cc0`, GetTalentTabInfo `0x5c6150`,
 // GetNumTalents `0x5c5d40`, GetTalentInfo `0x5c7800`, GetTalentPrereqs `0x5c7ed0`,
 // GetNumTalentGroups `0x5c5df0`, GetActiveTalentGroup `0x5c5810`, GetUnspentTalentPoints
-// `0x5c6310`, GetGroupPreviewTalentPointsSpent `0x5c6420`. The player has the one group the host
-// pushes (`set_talents`); the inspect branch reads [`WrathInspectTalents`]. Labelled: no preview
-// mode is carried, so preview ranks and points equal the current ones; pet talents and a second
-// player group are not carried and answer the native miss.
+// `0x5c6310`, GetTalentLink `0x5c7ce0`. The player has the one group the host pushes
+// (`set_talents`), whose preview ranks are [`super::wrath_talent_preview`]'s; the inspect branch
+// reads [`WrathInspectTalents`], whose preview ranks are its ranks. Labelled: pet talents and a
+// second player group are not carried and answer the native miss.
 
 use mlua::{Lua, MultiValue, Value};
 
 use super::talent::{TalentTabView, TalentView};
+use super::wrath_talent_preview as preview;
 use super::Model;
 
 /// Which pages a getter reads: the player's (group 1 only), or an inspected group's.
@@ -72,6 +73,11 @@ fn pages<'m>(
             .map(|g| &g.pages);
     }
     (group.unwrap_or(1) == 1).then_some(&model.talents)
+}
+
+/// The player's own pages, whose preview ranks the preview state holds.
+fn own(inspect: bool, pet: bool) -> bool {
+    !inspect && !pet
 }
 
 fn flag(on: bool) -> Value {
@@ -134,10 +140,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 ));
             };
             let group = number(lua, &arg(&args, 3));
+            let (inspect, pet) = (truth(&args, 1), truth(&args, 2));
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let Some(t) =
-                pages(&model, truth(&args, 1), truth(&args, 2), group).and_then(|p| tab_at(p, tab))
-            else {
+            let Some(t) = pages(&model, inspect, pet, group).and_then(|p| tab_at(p, tab)) else {
                 return Ok(MultiValue::from_vec(vec![
                     Value::Nil,
                     Value::Nil,
@@ -151,7 +156,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::Nil,
                 int(t.points_spent),
                 Value::String(lua.create_string(&t.background)?),
-                int(t.points_spent),
+                // The preview points past the spent ones (`0x5c6150`, the tab's `+8`).
+                int(if own(inspect, pet) {
+                    preview::tab_preview_spent(&model, (tab - 1) as usize)
+                } else {
+                    0
+                }),
             ]))
         })?,
     )?;
@@ -186,10 +196,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 ));
             };
             let inspect = truth(&args, 2);
+            let pet = truth(&args, 3);
             let group = number(lua, &arg(&args, 4));
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let Some(t) = pages(&model, inspect, truth(&args, 3), group)
-                .and_then(|p| talent_at(p, tab, i))
+            let Some(t) = pages(&model, inspect, pet, group).and_then(|p| talent_at(p, tab, i))
             else {
                 return Ok(MultiValue::from_vec(vec![
                     Value::Nil,
@@ -205,6 +215,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 ]));
             };
             let meets = if inspect { t.rank > 0 } else { t.meets_prereq };
+            let preview_rank = if own(inspect, pet) {
+                preview::preview_rank(&model, (tab - 1) as usize, (i - 1) as usize, t)
+            } else {
+                t.rank
+            };
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&t.name)?),
                 match &t.texture {
@@ -217,7 +232,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 int(t.max_rank),
                 flag(t.exceptional),
                 flag(meets),
-                int(t.rank),
+                int(preview_rank),
                 flag(meets),
             ]))
         })?,
@@ -235,13 +250,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 ));
             };
             let group = number(lua, &arg(&args, 4));
+            let (inspect, pet) = (truth(&args, 2), truth(&args, 3));
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let mut out = Vec::new();
-            if let Some(t) = pages(&model, truth(&args, 2), truth(&args, 3), group)
-                .and_then(|p| talent_at(p, tab, i))
-            {
+            if let Some(t) = pages(&model, inspect, pet, group).and_then(|p| talent_at(p, tab, i)) {
                 for p in &t.prereqs {
-                    out.extend([int(p.tier), int(p.column), flag(p.learnable), flag(p.learnable)]);
+                    let preview_met = if own(inspect, pet) {
+                        preview::prereq_preview_met(&model, (tab - 1) as usize, p.tier, p.column, p.rank)
+                    } else {
+                        p.learnable
+                    };
+                    out.extend([int(p.tier), int(p.column), flag(p.learnable), flag(preview_met)]);
                 }
             }
             Ok(MultiValue::from_vec(out))
@@ -307,10 +326,34 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetGroupPreviewTalentPointsSpent([isPet [, group]]): no preview mode, so 0.
+    // GetTalentLink(tab, index [, isInspect [, isPet [, group [, isPreview]]]]): the link of the
+    // current or the preview rank; nil off the pages.
     g.set(
-        "GetGroupPreviewTalentPointsSpent",
-        lua.create_function(|_, _args: MultiValue| Ok(0i64))?,
+        "GetTalentLink",
+        lua.create_function(|lua, args: MultiValue| {
+            let (Some(tab), Some(i)) = (number(lua, &arg(&args, 0)), number(lua, &arg(&args, 1)))
+            else {
+                return Err(mlua::Error::runtime(
+                    "Usage: GetTalentLink(tabIndex, talentIndex[, isInspect[, isPet[, groupIndex[, isPreview]]]])",
+                ));
+            };
+            let (inspect, pet) = (truth(&args, 2), truth(&args, 3));
+            let group = number(lua, &arg(&args, 4));
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let Some(t) = pages(&model, inspect, pet, group).and_then(|p| talent_at(p, tab, i))
+            else {
+                return Ok(Value::Nil);
+            };
+            let rank = if own(inspect, pet) && truth(&args, 5) {
+                preview::preview_rank(&model, (tab - 1) as usize, (i - 1) as usize, t)
+            } else {
+                t.rank
+            };
+            match preview::talent_link(t, rank) {
+                Some(link) => Ok(Value::String(lua.create_string(&link)?)),
+                None => Ok(Value::Nil),
+            }
+        })?,
     )?;
     Ok(())
 }
@@ -340,6 +383,7 @@ mod tests {
                     tier: 1,
                     column: 1,
                     learnable: true,
+                    rank: 1,
                 }],
                 ..Default::default()
             }]],

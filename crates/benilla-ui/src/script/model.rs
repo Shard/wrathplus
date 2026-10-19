@@ -285,6 +285,12 @@ pub(crate) struct Model {
     pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
     pub(crate) wrath_gm_survey: super::wrath_gm_survey::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
+    /// The player's talent preview ranks and queued `LearnPreviewTalents` lists.
+    pub(crate) talent_preview: super::wrath_talent_preview::TalentPreview,
+    /// The six glyph sockets the app pushes; `None` without a player.
+    pub(crate) glyph_sockets: Option<[super::GlyphSocketView; 6]>,
+    /// The units whose vehicle seat has `VehicleSeat.dbc` `flagsB & 0x8` (`UnitTargetsVehicleInRaidUI`).
+    pub(crate) raid_vehicle_units: HashSet<u64>,
     /// The server clock offset (`server - time()`) the host pushes; `None` until the first reply.
     pub(crate) wrath_server_time_offset: Option<i32>,
     /// `SetRaidRosterSelection`'s raid row index, client-side only.
@@ -909,6 +915,12 @@ pub(crate) struct Model {
     pub(crate) wrath_runes: super::WrathRunes,
     /// The arena-team slots, rosters and the client's roster order (`wrath_arena`).
     pub(crate) wrath_arena: super::wrath_arena::ArenaState,
+    /// The vehicle view, the seat-indicator table and the vehicle verbs' requests
+    /// (`wrath_vehicle`).
+    pub(crate) wrath_vehicles: super::WrathVehicles,
+    pub(crate) vehicle_indicators:
+        std::collections::HashMap<u32, super::VehicleIndicatorView>,
+    pub(crate) vehicle_calls: Vec<super::VehicleCall>,
     /// The Wrath spellbook's highest-rank list (`wrath_spellbook`).
     pub(crate) spellbook_highest_rank: Vec<u32>,
     /// `SetUIVisibility(false)`'s flag (`wrath_options`).
@@ -1202,6 +1214,9 @@ impl Model {
             wrath_saved_instances: Default::default(),
             wrath_gm_survey: Default::default(),
             wrath_inspect_talents: None,
+            talent_preview: Default::default(),
+            glyph_sockets: None,
+            raid_vehicle_units: HashSet::new(),
             wrath_server_time_offset: None,
             raid_selection: 0,
             now: 0.0,
@@ -1548,6 +1563,9 @@ impl Model {
             wrath_companions: Default::default(),
             wrath_runes: Default::default(),
             wrath_arena: Default::default(),
+            wrath_vehicles: Default::default(),
+            vehicle_indicators: Default::default(),
+            vehicle_calls: Vec::new(),
             spellbook_highest_rank: Vec::new(),
             ui_hidden: false,
             wrath_currency: Default::default(),

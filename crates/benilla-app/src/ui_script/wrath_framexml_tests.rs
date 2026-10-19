@@ -206,6 +206,12 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
 /// dead natively) in the same commit, and a listed name this VM answers fails the census.
 const NATIVE_ABSENT: &[(&str, &str)] = &[
     (
+        "AchievementMicroButton_Update",
+        "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
+         caller, Blizzard_AchievementUI.lua:671 (AchievementFrame_OnEvent), runs only while \
+         AchievementMicroButton is hidden, a stock 3.3.5 dangling reference",
+    ),
+    (
         "MultiCastSummonSpellButtonFlyoutButton_OnClick",
         "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
          caller is MultiCastActionBarFrame.xml's hidden $parentFlyoutButton OnClick, a stock 3.3.5 \
@@ -221,6 +227,12 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
         "MutedList_Update",
         "not in Wow.exe 12340 (raw byte search) and defined by no installed FrameXML file; its only \
          caller, FriendsFrame.lua:1341, is FriendsFrameMuteButton_OnClick of 3.3.5's retired mute list",
+    ),
+    (
+        "Result",
+        "not in Wow.exe 12340 (raw byte search, 0 NUL-bounded hits); Dump.lua:335 and :345 call \
+         context:Result() only when the caller's own context table defines it (`if \
+         (context.Result)`), a Lua-side optional hook, never a widget method",
     ),
     (
         "VoiceChatButton_OnEvent",
@@ -295,11 +307,20 @@ const NATIVE_ABSENT: &[(&str, &str)] = &[
 /// and that this VM does not answer, reviewed as not being shadowed engine APIs. Any other such
 /// name stays counted as missing, so a FrameXML definition cannot hide an engine method or global.
 /// A row needs its reason; the list only shrinks.
-const SHADOW_REVIEWED: &[(&str, &str)] = &[(
-    "OnFinished",
-    "an animation script-handler name FrameXML defines per instance; Wow.exe's string is the \
-     handler name, not an engine method (reviewed by the manager, 2026-10-19)",
-)];
+const SHADOW_REVIEWED: &[(&str, &str)] = &[
+    (
+        "Desaturate",
+        "Blizzard_AchievementUI assigns it per instance (self.Desaturate = AchievementIcon_Desaturate, \
+         :787/:806); Wow.exe's string (0x9ea16c) is referenced from a name/value table entry \
+         (0xac0efc, value 1) and FUN_00483060, not a script-method table, so no engine method is \
+         shadowed (the Texture method is SetDesaturated)",
+    ),
+    (
+        "OnFinished",
+        "an animation script-handler name FrameXML defines per instance; Wow.exe's string is the \
+         handler name, not an engine method (reviewed by the manager, 2026-10-19)",
+    ),
+];
 
 /// The census lines a FrameXML definition must not suppress: each `(kind, name, count)` that was
 /// suppressed only by a FrameXML definition, is an exact NUL-bounded string in `exe`, is not
@@ -409,7 +430,8 @@ fn missing_surface(script: &UiScript) {
             r##"
             local kinds = { "Frame", "Button", "CheckButton", "EditBox", "StatusBar", "Slider",
                 "ScrollFrame", "MessageFrame", "ScrollingMessageFrame", "GameTooltip", "Model",
-                "PlayerModel", "DressUpModel", "Minimap", "ColorSelect", "SimpleHTML", "Cooldown" }
+                "PlayerModel", "DressUpModel", "TabardModel", "Minimap", "ColorSelect", "SimpleHTML",
+                "Cooldown", "LootButton", "MovieFrame" }
             local has, out = {}, {}
             for _, kind in ipairs(kinds) do
                 local ok, frame = pcall(CreateFrame, kind)
@@ -555,12 +577,17 @@ fn missing_surface(script: &UiScript) {
         .unwrap();
     let native_absent = |name: &str| NATIVE_ABSENT.iter().any(|(n, _)| *n == name);
     let mut lines = Vec::new();
+    // A listed name the census still sees missing, method or global, keeps its row live.
+    let mut absent_listed = Vec::new();
     for (name, n) in &methods {
-        if !has.contains(name) && !native_absent(name) && !defined.contains(name) {
-            lines.push(format!("METHOD {name} {n}"));
+        if !has.contains(name) && !defined.contains(name) {
+            if native_absent(name) {
+                absent_listed.push(name.clone());
+            } else {
+                lines.push(format!("METHOD {name} {n}"));
+            }
         }
     }
-    let mut absent_listed = Vec::new();
     for name in absent {
         if native_absent(&name) {
             absent_listed.push(name);
@@ -585,7 +612,8 @@ fn missing_surface(script: &UiScript) {
     lines.extend(shadowed);
     eprintln!("native-absent: {} names", NATIVE_ABSENT.len());
     for (name, evidence) in NATIVE_ABSENT {
-        eprintln!("NATIVE-ABSENT {name} {}: {evidence}", calls.get(*name).copied().unwrap_or(0));
+        let n = calls.get(*name).or_else(|| methods.get(*name)).copied().unwrap_or(0);
+        eprintln!("NATIVE-ABSENT {name} {n}: {evidence}");
     }
     // Per origin, the missing names its own files call.
     let mut by_origin: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =

@@ -34,6 +34,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 #[derive(Resource, Default)]
 pub(crate) struct NativeArenaTeamPackets(pub(crate) VecDeque<Packet>);
 
+/// Team names whose roster another module wants re-asked (Wire B's arena-team event lines,
+/// whose packet names the team but carries no id): matched against the slots' query records,
+/// each through the slot's 10 s throttle; a name no slot holds is ignored. Unresolved, labelled:
+/// the reference's event handler (`SMSG_ARENA_TEAM_EVENT`) is untraced.
+#[derive(Resource, Default)]
+pub(crate) struct ArenaRosterRefresh(pub(crate) Vec<String>);
+
 /// `0x5a3600`'s per-slot throttle (`0xc0f7f0`).
 const ROSTER_THROTTLE_SECS: f64 = 10.0;
 /// `0x47b480`'s 48-byte name buffer, terminator included.
@@ -96,6 +103,17 @@ impl ArenaTable {
             }
         }
         fx.events.push(("ARENA_TEAM_UPDATE", Vec::new()));
+    }
+
+    /// A refresh by team name: the slot whose query record carries it asks, under its throttle.
+    pub(crate) fn refresh_team(&mut self, name: &str, now: f64, fx: &mut Effects) {
+        let slot = (0..3).find(|&s| {
+            let id = self.team_id(s);
+            id != 0 && self.records.get(&id).is_some_and(|r| r.name == name)
+        });
+        if let Some(slot) = slot {
+            self.ask_roster(slot, now, fx);
+        }
     }
 
     /// The frame's `ArenaTeamRoster` calls.
@@ -207,6 +225,7 @@ impl Plugin for UiArenaTeamPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NativeArenaTeamPackets>()
             .init_resource::<ArenaTable>()
+            .init_resource::<ArenaRosterRefresh>()
             .net_handler(SessionEventKind::WrathArenaTeam, receive)
             .net_handler(SessionEventKind::Disconnected, clear)
             .add_systems(Update, feed_arena.in_set(UnitFeed));
@@ -221,8 +240,10 @@ fn clear(
     In(_): In<SessionEvent>,
     mut packets: ResMut<NativeArenaTeamPackets>,
     mut table: ResMut<ArenaTable>,
+    mut refresh: ResMut<ArenaRosterRefresh>,
 ) {
     packets.0.clear();
+    refresh.0.clear();
     *table = ArenaTable::default();
 }
 
@@ -236,6 +257,7 @@ fn feed_arena(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeArenaTeamPackets>,
     mut table: ResMut<ArenaTable>,
+    mut refresh: ResMut<ArenaRosterRefresh>,
     me: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
     clock: Res<crate::ui_script::UiClock>,
@@ -261,6 +283,9 @@ fn feed_arena(
     }
     for packet in packets.0.drain(..) {
         table.apply(packet, &mut fx);
+    }
+    for name in refresh.0.drain(..) {
+        table.refresh_team(&name, now, &mut fx);
     }
     for command in fx.sends.drain(..) {
         let _ = commands.0.send(ClientCommand::ArenaTeamCommand(command));

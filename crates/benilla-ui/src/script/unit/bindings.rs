@@ -17,6 +17,32 @@ use super::{
 /// The `"player"` fast path of `UnitName`, `UnitRace`, `UnitClass` and `UnitSex`, never
 /// `UnitLevel`: the record's answer when the token equals `"player"` (`0x847894`) whole and
 /// case-insensitively; any other token, `"playerfoo"` included, goes to the resolver.
+/// `UnitClass`'s pair, the localized name and the uppercase token, or `nil, nil`. Build 12340's
+/// `UnitClassBase` (`0x610040`) answers the same pair: the names carried here have no sex-specific
+/// forms.
+pub(in crate::script) fn class_pair(
+    lua: &Lua,
+    token: Value,
+    usage: &'static str,
+) -> mlua::Result<(Value, Value)> {
+    let token = Some(crate::script::binding_abi::string_arg(lua, token, usage)?);
+    // The `"player"` arm reads the record's class byte (`0x5183b9`, `0xc27e81`); the second
+    // return is the uppercase token.
+    let pair = match player_record_arm(lua, &token, |r| r.class.clone()) {
+        Some(pair) => pair,
+        None => with_unit(lua, &token, None, |u| {
+            u.class.clone().zip(u.class_file.clone())
+        })?,
+    };
+    match pair {
+        Some((loc, file)) => Ok((
+            Value::String(lua.create_string(&loc)?),
+            Value::String(lua.create_string(&file)?),
+        )),
+        None => Ok((Value::Nil, Value::Nil)),
+    }
+}
+
 fn player_record_arm<T>(
     lua: &Lua,
     token: &Option<String>,
@@ -691,32 +717,7 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "UnitClass",
         lua.create_function(|lua, token: Value| {
-            let token = Some(crate::script::binding_abi::string_arg(
-                lua,
-                token,
-                r#"Usage: UnitClass("unit")"#,
-            )?);
-            // The `"player"` arm reads the record's class byte (`0x5183b9`, `0xc27e81`); the second
-            // return is the uppercase token.
-            if let Some(pair) = player_record_arm(lua, &token, |r| r.class.clone()) {
-                return match pair {
-                    Some((loc, file)) => Ok((
-                        Value::String(lua.create_string(&loc)?),
-                        Value::String(lua.create_string(&file)?),
-                    )),
-                    None => Ok((Value::Nil, Value::Nil)),
-                };
-            }
-            let pair = with_unit(lua, &token, None, |u| {
-                u.class.clone().zip(u.class_file.clone())
-            })?;
-            match pair {
-                Some((loc, file)) => Ok((
-                    Value::String(lua.create_string(&loc)?),
-                    Value::String(lua.create_string(&file)?),
-                )),
-                None => Ok((Value::Nil, Value::Nil)),
-            }
+            class_pair(lua, token, r#"Usage: UnitClass("unit")"#)
         })?,
     )?;
     // UnitHasRelicSlot(unit) (`0x519e50`): a player unit's class has a relic slot, `ChrClasses.dbc`
