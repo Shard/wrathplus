@@ -383,9 +383,7 @@ mod profile_route_tests {
 
     #[test]
     fn the_wrath_profile_selects_the_wrath_route() {
-        assert!(!uses_native_wrath_route(Some(
-            &benilla_formats::DataProfile::Vanilla
-        )));
+        assert!(!uses_native_wrath_route(None));
         assert!(uses_native_wrath_route(Some(
             &benilla_formats::DataProfile::Wrath {
                 locale: "enUS".into(),

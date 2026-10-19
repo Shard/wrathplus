@@ -111,9 +111,7 @@ pub fn parse_holidays(
 
 /// Use the caller's boot-resolved chain; every table is required.
 pub fn load_holidays(chain: &mut Chain) -> Result<HolidayCatalog> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("holidays require Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let mut read = |name| {
         chain

@@ -1,21 +1,24 @@
 //! Explicit data dialect selection. Archive discovery never guesses the client version.
 use anyhow::{bail, Result};
 
-/// A client data dialect and its archive locale.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The client data dialect (3.3.5a, build 12340) and its archive locale.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataProfile {
-    #[default]
-    Vanilla,
-    Wrath {
-        locale: String,
-    },
+    Wrath { locale: String },
+}
+
+impl Default for DataProfile {
+    fn default() -> Self {
+        Self::Wrath {
+            locale: "enUS".into(),
+        }
+    }
 }
 
 impl DataProfile {
-    /// Parse launcher configuration; absent profile preserves the vanilla default.
+    /// Parse launcher configuration; an absent profile is `wrath`, an absent locale `enUS`.
     pub fn parse(profile: Option<&str>, locale: Option<&str>) -> Result<Self> {
-        match profile.unwrap_or("vanilla") {
-            "vanilla" => Ok(Self::Vanilla),
+        match profile.unwrap_or("wrath") {
             "wrath" => {
                 let locale = locale.unwrap_or("enUS");
                 if !matches!(
@@ -37,7 +40,7 @@ impl DataProfile {
                     locale: locale.into(),
                 })
             }
-            other => bail!("unsupported WOW_CLIENT_PROFILE {other:?}; expected vanilla or wrath"),
+            other => bail!("unsupported WOW_CLIENT_PROFILE {other:?}; expected wrath"),
         }
     }
 
@@ -64,8 +67,9 @@ mod tests {
     fn explicit_dialects_and_locales() {
         assert_eq!(
             DataProfile::parse(None, None).unwrap(),
-            DataProfile::Vanilla
+            DataProfile::default()
         );
+        assert!(DataProfile::parse(Some("vanilla"), None).is_err());
         assert_eq!(
             DataProfile::parse(Some("wrath"), None).unwrap(),
             DataProfile::Wrath {

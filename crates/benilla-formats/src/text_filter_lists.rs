@@ -37,13 +37,10 @@ fn load(chain: &mut Chain, path: &str, name: &str) -> Result<Vec<FilterPattern>>
         .read_file(path)
         .with_context(|| format!("reading {name}.dbc"))?;
     let wrath_language = if name == "ChatProfanity" {
-        if let crate::DataProfile::Wrath { locale } = chain.profile() {
-            // Language is a zero-based client locale slot, not a spoken-language enum.
-            // Installed build-12340: English=0, Korean=1. Never apply foreign lists.
-            Some(crate::cfg_categories::locale_slot(locale)? as u32)
-        } else {
-            None
-        }
+        let crate::DataProfile::Wrath { locale } = chain.profile();
+        // Language is a zero-based client locale slot, not a spoken-language enum.
+        // Installed build-12340: English=0, Korean=1. Never apply foreign lists.
+        Some(crate::cfg_categories::locale_slot(locale)? as u32)
     } else {
         None
     };

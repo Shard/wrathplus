@@ -40,11 +40,10 @@ impl GameTipsCatalog {
 }
 
 // GameTipsRec is ID + langstringref. Build 12340 has 16 locale offsets and
-// a mask (18 fields total), not Vanilla's 8 offsets + mask (10 fields).
+// a mask (18 fields total).
 // References: https://wowdev.wiki/DB/GameTips and https://wowdev.wiki/Localization.
 fn text_layout(profile: &DataProfile) -> (usize, usize) {
     match profile {
-        DataProfile::Vanilla => (8, 0),
         DataProfile::Wrath { locale } => {
             let slot = match locale.as_str() {
                 "koKR" => 1,
@@ -130,7 +129,6 @@ mod tests {
         let cat = parse_tips(&bytes, &french).unwrap();
         assert_eq!(cat.get(0), Some("Francais"));
         assert_eq!(cat.get(1), Some("Second"));
-        assert!(parse_tips(&bytes, &DataProfile::Vanilla).is_err());
         let spanish = DataProfile::Wrath {
             locale: "esES".into(),
         };
@@ -139,15 +137,8 @@ mod tests {
             "no fabricated English fallback for empty locale"
         );
 
-        let mut vanilla = vec![0; 10];
-        vanilla[0] = 5;
-        vanilla[1] = 1;
-        let bytes = fixture(&[vanilla], strings);
-        assert_eq!(
-            parse_tips(&bytes, &DataProfile::Vanilla).unwrap().get(0),
-            Some("English")
-        );
-        assert!(parse_tips(&bytes, &french).is_err());
+        let short = vec![5, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert!(parse_tips(&fixture(&[short], strings), &french).is_err());
     }
 
     #[test]

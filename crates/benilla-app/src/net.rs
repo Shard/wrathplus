@@ -110,7 +110,6 @@ pub(crate) enum SessionDialect {
 impl SessionDialect {
     fn from_profile(profile: &benilla_formats::DataProfile) -> Self {
         match profile {
-            benilla_formats::DataProfile::Vanilla => Self::Vanilla5875,
             benilla_formats::DataProfile::Wrath { .. } => Self::Wrath12340,
         }
     }
@@ -2828,10 +2827,10 @@ mod tests {
     }
 
     #[test]
-    fn session_backend_selection_is_explicit_and_vanilla_default_stays_vanilla() {
+    fn the_default_profile_selects_the_wrath_session() {
         assert_eq!(
             SessionDialect::from_profile(&benilla_formats::DataProfile::default()),
-            SessionDialect::Vanilla5875
+            SessionDialect::Wrath12340
         );
         assert_eq!(
             SessionDialect::from_profile(&benilla_formats::DataProfile::Wrath {

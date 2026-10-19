@@ -240,7 +240,7 @@ impl CharacterGeosets {
             )?;
             let mut m = HashMap::with_capacity(rs.records().len());
             for r in rs.records() {
-                // fields: RaceID, SexID, VariationID(facialHair), 3×unused, Geoset100/300/200.
+                // fields: RaceID, SexID, VariationID(facialHair), Geoset100/300/200, then two extras.
                 if let (Some(race), Some(sex), Some(var)) =
                     (u32_at(r, 0), u32_at(r, 1), u32_at(r, 2))
                 {
@@ -249,12 +249,7 @@ impl CharacterGeosets {
                             .entry((race as u8, sex as u8, var as u8))
                             .or_insert([u32_at(r, 6).unwrap_or(0), u32_at(r, 7).unwrap_or(0)]);
                     }
-                    let start = if matches!(profile, DataProfile::Vanilla) {
-                        6
-                    } else {
-                        3
-                    };
-                    let g = std::array::from_fn(|i| u32_at(r, start + i).unwrap_or(0));
+                    let g = std::array::from_fn(|i| u32_at(r, 3 + i).unwrap_or(0));
                     // The first row wins.
                     m.entry((race as u8, sex as u8, var as u8)).or_insert(g);
                 }
@@ -326,17 +321,6 @@ pub(crate) fn helmet_vis_schema(profile: &DataProfile) -> Schema {
 pub(crate) fn char_facial_hair_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CharacterFacialHairStyles");
     let fields: &[(&str, FieldType)] = match profile {
-        DataProfile::Vanilla => &[
-            ("RaceID", FieldType::UInt32),
-            ("SexID", FieldType::UInt32),
-            ("VariationID", FieldType::UInt32),
-            ("Unused3", FieldType::UInt32),
-            ("Unused4", FieldType::UInt32),
-            ("Unused5", FieldType::UInt32),
-            ("Geoset100", FieldType::UInt32),
-            ("Geoset300", FieldType::UInt32),
-            ("Geoset200", FieldType::UInt32),
-        ],
         DataProfile::Wrath { .. } => &[
             ("RaceID", FieldType::UInt32),
             ("SexID", FieldType::UInt32),
@@ -720,55 +704,5 @@ mod tests {
         };
         let set = cg.visible_geosets(1, 0, 0, 0, &EquipGeosets::default());
         assert!(set.contains(&1), "max(1, 0) = scalp geoset 1");
-    }
-
-    /// The shipped CharHairGeosets repeats only the goblin male's one style, and the first row,
-    /// geoset 1, the bare scalp, wins; geoset 2 adds an untextured topknot.
-    #[test]
-    fn goblin_male_hair_takes_the_first_of_four_duplicate_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-
-        // The file's rows, read without the loader.
-        let bytes = chain.read_file(CHAR_HAIR_GEOSETS).expect("CharHairGeosets");
-        let rs = parse(
-            &bytes,
-            char_hair_geosets_schema(&DataProfile::Vanilla),
-            "CharHairGeosets",
-        )
-        .expect("parse");
-        let mut keys: HashMap<(u32, u32, u32), Vec<u32>> = HashMap::new();
-        for r in rs.records() {
-            if let (Some(race), Some(sex), Some(var), Some(geoset)) =
-                (u32_at(r, 1), u32_at(r, 2), u32_at(r, 3), u32_at(r, 4))
-            {
-                keys.entry((race, sex, var)).or_default().push(geoset);
-            }
-        }
-        let dups: Vec<_> = keys.iter().filter(|(_, v)| v.len() > 1).collect();
-        assert_eq!(
-            dups.len(),
-            1,
-            "exactly one duplicated (race,sex,variation) key ships; got {dups:?}"
-        );
-        assert_eq!(
-            keys.get(&(9, 0, 0)).map(Vec::as_slice),
-            Some([1u32, 2, 1, 2].as_slice()),
-            "the goblin-male block is the duplicate, in file order"
-        );
-
-        let cg = CharacterGeosets::load(&mut chain).expect("load customization tables");
-        let set = cg.visible_geosets(9, 0, 0, 0, &EquipGeosets::default());
-        assert!(
-            set.contains(&1),
-            "goblin male shows the bare scalp (geoset 1)"
-        );
-        assert!(
-            !set.contains(&2),
-            "goblin male does NOT show geoset 2 — the white topknot"
-        );
-        // Race 9 ships only sex-0 rows, so the goblin female keeps the region base, the same scalp.
-        let f = cg.visible_geosets(9, 1, 0, 0, &EquipGeosets::default());
-        assert!(f.contains(&1) && !f.contains(&2), "goblin female unchanged");
     }
 }
