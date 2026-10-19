@@ -101,6 +101,7 @@ impl PendingLock {
             extending: self.extending,
             encounters_completed: self.completed_mask.count_ones(),
             encounters_total: 0,
+            completed_mask: self.completed_mask,
         }
     }
 }

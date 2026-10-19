@@ -60,6 +60,7 @@ mod wrath_petition_vendor;
 mod wrath_quest_poi;
 mod wrath_barber;
 mod wrath_region_attrs;
+mod wrath_item_gems;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
 pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
 pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
@@ -910,6 +911,7 @@ impl UiScript {
             wrath_petition_vendor::install(&lua)?;
             wrath_barber::install(&lua)?;
             wrath_region_attrs::install(&lua)?;
+            wrath_item_gems::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;

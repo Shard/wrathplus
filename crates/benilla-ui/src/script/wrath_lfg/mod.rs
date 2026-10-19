@@ -84,6 +84,24 @@ pub use locks::{
 
 mod queue;
 pub(crate) use queue::start_backfill;
+
+/// The current map and difficulty's `index`-th DungeonEncounter row (0-based) under `mask`:
+/// name, icon, killed (`0x5538b0`, shared by the instance-lock popup).
+pub(crate) fn lock_encounter(
+    m: &Model,
+    index: usize,
+    mask: u32,
+) -> Option<(String, Option<String>, bool)> {
+    let (map, difficulty) = m.wrath_lfg.queue.location()?;
+    let e = m
+        .wrath_lfg
+        .queue
+        .encounters()
+        .iter()
+        .filter(|e| e.map == map && e.difficulty == difficulty)
+        .nth(index)?;
+    Some((e.name.clone(), e.icon.clone(), mask & (1 << (e.bit & 31)) != 0))
+}
 pub use queue::{
     WrathLfgBoot, WrathLfgCompletion, WrathLfgCompletionItem, WrathLfgEncounter, WrathLfgProposal,
     WrathLfgProposalRow, WrathLfgQueueRequest, WrathLfgQueueSnapshot, WrathLfgQueueStatus,

@@ -478,6 +478,8 @@ pub(crate) struct Model {
     pub(crate) wrath_popup: super::wrath_static_popup::State,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
+    /// Socketed gems by `(bag, slot)`, [`super::cursor::EQUIPMENT_BAG`] for worn items.
+    pub(crate) wrath_item_gems: Vec<(i64, u32, [Option<u32>; 3])>,
     /// The item id the last tooltip item lookup asked for, taken by the render that follows.
     pub(crate) tooltip_viewed_item: Option<u32>,
     pub(crate) wrath_quest_poi: super::wrath_quest_poi::State,
@@ -1306,6 +1308,7 @@ impl Model {
             wrath_popup: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
+            wrath_item_gems: Vec::new(),
             tooltip_viewed_item: None,
             wrath_quest_poi: Default::default(),
             wrath_barber: Default::default(),
