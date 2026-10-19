@@ -53,12 +53,41 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
 /// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
 /// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 51] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 80] = [
     MessageRecord { id: 0x1e0, key: "ERR_BATTLEGROUND_TOO_MANY_QUEUES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e1, key: "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e2, key: "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e3, key: "ERR_BATTLEGROUND_TEAM_LEFT_QUEUE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e4, key: "ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x204, key: "ERR_ARENA_NO_TEAM_II", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x205, key: "ERR_ARENA_TEAM_CREATE_S", kind: MsgKind::Chat, sound: Some("LEVELUP"), type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x206, key: "ERR_ARENA_TEAM_INVITE_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x207, key: "ERR_ARENA_TEAM_QUIT_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x208, key: "ERR_ARENA_TEAM_FOUNDER_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x209, key: "ERR_ARENA_TEAM_INTERNAL", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20a, key: "ERR_ALREADY_IN_ARENA_TEAM", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20b, key: "ERR_ALREADY_IN_ARENA_TEAM_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20c, key: "ERR_INVITED_TO_ARENA_TEAM", kind: MsgKind::Chat, sound: Some("LEVELUP"), type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20d, key: "ERR_ALREADY_INVITED_TO_ARENA_TEAM_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20e, key: "ERR_ARENA_TEAM_NAME_INVALID", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x20f, key: "ERR_ARENA_TEAM_NAME_EXISTS_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x210, key: "ERR_ARENA_TEAM_LEADER_LEAVE_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x211, key: "ERR_ARENA_TEAM_PERMISSIONS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x212, key: "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x213, key: "ERR_ARENA_TEAM_PLAYER_NOT_IN_TEAM_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x214, key: "ERR_ARENA_TEAM_PLAYER_NOT_FOUND_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x215, key: "ERR_ARENA_TEAM_NOT_ALLIED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x216, key: "ERR_ARENA_TEAM_JOIN_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x218, key: "ERR_ARENA_TEAM_LEAVE_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x219, key: "ERR_ARENA_TEAM_LEADER_IS_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21a, key: "ERR_ARENA_TEAM_LEADER_CHANGED_SSS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21b, key: "ERR_ARENA_TEAM_REMOVE_SSS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21c, key: "ERR_ARENA_TEAM_DISBANDED_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21d, key: "ERR_ARENA_TEAM_TARGET_TOO_LOW_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21e, key: "ERR_ARENA_TEAM_TARGET_TOO_HIGH_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x21f, key: "ERR_ARENA_TEAM_TOO_MANY_MEMBERS_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x221, key: "ERR_ARENA_TEAM_NOT_FOUND", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x222, key: "ERR_ARENA_TEAMS_LOCKED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x22d, key: "ERR_SYSTEM_DISABLED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x231, key: "ERR_USER_SQUELCHED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -142,6 +171,20 @@ mod tests {
         let n = keys.len();
         keys.dedup();
         assert_eq!(keys.len(), n);
+    }
+
+    /// The supplement adds rows the 1.12 table lacks: each key once, none shadowed, ids ascending.
+    #[test]
+    fn the_wrath_supplement_is_disjoint_and_ordered() {
+        for (i, r) in WRATH_SUPPLEMENT.iter().enumerate() {
+            assert!(CATALOG.iter().all(|c| c.key != r.key), "{} is a 1.12 row", r.key);
+            assert!(WRATH_SUPPLEMENT[..i].iter().all(|o| o.key != r.key), "{} twice", r.key);
+            assert!(i == 0 || WRATH_SUPPLEMENT[i - 1].id < r.id, "{} out of order", r.key);
+        }
+        // An arena team event is a chat line; the bracket refusal is the red one.
+        assert_eq!(kind_of("ERR_ARENA_TEAM_JOIN_SS"), MsgKind::Chat);
+        assert_eq!(kind_of("ERR_ARENA_NO_TEAM_II"), MsgKind::Error);
+        assert_eq!(by_key("ERR_ARENA_TEAM_CREATE_S").unwrap().sound, Some("LEVELUP"));
     }
 
     #[test]
