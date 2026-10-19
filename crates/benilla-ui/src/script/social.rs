@@ -517,6 +517,44 @@ mod tests {
         }
     }
 
+    /// `GetFriendInfo` (`0x6b4130`): eight values by index or name, the note and the RAF bit, and
+    /// the native miss shape.
+    #[test]
+    fn friend_info_answers_eight_by_index_or_name() {
+        let mut s = UiScript::new().unwrap();
+        s.set_social(SocialState {
+            friends: vec![super::FriendInfo {
+                name: "Benchtwo".into(),
+                level: 80,
+                class: "Mage".into(),
+                area: "Dalaran".into(),
+                connected: true,
+                status: String::new(),
+                note: Some("raid healer".into()),
+                refer_a_friend: true,
+            }],
+            ..SocialState::default()
+        });
+        for call in ["GetFriendInfo(1)", "GetFriendInfo('benchtwo')"] {
+            assert_eq!(
+                s.eval::<(i64, String, i64)>(&format!(
+                    "local n, l, c, a, on, st, note, raf = {call} \
+                     return select('#', {call}), note, raf"
+                ))
+                .unwrap(),
+                (8, "raid healer".into(), 1),
+                "{call}"
+            );
+        }
+        assert!(s
+            .eval::<bool>(
+                "local n, l, c, a, on, st, note, raf = GetFriendInfo(9) \
+                 return select('#', GetFriendInfo(9)) == 8 and n == nil and l == 0 \
+                    and st == '' and note == nil and raf == nil"
+            )
+            .unwrap());
+    }
+
     /// Two `/who` hits and a `WHO_LIST_UPDATE` handler that records the order it sees.
     fn seated() -> UiScript {
         let mut s = UiScript::new().unwrap();
