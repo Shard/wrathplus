@@ -53,6 +53,7 @@ pub use wrath_calendar::{
     WrathCalendarRequest, WrathCalendarTexture, WrathCalendarView,
 };
 pub use wrath_gm_survey::{WrathGmSurvey, WrathGmSurveyQuestion, WrathGmSurveySubmit};
+pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
@@ -197,6 +198,8 @@ mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;
 mod wrath_gm_survey;
+mod wrath_state_queries;
+mod wrath_modified_click;
 mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
@@ -914,6 +917,8 @@ impl UiScript {
             tradeskill::install_wrath(&lua)?;
             trainer::install_wrath(&lua)?;
             wrath_gm_survey::install(&lua)?;
+            wrath_state_queries::install(&lua)?;
+            wrath_modified_click::install(&lua)?;
         }
 
         let s = UiScript {

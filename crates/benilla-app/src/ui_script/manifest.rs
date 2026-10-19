@@ -211,7 +211,12 @@ pub(super) fn load_core_bindings(script: &UiScript) -> Vec<String> {
         );
         return Vec::new();
     };
-    match benilla_ui::bindings_xml::parse(&benilla_ui::source::decode(&bytes)) {
+    let text = benilla_ui::source::decode(&bytes);
+    // Build 12340's `<ModifiedClick>` rows, the `IsModifiedClick` actions.
+    if let Ok(clicks) = benilla_ui::bindings_xml::parse_modified_clicks(&text) {
+        script.register_modified_clicks(&clicks);
+    }
+    match benilla_ui::bindings_xml::parse(&text) {
         Ok(bindings) => {
             script.register_bindings(&bindings);
             info!(

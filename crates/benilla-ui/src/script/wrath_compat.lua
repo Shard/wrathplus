@@ -31,45 +31,6 @@ end
 GetBonusBarOffset = GetBonusBarOffset or zero
 GetActionBarToggles = GetActionBarToggles or none
 
--- ── modified clicks ────────────────────────────────────────────────────────────────────────────
-local modifiedClicks = {
-    AUTOLOOTTOGGLE = "SHIFT", CHATLINK = "SHIFT", COMPAREITEMS = "SHIFT", DRESSUP = "CTRL",
-    FOCUSCAST = "NONE", OPENALLBAGS = "SHIFT", PICKUPACTION = "SHIFT", QUESTWATCHTOGGLE = "SHIFT",
-    SELFCAST = "ALT", SHOWITEMFLYOUT = "ALT", SOCKETITEM = "SHIFT", SPLITSTACK = "SHIFT",
-    STICKYCAMERA = "CTRL", TOKENWATCHTOGGLE = "SHIFT",
-}
-local function modifierHeld(modifier)
-    local shift, ctrl, alt = IsShiftKeyDown(), IsControlKeyDown(), IsAltKeyDown()
-    if modifier == "NONE" then return false end
-    if modifier == "SHIFT" then return shift and not ctrl and not alt end
-    if modifier == "CTRL" then return ctrl and not shift and not alt end
-    if modifier == "ALT" then return alt and not shift and not ctrl end
-    local want = {}
-    for part in modifier:gmatch("[^%-]+") do want[part] = true end
-    return (not not want.SHIFT) == (not not shift) and (not not want.CTRL) == (not not ctrl)
-        and (not not want.ALT) == (not not alt)
-end
-function IsModifiedClick(action)
-    if action then
-        local modifier = modifiedClicks[action]
-        return modifier and modifierHeld(modifier) and 1 or nil
-    end
-    return (IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()) and 1 or nil
-end
-function GetModifiedClick(action) return modifiedClicks[action] end
-function SetModifiedClick(action, modifier) modifiedClicks[action] = modifier end
-function GetModifiedClickAction(index)
-    local i = 0
-    for action in pairs(modifiedClicks) do
-        i = i + 1
-        if i == index then return action end
-    end
-end
-function GetNumModifiedClickActions()
-    local n = 0
-    for _ in pairs(modifiedClicks) do n = n + 1 end
-    return n
-end
 SaveBindings = SaveBindings or none
 
 -- ── macro conditionals ([mod:shift,target=focus] a; b) ─────────────────────────────────────────
@@ -141,10 +102,6 @@ function SecureCmdOptionParse(options)
     end
 end
 
--- ── mirror timers, runes, totems ──────────────────────────────────────────────────────
-function GetMirrorTimerInfo() return "UNKNOWN", 0, 0, 0, 0, "" end
-GetMirrorTimerProgress = GetMirrorTimerProgress or zero
-
 -- ── languages ──────────────────────────────────────────────────────────────────────────────────
 function GetNumLanguages()
     local n = 0
@@ -174,12 +131,6 @@ InitWorldMapPing = InitWorldMapPing or none
 GetCurrentMapDungeonLevel = GetCurrentMapDungeonLevel or zero
 GetNumDungeonMapLevels = GetNumDungeonMapLevels or zero
 SetDungeonMapLevel = SetDungeonMapLevel or none
-function GetInstanceInfo()
-    local name = GetRealZoneText and GetRealZoneText() or ""
-    local inInstance, kind = false, "none"
-    if IsInInstance then inInstance, kind = IsInInstance() end
-    return name, kind or "none", 1, "", 0, 0, false
-end
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
 UnitInBattleground = UnitInBattleground or none
@@ -551,7 +502,6 @@ COMBATLOG_OBJECT_MAINTANK, COMBATLOG_OBJECT_MAINASSIST = 0x40000, 0x80000
 for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
-IsPVPTimerRunning = IsPVPTimerRunning or none
 debuginfo = debuginfo or none
 CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
 
@@ -586,7 +536,6 @@ GetQuestLogItemDrop = GetQuestLogItemDrop or none
 GetContainerItemQuestInfo = GetContainerItemQuestInfo or function() return nil, nil, nil end
 GetDailyQuestsCompleted = GetDailyQuestsCompleted or function() return 0 end
 GetMaxDailyQuests = GetMaxDailyQuests or function() return 25 end
-GetQuestResetTime = GetQuestResetTime or function() return 0 end
 GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none

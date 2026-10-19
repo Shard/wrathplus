@@ -284,6 +284,7 @@ pub(crate) struct Model {
     pub(crate) wrath_calendar: super::wrath_calendar::State,
     pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
     pub(crate) wrath_gm_survey: super::wrath_gm_survey::State,
+    pub(crate) wrath_state: super::wrath_state_queries::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The player's talent preview ranks and queued `LearnPreviewTalents` lists.
     pub(crate) talent_preview: super::wrath_talent_preview::TalentPreview,
@@ -1040,6 +1041,10 @@ pub(crate) struct Model {
     pub(crate) modifiers: (bool, bool, bool),
     /// The mouse buttons held, by WoW name, as [`super::UiScript::mouse_button`] reported them.
     pub(crate) buttons_down: Vec<String>,
+    /// The last button pressed, which a modified-click chord's `BUTTONn` part matches.
+    pub(crate) last_mouse_button: Option<String>,
+    /// Build 12340's modified-click actions (`IsModifiedClick`).
+    pub(crate) wrath_modified_clicks: super::wrath_modified_click::State,
 }
 
 impl Model {
@@ -1216,6 +1221,7 @@ impl Model {
             wrath_calendar: Default::default(),
             wrath_saved_instances: Default::default(),
             wrath_gm_survey: Default::default(),
+            wrath_state: Default::default(),
             wrath_inspect_talents: None,
             talent_preview: Default::default(),
             glyph_sockets: None,
@@ -1541,6 +1547,8 @@ impl Model {
             framerate: 0.0,
             modifiers: (false, false, false),
             buttons_down: Vec::new(),
+            last_mouse_button: None,
+            wrath_modified_clicks: Default::default(),
             money: 0,
             net_latency_ms: 0,
             player_xp: 0,

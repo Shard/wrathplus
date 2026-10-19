@@ -257,6 +257,7 @@ impl PluginGroup for GamePlugins {
             .add(UiTrainerPlugin)
             .add(UiTaxiPlugin)
             .add(UiTradeSkillPlugin)
+            .add(crate::ui_native::wrath_state_feed::WrathStateFeedPlugin)
             .add(UiCraftPlugin)
             .add(UiLootPlugin)
             .add(UiLootRollPlugin)

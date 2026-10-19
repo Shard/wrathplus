@@ -83,6 +83,8 @@ pub(crate) struct InstanceLock {
     grant_owed: bool,
     /// The latest `SMSG_INSTANCE_DIFFICULTY`'s difficulty, read by the LFG feed.
     pub(crate) difficulty: Option<u32>,
+    /// Its second word (`0xbd1980`), `GetInstanceInfo`'s dynamic difficulty.
+    pub(crate) dynamic_difficulty: u32,
 }
 
 /// A pending instance lock: when it forces (`GetTime` seconds), whether accepting extends, and
@@ -429,8 +431,12 @@ pub(crate) fn drive(
     // `SMSG_INSTANCE_DIFFICULTY`: the instance's difficulty, `IsInLFGDungeon`'s location half.
     if let Some(p) = packets.as_mut() {
         p.0.retain(|packet| match *packet {
-            Packet::InstanceDifficulty { difficulty, .. } => {
+            Packet::InstanceDifficulty {
+                difficulty,
+                dynamic_heroic,
+            } => {
                 lock.difficulty = Some(difficulty);
+                lock.dynamic_difficulty = dynamic_heroic;
                 false
             }
             _ => true,
