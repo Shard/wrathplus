@@ -208,6 +208,14 @@ impl<V: PartialEq> SeqLoops<V> {
 /// path does not. `drop_constant` drops a whole-track constant (the identity, or one the static
 /// path folded); `is_identity` drops a band that holds the identity, so a held alpha 0 still bakes
 /// and keeps hiding the batch. A `gseq` track ignores `seq`: one loop in every animation.
+/// The range the v264 reader gives a sequence whose inner key array is empty.
+pub(crate) const UNKEYED: u32 = u32::MAX;
+
+/// Whether some sequence of an ordinary sequence-timeline track keys nothing, so plays its default.
+pub(crate) fn has_unkeyed_sequence<T>(track: &M2Track<T>) -> bool {
+    track.gseq == 0xffff && track.ranges.iter().any(|&(lo, _)| lo == UNKEYED)
+}
+
 pub(crate) fn bake_track<T: Copy, V: Lerp + PartialEq>(
     track: &M2Track<T>,
     gseq_durations: &[u32],
@@ -229,9 +237,10 @@ pub(crate) fn bake_track<T: Copy, V: Lerp + PartialEq>(
         gseq: false,
         keys: vec![(0.0, v)],
     };
-    // An all-equal track is a constant in every band, judged whole as the static path judged it.
+    // An all-equal track is a constant in every band, judged whole as the static path judged it,
+    // unless a v264 sequence keys nothing: that band reads the default, not the constant.
     let (_, first) = keys[0];
-    if keys.iter().all(|&(_, v)| v == first) {
+    if keys.iter().all(|&(_, v)| v == first) && !has_unkeyed_sequence(track) {
         if drop_constant(first) {
             return None;
         }
@@ -262,6 +271,9 @@ pub(crate) fn bake_track<T: Copy, V: Lerp + PartialEq>(
     } = seq?;
     let (start, end) = band;
     let (lo, hi) = match track.ranges.get(index) {
+        // A v264 sequence with an empty inner array plays the default: `None`, the identity.
+        // `Rotating-MinimapArrow.m2` keys each layer's alpha 0 in every sequence but its own.
+        Some(&(UNKEYED, _)) => return None,
         Some(&(lo, hi)) => (lo as usize, hi as usize),
         None => (0, keys.len().saturating_sub(1)),
     };

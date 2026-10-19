@@ -17,17 +17,17 @@ use benilla_m2::{M2Model, M2Texture, M2TextureType, M2Track};
 use super::mat_anim;
 use super::tex_anim;
 use super::{
-    remap_submesh, AlphaAnim, AlphaSeq, BillboardKind, CharSkinSlot, CollisionMesh, EventMarker,
-    FogPolicy, GlobalSeqBone, GlobalSeqChannel, M2Attachment, M2Bounds, ModelAnimation, ModelBlend,
-    ParentArm, RenderSubmesh, Skeleton, SkeletonBone,
+    remap_submesh, AlphaAnim, AlphaSeq, AnimEvent, BillboardKind, CharSkinSlot, CollisionMesh,
+    EventMarker, FogPolicy, GlobalSeqBone, GlobalSeqChannel, M2Attachment, M2Bounds,
+    ModelAnimation, ModelBlend, ParentArm, RenderSubmesh, Skeleton, SkeletonBone,
 };
 use super::{BoneKeys, SeqSlot, DEGENERATE_RING_FOOTPRINT};
 
 /// All renderer-facing semantics currently representable from a v264 M2 and one external skin.
 ///
 /// Native lights and ribbons are adapted separately from the particle byte reader.
-/// Animation-event positions are retained in [`Self::event_markers`], but v264 event timelines are
-/// not exposed by that parser and therefore are not invented in [`Self::animations`].
+/// Animation-event positions are retained in [`Self::event_markers`]; their per-sequence trigger
+/// times are each [`ModelAnimation::events`].
 pub struct WrathRenderModel {
     pub submeshes: Vec<RenderSubmesh>,
     pub skeleton: Skeleton,
@@ -285,10 +285,9 @@ fn animations(wrath: &WrathM2) -> Result<(Vec<ModelAnimation>, Vec<Vec<WrathBone
             start_ms: 0,
             end_ms: sequence.duration_ms,
             duration: sequence.duration_ms as f32 / 1000.0,
-            // TODO(wrath-playback-policy): 0x20 is in-model residency, NOT looping
-            // (wowdev M2Sequence Flags). Keep this legacy hint until playback operations
-            // and sequence-relative material clocks are separated; Death overrides it.
-            looping: sequence.flags & 0x20 != 0,
+            // Bit 0x1 clamps: the sequence clock (`0x82e140`) wraps `elapsed % duration` only when
+            // it is clear, and `0x826c40` marks a set one finished at its end. 0x20 is residency.
+            looping: sequence.flags & 0x1 == 0,
             move_speed: sequence.move_speed,
             blend_time: sequence.blend_time_ms as f32 / 1000.0,
             bounds_center,
@@ -299,12 +298,39 @@ fn animations(wrath: &WrathM2) -> Result<(Vec<ModelAnimation>, Vec<Vec<WrathBone
             min_replay: sequence.replay_min,
             max_replay: sequence.replay_max,
             bones,
-            // The v264 parser currently exposes event positions but not nested trigger times.
-            events: Vec::new(),
+            events: sequence_events(wrath, sequence_index, sequence.duration_ms),
         });
         all_interpolation.push(interpolation);
     }
     Ok((animations, all_interpolation))
+}
+
+/// The event keys one sequence triggers, seconds from its start, in time order. v264 times are
+/// already sequence-relative; a key past the band never fires, and a global-sequence event has no
+/// sequence timeline.
+fn sequence_events(wrath: &WrathM2, sequence: usize, duration_ms: u32) -> Vec<AnimEvent> {
+    let mut events = wrath
+        .events()
+        .iter()
+        .filter(|event| event.global_sequence == u16::MAX)
+        .flat_map(|event| {
+            event
+                .times
+                .get(sequence)
+                .into_iter()
+                .flatten()
+                .filter(move |&&time| time <= duration_ms)
+                .map(move |&time| AnimEvent {
+                    time: time as f32 / 1000.0,
+                    ident: event.ident,
+                    data: event.data,
+                    bone: event.bone,
+                    position: event.position,
+                })
+        })
+        .collect::<Vec<_>>();
+    events.sort_by(|a, b| a.time.total_cmp(&b.time));
+    events
 }
 
 fn sequence_keys<T: Copy>(track: &M2Track<T>, sequence: usize) -> Result<Vec<(f32, T)>> {
@@ -493,9 +519,8 @@ fn render_submeshes(
         .map(|(index, sequence)| SeqSlot {
             index,
             band: (0, sequence.duration_ms),
-            // Same legacy residency hint as ModelAnimation above, not authored loop policy.
-            // TODO(wrath-playback-policy): sample from the active operation's loop/hold clock.
-            looping: sequence.flags & 0x20 != 0,
+            // The authored wrap, as ModelAnimation above (`0x82e140`).
+            looping: sequence.flags & 0x1 == 0,
         })
         .collect::<Vec<_>>();
     let seq0 = seq_slots.first().copied();
@@ -828,10 +853,11 @@ fn blend(mode: u16) -> Result<ModelBlend> {
 
 fn track_constant(track: &benilla_m2::M2ScalarTrack) -> Option<f32> {
     if track.keys.is_empty() {
-        Some(1.0)
-    } else {
-        track.constant()
+        return Some(1.0);
     }
+    // A sequence that keys nothing plays the default 1.0, so a constant elsewhere is not static.
+    let constant = track.constant()?;
+    (!super::key_anim::has_unkeyed_sequence(track) || constant == 1.0).then_some(constant)
 }
 
 fn normalize_weights(weights: [u8; 4]) -> [f32; 4] {
