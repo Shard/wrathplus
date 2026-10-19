@@ -80,7 +80,7 @@ impl CellRamp {
 /// The over-life ramps (+0x14c..) at normalized age `u = age / lifespan`: colour and size are
 /// 3-key ramps split at [`Self::mid`] into two linear segments, with a [`CellRamp`] per segment
 /// for the head and the tail (built at `0x70ebd0`, evaluated at `0x7b9b10`).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct OverLife {
     /// Normalized age (+0x14c) splitting the segments; only `age > lifespan·mid` enters B.
     pub mid: f32,
@@ -93,7 +93,38 @@ pub struct OverLife {
     /// The tail streak's own ramp: A (+0x174/+0x176), B (+0x178/+0x17a), read at `0x7b304e`.
     pub tail_cells: [CellRamp; 2],
     /// Flipbook repeats per segment (+0x16c/+0x172): unless 1.0, the cells cycle `fract(t·repeat)`.
+    /// Build 12340 has no repeat words: it keys every cycle into the cell track, `1.0` here.
     pub repeat: [f32; 2],
+    /// Build 12340's keyed head cell track, `(normalized age, cell)` in file order (the record's
+    /// `headCellTrack` block). With two or more keys it replaces [`Self::head_cells`]: each key
+    /// pair is a [`CellRamp`] over its own age span, so InsectSwarm's twenty alternating keys play
+    /// ten 0→1 cycles. Inferred from the 3-key ramp the 1.12 reader proves, not traced in 12340.
+    pub head_track: Vec<(f32, u16)>,
+    /// The tail streak's keyed cell track, as [`Self::head_track`].
+    pub tail_track: Vec<(f32, u16)>,
+}
+
+/// A keyed cell track at normalized age `u`: the key pair bracketing `u` as a [`CellRamp`], with
+/// the over-life `t·0.99 + 0.005` time; zero-length pairs (a step) are skipped. `None` under two
+/// keys.
+fn track_cell(track: &[(f32, u16)], u: f32) -> Option<u16> {
+    let (first, last) = (track.first()?, track.last()?);
+    if track.len() < 2 {
+        return None;
+    }
+    if u <= first.0 {
+        return Some(CellRamp::new(first.1, first.1).sample(0.005));
+    }
+    let pair = track
+        .windows(2)
+        .find(|w| w[1].0 > w[0].0 && u <= w[1].0)
+        .unwrap_or(&track[track.len() - 2..]);
+    let (a, b) = (pair[0], pair[1]);
+    if b.0 <= a.0 {
+        return Some(CellRamp::new(last.1, last.1).sample(0.005));
+    }
+    let t = ((u - a.0) / (b.0 - a.0)).clamp(0.0, 1.0) * 0.99 + 0.005;
+    Some(CellRamp::new(a.1, b.1).sample(t))
 }
 
 /// One evaluation of the over-life ramps: the four outputs of the reference's `0x7b9b10`.
@@ -138,8 +169,10 @@ impl OverLife {
         OverLifeSample {
             color,
             size,
-            head_cell: self.head_cells[seg].sample(ct),
-            tail_cell: self.tail_cells[seg].sample(ct),
+            head_cell: track_cell(&self.head_track, u)
+                .unwrap_or_else(|| self.head_cells[seg].sample(ct)),
+            tail_cell: track_cell(&self.tail_track, u)
+                .unwrap_or_else(|| self.tail_cells[seg].sample(ct)),
         }
     }
 }
@@ -686,6 +719,8 @@ mod wrath {
             };
             let (head_cells, head_repeat) = cells(0x13c);
             let (tail_cells, tail_repeat) = cells(0x14c);
+            let head_track = block(bytes, e + 0x13c, 2, le_u16);
+            let tail_track = block(bytes, e + 0x14c, 2, le_u16);
             let flags = le_u32(bytes, e + 0x04);
             out.push(ParticleEmitterDef {
                 flags,
@@ -753,6 +788,8 @@ mod wrath {
                     head_cells,
                     tail_cells,
                     repeat: [head_repeat, tail_repeat],
+                    head_track,
+                    tail_track,
                 },
             });
         }
@@ -812,7 +849,11 @@ mod tests {
             .expect("read ElwynnTallWaterfall01.m2");
         let defs = parse_m2_particle_emitters(&bytes).expect("parse emitters");
         assert_eq!(defs.len(), 1);
-        assert_eq!(defs[0].flags, 0x0002, "authored flag word");
+        assert_eq!(
+            defs[0].flags & 0xffff,
+            0x0002,
+            "authored flag word, less the 12340 0x20000 bit"
+        );
         assert_eq!(defs[0].blend, ParticleBlend::Alpha);
         assert!(defs[0].lit, "the spray sheet is shaded by the world");
     }
