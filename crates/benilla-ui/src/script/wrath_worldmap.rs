@@ -127,7 +127,7 @@ fn zoom_parent(wm: &WorldMapState) -> Option<u32> {
         wm.floors
             .iter()
             .filter(|f| f.map_id == row.map_id && f.floor_index == 1)
-            .last()
+            .next_back()
             .map_or(0, |f| f.parent)
     };
     (parent != 0).then_some(parent)
@@ -352,7 +352,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "InitWorldMapPing",
         lua.create_function(|lua, args: MultiValue| {
-            let Some(Value::Table(parent)) = args.get(0).cloned() else {
+            let Some(Value::Table(parent)) = args.front().cloned() else {
                 return Err(mlua::Error::runtime("Usage: InitWorldMapPing(parent)"));
             };
             if super::object::frame_handle_of(lua, &parent).is_err() {

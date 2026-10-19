@@ -160,7 +160,7 @@ pub(crate) fn extract(model: &Model, out: &mut [super::super::ExtractedQuad]) {
                 ZTarget::Region(r) => model.region_resolved.get(&r),
             };
             let Some(r) = rect else { continue };
-            for (_, (owner, ops)) in &model.animation_transforms {
+            for (owner, ops) in model.animation_transforms.values() {
                 if *owner != target {
                     continue;
                 }

@@ -57,8 +57,10 @@ pub fn decode_pet(body: &[u8]) -> io::Result<PetCastFailed> {
         spell_id: u32::from_le_bytes(body[1..5].try_into().unwrap()),
         reason,
         arguments: tail
-            .chunks_exact(4)
-            .map(|v| u32::from_le_bytes(v.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|v| u32::from_le_bytes(*v))
             .collect(),
     })
 }

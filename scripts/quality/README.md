@@ -22,7 +22,7 @@ python3 scripts/quality/test_gate.py               # cheap synthetic contract te
 ```
 
 - LoC counts physical lines in tracked `.rs` files (including tests/examples/vendor code).
-  Limit 500. An existing offender can shrink or stay the same; new/grown violations fail.
+  Limit 500. Generated sources listed in `gate.py`'s `GENERATED` are exempt by name. An existing offender can shrink or stay the same; new/grown violations fail.
   Deletions pass; moving an offender to a new path does not preserve its allowance.
 - Formatting is `rustfmt --check`, edition 2021, `skip_children=true` for explicitly selected
   files; no recursive check of unstaged module children and no automatic formatting.
@@ -43,7 +43,11 @@ python3 scripts/quality/test_gate.py               # cheap synthetic contract te
   matching renamed/nested functions by a line number; changed files lose all exceptions.
   Same-named functions use a multiset of allowances. Scores are not truncated or filtered to
   hide violations. Full coverage is opt-in and can require a large fresh instrumented target.
-- `machete` and `typos` are strict standalone tools, not silently skipped if absent. No blanket
+- `machete` and `typos` are strict standalone tools, not silently skipped if absent. `machete`
+  scans `crates/` unless given paths (vendored `third_party/` is not ours to prune); `typos`
+  reads the repository's `_typos.toml` (Blizzard's own spellings, domain words, the verbatim
+  `reference/*.tsv` excluded). CRAP refuses to start without `llvm-tools-preview`, which
+  `cargo llvm-cov` would otherwise prompt to install, hanging the run. No blanket
   exemptions or implicit installs. They are not required for the tooling unit's Python tests.
 
 The dormant hook exports the entire **index snapshot** to an ephemeral directory, then runs only
@@ -54,10 +58,11 @@ also. Bootstrap: commit tooling before installing it. Deleted files are skipped.
 installed by these scripts, and no hook runs merely by committing this unit.
 
 Heavy standalone clippy/coverage commands use `lockf -k /tmp/azb-heavy.lock`, `nice -n 15`,
-`CARGO_BUILD_JOBS=4`, `CARGO_INCREMENTAL=0`, and hermetic fixture environment. Default target is
-`/tmp/azb-target-experience`; override `CARGO_TARGET_DIR` with your own directory, **not another
-worker's**. Check the 40-GiB cap/free space before a run; coverage must wait for its turn. Artifacts
+`CARGO_BUILD_JOBS=4`, `CARGO_INCREMENTAL=0`, and hermetic fixture environment. `CARGO_TARGET_DIR`
+must be set to your own directory (`run.sh` refuses without it), **never another worker's**. Check the 40-GiB cap/free space before a run; coverage must wait for its turn. Artifacts
 are left in a fresh `/tmp/azb-quality-report.*` directory for diagnosis, never committed.
+
+Fresh baselines and the activation plan: `docs/QUALITY-GATES-ACTIVATION.md`.
 
 ## Initial inventory (base 68529487)
 

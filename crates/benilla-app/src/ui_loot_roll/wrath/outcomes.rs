@@ -96,9 +96,9 @@ pub(super) fn drain(
         }
         let (item, player) = match &*roll {
             Roll::Vote { item, player, .. } | Roll::Won { item, player, .. } => {
-                (&*item, Some(*player))
+                (item, Some(*player))
             }
-            Roll::AllPassed { item } => (&*item, None),
+            Roll::AllPassed { item } => (item, None),
             Roll::Start { .. } => return false,
         };
         let render = || {

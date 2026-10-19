@@ -31,6 +31,14 @@ class RatchetTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     gate.loc([str(p)])
 
+    def test_loc_skips_a_listed_generated_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            p = Path(directory) / 'generated.rs'
+            p.write_text('\n' * 900)
+            with patch.object(gate, 'load', return_value={'files': {}}), \
+                    patch.object(gate, 'GENERATED', {str(p)}):
+                gate.loc([str(p)])
+
     def test_crap_changed_file_loses_exception_and_missing_report_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory) / 'a.rs'

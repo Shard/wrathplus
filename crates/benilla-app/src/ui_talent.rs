@@ -227,7 +227,7 @@ pub(crate) fn build_pages_by(
     let mut pages = Vec::new();
     for tab in catalog.tabs_for_class(race, class) {
         let list = catalog.talents_in_tab(tab.id);
-        let spent: u32 = list.iter().map(|t| rank_of(t)).sum();
+        let spent: u32 = list.iter().map(rank_of).sum();
         let mut views = Vec::with_capacity(list.len());
         for t in list {
             let rank = rank_of(t);

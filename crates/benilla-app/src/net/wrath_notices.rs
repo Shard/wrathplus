@@ -71,7 +71,6 @@ fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
                 &[(span.index + u16::from(power_type), value)],
             ));
         }
-        return;
     }
 }
 

@@ -45,9 +45,9 @@ pub fn depth_lut(material_selector: u32, type_word_41: u32) -> Result<[f32; 256]
         return Ok([0.; 256]);
     }
     let ninth = f64::from(f32::from_bits(0x3de3_8e39));
-    let threshold = f64::from(4.666666507720947_f32);
-    let reciprocal = f64::from(0.2142857164144516_f32);
-    let scale = f64::from(0.5833333134651184_f32);
+    let threshold = f64::from(4.666_666_5_f32);
+    let reciprocal = f64::from(0.214_285_72_f32);
+    let scale = f64::from(0.583_333_3_f32);
     let inverse = 1.0 / (255.0 * scale);
     Ok(std::array::from_fn(|i| {
         if type_word_41 == 0 {
@@ -157,7 +157,7 @@ fn vertex_inputs(
     if !positions.iter().flatten().all(|v| v.is_finite()) {
         return Err("nonfinite liquid position".into());
     }
-    if indices.len() % 3 != 0 || indices.iter().any(|&i| i as usize >= n) {
+    if !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i as usize >= n) {
         return Err("invalid liquid triangle indices".into());
     }
     if !lut.iter().all(|v| v.is_finite()) {
