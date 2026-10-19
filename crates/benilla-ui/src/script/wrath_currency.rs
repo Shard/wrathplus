@@ -236,6 +236,52 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    // GameTooltip:SetCurrencyToken(index) (`0x630620`), over the list's visible rows, and
+    // :SetBackpackToken(index) (`0x6307e0`), over the watched ones: the token's item tooltip. A
+    // header (`+0xc`) or a row out of range shows nothing. Labelled: the reference shows the
+    // carried instance from the currency slots (118-149) else the template; this shows the
+    // template's link, as a token carries no instance state.
+    let tooltip: mlua::Table = lua.named_registry_value(super::tooltip::REG_TOOLTIP_METHODS)?;
+    for (method, backpack) in [("SetCurrencyToken", false), ("SetBackpackToken", true)] {
+        tooltip.set(
+            method,
+            lua.create_function(move |lua, (this, index): (mlua::Table, Value)| {
+                let index = match index {
+                    Value::Integer(n) => Some(n),
+                    Value::Number(n) => Some(n.round() as i64),
+                    v @ Value::String(_) => lua.coerce_number(v)?.map(|n| n.round() as i64),
+                    _ => None,
+                };
+                let Some(index) = index else {
+                    let name: Option<String> = mlua::ObjectLike::call_method(&this, "GetName", ())?;
+                    return Err(mlua::Error::runtime(format!(
+                        "Usage: {}:{method}(index)",
+                        name.unwrap_or_else(|| "<unnamed>".into())
+                    )));
+                };
+                let item = {
+                    let model = lua.app_data_ref::<Model>().expect("model");
+                    let snapshot = &model.wrath_currency;
+                    let row = if backpack {
+                        usize::try_from(index - 1).ok().filter(|i| *i < 3).and_then(|i| {
+                            snapshot
+                                .entries
+                                .iter()
+                                .filter(|r| !r.is_header && r.is_watched)
+                                .nth(i)
+                        })
+                    } else {
+                        snapshot.list_index(index).map(|i| &snapshot.entries[i])
+                    };
+                    row.filter(|r| !r.is_header && r.item_id != 0).map(|r| r.item_id)
+                };
+                if let Some(item) = item {
+                    mlua::ObjectLike::call_method::<()>(&this, "SetHyperlink", format!("item:{item}"))?;
+                }
+                Ok(())
+            })?,
+        )?;
+    }
     Ok(())
 }
 

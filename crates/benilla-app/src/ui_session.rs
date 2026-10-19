@@ -119,6 +119,7 @@ pub(crate) fn feed_interact_npc(
     // Not covered by the gossip arm: vmangos closes the gossip menu before it sends
     // `SMSG_PETITION_SHOWLIST` (`Player.cpp:12428-12431`).
     registrar: Option<Res<crate::ui_petition::GuildRegistrarState>>,
+    petition_vendor: Option<Res<crate::ui_petition::ArenaPetitionVendor>>,
     // A menuless stable master is asked for its list straight from the interact, the reference's
     // `0x5f05bc` path, with no gossip session behind it.
     stable: Option<Res<crate::ui_stable::StableOpen>>,
@@ -136,6 +137,7 @@ pub(crate) fn feed_interact_npc(
         .or_else(|| bank.and_then(|s| s.npc()))
         .or_else(|| auction.and_then(|s| s.npc()))
         .or_else(|| registrar.and_then(|s| s.npc()))
+        .or_else(|| petition_vendor.and_then(|s| s.npc()))
         .or_else(|| stable.and_then(|s| s.npc()))
         .or_else(|| tabard.and_then(|s| s.npc()));
     // Field 0 is the entity the booth bakes and the facing chain steers by; field 1 is the guid

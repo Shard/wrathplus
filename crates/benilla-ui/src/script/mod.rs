@@ -56,10 +56,12 @@ pub use wrath_gm_survey::{WrathGmSurvey, WrathGmSurveyQuestion, WrathGmSurveySub
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
+mod wrath_petition_vendor;
 mod wrath_quest_poi;
 mod wrath_barber;
 mod wrath_region_attrs;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
+pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
 pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
 pub use wrath_titles::WrathCharTitle;
 pub use wrath_guild_bank::{WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankSlot};
@@ -905,6 +907,7 @@ impl UiScript {
             wrath_titles::install(&lua)?;
             wrath_tooltip::install(&lua)?;
             wrath_quest_poi::install(&lua)?;
+            wrath_petition_vendor::install(&lua)?;
             wrath_barber::install(&lua)?;
             wrath_region_attrs::install(&lua)?;
             wrath_quests_completed::install(&lua)?;

@@ -71,3 +71,12 @@ Routes need the live writer only; they claim no server acceptance.
 Not in this unit: 0057/0059 item query multiple (AC `Handle_NULL`/registry only), 00B2 destroy
 items and 0106/0107 ground items (AC `Handle_NULL`), the Vanilla-shaped `ItemTextQuery` (text
 id; mail family), 0164 loot item notify (loot family), guild bank swaps.
+
+## Currency token tooltips
+
+`GameTooltip:SetCurrencyToken(index)` (`0x630620`) works over the currency list's visible rows.
+`:SetBackpackToken(index)` (`0x6307e0`) works over the three watched ones. Each shows the token's
+item tooltip; a header or a row out of range shows nothing (Experience's Wow.exe pass,
+`/tmp/azb-exp-misc-clean.log`). Labelled: the reference shows the carried instance from the
+currency slots (118-149), else the template. This shows the template's `item:<id>` link, since a
+token carries no instance state.

@@ -2567,11 +2567,11 @@ fn petition_command(command: ClientCommand) -> benilla_protocol::wrath_petition:
     use benilla_protocol::wrath_petition::Command as P;
     match command {
         ClientCommand::PetitionShowList { npc } => P::ShowList { npc },
-        ClientCommand::PetitionBuy { npc, name } => P::Buy { npc, name, index: 1 },
+        ClientCommand::PetitionBuy { npc, name, index } => P::Buy { npc, name, index },
         ClientCommand::PetitionShowSignatures { item } => P::ShowSignatures { item },
         ClientCommand::PetitionSign { item, byte } => P::Sign { item, byte },
         ClientCommand::OfferPetition { item, player } => P::Offer { item, player },
-        ClientCommand::TurnInPetition { item } => P::TurnIn { item },
+        ClientCommand::TurnInPetition { item, banner } => P::TurnIn { item, banner },
         ClientCommand::PetitionQuery { petition_id, item } => P::Query { petition_id, item },
         ClientCommand::PetitionRename { item, name } => P::Rename { item, name },
         ClientCommand::PetitionDecline { item } => P::Decline { item },

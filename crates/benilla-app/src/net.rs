@@ -2374,9 +2374,12 @@ pub(crate) enum ClientCommand {
         npc: u64,
     },
     /// `CMSG_PETITION_BUY`: success is only the new item.
+    /// `index` is the showlist row, 1-based: always 1 at a guild registrar, the bracket's row at
+    /// an arena one.
     PetitionBuy {
         npc: u64,
         name: String,
+        index: u32,
     },
     /// `CMSG_PETITION_SHOW_SIGNATURES`, on use and after a signature lands.
     PetitionShowSignatures {
@@ -2395,6 +2398,8 @@ pub(crate) enum ClientCommand {
     /// `CMSG_TURN_IN_PETITION`, owner only; a name collision answers a guild command result only.
     TurnInPetition {
         item: u64,
+        /// An arena charter's banner ([`benilla_protocol::wrath_petition::Command::TurnIn`]).
+        banner: Option<[u32; 5]>,
     },
     /// `CMSG_PETITION_QUERY`: the only source of the guild name and signature requirement.
     PetitionQuery {

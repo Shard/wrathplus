@@ -138,3 +138,22 @@ fn commands_encode_ac_read_order() {
         [1u64.to_le_bytes().to_vec(), b"N\0".to_vec()].concat()
     );
 }
+
+#[test]
+fn an_arena_turn_in_appends_its_banner_after_the_guid() {
+    let guild = encode(&Command::TurnIn {
+        item: 7,
+        banner: None,
+    });
+    assert_eq!(guild, (0x1c4, 7u64.to_le_bytes().to_vec()));
+    let (op, body) = encode(&Command::TurnIn {
+        item: 7,
+        banner: Some([0xff10_2030, 12, 0xff00_00ff, 3, 0xffff_ffff]),
+    });
+    assert_eq!(op, 0x1c4);
+    let words: Vec<u32> = body[8..]
+        .chunks(4)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    assert_eq!(words, [0xff10_2030, 12, 0xff00_00ff, 3, 0xffff_ffff]);
+}
