@@ -511,7 +511,7 @@ mod tests {
             .init_resource::<NameCache>()
             .init_resource::<crate::world_state::WorldStates>()
             .add_systems(Update, (feed_gossip, drain_gossip).chain());
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         prepare(&mut script);
         app.insert_non_send_resource(script);
         (app, rx)

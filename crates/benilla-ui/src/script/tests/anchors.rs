@@ -1,6 +1,6 @@
 //! `SetPoint` and the anchor resolve: sizes, rects, and the reference's `SetPoint` raises.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::layout::Rect;
 
 // FrameXML's anchor-to-the-screen idiom, `SetPoint("P", nil, "P", x, y)`: the explicit `nil`
@@ -133,7 +133,7 @@ fn setpoint_unresolved_name_raises() {
 /// `relativeTo` answers Usage.
 #[test]
 fn the_other_setpoint_raises() {
-    let s = script();
+    let s = vanilla_script();
     s.run(r#"f = CreateFrame("Frame", "Ladder")"#).unwrap();
 
     let e = s
@@ -168,7 +168,7 @@ fn the_other_setpoint_raises() {
 /// raise ladder must see the argument count Lua saw, not a padded or trimmed tuple.
 #[test]
 fn a_trailing_nil_relative_to_is_present_where_an_absent_one_is_not() {
-    let s = script();
+    let s = vanilla_script();
     s.run(r#"f = CreateFrame("Frame", "Trail")"#).unwrap();
     s.run(r#"Trail:SetPoint("CENTER", nil)"#).unwrap();
     assert_eq!(s.eval::<i64>("return Trail:GetNumPoints()").unwrap(), 1);

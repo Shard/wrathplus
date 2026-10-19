@@ -664,7 +664,7 @@ mod tests {
 
     #[test]
     fn get_chat_window_info_answers_the_nine_value_tuple() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.arity("GetChatWindowInfo(1)").unwrap(), 9);
     }
 
@@ -781,7 +781,7 @@ mod tests {
     /// `__ftol(x · 255.0)` truncates: 0.4 stores 102 and 0.5 stores 127.
     #[test]
     fn the_setters_round_trip_through_the_engine_byte() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run("SetChatWindowAlpha(1, 0.4)").unwrap();
         let a: f64 = s
             .eval("local _,_,_,_,_,a = GetChatWindowInfo(1) return a")

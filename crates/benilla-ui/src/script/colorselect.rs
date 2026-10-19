@@ -523,7 +523,7 @@ mod tests {
     /// It fires with the colour the widget now holds, and again on the same colour: no change gate.
     #[test]
     fn set_color_rgb_fires_on_color_select_every_time() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             r#"
             fired = {}

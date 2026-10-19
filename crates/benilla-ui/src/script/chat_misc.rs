@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn console_exec_writes_a_registered_cvar_and_queues_anything_else() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.register_cvars([("uiScale", "1")]);
         s.run("ConsoleExec('uiscale 0.8') ConsoleExec('reloadui') ConsoleExec('  ') ConsoleExec('uiScale')")
             .unwrap();

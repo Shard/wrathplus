@@ -736,8 +736,14 @@ pub fn addon_chunk_name(folder: &str, file: &str) -> String {
 }
 
 impl UiScript {
-    /// Build a fully sandboxed, stdlib- and object-model-equipped host.
+    /// Build a fully sandboxed, stdlib- and object-model-equipped host: build 12340's dialect.
     pub fn new() -> mlua::Result<UiScript> {
+        Self::new_with_dialect(ScriptDialect::Wrath12340)
+    }
+
+    /// A 1.12 host, for the tests that still pin 1.12 behaviour until Vanilla removal step 9
+    /// converts or deletes them.
+    pub fn new_vanilla() -> mlua::Result<UiScript> {
         Self::new_with_dialect(ScriptDialect::Vanilla)
     }
 

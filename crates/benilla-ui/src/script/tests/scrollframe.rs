@@ -1,7 +1,7 @@
 //! ScrollFrame: the scroll-child layout override, the live scroll ranges, the clip on `extract`
 //! and the clip-gated `hit_test`.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::layout::Rect;
 use crate::script::QuadContent;
 
@@ -155,7 +155,7 @@ fn scroll_child_top_tracks_vertical_scroll_unclamped_then_restores_on_clear() {
 /// still a change.
 #[test]
 fn set_vertical_scroll_fires_on_vertical_scroll_only_on_a_change() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -276,7 +276,7 @@ fn vertical_scroll_range_is_local_units_on_a_scaled_frame() {
 /// handler conventions of `0x704f10`.
 #[test]
 fn vertical_scroll_fires_as_given_and_update_rect_fires_range_changed() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -318,7 +318,7 @@ fn vertical_scroll_fires_as_given_and_update_rect_fires_range_changed() {
 /// app resolves only once per frame.
 #[test]
 fn update_scroll_child_rect_sees_a_same_tick_resize_with_no_intervening_resolve() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -524,7 +524,7 @@ fn update_scroll_child_rect_measures_the_childs_text_before_it_reads_the_range()
             }
         }
     }
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.set_text_measurer(Box::new(Rows));
     s.run(
@@ -554,7 +554,7 @@ fn update_scroll_child_rect_measures_the_childs_text_before_it_reads_the_range()
 /// offset pushes the child right.
 #[test]
 fn scroll_child_left_tracks_horizontal_scroll_unclamped_and_fires_on_change() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
 
     s.run(
@@ -662,7 +662,7 @@ fn scroll_child_left_tracks_horizontal_scroll_unclamped_and_fires_on_change() {
 /// pushed deepest and lands as `arg2`.
 #[test]
 fn update_scroll_child_rect_reports_both_ranges_horizontal_first() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

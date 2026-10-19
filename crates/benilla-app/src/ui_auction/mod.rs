@@ -1273,7 +1273,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<NameCache>()
             .insert_player(ME, "Seller".into(), None);
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 r#"

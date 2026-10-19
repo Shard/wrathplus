@@ -854,7 +854,7 @@ mod tests {
     /// Every return site in `0x4bb560` is `mov eax,9`, the miss arm `0x4bb7b9` included.
     #[test]
     fn get_raid_roster_info_returns_nine_values_on_every_path() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_party(ten_player_raid());
 
         for index in ["1", "10", "0", "-1", "41", "9999"] {
@@ -864,7 +864,7 @@ mod tests {
                 "index {index} must still be a nine-value answer"
             );
         }
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 9);
     }
 
@@ -948,7 +948,7 @@ mod tests {
     /// The raise at `0x4bb591` goes through `0x6f4940`, which never returns.
     #[test]
     fn get_raid_roster_info_raises_only_on_a_non_number() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let err = s.arity("GetRaidRosterInfo({})").unwrap_err();
         assert!(
             format!("{err}").contains("Usage: GetRaidRosterInfo(index)"),
@@ -1387,7 +1387,7 @@ mod tests {
 
     #[test]
     fn the_leaders_check_times_out_into_the_afk_list_and_disarms() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);
@@ -1417,7 +1417,7 @@ mod tests {
     /// The answer that leaves nobody pending closes the check at once (`0x4ba4d9`).
     #[test]
     fn an_answer_clears_its_member_and_the_last_one_closes_the_check_at_once() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);
@@ -1441,7 +1441,7 @@ mod tests {
     /// The leader arm stores a constant 0 whatever the status byte (`0x4ba40e`).
     #[test]
     fn a_not_ready_answer_prints_its_line_and_still_clears_the_member() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.run(r#"RAID_MEMBER_NOT_READY = "%s is not ready""#)
             .unwrap();
@@ -1471,7 +1471,7 @@ mod tests {
     /// (`0x4bb3a8`).
     #[test]
     fn an_offline_member_never_blocks_the_close_but_is_still_listed() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut party = raid_we_lead(&s);
         party
             .raid
@@ -1505,7 +1505,7 @@ mod tests {
 
     #[test]
     fn a_roster_change_with_nobody_left_pending_closes_the_check() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party.clone());
         s.set_now(100.0);
@@ -1524,7 +1524,7 @@ mod tests {
     /// A party has no raid roster, so `DoReadyCheck` flags nobody.
     #[test]
     fn the_leaders_own_echo_closes_an_empty_check_at_once() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut party = raid_we_lead(&s);
         party.raid.clear();
         s.set_party(party);
@@ -1540,7 +1540,7 @@ mod tests {
     /// Both keys are read raw from `_G` with an empty default.
     #[test]
     fn a_missing_summary_string_prints_an_empty_line() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let party = raid_we_lead(&s);
         s.set_party(party);
         s.set_now(100.0);

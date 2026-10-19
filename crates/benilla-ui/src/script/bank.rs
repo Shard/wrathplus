@@ -166,7 +166,7 @@ mod tests {
     /// (`BankFrame.lua:28`).
     #[test]
     fn bank_bag_slots_read_through_the_inventory_api() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert!(s
             .eval::<bool>("return GetInventoryItemTexture(\"player\", 64) == nil")
             .unwrap());
@@ -287,7 +287,7 @@ mod tests {
     /// to 64..=69; the wire slot is one less.
     #[test]
     fn bank_button_to_inv_slot() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<i64>("return BankButtonIDToInvSlotID(1)").unwrap(),
             40
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn bank_button_to_inv_slot_follows_the_carved_abi() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
 
         // `isBag` is `lua_isnumber(L, 2)`: `true` takes the item arm as nil and false do, while
         // `0` and `"1"` take the bag arm.

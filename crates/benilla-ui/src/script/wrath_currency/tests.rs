@@ -23,7 +23,7 @@ fn empty_defaults_and_vanilla_surface() {
     "#,
         )
         .unwrap();
-    UiScript::new()
+    UiScript::new_vanilla()
         .unwrap()
         .run(
             r#"

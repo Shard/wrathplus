@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn the_pickup_and_drop_fire_player_money_around_the_clear() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_money(1_000);
         let _ = events(&mut s);
         s.run("PickupPlayerMoney(10)").unwrap();

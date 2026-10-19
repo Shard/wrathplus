@@ -2734,7 +2734,7 @@ mod tests {
     #[test]
     fn a_flags_change_fires_unit_flags_with_the_token() {
         let fired = |prev: Option<UnitState>, cur: UnitState, edges: &FieldEdges| -> Vec<String> {
-            let mut s = UiScript::new().unwrap();
+            let mut s = UiScript::new_vanilla().unwrap();
             s.run(
                 r#"
                 SEEN = {}
@@ -2800,7 +2800,7 @@ mod tests {
         let mut app = App::new();
         app.init_resource::<crate::player::Player>()
             .add_systems(Update, (feed_player_control, feed_farsight_focus));
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 r#"
@@ -2871,7 +2871,7 @@ mod tests {
     #[test]
     fn the_tapped_bit_fires_unit_faction_and_the_by_player_bit_fires_nothing() {
         let fired = |prev: UnitState, cur: UnitState| -> Vec<String> {
-            let mut s = UiScript::new().unwrap();
+            let mut s = UiScript::new_vanilla().unwrap();
             s.run(
                 r#"
                 SEEN = {}
@@ -2936,7 +2936,7 @@ mod tests {
     #[test]
     fn player_flags_changed_fires_per_token_on_any_bit_and_never_on_first_sight() {
         let fired = |prev: Option<UnitState>, cur: UnitState, edges: &FieldEdges| -> Vec<String> {
-            let mut s = UiScript::new().unwrap();
+            let mut s = UiScript::new_vanilla().unwrap();
             s.run(
                 r#"
                 SEEN = {}
@@ -2997,7 +2997,7 @@ mod tests {
     #[test]
     fn unit_dynamic_flags_fires_per_token_on_any_bit_and_never_on_first_sight() {
         let fired = |prev: Option<UnitState>, cur: UnitState, edges: &FieldEdges| -> Vec<String> {
-            let mut s = UiScript::new().unwrap();
+            let mut s = UiScript::new_vanilla().unwrap();
             s.run(
                 r#"
                 SEEN = {}
@@ -3061,7 +3061,7 @@ mod tests {
             .init_resource::<crate::ui_guild::GuildState>();
         let (tx, _rx) = crossbeam_channel::unbounded();
         app.insert_resource(NetCommands(tx));
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 r#"

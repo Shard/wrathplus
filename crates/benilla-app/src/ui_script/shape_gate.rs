@@ -104,7 +104,7 @@ fn every_query_binding_answers_the_reference_s_return_arity() {
         by_name.entry(&r.name).or_default().push(r);
     }
 
-    let mut s = benilla_ui::script::UiScript::new().expect("VM");
+    let mut s = benilla_ui::script::UiScript::new_vanilla().expect("VM");
     // A seated player: the `Unit*` bindings raise on a nil token and answer a real one.
     s.set_unit(
         "player",
@@ -269,7 +269,7 @@ fn the_base_library_answers_the_reference_s_return_arity_and_kinds() {
         "the vendored table's baselib rows look wrong: {}",
         rows.len()
     );
-    let s = benilla_ui::script::UiScript::new().expect("VM");
+    let s = benilla_ui::script::UiScript::new_vanilla().expect("VM");
     let mut checked = 0usize;
     let mut kinds_checked = 0usize;
     let mut mismatches: Vec<String> = Vec::new();
@@ -529,7 +529,7 @@ fn every_query_binding_answers_the_reference_s_return_kinds() {
         by_name.entry(&r.name).or_default().push(r);
     }
 
-    let mut s = benilla_ui::script::UiScript::new().expect("VM");
+    let mut s = benilla_ui::script::UiScript::new_vanilla().expect("VM");
     s.set_unit(
         "player",
         Some(benilla_ui::script::UnitState {
@@ -749,7 +749,7 @@ fn no_query_binding_answers_a_lua_boolean() {
     const REFERENCE_BOOLEANS: &[&str] = &["IsPetAttackActive", "rawequal"];
 
     let all = rows();
-    let mut s = benilla_ui::script::UiScript::new().expect("VM");
+    let mut s = benilla_ui::script::UiScript::new_vanilla().expect("VM");
     s.set_unit(
         "player",
         Some(benilla_ui::script::UnitState {

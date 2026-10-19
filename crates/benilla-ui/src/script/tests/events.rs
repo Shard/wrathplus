@@ -1,14 +1,14 @@
 //! Event registration and dispatch (`0x704d50`, `0x704f10`). Handlers read varargs through Lua
 //! 5.0's implicit `arg` table: `...` is not a value in the 1.12 client's grammar.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::*;
 
 /// A handler gets no arguments (`0x705199` calls `lua_pcall` with zero); its inputs are the
 /// `this`, `event` and `argN` globals.
 #[test]
 fn an_event_handler_gets_no_arguments_and_reads_the_globals() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         local f = CreateFrame("Frame", "EF")
@@ -246,7 +246,7 @@ fn mid_dispatch_removal_of_the_next_stops_and_append_is_visited() {
 /// per-event registration.
 #[test]
 fn register_all_events_takes_every_event_and_unregister_all_clears_it() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         seen = {}

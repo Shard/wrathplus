@@ -1,7 +1,7 @@
 //! Slider (LoadXML `0x789580`): value, step and orientation, the vertical default, the unswapped
 //! min/max, the value quantiser, and the change gate that keeps scrollbar wiring from recursing.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::QuadContent;
 
 /// The `(left, right, bottom, top)` rect of the thumb quad whose texture path contains `needle`.
@@ -98,7 +98,7 @@ fn slider_thumb_drag_maps_cursor_to_value() {
 
 #[test]
 fn slider_track_press_seats_the_thumb_and_a_mouseless_slider_ignores_it() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(1024.0, 768.0);
     s.run(
         r#"
@@ -209,7 +209,7 @@ fn slider_value_clamps_and_does_not_swap_minmax() {
 
 #[test]
 fn slider_setvalue_fires_onvaluechanged_only_on_change() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         local sl = CreateFrame("Slider", "SlEvt")
@@ -233,7 +233,7 @@ fn slider_setvalue_fires_onvaluechanged_only_on_change() {
 /// not answer them: addons duck-type on `if widget.IsEnabled then`. A Button is the control.
 #[test]
 fn a_slider_does_not_answer_the_buttons_enable_trio() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         local sl = CreateFrame("Slider", "SlEnable")
@@ -275,7 +275,7 @@ fn slider_scrollbar_wiring_does_not_recurse() {
     // Stock wiring: the slider's OnValueChanged scrolls the frame (`UIPanelTemplates.xml:157`),
     // whose OnVerticalScroll sets the slider back (`:193`). The change gate
     // (`SliderState::store_value`) ends it after one hop; without it the stack overflows.
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(1024.0, 768.0);
     s.run(
         r#"
@@ -310,7 +310,7 @@ fn slider_value_bits_gate_the_first_fire_and_the_range_reclamp() {
     // The reference's `+0x314` bit1 (has a range) and bit2 (has a value), from `SetValue`
     // (`0x789930`) and `SetMinMaxValues` (`0x7898f0`): a rangeless SetValue is a no-op, the
     // first SetValue always fires, and SetMinMaxValues re-clamps only once a value exists.
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         seen = {}
@@ -345,7 +345,7 @@ fn slider_value_bits_gate_the_first_fire_and_the_range_reclamp() {
 fn slider_onload_range_does_not_run_an_unarmed_onvaluechanged() {
     // Atlas's options slider (`AtlasOptions.xml`): its `<OnValueChanged>` reads a saved variable
     // that exists only after ADDON_LOADED; in the reference the `<OnLoad>` range raises nothing.
-    let mut s = script();
+    let mut s = vanilla_script();
     let doc = crate::framexml::parse(
         r#"<Ui>
           <Slider name="SlAtlasAlpha">

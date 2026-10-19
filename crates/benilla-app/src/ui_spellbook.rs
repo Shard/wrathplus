@@ -610,7 +610,7 @@ mod tests {
                 )
                 .unwrap();
         }
-        let mut vanilla = UiScript::new().unwrap();
+        let mut vanilla = UiScript::new_vanilla().unwrap();
         seed_spell_catalog(&world, &mut vanilla);
         vanilla.run("assert(GetSpellInfo == nil)").unwrap();
     }

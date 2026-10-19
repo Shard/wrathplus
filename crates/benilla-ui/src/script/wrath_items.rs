@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn wrath_item_queries_do_not_leak_into_vanilla() {
-        let ui = UiScript::new().unwrap();
+        let ui = UiScript::new_vanilla().unwrap();
         ui.run(
             r#"
             assert(GetInventoryItemID == nil and GetContainerItemID == nil)

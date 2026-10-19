@@ -6,7 +6,7 @@ use crate::script::{ScriptDialect, ScriptValue, SeededCvar, UiScript, UnitGuids,
 
 #[test]
 fn vanilla_remains_the_default_and_keeps_legacy_semantics() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     assert_eq!(s.dialect(), ScriptDialect::Vanilla);
     assert!(s.eval::<bool>("return select == nil").unwrap());
 
@@ -28,7 +28,7 @@ fn vanilla_remains_the_default_and_keeps_legacy_semantics() {
 
 #[test]
 fn dialect_parser_and_generic_for_are_isolated_between_simultaneous_states() {
-    let vanilla = UiScript::new().unwrap();
+    let vanilla = UiScript::new_vanilla().unwrap();
     let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     for _ in 0..2 {
         assert!(vanilla.run("return #{} ").is_err());

@@ -239,7 +239,7 @@ fn survey_one(
         .collect();
 
     // A VM with our whole interface under it (see the module doc).
-    let mut script = match UiScript::new() {
+    let mut script = match UiScript::new_vanilla() {
         Ok(s) => s,
         Err(e) => {
             return AddonReport {
@@ -965,7 +965,7 @@ pub fn framexml_digest() -> String {
 /// diff against the 1.12 client's in-world `_G` (`reference/1.12-globals.tsv`). Dumped in Lua,
 /// since `_G` is what an addon sees.
 pub fn surface() -> Vec<(String, String)> {
-    let Ok(mut script) = UiScript::new() else {
+    let Ok(mut script) = UiScript::new_vanilla() else {
         return Vec::new();
     };
     script.set_instruction_budget(ADDON_INSTRUCTION_BUDGET);
@@ -3488,7 +3488,7 @@ mod dependency_tests {
 
     /// A VM shaped like the survey's, for the oracle tests below.
     fn seated_vm() -> UiScript {
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3764,7 +3764,7 @@ mod dependency_tests {
             eprintln!("skipping: no WoW client data");
             return;
         }
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
 
@@ -3800,7 +3800,7 @@ mod dependency_tests {
     /// counted.
     #[test]
     fn the_ui_probe_reaches_an_addon_override() {
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3822,7 +3822,7 @@ mod dependency_tests {
     /// And it records a raise rather than swallowing it.
     #[test]
     fn the_ui_probe_records_what_an_override_raises() {
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3842,7 +3842,7 @@ mod dependency_tests {
     #[test]
     fn the_ui_probe_hovers_and_records_what_a_tooltip_hook_raises() {
         benilla_formats::wow_data_or_skip!();
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3866,7 +3866,7 @@ mod dependency_tests {
     #[test]
     fn the_ui_probe_is_silent_on_a_clean_vm() {
         let _data = benilla_formats::wow_data_or_skip!();
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);

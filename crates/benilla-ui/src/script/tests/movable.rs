@@ -2,12 +2,12 @@
 //! `SetResizable`), title regions and the user-placed layout cache, driven through the Lua
 //! bindings and the real mouse entry points.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::UiScript;
 
 /// A frame wired the canonical way, laid out at (100, 100) 200×80 on an 800×600 screen.
 fn movable_panel() -> UiScript {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

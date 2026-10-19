@@ -34,11 +34,7 @@ fn install_boot_vm(world: &mut World) {
 /// A fresh VM on the process clock with the addon asset probes wired, or `None` (the world's VM
 /// removed) when the VM cannot start.
 fn new_vm(world: &mut World) -> Option<UiScript> {
-    let created = if wrath_profile(world) {
-        UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
-    } else {
-        UiScript::new()
-    };
+    let created = UiScript::new();
     let mut script = match created {
         Ok(s) => s,
         Err(e) => {

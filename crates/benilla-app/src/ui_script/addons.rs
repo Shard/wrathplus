@@ -1798,7 +1798,7 @@ mod tests {
             toc: Toc::parse(&std::fs::read_to_string(dir.join("EventProbe.toc")).unwrap()),
             source: Source::Dir(tmp.clone()),
         }];
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let mut w = Walk::default();
         let _ = w.load(&mut script, &all, "EventProbe");
@@ -1830,7 +1830,7 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join("probe.xml"), recorder_xml(&["ADDON_LOADED"])).unwrap();
 
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script.run("EventLog = {}").unwrap();
 
@@ -1886,7 +1886,7 @@ mod tests {
         let _h =
             crate::local_state::test_env::EnvGuard::set("BENILLA_HOME", home.to_str().unwrap());
 
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script.run("EventLog = {}").unwrap();
         let failures = load_third_party(&mut script, None, &[], true);
@@ -2264,7 +2264,7 @@ mod tests {
                 ),
             ],
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let _ = load_third_party(&mut script, None, &[], true);
 
@@ -2521,7 +2521,7 @@ mod tests {
             "## Interface: 11200\n## LoadOnDemand: 1\nlate.xml\ngone.xml\ngone.lua\n",
             &[("late.xml", "<Ui><Include file=\"nope.xml\"/></Ui>")],
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let _ = load_third_party(&mut script, None, &[], true);
         seat_stock_addon_reply(&mut script);
@@ -2571,7 +2571,7 @@ mod tests {
             "## Interface: 11200\n## Title: Base Options\n## Dependencies: Base\n             ## LoadOnDemand: 1\nopts.lua\n",
             &[("opts.lua", "OptsRan = BaseRan")],
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let _ = load_third_party(&mut script, None, &[], true);
 
@@ -2617,7 +2617,7 @@ mod tests {
             // `Locale-koKR.lua` is listed and not written.
             &[("real.lua", "HoleyRan = true")],
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let _ = load_third_party(&mut script, None, &[], true);
 
@@ -3163,7 +3163,7 @@ mod tests {
                  PingSeenLoaded = IsAddOnLoaded('Ping')",
             )],
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         script
             .eval::<()>(

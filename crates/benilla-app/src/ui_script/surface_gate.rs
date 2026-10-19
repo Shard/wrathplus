@@ -121,8 +121,8 @@ fn the_production_load_stays_inside_the_1_12_surface() {
 /// an engine-only prefixed one and a method on a class's table are each caught.
 #[test]
 fn the_production_gate_catches_a_name_put_back() {
-    let s = UiScript::new().unwrap();
-    let engine = UiScript::new().unwrap();
+    let s = UiScript::new_vanilla().unwrap();
+    let engine = UiScript::new_vanilla().unwrap();
     assert_eq!(
         production_beyond(&s, &engine),
         (Vec::new(), Vec::new()),

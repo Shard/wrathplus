@@ -110,7 +110,7 @@ mod tests {
         .unwrap();
         assert_eq!(s.take_game_movie_finished(), 1);
         assert_eq!(s.take_game_movie_finished(), 0);
-        let vanilla = UiScript::new().unwrap();
+        let vanilla = UiScript::new_vanilla().unwrap();
         assert!(vanilla.eval::<bool>("return GameMovieFinished == nil").unwrap());
     }
 }

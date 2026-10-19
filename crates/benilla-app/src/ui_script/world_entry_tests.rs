@@ -336,7 +336,7 @@ fn a_quit_from_the_character_screen_fires_logout_without_leaving_world() {
             local f = CreateFrame("Frame")
             f:RegisterEvent("PLAYER_LEAVING_WORLD")
             f:RegisterEvent("PLAYER_LOGOUT")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function(self, event)
                 if event == "PLAYER_LEAVING_WORLD" then
                     SeenLeaving = SeenLeaving + 1
                 else

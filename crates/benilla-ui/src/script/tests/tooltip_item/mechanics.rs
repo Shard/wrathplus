@@ -3,14 +3,14 @@
 
 use std::collections::HashMap;
 
-use super::script;
+use super::{script, vanilla_script};
 use crate::script::*;
 
 /// `SetBagItem` at an open merchant fires `OnTooltipAddMoney` with SellPrice × stack, and price 0
 /// prints `ITEM_UNSELLABLE`; with no merchant, neither. A template in flight renders the link name.
 #[test]
 fn bag_item_money_law_and_fallback() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     let mut slots = HashMap::new();
     slots.insert(

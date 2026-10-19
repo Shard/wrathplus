@@ -1166,7 +1166,7 @@ mod tests {
                 Some(crate::items::test_template("Traveler's Backpack")),
             );
         }
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 r#"

@@ -1,10 +1,10 @@
 //! Mouse input: hit order, hover, clicks, double clicks and the release capture.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 #[test]
 fn enable_mouse_gates_hit_testing() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -42,7 +42,7 @@ fn enable_mouse_gates_hit_testing() {
 /// top: `0x764aa0` appends equal keys after (strict `ja`) and `0x7660d0` sweeps from index 0.
 #[test]
 fn hit_order_is_strata_then_level_then_the_earlier_linked_frame() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -83,7 +83,7 @@ fn hit_order_is_strata_then_level_then_the_earlier_linked_frame() {
 
 #[test]
 fn mouse_move_fires_enter_then_leave_across_a_boundary_with_correct_self() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -115,7 +115,7 @@ fn mouse_move_fires_enter_then_leave_across_a_boundary_with_correct_self() {
 
 #[test]
 fn onclick_fires_on_press_release_same_frame_not_when_release_lands_elsewhere() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -189,7 +189,7 @@ fn hidden_or_effective_hidden_frame_never_captures() {
 
 #[test]
 fn mouse_wheel_passes_delta_to_the_captured_frame() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -337,7 +337,7 @@ fn an_enum_attribute_tolerates_the_whitespace_a_real_addon_ships() {
 
 #[test]
 fn a_second_fast_click_fires_on_double_click_instead_of_the_second_on_click() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -475,7 +475,7 @@ fn the_double_click_boundary_is_time_and_frame_and_clicks_pair_up() {
 /// double click across them, and `arg1` is the second click's button.
 #[test]
 fn a_multi_registered_button_pairs_a_left_click_with_a_right_one() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -562,7 +562,7 @@ fn set_script_on_double_click_is_accepted_because_something_fires_it() {
 /// Script names nothing fires still raise; a name leaves this list only when something fires it.
 #[test]
 fn the_unfired_script_kinds_still_raise_rather_than_silently_accepting() {
-    let s = script();
+    let s = vanilla_script();
     s.run(r#"Raiser = CreateFrame("EditBox", "RaiserBox")"#)
         .unwrap();
     for name in [
@@ -708,7 +708,7 @@ fn the_repick_re_hovers_without_a_mouse_move() {
 
 /// Two side-by-side frames, each recording every `OnMouseDown`/`OnMouseUp` it gets.
 fn two_frames() -> crate::script::UiScript {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -791,7 +791,7 @@ fn the_capture_is_per_button() {
 /// `0x76b6f0`). It still takes the hover: the walk sets `[root+0x7c]` before the notify.
 #[test]
 fn a_disabled_button_takes_the_hover_but_fires_no_enter_or_leave() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

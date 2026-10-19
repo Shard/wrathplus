@@ -390,7 +390,7 @@ fn target_nearest_queues_its_mode_and_reverse_flag() {
 
 #[test]
 fn set_unit_is_read_by_the_bindings() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player()));
 
     assert_eq!(s.eval::<i64>(r#"return UnitExists("player")"#).unwrap(), 1);
@@ -411,7 +411,7 @@ fn set_unit_is_read_by_the_bindings() {
 
 #[test]
 fn absent_token_reports_not_existing_with_zero_numbers() {
-    let s = UiScript::new().unwrap();
+    let s = UiScript::new_vanilla().unwrap();
     assert!(s
         .eval::<bool>(r#"return UnitExists("target") == nil"#)
         .unwrap());
@@ -431,7 +431,7 @@ fn absent_token_reports_not_existing_with_zero_numbers() {
 
 #[test]
 fn a_dead_unit_reports_dead_and_zero_health() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit(
         "target",
         Some(UnitState {
@@ -523,7 +523,7 @@ fn unitname_reads_unknownobject_for_a_resolved_unit_whose_name_is_in_flight() {
 
 #[test]
 fn power_bindings_read_the_active_type() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player())); // rage 35/100
                                           // One value: `0x517940` pushes a number, never a string.
     assert_eq!(
@@ -574,7 +574,7 @@ fn unit_xp_reads_the_player_globals_only_for_the_player_token() {
 
 #[test]
 fn set_unit_none_removes_the_token() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player()));
     assert_eq!(s.eval::<i64>(r#"return UnitExists("player")"#).unwrap(), 1);
     s.set_unit("player", None);
@@ -981,7 +981,7 @@ fn unit_is_plus_mob_reads_the_flag_bit_and_not_the_rank() {
 /// The resolver (`0x515970`) compares every literal with `_strnicmp`, folding ASCII case.
 #[test]
 fn a_unit_token_resolves_whatever_its_case() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player()));
     let mut tgt = player();
     tgt.name = Some("Hogger".into());
@@ -1035,7 +1035,7 @@ fn a_unit_token_resolves_whatever_its_case() {
 /// A `"Target"` push must not create an entry shadowing `"target"`.
 #[test]
 fn seating_a_token_folds_its_key_too() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     let mut a = player();
     a.name = Some("First".into());
     s.set_unit("Target", Some(a));
@@ -1056,7 +1056,7 @@ fn seating_a_token_folds_its_key_too() {
 /// `0x515970` ends its nine compares in `luaL_error(L, "Unknown unit name: %s")`.
 #[test]
 fn an_unrecognised_unit_token_raises_and_a_recognised_empty_one_does_not() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player()));
 
     for bogus in ["bogus", "focus", "boss1", "arena1"] {
@@ -1158,7 +1158,7 @@ fn a_multibyte_unit_token_raises_rather_than_panicking() {
 /// but is not visible.
 #[test]
 fn unit_is_visible_is_object_presence_not_existence() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
 
     s.set_unit(
         "party1",
@@ -1717,7 +1717,7 @@ fn every_unit_predicate_is_one_or_nil_and_never_a_boolean() {
     ];
 
     for (name, call, live) in table {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_unit("player", Some(player()));
         s.set_unit("target", Some(live));
 
@@ -1746,7 +1746,7 @@ fn every_unit_predicate_is_one_or_nil_and_never_a_boolean() {
         );
 
         // The false leg: nil, one value. Clearing the token also covers the absent-unit arm.
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_unit("player", Some(player()));
         s.set_unit("target", None);
 
@@ -1770,7 +1770,7 @@ fn every_unit_predicate_is_one_or_nil_and_never_a_boolean() {
 /// The addon idiom: under a boolean, neither `== 1` nor `== nil` would ever be true.
 #[test]
 fn the_equals_one_idiom_branches_correctly_on_a_live_and_a_dead_token() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_unit("player", Some(player()));
     s.set_unit("target", Some(player()));
 
@@ -1836,7 +1836,7 @@ fn unit_on_taxi_is_one_or_nil_and_raises_the_reference_usage() {
 /// snapshot, so a nameless player push cannot blank the name.
 #[test]
 fn the_player_record_outlives_every_snapshot() {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
 
     // Before Enter World the record is empty: nil.
     assert!(s

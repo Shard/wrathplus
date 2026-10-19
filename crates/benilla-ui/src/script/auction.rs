@@ -1230,7 +1230,7 @@ mod tests {
 
     #[test]
     fn a_missing_row_still_answers_twelve_values() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let n = s.arity(r#"GetAuctionItemInfo("list", 99)"#).unwrap();
         assert_eq!(n, 12, "twelve, even with no session open at all");
         let (count, quality): (i64, i64) = s
@@ -1456,7 +1456,7 @@ mod tests {
             )
             .unwrap());
         // The 1.12 VM has no `select`: count the returns from here.
-        let vanilla = crate::script::UiScript::new().unwrap();
+        let vanilla = crate::script::UiScript::new_vanilla().unwrap();
         let width = |chunk: &str| vanilla.eval::<mlua::MultiValue>(chunk).unwrap().len();
         assert_eq!(width("return GetAuctionItemInfo('owner', 1)"), 12);
         assert_eq!(width("return GetAuctionSellItemInfo()"), 6);

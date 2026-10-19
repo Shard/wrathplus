@@ -39,7 +39,7 @@ fn hook_script_runs_after_the_original_for_every_widget_kind() {
 
 #[test]
 fn vanilla_keeps_flat_script_acceptance_and_has_no_hookscript() {
-    let script = UiScript::new().unwrap();
+    let script = UiScript::new_vanilla().unwrap();
     assert!(script
         .eval::<bool>(
             r#"

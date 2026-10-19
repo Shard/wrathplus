@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn vanilla_has_neither_getter() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(s
             .eval::<bool>("return UnitCastingInfo == nil and UnitChannelInfo == nil")
             .unwrap());

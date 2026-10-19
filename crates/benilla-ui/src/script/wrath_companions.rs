@@ -344,7 +344,7 @@ mod tests {
         s.run(r#"local m = CreateFrame("PlayerModel", "Pane") m:SetCreature(1011) assert(not pcall(m.SetCreature, m))"#)
             .unwrap();
         assert_eq!(s.model_pane_creature("Pane"), Some(1011));
-        assert!(UiScript::new()
+        assert!(UiScript::new_vanilla()
             .unwrap()
             .eval::<bool>(
                 "return GetNumCompanions == nil and CreateFrame('PlayerModel').SetCreature == nil"

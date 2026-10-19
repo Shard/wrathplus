@@ -512,7 +512,7 @@ fn a_held_action_stays_held_while_the_pet_is_out_of_view() {
 /// The whole default UI on the rig's world in place of its listening VM: the stock pet bar, and
 /// the fed pet under it.
 fn with_stock_ui(rig: &mut Rig) {
-    let mut script = benilla_ui::script::UiScript::new().expect("a VM");
+    let mut script = benilla_ui::script::UiScript::new_vanilla().expect("a VM");
     script.set_screen_size(1024.0, 768.0);
     // The in-game UI loads on world entry, so a player exists.
     script.set_unit(

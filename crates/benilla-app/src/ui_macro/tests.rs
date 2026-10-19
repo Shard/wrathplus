@@ -341,7 +341,7 @@ fn wrath_does_not_enumerate_the_vanilla_macro_icon_catalog() {
     use benilla_ui::script::ScriptDialect;
     let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     assert!(!super::macro_catalog_enabled(&wrath));
-    assert!(super::macro_catalog_enabled(&UiScript::new().unwrap()));
+    assert!(super::macro_catalog_enabled(&UiScript::new_vanilla().unwrap()));
 }
 
 #[test]
@@ -356,7 +356,7 @@ fn actual_catalog_feed_gates_wrath_and_tracks_vm_and_source_replacement() {
         panic!("Wrath must never enumerate icons")
     });
     assert!(cache.icons.is_none());
-    let mut first = UiScript::new().unwrap();
+    let mut first = UiScript::new_vanilla().unwrap();
     super::seed_icon_catalog(&mut first, &source, &mut seeded, &mut cache, || {
         Ok(vec!["Interface\\Icons\\Spell_Test".into()])
     });
@@ -368,7 +368,7 @@ fn actual_catalog_feed_gates_wrath_and_tracks_vm_and_source_replacement() {
         first.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
         "Interface\\Icons\\Ability_Sentinel"
     );
-    let mut second = UiScript::new().unwrap();
+    let mut second = UiScript::new_vanilla().unwrap();
     super::seed_icon_catalog(&mut second, &source, &mut seeded, &mut cache, || {
         panic!("new VM same source must use cache")
     });

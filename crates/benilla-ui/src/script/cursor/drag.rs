@@ -92,7 +92,7 @@ mod tests {
     use crate::script::UiScript;
 
     fn drag_script() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_screen_size(800.0, 600.0);
         s
     }

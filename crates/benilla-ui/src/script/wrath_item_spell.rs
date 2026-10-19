@@ -122,7 +122,7 @@ mod tests {
     }
     #[test]
     fn no_vanilla_surface() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(s.eval::<bool>("return GetItemSpell==nil").unwrap());
     }
 }

@@ -125,7 +125,7 @@ mod tests {
             "#,
         )
         .unwrap();
-        assert!(UiScript::new()
+        assert!(UiScript::new_vanilla()
             .unwrap()
             .eval::<bool>("return GetRuneCooldown == nil")
             .unwrap());

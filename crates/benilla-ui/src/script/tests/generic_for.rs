@@ -2,11 +2,11 @@
 //! `OP_TFORPREP` folded into `OP_TFORLOOP` in `third_party/lua-src/lua-5.1.5/lvm.c`), long-string
 //! nesting and the constructor compat-semicolon.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 #[test]
 fn a_table_generator_iterates_like_lua_50() {
-    let s = script();
+    let s = vanilla_script();
     let seen: i64 = s
         .eval(
             r#"
@@ -36,7 +36,7 @@ fn a_table_generator_iterates_like_lua_50() {
 /// The 1.12 handler tests only the type tag, never the metatable, so `__call` is not consulted.
 #[test]
 fn a_table_with_a_call_metamethod_is_still_iterated_not_called() {
-    let s = script();
+    let s = vanilla_script();
     let out: String = s
         .eval(
             r#"
@@ -58,7 +58,7 @@ fn a_table_with_a_call_metamethod_is_still_iterated_not_called() {
 /// The callee is a raw read of the global `next` at each loop entry, so an addon can replace it.
 #[test]
 fn the_substituted_generator_is_the_live_global_next() {
-    let s = script();
+    let s = vanilla_script();
     let out: String = s
         .eval(
             r#"
@@ -126,7 +126,7 @@ fn only_a_table_is_substituted_and_other_types_still_raise() {
 
 #[test]
 fn an_empty_table_generator_terminates() {
-    let s = script();
+    let s = vanilla_script();
     let n: i64 = s
         .eval("local n = 0 for k, v in {} do n = n + 1 end return n")
         .unwrap();
@@ -136,7 +136,7 @@ fn an_empty_table_generator_terminates() {
 /// The patch rewrites the loop's own registers, reloaded from the expression at each entry.
 #[test]
 fn nested_and_repeated_loops_each_substitute_independently() {
-    let s = script();
+    let s = vanilla_script();
     let out: i64 = s
         .eval(
             r#"
@@ -170,7 +170,7 @@ fn nested_and_repeated_loops_each_substitute_independently() {
 /// `LUA_COMPAT_LSTR` to 2, which enables 5.1's own nesting path in `read_long_string`.
 #[test]
 fn a_nested_long_string_parses_as_lua_50_does() {
-    let s = crate::script::UiScript::new().unwrap();
+    let s = crate::script::UiScript::new_vanilla().unwrap();
     // The shape an addon writes: a long comment containing a long string.
     s.run("--[[ outer [[ inner ]] still comment ]]\nNESTED_OK = 1")
         .unwrap();
@@ -187,7 +187,7 @@ fn a_nested_long_string_parses_as_lua_50_does() {
 /// per separator position; 5.1 deleted the line, and AtlasLoot's `ButtonRegistry.lua` writes `;;`.
 #[test]
 fn a_double_semicolon_inside_a_constructor_parses_as_lua_50_does() {
-    let s = script();
+    let s = vanilla_script();
 
     let out: String = s
         .eval(

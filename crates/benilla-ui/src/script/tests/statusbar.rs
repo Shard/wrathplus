@@ -1,6 +1,6 @@
 //! StatusBar behaviour (`LoadXML` `0x782ef0`).
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::*;
 
 #[test]
@@ -44,7 +44,7 @@ fn statusbar_value_clamps_and_minmax_swaps() {
 
 #[test]
 fn statusbar_setvalue_fires_onvaluechanged() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         local b = CreateFrame("StatusBar", "SbEvt")

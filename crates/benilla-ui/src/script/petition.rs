@@ -379,7 +379,7 @@ mod tests {
     /// The six returns, in the reference's own destructuring order.
     #[test]
     fn get_petition_info_returns_the_reference_six_in_order() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         open(&mut s, record(), vec![]);
         let (kind, title, body, max, originator, is_originator) = s
             .eval::<(String, String, String, i32, String, Option<u32>)>("return GetPetitionInfo()")
@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn the_no_record_leg_is_six_values_with_a_numeric_zero() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.arity("GetPetitionInfo()").unwrap(),
             6,

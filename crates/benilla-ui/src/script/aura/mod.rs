@@ -279,7 +279,17 @@ mod tests {
 
     /// A VM whose resolver names us as `player` and `TARGET` as `target`.
     fn script() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
+        s.set_unit_guids(&UnitGuids {
+            player: ME,
+            target: TARGET,
+            ..Default::default()
+        });
+        s
+    }
+
+    fn vanilla_script() -> UiScript {
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_unit_guids(&UnitGuids {
             player: ME,
             target: TARGET,
@@ -306,7 +316,7 @@ mod tests {
 
     #[test]
     fn unit_buff_enumerates_the_pushed_order_not_the_spell_id_order() {
-        let mut s = script();
+        let mut s = vanilla_script();
         s.set_player_auras(vec![
             aura(2457, "Battle Stance", true, true),
             aura(1126, "Mark of the Wild", true, true),
@@ -347,7 +357,7 @@ mod tests {
 
     #[test]
     fn unit_buff_and_unit_debuff_return_the_1121_tuple() {
-        let mut s = script();
+        let mut s = vanilla_script();
         let mut buff = aura(1126, "Mark of the Wild", true, true);
         buff.count = 1;
         let mut debuff = aura(589, "Shadow Word: Pain", false, false);
@@ -449,7 +459,7 @@ mod tests {
     /// is over `MOB`. Each unit's list holds a buff and a debuff whose spell ids, and so icons, are
     /// its own: `base + 1` and `base + 2`.
     fn group_script() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_unit_guids(&UnitGuids {
             player: ME,
             target: TARGET,

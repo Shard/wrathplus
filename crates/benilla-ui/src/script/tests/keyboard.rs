@@ -1,11 +1,11 @@
 //! Frame keyboard delivery: the walk (`0x765f10`) and its existence gate (`0x76b7d0`).
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 /// Bucket membership (`0x76af00`) is the keyboard-enabled flag, which `SetScript` never sets.
 #[test]
 fn a_key_script_alone_does_not_put_a_frame_in_the_walk() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.run(
         r#"
         got = nil
