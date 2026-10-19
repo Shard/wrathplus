@@ -868,10 +868,15 @@ fn handled(
 
 fn adapt_loot(packet: ServerLootPacket) -> WrathDispatch {
     match packet {
-        ServerLootPacket::Response(LootResponse::Corpse { guid, gold, items }) => handled(
+        ServerLootPacket::Response(LootResponse::Window {
+            guid,
+            loot_type,
+            gold,
+            items,
+        }) => handled(
             vec![SessionEvent::LootResponse {
                 guid,
-                loot_type: 1,
+                loot_type,
                 gold,
                 items: items.iter().copied().map(WrathLootItem::neutral).collect(),
             }],

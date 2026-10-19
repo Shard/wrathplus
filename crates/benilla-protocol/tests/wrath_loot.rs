@@ -1,11 +1,12 @@
 use benilla_protocol::events::SessionEvent;
 use benilla_protocol::wrath_events::{WrathDispatch, WrathEvent, WrathEventAdapter};
 use benilla_protocol::wrath_loot::{
-    self, decode, decode_loot_response, encode_autostore_loot_item, encode_loot, encode_loot_money,
-    encode_loot_release, InventoryFailureExtra, LootCodecError, LootResponse, ServerLootPacket,
-    CMSG_AUTOSTORE_LOOT_ITEM, CMSG_LOOT, CMSG_LOOT_MONEY, CMSG_LOOT_RELEASE, MAX_LOOT_ITEMS,
+    self, CMSG_AUTOSTORE_LOOT_ITEM, CMSG_LOOT, CMSG_LOOT_MONEY, CMSG_LOOT_RELEASE,
+    InventoryFailureExtra, LootCodecError, LootResponse, MAX_LOOT_ITEMS,
     SMSG_INVENTORY_CHANGE_FAILURE, SMSG_ITEM_PUSH_RESULT, SMSG_LOOT_CLEAR_MONEY,
     SMSG_LOOT_MONEY_NOTIFY, SMSG_LOOT_RELEASE_RESPONSE, SMSG_LOOT_REMOVED, SMSG_LOOT_RESPONSE,
+    ServerLootPacket, decode, decode_loot_response, encode_autostore_loot_item, encode_loot,
+    encode_loot_money, encode_loot_release,
 };
 
 const CORPSE: u64 = 0xf130_0001_0000_002a;
@@ -81,10 +82,17 @@ fn client_opcodes_and_bodies_are_exact_build_12340_contracts() {
 #[test]
 fn solo_corpse_response_decodes_exact_rows_and_retains_native_suffix() {
     let body = corpse_response();
-    let LootResponse::Corpse { guid, gold, items } = decode_loot_response(&body).unwrap() else {
+    let LootResponse::Window {
+        guid,
+        loot_type,
+        gold,
+        items,
+    } = decode_loot_response(&body).unwrap()
+    else {
         panic!("expected corpse response")
     };
     assert_eq!(guid, CORPSE);
+    assert_eq!(loot_type, 1);
     assert_eq!(gold, 0x0102_0304);
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].slot, 0);
@@ -111,7 +119,7 @@ fn solo_owner_rows_decode_and_keep_their_type_in_both_adapter_surfaces() {
     let mut body = corpse_response();
     body[35] = wrath_loot::LOOT_SLOT_OWNER;
     *body.last_mut().unwrap() = wrath_loot::LOOT_SLOT_OWNER;
-    let LootResponse::Corpse { items, .. } = decode_loot_response(&body).unwrap() else {
+    let LootResponse::Window { items, .. } = decode_loot_response(&body).unwrap() else {
         panic!("expected owner corpse response")
     };
     assert!(items.iter().all(|item| item.slot_type == 4));
@@ -170,7 +178,7 @@ fn response_fences_non_solo_shapes_errors_and_oversized_counts() {
         LootCodecError::UnsupportedLootError(3)
     );
 
-    for unsupported_type in [2, 3, 4, 5, u8::MAX] {
+    for unsupported_type in [5, 9, 20, 21, 22, u8::MAX] {
         let mut body = CORPSE.to_le_bytes().to_vec();
         body.push(unsupported_type);
         assert_eq!(
@@ -196,6 +204,32 @@ fn response_fences_non_solo_shapes_errors_and_oversized_counts() {
         decode_loot_response(&oversized).unwrap_err(),
         LootCodecError::ItemCountOutOfRange(19)
     );
+}
+
+#[test]
+fn every_type_send_loot_writes_decodes_and_reaches_the_session_event() {
+    // `Player::SendLoot`: pickpocketing, fishing, disenchanting, skinning, prospecting, milling.
+    for loot_type in [2u8, 3, 4, 6, 7, 8] {
+        let mut body = corpse_response();
+        body[8] = loot_type;
+        let Ok(LootResponse::Window {
+            loot_type: decoded, ..
+        }) = decode_loot_response(&body)
+        else {
+            panic!("type {loot_type} decodes")
+        };
+        assert_eq!(decoded, loot_type);
+        let mut adapter = WrathEventAdapter::new();
+        let Ok(WrathDispatch::Handled { session_events, .. }) =
+            adapter.dispatch(SMSG_LOOT_RESPONSE, &body, 0)
+        else {
+            panic!("type {loot_type} dispatches")
+        };
+        assert!(matches!(
+            &session_events[..],
+            [SessionEvent::LootResponse { loot_type: t, .. }] if *t == loot_type
+        ));
+    }
 }
 
 #[test]

@@ -52,8 +52,12 @@ impl WrathLootState {
     }
 
     /// A response we did not request (a chest or lockbox our use opened, fishing, a pickpocket):
-    /// adopted as the open window when nothing else is in flight.
+    /// adopted as the open window when nothing else is in flight. A repeat of the open window is
+    /// admitted too, as the latch still names it (`0x6d53b0`).
     pub(super) fn adopt_response(&mut self, guid: u64) -> bool {
+        if self.phase == Phase::Active && self.source == Some(guid) {
+            return true;
+        }
         if self.phase != Phase::Idle {
             return false;
         }
@@ -62,12 +66,18 @@ impl WrathLootState {
         true
     }
 
-    pub(super) fn admit_error(&mut self, guid: u64) -> bool {
-        if self.phase != Phase::Requesting || self.source != Some(guid) {
-            return false;
+    /// Whether our own `CMSG_LOOT` for `guid` is unanswered: the reference arms its latch at that
+    /// send, where ours stays cold until the response, so this stands in for the latch match.
+    pub(super) fn is_requesting(&self, guid: u64) -> bool {
+        self.phase == Phase::Requesting && self.source == Some(guid)
+    }
+
+    /// The response handler zeroes the latch on a refusal and on a releasing error (`0x6d53b0`),
+    /// which drops an unanswered request with it; an open window's session is untouched.
+    pub(super) fn drop_request(&mut self) {
+        if self.phase == Phase::Requesting {
+            self.reset();
         }
-        self.reset();
-        true
     }
 
     pub(super) fn begin_take(&mut self, slot: u8) -> bool {
