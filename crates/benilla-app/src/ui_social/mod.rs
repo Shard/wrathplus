@@ -23,6 +23,8 @@ mod query;
 pub(crate) struct SocialState {
     /// The friend list in wire order (vmangos walks a guid-keyed map); the feed sorts for display.
     friends: Vec<FriendEntry>,
+    /// Build 12340's contact notes by friend guid (`GetFriendInfo`'s seventh return).
+    notes: std::collections::HashMap<u64, String>,
     ignores: Vec<u64>,
     /// The selected friend as a guid, like the reference's `+0x648`; 0 is none.
     selected_friend: u64,
@@ -135,6 +137,7 @@ impl SocialState {
             }
             friend_result::REMOVED => {
                 self.friends.retain(|f| f.guid != update.guid);
+                self.notes.remove(&update.guid);
                 if self.selected_friend == update.guid {
                     self.selected_friend = 0;
                 }
@@ -256,6 +259,7 @@ pub(crate) mod net {
         app.net_handler(K::FriendList, on_friend_list)
             .net_handler(K::IgnoreList, on_ignore_list)
             .net_handler(K::FriendStatus, on_friend_status)
+            .net_handler(K::WrathContactNotes, on_contact_notes)
             .net_handler(K::WhoResults, on_who)
             .net_handler(K::Disconnected, on_session_end)
             .net_handler(K::Connected, on_connected);
@@ -276,6 +280,17 @@ pub(crate) mod net {
     fn on_friend_status(In(ev): In<SessionEvent>, mut social: ResMut<SocialState>) {
         if let SessionEvent::FriendStatus(update) = ev {
             friend_status(&mut social, update);
+        }
+    }
+
+    /// The contact list's notes replace the set; an added friend's note patches it.
+    fn on_contact_notes(In(ev): In<SessionEvent>, mut social: ResMut<SocialState>) {
+        if let SessionEvent::WrathContactNotes { notes, replace } = ev {
+            if replace {
+                social.notes.clear();
+            }
+            social.notes.extend(notes);
+            social.friends_dirty = true;
         }
     }
 

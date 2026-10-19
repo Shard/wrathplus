@@ -19,12 +19,9 @@ const SHORT_REVIEWED: &[(&str, &str)] = &[
     ("GetQuestLogTitle", "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set"),
     ("UnitPowerType", "0x60f100: five only for a vehicle with a PowerDisplay row, else two"),
     ("GetQuestWorldMapAreaID", "pending App Migration: the native binding replaces the shim"),
-    ("GetAchievementInfoFromCriteria", "pending Native UI: a short hit"),
+    ("GetAchievementInfoFromCriteria", "0x5b1720: seven; the stock ten-wide unpack reads nils"),
     ("GetContainerItemInfo", "pending Native UI: a short hit"),
-    ("GetFriendInfo", "pending Native UI: a short hit"),
-    ("GetGuildRosterInfo", "pending Native UI: a short hit"),
     ("GetItemInfo", "pending Native UI: a short hit"),
-    ("GetWhoInfo", "pending Native UI: a short hit"),
 ];
 
 /// Names no probe reaches with a hit or a full-width miss, by reason.
@@ -42,15 +39,14 @@ const UNPROBED_REVIEWED: &[&str] = &[
     "GetBattlefieldVehicleInfo", "GetBattlegroundInfo", "GetBindingKey", "GetChannelRosterInfo",
     "GetChatWindowSavedDimensions", "GetChatWindowSavedPosition", "GetContainerItemPurchaseInfo",
     "GetContainerItemPurchaseItem", "GetCursorInfo", "GetGlyphSocketInfo",
-    "GetGuildBankTransaction", "GetGuildEventInfo", "GetInspectArenaTeamData",
+    "GetInspectArenaTeamData",
     "GetInventoryItemGems", "GetInventorySlotInfo", "GetLFGCompletionReward",
     "GetLFGCompletionRewardItem", "GetLFGDungeonRewardInfo", "GetLFGQueueStats",
     "GetLFGRandomDungeonInfo", "GetLFGRoleUpdateSlot", "GetLatestThreeSenders",
     "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPartyLFGBackfillInfo", "GetPlayerInfoByGUID",
     "GetPossessInfo", "GetQuestLogRewardSpell", "GetRewardSpell", "GetTrainerServiceStepReq",
     "GetVehicleUIIndicator", "GetVehicleUIIndicatorSeat", "GetVoiceSessionInfo", "GetZonePVPInfo",
-    "QuestPOIGetIconInfo", "QuestPOIGetQuestIDByVisibleIndex", "SearchLFGGetEncounterResults",
-    "SearchLFGGetPartyResults", "SearchLFGGetResults", "UnitDetailedThreatSituation",
+    "QuestPOIGetIconInfo", "QuestPOIGetQuestIDByVisibleIndex", "UnitDetailedThreatSituation",
     "UnitVehicleSeatInfo",
     // Widget methods whose object the probe does not populate.
     "GetItem", "GetMessageInfo", "UpdateMouseOverTooltip",
