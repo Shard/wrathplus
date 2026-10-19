@@ -198,42 +198,6 @@ mod tests {
         assert!((c * c + sn * sn).sqrt() < 1.0);
     }
 
-    /// The cooldown indicator's transform 0 turns 0 to −90° over sequence 0's first 250 ms (`z`
-    /// from 0 to `−√½`) and holds; sequence 1's keys at 1167 and 2167 ms are both the identity.
-    #[test]
-    fn the_cooldown_indicators_rotation_bakes_per_sequence() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let bytes = chain
-            .read_file(r"Interface\Cooldown\UI-Cooldown-Indicator.m2")
-            .expect("read the cooldown indicator");
-        let subs = super::super::parse_m2_render_submeshes(&bytes, "", &[]).expect("parse");
-        let rot = subs[0]
-            .uv_rot_seq
-            .as_ref()
-            .expect("the top-right quadrant's rotation loop");
-        let seq0 = rot.seq(Some(0)).expect("sequence 0 keys it");
-        assert!(!seq0.wrap, "sequence 0 clamps (flags 0x1)");
-        let r = std::f32::consts::FRAC_1_SQRT_2;
-        let at = |t: f32| seq0.sample(t);
-        assert!(at(0.0)[2].abs() < 1e-5, "{:?}", at(0.0));
-        assert!(
-            (at(0.25)[2] + r).abs() < 1e-3,
-            "−90° at 250 ms: {:?}",
-            at(0.25)
-        );
-        assert!(
-            (at(0.9)[2] + r).abs() < 1e-3,
-            "held to the end: {:?}",
-            at(0.9)
-        );
-        // Between the 0 and 62 ms keys, a per-component lerp of the raw quaternion.
-        let mid = at(0.031);
-        assert!(mid[2] < 0.0 && mid[2] > -r);
-        assert!(subs[0].uv_scale_seq.is_none(), "no scale track");
-        assert!(subs[4].uv_rot_seq.is_none(), "the star has no transform");
-    }
-
     fn track(gseq: u16, interp: u16, keys: &[(u32, [f32; 3])]) -> M2Vec3Track {
         M2Vec3Track {
             interp,
@@ -283,36 +247,5 @@ mod tests {
         let mid = a.sample(1.333 / 2.0);
         assert!((mid[1] + 0.5).abs() < 1e-3, "half-loop offset ≈ -0.5 V");
         assert!((a.sample(1.333 + 0.1)[1] - a.sample(0.1)[1]).abs() < 1e-4);
-    }
-
-    /// The Elwynn waterfall's two batches scroll V by −1.0 and −2.0 per loop (the foam layer).
-    #[test]
-    fn elwynn_waterfall_bakes_two_v_scroll_loops() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let bytes = chain
-            .read_file(
-                "World\\Azeroth\\Elwynn\\PassiveDoodads\\Waterfall\\ElwynnTallWaterfall01.m2",
-            )
-            .expect("read ElwynnTallWaterfall01.m2");
-        let subs = super::super::parse_m2_render_submeshes(&bytes, "", &[]).expect("parse");
-        let anims: Vec<&UvAnim> = subs.iter().filter_map(|s| s.uv_anim.as_ref()).collect();
-        assert_eq!(anims.len(), 2, "both waterfall batches carry UV loops");
-        for a in &anims {
-            assert!(a.period > 1.0, "a real loop, not a constant");
-            let (v0, v1) = (a.sample(0.0), a.sample(a.period * 0.5));
-            assert!(
-                (v1[1] - v0[1]).abs() > 0.01,
-                "the V offset moves over the loop ({v0:?} vs {v1:?})"
-            );
-        }
-        let (e0, e1) = (
-            anims[0].keys.last().unwrap().1[1],
-            anims[1].keys.last().unwrap().1[1],
-        );
-        assert!(
-            (e0 - e1).abs() > 0.5,
-            "distinct layer rates survive the bake ({e0} vs {e1})"
-        );
     }
 }

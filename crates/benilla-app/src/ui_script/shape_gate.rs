@@ -11,6 +11,12 @@
 /// list may only shrink.
 const NOT_YET_ASSERTED: &[(&str, usize, &str)] = &[];
 
+/// Bindings whose build-12340 shape supersedes the 1.12 row: the name, the 1.12 arity, the
+/// 3.3.5 arity it must answer instead, and the 12340 binding. The 3.3.5 arity is asserted
+/// exactly, so this is no exemption.
+const WRATH_SUPERSEDES: &[(&str, usize, usize, &str)] =
+    &[("GetInspectHonorData", 12, 6, "0x5e77c0: todayHK..lifetimeRank")];
+
 /// The kind gate's list, same rules: a name, the wrong kinds it answers and the reason. An entry
 /// whose binding comes into agreement fails the gate.
 const KINDS_NOT_YET_ASSERTED: &[(&str, &str, &str)] = &[];
@@ -142,6 +148,16 @@ fn every_query_binding_answers_the_reference_s_return_arity() {
             continue;
         }
         checked += 1;
+        if let Some((_, old, wrath, _)) = WRATH_SUPERSEDES.iter().find(|(n, ..)| n == name) {
+            assert_eq!(
+                *old, want,
+                "{name}: the 1.12 table's arity moved; check WRATH_SUPERSEDES"
+            );
+            if got as usize != *wrath {
+                mismatches.push(format!("{name}: answers {got}, build 12340 states {wrath}"));
+            }
+            continue;
+        }
         if got as usize != want {
             if let Some((_, known, _)) = NOT_YET_ASSERTED.iter().find(|(n, ..)| n == name) {
                 assert_eq!(

@@ -2,7 +2,7 @@
 //! keeps the second wire count independently, and routes by the uncapped count.
 //! BG/arena cross-realm local augmentation (006b8290) is not implemented here.
 use super::*;
-use crate::net::{ClientCommand, SessionDialect};
+use crate::net::ClientCommand;
 use crate::ui_native_who::NativeWhoPackets;
 use benilla_protocol::{
     messages::{WhoEntry, WhoResults},
@@ -56,14 +56,8 @@ pub(super) fn apply(
 pub(super) fn command(
     filter: &str,
     areas: Option<&benilla_formats::AreaTableCatalog>,
-    dialect: SessionDialect,
 ) -> ClientCommand {
-    if dialect == SessionDialect::Vanilla5875 {
-        return ClientCommand::Who {
-            request: Box::new(super::who_query(filter, areas)),
-        };
-    }
-    let q = super::query::parse_wrath(filter, areas);
+    let q = super::query::parse(filter, areas);
     ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Who(
         benilla_protocol::wrath_who::Query {
             level_min: q.level_min,
@@ -131,17 +125,13 @@ mod tests {
         assert_eq!(app.world().resource::<NativeWhoPackets>().0.len(), 1);
     }
     #[test]
-    fn native_producer_adds_wrath_classes_and_races_without_changing_vanilla() {
+    fn native_producer_adds_wrath_classes_and_races() {
         let ClientCommand::NativeWhoCommand(benilla_protocol::wrath_who::Command::Who(q)) =
-            command("c-deathknight r-bloodelf", None, SessionDialect::Wrath12340)
+            command("c-deathknight r-bloodelf", None)
         else {
             panic!()
         };
         assert_eq!(q.class_mask, 1 << 6);
         assert_eq!(q.race_mask, 1 << 10);
-        assert!(matches!(
-            command("", None, SessionDialect::Vanilla5875),
-            ClientCommand::Who { .. }
-        ));
     }
 }

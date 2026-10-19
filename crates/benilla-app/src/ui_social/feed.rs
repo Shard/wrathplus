@@ -375,7 +375,6 @@ pub(crate) fn drain_social(
     commands: Res<NetCommands>,
     areas: Option<Res<AreaTableRes>>,
     mut tutorials: Option<MessageWriter<crate::tutorial::TutorialEvent>>,
-    dialect: Option<Res<crate::net::SessionDialect>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -440,14 +439,7 @@ pub(crate) fn drain_social(
                 social.selected_ignore = row_guid(&social.ignore_display_order, index).unwrap_or(0);
             }
             SocialRequest::Who(filter) => {
-                let command = super::native_who::command(
-                    &filter,
-                    areas.as_deref().map(|a| &a.0),
-                    dialect
-                        .as_deref()
-                        .copied()
-                        .unwrap_or(crate::net::SessionDialect::Vanilla5875),
-                );
+                let command = super::native_who::command(&filter, areas.as_deref().map(|a| &a.0));
                 let _ = commands.0.send(command);
             }
             // Mirror the click the binding applied to the VM's chain. No `who_dirty`: `SortWho`
@@ -861,24 +853,6 @@ mod native_tests {
         assert!(social.who.is_empty());
         assert!(social.native_who_rows.is_empty());
         assert!(app.world().resource::<NativeWhoPackets>().0.is_empty());
-    }
-    #[test]
-    fn vanilla_connected_does_not_reset_social_selection_or_rows() {
-        let mut app = crate::game_plugins::schedule_tests::headless_client();
-        app.insert_resource(crate::net::SessionDialect::Vanilla5875);
-        {
-            let mut social = app.world_mut().resource_mut::<SocialState>();
-            social.selected_friend = 77;
-            social.selected_ignore = 99;
-            social.who_total = 42;
-            social.who_to_ui = true;
-        }
-        crate::net::handlers::dispatch(app.world_mut(), vec![connected()]);
-        let social = app.world().resource::<SocialState>();
-        assert_eq!(social.selected_friend, 77);
-        assert_eq!(social.selected_ignore, 99);
-        assert_eq!(social.who_total, 42);
-        assert!(social.who_to_ui);
     }
     #[test]
     fn native_chat_rows_and_summary_use_raw_count_not_total() {

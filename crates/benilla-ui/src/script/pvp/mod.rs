@@ -59,29 +59,19 @@ pub struct HonorState {
     pub rank_bar: u8,
 }
 
-/// One `MSG_INSPECT_HONOR_STATS` reply as the app decoded it. It has no dishonorable counts past
-/// the session pair (the server writes zeros there), so `GetInspectHonorData` returns twelve.
+/// One build-12340 `MSG_INSPECT_HONOR_STATS` reply (`0x5e7a50`): the leading byte, the kills word
+/// (today's low, yesterday's high), today's and yesterday's honor and the lifetime kills.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InspectHonorData {
     /// The player the reply was for, the app's key; never returned to Lua.
     pub guid: u64,
-    pub session_hk: u16,
-    pub session_dk: u16,
+    pub today_hk: u16,
+    pub today_honor: u32,
     pub yesterday_hk: u16,
     pub yesterday_honor: u32,
-    pub this_week_hk: u16,
-    pub this_week_honor: u32,
-    pub last_week_hk: u16,
-    pub last_week_honor: u32,
-    /// The reply's `lastWeekRank`, the ladder standing: `GetInspectHonorData`'s ninth return.
-    pub last_week_standing: u32,
     pub lifetime_hk: u32,
-    pub lifetime_dk: u32,
-    /// The reply's `highestRank`, internal scale: `GetInspectHonorData`'s twelfth return
-    /// (`lifetimeRank`), unfiltered, as `0x4c9620` pushes it with no below-5 gate.
-    pub highest_rank: u8,
-    /// The reply's trailing `rankBar`, read only by `GetInspectPVPRankProgress`.
-    pub rank_bar: u8,
+    /// The leading byte, `GetInspectHonorData`'s sixth return (`lifetimeRank`).
+    pub lifetime_rank: u8,
 }
 
 impl super::UiScript {
@@ -498,43 +488,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetInspectHonorData() → the reference's twelve, in its order:
-    //   sessionHK, sessionDK, yesterdayHK, yesterdayHonor, thisweekHK, thisweekHonor,
-    //   lastweekHK, lastweekHonor, lastweekStanding, lifetimeHK, lifetimeDK, lifetimeRank
-    // Twelve on every path: `0x4c9620` never checks for data and reads zero-initialised slots.
+    // GetInspectHonorData() → todayHK, todayHonor, yesterdayHK, yesterdayHonor, lifetimeHK,
+    // lifetimeRank (`0x5e77c0`), six on every path: the binding reads its globals unchecked.
     // Clearing drops the data here, while the reference's re-key zeroes only the flags and can
-    // still answer the previous target's numbers; matching that needs a latch apart from the data.
+    // still answer the previous target's numbers.
     g.set(
         "GetInspectHonorData",
         lua.create_function(|lua, ()| {
             let d = inspect_honor(lua).unwrap_or_default();
-            let out = vec![
-                Value::Integer(i64::from(d.session_hk)),
-                Value::Integer(i64::from(d.session_dk)),
+            Ok(MultiValue::from_vec(vec![
+                Value::Integer(i64::from(d.today_hk)),
+                Value::Integer(i64::from(d.today_honor)),
                 Value::Integer(i64::from(d.yesterday_hk)),
                 Value::Integer(i64::from(d.yesterday_honor)),
-                Value::Integer(i64::from(d.this_week_hk)),
-                Value::Integer(i64::from(d.this_week_honor)),
-                Value::Integer(i64::from(d.last_week_hk)),
-                Value::Integer(i64::from(d.last_week_honor)),
-                Value::Integer(i64::from(d.last_week_standing)),
                 Value::Integer(i64::from(d.lifetime_hk)),
-                Value::Integer(i64::from(d.lifetime_dk)),
-                Value::Integer(i64::from(d.highest_rank)),
-            ];
-            debug_assert_eq!(out.len(), 12, "the tuple is twelve wide on every path");
-            Ok(MultiValue::from_vec(out))
-        })?,
-    )?;
-
-    // GetInspectPVPRankProgress() → the reply's `rankBar` through `rank_progress`: `0x51ab00`'s
-    // kernel at `0x51ab04` is byte-identical to `0x51aace`, so it too reads 0.0 when empty.
-    g.set(
-        "GetInspectPVPRankProgress",
-        lua.create_function(|lua, ()| {
-            Ok(rank_progress(
-                inspect_honor(lua).unwrap_or_default().rank_bar,
-            ))
+                Value::Integer(i64::from(d.lifetime_rank)),
+            ]))
         })?,
     )?;
 

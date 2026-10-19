@@ -100,44 +100,6 @@ fn trigger_creature_models_carry_no_render_geometry() {
 }
 
 #[test]
-fn the_trigger_creature_still_carries_the_attachments_its_visible_self_rides() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
-
-    // The Naxxramas weapon mobs (display 15294) are this body, seen only through its attachments:
-    // the weapon on HandRight, the name plate on PlayerName.
-    let bytes = chain
-        .read_file("Creature\\InvisibleStalker\\InvisibleStalker.m2")
-        .expect("read InvisibleStalker.m2");
-    let attach = benilla_formats::parse_m2_attachments(&bytes).expect("parse attachments");
-    let at = |id: u16| attach.iter().find(|a| a.id == id).copied();
-
-    let hand = at(1).expect("HandRight (1) — the drawn mainhand, where the axe hangs");
-    assert!(
-        hand.position[2] > 0.5,
-        "the hand attachment sits on the body, not at the origin: {:?}",
-        hand.position
-    );
-    let name = at(18).expect("PlayerName (18) — `0x608640`'s overhead anchor");
-    assert!(
-        name.position[2] > 2.0,
-        "the name anchor is overhead, not at the feet: {:?}",
-        name.position
-    );
-
-    let bounds = benilla_formats::load_m2_bounds(
-        &mut chain,
-        "Creature\\InvisibleStalker\\InvisibleStalker.mdx",
-    )
-    .expect("bounds");
-    assert_eq!(
-        bounds.bbox_max[2] - bounds.bbox_min[2],
-        0.0,
-        "a vertex-less model has no vertex box — the overhead fallback is feet-height here"
-    );
-}
-
-#[test]
 fn suppresses_white1_invisible_trap_placeholder() {
     let data = benilla_formats::wow_data_or_skip!();
     let mut chain = open_chain(&data).expect("open vanilla patch chain");

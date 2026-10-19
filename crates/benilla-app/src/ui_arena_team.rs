@@ -26,7 +26,8 @@ use benilla_protocol::{
     SessionEvent, SessionEventKind,
 };
 use benilla_ui::script::{
-    ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView, ScriptValue, UiScript,
+    ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView, InspectArenaTeamView,
+    ScriptValue, UiScript,
 };
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -185,6 +186,32 @@ impl ArenaTable {
         }
     }
 
+    /// The inspected player's teams joined with their query records, asking once for a record
+    /// not yet held (`0x5e8030`'s cache lookup).
+    pub(crate) fn inspect_view(
+        &mut self,
+        teams: [Option<crate::ui_battlefield::InspectedArenaTeam>; 3],
+        fx: &mut Effects,
+    ) -> [Option<InspectArenaTeamView>; 3] {
+        teams.map(|t| {
+            let t = t.filter(|t| t.team_id != 0)?;
+            let Some(info) = self.records.get(&t.team_id).cloned() else {
+                if self.queried.insert(t.team_id) {
+                    fx.sends.push(Command::Query { team_id: t.team_id });
+                }
+                return None;
+            };
+            Some(InspectArenaTeamView {
+                info,
+                rating: t.rating,
+                season_games: t.season_games,
+                season_wins: t.season_wins,
+                player_games: t.member_games,
+                player_rating: t.personal_rating,
+            })
+        })
+    }
+
     /// The three slots as the bindings read them.
     pub(crate) fn teams(&self) -> [ArenaTeamView; 3] {
         std::array::from_fn(|s| ArenaTeamView {
@@ -250,6 +277,28 @@ fn clear(
 #[derive(Default)]
 struct Published {
     teams: Option<[ArenaTeamView; 3]>,
+    inspect: Option<[Option<InspectArenaTeamView>; 3]>,
+}
+
+/// The inspected player, as the inspect window resolves it.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Inspected<'w> {
+    target: Res<'w, crate::ui_inspect::InspectTarget>,
+    selection: Res<'w, crate::target::Selection>,
+    group: Res<'w, crate::ui_party::GroupState>,
+    teams: Res<'w, crate::ui_battlefield::InspectArenaTeams>,
+}
+
+impl Inspected<'_> {
+    fn teams(&self) -> [Option<crate::ui_battlefield::InspectedArenaTeam>; 3] {
+        self.target
+            .token
+            .as_deref()
+            .and_then(|t| crate::ui_unit::player_token_guid(t, &self.selection, &self.group))
+            .and_then(|g| self.teams.0.get(&g))
+            .copied()
+            .unwrap_or_default()
+    }
 }
 
 /// Drain the capture into the table, then publish what changed.
@@ -261,6 +310,7 @@ fn feed_arena(
     me: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
     clock: Res<crate::ui_script::UiClock>,
+    inspected: Inspected,
     mut memory: Local<crate::ui_script::VmMemo<Published>>,
 ) {
     let now = clock.ui_now;
@@ -287,6 +337,7 @@ fn feed_arena(
     for name in refresh.0.drain(..) {
         table.refresh_team(&name, now, &mut fx);
     }
+    let inspect = table.inspect_view(inspected.teams(), &mut fx);
     for command in fx.sends.drain(..) {
         let _ = commands.0.send(ClientCommand::ArenaTeamCommand(command));
     }
@@ -296,6 +347,14 @@ fn feed_arena(
     if memory.teams.as_ref() != Some(&teams) {
         script.set_wrath_arena_teams(teams.clone());
         memory.teams = Some(teams);
+    }
+    // The stats and the record both fire `INSPECT_HONOR_UPDATE` (`0x5e7b00`, `0x5e7640`).
+    if memory.inspect.as_ref() != Some(&inspect) {
+        script.set_inspect_arena_teams(inspect.clone());
+        memory.inspect = Some(inspect);
+        if !vm_reset {
+            script.fire_event("INSPECT_HONOR_UPDATE", Vec::new());
+        }
     }
     if vm_reset {
         for slot in 0..3 {

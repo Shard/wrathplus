@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use anyhow::{Context, Result};
-use benilla_m2::parse_m2;
 use benilla_wmo::{parse_wmo, ParsedWmo};
 
 use crate::Chain;
@@ -41,35 +40,9 @@ pub fn load_m2_collision_hull(chain: &mut Chain, raw_path: &str) -> Result<Colli
 
 /// [`load_m2_collision_hull`] from file bytes already in hand; empty when there is no hull.
 pub fn parse_m2_collision_hull(bytes: &[u8]) -> Result<CollisionMesh> {
-    let format =
-        parse_m2(&mut Cursor::new(bytes)).map_err(|e| anyhow::anyhow!("parsing M2 hull: {e}"))?;
-    let rd = &format.model().raw_data;
-    let positions: Vec<[f32; 3]> = rd
-        .bounding_vertices
-        .as_chunks::<12>()
-        .0
-        .iter()
-        .map(|c| {
-            [
-                f32::from_le_bytes([c[0], c[1], c[2], c[3]]),
-                f32::from_le_bytes([c[4], c[5], c[6], c[7]]),
-                f32::from_le_bytes([c[8], c[9], c[10], c[11]]),
-            ]
-        })
-        .collect();
-    let n = positions.len() as u32;
-    let indices: Vec<u32> = rd
-        .bounding_triangles
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| u32::from(u16::from_le_bytes([c[0], c[1]])))
-        .collect();
-    // Every 1.12 hull has whole triangles and in-range indices; anything else counts as no hull.
-    if indices.is_empty() || !indices.len().is_multiple_of(3) || indices.iter().any(|&i| i >= n) {
-        return Ok(CollisionMesh::default());
-    }
-    Ok(CollisionMesh { positions, indices })
+    let wrath = benilla_m2::wrath::parse_wrath_m2(&mut Cursor::new(bytes))
+        .map_err(|e| anyhow::anyhow!("parsing M2 hull: {e}"))?;
+    super::wrath::collision(wrath.model())
 }
 
 /// MOPY `DETAIL`, the face bit the walking gather skips. The reference builds a reject mask from a

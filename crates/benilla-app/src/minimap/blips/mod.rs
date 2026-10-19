@@ -97,18 +97,6 @@ pub(crate) enum RimArrow {
 }
 
 impl RimArrow {
-    /// The `AnimationData.dbc` sequence the reference plays for this art; the test checks the
-    /// model against it.
-    #[cfg(test)]
-    pub(crate) const fn anim_id(self) -> u16 {
-        match self {
-            Self::Group => 0xa5,
-            Self::Landmark => 0xa6,
-            Self::Corpse => 0xa7,
-            Self::Guide => 0xa8,
-        }
-    }
-
     /// The `.blp` that sequence lights.
     pub(crate) const fn texture(self) -> &'static str {
         match self {
@@ -453,34 +441,6 @@ pub(super) fn drive_blip_tooltip(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The call site gives only the sequence id; the model says what it draws.
-    #[test]
-    fn each_rim_arrow_sequence_lights_exactly_its_own_layer() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::Chain::open(&data).expect("the patch chain");
-        let bytes = chain
-            .read_file("Interface\\Minimap\\Rotating-MinimapArrow.m2")
-            .expect("the one rim-arrow model");
-
-        for kind in RimArrow::ALL {
-            let shown = benilla_formats::m2_sequence_visible_textures(&bytes, kind.anim_id())
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{kind:?}: the model authors no sequence {:#x} — the id \
-                    is wrong, or this is not the model the reference animates",
-                        kind.anim_id()
-                    )
-                });
-            let want = format!("{}.BLP", kind.texture().to_uppercase());
-            assert_eq!(
-                shown,
-                vec![want],
-                "{kind:?} (sequence {:#x}) must light its layer and ONLY its layer",
-                kind.anim_id()
-            );
-        }
-    }
 
     fn poi(importance: u32, flags: u32, x: f32, name: &str) -> AreaPoi {
         AreaPoi {

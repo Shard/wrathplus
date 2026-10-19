@@ -915,8 +915,8 @@ mod tests {
             let bytes = chain
                 .read_file(&crate::models::model_path(&m.model_path))
                 .unwrap_or_else(|e| panic!("{label}: read {}: {e:#}", m.model_path));
-            let fmt = benilla_m2::parse_m2(&mut std::io::Cursor::new(&bytes[..]))
-                .unwrap_or_else(|e| panic!("{label}: parse M2: {e:#}"));
+            let fmt = benilla_m2::wrath::parse_wrath_m2(&mut std::io::Cursor::new(&bytes[..]))
+                .unwrap_or_else(|e| panic!("{label}: parse M2: {e}"));
             let hdr = &fmt.model().header;
             let box_z = (hdr.collision_box_max[2] - hdr.collision_box_min[2]).abs();
             assert!(

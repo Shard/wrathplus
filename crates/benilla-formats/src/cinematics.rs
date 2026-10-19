@@ -2,9 +2,9 @@
 //! world-space camera path each one resolves to.
 //!
 //! A cinematic is not a movie. `SMSG_TRIGGER_CINEMATIC` carries a sequence id, the sequence names
-//! up to eight camera rows, and each row names a `Cameras\*.m2` whose one
-//! [`M2Camera`](benilla_m2::M2Camera) record is the shot: eye, look-at and roll tracks in the
-//! model's local frame, planted at the row's world origin and facing. The world renders normally
+//! up to eight camera rows, and each row names a `Cameras\*.m2` whose first
+//! [`WrathCamera`](benilla_m2::wrath::WrathCamera) record is the shot: eye, look-at and roll tracks
+//! in the model's local frame, planted at the row's world origin and facing. The world renders normally
 //! underneath. A shot ranges far from its origin (the Tauren intro starts 1741 yd out), and the
 //! server re-anchors object visibility to the flying camera while one runs (vmangos
 //! `Player::UpdateCinematic`), so the world streams from the camera, not the avatar.
@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
-use benilla_m2::{M2Camera, M2SplineKey, M2Track};
+use benilla_m2::wrath::{parse_wrath_m2_with_animations, WrathCamera};
 
 use crate::dbc::{f32_at, parse, str_at, u32_at};
 use crate::Chain;
@@ -200,48 +200,43 @@ pub struct CinematicPath {
     pub near_clip: f32,
     /// The authored far clip (1000/36 on every shipped shot), unread on this path.
     pub far_clip: f32,
-    /// How long the shot runs in ms: the width of its sequence band (`end − start`), not its end.
+    /// How long the shot runs in ms: the model's first sequence's duration.
     pub duration_ms: u32,
-    /// The band's start on the model's global timeline, added to every sample time.
-    band_start: u32,
     origin: [f32; 3],
     facing_sin_cos: (f32, f32),
-    camera: M2Camera,
+    camera: WrathCamera,
 }
 
 impl CinematicPath {
     /// Build a shot from its camera row: the `.m2`'s camera record, planted at the row's origin.
+    /// A sequence without the in-file flag keeps its keys in `<stem><id:04>-<variation:02>.anim`.
     pub fn load(chain: &mut Chain, row: &CinematicCameraRow) -> Result<Self> {
         let path = camera_model_path(&row.model);
         let bytes = chain
             .read_file(&path)
             .with_context(|| format!("reading cinematic camera model {path}"))?;
-        Self::from_m2_bytes(&bytes, row).with_context(|| format!("parsing {path}"))
+        let external = crate::models::m2_batches::chain_wrath_animations(chain, &path, &bytes)?;
+        let external: Vec<Option<&[u8]>> = external.iter().map(|e| e.as_deref()).collect();
+        Self::from_m2_parts(&bytes, &external, row).with_context(|| format!("parsing {path}"))
     }
 
-    /// The same, from bytes already in hand (the test/tooling seam).
-    pub fn from_m2_bytes(bytes: &[u8], row: &CinematicCameraRow) -> Result<Self> {
+    /// The same, from bytes already in hand (the test/tooling seam); `external` holds the
+    /// sibling `.anim` payloads by sequence index.
+    pub fn from_m2_parts(
+        bytes: &[u8],
+        external: &[Option<&[u8]>],
+        row: &CinematicCameraRow,
+    ) -> Result<Self> {
+        let model = parse_wrath_m2_with_animations(bytes, external)
+            .map_err(|e| anyhow::anyhow!("parsing camera model: {e}"))?;
         // The camera array alone: a `Cameras\*.m2` has no geometry, and the shot is this record.
-        let camera = benilla_m2::parse_cameras(bytes)
-            .into_iter()
-            .next()
+        let camera = model
+            .cameras()
+            .first()
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("model carries no camera record"))?;
-        // The reference plays the shot as an ordinary M2 animation on sequence 0: it runs for
-        // `end − start`, its keys stamped on the global timeline inside `[start, end]`. A file
-        // with no sequence falls back to its last key.
-        let (band_start, band_end) = sequence_band(bytes)
-            .or_else(|| {
-                [
-                    camera.positions.keys.last().map(|k| k.0),
-                    camera.target.keys.last().map(|k| k.0),
-                ]
-                .into_iter()
-                .flatten()
-                .max()
-                .map(|end| (0, end))
-            })
-            .unwrap_or((0, 0));
-        let duration_ms = band_end.saturating_sub(band_start);
+        // The shot plays as an ordinary M2 animation on sequence 0, for that sequence's duration.
+        let duration_ms = model.animations().first().map_or(0, |a| a.duration_ms);
         Ok(Self {
             camera_id: row.id,
             sound_id: row.sound_id,
@@ -249,7 +244,6 @@ impl CinematicPath {
             near_clip: camera.near_clip,
             far_clip: camera.far_clip,
             duration_ms,
-            band_start,
             origin: row.origin,
             facing_sin_cos: row.origin_facing.sin_cos(),
             camera,
@@ -259,21 +253,12 @@ impl CinematicPath {
     /// Sample the shot `ms` after its start, clamped at both ends: each track composed against its
     /// base, then planted in the world by the row's origin and facing, with no scale or flip.
     pub fn sample(&self, ms: u32) -> CinematicView {
-        let ms = self.band_start.saturating_add(ms);
-        let eye = self.to_world(sample_against(
-            &self.camera.positions,
-            self.camera.position_base,
-            ms,
-        ));
-        let target = self.to_world(sample_against(
-            &self.camera.target,
-            self.camera.target_base,
-            ms,
-        ));
+        let ms = ms.min(self.duration_ms);
+        let pose = crate::sample_wrath_camera(&self.camera, 0, ms, ms).ok();
         CinematicView {
-            eye,
-            target,
-            roll: self.camera.roll.sample_ms(ms).unwrap_or(0.0),
+            eye: self.to_world(pose.map_or(self.camera.position_base, |p| p.position)),
+            target: self.to_world(pose.map_or(self.camera.target_base, |p| p.target)),
+            roll: pose.map_or(0.0, |p| p.roll),
         }
     }
 
@@ -285,27 +270,6 @@ impl CinematicPath {
             self.origin[2] + local[2],
         ]
     }
-}
-
-/// A camera track sampled and composed against its base, the reference's publish form.
-fn sample_against(track: &M2Track<M2SplineKey<[f32; 3]>>, base: [f32; 3], ms: u32) -> [f32; 3] {
-    let d = track.sample_ms(ms).unwrap_or([0.0; 3]);
-    std::array::from_fn(|i| base[i] + d[i])
-}
-
-/// The model's first sequence band, `(start, end)` in global-timeline ms: count at header `0x1c`,
-/// offset at `0x20`, entries `0x44` apart, band at `+0x04`/`+0x08`. `start` is not always 0
-/// (`FlybyNightElf` bands at `[333, 102333]`).
-fn sequence_band(b: &[u8]) -> Option<(u32, u32)> {
-    let le_u32 = |o: usize| -> Option<u32> {
-        b.get(o..o + 4)
-            .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
-    };
-    let (n, o) = (le_u32(0x1c)?, le_u32(0x20)? as usize);
-    if n == 0 {
-        return None;
-    }
-    Some((le_u32(o + 0x04)?, le_u32(o + 0x08)?))
 }
 
 #[cfg(test)]
@@ -357,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn real_flyby_shots_are_bezier_and_end_on_their_sequence_band() {
+    fn real_flyby_shots_are_bezier_and_end_on_their_sequence() {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
         let cat = load_cinematics(&mut chain).expect("load cinematic tables");
@@ -367,27 +331,20 @@ mod tests {
                 .unwrap_or_else(|e| panic!("sequence {id} path: {e:#}"));
             // The shot is a real flight, not a single parked key.
             assert!(path.duration_ms > 30_000, "sequence {id} duration");
-            assert!(
-                path.camera.positions.keys.len() >= 10,
-                "sequence {id} is richly keyed"
-            );
-            // Interp 2 is cubic Bézier, on both vector tracks.
-            assert_eq!(path.camera.positions.interp, 2, "sequence {id} position");
-            assert_eq!(path.camera.target.interp, 2, "sequence {id} target");
-            // The band brackets both tracks exactly: `start` is the first key, `end` the last.
             for (what, track) in [
                 ("position", &path.camera.positions),
                 ("target", &path.camera.target),
             ] {
+                // Interpolation 2 is cubic Bézier.
+                assert_eq!(track.interpolation, 2, "sequence {id} {what}");
+                let keys = &track.sequences[0];
+                assert!(keys.len() >= 10, "sequence {id} {what} is richly keyed");
+                // The sequence brackets the track: its keys run from 0 to the duration.
+                assert_eq!(keys.first().map(|k| k.timestamp_ms), Some(0));
                 assert_eq!(
-                    track.keys.first().map(|k| k.0),
-                    Some(path.band_start),
-                    "sequence {id} {what} track starts on the band"
-                );
-                assert_eq!(
-                    track.keys.last().map(|k| k.0),
-                    Some(path.band_start + path.duration_ms),
-                    "sequence {id} {what} track ends on the band"
+                    keys.last().map(|k| k.timestamp_ms),
+                    Some(path.duration_ms),
+                    "sequence {id} {what} track ends on the sequence"
                 );
             }
             // Data only: uniform clips, and a 90° fov on the Undead intro against 45° elsewhere.

@@ -846,7 +846,7 @@ mod tests {
             .init_resource::<Items>()
             .init_resource::<crate::net::GuidIndex>()
             .insert_resource(NetCommands(tx))
-            .insert_resource(crate::net::SessionDialect::Vanilla5875);
+            .insert_resource(crate::net::SessionDialect::Wrath12340);
 
         app.world_mut().spawn((
             SelfPlayer,

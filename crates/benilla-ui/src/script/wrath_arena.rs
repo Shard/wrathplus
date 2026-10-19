@@ -70,6 +70,19 @@ pub struct ArenaTeamView {
     pub info: Option<ArenaTeamInfoView>,
 }
 
+/// One inspected player's arena team (`MSG_INSPECT_ARENA_TEAMS` `0x5e7b00` and the team's
+/// query record), as `GetInspectArenaTeamData` (`0x5e8030`) reads it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InspectArenaTeamView {
+    pub info: ArenaTeamInfoView,
+    pub rating: u32,
+    pub season_games: u32,
+    pub season_wins: u32,
+    /// The inspected player's games and personal rating on the team.
+    pub player_games: u32,
+    pub player_rating: u32,
+}
+
 /// The arena-team state the bindings read.
 #[derive(Clone, Debug)]
 pub(crate) struct ArenaState {
@@ -83,6 +96,8 @@ pub(crate) struct ArenaState {
     sort: [(u8, bool); 7],
     /// `ArenaTeamRoster` slots, 0-based, for the app's throttled send.
     roster_requests: Vec<u8>,
+    /// The inspected player's three teams, `None` until a team's stats and record are both held.
+    inspect: [Option<InspectArenaTeamView>; 3],
 }
 
 impl Default for ArenaState {
@@ -94,6 +109,7 @@ impl Default for ArenaState {
             show_offline: true,
             sort: std::array::from_fn(|k| (k as u8, false)),
             roster_requests: Vec::new(),
+            inspect: Default::default(),
         }
     }
 }
@@ -180,6 +196,11 @@ impl UiScript {
         let arena = &mut self.model_mut().wrath_arena;
         arena.rosters[slot] = members;
         arena.sort_roster(slot);
+    }
+
+    /// The inspected player's arena teams, by slot.
+    pub fn set_inspect_arena_teams(&mut self, teams: [Option<InspectArenaTeamView>; 3]) {
+        self.model_mut().wrath_arena.inspect = teams;
     }
 
     /// The frame's `ArenaTeamRoster` slots, 0-based, in call order.
@@ -279,6 +300,34 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         Ok(MultiValue::from_vec(out))
     })?;
     // 1 while the slot's descriptor member word is 0, which an empty slot's is too.
+    // name, size, rating, played, wins, playerPlayed, playerRating and the emblem's 11 values:
+    // 18, or nothing off slots 1-3 and for a team not yet held (`0x5e8030`).
+    set("GetInspectArenaTeamData", |lua, args| {
+        let Some(i) = index(&arg(&args, 0)) else {
+            return Err(mlua::Error::runtime(
+                "Usage: GetInspectArenaTeamData(index)",
+            ));
+        };
+        let model = lua.app_data_ref::<Model>().expect("model");
+        let Some(t) = slot(i).and_then(|s| model.wrath_arena.inspect[s].as_ref()) else {
+            return Ok(MultiValue::new());
+        };
+        let mut out = vec![
+            Value::String(lua.create_string(&t.info.name)?),
+            int(t.info.size),
+            int(t.rating),
+            int(t.season_games),
+            int(t.season_wins),
+            int(t.player_games),
+            int(t.player_rating),
+        ];
+        out.extend(rgb(t.info.emblem[0]));
+        out.push(int(t.info.emblem[1]));
+        out.extend(rgb(t.info.emblem[2]));
+        out.push(int(t.info.emblem[3]));
+        out.extend(rgb(t.info.emblem[4]));
+        Ok(MultiValue::from_vec(out))
+    })?;
     set("IsArenaTeamCaptain", |lua, args| {
         let Some(i) = index(&arg(&args, 0)) else {
             return Err(mlua::Error::runtime("Usage: IsArenaTeamCaptain(index)"));
@@ -533,6 +582,36 @@ mod tests {
             "##,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn inspected_teams_answer_eighteen_or_nothing() {
+        let mut s = vm();
+        assert_eq!(s.arity("GetInspectArenaTeamData(1)").unwrap(), 0);
+        let mut teams: [Option<InspectArenaTeamView>; 3] = Default::default();
+        teams[1] = Some(InspectArenaTeamView {
+            info: ArenaTeamInfoView {
+                name: "Trio".into(),
+                size: 3,
+                emblem: [0xff_00_00_ff, 4, 0, 2, 0],
+            },
+            rating: 1800,
+            season_games: 40,
+            season_wins: 22,
+            player_games: 30,
+            player_rating: 1750,
+        });
+        s.set_inspect_arena_teams(teams);
+        assert_eq!(s.arity("GetInspectArenaTeamData(2)").unwrap(), 18);
+        assert_eq!(s.arity("GetInspectArenaTeamData(4)").unwrap(), 0);
+        let got = s
+            .eval::<String>(
+                "local n, z, r, p, w, pp, pr, br, bg, bb, e = GetInspectArenaTeamData(2) \
+                 return table.concat({n, z, r, p, w, pp, pr, bb, e}, '|')",
+            )
+            .unwrap();
+        assert_eq!(got, "Trio|3|1800|40|22|30|1750|1|4");
+        assert!(s.run("GetInspectArenaTeamData()").is_err());
     }
 
     #[test]

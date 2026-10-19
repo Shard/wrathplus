@@ -10,8 +10,8 @@ use std::path::Path;
 
 use benilla_formats::wrath_liquid_surface::WrathLiquidSurface;
 use benilla_formats::{
-    adt_to_tile_mesh, adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad,
-    Mh2oChunk, TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
+    adt_to_tile_mesh_with_options, blp_bytes_to_native_chain, ChunkMesh, Doodad, Mh2oChunk,
+    TerrainDecodeOptions, TileMesh, WmoInstance, ALPHA_MAP_SIZE, SHADOW_MAP_SIZE,
 };
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext, RenderAssetUsages};
@@ -130,33 +130,6 @@ pub fn chunks_to_mesh(parts: &[(&ChunkMesh, &ChunkShading)]) -> Option<Mesh> {
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
     mesh.insert_indices(Indices::U32(indices));
     Some(mesh)
-}
-
-/// Loads a `*.adt` tile into an [`AdtTile`].
-#[derive(Default, TypePath)]
-pub struct AdtLoader;
-
-impl AssetLoader for AdtLoader {
-    type Asset = AdtTile;
-    type Settings = ();
-    type Error = std::io::Error;
-
-    async fn load(
-        &self,
-        reader: &mut dyn Reader,
-        _settings: &(),
-        ctx: &mut LoadContext<'_>,
-    ) -> Result<AdtTile, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        let to_io = |e: anyhow::Error| std::io::Error::other(format!("{e:#}"));
-        let tile = adt_to_tile_mesh(&bytes).map_err(to_io)?;
-        finish_tile(tile, ctx).await
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["adt"]
-    }
 }
 
 /// Wrath ADT loader. Its MCAL dialect comes only from the matching WDT's `MPHD` flags.

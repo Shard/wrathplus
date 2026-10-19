@@ -185,7 +185,7 @@ impl GuildState {
     fn request_identity(&self, guild_id: u32, commands: &NetCommands) {
         if guild_id != 0 {
             let command = ClientCommand::GuildQuery { guild_id };
-            let dialect = self.dialect.unwrap_or(SessionDialect::Vanilla5875);
+            let dialect = self.dialect.unwrap_or(SessionDialect::Wrath12340);
             if !commands.supports(dialect, &command) {
                 return;
             }
@@ -202,7 +202,8 @@ impl GuildState {
     /// A guild's identity if we hold a real one; `None` while in flight and for no such guild.
     /// Our own guild's rank name for `index`, `""` before the identity answers.
     pub(crate) fn own_rank_name(&self, index: u32) -> &str {
-        self.identity(self.guild_id).map_or("", |i| i.rank_name(index))
+        self.identity(self.guild_id)
+            .map_or("", |i| i.rank_name(index))
     }
 
     fn identity(&self, guild_id: u32) -> Option<&Identity> {
@@ -722,7 +723,7 @@ fn configure_dialect(dialect: Option<Res<SessionDialect>>, guild: Option<ResMut<
             dialect
                 .as_deref()
                 .copied()
-                .unwrap_or(SessionDialect::Vanilla5875),
+                .unwrap_or(SessionDialect::Wrath12340),
         );
     }
 }

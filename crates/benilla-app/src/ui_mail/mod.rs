@@ -10,10 +10,10 @@
 //! the icon because opening a letter arms a deferred refresh (`[0xb6efcc]`) and the mailbox close
 //! re-asks the server.
 
-use benilla_protocol::messages::{mail_error, mail_message_type, MailListEntry};
+use benilla_protocol::messages::{mail_error, MailListEntry};
 use bevy::prelude::*;
 
-use benilla_ui::script::{MailInboxRow, MailState, ScriptValue, StationeryView, UiScript};
+use benilla_ui::script::{MailInboxRow, ScriptValue, StationeryView, UiScript};
 
 use crate::entities::ItemDisplays;
 use crate::items::Items;
@@ -203,7 +203,12 @@ fn send_query_next_mail_time_on_enter(
 
 /// Send only commands backed by the selected dialect's writer; never fabricate a reply.
 /// A row pick as its mail command: by the native inbox in build 12340, else the 1.12 row id.
-fn inbox_action(mail: &MailOpen, mailbox: u64, index: u32, action: wrath::Action) -> Option<ClientCommand> {
+fn inbox_action(
+    mail: &MailOpen,
+    mailbox: u64,
+    index: u32,
+    action: wrath::Action,
+) -> Option<ClientCommand> {
     if let Some(inbox) = mail.wrath_inbox.as_ref() {
         return wrath::native_action(inbox, mailbox, index, action);
     }
@@ -258,116 +263,6 @@ pub(crate) const MAIL_SENT_KEY: &str = "ERR_MAIL_SENT";
 mod invoice;
 
 use invoice::auction_mail;
-
-/// One wire row as the Lua-facing row; anything still in flight stays `None` until it lands.
-fn resolve_row(
-    entry: &MailListEntry,
-    bodies: &QueryCache<u32, String>,
-    items: &Items,
-    icons: Option<&ItemDisplays>,
-    stationery: Option<&Stationery>,
-    names: &NameCache,
-    commands: &NetCommands,
-    rolls: crate::items::RollCatalogs,
-    macros: &crate::npc_text::MacroContext,
-    // The VM's GlobalStrings, for the auction subject: the strings are the install's, never ours.
-    get_text: &dyn Fn(&str) -> Option<String>,
-) -> MailInboxRow {
-    let is_gm = entry.stationery == STATIONERY_GM;
-    let returned = entry.checked & CHECKED_RETURNED != 0;
-    // Reply only to an unreturned mail from a player (`MailFrame.lua:281` reads it).
-    let can_reply = entry.sender_guid.is_some() && !returned;
-    // An unreturned player mail still carrying money or an item returns rather than deletes; the
-    // reference's `InboxItemCanDelete` predicate is untraced.
-    let can_delete =
-        returned || entry.sender_guid.is_none() || (entry.item.is_none() && entry.money == 0);
-
-    let (item_id, item_roll, item_count, item_name, item_texture, item_quality) = match &entry.item
-    {
-        Some(att) => {
-            let template = items.template(att.entry, 0, commands);
-            let name = template.map(|t| rolls.name(&t.name, att.random_prop_id));
-            let quality = template.map(|t| t.quality);
-            let display_id = template.map(|t| t.display_info_id).unwrap_or(0);
-            let texture = icons
-                .and_then(|i| i.catalog.get(display_id))
-                .and_then(|d| d.icon.clone());
-            (
-                att.entry,
-                att.random_prop_id,
-                u32::from(att.count),
-                name,
-                texture,
-                quality,
-            )
-        }
-        None => (0, 0, 0, None, None, None),
-    };
-
-    let sender = entry
-        .sender_guid
-        .and_then(|g| names.resolve(g, commands).map(str::to_string));
-
-    let stationery_texture = stationery
-        .map(|s| s.0.texture(entry.stationery).to_string())
-        .unwrap_or_else(|| benilla_formats::StationeryCatalog::DEFAULT_TEXTURE.to_string());
-
-    // The raw body: the invoice parses it before any `$`-macro expansion.
-    let raw_body = (entry.item_text_id != 0)
-        .then(|| bodies.get(entry.item_text_id))
-        .flatten();
-
-    // ── The auction house's mail (`0x4ace70`, `0x4af360`) ──
-    // Every notice gets its displayed subject; only a won or sold one has an invoice, once its
-    // body is fetched.
-    let auction = (entry.message_type == mail_message_type::AUCTION)
-        .then(|| invoice::parse_subject(&entry.subject))
-        .flatten();
-    // The notice's item comes from the subject: a sold notice names an item it does not carry.
-    let notice_item_name = auction
-        .and_then(|a| items.template(a.entry, 0, commands))
-        .map(|t| t.name.clone());
-    // Until the item template lands, the raw triplet stands.
-    let subject = auction_subject(&entry.subject, auction, notice_item_name.as_ref(), get_text);
-    let auction_invoice = auction_invoice(auction, raw_body, notice_item_name.clone(), names, commands);
-
-    MailInboxRow {
-        package_icon: item_texture.clone(),
-        stationery_icon: Some(
-            if is_gm {
-                STATIONERY_ICON_GM
-            } else {
-                STATIONERY_ICON_NORMAL
-            }
-            .to_string(),
-        ),
-        sender,
-        subject,
-        money: entry.money,
-        cod: entry.cod,
-        days_left: entry.expire_days,
-        item_count,
-        was_read: entry.checked & CHECKED_READ != 0,
-        was_returned: returned,
-        text_created: entry.checked & CHECKED_COPIED != 0,
-        can_reply,
-        is_gm,
-        // The body runs the `$`-macro expander for the local player, as `GetInboxText` does.
-        body: raw_body.map(|b| crate::npc_text::substitute(b, macros)),
-        stationery_texture,
-        // Won and sold notices only, not every auction mail: the reference's `isInvoice` reads
-        // what its subject parser persists for those two alone.
-        is_invoice: auction.is_some_and(|a| is_invoice_result(a.result)),
-        invoice: auction_invoice,
-        has_body: entry.item_text_id != 0,
-        item_id,
-        item_random_property_id: item_roll,
-        item_name,
-        item_texture,
-        item_quality,
-        can_delete,
-    }
-}
 
 /// The notices that carry an invoice: won, sold, and build 12340's sale pending payment.
 fn is_invoice_result(result: u32) -> bool {
@@ -466,40 +361,6 @@ fn stationeries(
     out.into_iter().map(|(_, v)| v).collect()
 }
 
-fn snapshot(
-    mail: &MailOpen,
-    items: &Items,
-    icons: Option<&ItemDisplays>,
-    stationery: Option<&Stationery>,
-    names: &NameCache,
-    commands: &NetCommands,
-    rolls: crate::items::RollCatalogs,
-    macros: &crate::npc_text::MacroContext,
-    get_text: &dyn Fn(&str) -> Option<String>,
-) -> Option<MailState> {
-    mail.mailbox?;
-    Some(MailState {
-        inbox: mail
-            .mails
-            .iter()
-            .map(|e| {
-                resolve_row(
-                    e,
-                    &mail.bodies,
-                    items,
-                    icons,
-                    stationery,
-                    names,
-                    commands,
-                    rolls,
-                    macros,
-                    get_text,
-                )
-            })
-            .collect(),
-    })
-}
-
 /// The feed's remaining parameters, bundled under Bevy's 16-parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
 struct MailFeedExtras<'w, 's> {
@@ -556,12 +417,10 @@ fn feed_mail(
     commands: Res<NetCommands>,
     mut pending: ResMut<MailPending>,
     time: Res<Time>,
-    mut last: Local<crate::ui_script::VmMemo<Option<MailState>>>,
     mut last_mailbox: Local<crate::ui_script::VmMemo<Option<u64>>>,
     mut last_has_new_mail: Local<crate::ui_script::VmMemo<bool>>,
     // The local player, the letter body's `$`-macro subject.
     self_q: Query<(&crate::net::ObjectStore, &crate::net::Guid), With<crate::net::SelfPlayer>>,
-    states: Res<crate::world_state::WorldStates>,
     extras: MailFeedExtras,
 ) {
     let Some(mut script) = script else {
@@ -591,7 +450,6 @@ fn feed_mail(
         enchants: enchants.as_deref(),
     };
     let last_wrath = last_wrath.get(&script);
-    let last = last.get(&script);
     let last_mailbox = last_mailbox.get(&script);
     let last_has_new_mail = last_has_new_mail.get(&script);
 
@@ -622,31 +480,10 @@ fn feed_mail(
         script.fire_event("MAIL_FAILED", vec![]);
     }
 
-    // `None` until the player is named; the diff re-substitutes an open letter when it lands.
-    let subject = crate::npc_text::player_identity(&self_q, &names, &commands);
-    let macros = crate::npc_text::MacroContext {
-        subject: subject.as_ref(),
-        states: &states,
-    };
-    let fresh = {
-        // Scoped: the resolver borrows the VM, and `set_mail` below needs it back.
-        let get_text = |key: &str| script.lua().globals().get::<String>(key).ok();
-        snapshot(
-            &mail,
-            &items,
-            icons.as_deref(),
-            stationery.as_deref(),
-            &names,
-            &commands,
-            rolls,
-            &macros,
-            &get_text,
-        )
-    };
     let opened = last_mailbox.is_none() && mail.mailbox.is_some();
     let closed = last_mailbox.is_some() && mail.mailbox.is_none();
     let show_requested = std::mem::take(&mut mail.show_requested);
-    let changed = if *dialect == SessionDialect::Wrath12340 {
+    let changed = {
         let native = {
             // Scoped, as above: the resolver borrows the VM.
             let get_text = |key: &str| script.lua().globals().get::<String>(key).ok();
@@ -670,11 +507,7 @@ fn feed_mail(
         }
         // `CanComplainInboxItem`'s not-from-self test (`0x56fa70`) reads the player's GUID.
         script.set_wrath_mail_self_guid(self_q.single().map_or(0, |(_, guid)| guid.0));
-        let gm_name = script
-            .lua()
-            .globals()
-            .get::<String>("GM_EMAIL_NAME")
-            .ok();
+        let gm_name = script.lua().globals().get::<String>("GM_EMAIL_NAME").ok();
         let senders = latest_senders(
             &pending.previews,
             &names,
@@ -688,12 +521,6 @@ fn feed_mail(
             *last = Some(senders);
         }
         *last_wrath = native;
-        changed
-    } else {
-        let changed = fresh != *last;
-        if changed {
-            script.set_mail(fresh.clone());
-        }
         changed
     };
     // The usable stationery is asked ahead of any mailbox so the list is whole when
@@ -742,7 +569,6 @@ fn feed_mail(
             script.fire_event("MAIL_INBOX_UPDATE", vec![]);
         }
     }
-    *last = fresh;
     *last_mailbox = mail.mailbox;
 
     // `HasNewMail()` is pushed on change, but `UPDATE_PENDING_MAIL` fires only at the reference's
@@ -860,7 +686,9 @@ fn drain_mail(
                 }
             }
             benilla_ui::script::WrathMailRequest::Complain { row, sender } => {
-                info!("mail: complaint about row {row} (sender {sender:#x}) not sent: capture-only");
+                info!(
+                    "mail: complaint about row {row} (sender {sender:#x}) not sent: capture-only"
+                );
             }
         }
     }
@@ -908,7 +736,7 @@ fn drain_mail(
         if let Some(send_slot) = missing {
             mail.errors.push("ERR_ITEM_NOT_FOUND");
             script.drop_send_mail_item(send_slot);
-        } else if *dialect == SessionDialect::Wrath12340 {
+        } else {
             // The package rides only with an item.
             let package = if items.is_empty() { 0 } else { req.package };
             let command = wrath::send(
@@ -923,24 +751,6 @@ fn drain_mail(
                 req.cod,
             );
             send_supported(&commands, *dialect, command);
-        } else {
-            let item_guid = items.first().map(|&(_, guid)| guid);
-            send_supported(
-                &commands,
-                *dialect,
-                ClientCommand::SendMail {
-                    mailbox,
-                    receiver: req.target,
-                    subject: req.subject,
-                    body: req.body,
-                    stationery: req.stationery,
-                    item_guid: item_guid.unwrap_or(0),
-                    money: req.money,
-                    cod: req.cod,
-                    // The package id rides only with an item (`0x4ae8f3`).
-                    package: if item_guid.is_some() { req.package } else { 0 },
-                },
-            );
         }
     }
 
@@ -952,16 +762,13 @@ fn drain_mail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::MailAttachment;
+    use benilla_protocol::messages::mail_message_type;
 
     #[test]
     fn next_mail_query_uses_each_dialects_native_writer_and_updates_pending() {
         use crossbeam_channel::TryRecvError;
 
-        for (dialect, expected) in [
-            (SessionDialect::Vanilla5875, true),
-            (SessionDialect::Wrath12340, true),
-        ] {
+        for (dialect, expected) in [(SessionDialect::Wrath12340, true)] {
             let (tx, rx) = crossbeam_channel::unbounded();
             let mut pending = MailPending::default();
             pending.apply_query_reply(0.0);
@@ -1025,14 +832,6 @@ mod tests {
                 .kind,
             benilla_ui::messages::MsgKind::Info
         );
-    }
-
-    /// A subject-less macro context: no row test uses a `$` token.
-    fn no_macros(states: &crate::world_state::WorldStates) -> crate::npc_text::MacroContext<'_> {
-        crate::npc_text::MacroContext {
-            subject: None,
-            states,
-        }
     }
 
     fn entry(
@@ -1104,132 +903,6 @@ mod tests {
         assert!(m.mails.is_empty());
         assert!(m.bodies.is_empty());
     }
-
-    /// No GlobalStrings in a unit test: every key misses.
-    fn no_strings(_key: &str) -> Option<String> {
-        None
-    }
-
-    #[test]
-    fn resolve_row_derives_the_reply_and_delete_law() {
-        let states = crate::world_state::WorldStates::default();
-        let items = Items::default();
-        let (tx, _rx) = crossbeam_channel::unbounded();
-        let commands = NetCommands(tx);
-        let names = NameCache::default();
-        let bodies = QueryCache::default();
-
-        // A plain letter from a player: replyable and deletable.
-        let from_player = entry(1, Some(0xA), 0, 30.0);
-        let row = resolve_row(
-            &from_player,
-            &bodies,
-            &items,
-            None,
-            None,
-            &names,
-            &commands,
-            crate::items::RollCatalogs::NONE,
-            &no_macros(&states),
-            &no_strings,
-        );
-        assert!(row.can_reply);
-        assert!(row.can_delete);
-        assert_eq!(row.stationery_texture, "STATIONERYTEST");
-
-        // A player mail still carrying money returns, so it is not deletable; so does an item.
-        let mut with_money = entry(4, Some(0xA), 0, 30.0);
-        with_money.money = 500;
-        let row = resolve_row(
-            &with_money,
-            &bodies,
-            &items,
-            None,
-            None,
-            &names,
-            &commands,
-            crate::items::RollCatalogs::NONE,
-            &no_macros(&states),
-            &no_strings,
-        );
-        assert!(row.can_reply);
-        assert!(!row.can_delete);
-
-        // A returned mail: not replyable, deletable.
-        let returned = entry(2, Some(0xA), CHECKED_RETURNED, 30.0);
-        let row = resolve_row(
-            &returned,
-            &bodies,
-            &items,
-            None,
-            None,
-            &names,
-            &commands,
-            crate::items::RollCatalogs::NONE,
-            &no_macros(&states),
-            &no_strings,
-        );
-        assert!(!row.can_reply);
-        assert!(row.can_delete);
-
-        // A system mail, with no sender guid: deletable.
-        let system = entry(3, None, 0, 30.0);
-        let row = resolve_row(
-            &system,
-            &bodies,
-            &items,
-            None,
-            None,
-            &names,
-            &commands,
-            crate::items::RollCatalogs::NONE,
-            &no_macros(&states),
-            &no_strings,
-        );
-        assert!(row.can_delete);
-    }
-
-    #[test]
-    fn resolve_row_reads_the_item_and_body_caches() {
-        let states = crate::world_state::WorldStates::default();
-        let items = Items::default();
-        let (tx, _rx) = crossbeam_channel::unbounded();
-        let commands = NetCommands(tx);
-        let names = NameCache::default();
-        let mut bodies = QueryCache::default();
-        bodies.insert(99, Some("the letter body".into()));
-
-        let mut e = entry(1, Some(0xA), 0, 30.0);
-        e.item_text_id = 99;
-        e.item = Some(MailAttachment {
-            entry: 2589,
-            perm_enchant: 0,
-            random_prop_id: 0,
-            suffix_factor: 0,
-            count: 5,
-            charges: 0,
-            durability_max: 0,
-            durability: 0,
-        });
-        let row = resolve_row(
-            &e,
-            &bodies,
-            &items,
-            None,
-            None,
-            &names,
-            &commands,
-            crate::items::RollCatalogs::NONE,
-            &no_macros(&states),
-            &no_strings,
-        );
-        assert_eq!(row.item_id, 2589);
-        assert_eq!(row.item_count, 5);
-        assert_eq!(row.body.as_deref(), Some("the letter body"));
-        assert!(row.has_body);
-        // The item template has not answered yet.
-        assert!(row.item_name.is_none());
-    }
 }
 
 #[cfg(test)]
@@ -1263,7 +936,8 @@ mod latest_senders_tests {
             latest_senders(&previews, &names, &commands, None, Some("Game Master")),
             ["Arthas", "Game Master"]
         );
-        assert!(latest_senders(&[preview(0, 7, 4, 41, -1.0)], &names, &commands, None, None)
-            .is_empty());
+        assert!(
+            latest_senders(&[preview(0, 7, 4, 41, -1.0)], &names, &commands, None, None).is_empty()
+        );
     }
 }

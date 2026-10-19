@@ -1,5 +1,6 @@
 //! Native mailbox snapshot: inline text and attachment slots are never narrowed to Vanilla mail.
 use super::*;
+use benilla_protocol::messages::mail_message_type;
 use benilla_ui::script::{WrathMailAttachment, WrathMailInbox, WrathMailRow};
 
 pub(super) fn snapshot(

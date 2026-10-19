@@ -987,7 +987,7 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
         app.init_resource::<Time>()
-            .insert_resource(SessionDialect::Vanilla5875)
+            .insert_resource(SessionDialect::Wrath12340)
             .init_resource::<LoginIntent>()
             // `GluePlugin`'s resource, seated here without the plugin.
             .init_resource::<GlueDialog>()

@@ -265,14 +265,17 @@ mod tests {
             .init_resource::<MailOpen>()
             .init_resource::<MailPending>()
             .init_resource::<EquipErrors>()
-            .insert_resource(SessionDialect::Vanilla5875)
+            .insert_resource(SessionDialect::Wrath12340)
             .insert_resource(NetCommands(tx));
         register(&mut app);
 
         app.world_mut().resource_mut::<MailOpen>().click(0x20);
         crate::net::handlers::dispatch(
             app.world_mut(),
-            vec![SessionEvent::NextMailTime { seconds: 0.0, previews: Vec::new() }],
+            vec![SessionEvent::NextMailTime {
+                seconds: 0.0,
+                previews: Vec::new(),
+            }],
         );
         assert!(app.world().resource::<MailPending>().has_new_mail());
         let inbox = benilla_protocol::wrath_mail::Inbox {

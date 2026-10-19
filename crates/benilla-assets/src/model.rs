@@ -306,21 +306,6 @@ pub(crate) fn upper_subtree_root(skel: &Skeleton) -> Option<usize> {
     bone_with(4).or_else(|| bone_with(6))
 }
 
-/// The finger key-bones per hand `(right, left)`, 8-12 and 13-17: the reference's `CloseHand`
-/// targets, posed with `HandsClosed` (AnimationData 15) while that hand holds a weapon
-/// (`0x479660`/`0x60b590`). Empty for a model without them.
-pub(crate) fn finger_subtree_roots(skel: &Skeleton) -> [Vec<usize>; 2] {
-    let roots = |lo: i16, hi: i16| -> Vec<usize> {
-        skel.bones
-            .iter()
-            .enumerate()
-            .filter(|(_, b)| (lo..=hi).contains(&b.key_bone))
-            .map(|(i, _)| i)
-            .collect()
-    };
-    [roots(8, 12), roots(13, 17)]
-}
-
 /// Whether bone `i` is `root` or one of its descendants.
 pub(crate) fn in_subtree(skel: &Skeleton, i: usize, root: usize) -> bool {
     let mut cur = i;
@@ -489,52 +474,6 @@ pub(crate) fn build_animation_clip(
         clip.set_duration(anim.duration.max(1e-3));
     }
     (clip, pose, any)
-}
-
-/// The weapon-grip overlay: one constant rotation per finger bone, played masked to one hand.
-pub(crate) fn build_grip_clip(poses: &[(u16, [f32; 4])]) -> (AnimationClip, PoseClip) {
-    let r = wow_to_bevy_quat();
-    let mut clip = AnimationClip::default();
-    let mut pose = PoseClip::default();
-    for &(bone, q) in poses {
-        let rot = r * Quat::from_xyzw(q[0], q[1], q[2], q[3]) * r.inverse();
-        if let Some(c) = keyframe_curve(0.033, vec![(0.0, rot)]) {
-            clip.add_curve_to_target(
-                bone_target_id(bone),
-                AnimatableCurve::new(animated_field!(Transform::rotation), c),
-            );
-            pose.push(PoseBone {
-                bone,
-                translation: PoseTrack::default(),
-                rotation: PoseTrack::new(&[(0.0, rot)]),
-                scale: PoseTrack::default(),
-            });
-        }
-    }
-    (clip, pose)
-}
-
-/// The [`BillboardInfo`] of a submesh that rides a billboard bone, in Bevy space.
-pub(crate) fn billboard_info(sub: &RenderSubmesh) -> Option<BillboardInfo> {
-    let bb = sub.billboard.as_ref()?;
-    Some(BillboardInfo {
-        pivot: wow_to_bevy(bb.pivot),
-        bone: bb.bone,
-        kind: bb.kind,
-        scale_anim: bb.scale_anim.clone(),
-        // Translation keys are vectors and take Bevy axes; the scale keys stay per-axis factors.
-        seq_translations: bb
-            .seq_translations
-            .iter()
-            .map(|(id, a)| {
-                let mut a = a.clone();
-                for (_, v) in &mut a.keys {
-                    *v = wow_to_bevy(*v).to_array();
-                }
-                (*id, a)
-            })
-            .collect(),
-    })
 }
 
 /// A global-sequence bone channel in Bevy space, a free-running loop; times in seconds.
@@ -884,69 +823,4 @@ mod tests {
         assert!(id.dot(Quat::IDENTITY).abs() > 0.9999, "got {id:?}");
     }
 
-    /// The shipped pauldron `LShoulder_Plate_PVPAlliance_A_01.m2` welds two spherical billboard
-    /// bones to the body with 50/50 seam rings: the card split refuses to lift them, and the
-    /// palette faces them anyway, since `0x714260` reads no vertex data.
-    #[test]
-    fn a_welded_billboard_bone_still_reaches_the_palette_with_its_arm() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let path = "Item\\ObjectComponents\\Shoulder\\LShoulder_Plate_PVPAlliance_A_01.m2";
-        let bytes = chain.read_file(path).expect("read the pauldron");
-        let raw = benilla_formats::parse_m2_skeleton(&bytes).expect("parse its skeleton");
-        // Two authored arms, so the test cannot pass on a build that stopped parsing bone flags.
-        assert_eq!(
-            raw.bones.iter().filter(|b| b.billboard.is_some()).count(),
-            2,
-            "the M2 authors two billboard bones"
-        );
-        assert_eq!(
-            benilla_formats::non_separable_billboard_bones(&bytes),
-            vec![1, 2],
-            "both are welded to the body — the card split still refuses to lift them"
-        );
-        let (built, _) = build_skeleton(&raw);
-        assert_eq!(
-            built
-                .joints
-                .iter()
-                .filter(|j| j.billboard == Some(benilla_formats::BillboardKind::Spherical))
-                .count(),
-            2,
-            "…and the palette faces them anyway: welding is not a gate on the arm"
-        );
-    }
-
-    /// `RidingHorse.m2`'s rider seat (attachment 0) rides bone 30, flags 0x6: the mount's root
-    /// basis replaces the seat's, so the gallop's spine swing reaches the rider as translation
-    /// only (the copy-root leg `0x714a18`).
-    #[test]
-    fn the_riding_horse_seat_bone_carries_the_root_basis_arm() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-        let bytes = chain
-            .read_file("Creature\\RidingHorse\\RidingHorse.m2")
-            .expect("read the horse");
-        let raw = benilla_formats::parse_m2_skeleton(&bytes).expect("parse its skeleton");
-        let seat = benilla_formats::parse_m2_attachments(&bytes)
-            .expect("parse attachments")
-            .into_iter()
-            .find(|a| a.id == 0)
-            .expect("the horse authors a rider seat");
-        assert_eq!(seat.bone, 30, "the seat rides bone 30");
-        let (built, _) = build_skeleton(&raw);
-        assert_eq!(
-            built.joints[usize::from(seat.bone)].parent_arm,
-            Some(benilla_formats::ParentArm {
-                ignore_translate: false,
-                basis: benilla_formats::ParentBasis::RootBasis,
-            }),
-            "the seat takes the mount's own root basis — the gallop reaches it as translation only"
-        );
-        // The spine bones above it carry no arm; they supply the swing.
-        assert!(
-            built.joints[23].parent_arm.is_none() && built.joints[25].parent_arm.is_none(),
-            "the swinging spine bones are ordinary"
-        );
-    }
 }

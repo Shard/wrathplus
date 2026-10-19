@@ -20,9 +20,23 @@ use benilla_ui::script::{HonorState, InspectHonorData, ScriptValue, UiScript};
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
 use crate::ui_script::{UiFeed, VmMemo};
 
+/// Build 12340's `MSG_INSPECT_HONOR_STATS` reply (`0x5e7a50`), filled by the native battleground
+/// drain ([`crate::ui_battlefield`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct InspectHonorReply {
+    pub(crate) player_guid: u64,
+    /// The leading byte, `GetInspectHonorData`'s `lifetimeRank`.
+    pub(crate) lifetime_rank: u8,
+    /// The kills word: today's in the low half, yesterday's in the high.
+    pub(crate) kills: u32,
+    pub(crate) today_honor: u32,
+    pub(crate) yesterday_honor: u32,
+    pub(crate) lifetime_hk: u32,
+}
+
 /// The inspect-honor reply held: one slot, like the reference's `HasInspectHonorData` latch.
 #[derive(Resource, Default)]
-pub(crate) struct InspectHonor(pub(crate) Option<benilla_protocol::messages::InspectHonorStats>);
+pub(crate) struct InspectHonor(pub(crate) Option<InspectHonorReply>);
 
 /// What the last push told this VM, keyed on the VM so a `/reload`'s fresh VM is told again.
 #[derive(Resource, Default)]
@@ -42,7 +56,6 @@ mod net {
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 
-    use super::InspectHonor;
     use crate::net::NetHandlerApp;
 
     pub(super) fn register(app: &mut App) {
@@ -50,9 +63,10 @@ mod net {
     }
 
     /// A reply replaces whatever is held, whoever it is for: the reference's latch is one slot.
-    fn on_inspect_stats(In(ev): In<SessionEvent>, mut inspect: ResMut<InspectHonor>) {
+    /// The 1.12 reply: build 12340 delivers it natively, so this drops it.
+    fn on_inspect_stats(In(ev): In<SessionEvent>) {
         if let SessionEvent::InspectHonorStats(stats) = ev {
-            inspect.0 = Some(stats);
+            debug!("honor: 1.12 inspect reply dropped, the native drain owns it: {stats:?}");
         }
     }
 }
@@ -168,24 +182,14 @@ fn feed_honor(
     }
     let held = inspect_honor.0.as_ref().map(|r| r.player_guid);
     if memo.last_inspect != held {
-        script.set_inspect_honor(inspect_honor.0.as_ref().map(|r| {
-            let (session_hk, session_dk) = r.session_kills();
-            InspectHonorData {
-                guid: r.player_guid,
-                session_hk,
-                session_dk,
-                yesterday_hk: r.yesterday_hk,
-                yesterday_honor: r.yesterday_honor,
-                this_week_hk: r.this_week_hk,
-                this_week_honor: r.this_week_honor,
-                last_week_hk: r.last_week_hk,
-                last_week_honor: r.last_week_honor,
-                last_week_standing: r.last_week_rank,
-                lifetime_hk: r.lifetime_hk,
-                lifetime_dk: r.lifetime_dhk,
-                highest_rank: r.highest_rank,
-                rank_bar: r.rank_bar,
-            }
+        script.set_inspect_honor(inspect_honor.0.as_ref().map(|r| InspectHonorData {
+            guid: r.player_guid,
+            today_hk: r.kills as u16,
+            today_honor: r.today_honor,
+            yesterday_hk: (r.kills >> 16) as u16,
+            yesterday_honor: r.yesterday_honor,
+            lifetime_hk: r.lifetime_hk,
+            lifetime_rank: r.lifetime_rank,
         }));
         memo.last_inspect = held;
         // Fired on a clear too, so the pane stops showing the previous player's numbers.
@@ -203,6 +207,13 @@ fn feed_honor(
                 let _ = commands
                     .0
                     .send(ClientCommand::InspectHonorStats { target: guid });
+                // Unresolved, labelled: the reference's request (`0x5e9140`) is untraced; the
+                // PvP tab's arena rows need `MSG_INSPECT_ARENA_TEAMS` too, sent with it.
+                let _ = commands.0.send(ClientCommand::NativeBattleground(
+                    benilla_protocol::wrath_battleground::Command::InspectArenaTeams {
+                        player: guid,
+                    },
+                ));
             }
             // Nothing to ask about; the pane asks again from its next `OnShow`.
             None => debug!("honor: inspect-honor request with no resolvable target — not sent"),
