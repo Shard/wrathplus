@@ -335,6 +335,42 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
+/// Build 12340's `GetGuildTabardFileNames` (`0x5a6ba0`): the player's guild emblem record as
+/// six texture paths, background, emblem and border, upper (`TU`) then lower (`TL`) each; six nils
+/// without a cached record or with an undesigned background, emblem or border (-1).
+pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
+    lua.globals().set(
+        "GetGuildTabardFileNames",
+        lua.create_function(|lua, _: mlua::MultiValue| {
+            let record = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .tabard_host
+                .guild_record;
+            let Some(r) = record.filter(|r| r[0] != -1 && r[2] != -1 && r[4] != -1) else {
+                return Ok(mlua::MultiValue::from_vec(vec![Value::Nil; 6]));
+            };
+            let mut out = Vec::with_capacity(6);
+            for (kind, a, b) in [
+                ("Background", r[4], None),
+                ("Emblem", r[0], Some(r[1])),
+                ("Border", r[2], Some(r[3])),
+            ] {
+                for half in ["TU", "TL"] {
+                    let path = match b {
+                        None => format!("Textures\\GuildEmblems\\{kind}_{a:02}_{half}_U"),
+                        Some(b) => {
+                            format!("Textures\\GuildEmblems\\{kind}_{a:02}_{b:02}_{half}_U")
+                        }
+                    };
+                    out.push(Value::String(lua.create_string(&path)?));
+                }
+            }
+            Ok(mlua::MultiValue::from_vec(out))
+        })?,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,6 +514,35 @@ mod tests {
             let err = s.run(call).unwrap_err().to_string();
             assert!(err.contains(needle), "{call}: {err}");
         }
+    }
+
+    #[test]
+    fn the_guild_tabard_answers_six_paths_or_six_nils() {
+        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        assert_eq!(s.arity("GetGuildTabardFileNames()").unwrap(), 6);
+        assert!(s
+            .eval::<bool>("return GetGuildTabardFileNames() == nil")
+            .unwrap());
+        s.set_tabard_host(TabardHost {
+            guild_record: Some([7, 3, 2, 15, 49]),
+            save_pending: false,
+        });
+        let got = s
+            .eval::<String>("return table.concat({GetGuildTabardFileNames()}, ',')")
+            .unwrap();
+        assert_eq!(
+            got,
+            "Textures\\GuildEmblems\\Background_49_TU_U,Textures\\GuildEmblems\\Background_49_TL_U,\
+             Textures\\GuildEmblems\\Emblem_07_03_TU_U,Textures\\GuildEmblems\\Emblem_07_03_TL_U,\
+             Textures\\GuildEmblems\\Border_02_15_TU_U,Textures\\GuildEmblems\\Border_02_15_TL_U"
+        );
+        s.set_tabard_host(TabardHost {
+            guild_record: Some([-1, 3, 2, 15, 49]),
+            save_pending: false,
+        });
+        assert!(s
+            .eval::<bool>("return GetGuildTabardFileNames() == nil")
+            .unwrap());
     }
 
     #[test]
