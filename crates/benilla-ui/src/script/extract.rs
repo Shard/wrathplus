@@ -191,6 +191,7 @@ impl UiScript {
                     let mut state_color: Option<[f32; 4]> = None;
                     let mut state_justify: Option<super::JustifyH> = None;
                     let mut button_font: Option<&crate::widget::ButtonFont> = None;
+                    let mut label_shift: Option<(f32, f32)> = None;
                     if let Some(crate::widget::KindState::Button(bs)) =
                         owner_frame.map(|f| &f.kind_state)
                     {
@@ -231,6 +232,10 @@ impl UiScript {
                             };
                             state_font = name.and_then(|n| model.font_object(n));
                             button_font = bs.font.as_ref();
+                            label_shift = (bs.button_state()
+                                == crate::widget::ButtonVisualState::Pushed)
+                                .then_some(bs.pushed_text_offset)
+                                .filter(|o| *o != (0.0, 0.0));
                             state_color = color;
                             state_justify = justify;
                         }
@@ -317,6 +322,12 @@ impl UiScript {
                     }
                     if bar_fill.is_none() && !thumb_fill && !color_thumb {
                         rect = model.region_resolved.get(&rh).copied();
+                    }
+                    if let (Some(r), Some((dx, dy))) = (rect.as_mut(), label_shift) {
+                        r.left += dx;
+                        r.right += dx;
+                        r.bottom += dy;
+                        r.top += dy;
                     }
                     let is_text = matches!(
                         region.map(|r| r.kind),
