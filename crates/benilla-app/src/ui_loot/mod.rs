@@ -741,18 +741,27 @@ fn feed_loot(
                 return;
             }
             let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
-            script.fire_event(
-                "LOOT_OPENED",
-                if wrath {
-                    vec![ScriptValue::Int(0)]
-                } else {
-                    vec![]
-                },
-            );
-            // Auto-loot (`LootConfig`), inverted by a held Shift: every row gets a hand pick's
-            // sends, and emptying the window auto-releases it.
+            // Auto-loot (`autoLootDefault`), inverted by a held Shift (`AUTOLOOTTOGGLE`).
             let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-            if !wrath && cfg.auto_loot != shift {
+            let auto = cfg.auto_loot != shift;
+            if wrath {
+                // Build 12340 (`0x5896b0`): an auto-loot window sweeps instead (`0x588f90`), then
+                // opens with `autoLoot` 1 while anything remains (`0x588eb0`), else releases
+                // (`CloseLoot(1, 0, 0)`). Labelled: the flag is sampled here, where the reference
+                // samples it at the request send (`0x6dcd70` → `0x513700`, `[player+0x18e8]`).
+                if !auto {
+                    script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(0)]);
+                } else if loot.is_empty() {
+                    loot.arm_auto_release();
+                } else {
+                    wrath_auto_loot(&mut loot, &commands, &items, &mut script, &mut pickup, snap);
+                    script.fire_event("LOOT_OPENED", vec![ScriptValue::Int(1)]);
+                }
+            } else {
+                script.fire_event("LOOT_OPENED", vec![]);
+            }
+            // Every row gets a hand pick's sends, and emptying the window auto-releases it.
+            if !wrath && auto {
                 let mut bind_confirm_fired = false;
                 for index in 1..=snap.rows.len() as u32 {
                     match loot.action_at(index) {
@@ -809,6 +818,49 @@ fn feed_loot(
         (None, None) => {}
     }
     *last = fresh;
+}
+
+/// Build 12340's auto-loot sweep (`0x588f90`): the coin, then every allow or owner row through the
+/// Wrath take machine. The first row that needs a bind confirm raises `LOOT_BIND_CONFIRM` and later
+/// ones stay, untaken and unasked.
+fn wrath_auto_loot(
+    loot: &mut LootState,
+    commands: &NetCommands,
+    items: &Items,
+    script: &mut UiScript,
+    pickup: &mut MessageWriter<crate::sound::LootPickupSound>,
+    snap: &LootSnapshot,
+) {
+    let mut bind_confirm_fired = false;
+    for index in 1..=snap.rows.len() as u32 {
+        let action = match loot.action_at(index) {
+            Some(action @ LootAction::Money) => action,
+            Some(
+                action @ LootAction::Item {
+                    item_id, slot_type, ..
+                },
+            ) if wrath::is_takeable(slot_type) => {
+                if bind_confirm_required(items, commands, item_id, slot_type) {
+                    if !bind_confirm_fired {
+                        loot.pending_bind_confirm = Some(index);
+                        script.fire_event(
+                            "LOOT_BIND_CONFIRM",
+                            vec![ScriptValue::Int(i64::from(index))],
+                        );
+                        bind_confirm_fired = true;
+                    }
+                    continue;
+                }
+                action
+            }
+            Some(LootAction::Item { .. }) | None => continue,
+        };
+        if wrath::send_pick(loot, commands, action) {
+            if let LootAction::Item { display_id, .. } = action {
+                pickup.write(crate::sound::LootPickupSound { display_id });
+            }
+        }
+    }
 }
 
 /// Whether a take must raise `LOOT_BIND_CONFIRM` first (`0x589140`): bind on pickup, uncommon or
@@ -1287,6 +1339,144 @@ mod tests {
                 .unwrap();
             assert_eq!(answered, expected, "unit source: {unit}");
         }
+    }
+
+    /// A Wrath VM recording `LOOT_OPENED`'s `autoLoot` and `LOOT_BIND_CONFIRM`'s row, over `rows`
+    /// with `gold`, the auto-loot CVar at `auto` and Shift at `shift`; one feed frame run.
+    fn wrath_auto_app(
+        auto: bool,
+        shift: bool,
+        gold: u32,
+        rows: Vec<LootItem>,
+    ) -> (App, crossbeam_channel::Receiver<ClientCommand>) {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut app = App::new();
+        app.add_message::<crate::sound::LootPickupSound>()
+            .init_resource::<LootState>()
+            .init_resource::<crate::ui_chat::ChatLog>()
+            .init_resource::<GroupState>()
+            .init_resource::<NameCache>()
+            .init_resource::<Items>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .insert_resource(LootConfig {
+                auto_loot: auto,
+                ..LootConfig::default()
+            })
+            .insert_resource(NetCommands(tx))
+            .add_systems(bevy::prelude::Update, feed_loot);
+        if shift {
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::ShiftLeft);
+        }
+        let mut items = app.world_mut().resource_mut::<Items>();
+        for (entry, name, quality, bonding) in [
+            (FELSTRIKER, "Felstriker", 4, 1),
+            (FLURRY_AXE, "Flurry Axe", 4, 2),
+            (TOUGH_JERKY, "Tough Jerky", 1, 0),
+        ] {
+            items.insert_template(
+                entry,
+                Some(ItemInfo {
+                    quality,
+                    bonding,
+                    ..crate::items::test_template(name)
+                }),
+            );
+        }
+        // `open` adopts the window as the active Wrath session.
+        app.world_mut()
+            .resource_mut::<LootState>()
+            .open(0x42, loot_type::CORPSE, gold, rows);
+        let script =
+            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+        script
+            .run(
+                "OPENED = {} CONFIRMS = {}\n\
+                 local f = CreateFrame(\"Frame\")\n\
+                 f:RegisterEvent(\"LOOT_OPENED\")\n\
+                 f:RegisterEvent(\"LOOT_BIND_CONFIRM\")\n\
+                 f:SetScript(\"OnEvent\", function(self, event, arg)\n\
+                   if event == \"LOOT_OPENED\" then tinsert(OPENED, arg)\n\
+                   else tinsert(CONFIRMS, arg) end\n\
+                 end)",
+            )
+            .unwrap();
+        app.insert_non_send_resource(script);
+        app.update();
+        (app, rx)
+    }
+
+    fn lua_list(app: &mut App, name: &str) -> Vec<i64> {
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .eval::<Vec<i64>>(&format!("return {name}"))
+            .unwrap()
+    }
+
+    /// `0x5896b0` → `0x588f90`: the sweep takes the coin and every row, the first bind-on-pickup
+    /// row asks once, and the window opens with `autoLoot` 1 while the takes are in flight.
+    #[test]
+    fn wrath_auto_loot_sweeps_then_opens_with_auto_loot_set() {
+        let (mut app, rx) = wrath_auto_app(
+            true,
+            false,
+            120,
+            vec![
+                item(0, TOUGH_JERKY, 1),
+                item(1, FELSTRIKER, 1),
+                item(2, FLURRY_AXE, 1),
+                item(3, FELSTRIKER, 1),
+                group_item(4, TOUGH_JERKY, slot_type::ROLL_ONGOING),
+            ],
+        );
+        let sent = sent(&rx);
+        assert!(
+            matches!(
+                sent[..],
+                [
+                    ClientCommand::LootMoney,
+                    ClientCommand::AutostoreLootItem { slot: 0 },
+                    ClientCommand::AutostoreLootItem { slot: 2 },
+                ]
+            ),
+            "{sent:?}"
+        );
+        assert_eq!(
+            lua_list(&mut app, "CONFIRMS"),
+            [3],
+            "the first BoP row, display row 3"
+        );
+        assert_eq!(pending_confirm(&app), Some(3));
+        assert_eq!(lua_list(&mut app, "OPENED"), [1]);
+    }
+
+    /// Without auto-loot, or with Shift inverting it, the window opens with `autoLoot` 0 and
+    /// nothing is sent.
+    #[test]
+    fn wrath_auto_loot_off_or_inverted_opens_untouched() {
+        for (auto, shift) in [(false, false), (true, true)] {
+            let (mut app, rx) = wrath_auto_app(auto, shift, 0, vec![item(0, TOUGH_JERKY, 1)]);
+            assert!(sent(&rx).is_empty(), "auto {auto} shift {shift}");
+            assert_eq!(lua_list(&mut app, "OPENED"), [0]);
+        }
+        let (mut app, rx) = wrath_auto_app(false, true, 0, vec![item(0, TOUGH_JERKY, 1)]);
+        assert!(matches!(
+            sent(&rx)[..],
+            [ClientCommand::AutostoreLootItem { slot: 0 }]
+        ));
+        assert_eq!(lua_list(&mut app, "OPENED"), [1], "Shift turns it on");
+    }
+
+    /// An empty window under auto-loot never opens: `CloseLoot(1, 0, 0)` releases it.
+    #[test]
+    fn wrath_auto_loot_releases_an_empty_window_unopened() {
+        let (mut app, _rx) = wrath_auto_app(true, false, 0, Vec::new());
+        assert!(lua_list(&mut app, "OPENED").is_empty());
+        assert!(app
+            .world_mut()
+            .resource_mut::<LootState>()
+            .take_auto_release());
     }
 
     /// `0x4c2ac0` fires `LOOT_OPENED` once, at the last answer; here a negative one opens it too.

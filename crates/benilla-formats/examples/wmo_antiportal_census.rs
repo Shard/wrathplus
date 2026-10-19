@@ -89,7 +89,7 @@ fn known_name(bit: u32) -> &'static str {
 
 fn main() -> anyhow::Result<()> {
     let data = benilla_formats::wow_data()
-        .ok_or_else(|| anyhow::anyhow!("no 1.12.1 install found (set $WOW_DATA)"))?;
+        .ok_or_else(|| anyhow::anyhow!("no install found (set $WOW_DATA)"))?;
     let chain = Chain::open(&data)?;
 
     // Every root `.wmo` the chain lists (a group file's stem ends `_NNN`, a root's does not); a
@@ -204,7 +204,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // ==== headline ================================================================================
-    println!("==== WMO ANTIPORTAL census (1.12.1 / build 5875) ====\n");
+    println!("==== WMO ANTIPORTAL census ====\n");
     println!(
         "roots: {roots_scanned} parsed / {} listed  (read failures {root_read_fail}, parse failures {root_parse_fail})",
         roots.len()

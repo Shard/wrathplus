@@ -184,6 +184,8 @@ fn cell_ramp_matches_the_reference_including_backwards() {
         head_cells: [CellRamp::new(0, 7), CellRamp::new(31, 16)],
         tail_cells: [CellRamp::new(3, 3), CellRamp::new(9, 4)],
         repeat: [1.0; 2],
+        head_track: Vec::new(),
+        tail_track: Vec::new(),
     };
     assert_eq!(ol.sample(0.0).head_cell, 0, "u=0 sits on segment A's begin");
     assert_eq!(ol.sample(1.0).head_cell, 16, "u=1 sits on segment B's end");
@@ -208,6 +210,8 @@ fn colour_and_size_ride_the_same_inset() {
         head_cells: [CellRamp::new(0, 0); 2],
         tail_cells: [CellRamp::new(0, 0); 2],
         repeat: [1.0; 2],
+        head_track: Vec::new(),
+        tail_track: Vec::new(),
     };
     // Segment A runs 0 to 100 over u in [0, 0.5].
     let start = ol.sample(0.0);
@@ -229,59 +233,58 @@ fn colour_and_size_ride_the_same_inset() {
     );
 }
 
-/// `DwarvenBrazier01`'s settling flame authors the inverted segment-B pair `(6, 5)`.
+/// `DwarvenBrazier01`'s settling flame keys `0 → 5`, steps to 6 at mid-life, then runs back
+/// to 5: the falling pair plays backwards and nothing leaves the authored cells.
 #[test]
-fn inverted_ramp_on_real_data_does_not_panic() {
+fn a_falling_cell_pair_on_real_data_does_not_panic() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let bytes = chain
         .read_file("World\\Generic\\Dwarf\\Passive Doodads\\Braziers\\DwarvenBrazier01.m2")
         .expect("read DwarvenBrazier01.m2");
     let emitters = parse_m2_particle_emitters(&bytes).expect("parse emitters");
     let ol = &emitters[1].over_life;
+    let cells: Vec<u16> = ol.head_track.iter().map(|&(_, c)| c).collect();
+    assert_eq!(cells, [0, 5, 6, 5], "the authored keys");
     assert_eq!(
-        (ol.head_cells[0].begin, ol.head_cells[0].end),
-        (0, 5),
-        "segment A runs forward"
-    );
-    assert_eq!(
-        (ol.head_cells[1].begin, ol.head_cells[1].end),
-        (6, 5),
-        "segment B is the INVERTED pair — the whole point of this test"
+        ol.sample(0.0).head_cell,
+        0,
+        "segment A starts at its first cell"
     );
     // Every point of the particle's life, at the granularity a 60 Hz frame would visit.
     for i in 0..=1000 {
         let s = ol.sample(i as f32 / 1000.0);
-        assert!(s.head_cell <= 6, "cell stays inside the authored pair");
+        assert!(s.head_cell <= 6, "cell stays inside the authored keys");
     }
 }
 
-/// The per-segment flipbook repeat count (file `+0x16c`, `+0x172`) cycles the cell ramp by
-/// `fmod(t·repeat, 1.0)`; the 18 shipped emitters that author one are the Insect Swarm visuals.
+/// Build 12340 keys the swarm's flipbook into the head cell track: twenty keys alternate cells 0
+/// and 1, ten cycles over the particle's life (1.12 authored a 5× repeat word instead).
 #[test]
-fn repeat_count_cycles_the_flipbook() {
+fn the_keyed_cell_track_cycles_the_flipbook() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let bytes = chain
         .read_file("SPELLS\\InsectSwarm_State_Chest.m2")
         .expect("read InsectSwarm_State_Chest.m2");
     let emitters = parse_m2_particle_emitters(&bytes).expect("parse emitters");
     let ol = &emitters[0].over_life;
-    assert_eq!(ol.repeat, [5.0, 5.0], "the swarm authors a 5× cycle");
+    assert_eq!(ol.head_track.len(), 20, "the swarm keys every cycle");
+    assert_eq!(ol.repeat, [1.0, 1.0], "12340 has no repeat words");
 
-    let mid = ol.mid;
     let mut drops = 0;
     let mut prev = ol.sample(0.0).head_cell;
     for i in 1..=2000 {
-        let c = ol.sample(mid * (i as f32 / 2000.0)).head_cell;
+        let c = ol.sample(i as f32 / 2000.0).head_cell;
+        assert!(c <= 1, "the swarm stays on cells 0 and 1");
         if c < prev {
             drops += 1;
         }
         prev = c;
     }
     assert_eq!(
-        drops, 4,
-        "5 passes over the segment == 4 wraps, got {drops}"
+        drops, 9,
+        "ten passes over the life == nine wraps, got {drops}"
     );
 }
 
@@ -325,17 +328,17 @@ fn twinkle_fields_gate_not_scale() {
 }
 
 /// The file-to-runtime flag remap (`0x70faf8`-`0x70fc44`): file bit 0x10 (runtime 0x100) is model
-/// space, file 0x20 (runtime 0x200) scales size by the placement. The chandelier's flames (0x11,
+/// space, file 0x20 (runtime 0x200) scales size by the placement. Build 12340 also sets 0x20000 on
+/// most emitters, whose meaning is untraced, so the low half is compared. The chandelier's flames (0x11,
 /// 0x15) ride its swing; the campfire (0x21, 0x29) scales.
 #[test]
 fn flag_remap_reads_the_file_bits() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
 
     let kobold =
         parse_m2_particle_emitters(&chain.read_file("Creature\\Kobold\\Kobold.m2").unwrap())
             .unwrap();
-    assert_eq!(kobold[0].flags, 0x01);
     assert!(!kobold[0].model_space() && !kobold[0].scale_size_by_instance());
 
     let chandelier = parse_m2_particle_emitters(

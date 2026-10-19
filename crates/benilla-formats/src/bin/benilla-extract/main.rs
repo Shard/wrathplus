@@ -1,6 +1,6 @@
-//! `benilla-extract`: a CLI over the 1.12.1 (build 5875) MPQ patch chain, where later archives
-//! override earlier ones and names come from `patch.MPQ`'s `(listfile)`. This file holds the clap
-//! commands, their dispatch and the shared helpers; the subcommands live in modules by concern.
+//! `benilla-extract`: a CLI over the 3.3.5a (build 12340) MPQ patch chain, where later archives
+//! override earlier ones. This file holds the clap commands, their dispatch and the shared
+//! helpers; the subcommands live in modules by concern.
 
 use std::path::PathBuf;
 
@@ -12,10 +12,11 @@ mod chaincensus;
 mod charatlas;
 mod charprocs;
 mod kitanim;
+mod m2info;
 mod scan;
 mod spellvis;
 
-/// Read WoW 1.12.1 asset archives (MPQ).
+/// Read WoW 3.3.5a asset archives (MPQ).
 #[derive(Parser)]
 #[command(
     name = "benilla-extract",
@@ -24,7 +25,7 @@ mod spellvis;
     allow_negative_numbers = true
 )]
 struct Cli {
-    /// A single `.MPQ` file, or a vanilla `Data` directory (opens the full patch chain).
+    /// A single `.MPQ` file, or a `Data` directory (opens the full patch chain).
     path: PathBuf,
     #[command(subcommand)]
     command: Command,
@@ -139,8 +140,14 @@ enum Command {
     /// Sweep every WMO root and cross-tab its MOSB skybox model against its groups' `0x40000`
     /// flag, which never appears without a MOSB in all 815 roots; the reference tests it on the
     /// flood-visited group (`0x6b42e0`). Also which buildings replace the `Light.dbc` dome with an
-    /// authored sky, and in how many groups: only Stratholme's is reachable in 1.12.
+    /// authored sky, and in how many groups.
     Skyboxscan,
+    /// Report one v264 model: sequences, bones, attachments, events, batches, particle emitters,
+    /// ribbons, lights and cameras, read with its sibling `.anim` files and `00.skin`.
+    M2info {
+        /// Internal path to the `.m2` (`.mdx`/`.mdl` resolve to `.m2`).
+        internal_path: String,
+    },
     /// Dump all 18 `LightIntBand` rows of the `Light.dbc` entry covering a position at a time of
     /// day. One params record, raw: near a sphere's falloff edge the live light is mostly the
     /// continent global, and `lightblend` shows what wins there.
@@ -429,6 +436,7 @@ fn main() -> Result<()> {
             scan::partscan(&mut chain, mask, prefix.as_deref())?;
         }
         Command::Skyboxscan => scan::skyboxscan(&mut chain)?,
+        Command::M2info { internal_path } => m2info::m2info(&mut chain, &internal_path)?,
         Command::Lightbands {
             map,
             x,

@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
         .nth(1)
         .ok_or_else(|| anyhow::anyhow!("usage: dump_file <virtual\\mpq\\path>"))?;
     let data = benilla_formats::wow_data().expect("no WoW install found (set $WOW_DATA)");
-    // Match the launcher's explicit profile; Vanilla remains the default.
+    // Match the launcher's configured profile.
     let mut chain = benilla_formats::open_configured_chain(&data)?;
     let bytes = chain.read_file(&virt)?;
     std::io::stdout().write_all(&bytes)?;

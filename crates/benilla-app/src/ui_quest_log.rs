@@ -57,6 +57,11 @@ impl crate::query_cache::AskOnce for QuestLog {
 }
 
 impl QuestLog {
+    /// A cached template's `ZoneOrSort`, never asking: the quest-log header the quest sits under.
+    pub(crate) fn zone_or_sort(&self, quest_id: u32) -> Option<i32> {
+        self.templates.get(quest_id).map(|t| t.zone_or_sort)
+    }
+
     /// The template, asked once: a miss sends `CMSG_QUEST_QUERY` (once while in flight); an id
     /// the server does not know stays `None` without a re-ask.
     pub(crate) fn template(&self, quest_id: u32, commands: &NetCommands) -> Option<&QuestTemplate> {

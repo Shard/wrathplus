@@ -23,7 +23,7 @@ struct Tally {
 
 fn main() -> anyhow::Result<()> {
     let data = benilla_formats::wow_data()
-        .ok_or_else(|| anyhow::anyhow!("no 1.12.1 install found (set $WOW_DATA)"))?;
+        .ok_or_else(|| anyhow::anyhow!("no install found (set $WOW_DATA)"))?;
     let reader = Chain::open(&data)?;
 
     let mut by_arm: BTreeMap<(bool, String), Tally> = BTreeMap::new();

@@ -97,6 +97,18 @@ pub(crate) enum RimArrow {
 }
 
 impl RimArrow {
+    /// The `AnimationData.dbc` sequence the reference plays for this art; the test checks the
+    /// model against it.
+    #[cfg(test)]
+    pub(crate) const fn anim_id(self) -> u16 {
+        match self {
+            Self::Group => 0xa5,
+            Self::Landmark => 0xa6,
+            Self::Corpse => 0xa7,
+            Self::Guide => 0xa8,
+        }
+    }
+
     /// The `.blp` that sequence lights.
     pub(crate) const fn texture(self) -> &'static str {
         match self {
@@ -441,6 +453,51 @@ pub(super) fn drive_blip_tooltip(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The call site gives only the sequence id; the installed 3.3.5 model says what it draws.
+    #[test]
+    fn installed_each_rim_arrow_sequence_lights_exactly_its_own_layer() {
+        let data = benilla_formats::wow_data_or_skip!();
+        let mut chain = benilla_formats::open_chain(&data).expect("the patch chain");
+        let path = "Interface\\Minimap\\Rotating-MinimapArrow";
+        let bytes = chain
+            .read_file(&format!("{path}.m2"))
+            .expect("the rim-arrow model");
+        let skin = chain
+            .read_file(&format!("{path}00.skin"))
+            .expect("its skin");
+        let model = benilla_formats::parse_wrath_render_model(&bytes, &skin, "", &[])
+            .expect("the rim arrow parses");
+
+        for kind in RimArrow::ALL {
+            let seq = model
+                .animations
+                .iter()
+                .find(|a| a.anim_id == kind.anim_id())
+                .unwrap_or_else(|| panic!("{kind:?}: no sequence {:#x}", kind.anim_id()));
+            // Lit if its alpha reaches past half anywhere in the band: some layers fade in.
+            let shown: Vec<String> = model
+                .submeshes
+                .iter()
+                .filter(|sub| {
+                    (0..=20).any(|step| {
+                        let t = seq.duration * step as f32 / 20.0;
+                        sub.alpha_anim
+                            .as_ref()
+                            .map_or(1.0, |a| a.sample(Some(seq.seq_index), t, 0.0))
+                            > 0.5
+                    })
+                })
+                .filter_map(|sub| sub.texture.clone())
+                .collect();
+            assert_eq!(
+                shown,
+                vec![format!("{}.BLP", kind.texture().to_uppercase())],
+                "{kind:?} (sequence {:#x}) must light its layer and ONLY its layer",
+                kind.anim_id()
+            );
+        }
+    }
 
     fn poi(importance: u32, flags: u32, x: f32, name: &str) -> AreaPoi {
         AreaPoi {
