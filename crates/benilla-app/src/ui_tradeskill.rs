@@ -42,6 +42,99 @@ pub(crate) struct TradeSkillOpens(pub(crate) Vec<u32>);
 #[derive(Resource, Default)]
 pub(crate) struct TradeSkillOpen {
     pub(crate) line: Option<u32>,
+    /// The opener spell (`0xc235a0`), our own or the link's: `GetTradeSkillListLink` builds off it.
+    pub(crate) spell: u32,
+    /// A clicked trade link's book (`0xc235e4`), or `None` for our own.
+    pub(crate) link: Option<LinkedBook>,
+}
+
+/// A linked window (`0x5de120`): the linker, their rank off the link (`0xc235e8`/`0xc235ec`), and
+/// the spells the link's mask marks.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct LinkedBook {
+    pub(crate) guid: u64,
+    pub(crate) rank: u32,
+    pub(crate) max_rank: u32,
+    pub(crate) spells: Vec<u32>,
+}
+
+impl TradeSkillOpen {
+    fn close(&mut self) {
+        self.line = None;
+        self.spell = 0;
+        self.link = None;
+    }
+
+    /// Open a clicked trade link's book (`0x5de120`): a line that links, and a mask of the line's
+    /// length, else nothing opens. Labelled: the reference resolves the opener's line through the
+    /// linker's race and class (`0x812410` over their name-cache row); here the opener's first
+    /// `SkillLineAbility` row.
+    fn open_link(&mut self, catalog: &benilla_formats::SkillLineCatalog, raw: &str) -> bool {
+        let Some(link) = benilla_formats::parse_trade_link(raw) else {
+            return false;
+        };
+        let Some(line) = catalog.spell_to_line(link.spell_id) else {
+            return false;
+        };
+        if !catalog.line(line).is_some_and(|l| l.can_link) {
+            return false;
+        }
+        let Some(spells) =
+            benilla_formats::decode_trade_mask(catalog.line_abilities(line), &link.mask)
+        else {
+            return false;
+        };
+        self.line = Some(line);
+        self.spell = link.spell_id;
+        self.link = Some(LinkedBook {
+            guid: link.guid,
+            rank: link.rank,
+            max_rank: link.max_rank,
+            spells,
+        });
+        true
+    }
+}
+
+/// `GetTradeSkillListLink` (`0x5db060`): our own link for `spell`'s line, when the line links and
+/// we hold the skill. The rank is the raw `PLAYER_SKILL_INFO` pair; labelled: the reference's
+/// `0x51a250`/`0x594710` may add the skill bonus.
+pub(crate) fn own_trade_link(
+    catalog: &benilla_formats::SkillLineCatalog,
+    spells: &Spells,
+    known: &std::collections::BTreeSet<u32>,
+    store: &ObjectStore,
+    guid: u64,
+    spell: u32,
+) -> Option<String> {
+    let def = spells.catalog.get(spell)?;
+    if def.effects[0] != benilla_formats::SPELL_EFFECT_TRADE_SKILL {
+        return None;
+    }
+    let line = catalog.spell_to_line(spell)?;
+    if !catalog.line(line)?.can_link {
+        return None;
+    }
+    let (rank, max_rank) = skill_rank(store, line);
+    if max_rank == 0 {
+        return None;
+    }
+    let race = store.0.unit_race().unwrap_or(0);
+    let class = store.0.unit_class().unwrap_or(0);
+    let mask = benilla_formats::encode_trade_mask(
+        catalog.line_abilities(line),
+        |s| known.contains(&s),
+        race,
+        class,
+    );
+    let link = benilla_formats::TradeLink {
+        spell_id: spell,
+        rank,
+        max_rank,
+        guid,
+        mask,
+    };
+    Some(benilla_formats::trade_link(&link, &def.name))
 }
 
 /// The Create All repeat (`DoTradeSkill` `0x500280`): latch the count, cast once, and re-cast on
@@ -96,7 +189,7 @@ fn on_session_end(
     mut repeat: ResMut<TradeSkillRepeat>,
 ) {
     opens.0.clear();
-    open.line = None;
+    open.close();
     repeat.clear();
 }
 
@@ -152,11 +245,20 @@ fn open_trade_skill(
             craft_open.line = Some(line);
             craft_open.craft_type = craft_type;
         } else {
+            // `0x5de120`: our own opener on our own open book closes it.
+            if open.link.is_none() && open.line == Some(line) {
+                debug!("ui_tradeskill: opener {spell_id} closes skill line {line}");
+                open.close();
+                repeat.clear();
+                continue;
+            }
             debug!("ui_tradeskill: opener {spell_id} opens skill line {line}");
             if open.line != Some(line) {
                 repeat.clear();
             }
             open.line = Some(line);
+            open.spell = spell_id;
+            open.link = None;
         }
     }
 }
@@ -331,11 +433,12 @@ fn feed_trade_skill(
     icons: Option<Res<ItemDisplays>>,
     subclasses: Option<Res<crate::ui_items::ItemSubClasses>>,
     repeat: Res<TradeSkillRepeat>,
-    self_store: Query<&ObjectStore, With<SelfPlayer>>,
+    self_store: Query<(&ObjectStore, &crate::net::Guid), With<SelfPlayer>>,
     objects: Objects,
     items: Res<Items>,
     commands: Res<NetCommands>,
     cooldowns: Res<crate::spell::Cooldowns>,
+    names: Res<crate::names::NameCache>,
     mut last: Local<crate::ui_script::VmMemo<Option<TradeSkillState>>>,
 ) {
     let Some(mut script) = script else {
@@ -346,8 +449,12 @@ fn feed_trade_skill(
         let line = open.line?;
         let spells = spells.as_deref()?;
         let skill_lines = skill_lines.as_deref()?;
-        let store = self_store.single().ok()?;
-        let (rank, max_rank) = skill_rank(store, line);
+        let (store, own_guid) = self_store.single().ok()?;
+        // A linked book shows the link's rank (`0xc235e8`/`0xc235ec`), ours the descriptor's.
+        let (rank, max_rank) = match &open.link {
+            Some(l) => (l.rank, l.max_rank),
+            None => skill_rank(store, line),
+        };
         let line_name = skill_lines
             .catalog
             .line(line)
@@ -377,16 +484,29 @@ fn feed_trade_skill(
                 .filter(|t| !t.is_empty())
                 .map(|t| benilla_formats::substitute(t, d, &ctx))
         };
-        let recipes: Vec<TradeSkillRecipe> = actions
-            .spells
+        let is_tradeskill = |s: u32| {
+            spells
+                .catalog
+                .get(s)
+                .is_some_and(|d| d.attributes & SPELL_ATTR_IS_TRADESKILL != 0)
+        };
+        // Ours: the known spells of the line. A link's (`0x5dd5a0`): each spell its mask marks.
+        let book: Vec<u32> = match &open.link {
+            Some(l) => l
+                .spells
+                .iter()
+                .copied()
+                .filter(|&s| is_tradeskill(s))
+                .collect(),
+            None => actions
+                .spells
+                .iter()
+                .copied()
+                .filter(|&s| is_tradeskill(s) && skill_lines.catalog.spell_to_line(s) == Some(line))
+                .collect(),
+        };
+        let recipes: Vec<TradeSkillRecipe> = book
             .iter()
-            .filter(|&&s| {
-                spells
-                    .catalog
-                    .get(s)
-                    .is_some_and(|d| d.attributes & SPELL_ATTR_IS_TRADESKILL != 0)
-                    && skill_lines.catalog.spell_to_line(s) == Some(line)
-            })
             .filter_map(|&s| {
                 resolve_recipe(
                     s,
@@ -414,6 +534,20 @@ fn feed_trade_skill(
             max_rank,
             recipes,
             repeat_count: repeat.remaining,
+            linked: open.link.as_ref().map(|l| {
+                names
+                    .resolve(l.guid, &commands)
+                    .unwrap_or_default()
+                    .to_string()
+            }),
+            list_link: own_trade_link(
+                &skill_lines.catalog,
+                spells,
+                &actions.spells,
+                store,
+                own_guid.0,
+                open.spell,
+            ),
         })
     })();
 
@@ -462,6 +596,7 @@ fn drain_trade_skill(
     mut cast_events: MessageReader<CastEvent>,
     targeting: cast_target::CastTargeting,
     mut ladder: CastLadder,
+    skill_lines: Option<Res<SkillLines>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -521,8 +656,21 @@ fn drain_trade_skill(
 
     if script.take_trade_skill_close() {
         debug!("ui_tradeskill: client-side close (no packet)");
-        open.line = None;
+        open.close();
         repeat.clear();
+    }
+
+    // A clicked trade link opens the linker's book over ours (`0x5de120`).
+    for raw in script.take_trade_link_clicks() {
+        let opened = skill_lines
+            .as_deref()
+            .is_some_and(|sl| open.open_link(&sl.catalog, &raw));
+        if opened {
+            debug!("ui_tradeskill: trade link opens skill line {:?}", open.line);
+            repeat.clear();
+        } else {
+            debug!("ui_tradeskill: trade link {raw:?} opens nothing");
+        }
     }
 }
 
@@ -636,5 +784,122 @@ mod tests {
         assert_eq!(app.world().resource::<TradeSkillOpen>().line, None);
         let repeat = app.world().resource::<TradeSkillRepeat>();
         assert_eq!((repeat.spell_id, repeat.remaining), (0, 0));
+    }
+
+    /// Alchemy (171) with eight rows, spells 1..=8, opened by 2259; row 7 is Orc-only.
+    fn alchemy(can_link: bool) -> benilla_formats::SkillLineCatalog {
+        let mut cat = benilla_formats::SkillLineCatalog::from_spell_lines(
+            std::iter::once((2259, 171)).chain((1..=8).map(|s| (s, 171))),
+        );
+        cat.set_line(
+            171,
+            benilla_formats::SkillLineInfo {
+                name: "Alchemy".into(),
+                category_id: 11,
+                icon: None,
+                description: String::new(),
+                can_link,
+            },
+        );
+        cat.set_line_abilities(
+            171,
+            (1..=8)
+                .map(|s| benilla_formats::LineAbility {
+                    spell_id: s,
+                    race_mask: if s == 7 { 1 << 1 } else { 0 },
+                    class_mask: 0,
+                })
+                .collect(),
+        );
+        cat
+    }
+
+    #[test]
+    fn a_trade_link_opens_the_linkers_book_only_on_a_linkable_line_and_a_whole_mask() {
+        let mut open = TradeSkillOpen::default();
+        assert!(open.open_link(
+            &alchemy(true),
+            "|cffffd000|Htrade:2259:75:150:2A:DB|h[Alchemy]|h|r"
+        ));
+        assert_eq!((open.line, open.spell), (Some(171), 2259));
+        assert_eq!(
+            open.link,
+            Some(LinkedBook {
+                guid: 0x2a,
+                rank: 75,
+                max_rank: 150,
+                spells: vec![1, 2, 7],
+            })
+        );
+        let mut open = TradeSkillOpen::default();
+        assert!(
+            !open.open_link(&alchemy(true), "trade:2259:75:150:2A:D"),
+            "short mask"
+        );
+        assert!(
+            !open.open_link(&alchemy(false), "trade:2259:75:150:2A:DB"),
+            "no canLink"
+        );
+        assert_eq!(open.line, None);
+    }
+
+    #[test]
+    fn our_list_link_marks_the_known_rows_our_race_may_take() {
+        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        let spells = Spells {
+            catalog: benilla_formats::SpellCatalog::from_displays(HashMap::from([(
+                2259,
+                SpellDisplay {
+                    name: "Alchemy".into(),
+                    effects: [benilla_formats::SPELL_EFFECT_TRADE_SKILL, 0, 0],
+                    ..Default::default()
+                },
+            )])),
+            ..Spells::empty_for_tests()
+        };
+        // A human (race 1) warrior with Alchemy 75/150.
+        let store = ObjectStore(ObjectFields::from_field_slots(
+            FieldLayout::Wrath12340,
+            &[
+                (Field::PlayerSkillInfo11, 0, 171),
+                (Field::PlayerSkillInfo11, 1, 75 | 150 << 16),
+                (Field::UnitBytes0, 0, 1 | 1 << 8),
+            ],
+        ));
+        let known = [1, 2, 7].into_iter().collect();
+        assert_eq!(
+            own_trade_link(&alchemy(true), &spells, &known, &store, 0x2a, 2259).as_deref(),
+            Some("|cffffd000|Htrade:2259:75:150:2A:DA|h[Alchemy]|h|r"),
+            "row 7 is known but Orc-only"
+        );
+        assert_eq!(
+            own_trade_link(&alchemy(false), &spells, &known, &store, 0x2a, 2259),
+            None
+        );
+    }
+
+    #[test]
+    fn our_own_opener_on_our_open_book_closes_it() {
+        let mut app = App::new();
+        app.init_resource::<TradeSkillOpens>()
+            .init_resource::<TradeSkillOpen>()
+            .init_resource::<TradeSkillRepeat>()
+            .init_resource::<crate::ui_craft::CraftOpen>()
+            .insert_resource(SkillLines {
+                catalog: alchemy(true),
+            })
+            .add_systems(Update, open_trade_skill);
+        app.world_mut()
+            .resource_mut::<TradeSkillOpens>()
+            .0
+            .push(2259);
+        app.update();
+        assert_eq!(app.world().resource::<TradeSkillOpen>().line, Some(171));
+        app.world_mut()
+            .resource_mut::<TradeSkillOpens>()
+            .0
+            .push(2259);
+        app.update();
+        assert_eq!(app.world().resource::<TradeSkillOpen>().line, None);
     }
 }

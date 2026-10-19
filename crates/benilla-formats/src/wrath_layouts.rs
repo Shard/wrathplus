@@ -35,7 +35,7 @@ pub(crate) fn columns(
         }),
         "Spell" => (187, 234, spell),
         "SpellDispelType" => (12, 21, spell_dispel_type),
-        "SkillLine" => (22, 56, skill_line),
+        "SkillLine" => (23, 56, skill_line),
         "TalentTab" => (15, 24, talent_tab),
         "SpellShapeshiftForm" => (14, 35, spell_shapeshift_form),
         "Faction" => (37, 57, faction),
@@ -168,9 +168,10 @@ fn spell_dispel_type(m: &mut Map) {
     m.run(0, 0, 1).loc(1, 1).run(10, 19, 1).run(11, 20, 1);
 }
 
-/// `SkillLine.dbc` 22 → 56: id, category, costs, name, description, icon.
+/// `SkillLine.dbc` 23 → 56: id, category, costs, name, description, icon, and the
+/// loader's 3.3.5-only `canLink`.
 fn skill_line(m: &mut Map) {
-    m.same(0, 3).loc(3, 3).loc(12, 20).run(21, 37, 1);
+    m.same(0, 3).loc(3, 3).loc(12, 20).run(21, 37, 1).run(22, 55, 1);
 }
 
 /// `TalentTab.dbc` 15 → 24: id, name, icon, race mask, class mask, order, background.
@@ -280,7 +281,7 @@ mod tests {
         ("PetPersonality", 19, 24),
         ("Spell", 187, 234),
         ("SpellDispelType", 12, 21),
-        ("SkillLine", 22, 56),
+        ("SkillLine", 23, 56),
         ("TalentTab", 15, 24),
         ("SpellShapeshiftForm", 14, 35),
         ("Faction", 37, 57),

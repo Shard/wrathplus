@@ -25,14 +25,18 @@ const SKILL_LINE: &str = "DBFilesClient\\SkillLine.dbc";
 const SKILL_LINE_ABILITY: &str = "DBFilesClient\\SkillLineAbility.dbc";
 const SKILL_RACE_CLASS_INFO: &str = "DBFilesClient\\SkillRaceClassInfo.dbc";
 
-const SKILL_LINE_FIELDS: usize = 22;
+const SKILL_LINE_FIELDS: usize = 23;
 const COL_SL_NAME_ENUS: usize = 3;
 const COL_SL_DESC_ENUS: usize = 12;
 const COL_SL_SPELL_ICON: usize = 21;
+/// Build 12340 only: `canLink` (file column 55), the trade-link gate (`0x5db060`, `0x5de120`).
+const COL_SL_CAN_LINK: usize = 22;
 
 const SKILL_LINE_ABILITY_FIELDS: usize = 15;
 const COL_SLA_SKILL_ID: usize = 1;
 const COL_SLA_SPELL_ID: usize = 2;
+const COL_SLA_RACE_MASK: usize = 3;
+const COL_SLA_CLASS_MASK: usize = 4;
 const COL_SLA_REQ_SKILL_VALUE: usize = 7;
 const COL_SLA_FORWARD_SPELL: usize = 8;
 const COL_SLA_TRIVIAL_HIGH: usize = 10;
@@ -86,6 +90,8 @@ pub struct SkillLineInfo {
     pub icon: Option<String>,
     /// enUS `description_lang`, column 12: `GetSkillLineInfo`'s 13th return.
     pub description: String,
+    /// `canLink`: the line has a trade link (`GetTradeSkillListLink`).
+    pub can_link: bool,
 }
 
 /// One `SkillRaceClassInfo.dbc` row: the race and class masks, and its [`SkillRaceClass`].
@@ -157,6 +163,15 @@ pub struct SlaInfo {
     pub trivial_high: u32,
 }
 
+/// One `SkillLineAbility.dbc` row of a line: its spell and the race and class masks a trade
+/// link's bit tests (`0x810320`, a zero mask admitting all).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineAbility {
+    pub spell_id: u32,
+    pub race_mask: u32,
+    pub class_mask: u32,
+}
+
 /// The skill tables joined: a spell's line, a line's display, and the per-race/class routing.
 pub struct SkillLineCatalog {
     lines: HashMap<u32, SkillLineInfo>,
@@ -165,6 +180,9 @@ pub struct SkillLineCatalog {
     categories: HashMap<u32, (String, u32)>,
     /// Skill line id to its `SkillRaceClassInfo` rows; empty if the DBC failed to load.
     race_class: HashMap<u32, Vec<SrciRow>>,
+    /// Skill line id to its `SkillLineAbility` rows in file order, the order a trade link's
+    /// bitmask runs over.
+    line_rows: HashMap<u32, Vec<LineAbility>>,
     /// `forward_spellid` inverted, next rank to previous; injective on the 5875 data.
     rank_prev: HashMap<u32, u32>,
 }
@@ -192,7 +210,25 @@ impl SkillLineCatalog {
             categories: HashMap::new(),
             race_class: HashMap::new(),
             rank_prev: HashMap::new(),
+            line_rows: HashMap::new(),
         }
+    }
+
+    /// A line's `SkillLineAbility` rows in file order. Labelled: the reference walks a per-line
+    /// run of its loaded table (`0x8104a0`); file order within the line is assumed to be that
+    /// run's order.
+    pub fn line_abilities(&self, line_id: u32) -> &[LineAbility] {
+        self.line_rows.get(&line_id).map_or(&[], Vec::as_slice)
+    }
+
+    /// Set a line's display, for tests and fixtures.
+    pub fn set_line(&mut self, line_id: u32, info: SkillLineInfo) {
+        self.lines.insert(line_id, info);
+    }
+
+    /// Set a line's rows, for tests and fixtures.
+    pub fn set_line_abilities(&mut self, line_id: u32, rows: Vec<LineAbility>) {
+        self.line_rows.insert(line_id, rows);
     }
 
     /// The skill line a spell belongs to, if `SkillLineAbility.dbc` names one.
@@ -259,6 +295,7 @@ impl SkillLineCatalog {
             categories: HashMap::new(),
             race_class: HashMap::new(),
             rank_prev,
+            line_rows: HashMap::new(),
         }
     }
 
@@ -475,6 +512,7 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
             .and_then(|i| icons.get(&i).cloned());
         let category_id = u32_at(r, 1).unwrap_or(0);
         let description = str_at(&sl_set, r, COL_SL_DESC_ENUS).unwrap_or_default();
+        let can_link = u32_at(r, COL_SL_CAN_LINK).unwrap_or(0) != 0;
         lines.insert(
             id,
             SkillLineInfo {
@@ -482,6 +520,7 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
                 category_id,
                 icon,
                 description,
+                can_link,
             },
         );
     }
@@ -494,11 +533,17 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
         skill_line_ability_schema(),
         "SkillLineAbility.dbc",
     )?;
+    let mut line_rows: HashMap<u32, Vec<LineAbility>> = HashMap::new();
     let mut abilities: HashMap<u32, SlaInfo> = HashMap::new();
     for r in sla_set.records() {
         if let (Some(skill_id), Some(spell_id)) =
             (u32_at(r, COL_SLA_SKILL_ID), u32_at(r, COL_SLA_SPELL_ID))
         {
+            line_rows.entry(skill_id).or_default().push(LineAbility {
+                spell_id,
+                race_mask: u32_at(r, COL_SLA_RACE_MASK).unwrap_or(0),
+                class_mask: u32_at(r, COL_SLA_CLASS_MASK).unwrap_or(0),
+            });
             let forward_spell_id = u32_at(r, COL_SLA_FORWARD_SPELL).unwrap_or(0);
             // The first row in file order wins.
             let slot = abilities.entry(spell_id).or_insert(SlaInfo {
@@ -529,8 +574,15 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
         categories,
         race_class,
         rank_prev,
+        line_rows,
     })
 }
+
+mod trade_link;
+pub use trade_link::{
+    decode_trade_mask, encode_trade_mask, parse_trade_link, race_class_admits, trade_link,
+    trade_mask_len, TradeLink,
+};
 
 #[cfg(test)]
 mod tests;

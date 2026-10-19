@@ -90,6 +90,8 @@ fn state() -> TradeSkillState {
             recipe(3320, "Rough Sharpening Stone", (7, 0, "Trade Goods"), 0),
         ],
         repeat_count: 0,
+        linked: None,
+        list_link: None,
     }
 }
 

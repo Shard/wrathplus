@@ -720,6 +720,9 @@ pub(crate) struct Model {
     pub(crate) trade_skill_name_filter: Option<String>,
     /// `TradeSkillOnlyShowMakeable` (`0xc235c8`).
     pub(crate) trade_skill_only_makeable: bool,
+    /// Build 12340's clicked trade links (`SetHyperlink` with a `trade:` link, `0x5de120`), raw,
+    /// for the app to open the linked window.
+    pub(crate) trade_link_clicks: Vec<String>,
     pub(crate) trade_skill_filter_touched: bool,
     pub(crate) trade_skill_stop_repeat: bool,
 
@@ -1422,6 +1425,7 @@ impl Model {
             trade_skill_level_filter: (0, 0),
             trade_skill_name_filter: None,
             trade_skill_only_makeable: false,
+            trade_link_clicks: Vec::new(),
             trade_skill_filter_touched: false,
             trade_skill_stop_repeat: false,
             craft: None,

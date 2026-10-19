@@ -471,10 +471,8 @@ pub(in crate::script) fn install(lua: &Lua) -> mlua::Result<()> {
 /// Build 12340's additions (`/tmp/azb-app-mig/ghidra/ts*.log`): the description and recipe link,
 /// the level, name and makeable filters, the repeat stop, and the linked-window queries.
 ///
-/// Labelled: no linked tradeskill window is ever opened here, so `IsTradeSkillLinked` answers
-/// nil, nil; `GetTradeSkillListLink`'s trade link (the known-recipe bitmask over
-/// `SkillLineAbility`, `0x5db060`) is not built and answers nil; the recipe link's prefix is the
-/// open line's name.
+/// The app builds `GetTradeSkillListLink`'s trade link (`0x5db060`) and the linked window
+/// `IsTradeSkillLinked` reports; the recipe link's prefix is the open line's name.
 pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     let index_arg = |lua: &Lua, args: &MultiValue| -> Option<usize> {
@@ -485,7 +483,9 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         "GetTradeSkillDescription",
         lua.create_function(move |lua, args: MultiValue| {
             if args.front().is_none() {
-                return Err(mlua::Error::runtime("Usage: GetTradeSkillDescription(index)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: GetTradeSkillDescription(index)",
+                ));
             }
             let text = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
@@ -500,7 +500,9 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
         "GetTradeSkillRecipeLink",
         lua.create_function(move |lua, args: MultiValue| {
             if args.front().is_none() {
-                return Err(mlua::Error::runtime("Usage: GetTradeSkillRecipeLink(index)"));
+                return Err(mlua::Error::runtime(
+                    "Usage: GetTradeSkillRecipeLink(index)",
+                ));
             }
             let link = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
@@ -523,11 +525,34 @@ pub(in crate::script) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     )?;
     g.set(
         "GetTradeSkillListLink",
-        lua.create_function(|_, ()| Ok(Value::Nil))?,
+        lua.create_function(|lua, ()| {
+            let link = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .trade_skill
+                .as_ref()
+                .and_then(|t| t.list_link.clone());
+            opt_str(lua, link.as_ref())
+        })?,
     )?;
+    // IsTradeSkillLinked() (`0x5da310`): 1 and the linker's name, or nil, nil.
     g.set(
         "IsTradeSkillLinked",
-        lua.create_function(|_, ()| Ok(MultiValue::from_vec(vec![Value::Nil, Value::Nil])))?,
+        lua.create_function(|lua, ()| {
+            let linked = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .trade_skill
+                .as_ref()
+                .and_then(|t| t.linked.clone());
+            Ok(match linked {
+                Some(name) => MultiValue::from_vec(vec![
+                    Value::Integer(1),
+                    Value::String(lua.create_string(&name)?),
+                ]),
+                None => MultiValue::from_vec(vec![Value::Nil, Value::Nil]),
+            })
+        })?,
     )?;
     // SetTradeSkillItemLevelFilter(minLevel, maxLevel) (`0x5dd090` → `0x5dd030`): a change
     // rebuilds the list and fires `TRADE_SKILL_UPDATE`.

@@ -363,3 +363,18 @@ fn a_higher_rank_is_known_only_forward_along_the_chain() {
         "an unchained spell has no chain"
     );
 }
+
+/// Build 12340's `canLink` (file column 55): the professions link, the weapon lines do not; a
+/// profession's rows carry its recipes with their race and class masks.
+#[test]
+fn real_professions_can_link_and_list_their_rows() {
+    let data = crate::wow_data_or_skip!();
+    let mut chain = crate::open_chain(&data).expect("open chain");
+    let cat = load_skill_line_catalog(&mut chain).expect("load SkillLine/SkillLineAbility");
+    assert!(cat.line(171).expect("Alchemy resolves").can_link);
+    assert!(cat.line(164).expect("Blacksmithing resolves").can_link);
+    assert!(!cat.line(43).expect("Swords resolves").can_link);
+    let alchemy = cat.line_abilities(171);
+    assert!(alchemy.len() > 100, "Alchemy has {} row(s)", alchemy.len());
+    assert!(alchemy.iter().all(|r| cat.spell_to_line(r.spell_id).is_some()));
+}
