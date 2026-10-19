@@ -821,6 +821,7 @@ impl Loader<'_> {
         self.apply_colorselect(el, wrapper, self_name, dbg_name);
         self.apply_button(el, wrapper, self_name, dbg_name);
         self.apply_editbox(el, wrapper, dbg_name);
+        self.apply_wrath_frame_flags(el, wrapper, dbg_name);
         self.apply_messageframe(el, wrapper, dbg_name);
         self.apply_simplehtml(el, wrapper, dbg_name);
         self.apply_minimap(el, wrapper, dbg_name);

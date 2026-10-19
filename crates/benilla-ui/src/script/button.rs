@@ -1,6 +1,6 @@
 //! The `Button` and `CheckButton` methods (`CSimpleButton` `0x6eeab0`, `CSimpleCheckbox`
 //! `0x6eeb30`). The shown state texture latches at each state edge (`SetState` `0x779790`), not at
-//! paint. `<PushedTextOffset>` is not built: a pushed label does not shift.
+//! paint. A pushed label shifts by Wrath's `<PushedTextOffset>` at paint.
 //! Lookup runs CheckButton's table, then Button's, then the frame table, the client's class chain,
 //! so `SetChecked` is nil on a plain Button and `GetText` on a plain Frame.
 
@@ -175,7 +175,7 @@ pub(crate) fn set_label_font_justify_h_lua(
 
 /// Run `f` over a frame's Button state under one short write borrow. It moves no state, only an
 /// edge does: re-registering a held button's clicks does not un-press it, as in the reference.
-fn with_button<T>(
+pub(super) fn with_button<T>(
     lua: &Lua,
     this: &Table,
     f: impl FnOnce(&mut ButtonState) -> T,
@@ -247,7 +247,7 @@ pub(super) fn edge(model: &mut Model, h: FrameHandle, f: impl FnOnce(&mut Button
 pub(super) fn hover_notify_runs(model: &Model, h: Option<FrameHandle>) -> bool {
     let Some(h) = h else { return true };
     match model.arena.frame(h).map(|f| &f.kind_state) {
-        Some(KindState::Button(bs)) => bs.enabled(),
+        Some(KindState::Button(bs)) => bs.enabled() || bs.motion_while_disabled,
         _ => true,
     }
 }
