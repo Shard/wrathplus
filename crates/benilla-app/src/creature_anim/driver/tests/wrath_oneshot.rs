@@ -339,15 +339,6 @@ fn wrath_explicit_cast_hold_still_repeats_until_the_hold_ends() {
 }
 
 #[test]
-fn vanilla_legacy_model_looping_completion_policy_is_unchanged() {
-    let (mut app, unit) = fixture(SessionDialect::Vanilla5875, (0, 0));
-    transplant_then_stop(&mut app, unit);
-    advance(&mut app, 2000);
-    app.update();
-    assert_eq!(drv(&app, unit).overlay.map(|o| o.id), Some(SWORD));
-}
-
-#[test]
 fn installed_wrath_human_sword_residency_is_not_an_overlay_release_policy() {
     let data = benilla_formats::wow_data_or_skip!();
     let chain = benilla_formats::Chain::open_wrath(&data, "enUS").expect("read-only chain");

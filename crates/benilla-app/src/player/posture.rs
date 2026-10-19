@@ -270,22 +270,6 @@ mod setter_tests {
     }
 
     #[test]
-    fn vanilla_movement_stands_and_a_sit_request_commits_through_update() {
-        let (mut moving, move_rx) = world(SessionDialect::Vanilla5875, 1, true);
-        moving.update();
-        assert_eq!(stand_change(&move_rx), Some(0));
-        assert_eq!(moving.world().resource::<Player>().stand_pending, Some(0));
-
-        let (mut sitting, sit_rx) = world(SessionDialect::Vanilla5875, 0, false);
-        sitting
-            .world_mut()
-            .write_message(StandStateRequest { state: 1 });
-        sitting.update();
-        assert_eq!(stand_change(&sit_rx), Some(1));
-        assert_eq!(sitting.world().resource::<Player>().stand_pending, Some(1));
-    }
-
-    #[test]
     fn wrath_qualified_posture_commits_movement_stand_and_requested_sit() {
         let (mut moving, move_rx) = world(SessionDialect::Wrath12340, 1, true);
         moving.update();

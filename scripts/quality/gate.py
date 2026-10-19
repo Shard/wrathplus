@@ -28,10 +28,19 @@ def load(name):
     return json.loads((HERE / (name + '-baseline.json')).read_text())
 
 
+# Generated sources, exempt from the line limit by name (their generator is the thing to keep
+# small). A move of one of these needs this list updated in the same commit.
+GENERATED = {
+    'crates/benilla-protocol/src/messages/update_object/fields/layout_generated.rs',
+}
+
+
 def loc(paths):
     baseline = load('loc')['files']
     failures = []
     for path in paths:
+        if path in GENERATED:
+            continue
         if path.endswith('.rs') and Path(path).is_file():
             count = len(Path(path).read_bytes().splitlines())
             if count > max(500, baseline.get(path, 500)):

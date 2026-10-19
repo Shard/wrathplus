@@ -51,6 +51,17 @@ impl WrathLootState {
         true
     }
 
+    /// A response we did not request (a chest or lockbox our use opened, fishing, a pickpocket):
+    /// adopted as the open window when nothing else is in flight.
+    pub(super) fn adopt_response(&mut self, guid: u64) -> bool {
+        if self.phase != Phase::Idle {
+            return false;
+        }
+        self.source = Some(guid);
+        self.phase = Phase::Active;
+        true
+    }
+
     pub(super) fn admit_error(&mut self, guid: u64) -> bool {
         if self.phase != Phase::Requesting || self.source != Some(guid) {
             return false;

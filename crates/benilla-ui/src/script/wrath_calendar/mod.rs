@@ -467,7 +467,7 @@ impl State {
                 _ => (u32::from(i.status), String::new()),
             }
         };
-        list.sort_by(|a, b| key(a).cmp(&key(b)));
+        list.sort_by_key(|a| key(a));
         if reverse {
             list.reverse();
         }

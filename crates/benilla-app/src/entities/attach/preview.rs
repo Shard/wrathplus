@@ -575,7 +575,7 @@ fn assemble(spec: &PreviewSpec, ctx: &mut PreviewCtx<'_, '_>) -> Option<Assemble
     let eg = equip_geosets(ctx.displays.as_deref(), &bodyslots, cloak, helm, false);
     let visible = ctx
         .characters
-        .map(|c| super::char_skin::eye_geosets(&c.0, &char_look, &eg, ctx.sections.as_deref()));
+        .map(|c| super::char_skin::eye_geosets(&c.0, &char_look, &eg, ctx.sections));
     let body_tex = super::char_skin::forced_body_atlas(
         &char_look,
         super::char_skin::skin_key(&char_look, bodyslots, spec.emblem, false),

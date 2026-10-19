@@ -20,7 +20,7 @@ impl Loader<'_> {
                     let value = match attr.attr("type").unwrap_or("string") {
                         "string" => self.lua().create_string(text).map(mlua::Value::String),
                         "number" => text.parse::<f64>().map(mlua::Value::Number)
-                            .map_err(|e| mlua::Error::external(e)),
+                            .map_err(mlua::Error::external),
                         "boolean" => Ok(mlua::Value::Boolean(text == "true")),
                         kind => Err(mlua::Error::external(format!("unknown attribute type {kind}"))),
                     };

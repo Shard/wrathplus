@@ -22,7 +22,7 @@ use crate::ui_script::gate;
 use super::equip_error::equip_error_key;
 use super::{
     find_equip_slot, has_key, slot_guid_count, EquipErrors, BAGS, BAG_SLOT_FIRST,
-    BANK_BAG_ID_FIRST, BANK_CONTAINER, BANK_SLOTS, KEYRING_CONTAINER, PACK_SLOTS,
+    BANK_BAG_ID_FIRST, BANK_CONTAINER, KEYRING_CONTAINER, PACK_SLOTS,
 };
 
 /// What the container feed last pushed, for per-bag change events.
@@ -1435,8 +1435,9 @@ fn diff_and_push(
 mod tests {
     use super::{
         apply_container_source, charges_count, ContainerSlot, FeedMemory, SlotGuids,
-        BANK_CONTAINER, BANK_SLOTS,
+        BANK_CONTAINER,
     };
+    use crate::ui_items::BANK_SLOTS;
 
     /// No bags and an empty vault.
     const NO_BAGS: SlotGuids = SlotGuids {

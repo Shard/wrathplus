@@ -374,9 +374,6 @@ pub(crate) struct Player {
     pub(crate) native_worldport_ack: Option<benilla_protocol::wrath_transfer::Token>,
     /// `Time::elapsed_secs` when we last sent a heartbeat.
     pub(super) last_heartbeat: f32,
-    /// Milliseconds of movement the settle hold skipped, sent as `CMSG_MOVE_TIME_SKIPPED` on the
-    /// release edge; fractional because it accrues a frame `dt` at a time.
-    pub(super) skipped_ms: f32,
     /// When the current airborne phase began (`Time::elapsed_secs`): the wire `fall_time`, and the
     /// take-off and landing edges that emit `MSG_MOVE_JUMP` and `MSG_MOVE_FALL_LAND`.
     pub(super) airborne_since: Option<f32>,

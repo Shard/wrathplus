@@ -510,7 +510,7 @@ impl Cooldowns {
     ) {
         self.add(
             now,
-            u32::from(cd.spell_id),
+            cd.spell_id,
             u32::from(cd.item_id),
             Timer {
                 start: now,

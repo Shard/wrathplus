@@ -6,12 +6,14 @@ check=${1:?usage: run.sh loc|fmt|clippy|crap|machete|typos [paths or -p packages
 shift
 case "$check" in
 loc|fmt) exec python3 scripts/quality/gate.py "$check" "$@" ;;
-machete) exec cargo machete "$@" ;;
+# The workspace crates only: vendored third_party/ code is not ours to prune.
+machete) if [[ $# == 0 ]]; then set -- crates; fi; exec cargo machete "$@" ;;
 typos) exec typos "$@" ;;
 clippy|crap) ;;
 *) echo 'unknown check' >&2; exit 2 ;;
 esac
-: "${CARGO_TARGET_DIR:=/tmp/azb-target-experience}"
+# Each worker builds in its own target directory; never default into another's.
+: "${CARGO_TARGET_DIR:?set CARGO_TARGET_DIR to your own target directory (e.g. /tmp/azb-target-<you>)}"
 export CARGO_TARGET_DIR CARGO_BUILD_JOBS=4 CARGO_INCREMENTAL=0
 # Coverage can create a fresh instrumented tree; refuse to start above the shared cap.
 if [[ -d $CARGO_TARGET_DIR ]] && (( $(du -sk "$CARGO_TARGET_DIR" | cut -f1) > 41943040 )); then
@@ -40,6 +42,11 @@ if [[ $check == clippy ]]; then
   if (( status != 0 )) && ! grep -q '"reason":"compiler-message"' "$report/clippy.json"; then exit "$status"; fi
 else
   for tool in cargo-llvm-cov cargo-crap; do command -v "$tool" >/dev/null; done
+  # cargo-llvm-cov otherwise stops at an interactive install prompt, hanging an unattended run.
+  if ! rustup component list --installed 2>/dev/null | grep -q '^llvm-tools'; then
+    echo 'quality: crap needs `rustup component add llvm-tools-preview` for this toolchain' >&2
+    exit 2
+  fi
   # No report reuse: a failed test or coverage export aborts before any scoring.
   cargo llvm-cov --locked --lib --no-default-ignore-filename-regex \
     --ignore-filename-regex '^$' --lcov --output-path "$report/lcov.info" "$@" -- --test-threads 4
