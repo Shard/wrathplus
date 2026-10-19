@@ -1307,7 +1307,10 @@ pub(super) fn measure_request_for(model: &mut Model, rh: RegionHandle) -> Option
     let (key, scale) = stale_measure_key(model, rh)?;
     let d = model.region_data.get(&rh)?;
     let text = d.text.clone().filter(|t| !t.is_empty())?;
-    let wrap_width = d.size.map(|s| s.0).filter(|w| *w > 0.0);
+    let wrap_width = d
+        .size
+        .map(|s| s.0)
+        .filter(|w| *w > 0.0 && d.word_wrap != Some(false));
     let font = d.font_path.clone();
     let height = d.font_height;
     let text_height = d.text_height;

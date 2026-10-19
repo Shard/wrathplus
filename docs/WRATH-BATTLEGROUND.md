@@ -20,6 +20,17 @@ queue reply and eject. 04F7 world-state UI timer keeps its existing capture (sta
 **Shared (handled)**, 1.12 shapes unchanged: 02EC/02ED player joined/left, 02E4 spirit-healer time,
 028C PvP credit.
 
+**Arena lines** (`A/net/wrath_arena_lines.rs`, drained from `ui_battlefield::NativeBattlegroundRest`
+after Experience's `drain_native`): 0349 command result → its action's line on error 0
+(`ERR_ARENA_TEAM_CREATE_S`, `_INVITE_SS`, `_QUIT_S`, `_FOUNDER_S`), else the error code's
+`ERR_ARENA_TEAM_*`/`ERR_*_ARENA_TEAM*` line; 0357 event 3..8 → `ERR_ARENA_TEAM_JOIN_SS` ..
+`_DISBANDED_S` with its strings as they arrived, and the team (the last string) pushed to
+`ui_arena_team::ArenaRosterRefresh`; 0376 with a leading 0 → `ERR_ARENA_NO_TEAM_II` (the team type
+twice). Each is a `UiErrorKeys` catalog line. Labelled: the client's arena handlers are untraced.
+The tables mirror the guild command-result and event handlers, whose codes AC's arena enums copy.
+A `_S` code takes the player name, else the team name. 04C7 stays in the rest FIFO, capture-only:
+no arena-opponent model consumes it.
+
 **Outbound**:
 - Existing commands whose 3.3.5 bodies are unchanged now route natively: 02D7 battlemaster hello,
   02E2/02E3 area spirit healer query/queue, 021C spirit healer, 02D6 honor inspect, 0253 toggle

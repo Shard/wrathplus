@@ -4,8 +4,8 @@
 //! slot, keyed as the binding reads it (equipped rows use bag 0). A refunded item's row goes when
 //! `SMSG_ITEM_REFUND_RESULT` succeeds. Refunds expire after two hours of played time
 //! (AzerothCore `Item::IsRefundExpired`), counted down from the reply.
-use super::wrath_inventory_capture::NativeInventoryPackets;
-use super::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
+use crate::net::wrath_inventory_capture::NativeInventoryPackets;
+use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_protocol::wrath_inventory::{Command, Packet, RefundCost};
 use benilla_ui::script::{ItemRefundCost, ItemRefundView, ScriptDialect, UiScript};
 use bevy::prelude::*;
@@ -31,7 +31,7 @@ pub(crate) struct ItemRefunds {
     asked: HashSet<u64>,
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<ItemRefunds>().add_systems(
         Update,
         feed_item_refunds
@@ -55,7 +55,7 @@ fn lua_key(bag: u8, slot: u8) -> Option<(bool, i32, i32)> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn feed_item_refunds(
+pub(crate) fn feed_item_refunds(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
     mut refunds: ResMut<ItemRefunds>,
@@ -179,7 +179,7 @@ fn absorb(packets: &mut std::collections::VecDeque<Packet>, refunds: &mut ItemRe
 }
 
 /// A session boundary forgets every reply and every ask.
-pub(super) fn clear(refunds: &mut ItemRefunds) {
+pub(crate) fn clear(refunds: &mut ItemRefunds) {
     *refunds = ItemRefunds::default();
 }
 

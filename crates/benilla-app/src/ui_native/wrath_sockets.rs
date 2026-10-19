@@ -10,8 +10,8 @@
 //! one still in its trade window (`END_BOUND_TRADEABLE("gem")`); their Yes, `EndRefund(2)` /
 //! `EndBoundTradeable("gem")` (`0x523370`, `0x5233d0` → `0x5c4ff0`), sends `CMSG_SOCKET_GEMS`.
 //! Labelled: which prompt `AcceptSockets` checks first is not traced (refund first here).
-use super::wrath_inventory_capture::NativeInventoryPackets;
-use super::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, Objects, SelfPlayer};
+use crate::net::wrath_inventory_capture::NativeInventoryPackets;
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, Objects, SelfPlayer};
 use benilla_formats::gems::{
     GemCatalog, SOCKET_COLOR_BLUE, SOCKET_COLOR_META, SOCKET_COLOR_RED, SOCKET_COLOR_YELLOW,
 };
@@ -55,7 +55,7 @@ pub(crate) struct SocketSession {
     new: [Option<u64>; SOCKETS],
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<SocketTemplates>()
         .init_resource::<SocketSession>()
         .init_resource::<SocketResume>()
@@ -64,7 +64,7 @@ pub(super) fn register(app: &mut App) {
         .add_systems(
             Update,
             feed_sockets
-                .after(super::wrath_equipment_sets::feed_equipment_sets)
+                .after(crate::net::wrath_equipment_sets::feed_equipment_sets)
                 .after(crate::ui_guild_bank::feed_guild_bank)
                 .in_set(crate::ui_script::UiFeed)
                 .run_if(crate::ui_script::ingame_ui_up),
@@ -146,7 +146,7 @@ fn socket_colors(template: &SocketMetadata, prismatic: bool) -> Vec<u32> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn feed_sockets(
+pub(crate) fn feed_sockets(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
     mut session: ResMut<SocketSession>,
@@ -372,7 +372,7 @@ fn apply(
 }
 
 /// A session boundary closes the window's session; templates and gem tables stay.
-pub(super) fn clear(session: &mut SocketSession) {
+pub(crate) fn clear(session: &mut SocketSession) {
     *session = SocketSession::default();
 }
 

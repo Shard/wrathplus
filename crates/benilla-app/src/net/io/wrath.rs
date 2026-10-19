@@ -2750,14 +2750,13 @@ fn exchange_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         }),
         ClientCommand::AuctionSellItem {
             auctioneer,
-            item_guid,
+            items,
             bid,
             buyout,
             etime_minutes,
-            count,
         } => encode(&X::AuctionSell {
             auctioneer,
-            items: vec![(item_guid, count)],
+            items,
             bid,
             buyout,
             etime_minutes,
@@ -3923,11 +3922,10 @@ mod tests {
             (
                 ClientCommand::AuctionSellItem {
                     auctioneer: 7,
-                    item_guid: 9,
+                    items: vec![(9, 20)],
                     bid: 1,
                     buyout: 2,
                     etime_minutes: 720,
-                    count: 20,
                 },
                 0x256,
                 [

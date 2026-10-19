@@ -266,6 +266,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         .set_name("=[AzerothBench SetFrameStack]")
         .call(())?;
     m.set("SetFrameStack", frame_stack)?;
+    // SetTracking() (Minimap.xml:497): the active tracking's hover, 3.3.5's name for 1.12's
+    // SetTrackingSpell, whose binding it shares (labelled: the 12340 binding is unread).
+    let tracking: mlua::Function = m.get("SetTrackingSpell")?;
+    m.set("SetTracking", tracking)?;
     // FontString:GetFieldSize() (`0x48bc70`): the text buffer's fixed size, 8191 (`0x9ead70`).
     let fontstrings: Table = lua.named_registry_value(super::REG_FONTSTRING_METHODS)?;
     fontstrings.set("GetFieldSize", lua.create_function(|_, _this: Table| Ok(8191.0))?)?;
@@ -370,6 +374,7 @@ mod widget_tests {
             "E:HasFocus() == false",
             "F:GetFieldSize() == 8191",
             "A:GetRegionParent() == P",
+            "T.SetTracking == T.SetTrackingSpell",
         ] {
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }

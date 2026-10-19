@@ -7,7 +7,7 @@
 //! Not built (labelled): the same ticker fires `WORLD_STATE_UI_TIMER_UPDATE` (`0x28b`) each second
 //! while a type-3 world-state UI entry is active; that waits on Native UI's Wrath world-state UI
 //! projection.
-use super::{ClientCommand, NetCommands, NetHandlerApp};
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use benilla_protocol::{wrath_ui_timer::Packet, SessionEvent, SessionEventKind};
 use benilla_ui::script::{ScriptDialect, UiScript};
 use bevy::prelude::*;
@@ -30,7 +30,7 @@ pub(crate) struct ServerClock {
 #[derive(Resource, Default)]
 pub(crate) struct NativeUiTimerPackets(pub(crate) VecDeque<Packet>);
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<NativeUiTimerPackets>()
         .init_resource::<ServerClock>()
         // In the feed phase, once the in-game UI exists: replies wait in the FIFO until then.
