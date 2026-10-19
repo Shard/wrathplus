@@ -103,6 +103,10 @@ pub struct TradeSkillRecipe {
     /// Build 12340's `GetTradeSkillDescription`: the spell's description, tokens filled; `None`
     /// for an empty one.
     pub description: Option<String>,
+    /// `GetTradeSkillInfo`'s fifth return (`0x5db2a0`): the open line's `alternateVerb`, empty
+    /// included, for a spell whose first effect creates no item (not 24, 157 or 59); `None`
+    /// otherwise.
+    pub alt_verb: Option<String>,
 }
 
 /// One open tradeskill window, pushed whole by the app.

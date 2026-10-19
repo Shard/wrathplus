@@ -33,6 +33,7 @@ const WIDGET_NOT_YET_ASSERTED: &[&str] = &[];
 const WRATH_SHAPED: &[(&str, &str)] = &[
     ("GetActiveTitle", "0x58bed0: the title (nil out of range) and a boolean completion"),
     ("GetLootMethod", "0x52cd90: method, partyMaster, raidMaster, always three"),
+    ("GetTradeSkillInfo", "0x5db2a0: five values on every path, the fifth altVerb"),
 ];
 
 fn wrath_shaped(name: &str) -> bool {

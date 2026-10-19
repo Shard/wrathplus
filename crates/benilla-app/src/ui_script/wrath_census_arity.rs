@@ -22,7 +22,6 @@ const SHORT_REVIEWED: &[(&str, &str)] = &[
     ("GetAchievementInfoFromCriteria", "0x5b1720: seven; the stock ten-wide unpack reads nils"),
     ("GetContainerItemInfo", "pending Native UI: a short hit"),
     ("GetItemInfo", "pending Native UI: a short hit"),
-    ("GetTradeSkillInfo", "pending Native UI: a short hit"),
 ];
 
 /// Names no probe reaches with a hit or a full-width miss, by reason.
