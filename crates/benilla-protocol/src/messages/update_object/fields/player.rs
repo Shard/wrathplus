@@ -93,6 +93,11 @@ impl ObjectFields {
     pub fn player_glyph(&self, i: u8) -> Option<u32> {
         (i < 6).then(|| self.get_at(Field::PlayerGlyphs1, u16::from(i)))?
     }
+    /// `PLAYER_FIELD_DAILY_QUESTS_1 + i`: the daily quest completed in slot `i` (0-24), 0 for none
+    /// (build 12340 only); `GetDailyQuestsCompleted` counts the non-zero slots (`0x58db30`).
+    pub fn player_daily_quest(&self, i: u8) -> Option<u32> {
+        (i < 25).then(|| self.get_at(Field::PlayerDailyQuests1, u16::from(i)))?
+    }
     /// `PLAYER_GLYPHS_ENABLED`: one bit per unlocked socket.
     pub fn player_glyphs_enabled(&self) -> Option<u32> {
         self.get(Field::PlayerGlyphsEnabled)

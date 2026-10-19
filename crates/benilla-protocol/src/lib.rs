@@ -333,6 +333,9 @@ mod host_port_tests {
 #[cfg(test)]
 mod wrath_native_stream_tests;
 
+#[cfg(test)]
+mod wrath_native_codec_guard_tests;
+
 pub mod wrath_pet;
 pub mod wrath_spell_control;
 pub mod wrath_speed;

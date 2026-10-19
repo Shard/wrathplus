@@ -180,6 +180,8 @@ pub use quest_headers::{load_quest_header_names, QuestHeaderNames};
 mod game_tables;
 pub use game_tables::{load_wrath_game_tables, GameTable, WrathGameTables, GAME_TABLE_MAX_LEVEL};
 mod barber;
+mod movies;
+pub use movies::{load_movies, Movie, Movies};
 pub use barber::{
     barber_kind, load_barber_cost_base, load_barber_styles, BarberCostBase, BarberStyle,
     BarberStyles,
@@ -389,29 +391,12 @@ pub use taxi_nodes::{load_taxi_nodes, TaxiNode, TaxiNodes};
 mod taxi_path;
 pub use taxi_path::{load_taxi_paths, TaxiPath, TaxiPaths};
 
-/// The ten base archives, lowest priority first: the reference mounter's table (`0x82e12c`),
-/// priority 0x36 (`dbc.MPQ`) to 0x3f (`model.MPQ`), in [`Chain`]'s later-wins order. The patch
-/// archives and `speech2.MPQ` are found by [`Chain::open`]; `base.MPQ` is left out, as the
-/// reference closes it before mounting (`0x5aa2d0`).
-pub const VANILLA_BASE_ORDER: &[&str] = &[
-    "dbc.MPQ",
-    "speech.MPQ",
-    "fonts.MPQ",
-    "interface.MPQ",
-    "misc.MPQ",
-    "sound.MPQ",
-    "wmo.MPQ",
-    "terrain.MPQ",
-    "texture.MPQ",
-    "model.MPQ",
-];
-
-/// [`Chain::open`] on one `.MPQ` file or a vanilla `Data` directory.
+/// [`Chain::open`] on one `.MPQ` file or a `Data` directory.
 pub fn open_chain(path: &Path) -> Result<Chain> {
     Chain::open(path)
 }
 
-/// Open the launcher's explicitly configured data profile; vanilla remains the default.
+/// Open the launcher's configured data profile.
 pub fn open_configured_chain(path: &Path) -> Result<Chain> {
     Chain::open_profile(path, &DataProfile::from_env()?)
 }
@@ -645,29 +630,31 @@ pub fn blp_bytes_to_native_chain(bytes: &[u8]) -> Result<BlpMipChain> {
     })
 }
 
-/// Our schema for a known 1.12 DBC by base filename, as DBC files carry no column types. A
+/// Our schema for a known DBC by base filename, as DBC files carry no column types. A
 /// localized string is 9 dwords: 8 locale offsets and a flags word.
 fn schema_for(dbc_name: &str) -> Option<Schema> {
     let base = dbc_name.rsplit(['/', '\\']).next().unwrap_or(dbc_name);
 
-    // A table with a typed loader reuses its vanilla schema, so a dump reads what the loader reads.
+    // A table with a typed loader reuses its schema, so a dump reads what the loader reads.
     let typed = match base.to_ascii_lowercase().as_str() {
         "creaturedisplayinfo.dbc" => Some(creatures::creature_display_info_schema(
-            &DataProfile::Vanilla,
+            &DataProfile::default(),
         )),
         "creaturedisplayinfoextra.dbc" => Some(creatures::creature_display_info_extra_schema(
-            &DataProfile::Vanilla,
+            &DataProfile::default(),
         )),
         "creaturemodeldata.dbc" => {
-            Some(creatures::creature_model_data_schema(&DataProfile::Vanilla))
+            Some(creatures::creature_model_data_schema(&DataProfile::default()))
         }
-        "charhairgeosets.dbc" => Some(characters::char_hair_geosets_schema(&DataProfile::Vanilla)),
+        "charhairgeosets.dbc" => {
+            Some(characters::char_hair_geosets_schema(&DataProfile::default()))
+        }
         "characterfacialhairstyles.dbc" => {
-            Some(characters::char_facial_hair_schema(&DataProfile::Vanilla))
+            Some(characters::char_facial_hair_schema(&DataProfile::default()))
         }
-        "helmetgeosetvisdata.dbc" => Some(characters::helmet_vis_schema(&DataProfile::Vanilla)),
-        "charsections.dbc" => Some(characters::char_sections_schema(&DataProfile::Vanilla)),
-        "itemdisplayinfo.dbc" => Some(items::item_display_info_schema(&DataProfile::Vanilla)),
+        "helmetgeosetvisdata.dbc" => Some(characters::helmet_vis_schema(&DataProfile::default())),
+        "charsections.dbc" => Some(characters::char_sections_schema(&DataProfile::default())),
+        "itemdisplayinfo.dbc" => Some(items::item_display_info_schema(&DataProfile::default())),
         "itemvisuals.dbc" => Some(item_visuals::item_visuals_schema()),
         "itemvisualeffects.dbc" => Some(item_visuals::item_visual_effects_schema()),
         "spellitemenchantment.dbc" => Some(item_visuals::spell_item_enchantment_schema()),

@@ -210,7 +210,7 @@ pub struct AssetOverridePolicy(pub benilla_formats::AssetOverrides);
 /// Register the `mpq://` source on `app`, backed by the patch chain at `data_dir`. Call it before
 /// `AssetPlugin` builds (before `DefaultPlugins`), which reads the sources.
 pub fn register_mpq_source(app: &mut App, data_dir: &Path) -> Result<()> {
-    register_mpq_source_profile(app, data_dir, &benilla_formats::DataProfile::Vanilla)
+    register_mpq_source_profile(app, data_dir, &benilla_formats::DataProfile::default())
 }
 
 /// Register the explicitly selected archive dialect before Bevy's asset plugin builds.
@@ -266,16 +266,8 @@ pub fn register_asset_loaders(app: &mut App) {
         .get_resource::<ClientDataProfile>()
         .cloned()
         .unwrap_or_default();
-    match profile.0 {
-        benilla_formats::DataProfile::Vanilla => {
-            app.register_asset_loader(M2ModelLoader);
-            app.register_asset_loader(AdtLoader);
-        }
-        benilla_formats::DataProfile::Wrath { .. } => {
-            app.register_asset_loader(WrathM2ModelLoader);
-            app.register_asset_loader(WrathAdtLoader);
-        }
-    }
+    app.register_asset_loader(WrathM2ModelLoader);
+    app.register_asset_loader(WrathAdtLoader);
     let catalogs = app
         .world()
         .get_resource::<WmoLiquidCatalogs>()
@@ -354,12 +346,19 @@ mod tests {
         mcnk.extend(chunk(b"YLCM", &[0u8; 16]));
         let mut tile = chunk(b"XETM", b"World/Doodad.blp\0");
         tile.extend(chunk(b"KNCM", &mcnk));
-        std::fs::write(root.join("World/Tile.adt"), tile).unwrap();
+        // A build-12340 tile is `World/Maps/{map}/{map}_x_y.adt` beside its `{map}.wdt`.
+        std::fs::create_dir_all(root.join("World/Maps/Test")).unwrap();
+        std::fs::write(root.join("World/Maps/Test/Test_32_32.adt"), tile).unwrap();
+        std::fs::write(
+            root.join("World/Maps/Test/Test.wdt"),
+            chunk(b"DHPM", &[0u8; 32]),
+        )
+        .unwrap();
         let policy = benilla_formats::AssetOverrides::from_roots([root.clone()]).unwrap();
         let reader = MpqAssetReader {
             chain: Arc::new(Chain::from_overrides(
                 policy,
-                benilla_formats::DataProfile::Vanilla,
+                benilla_formats::DataProfile::default(),
             )),
         };
         let mut app = App::new();
@@ -377,7 +376,7 @@ mod tests {
         let tile: Handle<AdtTile> = app
             .world()
             .resource::<AssetServer>()
-            .load("mpq://World/Tile.adt");
+            .load("mpq://World/Maps/Test/Test_32_32.adt");
         // Exactly the sampler-marked path that streamed M2/WMO doodads request.
         let handle: Handle<Image> = app
             .world()
@@ -395,7 +394,7 @@ mod tests {
         let tiles = app.world().resource::<Assets<AdtTile>>();
         let tile = tiles
             .get(&tile)
-            .expect("pack-only tile streams through AdtLoader");
+            .expect("pack-only tile streams through WrathAdtLoader");
         assert_eq!(
             tile.shading[0].layers[0], 1,
             "pack texture wins over fallback layer 0"

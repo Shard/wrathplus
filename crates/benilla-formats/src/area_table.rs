@@ -114,11 +114,9 @@ impl AreaTableCatalog {
 fn schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("AreaTable");
     let fields = match profile {
-        DataProfile::Vanilla => 25,
         DataProfile::Wrath { .. } => 36,
     };
     let name_field = match profile {
-        DataProfile::Vanilla => 11,
         DataProfile::Wrath { locale } => 11 + wrath_locale_slot(locale),
     };
     for i in 0..fields {
@@ -153,7 +151,6 @@ pub fn load_area_table_catalog(chain: &mut Chain) -> Result<AreaTableCatalog> {
         .context("reading AreaTable.dbc")?;
     let rs = parse(&bytes, schema(&profile), "AreaTable")?;
     let (name_field, faction_group_field) = match &profile {
-        DataProfile::Vanilla => (11, 20),
         DataProfile::Wrath { locale } => (11 + wrath_locale_slot(locale), 28),
     };
     let mut by_id = HashMap::with_capacity(rs.records().len());
@@ -205,22 +202,8 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_and_wrath_area_offsets_are_distinct_and_localized() {
+    fn wrath_area_offsets_are_localized() {
         let strings = b"\0vanilla\0wrath-de\0";
-        let mut vanilla = (100..125).collect::<Vec<u32>>();
-        vanilla[11] = 1;
-        let set = parse(
-            &wdbc(&vanilla, strings),
-            schema(&DataProfile::Vanilla),
-            "synthetic vanilla AreaTable",
-        )
-        .unwrap();
-        assert_eq!(
-            str_at(&set, &set.records()[0], 11).as_deref(),
-            Some("vanilla")
-        );
-        assert_eq!(u32_at(&set.records()[0], 20), Some(120));
-
         let profile = DataProfile::Wrath {
             locale: "deDE".into(),
         };

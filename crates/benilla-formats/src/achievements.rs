@@ -212,9 +212,7 @@ fn categories(bytes: &[u8], locale: &str) -> Result<AchievementCategoryCatalog> 
 }
 
 fn read(chain: &mut Chain, table: &str) -> Result<(Vec<u8>, String)> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("{table} requires Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let bytes = chain
         .read_file(&format!("DBFilesClient\\{table}.dbc"))

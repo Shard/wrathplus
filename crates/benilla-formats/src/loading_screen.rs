@@ -83,16 +83,9 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_and_wrath_loading_screen_records_use_profile_specific_widths() {
+    fn wrath_loading_screen_records_are_four_fields_wide() {
         let strings =
             b"\0Eastern Kingdoms\0Interface\\Glues\\LoadingScreens\\LoadScreenEasternKingdom.blp\0";
-
-        let vanilla = parse_loading_screens(&wdbc(&[4, 1, 18], strings), &DataProfile::Vanilla)
-            .expect("three-field Vanilla LoadingScreens row");
-        assert_eq!(
-            vanilla.path(4),
-            Some("Interface\\Glues\\LoadingScreens\\LoadScreenEasternKingdom.blp")
-        );
 
         let profile = DataProfile::Wrath {
             locale: "enUS".into(),
@@ -105,9 +98,7 @@ mod tests {
             "HasWideScreen is metadata, not permission to invent an unlisted asset path"
         );
 
-        assert!(
-            parse_loading_screens(&wdbc(&[4, 1, 18, 0], strings), &DataProfile::Vanilla).is_err()
-        );
+        assert!(parse_loading_screens(&wdbc(&[4, 1, 18], strings), &profile).is_err());
     }
 
     #[test]

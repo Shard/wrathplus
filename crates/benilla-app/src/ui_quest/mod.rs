@@ -502,6 +502,14 @@ pub(crate) fn feed_quest(
             state.reward_title = tables.title(native.title_id, player.as_ref());
         }
     }
+    // Build 12340's `QuestFlagsPVP` (`0x58c3e0`): the panel quest's flags (`0xc0d6b4`).
+    let panel_flags = match giver.view.as_ref() {
+        Some(QuestView::Detail(q)) => q.wrath.as_ref().map(|w| w.flags),
+        Some(QuestView::Reward(q)) => q.wrath.as_ref().map(|w| w.flags),
+        Some(QuestView::Progress(q)) => q.wrath.as_ref().map(|w| w.flags),
+        _ => None,
+    };
+    script.set_wrath_quest_panel_flags(panel_flags.unwrap_or(0));
     // The background is the source object's material, never a creature's and never on the wire
     // (`GetQuestBackgroundMaterial`, `0x502230`); the reader window's binding shares its body.
     let fresh = fresh.map(|mut st| {

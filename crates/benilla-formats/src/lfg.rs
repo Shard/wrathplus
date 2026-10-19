@@ -218,6 +218,8 @@ pub(crate) fn table<const N: usize>(bytes: &[u8]) -> Result<Table<'_, N>> {
         end.checked_add(word(16) as usize) == Some(bytes.len()),
         "WDBC size mismatch"
     );
+    // `as_chunks::<{ N * 4 }>` needs `generic_const_exprs`, unstable.
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     let rows = bytes[20..end]
         .chunks_exact(N * 4)
         .map(|r| {
@@ -345,9 +347,7 @@ pub fn parse_dungeon_encounters(bytes: &[u8], locale: &str) -> Result<Vec<Dungeo
 }
 /// The encounters in file order, each with its `SpellIcon.dbc` path.
 pub fn load_dungeon_encounters(chain: &mut Chain) -> Result<Vec<DungeonEncounter>> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("dungeon encounters require Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let bytes = chain
         .read_file("DBFilesClient\\DungeonEncounter.dbc")
@@ -370,9 +370,7 @@ pub struct LfgCatalogs {
 /// Use the caller's boot-resolved chain, including override policy/provenance.
 /// All tables are required and errors propagate; no partial/default catalog.
 pub fn load_lfg_catalogs(chain: &mut Chain) -> Result<LfgCatalogs> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("LFG catalogs require Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let mut read = |name| {
         chain

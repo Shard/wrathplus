@@ -146,9 +146,7 @@ pub fn load_currency_types(chain: &mut Chain) -> Result<CurrencyCatalog> {
 
 /// Load category labels using the chain's explicitly selected archive locale.
 pub fn load_currency_categories(chain: &mut Chain) -> Result<CurrencyCategoryCatalog> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("CurrencyCategory requires Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     categories(
         &chain

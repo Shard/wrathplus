@@ -57,10 +57,12 @@ pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
+mod movie;
 mod wrath_petition_vendor;
 mod wrath_quest_poi;
 mod wrath_barber;
 mod wrath_region_attrs;
+mod wrath_item_gems;
 pub use wrath_barber::{WrathBarberRequest, WrathBarberShop, WrathBarberStyle};
 pub use wrath_petition_vendor::{WrathPetitionItem, WrathPetitionVendorRequest};
 pub use wrath_quest_poi::{WrathQuestPoi, WrathQuestPoiBlob};
@@ -205,6 +207,7 @@ mod wrath_state_queries;
 mod wrath_modified_click;
 mod wrath_macro_options;
 mod wrath_engine_constants;
+mod wrath_quest_queries;
 mod wrath_saved_instances;
 mod wrath_quests_completed;
 mod wrath_inspect_talents; pub use wrath_inspect_talents::{WrathInspectGroup, WrathInspectTalents};
@@ -859,6 +862,7 @@ impl UiScript {
         slider::install(&lua)?;
         colorselect::install(&lua)?;
         minimap::install(&lua)?;
+        movie::install(&lua)?;
         modelframe::install(&lua)?;
         tooltip::install(&lua)?;
         worldmap::install(&lua)?;
@@ -916,8 +920,10 @@ impl UiScript {
             wrath_tooltip::install(&lua)?;
             wrath_quest_poi::install(&lua)?;
             wrath_petition_vendor::install(&lua)?;
+            movie::install_wrath(&lua)?;
             wrath_barber::install(&lua)?;
             wrath_region_attrs::install(&lua)?;
+            wrath_item_gems::install(&lua)?;
             wrath_quests_completed::install(&lua)?;
             wrath_calendar::install(&lua)?;
             wrath_saved_instances::install(&lua)?;
@@ -929,6 +935,8 @@ impl UiScript {
             wrath_modified_click::install(&lua)?;
             wrath_macro_options::install(&lua)?;
             wrath_engine_constants::install(&lua)?;
+            unit::wrath_queries::install(&lua)?;
+            wrath_quest_queries::install(&lua)?;
         }
 
         let s = UiScript {

@@ -510,7 +510,7 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
     native.players_slain = u32_le(r)?;
     native.bonus_talents = u32_le(r)?;
     native.arena_points = u32_le(r)?;
-    let _rep_show_mask = u32_le(r)?;
+    native.reward_rep_show_mask = u32_le(r)?;
     let mut rewards = [(0, 0); 4];
     for slot in &mut rewards {
         *slot = (u32_le(r)?, u32_le(r)?);
@@ -519,8 +519,14 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
     for slot in &mut choices {
         *slot = (u32_le(r)?, u32_le(r)?);
     }
-    for _ in 0..15 {
-        let _reputation = u32_le(r)?;
+    for slot in &mut native.reward_factions {
+        slot.0 = u32_le(r)?;
+    }
+    for slot in &mut native.reward_factions {
+        slot.1 = u32_le(r)? as i32;
+    }
+    for slot in &mut native.reward_factions {
+        slot.2 = u32_le(r)? as i32;
     }
     let point_map_id = u32_le(r)?;
     let point_x = f32_le(r)?;
@@ -538,11 +544,10 @@ fn quest_template(r: &mut Cursor<&[u8]>) -> io::Result<QuestTemplate> {
         item_count: 0,
         text: String::new(),
     });
-    for objective in &mut objectives {
+    for (objective, drop) in objectives.iter_mut().zip(native.item_drops.iter_mut()) {
         objective.creature_or_go = u32_le(r)?;
         objective.required_count = u32_le(r)?;
-        let _item_drop = u32_le(r)?;
-        let _source_count = u32_le(r)?;
+        *drop = (u32_le(r)?, u32_le(r)?);
     }
     for i in 0..6 {
         let (item, count) = (u32_le(r)?, u32_le(r)?);
@@ -638,6 +643,54 @@ mod tests {
     fn cstr(out: &mut Vec<u8>, s: &str) {
         out.extend(s.as_bytes());
         out.push(0);
+    }
+
+    #[test]
+    fn a_quest_template_keeps_its_reputation_runs_and_item_drops() {
+        let mut b = Vec::new();
+        let w = |b: &mut Vec<u8>, v: u32| b.extend(v.to_le_bytes());
+        for i in 0..25u32 {
+            w(&mut b, if i == 0 { 9001 } else { 0 });
+        }
+        w(&mut b, 0); // RewardRepShowMask
+        for _ in 0..(8 + 12) {
+            w(&mut b, 0);
+        }
+        for id in [1037, 1052, 0, 0, 0] {
+            w(&mut b, id);
+        }
+        for value in [5, -3, 0, 0, 0] {
+            w(&mut b, value as u32);
+        }
+        for over in [0, 250, 0, 0, 0] {
+            w(&mut b, over as u32);
+        }
+        for _ in 0..4 {
+            w(&mut b, 0);
+        }
+        for _ in 0..5 {
+            cstr(&mut b, "");
+        }
+        for k in 0..4u32 {
+            for v in [100 + k, 1, 3000 + k, 2 + k] {
+                w(&mut b, v);
+            }
+        }
+        for _ in 0..12 {
+            w(&mut b, 0);
+        }
+        for _ in 0..4 {
+            cstr(&mut b, "");
+        }
+        let t = quest_template(&mut Cursor::new(&b[..])).unwrap();
+        let native = t.wrath.unwrap();
+        assert_eq!(t.quest_id, 9001);
+        assert_eq!(
+            native.reward_factions,
+            [(1037, 5, 0), (1052, -3, 250), (0, 0, 0), (0, 0, 0), (0, 0, 0)]
+        );
+        assert_eq!(native.item_drops, [(3000, 2), (3001, 3), (3002, 4), (3003, 5)]);
+        assert_eq!(t.objectives[1].creature_or_go, 101);
     }
 
     #[test]

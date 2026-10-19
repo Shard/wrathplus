@@ -510,9 +510,11 @@ pub(crate) fn feed_quest_log(
     header_names: Option<Res<QuestHeaderNamesRes>>,
     tag_names: Option<Res<QuestTagNamesRes>>,
     states: Res<crate::world_state::WorldStates>,
-    (spells, rewards): (
+    (spells, rewards, factions, reputations): (
         Option<Res<Spells>>,
         Option<Res<crate::quest_rewards::QuestRewardTables>>,
+        Option<Res<crate::target::Factions>>,
+        Option<Res<crate::net::Reputations>>,
     ),
     // The completion toast is a message-catalog row, whose surface and sound the sink reads.
     mut sink: crate::ui_action::MessageSink,
@@ -739,6 +741,50 @@ pub(crate) fn feed_quest_log(
     quest_log.row_slots = rows.iter().map(|r| (r.quest_id, r.slot)).collect();
     quest_log.header_keys = header_keys;
 
+    // Build 12340's quest reputation rewards (`0x58d050`): each quest's staged list, which
+    // `ProcessQuestLogRewardFactions` stages for the selected quest.
+    if let (Some(table), Some(factions)) = (
+        rewards.as_deref().and_then(|r| r.faction_rewards()),
+        factions.as_deref(),
+    ) {
+        let catalog = factions.catalog();
+        let (race, class) = (store.0.unit_race().unwrap_or(0), store.0.unit_class().unwrap_or(0));
+        let standing = |f: u32| {
+            catalog.faction(f).map_or(0, |info| {
+                let wire = usize::try_from(info.rep_index)
+                    .ok()
+                    .and_then(|i| reputations.as_ref()?.0.get(i))
+                    .map_or(0, |&(_, s)| s);
+                info.base_for(race, class) + wire
+            })
+        };
+        script.set_wrath_quest_reward_factions(
+            rows.iter()
+                .filter_map(|r| {
+                    let w = quest_log.templates.get(r.quest_id)?.wrath.as_ref()?;
+                    let staged = crate::quest_reputation::staged(
+                        &w.reward_factions,
+                        w.reward_rep_show_mask,
+                        table,
+                        catalog,
+                        &standing,
+                    );
+                    Some((r.quest_id, staged))
+                })
+                .collect(),
+        );
+    }
+    // Build 12340's quest item drops (`0x5e1ff0`, `0x5e20a0`): each quest's source item and its
+    // objectives' drops, off the template.
+    script.set_wrath_quest_item_drops(
+        rows.iter()
+            .filter_map(|r| {
+                let t = quest_log.templates.get(r.quest_id)?;
+                let drops = t.wrath.as_ref().map(|w| w.item_drops.to_vec()).unwrap_or_default();
+                Some((r.quest_id, (t.src_item_id, drops)))
+            })
+            .collect(),
+    );
     let fresh = QuestLogState {
         entries,
         num_quests: rows.len() as u32,

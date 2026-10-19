@@ -99,7 +99,7 @@ impl ItemDisplayCatalog {
     }
 }
 
-/// All 23 columns, the unread ones included, so the field-count check against the header is exact.
+/// All 25 columns, the unread ones included, so the field-count check against the header is exact.
 pub(crate) fn item_display_info_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("ItemDisplayInfo");
     for (name, ty) in [
@@ -228,7 +228,7 @@ mod tests {
         b
     }
 
-    const FIELD_COUNT: u32 = 23;
+    const FIELD_COUNT: u32 = 25;
     const RECORD_SIZE: u32 = FIELD_COUNT * 4;
     const OFF_EMPTY: u32 = 0;
 
@@ -292,6 +292,7 @@ mod tests {
         rec.extend(u32le(off_texture)); // ModelTextureLeft
         rec.extend(u32le(OFF_EMPTY)); // ModelTextureRight: absent
         rec.extend(u32le(OFF_EMPTY)); // Icon: absent
+        rec.extend(u32le(OFF_EMPTY)); // Icon2: absent
         rec.extend(u32le(1)); // GeosetGroup0
         rec.extend(u32le(0)); // GeosetGroup1
         rec.extend(u32le(0)); // GeosetGroup2
@@ -304,16 +305,17 @@ mod tests {
             rec.extend(u32le(OFF_EMPTY)); // region textures: none
         }
         rec.extend(u32le(0)); // ItemVisualID
+        rec.extend(u32le(0)); // ParticleColorID
         assert_eq!(rec.len(), RECORD_SIZE as usize);
 
         let bytes = build_wdbc(1, FIELD_COUNT, RECORD_SIZE, &rec, &strings.0);
         let rs = parse(
             &bytes,
-            item_display_info_schema(&DataProfile::Vanilla),
+            item_display_info_schema(&DataProfile::default()),
             "test",
         )
         .expect("synthetic DBC parses");
-        let catalog = catalog_from_records(rs, &DataProfile::Vanilla);
+        let catalog = catalog_from_records(rs, &DataProfile::default());
 
         assert_eq!(catalog.len(), 1);
         let display = catalog.get(18730).expect("displayId 18730 present");
@@ -351,11 +353,11 @@ mod tests {
         let bytes = build_wdbc(1, FIELD_COUNT, RECORD_SIZE, &rec, &StringBlock::new().0);
         let rs = parse(
             &bytes,
-            item_display_info_schema(&DataProfile::Vanilla),
+            item_display_info_schema(&DataProfile::default()),
             "test",
         )
         .expect("synthetic DBC parses");
-        let catalog = catalog_from_records(rs, &DataProfile::Vanilla);
+        let catalog = catalog_from_records(rs, &DataProfile::default());
         assert_eq!(catalog.len(), 1);
         assert!(catalog.get(999).is_none());
     }

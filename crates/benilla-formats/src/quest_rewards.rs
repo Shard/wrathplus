@@ -71,6 +71,10 @@ impl QuestXpCatalog {
 pub struct QuestFactionRewardCatalog(BTreeMap<u32, [i32; 10]>);
 
 impl QuestFactionRewardCatalog {
+    /// A catalog of these rows, for tests.
+    pub fn from_rows(rows: impl IntoIterator<Item = (u32, [i32; 10])>) -> Self {
+        Self(rows.into_iter().collect())
+    }
     pub fn get(&self, id: u32) -> Option<&[i32; 10]> {
         self.0.get(&id)
     }

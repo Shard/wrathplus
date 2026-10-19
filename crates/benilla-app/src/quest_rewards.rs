@@ -7,6 +7,8 @@ pub(crate) struct QuestRewardTables {
     titles: Option<CharTitlesCatalog>,
     xp: Option<QuestXpCatalog>,
     honor: Option<TeamContributionPointsCatalog>,
+    /// `QuestFactionReward.dbc`, the reputation rewards' amounts.
+    faction_rewards: Option<benilla_formats::QuestFactionRewardCatalog>,
 }
 
 pub(crate) fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>) {
@@ -23,7 +25,12 @@ impl QuestRewardTables {
             titles: benilla_formats::load_char_titles(chain).ok(),
             xp: benilla_formats::load_quest_xp(chain).ok(),
             honor: benilla_formats::load_team_contribution_points(chain).ok(),
+            faction_rewards: benilla_formats::load_quest_faction_reward(chain).ok(),
         }
+    }
+
+    pub(crate) fn faction_rewards(&self) -> Option<&benilla_formats::QuestFactionRewardCatalog> {
+        self.faction_rewards.as_ref()
     }
 
     pub(crate) fn fill_log(

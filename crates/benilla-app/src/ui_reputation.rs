@@ -75,6 +75,8 @@ pub(crate) fn reputation_row(
         // What `GetFactionInfo` reports; the toggle itself is stricter (`0x4d5fd0`).
         can_toggle_at_war: flags & flag::PEACE_FORCED == 0 && standing >= -3000,
         inactive: flags & flag::INACTIVE != 0,
+        // A header with its own bar: the fitting slot's ReputationFlags 0x80 (`0x5d0ce0`).
+        has_rep: info.default_flags_for(race, class) & 0x80 != 0 && info.rep_index >= 0,
     })
 }
 

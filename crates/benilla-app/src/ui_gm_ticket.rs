@@ -353,12 +353,11 @@ fn load_gm_ticket_dbc(
         }
         Err(e) => warn!("gm ticket: GMTicketCategory.dbc failed to load: {e:#}"),
     }
-    if let benilla_formats::DataProfile::Wrath { locale } = chain.profile() {
-        let locale_id = locale_id(locale);
-        match benilla_formats::gm_survey::load_gm_survey(&mut chain) {
-            Ok(catalog) => commands.insert_resource(GmSurveyTables { catalog, locale_id }),
-            Err(e) => warn!("gm survey: DBCs failed to load: {e:#}"),
-        }
+    let benilla_formats::DataProfile::Wrath { locale } = chain.profile();
+    let locale_id = locale_id(locale);
+    match benilla_formats::gm_survey::load_gm_survey(&mut chain) {
+        Ok(catalog) => commands.insert_resource(GmSurveyTables { catalog, locale_id }),
+        Err(e) => warn!("gm survey: DBCs failed to load: {e:#}"),
     }
 }
 
