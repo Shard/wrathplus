@@ -74,7 +74,7 @@ impl Default for NameCache {
             creatures: QueryCache::default(),
             pets: QueryCache::default(),
             generation: 0,
-            dialect: SessionDialect::Vanilla5875,
+            dialect: SessionDialect::Wrath12340,
         }
     }
 }
@@ -537,7 +537,7 @@ pub(crate) mod net {
         let dialect = dialect
             .as_deref()
             .copied()
-            .unwrap_or(SessionDialect::Vanilla5875);
+            .unwrap_or(SessionDialect::Wrath12340);
         if let Some(mut names) = names {
             names.set_dialect(dialect);
         }

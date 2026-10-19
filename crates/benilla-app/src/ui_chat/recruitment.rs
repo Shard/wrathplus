@@ -245,7 +245,7 @@ mod tests {
         cascade_leave(
             &mut channels,
             &NetCommands(tx),
-            crate::net::SessionDialect::Vanilla5875,
+            crate::net::SessionDialect::Wrath12340,
             "GuildRecruitment - City".into(),
         );
 

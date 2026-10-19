@@ -13,19 +13,10 @@ use benilla_protocol::messages::WhoRequest;
 
 use crate::ui_unit::{class_names, race_names};
 
-/// The 1.12 class ids a `c-` word can name; 6 and 10 do not exist in 1.12.
-const CLASS_IDS: [u8; 9] = [1, 2, 3, 4, 5, 7, 8, 9, 11];
-/// The 1.12 playable race ids (`race_names`' domain).
-const RACE_IDS: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-
-/// Parse a `/who` filter into the wire request. A `z-` name that `areas` cannot resolve becomes a
-/// search term, which the server still matches against zone names.
-pub(crate) fn parse(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoRequest {
-    parse_with_ids(filter, areas, &CLASS_IDS, &RACE_IDS)
-}
-
-/// Wrath adds death knights, blood elves and draenei; Vanilla parser is unchanged.
-pub(super) fn parse_wrath(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoRequest {
+/// Parse a `/who` filter into the wire request, over build 12340's classes (death knight 6 and
+/// druid 11 included) and races (blood elf 10, draenei 11). A `z-` name that `areas` cannot resolve
+/// becomes a search term, which the server still matches against zone names.
+pub(super) fn parse(filter: &str, areas: Option<&AreaTableCatalog>) -> WhoRequest {
     parse_with_ids(
         filter,
         areas,

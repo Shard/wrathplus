@@ -426,7 +426,7 @@ impl Default for Items {
             fresh: Vec::new(),
             answers: Default::default(),
             pending_enchant_times: Vec::new(),
-            dialect: SessionDialect::Vanilla5875,
+            dialect: SessionDialect::Wrath12340,
         }
     }
 }

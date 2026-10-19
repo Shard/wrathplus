@@ -79,7 +79,7 @@ pub(crate) struct TextPage {
 #[derive(Resource)]
 pub(crate) struct GameObjectTemplates {
     templates: QueryCache<u32, GoTemplate>,
-    /// The active wire dialect; direct/offline fixtures retain Vanilla query semantics.
+    /// The active wire dialect, build 12340 by default.
     dialect: SessionDialect,
 }
 
@@ -87,7 +87,7 @@ impl Default for GameObjectTemplates {
     fn default() -> Self {
         Self {
             templates: QueryCache::default(),
-            dialect: SessionDialect::Vanilla5875,
+            dialect: SessionDialect::Wrath12340,
         }
     }
 }
