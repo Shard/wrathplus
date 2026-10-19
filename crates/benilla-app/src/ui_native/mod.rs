@@ -7,6 +7,7 @@ pub(crate) mod wrath_appearance;
 pub(crate) mod wrath_death_capture;
 pub(crate) mod wrath_equipment_sets;
 pub(crate) mod wrath_item_refunds;
+pub(crate) mod wrath_movie;
 pub(crate) mod wrath_quest_pois;
 pub(crate) mod wrath_quests_completed_capture;
 pub(crate) mod wrath_raid_browser_feed;

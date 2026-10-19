@@ -119,12 +119,16 @@ pub enum Command {
     Use { object: u64 },
     /// `CMSG_GAMEOBJ_REPORT_USE`: AC credits the use-game-object achievement criterion.
     ReportUse { object: u64 },
+    /// `CMSG_COMPLETE_MOVIE`, empty: the client's `0x518870` ends a server-triggered movie with it.
+    /// AC binds it to `Handle_NULL`.
+    CompleteMovie,
 }
 
 pub fn encode(command: &Command) -> (u32, Vec<u8>) {
     match command {
         Command::Use { object } => (0x00b1, object.to_le_bytes().to_vec()),
         Command::ReportUse { object } => (0x0481, object.to_le_bytes().to_vec()),
+        Command::CompleteMovie => (0x0465, Vec::new()),
     }
 }
 

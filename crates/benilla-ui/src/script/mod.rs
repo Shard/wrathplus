@@ -57,6 +57,7 @@ pub use wrath_state_queries::{WrathInstanceInfo, WrathMirrorTimer};
 pub use wrath_saved_instances::{WrathSavedInstance, WrathSavedInstanceRequest};
 mod wrath_titles;
 mod wrath_tooltip;
+mod movie;
 mod wrath_petition_vendor;
 mod wrath_quest_poi;
 mod wrath_barber;
@@ -858,6 +859,7 @@ impl UiScript {
         slider::install(&lua)?;
         colorselect::install(&lua)?;
         minimap::install(&lua)?;
+        movie::install(&lua)?;
         modelframe::install(&lua)?;
         tooltip::install(&lua)?;
         worldmap::install(&lua)?;
@@ -914,6 +916,7 @@ impl UiScript {
             wrath_tooltip::install(&lua)?;
             wrath_quest_poi::install(&lua)?;
             wrath_petition_vendor::install(&lua)?;
+            movie::install_wrath(&lua)?;
             wrath_barber::install(&lua)?;
             wrath_region_attrs::install(&lua)?;
             wrath_quests_completed::install(&lua)?;

@@ -114,4 +114,5 @@ fn use_and_report_use_send_the_full_guid() {
     let go = 0xf110_0000_0000_0007u64;
     assert_eq!(encode(&Command::Use { object: go }), (0x0b1, q(go)));
     assert_eq!(encode(&Command::ReportUse { object: go }), (0x481, q(go)));
+    assert_eq!(encode(&Command::CompleteMovie), (0x465, Vec::new()));
 }
