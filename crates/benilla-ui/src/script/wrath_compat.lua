@@ -404,5 +404,4 @@ SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none,
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
 GetQuestLogSpellLink, GetQuestSpellLink = GetQuestLogSpellLink or none, GetQuestSpellLink or none
-GetQuestWorldMapAreaID = GetQuestWorldMapAreaID or function() return 0 end
 

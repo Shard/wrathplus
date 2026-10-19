@@ -119,12 +119,46 @@ fn logged_quests(store: &benilla_protocol::ObjectFields) -> Vec<u32> {
         .collect()
 }
 
+/// What `GetQuestWorldMapAreaID` reads beside the POIs: each logged quest's header top zone and
+/// the player's world `(x, y)`.
+#[derive(Clone, Debug, PartialEq)]
+struct QuestMapContext {
+    zones: Vec<(u32, u32)>,
+    player: Option<(f32, f32)>,
+}
+
+/// `0x5e2b60`'s fallback input: a logged quest's quest-log header, a positive `ZoneOrSort` naming
+/// an `AreaTable` zone, walked up to its top zone. A `QuestSort` header or an uncached template
+/// has none.
+fn quest_zones(
+    logged: &[u32],
+    quest_log: Option<&crate::ui_quest_log::QuestLog>,
+    areas: Option<&crate::area::AreaTableRes>,
+) -> Vec<(u32, u32)> {
+    let (Some(quest_log), Some(areas)) = (quest_log, areas) else {
+        return Vec::new();
+    };
+    logged
+        .iter()
+        .filter_map(|&q| {
+            let zone = u32::try_from(quest_log.zone_or_sort(q)?).ok()?;
+            Some((q, areas.0.top_zone(zone)?))
+        })
+        .collect()
+}
+
 fn feed_quest_pois(
     script: Option<NonSendMut<UiScript>>,
     mut pois: ResMut<QuestPois>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
+    context: (
+        Option<Res<crate::ui_quest_log::QuestLog>>,
+        Option<Res<crate::area::AreaTableRes>>,
+        Option<Res<crate::player::Player>>,
+    ),
     mut last: Local<crate::ui_script::VmMemo<Option<Vec<WrathQuestPoi>>>>,
+    mut last_context: Local<crate::ui_script::VmMemo<Option<QuestMapContext>>>,
 ) {
     let Some(mut script) = script else {
         return;
@@ -147,6 +181,20 @@ fn feed_quest_pois(
     if reset || last.as_ref() != Some(&view) {
         *last = Some(view.clone());
         script.set_wrath_quest_pois(view);
+    }
+    let (quest_log, areas, player) = context;
+    let now = QuestMapContext {
+        zones: quest_zones(&logged, quest_log.as_deref(), areas.as_deref()),
+        player: player.map(|p| {
+            let wow = benilla_assets::coords::bevy_to_wow(p.pos);
+            (wow[0], wow[1])
+        }),
+    };
+    let (last_context, reset) = last_context.get_reset(&script);
+    if reset || last_context.as_ref() != Some(&now) {
+        script.set_wrath_quest_zones(now.zones.clone());
+        script.set_wrath_quest_player_position(now.player);
+        *last_context = Some(now);
     }
     if std::mem::take(&mut pois.fresh) {
         script.fire_event("QUEST_POI_UPDATE", vec![]);

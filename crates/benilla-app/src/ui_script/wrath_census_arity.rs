@@ -18,7 +18,6 @@ const SHORT_REVIEWED: &[(&str, &str)] = &[
     ("GetLFGBootProposal", "0x554a60: false alone when no vote is in progress"),
     ("GetQuestLogTitle", "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set"),
     ("UnitPowerType", "0x60f100: five only for a vehicle with a PowerDisplay row, else two"),
-    ("GetQuestWorldMapAreaID", "pending App Migration: the native binding replaces the shim"),
     ("GetAchievementInfoFromCriteria", "pending Native UI: a short hit"),
     ("GetContainerItemInfo", "pending Native UI: a short hit"),
     ("GetFriendInfo", "pending Native UI: a short hit"),
