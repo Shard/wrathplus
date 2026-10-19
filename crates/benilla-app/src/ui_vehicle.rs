@@ -17,7 +17,7 @@ use bevy::prelude::*;
 
 use benilla_formats::vehicles::VehicleCatalog;
 use benilla_ui::script::{
-    BattlefieldVehicleView, UiScript, UnitVehicleView, VehicleAimView, VehicleCall,
+    BattlefieldVehicleView, PossessView, UiScript, UnitVehicleView, VehicleAimView, VehicleCall,
     VehicleIndicatorView, VehicleSeatView, WrathVehicles,
 };
 
@@ -125,6 +125,24 @@ fn possess_spell(
         .map(|a| a.spell_id)
 }
 
+/// `GetPossessInfo`'s row (`0x5d5820`): the active icon when the spell has one (`+0x218`), else
+/// its icon (`+0x214`); the cancel slot shows unless `Attributes` has 0x80000000.
+fn possess_view(
+    spell: &benilla_formats::SpellDisplay,
+    cancel: Option<&PossessCancelIcon>,
+) -> PossessView {
+    PossessView {
+        texture: if spell.active_icon_id != 0 {
+            spell.active_icon.clone()
+        } else {
+            spell.icon.clone()
+        },
+        name: spell.name.clone(),
+        cancel_texture: cancel.and_then(|c| c.0.clone()),
+        cancelable: spell.attributes & 0x8000_0000 == 0,
+    }
+}
+
 /// The seat record a riding unit sits in.
 fn rider_seat<'a>(
     world: &VehicleWorld,
@@ -152,6 +170,7 @@ struct PossessInputs<'w> {
     auras: Res<'w, crate::net::wrath_auras::PacketAuras>,
     spells: Option<Res<'w, crate::ui_action::Spells>>,
     summons: Option<Res<'w, crate::ui_companions::SummonSlots>>,
+    cancel_icon: Option<Res<'w, PossessCancelIcon>>,
 }
 
 fn feed_vehicles(
@@ -310,6 +329,12 @@ fn feed_vehicles(
         has_mover: me.0.is_some(),
         battlefield,
         possess_spell,
+        possess: possess_spell.and_then(|id| {
+            Some(possess_view(
+                possess.spells.as_deref()?.catalog.get(id)?,
+                possess.cancel_icon.as_deref(),
+            ))
+        }),
     };
     let last = last.get(&script);
     if last.as_ref() != Some(&fresh) {
@@ -322,8 +347,16 @@ fn feed_vehicles(
 #[derive(Resource, Default)]
 struct VehicleIndicators(HashMap<u32, VehicleIndicatorView>);
 
+/// `SpellIcon.dbc` row 0x2b5's path, the possess bar's cancel art.
+#[derive(Resource, Default)]
+struct PossessCancelIcon(Option<String>);
+
 fn load_indicators(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     let Some(assets) = assets else { return };
+    match benilla_formats::load_possess_cancel_icon(&mut assets.chain.lock_recover()) {
+        Ok(icon) => commands.insert_resource(PossessCancelIcon(icon)),
+        Err(e) => warn!("vehicles: SpellIcon.dbc failed to load — no possess cancel art: {e:#}"),
+    }
     let loaded = benilla_formats::load_vehicle_indicators(&mut assets.chain.lock_recover());
     match loaded {
         Ok(table) => commands.insert_resource(VehicleIndicators(
@@ -394,5 +427,35 @@ impl Plugin for UiVehiclePlugin {
                         .before(crate::net::wrath_vehicle::drain_vehicle_requests),
                 ),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn possess_view_takes_the_active_icon_and_the_cancel_gate() {
+        let cancel = PossessCancelIcon(Some(r"Interface\Icons\Cancel".into()));
+        let mut spell = benilla_formats::SpellDisplay {
+            name: "Mind Control".into(),
+            icon: Some(r"Interface\Icons\Icon".into()),
+            active_icon: Some(r"Interface\Icons\Active".into()),
+            ..Default::default()
+        };
+        let v = possess_view(&spell, Some(&cancel));
+        assert_eq!(
+            v.texture.as_deref(),
+            Some(r"Interface\Icons\Icon"),
+            "no active icon id"
+        );
+        assert!(v.cancelable);
+        assert_eq!(v.cancel_texture.as_deref(), Some(r"Interface\Icons\Cancel"));
+        spell.active_icon_id = 7;
+        spell.attributes = 0x8000_0000;
+        let v = possess_view(&spell, None);
+        assert_eq!(v.texture.as_deref(), Some(r"Interface\Icons\Active"));
+        assert!(!v.cancelable, "Attributes 0x80000000 cannot be cancelled");
+        assert_eq!(v.cancel_texture, None);
     }
 }

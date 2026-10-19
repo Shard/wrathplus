@@ -34,19 +34,14 @@ const UNPROBED_REVIEWED: &[&str] = &[
     // No debug zone map or debug objects in a retail client.
     "GetDebugZoneMap", "GetMapDebugObjectInfo",
     // Fixture pending: the state each reads is not seeded yet.
-    "GetAchievementComparisonInfo", "GetBarberShopStyleInfo", "GetBattlefieldInfo",
-    "GetBattlefieldVehicleInfo", "GetBattlegroundInfo", "GetBindingKey", "GetChannelRosterInfo",
-    "GetChatWindowSavedDimensions", "GetChatWindowSavedPosition", "GetContainerItemPurchaseInfo",
-    "GetContainerItemPurchaseItem", "GetCursorInfo", "GetGlyphSocketInfo",
-    "GetInspectArenaTeamData",
+    "GetAchievementComparisonInfo", "GetBarberShopStyleInfo", "GetBindingKey",
+    "GetChannelRosterInfo", "GetChatWindowSavedDimensions", "GetChatWindowSavedPosition",
+    "GetContainerItemPurchaseInfo", "GetContainerItemPurchaseItem", "GetCursorInfo",
     "GetInventoryItemGems", "GetInventorySlotInfo", "GetLFGCompletionReward",
     "GetLFGCompletionRewardItem", "GetLFGDungeonRewardInfo", "GetLFGQueueStats",
     "GetLFGRandomDungeonInfo", "GetLFGRoleUpdateSlot", "GetLatestThreeSenders",
     "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPartyLFGBackfillInfo", "GetPlayerInfoByGUID",
-    "GetPossessInfo", "GetQuestLogRewardSpell", "GetRewardSpell", "GetTrainerServiceStepReq",
-    "GetVehicleUIIndicator", "GetVehicleUIIndicatorSeat", "GetVoiceSessionInfo", "GetZonePVPInfo",
-    "QuestPOIGetIconInfo", "QuestPOIGetQuestIDByVisibleIndex", "UnitDetailedThreatSituation",
-    "UnitVehicleSeatInfo",
+    "GetQuestLogRewardSpell", "GetRewardSpell", "GetTrainerServiceStepReq", "GetVoiceSessionInfo",
     // Widget methods whose object the probe does not populate.
     "GetItem", "GetMessageInfo", "UpdateMouseOverTooltip",
 ];
@@ -233,11 +228,12 @@ pub(super) fn audit(
                 return n, false
             end
             local best, miss, errors = 0, 0, 0
-            -- Indexes, unit tokens, bag/slot pairs, aura filters, item and spell ids, quest-item types.
+            -- Indexes, unit tokens, bag/slot pairs, aura filters, item and spell ids, quest-item types,
+            -- and a unit pair (a member against its mob).
             local ladder = { {}, { 1 }, { "player" }, { 1, 1 }, { 1, 1, 1 }, { "player", 1 },
                 { 0, 1 }, { "player", 1, "HELPFUL" }, { "player", 1, "HARMFUL" }, { 6948 },
                 { "item:6948" }, { 6603 }, { "reward", 1 }, { "choice", 1 }, { "required", 1 },
-                { 2, 1 }, { 1, 1, 1, 1 }, { 1, 2 }, { "CRITTER", 1 }, { "MOUNT", 1 }, { 2 } }
+                { 2, 1 }, { 1, 1, 1, 1 }, { 1, 2 }, { "CRITTER", 1 }, { "MOUNT", 1 }, { 2 }, { "player", "target" } }
             for _, args in ipairs(ladder) do
                 local ok, n, hit
                 if method then
