@@ -530,6 +530,7 @@ fn unit_predicate(
 
 /// The `Unit*` and `GetQuestGreenRange` registrations.
 mod bindings;
+pub(crate) mod wrath_queries;
 #[cfg(test)]
 mod chain_tests;
 mod resolve;

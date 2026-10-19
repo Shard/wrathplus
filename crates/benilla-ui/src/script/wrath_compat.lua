@@ -29,33 +29,16 @@ function ChangeActionBarPage(page)
     end
 end
 
-
--- ── languages ──────────────────────────────────────────────────────────────────────────────────
-function GetNumLanguages()
-    local n = 0
-    while GetLanguageByIndex(n + 1) do n = n + 1 end
-    return n
-end
-
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-UnitIsAFK = UnitIsAFK or none
-UnitIsDND = UnitIsDND or none
-UnitIsSameServer = UnitIsSameServer or function() return 1 end
-UnitIsRaidOfficer = UnitIsRaidOfficer or none
-IsXPUserDisabled = IsXPUserDisabled or none
 GetAccountExpansionLevel = GetAccountExpansionLevel or function() return 2 end
 GetExpansionLevel = GetExpansionLevel or function() return 2 end
 GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
-IsReferAFriendLinked = IsReferAFriendLinked or none
-CanSummonFriend = CanSummonFriend or none
 
 -- ── maps and instances ─────────────────────────────────────────────────────────────────────────
 InitWorldMapPing = InitWorldMapPing or none
 
 -- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
-UnitInBattleground = UnitInBattleground or none
-PlayerIsPVPInactive = PlayerIsPVPInactive or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
 BNFeaturesEnabled, BNFeaturesEnabledAndConnected, BNConnected = none, none, none
@@ -81,8 +64,6 @@ GetTrackedAchievements, GetAchievementInfo = none, none
 GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
 
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
-IsThreatWarningEnabled = IsThreatWarningEnabled or none
-GetSummonFriendCooldown = GetSummonFriendCooldown or function() return 0, 0 end
 GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
 UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
@@ -351,7 +332,6 @@ end
 IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
-GetAvailableRoles = GetAvailableRoles or function() return true, true, true end
 do
     local dimensions, positions = {}, {}
     function GetChatWindowSavedDimensions(id)
@@ -424,7 +404,6 @@ do
         return c[1], c[2], c[3], 1
     end
 end
-UnitIsTappedByAllThreatList = UnitIsTappedByAllThreatList or none
 
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none

@@ -927,6 +927,7 @@ impl UiScript {
             wrath_modified_click::install(&lua)?;
             wrath_macro_options::install(&lua)?;
             wrath_engine_constants::install(&lua)?;
+            unit::wrath_queries::install(&lua)?;
         }
 
         let s = UiScript {
