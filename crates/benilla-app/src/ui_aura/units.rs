@@ -428,7 +428,7 @@ mod tests {
     fn native_feed_rechecks_catalog_and_context_without_packet_changes() {
         use crate::net::wrath_auras::{PacketAuras, StampedAura};
         let mut cache = super::UnitAuras::default();
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         let packets = PacketAuras {
             by_guid: std::collections::HashMap::from([(
                 MEMBER,
@@ -514,7 +514,7 @@ mod tests {
             .init_resource::<GroupState>()
             .insert_resource(NetCommands(tx))
             .add_plugins(super::super::UiAuraPlugin);
-        app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
+        app.insert_non_send_resource(UiScript::new().unwrap());
         app.world_mut()
             .non_send_resource::<UiScript>()
             .run(
@@ -523,7 +523,7 @@ mod tests {
                 local f = CreateFrame("Frame")
                 f:RegisterEvent("UNIT_AURA")
                 -- The group's tokens only: the player's list fires on the first frame too.
-                f:SetScript("OnEvent", function()
+                f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
                     if arg1 ~= "player" then table.insert(SEEN, arg1) end
                 end)
             "#,
@@ -622,7 +622,7 @@ mod tests {
             .eval::<usize>(&format!(
                 r#"local n = 0
                    for i = 1, 48 do
-                       local _, count = {verb}("{token}", i)
+                       local _, _, _, count = {verb}("{token}", i)
                        if count == nil then break end
                        n = n + 1
                    end
@@ -707,7 +707,7 @@ mod tests {
         let count = app
             .world_mut()
             .non_send_resource::<UiScript>()
-            .eval::<i64>(r#"local _, count = UnitDebuff("party1", 1) return count"#)
+            .eval::<i64>(r#"local _, _, _, count = UnitDebuff("party1", 1) return count"#)
             .unwrap();
         assert_eq!(count, 1);
         assert_eq!(seen(&mut app), ["party1"]);
@@ -997,7 +997,7 @@ mod tests {
         let count = app
             .world_mut()
             .non_send_resource::<UiScript>()
-            .eval::<i64>(r#"local _, count = UnitDebuff("raid5", 1) return count"#)
+            .eval::<i64>(r#"local _, _, _, count = UnitDebuff("raid5", 1) return count"#)
             .unwrap();
         assert_eq!(count, 1);
         assert_eq!(listed(&mut app, "raidpet5", false), [1126]);

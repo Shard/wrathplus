@@ -291,7 +291,7 @@ mod tests {
                 ..Default::default()
             };
         }
-        let mut script = UiScript::new_vanilla().expect("a VM");
+        let mut script = UiScript::new().expect("a VM");
         script.set_spellbook(SpellBookState {
             tabs: vec![SpellTabView {
                 name: "Holy".into(),
@@ -785,7 +785,7 @@ mod tests {
                 .run(
                     r#"local f = CreateFrame("Frame")
                     f:RegisterEvent("EXECUTE_CHAT_LINE")
-                    f:SetScript("OnEvent", function() RunScript(arg1) end)
+                    f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) RunScript(arg1) end)
                     MACRO_INDEX = CreateMacro("heal", 1, 'CastSpellByName("Heal")', 1, nil)"#,
                 )
                 .expect("the macro is made");

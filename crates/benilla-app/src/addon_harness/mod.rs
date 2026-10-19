@@ -239,7 +239,7 @@ fn survey_one(
         .collect();
 
     // A VM with our whole interface under it (see the module doc).
-    let mut script = match UiScript::new_vanilla() {
+    let mut script = match UiScript::new() {
         Ok(s) => s,
         Err(e) => {
             return AddonReport {
@@ -965,7 +965,7 @@ pub fn framexml_digest() -> String {
 /// diff against the 1.12 client's in-world `_G` (`reference/1.12-globals.tsv`). Dumped in Lua,
 /// since `_G` is what an addon sees.
 pub fn surface() -> Vec<(String, String)> {
-    let Ok(mut script) = UiScript::new_vanilla() else {
+    let Ok(mut script) = UiScript::new() else {
         return Vec::new();
     };
     script.set_instruction_budget(ADDON_INSTRUCTION_BUDGET);
@@ -2596,19 +2596,19 @@ mod dependency_tests {
         // depth-first.
         write(
             "Lib",
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
             "lib.lua",
             "LibReady = 1\n",
         );
         write(
             "Mid",
-            "## Interface: 11200\n## Dependencies: Lib\nmid.lua\n",
+            "## Interface: 30300\n## Dependencies: Lib\nmid.lua\n",
             "mid.lua",
             "MidReady = LibReady + 1\n",
         );
         write(
             "Leaf",
-            "## Interface: 11200\n## Dependencies: Mid\nleaf.lua\n",
+            "## Interface: 30300\n## Dependencies: Mid\nleaf.lua\n",
             "leaf.lua",
             "LeafReady = MidReady + 1\n",
         );
@@ -2625,7 +2625,7 @@ mod dependency_tests {
         // ...and a dependency that is not installed is still reported.
         write(
             "Orphan",
-            "## Interface: 11200\n## Dependencies: Nowhere\norphan.lua\n",
+            "## Interface: 30300\n## Dependencies: Nowhere\norphan.lua\n",
             "orphan.lua",
             "OrphanReady = 1\n",
         );
@@ -2782,7 +2782,7 @@ mod dependency_tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(
                 dir.join(format!("{name}.toc")),
-                "## Interface: 11200\na.lua\n",
+                "## Interface: 30300\na.lua\n",
             )
             .unwrap();
             std::fs::write(dir.join("a.lua"), body).unwrap();
@@ -2791,7 +2791,7 @@ mod dependency_tests {
             "LoginBreaker",
             "local f = CreateFrame('Frame')\n\
              f:RegisterEvent('PLAYER_LOGIN')\n\
-             f:SetScript('OnEvent', function() error('boom at login') end)\n",
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) error('boom at login') end)\n",
         );
         write(
             "TickBreaker",
@@ -2802,7 +2802,7 @@ mod dependency_tests {
             "Fine",
             "local f = CreateFrame('Frame')\n\
              f:RegisterEvent('PLAYER_LOGIN')\n\
-             f:SetScript('OnEvent', function() FineRan = 1 end)\n",
+             f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) FineRan = 1 end)\n",
         );
 
         let reports = survey(&tmp);
@@ -2850,12 +2850,12 @@ mod dependency_tests {
         // names.
         write(
             "QueueLib",
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
             "lib.lua",
             "QueueLibQueue = {}\n\
              QueueLibFrame = CreateFrame(\"Frame\")\n\
              QueueLibFrame:RegisterEvent(\"ADDON_LOADED\")\n\
-             QueueLibFrame:SetScript(\"OnEvent\", function()\n\
+             QueueLibFrame:SetScript(\"OnEvent\", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)\n\
              while table.getn(QueueLibQueue) > 0 do\n\
              local f = table.remove(QueueLibQueue, 1) f()\n\
              end\n\
@@ -2864,7 +2864,7 @@ mod dependency_tests {
         // The consumer queues a callback that raises from its own file.
         write(
             "QueueUser",
-            "## Interface: 11200\n## Dependencies: QueueLib\nuse.lua\n",
+            "## Interface: 30300\n## Dependencies: QueueLib\nuse.lua\n",
             "use.lua",
             "table.insert(QueueLibQueue, function() error(\"consumer init blew up\") end)\n",
         );
@@ -2904,37 +2904,37 @@ mod dependency_tests {
         // `ADDON_LOADED`.
         write(
             "TheLib",
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
             "lib.lua",
             "TheLibFrame = CreateFrame(\"Frame\")\n\
              TheLibFrame:RegisterEvent(\"ADDON_LOADED\")\n\
-             TheLibFrame:SetScript(\"OnEvent\", function()\n\
+             TheLibFrame:SetScript(\"OnEvent\", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)\n\
              if event == \"ADDON_LOADED\" and arg1 == \"TheLib\" then TheLibOptions = {} end\n\
              end)\n",
         );
         // The consumer reads the library's initialised state on a later event.
         write(
             "TheUser",
-            "## Interface: 11200\n## Dependencies: TheLib\nuse.lua\n",
+            "## Interface: 30300\n## Dependencies: TheLib\nuse.lua\n",
             "use.lua",
             "TheUserFrame = CreateFrame(\"Frame\")\n\
              TheUserFrame:RegisterEvent(\"PLAYER_LOGIN\")\n\
-             TheUserFrame:SetScript(\"OnEvent\", function() local _ = TheLibOptions.anything end)\n",
+             TheUserFrame:SetScript(\"OnEvent\", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) local _ = TheLibOptions.anything end)\n",
         );
         // A library whose own handler raises: its row, not its consumers'.
         write(
             "BadLib",
-            "## Interface: 11200\nbad.lua\n",
+            "## Interface: 30300\nbad.lua\n",
             "bad.lua",
             "BadLibFrame = CreateFrame(\"Frame\")\n\
              BadLibFrame:RegisterEvent(\"ADDON_LOADED\")\n\
-             BadLibFrame:SetScript(\"OnEvent\", function()\n\
+             BadLibFrame:SetScript(\"OnEvent\", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)\n\
              if event == \"ADDON_LOADED\" and arg1 == \"BadLib\" then error(\"lib init blew up\") end\n\
              end)\n",
         );
         write(
             "BadUser",
-            "## Interface: 11200\n## Dependencies: BadLib\nquiet.lua\n",
+            "## Interface: 30300\n## Dependencies: BadLib\nquiet.lua\n",
             "quiet.lua",
             "QuietGlobal = 1\n",
         );
@@ -2982,18 +2982,18 @@ mod dependency_tests {
         };
         write(
             "EagerLib",
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
             "lib.lua",
             "EagerLibFrame = CreateFrame(\"Frame\")\n\
              EagerLibFrame:RegisterEvent(\"ADDON_LOADED\")\n\
-             EagerLibFrame:SetScript(\"OnEvent\", function()\n\
+             EagerLibFrame:SetScript(\"OnEvent\", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)\n\
              if event == \"ADDON_LOADED\" and arg1 == \"EagerLib\" then EagerLibReady = {} end\n\
              end)\n",
         );
         // The consumer reads it at file scope.
         write(
             "EagerUser",
-            "## Interface: 11200\n## Dependencies: EagerLib\nuse.lua\n",
+            "## Interface: 30300\n## Dependencies: EagerLib\nuse.lua\n",
             "use.lua",
             "EagerUserSaw = EagerLibReady.anything\n",
         );
@@ -3030,7 +3030,7 @@ mod dependency_tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let dir = tmp.join("TplUser");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("TplUser.toc"), "## Interface: 11200\nuse.lua\n").unwrap();
+        std::fs::write(dir.join("TplUser.toc"), "## Interface: 30300\nuse.lua\n").unwrap();
         // Every shape in one file; only the first three are seen.
         std::fs::write(
             dir.join("use.lua"),
@@ -3095,13 +3095,13 @@ mod dependency_tests {
         // Ships one of the two files its own manifest lists.
         write(
             "ShortPackage",
-            "## Interface: 11200\nhere.lua\ngone.lua\n",
+            "## Interface: 30300\nhere.lua\ngone.lua\n",
             &[("here.lua", "ShortPackageRan = 1\n")],
         );
         // Reaches a neighbour that is not installed, through `..`.
         write(
             "WantsNeighbour",
-            "## Interface: 11200\nown.lua\n..\\NotInstalled\\templates.xml\n",
+            "## Interface: 30300\nown.lua\n..\\NotInstalled\\templates.xml\n",
             &[("own.lua", "WantsNeighbourRan = 1\n")],
         );
 
@@ -3178,13 +3178,13 @@ mod dependency_tests {
         // the 1.12 client because they share a Lua state.
         write(
             "Embedder",
-            "## Interface: 11200\nembedded.lua\n",
+            "## Interface: 30300\nembedded.lua\n",
             "embedded.lua",
             "SharedLibGlobal = 1\n",
         );
         write(
             "Freeloader",
-            "## Interface: 11200\nuse.lua\n",
+            "## Interface: 30300\nuse.lua\n",
             "use.lua",
             "if not SharedLibGlobal then error('needs the sibling library') end\n",
         );
@@ -3224,13 +3224,13 @@ mod dependency_tests {
         // The library, and a dependent whose own file order needs it to have gone first.
         write(
             "TheLib",
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
             "lib.lua",
             "TheLibGlobal = 1\n",
         );
         write(
             "Dependent",
-            "## Interface: 11200\n## OptionalDeps: TheLib, NotInstalled\nuse.lua\n",
+            "## Interface: 30300\n## OptionalDeps: TheLib, NotInstalled\nuse.lua\n",
             "use.lua",
             "if not TheLibGlobal then error('Dependent requires TheLib') end\nDependentReady = 1\n",
         );
@@ -3261,7 +3261,7 @@ mod dependency_tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let dir = tmp.join("Inheritor");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("Inheritor.toc"), "## Interface: 11200\nui.xml\n").unwrap();
+        std::fs::write(dir.join("Inheritor.toc"), "## Interface: 30300\nui.xml\n").unwrap();
         std::fs::write(
             dir.join("ui.xml"),
             r#"<Ui>
@@ -3318,7 +3318,7 @@ mod dependency_tests {
         std::fs::create_dir_all(&lib).unwrap();
         std::fs::write(
             lib.join("MethodicalLib.toc"),
-            "## Interface: 11200\nlib.lua\n",
+            "## Interface: 30300\nlib.lua\n",
         )
         .unwrap();
         std::fs::write(
@@ -3330,7 +3330,7 @@ mod dependency_tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("Methodical.toc"),
-            "## Interface: 11200\n## Dependencies: MethodicalLib\na.lua\n",
+            "## Interface: 30300\n## Dependencies: MethodicalLib\na.lua\n",
         )
         .unwrap();
         // Inside a function never called: the census is static, and an unrun body keeps `loaded`
@@ -3398,7 +3398,7 @@ mod dependency_tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let dir = tmp.join("PerKind");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("PerKind.toc"), "## Interface: 11200\na.lua\n").unwrap();
+        std::fs::write(dir.join("PerKind.toc"), "## Interface: 30300\na.lua\n").unwrap();
         // Never executed: the scan is static, and an unrun body keeps `loaded` clean.
         std::fs::write(
             dir.join("a.lua"),
@@ -3488,7 +3488,7 @@ mod dependency_tests {
 
     /// A VM shaped like the survey's, for the oracle tests below.
     fn seated_vm() -> UiScript {
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3530,17 +3530,17 @@ mod dependency_tests {
             "Elwynn Forest"
         );
         assert!(
-            s.eval::<bool>("local _,_,_,h = GetQuestLogTitle(1) return h and true or false")
+            s.eval::<bool>("local _,_,_,_,h = GetQuestLogTitle(1) return h and true or false")
                 .unwrap(),
             "row 1 is the header"
         );
         // Both ends of isComplete: nil for in-progress, 1 for complete.
         assert!(s
-            .eval::<Option<i64>>("local _,_,_,_,_,c = GetQuestLogTitle(2) return c")
+            .eval::<Option<i64>>("local _,_,_,_,_,_,c = GetQuestLogTitle(2) return c")
             .unwrap()
             .is_none());
         assert_eq!(
-            s.eval::<i64>("local _,_,_,_,_,c = GetQuestLogTitle(3) return c")
+            s.eval::<i64>("local _,_,_,_,_,_,c = GetQuestLogTitle(3) return c")
                 .unwrap(),
             1
         );
@@ -3764,7 +3764,7 @@ mod dependency_tests {
             eprintln!("skipping: no WoW client data");
             return;
         }
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
 
@@ -3800,7 +3800,7 @@ mod dependency_tests {
     /// counted.
     #[test]
     fn the_ui_probe_reaches_an_addon_override() {
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3822,7 +3822,7 @@ mod dependency_tests {
     /// And it records a raise rather than swallowing it.
     #[test]
     fn the_ui_probe_records_what_an_override_raises() {
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3842,7 +3842,7 @@ mod dependency_tests {
     #[test]
     fn the_ui_probe_hovers_and_records_what_a_tooltip_hook_raises() {
         benilla_formats::wow_data_or_skip!();
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);
@@ -3866,7 +3866,7 @@ mod dependency_tests {
     #[test]
     fn the_ui_probe_is_silent_on_a_clean_vm() {
         let _data = benilla_formats::wow_data_or_skip!();
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
         let _ = crate::ui_script::load_default_ui(&script);

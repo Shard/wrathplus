@@ -496,7 +496,7 @@ mod tests {
         local f = CreateFrame("Frame")
         f:RegisterEvent("GOSSIP_SHOW")
         f:RegisterEvent("GOSSIP_CLOSED")
-        f:SetScript("OnEvent", function() table.insert(SEEN, event) end)
+        f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN, event) end)
     "#;
 
     /// The real [`feed_gossip`] and [`drain_gossip`] over a VM, in plugin order; `prepare` seeds
@@ -511,7 +511,7 @@ mod tests {
             .init_resource::<NameCache>()
             .init_resource::<crate::world_state::WorldStates>()
             .add_systems(Update, (feed_gossip, drain_gossip).chain());
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         prepare(&mut script);
         app.insert_non_send_resource(script);
         (app, rx)

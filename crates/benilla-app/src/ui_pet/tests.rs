@@ -791,7 +791,7 @@ fn a_cooldown_alone_is_pushed_with_no_event_from_the_bar_feed() {
         })
         .insert_resource(bar)
         .add_systems(Update, super::bar::feed_pet_bar);
-    let script = benilla_ui::script::UiScript::new_vanilla().unwrap();
+    let script = benilla_ui::script::UiScript::new().unwrap();
     script
         .run(
             r#"
@@ -799,7 +799,7 @@ fn a_cooldown_alone_is_pushed_with_no_event_from_the_bar_feed() {
             local f = CreateFrame("Frame")
             f:RegisterEvent("PET_BAR_UPDATE")
             f:RegisterEvent("PET_BAR_UPDATE_COOLDOWN")
-            f:SetScript("OnEvent", function() table.insert(SEEN, event) end)
+            f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN, event) end)
         "#,
         )
         .unwrap();

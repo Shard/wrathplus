@@ -1273,14 +1273,14 @@ mod tests {
         app.world_mut()
             .resource_mut::<NameCache>()
             .insert_player(ME, "Seller".into(), None);
-        let script = UiScript::new_vanilla().unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 r#"
                 SEEN = {}
                 local f = CreateFrame("Frame")
                 f:RegisterEvent("AUCTION_OWNED_LIST_UPDATE")
-                f:SetScript("OnEvent", function() table.insert(SEEN, event) end)
+                f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN, event) end)
             "#,
             )
             .unwrap();

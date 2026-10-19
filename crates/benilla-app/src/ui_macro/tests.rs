@@ -190,7 +190,7 @@ fn a_registered_frame_sees_every_macro_line_as_an_event() {
         r#"MacroSpy = CreateFrame("Frame")
            MacroSpy.seen = {}
            MacroSpy:RegisterEvent("EXECUTE_CHAT_LINE")
-           MacroSpy:SetScript("OnEvent", function()
+           MacroSpy:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
                table.insert(MacroSpy.seen, arg1)
            end)"#,
     )
@@ -341,14 +341,12 @@ fn wrath_does_not_enumerate_the_vanilla_macro_icon_catalog() {
     use benilla_ui::script::ScriptDialect;
     let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     assert!(!super::macro_catalog_enabled(&wrath));
-    assert!(super::macro_catalog_enabled(&UiScript::new_vanilla().unwrap()));
 }
 
 #[test]
-fn actual_catalog_feed_gates_wrath_and_tracks_vm_and_source_replacement() {
+fn the_wrath_feed_never_enumerates_the_icon_catalog() {
     use benilla_ui::script::ScriptDialect;
     let source = std::sync::Arc::new(());
-    let replacement = std::sync::Arc::new(());
     let mut cache = super::IconCatalogCache::default();
     let mut seeded = crate::ui_script::VmMemo::default();
     let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
@@ -356,33 +354,6 @@ fn actual_catalog_feed_gates_wrath_and_tracks_vm_and_source_replacement() {
         panic!("Wrath must never enumerate icons")
     });
     assert!(cache.icons.is_none());
-    let mut first = UiScript::new_vanilla().unwrap();
-    super::seed_icon_catalog(&mut first, &source, &mut seeded, &mut cache, || {
-        Ok(vec!["Interface\\Icons\\Spell_Test".into()])
-    });
-    first.set_macro_icons(vec!["Interface\\Icons\\Ability_Sentinel".into()]);
-    super::seed_icon_catalog(&mut first, &source, &mut seeded, &mut cache, || {
-        panic!("same VM/source must not load or reseed")
-    });
-    assert_eq!(
-        first.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
-        "Interface\\Icons\\Ability_Sentinel"
-    );
-    let mut second = UiScript::new_vanilla().unwrap();
-    super::seed_icon_catalog(&mut second, &source, &mut seeded, &mut cache, || {
-        panic!("new VM same source must use cache")
-    });
-    assert_eq!(
-        second.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
-        "Interface\\Icons\\Spell_Test"
-    );
-    super::seed_icon_catalog(&mut second, &replacement, &mut seeded, &mut cache, || {
-        Ok(vec!["Interface\\Icons\\Ability_New".into()])
-    });
-    assert_eq!(
-        second.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
-        "Interface\\Icons\\Ability_New"
-    );
 }
 
 #[test]

@@ -344,8 +344,10 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // Wrath predicates are booleans. A token is observable only when the engine supplied an
-    // existing unit snapshot; no placeholder or guessed identity is manufactured.
+    // `0x60c2a0`: the number 1 or nil, never a boolean (`/tmp/azb-app-mig/ghidra/unitexists.log`).
+    // A token is observable only when the engine supplied an existing unit snapshot; no
+    // placeholder or guessed identity is manufactured. Labelled: with no object the native asks
+    // `0x512a30` before answering nil (unread; the snapshot's `exists` stands in for it).
     globals.set(
         "UnitExists",
         lua.create_function(|lua, token: Option<String>| {
@@ -355,7 +357,7 @@ fn install_truthful_readers(lua: &Lua) -> mlua::Result<()> {
                     .unit(token)
                     .is_some_and(|unit| unit.exists)
             });
-            Ok(exists)
+            Ok(exists.then_some(1))
         })?,
     )?;
     globals.set(
