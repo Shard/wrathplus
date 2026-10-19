@@ -1,22 +1,24 @@
 //! The always-up world-state readout behind stock `WorldStateFrame.xml`: joins the rows
 //! `WorldStateUI.dbc` displays with the states the server sent ([`crate::world_state`]).
 //!
-//! The list builder (`0x4c56e0`) walks the whole DBC and admits a row when:
+//! Build 12340's list builder (`0x5487d0`) walks the whole DBC and admits a row when:
 //! 1. `MapID` is -1 or the scope's map;
-//! 2. `AreaID` is 0 or the scope's area;
-//! 3. `Type` is 0, or 1 while [`defense_channel_joined`]; 2 (battleground scoreboard columns)
-//!    never.
+//! 2. `AreaID` is 0 or the scope's zone or area;
+//! 3. its phase mask is 0 or shares a bit with the player's;
+//! 4. `Type` is 0, 1 or 3; 2 (battleground scoreboard columns) never.
 //!
-//! The scope is the server's last `SMSG_INIT_WORLD_STATES`, not the player's position: the
-//! reference's two scope globals are written only by that init and by the logout reset.
+//! The world-PvP rows (`Type` 1) are always listed: `WorldStateFrame.lua` filters them itself
+//! through `WORLD_PVP_OBJECTIVES_DISPLAY` and `IsSubZonePVPPOI`. While any listed row is a timer
+//! (`Type` 3), `WORLD_STATE_UI_TIMER_UPDATE` fires every second (`0x5488f0`).
 //!
-//! The world-PvP rows (Eastern Plaguelands, Silithus) are all `Type` 1, so leaving the zone
-//! defense channel hides them; the map icons, gated on the states themselves, stay.
+//! The scope is the server's last `SMSG_INIT_WORLD_STATES`, not the player's position.
+//! Unresolved, labelled: the init's area word is dropped by the decoder, so a row keyed to a
+//! subzone is admitted only by its zone; the phase mask is not modelled (every row passes).
 
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
 
-use benilla_formats::{chat_channel_flags as chan, WorldStateUiCatalog, WorldStateUiRow};
+use benilla_formats::{WorldStateUiCatalog, WorldStateUiRow};
 use benilla_ui::script::{UiScript, WorldStateUiView};
 
 use benilla_assets::{AssetSet, LockRecover, WorldAssets};
@@ -40,16 +42,6 @@ fn load_world_state_ui(mut commands: Commands, assets: Option<Res<WorldAssets>>)
         }
         Err(e) => warn!("world-state UI: WorldStateUI.dbc failed — no readout: {e:#}"),
     }
-}
-
-/// The `Type == 1` gate: a joined channel whose `ChatChannels.dbc` flags carry both `ZONE_DEP` and
-/// `DEFENSE` (`0x49bd9b`, `0x49bda2`), which is row 22 alone. A custom channel resolves to no row.
-fn defense_channel_joined(channels: &crate::ui_chat::ChannelState) -> bool {
-    const REQUIRED: u32 = chan::ZONE_DEP | chan::DEFENSE;
-    channels
-        .iter_names()
-        .filter_map(|name| channels.channels.row_for_name(name))
-        .any(|row| row.flags & REQUIRED == REQUIRED)
 }
 
 /// Expands a `WorldStateUI` label (`0x508560`), a different expander from [`crate::npc_text`]'s,
@@ -101,37 +93,29 @@ fn expand(text: &str, states: &WorldStates) -> String {
 }
 
 /// The admitted rows for the current scope, resolved as `GetWorldStateUIInfo` answers them.
-fn build(
-    catalog: &WorldStateUiCatalog,
-    states: &WorldStates,
-    defense_channel: bool,
-) -> Vec<WorldStateUiView> {
+fn build(catalog: &WorldStateUiCatalog, states: &WorldStates) -> Vec<WorldStateUiView> {
     let Some((map, area)) = states.scope() else {
         // Before an init the reference never rebuilds, and its scope globals read -1.
         return Vec::new();
     };
     catalog
         .rows()
-        .filter(|(_, row)| admits(row, map, area, defense_channel))
+        .filter(|(_, row)| admits(row, map, area))
         .map(|(_, row)| resolve(row, states))
         .collect()
 }
 
-fn admits(row: &WorldStateUiRow, map: u32, area: u32, defense_channel: bool) -> bool {
+fn admits(row: &WorldStateUiRow, map: u32, area: u32) -> bool {
     let map_ok = row.map_id == u32::MAX || row.map_id == map;
     let area_ok = row.area_id == 0 || row.area_id == area;
-    let type_ok = match row.ui_type {
-        0 => true,
-        1 => defense_channel,
-        _ => false,
-    };
-    map_ok && area_ok && type_ok
+    map_ok && area_ok && matches!(row.ui_type, 0 | 1 | 3)
 }
 
-/// `GetWorldStateUIInfo` for one row (`0x4c5a70`): only the text is expanded, and the extended
+/// `GetWorldStateUIInfo` for one row (`0x548d40`): only the text is expanded, and the extended
 /// ids answer their states' values.
 fn resolve(row: &WorldStateUiRow, states: &WorldStates) -> WorldStateUiView {
     WorldStateUiView {
+        ui_type: row.ui_type,
         // No `StateVariable` answers 1 (`0x4c5ad8`).
         ui_state: match row.state_variable {
             0 => 1,
@@ -147,30 +131,31 @@ fn resolve(row: &WorldStateUiRow, states: &WorldStates) -> WorldStateUiView {
     }
 }
 
-/// Pushes the readout when a world-state packet arrives or the defense-channel flag flips, the
-/// reference's two rebuild triggers.
+/// Pushes the readout when a world-state packet arrives, and ticks the timer rows.
 fn feed_world_state_ui(
     script: Option<NonSendMut<UiScript>>,
     catalog: Option<Res<WorldStateUiRes>>,
     states: Res<WorldStates>,
-    channels: Res<crate::ui_chat::ChannelState>,
-    mut defense_channel: Local<bool>,
-    mut last: Local<crate::ui_script::VmMemo<Option<(u64, bool)>>>,
+    clock: Res<crate::ui_script::UiClock>,
+    mut last: Local<crate::ui_script::VmMemo<Option<u64>>>,
+    mut timer: Local<crate::ui_script::VmMemo<(bool, f64)>>,
 ) {
-    // Only when the roster moves; a first run sees it changed.
-    if channels.is_changed() {
-        *defense_channel = defense_channel_joined(&channels);
-    }
-    let defense_channel = *defense_channel;
     let (Some(mut script), Some(catalog)) = (script, catalog) else {
         return;
     };
-    let key = (states.generation(), defense_channel);
-    if *last.get(&script) == Some(key) {
-        return;
+    let key = states.generation();
+    if *last.get(&script) != Some(key) {
+        *last.get(&script) = Some(key);
+        let rows = build(&catalog.0, &states);
+        timer.get(&script).0 = rows.iter().any(|r| r.ui_type == 3);
+        script.set_world_state_ui(rows);
     }
-    *last.get(&script) = Some(key);
-    script.set_world_state_ui(build(&catalog.0, &states, defense_channel));
+    // `0x5488f0`: once a second while a timer row is listed.
+    let (has_timer, next) = *timer.get(&script);
+    if has_timer && clock.ui_now >= next {
+        timer.get(&script).1 = clock.ui_now + 1.0;
+        script.fire_event("WORLD_STATE_UI_TIMER_UPDATE", Vec::new());
+    }
 }
 
 pub(crate) struct WorldStateUiPlugin;
@@ -254,33 +239,30 @@ mod tests {
     #[test]
     fn the_builder_gates_admit_the_right_rows() {
         // Eastern Plaguelands: map 0, area 139.
-        assert!(admits(&row(0, 139, 0), 0, 139, false));
-        assert!(!admits(&row(0, 139, 0), 0, 1377, false), "wrong area");
-        assert!(!admits(&row(0, 139, 0), 1, 139, false), "wrong map");
-        assert!(admits(&row(0, 0, 0), 0, 139, false), "area 0 is a wildcard");
+        assert!(admits(&row(0, 139, 0), 0, 139));
+        assert!(!admits(&row(0, 139, 0), 0, 1377), "wrong area");
+        assert!(!admits(&row(0, 139, 0), 1, 139), "wrong map");
+        assert!(admits(&row(0, 0, 0), 0, 139), "area 0 is a wildcard");
         assert!(
-            admits(&row(u32::MAX, 139, 0), 5, 139, false),
+            admits(&row(u32::MAX, 139, 0), 5, 139),
             "map -1 is a wildcard"
         );
-
-        assert!(admits(&row(0, 139, 1), 0, 139, true));
         assert!(
-            !admits(&row(0, 139, 1), 0, 139, false),
-            "the world-PvP rows need the zone-defense channel"
+            admits(&row(0, 139, 1), 0, 139),
+            "world PvP: the Lua filters it"
         );
-        for joined in [true, false] {
-            assert!(
-                !admits(&row(0, 139, 2), 0, 139, joined),
-                "a scoreboard column is never an always-up row"
-            );
-        }
+        assert!(admits(&row(0, 139, 3), 0, 139), "a timer row");
+        assert!(
+            !admits(&row(0, 139, 2), 0, 139),
+            "a scoreboard column is never an always-up row"
+        );
     }
 
     #[test]
     fn nothing_shows_before_the_first_init() {
         let catalog = WorldStateUiCatalog::from_rows(vec![(136, row(0, 139, 0))]);
         let states = WorldStates::default();
-        assert!(build(&catalog, &states, true).is_empty());
+        assert!(build(&catalog, &states).is_empty());
     }
 
     #[test]
@@ -310,103 +292,24 @@ mod tests {
         assert_eq!(resolve(&r, &states).extended_ui_state, [42, 7, 0]);
     }
 
-    /// Against the install's table: Eastern Plaguelands with and without the defense channel.
+    /// Against the install's table: Warsong Gulch's always-up rows, and no scoreboard column.
     #[test]
-    fn the_real_table_builds_the_eastern_plaguelands_readout() {
+    fn the_real_table_builds_the_warsong_gulch_readout() {
         let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("chain");
+        let profile = benilla_formats::DataProfile::from_env().expect("profile");
+        let mut chain = benilla_formats::Chain::open_profile(&data, &profile).expect("chain");
         let catalog =
             benilla_formats::load_world_state_ui_catalog(&mut chain).expect("WorldStateUI");
-
-        let mut states = WorldStates::default();
-        states.init_scope(0, 139); // the server scoping us to Eastern Plaguelands
-        states.write(&[(2327, 3), (2328, 1), (2426, 1), (2427, 60), (2428, 40)]);
-
-        assert!(
-            build(&catalog, &states, false).is_empty(),
-            "no zone-defense channel — the world-PvP rows are all Type 1 (the Type gate, the \
-             least obvious of the gates here)"
-        );
-
-        let rows = build(&catalog, &states, true);
-        assert_eq!(
-            rows.len(),
-            3,
-            "the two tower counters plus the progress bar"
-        );
-        assert_eq!(rows[0].text, "Towers Controlled: 3");
-        assert_eq!(rows[0].icon, "Interface\\WorldStateFrame\\AllianceTower");
-        assert_eq!(rows[0].tooltip, "Alliance Towers Controlled");
-        assert_eq!(rows[0].ui_state, 1, "no StateVariable of its own");
-        assert_eq!(rows[1].text, "Towers Controlled: 1");
-        assert_eq!(rows[1].icon, "Interface\\WorldStateFrame\\HordeTower");
-        assert_eq!(rows[2].text, "Progress: 60");
-        assert_eq!(rows[2].extended_ui, "CAPTUREPOINT");
-        assert_eq!(rows[2].extended_ui_state, [60, 40, 0]);
-        assert_eq!(rows[2].ui_state, 1, "state 2426 reads 1");
-
-        // The server flips a tower.
-        states.write(&[(2327, 2), (2328, 2)]);
-        let rows = build(&catalog, &states, true);
-        assert_eq!(rows[0].text, "Towers Controlled: 2");
-        assert_eq!(rows[1].text, "Towers Controlled: 2");
-
-        let mut elsewhere = WorldStates::default();
-        elsewhere.init_scope(0, 12); // Elwynn Forest
-        assert!(build(&catalog, &elsewhere, true).is_empty());
-
-        // Warsong Gulch: `Type` 0, with dynamic flag icons.
         let mut wsg = WorldStates::default();
         wsg.init_scope(489, 0);
-        wsg.write(&[(1581, 2), (1582, 1), (1601, 3), (2339, 1)]);
-        let rows = build(&catalog, &wsg, false);
-        assert_eq!(rows.len(), 2, "Type 0 needs no channel");
-        assert_eq!(rows[0].text, "2/3");
-        assert_eq!(
-            rows[0].dynamic_icon,
-            "Interface\\WorldStateFrame\\HordeFlag"
-        );
-        assert_eq!(rows[0].ui_state, 1, "state 2339 — the Horde flag is up");
-        assert_eq!(rows[1].text, "1/3");
-        assert_eq!(rows[1].ui_state, 0, "state 2338 — the Alliance flag is not");
-    }
-
-    /// Against the install's `ChatChannels.dbc`: the one qualifying row is auto-joined, and
-    /// `WorldDefense` (`DEFENSE` without `ZONE_DEP`) is the control.
-    #[test]
-    fn the_gates_channel_is_one_the_client_joins_by_itself() {
-        let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::open_chain(&data).expect("chain");
-        let channels = benilla_formats::load_chat_channels_catalog(&mut chain).expect("channels");
-        const REQUIRED: u32 = chan::ZONE_DEP | chan::DEFENSE;
-
-        let qualifying: Vec<_> = channels
-            .rows()
-            .iter()
-            .filter(|r| r.flags & REQUIRED == REQUIRED)
-            .collect();
-        assert_eq!(
-            qualifying.len(),
-            1,
-            "one row opens the gate: {qualifying:?}"
-        );
-        assert_eq!(qualifying[0].id, 22);
-        assert_eq!(qualifying[0].pattern, "LocalDefense - %s");
-        assert!(
-            qualifying[0].is_auto_join(),
-            "and the client joins it unasked — otherwise the readout would never appear"
-        );
-
-        let world_defense = channels
-            .rows()
-            .iter()
-            .find(|r| r.id == 23)
-            .expect("WorldDefense");
-        assert_ne!(
-            world_defense.flags & REQUIRED,
-            REQUIRED,
-            "the realm-wide defense channel carries DEFENSE without ZONE_DEP and must NOT qualify"
-        );
+        wsg.write(&[(1581, 2), (1582, 1)]);
+        let rows = build(&catalog, &wsg);
+        assert!(rows.len() >= 2, "{} rows", rows.len());
+        assert!(rows.iter().all(|r| matches!(r.ui_type, 0 | 1 | 3)));
+        assert!(rows.iter().any(|r| r.dynamic_icon.contains("Flag")));
+        let mut elsewhere = WorldStates::default();
+        elsewhere.init_scope(0, 12); // Elwynn Forest
+        assert!(build(&catalog, &elsewhere).iter().all(|r| r.ui_type != 2));
     }
 
     /// An init clears the table.

@@ -1,14 +1,17 @@
-//! `GetNumWorldStateUI` and `GetWorldStateUIInfo`, behind the always-up PvP readout, over rows the
-//! app resolves; the reference re-walks an array of DBC row ids (`0xb71e7c`) on demand. The info
-//! is ten values (`0x4c5a70`), with no `uiType` or `hidden`, which came later.
+//! `GetNumWorldStateUI` (`0x548720`) and `GetWorldStateUIInfo` (`0x548d40`), behind the
+//! always-up PvP readout, over rows the app resolves; build 12340 re-walks an array of
+//! `(row id, type)` pairs (`0xbe8f88`) on demand. The info is eleven values, `uiType` first.
 
 use mlua::{Lua, MultiValue, Value};
 
 use super::Model;
 
-/// One row of the readout: the ten values `GetWorldStateUIInfo` returns, in order.
+/// One row of the readout: the eleven values `GetWorldStateUIInfo` returns, in order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorldStateUiView {
+    /// The row's `Type` (`+0x20`): 0 always up, 1 world PvP (the Lua's own display filter), 3 a
+    /// timer row.
+    pub ui_type: u32,
     /// `uiState`: the row's `StateVariable` world state, or 1 (on) when it has none (`0x4c5ad8`).
     pub ui_state: i32,
     /// The label, macro-expanded, the only expanded string of the ten.
@@ -58,8 +61,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // A non-number raises (the `luaL_error` longjmps), an out-of-range index answers the single
-    // number 0 (`0x4c5be5`), and no string is ever nil: an empty DBC column reads `""`.
+    // A non-number raises, an out-of-range index answers the single number 0, and no string is
+    // ever nil: an empty DBC column reads `""`. The index is rounded (`ROUND`).
     g.set(
         "GetWorldStateUIInfo",
         lua.create_function(|lua, index: Value| {
@@ -75,8 +78,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             };
             let row = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                // Truncated toward zero by `__ftol`, then 1-based.
-                usize::try_from(index.trunc() as i64)
+                usize::try_from(index.round_ties_even() as i64)
                     .ok()
                     .and_then(|i| i.checked_sub(1))
                     .and_then(|i| model.worldstate.rows.get(i).cloned())
@@ -86,6 +88,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             };
             let s = |v: &str| -> mlua::Result<Value> { Ok(Value::String(lua.create_string(v)?)) };
             Ok(MultiValue::from_vec(vec![
+                Value::Integer(i64::from(r.ui_type)),
                 Value::Integer(i64::from(r.ui_state)),
                 s(&r.text)?,
                 s(&r.icon)?,
