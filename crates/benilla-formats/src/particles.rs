@@ -1010,11 +1010,16 @@ mod tests {
         )
         .expect("parse emitters");
         assert_eq!(impact.len(), 6);
+        // Build 12340 keys the plume (0 ms, 0) → (100 ms, 100) → (267 ms, 0), linear.
         assert_eq!(impact[0].timing.rate(None, 0.0, 0.0), 0.0);
         assert_eq!(
-            impact[0].timing.rate(None, 0.133, 0.0),
-            60.0,
-            "the plume bursts at impact"
+            impact[0].timing.rate(None, 0.1, 0.0),
+            100.0,
+            "the plume peaks at impact"
+        );
+        assert!(
+            (impact[0].timing.rate(None, 0.133, 0.0) - 80.24).abs() < 0.01,
+            "and falls linearly to its 267 ms key"
         );
         assert!(impact[1].timing.emitting(None, 0.1, 0.0));
         assert!(
