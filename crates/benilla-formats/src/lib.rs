@@ -61,6 +61,7 @@ pub mod gm_survey;
 pub mod holidays;
 pub mod lfg;
 pub mod vehicles;
+pub mod world_map_wrath;
 pub use itemsets::{load_item_sets, ItemSetCatalog, ItemSetInfo};
 mod gm_ticket_category;
 pub use gm_ticket_category::{

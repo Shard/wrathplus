@@ -22,7 +22,7 @@ pub type TextureProbe = Box<dyn Fn(&str) -> bool>;
 /// [`super::UiScript::world_map_selection`] reads it, a map id and a world `(x, y)`, to the map UV,
 /// `None` where the reference's outputs stay at their `(0, 0)`.
 pub type WorldLocProjector =
-    Box<dyn Fn((u32, u32, Option<u32>), u32, f32, f32) -> Option<(f32, f32)>>;
+    Box<dyn Fn(super::MapSelection, u32, f32, f32) -> Option<(f32, f32)>>;
 
 /// The host's answer to a texture path's size in texels.
 pub type TextureSizeProbe = Box<dyn Fn(&str) -> Option<(u32, u32)>>;
