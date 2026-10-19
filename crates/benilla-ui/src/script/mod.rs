@@ -245,7 +245,7 @@ pub use wrath_merchant::{CostItemView, ExtendedCostView};
 pub use wrath_arena::{ArenaMemberView, ArenaTeamInfoView, ArenaTeamStatsView, ArenaTeamView};
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_vehicle::{
-    UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
+    BattlefieldVehicleView, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
     WrathVehicles,
 };
 pub use wrath_totems::{TotemState, TotemView};
