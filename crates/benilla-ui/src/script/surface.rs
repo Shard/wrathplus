@@ -34,6 +34,7 @@ const METHOD_TABLES: &[&str] = &[
     "__benilla_plain_messageframe_methods",
     "__benilla_scrollingmessageframe_methods",
     "__benilla_minimap_methods",
+    "__benilla_movieframe_methods",
     "__benilla_tooltip_methods",
 ];
 

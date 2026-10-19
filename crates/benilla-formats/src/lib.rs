@@ -179,6 +179,8 @@ pub use quest_headers::{load_quest_header_names, QuestHeaderNames};
 mod game_tables;
 pub use game_tables::{load_wrath_game_tables, GameTable, WrathGameTables, GAME_TABLE_MAX_LEVEL};
 mod barber;
+mod movies;
+pub use movies::{load_movies, Movie, Movies};
 pub use barber::{
     barber_kind, load_barber_cost_base, load_barber_styles, BarberCostBase, BarberStyle,
     BarberStyles,

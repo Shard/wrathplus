@@ -33,3 +33,21 @@ has no producer.
 
 Note for the battleground owner: `wrath_battleground` tests describe 0222 as having no AC sender;
 `spell_generic.cpp:2772` sends it, and this module now decodes it.
+
+## The in-game movie
+
+`A/ui_native/wrath_movie.rs` drains 0464 from the capture and makes the movie pending, as the
+reference does (`[0xbd0800]`, id `[0xbd0804]`). The play step (`0x51d710`) fires
+`PLAY_MOVIE(name, volume)` from the `Movie.dbc` row: the file name up to its first `.`, and the
+row's volume. For an id the table lacks, it finishes straight away.
+
+benilla has no playback path. `MovieFrame:StartMovie` answers nil, as `0x970660` does for a movie
+it cannot open, so the stock `MovieFrame_PlayMovie` hides the frame and calls
+`GameMovieFinished()`. That (`0x518870`) sends the empty 0465 only while a movie is pending.
+AC binds 0465 to `Handle_NULL`. `StopMovie` is a no-op with nothing playing, and `EnableSubtitles`
+keeps its flag.
+
+Labelled: the trigger handler (`0x526530`) is untraced, and so are the name's `"%s%s"` prefix
+field (`+8`) and the volume's source. The player-control bit that `0x518870` clears is not modeled.
+Wow.exe pass: `/tmp/azb-wireb-ghidra/movie-decomp.log`, with Experience's
+`/tmp/azb-exp-misc-clean.log`.

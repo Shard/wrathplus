@@ -54,19 +54,6 @@ const FRAME_CHAIN: &[&str] = &[FRAME, REGION];
 /// Reference methods this client does not answer yet: one row per name, its classes and why. The
 /// list only shrinks; a name with live callers belongs implemented.
 const NOT_YET_ANSWERED: &[(&str, &str, &str)] = &[
-    // ── The MovieFrame trio ──
-    // The stock glue `MovieFrame.lua` calls all three; benilla plays no movie yet.
-    (
-        "StartMovie",
-        "MovieFrame",
-        "the intro-movie screen's own verb; benilla plays no movie yet",
-    ),
-    ("StopMovie", "MovieFrame", "the same, on the skip path"),
-    (
-        "EnableSubtitles",
-        "MovieFrame",
-        "the same — `MovieFrame.lua:35` passes `GetMovieSubtitles()`",
-    ),
     // ── The Minimap's four content setters ──
     // The app draws the minimap's blips and arrow itself, never through Lua.
     (
