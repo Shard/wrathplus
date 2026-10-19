@@ -6,6 +6,7 @@ use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionResource
 #[derive(Component)]
 pub(super) struct GxAoBind(pub BindGroup);
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(super) fn prepare_bind_groups(
     mut commands: Commands,
     views: Query<

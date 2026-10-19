@@ -5,6 +5,7 @@ use bevy::render::settings::{Backends, WgpuSettings};
 use bevy::shader::{PipelineCacheError, ShaderCache, ShaderCacheSource, ValidateShader};
 use std::borrow::Cow;
 
+#[allow(clippy::result_large_err)] // the error type is the library's (a large enum), returned as-is
 fn load_module(
     device: &RenderDevice,
     source: ShaderCacheSource<'_>,

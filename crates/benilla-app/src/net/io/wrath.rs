@@ -505,7 +505,7 @@ fn run(
                         .unwrap_or_else(|p| p.into_inner())
                         .record_pong(sequence);
                 }
-                0x003e | 0x003f | 0x0040 => {
+                0x003e..=0x0040 => {
                     let packet =
                         match benilla_protocol::wrath_transfer::decode(packet.opcode, &packet.body)
                         {

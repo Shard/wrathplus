@@ -58,6 +58,7 @@ pub(crate) mod tests {
     }
 
     /// Use the same composer/import resolution as the renderer, but never create a GPU module.
+    #[allow(clippy::result_large_err)] // the error type is the library's (a large enum), returned as-is
     fn validate_module(
         _: &(),
         source: bevy::shader::ShaderCacheSource<'_>,

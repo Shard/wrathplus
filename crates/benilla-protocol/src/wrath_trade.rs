@@ -101,7 +101,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Packet> {
             let gold = u32_le(&mut r)?;
             let spell = u32_le(&mut r)?;
             let remaining = body.len() - r.position() as usize;
-            if remaining % 73 != 0 {
+            if !remaining.is_multiple_of(73) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "partial trade item row",

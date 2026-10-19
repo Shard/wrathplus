@@ -1,6 +1,7 @@
 //! Test-only production specialization bridge and fixture buffer builders.
 use super::*;
 
+#[allow(clippy::result_large_err)] // the error type is the library's (a large enum), returned as-is
 pub(super) fn load_module(
     device: &RenderDevice,
     source: ShaderCacheSource<'_>,

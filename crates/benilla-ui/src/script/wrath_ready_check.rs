@@ -6,7 +6,7 @@ use mlua::Lua;
 use std::collections::HashMap;
 
 #[derive(Default)]
-pub(super) struct State {
+pub(crate) struct State {
     active: bool,
     statuses: HashMap<u64, &'static str>,
 }

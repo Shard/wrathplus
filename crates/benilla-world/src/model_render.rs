@@ -1027,6 +1027,28 @@ pub struct EntityPathWhy(pub &'static str);
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ModelVisSet;
 
+/// Initialize the second-stage seed and expose independent animation channels.
+pub fn second_stage_loops(
+    sub: &benilla_assets::ModelSubmesh,
+    materials: &mut Assets<WowModelMaterial>,
+    id: AssetId<WowModelMaterial>,
+) -> crate::doodad_anim::UvLoops {
+    let Some(stage) = &sub.geometry.stage2 else {
+        return Default::default();
+    };
+    let loops = crate::doodad_anim::UvLoops {
+        single: stage.uv_anim.clone().map(std::sync::Arc::new),
+        seqs: stage.uv_seq.clone().map(std::sync::Arc::new),
+        rot: stage.uv_rot_seq.clone().map(std::sync::Arc::new),
+        scale: stage.uv_scale_seq.clone().map(std::sync::Arc::new),
+    };
+    let seed = loops.open_offset();
+    lazy::with_material_mut(materials, id, |mat| {
+        mat.extension.stage2_seed = Vec4::new(seed[0], seed[1], 0.0, 0.0);
+    });
+    loops
+}
+
 #[cfg(test)]
 mod tests {
     use super::replace_fog_policy;
@@ -1154,26 +1176,4 @@ mod tests {
         let all = src | super::FAR_SIDE_MARKER | 0x0f;
         assert_eq!(f32::from(all) as u16, all);
     }
-}
-
-/// Initialize the second-stage seed and expose independent animation channels.
-pub fn second_stage_loops(
-    sub: &benilla_assets::ModelSubmesh,
-    materials: &mut Assets<WowModelMaterial>,
-    id: AssetId<WowModelMaterial>,
-) -> crate::doodad_anim::UvLoops {
-    let Some(stage) = &sub.geometry.stage2 else {
-        return Default::default();
-    };
-    let loops = crate::doodad_anim::UvLoops {
-        single: stage.uv_anim.clone().map(std::sync::Arc::new),
-        seqs: stage.uv_seq.clone().map(std::sync::Arc::new),
-        rot: stage.uv_rot_seq.clone().map(std::sync::Arc::new),
-        scale: stage.uv_scale_seq.clone().map(std::sync::Arc::new),
-    };
-    let seed = loops.open_offset();
-    lazy::with_material_mut(materials, id, |mat| {
-        mat.extension.stage2_seed = Vec4::new(seed[0], seed[1], 0.0, 0.0);
-    });
-    loops
 }

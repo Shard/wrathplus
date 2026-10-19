@@ -679,6 +679,7 @@ impl CombineSpecializer<'_> {
     }
 }
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn prepare_textures(
     mut commands: Commands,
     mut texture_cache: ResMut<TextureCache>,

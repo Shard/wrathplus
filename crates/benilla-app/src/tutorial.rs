@@ -271,6 +271,7 @@ const KEYRING_SLOTS: std::ops::RangeInclusive<u32> = 0x51..=0x70;
 
 /// Before the script tick: the sites' asks, the descriptor edges, the timers, the cue and the
 /// event, and the acknowledged bank's push to whichever VM is live.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_tutorials(
     script: Option<NonSendMut<UiScript>>,
     mut tutorials: ResMut<Tutorials>,

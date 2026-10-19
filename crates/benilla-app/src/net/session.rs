@@ -249,33 +249,6 @@ fn admitted_native_destination(
     })
 }
 
-#[cfg(test)]
-mod transfer_tests {
-    use super::*;
-    #[test]
-    fn native_destination_requires_token_and_finite_pose() {
-        let token = benilla_protocol::wrath_transfer::Token {
-            epoch: 4,
-            sequence: 8,
-        };
-        assert_eq!(admitted_native_destination(None, [0.0; 3], 0.0), None);
-        assert_eq!(
-            admitted_native_destination(Some(token), [0.0; 3], 0.0),
-            Some(token)
-        );
-        for component in 0..4 {
-            for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-                let mut pose = [0.0; 4];
-                pose[component] = value;
-                assert_eq!(
-                    admitted_native_destination(Some(token), [pose[0], pose[1], pose[2]], pose[3]),
-                    None
-                );
-            }
-        }
-    }
-}
-
 fn on_worldport(
     In(ev): In<SessionEvent>,
     mut e: Edges,
@@ -790,5 +763,32 @@ fn packet_dropped(opcode: u16, unparseable: bool, dropped: &mut DroppedOpcodes) 
         tally.unparseable += 1;
     } else {
         tally.unknown += 1;
+    }
+}
+
+#[cfg(test)]
+mod transfer_tests {
+    use super::*;
+    #[test]
+    fn native_destination_requires_token_and_finite_pose() {
+        let token = benilla_protocol::wrath_transfer::Token {
+            epoch: 4,
+            sequence: 8,
+        };
+        assert_eq!(admitted_native_destination(None, [0.0; 3], 0.0), None);
+        assert_eq!(
+            admitted_native_destination(Some(token), [0.0; 3], 0.0),
+            Some(token)
+        );
+        for component in 0..4 {
+            for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let mut pose = [0.0; 4];
+                pose[component] = value;
+                assert_eq!(
+                    admitted_native_destination(Some(token), [pose[0], pose[1], pose[2]], pose[3]),
+                    None
+                );
+            }
+        }
     }
 }

@@ -14,7 +14,9 @@ fn installed_wrath_animation_data() {
     // Decoder 0x8a93e0: disk columns map directly to runtime offsets. Native fallback
     // walker 0x717814 reads row+0x14, distinct from row+0x18 in 0x7176b0.
     let row = raw[20..20 + 506 * 32]
-        .chunks_exact(32)
+        .as_chunks::<32>()
+        .0
+        .iter()
         .find(|r| u32::from_le_bytes(r[..4].try_into().unwrap()) == 247)
         .unwrap();
     assert_eq!(u32::from_le_bytes(row[20..24].try_into().unwrap()), 246);

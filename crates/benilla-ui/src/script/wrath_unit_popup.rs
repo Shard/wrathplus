@@ -556,7 +556,6 @@ mod tests {
             members: vec![PartyMemberInfo {
                 name: "Lead".into(),
                 guid: 2,
-                ..Default::default()
             }],
             leader_guid: 2,
             own_guid: 1,
@@ -582,7 +581,6 @@ mod tests {
             members: vec![PartyMemberInfo {
                 name: "Pal".into(),
                 guid: 2,
-                ..Default::default()
             }],
             leader_guid: 1,
             own_guid: 1,

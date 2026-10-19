@@ -460,8 +460,10 @@ mod tests {
         let mut s = wrath();
         s.run("assert(GetPetSpellBonusDamage() == 0 and GetUnitHealthModifier('pet') == 0)")
             .unwrap();
-        let mut stats = crate::script::WrathPaperDollStats::default();
-        stats.pet_spell_power = 321;
+        let stats = crate::script::WrathPaperDollStats {
+            pet_spell_power: 321,
+            ..Default::default()
+        };
         s.set_wrath_paperdoll_stats(stats);
         s.set_pet_stats(
             true,

@@ -14,12 +14,16 @@ fn installed_wrath_material() {
     // Native decoder 0x8b8ba0 retains all five serialized words in order.
     // Appended words are checked as raw data, not assigned new semantics.
     let plate = raw[20..180]
-        .chunks_exact(20)
+        .as_chunks::<20>()
+        .0
+        .iter()
         .find(|r| u32::from_le_bytes(r[..4].try_into().unwrap()) == 6)
         .unwrap();
     let words: Vec<_> = plate
-        .chunks_exact(4)
-        .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
         .collect();
     assert_eq!(words, [6, 3, 1004, 696, 701]);
 

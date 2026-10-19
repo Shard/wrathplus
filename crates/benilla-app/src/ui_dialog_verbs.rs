@@ -86,7 +86,6 @@ impl InstanceBoot {
 }
 
 /// `UNIT_NPC_FLAGS` bit 6, `SPIRITGUIDE`, which the acquire callback `0x4924c0` tests (`0x4924fc`).
-
 /// The area spirit healer's aura, cancelled by `0x4921c0` and `CancelAreaSpiritHeal`; `0x6e7040`
 /// fires `AREA_SPIRIT_HEALER_OUT_OF_RANGE` for this spell id alone (`0x6e70b6`).
 pub(crate) const AREA_SPIRIT_HEALER_AURA: u32 = 2584;

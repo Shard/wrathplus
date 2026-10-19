@@ -148,8 +148,10 @@ mod tests {
         let commands = NetCommands(tx);
         let names = NameCache::default();
         let mut items = Items::default();
-        let mut mail = MailOpen::default();
-        mail.mailbox = Some(42);
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
         let mut enchants = [[0; 3]; 7];
         for (i, row) in enchants.iter_mut().enumerate() {
             *row = [100 + i as u32, 200 + i as u32, 300 + i as u32];
@@ -252,8 +254,10 @@ mod tests {
         use benilla_protocol::wrath_mail::{Attachment, Inbox, Mail};
         let (tx, _rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
-        let mut mail = MailOpen::default();
-        mail.mailbox = Some(42);
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
         mail.wrath_inbox = Some(Inbox {
             total_count: 70,
             mails: vec![Mail {
@@ -545,8 +549,10 @@ mod action_tests {
         let mut names = NameCache::default();
         names.insert_player(0x2a, "Buyer".into(), None);
         let eta = (14 << 6) | 35;
-        let mut mail = MailOpen::default();
-        mail.mailbox = Some(42);
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
         mail.wrath_inbox = Some(Inbox {
             total_count: 1,
             mails: vec![Mail {

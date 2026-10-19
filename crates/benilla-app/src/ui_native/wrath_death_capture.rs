@@ -59,6 +59,7 @@ fn clear(
     }
 }
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_death_release(
     script: Option<NonSendMut<benilla_ui::script::UiScript>>,
     release: Res<DeathRelease>,

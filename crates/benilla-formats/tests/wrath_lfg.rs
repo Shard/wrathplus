@@ -20,8 +20,10 @@ fn installed_wrath_lfg_catalogs() {
         .read_file("DBFilesClient\\LFGDungeonExpansion.dbc")
         .unwrap();
     let words: Vec<_> = raw_expansion[20..52]
-        .chunks_exact(4)
-        .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32::from_le_bytes(*b))
         .collect();
     assert_eq!(words, [38, 2, 0, 258, 57, 60, 59, 60]);
 

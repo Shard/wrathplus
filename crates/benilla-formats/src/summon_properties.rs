@@ -112,7 +112,8 @@ mod tests {
         let mut chain = Chain::open_profile(&data, &profile).expect("open chain");
         let table = load_summon_properties(&mut chain).expect("load SummonProperties.dbc");
         assert!(!table.is_empty());
-        for id in [41] {
+        {
+            let id = 41;
             assert_eq!(table.slot(id), Some(SUMMON_SLOT_MINIPET), "row {id}");
         }
         assert_eq!(table.slot(u32::MAX), None);

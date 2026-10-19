@@ -637,6 +637,7 @@ fn paid_flow(
 /// Native results ride the same system: the transport publishes the refreshed roster before a
 /// success (`9bab9156`), and a refusal shows its 12340 status key
 /// ([`crate::char_select::wrath_char_result_key`]).
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn create_result(
     mut msgs: MessageReader<CharActionResultMessage>,
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,

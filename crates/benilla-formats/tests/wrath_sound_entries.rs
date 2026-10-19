@@ -13,7 +13,9 @@ fn installed_wrath_sound_entries() {
     assert_eq!((word(4), word(8), word(12)), (12941, 30, 120));
     // Native decoder 0x8b69c0 preserves these offsets, with strings relocated.
     let row = raw[20..20 + 12941 * 120]
-        .chunks_exact(120)
+        .as_chunks::<120>()
+        .0
+        .iter()
         .find(|r| u32::from_le_bytes(r[..4].try_into().unwrap()) == 850)
         .unwrap();
     assert_eq!(

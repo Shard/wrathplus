@@ -23,12 +23,16 @@ fn installed_wrath_ground_effects() {
         [11939, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
     ] {
         let row = raw[20..20 + word(4) as usize * 44]
-            .chunks_exact(44)
+            .as_chunks::<44>()
+            .0
+            .iter()
             .find(|r| u32::from_le_bytes(r[..4].try_into().unwrap()) == expected[0])
             .unwrap();
         let actual: Vec<_> = row
-            .chunks_exact(4)
-            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_le_bytes(*w))
             .collect();
         assert_eq!(actual, expected);
     }

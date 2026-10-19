@@ -417,9 +417,11 @@ mod tests {
             benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1 << 24)]);
         assert!(quest_complete(&complete, 7));
         assert!(!quest_complete(&complete, 8));
-        let mut state = GossipState::default();
-        state.npc = Some(1);
-        state.greeting = Some("hello".into());
+        let mut state = GossipState {
+            npc: Some(1),
+            greeting: Some("hello".into()),
+            ..Default::default()
+        };
         state.quests.push((7, 4, 80, "daily".into()));
         state
             .quest_info

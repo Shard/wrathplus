@@ -53,6 +53,7 @@ fn pvp_timer(flags: u32, prev: Option<(bool, Option<f64>)>, now: f64) -> (bool, 
     }
 }
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_wrath_state(
     script: Option<NonSendMut<UiScript>>,
     mut misc: ResMut<NativeSessionMiscPackets>,

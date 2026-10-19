@@ -25,7 +25,7 @@ pub fn decode(body: &[u8]) -> io::Result<RaidInstanceInfo> {
     let count = u32_le(&mut r)? as usize;
     let remaining = body.len() - r.position() as usize;
     // Validate the exact extent before any count-controlled allocation.
-    if remaining % 22 != 0 || count != remaining / 22 {
+    if !remaining.is_multiple_of(22) || count != remaining / 22 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "Wrath saved-instance count/tail",

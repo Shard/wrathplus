@@ -30,10 +30,11 @@ fn tables() -> GlyphCatalog {
 }
 
 fn glyph_spell(glyph: i32) -> SpellDisplay {
-    let mut d = SpellDisplay::default();
-    d.effects = [APPLY_GLYPH, 0, 0];
-    d.effect_misc_value = [glyph, 0, 0];
-    d
+    SpellDisplay {
+        effects: [APPLY_GLYPH, 0, 0],
+        effect_misc_value: [glyph, 0, 0],
+        ..Default::default()
+    }
 }
 
 /// Socket 0 offers major slot 21; `held` is socket 0's glyph.

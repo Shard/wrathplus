@@ -247,6 +247,12 @@ fn next_mail_time(seconds: f32, pending: &mut MailPending) {
     pending.apply_query_reply(seconds);
 }
 
+fn on_wrath_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
+    if let SessionEvent::WrathMailList { inbox } = ev {
+        mail.wrath_inbox = Some(inbox);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,11 +300,5 @@ mod tests {
         assert!(!app.world().resource::<MailPending>().has_new_mail());
         assert_eq!(app.world().resource::<MailOpen>().mailbox, None);
         assert!(app.world().resource::<MailOpen>().wrath_inbox.is_none());
-    }
-}
-
-fn on_wrath_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
-    if let SessionEvent::WrathMailList { inbox } = ev {
-        mail.wrath_inbox = Some(inbox);
     }
 }

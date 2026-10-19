@@ -21,7 +21,7 @@ pub fn decode(body: &[u8]) -> io::Result<Packet> {
     let mut r = Cursor::new(body);
     let count = u32_le(&mut r)? as usize;
     // Validate before allocating, including overflow-sized counts and trailing bytes.
-    if count != (body.len() - 4) / 4 || (body.len() - 4) % 4 != 0 {
+    if count != (body.len() - 4) / 4 || !(body.len() - 4).is_multiple_of(4) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "completed quest count/framing",

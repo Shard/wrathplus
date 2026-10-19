@@ -99,7 +99,7 @@ mod tests {
             });
             s.set_bank_bag_slots(bags);
             assert_eq!(
-                s.eval::<i64>(&format!("return BankButtonIDToInvSlotID(5,1)"))
+                s.eval::<i64>("return BankButtonIDToInvSlotID(5,1)")
                     .unwrap(),
                 bag_first
             );
