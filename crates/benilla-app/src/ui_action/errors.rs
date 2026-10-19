@@ -667,7 +667,7 @@ mod ui_error_tests {
     /// that line yet, so the declared key and available arguments survive as host diagnostics.
     #[test]
     fn missing_key_is_preserved_only_for_wrath() {
-        let vanilla = UiScript::new().expect("Vanilla VM");
+        let vanilla = UiScript::new_vanilla().expect("Vanilla VM");
         let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM");
         let error = UiError::args(
             "TEST_MISSING_SD",

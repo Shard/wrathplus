@@ -752,7 +752,7 @@ mod tests {
 
     #[test]
     fn cooldown_triple_stamps_to_the_vm_clock_and_goes_cold() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.tick(10.0); // GetTime == 10
         s.set_pet_actions(true, true, true, slots());
 

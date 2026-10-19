@@ -250,7 +250,7 @@ mod tests {
     /// Mik's Scrolling Battle Text 4.43's capture tables: wipe, `setn(t, 0)`, then insert.
     #[test]
     fn a_wipe_then_setn_zero_then_insert_is_countable_again() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<i64>(
                 r#"
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn the_remembered_size_round_trips_and_never_appears_as_a_key() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.eval::<i64>("return table.getn({1,2,3})").unwrap(), 3);
         assert_eq!(
             s.eval::<i64>("local t = {1,2,3} table.setn(t, 7) return table.getn(t)")
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn insert_and_remove_maintain_the_size_the_way_the_reference_does() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         // A position past the remembered size grows it (`if (pos > n) n = pos`).
         assert_eq!(
             s.eval::<String>(
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn concat_sort_foreachi_and_unpack_all_read_the_remembered_size() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<String>("local t = {'a','b','c'} table.setn(t, 2) return table.concat(t, '')")
                 .unwrap(),
@@ -407,7 +407,7 @@ mod tests {
     /// `getn`, `tinsert` and `tremove`, bound by the stdlib layer after this one, are these bodies.
     #[test]
     fn the_bare_aliases_bind_the_5_0_bodies() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(s.eval::<bool>("return getn == table.getn").unwrap());
         assert!(s.eval::<bool>("return tinsert == table.insert").unwrap());
         assert!(s.eval::<bool>("return tremove == table.remove").unwrap());

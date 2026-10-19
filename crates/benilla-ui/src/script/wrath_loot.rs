@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn vanilla_loot_slot_abi_is_unchanged() {
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_loot(Some(LootState {
             rows: vec![Some(row())],
             ..LootState::default()

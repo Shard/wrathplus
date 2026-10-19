@@ -77,7 +77,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        let vanilla = UiScript::new().unwrap();
+        let vanilla = UiScript::new_vanilla().unwrap();
         vanilla.run("assert(SetBagPortraitTexture == nil); assert(type(SetBagPortaitTexture) == 'function')").unwrap();
     }
 }

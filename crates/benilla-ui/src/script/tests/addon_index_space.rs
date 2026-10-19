@@ -121,7 +121,7 @@ fn a_reply_that_hides_nothing_still_builds_the_array() {
 /// A player's addon `Probe` and a hidden chain addon `Blizzard_AuctionUI`, LoadOnDemand, whose one
 /// file sets `AuctionLoaded`; the reply hides the Blizzard one, as a vmangos realm does.
 fn with_hidden_blizzard(blizzard_enabled: bool) -> UiScript {
-    let mut s = UiScript::new().unwrap();
+    let mut s = UiScript::new_vanilla().unwrap();
     s.set_addon_chain_reader(Box::new(|path| {
         (path == "Interface/AddOns/Blizzard_AuctionUI/Blizzard_AuctionUI.lua")
             .then(|| b"AuctionLoaded = 1".to_vec())

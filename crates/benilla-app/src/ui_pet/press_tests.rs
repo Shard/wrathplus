@@ -121,7 +121,7 @@ pub(super) struct Rig {
 
 /// A VM whose listener records every event the pet's lists fire into `SEEN`, in order.
 pub(super) fn listening_vm() -> benilla_ui::script::UiScript {
-    let script = benilla_ui::script::UiScript::new().expect("a VM");
+    let script = benilla_ui::script::UiScript::new_vanilla().expect("a VM");
     listen(&script);
     script
 }

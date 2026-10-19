@@ -1448,7 +1448,7 @@ mod tests {
     /// The handler's container ids reach the VM as `BAG_OPEN`'s `arg1`.
     #[test]
     fn a_server_opened_bag_fires_bag_open_with_its_container_id() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
@@ -1487,7 +1487,7 @@ mod tests {
     /// items swapped fire the argless one twice though the views are equal.
     #[test]
     fn playerbankslots_changed_names_its_producer_by_the_slot_guid() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
@@ -1617,7 +1617,7 @@ mod tests {
     /// two identical bags swapped still close both windows.
     #[test]
     fn bag_closed_fires_on_the_bag_guid_moving_and_only_off_a_non_empty_slot() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(
             "SEEN = {} \
              local f = CreateFrame('Frame') \
@@ -1812,7 +1812,7 @@ mod tests {
     fn a_stack_ticking_down_fires_item_lock_changed_before_bag_update() {
         use benilla_ui::script::ContainerSlot;
 
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(
             "ORDER = {} \
              local f = CreateFrame('Frame') \

@@ -296,7 +296,7 @@ mod tests {
     /// `0x703200`: `lua_getgccount` and `lua_getgcthreshold`, each `>> 10`, two values.
     #[test]
     fn gcinfo_answers_two_numbers_as_1_12_does() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.arity("gcinfo()").unwrap(),
             2,
@@ -329,7 +329,7 @@ mod tests {
     /// string options.
     #[test]
     fn collectgarbage_answers_nothing_and_takes_a_number() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.arity("collectgarbage()").unwrap(),
             0,
@@ -395,7 +395,7 @@ mod tests {
     /// only a call with more than one argument tells 5.0 from 5.1.
     #[test]
     fn assert_answers_one_value_and_keeps_5_0_s_messages() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.arity("assert(1, 2, 3)").unwrap(),
             1,
@@ -433,7 +433,7 @@ mod tests {
     /// `table.setn`, which stock 5.1 raises on.
     #[test]
     fn acelibrarys_own_dialect_probe_takes_the_5_0_branch_and_works() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             r#"
             local table_setn
@@ -456,7 +456,7 @@ mod tests {
     /// The remembered size is neither a no-op nor a visible `n` key.
     #[test]
     fn getn_and_setn_remember_a_size_without_polluting_the_table() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         // No remembered size: a count from 1 to the first nil.
         assert_eq!(s.eval::<i64>("return table.getn({1,2,3})").unwrap(), 3);
         // The size round-trips...
@@ -492,7 +492,7 @@ mod tests {
     /// The 5.1-only members are gone, so an addon's feature detection picks 1.12's branch.
     #[test]
     fn the_5_1_only_members_are_not_offered() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         for expr in [
             "string.gmatch",
             "string.match",
@@ -529,7 +529,7 @@ mod tests {
     /// `...` parses in a parameter list and nowhere else; `arg` carries the arguments.
     #[test]
     fn vararg_is_a_declaration_only() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let parses = |src: &str| s.run(src).is_ok();
         // Declaration, and 5.0's way to read what it captured.
         assert!(parses("return function(x, ...) return x end"));
@@ -597,7 +597,7 @@ mod tests {
     /// `print` and `_VERSION` are not in 1.12's `_G`, and `__pow` is.
     #[test]
     fn the_base_library_matches_the_captured_globals() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(s.eval::<bool>("return print == nil").unwrap());
         assert!(s.eval::<bool>("return _VERSION == nil").unwrap());
         // 5.0 implements `^` by calling `__pow`.
@@ -608,7 +608,7 @@ mod tests {
     /// 1.12: the reference's `simpleexp` (`0x6fd240`) has no `...` arm.
     #[test]
     fn the_vararg_expression_is_a_syntax_error_as_it_is_on_1_12() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(
             s.eval::<bool>(
                 r#"return (loadstring("return function(...) return ... end") and true or false) == false"#
@@ -649,7 +649,7 @@ mod tests {
     /// (`0x6fe0c0`) has no `%`, and its metamethod names (`0x871896`) have no `__len` or `__mod`.
     #[test]
     fn the_length_and_modulo_operators_are_not_in_the_grammar() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         for probe in ["return #t", "return 7 % 3", "local n = #({1,2}) return n"] {
             assert!(
                 s.eval::<bool>(&format!("return loadstring({:?}) == nil", probe))
@@ -669,7 +669,7 @@ mod tests {
     /// constructor's extra semicolon.
     #[test]
     fn the_5_0_grammar_the_reference_writes_still_parses() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run(
             r#"
             -- 5.0 varargs: the implicit `arg` table, the form all of 1.12 FrameXML uses.
@@ -697,7 +697,7 @@ mod tests {
     /// `xor eax,eax; ret`, returning nothing; only `debugprofilestart`/`stop` are real.
     #[test]
     fn the_debug_family_is_six_stubs_and_two_real_ones() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         // Zero values, not one nil: only a count tells them apart.
         for name in [
             "debuginfo",
@@ -723,7 +723,7 @@ mod tests {
     /// `table.insert` appends after the remembered size (its `luaL_getn` call, `0x7fb6d8`).
     #[test]
     fn table_insert_consults_the_remembered_size() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<i64>("local t = {1,2,3} table.setn(t, 0) table.insert(t, 9) return t[1]")
                 .unwrap(),
@@ -739,7 +739,7 @@ mod tests {
     /// written in this form, as the reference writes them, so a saved list reloads in order.
     #[test]
     fn a_bracketed_key_constructor_is_an_array_and_walks_in_index_order() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         // Bagnon's own table, as its saved-variables file spells it.
         assert_eq!(
             s.eval::<String>(
@@ -835,7 +835,7 @@ mod error_quoting_tests {
     /// binding that returns nothing.
     #[test]
     fn select_is_not_a_1_12_global_and_arg_n_answers_instead() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(
             s.eval::<bool>("return select == nil").unwrap(),
             "`select` is 5.1's base library; `reference/1.12-globals.tsv` has no row for it"
@@ -864,7 +864,7 @@ mod error_quoting_tests {
     /// ``attempt to %s %s `%s' (a %s value)`` (`0x871c2c`).
     #[test]
     fn the_string_type_has_no_metatable() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert!(
             s.eval::<bool>(r#"return getmetatable("") == nil"#).unwrap(),
             "5.1's luaopen_string ends in a createmetatable 5.0's does not have"

@@ -379,7 +379,7 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         )];
     }
 
-    let mut script = benilla_ui::script::UiScript::new().unwrap();
+    let mut script = benilla_ui::script::UiScript::new_vanilla().unwrap();
     script.set_screen_size(1024.0, 768.0);
     let failures = crate::ui_script::load_default_ui(&script);
     assert!(failures.is_empty(), "load failures: {failures:?}");

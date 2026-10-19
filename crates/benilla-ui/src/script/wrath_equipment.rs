@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn vanilla_surface_is_unchanged() {
-        UiScript::new()
+        UiScript::new_vanilla()
             .unwrap()
             .run(
                 r#"

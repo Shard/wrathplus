@@ -299,7 +299,7 @@ mod tests {
     /// The nil after the equip is the reference's (`0x4c7cae`), so the same click opens the bag.
     #[test]
     fn an_empty_bag_slot_equips_the_held_bag_and_still_answers_nil() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(Default::default());
         s.run("PickupContainerItem(0, 1)").unwrap();
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn an_occupied_bag_slot_swaps_with_a_held_bag_and_answers_one() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 1)").unwrap();
@@ -354,7 +354,7 @@ mod tests {
 
     #[test]
     fn an_occupied_bag_slot_auto_stores_an_ordinary_item() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 2)").unwrap();
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn the_answer_is_the_number_one_not_the_boolean_true() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 2)").unwrap();
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn pickup_bag_from_slot_takes_the_bag_and_returns_nothing() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_bank_bag_slots(one_bank_bag());
         assert_eq!(
             s.arity("PickupBagFromSlot(64)").unwrap(),

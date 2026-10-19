@@ -1016,8 +1016,9 @@ fn the_mouseover_token_clears_when_no_unit_is_hovered() {
         .id();
     let named = |app: &mut App| {
         (
-            eval(app, r#"return UnitExists("mouseover")"#),
-            eval(app, r#"return UnitIsUnit("mouseover", "target")"#),
+            eval(app, r#"return UnitExists("mouseover") and 1 or nil"#),
+            // Build 12340 answers a boolean; both read as 1 or nil here.
+            eval(app, r#"return UnitIsUnit("mouseover", "target") and 1 or nil"#),
         )
     };
     let empty = Hovered::default();

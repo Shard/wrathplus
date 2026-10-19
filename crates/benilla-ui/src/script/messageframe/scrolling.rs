@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn hyperlink_span_release_fires_on_hyperlink_click() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_screen_size(800.0, 600.0);
         s.run(
             "local f = CreateFrame('ScrollingMessageFrame', 'CF')\n\
@@ -1021,7 +1021,7 @@ mod tests {
 
     #[test]
     fn vanilla_scrolling_frames_lack_the_wrath_methods() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run("F = CreateFrame('ScrollingMessageFrame')").unwrap();
         for m in ["GetMessageInfo", "RemoveMessagesByAccessID", "SetHyperlinksEnabled"] {
             assert!(s.eval::<bool>(&format!("return F.{m} == nil")).unwrap(), "{m}");

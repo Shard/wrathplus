@@ -313,7 +313,7 @@ mod loader_tests {
     /// Names, `$parent`, bottom-up `OnLoad` and the anchored texture rect, end to end.
     #[test]
     fn synthetic_full_document_materializes() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_screen_size(800.0, 600.0);
         s.run("loadorder = {}").unwrap();
 
@@ -819,7 +819,7 @@ mod loader_tests {
     /// `OnAttributeChanged` is 2.0's; no 1.12 handler resolver has a slot for it.
     #[test]
     fn unsupported_script_name_is_a_warning() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let doc = parse(
             r#"<Ui><Frame name="Keyed"><Scripts><OnAttributeChanged>x = 1</OnAttributeChanged></Scripts></Frame></Ui>"#,
         );
@@ -1088,7 +1088,7 @@ mod loader_tests {
     /// `<unnamed>` (`0x84c7f0`), and `0x704c70` loads the raw body, so body line n is chunk line n.
     #[test]
     fn an_xml_handler_chunk_is_named_by_its_frame_and_handler() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let doc = parse(
             "<Ui>\n\
              <Button name=\"NamedBtn\">\n\
@@ -1989,7 +1989,7 @@ mod loader_tests {
     /// `ItemTextFrame.xml:214` uses the first.
     #[test]
     fn simplehtml_xml_declares_element_fonts_not_regions() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_screen_size(800.0, 600.0);
         let doc = parse(
             r#"<Ui>
@@ -2441,7 +2441,7 @@ mod chunk_name_tests {
     /// captures a handler with `GetScript` and calls it bare) reaches the same frame.
     #[test]
     fn a_handler_body_is_the_chunk_and_self_is_a_global() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let doc = parse(
             r#"<Ui>
                 <Frame name="Hooked" hidden="true">
@@ -2478,7 +2478,7 @@ mod chunk_name_tests {
     /// handler, whatever global the attribute names.
     #[test]
     fn a_function_attribute_binds_nothing() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         s.run("function NamedHandler() RAN = true end").unwrap();
         let doc = parse(
             r#"<Ui>

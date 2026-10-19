@@ -1,7 +1,7 @@
 //! The model pane's clock, sequence arm and handlers (`0x76d7f0`, `0x7121a0`, `0x76cac0`). The
 //! engine parses no M2: a file's sequences and bounds are [`ModelFileFacts`] the host hands over.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::{Model, UiScript};
 use crate::widget::{KindState, ModelFileFacts, ModelState, SequenceFacts};
 
@@ -190,7 +190,7 @@ fn an_unowned_id_stops_the_track_and_arms_nothing() {
 /// The stock `Cooldown.lua`, which runs on `OnUpdateModel` and `OnAnimFinished` alone.
 #[test]
 fn the_cooldown_machine_runs_on_the_two_handlers() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.set_model_facts(COOLDOWN_FILE, cooldown_facts());
     // `SetTimer` gates on `start > 0`, so the session clock must be past 0.
@@ -278,7 +278,7 @@ fn the_cooldown_machine_runs_on_the_two_handlers() {
 /// `OnUpdateModel` runs before the completion is read, so re-arming each paint completes nothing.
 #[test]
 fn on_update_model_fires_per_visible_paint_with_this() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.set_model_facts(COOLDOWN_FILE, cooldown_facts());
     s.run(&format!(

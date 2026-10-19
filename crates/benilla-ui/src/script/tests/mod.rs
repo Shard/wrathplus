@@ -125,7 +125,7 @@ fn get_bind_location_answers_the_pushed_name_and_never_nil() {
 /// `RequestTimePlayed()` queues the ask; `TIME_PLAYED_MSG` carries the answer.
 #[test]
 fn request_time_played_queues_an_ask_and_the_answer_arrives_as_an_event() {
-    let mut s = crate::script::UiScript::new().unwrap();
+    let mut s = crate::script::UiScript::new_vanilla().unwrap();
 
     assert_eq!(s.arity("RequestTimePlayed()").unwrap(), 0);
     // A count, not a latch: the packet is empty, so two asks in a frame are two sends.

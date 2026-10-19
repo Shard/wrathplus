@@ -1,7 +1,7 @@
 //! The talent bindings over a pushed snapshot, the learn queue, and `SetTalent`: the talent builder
 //! for a passive talent, the spell tooltip with the talent lines interleaved for an exceptional one.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::*;
 
 fn one_tab_state() -> TalentUiState {
@@ -66,7 +66,7 @@ fn one_tab_state() -> TalentUiState {
 
 #[test]
 fn bindings_read_the_pushed_snapshot() {
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_talents(one_tab_state());
     s.run(
         r#"

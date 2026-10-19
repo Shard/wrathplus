@@ -704,7 +704,7 @@ mod tests {
         let mut s = vm();
         s.run("ConfirmLootSlot(2)").unwrap();
         assert_eq!(s.take_loot_confirms(), vec![2]);
-        let v = UiScript::new().unwrap();
+        let v = UiScript::new_vanilla().unwrap();
         assert!(v
             .eval::<bool>("return CancelSummon == nil and GetText == nil and IsFalling == nil")
             .unwrap());

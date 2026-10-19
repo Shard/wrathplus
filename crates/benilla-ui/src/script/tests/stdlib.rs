@@ -1,7 +1,7 @@
 //! The WoW stdlib: positional `format`, the bare-global aliases, the sandbox, `debugstack`,
 //! `GetTime`, `time`/`date`, `RunScript` and the Lua 5.0 dialect.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 // ── The positional format wrapper ──
 
@@ -40,7 +40,7 @@ fn positional_format_reorders_and_mix_is_an_error() {
 
 #[test]
 fn stdlib_aliases_and_helpers() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         -- getglobal on a named frame
@@ -250,7 +250,7 @@ fn gettime_starts_at_zero_and_tracks_tick() {
 /// The rest of the engine's bare string and math globals, and the later-client names it lacks.
 #[test]
 fn the_rest_of_the_bare_globals() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r#"
         -- string family
@@ -282,7 +282,7 @@ fn the_rest_of_the_bare_globals() {
 /// 5.0 idioms vanilla addons use run on it, above all the implicit vararg `arg` table.
 #[test]
 fn the_lua_5_0_dialect_vanilla_addons_are_written_in_runs_here() {
-    let s = script();
+    let s = vanilla_script();
     s.run(
         r##"
         -- The implicit vararg table, 5.0's spelling of what 5.1 does with `...`.

@@ -871,7 +871,7 @@ mod tests {
             }),
         );
 
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script.run("UseContainerItem(0, 1)").unwrap();
         app.insert_non_send_resource(script);
         run_container_clicks(app.world_mut());
@@ -1411,7 +1411,7 @@ mod bind_confirm_tests {
             }),
         );
 
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         load_ui(&script);
         script.set_container(0, Some(bag_with_the_axe(quality)));
@@ -1660,7 +1660,7 @@ mod bind_confirm_tests {
                 ..crate::items::test_template("Flurry Axe")
             }),
         );
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         load_ui(&script);
         script.set_container(0, Some(bag_with_the_axe(4)));
@@ -1835,7 +1835,7 @@ mod bind_confirm_tests {
         }
         items.insert_template(FLURRY_AXE, Some(template));
 
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script.set_screen_size(1024.0, 768.0);
         load_ui(&script);
         script.set_container(0, Some(bag_with_the_axe(3)));

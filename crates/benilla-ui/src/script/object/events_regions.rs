@@ -361,7 +361,7 @@ mod tests {
     /// Both frames share both events, so clearing one must leave the other's registrations.
     #[test]
     fn unregister_all_events_clears_one_frame_and_only_that_frame() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(
             r#"
             Mine  = CreateFrame("Frame", "UnregAllMine")

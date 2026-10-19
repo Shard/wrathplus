@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn a_broadcast_is_prefix_tab_message_and_defaults_to_party() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("oRA", "hello")"#).unwrap();
         assert_eq!(
             s.take_addon_sends(),
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn the_distribution_set_is_exactly_party_raid_guild_battleground() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         // In a raid, so RAID is not downgraded.
         s.set_party(PartyState {
             raid: vec![RaidMemberInfo::default()],
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn a_number_distribution_raises_rather_than_being_read_as_a_type_byte() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let err = s
             .run(r#"SendAddonMessage("p", "m", 1)"#)
             .expect_err("a numeric distribution must raise");
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn a_non_string_distribution_takes_the_party_default() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("p", "m", nil)"#).unwrap();
         s.run(r#"SendAddonMessage("p", "m", {})"#).unwrap();
         let sent = s.take_addon_sends();
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn raid_outside_a_raid_is_downgraded_to_party() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         // Default PartyState: not in a raid.
         s.run(r#"SendAddonMessage("CTRA", "status", "RAID")"#)
             .unwrap();
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn only_both_empty_is_a_usage_error() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let err = s
             .run(r#"SendAddonMessage("", "")"#)
             .expect_err("both empty must raise");
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn arguments_coerce_like_lua_tostring_and_nil_becomes_empty() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("v", 314)"#).unwrap();
         assert_eq!(s.take_addon_sends()[0].text, "v\t314");
         s.run(r#"SendAddonMessage(42, "m")"#).unwrap();
@@ -449,14 +449,14 @@ mod tests {
     /// The reference does not strip a TAB from the prefix either; the receiver splits at it.
     #[test]
     fn a_tab_inside_the_prefix_is_passed_through_unsanitised() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run("SendAddonMessage(\"pre\\tfix\", \"body\")").unwrap();
         assert_eq!(s.take_addon_sends()[0].text, "pre\tfix\tbody");
     }
 
     #[test]
     fn the_payload_truncates_silently_at_2047_bytes() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("p", string.rep("x", 4000))"#)
             .unwrap();
         let sent = s.take_addon_sends();
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn a_well_formed_colour_run_passes_and_its_closer_is_skipped_not_scanned() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         for payload in [
             "|cffff0000red|r",
             "before |cffff0000red|r after",
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn every_other_escape_start_raises_including_a_bare_closer_and_a_trailing_pipe() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         for payload in [
             "|r",                    // a closer with nothing open
             "|Hitem:1:0:0:0|h[x]|h", // link tokens outside a colour run
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn an_unmatched_colour_open_truncates_in_place_and_still_sends() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("P", "keep|cff00ff00dropped", "GUILD")"#)
             .unwrap();
         assert_eq!(s.take_addon_sends()[0].text, "P\tkeep");
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn a_colour_run_may_span_the_tab_because_the_scan_is_on_the_composed_buffer() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.run(r#"SendAddonMessage("|cffff0000pre", "post|r", "GUILD")"#)
             .unwrap();
         assert_eq!(s.take_addon_sends()[0].text, "|cffff0000pre\tpost|r");
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn a_bad_escape_beats_a_bad_distribution() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         let err = s
             .run(r#"SendAddonMessage("P", "|z", "TOTALLY_BOGUS")"#)
             .expect_err("must raise");

@@ -1,7 +1,7 @@
 //! The `Model` and `PlayerModel` Lua surface, read back through the API that wrote it, and checked
 //! against the reference's method tables in both directions.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::UiScript;
 
 #[test]
@@ -218,7 +218,7 @@ fn the_two_model_tables_are_the_references_own() {
     /// The names in [`MODEL_23`] this client leaves unbuilt, absent rather than stubbed: none.
     const UNBUILT: [&str; 0] = [];
 
-    let mut s = script();
+    let mut s = vanilla_script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"

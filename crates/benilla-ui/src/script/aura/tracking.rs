@@ -68,7 +68,7 @@ impl crate::script::UiScript {
 mod tests {
     #[test]
     fn trivial_tracking_is_wrath_only_and_can_be_cleared() {
-        let s = crate::script::UiScript::new().unwrap();
+        let s = crate::script::UiScript::new_vanilla().unwrap();
         s.lua()
             .load("assert(GetNumTrackingTypes==nil); assert(GetTrackingInfo==nil); assert(SetTracking==nil)")
             .exec()

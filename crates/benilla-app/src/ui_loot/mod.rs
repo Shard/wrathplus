@@ -1165,7 +1165,7 @@ mod tests {
             .resource_mut::<LootState>()
             .open(0x42, loot_type::CORPSE, gold, rows);
 
-        let mut script = UiScript::new().unwrap();
+        let mut script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 "BIND_CONFIRMS = {}\n\
@@ -1232,7 +1232,7 @@ mod tests {
                 5,
                 Vec::new(),
             );
-            let script = UiScript::new().unwrap();
+            let script = UiScript::new_vanilla().unwrap();
             script
                 .run(r#"CreateFrame("Frame", "LootHost"):CreateTexture("LootTex")"#)
                 .unwrap();
@@ -1277,7 +1277,7 @@ mod tests {
                 vec![item(3, TOUGH_JERKY, 1)],
             );
 
-            let script = UiScript::new().unwrap();
+            let script = UiScript::new_vanilla().unwrap();
             script
                 .run(
                     "OPENS = 0\n\
@@ -1532,7 +1532,7 @@ mod tests {
                 item(7, TOUGH_JERKY, 1),
             ],
         );
-        let script = UiScript::new().unwrap();
+        let script = UiScript::new_vanilla().unwrap();
         script
             .run(
                 "BIND_CONFIRMS = {}\n\
@@ -2226,7 +2226,7 @@ mod tests {
                 })
                 .collect()
         };
-        app.insert_non_send_resource(UiScript::new().unwrap());
+        app.insert_non_send_resource(UiScript::new_vanilla().unwrap());
         let close_loot = |app: &mut App| {
             app.world_mut()
                 .non_send_resource_mut::<UiScript>()

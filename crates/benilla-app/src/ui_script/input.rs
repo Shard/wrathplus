@@ -347,7 +347,7 @@ mod tests {
     use bevy::input::mouse::MouseScrollUnit;
 
     fn wheel_pane() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_screen_size(1024.0, 768.0);
         s.run(
             r#"

@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn the_invoice_answers_seven_values_or_a_three_nil_four_zero_miss() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut st = state();
         st.inbox[0].is_invoice = true;
         st.inbox[0].invoice = Some(MailInvoice {
@@ -1120,7 +1120,7 @@ mod tests {
 
     #[test]
     fn an_invoice_has_no_letter_body() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut st = state();
         st.inbox[0].is_invoice = true;
         st.inbox[0].body = Some("6C:10000:10000:25:500".into());
@@ -1146,7 +1146,7 @@ mod tests {
 
     #[test]
     fn a_buyer_invoice_is_the_literal_token_buyer() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut st = state();
         st.inbox[0].is_invoice = true;
         st.inbox[0].invoice = Some(MailInvoice {
@@ -1168,7 +1168,7 @@ mod tests {
 
     #[test]
     fn inbox_header_reads_the_reference_tuple() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.eval::<i64>("return GetInboxNumItems()").unwrap(), 0);
         assert!(s
             .eval::<bool>("return GetInboxHeaderInfo(1) == nil")
@@ -1213,7 +1213,7 @@ mod tests {
 
     #[test]
     fn get_inbox_text_returns_body_and_queues_open() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_mail(Some(state()));
         let (body, tex, takeable, invoice): (String, String, Value, Value) =
             s.eval("return GetInboxText(1)").unwrap();
@@ -1229,7 +1229,7 @@ mod tests {
 
     #[test]
     fn get_inbox_item_and_can_delete() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_mail(Some(state()));
         let (name, _tex, count, quality, canuse): (String, String, i64, i64, i64) =
             s.eval("return GetInboxItem(1)").unwrap();
@@ -1429,7 +1429,7 @@ mod tests {
     #[test]
     fn clear_send_mail_resets_the_form_and_fires_its_events() {
         use crate::script::cursor::{CursorItem, CursorPayload};
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         select_default_stationery(&mut s);
         s.set_mail_packages(vec![PackageView {
             id: 2,
@@ -1680,7 +1680,7 @@ mod stationery_tests {
             )
             .unwrap());
         // The 1.12 VM has no `select`: count the returns from here.
-        let vanilla = UiScript::new().unwrap();
+        let vanilla = UiScript::new_vanilla().unwrap();
         assert_eq!(
             vanilla
                 .eval::<mlua::MultiValue>("return GetInboxInvoiceInfo(1)")

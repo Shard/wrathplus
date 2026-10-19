@@ -249,7 +249,7 @@ mod tests {
     /// in-game one, not the glue (`0x46cd70`, five).
     #[test]
     fn get_build_info_answers_as_the_1_12_1_client() {
-        let s = UiScript::new().unwrap();
+        let s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<Vec<String>>("return { GetBuildInfo() }").unwrap(),
             vec!["1.12.1", "5875", "Sep 19 2006"]

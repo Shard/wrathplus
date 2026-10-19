@@ -962,7 +962,7 @@ mod tests {
 
     #[test]
     fn entries_and_title_tuple() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert_eq!(
             s.eval::<(i64, i64)>("return GetNumQuestLogEntries()")
                 .unwrap(),
@@ -996,7 +996,7 @@ mod tests {
     /// The shape of `0x4df930`.
     #[test]
     fn out_of_range_is_six_values_with_a_zero_level_and_a_bad_arg_raises() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert_eq!(s.arity("GetQuestLogTitle(1)").unwrap(), 6);
         assert!(
             s.eval::<bool>("local t, l = GetQuestLogTitle(1) return t == nil and l == 0")
@@ -1034,7 +1034,7 @@ mod tests {
 
     #[test]
     fn is_header_and_is_collapsed_are_one_or_nil_never_booleans() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut state = two_quests();
         state.entries.insert(
             0,
@@ -1282,7 +1282,7 @@ mod tests {
 
     #[test]
     fn failed_state_reads() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         let mut state = two_quests();
         state.entries[0].complete = -1;
         s.set_quest_log(state);

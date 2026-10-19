@@ -3,7 +3,7 @@
 //! getters over them read the client's own state, which Lua cannot reach. So a global an addon
 //! assigns under one of benilla's old host names is a global no getter reads.
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 use crate::script::{ActionState, AuraState, UiScript};
 
 /// Each old host name, the Lua that writes it, and a probe of every answer it once fed. The probe
@@ -145,7 +145,7 @@ fn rewinding_the_old_clock_name_leaves_the_session_clock_running() {
 /// nil (`0x48d540`); `GetGameTime` two numbers (`0x515ee0`); `GetTime` one (`0x515ea0`).
 #[test]
 fn the_getters_answer_the_pushed_state_in_their_1_12_shapes() {
-    let mut s = script();
+    let mut s = vanilla_script();
     for call in [
         "GetZoneText()",
         "GetRealZoneText()",

@@ -4,7 +4,7 @@
 use crate::script::UiScript;
 
 fn script_with(rows: &[(&str, &str)]) -> UiScript {
-    let s = UiScript::new().unwrap();
+    let s = UiScript::new_vanilla().unwrap();
     s.register_cvars(rows.iter().copied());
     s
 }

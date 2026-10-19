@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn roll_snapshot_reads() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         assert!(s
             .eval::<bool>("return GetLootRollItemInfo(7) == nil")
             .unwrap());
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn roll_on_loot_queues_votes() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_loot_rolls(rolls());
         // Roll 8 is not bind-on-pickup, so every vote goes straight out.
         s.run("RollOnLoot(8, 1)").unwrap(); // Need
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn need_or_greed_on_a_bop_roll_confirms_instead_of_voting() {
-        let mut s = UiScript::new().unwrap();
+        let mut s = UiScript::new_vanilla().unwrap();
         s.set_loot_rolls(rolls()); // roll 7 is bind_on_pickup
         s.run("RollOnLoot(7, 1)").unwrap(); // Need on BoP
         s.run("RollOnLoot(7, 2)").unwrap(); // Greed on BoP

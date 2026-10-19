@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use super::common::script;
+use super::common::{script, vanilla_script};
 
 /// Globals the engine exposes that 1.12 does not, each with its reason. The list is exact.
 const BEYOND_1_12: &[&str] = &[
@@ -40,7 +40,7 @@ fn reference() -> HashSet<String> {
 
 /// The string keys of a bare VM's `_G`.
 fn engine_globals() -> HashSet<String> {
-    script()
+    vanilla_script()
         .eval::<Vec<String>>(
             "local out = {} \
              for k in pairs(getfenv(0)) do if type(k) == 'string' then table.insert(out, k) end end \
@@ -92,7 +92,7 @@ fn the_exception_list_is_exact() {
 /// does.
 #[test]
 fn the_era_globals_and_the_uncalled_hooks_are_absent() {
-    let s = script();
+    let s = vanilla_script();
     for (name, instead) in [
         (
             "UnitAura",
@@ -952,7 +952,7 @@ fn unit_creature_type_answers_the_snapshots_resolved_type() {
 /// raises the reference's message, with no `Usage:` and no name.
 #[test]
 fn get_inventory_slot_info_folds_case_and_flags_only_the_ranged_slot() {
-    let s = script();
+    let s = vanilla_script();
 
     for name in ["AmmoSlot", "ammoSlot", "AMMOSLOT"] {
         assert_eq!(
@@ -1433,7 +1433,7 @@ fn every_installed_region_method_lands_in_a_leaf() {
     use crate::script::{
         FONTSTRING_ONLY_METHODS, REGION_LEAF_SHARED, REGION_MAP_METHODS, TEXTURE_ONLY_METHODS,
     };
-    let s = crate::script::UiScript::new().unwrap();
+    let s = crate::script::UiScript::new_vanilla().unwrap();
     let full: mlua::Table = s
         .lua()
         .named_registry_value(crate::script::REG_REGION_METHODS_FOR_TEST)
@@ -1607,7 +1607,7 @@ fn the_pfui_hdgraphic_extended_arm_runs() {
 #[test]
 fn the_nameplate_verbs_write_two_runtime_bits_and_no_cvar() {
     use crate::script::{PLATE_BIT_ENEMY as ENEMY, PLATE_BIT_FRIEND as FRIEND};
-    let mut s = script();
+    let mut s = vanilla_script();
 
     s.run("ShowNameplates()").unwrap();
     assert_eq!(s.take_nameplate_bit_writes().apply(0), ENEMY);
