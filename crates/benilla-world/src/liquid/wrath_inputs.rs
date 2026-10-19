@@ -225,8 +225,8 @@ mod tests {
         assert_eq!(ramp[255], 1.);
         assert_eq!(normalized[0], 0.);
         assert_eq!(normalized[255], 1.);
-        for i in 0..256 {
-            assert!((normalized[i] - i as f32 / 255.).abs() < 1e-7);
+        for (i, value) in normalized.iter().enumerate() {
+            assert!((value - i as f32 / 255.).abs() < 1e-7);
         }
         for word in 0..=1 {
             assert_eq!(depth_lut(0, word), depth_lut(2, word));

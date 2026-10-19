@@ -135,6 +135,10 @@ struct Record {
     /// The record's `+0x1110` bit 0, set for a guild charter: it picks `GetPetitionInfo`'s first
     /// return and gates `CanSignPetition`'s guild-member and full-list refusals.
     is_charter: bool,
+    /// An arena-team charter (build 12340, `wrath_petition`'s `flags` bit 1).
+    is_arena: bool,
+    /// The signature cap the packet names, `GetPetitionInfo`'s `maxSignatures`.
+    maximum: i32,
 }
 
 impl crate::query_cache::AskOnce for PetitionState {
@@ -181,6 +185,8 @@ impl PetitionState {
                 body_text: response.body_text,
                 required: response.min_signatures as i32,
                 is_charter: response.flags & 1 != 0,
+                is_arena: response.flags & 2 != 0,
+                maximum: response.max_signatures as i32,
             }),
         );
     }

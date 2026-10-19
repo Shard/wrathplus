@@ -858,12 +858,13 @@ mod tests {
 
     #[test]
     fn wrath_light_records_keep_eight_params() {
-        for (profile, count) in [(
-            DataProfile::Wrath {
-                locale: "frFR".into(),
-            },
-            15usize,
-        )] {
+        {
+            let (profile, count) = (
+                DataProfile::Wrath {
+                    locale: "frFR".into(),
+                },
+                15usize,
+            );
             let fields = (300..300 + count as u32).collect::<Vec<_>>();
             let set = parse(&wdbc(&fields), light_schema(&profile), "synthetic Light").unwrap();
             let row = &set.records()[0];

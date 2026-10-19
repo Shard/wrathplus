@@ -42,6 +42,7 @@ fn tree_for(
     talents?.catalog.pet_tab_name(ty).map(str::to_string)
 }
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_pet_talent_tree(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,

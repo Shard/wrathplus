@@ -55,7 +55,7 @@ impl History {
     /// Modern-format load, stopping at zero or an incomplete triple (`0x766f70`).
     fn decode_modern(bytes: &[u8]) -> Self {
         let mut history = Self::default();
-        for (slot, digits) in history.entries.iter_mut().zip(bytes.chunks_exact(3)) {
+        for (slot, digits) in history.entries.iter_mut().zip(bytes.as_chunks::<3>().0) {
             if digits.contains(&0) {
                 break;
             }

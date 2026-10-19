@@ -163,10 +163,12 @@ mod tests {
             ],
         );
         let glyph_spell = |id: u32, glyph: i32| {
-            let mut d = benilla_formats::SpellDisplay::default();
-            d.name = format!("Glyph {id}");
-            d.effects = [APPLY_GLYPH, 0, 0];
-            d.effect_misc_value = [glyph, 0, 0];
+            let d = benilla_formats::SpellDisplay {
+                name: format!("Glyph {id}"),
+                effects: [APPLY_GLYPH, 0, 0],
+                effect_misc_value: [glyph, 0, 0],
+                ..Default::default()
+            };
             (id, d)
         };
         let spells = SpellCatalog::from_displays(

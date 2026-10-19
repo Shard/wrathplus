@@ -155,7 +155,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
             let spell_id = u32_le(&mut r)?;
             // No count: the failed auras run to the end of the body.
             let left = body.len() - r.position() as usize;
-            if left % 4 != 0 {
+            if !left.is_multiple_of(4) {
                 return Err(invalid("dispel-failed list is not whole words"));
             }
             let spell_ids = (0..left / 4)

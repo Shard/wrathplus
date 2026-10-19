@@ -28,12 +28,18 @@ fn receive(
     match event {
         // A letter's text goes to the reader's cache, not the FIFO.
         SessionEvent::WrathInventory {
-            packet: Packet::ItemText { text, .. },
-        } => match text {
-            Some((item_guid, text)) => letters.insert(item_guid, Some(text)),
-            // AC's "no text" carries no GUID: nothing to answer, and the ask stays pending.
-            None => {}
-        },
+            packet:
+                Packet::ItemText {
+                    text: Some((item_guid, text)),
+                    ..
+                },
+        } => {
+            letters.insert(item_guid, Some(text));
+        }
+        // A reply with no text is dropped, never queued.
+        SessionEvent::WrathInventory {
+            packet: Packet::ItemText { text: None, .. },
+        } => {}
         SessionEvent::WrathInventory { packet } => packets.0.push_back(packet),
         _ => {}
     }

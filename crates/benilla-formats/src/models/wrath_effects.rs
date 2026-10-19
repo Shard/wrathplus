@@ -453,7 +453,7 @@ mod tests {
             sequences: vec![vec![key(0, 0u8), key(300, 1)]],
         };
         assert!(moves(&lightning));
-        let v = seq_track(&[], &lightning, 1.0, 1.0, |b| f32::from(b));
+        let v = seq_track(&[], &lightning, 1.0, 1.0, f32::from);
         assert_eq!(v.sample(at(0, 100.0, 0.0)), 0.0);
         assert_eq!(v.sample(at(0, 150.0, 0.0)), 0.0, "interp 0 steps");
         assert_eq!(v.sample(at(0, 300.0, 0.0)), 1.0);

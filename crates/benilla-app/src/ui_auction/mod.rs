@@ -1361,11 +1361,13 @@ mod tests {
         assert_eq!(m.take_stack(), Some(vec![(3, 12), (2, 3)]));
         assert_eq!(m.take_stack(), Some(vec![(2, 2), (1, 13)]));
         assert_eq!(m.take_stack(), None, "7 left of 15");
-        let mut open = AuctionOpen::default();
-        open.multisell = Some(MultiSell {
-            remaining: 1,
-            ..m.clone()
-        });
+        let mut open = AuctionOpen {
+            multisell: Some(MultiSell {
+                remaining: 1,
+                ..m.clone()
+            }),
+            ..Default::default()
+        };
         open.multisell_stack_landed();
         assert_eq!(
             open.multisell_events,

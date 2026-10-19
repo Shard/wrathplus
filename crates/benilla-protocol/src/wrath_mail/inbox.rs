@@ -70,7 +70,7 @@ pub fn decode_inbox(body: &[u8]) -> io::Result<Inbox> {
         let kind = u8_le(&mut row)?;
         let sender = match kind {
             0 => u64_le(&mut row)?,
-            2 | 3 | 4 | 5 => u64::from(u32_le(&mut row)?),
+            2..=5 => u64::from(u32_le(&mut row)?),
             _ => return Err(invalid()),
         };
         let cod = u32_le(&mut row)?;

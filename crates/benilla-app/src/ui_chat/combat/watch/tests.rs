@@ -161,20 +161,20 @@ mod packet_aura_tests {
         use PacketAuraChange::*;
         let a = aura(200, 42, 1);
         assert_eq!(
-            packet_aura_changes(&[], &[a.clone()]),
+            packet_aura_changes(&[], std::slice::from_ref(&a)),
             vec![Added(42, true)]
         );
         let mut stacked = a.clone();
         stacked.stacks = 3;
         assert_eq!(
-            packet_aura_changes(&[a.clone()], &[stacked.clone()]),
+            packet_aura_changes(std::slice::from_ref(&a), &[stacked.clone()]),
             vec![Stacked(42, true, 3)]
         );
-        assert!(packet_aura_changes(&[stacked], &[a.clone()]).is_empty());
+        assert!(packet_aura_changes(&[stacked], std::slice::from_ref(&a)).is_empty());
         let mut replacement = aura(200, 99, 4);
         replacement.flags = 0x80;
         assert_eq!(
-            packet_aura_changes(&[a.clone()], &[replacement]),
+            packet_aura_changes(std::slice::from_ref(&a), &[replacement]),
             vec![Added(99, false), Removed(42)]
         );
         assert_eq!(packet_aura_changes(&[a], &[]), vec![Removed(42)]);

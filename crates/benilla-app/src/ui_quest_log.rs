@@ -497,6 +497,7 @@ fn order_groups(rows: &[GroupRow]) -> Vec<(i32, String, Vec<usize>)> {
 
 /// Reads the player's `PLAYER_QUEST_LOG` slots each frame and pushes a [`QuestLogState`] on a
 /// change; also refreshes `row_slots` for the abandon drain.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(crate) fn feed_quest_log(
     script: Option<NonSendMut<UiScript>>,
     self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
@@ -725,7 +726,6 @@ pub(crate) fn feed_quest_log(
                 timer: r.log_slot.timer,
                 objectives,
                 detail,
-                ..Default::default()
             });
             header_keys.push(None);
         }
@@ -837,6 +837,7 @@ pub(crate) fn feed_quest_log(
 /// its first copy in the backpack or the four bags, which `GetQuestLogSpecialItemInfo`,
 /// `UseQuestLogSpecialItem` and their kin read. Labelled inferred: the reference picks the item in
 /// `0x5e0da0`, not traced; this takes the template's `SrcItemId`.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_quest_special_items(
     script: Option<NonSendMut<UiScript>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,

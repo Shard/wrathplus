@@ -90,6 +90,7 @@ pub(super) fn apply_vehicle_aim(
     }
 }
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(super) fn apply_server_moves(
     time: &Time,
     commands: &mut Commands,

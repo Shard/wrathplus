@@ -222,7 +222,7 @@ mod tests {
                 .unwrap(),
             0
         );
-        let mut vanilla = UiScript::new().unwrap();
+        let vanilla = UiScript::new().unwrap();
         vanilla.run("function count(...) return arg.n end").unwrap();
         assert_eq!(
             vanilla

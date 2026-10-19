@@ -299,6 +299,26 @@ fn row_at(model: &Model, kind: &str, index: usize) -> Option<AuctionItemRow> {
 
 /// The sell slot's `(name, texture, count, quality, canUse, stackValue)`, `stackValue` being the
 /// vendor price times the stack: the base of the suggested opening price and the deposit.
+/// Build 12340's three extra sell-slot values: the per-unit vendor price, the template's stack
+/// size and how many of the item the bags hold (`Blizzard_AuctionUI.lua:1459`).
+fn sell_item_extras(model: &Model) -> (u32, u32, u32) {
+    let Some(it) = model.auction_sell_item.as_ref() else {
+        return (0, 0, 0);
+    };
+    let template = model.item_templates.get(&it.item_id);
+    let carried: u32 = (0..=4)
+        .filter_map(|bag| model.containers.get(&bag))
+        .flat_map(|c| c.slots.values())
+        .filter(|s| s.item_id == it.item_id)
+        .map(|s| s.count)
+        .sum();
+    (
+        template.map_or(0, |t| t.sell_price),
+        template.map_or(0, |t| t.stackable),
+        carried.max(cursor::held_count(model, it)),
+    )
+}
+
 fn sell_item_info(model: &Model) -> Option<(String, Option<String>, u32, i64, bool, u32)> {
     let it = model.auction_sell_item.as_ref()?;
     // The real stack size, not the split-carry field: the deposit is per stack.
@@ -352,18 +372,28 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetAuctionItemInfo(type, index) → twelve values; `highBidder` is a name, `1` or nil.
+    // GetAuctionItemInfo(type, index) → twelve values; `highBidder` is a name, `1` or nil. Build
+    // 12340 adds `saleStatus` (Blizzard_AuctionUI.lua:1205), 1 for a sold auction awaiting its
+    // payment. Labelled: always 0 here, as AzerothCore never lists a sold auction (it removes it
+    // and mails the seller, `AuctionHouseMgr::SendAuctionSalePendingMail`); the 12340 read is
+    // untraced.
     g.set(
         "GetAuctionItemInfo",
         lua.create_function(|lua, (kind, index): (String, usize)| {
-            let row = {
+            let (row, wrath) = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                row_at(&model, &kind, index)
+                (row_at(&model, &kind, index), model.dialect == super::ScriptDialect::Wrath12340)
+            };
+            let sale_status = |mut v: Vec<Value>| {
+                if wrath {
+                    v.push(Value::Integer(0));
+                }
+                MultiValue::from_vec(v)
             };
             let Some(r) = row else {
                 // A miss (unknown type, out of range, not cached) still answers twelve values, with
                 // `count = 1` and `quality = -1` (one shared exit, `0x4cf1ec`), read unguarded.
-                return Ok(MultiValue::from_vec(vec![
+                return Ok(sale_status(vec![
                     Value::Nil,         // name
                     Value::Nil,         // texture
                     Value::Integer(1),  // count
@@ -389,7 +419,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     None => Value::Nil,
                 })
             };
-            Ok(MultiValue::from_vec(vec![
+            Ok(sale_status(vec![
                 opt_str(&r.name)?,
                 opt_str(&r.texture)?,
                 Value::Integer(i64::from(r.count)),
@@ -744,15 +774,30 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     // GetAuctionSellItemInfo() → name, texture, count, quality, canUse, price: six values always.
     // An empty slot answers count 1 and quality -1: the stock Lua reads `count > 1` unguarded.
+    // Build 12340 adds `pricePerUnit, stackCount, totalCount`; an empty slot's `totalCount` is 0
+    // (`Blizzard_AuctionUI.lua:1483`). Labelled: `totalCount` counts the backpack and bags, the
+    // reference's walk untraced.
     g.set(
         "GetAuctionSellItemInfo",
         lua.create_function(|lua, ()| {
-            let info = {
+            let (info, extras) = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                sell_item_info(&model)
+                let extras = (model.dialect == super::ScriptDialect::Wrath12340)
+                    .then(|| sell_item_extras(&model));
+                (sell_item_info(&model), extras)
+            };
+            let with_extras = |mut v: Vec<Value>| {
+                if let Some((per_unit, stack, total)) = extras {
+                    v.extend([
+                        Value::Integer(i64::from(per_unit)),
+                        Value::Integer(i64::from(stack)),
+                        Value::Integer(i64::from(total)),
+                    ]);
+                }
+                MultiValue::from_vec(v)
             };
             let Some((name, texture, count, quality, can_use, price)) = info else {
-                return Ok(MultiValue::from_vec(vec![
+                return Ok(with_extras(vec![
                     Value::Nil,
                     Value::Nil,
                     Value::Integer(1),
@@ -761,7 +806,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     Value::Integer(0),
                 ]));
             };
-            Ok(MultiValue::from_vec(vec![
+            Ok(with_extras(vec![
                 if name.is_empty() {
                     Value::Nil
                 } else {
@@ -1394,5 +1439,26 @@ mod tests {
         assert_eq!(wrath_deposit(5, 10_000, 720), 1500);
         assert_eq!(wrath_deposit(5, 10, 720), 100, "at least 100");
         assert_eq!(wrath_deposit(5, 10_000, 30), 100, "off the table");
+    }
+
+    /// Build 12340's widths: `saleStatus` thirteenth, and the sell slot's three extras.
+    #[test]
+    fn wrath_answers_thirteen_auction_and_nine_sell_values() {
+        let wrath =
+            crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340)
+                .unwrap();
+        assert!(wrath
+            .eval::<bool>(
+                "return select('#', GetAuctionItemInfo('owner', 1)) == 13 \
+                 and select(13, GetAuctionItemInfo('owner', 1)) == 0 \
+                 and select('#', GetAuctionSellItemInfo()) == 9 \
+                 and select(9, GetAuctionSellItemInfo()) == 0"
+            )
+            .unwrap());
+        // The 1.12 VM has no `select`: count the returns from here.
+        let vanilla = crate::script::UiScript::new().unwrap();
+        let width = |chunk: &str| vanilla.eval::<mlua::MultiValue>(chunk).unwrap().len();
+        assert_eq!(width("return GetAuctionItemInfo('owner', 1)"), 12);
+        assert_eq!(width("return GetAuctionSellItemInfo()"), 6);
     }
 }

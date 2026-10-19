@@ -907,7 +907,8 @@ fn every_wrath_writer_route_is_admitted() {
     // Deliberate exclusion: legacy un-tokened WorldportAck has no native route.
     // NativeWorldportAck above is admitted, while the writer still requires a matching
     // live transfer capability/epoch.
-    for command in [ClientCommand::WorldportAck] {
+    {
+        let command = ClientCommand::WorldportAck;
         assert!(!has_writer_route(&command));
         assert!(!commands.supports(crate::net::SessionDialect::Wrath12340, &command));
     }

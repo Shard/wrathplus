@@ -1,5 +1,6 @@
 //! Native mailbox snapshot: inline text and attachment slots are never narrowed to Vanilla mail.
 use super::*;
+use benilla_protocol::messages::mail_message_type;
 use benilla_ui::script::{WrathMailAttachment, WrathMailInbox, WrathMailRow};
 
 pub(super) fn snapshot(
@@ -10,6 +11,8 @@ pub(super) fn snapshot(
     commands: &NetCommands,
     rolls: crate::items::RollCatalogs,
     player_level: Option<u32>,
+    // The VM's `GlobalStrings.lua`, for the auction notices' `AUCTION_*_MAIL_SUBJECT`.
+    get_text: &dyn Fn(&str) -> Option<String>,
 ) -> Option<WrathMailInbox> {
     mail.mailbox?;
     let inbox = mail.wrath_inbox.as_ref()?;
@@ -42,6 +45,14 @@ pub(super) fn snapshot(
                     })
                     .collect();
                 let returned = row.checked & CHECKED_RETURNED != 0;
+                // An auction notice: its subject through `AUCTION_*_MAIL_SUBJECT`, and the won,
+                // sold and sale-pending ones' invoice from the inline body.
+                let auction = (row.kind == mail_message_type::AUCTION)
+                    .then(|| invoice::parse_subject(&row.subject))
+                    .flatten();
+                let notice_item_name = auction
+                    .and_then(|a| items.template(a.entry, 0, commands))
+                    .map(|t| t.name.clone());
                 let header = MailInboxRow {
                     package_icon: attachments.first().and_then(|a| a.texture.clone()),
                     stationery_icon: Some(
@@ -55,7 +66,12 @@ pub(super) fn snapshot(
                     sender: (row.kind == 0)
                         .then(|| names.resolve(row.sender, commands).map(str::to_owned))
                         .flatten(),
-                    subject: row.subject.clone(),
+                    subject: auction_subject(
+                        &row.subject,
+                        auction,
+                        notice_item_name.as_ref(),
+                        get_text,
+                    ),
                     money: row.money,
                     cod: row.cod,
                     days_left: row.expire_days,
@@ -69,6 +85,14 @@ pub(super) fn snapshot(
                     has_body: !row.body.is_empty(),
                     stationery_texture: benilla_formats::StationeryCatalog::DEFAULT_TEXTURE.into(),
                     can_delete: row.money == 0 && attachments.is_empty(),
+                    is_invoice: auction.is_some_and(|a| is_invoice_result(a.result)),
+                    invoice: auction_invoice(
+                        auction,
+                        Some(&row.body),
+                        notice_item_name,
+                        names,
+                        commands,
+                    ),
                     ..Default::default()
                 };
                 WrathMailRow {
@@ -125,8 +149,10 @@ mod tests {
         let commands = NetCommands(tx);
         let names = NameCache::default();
         let mut items = Items::default();
-        let mut mail = MailOpen::default();
-        mail.mailbox = Some(42);
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
         let mut enchants = [[0; 3]; 7];
         for (i, row) in enchants.iter_mut().enumerate() {
             *row = [100 + i as u32, 200 + i as u32, 300 + i as u32];
@@ -172,6 +198,7 @@ mod tests {
                 &commands,
                 crate::items::RollCatalogs::NONE,
                 level,
+                &|_| None,
             )
         };
         assert!(
@@ -228,8 +255,10 @@ mod tests {
         use benilla_protocol::wrath_mail::{Attachment, Inbox, Mail};
         let (tx, _rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
-        let mut mail = MailOpen::default();
-        mail.mailbox = Some(42);
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
         mail.wrath_inbox = Some(Inbox {
             total_count: 70,
             mails: vec![Mail {
@@ -270,6 +299,7 @@ mod tests {
             &commands,
             crate::items::RollCatalogs::NONE,
             Some(80),
+            &|_| None,
         )
         .unwrap();
         assert_eq!(view.total_count, 70);
@@ -289,6 +319,7 @@ mod tests {
             &commands,
             crate::items::RollCatalogs::NONE,
             Some(80),
+            &|_| None,
         )
         .is_none());
     }
@@ -505,5 +536,66 @@ mod action_tests {
             }))
         ));
         assert!(mark_read(&mut inbox, 7, 1).is_none());
+    }
+
+    /// An AzerothCore sale-pending notice: the subject through its key, and the invoice with the
+    /// delay and the ETA.
+    #[test]
+    fn a_sale_pending_notice_has_its_subject_and_a_pending_invoice() {
+        use benilla_protocol::wrath_mail::{Inbox, Mail};
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let commands = NetCommands(tx);
+        let mut items = Items::default();
+        items.insert_template(2589, Some(crate::items::test_template("Linen Cloth")));
+        let mut names = NameCache::default();
+        names.insert_player(0x2a, "Buyer".into(), None);
+        let eta = (14 << 6) | 35;
+        let mut mail = MailOpen {
+            mailbox: Some(42),
+            ..Default::default()
+        };
+        mail.wrath_inbox = Some(Inbox {
+            total_count: 1,
+            mails: vec![Mail {
+                id: 10,
+                kind: mail_message_type::AUCTION,
+                sender: 917,
+                cod: 0,
+                unknown: 0,
+                stationery: 62,
+                money: 0,
+                checked: 0,
+                expire_days: 30.0,
+                template_id: 0,
+                subject: "2589:0:6:917:20".into(),
+                body: format!("              2a:9000:10000:25:450:3600:{eta}"),
+                attachments: Vec::new(),
+            }],
+        });
+        let text = |key: &str| (key == "AUCTION_INVOICE_MAIL_SUBJECT").then(|| "Sale Pending: %s".into());
+        let view = snapshot(
+            &mail,
+            &items,
+            None,
+            &names,
+            &commands,
+            crate::items::RollCatalogs::NONE,
+            Some(80),
+            &text,
+        )
+        .unwrap();
+        let header = &view.rows[0].header;
+        assert_eq!(header.subject, "Sale Pending: Linen Cloth");
+        assert!(header.is_invoice);
+        let invoice = header.invoice.as_ref().expect("an invoice");
+        assert!(invoice.seller && invoice.pending);
+        assert_eq!(
+            (invoice.player_name.as_str(), invoice.bid, invoice.consignment),
+            ("Buyer", 9000, 450)
+        );
+        assert_eq!(
+            (invoice.money_delay, invoice.eta_hour, invoice.eta_min),
+            (3600, 14, 35)
+        );
     }
 }

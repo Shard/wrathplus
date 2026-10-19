@@ -25,6 +25,7 @@ pub(super) fn register(app: &mut App) {
         .net_handler(SessionEventKind::Disconnected, clear)
         .net_handler(SessionEventKind::Connected, connected);
 }
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn receive(
     In(event): In<SessionEvent>,
     mut receipts: ResMut<NativeFailures>,

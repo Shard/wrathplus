@@ -1268,8 +1268,10 @@ mod tests {
 
     #[test]
     fn the_texture_index_reads_the_world_state_icon_and_blanks_zone_rows() {
-        let mut links = AreaPoiLinks::default();
-        links.icons = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+        let links = AreaPoiLinks {
+            icons: [10, 11, 12, 13, 14, 15, 16, 17, 18],
+            ..Default::default()
+        };
         let mut states = WorldStates::default();
         let town = poi(0x0d, 0, 0);
         let tower = poi(0x87, 0, 2372);

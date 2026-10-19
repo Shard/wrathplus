@@ -6,7 +6,8 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
 use super::{LootLatch, LootState};
-use crate::net::{NetHandlerApp, SelfGuid};
+use crate::net::{ClientCommand, NetHandlerApp, SelfGuid};
+use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_action::{UiError, UiErrorKeys};
 
 pub(super) fn register(app: &mut App) {
@@ -26,13 +27,35 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::Disconnected, on_session_end);
 }
 
-/// The `loot_type`s a cold latch admits: pickpocketing, fishing and disenchanting, which the
-/// server starts.
-const SERVER_STARTED_LOOT: [u8; 3] = [2, 3, 4];
+/// The `loot_type`s a cold latch admits (`0x6d53b0`): pickpocketing, fishing, disenchanting,
+/// skinning, prospecting and milling, which the server starts.
+const SERVER_STARTED_LOOT: [u8; 6] = [2, 3, 4, 6, 7, 8];
+
+/// AzerothCore's `LOOT_ERROR_ALREADY_PICKPOCKETED`, the one error a refused response still shows.
+const ALREADY_PICKPOCKETED: u8 = 15;
+
+/// `UnlockItem 0x513770` on a loot guid: only an item we locked at its `CMSG_OPEN_ITEM` send
+/// (`0x6dcd70` → `LockItem 0x513740`) unlocks, and its slot queues for `ITEM_LOCK_CHANGED`.
+#[derive(bevy::ecs::system::SystemParam)]
+struct ItemUnlock<'w> {
+    pending: ResMut<'w, PendingItemOps>,
+    lock_cleared: ResMut<'w, LockTransitions>,
+}
+
+impl ItemUnlock<'_> {
+    fn unlock(&mut self, guid: u64) {
+        let slots = self.pending.clear_by_guid(guid);
+        self.lock_cleared.0.extend(slots);
+    }
+}
 
 /// An admitted response selects a looted unit (`0x5ebc35` → `0x48f3a0`) before the window opens
 /// (`0x4c1cb0`), so the outgoing target's teardown closes a window still open on it.
-fn on_response(In(ev): In<SessionEvent>, mut select: crate::target::SelectCommit) {
+fn on_response(
+    In(ev): In<SessionEvent>,
+    mut select: crate::target::SelectCommit,
+    mut unlock: ItemUnlock,
+) {
     let SessionEvent::LootResponse {
         guid,
         loot_type,
@@ -42,14 +65,21 @@ fn on_response(In(ev): In<SessionEvent>, mut select: crate::target::SelectCommit
     else {
         return;
     };
-    // Our own request, else one the latch armed (a use or an opened item) or a server-started
-    // type. Labelled: the admission is 1.12's (`0x5eb924`); build 12340's handler is not decompiled.
-    let latched = select.seam.loot_latch.0 == Some(guid);
+    // `0x6d53b0`: the latch names the packet's guid, or it is cold and the server started the
+    // loot. Our own unanswered `CMSG_LOOT` stands in for the latch the reference arms at its send.
+    let latch = select.seam.loot_latch.0;
     let wrath = &mut select.seam.loot.wrath;
-    if !wrath.admit_response(guid)
-        && !((latched || SERVER_STARTED_LOOT.contains(&loot_type)) && wrath.adopt_response(guid))
-    {
-        debug!("net: loot response {guid:#x} type {loot_type} refused");
+    let admitted = wrath.admit_response(guid)
+        || ((latch == Some(guid) || (latch.is_none() && SERVER_STARTED_LOOT.contains(&loot_type)))
+            && wrath.adopt_response(guid));
+    if !admitted {
+        // The refusal: a `CMSG_LOOT_RELEASE` for the packet's guid, then the latch zeroed whatever
+        // it held and `UnlockItem` on the guid.
+        debug!("net: loot response {guid:#x} type {loot_type} refused (latch {latch:?})");
+        let _ = select.seam.net.0.send(ClientCommand::LootRelease { guid });
+        select.seam.loot_latch.0 = None;
+        select.seam.loot.wrath.drop_request();
+        unlock.unlock(guid);
         return;
     }
     select.seam.loot_latch.0 = Some(guid);
@@ -61,11 +91,77 @@ fn on_response(In(ev): In<SessionEvent>, mut select: crate::target::SelectCommit
     select.seam.loot.open(guid, loot_type, gold, items);
 }
 
-fn on_error(In(ev): In<SessionEvent>, mut latch: ResMut<LootLatch>, mut loot: ResMut<LootState>) {
-    if let SessionEvent::LootError { guid, .. } = ev {
-        if loot.wrath.admit_error(guid) {
-            latch.clear_for(guid);
-        }
+fn on_error(
+    In(ev): In<SessionEvent>,
+    mut errors: ResMut<UiErrorKeys>,
+    mut latch: ResMut<LootLatch>,
+    mut loot: ResMut<LootState>,
+    mut unlock: ItemUnlock,
+) {
+    if let SessionEvent::LootError { guid, error } = ev {
+        loot_error(guid, error, &mut errors, &mut latch, &mut loot, &mut unlock);
+    }
+}
+
+/// One arm of `0x6d53b0`'s error switch: the message it hands `DisplayError 0x5216f0`, and whether
+/// it falls into the release tail (the latch zeroed and `UnlockItem 0x513770` on the guid).
+struct LootRefusal {
+    key: &'static str,
+    releases: bool,
+}
+
+/// Build 12340's error table, by AzerothCore's `LootError`. The arms that answer an open window
+/// (the master-loot three, a missing player, shapeshift) only show their message. Every other code
+/// takes the default, `ERR_LOOT_DIDNT_KILL`, `ALREADY_PICKPOCKETED` (15) included.
+fn loot_refusal(error: u8) -> LootRefusal {
+    let (key, releases) = match error {
+        4 => ("ERR_LOOT_TOO_FAR", true),              // 0x8b
+        5 => ("ERR_LOOT_BAD_FACING", true),           // 0x8d
+        6 => ("ERR_LOOT_LOCKED", true),               // 0x8a
+        8 => ("ERR_LOOT_NOTSTANDING", true),          // 0x8e
+        9 => ("ERR_LOOT_STUNNED", true),              // 0x8f
+        10 => ("ERR_LOOT_PLAYER_NOT_FOUND", false),   // 0x1bc
+        11 => ("ERR_PLAY_TIME_EXCEEDED", true),       // 0x1e9
+        12 => ("ERR_LOOT_MASTER_INV_FULL", false),    // 0x1fc
+        13 => ("ERR_LOOT_MASTER_UNIQUE_ITEM", false), // 0x1fd
+        14 => ("ERR_LOOT_MASTER_OTHER", false),       // 0x1fe
+        16 => ("ERR_NOT_WHILE_SHAPESHIFTED", false),  // 0x1c1
+        _ => ("ERR_LOOT_DIDNT_KILL", true),           // 0x8c
+    };
+    LootRefusal { key, releases }
+}
+
+/// `SMSG_LOOT_RESPONSE`'s error shape (`loot_type` 0), behind the same admission as a window: the
+/// latch names the guid, or our own request does. An admitted error shows its arm's message; a
+/// refused one shows only `ERR_ALREADY_PICKPOCKETED` (`0x255`), since a pickpocket's error meets a
+/// cold latch. Both take the release tail, except the arms that answer an open window, so a
+/// lockbox opened with `CMSG_OPEN_ITEM` unlocks on its error.
+fn loot_error(
+    guid: u64,
+    error: u8,
+    errors: &mut UiErrorKeys,
+    latch: &mut LootLatch,
+    loot: &mut LootState,
+    unlock: &mut ItemUnlock,
+) {
+    let admitted = latch.0 == Some(guid) || loot.wrath.is_requesting(guid);
+    let (key, releases) = if admitted {
+        let LootRefusal { key, releases } = loot_refusal(error);
+        (Some(key), releases)
+    } else {
+        (
+            (error == ALREADY_PICKPOCKETED).then_some("ERR_ALREADY_PICKPOCKETED"),
+            true,
+        )
+    };
+    debug!("net: loot error {error} on {guid:#x} (admitted {admitted}) → {key:?}");
+    if let Some(key) = key {
+        errors.0.push(UiError::key(key));
+    }
+    if releases {
+        latch.0 = None;
+        loot.wrath.drop_request();
+        unlock.unlock(guid);
     }
 }
 
@@ -101,12 +197,17 @@ fn on_release_response(
     mut loot: ResMut<LootState>,
     mut latch: ResMut<LootLatch>,
     mut dead: super::DeadUnitDeselect,
+    mut unlock: ItemUnlock,
 ) {
     if let SessionEvent::LootReleaseResponse { guid } = ev {
         if !loot.wrath.acknowledge_release(guid) {
             return;
         }
         latch.clear_for(guid);
+        // `0x6d59e0` → `CloseLoot 0x523640(0, 0, 0)`, which unlocks an item source (`0x5236fc`).
+        // The reference's own close unlocks at the close; ours waits for this acknowledgement,
+        // which every close we send is owed.
+        unlock.unlock(guid);
         let closed = (loot.source() == Some(guid))
             .then(|| super::close_interaction(&mut loot, &mut latch, None))
             .flatten();
@@ -347,11 +448,191 @@ mod tests {
                 SessionEvent::LootReleaseResponse { guid: CORPSE },
             )
             .expect("the handler runs as a one-shot system");
-        assert!(world
-            .resource_mut::<bevy::ecs::message::Messages<crate::target::DeselectGuid>>()
-            .drain()
-            .next()
-            .is_none());
+        assert!(
+            world
+                .resource_mut::<bevy::ecs::message::Messages<crate::target::DeselectGuid>>()
+                .drain()
+                .next()
+                .is_none()
+        );
+    }
+
+    /// Runs [`on_error`] for `guid` with `error` in `world`.
+    fn error(world: &mut World, guid: u64, error: u8) {
+        world
+            .run_system_once_with(on_error, SessionEvent::LootError { guid, error })
+            .expect("the handler runs as a one-shot system");
+    }
+
+    fn take_errors(world: &mut World) -> Vec<UiError> {
+        std::mem::take(&mut world.resource_mut::<UiErrorKeys>().0)
+    }
+
+    fn take_unlocks(world: &mut World) -> Vec<(i64, u32)> {
+        std::mem::take(&mut world.resource_mut::<LockTransitions>().0)
+    }
+
+    /// Build 12340's table (`0x6d53b0`, ids `0x8a`-`0x8f`, `0x1bc`, `0x1c1`, `0x1e9`, `0x1fc`-`0x1fe`,
+    /// `0x255`) names catalogued messages, and only the open-window arms skip the release tail.
+    #[test]
+    fn every_error_arm_names_a_catalogued_message() {
+        for error in 0..=u8::MAX {
+            let LootRefusal { key, releases } = loot_refusal(error);
+            assert!(
+                benilla_ui::messages::by_key(key).is_some(),
+                "{error}: {key}"
+            );
+            assert_eq!(
+                !releases,
+                matches!(error, 10 | 12 | 13 | 14 | 16),
+                "{error}"
+            );
+        }
+        assert_eq!(
+            loot_refusal(ALREADY_PICKPOCKETED).key,
+            "ERR_LOOT_DIDNT_KILL"
+        );
+        assert!(benilla_ui::messages::by_key("ERR_ALREADY_PICKPOCKETED").is_some());
+    }
+
+    /// The lockbox gap: an error for the item `CMSG_OPEN_ITEM` latched shows its message, drops the
+    /// latch and unlocks the item's slot (`UnlockItem 0x513770`).
+    #[test]
+    fn a_lockbox_error_shows_its_message_and_unlocks_the_item() {
+        let mut world = opened_lockbox_world();
+        error(&mut world, LOCKBOX, 6);
+        assert_eq!(take_errors(&mut world), [UiError::key("ERR_LOOT_LOCKED")]);
+        assert_eq!(world.resource::<LootLatch>().0, None);
+        assert_eq!(take_unlocks(&mut world), [(0, 3)]);
+        assert!(world.resource::<PendingItemOps>().is_empty());
+    }
+
+    /// The open-window arms (master loot, a missing player, shapeshift) only show their message.
+    #[test]
+    fn an_open_window_error_keeps_the_latch_and_the_lock() {
+        for (code, key) in [
+            (10, "ERR_LOOT_PLAYER_NOT_FOUND"),
+            (12, "ERR_LOOT_MASTER_INV_FULL"),
+            (16, "ERR_NOT_WHILE_SHAPESHIFTED"),
+        ] {
+            let mut world = opened_lockbox_world();
+            error(&mut world, LOCKBOX, code);
+            assert_eq!(take_errors(&mut world), [UiError::key(key)]);
+            assert_eq!(world.resource::<LootLatch>().0, Some(LOCKBOX));
+            assert!(take_unlocks(&mut world).is_empty());
+        }
+    }
+
+    /// A refused error (the latch names another guid, or none) still takes the release tail, and
+    /// shows only `ERR_ALREADY_PICKPOCKETED`.
+    #[test]
+    fn a_refused_error_shows_only_the_pickpocket_message() {
+        let mut world = opened_lockbox_world();
+        world.resource_mut::<LootLatch>().0 = None;
+        error(&mut world, KOBOLD, ALREADY_PICKPOCKETED);
+        assert_eq!(
+            take_errors(&mut world),
+            [UiError::key("ERR_ALREADY_PICKPOCKETED")]
+        );
+        world.resource_mut::<LootLatch>().0 = Some(LOCKBOX);
+        error(&mut world, KOBOLD, 4);
+        assert!(take_errors(&mut world).is_empty());
+        assert_eq!(
+            world.resource::<LootLatch>().0,
+            None,
+            "zeroed whatever it held"
+        );
+        assert!(take_unlocks(&mut world).is_empty(), "the kobold is no item");
+    }
+
+    /// Our own `CMSG_LOOT` stands in for the latch: its error shows, and the request is dropped,
+    /// so the next loot can start.
+    #[test]
+    fn an_error_for_our_own_request_shows_and_ends_it() {
+        let (mut world, rx) = tabbed_world();
+        world.init_resource::<UiErrorKeys>();
+        let begin = |world: &mut World| {
+            world.resource_scope(|world, mut loot: Mut<LootState>| {
+                world.resource_scope(|world, mut latch: Mut<LootLatch>| {
+                    super::super::wrath::begin_wrath_corpse_loot(
+                        &mut loot,
+                        &mut latch,
+                        world.resource::<NetCommands>(),
+                        CORPSE,
+                    )
+                })
+            })
+        };
+        assert!(begin(&mut world));
+        error(&mut world, CORPSE, 4);
+        assert_eq!(take_errors(&mut world), [UiError::key("ERR_LOOT_TOO_FAR")]);
+        assert!(begin(&mut world), "the request ended with its error");
+        assert_eq!(rx.try_iter().count(), 2);
+    }
+
+    /// `0x6d59e0` → `CloseLoot 0x523640`: the release of an opened item's window unlocks it.
+    #[test]
+    fn a_release_for_the_opened_item_unlocks_its_slot() {
+        let mut world = opened_lockbox_world();
+        let (net, _rx) = net();
+        world.insert_resource(net);
+        world
+            .resource_mut::<LootState>()
+            .open(LOCKBOX, 1, 0, Vec::new());
+        world
+            .run_system_once_with(
+                on_release_response,
+                SessionEvent::LootReleaseResponse { guid: LOCKBOX },
+            )
+            .expect("the handler runs as a one-shot system");
+        assert_eq!(world.resource::<LootState>().source(), None);
+        assert_eq!(take_unlocks(&mut world), [(0, 3)]);
+    }
+
+    /// The refusal releases the packet's guid and unlocks it; a cold latch admits every
+    /// server-started type, skinning to milling included, but not while our request is unanswered.
+    #[test]
+    fn the_admission_refuses_with_a_release_and_admits_server_started_types() {
+        let (mut world, rx) = tabbed_world();
+        world
+            .resource_mut::<PendingItemOps>()
+            .add([(0, 3, LOCKBOX, 1)]);
+        respond(&mut world, LOCKBOX, 1);
+        assert_eq!(world.resource::<LootState>().source(), None);
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>()[..],
+            [ClientCommand::LootRelease { guid }] if guid == LOCKBOX
+        ));
+        assert_eq!(take_unlocks(&mut world), [(0, 3)]);
+
+        for loot_type in SERVER_STARTED_LOOT {
+            let (mut world, _rx) = tabbed_world();
+            respond(&mut world, CORPSE, loot_type);
+            assert_eq!(
+                world.resource::<LootState>().source(),
+                Some(CORPSE),
+                "{loot_type}"
+            );
+            assert_eq!(world.resource::<LootLatch>().0, Some(CORPSE));
+        }
+
+        let (mut world, rx) = tabbed_world();
+        world.resource_scope(|world, mut loot: Mut<LootState>| {
+            world.resource_scope(|world, mut latch: Mut<LootLatch>| {
+                super::super::wrath::begin_wrath_corpse_loot(
+                    &mut loot,
+                    &mut latch,
+                    world.resource::<NetCommands>(),
+                    KOBOLD,
+                )
+            })
+        });
+        respond(&mut world, CORPSE, 6);
+        assert_eq!(world.resource::<LootState>().source(), None);
+        assert!(matches!(
+            rx.try_iter().collect::<Vec<_>>()[..],
+            [ClientCommand::Loot { .. }, ClientCommand::LootRelease { guid }] if guid == CORPSE
+        ));
     }
 
     /// A live creature: `TYPEMASK_OBJECT | TYPEMASK_UNIT`, so it is the Tab target.
@@ -385,8 +666,8 @@ mod tests {
             .index_of(benilla_protocol::messages::Field::UnitFlags);
         const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
             .index_of(benilla_protocol::messages::Field::UnitHealth);
-        use benilla_protocol::messages::{ObjectFields, ObjectType};
         use benilla_protocol::EntityKind::{GameObject, Unit};
+        use benilla_protocol::messages::{ObjectFields, ObjectType};
         let unit = |kind, type_mask, pairs: &[(u16, u32)]| {
             let mut fields = vec![(OBJECT_FIELD_TYPE, type_mask)];
             fields.extend_from_slice(pairs);

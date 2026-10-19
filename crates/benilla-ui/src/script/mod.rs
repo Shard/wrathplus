@@ -339,8 +339,8 @@ pub use guild::{
 pub use input_verbs::{BindingInput, FiredInput, HeldInput};
 pub use modelframe::ModelPaneFrame;
 pub use petition::{
-    validate_guild_name, PetitionRecordView, PetitionRequest, PetitionState, PETITION_TYPE_CHARTER,
-    PETITION_TYPE_PETITION,
+    validate_guild_name, PetitionRecordView, PetitionRequest, PetitionState, PETITION_TYPE_ARENA,
+    PETITION_TYPE_CHARTER, PETITION_TYPE_PETITION,
 };
 pub use tabard::{
     emblem_mask_path, TabardHost, TabardIntent, EMBLEM_MASK_TOKEN, TABARD_COUNTS,

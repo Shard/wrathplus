@@ -712,7 +712,7 @@ mod native_tests {
                 Update,
                 (super::super::native_who::drain, feed_social).chain(),
             );
-        let mut script = UiScript::new().unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 r#"

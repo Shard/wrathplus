@@ -446,7 +446,6 @@ mod tests {
                     received_at: 0.0,
                 }],
             )]),
-            ..Default::default()
         };
         let catalog =
             benilla_formats::SpellCatalog::from_displays(std::collections::HashMap::from([(

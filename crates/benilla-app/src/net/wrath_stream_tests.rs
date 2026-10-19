@@ -246,6 +246,7 @@ fn ordered_wrath_packets_reach_real_object_and_aura_handlers() {
 }
 
 /// Read only reviewed/sanitized decrypted captures. No capture file ships in this unit.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn recording(bytes: &[u8]) -> Result<Vec<(u64, u16, Vec<u8>)>, &'static str> {
     if bytes.len() < 12 || &bytes[..8] != b"AZBWRPK1" || bytes[8..12] != 12340u32.to_le_bytes() {
         return Err("not a build-12340 recording");

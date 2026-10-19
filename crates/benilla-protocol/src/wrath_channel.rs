@@ -32,7 +32,7 @@ pub fn decode(body: &[u8]) -> io::Result<ChannelList> {
     let count = u32_le(&mut r)? as usize;
     let remaining = body.len() - r.position() as usize;
     // Validate before allocation; no unbounded count-controlled allocation or partial rosters.
-    if remaining % 9 != 0 || count != remaining / 9 {
+    if !remaining.is_multiple_of(9) || count != remaining / 9 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "Wrath channel roster count/tail",

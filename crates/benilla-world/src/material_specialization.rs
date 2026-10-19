@@ -11,6 +11,7 @@ use bevy::prelude::*;
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FinalMaterialSpecialization;
 
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn append_late<M: Material>(
     changed: Query<
         Entity,

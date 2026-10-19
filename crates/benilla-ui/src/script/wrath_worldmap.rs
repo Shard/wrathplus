@@ -126,8 +126,7 @@ fn zoom_parent(wm: &WorldMapState) -> Option<u32> {
     } else {
         wm.floors
             .iter()
-            .filter(|f| f.map_id == row.map_id && f.floor_index == 1)
-            .next_back()
+            .rfind(|f| f.map_id == row.map_id && f.floor_index == 1)
             .map_or(0, |f| f.parent)
     };
     (parent != 0).then_some(parent)

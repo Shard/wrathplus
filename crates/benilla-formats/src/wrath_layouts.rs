@@ -361,8 +361,8 @@ mod tests {
                 Some(20)
             ]
         );
-        for field in 19..35 {
-            assert_eq!(kit[field], Some(field + 2));
+        for (field, column) in kit.iter().enumerate().take(35).skip(19) {
+            assert_eq!(*column, Some(field + 2));
         }
     }
 

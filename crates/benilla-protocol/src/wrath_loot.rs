@@ -1,8 +1,9 @@
-//! Native SOLO corpse-loot wire codec for Wrath 3.3.5a, build 12340.
+//! Native SOLO loot wire codec for Wrath 3.3.5a, build 12340.
 //!
 //! Layouts follow AzerothCore `LootHandler.cpp`, `Player::SendLoot*`,
-//! `LootMgr.cpp::operator<<(LootView)`, and `Player::SendNewItem`. Group/master loot,
-//! fishing, item containers, and spell-opened loot are deliberately outside this codec.
+//! `LootMgr.cpp::operator<<(LootView)`, and `Player::SendNewItem`. Every loot type the server
+//! writes decodes (`Player::SendLoot` folds insignia into skinning and fishing holes and junk
+//! into fishing); group/master rows remain outside this codec.
 
 use std::fmt;
 
@@ -21,7 +22,9 @@ pub const SMSG_LOOT_CLEAR_MONEY: u16 = 0x0165;
 pub const SMSG_ITEM_PUSH_RESULT: u16 = 0x0166;
 
 pub const MAX_LOOT_ITEMS: u8 = 18;
-const LOOT_CORPSE: u8 = 1;
+/// The `LootType`s `Player::SendLoot` writes (`LootMgr.h`): corpse, pickpocketing, fishing,
+/// disenchanting, skinning, prospecting and milling. 5 is unused; 20-22 are folded before the send.
+const LOOT_WINDOW_TYPES: [u8; 7] = [1, 2, 3, 4, 6, 7, 8];
 const LOOT_SLOT_ALLOW: u8 = 0;
 /// AzerothCore `LootMgr.h`: the single-player owner may take this row without a bind popup.
 pub const LOOT_SLOT_OWNER: u8 = 4;
@@ -108,8 +111,10 @@ impl WrathLootItem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LootResponse {
-    Corpse {
+    /// An open loot window of `loot_type` (one of `Player::SendLoot`'s types).
+    Window {
         guid: u64,
+        loot_type: u8,
         gold: u32,
         items: Vec<WrathLootItem>,
     },
@@ -246,7 +251,7 @@ pub fn decode_loot_response(body: &[u8]) -> Result<LootResponse> {
         input.finish()?;
         return Ok(LootResponse::Error { guid, error });
     }
-    if loot_type != LOOT_CORPSE {
+    if !LOOT_WINDOW_TYPES.contains(&loot_type) {
         return Err(LootCodecError::UnsupportedLootType(loot_type));
     }
 
@@ -275,7 +280,12 @@ pub fn decode_loot_response(body: &[u8]) -> Result<LootResponse> {
         items.push(item);
     }
     input.finish()?;
-    Ok(LootResponse::Corpse { guid, gold, items })
+    Ok(LootResponse::Window {
+        guid,
+        loot_type,
+        gold,
+        items,
+    })
 }
 
 fn decode_release(body: &[u8]) -> Result<ServerLootPacket> {

@@ -175,6 +175,75 @@ impl super::UiScript {
     }
 }
 
+fn notify_ready(model: &mut super::Model) {
+    if !model.wrath_channel_roster.ready() {
+        return;
+    }
+    if let Some(index) = super::wrath_channel_display::selected_index(model) {
+        let count = model.wrath_channel_roster.members.len();
+        for event in ["CHANNEL_COUNT_UPDATE", "CHANNEL_ROSTER_UPDATE"] {
+            model.pending_events.push((
+                event.into(),
+                vec![
+                    super::ScriptValue::Number(index as f64),
+                    super::ScriptValue::Number(count as f64),
+                ],
+            ));
+        }
+    }
+}
+
+impl super::UiScript {
+    /// Consume a newly received display response once. Ordinary lists and stale channels
+    /// return None; the revision binds later name completions to this accepted response.
+    pub fn receive_wrath_channel_roster(
+        &mut self,
+        channel_type: u8,
+        channel: &str,
+        flags: u8,
+        members: Vec<WrathChannelRosterMember>,
+    ) -> Option<u64> {
+        let mut model = self.model_mut();
+        let revision = model
+            .wrath_channel_roster
+            .receive(channel_type, channel, flags, members)?;
+        notify_ready(&mut model);
+        Some(revision)
+    }
+
+    /// Apply one roster delta to the selected server channel, then fire the count and roster
+    /// updates as a received roster does; the revision binds the added member's name completion.
+    /// `count`, the server's member count, is the roster's own length here.
+    pub fn apply_wrath_channel_roster_delta(
+        &mut self,
+        channel: &str,
+        delta: WrathChannelRosterDelta,
+        channel_flags: u8,
+        _count: u32,
+    ) -> Option<u64> {
+        let mut model = self.model_mut();
+        let revision = model
+            .wrath_channel_roster
+            .apply(channel, delta, channel_flags)?;
+        notify_ready(&mut model);
+        Some(revision)
+    }
+
+    pub fn resolve_wrath_channel_roster_name(
+        &mut self,
+        revision: u64,
+        guid: u64,
+        name: String,
+    ) -> bool {
+        let mut model = self.model_mut();
+        let changed = model.wrath_channel_roster.resolve(revision, guid, name);
+        if changed {
+            notify_ready(&mut model);
+        }
+        changed
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,74 +320,5 @@ mod tests {
         assert!(s.ready());
         s.select(Identity::Synthetic(2));
         assert!(!s.resolve(next, 2, "Stale".into()));
-    }
-}
-
-fn notify_ready(model: &mut super::Model) {
-    if !model.wrath_channel_roster.ready() {
-        return;
-    }
-    if let Some(index) = super::wrath_channel_display::selected_index(model) {
-        let count = model.wrath_channel_roster.members.len();
-        for event in ["CHANNEL_COUNT_UPDATE", "CHANNEL_ROSTER_UPDATE"] {
-            model.pending_events.push((
-                event.into(),
-                vec![
-                    super::ScriptValue::Number(index as f64),
-                    super::ScriptValue::Number(count as f64),
-                ],
-            ));
-        }
-    }
-}
-
-impl super::UiScript {
-    /// Consume a newly received display response once. Ordinary lists and stale channels
-    /// return None; the revision binds later name completions to this accepted response.
-    pub fn receive_wrath_channel_roster(
-        &mut self,
-        channel_type: u8,
-        channel: &str,
-        flags: u8,
-        members: Vec<WrathChannelRosterMember>,
-    ) -> Option<u64> {
-        let mut model = self.model_mut();
-        let revision = model
-            .wrath_channel_roster
-            .receive(channel_type, channel, flags, members)?;
-        notify_ready(&mut model);
-        Some(revision)
-    }
-
-    /// Apply one roster delta to the selected server channel, then fire the count and roster
-    /// updates as a received roster does; the revision binds the added member's name completion.
-    /// `count`, the server's member count, is the roster's own length here.
-    pub fn apply_wrath_channel_roster_delta(
-        &mut self,
-        channel: &str,
-        delta: WrathChannelRosterDelta,
-        channel_flags: u8,
-        _count: u32,
-    ) -> Option<u64> {
-        let mut model = self.model_mut();
-        let revision = model
-            .wrath_channel_roster
-            .apply(channel, delta, channel_flags)?;
-        notify_ready(&mut model);
-        Some(revision)
-    }
-
-    pub fn resolve_wrath_channel_roster_name(
-        &mut self,
-        revision: u64,
-        guid: u64,
-        name: String,
-    ) -> bool {
-        let mut model = self.model_mut();
-        let changed = model.wrath_channel_roster.resolve(revision, guid, name);
-        if changed {
-            notify_ready(&mut model);
-        }
-        changed
     }
 }

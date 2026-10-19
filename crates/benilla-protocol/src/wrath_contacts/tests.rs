@@ -67,7 +67,7 @@ fn duels_map_to_the_shared_events_with_seconds_and_retreats() {
     ];
     let mut adapter = crate::wrath_events::WrathEventAdapter::new();
     for (opcode, body, expected) in rows {
-        assert_eq!(debug(&decode(opcode, &body).unwrap()), debug(&[expected.clone()]), "{opcode:#x}");
+        assert_eq!(debug(&decode(opcode, &body).unwrap()), debug(std::slice::from_ref(&expected)), "{opcode:#x}");
         match adapter.dispatch(opcode, &body, 0).unwrap() {
             crate::wrath_events::WrathDispatch::Handled { session_events, .. } => {
                 assert_eq!(debug(&session_events), debug(&[expected]))

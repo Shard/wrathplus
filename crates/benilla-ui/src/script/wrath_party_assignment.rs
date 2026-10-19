@@ -211,7 +211,6 @@ mod tests {
             members: vec![PartyMemberInfo {
                 guid: 2,
                 name: "Ally".into(),
-                ..Default::default()
             }],
             raid: if raid {
                 vec![

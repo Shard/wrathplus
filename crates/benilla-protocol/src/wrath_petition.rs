@@ -119,13 +119,15 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
                 choices.push(cstr(r)?);
             }
             let default_choice = u32_(r)?;
-            let _charter_type = u32_(r)?;
+            // AC's last word: 0 a guild charter, 1 an arena-team charter. It rides the shared
+            // `flags`, bit 0 the 1.12 charter bit and bit 1 the arena team (our mapping).
+            let charter_type = u32_(r)?;
             SessionEvent::PetitionQueryResponse(PetitionQueryResponse {
                 petition_id,
                 owner,
                 name,
                 body_text,
-                flags: 0,
+                flags: if charter_type == 0 { 1 } else { 2 },
                 min_signatures,
                 max_signatures,
                 deadline,

@@ -542,6 +542,7 @@ pub(crate) enum CommandSender {
 }
 
 impl CommandSender {
+    #[allow(clippy::result_large_err)] // the error type is the library's (a large enum), returned as-is
     pub(crate) fn send(
         &self,
         command: ClientCommand,
@@ -566,6 +567,7 @@ impl SessionCommandSender {
         Self { sender, epoch }
     }
 
+    #[allow(clippy::result_large_err)] // the error type is the library's (a large enum), returned as-is
     pub(crate) fn send(
         &self,
         command: ClientCommand,

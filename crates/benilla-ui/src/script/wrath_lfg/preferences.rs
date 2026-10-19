@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn bounded_native_bitset_mutations_and_trim() {
-        let mut s = vm();
+        let s = vm();
         s.run("SetLFGDungeonEnabled(1517, true); SetLFGDungeonEnabled(1524, true)")
             .unwrap();
         assert_eq!(s.cvar("lfdSelectedDungeons").unwrap().len(), 254);

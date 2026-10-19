@@ -127,9 +127,8 @@ mod tests {
     fn word_wrap_indent_and_tiling_flags() {
         let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("F = CreateFrame('Frame') S = F:CreateFontString() T = F:CreateTexture()").unwrap();
-        for check in [
-            "S:CanWordWrap() == 1 and S:GetIndentedWordWrap() == nil and T:GetHorizTile() == nil",
-        ] {
+        {
+            let check = "S:CanWordWrap() == 1 and S:GetIndentedWordWrap() == nil and T:GetHorizTile() == nil";
             assert!(s.eval::<bool>(&format!("return {check}")).unwrap(), "{check}");
         }
         s.run("S:SetWordWrap(false) S:SetIndentedWordWrap(true) T:SetHorizTile(true) T:SetVertTile(1)").unwrap();

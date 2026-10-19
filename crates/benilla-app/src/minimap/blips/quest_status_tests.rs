@@ -268,21 +268,23 @@ fn installed_wrath_question_mark_cell_is_nonempty() {
                 crop.extend_from_slice(&rgba[((y * width + x) * 4) as usize..][..4]);
             }
         }
-        assert!(crop.chunks_exact(4).filter(|p| p[3] > 0).count() > 100);
+        assert!(crop.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count() > 100);
         assert!(
             !crops.contains(&crop),
             "each cell must contain distinct installed art"
         );
         // Identify top-row cells by their installed colors, not just nonempty pixels.
-        let rgb = crop
-            .chunks_exact(4)
-            .filter(|p| p[3] > 0)
-            .fold([0u64; 3], |mut sum, p| {
-                for i in 0..3 {
-                    sum[i] += u64::from(p[i]);
-                }
-                sum
-            });
+        let rgb =
+            crop.as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[3] > 0)
+                .fold([0u64; 3], |mut sum, p| {
+                    for i in 0..3 {
+                        sum[i] += u64::from(p[i]);
+                    }
+                    sum
+                });
         match icon {
             ObjectIcon::Party => assert!(rgb[2] > rgb[0] && rgb[2] > rgb[1], "blue party art"),
             ObjectIcon::TrackedUnit => {

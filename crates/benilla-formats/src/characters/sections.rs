@@ -831,9 +831,9 @@ mod tests {
             wrath_sections.hair_texture(1, 0, 71, 9),
             Some("wrath-player")
         );
-        for (profile, rows, expected, scaled) in
-            [(&wrath, [(0, "npc"), (1, "player")], "player", true)]
         {
+            let (profile, rows, expected, scaled) =
+                (&wrath, [(0, "npc"), (1, "player")], "player", true);
             let parsed =
                 CharSections::from_records(&char_sections_fixture(profile, &rows), profile);
             assert_eq!(parsed.hair_texture(1, 0, 71, 9), Some(expected));

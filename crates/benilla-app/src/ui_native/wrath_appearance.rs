@@ -329,6 +329,7 @@ fn feed_appearance(
 
 /// The player's titles for Native UI's title getters: the `CharTitles.dbc` catalog once per VM,
 /// and `PLAYER__FIELD_KNOWN_TITLES` (three 64-bit words) with `PLAYER_CHOSEN_TITLE` when they move.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 fn feed_titles(
     script: Option<NonSendMut<UiScript>>,
     tables: Option<Res<crate::quest_rewards::QuestRewardTables>>,
@@ -372,12 +373,11 @@ fn feed_titles(
     .map(|f| store.0.get_field_guid(f, 0).unwrap_or(0))
     .collect();
     let chosen = store.0.get(Field::PlayerChosenTitle).unwrap_or(0);
-    let now = Some((known, chosen));
+    let now = (known, chosen);
     let (last, reset) = last.get_reset(&script);
-    if reset || *last != now {
-        *last = now.clone();
-        let (known, chosen) = now.expect("just built");
-        script.set_wrath_player_titles(known, chosen);
+    if reset || last.as_ref() != Some(&now) {
+        *last = Some(now.clone());
+        script.set_wrath_player_titles(now.0, now.1);
     }
 }
 

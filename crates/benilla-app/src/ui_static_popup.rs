@@ -191,6 +191,7 @@ pub(crate) fn cannot_be_resurrected<'a>(
 }
 
 /// What an answer reads besides itself.
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(crate) struct Lookups<'a> {
     /// A 1-based arena slot's team id, 0 for none.
     pub(crate) team_id: &'a dyn Fn(u8) -> u32,
@@ -351,6 +352,7 @@ pub(crate) struct Memo {
 
 /// What the host reads beside the VM, the commands and the summon latch.
 #[derive(bevy::ecs::system::SystemParam)]
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(crate) struct PopupInputs<'w, 's> {
     packets: Option<
         ResMut<'w, crate::net::wrath_instance_control_capture::NativeInstanceControlPackets>,
@@ -604,7 +606,6 @@ pub(crate) fn drive(
             },
         ),
         guild_bank_tab_cost: tab_cost(purchase.1),
-        ..Default::default()
     };
     let memo = memo.get(script);
     if memo.pushed.as_ref() != Some(&state) {

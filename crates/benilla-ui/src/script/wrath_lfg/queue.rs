@@ -1273,7 +1273,6 @@ mod tests {
             members: vec![PartyMemberInfo {
                 name: "Pal".into(),
                 guid: 2,
-                ..Default::default()
             }],
             leader_guid: 1,
             own_guid: 1,

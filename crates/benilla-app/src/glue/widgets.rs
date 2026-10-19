@@ -290,7 +290,6 @@ pub(crate) struct IconDisabled;
 ///
 /// It carries its own [`LockHighlight`]: `SetCharacterRace`/`Class`/`Gender` check these by hand,
 /// and the screen's query needs the component present.
-
 pub(crate) fn icon_button<A: Component, I: Bundle, L: Bundle>(
     parent: &mut ChildSpawnerCommands,
     font: &Handle<Font>,

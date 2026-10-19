@@ -55,6 +55,7 @@ fn lua_key(bag: u8, slot: u8) -> Option<(bool, i32, i32)> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)] // Bevy system parameters / a closure table, kept inline
 pub(crate) fn feed_item_refunds(
     script: Option<NonSendMut<UiScript>>,
     mut packets: ResMut<NativeInventoryPackets>,
