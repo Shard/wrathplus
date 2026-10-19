@@ -723,11 +723,14 @@ pub(crate) mod schedule_tests {
     /// - the native battlefield reducer and feed (`ui_battlefield::drain_native`,
     ///   `feed_battlefield`) against the terrain stream's release and rescatter: they read the
     ///   player's area through `WorldPoint`, which those systems only rebuild between frames' reads.
+    /// - the arena lines' drain (`net::wrath_arena_lines::drain_arena_lines`) against the arena
+    ///   reducer (`ui_arena_team::feed_arena`) over `ArenaRosterRefresh`: a queue of team names the
+    ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
     ///
     /// Raising the ceiling is a claim that a new undeclared order is acceptable: make it with the
     /// reason read off the dump, or declare the order (`.after`, a set, a `chain`). A resource
     /// that commutes by construction belongs in [`Classes`].
-    const UPDATE_ACTIONABLE_CEILING: usize = 4_653;
+    const UPDATE_ACTIONABLE_CEILING: usize = 4_654;
     const UPDATE_ACTIONABLE_SLACK: usize = 40;
 
     fn ratchet(what: &str, n: usize, ceiling: usize, slack: usize) {

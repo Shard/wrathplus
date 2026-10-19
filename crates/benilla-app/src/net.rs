@@ -45,6 +45,7 @@ mod wrath_appearance;
 pub(crate) mod wrath_social_lists_capture;
 mod wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
+mod wrath_arena_lines;
 mod wrath_quest_pois;
 mod wrath_chat_notice_capture;
 pub(crate) mod wrath_battleground_capture;
@@ -169,6 +170,7 @@ impl Plugin for NetPlugin {
         wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_pois::register(app);
+        wrath_arena_lines::register(app);
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
