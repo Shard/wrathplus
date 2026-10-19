@@ -82,6 +82,9 @@ pub struct PartyState {
     /// The master looter as a party index (`0` the player, `1..=4` a `members` slot),
     /// `GetLootMethod`'s second return.
     pub master_looter: Option<u32>,
+    /// The master looter's guid (`0xbd1970`), `0` for none: `GetLootMethod`'s third return finds
+    /// it in [`Self::raid`] and `GetRaidRosterInfo`'s eleventh compares it.
+    pub master_looter_guid: u64,
     /// `GetLootThreshold`'s item quality, `2..=4` once grouped.
     pub loot_threshold: u32,
 }
@@ -369,7 +372,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetLootMethod() → lootmethod, masterlooterPartyID: two returns in 1.12.
+    // GetLootMethod() (`0x52cd90`) → method, partyMaster, raidMaster: always three. partyMaster is
+    // 0 for the player or a party slot 1..4; raidMaster the raid roster index (`0xbeb568`); each
+    // nil when the master is not there.
     g.set(
         "GetLootMethod",
         lua.create_function(|lua, ()| {
@@ -385,7 +390,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Some(idx) => Value::Integer(i64::from(idx)),
                 None => Value::Nil,
             };
-            Ok((Value::String(lua.create_string(method)?), master))
+            let guid = model.party.master_looter_guid;
+            let raid = match model.party.raid.iter().position(|m| guid != 0 && m.guid == guid) {
+                Some(i) => Value::Integer(i as i64 + 1),
+                None => Value::Nil,
+            };
+            Ok((Value::String(lua.create_string(method)?), master, raid))
         })?,
     )?;
 
@@ -734,6 +744,7 @@ mod tests {
             raid: Vec::new(),
             loot_method: "group".into(),
             master_looter: None,
+            master_looter_guid: 0,
             loot_threshold: 2,
         }
     }
@@ -774,10 +785,26 @@ mod tests {
         let mut party = two_member_party();
         party.loot_method = "master".into();
         party.master_looter = Some(2); // Bob (party2)
-        s.set_party(party);
+        s.set_party(party.clone());
         let (method, master) = s.eval::<(String, i64)>("return GetLootMethod()").unwrap();
         assert_eq!(method, "master");
         assert_eq!(master, 2);
+        // Build 12340's third return: the master's raid roster index, nil outside the roster.
+        assert_eq!(s.arity("GetLootMethod()").unwrap(), 3);
+        assert_eq!(
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            None
+        );
+        party.master_looter_guid = 0xb0b;
+        party.raid = vec![
+            super::RaidMemberInfo { guid: 0xa, ..Default::default() },
+            super::RaidMemberInfo { guid: 0xb0b, ..Default::default() },
+        ];
+        s.set_party(party);
+        assert_eq!(
+            s.eval::<Option<i64>>("local _, _, r = GetLootMethod() return r").unwrap(),
+            Some(2)
+        );
     }
 
     #[test]
@@ -1353,6 +1380,7 @@ mod tests {
             ],
             loot_method: "group".into(),
             master_looter: None,
+            master_looter_guid: 0,
             loot_threshold: 2,
         }
     }

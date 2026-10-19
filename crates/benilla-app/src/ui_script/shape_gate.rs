@@ -21,6 +21,18 @@ const WIDGET_KINDS_NOT_YET_ASSERTED: &[(&str, &str, &str)] = &[];
 /// The widget arity gate's list, same rules as [`NOT_YET_ASSERTED`].
 const WIDGET_NOT_YET_ASSERTED: &[&str] = &[];
 
+/// Bindings that answer build 12340's shape in every VM (3.3.5 only), so the 1.12 reference no
+/// longer describes them: a name and the 12340 evidence. Neither the arity nor the kind gates
+/// probe them.
+const WRATH_SHAPED: &[(&str, &str)] = &[
+    ("GetActiveTitle", "0x58bed0: the title (nil out of range) and a boolean completion"),
+    ("GetLootMethod", "0x52cd90: method, partyMaster, raidMaster, always three"),
+];
+
+fn wrath_shaped(name: &str) -> bool {
+    WRATH_SHAPED.iter().any(|(n, _)| *n == name)
+}
+
 /// The glue registrar table. This VM is the in-game one, so a duplicated name is read at its
 /// other row.
 const GLUE_TABLE: &str = "0x8373b8";
@@ -105,6 +117,7 @@ fn every_query_binding_answers_the_reference_s_return_arity() {
         if !["Get", "Is", "Has", "Can", "Unit", "Num"]
             .iter()
             .any(|p| name.starts_with(p))
+            || wrath_shaped(name)
         {
             continue;
         }
@@ -740,7 +753,7 @@ fn no_query_binding_answers_a_lua_boolean() {
                 .iter()
                 .any(|p| n.starts_with(p))
         })
-        .filter(|n| !REFERENCE_BOOLEANS.contains(n))
+        .filter(|n| !REFERENCE_BOOLEANS.contains(n) && !wrath_shaped(n))
         .collect();
     names.sort_unstable();
     names.dedup();

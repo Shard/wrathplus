@@ -358,6 +358,8 @@ fn snapshot(
             let mut available_info = Vec::new();
             for q in &l.quests {
                 let info = benilla_ui::script::QuestGreetingInfo {
+                    // `0x58bcb0` is untraced: no completion source yet.
+                    complete: false,
                     daily: q.wrath.as_ref().is_some_and(|w| w.flags & 0x1000 != 0),
                     repeatable: q.wrath.as_ref().is_some_and(|w| w.repeatable),
                     trivial: false,

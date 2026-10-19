@@ -410,6 +410,7 @@ fn left_clicking_the_player_frame_targets_self() {
         raid: Vec::new(),
         loot_method: "group".into(),
         master_looter: None,
+        master_looter_guid: 0,
         loot_threshold: 2,
     });
     s.mouse_button(cx as f32, cy as f32, "RightButton", true);
@@ -483,6 +484,7 @@ fn raid_mark_clicks_through_the_nested_level() {
         raid: Vec::new(),
         loot_method: "group".into(),
         master_looter: None,
+        master_looter_guid: 0,
         loot_threshold: 2,
     });
     s.resolve();
@@ -1203,6 +1205,7 @@ fn the_party_art_paints_over_the_bars() {
         raid: Vec::new(),
         loot_method: "group".into(),
         master_looter: None,
+        master_looter_guid: 0,
         loot_threshold: 2,
     });
     s.fire_event("PARTY_MEMBERS_CHANGED", vec![]);
@@ -1833,6 +1836,7 @@ fn the_player_frame_wears_the_leader_and_master_looter_icons() {
         raid: Vec::new(),
         loot_method: method.into(),
         master_looter,
+        master_looter_guid: 0,
         loot_threshold: 2,
     };
 

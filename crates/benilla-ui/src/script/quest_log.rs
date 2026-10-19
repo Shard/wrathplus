@@ -227,7 +227,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .and_then(|n| model.quest_log.entries.get(n))
                     .cloned()
             };
+            let wrath = lua.app_data_ref::<Model>().expect("model app_data").dialect
+                == super::ScriptDialect::Wrath12340;
             let Some(e) = entry else {
+                // `0x5e5cc0` out of range: no title, level 0, no tag, group 0, then nils and quest 0.
+                if wrath {
+                    let mut v = vec![Value::Nil, Value::Integer(0), Value::Nil, Value::Integer(0)];
+                    v.extend([Value::Nil, Value::Nil, Value::Nil, Value::Nil, Value::Integer(0)]);
+                    return Ok(MultiValue::from_vec(v));
+                }
                 return Ok(MultiValue::from_vec(vec![
                     Value::Nil,
                     Value::Integer(0),
@@ -248,24 +256,20 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             // Returns 4 and 5 are 1 or nil, never booleans; `isCollapsed` is 1 only on a header
             // whose bit in `[0xbb748c]` is clear.
             let flag = |b: bool| if b { Value::Integer(1) } else { Value::Nil };
-            // 2.0+ puts `suggestedGroup` fourth and appends `isDaily, questID`.
-            if lua.app_data_ref::<Model>().expect("model app_data").dialect
-                == super::ScriptDialect::Wrath12340
-            {
+            // `0x5e5cc0`: 2.0+ puts `suggestedGroup` fourth and appends `isDaily, questID`; a
+            // header's level and quest are 0. A tenth (`displayQuestID`) follows only with that
+            // debug cvar set: labelled, not served.
+            if wrath {
                 return Ok(MultiValue::from_vec(vec![
                     Value::String(lua.create_string(&e.title)?),
-                    Value::Integer(i64::from(e.level)),
+                    Value::Integer(if e.is_header { 0 } else { i64::from(e.level) }),
                     tag,
                     Value::Integer(i64::from(e.suggested_group)),
                     flag(e.is_header),
                     flag(e.is_header && e.collapsed),
                     complete,
                     flag(e.daily),
-                    if e.is_header {
-                        Value::Nil
-                    } else {
-                        Value::Integer(i64::from(e.quest_id))
-                    },
+                    Value::Integer(if e.is_header { 0 } else { i64::from(e.quest_id) }),
                 ]));
             }
             Ok(MultiValue::from_vec(vec![
@@ -1608,5 +1612,48 @@ mod tests {
             s.take_quest_log_pushes().is_empty(),
             "a header is not a quest"
         );
+    }
+
+    /// `0x5e5cc0`: nine values; a header's level and quest are 0; out of range, no title, level
+    /// 0, no tag, group 0, nils and quest 0.
+    #[test]
+    fn wrath_titles_answer_nine_with_zeroed_header_and_miss_fields() {
+        let mut s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        s.set_quest_log(QuestLogState {
+            entries: vec![
+                QuestLogEntryView {
+                    title: "Elwynn Forest".into(),
+                    is_header: true,
+                    level: 7,
+                    quest_id: 9,
+                    ..Default::default()
+                },
+                QuestLogEntryView {
+                    quest_id: 55,
+                    title: "A Threat Within".into(),
+                    level: 1,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        assert_eq!(s.arity("GetQuestLogTitle(1)").unwrap(), 9);
+        assert!(s
+            .eval::<bool>(
+                "local t, l, _, _, h, _, _, _, id = GetQuestLogTitle(1) \
+                 return t == 'Elwynn Forest' and l == 0 and h == 1 and id == 0"
+            )
+            .unwrap());
+        assert!(s
+            .eval::<bool>("local _, l, _, _, _, _, _, _, id = GetQuestLogTitle(2) return l == 1 and id == 55")
+            .unwrap());
+        assert_eq!(s.arity("GetQuestLogTitle(3)").unwrap(), 9);
+        assert!(s
+            .eval::<bool>(
+                "local t, l, tag, g, h, c, done, d, id = GetQuestLogTitle(3) \
+                 return t == nil and l == 0 and tag == nil and g == 0 and h == nil and c == nil \
+                 and done == nil and d == nil and id == 0"
+            )
+            .unwrap());
     }
 }
