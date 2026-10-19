@@ -190,7 +190,6 @@ fn light_schema(profile: &DataProfile) -> Schema {
         s.add_field(SchemaField::new(n, t));
     }
     let params = match profile {
-        DataProfile::Vanilla => 5,
         DataProfile::Wrath { .. } => 8,
     };
     for i in 0..params {
@@ -858,16 +857,13 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_and_wrath_light_records_keep_five_and_eight_params() {
-        for (profile, count) in [
-            (DataProfile::Vanilla, 12usize),
-            (
-                DataProfile::Wrath {
-                    locale: "frFR".into(),
-                },
-                15,
-            ),
-        ] {
+    fn wrath_light_records_keep_eight_params() {
+        for (profile, count) in [(
+            DataProfile::Wrath {
+                locale: "frFR".into(),
+            },
+            15usize,
+        )] {
             let fields = (300..300 + count as u32).collect::<Vec<_>>();
             let set = parse(&wdbc(&fields), light_schema(&profile), "synthetic Light").unwrap();
             let row = &set.records()[0];

@@ -143,7 +143,7 @@ mod tests {
         std::fs::write(a.join("Model.m2"), b"model").unwrap();
         std::fs::write(b.join("Table.dbc"), b"dbc").unwrap();
         let policy = AssetOverrides::from_roots([a, b]).unwrap();
-        let chain = crate::Chain::from_overrides(policy, crate::DataProfile::Vanilla);
+        let chain = crate::Chain::from_overrides(policy, crate::DataProfile::default());
         assert!(chain.contains("WORLD\\TILE.BLP"));
         assert_eq!(chain.read("world/tile.blp").unwrap(), b"replacement");
         assert_eq!(chain.read("model.m2").unwrap(), b"model");
@@ -163,7 +163,8 @@ mod tests {
             assert!(!chain.contains(unsafe_path));
             assert!(chain.read(unsafe_path).is_err());
         }
-        let classic = crate::Chain::from_overrides(Default::default(), crate::DataProfile::Vanilla);
+        let classic =
+            crate::Chain::from_overrides(Default::default(), crate::DataProfile::default());
         assert!(!classic.contains("model.m2"));
         assert!(classic.list().unwrap().is_empty());
         std::fs::remove_dir_all(root).unwrap();

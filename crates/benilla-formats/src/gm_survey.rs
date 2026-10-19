@@ -69,9 +69,7 @@ pub fn parse_gm_survey(
 }
 
 pub fn load_gm_survey(chain: &mut Chain) -> Result<GmSurveyCatalog> {
-    let DataProfile::Wrath { locale } = chain.profile() else {
-        anyhow::bail!("the GM survey requires Wrath data");
-    };
+    let DataProfile::Wrath { locale } = chain.profile();
     let locale = locale.clone();
     let mut read = |name| {
         chain

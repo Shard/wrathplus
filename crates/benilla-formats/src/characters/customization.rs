@@ -28,57 +28,12 @@ const SECTION_HAIR: u8 = 3;
 /// A CharSections availability key: `(race, sex, sectionType, variation, color)`.
 type SectionKey = (u8, u8, u8, u8, u8);
 
-/// The playable races, ChrRaces ids 1–8; Goblin (9) and above are not creatable.
-const VANILLA_PLAYABLE_RACES: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+/// The playable races: ChrRaces ids 1–8, Blood Elf (10) and Draenei (11).
 const WRATH_PLAYABLE_RACES: [u8; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11];
-
-/// The shipped ChrRaces fileStrings (col 15), guarding [`load_races`]' string columns.
-const KNOWN_FILES: [(u8, &str); 8] = [
-    (1, "Human"),
-    (2, "Orc"),
-    (3, "Dwarf"),
-    (4, "NightElf"),
-    (5, "Scourge"),
-    (6, "Tauren"),
-    (7, "Gnome"),
-    (8, "Troll"),
-];
-
-/// The shipped `CharBaseInfo` rows by race, the load-time guard on the 2-byte parse: each must be
-/// present, and a patch may add more, as the class-list builder `0x4706b0` lists every row for the
-/// race. Not the playable set, as it holds the dead Dwarf-Mage row ([`UNUSED_COMBOS`]).
-const KNOWN_COMBOS: [(u8, &[u8]); 8] = [
-    (1, &[1, 2, 4, 5, 8, 9]), // Human
-    (2, &[1, 3, 4, 7, 9]),    // Orc
-    (3, &[1, 2, 3, 4, 5, 8]), // Dwarf; 8 (Mage) is the dead row
-    (4, &[1, 3, 4, 5, 11]),   // Night Elf
-    (5, &[1, 4, 5, 8, 9]),    // Undead
-    (6, &[1, 3, 7, 11]),      // Tauren
-    (7, &[1, 4, 8, 9]),       // Gnome
-    (8, &[1, 3, 4, 5, 7, 8]), // Troll
-];
 
 /// `CharBaseInfo` pairs the client never offers: its class-list builder `0x4706b0` skips the
 /// literal `race == 3 && class == 8` (Dwarf-Mage), though the row and its outfit are populated.
 const UNUSED_COMBOS: [(u8, u8); 1] = [(3, 8)];
-
-/// The `CharBaseInfo` misparse guard: every shipped pair is present; a patch's extra pairs pass.
-fn shipped_combos_present(combos: &HashSet<(u8, u8)>) -> Result<()> {
-    for (race, classes) in KNOWN_COMBOS {
-        let missing: Vec<u8> = classes
-            .iter()
-            .copied()
-            .filter(|&c| !combos.contains(&(race, c)))
-            .collect();
-        if !missing.is_empty() {
-            bail!(
-                "CharBaseInfo misparse: race {race} lacks shipped classes {missing:?} \
-                 (check the 2-byte race/class layout)"
-            );
-        }
-    }
-    Ok(())
-}
 
 /// One worn item of a CharStartOutfit row: its ItemDisplayInfo id and its InventoryType.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,7 +135,6 @@ impl CharCreateCatalog {
 
         let mut ranges = HashMap::new();
         let playable: &[u8] = match profile {
-            DataProfile::Vanilla => &VANILLA_PLAYABLE_RACES,
             DataProfile::Wrath { .. } => &WRATH_PLAYABLE_RACES,
         };
         for &race in playable {
@@ -208,42 +162,7 @@ impl CharCreateCatalog {
     }
 
     fn self_check(&self, profile: &DataProfile) -> Result<()> {
-        if matches!(profile, DataProfile::Vanilla) {
-            shipped_combos_present(&self.combos)?;
-            for (race, file) in KNOWN_FILES {
-                if self.race_file(race) != Some(file) {
-                    bail!(
-                        "ChrRaces misparse: race {race} fileString {:?} != known {file:?} \
-                         (check the string-column positions in load_races)",
-                        self.race_file(race)
-                    );
-                }
-            }
-        }
-        if matches!(profile, DataProfile::Vanilla) {
-            // CharStartOutfit layout guard: the shipped Human Warrior male set, (display,
-            // InventoryType) for the shirt, pants, boots, shortsword and shield.
-            let hw = self.start_outfit(1, 1, 0);
-            for &(disp, inv) in &[
-                (9891u32, 4u8),
-                (9892, 7),
-                (10141, 8),
-                (1542, 21),
-                (18730, 14),
-            ] {
-                if !hw
-                    .iter()
-                    .any(|it| it.display_id == disp && it.inv_type == inv)
-                {
-                    bail!(
-                    "CharStartOutfit misparse: Human Warrior male missing display {disp} inv {inv} \
-                     (got {hw:?}) — check the 41-field / 152-byte packed layout"
-                );
-                }
-            }
-        }
         let playable: &[u8] = match profile {
-            DataProfile::Vanilla => &VANILLA_PLAYABLE_RACES,
             DataProfile::Wrath { .. } => &WRATH_PLAYABLE_RACES,
         };
         for &race in playable {
@@ -273,8 +192,8 @@ impl CharCreateCatalog {
     }
 }
 
-/// ChrRaces (29 fields, 116-byte records) → per playable race: displayIds (cols 4/5), fileString
-/// (15), facial-hair (26/27) and hair (28) tokens; other string columns are read as ignored `u32`s.
+/// ChrRaces (69 fields) → per playable race: displayIds (cols 4/5) and fileString (14); the
+/// customization tokens are all `NORMAL`. Other string columns are read as ignored `u32`s.
 #[allow(clippy::type_complexity)] // one pass over one DBC → the catalog's three race-keyed maps
 fn load_races(
     chain: &mut Chain,
@@ -288,15 +207,10 @@ fn load_races(
         .read_file(CHR_RACES)
         .with_context(|| format!("reading {CHR_RACES}"))?;
     let mut schema = Schema::new("ChrRaces");
-    let fields = if matches!(profile, DataProfile::Vanilla) {
-        29
-    } else {
-        69
-    };
-    for i in 0..fields {
+    let DataProfile::Wrath { .. } = profile;
+    for i in 0..69 {
         let ty = match i {
-            15 | 26 | 27 | 28 if matches!(profile, DataProfile::Vanilla) => FieldType::String,
-            14 if matches!(profile, DataProfile::Wrath { .. }) => FieldType::String,
+            14 => FieldType::String,
             _ => FieldType::UInt32,
         };
         schema.add_field(SchemaField::new(format!("f{i}"), ty));
@@ -308,28 +222,13 @@ fn load_races(
     for r in rs.records() {
         let Some(race) = u32_at(r, 0) else { continue };
         let race = race as u8;
-        let playable: &[u8] = if matches!(profile, DataProfile::Vanilla) {
-            &VANILLA_PLAYABLE_RACES
-        } else {
-            &WRATH_PLAYABLE_RACES
-        };
-        if !playable.contains(&race) {
+        if !WRATH_PLAYABLE_RACES.contains(&race) {
             continue;
         }
         if let (Some(male), Some(female)) = (u32_at(r, 4), u32_at(r, 5)) {
             displays.insert(race, (male, female));
         }
         match profile {
-            DataProfile::Vanilla => {
-                if let Some(file) = str_at(&rs, r, 15) {
-                    files.insert(race, file);
-                }
-                if let (Some(fm), Some(ff), Some(hair)) =
-                    (str_at(&rs, r, 26), str_at(&rs, r, 27), str_at(&rs, r, 28))
-                {
-                    tokens.insert(race, ([fm, ff], hair));
-                }
-            }
             DataProfile::Wrath { .. } => {
                 if let Some(file) = str_at(&rs, r, 14) {
                     files.insert(race, file);
@@ -384,7 +283,6 @@ fn load_start_outfits(
     let field_count = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
     let record_size = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
     let (expected_fields, expected_size, slots, display_off, inv_off) = match profile {
-        DataProfile::Vanilla => (41, 152, 12, 56, 104),
         DataProfile::Wrath { .. } => (77, 296, 24, 104, 200),
     };
     if field_count != expected_fields || record_size != expected_size {
@@ -416,8 +314,7 @@ fn load_start_outfits(
     Ok(map)
 }
 
-/// CharSections → selectable keys. Vanilla excludes flag `0x1` (`SECTION_FLAG_UNAVAILABLE`), while
-/// Wrath requires it (`SECTION_FLAG_PLAYER` in AzerothCore's build-12340 DBC structure).
+/// CharSections → selectable keys. Wrath requires flag `0x1` (`SECTION_FLAG_PLAYER` in AzerothCore's build-12340 DBC structure).
 fn load_available_sections(
     chain: &mut Chain,
     profile: &DataProfile,
@@ -450,7 +347,6 @@ fn available_sections_from_records(
         ) {
             let player_row = flags & 0x1 != 0;
             let available = match profile {
-                DataProfile::Vanilla => !player_row,
                 DataProfile::Wrath { .. } => player_row,
             };
             if available {
@@ -578,21 +474,12 @@ mod tests {
     }
 
     #[test]
-    fn char_sections_physical_columns_and_player_flag_are_profile_specific() {
-        let vanilla = DataProfile::Vanilla;
+    fn wrath_char_sections_require_the_player_flag() {
         let wrath = DataProfile::Wrath {
             locale: "enUS".to_string(),
         };
         let sentinel = (1, 0, 3, 71, 9);
 
-        assert!(
-            available_sections_from_records(&char_sections_fixture(&vanilla, 0), &vanilla)
-                .contains(&sentinel)
-        );
-        assert!(
-            !available_sections_from_records(&char_sections_fixture(&vanilla, 1), &vanilla)
-                .contains(&sentinel)
-        );
         assert!(
             !available_sections_from_records(&char_sections_fixture(&wrath, 0), &wrath)
                 .contains(&sentinel)
@@ -601,180 +488,5 @@ mod tests {
             available_sections_from_records(&char_sections_fixture(&wrath, 1), &wrath)
                 .contains(&sentinel)
         );
-    }
-
-    /// CharSections `SECTION_TYPE_FACIAL_HAIR`, needed only by the transcribed check.
-    const SECTION_FACIAL_HAIR: u8 = 2;
-
-    /// vmangos's `Player::ValidateAppearance` (`Player.cpp:326`), run on `CMSG_CHAR_CREATE`;
-    /// `avail` already excludes the `0x1`-flagged rows, and face is keyed by skin colour.
-    fn validate_appearance(
-        avail: &HashSet<SectionKey>,
-        facial: &HashMap<(u8, u8), HashSet<u8>>,
-        race: u8,
-        sex: u8,
-        skin: u8,
-        face: u8,
-        hair: u8,
-        hair_color: u8,
-        facial_hair: u8,
-    ) -> bool {
-        let has = |ty, var, color| avail.contains(&(race, sex, ty, var, color));
-        if !has(SECTION_SKIN, 0, skin) {
-            return false;
-        }
-        if !has(SECTION_FACE, face, skin) {
-            return false;
-        }
-        if !has(SECTION_HAIR, hair, hair_color) {
-            return false;
-        }
-        // Tauren and all females but Night Elf (4) and Undead (5) have no FACIAL_HAIR sections.
-        let excluded = race == 6 || (sex == 1 && race != 4 && race != 5);
-        if !excluded && !has(SECTION_FACIAL_HAIR, facial_hair, hair_color) {
-            return false;
-        }
-        facial
-            .get(&(race, sex))
-            .is_some_and(|vs| vs.contains(&facial_hair))
-    }
-
-    #[test]
-    fn a_patched_combo_passes_the_guard_and_a_lost_one_does_not() {
-        let mut combos: HashSet<(u8, u8)> = KNOWN_COMBOS
-            .iter()
-            .flat_map(|&(r, cs)| cs.iter().map(move |&c| (r, c)))
-            .collect();
-        assert!(shipped_combos_present(&combos).is_ok());
-        // A patch that adds Human Hunter: 1.12.1's builder lists it, so the load must go on.
-        combos.insert((1, 3));
-        assert!(shipped_combos_present(&combos).is_ok());
-        // A misparse that drops a shipped pair still refuses.
-        combos.remove(&(2, 7));
-        assert!(shipped_combos_present(&combos).is_err());
-    }
-
-    #[test]
-    fn char_create_catalog_matches_the_5875_dbcs() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = CharCreateCatalog::load(&mut chain).expect("load char-create catalog");
-        let creatures = crate::load_creature_catalog(&mut chain).expect("load creatures");
-
-        for race in VANILLA_PLAYABLE_RACES {
-            for sex in [0u8, 1] {
-                let display = cat.body_display(race, sex).expect("has display");
-                let model = creatures.model(display).unwrap_or_else(|| {
-                    panic!("display {display} (race {race} sex {sex}) resolves")
-                });
-                assert!(
-                    model
-                        .model_path
-                        .to_ascii_lowercase()
-                        .starts_with("character\\"),
-                    "race {race} sex {sex} display {display} → {:?} (expected a Character body)",
-                    model.model_path
-                );
-            }
-        }
-
-        // The playable sets are the raw table less the dead pairs.
-        for (race, classes) in KNOWN_COMBOS {
-            let playable: Vec<u8> = classes
-                .iter()
-                .copied()
-                .filter(|&c| !UNUSED_COMBOS.contains(&(race, c)))
-                .collect();
-            assert_eq!(
-                cat.classes_for_race(race),
-                playable,
-                "combos for race {race}"
-            );
-        }
-        assert_eq!(
-            cat.classes_for_race(3),
-            vec![1, 2, 3, 4, 5],
-            "Dwarf offers exactly Warrior/Paladin/Hunter/Rogue/Priest — no Mage (the dead \
-             CharBaseInfo row must not reach the create screen)"
-        );
-
-        // The glue tokens against the shipped rows, pinning cols 26/27's male/female order; no
-        // shipped row is "NONE".
-        assert_eq!(cat.hair_customization(6), Some("HORNS"), "Tauren hair tok");
-        assert_eq!(cat.hair_customization(1), Some("NORMAL"), "Human hair tok");
-        assert_eq!(
-            cat.facial_hair_customization(1, 0),
-            Some("NORMAL"),
-            "Human male facial tok"
-        );
-        assert_eq!(
-            cat.facial_hair_customization(1, 1),
-            Some("PIERCINGS"),
-            "Human female facial tok"
-        );
-        assert_eq!(
-            cat.facial_hair_customization(4, 1),
-            Some("MARKINGS"),
-            "Night Elf female facial tok"
-        );
-        assert_eq!(
-            cat.facial_hair_customization(8, 0),
-            Some("TUSKS"),
-            "Troll male facial tok"
-        );
-
-        // Every creatable combo wears at least one item; the Human Mage wears a robe (inv 20).
-        for (race, classes) in KNOWN_COMBOS {
-            for &class in classes
-                .iter()
-                .filter(|&&c| !UNUSED_COMBOS.contains(&(race, c)))
-            {
-                for sex in [0u8, 1] {
-                    let out = cat.start_outfit(race, class, sex);
-                    assert!(
-                        !out.is_empty(),
-                        "race {race} class {class} sex {sex} has no start outfit"
-                    );
-                    assert!(
-                        out.iter().all(|it| it.display_id >= 1 && it.inv_type >= 1),
-                        "race {race} class {class} sex {sex} outfit has a 0/empty entry: {out:?}"
-                    );
-                }
-            }
-        }
-        let mage = cat.start_outfit(1, 8, 0);
-        assert!(
-            mage.iter()
-                .any(|it| it.inv_type == 20 && it.display_id == 12647),
-            "Human Mage male should wear a robe (inv 20, disp 12647): {mage:?}"
-        );
-
-        // Every tuple in the dial ranges passes ValidateAppearance.
-        let avail = load_available_sections(&mut chain, &DataProfile::Vanilla).expect("sections");
-        let facial =
-            load_facial_hair_styles(&mut chain, &DataProfile::Vanilla).expect("facial hair");
-        for race in VANILLA_PLAYABLE_RACES {
-            for sex in [0u8, 1] {
-                let r = cat.ranges(race, sex).expect("ranges");
-                for sk in 0..r.skin {
-                    for fa in 0..r.face {
-                        for hs in 0..r.hair_style {
-                            for hc in 0..r.hair_color {
-                                for fh in 0..r.facial_hair {
-                                    assert!(
-                                        validate_appearance(
-                                            &avail, &facial, race, sex, sk, fa, hs, hc, fh
-                                        ),
-                                        "race {race} sex {sex} tuple \
-                                         skin={sk} face={fa} hair={hs} hairColor={hc} facial={fh} \
-                                         fails ValidateAppearance"
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

@@ -12,9 +12,6 @@ use crate::dbc::{f32_at, parse, str_at, u32_at};
 
 const MAP: &str = "DBFilesClient\\Map.dbc";
 
-/// Vanilla field index of `LoadingScreenID`, a `LoadingScreens.dbc` id.
-const LOADING_SCREEN_FIELD: usize = 38;
-
 /// `Map.dbc`'s per-map data, keyed by map id.
 pub struct MapCatalog {
     dirs: HashMap<u32, String>,
@@ -26,37 +23,38 @@ pub struct MapCatalog {
     /// `InstanceType` (field 2, `+0x8`, read at `0x48a772`, `0x495cb9`, `0x495d33`): 0 none,
     /// 1 party, 2 raid, 3 battleground, as `IsInInstance` spells them (`0x83de58`, guarded `< 4`).
     instance_types: HashMap<u32, u32>,
-    /// Build 12340 `Flags`, 0 on a 1.12 file.
+    /// Build 12340 `Flags`.
     flags: HashMap<u32, u32>,
     /// The battleground columns of every row, since the client resolves map 0's too.
     battleground: HashMap<u32, MapBattlegroundColumns>,
 }
 
-/// The `Map.dbc` columns the battleground verbs read by row offset (`GetBattlefieldInfo`
-/// `0x4ab0b0`, the list handler `0x4aa6c0`); `+0x4·k` is field `k`.
+/// The `Map.dbc` columns the battleground verbs read. Build 12340's Map.dbc has no level-bracket,
+/// group-queue or `GetBattlefieldInfo` float columns (those moved to `BattlemasterList.dbc` and
+/// `PvpDifficulty.dbc`); their fields here read `0` until the verbs move off them.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct MapBattlegroundColumns {
-    /// Field 13 (`+0x34`), the bracket base and `GetBattlefieldInfo`'s third value.
+    /// No build-12340 column: `0`.
     pub min_level: u32,
-    /// Field 14 (`+0x38`), `GetBattlefieldInfo`'s fourth value.
+    /// No build-12340 column: `0`.
     pub max_level: u32,
-    /// Field 15 (`+0x3c`): a group join needs both the party and the raid count `<=` this, else
-    /// message 442 and nothing sent (`0x4a9f60`).
+    /// Field 65 (`maxPlayers`): a group join needs both the party and the raid count `<=` this,
+    /// else message 442 and nothing sent.
     pub max_players: u32,
-    /// Field 16 (`+0x40`, signed), `GetBattlefieldInfo`'s fifth value; `-1` on every battleground.
+    /// No build-12340 column: `0`.
     pub field_16: i32,
-    /// Fields 17 and 18 (`+0x44`/`+0x48`, f32), `GetBattlefieldInfo`'s sixth and seventh values.
+    /// No build-12340 columns: `0.0`.
     pub field_17: f32,
     pub field_18: f32,
-    /// Fields 20 and 29 (`+0x50`, `+0x74`), the localized descriptions by faction-group index:
-    /// `0` for a `FactionTemplate` mask with bit `0x4`, `1` for bit `0x2` (`0x5efe00`).
+    /// Fields 23 and 40 plus the locale slot, the localized descriptions by faction-group index:
+    /// `0` for a `FactionTemplate` mask with bit `0x4`, `1` for bit `0x2`.
     pub descriptions: [String; 2],
-    /// Field 39 (`+0x9c`), the level-bracket span; `0` means one bracket and zeroed bounds.
+    /// No build-12340 column: `0`, one bracket with zeroed bounds.
     pub bracket_span: u32,
-    /// Field 40 (`+0xa0`), non-zero for a group queue (`CanJoinBattlefieldAsGroup` `0x4ac380`).
+    /// No build-12340 column: `0`.
     pub group_queue: u32,
-    /// Field 41 (`+0xa4`, f32), `MinimapIconScale`: what `GetBattlefieldMapIconScale()` answers
-    /// for the active queue slot's map (`0x4ac3d0`).
+    /// Field 58 (f32), `MinimapIconScale`: what `GetBattlefieldMapIconScale()` answers for the
+    /// active queue slot's map.
     pub minimap_icon_scale: f32,
 }
 
@@ -118,21 +116,7 @@ impl MapCatalog {
     }
 }
 
-const MAP_NAME_FIELD: usize = 4;
-
 const INSTANCE_TYPE_FIELD: usize = 2;
-
-const MIN_LEVEL_FIELD: usize = 13;
-const MAX_LEVEL_FIELD: usize = 14;
-const MAX_PLAYERS_FIELD: usize = 15;
-const FIELD_16: usize = 16;
-const FIELD_17: usize = 17;
-const FIELD_18: usize = 18;
-const DESCRIPTION_0_FIELD: usize = 20;
-const DESCRIPTION_1_FIELD: usize = 29;
-const BRACKET_SPAN_FIELD: usize = 39;
-const GROUP_QUEUE_FIELD: usize = 40;
-const MINIMAP_ICON_SCALE_FIELD: usize = 41;
 
 /// Build 12340 `Flags` (`+0xc`): bit `0x100` is `GetInstanceInfo`'s `isDynamic` (`0x51a8c0`).
 const WRATH_FLAGS_FIELD: usize = 3;
@@ -163,11 +147,9 @@ fn wrath_locale_slot(locale: &str) -> usize {
 fn map_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("Map");
     let fields = match profile {
-        DataProfile::Vanilla => 42,
         DataProfile::Wrath { .. } => 66,
     };
     let (name, description_0, description_1) = match profile {
-        DataProfile::Vanilla => (MAP_NAME_FIELD, DESCRIPTION_0_FIELD, DESCRIPTION_1_FIELD),
         DataProfile::Wrath { locale } => {
             let slot = wrath_locale_slot(locale);
             (
@@ -180,11 +162,7 @@ fn map_schema(profile: &DataProfile) -> Schema {
     for i in 0..fields {
         let ty = if i == 1 || i == name || i == description_0 || i == description_1 {
             FieldType::String
-        } else if matches!(profile, DataProfile::Vanilla)
-            && matches!(i, FIELD_17 | FIELD_18 | MINIMAP_ICON_SCALE_FIELD)
-            || matches!(profile, DataProfile::Wrath { .. })
-                && matches!(i, WRATH_MINIMAP_ICON_SCALE_FIELD | 60 | 61)
-        {
+        } else if matches!(i, WRATH_MINIMAP_ICON_SCALE_FIELD | 60 | 61) {
             FieldType::Float32
         } else {
             FieldType::UInt32
@@ -207,14 +185,6 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
     let rs = parse(bytes, map_schema(profile), "Map")?;
     let (name, description_0, description_1, loading_screen, max_players, minimap_icon_scale) =
         match profile {
-            DataProfile::Vanilla => (
-                MAP_NAME_FIELD,
-                DESCRIPTION_0_FIELD,
-                DESCRIPTION_1_FIELD,
-                Some(LOADING_SCREEN_FIELD),
-                MAX_PLAYERS_FIELD,
-                MINIMAP_ICON_SCALE_FIELD,
-            ),
             DataProfile::Wrath { locale } => {
                 let locale = wrath_locale_slot(locale);
                 (
@@ -227,7 +197,6 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
                 )
             }
         };
-    let wrath = matches!(profile, DataProfile::Wrath { .. });
     let mut dirs = HashMap::with_capacity(rs.records().len());
     let mut names = HashMap::with_capacity(rs.records().len());
     let mut loading_screens = HashMap::new();
@@ -239,46 +208,18 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
         battleground.insert(
             id,
             MapBattlegroundColumns {
-                min_level: if wrath {
-                    0
-                } else {
-                    u32_at(r, MIN_LEVEL_FIELD).unwrap_or(0)
-                },
-                max_level: if wrath {
-                    0
-                } else {
-                    u32_at(r, MAX_LEVEL_FIELD).unwrap_or(0)
-                },
+                min_level: 0,
+                max_level: 0,
                 max_players: u32_at(r, max_players).unwrap_or(0),
-                field_16: if wrath {
-                    0
-                } else {
-                    u32_at(r, FIELD_16).unwrap_or(0) as i32
-                },
-                field_17: if wrath {
-                    0.0
-                } else {
-                    f32_at(r, FIELD_17).unwrap_or(0.0)
-                },
-                field_18: if wrath {
-                    0.0
-                } else {
-                    f32_at(r, FIELD_18).unwrap_or(0.0)
-                },
+                field_16: 0,
+                field_17: 0.0,
+                field_18: 0.0,
                 descriptions: [
                     str_at(&rs, r, description_0).unwrap_or_default(),
                     str_at(&rs, r, description_1).unwrap_or_default(),
                 ],
-                bracket_span: if wrath {
-                    0
-                } else {
-                    u32_at(r, BRACKET_SPAN_FIELD).unwrap_or(0)
-                },
-                group_queue: if wrath {
-                    0
-                } else {
-                    u32_at(r, GROUP_QUEUE_FIELD).unwrap_or(0)
-                },
+                bracket_span: 0,
+                group_queue: 0,
                 minimap_icon_scale: f32_at(r, minimap_icon_scale).unwrap_or(1.0),
             },
         );
@@ -288,9 +229,7 @@ fn parse_map_catalog(bytes: &[u8], profile: &DataProfile) -> Result<MapCatalog> 
         if let Some(name) = str_at(&rs, r, name).filter(|n| !n.is_empty()) {
             names.insert(id, name);
         }
-        if wrath {
-            flags.insert(id, u32_at(r, WRATH_FLAGS_FIELD).unwrap_or(0));
-        }
+        flags.insert(id, u32_at(r, WRATH_FLAGS_FIELD).unwrap_or(0));
         // Type 0 is recorded too, so `None` means only that no such map exists.
         if let Some(ty) = u32_at(r, INSTANCE_TYPE_FIELD) {
             instance_types.insert(id, ty);
@@ -329,24 +268,8 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_and_wrath_map_offsets_are_distinct_and_localized() {
+    fn wrath_map_offsets_are_localized() {
         let strings = b"\0directory\0vanilla-name\0wrath-fr\0horde-fr\0alliance-fr\0";
-        let mut vanilla = (10_000..10_042).collect::<Vec<u32>>();
-        vanilla[1] = 1;
-        vanilla[MAP_NAME_FIELD] = 11;
-        vanilla[MINIMAP_ICON_SCALE_FIELD] = 1.25f32.to_bits();
-        let set = parse(
-            &wdbc(&vanilla, strings),
-            map_schema(&DataProfile::Vanilla),
-            "synthetic vanilla Map",
-        )
-        .unwrap();
-        let row = &set.records()[0];
-        assert_eq!(
-            str_at(&set, row, MAP_NAME_FIELD).as_deref(),
-            Some("vanilla-name")
-        );
-        assert_eq!(u32_at(row, MAX_PLAYERS_FIELD), Some(10_015));
 
         let profile = DataProfile::Wrath {
             locale: "frFR".into(),
@@ -391,48 +314,5 @@ mod tests {
         assert_eq!(catalog.directory(0), Some("Azeroth"));
         assert!(catalog.name(0).is_some_and(|name| !name.is_empty()));
         assert!(catalog.len() > 100);
-    }
-
-    #[test]
-    fn the_battleground_columns_read_the_shipped_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let catalog = load_map_catalog(&mut chain).expect("Map.dbc");
-        let wsg = catalog.battleground(489).expect("Warsong Gulch");
-        assert_eq!(
-            (wsg.min_level, wsg.max_level, wsg.max_players, wsg.field_16),
-            (10, 60, 10, -1)
-        );
-        assert_eq!((wsg.bracket_span, wsg.group_queue), (10, 1));
-        assert!(wsg.descriptions[0].starts_with("A valley bordering Ashenvale"));
-        assert_eq!(
-            wsg.descriptions[0], wsg.descriptions[1],
-            "both faction descriptions carry the same text on the shipped rows"
-        );
-        assert_eq!(wsg.bracket_levels(0), (10, 19));
-        assert_eq!(wsg.bracket_levels(5), (60, 60), "the max clamps at 60");
-        let ab = catalog.battleground(529).expect("Arathi Basin");
-        assert_eq!(
-            (ab.min_level, ab.max_players, ab.bracket_span),
-            (20, 15, 10)
-        );
-        assert!(
-            (ab.minimap_icon_scale - 1.25).abs() < 1e-6,
-            "Arathi Basin\'s MinimapIconScale"
-        );
-        assert!((wsg.minimap_icon_scale - 1.0).abs() < 1e-6);
-        assert_eq!(ab.bracket_levels(1), (30, 39));
-        let av = catalog.battleground(30).expect("Alterac Valley");
-        assert_eq!((av.min_level, av.max_players, av.group_queue), (51, 40, 0));
-        assert_eq!(
-            av.bracket_levels(0),
-            (0, 0),
-            "a zero span zeroes both bounds"
-        );
-        assert!((av.field_17 - 0.74).abs() < 1e-3 && (av.field_18 - 0.34).abs() < 1e-3);
-        assert!(
-            catalog.battleground(0).is_some(),
-            "every row carries the columns — the client resolves map 0's when nothing was listed"
-        );
     }
 }

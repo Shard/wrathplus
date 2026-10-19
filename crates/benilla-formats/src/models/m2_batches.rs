@@ -8,7 +8,7 @@ use benilla_bytes::ByteExt;
 use benilla_m2::parse_m2;
 use benilla_m2::M2TextureType;
 
-use crate::{Chain, DataProfile};
+use crate::Chain;
 
 use super::anim::parse_m2_animations;
 use super::key_anim::SeqSlot;
@@ -198,46 +198,25 @@ pub fn load_m2_mesh_skinned(
     let bytes = chain
         .read_file(&path)
         .with_context(|| format!("reading M2 {path}"))?;
-    let profile = chain.profile().clone();
-    parse_chain_m2(&profile, chain, &path, &bytes, &dir, skins)
-        .with_context(|| format!("parsing M2 {path}"))
+    parse_chain_m2(chain, &path, &bytes, &dir, skins).with_context(|| format!("parsing M2 {path}"))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ChainM2Parser {
-    VanillaEmbeddedSkin,
-    WrathExternalSkin,
-}
-
-fn chain_m2_parser(profile: &DataProfile) -> ChainM2Parser {
-    match profile {
-        DataProfile::Vanilla => ChainM2Parser::VanillaEmbeddedSkin,
-        DataProfile::Wrath { .. } => ChainM2Parser::WrathExternalSkin,
-    }
-}
-
-/// Parse with the chain's declared dialect; a Wrath model always consumes its sibling `00.skin`.
+/// Parse a chain model with its sibling `00.skin`, as every build-12340 model needs.
 fn parse_chain_m2(
-    profile: &DataProfile,
     chain: &mut Chain,
     path: &str,
     bytes: &[u8],
     dir: &str,
     skins: &[Option<String>],
 ) -> Result<Vec<RenderSubmesh>> {
-    match chain_m2_parser(profile) {
-        ChainM2Parser::VanillaEmbeddedSkin => parse_m2_render_submeshes(bytes, dir, skins),
-        ChainM2Parser::WrathExternalSkin => {
-            let stem = path
-                .strip_suffix(".m2")
-                .with_context(|| format!("Wrath M2 path has no .m2 suffix: {path}"))?;
-            let skin_path = format!("{stem}00.skin");
-            let skin = chain
-                .read_file(&skin_path)
-                .with_context(|| format!("reading Wrath skin {skin_path}"))?;
-            Ok(super::wrath::parse_wrath_render_model(bytes, &skin, dir, skins)?.submeshes)
-        }
-    }
+    let stem = path
+        .strip_suffix(".m2")
+        .with_context(|| format!("Wrath M2 path has no .m2 suffix: {path}"))?;
+    let skin_path = format!("{stem}00.skin");
+    let skin = chain
+        .read_file(&skin_path)
+        .with_context(|| format!("reading Wrath skin {skin_path}"))?;
+    Ok(super::wrath::parse_wrath_render_model(bytes, &skin, dir, skins)?.submeshes)
 }
 
 /// [`crate::m2_bone_spins`] for a model read from the chain.
@@ -776,20 +755,6 @@ pub fn m2_sequence_visible_textures(bytes: &[u8], anim_id: u16) -> Option<Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn chain_profile_selects_its_native_m2_and_skin_layout() {
-        assert_eq!(
-            chain_m2_parser(&DataProfile::Vanilla),
-            ChainM2Parser::VanillaEmbeddedSkin
-        );
-        assert_eq!(
-            chain_m2_parser(&DataProfile::Wrath {
-                locale: "enUS".into()
-            }),
-            ChainM2Parser::WrathExternalSkin
-        );
-    }
 
     /// A bucket never sorts under the exact rung, which its sibling quad cloud keeps.
     #[test]

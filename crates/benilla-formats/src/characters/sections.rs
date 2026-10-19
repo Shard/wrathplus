@@ -271,23 +271,17 @@ impl CharSections {
                     std::array::from_fn(|i| str_at(rs, r, columns.texture + i).unwrap_or_default());
                 let key = (race as u8, sex as u8, ty as u8, var as u8, color as u8);
                 // A row flagged `0x1` can share its key with a standard row (Human male skin 0 has
-                // `…Skin00_00` and `…_100`). Vanilla prefers the unflagged standard row; Wrath's
-                // bit means SECTION_FLAG_PLAYER, so the flagged player row wins instead.
+                // `…Skin00_00` and `…_100`). The bit means SECTION_FLAG_PLAYER, so the flagged
+                // player row wins.
                 let player_flag = u32_at(r, columns.flags).unwrap_or(0) & 0x1 != 0;
                 match profile {
-                    DataProfile::Vanilla if player_flag => {
-                        if !sections.contains_key(&key) {
-                            flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
-                        }
-                        sections.entry(key).or_insert(texs);
-                    }
                     DataProfile::Wrath { .. } if !player_flag => {
                         if !sections.contains_key(&key) {
                             flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
                         }
                         sections.entry(key).or_insert(texs);
                     }
-                    DataProfile::Vanilla | DataProfile::Wrath { .. } => {
+                    DataProfile::Wrath { .. } => {
                         flags.insert(key, u32_at(r, columns.flags).unwrap_or(0));
                         sections.insert(key, texs);
                     }
@@ -721,18 +715,6 @@ fn region_texel(
 /// CharSections.dbc: 10 fields, three of them texture names.
 pub(crate) fn char_sections_schema(profile: &DataProfile) -> Schema {
     let mut s = Schema::new("CharSections");
-    let vanilla = [
-        ("ID", FieldType::UInt32),
-        ("RaceID", FieldType::UInt32),
-        ("SexID", FieldType::UInt32),
-        ("SectionType", FieldType::UInt32),
-        ("VariationIndex", FieldType::UInt32),
-        ("ColorIndex", FieldType::UInt32),
-        ("TextureName0", FieldType::String),
-        ("TextureName1", FieldType::String),
-        ("TextureName2", FieldType::String),
-        ("Flags", FieldType::UInt32),
-    ];
     let wrath = [
         ("ID", FieldType::UInt32),
         ("RaceID", FieldType::UInt32),
@@ -746,7 +728,6 @@ pub(crate) fn char_sections_schema(profile: &DataProfile) -> Schema {
         ("ColorIndex", FieldType::UInt32),
     ];
     for (name, ty) in match profile {
-        DataProfile::Vanilla => vanilla,
         DataProfile::Wrath { .. } => wrath,
     } {
         s.add_field(SchemaField::new(name, ty));
@@ -767,13 +748,6 @@ pub(crate) struct CharSectionColumns {
 
 pub(crate) fn char_section_columns(profile: &DataProfile) -> CharSectionColumns {
     match profile {
-        DataProfile::Vanilla => CharSectionColumns {
-            section_type: 3,
-            variation: 4,
-            color: 5,
-            texture: 6,
-            flags: 9,
-        },
         DataProfile::Wrath { .. } => CharSectionColumns {
             section_type: 3,
             variation: 8,
@@ -846,29 +820,20 @@ mod tests {
     }
 
     #[test]
-    fn char_sections_uses_profile_columns_and_prefers_the_profile_player_row() {
-        let vanilla = DataProfile::Vanilla;
+    fn char_sections_use_wrath_columns_and_prefer_the_player_row() {
         let wrath = DataProfile::Wrath {
             locale: "enUS".to_string(),
         };
-        let vanilla_rows =
-            char_sections_fixture(&vanilla, &[(0, "vanilla-player"), (1, "vanilla-extra")]);
         let wrath_rows = char_sections_fixture(&wrath, &[(1, "wrath-player"), (0, "wrath-npc")]);
 
-        let vanilla_sections = CharSections::from_records(&vanilla_rows, &vanilla);
         let wrath_sections = CharSections::from_records(&wrath_rows, &wrath);
-        assert_eq!(
-            vanilla_sections.hair_texture(1, 0, 71, 9),
-            Some("vanilla-player")
-        );
         assert_eq!(
             wrath_sections.hair_texture(1, 0, 71, 9),
             Some("wrath-player")
         );
-        for (profile, rows, expected, scaled) in [
-            (&vanilla, [(1, "extra"), (0, "player")], "player", false),
-            (&wrath, [(0, "npc"), (1, "player")], "player", true),
-        ] {
+        for (profile, rows, expected, scaled) in
+            [(&wrath, [(0, "npc"), (1, "player")], "player", true)]
+        {
             let parsed =
                 CharSections::from_records(&char_sections_fixture(profile, &rows), profile);
             assert_eq!(parsed.hair_texture(1, 0, 71, 9), Some(expected));
