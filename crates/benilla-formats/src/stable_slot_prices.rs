@@ -82,9 +82,29 @@ mod tests {
     #[test]
     fn the_shipped_ladder_prices_each_next_slot() {
         let t = table_from(&synthesize()).expect("parse");
-        assert_eq!(t.len(), 2, "5875 ships exactly two stable slots");
+        assert_eq!(t.len(), 2, "the synthesized ladder's two rows");
         assert_eq!(t.next_slot_price(0), Some(500));
         assert_eq!(t.next_slot_price(1), Some(50_000));
         assert_eq!(t.next_slot_price(2), None);
+    }
+
+    /// The installed 12340 table: four slots at 5 s, 5 g, 50 g and 150 g.
+    #[test]
+    fn the_installed_ladder_is_four_slots() {
+        let data = crate::wow_data_or_skip!();
+        let mut chain = crate::open_chain(&data).expect("open chain");
+        let t = load_stable_slot_prices(&mut chain).expect("load StableSlotPrices.dbc");
+        assert_eq!(t.len(), 4);
+        let prices: Vec<_> = (0..5).map(|n| t.next_slot_price(n)).collect();
+        assert_eq!(
+            prices,
+            [
+                Some(500),
+                Some(50_000),
+                Some(500_000),
+                Some(1_500_000),
+                None
+            ]
+        );
     }
 }

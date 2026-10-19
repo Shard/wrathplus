@@ -760,6 +760,18 @@ pub(crate) fn char_section_columns(profile: &DataProfile) -> CharSectionColumns 
 
 #[cfg(test)]
 mod tests {
+    /// A 1.12 256-space tile on an atlas `width` texels wide: build 12340's installed atlas is
+    /// 512², and [`blit_over_scaled`] places every region at the same normalized UVs.
+    fn at(t: Tile, width: u32) -> Tile {
+        let (x, y, w, h) = t;
+        (
+            x * width / 256,
+            y * width / 256,
+            w * width / 256,
+            h * width / 256,
+        )
+    }
+
     /// The `(cell, texture)` of a worn contribution; these fixtures pass no emblem.
     fn worn_cell<'a>(step: &EquipBlit<'a>) -> (i8, &'a str) {
         match step.source {
@@ -1626,17 +1638,22 @@ mod tests {
             .expect("composite ok")
             .expect("base skin row present");
 
-        assert_eq!((comp.width, comp.height), (256, 256), "atlas is 256²");
+        assert_eq!(
+            (comp.width, comp.height),
+            (512, 512),
+            "the 12340 atlas is 512²"
+        );
         assert_eq!(comp.mips.len(), base.mips.len(), "keeps the base mip count");
 
         // Count mip-0 pixels in a tile that differ from the base atlas.
+        let stride = comp.width;
         let changed = |t: Tile| {
-            let (x, y, w, h) = t;
+            let (x, y, w, h) = at(t, stride);
             let (b, c) = (&base.mips[0], &comp.mips[0]);
             (y..y + h)
                 .flat_map(|row| (x..x + w).map(move |col| (row, col)))
                 .filter(|&(row, col)| {
-                    let i = ((row * 256 + col) * 4) as usize;
+                    let i = ((row * stride + col) * 4) as usize;
                     b[i..i + 4] != c[i..i + 4]
                 })
                 .count()
@@ -1752,11 +1769,6 @@ mod tests {
             "Character\\NightElf\\Female\\NightElfFemaleNakedTorsoSkin00_00.blp",
         )
         .expect("read naked torso");
-        assert_eq!(
-            (torso.width, torso.height),
-            (128, 64),
-            "the sheet is authored exactly tile-sized"
-        );
         let comp = cs
             .composite_body(
                 &mut chain, race, sex, skin, 0, 0, 0, 0, [None; 8], None, false,
@@ -1764,9 +1776,14 @@ mod tests {
             .expect("composite ok")
             .expect("base skin row present");
 
-        let (tx, ty, tw, th) = TILE_G3;
+        let (tx, ty, tw, th) = at(TILE_G3, comp.width);
+        assert_eq!(
+            (torso.width, torso.height),
+            (tw, th),
+            "the sheet is authored exactly tile-sized"
+        );
         for row in 0..th {
-            let d = ((ty + row) * 256 + tx) as usize * 4;
+            let d = ((ty + row) * comp.width + tx) as usize * 4;
             let s = (row * tw) as usize * 4;
             assert_eq!(
                 &comp.mips[0][d..d + tw as usize * 4],
@@ -1803,9 +1820,13 @@ mod tests {
                 })
                 .collect()
         };
-        let sheet = |img: &BlpMipChain| rect(img, (0, 0, 128, 64), 128);
+        let sheet = |img: &BlpMipChain| rect(img, (0, 0, img.width, img.height), img.width);
         let (torso_sheet, pelvis_sheet) = (sheet(&torso), sheet(&pelvis));
-        let (base_g3, base_g5) = (rect(&base, TILE_G3, 256), rect(&base, TILE_G5, 256));
+        let w = base.width;
+        let (base_g3, base_g5) = (
+            rect(&base, at(TILE_G3, w), w),
+            rect(&base, at(TILE_G5, w), w),
+        );
 
         // A display that takes the cell without painting it.
         let occupies = |layers: &[usize]| {
@@ -1898,10 +1919,12 @@ mod tests {
                 (TILE_G3, "torso", g3_want, g3),
                 (TILE_G5, "pelvis", g5_want, g5),
             ] {
-                let n = differing(&rect(&comp, tile, 256), want);
+                let n = differing(&rect(&comp, at(tile, comp.width), comp.width), want);
                 assert_eq!(
-                    n, 0,
-                    "{label}: the {name} tile is not {want_name} ({n}/8192 texels)"
+                    n,
+                    0,
+                    "{label}: the {name} tile is not {want_name} ({n}/{} texels)",
+                    want.len() / 4
                 );
             }
         }
@@ -1947,9 +1970,9 @@ mod tests {
             let mips = read_texture_mip_chain(&mut chain, &path).expect("re-read");
             let (_, _, tw, th) = EQUIP_TILES[step.layer];
             assert_eq!(
-                (mips.width, mips.height),
-                (tw, th),
-                "{path} is authored tile-sized"
+                mips.width * th,
+                mips.height * tw,
+                "{path} is authored in its tile's proportions"
             );
         }
 
@@ -1960,11 +1983,13 @@ mod tests {
         };
         let plain = compose(None);
         let crested = compose(Some(emblem));
+        let width = plain.width as usize;
         let in_torso = |i: usize| {
-            let (x, y) = ((i % 256) as u32, (i / 256) as u32);
+            let (x, y) = ((i % width) as u32, (i / width) as u32);
             [EQUIP_TILES[3], EQUIP_TILES[4]]
                 .iter()
-                .any(|(tx, ty, tw, th)| x >= *tx && x < tx + tw && y >= *ty && y < ty + th)
+                .map(|&t| at(t, plain.width))
+                .any(|(tx, ty, tw, th)| x >= tx && x < tx + tw && y >= ty && y < ty + th)
         };
         let moved: Vec<usize> = plain.mips[0]
             .as_chunks::<4>()
@@ -1984,7 +2009,7 @@ mod tests {
             strays.is_empty(),
             "the emblem repainted {} texel(s) outside the torso tiles, first at {:?}",
             strays.len(),
-            strays.first().map(|i| (i % 256, i / 256))
+            strays.first().map(|i| (i % width, i / width))
         );
 
         let other = compose(Some(GuildEmblem {
@@ -2038,11 +2063,11 @@ mod tests {
         let dressed = compose(equipment);
 
         let changed = |a: &BlpMipChain, b: &BlpMipChain, t: Tile| {
-            let (x, y, w, h) = t;
+            let (x, y, w, h) = at(t, a.width);
             (y..y + h)
                 .flat_map(|row| (x..x + w).map(move |col| (row, col)))
                 .filter(|&(row, col)| {
-                    let i = ((row * 256 + col) * 4) as usize;
+                    let i = ((row * a.width + col) * 4) as usize;
                     a.mips[0][i..i + 4] != b.mips[0][i..i + 4]
                 })
                 .count()

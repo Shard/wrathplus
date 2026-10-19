@@ -1,7 +1,8 @@
 //! FixColorVertexAlpha, the portal fade: MOCV vertices at a portal whose far side is an exterior
 //! group turn `(255, 255, 255, 255)`, interior-to-interior portals whiten nothing, and there is no
-//! MOPY alpha pre-pass. A capture of the reference's uploaded MOCV for the Northshire abbey matches
-//! the file in all 678 vertices of group 1 and in 496 of 506 in group 3.
+//! MOPY alpha pre-pass. A 1.12 capture of the reference's uploaded MOCV for the Northshire abbey
+//! matched the file in every vertex of group 1 and all but the fade's 10 slots of group 3; the
+//! 12340 abbey is re-authored, so the counts are not carried over.
 
 use benilla_formats::{parse_wmo_root, wmo_group_fixed_colors, Chain};
 
@@ -27,26 +28,23 @@ fn fade_census(reader: &Chain, stem: &str, gi: u32) -> (usize, usize, f32, f32) 
 }
 
 #[test]
-fn abbey_matches_the_reference_capture() {
+fn the_abbey_fade_touches_only_exterior_portals() {
     let data = benilla_formats::wow_data_or_skip!();
-    let reader = Chain::open(&data).expect("open vanilla patch chain");
+    let reader = Chain::open(&data).expect("open patch chain");
     let stem = "World\\wmo\\Azeroth\\Buildings\\NSabbey\\NSabbey";
 
-    let (changed, total, _, _) = fade_census(&reader, stem, 1);
-    assert_eq!(total, 678, "capture's group 1 upload was 678 vertices");
+    let (changed, _, _, _) = fade_census(&reader, stem, 1);
     assert_eq!(
         changed, 0,
-        "group 1's portals all lead to interior neighbours — the capture read it byte-exact"
+        "group 1's portals all lead to interior neighbours, so nothing whitens"
     );
 
     let (changed, total, before, after) = fade_census(&reader, stem, 3);
-    assert_eq!(total, 506, "capture's group 3 upload was 506 vertices");
-    assert_eq!(
-        changed, 10,
-        "the capture read 496/506 byte-exact — the fade's whole footprint is 10 slots \
-         (an infinite-plane distance test rewrites 12; the MOPY pre-pass would rewrite 372)"
+    assert!(
+        changed * 20 < total,
+        "the fade's footprint is a few portal slots, not a pre-pass ({changed}/{total})"
     );
-    // Those 10 are near-white in the file already (225..254).
+    // The faded slots are near-white in the file already.
     assert!(
         (before - after).abs() < 0.5,
         "abbey g003 mean luminance moved {before} → {after}"
@@ -59,7 +57,7 @@ fn abbey_matches_the_reference_capture() {
 #[test]
 fn dire_maul_entrance_corridor_floors_are_lit() {
     let data = benilla_formats::wow_data_or_skip!();
-    let reader = Chain::open(&data).expect("open vanilla patch chain");
+    let reader = Chain::open(&data).expect("open patch chain");
     let stem = "World\\wmo\\Dungeon\\KL_Diremaul\\KL_Diremaul";
 
     for gi in [12, 14, 17, 27, 31] {
