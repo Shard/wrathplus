@@ -25,12 +25,14 @@ const SKILL_LINE: &str = "DBFilesClient\\SkillLine.dbc";
 const SKILL_LINE_ABILITY: &str = "DBFilesClient\\SkillLineAbility.dbc";
 const SKILL_RACE_CLASS_INFO: &str = "DBFilesClient\\SkillRaceClassInfo.dbc";
 
-const SKILL_LINE_FIELDS: usize = 23;
+const SKILL_LINE_FIELDS: usize = 32;
 const COL_SL_NAME_ENUS: usize = 3;
 const COL_SL_DESC_ENUS: usize = 12;
 const COL_SL_SPELL_ICON: usize = 21;
 /// Build 12340 only: `canLink` (file column 55), the trade-link gate (`0x5db060`, `0x5de120`).
 const COL_SL_CAN_LINK: usize = 22;
+/// Build 12340 only: enUS `alternateVerb_lang` (file column 38), `GetTradeSkillInfo`'s fifth return.
+const COL_SL_ALT_VERB_ENUS: usize = 23;
 
 const SKILL_LINE_ABILITY_FIELDS: usize = 15;
 const COL_SLA_SKILL_ID: usize = 1;
@@ -92,6 +94,9 @@ pub struct SkillLineInfo {
     pub description: String,
     /// `canLink`: the line has a trade link (`GetTradeSkillListLink`).
     pub can_link: bool,
+    /// enUS `alternateVerb_lang` ("Enchant" on Enchanting), empty on most lines: the verb
+    /// `GetTradeSkillInfo` answers for a recipe that creates no item (`0x5db2a0`).
+    pub alternate_verb: String,
 }
 
 /// One `SkillRaceClassInfo.dbc` row: the race and class masks, and its [`SkillRaceClass`].
@@ -405,6 +410,8 @@ fn skill_line_schema() -> Schema {
             s.add_field(SchemaField::new("NameEnUs", FieldType::String));
         } else if i == COL_SL_DESC_ENUS {
             s.add_field(SchemaField::new("DescEnUs", FieldType::String));
+        } else if i == COL_SL_ALT_VERB_ENUS {
+            s.add_field(SchemaField::new("AltVerbEnUs", FieldType::String));
         } else {
             s.add_field(SchemaField::new(format!("F{i}"), FieldType::UInt32));
         }
@@ -513,6 +520,7 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
         let category_id = u32_at(r, 1).unwrap_or(0);
         let description = str_at(&sl_set, r, COL_SL_DESC_ENUS).unwrap_or_default();
         let can_link = u32_at(r, COL_SL_CAN_LINK).unwrap_or(0) != 0;
+        let alternate_verb = str_at(&sl_set, r, COL_SL_ALT_VERB_ENUS).unwrap_or_default();
         lines.insert(
             id,
             SkillLineInfo {
@@ -521,6 +529,7 @@ pub fn load_skill_line_catalog(chain: &mut Chain) -> Result<SkillLineCatalog> {
                 icon,
                 description,
                 can_link,
+                alternate_verb,
             },
         );
     }

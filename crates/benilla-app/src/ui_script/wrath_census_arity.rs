@@ -24,7 +24,6 @@ const SHORT_REVIEWED: &[(&str, &str)] = &[
     ("GetFriendInfo", "pending Native UI: a short hit"),
     ("GetGuildRosterInfo", "pending Native UI: a short hit"),
     ("GetItemInfo", "pending Native UI: a short hit"),
-    ("GetTradeSkillInfo", "pending Native UI: a short hit"),
     ("GetWhoInfo", "pending Native UI: a short hit"),
 ];
 

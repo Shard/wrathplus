@@ -402,6 +402,15 @@ fn resolve_recipe(
         }
     }
 
+    // `GetTradeSkillInfo`'s altVerb (`0x5db2a0`): the open line's `alternateVerb` unless the first
+    // effect makes an item (24 `CREATE_ITEM`, 157 `CREATE_ITEM_2`, 59 `CREATE_RANDOM_ITEM`).
+    let alt_verb = (!matches!(d.effects[0], 24 | 157 | 59))
+        .then(|| {
+            let line = skill_lines.catalog.spell_to_line(spell_id)?;
+            Some(skill_lines.catalog.line(line)?.alternate_verb.clone())
+        })
+        .flatten();
+
     let cd = cooldowns.info(spell_id, 0, Some(d), now);
     Some(TradeSkillRecipe {
         group,
@@ -419,6 +428,7 @@ fn resolve_recipe(
         reagents,
         tools,
         description: describe(d),
+        alt_verb,
     })
 }
 
@@ -799,6 +809,7 @@ mod tests {
                 icon: None,
                 description: String::new(),
                 can_link,
+                alternate_verb: String::new(),
             },
         );
         cat.set_line_abilities(
