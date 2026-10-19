@@ -5,8 +5,8 @@
 //! The search verbs (`take_wrath_raid_browser_requests`) send `CMSG_SEARCH_LFG_JOIN`/`LEAVE`.
 //! Labelled: a member is never shown ignored or a friend; `unknown_64`/`flag_8c` read 0; the
 //! totals are the listed counts.
-use super::wrath_social_lists_capture::NativeRaidBrowser;
-use super::{ClientCommand, NetCommands};
+use crate::net::wrath_social_lists_capture::NativeRaidBrowser;
+use crate::net::{ClientCommand, NetCommands};
 use benilla_protocol::wrath_raid_browser::{Command, Group, Packet, Player};
 use benilla_ui::script::{
     ScriptDialect, UiScript, WrathRaidBrowserGroup, WrathRaidBrowserMember,
@@ -26,7 +26,7 @@ pub(crate) struct RaidBrowser {
     names_seen: u64,
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<RaidBrowser>().add_systems(
         Update,
         feed_raid_browser
@@ -206,7 +206,7 @@ fn feed_raid_browser(
 }
 
 /// A session boundary forgets the list.
-pub(super) fn clear(browser: &mut RaidBrowser) {
+pub(crate) fn clear(browser: &mut RaidBrowser) {
     *browser = RaidBrowser::default();
 }
 

@@ -1390,12 +1390,17 @@ fn writer_loop(
                     } => w.auction_list_bidder_items(auctioneer, list_from, &auction_ids),
                     ClientCommand::AuctionSellItem {
                         auctioneer,
-                        item_guid,
+                        items,
                         bid,
                         buyout,
                         etime_minutes,
-                        ..
-                    } => w.auction_sell_item(auctioneer, item_guid, bid, buyout, etime_minutes),
+                    } => w.auction_sell_item(
+                        auctioneer,
+                        items.first().map_or(0, |&(guid, _)| guid),
+                        bid,
+                        buyout,
+                        etime_minutes,
+                    ),
                     ClientCommand::AuctionPlaceBid {
                         auctioneer,
                         auction_id,

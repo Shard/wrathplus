@@ -803,6 +803,7 @@ pub(crate) struct Model {
     pub(crate) auction_sorts: Vec<(usize, auction::AuctionSortOp)>,
     /// `SetAuctionsTabShowing(bool)` (`0xc0f3f5`).
     pub(crate) auctions_tab_showing: bool,
+    pub(crate) auction_cancel_sell: bool,
     pub(crate) auction_close: bool,
     /// The sell slot's item, resolved to its guid when `StartAuction` fires.
     pub(crate) auction_sell_item: Option<cursor::CursorItem>,
@@ -1473,6 +1474,7 @@ impl Model {
             auction_start: None,
             auction_sorts: Vec::new(),
             auctions_tab_showing: false,
+            auction_cancel_sell: false,
             auction_close: false,
             auction_sell_item: None,
             trade: None,

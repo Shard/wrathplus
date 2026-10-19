@@ -6,9 +6,9 @@
 //! `SMSG_RESPOND_INSPECT_ACHIEVEMENTS` becomes the comparison. A server first
 //! (`SMSG_SERVER_FIRST_ACHIEVEMENT`) becomes an achievement chat line ([`server_first_line`]).
 //! Other players' earns stay in the capture.
-use super::wrath_achievement_capture::NativeAchievementPackets;
-use super::wrath_notices::WrathProgress;
-use super::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
+use crate::net::wrath_achievement_capture::NativeAchievementPackets;
+use crate::net::wrath_notices::WrathProgress;
+use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_achievement::{Packet, Snapshot};
 use benilla_protocol::wrath_chat::Message;
 use benilla_ui::script::{
@@ -29,7 +29,7 @@ pub(crate) struct Achievements {
     compared: Option<u64>,
 }
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<Achievements>().add_systems(
         Update,
         feed_achievements
@@ -228,7 +228,7 @@ fn absorb(
 }
 
 /// A session boundary forgets the progress and any comparison.
-pub(super) fn clear(state: &mut Achievements) {
+pub(crate) fn clear(state: &mut Achievements) {
     *state = Achievements::default();
 }
 

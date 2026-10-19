@@ -173,7 +173,12 @@ fn auction_command_result(
         // prints each success in chat with no fill (`0x4cc4be`).
         match action {
             auction_action::STARTED => {
-                auction.sell_slot_taken();
+                // A multi-stack sell keeps its slot until the last stack (`0x59ba80`).
+                if auction.multiselling() {
+                    auction.multisell_stack_landed();
+                } else {
+                    auction.sell_slot_taken();
+                }
                 auction.refresh_owner();
                 auction
                     .messages
@@ -197,6 +202,10 @@ fn auction_command_result(
     }
     // `HIGHER_BID` prints nothing: its arm (`0x4cc672`) patches the row, and the player's line is
     // `ERR_AUCTION_OUTBID_S` from the bidder notification.
+    // A refused sell ends a multi-stack sell (`0x59ffb0` → `0x59ab20(0)`).
+    if action == auction_action::STARTED {
+        auction.multisell_failed();
+    }
     if error == auction_error::HIGHER_BID {
         auction.refresh_bidder();
         return;

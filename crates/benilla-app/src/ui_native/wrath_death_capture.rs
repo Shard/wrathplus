@@ -1,7 +1,7 @@
 //! Ordered native death and corpse receipts. The release location (`SMSG_DEATH_RELEASE_LOC`) feeds
 //! the world map's `GetDeathReleasePosition`; pre-resurrect and corpse-map-position receipts stay
 //! here (AC answers the latter with zeros).
-use super::NetHandlerApp;
+use crate::net::NetHandlerApp;
 use benilla_protocol::{wrath_death::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 use std::collections::VecDeque;
@@ -13,7 +13,7 @@ pub(crate) struct NativeDeathPackets(pub(crate) VecDeque<Packet>);
 #[derive(Resource, Default)]
 pub(crate) struct DeathRelease(Option<(u32, f32, f32)>);
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.init_resource::<NativeDeathPackets>()
         .init_resource::<DeathRelease>()
         .net_handler(SessionEventKind::WrathDeath, receive)
