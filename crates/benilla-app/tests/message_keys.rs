@@ -59,8 +59,8 @@ fn every_error_key_in_the_source_is_a_catalog_row() {
         .collect();
     assert!(
         strays.is_empty(),
-        "these keys are not rows of the 5875 message catalog, so the client would show nothing \
-         for them: {strays:?}"
+        "these keys are not rows of the message catalog (1.12 plus the 12340 supplement), so the \
+         client would show nothing for them: {strays:?}"
     );
 }
 
