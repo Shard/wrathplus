@@ -285,6 +285,7 @@ pub(crate) struct Model {
     pub(crate) wrath_saved_instances: super::wrath_saved_instances::State,
     pub(crate) wrath_gm_survey: super::wrath_gm_survey::State,
     pub(crate) wrath_state: super::wrath_state_queries::State,
+    pub(crate) wrath_quests: super::wrath_quest_queries::State,
     pub(crate) wrath_inspect_talents: Option<super::WrathInspectTalents>,
     /// The player's talent preview ranks and queued `LearnPreviewTalents` lists.
     pub(crate) talent_preview: super::wrath_talent_preview::TalentPreview,
@@ -1227,6 +1228,7 @@ impl Model {
             wrath_saved_instances: Default::default(),
             wrath_gm_survey: Default::default(),
             wrath_state: Default::default(),
+            wrath_quests: Default::default(),
             wrath_inspect_talents: None,
             talent_preview: Default::default(),
             glyph_sockets: None,

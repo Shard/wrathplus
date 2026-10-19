@@ -406,14 +406,9 @@ ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none,
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
-QuestFlagsPVP = QuestFlagsPVP or function() return nil end
-GetNumQuestItemDrops = GetNumQuestItemDrops or function() return 0 end
-GetQuestLogItemDrop = GetQuestLogItemDrop or none
-GetQuestLink = GetQuestLink or none
 GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
 GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none
 ProcessQuestLogRewardFactions = ProcessQuestLogRewardFactions or none
 GetQuestLogSpellLink, GetQuestSpellLink = GetQuestLogSpellLink or none, GetQuestSpellLink or none
-GetQuestSortIndex = GetQuestSortIndex or function() return 0 end
 GetQuestWorldMapAreaID = GetQuestWorldMapAreaID or function() return 0 end
 

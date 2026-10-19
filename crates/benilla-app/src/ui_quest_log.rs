@@ -739,6 +739,17 @@ pub(crate) fn feed_quest_log(
     quest_log.row_slots = rows.iter().map(|r| (r.quest_id, r.slot)).collect();
     quest_log.header_keys = header_keys;
 
+    // Build 12340's quest item drops (`0x5e1ff0`, `0x5e20a0`): each quest's source item and its
+    // objectives' drops, off the template.
+    script.set_wrath_quest_item_drops(
+        rows.iter()
+            .filter_map(|r| {
+                let t = quest_log.templates.get(r.quest_id)?;
+                let drops = t.wrath.as_ref().map(|w| w.item_drops.to_vec()).unwrap_or_default();
+                Some((r.quest_id, (t.src_item_id, drops)))
+            })
+            .collect(),
+    );
     let fresh = QuestLogState {
         entries,
         num_quests: rows.len() as u32,
