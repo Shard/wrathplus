@@ -606,6 +606,16 @@ pub(super) fn feed_player_req(
 
 /// One bag slot from its item guid: instance, template, icon and use-spell cooldown. `None` is an
 /// empty slot; an occupied one not yet resolved is `Some` with empty fields.
+/// A bag item's `BagFamily`, 0 for no template yet.
+fn bag_family(items: &Items, entry: u32, guid: u64, commands: &NetCommands) -> u32 {
+    if entry == 0 {
+        return 0;
+    }
+    items
+        .template(entry, guid, commands)
+        .map_or(0, |t| t.bag_family)
+}
+
 fn resolve_slot(
     guid: u64,
     objects: &Objects,
@@ -959,6 +969,8 @@ pub(crate) fn feed_containers(
     let opened: Vec<i64> = std::mem::take(&mut opens.0);
 
     let mut fresh: HashMap<i64, ContainerState> = HashMap::new();
+    // Build 12340's `GetContainerNumFreeSlots` second value: each bag's `BagFamily`.
+    let mut wrath_families: HashMap<i64, u32> = HashMap::new();
     // The class's relic flag; without client data it is false, an ordinary ranged slot.
     let has_relic_slot = player.is_some_and(|p| {
         p.0.unit_class().is_some_and(|c| {
@@ -1046,6 +1058,10 @@ pub(crate) fn feed_containers(
                     slots.insert(j as u32 + 1, slot);
                 }
             }
+            wrath_families.insert(
+                i64::from(bag),
+                bag_family(&items, entry, bag_guid, &commands),
+            );
             fresh.insert(
                 i64::from(bag),
                 ContainerState {
@@ -1132,6 +1148,7 @@ pub(crate) fn feed_containers(
                     slots.insert(j as u32 + 1, slot);
                 }
             }
+            wrath_families.insert(bag_id, bag_family(&items, entry, bag_guid, &commands));
             fresh.insert(
                 bag_id,
                 ContainerState {
@@ -1205,6 +1222,11 @@ pub(crate) fn feed_containers(
                 sum as f64 / n as f64 / 1e6,
                 fresh.len(),
             );
+        }
+    }
+    if player.is_some() {
+        for (&bag, &family) in &wrath_families {
+            script.set_wrath_bag_family(bag, family);
         }
     }
     if apply_container_source(

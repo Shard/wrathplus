@@ -246,6 +246,9 @@ fn feed_zone_events(
         is_arena,
         pvp_is_subzone,
     });
+    // Build 12340's `CanHearthAndResurrectFromArea` (`0x54c810`): the current area's flag
+    // `0x8000000`. Labelled: the area id it reads (`0xbd080c`) is taken as the leaf row's.
+    script.set_wrath_can_hearth_and_resurrect(leaf_row.flags & AREA_FLAG_HEARTH_AND_RESURRECT != 0);
 
     if let Some(event) = event {
         script.fire_event(event, vec![]);
@@ -272,6 +275,8 @@ const AREA_FLAG_ARENA: u32 = 0x80;
 /// Wintergrasp-style battlefield, the "combat" type.
 const AREA_FLAG_COMBAT: u32 = 0x0100_0000;
 const AREA_FLAG_CONTESTED: u32 = 0x0004_0000;
+/// `CanHearthAndResurrectFromArea`'s bit.
+const AREA_FLAG_HEARTH_AND_RESURRECT: u32 = 0x0800_0000;
 
 /// Wrath `GetZonePVPInfo 0x51ba50`'s type: the leaf row's flags when it has one, else the zone's;
 /// sanctuary, arena and combat first, with isSubZone set when the flags came from the leaf. Any

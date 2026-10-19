@@ -1,6 +1,7 @@
 //! Build 12340's gameplay-state readers' feed: the daily quest reset off
-//! `SMSG_QUERY_TIME_RESPONSE` (`GetQuestResetTime`, `0x5e6de0`) and the PvP timer off
-//! `PLAYER_FLAGS_PVP_TIMER` (`IsPVPTimerRunning`/`GetPVPTimer`, `0x51bd60`/`0x6de7a0`).
+//! `SMSG_QUERY_TIME_RESPONSE` (`GetQuestResetTime`, `0x5e6de0`), the PvP timer off
+//! `PLAYER_FLAGS_PVP_TIMER` (`IsPVPTimerRunning`/`GetPVPTimer`, `0x51bd60`/`0x6de7a0`), and the
+//! daily-quest slots (`GetDailyQuestsCompleted`, `0x58db30`).
 //!
 //! Labelled: the reset's writer (`0x5dff40`) is not decompiled; it is stamped as the local wall
 //! clock plus the packet's seconds-to-reset at receipt. The timer's end (`player+0x1940`) has no
@@ -80,6 +81,13 @@ fn feed_wrath_state(
         script.set_wrath_pvp_timer(fresh);
         *prev = fresh;
     }
+    // `GetDailyQuestsCompleted` (`0x58db30`): the non-zero daily-quest slots.
+    let daily = me.single().map_or(0, |store| {
+        (0..25)
+            .filter(|&i| store.0.player_daily_quest(i).is_some_and(|q| q != 0))
+            .count() as u32
+    });
+    script.set_wrath_daily_quests_completed(daily);
 }
 
 #[cfg(test)]
