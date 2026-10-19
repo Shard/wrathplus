@@ -53,7 +53,12 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
 /// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
 /// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 38] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 51] = [
+    MessageRecord { id: 0x1e0, key: "ERR_BATTLEGROUND_TOO_MANY_QUEUES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x1e1, key: "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x1e2, key: "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x1e3, key: "ERR_BATTLEGROUND_TEAM_LEFT_QUEUE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x1e4, key: "ERR_BATTLEGROUND_NOT_IN_BATTLEGROUND", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x22d, key: "ERR_SYSTEM_DISABLED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x231, key: "ERR_USER_SQUELCHED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -62,6 +67,10 @@ pub static WRATH_SUPPLEMENT: [MessageRecord; 38] = [
     MessageRecord { id: 0x28c, key: "ERR_PARTY_LFG_BOOT_VOTE_SUCCEEDED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x28d, key: "ERR_PARTY_LFG_BOOT_VOTE_FAILED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x296, key: "ERR_NOT_WHILE_FALLING", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x29c, key: "ERR_BATTLEGROUND_JOIN_XP_GAIN", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2a2, key: "ERR_BATTLEGROUND_JOIN_RANGE_INDEX", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2a4, key: "ERR_BATTLEGROUND_JOIN_FAILED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2a5, key: "ERR_BATTLEGROUND_JOIN_TIMED_OUT", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2a8, key: "ERR_LFG_ROLE_CHECK_FAILED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2a9, key: "ERR_LFG_ROLE_CHECK_FAILED_TIMEOUT", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2aa, key: "ERR_LFG_ROLE_CHECK_FAILED_NOT_VIABLE", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -91,7 +100,11 @@ pub static WRATH_SUPPLEMENT: [MessageRecord; 38] = [
     MessageRecord { id: 0x2c2, key: "ERR_LFG_LEFT_QUEUE", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2c3, key: "ERR_LFG_LEFT_LIST", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2c4, key: "ERR_LFG_ROLE_CHECK_ABORTED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2c5, key: "ERR_LFG_CANT_USE_BATTLEGROUND", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x2c6, key: "ERR_LFG_CANT_USE_DUNGEONS", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2d0, key: "ERR_ARENA_TEAM_PARTY_SIZE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2d2, key: "ERR_IN_RANDOM_BG", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x2d3, key: "ERR_IN_NON_RANDOM_BG", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
 ];
 
 /// The record for a `GlobalStrings` key; keys are unique (the generator refuses a duplicate),
