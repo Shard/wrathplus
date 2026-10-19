@@ -55,6 +55,8 @@ mod wrath_help_capture;
 pub(crate) mod wrath_refer_friend_capture;
 mod wrath_world_objects_capture;
 mod wrath_session_misc_capture;
+#[cfg(test)]
+mod capture_replay_tests;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
 mod wrath_faction_capture;
