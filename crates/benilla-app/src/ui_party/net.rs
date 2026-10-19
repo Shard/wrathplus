@@ -297,7 +297,10 @@ fn on_ready_check_answer(In(ev): In<SessionEvent>, mut group: ResMut<GroupState>
 /// `WrathRaidInstanceInfo`, so this decode has no consumer (3.3.5 only).
 fn drop_raid_instance_info(In(ev): In<SessionEvent>) {
     if let SessionEvent::RaidInstanceInfo { entries } = ev {
-        debug!("a 1.12 saved-instance list ({} rows) has no 3.3.5 consumer", entries.len());
+        debug!(
+            "a 1.12 saved-instance list ({} rows) has no 3.3.5 consumer",
+            entries.len()
+        );
     }
 }
 
@@ -553,7 +556,7 @@ mod tests {
             &names,
             &GuidIndex::default(),
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
 
         let asked: Vec<u64> = rx
@@ -585,7 +588,7 @@ mod tests {
             &names,
             &GuidIndex::default(),
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
         assert!(
             rx.try_iter()
@@ -624,7 +627,7 @@ mod tests {
                 names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Vanilla5875,
+                SessionDialect::Wrath12340,
             );
             group.roster_updates
         };
@@ -685,7 +688,7 @@ mod tests {
                 &names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Vanilla5875,
+                SessionDialect::Wrath12340,
             );
         };
 
@@ -803,7 +806,7 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
 
         let rec = group.stats.get(&guid).expect("the member has a record");
@@ -866,7 +869,7 @@ mod tests {
             held,
             &names,
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
 
         let rec = group.stats.get(&guid).expect("the member has a record");
@@ -894,7 +897,7 @@ mod tests {
             |_| None,
             &names,
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
         let rec = group.stats.get(&guid).unwrap();
         assert_eq!((rec.pet_guid, rec.pet_auras_negative.clone()), (None, None));
@@ -919,7 +922,7 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
         assert!(asked(&rx).is_empty());
         assert!(!group.stats.contains_key(&0xdead));
@@ -932,7 +935,7 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Vanilla5875,
+            SessionDialect::Wrath12340,
         );
         assert!(asked(&rx).is_empty());
     }
@@ -970,7 +973,7 @@ mod tests {
                 &names,
                 &index,
                 &net,
-                SessionDialect::Vanilla5875,
+                SessionDialect::Wrath12340,
             );
         };
 
@@ -1043,7 +1046,7 @@ mod tests {
                 &names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Vanilla5875,
+                SessionDialect::Wrath12340,
             );
         };
 

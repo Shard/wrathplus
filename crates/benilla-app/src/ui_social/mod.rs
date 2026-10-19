@@ -17,8 +17,6 @@ pub(crate) mod feed;
 mod native_who;
 mod query;
 
-pub(crate) use query::parse as who_query;
-
 /// The social session mirror: filled by the social handlers, read by the feed, cleared on
 /// disconnect.
 #[derive(Resource, Default)]
@@ -287,14 +285,8 @@ pub(crate) mod net {
         }
     }
 
-    fn on_connected(
-        In(event): In<SessionEvent>,
-        dialect: Option<Res<crate::net::SessionDialect>>,
-        mut social: ResMut<SocialState>,
-    ) {
-        if matches!(event, SessionEvent::Connected { .. })
-            && dialect.as_deref() == Some(&crate::net::SessionDialect::Wrath12340)
-        {
+    fn on_connected(In(event): In<SessionEvent>, mut social: ResMut<SocialState>) {
+        if matches!(event, SessionEvent::Connected { .. }) {
             social.clear_session();
         }
     }
