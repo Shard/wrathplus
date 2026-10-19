@@ -1,7 +1,9 @@
 //! Build 12340's quest-log readers the 1.12 surface lacks: `QuestFlagsPVP` (`0x58c3e0`),
 //! `GetQuestLink` (`0x5e51d0` → `0x61e5c0`), `GetQuestSortIndex` (`0x5dfa10` → `0x5deae0`),
-//! `GetNumQuestItemDrops` (`0x5e4260` → `0x5e1ff0`) and `GetQuestLogItemDrop` (`0x5e60d0` →
-//! `0x5e20a0`). Evidence: `/tmp/azb-app-mig/ghidra/{audit1,quest1,quest2}.log`.
+//! `GetNumQuestItemDrops` (`0x5e4260` → `0x5e1ff0`), `GetQuestLogItemDrop` (`0x5e60d0` →
+//! `0x5e20a0`), and the staged reputation rewards: `ProcessQuestLogRewardFactions` (`0x5df8a0`),
+//! `GetNumQuestLogRewardFactions` (`0x5df910`) and `GetQuestLogRewardFactionInfo` (`0x5df940`), over
+//! the lists App stages per quest. Evidence: `/tmp/azb-app-mig/ghidra/{audit1,quest1,quest2}.log`.
 //!
 //! Labelled: `QuestFlagsPVP`'s gate `0xb2f998` (written at `0x405540`) is read as 0.
 //! `GetQuestLogItemDrop`'s second string (`0x9f6f44`) is not resolved and answers empty.
@@ -21,12 +23,21 @@ pub(crate) struct State {
     panel_flags: u32,
     /// Each logged quest's `(source item, objective drops)`.
     item_drops: HashMap<u32, (u32, Vec<(u32, u32)>)>,
+    /// Each logged quest's staged reputation rewards `(faction, hundredths)`.
+    reward_factions: HashMap<u32, Vec<(u32, i32)>>,
+    /// The list `ProcessQuestLogRewardFactions` staged (`0xc0173c`, `0xc01840`, `0xc01818`).
+    staged: Vec<(u32, i32)>,
 }
 
 impl UiScript {
     /// The open quest panel's quest flags, 0 for none.
     pub fn set_wrath_quest_panel_flags(&mut self, flags: u32) {
         self.model_mut().wrath_quests.panel_flags = flags;
+    }
+
+    /// Each logged quest's staged reputation rewards `(faction, hundredths)`.
+    pub fn set_wrath_quest_reward_factions(&mut self, rewards: HashMap<u32, Vec<(u32, i32)>>) {
+        self.model_mut().wrath_quests.reward_factions = rewards;
     }
 
     /// Each logged quest's source item and objective drops `(item, count)`.
@@ -221,6 +232,51 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             ]))
         })?,
     )?;
+    // ProcessQuestLogRewardFactions() (`0x5df8a0`): stage the selected quest's rewards; a quest
+    // with none on record leaves the stage as it was.
+    g.set(
+        "ProcessQuestLogRewardFactions",
+        lua.create_function(|lua, ()| {
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let selected = row_quest(&model, i64::from(model.quest_log_selection));
+            if let Some(list) = selected.and_then(|q| model.wrath_quests.reward_factions.get(&q)) {
+                let list = list.clone();
+                model.wrath_quests.staged = list;
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "GetNumQuestLogRewardFactions",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .wrath_quests
+                .staged
+                .len() as f64)
+        })?,
+    )?;
+    // GetQuestLogRewardFactionInfo(index) (`0x5df940`): the staged faction and its amount in
+    // hundredths, 0 and 0 past the ten.
+    g.set(
+        "GetQuestLogRewardFactionInfo",
+        lua.create_function(|lua, args: MultiValue| {
+            let Some(index) = number(lua, &args, 0) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: GetQuestLogRewardFactionInfo(index)",
+                ));
+            };
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let (faction, amount) = usize::try_from(index - 1)
+                .ok()
+                .filter(|&i| i < 10)
+                .and_then(|i| model.wrath_quests.staged.get(i))
+                .copied()
+                .unwrap_or((0, 0));
+            Ok((f64::from(faction), f64::from(amount)))
+        })?,
+    )?;
     Ok(())
 }
 
@@ -295,5 +351,26 @@ mod tests {
             .unwrap());
         s.set_wrath_quest_panel_flags(0x2000);
         assert_eq!(s.eval::<f64>("return QuestFlagsPVP()").unwrap(), 1.0);
+    }
+
+    #[test]
+    fn process_stages_the_selected_quests_rewards() {
+        let mut s = vm();
+        let mut rewards = HashMap::new();
+        rewards.insert(7, vec![(21, 25000), (169, 12500)]);
+        s.set_wrath_quest_reward_factions(rewards);
+        assert_eq!(
+            s.eval::<f64>("return GetNumQuestLogRewardFactions()")
+                .unwrap(),
+            0.0
+        );
+        s.set_quest_log_selection(2);
+        s.run("ProcessQuestLogRewardFactions()").unwrap();
+        assert!(s
+            .eval::<bool>(
+                "local f, a = GetQuestLogRewardFactionInfo(2) local g, b = GetQuestLogRewardFactionInfo(3) \
+                 return GetNumQuestLogRewardFactions() == 2 and f == 169 and a == 12500 and g == 0 and b == 0"
+            )
+            .unwrap());
     }
 }

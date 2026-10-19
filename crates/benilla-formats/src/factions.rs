@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use benilla_dbc::{FieldType, Schema, SchemaField};
 
-use crate::dbc::{parse, u32_at};
+use crate::dbc::{f32_at, parse, u32_at};
 use crate::Chain;
 
 const FACTION_TEMPLATE: &str = "DBFilesClient\\FactionTemplate.dbc";
@@ -103,9 +103,28 @@ pub struct FactionInfo {
     base: [i32; 4],
     /// Per-slot `ReputationFlags`; `0x4` on the matched slot hides the unit tooltip's faction line.
     flags: [u32; 4],
+    /// Build 12340 `ParentFactionMod[2]` (fields 19-20): `[0]` scales a gain spilling down from the
+    /// parent into this child, `[1]` one spilling up from this row into its parent (`0x58c790`).
+    pub parent_mod: [f32; 2],
+    /// Build 12340 `ParentFactionCap[2]` (fields 21-22): the rank each spillover stops below.
+    pub parent_cap: [u32; 2],
 }
 
 impl FactionInfo {
+    /// A row with only its index, parent and spillover columns, for tests.
+    pub fn for_tests(rep_index: i32, team: u32, parent_mod: [f32; 2], parent_cap: [u32; 2]) -> Self {
+        Self {
+            rep_index,
+            team,
+            race_masks: [0; 4],
+            class_masks: [0; 4],
+            base: [0; 4],
+            flags: [0; 4],
+            parent_mod,
+            parent_cap,
+        }
+    }
+
     /// The slot the reference (`0x4d5500`..`0x4d5564`) picks for a `race`/`class`, both 1-based.
     /// `None` also keeps the faction out of the reputation pane, whose list build adds a faction
     /// only in this loop's accept block (`0x4d5555`). Unlike vmangos's `GetIndexFitTo`, a slot
@@ -260,6 +279,29 @@ impl FactionCatalog {
 
     /// A `Faction.dbc` id's reputation identity, `Some` only with a reputation slot: the
     /// reference's `FactionHasReputation` (`0x605fc0`), tested before the comparator (`0x606530`).
+    /// Any `Faction.dbc` row, with or without a reputation slot.
+    pub fn faction(&self, faction_id: u32) -> Option<&FactionInfo> {
+        self.factions.get(&faction_id)
+    }
+
+    /// The rows whose parent (`team`) is `faction_id`, by id. Labelled: the reference walks its
+    /// own child list (`0x5d2680`), whose order is not decompiled.
+    pub fn children(&self, faction_id: u32) -> Vec<u32> {
+        let mut ids: Vec<u32> = self
+            .factions
+            .iter()
+            .filter(|(_, f)| f.team == faction_id && faction_id != 0)
+            .map(|(&id, _)| id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Add a `Faction.dbc` row, for tests.
+    pub fn insert_faction(&mut self, faction_id: u32, info: FactionInfo) {
+        self.factions.insert(faction_id, info);
+    }
+
     pub fn reputation_faction(&self, faction_id: u32) -> Option<&FactionInfo> {
         self.factions.get(&faction_id).filter(|f| f.rep_index >= 0)
     }
@@ -360,6 +402,13 @@ fn faction_schema() -> Schema {
         s.add_field(SchemaField::new(format!("Desc{i}"), FieldType::String));
     }
     s.add_field(SchemaField::new("DescFlags", FieldType::UInt32));
+    // Build 12340 only, file fields 19-22.
+    for i in 0..2 {
+        s.add_field(SchemaField::new(format!("ParentFactionMod{i}"), FieldType::Float32));
+    }
+    for i in 0..2 {
+        s.add_field(SchemaField::new(format!("ParentFactionCap{i}"), FieldType::UInt32));
+    }
     s
 }
 
@@ -435,6 +484,8 @@ pub fn load_faction_catalog(chain: &mut Chain) -> Result<FactionCatalog> {
                     class_masks: [at(6), at(7), at(8), at(9)],
                     base: [iat(10), iat(11), iat(12), iat(13)],
                     flags: [at(14), at(15), at(16), at(17)],
+                    parent_mod: [f32_at(r, 37).unwrap_or(0.0), f32_at(r, 38).unwrap_or(0.0)],
+                    parent_cap: [at(39), at(40)],
                 },
             );
             // Name0 (enUS), column 19: after the ID, the index, 16 slot columns and `Team`.

@@ -406,9 +406,6 @@ ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none,
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 
 -- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
-GetNumQuestLogRewardFactions = GetNumQuestLogRewardFactions or function() return 0 end
-GetQuestLogRewardFactionInfo = GetQuestLogRewardFactionInfo or none
-ProcessQuestLogRewardFactions = ProcessQuestLogRewardFactions or none
 GetQuestLogSpellLink, GetQuestSpellLink = GetQuestLogSpellLink or none, GetQuestSpellLink or none
 GetQuestWorldMapAreaID = GetQuestWorldMapAreaID or function() return 0 end
 

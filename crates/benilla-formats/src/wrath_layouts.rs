@@ -38,7 +38,7 @@ pub(crate) fn columns(
         "SkillLine" => (23, 56, skill_line),
         "TalentTab" => (16, 24, talent_tab),
         "SpellShapeshiftForm" => (14, 35, spell_shapeshift_form),
-        "Faction" => (37, 57, faction),
+        "Faction" => (41, 57, faction),
         "ChrRaces" => (29, 69, chr_races),
         "ChrClasses" => (17, 60, chr_classes),
         "CreatureDisplayInfo" => (12, 16, creature_display_info),
@@ -190,10 +190,10 @@ fn spell_shapeshift_form(m: &mut Map) {
     m.same(0, 2).loc(2, 2).run(11, 19, 3);
 }
 
-/// `Faction.dbc` 37 → 57: the reputation columns are unchanged; the name and description blocks
-/// move past the 3.3.5 spillover columns.
+/// `Faction.dbc` 41 → 57: the reputation columns are unchanged; the name and description blocks
+/// move past the 3.3.5 spillover columns, which the loader reads as its slots 37-40.
 fn faction(m: &mut Map) {
-    m.same(0, 19).loc(19, 23).loc(28, 40);
+    m.same(0, 19).loc(19, 23).loc(28, 40).run(37, 19, 4);
 }
 
 /// `ChrRaces.dbc` 29 → 69. 1.12's mount scale (7), login effect (10), combat stun (11) and
@@ -290,7 +290,7 @@ mod tests {
         ("SkillLine", 23, 56),
         ("TalentTab", 16, 24),
         ("SpellShapeshiftForm", 14, 35),
-        ("Faction", 37, 57),
+        ("Faction", 41, 57),
         ("ChrRaces", 29, 69),
         ("ChrClasses", 17, 60),
         ("CreatureDisplayInfo", 12, 16),
