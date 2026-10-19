@@ -383,15 +383,26 @@ pub(super) fn seed(s: &mut UiScript) {
     // The dungeon finder: a catalog row, a queue and a proposal.
     s.set_wrath_lfg_catalog(
         std::sync::Arc::new(WrathLfgCatalog {
-            dungeons: vec![WrathLfgDungeon {
-                id: 1,
-                name: "Ragefire Chasm".into(),
-                dungeon_type: 1,
-                min_level: 15,
-                target_min_level: 15,
-                target_max_level: 21,
-                ..Default::default()
-            }],
+            dungeons: vec![
+                WrathLfgDungeon {
+                    id: 1,
+                    name: "Ragefire Chasm".into(),
+                    dungeon_type: 1,
+                    min_level: 15,
+                    target_min_level: 15,
+                    target_max_level: 21,
+                    ..Default::default()
+                },
+                WrathLfgDungeon {
+                    id: 2,
+                    name: "Random Dungeon".into(),
+                    dungeon_type: 6,
+                    min_level: 15,
+                    target_min_level: 15,
+                    target_max_level: 80,
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         }),
         Some(2),
@@ -399,11 +410,45 @@ pub(super) fn seed(s: &mut UiScript) {
     s.set_wrath_lfg_lock_snapshot(std::sync::Arc::new(WrathLfgLockSnapshot {
         player: Some(WrathLfgPlayerLocks {
             locks: vec![WrathLfgLock { entry: 0x0100_0001, reason: 2 }],
-            previews: vec![],
+            // The reward preview sits on the random row, the rows `GetLFGDungeonRewardInfo` reads.
+            previews: vec![WrathLfgPreview {
+                entry: 0x0600_0002,
+                money_base: 100,
+                xp_base: 1000,
+                items: vec![WrathLfgRewardItem { item: 6948, display: 1, count: 1 }],
+                ..Default::default()
+            }],
         }),
         party: None,
     }));
     s.set_wrath_lfg_queue(std::sync::Arc::new(WrathLfgQueueSnapshot {
+        player: Some(WrathLfgUpdate {
+            update_type: 5,
+            joined: true,
+            queued: true,
+            dungeons: vec![0x0100_0001],
+            ..Default::default()
+        }),
+        role_check: Some(WrathLfgRoleCheck {
+            state: 2,
+            is_beginning: false,
+            dungeons: vec![0x0100_0001],
+            members: vec![WrathLfgRoleCheckMember {
+                guid: ME,
+                ready: true,
+                roles: 2,
+                level: 80,
+                name: Some("Benchone".into()),
+            }],
+        }),
+        completion: Some(WrathLfgCompletion {
+            dungeon: 0x0100_0001,
+            strangers: 2,
+            money_base: 100,
+            xp_base: 1000,
+            items: vec![WrathLfgCompletionItem { item: 6948, display: 1, count: 1 }],
+            ..Default::default()
+        }),
         queue: Some(WrathLfgQueueStatus {
             dungeon: 0x0100_0001,
             avg_wait: 300,
@@ -561,6 +606,13 @@ pub(super) fn seed(s: &mut UiScript) {
         earned: vec![(1, 0)],
         criteria: std::collections::BTreeMap::from([(1, 10)]),
         faction: 1,
+    });
+
+    // An LFG party that can backfill.
+    s.set_wrath_group(WrathGroup {
+        lfg_dungeon_entry: 0x0100_0001,
+        lfg_status: 2,
+        ..Default::default()
     });
 
     // Equipment sets and companions.
