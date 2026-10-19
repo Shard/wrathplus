@@ -1,35 +1,6 @@
 {
   "version": 1,
   "diagnostics": [
-    "[\"crates/benilla-formats/src/spell_visual/chain_effects.rs\",\"clippy::chunks_exact_to_as_chunks\",\"using `chunks_exact` with a constant chunk size\",\"adda6a20213b409fdc01458552491d745ee81e1e8092698dbda67b8852ff36bb\"]",
-    "[\"crates/benilla-formats/src/models/wrath_effects.rs\",\"clippy::needless_question_mark\",\"enclosing `Ok` and `?` operator are unneeded\",\"f85d754667ddcef7ca52eca3b3b5fdb7a276d647a484cd6c6d58db2ef3dcdafa\"]",
-    "[\"crates/benilla-ui/src/loader/geometry.rs\",\"clippy::redundant_closure\",\"redundant closure\",\"73e5a7ad4cd83c28d691ade2b76a8067d0152833baae25ba85d7e440d9aa72d2\"]",
-    "[\"crates/benilla-ui/src/loader/geometry.rs\",\"clippy::redundant_closure\",\"redundant closure\",\"73e5a7ad4cd83c28d691ade2b76a8067d0152833baae25ba85d7e440d9aa72d2\"]",
-    "[\"crates/benilla-world/src/ffx_glow.rs\",\"clippy::type_complexity\",\"very complex type used. Consider factoring parts into `type` definitions\",\"5286ca3873ad6bd6087c4d0c066b57e989c20ed2730e5cd92bbb7144459ceb17\"]",
-    "[\"crates/benilla-formats/src/wrath_layouts.rs\",\"clippy::needless_range_loop\",\"the loop variable `field` is used to index `kit`\",\"8ab298b4e7c548cdc6781a4e9607024fa862421d39d70b31cc199e8022a41878\"]",
-    "[\"crates/benilla-formats/src/spell_visual/chain_effects.rs\",\"clippy::chunks_exact_to_as_chunks\",\"using `chunks_exact` with a constant chunk size\",\"adda6a20213b409fdc01458552491d745ee81e1e8092698dbda67b8852ff36bb\"]",
-    "[\"crates/benilla-formats/src/models/wrath_effects.rs\",\"clippy::needless_question_mark\",\"enclosing `Ok` and `?` operator are unneeded\",\"f85d754667ddcef7ca52eca3b3b5fdb7a276d647a484cd6c6d58db2ef3dcdafa\"]",
-    "[\"crates/benilla-world/src/ffx_glow.rs\",\"clippy::type_complexity\",\"very complex type used. Consider factoring parts into `type` definitions\",\"5286ca3873ad6bd6087c4d0c066b57e989c20ed2730e5cd92bbb7144459ceb17\"]",
-    "[\"crates/benilla-world/src/shaders.rs\",\"clippy::result_large_err\",\"the `Err`-variant returned from this function is very large\",\"6741c24f8168cfdb04760d5cad5b262be92758ec15d882acbe7b202cf6f2a814\"]",
-    "[\"crates/benilla-app/src/net.rs\",\"deprecated\",\"use of deprecated method `net::FieldChanged::unit_field`: WS2 staging only: migrate to named_field\",\"adc384cdcef5b14208656fe9d7e07220bedbd1a8407956657ceb8004d5143270\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/net.rs\",\"dead_code\",\"methods `raw_index_compat`, `unit_field`, and `unit_array_slot` are never used\",\"adc384cdcef5b14208656fe9d7e07220bedbd1a8407956657ceb8004d5143270\"]",
-    "[\"crates/benilla-app/src/spell/cooldowns.rs\",\"clippy::useless_conversion\",\"useless conversion to the same type: `u32`\",\"90c71863e3d938a16ab4bb2184ad83780b9ee72510f61b490bd8c25f204627c6\"]",
-    "[\"crates/benilla-app/src/ui_quest_log.rs\",\"clippy::needless_update\",\"struct update has no effect, all the fields in the struct have already been specified\",\"f39bf5272fa4b331bc1e833ca294d0aae20df7a34a8947acbf52776cb7cdd883\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated method `net::FieldEdges::moved`: WS2 staging only: migrate Vanilla callers to moved_field\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated associated function `net::FieldEdges::of`: WS2 staging only: migrate fixtures to semantic_of\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated associated function `net::FieldEdges::of`: WS2 staging only: migrate fixtures to semantic_of\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated associated function `net::FieldEdges::of`: WS2 staging only: migrate fixtures to semantic_of\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/ui_unit.rs\",\"deprecated\",\"use of deprecated associated function `net::FieldEdges::of`: WS2 staging only: migrate fixtures to semantic_of\",\"d97ac32cd58e0dae5969505221310cf204ca8463b8d78361a9376b04e8e57bed\"]",
-    "[\"crates/benilla-app/src/minimap/blips/dots.rs\",\"clippy::chunks_exact_to_as_chunks\",\"using `chunks_exact` with a constant chunk size\",\"f9688858391b710299efcd2d9c7eb531c2347c92720bdc3aa4651d2d0a2061b4\"]",
-    "[\"crates/benilla-app/src/minimap/blips/dots.rs\",\"clippy::chunks_exact_to_as_chunks\",\"using `chunks_exact` with a constant chunk size\",\"f9688858391b710299efcd2d9c7eb531c2347c92720bdc3aa4651d2d0a2061b4\"]",
-    "[\"crates/benilla-app/src/spell/cooldowns.rs\",\"clippy::useless_conversion\",\"useless conversion to the same type: `u32`\",\"90c71863e3d938a16ab4bb2184ad83780b9ee72510f61b490bd8c25f204627c6\"]",
-    "[\"crates/benilla-app/src/ui_gossip/mod.rs\",\"clippy::field_reassign_with_default\",\"field assignment outside of initializer for an instance created with Default::default()\",\"23d91868d29d89afe863225b0b5458aca3581dbb3da648f24fd3e9ece73f6314\"]",
-    "[\"crates/benilla-app/src/ui_quest_log.rs\",\"clippy::needless_update\",\"struct update has no effect, all the fields in the struct have already been specified\",\"f39bf5272fa4b331bc1e833ca294d0aae20df7a34a8947acbf52776cb7cdd883\"]",
-    "[\"crates/benilla-app/src/ui_script/wrath_framexml_tests.rs\",\"clippy::single_element_loop\",\"for loop over a single element\",\"2cf0c7aa8483617814bff20252100e595344b85fd3d1ffb236c7ccb024609616\"]"
+    "[\"crates/benilla-app/src/net.rs\",\"dead_code\",\"variant `Vanilla5875` is never constructed\",\"6a9314bbd243aea087327cdaccf158956cc5d8605bb6eaa0e0fde071fdfbb7ac\"]"
   ]
 }

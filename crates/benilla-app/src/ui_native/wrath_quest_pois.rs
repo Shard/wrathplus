@@ -147,6 +147,7 @@ fn quest_zones(
         .collect()
 }
 
+#[allow(clippy::type_complexity)] // the map context bundled as one param, under the arg cap
 fn feed_quest_pois(
     script: Option<NonSendMut<UiScript>>,
     mut pois: ResMut<QuestPois>,

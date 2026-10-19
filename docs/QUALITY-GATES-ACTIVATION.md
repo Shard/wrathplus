@@ -2,8 +2,8 @@
 
 Measured 2026-10-19 on `azerothbench/wrath-hud` 4a007e65 (plus the formats clippy fix 95a121eb)
 by Wire B, for `WRATH-NATIVE-PLAN.md` "Tidy-up and quality gates". The tooling is
-`scripts/quality/` (README there). Nothing is enabled by this note: no hook is installed and
-`gates.sh`/CI are unchanged.
+`scripts/quality/` (README there). Since 2026-10-20 the clippy ratchet is enabled
+(step 1 below); no hook is installed and the other ratchets stay opt-in.
 
 ## Tools
 
@@ -93,17 +93,19 @@ Order: after Vanilla-removal step 3 (it deletes the top CRAP offenders and thous
 and the rename (`WRATHPLUS-RENAME.md`). Per the README, the rename is followed by one explicit,
 reviewed path migration of the baselines, never a silent reset. Steps 1-3 can happen now.
 
-1. **clippy back to green** (now). Fix the `-D warnings` stops crate by crate as small mechanical
-   commits, formats first (done: 95a121eb), then protocol, ui and app. Then regenerate
-   `clippy-baseline.json` once, from a run that compiles under `-D`, with only the residue a fix
-   cannot remove. This restores `gates.sh` and CI.
-2. **typos config** (now). Add `_typos.toml`:
+1. **clippy back to green** (done, 2026-10-20). Mechanical fixes crate by crate (95a121eb,
+   94f4e77f, c27b4957), the owner-held items with their owners (f7b57e65), then one regeneration
+   of `clippy-baseline.json` from a warnings-mode workspace run: its only entry is
+   `SessionDialect::Vanilla5875`'s `dead_code`, which App Migration's last step-4 batch deletes.
+   The clippy rung of `gates.sh`, `check.sh` and CI is now `scripts/quality/run.sh clippy`: every
+   warning, rustc's or clippy's, fails unless that baseline names it, so the count only shrinks.
+2. **typos config** (done). Add `_typos.toml`:
    - exclude `reference/*.tsv` and `third_party/`;
    - allow `lod`/`LOD`/`Lod` and the Blizzard API spellings (`Hilight`, `SUPERCEDED`,
      `Compleated`, verified against `GlobalStrings.lua`/FrameXML);
    - ignore short hex identifiers.
    Then record the remainder as the baseline, and fix real typos with their owners.
-3. **Script fixes** (now). Make `run.sh` default to the caller's own target dir, fail fast
+3. **Script fixes** (done). Make `run.sh` default to the caller's own target dir, fail fast
    without `llvm-tools-preview`, and exclude `third_party/` from machete. Exempt generated files
    (`layout_generated.rs`) from LoC by an explicit list.
 4. **Re-baseline LoC and CRAP** after step 3 of the Vanilla removal, from measured runs on that

@@ -109,7 +109,8 @@ run() {
 }
 
 run fmt cargo fmt --all -- --check
-run clippy cargo clippy $pflags --all-targets -- -D warnings
+run clippy env AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}" \
+    scripts/quality/run.sh clippy $pflags
 run test env BENILLA_SKIP_LOG="$skips" cargo test $pflags
 # Data-gated tests skip without the install or the addon corpus and libtest swallows their line,
 # so each skip is also logged to $BENILLA_SKIP_LOG and counted here.
