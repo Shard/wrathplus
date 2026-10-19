@@ -19,8 +19,6 @@ const SHORT_REVIEWED: &[(&str, &str)] = &[
     ("GetQuestLogTitle", "0x5e5cc0: the tenth (displayQuestID) only with that debug cvar set"),
     ("UnitPowerType", "0x60f100: five only for a vehicle with a PowerDisplay row, else two"),
     ("GetAchievementInfoFromCriteria", "0x5b1720: seven; the stock ten-wide unpack reads nils"),
-    ("GetContainerItemInfo", "pending Native UI: a short hit"),
-    ("GetItemInfo", "pending Native UI: a short hit"),
 ];
 
 /// Names no probe reaches with a hit or a full-width miss, by reason.
@@ -39,16 +37,15 @@ const UNPROBED_REVIEWED: &[&str] = &[
     "GetChatWindowSavedDimensions", "GetChatWindowSavedPosition", "GetContainerItemPurchaseInfo",
     "GetContainerItemPurchaseItem", "GetCursorInfo", "GetGlyphSocketInfo",
     "GetInspectArenaTeamData",
-    "GetInventoryItemGems", "GetInventorySlotInfo", "GetLFGCompletionReward",
-    "GetLFGCompletionRewardItem", "GetLFGDungeonRewardInfo", "GetLFGQueueStats",
-    "GetLFGRandomDungeonInfo", "GetLFGRoleUpdateSlot", "GetLatestThreeSenders",
-    "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPartyLFGBackfillInfo", "GetPlayerInfoByGUID",
+    "GetInventoryItemGems", "GetInventorySlotInfo",
+    "GetLatestThreeSenders",
+    "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPlayerInfoByGUID",
     "GetPossessInfo", "GetQuestLogRewardSpell", "GetRewardSpell", "GetTrainerServiceStepReq",
     "GetVehicleUIIndicator", "GetVehicleUIIndicatorSeat", "GetVoiceSessionInfo", "GetZonePVPInfo",
     "QuestPOIGetIconInfo", "QuestPOIGetQuestIDByVisibleIndex", "UnitDetailedThreatSituation",
     "UnitVehicleSeatInfo",
-    // Widget methods whose object the probe does not populate.
-    "GetItem", "GetMessageInfo", "UpdateMouseOverTooltip",
+    // QuestPOIFrame's blob hit test answers nothing off a drawn blob (the map's blobs, Wire A).
+    "UpdateMouseOverTooltip",
 ];
 
 /// The widest unpack seen for one name: values wanted, where, and how many unpacking sites.
@@ -203,6 +200,13 @@ pub(super) fn audit(
                 for _, kind in ipairs(kinds) do
                     local ok, frame = pcall(CreateFrame, kind)
                     if ok and frame then
+                        -- A tooltip showing an item and a chat frame holding a line.
+                        if kind == "GameTooltip" then
+                            pcall(frame.SetOwner, frame, UIParent, "ANCHOR_NONE")
+                            pcall(frame.SetHyperlink, frame, "item:6948")
+                        elseif kind == "ScrollingMessageFrame" then
+                            pcall(frame.AddMessage, frame, "Hello", 1, 1, 1, 1)
+                        end
                         -- Anchored and sized, so the geometry getters answer a hit.
                         pcall(frame.SetPoint, frame, "CENTER", UIParent, "CENTER", 0, 0)
                         pcall(frame.SetWidth, frame, 10)
