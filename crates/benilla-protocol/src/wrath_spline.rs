@@ -1,63 +1,75 @@
-//! Bare packed-GUID spline toggles. The original twelve messages are unchanged since 1.12;
-//! Wrath flying/gravity toggles are from AzerothCore Unit::SetCanFly/SetDisableGravity.
+//! The sixteen spline mode toggles of build 12340, each a bare packed GUID: AzerothCore
+//! `Unit::SetControlled` (root, `0x31A`/`0x304`), `SetFeatherFall`, `SetHover`, `SetWaterWalking`,
+//! `SetCanFly`, `SetDisableGravity` and `Creature::SetWalk`/`SetSwim` (`Unit.cpp`,
+//! `Creature.cpp`), plus their `SendMovement*` single-target copies. Strict framing: the GUID and
+//! nothing after it.
 
 use std::io::{self, Cursor};
 
-use crate::events::{decode as session_decode, SessionEvent};
-use crate::messages::{parse_server_with_tail, SplineMode};
+use crate::events::SessionEvent;
+use crate::messages::SplineMode;
 use crate::wire::read_packed_guid;
 
+pub const SMSG_SPLINE_MOVE_UNROOT: u16 = 0x0304;
+pub const SMSG_SPLINE_MOVE_FEATHER_FALL: u16 = 0x0305;
+pub const SMSG_SPLINE_MOVE_NORMAL_FALL: u16 = 0x0306;
+pub const SMSG_SPLINE_MOVE_SET_HOVER: u16 = 0x0307;
+pub const SMSG_SPLINE_MOVE_UNSET_HOVER: u16 = 0x0308;
+pub const SMSG_SPLINE_MOVE_WATER_WALK: u16 = 0x0309;
+pub const SMSG_SPLINE_MOVE_LAND_WALK: u16 = 0x030A;
+pub const SMSG_SPLINE_MOVE_START_SWIM: u16 = 0x030B;
+pub const SMSG_SPLINE_MOVE_STOP_SWIM: u16 = 0x030C;
+pub const SMSG_SPLINE_MOVE_SET_RUN_MODE: u16 = 0x030D;
+pub const SMSG_SPLINE_MOVE_SET_WALK_MODE: u16 = 0x030E;
+pub const SMSG_SPLINE_MOVE_ROOT: u16 = 0x031A;
 pub const SMSG_SPLINE_MOVE_SET_FLYING: u16 = 0x0422;
 pub const SMSG_SPLINE_MOVE_UNSET_FLYING: u16 = 0x0423;
 pub const SMSG_SPLINE_MOVE_GRAVITY_DISABLE: u16 = 0x04D3;
 pub const SMSG_SPLINE_MOVE_GRAVITY_ENABLE: u16 = 0x04D4;
 
+/// The toggle an opcode carries: the mode and whether it applies.
+const fn toggle(opcode: u16) -> Option<(SplineMode, bool)> {
+    Some(match opcode {
+        SMSG_SPLINE_MOVE_ROOT => (SplineMode::Root, true),
+        SMSG_SPLINE_MOVE_UNROOT => (SplineMode::Root, false),
+        SMSG_SPLINE_MOVE_FEATHER_FALL => (SplineMode::FeatherFall, true),
+        SMSG_SPLINE_MOVE_NORMAL_FALL => (SplineMode::FeatherFall, false),
+        SMSG_SPLINE_MOVE_SET_HOVER => (SplineMode::Hover, true),
+        SMSG_SPLINE_MOVE_UNSET_HOVER => (SplineMode::Hover, false),
+        SMSG_SPLINE_MOVE_WATER_WALK => (SplineMode::WaterWalk, true),
+        SMSG_SPLINE_MOVE_LAND_WALK => (SplineMode::WaterWalk, false),
+        SMSG_SPLINE_MOVE_START_SWIM => (SplineMode::Swimming, true),
+        SMSG_SPLINE_MOVE_STOP_SWIM => (SplineMode::Swimming, false),
+        SMSG_SPLINE_MOVE_SET_WALK_MODE => (SplineMode::WalkMode, true),
+        SMSG_SPLINE_MOVE_SET_RUN_MODE => (SplineMode::WalkMode, false),
+        SMSG_SPLINE_MOVE_SET_FLYING => (SplineMode::CanFly, true),
+        SMSG_SPLINE_MOVE_UNSET_FLYING => (SplineMode::CanFly, false),
+        SMSG_SPLINE_MOVE_GRAVITY_DISABLE => (SplineMode::DisableGravity, true),
+        SMSG_SPLINE_MOVE_GRAVITY_ENABLE => (SplineMode::DisableGravity, false),
+        _ => return None,
+    })
+}
+
 pub const fn handles(opcode: u16) -> bool {
-    matches!(
-        opcode,
-        0x0304
-            ..=0x030E
-                | 0x031A
-                | SMSG_SPLINE_MOVE_SET_FLYING
-                | SMSG_SPLINE_MOVE_UNSET_FLYING
-                | SMSG_SPLINE_MOVE_GRAVITY_DISABLE
-                | SMSG_SPLINE_MOVE_GRAVITY_ENABLE
-    )
+    toggle(opcode).is_some()
 }
 
 pub fn decode(opcode: u16, body: &[u8]) -> io::Result<Vec<SessionEvent>> {
-    let mode = match opcode {
-        SMSG_SPLINE_MOVE_SET_FLYING => Some((SplineMode::CanFly, true)),
-        SMSG_SPLINE_MOVE_UNSET_FLYING => Some((SplineMode::CanFly, false)),
-        SMSG_SPLINE_MOVE_GRAVITY_DISABLE => Some((SplineMode::DisableGravity, true)),
-        SMSG_SPLINE_MOVE_GRAVITY_ENABLE => Some((SplineMode::DisableGravity, false)),
-        _ if handles(opcode) => None,
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "not a Wrath spline toggle",
-            ))
-        }
+    let Some((mode, apply)) = toggle(opcode) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a Wrath spline toggle",
+        ));
     };
-    if let Some((mode, apply)) = mode {
-        let mut r = Cursor::new(body);
-        let guid = read_packed_guid(&mut r)?;
-        if r.position() as usize != body.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "spline toggle trailing bytes",
-            ));
-        }
-        return Ok(vec![SessionEvent::SplineMoveMode { guid, mode, apply }]);
-    }
-    let (packet, tail) = parse_server_with_tail(opcode, body)?;
-    if tail != 0 {
+    let mut r = Cursor::new(body);
+    let guid = read_packed_guid(&mut r)?;
+    if r.position() as usize != body.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "spline toggle trailing bytes",
         ));
     }
-    Ok(session_decode(packet))
+    Ok(vec![SessionEvent::SplineMoveMode { guid, mode, apply }])
 }
 
 #[cfg(test)]
@@ -108,5 +120,14 @@ mod tests {
         }
         assert_eq!(SplineMode::CanFly.flag(), 0x01000000);
         assert_eq!(SplineMode::DisableGravity.flag(), 0x00000200);
+        // Exactly the sixteen: the neighbours are other messages.
+        for opcode in [
+            0x0303, 0x030F, 0x0319, 0x031B, 0x0421, 0x0424, 0x04D2, 0x04D5,
+        ] {
+            assert!(
+                !handles(opcode) && decode(opcode, &b).is_err(),
+                "{opcode:#x}"
+            );
+        }
     }
 }
