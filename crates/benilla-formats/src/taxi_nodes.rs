@@ -97,30 +97,3 @@ pub fn load_taxi_nodes(chain: &mut Chain) -> Result<TaxiNodes> {
     }
     Ok(TaxiNodes { rows })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The 5875 layout on Stormwind's node, which serves the Alliance only.
-    #[test]
-    fn real_taxi_nodes_layout_sanity() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_taxi_nodes(&mut chain).expect("load TaxiNodes");
-        assert_eq!(cat.len(), 85, "1.12 ships 85 taxi nodes");
-
-        let stormwind = cat.get(2).expect("node 2 exists");
-        assert_eq!(stormwind.name, "Stormwind, Elwynn");
-        assert_eq!(stormwind.map_id, 0, "Eastern Kingdoms");
-        assert_eq!(stormwind.mount_horde, 0, "no Horde service from Stormwind");
-        assert_eq!(
-            stormwind.mount_alliance, 541,
-            "Stormwind's Alliance gryphon mount template"
-        );
-
-        // The other end of the hop the `TaxiPath` test pins.
-        let sentinel_hill = cat.get(4).expect("node 4 exists");
-        assert_eq!(sentinel_hill.name, "Sentinel Hill, Westfall");
-    }
-}

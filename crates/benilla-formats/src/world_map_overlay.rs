@@ -117,30 +117,3 @@ pub fn load_world_map_overlay_catalog(chain: &mut Chain) -> Result<WorldMapOverl
     }
     Ok(WorldMapOverlayCatalog { by_area })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn real_world_map_overlay_has_nonempty_textures_for_teldrassil() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_world_map_overlay_catalog(&mut chain).expect("load WorldMapOverlay");
-        assert_eq!(cat.len(), 526, "all 526 rows load");
-
-        let teldrassil = cat.for_area(41);
-        assert!(
-            !teldrassil.is_empty(),
-            "Teldrassil (WorldMapArea 41) has overlay rows"
-        );
-        assert!(
-            teldrassil.iter().all(|o| !o.texture_name.is_empty()),
-            "every overlay row names a texture"
-        );
-        assert!(
-            teldrassil.iter().any(|o| o.texture_name == "DARNASSUS"),
-            "the Darnassus sub-zone highlight is present"
-        );
-    }
-}

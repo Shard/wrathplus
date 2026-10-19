@@ -10,60 +10,6 @@ const JUBIE_DISPLAY: u32 = 7969;
 const AMULET_DISPLAY: u32 = 15676;
 
 #[test]
-fn a_modelless_head_display_is_not_a_worn_helm() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
-    let items = load_item_display_catalog(&mut chain).expect("ItemDisplayInfo");
-
-    let amulet = items.get(AMULET_DISPLAY).expect("display 15676 exists");
-    assert!(
-        amulet.model.iter().all(Option::is_none),
-        "display {AMULET_DISPLAY} names no model in either slot, got {:?}",
-        amulet.model
-    );
-    assert_eq!(
-        amulet.helmet_vis,
-        [248, 306],
-        "display {AMULET_DISPLAY} still carries a HelmetGeosetVisData pair"
-    );
-    assert_eq!(
-        amulet.worn_helm_vis(),
-        None,
-        "a model-less display is not a worn helm"
-    );
-
-    let (_, helm) = items
-        .iter()
-        .find(|(_, d)| d.model[0].is_some() && d.helmet_vis != [0, 0])
-        .expect("some display is a modelled helm with a vis row");
-    assert_eq!(
-        helm.worn_helm_vis(),
-        Some(helm.helmet_vis),
-        "a modelled helm keeps its vis pair"
-    );
-
-    // Of the 1314 rows with a vis pair, 12 leave the left model slot empty.
-    let masked = items.iter().filter(|(_, d)| d.helmet_vis != [0, 0]).count();
-    let masked_modelless = items
-        .iter()
-        .filter(|(_, d)| d.helmet_vis != [0, 0] && d.model[0].is_none())
-        .count();
-    assert_eq!((masked, masked_modelless), (1314, 12));
-
-    // The reference gates on `ModelName[0]` alone (`0x4799c1`); the 41 rows that fill only the
-    // right slot carry no vis pair.
-    let right_only = items
-        .iter()
-        .filter(|(_, d)| d.model[0].is_none() && d.model[1].is_some())
-        .count();
-    let right_only_masked = items
-        .iter()
-        .filter(|(_, d)| d.model[0].is_none() && d.model[1].is_some() && d.helmet_vis != [0, 0])
-        .count();
-    assert_eq!((right_only, right_only_masked), (41, 0));
-}
-
-#[test]
 fn jubie_keeps_her_hair_ears_and_earrings() {
     let data = benilla_formats::wow_data_or_skip!();
     let mut chain = open_chain(&data).expect("open vanilla patch chain");

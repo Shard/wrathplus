@@ -496,7 +496,13 @@ mod tests {
         register_asset_loaders(&mut app);
 
         // In isolation: a bare `load()` of the same path would share the handle and its settings.
-        let tile = "mpq://textures/Minimap/ea283abc0bf9637c3fad5e840a65b38b.blp";
+        let mut chain = benilla_formats::Chain::open(&data).expect("open chain");
+        let hash = benilla_formats::load_minimap_translate(&mut chain)
+            .expect("md5translate.trs")
+            .tile("Azeroth", 32, 48)
+            .expect("Azeroth 32_48 has a tile")
+            .to_string();
+        let tile = format!("mpq://textures/Minimap/{hash}");
         let server = app.world().resource::<AssetServer>().clone();
         let sprite_h: Handle<Image> =
             server.load_with_settings(tile, |s: &mut BlpLoaderSettings| {
@@ -547,16 +553,23 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         let m = model.expect("Ironforge loads");
-        // (group, X tiles, Y tiles), read off the trs tile names.
+        // (group, X tiles, Y tiles), read off the installed trs tile names.
+        let mut chain = benilla_formats::Chain::open(&data).expect("open chain");
+        let trs = benilla_formats::load_minimap_translate(&mut chain).expect("md5translate.trs");
+        let tiles = |g: usize, axis: usize| {
+            (0..8)
+                .filter(|&n| {
+                    let (x, y) = if axis == 0 { (n, 0) } else { (0, n) };
+                    trs.get(&format!(
+                        "wmo\\KhazModan\\Cities\\Ironforge\\ironforge_{g:03}_{x:02}_{y:02}.blp"
+                    ))
+                    .is_some()
+                })
+                .count()
+        };
         let grid = |ext: f32| crate::minimap_grid::group_axis_grid(ext).0;
-        for &(g, ex_n, ey_n) in &[
-            (1, 1, 1),
-            (2, 1, 1),
-            (10, 1, 1),
-            (44, 1, 2),
-            (66, 2, 2),
-            (89, 2, 1),
-        ] {
+        for g in [1usize, 2, 10, 44, 66, 89] {
+            let (ex_n, ey_n) = (tiles(g, 0) as u32, tiles(g, 1) as u32);
             let gn = m.group_nav.get(g).expect("group present");
             let nx = grid(gn.bbox_max[0] - gn.bbox_min[0]);
             let ny = grid(gn.bbox_max[1] - gn.bbox_min[1]);

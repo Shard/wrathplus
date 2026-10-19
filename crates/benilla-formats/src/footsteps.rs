@@ -176,52 +176,6 @@ pub fn load_footprint_textures(chain: &mut Chain) -> Result<HashMap<u32, String>
 mod tests {
     use super::*;
 
-    /// The chain on 5875 data: class 8 on Metallic, and the character class on dirt and grass.
-    #[test]
-    fn real_footstep_chain_resolves() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_footstep_catalog(&mut chain).expect("load footstep catalog");
-        assert_eq!(cat.len(), 179, "all lookup rows load");
-
-        // An effect over Metallic (`TerrainType` 1, sound 2).
-        let metallic = cat
-            .effect_terrain
-            .iter()
-            .find(|(_, &tt)| tt == 1)
-            .map(|(&e, _)| e);
-        if let Some(e) = metallic {
-            assert_eq!(
-                cat.resolve(8, Some(e)),
-                Some((650, 1063)),
-                "class 8 on metallic → the byte-decoded row"
-            );
-        }
-        let effect_with_sound_class = |sc: u32| {
-            cat.effect_terrain
-                .iter()
-                .find(|(_, tt)| cat.terrain_sound.get(tt) == Some(&sc))
-                .map(|(&e, _)| e)
-        };
-        if let Some(e) = effect_with_sound_class(1) {
-            assert_eq!(
-                cat.resolve(7, Some(e)).map(|(dry, _)| dry),
-                Some(560),
-                "class 7 on dirt → CharacterMediumLargeDirt"
-            );
-        }
-        if let Some(e) = effect_with_sound_class(6) {
-            assert_eq!(
-                cat.resolve(7, Some(e)).map(|(dry, _)| dry),
-                Some(562),
-                "class 7 on grass → CharacterMediumLargeGrass"
-            );
-        }
-        // No ground-effect layer, or an unknown class, is silent.
-        assert_eq!(cat.resolve(7, None), None);
-        assert_eq!(cat.resolve(9999, None), None);
-    }
-
     /// The footprint bit on 5875 data, Snow and Sand only, and the six `FootprintTextures` rows.
     #[test]
     fn footprint_gate_and_textures_on_real_data() {

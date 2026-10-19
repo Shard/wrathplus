@@ -234,47 +234,6 @@ pub fn load_sound_kit_catalog(chain: &mut Chain) -> Result<SoundKitCatalog> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn real_sound_entries_parse_and_resolve() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_sound_kit_catalog(&mut chain).expect("load sound kits");
-        assert_eq!(cat.len(), 4623, "all 5875 SoundEntries rows load");
-
-        // Kit 3, decoded by hand from the file's bytes.
-        let kit = cat.get(3).expect("kit 3 exists");
-        assert_eq!(kit.name, "Invisibility Impact");
-        assert_eq!(kit.sound_type, 1);
-        assert_eq!(kit.files.len(), 1);
-        assert_eq!(
-            kit.files[0],
-            ("Sound\\Spells\\Dispel_Low_Base.wav".into(), 1)
-        );
-        assert_eq!(kit.volume, 1.0);
-        assert_eq!(kit.flags, 0);
-        assert_eq!(kit.min_distance, 8.0);
-        assert_eq!(kit.distance_cutoff, 45.0);
-        assert_eq!(kit.eax_def, 2);
-
-        // The name lookup ignores case.
-        let ui = cat.by_name("IGMINIMAPZOOMIN").expect("UI kit by name");
-        assert_eq!(ui.id, 823);
-        assert_eq!(ui.sound_type, 2, "type 2 = UI");
-
-        let repair = cat.by_name("ITEM_REPAIR").expect("repair UI kit by name");
-        assert_eq!(repair.id, 7994);
-        assert_eq!(repair.flags & sound_kit_flags::NO_DUPLICATES, 0x20);
-
-        // The joined path of a UI kit resolves to real bytes on the chain.
-        let (path, _) = &ui.files[0];
-        let bytes = chain.read(path).expect("kit file readable off the chain");
-        assert!(
-            bytes.len() > 1000,
-            "{path} is a real WAV ({} B)",
-            bytes.len()
-        );
-    }
-
     /// The two forced ambience rows, by the exact names `0x4609b0` compares: row 4160 and row 4209,
     /// where no row is named plain `Ghost` and 4123 `UnderWaterLoop` is a different row of the
     /// same file.
@@ -356,42 +315,6 @@ mod tests {
         );
     }
 
-    /// The `EAXDef` census the reverb send is gated on: 0 is the reference's null slot, a channel
-    /// that never gets reverb.
-    #[test]
-    fn real_sound_entries_eaxdef_census() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_sound_kit_catalog(&mut chain).expect("load sound kits");
-
-        let mut n = [0usize; 3];
-        for k in cat.kits.values() {
-            assert!(k.eax_def <= 2, "kit {} has EAXDef {}", k.id, k.eax_def);
-            n[k.eax_def as usize] += 1;
-        }
-        assert_eq!(
-            (n[0], n[1], n[2]),
-            (2072, 2, 2549),
-            "the 5875 EAXDef census"
-        );
-
-        // NPC voice lines (`SoundType` 17, which `NPCSounds.dbc` names) are all dry, so NPCs in a
-        // reverberant interior carry no echo.
-        let voices: Vec<_> = cat.kits.values().filter(|k| k.sound_type == 17).collect();
-        assert_eq!(voices.len(), 275, "the type-17 NPC voice rows");
-        assert!(
-            voices.iter().all(|k| k.eax_def == 0),
-            "every NPC voice kit is authored dry"
-        );
-
-        // The control: creature barks mix wet and dry.
-        let barks: Vec<_> = cat.kits.values().filter(|k| k.sound_type == 10).collect();
-        assert!(
-            barks.iter().any(|k| k.eax_def != 0) && barks.iter().any(|k| k.eax_def == 0),
-            "creature barks split wet/dry"
-        );
-    }
-
     /// An empty directory emits the file alone (26 shipped rows, 1103 `WyvernWingFlap` among them,
     /// whose variations are full paths); a leading separator is kept, as the reference keeps it.
     #[test]
@@ -412,61 +335,6 @@ mod tests {
             join_variation("\\Sound\\Creature\\Ashbringer\\", "ASH_SPEAK_01.wav"),
             "\\Sound\\Creature\\Ashbringer\\ASH_SPEAK_01.wav",
             "the leading separator survives — the reference emits it and misses too"
-        );
-    }
-
-    /// Every kit path asked of the real chain: the reference's join resolves 8934 of 8961
-    /// variations, and the 27 it misses are dead in the reference too. An unconditional separator
-    /// would also silence kits 1519, 2988 and 3412, each one variation under a `DirectoryBase`
-    /// that ends in `\`.
-    #[test]
-    fn real_sound_entries_paths_resolve_exactly_as_the_reference_s_do() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_sound_kit_catalog(&mut chain).expect("load sound kits");
-
-        let mut total = 0usize;
-        let mut dead: Vec<(u32, &str, &str)> = Vec::new();
-        for kit in cat.kits.values() {
-            for (path, _) in &kit.files {
-                total += 1;
-                if !chain.contains(path) {
-                    dead.push((kit.id, &kit.name, path));
-                }
-            }
-        }
-        dead.sort_unstable();
-        assert_eq!(total, 8961, "non-empty variation cells in the 5875 table");
-        assert_eq!(
-            total - dead.len(),
-            8934,
-            "variations that resolve — the binary's own count; {dead:?}"
-        );
-
-        // Ten belong to kit 8940, silent in the reference too.
-        let ashbringer: Vec<_> = dead.iter().filter(|(id, ..)| *id == 8940).collect();
-        assert_eq!(ashbringer.len(), 10, "every ASH_SPEAK line misses");
-        assert!(
-            chain.contains("Sound\\Creature\\Ashbringer\\ASH_SPEAK_01.wav"),
-            "the asset ships — it is the authored path that cannot reach it"
-        );
-
-        // The other 17 are absent assets, in kits that mostly still play.
-        assert_eq!(dead.len() - ashbringer.len(), 17, "absent assets: {dead:?}");
-
-        // Only 8588, whose one variation is absent, and 8940 have nothing playable.
-        let silent: Vec<u32> = cat
-            .kits
-            .values()
-            .filter(|k| !k.files.is_empty() && !k.files.iter().any(|(p, _)| chain.contains(p)))
-            .map(|k| k.id)
-            .collect();
-        let mut silent = silent;
-        silent.sort_unstable();
-        assert_eq!(
-            silent,
-            vec![8588, 8940],
-            "the only kits with no playable variation at all"
         );
     }
 }

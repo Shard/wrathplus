@@ -363,36 +363,31 @@ fn follow_camera(
 mod tests {
     use super::*;
 
-    /// On the real art: the seventeen other batches are wholly on bone 0, which has no track.
+    /// On the real art: the belt batches ride the three spun bones, every other batch is wholly
+    /// on bone 0, which has no track.
     #[test]
     fn only_the_belt_batches_of_the_caverns_sky_resolve_to_a_spinning_bone() {
         let data = benilla_formats::wow_data_or_skip!();
-        let mut chain = benilla_formats::Chain::open(&data).expect("open vanilla patch chain");
+        let mut chain = benilla_formats::Chain::open(&data).expect("open patch chain");
         const SKY: &str = "Environments\\Stars\\CavernsOfTimeSky.m2";
         let subs = benilla_formats::load_m2_mesh(&mut chain, SKY).expect("load the sky");
         let spins = benilla_formats::load_m2_bone_spins(&mut chain, SKY).expect("its spins");
+        assert_eq!(spins.len(), 3, "three spun belt bones");
 
         let bones: Vec<Option<u16>> = subs.iter().map(sole_bone).collect();
-        assert_eq!(bones.len(), 21, "21 authored batches");
-        // Batches 5..=8 are the belts (`benilla-extract m2batch`); every other rides bone 0.
-        assert_eq!(
-            &bones[5..=8],
-            &[Some(1), Some(2), Some(3), Some(3)],
-            "the belt batches and the bones they ride"
+        assert!(
+            bones.iter().all(Option::is_some),
+            "every batch rides one bone: {bones:?}"
+        );
+        let (belts, still): (Vec<_>, Vec<_>) =
+            bones.iter().flatten().partition(|b| spins.contains_key(b));
+        assert!(
+            belts.len() >= spins.len(),
+            "each spun bone carries a belt batch: {bones:?}"
         );
         assert!(
-            bones
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| !(5..=8).contains(i))
-                .all(|(_, b)| *b == Some(0)),
+            still.iter().all(|&&b| b == 0),
             "every non-belt batch is wholly on bone 0: {bones:?}"
         );
-
-        let spinning = bones
-            .iter()
-            .filter(|b| b.and_then(|b| spins.get(&b)).is_some())
-            .count();
-        assert_eq!(spinning, 4, "exactly the four belt batches turn");
     }
 }

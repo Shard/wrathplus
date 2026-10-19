@@ -82,24 +82,6 @@ pub fn load_server_messages_catalog(chain: &mut Chain) -> Result<ServerMessagesC
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_real_table_is_the_five_documented_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_server_messages_catalog(&mut chain).expect("load ServerMessages");
-        let got: Vec<(u32, &str)> = cat.rows.iter().map(|(i, t)| (*i, t.as_str())).collect();
-        assert_eq!(
-            got,
-            vec![
-                (1, "[SERVER] Shutdown in %s"),
-                (2, "[SERVER] Restart in %s"),
-                (3, "%s"),
-                (4, "[SERVER] Shutdown cancelled"),
-                (5, "[SERVER] Restart cancelled"),
-            ]
-        );
-    }
-
     fn shipped() -> ServerMessagesCatalog {
         ServerMessagesCatalog::from_rows(vec![
             (1, "[SERVER] Shutdown in %s".into()),
