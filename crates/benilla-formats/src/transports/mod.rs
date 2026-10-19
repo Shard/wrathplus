@@ -189,51 +189,11 @@ fn normalize_orientation(o: f32) -> f32 {
     }
 }
 
-/// How keyframe times accumulate: `build` uses `Vmangos`, the calibration tests sweep both.
+/// How keyframe times accumulate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TimeMode {
     /// vmangos's `f32` seconds, truncated to ms per keyframe (`TransportMgr.cpp:297-325`).
     Vmangos,
-    /// The reference's closed form (`0x5f9120`) per stop-to-stop span, in integer ms. Interior
-    /// times are distance-linear, so it only calibrates periods; only the tests build it.
-    #[cfg_attr(not(test), allow(dead_code))]
-    ClientForms,
-}
-
-/// Seconds to ms, `±0.5` then truncated, as the reference's `__ftol` idiom (`0x40a2b0`).
-fn round_ftol(t: f64) -> i32 {
-    let scaled = t * 1000.0;
-    let adj = if scaled > 0.0 {
-        scaled + 0.5
-    } else {
-        scaled - 0.5
-    };
-    adj.trunc() as i32
-}
-
-/// A stop-to-stop span's time in ms, the reference's `0x5f9120` `!first` branch:
-/// `if 2B < D { (D − 2B)/v + 2A } else { 2·√(D/a) }`, with `A = v/a` stored `f32` and `B = ½·v·A`
-/// compared in `f64` but stored `f32`; the mixed precision is the reference's.
-fn span_time_ms(d_span: f32, speed: f32, accel: f32) -> u32 {
-    if accel <= 0.0 {
-        return 0;
-    }
-    let d = f64::from(d_span);
-    let v = f64::from(speed);
-    let a_param = f64::from(accel);
-    let a: f32 = (v / a_param) as f32; // A, stored f32 as the reference does
-    let b_live = 0.5 * v * f64::from(a); // B in f64, for the branch compare
-    let b: f32 = b_live as f32; // B stored f32, for the arithmetic
-    let t: f64 = if b_live < 0.5 * d {
-        (d - 2.0 * f64::from(b)) / v + 2.0 * f64::from(a)
-    } else {
-        2.0 * (d / a_param).sqrt()
-    };
-    round_ftol(t).max(0) as u32
-}
-
-fn delay_ms(secs: f32) -> u32 {
-    (secs * 1000.0).round().max(0.0) as u32
 }
 
 /// vmangos's accumulation (`TransportMgr.cpp:297-325`): add the previous frame's `TimeTo`, and at
@@ -262,116 +222,6 @@ fn accumulate_vmangos(raws: &[RawFrame], time_to: &[f32]) -> (Vec<u32>, Vec<u32>
             next_arrive[i - 1] = arrive[i];
             depart[i] = arrive[i];
         }
-    }
-    next_arrive[n - 1] = depart[n - 1];
-    let period = depart[n - 1];
-    (arrive, depart, next_arrive, period)
-}
-
-/// Integer-ms times from [`span_time_ms`] per stop-to-stop span, exact at the stops; interior
-/// frames are apportioned by distance, not by the reference's per-point scheme. The fragments
-/// before the first stop and after the last are one span across the wrap, not two from rest.
-fn accumulate_client_forms(
-    raws: &[RawFrame],
-    dist_from_prev: &[f32],
-    speed: f32,
-    accel: f32,
-) -> (Vec<u32>, Vec<u32>, Vec<u32>, u32) {
-    let n = raws.len();
-    let mut arrive = vec![0u32; n];
-    let mut depart = vec![0u32; n];
-    let mut next_arrive = vec![0u32; n];
-
-    let stops: Vec<usize> = raws
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.is_stop)
-        .map(|(i, _)| i)
-        .collect();
-
-    if stops.is_empty() {
-        // No stop at all: the whole cyclic path is one wrap span.
-        let d_total: f32 = dist_from_prev[1..].iter().sum();
-        let t_total = i64::from(span_time_ms(d_total, speed, accel));
-        let mut cum = 0.0f32;
-        for k in 1..n {
-            cum += dist_from_prev[k];
-            let frac = if d_total > 0.0 {
-                f64::from(cum / d_total)
-            } else {
-                1.0
-            };
-            arrive[k] = (frac * t_total as f64).round().max(0.0) as u32;
-            depart[k] = arrive[k];
-        }
-        if n > 1 {
-            next_arrive[..n - 1].copy_from_slice(&arrive[1..n]);
-        }
-        if n > 0 {
-            next_arrive[n - 1] = depart[n - 1];
-        }
-        let period = depart[n.saturating_sub(1)];
-        return (arrive, depart, next_arrive, period);
-    }
-
-    let first_stop = stops[0];
-    let last_stop = *stops.last().unwrap();
-
-    let leading_dist: f32 = dist_from_prev[1..=first_stop].iter().sum();
-    let trailing_dist: f32 = dist_from_prev[last_stop + 1..].iter().sum();
-    let d_wrap = leading_dist + trailing_dist;
-    let t_wrap = i64::from(span_time_ms(d_wrap, speed, accel));
-
-    // The leading fragment, frame 0 at clock zero, at the wrap span's rate.
-    let mut cum = 0.0f32;
-    for k in 1..=first_stop {
-        cum += dist_from_prev[k];
-        let frac = if d_wrap > 0.0 {
-            f64::from(cum / d_wrap)
-        } else {
-            1.0
-        };
-        arrive[k] = (frac * t_wrap as f64).round().max(0.0) as u32;
-    }
-    depart[first_stop] = arrive[first_stop] + delay_ms(raws[first_stop].delay_secs);
-
-    // Interior spans, each two-ramp and self-contained.
-    for w in stops.windows(2) {
-        let (b_prev, b_next) = (w[0], w[1]);
-        let depart_prev = i64::from(depart[b_prev]);
-        let d_span: f32 = dist_from_prev[b_prev + 1..=b_next].iter().sum();
-        let span_ms = i64::from(span_time_ms(d_span, speed, accel));
-        let mut cum = 0.0f32;
-        for k in (b_prev + 1)..=b_next {
-            cum += dist_from_prev[k];
-            let frac = if d_span > 0.0 {
-                f64::from(cum / d_span)
-            } else {
-                1.0
-            };
-            let arrive_k = (depart_prev + (frac * span_ms as f64).round() as i64).max(0) as u32;
-            arrive[k] = arrive_k;
-            depart[k] = arrive_k + delay_ms(raws[k].delay_secs);
-        }
-    }
-
-    // The trailing fragment, the wrap span's tail.
-    let depart_last = i64::from(depart[last_stop]);
-    let mut cum = 0.0f32;
-    for k in (last_stop + 1)..n {
-        cum += dist_from_prev[k];
-        let frac = if d_wrap > 0.0 {
-            f64::from(cum / d_wrap)
-        } else {
-            1.0
-        };
-        let arrive_k = (depart_last + (frac * t_wrap as f64).round() as i64).max(0) as u32;
-        arrive[k] = arrive_k;
-        depart[k] = arrive_k; // no stop follows last_stop by construction
-    }
-
-    if n > 1 {
-        next_arrive[..n - 1].copy_from_slice(&arrive[1..n]);
     }
     next_arrive[n - 1] = depart[n - 1];
     let period = depart[n - 1];
@@ -601,9 +451,6 @@ impl TransportTimetable {
         // Phase H: arrivals, departures and the period, by mode; `sample` needs no arrival.
         let (_arrive_time, departure_time, next_arrive_time, period_ms) = match mode {
             TimeMode::Vmangos => accumulate_vmangos(&raws, &time_to),
-            TimeMode::ClientForms => {
-                accumulate_client_forms(&raws, &dist_from_prev, move_speed, accel_rate)
-            }
         };
 
         let frames: Vec<Frame> = (0..n)

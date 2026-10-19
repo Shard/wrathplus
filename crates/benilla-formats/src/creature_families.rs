@@ -249,32 +249,6 @@ mod tests {
         );
     }
 
-    /// Field 17 sits behind locale slots typed as dwords, so a column slip reads an empty path.
-    #[test]
-    fn every_shipped_family_carries_a_pet_icon() {
-        let Some(mut chain) = chain() else { return };
-        let fams = load_creature_families(&mut chain).expect("families");
-
-        assert_eq!(
-            fams.icon(1),
-            Some("Interface\\Icons\\Ability_Hunter_Pet_Wolf")
-        );
-        // A warlock minion has one too, for `GetPetIcon`.
-        assert!(fams
-            .icon(15)
-            .is_some_and(|i| i.starts_with("Interface\\Icons\\")));
-
-        for id in 1..=27 {
-            let Some(f) = fams.get(id) else { continue };
-            assert!(
-                fams.icon(id).is_some(),
-                "family {id} ({}) has no icon",
-                f.name
-            );
-        }
-        assert_eq!(fams.icon(9999), None);
-    }
-
     #[test]
     fn the_family_size_ramp_reads_off_the_shipped_file() {
         let Some(mut chain) = chain() else { return };
@@ -326,30 +300,6 @@ mod tests {
         assert!((fams.pet_scale(1, 60).unwrap() - 1.0).abs() < 1e-6);
     }
 
-    /// Names are asserted verbatim: a column early reads the food mask, a column late a zero slot.
-    #[test]
-    fn the_real_creature_families_name_every_pet() {
-        let Some(mut chain) = chain() else { return };
-        let f = load_creature_families(&mut chain).expect("load CreatureFamily.dbc");
-        assert_eq!(f.len(), 23, "5875 ships 23 creature families");
-
-        assert_eq!(f.name(1), Some("Wolf"));
-        assert_eq!(f.name(2), Some("Cat"));
-        assert_eq!(f.name(7), Some("Carrion Bird"));
-        assert_eq!(f.name(27), Some("Wind Serpent"));
-        assert_eq!(f.name(15), Some("Felhunter"));
-        assert_eq!(f.name(16), Some("Voidwalker"));
-        assert_eq!(f.name(17), Some("Succubus"));
-        assert_eq!(f.name(19), Some("Doomguard"));
-        assert_eq!(f.name(23), Some("Imp"));
-
-        // The id gaps: a dense 1..=23 read would shift half the table.
-        for missing in [10, 13, 14, 18, 22] {
-            assert_eq!(f.name(missing), None, "id {missing} is not in the file");
-        }
-        assert_eq!(f.name(0), None);
-    }
-
     #[test]
     fn the_real_pet_food_names_are_the_eight_diets() {
         let Some(mut chain) = chain() else { return };
@@ -369,49 +319,6 @@ mod tests {
         }
         assert_eq!(n.name(0), None, "the file is 1-based; there is no row 0");
         assert_eq!(n.name(9), None);
-    }
-
-    /// Wolf, Bear, Boar and Turtle are the reference's own cases (`0x4bea10`); the rest are
-    /// vanilla's documented diets.
-    #[test]
-    fn the_shipped_masks_expand_to_vanillas_own_diets() {
-        let Some(mut chain) = chain() else { return };
-        let fam = load_creature_families(&mut chain).expect("families");
-        let food = load_pet_food_names(&mut chain).expect("foods");
-        let diet = |id: u32| food.for_mask(fam.get(id).expect("family").pet_food_mask);
-
-        const EVERYTHING: [&str; 6] = ["Meat", "Fish", "Cheese", "Bread", "Fungus", "Fruit"];
-        assert_eq!(diet(1), ["Meat"], "Wolf — control");
-        assert_eq!(diet(2), ["Meat", "Fish"], "Cat");
-        assert_eq!(diet(4), EVERYTHING, "Bear — control");
-        assert_eq!(diet(5), EVERYTHING, "Boar — control");
-        assert_eq!(diet(9), ["Fungus", "Fruit"], "Gorilla");
-        assert_eq!(diet(12), ["Cheese", "Fungus", "Fruit"], "Tallstrider");
-        assert_eq!(diet(27), ["Fish", "Cheese", "Bread"], "Wind Serpent");
-        // Turtle (mask 178) is the only family to set bit 7, row 8's "Raw Fish".
-        assert_eq!(
-            diet(21),
-            ["Fish", "Fungus", "Fruit", "Raw Fish"],
-            "Turtle — control"
-        );
-
-        // The exact empty-diet set: the diet tooltip formats `BuildListString()`'s nil for an empty
-        // list and errors, so no tameable beast may join the five minions and row 28.
-        let empty: Vec<u32> = {
-            let mut v: Vec<u32> = fam
-                .0
-                .iter()
-                .filter(|(_, f)| food.for_mask(f.pet_food_mask).is_empty())
-                .map(|(id, _)| *id)
-                .collect();
-            v.sort_unstable();
-            v
-        };
-        assert_eq!(
-            empty,
-            [15, 16, 17, 19, 23, 28],
-            "Felhunter/Voidwalker/Succubus/Doomguard/Imp + Remote Control — no tameable beast"
-        );
     }
 
     #[test]

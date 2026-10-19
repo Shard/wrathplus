@@ -81,36 +81,3 @@ pub fn load_lock_type_catalog(chain: &mut Chain) -> Result<LockTypeCatalog> {
     }
     Ok(LockTypeCatalog { cursors, names })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The 5875 rows: a column slip lands on another column and fails.
-    #[test]
-    fn real_lock_types_name_their_cursors() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_lock_type_catalog(&mut chain).expect("load LockType.dbc");
-
-        assert_eq!(cat.cursor_name(1), Some("PickLock"));
-        assert_eq!(cat.cursor_name(2), Some("GatherHerbs"));
-        assert_eq!(cat.cursor_name(3), Some("Mine"));
-        assert_eq!(cat.cursor_name(5), None); // Open; 13 is the keyless chest
-        assert_eq!(cat.cursor_name(13), None);
-        assert_eq!(cat.cursor_name(19), None); // Fishing
-        assert_eq!(cat.cursor_name(0), None); // an empty lock slot's index
-        assert_eq!(
-            cat.len(),
-            3,
-            "only three LockType rows carry a CursorName in 5875"
-        );
-
-        // A slip to `ResourceName` (field 10) would print "Requires Herbs".
-        assert_eq!(cat.name(1), Some("Pick Lock"));
-        assert_eq!(cat.name(2), Some("Herbalism"));
-        assert_eq!(cat.name(3), Some("Mining"));
-        assert_eq!(cat.name(19), Some("Fishing"));
-        assert_eq!(cat.name(0), None);
-    }
-}

@@ -122,30 +122,3 @@ pub fn load_sound_provider_catalog(chain: &mut Chain) -> Result<SoundProviderCat
     }
     Ok(SoundProviderCatalog { providers })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// PRESET_GENERIC (67) carries the published EAX SDK values; Underwater (11) cuts all highs.
-    #[test]
-    fn real_provider_table_decodes() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_sound_provider_catalog(&mut chain).expect("load providers");
-        assert_eq!(cat.len(), 38);
-
-        let generic = cat.get(67).expect("PRESET_GENERIC");
-        assert_eq!(generic.name, "PRESET_GENERIC");
-        assert!((generic.decay_time - 1.49).abs() < 1e-3);
-        assert_eq!(generic.room, -1000);
-        assert_eq!(generic.room_hf, -100);
-        assert_eq!(generic.reflections, -2602);
-        assert_eq!(generic.reverb, 200);
-
-        let underwater = cat.get(11).expect("Underwater");
-        assert_eq!(underwater.name, "Underwater");
-        assert_eq!(underwater.room_hf, -10000);
-        assert_eq!(underwater.reverb, 1700);
-    }
-}

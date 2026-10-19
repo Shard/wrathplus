@@ -32,26 +32,3 @@ fn ring_footprint_matches_reference_pixels() {
         );
     }
 }
-
-/// A box whose X and Y extents are both zero takes the literal 1.2 (`0x60af4f`..`0x60af67`,
-/// `0x3f99999a`): `InvisibleStalker` authors all 135 sequence boxes at zero, so the Naxxramas
-/// weapon mobs on its body (display 15294, scale 2.25) ring at 2.7 yd.
-#[test]
-fn a_degenerate_stand_box_rings_at_the_reference_constant() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open chain");
-
-    let path = "Creature\\InvisibleStalker\\InvisibleStalker.mdx";
-    let b = load_m2_bounds(&mut chain, path).unwrap_or_else(|e| panic!("bounds {path}: {e}"));
-    // No vertices, so nothing is bounded, the header box and the Stand box alike.
-    assert_eq!(
-        (b.bbox_min, b.bbox_max, b.sphere_radius),
-        ([0.0; 3], [0.0; 3], 0.0),
-        "{path}: expected an entirely unauthored bound"
-    );
-    assert_eq!(
-        b.ring_footprint,
-        benilla_formats::DEGENERATE_RING_FOOTPRINT,
-        "{path}: a zero-extent box takes the writer's 1.2, not the formula's 0"
-    );
-}

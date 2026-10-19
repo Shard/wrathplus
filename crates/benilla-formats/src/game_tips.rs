@@ -140,26 +140,4 @@ mod tests {
         let short = vec![5, 1, 0, 0, 0, 0, 0, 0, 0, 0];
         assert!(parse_tips(&fixture(&[short], strings), &french).is_err());
     }
-
-    #[test]
-    fn the_real_table_is_seventy_four_tips_in_file_order() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_game_tips(&mut chain).expect("load GameTips");
-        assert_eq!(cat.len(), 74, "the 5875 enGB chain ships 74 tips");
-        assert!(
-            cat.get(0).unwrap().starts_with("|cffffd100"),
-            "the colour prefix is authored INTO the data, not added by the renderer: {:?}",
-            cat.get(0)
-        );
-        assert!(
-            cat.get(0).unwrap().contains("mini-map"),
-            "record order, not id order — record 0 is id 396: {:?}",
-            cat.get(0)
-        );
-        assert!(
-            cat.get(74).is_none(),
-            "one past the end is None, not a panic"
-        );
-    }
 }

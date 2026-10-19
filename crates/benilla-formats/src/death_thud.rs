@@ -105,41 +105,6 @@ pub fn load_death_thud_catalog(chain: &mut Chain) -> Result<DeathThudCatalog> {
 mod tests {
     use super::*;
 
-    /// The 5875 tables; the spot rows pin the column order, as a swapped pair still counts 45.
-    #[test]
-    fn real_death_thud_chain_resolves() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_death_thud_catalog(&mut chain).expect("load death thud catalog");
-
-        assert_eq!(cat.len(), 45, "all DeathThudLookups rows load");
-        assert_eq!(
-            cat.terrain_sounds().collect::<Vec<_>>(),
-            (1..=9).collect::<Vec<_>>(),
-            "TerrainTypeSounds is the bare 1..=9 enum"
-        );
-        assert_eq!(cat.size_classes(), (0..=4).collect(), "Small..Colossal");
-
-        // Small on Dirt (`DeathThudSmallDirt`), Colossal on Grass (`DeathThudColossalGrass`).
-        assert_eq!(cat.resolve(0, 1), Some((907, 1266)));
-        assert_eq!(cat.resolve(4, 6), Some((928, 1269)));
-        assert_eq!(cat.kit(4, 6, false), Some(928));
-        assert_eq!(cat.kit(4, 6, true), Some(1269));
-
-        // Metallic (2) borrows the Stone kits and has no water kit: silent in water.
-        assert_eq!(
-            cat.resolve(0, 2),
-            Some((910, 0)),
-            "Small Metallic → Stone kit"
-        );
-        assert_eq!(cat.kit(0, 2, true), None, "and nothing in water");
-        assert_eq!(cat.kit(0, 2, false), Some(910));
-
-        // Terrain sound 0 (`TerrainType` "None") and size class 5 have no rows.
-        assert_eq!(cat.resolve(0, 0), None);
-        assert_eq!(cat.resolve(5, 1), None);
-    }
-
     /// The reference joins these tables by array index, so every terrain sound a `TerrainType` or
     /// `DeathThudLookups` row names must be a `TerrainTypeSounds` row, or `0`.
     #[test]

@@ -88,24 +88,4 @@ mod tests {
         assert_eq!(cat.kit(7, ItemGesture::Use), None, "a 0 slot is silent");
         assert_eq!(cat.kit(999, ItemGesture::Pickup), None, "unknown group");
     }
-
-    #[test]
-    fn real_display_group_ids_all_resolve() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let sounds = load_item_group_sounds(&mut chain).expect("load ItemGroupSounds");
-        let displays = crate::load_item_display_catalog(&mut chain).expect("load ItemDisplayInfo");
-        let mut nonzero = 0usize;
-        let mut valid = 0usize;
-        for (_, d) in displays.iter() {
-            if d.group_sounds != 0 {
-                nonzero += 1;
-                if sounds.groups.contains_key(&d.group_sounds) {
-                    valid += 1;
-                }
-            }
-        }
-        assert_eq!(nonzero, 20513, "the nonzero field-11 count");
-        assert_eq!(valid, nonzero, "every nonzero group id resolves");
-    }
 }

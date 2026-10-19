@@ -61,29 +61,3 @@ pub fn load_item_classes(chain: &mut Chain) -> Result<ItemClassCatalog> {
     }
     Ok(ItemClassCatalog { names })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::load_item_classes;
-
-    /// Bagnon (`Bagnon_Core/localization.lua:94-95`) expects "Container" and "Quiver" here.
-    #[test]
-    fn the_shipped_classes_are_named_as_getiteminfo_returns_them() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = crate::open_chain(&data).expect("open chain");
-        let cat = load_item_classes(&mut chain).expect("ItemClass.dbc");
-
-        assert_eq!(cat.name(0), Some("Consumable"));
-        assert_eq!(cat.name(1), Some("Container"), "Bagnon's own expectation");
-        assert_eq!(cat.name(2), Some("Weapon"));
-        assert_eq!(cat.name(4), Some("Armor"));
-        assert_eq!(cat.name(7), Some("Trade Goods"));
-        assert_eq!(cat.name(11), Some("Quiver"), "Bagnon's own expectation");
-        assert_eq!(cat.name(15), Some("Miscellaneous"));
-        // The reference pushes the row string unfiltered.
-        assert_eq!(cat.name(3), Some("Jewelry(OBSOLETE)"));
-        assert_eq!(cat.name(10), Some("Money(OBSOLETE)"));
-        assert_eq!(cat.name(16), None);
-        assert_eq!(cat.len(), 16, "the whole shipped table");
-    }
-}

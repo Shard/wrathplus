@@ -6,7 +6,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use benilla_dbc::{DbcParser, FieldType, Schema, SchemaField};
+use benilla_dbc::{DbcParser, Schema};
 
 /// The BLP texel forms, re-exported for [`BlpMipChain::texels`].
 pub use benilla_blp::BlpTexels;
@@ -624,13 +624,13 @@ pub fn blp_bytes_to_native_chain(bytes: &[u8]) -> Result<BlpMipChain> {
     })
 }
 
-/// Our schema for a known DBC by base filename, as DBC files carry no column types. A
-/// localized string is 9 dwords: 8 locale offsets and a flags word.
+/// Our schema for a known DBC by base filename, as DBC files carry no column types: a typed
+/// loader's own, which `dbc::parse` remaps onto the build-12340 columns.
 fn schema_for(dbc_name: &str) -> Option<Schema> {
     let base = dbc_name.rsplit(['/', '\\']).next().unwrap_or(dbc_name);
 
     // A table with a typed loader reuses its schema, so a dump reads what the loader reads.
-    let typed = match base.to_ascii_lowercase().as_str() {
+    match base.to_ascii_lowercase().as_str() {
         "creaturedisplayinfo.dbc" => Some(creatures::creature_display_info_schema(
             &DataProfile::default(),
         )),
@@ -655,115 +655,7 @@ fn schema_for(dbc_name: &str) -> Option<Schema> {
         "itemrandomproperties.dbc" => Some(item_random_properties::item_random_properties_schema()),
         "areatrigger.dbc" => Some(area_trigger::area_trigger_schema()),
         _ => None,
-    };
-    if typed.is_some() {
-        return typed;
     }
-
-    if base.eq_ignore_ascii_case("TaxiNodes.dbc") {
-        // 16 fields, 64-byte records.
-        let mut s = Schema::new("TaxiNodes");
-        s.add_field(SchemaField::new("ID", FieldType::UInt32));
-        s.add_field(SchemaField::new("MapID", FieldType::UInt32));
-        s.add_field(SchemaField::new("X", FieldType::Float32));
-        s.add_field(SchemaField::new("Y", FieldType::Float32));
-        s.add_field(SchemaField::new("Z", FieldType::Float32));
-        s.add_field(SchemaField::new("Name", FieldType::String)); // enUS (locale 0)
-        s.add_field(SchemaField::new_array(
-            "NameOtherLocales",
-            FieldType::String,
-            7,
-        ));
-        s.add_field(SchemaField::new("NameFlags", FieldType::UInt32));
-        s.add_field(SchemaField::new("MountIdHorde", FieldType::UInt32));
-        s.add_field(SchemaField::new("MountIdAlliance", FieldType::UInt32));
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    if base.eq_ignore_ascii_case("AreaTable.dbc") {
-        // 25 fields, 100-byte records, as `area_table.rs` and `area_sound.rs` load them.
-        let mut s = Schema::new("AreaTable");
-        s.add_field(SchemaField::new("ID", FieldType::UInt32));
-        s.add_field(SchemaField::new("ContinentID", FieldType::UInt32));
-        s.add_field(SchemaField::new("ParentAreaID", FieldType::UInt32));
-        s.add_field(SchemaField::new("AreaBit", FieldType::UInt32));
-        s.add_field(SchemaField::new("Flags", FieldType::UInt32));
-        s.add_field(SchemaField::new("SoundProviderPref", FieldType::UInt32));
-        s.add_field(SchemaField::new(
-            "SoundProviderPrefUnderwater",
-            FieldType::UInt32,
-        ));
-        s.add_field(SchemaField::new("AmbienceID", FieldType::UInt32));
-        s.add_field(SchemaField::new("ZoneMusic", FieldType::UInt32));
-        s.add_field(SchemaField::new("IntroSound", FieldType::UInt32));
-        s.add_field(SchemaField::new("ExplorationLevel", FieldType::UInt32));
-        s.add_field(SchemaField::new("AreaName", FieldType::String)); // enUS (locale 0)
-        s.add_field(SchemaField::new_array(
-            "AreaNameOtherLocales",
-            FieldType::String,
-            7,
-        ));
-        s.add_field(SchemaField::new("AreaNameFlags", FieldType::UInt32));
-        s.add_field(SchemaField::new("FactionGroupMask", FieldType::UInt32));
-        s.add_field(SchemaField::new_array("LiquidTypeID", FieldType::UInt32, 4));
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    if base.eq_ignore_ascii_case("GameObjectDisplayInfo.dbc") {
-        // 12 fields, as `gameobjects.rs` loads them.
-        let mut s = Schema::new("GameObjectDisplayInfo");
-        s.add_field(SchemaField::new("ID", FieldType::UInt32));
-        s.add_field(SchemaField::new("ModelName", FieldType::String));
-        for i in 0..10 {
-            s.add_field(SchemaField::new(format!("Sound{i}"), FieldType::UInt32));
-        }
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    if base.eq_ignore_ascii_case("TaxiPath.dbc") {
-        let mut s = Schema::new("TaxiPath");
-        for name in ["ID", "FromTaxiNode", "ToTaxiNode", "Cost"] {
-            s.add_field(SchemaField::new(name, FieldType::UInt32));
-        }
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    if base.eq_ignore_ascii_case("TaxiPathNode.dbc") {
-        // 9 fields, as `taxi.rs` loads them.
-        let mut s = Schema::new("TaxiPathNode");
-        for name in ["ID", "PathID", "NodeIndex", "MapID"] {
-            s.add_field(SchemaField::new(name, FieldType::UInt32));
-        }
-        for name in ["LocX", "LocY", "LocZ"] {
-            s.add_field(SchemaField::new(name, FieldType::Float32));
-        }
-        for name in ["Flags", "Delay"] {
-            s.add_field(SchemaField::new(name, FieldType::UInt32));
-        }
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    if base.eq_ignore_ascii_case("TransportAnimation.dbc") {
-        // 7 fields; vmangos's `TransportAnimationEntry` (`DBCStructure.h:709-718`) reads the
-        // middle five, leaving the first and last out.
-        let mut s = Schema::new("TransportAnimation");
-        s.add_field(SchemaField::new("ID", FieldType::UInt32));
-        s.add_field(SchemaField::new("TransportID", FieldType::UInt32));
-        s.add_field(SchemaField::new("TimeIndex", FieldType::UInt32));
-        for name in ["PosX", "PosY", "PosZ"] {
-            s.add_field(SchemaField::new(name, FieldType::Float32));
-        }
-        s.add_field(SchemaField::new("SequenceID", FieldType::UInt32));
-        s.set_key_field("ID");
-        return Some(s);
-    }
-
-    None
 }
 
 /// Write a DBC as CSV through our schema for it, returning `(record_count, field_count)`; an error
@@ -776,20 +668,16 @@ pub fn dbc_to_csv(dbc_bytes: &[u8], dbc_name: &str, out: &Path) -> Result<(u32, 
 
     let schema = schema_for(dbc_name).ok_or_else(|| {
         anyhow::anyhow!(
-            "no schema defined for '{dbc_name}' ({fields} fields); known: TaxiNodes.dbc, \
-             AreaTable.dbc, GameObjectDisplayInfo.dbc, TaxiPath.dbc, TaxiPathNode.dbc, \
-             TransportAnimation.dbc, CreatureDisplayInfo.dbc, CreatureDisplayInfoExtra.dbc, \
-             CreatureModelData.dbc, CharHairGeosets.dbc, CharacterFacialHairStyles.dbc, \
-             HelmetGeosetVisData.dbc, CharSections.dbc, ItemDisplayInfo.dbc"
+            "no schema defined for '{dbc_name}' ({fields} fields); known: CreatureDisplayInfo.dbc, \
+             CreatureDisplayInfoExtra.dbc, CreatureModelData.dbc, CharHairGeosets.dbc, \
+             CharacterFacialHairStyles.dbc, HelmetGeosetVisData.dbc, CharSections.dbc, \
+             ItemDisplayInfo.dbc, ItemVisuals.dbc, ItemVisualEffects.dbc, \
+             SpellItemEnchantment.dbc, ItemRandomProperties.dbc, AreaTrigger.dbc"
         )
     })?;
-
-    let parser = parser
-        .with_schema(schema)
-        .map_err(|e| anyhow::anyhow!("applying schema (field count mismatch?): {e}"))?;
-    let record_set = parser
-        .parse_records()
-        .map_err(|e| anyhow::anyhow!("parsing DBC records: {e}"))?;
+    // The loaders' own path, so a build-12340 table gets its column remap.
+    let what = schema.name.clone();
+    let record_set = crate::dbc::parse(dbc_bytes, schema, &what)?;
 
     let file = std::fs::File::create(out).with_context(|| format!("creating {}", out.display()))?;
     benilla_dbc::export_to_csv(&record_set, std::io::BufWriter::new(file))
@@ -930,12 +818,6 @@ mod tests {
             "ItemVisualEffects",
             "SpellItemEnchantment",
             "ItemRandomProperties",
-            "TaxiNodes",
-            "AreaTable",
-            "GameObjectDisplayInfo",
-            "TaxiPath",
-            "TaxiPathNode",
-            "TransportAnimation",
         ] {
             let path = format!("DBFilesClient\\{table}.dbc");
             let bytes = chain

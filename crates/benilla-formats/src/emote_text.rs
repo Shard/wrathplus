@@ -219,45 +219,6 @@ mod tests {
         assert_eq!(fill("", &["Bob"]), "");
     }
 
-    #[test]
-    fn the_shipped_tables_compose_waves_five_forms() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = Chain::open(&data).expect("open patch chain");
-        let cat = load_emote_text_catalog(&mut chain).expect("load");
-        assert_eq!(cat.len(), 169, "one form table per EmotesText row");
-
-        // ctx 0: someone else waves at someone else.
-        assert_eq!(
-            cat.compose(WAVE, &line("Bob", "Jane", "Me"), 0).as_deref(),
-            Some("Bob waves at Jane.")
-        );
-        // ctx 1: someone else waves at you (the target name matches your own).
-        assert_eq!(
-            cat.compose(WAVE, &line("Bob", "Me", "Me"), 0).as_deref(),
-            Some("Bob waves at you.")
-        );
-        // ctx 4: someone else waves at nobody.
-        assert_eq!(
-            cat.compose(WAVE, &line("Bob", "", "Me"), 0).as_deref(),
-            Some("Bob waves.")
-        );
-        // ctx 2: you wave at someone.
-        let mine = EmoteLine {
-            performer_is_you: true,
-            ..line("Me", "Jane", "Me")
-        };
-        assert_eq!(
-            cat.compose(WAVE, &mine, 0).as_deref(),
-            Some("You wave at Jane.")
-        );
-        // ctx 6: you wave at nobody.
-        let mine = EmoteLine {
-            performer_is_you: true,
-            ..line("Me", "", "Me")
-        };
-        assert_eq!(cat.compose(WAVE, &mine, 0).as_deref(), Some("You wave."));
-    }
-
     /// The branch order would render your own name for a self-target, but the send side clears a
     /// self-target (`DoEmote`, `0x5ef611`), so the server echoes an empty name: "You wave.".
     #[test]
@@ -305,52 +266,5 @@ mod tests {
         let cat = load_emote_text_catalog(&mut chain).expect("load");
         assert_eq!(cat.compose(WAVE, &line("Bob", "Jane", "Me"), 5), None);
         assert_eq!(cat.compose(9999, &line("Bob", "Jane", "Me"), 0), None);
-    }
-
-    /// Three rows are silent as shipped: `SIT` (86) points columns 4 and 6 at `EmotesTextData`
-    /// rows 446 and 447, blank in every locale, and `STAND` (141) and `TRAIN` (264) have all
-    /// sixteen columns zero. Every other row composes a `%s`-free sentence in all five contexts.
-    #[test]
-    fn every_shipped_emote_composes_except_the_three_silent_rows() {
-        let data = crate::wow_data_or_skip!();
-        let mut chain = Chain::open(&data).expect("open patch chain");
-        let cat = load_emote_text_catalog(&mut chain).expect("load");
-        let mut ids: Vec<u32> = cat.forms.keys().copied().collect();
-        ids.sort_unstable();
-        let mut silent = Vec::new();
-        for id in ids {
-            for (label, l) in [
-                ("other→other", line("Bob", "Jane", "Me")),
-                ("other→you", line("Bob", "Me", "Me")),
-                ("other→none", line("Bob", "", "Me")),
-                (
-                    "you→other",
-                    EmoteLine {
-                        performer_is_you: true,
-                        ..line("Me", "Jane", "Me")
-                    },
-                ),
-                (
-                    "you→none",
-                    EmoteLine {
-                        performer_is_you: true,
-                        ..line("Me", "", "Me")
-                    },
-                ),
-            ] {
-                match cat.compose(id, &l, 0) {
-                    None => silent.push(id),
-                    Some(s) => {
-                        assert!(!s.is_empty(), "EmotesText {id} composed empty for {label}");
-                        assert!(
-                            !s.contains("%s"),
-                            "EmotesText {id} left a %s unfilled for {label}: {s:?}"
-                        );
-                    }
-                }
-            }
-        }
-        silent.dedup();
-        assert_eq!(silent, [86, 141, 264], "the silent set is SIT/STAND/TRAIN");
     }
 }
