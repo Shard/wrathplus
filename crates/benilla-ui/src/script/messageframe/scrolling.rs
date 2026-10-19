@@ -293,6 +293,19 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 pub(crate) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
     let m: Table = lua.named_registry_value(REG_SCROLLINGMESSAGEFRAME_METHODS)?;
 
+    // SetScrollOffset(offset) (`0x973470`): the rounded offset, lines up from the newest; a
+    // missing number does nothing, with no usage error.
+    m.set(
+        "SetScrollOffset",
+        lua.create_function(|lua, (this, offset): (Table, Value)| {
+            if !is_number(&offset) {
+                return Ok(());
+            }
+            let offset = i64::from(to_integer(lua, &offset));
+            scroll(lua, &this, |smf, rows| smf.set_scroll_offset(offset, rows))
+        })?,
+    )?;
+
     // GetMessageInfo(index [, accessID]) (`0x973150`) → text, accessID, typeID, extraData: the
     // `index`th line (rounded, 1-based, oldest first) among every line, or among those carrying
     // a non-zero accessID. FrameXML names the typeID `lineID`. A miss raises.
@@ -527,6 +540,23 @@ mod tests {
         assert_eq!(s.lines[2].alpha, 1.0, "the one displayed line came back");
         assert_eq!(s.lines[1].alpha, 0.0, "off-screen lines are untouched");
         assert_eq!(s.lines[0].alpha, 0.0);
+    }
+
+    #[test]
+    fn set_scroll_offset_counts_up_from_the_newest_and_clamps() {
+        let mut s = ScrollingMessageState {
+            max_lines: 8,
+            ..Default::default()
+        };
+        for n in 0..4 {
+            s.add(format!("l{n}"), 1.0, 1.0, 1.0);
+        }
+        s.set_scroll_offset(2, 8);
+        assert_eq!(s.scroll_offset, 2);
+        s.set_scroll_offset(99, 8);
+        assert_eq!(s.scroll_offset, 3, "past the oldest line clamps");
+        s.set_scroll_offset(-5, 8);
+        assert!(s.at_bottom());
     }
 
     #[test]

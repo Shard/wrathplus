@@ -5,7 +5,7 @@
 //! Gestures go out as [`WrathGuildBankRequest`]s (capture-only until App sends them); the bank
 //! state is whatever the host publishes. The selected tab is local, as natively (`0xc1dc0d`).
 
-use mlua::{Lua, MultiValue, Value};
+use mlua::{Lua, MultiValue, Table, Value};
 
 use super::cursor::{CursorGuildBankItem, CursorPayload};
 use super::{Model, WrathGuildBankRequest};
@@ -153,8 +153,40 @@ fn rank_right(model: &Model, right: u32) -> bool {
             .is_some_and(|r| r.money_per_day != 0)
 }
 
+/// The item icons the tab-icon chooser lists (`0xbeafa8`, `0xbeafa4` of them), bare file names
+/// under `Interface\Icons`; the host builds the list.
+#[derive(Default)]
+struct MacroItemIcons(Vec<String>);
+
+impl super::UiScript {
+    /// Publish the item-icon list `GetNumMacroItemIcons`/`GetMacroItemIconInfo` read, in order.
+    pub fn set_macro_item_icons(&mut self, icons: Vec<String>) {
+        self.lua.set_app_data(MacroItemIcons(icons));
+    }
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     use WrathGuildBankRequest as R;
+    lua.set_app_data(MacroItemIcons::default());
+    // GetNumMacroItemIcons() (`0x5664e0`) and GetMacroItemIconInfo(index) (`0x564f60`): the
+    // count, and the `index`th icon's `Interface\Icons\` path, "" out of range or for an empty
+    // name.
+    set(lua, "GetNumMacroItemIcons", |lua, _| {
+        let n = lua.app_data_ref::<MacroItemIcons>().map_or(0, |i| i.0.len());
+        Ok(MultiValue::from_vec(vec![int(n as i64)]))
+    })?;
+    set(lua, "GetMacroItemIconInfo", |lua, args| {
+        let Some(i) = index(lua, &arg(&args, 0)) else {
+            return Err(mlua::Error::runtime("Usage: GetMacroItemIconInfo(index)"));
+        };
+        let path = i
+            .and_then(|i| {
+                let icons = lua.app_data_ref::<MacroItemIcons>()?;
+                icons.0.get(i).filter(|n| !n.is_empty()).cloned()
+            })
+            .map_or_else(String::new, |n| format!("Interface\\Icons\\{n}"));
+        Ok(MultiValue::from_vec(vec![Value::String(lua.create_string(&path)?)]))
+    })?;
     let two = |lua: &Lua, args: &MultiValue, usage: &'static str| match (
         index(lua, &arg(args, 0)),
         index(lua, &arg(args, 1)),
@@ -528,6 +560,33 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             model.guild.in_guild && model.guild.is_leader,
         )]))
     })?;
+    // GameTooltip:SetGuildBankItem(tab, slot) (`0x6304a0`): the slot's item, its suffix, enchant
+    // and gems carried by the slot's link; an empty slot shows nothing. Labelled: the reference
+    // builds the instance tooltip from the slot's fields (`0x6277f0`), the same ones the link
+    // encodes.
+    let tooltip: Table = lua.named_registry_value(super::tooltip::REG_TOOLTIP_METHODS)?;
+    tooltip.set(
+        "SetGuildBankItem",
+        lua.create_function(move |lua, args: MultiValue| {
+            let this = match args.front() {
+                Some(Value::Table(t)) => t.clone(),
+                _ => return Err(mlua::Error::runtime("Invalid tab or slot in SetGuildBankItem")),
+            };
+            let rest: MultiValue = args.iter().skip(1).cloned().collect();
+            let (Some(t), Some(sl)) = two(lua, &rest, "Invalid tab or slot in SetGuildBankItem")?
+            else {
+                return Ok(());
+            };
+            let link = {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                (t < 6).then(|| slot_at(&model, t, sl)).flatten().and_then(|s| s.link)
+            };
+            if let Some(link) = link {
+                mlua::ObjectLike::call_method::<()>(&this, "SetHyperlink", link)?;
+            }
+            Ok(())
+        })?,
+    )?;
     Ok(())
 }
 
@@ -753,5 +812,39 @@ mod tests {
         assert!(s
             .eval::<bool>("return CanWithdrawGuildBankMoney() == 1 and CanGuildBankRepair() == nil")
             .unwrap());
+    }
+
+    #[test]
+    fn the_bank_item_tooltip_shows_the_slots_link() {
+        let s = vm();
+        s.run(
+            r#"
+            local tip = CreateFrame("GameTooltip", "BankTip", UIParent)
+            local shown = {}
+            tip.SetHyperlink = function(_, link) shown[#shown + 1] = link end
+            tip:SetGuildBankItem(1, 5)
+            tip:SetGuildBankItem(1, 6)
+            tip:SetGuildBankItem(7, 5)
+            assert(#shown == 1 and shown[1] == "|Hitem:2589|h[Linen Cloth]|h", table.concat(shown, ","))
+            assert(not pcall(tip.SetGuildBankItem, tip, 1))
+        "#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_item_icon_list_answers_paths_and_empty_strings() {
+        let mut s = vm();
+        assert_eq!(s.eval::<i64>("return GetNumMacroItemIcons()").unwrap(), 0);
+        s.set_macro_item_icons(vec!["INV_Misc_Bag_07".into(), String::new()]);
+        assert!(s
+            .eval::<bool>(
+                "return GetNumMacroItemIcons() == 2 \
+                 and GetMacroItemIconInfo(1) == 'Interface\\\\Icons\\\\INV_Misc_Bag_07' \
+                 and GetMacroItemIconInfo(2) == '' and GetMacroItemIconInfo(3) == '' \
+                 and GetMacroItemIconInfo(0) == ''"
+            )
+            .unwrap());
+        assert!(s.run("GetMacroItemIconInfo()").is_err());
     }
 }

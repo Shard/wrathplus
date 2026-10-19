@@ -192,7 +192,11 @@ pub(super) fn drain_petition(
                     debug!("ui_petition: BuyGuildCharter with no registrar open — dropped");
                     continue;
                 };
-                let _ = commands.0.send(ClientCommand::PetitionBuy { npc, name });
+                let _ = commands.0.send(ClientCommand::PetitionBuy {
+                    npc,
+                    name,
+                    index: 1,
+                });
             }
             PetitionRequest::TurnIn => {
                 // A fresh bag scan per call (`0x5ef2b0`); the charter's `max_count` is 1.
@@ -206,7 +210,7 @@ pub(super) fn drain_petition(
                 });
                 match charter {
                     Some((_, _, item)) => {
-                        let _ = commands.0.send(ClientCommand::TurnInPetition { item });
+                        let _ = commands.0.send(ClientCommand::TurnInPetition { item, banner: None });
                     }
                     // No charter, no packet: a red line (`0x5ef49a`).
                     None => petition.lines.push(lines::no_charter_line()),

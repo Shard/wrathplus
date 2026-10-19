@@ -182,8 +182,11 @@ pub enum Command {
         item: u64,
         player: u64,
     },
+    /// An arena charter carries its banner: background colour, emblem, emblem colour, border and
+    /// border colour, as AC reads them after the guid (`PetitionsHandler.cpp:790`).
     TurnIn {
         item: u64,
+        banner: Option<[u32; 5]>,
     },
     Query {
         petition_id: u32,
@@ -241,8 +244,11 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             body.extend(player.to_le_bytes());
             0x01c3
         }
-        Command::TurnIn { item } => {
+        Command::TurnIn { item, banner } => {
             body.extend(item.to_le_bytes());
+            for word in banner.iter().flatten() {
+                body.extend(word.to_le_bytes());
+            }
             0x01c4
         }
         Command::Query { petition_id, item } => {

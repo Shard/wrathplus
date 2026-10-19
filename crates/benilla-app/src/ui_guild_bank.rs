@@ -81,11 +81,47 @@ impl Plugin for UiGuildBankPlugin {
             .net_handler(SessionEventKind::Disconnected, clear)
             .add_systems(
                 Update,
-                feed_guild_bank
+                (feed_guild_bank, feed_item_icons)
                     .in_set(crate::ui_script::UiFeed)
                     .run_if(crate::ui_script::ingame_ui_up),
             );
     }
+}
+
+/// The tab-icon chooser's item icons (`GetNumMacroItemIcons`), once per VM: every
+/// `ItemDisplayInfo.dbc` inventory icon, each name once, by display id. Labelled: the reference's
+/// list builder (`0x565840`) is untraced.
+fn item_icon_names(displays: &benilla_formats::ItemDisplayCatalog) -> Vec<String> {
+    let mut rows: Vec<(u32, &str)> = displays
+        .iter()
+        .filter_map(|(id, d)| Some((id, d.icon.as_deref()?)))
+        .collect();
+    rows.sort_unstable_by_key(|(id, _)| *id);
+    let mut seen = std::collections::HashSet::new();
+    rows.into_iter()
+        .map(|(_, path)| path.rsplit(['\\', '/']).next().unwrap_or(path))
+        .filter(|name| !name.is_empty() && seen.insert(name.to_ascii_lowercase()))
+        .map(str::to_string)
+        .collect()
+}
+
+fn feed_item_icons(
+    script: Option<NonSendMut<UiScript>>,
+    displays: Option<Res<crate::entities::ItemDisplays>>,
+    mut seeded: Local<crate::ui_script::VmMemo<bool>>,
+) {
+    let (Some(mut script), Some(displays)) = (script, displays) else {
+        return;
+    };
+    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
+        return;
+    }
+    let (done, reset) = seeded.get_reset(&script);
+    if *done && !reset {
+        return;
+    }
+    *done = true;
+    script.set_macro_item_icons(item_icon_names(&displays.catalog));
 }
 
 fn receive(In(event): In<SessionEvent>, mut bank: ResMut<GuildBank>, open: Res<GuildBankOpen>) {
