@@ -17,7 +17,7 @@ by Wire B, for `WRATH-NATIVE-PLAN.md` "Tidy-up and quality gates". The tooling i
 
 `python3 scripts/quality/test_gate.py`: 4 tests, OK. Every check runs on today's tree.
 
-Script issues found:
+Script issues found (all fixed in step 3):
 1. `run.sh` defaults `CARGO_TARGET_DIR` to `/tmp/azb-target-experience`, another worker's
    tree. It should default to the caller's own target, or refuse without one.
 2. `cargo llvm-cov` prompts interactively when `llvm-tools-preview` is missing, which hangs an
@@ -78,7 +78,14 @@ committed.
 (23, `benilla-srp`), `unparseable` (48), `hander` (14), `boxs` (9) and `numer` (8). Per the
 manager, these are recorded, not fixed.
 
-**machete.** Clean.
+With `_typos.toml` (step 2: `reference/*.tsv`, `third_party/` and the baselines excluded; `lod`,
+the Blizzard API names `Hilight`, `Compleated`, `Portait`, `SUPERCEDED`, `Laguages`
+(`GetNumLaguages`), `QUITING` (`PLAYER_QUITING`), and short code identifiers allowed), the count
+is **210**. Those 210 are the typos baseline, recorded not fixed. They are mostly real misspellings
+and truncations: `unparseable` 45, `mis` 28, `hander` 14, `hilights` 13, `boxs` 9, `childs`,
+`Proccess`, `precessed`, `texure`, `THREHOLD`, `permanantly`, `Enviromental`.
+
+**machete.** Clean (scanning `crates/`, step 3).
 
 ## Activation plan
 

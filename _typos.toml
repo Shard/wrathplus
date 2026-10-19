@@ -1,0 +1,40 @@
+# typos (scripts/quality, docs/QUALITY-GATES-ACTIVATION.md): Blizzard's own spellings and this
+# codebase's domain words. A word belongs here only when it is a name we cannot rename.
+
+[files]
+extend-exclude = [
+    # Blizzard's 1.12 globals, events and shapes, quoted verbatim from the client.
+    "reference/*.tsv",
+    "third_party/",
+    # Ratchet budgets: paths and function names as the scorer wrote them.
+    "scripts/quality/*-baseline.json",
+    # Quotes the findings it counts.
+    "docs/QUALITY-GATES-ACTIVATION.md",
+]
+
+[default.extend-words]
+# Level of detail.
+lod = "lod"
+# Blizzard API names: `ButtonHilight`/`Hilight` textures, `GetNextCompleatedTutorial`,
+# `SetInventoryPortaitTexture`, `SMSG_SUPERCEDED_SPELL`.
+hilight = "hilight"
+compleated = "compleated"
+portait = "portait"
+superceded = "superceded"
+# More Blizzard names: `GetNumLaguages`, `PLAYER_QUITING`.
+laguages = "laguages"
+quiting = "quiting"
+# The SRP header cipher type's name, a valid spelling.
+encrypter = "encrypter"
+# Short identifiers: font object, axis indices, time of impact, anchor, inherited, numerator,
+# packed normal, threshold, texture position.
+fo = "fo"
+iy = "iy"
+iz = "iz"
+toi = "toi"
+anc = "anc"
+inh = "inh"
+numer = "numer"
+pn = "pn"
+thr = "thr"
+tpos = "tpos"
