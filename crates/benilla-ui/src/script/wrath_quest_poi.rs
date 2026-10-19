@@ -7,9 +7,19 @@
 //! projects onto it through the world-map projector (native tests the blob against the zone or
 //! dungeon floor, `0x5e0110`/`0x5e0180`). Labelled: `QuestPOIUpdateIcons` (`0x5e2eb0`) and
 //! `SortQuestWatches`' sort (`0x5e5c10`) are unread.
+//!
+//! `GetQuestWorldMapAreaID` (`0x5e56c0` → `0x5e2b60`, `/tmp/azb-app-mig/ghidra/qwmap1.log`) picks
+//! among the quest's POI blobs that the icon would mark: one on the displayed map and floor wins at
+//! once; else one on the displayed map's continent, the nearest floor, then the nearest to the
+//! player; else the first on another continent. A quest with none of those answers its quest-log
+//! header's top zone's `WorldMapArea` row, floor 0, and a quest not in the log 0, 0. Labelled: the
+//! blob point the distance reads (`+0x10`/`+0x14`) is taken as the points' centroid, the header
+//! zone's row as the lowest `WorldMapArea` id carrying it (the native scan is in file order), and
+//! the pre-pass `0x547170(0)` is unread.
 
 use mlua::{Lua, MultiValue, Table, Value};
 
+use super::wrath_worldmap::{displayed_wma, floor_row};
 use super::Model;
 
 /// One POI blob of a quest (AC `quest_poi`, its points `quest_poi_points`).
@@ -39,12 +49,26 @@ pub(crate) struct State {
     special_items: Vec<(u32, (i64, u32))>,
     /// `QuestMapUpdateAllQuests`' visible quests, in quest-log order (`0xc23b28`).
     visible: Vec<u32>,
+    /// The player's world `(x, y)`, which `GetQuestWorldMapAreaID`'s nearest-blob leg measures from.
+    player: Option<(f32, f32)>,
+    /// Each logged quest's quest-log header zone, walked up to its top `AreaTable` zone.
+    zones: Vec<(u32, u32)>,
 }
 
 impl super::UiScript {
     /// Publish the quest POIs, whole.
     pub fn set_wrath_quest_pois(&mut self, pois: Vec<WrathQuestPoi>) {
         self.model_mut().wrath_quest_poi.pois = pois;
+    }
+
+    /// Publish the player's world `(x, y)`.
+    pub fn set_wrath_quest_player_position(&mut self, player: Option<(f32, f32)>) {
+        self.model_mut().wrath_quest_poi.player = player;
+    }
+
+    /// Publish each logged quest's header top zone (quest id, `AreaTable` id), whole.
+    pub fn set_wrath_quest_zones(&mut self, zones: Vec<(u32, u32)>) {
+        self.model_mut().wrath_quest_poi.zones = zones;
     }
 
     /// Publish where each quest's special item sits in the bags (quest id, bag, slot).
@@ -79,22 +103,68 @@ fn icon(m: &Model, quest_id: u32) -> Option<(bool, f32, f32, i32)> {
     let selection = m.map_selection();
     poi.blobs
         .iter()
-        .filter(|b| {
-            if complete {
-                b.objective_index == -1
-            } else {
-                b.objective_index >= 0 && mask & (1 << (b.objective_index & 31)) != 0
-            }
-        })
+        .filter(|b| marks(mask, b))
         .find_map(|b| {
-            let n = b.points.len().max(1) as f32;
-            let (sx, sy) = b.points.iter().fold((0.0, 0.0), |(x, y), p| (x + p.0 as f32, y + p.1 as f32));
-            let (u, v) = project(selection, b.map_id, sx / n, sy / n)?;
+            let (x, y) = centroid(b);
+            let (u, v) = project(selection, b.map_id, x, y)?;
             (u * v).abs().gt(&f32::EPSILON).then_some((complete, u, v, b.objective_index))
         })
 }
 
+/// Whether the icon would mark this blob: the turn-in when complete, else an incomplete objective.
+fn marks(mask: u32, b: &WrathQuestPoiBlob) -> bool {
+    if mask == u32::MAX {
+        b.objective_index == -1
+    } else {
+        b.objective_index >= 0 && mask & (1 << (b.objective_index & 31)) != 0
+    }
+}
+
+fn centroid(b: &WrathQuestPoiBlob) -> (f32, f32) {
+    let n = b.points.len().max(1) as f32;
+    let (sx, sy) = b.points.iter().fold((0.0, 0.0), |(x, y), p| (x + p.0 as f32, y + p.1 as f32));
+    (sx / n, sy / n)
+}
+
+/// `0x5e2b60`'s POI leg: the `(WorldMapArea id, floor)` of the blob to show.
+fn poi_area(m: &Model, quest_id: u32) -> Option<(u32, u32)> {
+    let wm = &m.worldmap;
+    let shown = displayed_wma(wm).and_then(|id| wm.areas.get(&id))?;
+    let floor = floor_row(wm).map_or(0, |f| f.floor_index);
+    let mask = incomplete_mask(m, quest_id)?;
+    let poi = m.wrath_quest_poi.pois.iter().find(|p| p.quest_id == quest_id)?;
+    let (px, py) = m.wrath_quest_poi.player.unwrap_or_default();
+    let mut best = None;
+    let mut nearest: Option<(u32, f32)> = None;
+    for b in poi.blobs.iter().filter(|b| marks(mask, b)) {
+        if b.area_id == shown.id && b.floor == floor {
+            return Some((b.area_id, b.floor));
+        }
+        let Some(row) = wm.areas.get(&b.area_id) else {
+            continue;
+        };
+        if row.map_id == shown.map_id {
+            let (cx, cy) = centroid(b);
+            let key = (floor.abs_diff(b.floor), (px - cx).powi(2) + (py - cy).powi(2));
+            if nearest.is_none_or(|n| key.0 < n.0 || (key.0 == n.0 && key.1 < n.1)) {
+                nearest = Some(key);
+                best = Some((b.area_id, b.floor));
+            }
+        } else if best.is_none() {
+            best = Some((b.area_id, b.floor));
+        }
+    }
+    best
+}
+
+/// `0x5e2b60`'s fallback: the quest-log header's top zone's `WorldMapArea` row, floor 0.
+fn zone_area(m: &Model, quest_id: u32) -> Option<u32> {
+    let (_, zone) = m.wrath_quest_poi.zones.iter().find(|(q, _)| *q == quest_id)?;
+    m.worldmap.areas.values().filter(|a| a.area_id == *zone).map(|a| a.id).min()
+}
+
 fn log_index(m: &Model, quest_id: u32) -> Option<usize> {
+
     m.quest_log
         .entries
         .iter()
@@ -154,6 +224,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         let n = visible.len() as i64;
         m.wrath_quest_poi.visible = visible;
         Ok(MultiValue::from_vec(vec![Value::Integer(n)]))
+    })?;
+    // GetQuestWorldMapAreaID(questID) (`0x5e56c0`) → the WorldMapArea id and floor to show it on.
+    set(lua, "GetQuestWorldMapAreaID", |lua, args| {
+        let quest = number(lua, arg(&args, 0), "Usage: GetQuestWorldMapAreaID(questID)")?;
+        let m = lua.app_data_ref::<Model>().expect("model app_data");
+        let (area, floor) = u32::try_from(quest)
+            .ok()
+            .filter(|&q| q > 0)
+            .and_then(|q| poi_area(&m, q).or_else(|| zone_area(&m, q).map(|a| (a, 0))))
+            .unwrap_or((0, 0));
+        Ok(MultiValue::from_vec(vec![Value::Integer(area.into()), Value::Integer(floor.into())]))
     })?;
     // QuestPOIGetQuestIDByVisibleIndex(index) (`0x5e5750`) → questID, quest-log index.
     set(lua, "QuestPOIGetQuestIDByVisibleIndex", |lua, args| {
@@ -372,5 +453,51 @@ mod tests {
             .unwrap());
         s.run("GetQuestLogSpecialItemCooldown(2) UseQuestLogSpecialItem(2) UseQuestLogSpecialItem(4)").unwrap();
         assert!(s.run("UseQuestLogSpecialItem()").is_err());
+    }
+
+    #[test]
+    fn quest_world_map_area_prefers_the_shown_map_then_the_nearest_then_the_header_zone() {
+        use crate::script::worldmap::WorldMapAreaView;
+        let mut s = vm();
+        let area = |id, map_id, area_id| WorldMapAreaView { id, map_id, area_id, ..Default::default() };
+        s.set_world_map_areas(
+            [area(14, 1, 0), area(141, 1, 141), area(23, 0, 139), area(30, 1, 331)]
+                .into_iter()
+                .map(|a| (a.id, a))
+                .collect(),
+            Vec::new(),
+        );
+        let blob = |objective_index, area_id, x| WrathQuestPoiBlob {
+            objective_index,
+            area_id,
+            points: vec![(x, 0)],
+            ..Default::default()
+        };
+        s.set_wrath_quest_pois(vec![
+            // Quest 10's objective 1 is finished, so its blob never counts.
+            WrathQuestPoi {
+                quest_id: 10,
+                blobs: vec![blob(1, 141, 0), blob(0, 23, 0), blob(0, 141, 900), blob(0, 30, 100)],
+            },
+            WrathQuestPoi { quest_id: 11, blobs: vec![blob(-1, 23, 0)] },
+        ]);
+        s.set_wrath_quest_player_position(Some((120.0, 0.0)));
+        s.set_wrath_quest_zones(vec![(12, 331), (11, 139)]);
+        let at = |s: &UiScript, q: u32| {
+            s.eval::<(i64, i64)>(&format!("return GetQuestWorldMapAreaID({q})")).unwrap()
+        };
+        // Nothing displayed: no POI leg, so the header zone answers.
+        assert_eq!(at(&s, 10), (0, 0));
+        assert_eq!(at(&s, 11), (23, 0));
+        // Continent 1 shown: its blob nearest the player beats the other continent's.
+        s.model_mut().worldmap.direct_area = Some(14);
+        assert_eq!(at(&s, 10), (30, 0));
+        // A blob on the shown map and floor wins at once.
+        s.model_mut().worldmap.direct_area = Some(141);
+        assert_eq!(at(&s, 10), (141, 0));
+        assert_eq!(at(&s, 11), (23, 0), "only another continent's blob: the first");
+        assert_eq!(at(&s, 12), (30, 0), "no POIs: the header zone's row");
+        assert_eq!(at(&s, 99), (0, 0), "not in the log");
+        assert!(s.run("GetQuestWorldMapAreaID()").is_err());
     }
 }
