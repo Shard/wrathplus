@@ -471,8 +471,9 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
 }
 
 /// A Wrath VM with the stock interface loaded as a session loads it (`ui_script::lifecycle`): the
-/// CVar table, the display modes and the Enter World player (record, then unit) are seated first,
-/// then `load_wrath_ui` without addons, its load budget disarmed after. Returns every failure.
+/// CVar table, the class names, the session, the display modes and the Enter World player (record,
+/// then unit) are seated first, then `load_wrath_ui` without addons, its load budget disarmed
+/// after. Returns every failure.
 ///
 /// Not `load_default_ui`: that is the 1.12 shape, which also loads the benilla layer and seats
 /// neither the display modes nor the player. Stock `UpdateMenuBarTop` divides by the current
@@ -482,6 +483,17 @@ pub(super) fn stock_session_ui() -> (benilla_ui::script::UiScript, Vec<String>) 
     use benilla_ui::script::{PlayerRecord, ScreenResolution, UiScript, UnitState};
     let mut script = UiScript::new().expect("a VM");
     script.register_cvars(crate::shipped_cvars::pairs());
+    // As `lifecycle::new_vm` seeds it: stock `Constants.lua` fills the class names at file scope.
+    // Callers have already gated on the install, so `wow_data` answers.
+    let data = benilla_formats::wow_data().expect("a WoW install");
+    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    script.set_localized_class_names(
+        benilla_formats::load_chr_classes(&mut chain)
+            .expect("ChrClasses.dbc")
+            .localized_names(),
+    );
+    // A live Wrath account (expansion 2) on the installed locale.
+    script.set_wrath_session(Some(2), vec!["enUS".into()]);
     script.set_screen_size(1024.0, 768.0);
     script.set_screen_resolutions(
         vec![],
