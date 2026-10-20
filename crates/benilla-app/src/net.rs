@@ -22,7 +22,6 @@ use benilla_world::schedule::WorldStage;
 pub(crate) mod apply;
 pub(crate) mod handlers;
 pub(crate) mod io;
-mod motion;
 pub(crate) mod objects;
 pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
@@ -73,20 +72,22 @@ use apply::tag_self_player;
 pub(crate) use handlers::NetHandlerApp;
 
 pub(crate) use io::LoginRequest;
-use motion::{
-    drain_pending_moves, extrapolate_remote_units, ground_clamp_creatures, mark_swimming_creatures,
-    sample_splines,
-};
+// The movement model's apply and its movers live in `crate::motion` (`docs/APP-CRATE-SPLIT-PLAN.md`,
+// item 3 part A); these paths keep their callers compiling.
 // `pub(crate)`: `creature_anim` reads the shuffle latch it produces, and a test runs both.
-pub(crate) use motion::drive_display_facing;
-pub(crate) use motion::{
+pub(crate) use crate::motion::drive_display_facing;
+pub(crate) use crate::motion::{
     ground_derived, grounded_y, jump_seed, CreatureSwimming, FacingStep, RemoteMotion, Spline,
     SplineStopped, UnitMoveModes,
 };
 // Only the ground-census probe reads this, so a build without the instruments leaves it unused.
 // Not a `cfg`: seam knowledge lives in three fixed places, and this file is not one of them.
 #[allow(unused_imports)]
-pub(crate) use motion::GroundClamped;
+pub(crate) use crate::motion::GroundClamped;
+
+/// The drain and the self-player tag, which every mover in `crate::motion` runs after.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct NetApply;
 
 /// The net subsystem: spawns the background IO threads and drives the per-frame event drain.
 pub(crate) struct NetPlugin {
@@ -242,23 +243,10 @@ impl Plugin for NetPlugin {
             .add_message::<DisconnectedMessage>()
             .add_systems(
                 Update,
-                (
-                    apply_net_updates,
-                    tag_self_player,
-                    sample_splines,
-                    // Swim state from the water at the feet (the wire never carries it for
-                    // creatures), before the clamp so a swimmer is exempt the same frame.
-                    mark_swimming_creatures,
-                    // After the raw spline Z: re-ground walkers (the client discards a ground
-                    // spline's Z); a swimmer keeps its wire Z.
-                    ground_clamp_creatures,
-                    // Due relays fire before the extrapolator advances the fresh state.
-                    drain_pending_moves,
-                    extrapolate_remote_units,
-                    // After the movers, so a turn reads the goal's position this frame.
-                    drive_display_facing,
-                )
+                // The movers follow in `crate::motion::MotionPlugin`, chained after this set.
+                (apply_net_updates, tag_self_player)
                     .chain()
+                    .in_set(NetApply)
                     .in_set(WorldStage::Net),
                 // `ui_session::feed_interact_npc` seats itself inside this chain, after
                 // `apply_net_updates` and before `drive_display_facing`, so the `"npc"` token is
@@ -266,7 +254,11 @@ impl Plugin for NetPlugin {
             )
             // Not part of the movement chain above: one send on the world-enter message.
             .add_systems(Update, send_query_time.in_set(WorldStage::Net))
-            .add_systems(Update, population_pulse.in_set(WorldStage::Net));
+            .add_systems(Update, population_pulse.in_set(WorldStage::Net))
+            // Last, so its handlers follow every one above on the same event. Here rather than in
+            // `game_plugins` while net and the movers share a crate: an app built on `NetPlugin` alone
+            // keeps the whole movement chain.
+            .add_plugins(crate::motion::MotionPlugin);
     }
 }
 

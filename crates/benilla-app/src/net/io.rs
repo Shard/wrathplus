@@ -14,7 +14,7 @@ use super::{CharRequest, RealmRequest, SessionCommand, SessionCommandSender};
 pub(super) mod wrath;
 
 /// The inbound census: every packet off the world socket, and the unix ms of the latest, which
-/// tell a silent server from a dead socket for the runaway watch ([`crate::net::motion`]).
+/// tell a silent server from a dead socket for the runaway watch ([`crate::motion`]).
 pub(crate) static INBOUND_PACKETS: AtomicU64 = AtomicU64::new(0);
 static LAST_INBOUND_UNIX_MS: AtomicU64 = AtomicU64::new(0);
 

@@ -9,7 +9,7 @@ use bevy::time::Real;
 use crate::app_core::movement::move_flags;
 use crate::app_core::movement::{GRAVITY, TERMINAL_VELOCITY};
 
-use super::super::{ActiveMover, UnitSpeeds};
+use crate::net::{ActiveMover, UnitSpeeds};
 use super::relay::{PendingMove, RelayChain, RelayMove};
 use super::{yaw_of, Spline};
 
@@ -45,7 +45,7 @@ pub(crate) struct RemoteMotion {
 /// What `unit_move` did with an inbound relayed move: the `out=` field of the `rly` trace, which
 /// logs discarded arrivals too.
 #[derive(Clone, Copy)]
-pub(in crate::net) enum RelayOutcome {
+pub(in crate::motion) enum RelayOutcome {
     /// Due, with an empty queue.
     Now,
     Queued,
@@ -74,7 +74,7 @@ impl RelayOutcome {
 
 /// The `rly` trace line per inbound relayed move: stamp, flags, outcome, schedule lead and queue
 /// depth.
-pub(in crate::net) fn trace_relay(
+pub(in crate::motion) fn trace_relay(
     guid: u64,
     mv: &RelayMove,
     chain: &RelayChain,
@@ -169,7 +169,7 @@ fn trace_remote(e: Entity, guid: u64, rm: &RemoteMotion, held: f32, dz: f32, now
 
 /// `WOW_REMOTE_SNAP=1`: apply every relayed move at arrival as a raw snap, with no queue and no
 /// reconcile lerp, for an A/B.
-pub(in crate::net) fn arrival_snap() -> bool {
+pub(in crate::motion) fn arrival_snap() -> bool {
     static SNAP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *SNAP.get_or_init(|| std::env::var_os("WOW_REMOTE_SNAP").is_some())
 }
@@ -242,7 +242,7 @@ pub(super) fn facing_lerp(orientation: f32, target: f32, dt: f32, remaining_s: f
 
 /// Applies one relayed move, the reference's snap and re-seed at arrival (`0x7c6420`) or at fire
 /// (`0x617e90` to `0x7c69a0`): the pose outright, the jump tail, the landing edge, the rider tail.
-pub(in crate::net) fn apply_move(
+pub(in crate::motion) fn apply_move(
     e: Entity,
     ev: &RelayMove,
     rm: &mut RemoteMotion,
@@ -304,7 +304,7 @@ pub(in crate::net) fn apply_move(
 /// Real time: the reference's clock is the OS wall clock (`0x42c010`), and Bevy's virtual clock
 /// clamps each delta to 250 ms, so a throttled window would fall behind the schedule.
 #[allow(clippy::type_complexity)]
-pub(in crate::net) fn drain_pending_moves(
+pub(in crate::motion) fn drain_pending_moves(
     time: Res<Time<Real>>,
     mut commands: Commands,
     mut landings: MessageWriter<crate::app_core::movement::HardLanding>,
@@ -325,7 +325,7 @@ pub(in crate::net) fn drain_pending_moves(
 /// the reference. The wire has no blocked bit: a mover held by a wall is held by ours. Real time,
 /// the clock the fire-times are on.
 #[allow(clippy::type_complexity)]
-pub(in crate::net) fn extrapolate_remote_units(
+pub(in crate::motion) fn extrapolate_remote_units(
     time: Res<Time<Real>>,
     mut commands: Commands,
     // The local controller's own sweep and capsule.
@@ -550,7 +550,7 @@ pub(crate) fn jump_seed(jump: Option<JumpInfo>, fall_time: u32, feather: bool) -
 
 /// One packet's step of the landing predictor: `(fall_start_z, descent)`, the descent
 /// `takeoff - landing` only on the `FALLING` to grounded edge with a known takeoff.
-pub(in crate::net) fn fall_arc_step(
+pub(in crate::motion) fn fall_arc_step(
     was_falling: bool,
     now_falling: bool,
     fall_start_z: Option<f32>,
