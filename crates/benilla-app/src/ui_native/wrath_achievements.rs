@@ -6,6 +6,7 @@
 //! `SMSG_RESPOND_INSPECT_ACHIEVEMENTS` becomes the comparison. A server first
 //! (`SMSG_SERVER_FIRST_ACHIEVEMENT`) becomes an achievement chat line ([`server_first_line`]).
 //! Other players' earns stay in the capture.
+pub(crate) use crate::net::wrath_achievement_capture::Achievements;
 use crate::net::wrath_achievement_capture::NativeAchievementPackets;
 use crate::net::wrath_notices::WrathProgress;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
@@ -15,22 +16,9 @@ use benilla_ui::script::{
     ScriptDialect, UiScript, WrathAchievementProgress, WrathAchievementRequest,
 };
 use bevy::prelude::*;
-use std::collections::BTreeMap;
-
-#[derive(Resource, Default)]
-pub(crate) struct Achievements {
-    /// Earned achievements and their packed dates.
-    earned: BTreeMap<u32, u32>,
-    /// The login snapshot's counters; later updates come from `WrathProgress`.
-    criteria: BTreeMap<u32, u64>,
-    /// Criteria the server deleted since the snapshot.
-    deleted: Vec<u32>,
-    /// The player a comparison was asked for.
-    compared: Option<u64>,
-}
 
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<Achievements>().add_systems(
+    app.add_systems(
         Update,
         feed_achievements
             .in_set(crate::ui_script::UiFeed)
@@ -225,11 +213,6 @@ fn absorb(
     }
     *packets = kept;
     (earned, comparison, firsts)
-}
-
-/// A session boundary forgets the progress and any comparison.
-pub(crate) fn clear(state: &mut Achievements) {
-    *state = Achievements::default();
 }
 
 #[cfg(test)]

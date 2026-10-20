@@ -4,12 +4,14 @@
 //! slot, keyed as the binding reads it (equipped rows use bag 0). A refunded item's row goes when
 //! `SMSG_ITEM_REFUND_RESULT` succeeds. Refunds expire after two hours of played time
 //! (AzerothCore `Item::IsRefundExpired`), counted down from the reply.
+pub(crate) use crate::net::wrath_inventory_capture::ItemRefunds;
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
-use benilla_protocol::wrath_inventory::{Command, Packet, RefundCost};
+#[cfg(test)]
+use benilla_protocol::wrath_inventory::RefundCost;
+use benilla_protocol::wrath_inventory::{Command, Packet};
 use benilla_ui::script::{ItemRefundCost, ItemRefundView, ScriptDialect, UiScript};
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
 
 /// `ITEM_FIELD_FLAG_REFUNDABLE` (AzerothCore ItemTemplate.h).
 const ITEM_FIELD_FLAG_REFUNDABLE: u32 = 0x0000_1000;
@@ -23,16 +25,8 @@ const BACKPACK_END: u8 = 39;
 const BAG_SLOT_FIRST: u8 = 19;
 const BAG_SLOT_END: u8 = 23;
 
-#[derive(Resource, Default)]
-pub(crate) struct ItemRefunds {
-    /// By item GUID: the reply's cost and the refund window left, as of `at` (elapsed seconds).
-    infos: HashMap<u64, (RefundCost, f64, f64)>,
-    /// Items asked this session, so each is asked once.
-    asked: HashSet<u64>,
-}
-
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<ItemRefunds>().add_systems(
+    app.add_systems(
         Update,
         feed_item_refunds
             .in_set(crate::ui_script::UiFeed)
@@ -177,11 +171,6 @@ fn absorb(packets: &mut std::collections::VecDeque<Packet>, refunds: &mut ItemRe
         }
     }
     *packets = kept;
-}
-
-/// A session boundary forgets every reply and every ask.
-pub(crate) fn clear(refunds: &mut ItemRefunds) {
-    *refunds = ItemRefunds::default();
 }
 
 #[cfg(test)]

@@ -12,24 +12,11 @@
 //! `CMSG_ALTER_APPEARANCE`, and the preview dresses our own body
 //! ([`crate::entities::BarberPreview`]). Labelled: `CancelBarberShop` (`0x52e9f0`, untraced) stands
 //! the player up here, which closes the window as getting up does.
-use crate::net::{NetHandlerApp, ObjectStore, SelfGuid, SelfPlayer};
+pub(crate) use crate::net::wrath_appearance::{AppearanceReceipts, BarberChair};
+use crate::net::{ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_appearance::Packet;
-use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{ScriptDialect, UiScript};
 use bevy::prelude::*;
-use std::collections::VecDeque;
-
-#[derive(Resource, Default)]
-pub(crate) struct AppearanceReceipts(VecDeque<Packet>);
-
-/// The barber window's lifetime: opened by `SMSG_ENABLE_BARBER_SHOP`, closed when the player gets
-/// up from the chair (`BARBER_SHOP_CLOSE`).
-#[derive(Resource, Default)]
-pub(crate) struct BarberChair {
-    open: bool,
-    /// The player has been seen in a chair stand state since the open.
-    seated: bool,
-}
 
 /// `UNIT_STAND_STATE_SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`: the barber chair sits the player at
 /// `SIT_LOW_CHAIR + chairheight` (AC `GameObject::Use`).
@@ -56,12 +43,7 @@ fn chair_step(chair: &mut BarberChair, stand_state: Option<u8>) -> bool {
 }
 
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<AppearanceReceipts>()
-        .init_resource::<BarberChair>()
-        .net_handler(SessionEventKind::WrathAppearance, receive)
-        .net_handler(SessionEventKind::Connected, clear)
-        .net_handler(SessionEventKind::Disconnected, clear)
-        .init_resource::<crate::entities::BarberPreview>()
+    app.init_resource::<crate::entities::BarberPreview>()
         .add_systems(Startup, load_barber.after(benilla_assets::AssetSet::Open))
         .add_systems(
             Update,
@@ -227,26 +209,6 @@ fn feed_barber(
         });
     if preview.0 != shown {
         preview.0 = shown;
-    }
-}
-
-fn receive(In(event): In<SessionEvent>, mut receipts: ResMut<AppearanceReceipts>) {
-    if let SessionEvent::WrathAppearance { packet } = event {
-        receipts.0.push_back(packet);
-    }
-}
-
-fn clear(
-    In(event): In<SessionEvent>,
-    mut receipts: ResMut<AppearanceReceipts>,
-    mut chair: ResMut<BarberChair>,
-) {
-    if matches!(
-        event,
-        SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
-    ) {
-        receipts.0.clear();
-        *chair = BarberChair::default();
     }
 }
 
