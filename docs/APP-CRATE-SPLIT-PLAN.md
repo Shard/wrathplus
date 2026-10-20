@@ -96,6 +96,26 @@ the later moves are pure file moves. Each item names the symbols that point the 
 
 Done when the module graph, rerun with the script below, shows no back edge between layers.
 
+### Progress and the unit 2c clusters
+
+Units 1 (schedule sets), 2a (UI error queues; spell, client, roster, NPC, loot-gate and pointer
+state) and 2b (quest giver, input map) are done. Five shared-state types stayed behind because
+their fields hold types owned by the UI or world layer; moving one alone would leave `app_core`
+pointing back up. Measured (read-only) by following the type names in each definition's code,
+transitively, with name collisions checked by hand:
+
+| Root | Cluster to move together | Size | Notes |
+|---|---|---|---|
+| `GroupState` (`ui_party`) | `GroupState`; `wrath::RaidState`; `saved_instances::NativeSavedInstances`; `pets::Roster` | 4 types, ~70 lines, all `ui_party` | `pets::Roster` clashes by name with `char_select::Roster` (already in `app_core::state`): give the cluster its own module, `app_core::group` |
+| `LootState` (`ui_loot`) | `LootState`, `PendingReceive`; `wrath::WrathLootState`, `wrath::Phase` | 4 types, ~60 lines, all `ui_loot` | `app_core::loot`, beside the latch and config moved in 2a |
+| `PetBar` (`ui_pet`) | `PetBar`; `spell::cooldowns::{Cooldowns, Record, Timer}` | 4 types, ~50 lines | the cooldown store is world-layer state every layer reads: `app_core::cooldowns` |
+| `GuildState` (`ui_guild`) | `GuildState`, `Identity`, `RosterUpdate`; `sort::{SortStack, SortField}` | 5 types, ~70 lines | also reads `query_cache::QueryCache` (core, fine) and `net::SessionDialect`, which Vanilla-removal step 4 collapses; move after that field goes |
+| `ChatLog` (`ui_chat`) | `ChatLog`, `Pending`; `event::{ChatEvent, ChatEventKind}`; `broadcast::Broadcast`; `combat::{PendingCombat, Family, Variant, Fills, Named}` and the slot/keying types they hold | ~14 types, ~300 lines, all `ui_chat` | this is the chat event model, not a flag; either move it whole as `app_core::chat`, or keep it in UI and have the five lower callers (death lines, combat log) write a narrower queue. Decide before moving |
+
+Unit 2c waits for the whole-client test move (Experience) because `ui_pet` and `ui_chat/feed.rs`
+overlap; Vanilla-removal step 5 takes priority over it.
+
+
 ## Moving a layer out (steps 1 to 4)
 
 Order: `core`, then `net`, then `tools`, then `world` and `ui` (world first, so `ui` can depend
