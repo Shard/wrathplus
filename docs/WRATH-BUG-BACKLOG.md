@@ -10,6 +10,7 @@ listed here; they belong to the workstream backlogs.
 | 2 | 10-16 | Character eyes glow (DK eye glow on a human warrior) | geoset 1703 always on | Fixed 99f04ad5 |
 | 3 | 10-16 | Backpack does not open | `SetBagPortraitTexture` missing | Fixed d94f9756 |
 | 4 | 10-18 | Character create offers only 1.12 races/classes (no Blood Elf, Draenei, Death Knight) | App's char_create is the 1.12 screen (found by App Migration while scoping paid services) | Fixed (12340 grid) via ecbc97f3 |
+| 5 | 10-20 | Capture probes (`capture/probe_*`) still target vmangos spawn guids and server quirks | App Migration, converted to Wrath handlers in 90af10b4; low priority | Open: retarget to AzerothCore |
 
 ## Installed-data test failures kept after Vanilla removal 6c
 

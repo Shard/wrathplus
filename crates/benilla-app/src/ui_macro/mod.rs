@@ -65,12 +65,12 @@ impl Plugin for UiMacroPlugin {
 /// An immutable archive catalog belongs to its asset source, not the short-lived UI VM.
 /// Keep a weak identity so replacing the source invalidates both success and failure without
 /// pinning the old archives. Failed loads are attempted once per source, as successful ones are.
-struct IconCatalogCache<T> {
+struct IconCatalogCache<T, V = Vec<String>> {
     source: std::sync::Weak<T>,
-    icons: Option<Result<Vec<String>, String>>,
+    icons: Option<Result<V, String>>,
 }
 
-impl<T> Default for IconCatalogCache<T> {
+impl<T, V> Default for IconCatalogCache<T, V> {
     fn default() -> Self {
         Self {
             source: std::sync::Weak::new(),
@@ -79,12 +79,12 @@ impl<T> Default for IconCatalogCache<T> {
     }
 }
 
-impl<T> IconCatalogCache<T> {
+impl<T, V> IconCatalogCache<T, V> {
     fn get_or_load(
         &mut self,
         source: &std::sync::Arc<T>,
-        load: impl FnOnce() -> Result<Vec<String>, String>,
-    ) -> (&Result<Vec<String>, String>, bool) {
+        load: impl FnOnce() -> Result<V, String>,
+    ) -> (&Result<V, String>, bool) {
         let same_source = self
             .source
             .upgrade()
@@ -108,17 +108,26 @@ fn macro_catalog_enabled(script: &UiScript) -> bool {
     script.dialect() == benilla_ui::script::ScriptDialect::Vanilla
 }
 
-/// Seed each Vanilla VM from a source-owned immutable catalog. A failed load leaves the chooser
-/// empty (`MacroPopupOkayButton_Update` keeps OKAY disabled); Wrath has no chooser API yet.
+/// Seed each VM from a source-owned immutable catalog. A failed load leaves the chooser empty
+/// (`MacroPopupOkayButton_Update` keeps OKAY disabled). A Wrath VM takes build 12340's two lists,
+/// the spell icons and the item icons the guild-bank tab chooser also reads.
 fn load_icon_catalog(
     script: Option<NonSendMut<UiScript>>,
     assets: Option<Res<WorldAssets>>,
     mut seeded: Local<crate::ui_script::VmMemo<IconSource>>,
     mut catalog: Local<IconCatalogCache<CatalogSource>>,
+    mut wrath: Local<IconCatalogCache<CatalogSource, benilla_formats::WrathMacroIcons>>,
 ) {
     let (Some(mut script), Some(assets)) = (script, assets) else {
         return;
     };
+    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
+        seed_wrath_icon_catalog(&mut script, &assets.chain, &mut seeded, &mut wrath, || {
+            let mut chain = assets.chain.lock_recover();
+            benilla_formats::load_wrath_macro_icons(&mut chain).map_err(|e| format!("{e:#}"))
+        });
+        return;
+    }
     seed_icon_catalog(
         &mut script,
         &assets.chain,
@@ -139,7 +148,7 @@ fn seed_icon_catalog<T>(
     catalog: &mut IconCatalogCache<T>,
     load: impl FnOnce() -> Result<Vec<String>, String>,
 ) {
-    // Wrath has no macro chooser API. Do not enumerate archives for an inaccessible surface.
+    // The 1.12 catalog: a Wrath VM takes `seed_wrath_icon_catalog` instead.
     if !macro_catalog_enabled(script) {
         return;
     }
@@ -165,6 +174,41 @@ fn seed_icon_catalog<T>(
         }
         Err(e) if !hit => {
             error!("ui_macro: no Interface\\Icons\\ listing — the chooser is empty: {e}")
+        }
+        Err(_) => {}
+    }
+}
+
+/// [`seed_icon_catalog`]'s policy for a Wrath VM: once per VM and source, both lists.
+fn seed_wrath_icon_catalog<T>(
+    script: &mut UiScript,
+    chain: &std::sync::Arc<T>,
+    seeded: &mut crate::ui_script::VmMemo<Option<std::sync::Weak<T>>>,
+    catalog: &mut IconCatalogCache<T, benilla_formats::WrathMacroIcons>,
+    load: impl FnOnce() -> Result<benilla_formats::WrathMacroIcons, String>,
+) {
+    let source = seeded.get(script);
+    if source
+        .as_ref()
+        .and_then(std::sync::Weak::upgrade)
+        .is_some_and(|old| std::sync::Arc::ptr_eq(&old, chain))
+    {
+        return;
+    }
+    *source = Some(std::sync::Arc::downgrade(chain));
+    let (loaded, hit) = catalog.get_or_load(chain, load);
+    match loaded {
+        Ok(icons) => {
+            script.set_macro_spell_icons(icons.spell.clone());
+            script.set_macro_item_icons(icons.item.clone());
+            info!(
+                "ui_macro: {} spell and {} item icons in the choosers (cached={hit})",
+                icons.spell.len(),
+                icons.item.len()
+            );
+        }
+        Err(e) if !hit => {
+            error!("ui_macro: no Interface\\Icons\\ listing — the choosers are empty: {e}")
         }
         Err(_) => {}
     }

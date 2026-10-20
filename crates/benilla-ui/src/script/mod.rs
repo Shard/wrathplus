@@ -46,6 +46,7 @@ mod wrath_chat_verbs;
 mod wrath_static_popup;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
+mod wrath_macro_icons;
 mod wrath_unit_popup;
 pub use wrath_calendar::{
     WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
@@ -923,6 +924,7 @@ impl UiScript {
             wrath_static_popup::install(&lua)?;
             wrath_friends_frame::install(&lua)?;
             wrath_guild_bank::install(&lua)?;
+            wrath_macro_icons::install(&lua)?;
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_titles::install(&lua)?;
