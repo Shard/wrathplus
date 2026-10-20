@@ -3,14 +3,9 @@
 //! data (vmangos `CharmInfo::InitPetActionBar`), not a layout: a possessed or charmed unit fills
 //! the same ten words differently, so nothing here assumes them.
 
-use std::time::Instant;
-
 use bevy::prelude::*;
 
-use benilla_protocol::messages::PetSpells;
-
 use crate::net::{GuidIndex, ObjectStore};
-use crate::spell::Cooldowns;
 use crate::ui_action::CooldownEvents;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
@@ -37,34 +32,7 @@ mod tests;
 #[cfg(test)]
 pub(crate) mod usable_tests;
 
-/// The pet action bar's state. A zero `spells.pet_guid` means no bar: the teardown packet carries
-/// only that guid.
-#[derive(Resource, Default)]
-pub(crate) struct PetBar {
-    /// Lossless native 12340 initialization. Capture only: the native visible feed is separate;
-    /// `None` means unavailable, not a known empty spellbook. Never use Vanilla action helpers.
-    pub(crate) native: Option<benilla_protocol::wrath_pet::PetSpells>,
-    /// The last `SMSG_PET_SPELLS`, with `SMSG_PET_MODE` and local presses folded in.
-    pub(crate) spells: PetSpells,
-    /// The pet's own cooldowns, the list at `0xcecb04`. Seeded from `SMSG_PET_SPELLS`, topped up
-    /// by `SMSG_SPELL_COOLDOWN` for the pet's guid, by the pet's own `SMSG_SPELL_GO` and by a
-    /// press's GCD. Each mutation but the seed fires the flush, off [`Cooldowns::generation`]
-    /// (`bar::fire_pet_cooldown_events`).
-    pub(crate) cooldowns: Cooldowns,
-    /// The client's `[0xb714b0]`, a local latch: all of `IsPetAttackActive`, and the only thing
-    /// that lights Attack (`0x4bdf16`-`0x4bdf22`). Raised only for a possessed unit (`0x4bd420`),
-    /// so never on a hunter's bar; lowered by `PetStopAttack` (`0x4bd650`), a new pet (`0x4bc8ce`)
-    /// and the old-target clear (`0x493a18`). `PET_ATTACK_*` read the pet's flag `0x800` instead.
-    pub(crate) attacking: bool,
-    /// `PET_BAR_UPDATE` signals, counted. Both state writes signal unconditionally (`0x4bc940`,
-    /// `0x4bc960`), and `OnClick`'s `SetChecked(0)` needs that repaint to relight a press on the
-    /// current mode, so the count is in the feed's dedup key. Wrapping: only a change is read.
-    pub(crate) bar_signals: u32,
-    /// `[0xb714a8]`: the charm or possess expiry, the packet's duration past its arrival; `None`
-    /// when the duration is 0, as for a hunter's or warlock's own pet.
-    pub(crate) expires: Option<Instant>,
-}
-
+pub(crate) use crate::app_core::state::PetBar;
 impl PetBar {
     /// `PetHasActionBar()`: a nonzero cached guid, with no alive or control check (`0x4bdc20`).
     pub(crate) fn has_bar(&self) -> bool {
@@ -85,7 +53,7 @@ impl PetBar {
     }
 
     /// No pet: every field back to its default, the cooldown list emptied with its counters kept
-    /// ([`Cooldowns::clear_silent`]), for the teardown packet and the session end.
+    /// ([`crate::spell::Cooldowns::clear_silent`]), for the teardown packet and the session end.
     pub(crate) fn clear(&mut self) {
         let mut cooldowns = std::mem::take(&mut self.cooldowns);
         cooldowns.clear_silent();

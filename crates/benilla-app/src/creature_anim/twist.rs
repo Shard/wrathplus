@@ -5,16 +5,7 @@
 
 use bevy::prelude::*;
 
-/// The twist state, on a unit's root when its model has either key bone (the client's
-/// `[+0xd58] & 0x80`/`0x100`).
-#[derive(Component)]
-pub(crate) struct BodyTwist {
-    /// `wrap(aim − rendered root yaw)` in radians; zero while the body faces its aim.
-    pub(crate) yaw_gap: f32,
-    spine: Option<Channel>,
-    head: Option<Channel>,
-}
-
+pub(crate) use crate::app_core::anim::{BodyTwist, Channel};
 impl BodyTwist {
     pub(crate) fn new(spine: Option<u16>, head: Option<u16>) -> Self {
         Self {
@@ -23,16 +14,6 @@ impl BodyTwist {
             head: head.map(Channel::new),
         }
     }
-}
-
-/// One twist channel's bone and bookkeeping.
-struct Channel {
-    bone: u16,
-    /// The animated local rotation the twist last composed on.
-    base: Quat,
-    /// What we last wrote (`base * twist`). A bone still holding it was not re-keyed this frame, so
-    /// `base` stays; composing onto it would accumulate the twist and spin the bone.
-    last_out: Quat,
 }
 
 impl Channel {
