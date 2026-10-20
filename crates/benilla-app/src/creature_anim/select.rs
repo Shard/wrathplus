@@ -61,130 +61,13 @@ pub(crate) const LIFT_OFF: u16 = 192;
 /// See [`KNOCKDOWN`].
 pub(crate) const LAND: u16 = 200;
 
-/// The client's `MOVEMENTFLAGS` bits (cached at `unit+0x9e8`), tested as the binary tests them.
-pub(crate) mod move_flags {
-    pub const FORWARD: u32 = 0x1;
-    pub const BACKWARD: u32 = 0x2;
-    pub const STRAFE_LEFT: u32 = 0x4;
-    pub const STRAFE_RIGHT: u32 = 0x8;
-    /// The keyboard turn keys (with `TURN_RIGHT`), which rotate the facing (`0x7c4f30`).
-    pub const TURN_LEFT: u32 = 0x10;
-    pub const TURN_RIGHT: u32 = 0x20;
-    /// The pitch keys while swimming or flying (the same bits in 1.12 and build 12340, whose
-    /// `0x989220` sets one and clears the other).
-    pub const PITCH_UP: u32 = 0x40;
-    pub const PITCH_DOWN: u32 = 0x80;
-    /// Walk mode: it scales only the rate numerator, never the id choice.
-    pub const WALK_MODE: u32 = 0x100;
-    /// `MOVEFLAG_LEVITATING`: the swim decision `0x6030c0` bails on it first (`0x6030d2`), so
-    /// liquid can neither latch nor clear [`SWIMMING`]; GM flight sets both (`Player.cpp:4595`).
-    pub const LEVITATING: u32 = 0x400;
-    /// JUMPING/FALLING: set for the whole airborne arc.
-    pub const FALLING: u32 = 0x2000;
-    /// `MOVEFLAG_FALLINGFAR` (`0x633220`/`0x633240`): a jump latches it 1/9 yd below its launch
-    /// height, a step-off fall after 500 ms airborne; only StopFalling (`0x7c6290`) clears it.
-    pub const FALLING_FAR: u32 = 0x4000;
-    /// `MOVEFLAG_ROOT`: vmangos kicks a root-apply ack without it unless the ack still falls
-    /// (`MovementHandler.cpp:715-722`); a moving bit beside it freezes the 1.12 client.
-    pub const ROOT: u32 = 0x1000;
-    pub const SWIMMING: u32 = 0x20_0000;
-    /// `MOVEFLAG_ONTRANSPORT` (`MovementInfo.h:56`, not TBC's 0x200): every packet carrying it
-    /// also carries the transport-local pose.
-    pub const ON_TRANSPORT: u32 = 0x0200_0000;
-    /// `MOVEFLAG_WATERWALKING`: liquid is walkable ground; read by the liquid-mask selector
-    /// `0x6315f0` (`0x63160d`, only when not swimming) and the opcode 0x22 apply `0x61a430`.
-    pub const WATER_WALKING: u32 = 0x1000_0000;
-    /// `MOVEFLAG_SAFE_FALL`, feather fall: its one effect is the terminal fall speed (`0x7c5d23`),
-    /// 7.0 yd/s (`[0x87d898]`) instead of 60.148 (`[0x87d894]`).
-    pub const SAFE_FALL: u32 = 0x2000_0000;
-    /// `MOVEFLAG_HOVER`: the body rests 1.0 yd above the ground (Levitate): the walk resolver
-    /// `0x6367b0` adds the `[0x7ff9d8]` offset and the step-down reach widens by it (`0x633e35`).
-    pub const HOVER: u32 = 0x4000_0000;
-    /// Build 12340's CAN_FLY (the same bit on the Wrath wire); 1.12 never sets it.
-    pub const CAN_FLY: u32 = 0x0100_0000;
-    /// Build 12340's ASCENDING and DESCENDING (the same bits on the Wrath wire), set by the jump and
-    /// descend keys while swimming or flying (`0x9898e0`).
-    pub const ASCENDING: u32 = 0x0040_0000;
-    pub const DESCENDING: u32 = 0x0080_0000;
-    /// Build 12340's FLYING, held in a bit of its own: the Wrath wire's `0x0200_0000` is the shared
-    /// word's [`ON_TRANSPORT`], so `player::movement_net` and the Wrath relay map between them at
-    /// the boundary. Inside [`SERVER_AUTHORED`]: a relayed flier's word carries it.
-    pub const FLYING: u32 = 0x0800_0000;
+pub(crate) use crate::app_core::movement::move_flags;
 
-    /// The bits a server-authored move packet owns, the reference's merge mask (`0x618c30` @
-    /// `0x618deb`), with build 12340's [`FLYING`] and [`ASCENDING`] (a relayed flier's state). [`ON_TRANSPORT`] is outside it: a server pose relocates a rider but never
-    /// boards or deboards them.
-    pub const SERVER_AUTHORED: u32 = 0x75a0_7dff | FLYING | ASCENDING;
+pub(crate) use crate::app_core::movement::ease_strafe_yaw;
 
-    /// Merge a server-authored packet's flags under [`SERVER_AUTHORED`] (`0x618de7`), for our mover
-    /// and every watched one: all thirty relay opcodes take this mask (`0x618f20`).
-    pub const fn merge_server_authored(local: u32, wire: u32) -> u32 {
-        (local & !SERVER_AUTHORED) | (wire & SERVER_AUTHORED)
-    }
+pub(crate) use crate::app_core::movement::strafe_body_offset;
 
-    /// Any horizontal direction bit: the client's `[9e8] & 0xf` gate.
-    pub const ANY_MOVE: u32 = FORWARD | BACKWARD | STRAFE_LEFT | STRAFE_RIGHT;
-
-    /// The bits that get a mover integrated at all, the client's `0x20ff` (`0x616e20`, `0x6166f5`):
-    /// without one a mover keeps its last packet's pose, and a flag-less unit is not even in the
-    /// mover list (`0x618940`). Swim and the mode bits are not among them.
-    pub const INTEGRATED: u32 = 0xff | FALLING;
-
-    /// The committed-lower-body test routing a one-shot to the masked overlay (`0x5fe6dc`); the
-    /// client's separate mouse-turn test (`d58 & 0x1800`) reads a field benilla does not model.
-    pub const ROUTE_COMMITTED_MOVE: u32 =
-        FORWARD | BACKWARD | STRAFE_LEFT | STRAFE_RIGHT | TURN_LEFT | TURN_RIGHT | SWIMMING;
-
-    /// The stationary-cast pin's moving test (`0x5fde80`): no turn bits, so a caster turning in
-    /// place keeps the pin, where [`ROUTE_COMMITTED_MOVE`]'s turn bits would flap it.
-    pub const CAST_PIN_MOVE: u32 = ANY_MOVE | SWIMMING;
-}
-
-/// The rate (/s) the strafing yaw eases at: the reference closes a quarter of the gap per frame
-/// (`0x607ed0`, `[0x8029b0]`), 17.3/s at 60 fps. Deviation: a time-based rate, because the
-/// reference's per-frame step changes with the frame rate.
-const STRAFE_BLEND_RATE: f32 = 17.26;
-
-/// Ease the rendered yaw toward `aim + offset` through the aim-relative offset, which swings round
-/// the front where the absolute shortest arc ties at the ±90° strafe flip.
-pub(crate) fn ease_strafe_yaw(current_yaw: f32, aim: f32, offset: f32, dt: f32) -> f32 {
-    let cur = super::wrap_pi(current_yaw - aim);
-    let eased = cur + (offset - cur) * (1.0 - (-STRAFE_BLEND_RATE * dt).exp());
-    super::wrap_pi(aim + eased)
-}
-
-/// The strafe body heading's offset from the aim (`0x607ed0`): ±π/2, ±π/4 with forward or back,
-/// left positive, mirrored while backpedaling. Both strafe bits give 0, as they cancel to no
-/// lateral motion, where the client's fold keys on the left bit alone: an unobservable edge.
-pub(crate) fn strafe_body_offset(flags: u32) -> f32 {
-    use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
-    let left = flags & move_flags::STRAFE_LEFT != 0;
-    let right = flags & move_flags::STRAFE_RIGHT != 0;
-    if left == right {
-        return 0.0;
-    }
-    let diagonal = flags & (move_flags::FORWARD | move_flags::BACKWARD) != 0;
-    let magnitude = if diagonal { FRAC_PI_4 } else { FRAC_PI_2 };
-    let back = flags & move_flags::BACKWARD != 0;
-    if left != back {
-        magnitude
-    } else {
-        -magnitude
-    }
-}
-
-/// The swim body pitch for every mover with a reported pitch (`0x60a110` to `0x710620`): the
-/// reference's `Rz(facing)·Ry(2π − pitch)` is `Ry(yaw)·Rx(pitch)` here, nose up positive, and
-/// only SWIMMING with forward or back pitches (`CMovement+0x40 & 3` at `0x60857d`).
-pub(crate) fn swim_body_rotation(yaw: f32, flags: u32, pitch: f32) -> Quat {
-    if flags & move_flags::SWIMMING != 0
-        && flags & (move_flags::FORWARD | move_flags::BACKWARD) != 0
-    {
-        Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch)
-    } else {
-        Quat::from_rotation_y(yaw)
-    }
-}
+pub(crate) use crate::app_core::movement::swim_body_rotation;
 
 /// The per-frame movement state the selector `0x5fd8b0` reads.
 #[derive(Component, Clone, Copy, Default)]

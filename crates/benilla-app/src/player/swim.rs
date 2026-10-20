@@ -31,33 +31,14 @@ pub(super) const SWIM_BACK_SPEED: f32 = 2.5;
 /// about 14% over the land jump's 7.955547.
 const SWIM_JUMP_SPEED: f32 = 9.096_748;
 
-/// The share of the unit's collision height the water must cover to swim (`0x8012cc`, compared
-/// at `0x6030c0`).
-const SWIM_DEPTH_FRAC: f32 = 0.75;
 /// The enter/leave band (yd, `0x7ff9d0`): enter above `0.75·h`, leave below `0.75·h - 1/36`,
 /// hold between (`0x603100`, `0x6031c0`).
 const SWIM_HYSTERESIS: f32 = 1.0 / 36.0;
 
-/// The `UNIT_FIELD_FLAGS` bits that let a unit swim: `PLAYER_CONTROLLED` (0x8, set on every
-/// player, vmangos `Player.cpp:462`), `PET_IN_COMBAT` (0x800) and `USE_SWIM_ANIMATION` (0x8000,
-/// from the creature's `CAN_SWIM`). `0x6030c0` tests them on both legs: with none set a unit
-/// cannot enter and is stopped at any depth (`0x6031b4`, then `0x60dff0`). The client's only reads
-/// of 0x8000 are this predicate (`0x5fb922`, `0x603111`, `0x6031d0`). Every body a player can be
-/// [`crate::net::Embodied`] in has 0x8, so only the creature marker
-/// (`crate::net::motion::spline::mark_swimming_creatures`) needs this.
-const SWIM_UNIT_FLAGS: u32 = 0x8 | 0x800 | 0x8000;
+#[cfg(test)]
+use crate::app_core::movement::{may_swim, SWIM_UNIT_FLAGS};
 
-/// Whether a unit may swim at all ([`SWIM_UNIT_FLAGS`]): false blocks entry and forces an exit.
-pub(crate) fn may_swim(unit_flags: u32) -> bool {
-    unit_flags & SWIM_UNIT_FLAGS != 0
-}
-
-/// The depth over the feet (yd) past which a unit swims: 0.75 × its own collision height
-/// ([`crate::entities::CollisionHeight`]), about 1.52 yd for a human male and 0.86 for a gnome
-/// female. Also the wade ceiling: wading is being in liquid without swimming.
-pub(crate) fn swim_enter_depth(h: f32) -> f32 {
-    SWIM_DEPTH_FRAC * h
-}
+pub(crate) use crate::app_core::movement::swim_enter_depth;
 /// The depth (yd) below which swimming stops, `0.75·h - 1/36`: the band is absolute, never scaled
 /// by `h` (`0x6030f2` subtracts `[0x7ff9d0]`).
 pub(super) fn swim_exit_depth(h: f32) -> f32 {
