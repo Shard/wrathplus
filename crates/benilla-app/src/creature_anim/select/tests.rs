@@ -916,7 +916,7 @@ fn a_flying_spline_is_fly_before_backward_and_speed() {
 #[test]
 fn unify_stamps_flying_from_the_live_spline_on_every_leg() {
     use std::time::{Duration, Instant};
-    let spline = |grounded| crate::net::Spline {
+    let spline = |grounded| crate::motion::Spline {
         deck: None,
         points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
         start: Instant::now(),
@@ -947,7 +947,7 @@ fn unify_stamps_flying_from_the_live_spline_on_every_leg() {
 /// in its `MovementState`.
 #[test]
 fn the_granted_modes_fold_into_the_flags_word_on_every_leg_but_our_own() {
-    use crate::net::UnitMoveModes;
+    use crate::motion::UnitMoveModes;
     use std::time::{Duration, Instant};
 
     let rooted = UnitMoveModes(move_flags::ROOT);
@@ -958,7 +958,7 @@ fn the_granted_modes_fold_into_the_flags_word_on_every_leg_but_our_own() {
     assert_eq!(v.flags & move_flags::ROOT, move_flags::ROOT);
 
     // Creature leg on a path: the granted bit rides alongside the spline's own FORWARD.
-    let spline = crate::net::Spline {
+    let spline = crate::motion::Spline {
         deck: None,
         points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
         start: Instant::now(),
@@ -976,7 +976,7 @@ fn the_granted_modes_fold_into_the_flags_word_on_every_leg_but_our_own() {
     );
 
     // Remote leg: OR'd onto the pose's flags.
-    let rm = crate::net::RemoteMotion {
+    let rm = crate::motion::RemoteMotion {
         wow_pos: [0.0; 3],
         pending: std::collections::VecDeque::new(),
         orientation: 0.0,

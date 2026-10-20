@@ -178,8 +178,8 @@ const SWIM_DEPTH_FRAC: f32 = 0.75;
 /// from the creature's `CAN_SWIM`). `0x6030c0` tests them on both legs: with none set a unit
 /// cannot enter and is stopped at any depth (`0x6031b4`, then `0x60dff0`). The client's only reads
 /// of 0x8000 are this predicate (`0x5fb922`, `0x603111`, `0x6031d0`). Every body a player can be
-/// [`crate::net::Embodied`] in has 0x8, so only the creature marker
-/// (`crate::motion::spline::mark_swimming_creatures`) needs this.
+/// [`super::session::Embodied`] in has 0x8, so only the creature marker
+/// (`motion`'s `mark_swimming_creatures`) needs this.
 pub(crate) const SWIM_UNIT_FLAGS: u32 = 0x8 | 0x800 | 0x8000;
 
 /// Whether a unit may swim at all ([`SWIM_UNIT_FLAGS`]): false blocks entry and forces an exit.

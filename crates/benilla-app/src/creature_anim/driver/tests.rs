@@ -486,13 +486,13 @@ fn relaxed_base_arms_roll_variations_and_the_shuffle_drives_them() {
 
     app.world_mut()
         .entity_mut(unit)
-        .insert(crate::net::FacingStep(0.3));
+        .insert(crate::motion::FacingStep(0.3));
     app.update();
     assert_eq!(gait(&app), Some(11), "stepping yaw → ShuffleLeft");
 
     app.world_mut()
         .entity_mut(unit)
-        .remove::<crate::net::FacingStep>();
+        .remove::<crate::motion::FacingStep>();
     advance(&mut app, 25);
     assert_eq!(
         gait(&app),
@@ -3323,7 +3323,7 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
         .init_resource::<crate::ui_session::InteractNpc>();
     app.add_systems(
         Update,
-        crate::net::drive_display_facing.before(drive_animations),
+        crate::motion::drive_display_facing.before(drive_animations),
     );
     // Off the vendor's axis at a bearing of ~2.60 rad; exactly ±pi would sit on the yaw wrap.
     app.world_mut().spawn((
@@ -3334,7 +3334,11 @@ fn the_interaction_face_me_shuffles_its_feet_for_the_whole_turn() {
     let (npc, nodes) = spawn_vendor(&mut app);
 
     let gait = |app: &App| app.world().entity(npc).get::<AnimDriver>().unwrap().gait;
-    let turning = |app: &App| app.world().entity(npc).contains::<crate::net::FacingStep>();
+    let turning = |app: &App| {
+        app.world()
+            .entity(npc)
+            .contains::<crate::motion::FacingStep>()
+    };
     let shuffle_weight = |app: &App| {
         let p = app.world().entity(npc).get::<AnimationPlayer>().unwrap();
         nodes[1..]

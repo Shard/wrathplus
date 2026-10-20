@@ -350,7 +350,7 @@ pub(in crate::motion) fn extrapolate_remote_units(
             Option<&crate::net::Guid>,
             // Modes from `SMSG_SPLINE_MOVE_*`, which vmangos sends only for a unit it drives; a
             // player's ride the pose, so the union is the reference's one `CMovement+0x40` word.
-            Option<&crate::net::UnitMoveModes>,
+            Option<&crate::motion::UnitMoveModes>,
         ),
         (Without<Spline>, Without<ActiveMover>),
     >,

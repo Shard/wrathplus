@@ -19,8 +19,9 @@ use bevy::prelude::*;
 
 use super::ProbeClock;
 use crate::entities::{FallbackCube, HeldAttached, VisualAttached, ATTACH_SLOT_NAMES};
+use crate::motion::Spline;
 use crate::names::NameCache;
-use crate::net::{Guid, NetEntity, SelfPlayer, Spline};
+use crate::net::{Guid, NetEntity, SelfPlayer};
 use crate::target::hover::pick_model_roots;
 
 /// Census radius in yards, past the server's visibility radius; `WOW_UNIT_VISUALS_RADIUS` sets it.

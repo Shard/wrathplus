@@ -11,11 +11,11 @@ use bevy::animation::graph::AnimationNodeIndex;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::prelude::*;
 
+use crate::motion::FacingStep;
+use crate::motion::RemoteMotion;
+use crate::motion::Spline;
 use crate::names::type_flags::DO_NOT_PLAY_WOUND_ANIM;
-use crate::net::{
-    ClientCommand, FacingStep, NetCommands, ObjectStore, RemoteMotion, SelfPlayer, Spline,
-    UnitSpeeds,
-};
+use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer, UnitSpeeds};
 use crate::sound::EmoteSounds;
 
 use super::select::{
@@ -259,13 +259,13 @@ pub(super) fn drive_animations(
             Has<AutoRepeatArmed>,
             Has<SelfPlayer>,
             Option<&crate::entities::mount::MountBody>,
-            Has<crate::net::CreatureSwimming>,
+            Has<crate::motion::CreatureSwimming>,
             // The in-hand arrow is latched (the `$BWP`..`$BWR` window).
             Has<NockLatch>,
             // `OBJECT_FIELD_SCALE_X` on the transform; the locomotion rate divides by it.
             &Transform,
             // Server-granted movement modes, folded by `unify` into the selector's flags word.
-            Option<&crate::net::UnitMoveModes>,
+            Option<&crate::motion::UnitMoveModes>,
             // A proc-11 rate node here (the freeze auras', `0x6201d0`) refuses the wound flinch.
             Option<&crate::aura_visual::AuraNodes>,
         ),
@@ -277,8 +277,8 @@ pub(super) fn drive_animations(
         Option<&MovementState>,
         Option<&UnitSpeeds>,
         Option<&FacingStep>,
-        Has<crate::net::CreatureSwimming>,
-        Option<&crate::net::UnitMoveModes>,
+        Has<crate::motion::CreatureSwimming>,
+        Option<&crate::motion::UnitMoveModes>,
         // The rider's scale: the mount renders at the rider's scale times its own (`0x613ef0`).
         &Transform,
         // Read only by the debug trace.

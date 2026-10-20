@@ -15,12 +15,14 @@ use benilla_protocol::EntityKind;
 use bevy::prelude::*;
 
 use super::ProbeClock;
+use crate::motion::ground_derived;
+use crate::motion::CreatureSwimming;
+use crate::motion::GroundClamped;
+use crate::motion::RemoteMotion;
+use crate::motion::Spline;
 use crate::names::NameCache;
 use crate::net::NetCommands;
-use crate::net::{
-    ground_derived, CreatureSwimming, Embodied, GroundClamped, Guid, NetEntity, RemoteMotion,
-    SelfPlayer, Spline,
-};
+use crate::net::{Embodied, Guid, NetEntity, SelfPlayer};
 
 /// A drop past this (yd) counts as sunk: clear of the clamp's small corrections, under a storey.
 const SUNK_YD: f32 = 0.5;
