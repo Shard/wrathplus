@@ -53,7 +53,7 @@ fn load_name_cache(
     mut file: ResMut<NameCacheFile>,
     mut names: ResMut<NameCache>,
 ) {
-    let Some((realm, _)) = crate::ui_macro::identity(&roster) else {
+    let Some((realm, _)) = crate::app_core::state::identity(&roster) else {
         return;
     };
     if file.realm.as_deref() == Some(realm.as_str()) {
@@ -131,7 +131,7 @@ mod tests {
     use super::*;
     use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
 
-    /// A roster with a pick in flight and no realm: [`crate::ui_macro::identity`] answers
+    /// A roster with a pick in flight and no realm: [`crate::app_core::state::identity`] answers
     /// `("Realm", <name>)`.
     fn roster_with_pick(name: &str, guid: u64) -> Roster {
         Roster::with_pending_pick(
