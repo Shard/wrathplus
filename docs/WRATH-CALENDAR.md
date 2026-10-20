@@ -3,20 +3,19 @@
 Wire reference: AzerothCore `7f12e89ee5f467a50e62eba1d525eac7dc953d03`: `CalendarHandler.cpp`
 (`HandleCalendarGetCalendar`, every handler's read order, `SendCalendarRaidLockout*`),
 `CalendarMgr.cpp` (`SendCalendar*`), `CalendarPackets.cpp`, `Guild.cpp` and `ArenaTeam.cpp`
-(`MassInviteToEvent`). No client-only behaviour is inferred; no Ghidra round. Codec:
-`crates/benilla-protocol/src/wrath_calendar.rs`.
+(`MassInviteToEvent`). Codec: `crates/benilla-protocol/src/wrath_calendar.rs`.
 
-All receive rows are **capture-only** (`NativeCalendarPackets` FIFO, sole owner, cleared on
-Connected and Disconnected, duplicates kept): 0436 calendar (invites, events, server and zone time,
+Every receive row is decoded into the `NativeCalendarPackets` FIFO (cleared on Connected and
+Disconnected, duplicates kept), which `ui_calendar` reduces (below): 0436 calendar (invites, events, server and zone time,
 permanent lockouts, raid reset periods, holidays with 26 dates, 10 durations, 10 flags and the
 texture), 0437 event with invitees, 0438/0439 guild-filter and arena-team member lists, 043A..043D
 invite, invite removed, status and command result (the three name-carrying errors keep their
 name), 043E/043F/0471 raid lockout added, removed and updated, 0440/0441/0443/0444/0445 alerts,
 0448 pending count, 04BB clear pending action. Packed times stay packed; raw bytes and flags are
-kept; counts are bounded by the body. No calendar, lockout, holiday or pending state, and no Lua
-events, are produced.
+kept; counts are bounded by the body.
 
-Outbound transport-only `ClientCommand::NativeCalendar` (no UI producer): 0429 get calendar,
+Outbound `ClientCommand::NativeCalendar`, produced by the VM's requests through `ui_calendar`:
+0429 get calendar,
 042A get event, 042B guild filter, 042C arena team, 042D add event (the invite list is omitted for
 a guild announcement, as AC reads none), 042E update, 042F remove (AC reads only the event id),
 0430 copy, 0431 invite, 0432 RSVP, 0433 remove invite, 0434 status, 0435 moderator status,
@@ -48,14 +47,23 @@ clipboard, edited fields, invite sort, action-pending bit, the 2 s invite and 5 
 | 0440/0441/0443/0444 | Row added, removed (the open event closes, `CALENDAR_CLOSE_EVENT`), updated (`CALENDAR_UPDATE_EVENT`). |
 | 0448 / 04BB | `CALENDAR_UPDATE_PENDING_INVITES`; the action-pending bit clears (also on 0437/043D). |
 
+Traced (Wire B's round, `/tmp/azb-wireb-ghidra/calendar-decomp.log`):
+- 043D's error switch `0x6cd380` → `0x5b9960`: its own keys for 9 (`ERR_GUILD_PLAYER_NOT_IN_GUILD`),
+  11 (`PLAYER_NOT_FOUND`) and 13 (`ERR_IGNORING_YOU_S`); the limits it formats into `%d` (100 guild
+  events, 30 events, 100 invites); the name only for 4, 10 and 13;
+- `CalendarGetMaxDate` (`0x5b82a0`) 1 January 2031, `CalendarGetMaxCreateDate` (`0x5b7a80`) the
+  first of the month thirteen months on, its year at most 2031; `CalendarGetMinDate` 24 November
+  2004.
+
 Labelled, not traced or never sent:
-- the client's error-id table (AzerothCore's names matched to GlobalStrings);
+- `CalendarGetMinHistoryDate` (`0x5b8350`) answers the minimum date, where the decompile steps a copy
+  of today back 14 days and pushes today;
+- the `|4one:many;` plural escapes in the `%d` error lines, left to the text renderer;
 - the day list's order (holidays, then by time);
 - a holiday's day split (its first duration from each start date);
 - the raid-reset projection;
 - the status-option filter `0x5f26f0`;
 - the texture lists' row choice (every `LFGDungeons` raid, then dungeon);
-- `CalendarGetMaxCreateDate`/`MaxDate` (a year from today);
 - the guild filter's level cap (80);
 - the not-signed-up and sign-up constants `0x9f0df0`/`0x9e8ce8`;
 - invite sorting by party (falls back to status);
