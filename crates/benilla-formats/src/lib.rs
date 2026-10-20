@@ -91,7 +91,9 @@ pub use battlemaster::{
     load_battlemasters, BattlemasterType, Battlemasters, PvpBracket, RANDOM_BATTLEGROUND,
 };
 mod vehicle_indicators;
-pub use vehicle_indicators::{load_vehicle_indicators, VehicleIndicator};
+pub use vehicle_indicators::{
+    load_possess_cancel_icon, load_vehicle_indicators, VehicleIndicator, POSSESS_CANCEL_ICON,
+};
 mod item_extended_cost;
 pub use item_extended_cost::{load_item_extended_costs, ExtendedCost, ExtendedCosts};
 pub use summon_properties::{

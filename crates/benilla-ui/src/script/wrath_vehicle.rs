@@ -160,6 +160,20 @@ pub struct WrathVehicles {
     pub battlefield: Vec<BattlefieldVehicleView>,
     /// The possess bar's spell (`0xc234e0`, picked by `0x5d62a0`), `None` without one.
     pub possess_spell: Option<u32>,
+    /// That spell's row as `GetPossessInfo` reads it; `None` without a spell or its row.
+    pub possess: Option<PossessView>,
+}
+
+/// The possess bar's two slots (`GetPossessInfo` `0x5d5820`): the spell, then its cancel.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PossessView {
+    /// The spell's `SpellIcon.dbc` path: its active icon when it has one, else its icon.
+    pub texture: Option<String>,
+    pub name: String,
+    /// `SpellIcon.dbc` row 0x2b5, the cancel slot's art.
+    pub cancel_texture: Option<String>,
+    /// `Attributes` lacks 0x80000000 (cannot be cancelled), so the cancel slot shows.
+    pub cancelable: bool,
 }
 
 /// A vehicle request for the app's outbox.
@@ -573,6 +587,39 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    // texture, name, enabled for the possess bar's slot (`0x5d5820`): 1 is the spell, enabled; 2
+    // its cancel, enabled unless the spell cannot be cancelled. Three nils for any other slot, or
+    // without a player or a possess spell.
+    set("GetPossessInfo", |lua, args| {
+        let Some(slot) = index(lua, &arg(&args, 0))? else {
+            return Err(mlua::Error::runtime("Usage: GetPossessInfo(index)"));
+        };
+        let model = lua.app_data_ref::<Model>().expect("model");
+        let possess = model
+            .wrath_vehicles
+            .possess
+            .as_ref()
+            .filter(|_| model.unit("player").is_some_and(|u| u.exists));
+        let text = |s: &Option<String>| -> mlua::Result<Value> {
+            Ok(match s {
+                Some(t) => Value::String(lua.create_string(t)?),
+                None => Value::Nil,
+            })
+        };
+        let (texture, enabled) = match (possess, slot) {
+            (Some(p), 1) => (&p.texture, true),
+            (Some(p), 2) => (&p.cancel_texture, p.cancelable),
+            _ => return Ok(MultiValue::from_vec(vec![Value::Nil; 3])),
+        };
+        let name = possess.map_or(Value::Nil, |p| {
+            lua.create_string(&p.name).map_or(Value::Nil, Value::String)
+        });
+        Ok(MultiValue::from_vec(vec![
+            text(texture)?,
+            name,
+            Value::Boolean(enabled),
+        ]))
+    })?;
     set("GetNumBattlefieldVehicles", |lua, _| {
         let model = lua.app_data_ref::<Model>().expect("model");
         one(Value::Integer(model.wrath_vehicles.battlefield.len() as i64))
@@ -741,6 +788,7 @@ mod tests {
             has_mover: true,
             battlefield: Vec::new(),
             possess_spell: None,
+            possess: None,
         });
         let mut ind = HashMap::new();
         ind.insert(
@@ -834,6 +882,32 @@ mod tests {
         );
         s.run("T:SetPossession(1)").unwrap();
         assert!(s.run("T:SetPossession()").is_err());
+    }
+
+    #[test]
+    fn possess_info_is_the_spell_then_its_cancel() {
+        let mut s = vm();
+        s.run("assert(select('#', GetPossessInfo(1)) == 3 and GetPossessInfo(1) == nil)")
+            .unwrap();
+        let mut v = s.model_mut().wrath_vehicles.clone();
+        v.possess = Some(PossessView {
+            texture: Some("Interface\\Icons\\Spell_Shadow_ShadowWordDominate".into()),
+            name: "Mind Control".into(),
+            cancel_texture: Some("Interface\\Icons\\Spell_ChargeNegative".into()),
+            cancelable: false,
+        });
+        s.set_wrath_vehicles(v);
+        s.run(
+            r##"
+            local t, n, e = GetPossessInfo(1)
+            assert(t == "Interface\\Icons\\Spell_Shadow_ShadowWordDominate" and n == "Mind Control" and e == true)
+            t, n, e = GetPossessInfo(2)
+            assert(t == "Interface\\Icons\\Spell_ChargeNegative" and n == "Mind Control" and e == false)
+            assert(select("#", GetPossessInfo(3)) == 3 and GetPossessInfo(3) == nil)
+            assert(not pcall(GetPossessInfo))
+            "##,
+        )
+        .unwrap();
     }
 
     #[test]
