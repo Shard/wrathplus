@@ -1413,6 +1413,20 @@ pub(crate) fn env_family(damage_type: u8) -> Option<Family> {
 
 /// Every family this module emits, for the sweep against the shipped templates; a family left out
 /// goes unchecked.
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // Outside that table (`0x626d5f`, "60" at `0x862e14`): `0x62c160` reads it first and falls back
+        // to the per-class range only when the lookup fails.
+        same(DEATH_LOG_RANGE_CVAR, "60"),
+        // `CombatLogPeriodicSpells` (`0x6033b3`): the handle is discarded and every use looks it up by
+        // name; read as the record's int.
+        same(LOG_PERIODIC_CVAR, "1"),
+    ]
+};
+
 #[cfg(test)]
 pub(crate) const ALL_FAMILIES: &[Family] = &[
     COMBATHIT,

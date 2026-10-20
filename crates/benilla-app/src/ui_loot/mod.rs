@@ -327,8 +327,21 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut loot: ResMut<LootCo
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `showLootSpam` (`0x48fd1c`, name `0x8430a0`, "1" `0x82e748`, record `0xb4e2bc`): off, group
+        // loot-roll lines are hidden and only the winner shows. Its three readers are the roll-line
+        // composers; the knob is [`LootConfig::show_loot_spam`].
+        same("showLootSpam", "1"),
+    ]
+};
+
 impl Plugin for UiLootPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         app.add_observer(on_cvar);
         app.init_resource::<LootState>()

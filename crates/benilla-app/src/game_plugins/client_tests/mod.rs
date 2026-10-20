@@ -35,6 +35,7 @@ mod net_wrath_stream_tests;
 mod net_wrath_vehicle;
 mod net_wrath_world_objects_capture_tests;
 mod script_calls;
+mod shipped_cvars;
 mod spell_native_failure;
 mod target_ring;
 mod ui_arena_team_tests;

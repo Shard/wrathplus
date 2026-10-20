@@ -216,8 +216,22 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut setting: ResMut<Gam
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // Registered by `CGlueMgr::EnterWorld` (`0x46b633` `gameTip` "0", `0x46b658` `showGameTips`
+        // "1"), category 5. `gameTip` is the cursor and holds the next tip, not the one on screen;
+        // `crate::game_tip` advances it.
+        same("gameTip", "0"),
+        same("showGameTips", "1"),
+    ]
+};
+
 impl Plugin for GameTipPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         app.init_resource::<GameTips>()
             // Initialised here, not by the CVar host: [`on_cvar`] takes it as a plain `ResMut` and

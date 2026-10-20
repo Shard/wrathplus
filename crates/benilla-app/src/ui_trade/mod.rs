@@ -309,8 +309,20 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut block: ResMut<Block
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `BlockTrades` (`0x842fbc`), `UIOptionsFrame.lua:11`: the refusal leg `0x4bf7bc` fires only
+        // when it is set. The knob is [`BlockTrades`].
+        same("BlockTrades", "0"),
+    ]
+};
+
 impl Plugin for UiTradePlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         net::register(app);
         app.init_resource::<TradeSession>()

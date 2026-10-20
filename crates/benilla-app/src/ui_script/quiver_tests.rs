@@ -74,7 +74,7 @@ fn load_addon_files(script: &UiScript, root: &Path, name: &str) -> Vec<String> {
 fn seat_a_hunter(root: &Path) -> UiScript {
     let mut s = UiScript::new().expect("VM");
     s.set_screen_size(1024.0, 768.0);
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s.set_realm_name("Harness");
     s.set_unit(
         "player",
