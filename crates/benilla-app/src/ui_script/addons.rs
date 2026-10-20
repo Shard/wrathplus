@@ -120,13 +120,6 @@ impl Addon {
         }
     }
 
-    /// Load this addon's `.toc`-listed files, in listed order, reporting into `toc`, the `.toc`'s
-    /// load record. Each error is logged as it happens and also returned, tagged
-    /// `"<Addon>/<file>: <error>"`, for the tests to assert empty.
-    fn load(&self, script: &UiScript, toc: &mut Status) -> Vec<String> {
-        self.load_files_into(script, &self.toc.files, toc)
-    }
-
     /// Wrath's Lua file ABI passes `(addonName, privateTable)` and reuses the private table for
     /// every file in an addon. XML still uses the shared widget loader and this addon's provider.
     fn load_wrath(&self, script: &UiScript, toc: &mut Status) -> Vec<String> {
@@ -849,7 +842,6 @@ pub(super) fn load_wrath_third_party(
         disabled,
         version_check,
         client_interface: 30300,
-        wrath: true,
         ..Walk::default()
     };
     for addon in &addons {
@@ -876,10 +868,8 @@ struct Walk {
     /// `checkAddonVersion`: when on, an addon whose `## Interface` is not exactly the client's is
     /// skipped like a disabled one, and a dependent gets `Err` (`DEP_INTERFACE_VERSION`).
     version_check: bool,
-    /// Dialect-scoped exact `## Interface` gate.
+    /// The exact `## Interface` the gate compares against, 30300.
     client_interface: u32,
-    /// Use Wrath addon chunk arguments and omit the unsupported addon Bindings.xml surface.
-    wrath: bool,
 }
 
 impl Walk {
@@ -964,21 +954,18 @@ impl Walk {
         // (`0x51f464`), merged into the UI load's.
         let debug = script.framexml_debug();
         let mut toc = Status::default();
-        self.failures.extend(if self.wrath {
-            addon.load_wrath(script, &mut toc)
-        } else {
-            addon.load(script, &mut toc)
-        });
+        self.failures.extend(addon.load_wrath(script, &mut toc));
         let mut own = Status::default();
         let toc_path = status::addon_toc_path(&addon.name);
         toc.close_into(&mut own, debug, status::toc_banner(&toc_path));
         let mut block = Status::default();
         own.close_into(&mut block, debug, status::addon_banner(&addon.name));
         script.report_load_status(block);
-        // `Bindings.xml` (`0x51f400`), after the files whose functions a binding calls, through
-        // the addon's own sandboxed reader; absent is normal.
+        // `Bindings.xml` (1.12 `0x51f400`; 12340's step is assumed at the same place, untraced),
+        // after the files whose functions a binding calls, through the addon's own sandboxed
+        // reader; absent is normal.
         let bindings_xml = benilla_ui::loader::join_ref(&addon.prefix(), "Bindings.xml");
-        if let Some(bytes) = (!self.wrath).then(|| addon.read(&bindings_xml)).flatten() {
+        if let Some(bytes) = addon.read(&bindings_xml) {
             match benilla_ui::bindings_xml::parse(&benilla_ui::source::decode(&bytes)) {
                 Ok(bindings) => script.register_addon_bindings(&addon.name, &bindings),
                 Err(e) => {
@@ -1202,7 +1189,7 @@ mod tests {
         };
 
         let script = UiScript::new().unwrap();
-        let failures = addon.load(&script, &mut Status::default());
+        let failures = addon.load_wrath(&script, &mut Status::default());
         assert!(
             failures.is_empty(),
             "a listed Bindings.xml costs log lines, not script errors: {failures:?}"
@@ -1210,6 +1197,48 @@ mod tests {
         assert!(
             script.eval::<bool>("return PROBE_RAN == 1").unwrap(),
             "and the manifest carries on to the next line"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// An addon's own `Bindings.xml` registers its commands on a Wrath VM, between its files and
+    /// `ADDON_LOADED`, so the stock key-binding list (`GetBinding`) carries them.
+    #[test]
+    fn an_addons_bindings_xml_registers_its_commands() {
+        let tmp =
+            std::env::temp_dir().join(format!("benilla-addon-bindings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let root = tmp.join("AddOns");
+        std::fs::create_dir_all(root.join("Probe")).unwrap();
+        std::fs::write(
+            root.join("Probe/Bindings.xml"),
+            r#"<Bindings>
+  <Binding name="PROBE_STEPUP" header="PROBE">ProbeStep_Inc()</Binding>
+</Bindings>"#,
+        )
+        .unwrap();
+        std::fs::write(root.join("Probe/Probe.lua"), "PROBE_RAN = 1").unwrap();
+        let addon = Addon {
+            name: "Probe".into(),
+            toc: Toc::parse("## Interface: 30300\nProbe.lua\n"),
+            source: Source::Dir(root),
+        };
+
+        let mut script = UiScript::new().unwrap();
+        let mut walk = Walk {
+            client_interface: 30300,
+            ..Walk::default()
+        };
+        assert!(walk.load(&mut script, &[addon], "Probe").is_ok());
+        assert!(walk.failures.is_empty(), "{:?}", walk.failures);
+        assert!(
+            script
+                .eval::<bool>(
+                    "for i = 1, GetNumBindings() do \
+                     if GetBinding(i) == 'PROBE_STEPUP' then return true end end return false"
+                )
+                .unwrap(),
+            "the addon's command is in the binding list"
         );
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -1246,7 +1275,7 @@ mod tests {
         };
 
         let script = UiScript::new().unwrap();
-        assert!(addon.load(&script, &mut Status::default()).is_empty());
+        assert!(addon.load_wrath(&script, &mut Status::default()).is_empty());
 
         // The exact pattern the libraries run, on each file's own traceback.
         let folder = |global: &str| -> Option<String> {
@@ -1367,7 +1396,7 @@ mod tests {
         };
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let failures = addon.load(&script, &mut Status::default());
+        let failures = addon.load_wrath(&script, &mut Status::default());
         assert!(failures.is_empty(), "addon load errors: {failures:#?}");
 
         assert_eq!(
