@@ -150,8 +150,170 @@ fn number(lua: &Lua, args: &MultiValue, i: usize) -> Option<f64> {
         .and_then(|v| lua.coerce_number(v.clone()).ok().flatten())
 }
 
+/// An item argument as the inventory finders take it (`0x754a20`/`0x754a50` by id, `0x754af0`/
+/// `0x754b90` by name or link): a number is an item id, a string with `item:` its link's id, and
+/// any other string a name.
+enum ItemQuery {
+    Id(u32),
+    Name(String),
+}
+
+fn item_query(lua: &Lua, v: Value, usage: &str) -> mlua::Result<ItemQuery> {
+    if let Value::String(s) = &v {
+        let text = s.to_str()?.to_string();
+        if let Some(rest) = text.split_once("item:").map(|(_, r)| r) {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            return Ok(ItemQuery::Id(digits.parse().unwrap_or(0)));
+        }
+        return Ok(ItemQuery::Name(text));
+    }
+    let n = lua
+        .coerce_number(v)?
+        .ok_or_else(|| mlua::Error::runtime(usage.to_string()))?;
+    Ok(ItemQuery::Id(
+        u32::try_from(n.round_ties_even() as i64).unwrap_or(0),
+    ))
+}
+
+/// The first carried bag slot (backpack, then bags 1-4, each in slot order) holding the item.
+/// Labelled: a name matches the template's name without case, and only the bags are searched,
+/// where the native finders also reach worn items.
+fn carried_item(model: &Model, query: &ItemQuery) -> Option<(i64, u32)> {
+    (0..=4).find_map(|bag| {
+        let container = model.containers.get(&bag)?;
+        let mut slots: Vec<_> = container
+            .slots
+            .iter()
+            .filter(|(_, s)| s.item_id != 0)
+            .collect();
+        slots.sort_by_key(|(slot, _)| **slot);
+        slots.into_iter().find_map(|(&slot, s)| {
+            let hit = match query {
+                ItemQuery::Id(id) => s.item_id == *id,
+                ItemQuery::Name(name) => model
+                    .item_templates
+                    .get(&s.item_id)
+                    .is_some_and(|t| t.name.eq_ignore_ascii_case(name)),
+            };
+            hit.then_some((bag, slot))
+        })
+    })
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    // SpellCanTargetItem() (`0x7fdd10`): 1 while the targeting spell takes an item (its word
+    // `& 0x4010`, the app's `set_item_pick_armed`), else nil.
+    g.set(
+        "SpellCanTargetItem",
+        lua.create_function(|lua, ()| {
+            let armed = lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .item_pick_armed;
+            Ok(armed.then_some(1))
+        })?,
+    )?;
+    // SpellTargetItem(item) (`0x8007e0`): while armed, the first carried slot holding the item
+    // binds it as a bag click does (`0x5210d0`); nothing otherwise. Labelled: the `0x5191c0(2)`
+    // gate is unread.
+    g.set(
+        "SpellTargetItem",
+        lua.create_function(|lua, item: Value| {
+            if !lua
+                .app_data_ref::<Model>()
+                .expect("model app_data")
+                .item_pick_armed
+            {
+                return Ok(());
+            }
+            let query = item_query(
+                lua,
+                item,
+                "Usage: SpellTargetItem(itemID|\"name\"|\"itemlink\")",
+            )?;
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            if let Some(at) = carried_item(&model, &query) {
+                model.item_picks.push(at);
+            }
+            Ok(())
+        })?,
+    )?;
+    // SetMultiCastSpell(slot, spellID) (`0x5ab8a0`): the totem bar's slots 133-144 take a spell
+    // action, or are cleared by spell 0 (`0x5aaa90`), through the `PlaceAction` queue. Labelled:
+    // the per-slot totem check (`0x5a7bc0`, its refusal message `0x299`), the record check
+    // (`0x4cfd20`) and the `0x5191c0(0xe)` gate are not modelled.
+    g.set(
+        "SetMultiCastSpell",
+        lua.create_function(|lua, (slot, spell): (Value, Value)| {
+            let number = |v: Value| -> mlua::Result<Option<i64>> {
+                Ok(lua.coerce_number(v)?.map(|n| n.round_ties_even() as i64))
+            };
+            let (Some(slot), spell) = (number(slot)?, number(spell)?) else {
+                return Err(mlua::Error::runtime(
+                    "Usage: SetMultiCastSpell(slot, spellID)",
+                ));
+            };
+            if !(133..=144).contains(&slot) {
+                return Ok(());
+            }
+            let packed = u32::try_from(spell.unwrap_or(0)).unwrap_or(0) & 0x00ff_ffff;
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .action_sets
+                .push((slot as u32, packed));
+            Ok(())
+        })?,
+    )?;
+    // EquipItemByName(item [, slot]) (`0x51cdb0`): the first carried, unlocked slot holding the
+    // item auto-equips (`0x6dfee0`), or with a slot (1-19, or an `INVSLOT` name) moves there
+    // (`0x6dff90`); a bad slot raises.
+    g.set(
+        "EquipItemByName",
+        lua.create_function(|lua, (item, slot): (Value, Value)| {
+            const BAD_SLOT: &str = "EquipItemByName(): Invalid inventory dstSlot";
+            let dst = match &slot {
+                Value::Nil => None,
+                Value::String(name) => Some(
+                    super::char_stats::slot_id_by_name(&name.to_str()?)
+                        .filter(|id| (1..=19).contains(id))
+                        .ok_or_else(|| mlua::Error::runtime(BAD_SLOT))?,
+                ),
+                other => Some(
+                    lua.coerce_number(other.clone())?
+                        .map(|n| n.round_ties_even() as i64)
+                        .filter(|id| (1..=19).contains(id))
+                        .ok_or_else(|| mlua::Error::runtime(BAD_SLOT))?,
+                ),
+            };
+            let Ok(query) = item_query(lua, item, "") else {
+                return Ok(());
+            };
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let Some((bag, at)) = carried_item(&model, &query) else {
+                return Ok(());
+            };
+            let locked = model
+                .containers
+                .get(&bag)
+                .and_then(|c| c.slots.get(&at))
+                .is_some_and(|s| s.locked);
+            if locked {
+                return Ok(());
+            }
+            match dst {
+                None => model.container_autoequips.push((bag, at)),
+                Some(id) => model.container_moves.push(super::ContainerMove {
+                    src_bag: bag,
+                    src_slot: at,
+                    dst_bag: super::cursor::EQUIPMENT_BAG,
+                    dst_slot: id as u32,
+                    count: None,
+                }),
+            }
+            Ok(())
+        })?,
+    )?;
     // IsStackableAction(slot) (`0x5a8720` → `0x5a8470`): 1 when slot 1-144 holds an item whose
     // template stacks past one (`ActionButton.lua` then shows its count), else nil. Labelled: the
     // native compares template `+0x5c`, taken as the stack size (`ItemTemplateView::stackable`).
@@ -334,11 +496,18 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let c = model.containers.get(&bag);
             let free = match (bag, c) {
                 (0, None) => 16,
-                (-1..=11, Some(c)) => (1..=c.num_slots).filter(|s| !c.slots.contains_key(s)).count(),
+                (-1..=11, Some(c)) => (1..=c.num_slots)
+                    .filter(|s| !c.slots.contains_key(s))
+                    .count(),
                 _ => return lone(),
             };
             let family = match bag {
-                1..=11 => model.wrath_state.bag_families.get(&bag).copied().unwrap_or(0),
+                1..=11 => model
+                    .wrath_state
+                    .bag_families
+                    .get(&bag)
+                    .copied()
+                    .unwrap_or(0),
                 _ => 0,
             };
             Ok(MultiValue::from_vec(vec![
@@ -454,6 +623,59 @@ mod tests {
 
     fn vm() -> UiScript {
         UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    }
+
+    #[test]
+    fn multi_cast_slots_take_a_spell_or_clear_through_the_place_queue() {
+        let mut s = vm();
+        s.run("SetMultiCastSpell(133, 8071) SetMultiCastSpell(144, 0) SetMultiCastSpell(5, 8071)")
+            .unwrap();
+        assert_eq!(s.take_action_sets(), vec![(133, 8071), (144, 0)]);
+        assert!(s.run("SetMultiCastSpell()").is_err());
+    }
+
+    #[test]
+    fn item_targeting_and_equip_by_name_find_the_first_carried_slot() {
+        use crate::script::{ContainerSlot, ContainerState, ItemTemplateView};
+        let mut s = vm();
+        let mut bag = ContainerState {
+            num_slots: 4,
+            ..Default::default()
+        };
+        for (slot, id) in [(3, 1201), (1, 2589)] {
+            bag.slots.insert(
+                slot,
+                ContainerSlot {
+                    item_id: id,
+                    ..Default::default()
+                },
+            );
+        }
+        s.model_mut().containers.insert(0, bag);
+        s.set_item_template(
+            1201,
+            ItemTemplateView {
+                name: "Dented Buckler".into(),
+                ..Default::default()
+            },
+        );
+        assert!(s
+            .eval::<bool>("return SpellCanTargetItem() == nil")
+            .unwrap());
+        s.run("SpellTargetItem(2589)").unwrap();
+        assert!(s.model_mut().item_picks.is_empty(), "not armed: nothing");
+        s.model_mut().item_pick_armed = true;
+        assert!(s.eval::<bool>("return SpellCanTargetItem() == 1").unwrap());
+        s.run("SpellTargetItem('|cffffffff|Hitem:2589:0:0:0|h[Linen Cloth]|h|r')")
+            .unwrap();
+        assert_eq!(s.model_mut().item_picks, [(0, 1)]);
+        s.run("EquipItemByName('dented buckler')").unwrap();
+        assert_eq!(s.model_mut().container_autoequips, [(0, 3)]);
+        s.run("EquipItemByName(1201, 'SecondaryHandSlot')").unwrap();
+        let moved = s.model_mut().container_moves.pop().unwrap();
+        assert_eq!((moved.src_bag, moved.src_slot, moved.dst_slot), (0, 3, 17));
+        assert!(s.run("EquipItemByName(1201, 20)").is_err());
+        assert!(s.run("SpellTargetItem({})").is_err());
     }
 
     #[test]
@@ -615,7 +837,8 @@ mod tests {
     fn free_slots_follow_the_native_container_cases() {
         let mut s = vm();
         let free = |s: &UiScript, bag: i32| {
-            s.eval::<Vec<f64>>(&format!("return {{ GetContainerNumFreeSlots({bag}) }}")).unwrap()
+            s.eval::<Vec<f64>>(&format!("return {{ GetContainerNumFreeSlots({bag}) }}"))
+                .unwrap()
         };
         assert_eq!(free(&s, 0), vec![16.0, 0.0]);
         assert_eq!(free(&s, -2), vec![0.0]);
