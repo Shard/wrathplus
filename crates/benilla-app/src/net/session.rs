@@ -141,8 +141,8 @@ fn on_connected(
     In(ev): In<SessionEvent>,
     mut e: Edges,
     mut b: Bridge,
-    native_pet_names: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
-    native_who: Option<ResMut<crate::ui_native_who::NativeWhoPackets>>,
+    native_pet_names: Option<ResMut<super::wrath_pet_name_capture::NativePetNamePackets>>,
+    native_who: Option<ResMut<super::wrath_who_capture::NativeWhoPackets>>,
 ) {
     if let SessionEvent::Connected {
         self_guid: guid,

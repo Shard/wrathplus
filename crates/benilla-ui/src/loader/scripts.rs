@@ -49,7 +49,7 @@ impl Loader<'_> {
                 } else if cleared {
                     None
                 } else {
-                    match self.compile_handler(handler, &name, &owner, dbg) {
+                    match self.compile_handler(handler, &el.tag, &name, &owner, dbg) {
                         Some(f) => Some(f),
                         None => continue,
                     }
@@ -94,12 +94,13 @@ impl Loader<'_> {
         onload
     }
 
-    /// Compile a handler body as the chunk itself, as the reference loads it (`0x704c70`): it takes
-    /// no arguments and reads its frame from `this`, so a `self` in it is an ordinary global. The
-    /// Wrath additionally resolves `function=` from the global table.
+    /// Compile a handler body. 1.12 loads it as the chunk itself (`0x704c70`), reading its frame
+    /// from `this`. Build 12340 wraps it in its script's formals ([`native_formals`]) on one line
+    /// and names the chunk `*:<script>`.
     pub(super) fn compile_handler(
         &mut self,
         handler: &Element,
+        tag: &str,
         name: &str,
         owner: &str,
         dbg: &str,
@@ -109,61 +110,23 @@ impl Loader<'_> {
         if body.is_empty() {
             return None;
         }
-        let body = match self.lua().app_data_ref::<Model>().expect("model").dialect {
+        let dialect = self.lua().app_data_ref::<Model>().expect("model").dialect;
+        // Build 12340 names every XML handler chunk `*:<script>` (`0x48fef0`, `"*:%s"`).
+        let chunk_name = match dialect {
+            ScriptDialect::Vanilla => format!("{owner}:{name}"),
+            ScriptDialect::Wrath12340 => format!("*:{name}"),
+        };
+        let body = match dialect {
             ScriptDialect::Vanilla => body.to_string(),
+            // One line, so an error's line number is the body's own, as in the client.
             ScriptDialect::Wrath12340 => {
-                // FrameXML compiles the well-known handler arguments as named locals. Keeping
-                // the trailing varargs is material for OnEvent payloads beyond `event`.
-                let formals = if name.eq_ignore_ascii_case("OnEvent") {
-                    "self, event, ..."
-                } else if name.eq_ignore_ascii_case("OnUpdate") {
-                    "self, elapsed"
-                } else if name.eq_ignore_ascii_case("OnClick") {
-                    "self, button, down"
-                } else if matches_ci(name, &["OnMouseDown", "OnMouseUp", "OnDragStart"]) {
-                    "self, button"
-                } else if name.eq_ignore_ascii_case("OnMouseWheel") {
-                    "self, delta"
-                } else if matches_ci(name, &["OnKeyDown", "OnKeyUp"]) {
-                    "self, key"
-                } else if name.eq_ignore_ascii_case("OnChar") {
-                    "self, text"
-                } else if name.eq_ignore_ascii_case("OnValueChanged") {
-                    "self, value"
-                } else if name.eq_ignore_ascii_case("OnSizeChanged") {
-                    "self, width, height"
-                } else if matches_ci(name, &["OnDragStop", "OnReceiveDrag"]) {
-                    "self"
-                } else if name.eq_ignore_ascii_case("OnAttributeChanged") {
-                    "self, name, value"
-                } else if matches_ci(name, &["OnVerticalScroll", "OnHorizontalScroll"]) {
-                    "self, offset"
-                } else if name.eq_ignore_ascii_case("OnScrollRangeChanged") {
-                    "self, xrange, yrange"
-                } else if matches_ci(name, &["OnHyperlinkClick", "OnHyperlinkEnter", "OnHyperlinkLeave"]) {
-                    "self, link, text, button"
-                } else if matches_ci(name, &["OnEnter", "OnLeave"]) {
-                    "self, motion"
-                } else if name.eq_ignore_ascii_case("OnDoubleClick") {
-                    "self, button"
-                } else if name.eq_ignore_ascii_case("OnCursorChanged") {
-                    // Wrath EditBox script lookup 0x9628f0 supplies named locals;
-                    // stock ScrollingEdit scripts reference x/y/w/h directly.
-                    "self, x, y, w, h"
-                } else if name.eq_ignore_ascii_case("OnTextChanged") {
-                    "self, userInput"
-                } else if name.eq_ignore_ascii_case("OnTooltipAddMoney") {
-                    "self, cost, maxcost"
-                } else {
-                    "self, ..."
-                };
-                format!("return function({formals})\n{body}\nend")
+                format!("return function({}) {body} end", native_formals(tag, name))
             }
         };
         let compiled = self
             .lua()
             .load(&body)
-            .set_name(format!("{owner}:{name}"))
+            .set_name(chunk_name)
             .set_mode(mlua::ChunkMode::Text)
             .into_function();
         match compiled {
@@ -228,8 +191,65 @@ impl Loader<'_> {
     }
 }
 
-fn matches_ci(value: &str, choices: &[&str]) -> bool {
-    choices
+/// Build 12340's formals for script `name` on an element of XML type `tag`: each script lookup
+/// hands the compiler its `return function(<formals>) %s end`, else the default `self`
+/// (`0x48fef0`). The lookups: the frame base `0x48e680` and `OnEvent` `0x816830`, Button
+/// `0x96f200`, EditBox `0x9628f0`, the hyperlink trio `0x978610`, MovieFrame `0x95db80`, GameTooltip
+/// `0x61a280`, Slider `0x96bca0` and StatusBar `0x961630`, ScrollFrame `0x96b0b0`, ColorSelect
+/// `0x96dc50`, AnimationGroup `0x497800` and Animation `0x497500`.
+fn native_formals(tag: &str, name: &str) -> &'static str {
+    const ANIMATIONS: [&str; 6] = ["Animation", "Alpha", "Path", "Rotation", "Scale", "Translation"];
+    let is = |script: &str| name.eq_ignore_ascii_case(script);
+    let group = tag.eq_ignore_ascii_case("AnimationGroup");
+    if group || ANIMATIONS.iter().any(|a| tag.eq_ignore_ascii_case(a)) {
+        return if is("OnEvent") {
+            "self,event,..."
+        } else if is("OnStop") || (group && is("OnFinished")) {
+            "self,requested"
+        } else if is("OnUpdate") {
+            "self,elapsed"
+        } else if group && is("OnLoop") {
+            "self,loopState"
+        } else {
+            "self"
+        };
+    }
+    const TABLE: [(&str, &str); 32] = [
+        ("OnEvent", "self,event,..."),
+        ("OnSizeChanged", "self,w,h"),
+        ("OnUpdate", "self,elapsed"),
+        ("OnEnter", "self,motion"),
+        ("OnLeave", "self,motion"),
+        ("OnMouseDown", "self,button"),
+        ("OnMouseUp", "self,button"),
+        ("OnMouseWheel", "self,delta"),
+        ("OnDragStart", "self,button"),
+        ("OnChar", "self,text"),
+        ("OnKeyDown", "self,key"),
+        ("OnKeyUp", "self,key"),
+        ("OnAttributeChanged", "self,name,value"),
+        ("PreClick", "self,button,down"),
+        ("OnClick", "self,button,down"),
+        ("PostClick", "self,button,down"),
+        ("OnDoubleClick", "self,button"),
+        ("OnTextChanged", "self, userInput"),
+        ("OnCursorChanged", "self,x,y,w,h"),
+        ("OnInputLanguageChanged", "self,language"),
+        ("OnCharComposition", "self,text"),
+        ("OnHyperlinkEnter", "self,link,text"),
+        ("OnHyperlinkLeave", "self,link,text"),
+        ("OnHyperlinkClick", "self,link,text,button"),
+        ("OnMovieShowSubtitle", "self,text"),
+        ("OnTooltipAddMoney", "self,cost,maxcost"),
+        ("OnValueChanged", "self,value"),
+        ("OnMinMaxChanged", "self,min,max"),
+        ("OnHorizontalScroll", "self,offset"),
+        ("OnVerticalScroll", "self,offset"),
+        ("OnScrollRangeChanged", "self,xrange,yrange"),
+        ("OnColorSelect", "self,r,g,b"),
+    ];
+    TABLE
         .iter()
-        .any(|choice| value.eq_ignore_ascii_case(choice))
+        .find(|(script, _)| is(script))
+        .map_or("self", |(_, formals)| formals)
 }

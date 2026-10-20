@@ -59,8 +59,10 @@ pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
 pub(crate) mod wrath_movie;
+pub(crate) mod wrath_pet_name_capture;
 pub(crate) mod wrath_threat;
 pub(crate) mod wrath_ui_timer_capture;
+pub(crate) mod wrath_who_capture;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
@@ -209,7 +211,10 @@ impl Plugin for NetPlugin {
             .add_systems(
                 Update,
                 // The movers follow in `crate::motion::MotionPlugin`, chained after this set.
-                (apply_net_updates, tag_self_player)
+                (
+                    apply_net_updates.in_set(crate::app_core::schedule::NetDrain),
+                    tag_self_player,
+                )
                     .chain()
                     .in_set(NetApply)
                     .in_set(WorldStage::Net),
