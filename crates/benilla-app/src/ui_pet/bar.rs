@@ -20,7 +20,7 @@ use super::{PetBar, PetUnit};
 /// What the feed last pushed, so `PET_BAR_UPDATE` fires on a change; the key's leading `u32` is
 /// [`PetBar::bar_signals`], so a press that changes nothing still repaints.
 #[derive(Default)]
-pub(super) struct PetBarMemory {
+pub(crate) struct PetBarMemory {
     pushed: Option<(u32, bool, bool, bool, Vec<PetActionView>)>,
     /// The ten cooldown triples as last pushed, so a cooldown alone is pushed with no event: its
     /// events are [`fire_pet_cooldown_events`]'s.
@@ -170,7 +170,7 @@ pub(super) fn active_aura_press(
 /// Push the ten slot views on a change, and `PET_BAR_UPDATE` when the bar itself moved. A change
 /// of the cooldowns alone is pushed without an event: the pet's cooldown events fire off the
 /// list's generation, so a natural expiry fires none, as in the reference.
-pub(super) fn feed_pet_bar(
+pub(crate) fn feed_pet_bar(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
     actions: Option<Res<crate::ui_action::PlayerActions>>,
@@ -303,7 +303,7 @@ pub(super) fn feed_pet_bar(
 /// a rebuild. Runs after [`CooldownEvents`](crate::ui_action::CooldownEvents): every feed that
 /// pushes a pet cooldown, the bar's and the book's, has pushed by then, so the handlers read the
 /// new list.
-pub(super) fn fire_pet_cooldown_events(
+pub(crate) fn fire_pet_cooldown_events(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
     mut memory: Local<crate::ui_script::VmMemo<crate::ui_script::gate::Watch>>,

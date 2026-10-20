@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeCalendarPackets>
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_calendar_capture_tests.rs"]
-mod tests;

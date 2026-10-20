@@ -19,7 +19,7 @@ pub(crate) mod cooldowns;
 pub(crate) mod group_relation;
 mod inflight;
 mod mods;
-mod native_failure;
+pub(crate) mod native_failure;
 pub(crate) mod unit_cast;
 pub(crate) mod net;
 mod range_units;

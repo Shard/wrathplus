@@ -77,4 +77,4 @@ fn feed_death_release(
 
 #[cfg(test)]
 #[path = "wrath_death_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

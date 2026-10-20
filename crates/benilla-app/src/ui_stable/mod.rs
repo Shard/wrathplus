@@ -20,7 +20,7 @@ use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession
 
 mod net;
 
-mod wrath;
+pub(crate) mod wrath;
 
 pub(crate) struct UiStablePlugin;
 

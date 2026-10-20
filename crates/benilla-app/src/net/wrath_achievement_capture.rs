@@ -35,7 +35,3 @@ fn clear(
         super::wrath_achievements::clear(&mut achievements);
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_achievement_capture_tests.rs"]
-mod tests;

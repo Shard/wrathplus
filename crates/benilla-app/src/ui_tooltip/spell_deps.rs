@@ -106,7 +106,7 @@ impl UnitFields {
 /// ([`super::spell_feed::PetInputs`]) rebuild every pet view and are not recorded. Written where
 /// the builder reads, so a read cannot be added without saying what it depends on.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(super) struct Deps {
+pub(crate) struct Deps {
     /// A `$z` expanded: the bind point.
     pub(super) home: bool,
     /// The required-form test read the shapeshift form.

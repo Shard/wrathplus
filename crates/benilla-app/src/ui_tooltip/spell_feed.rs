@@ -23,7 +23,7 @@ use crate::ui_trainer::TrainerTooltipSubjects;
 /// The unit a view's caster cells are computed against, the spell builder `0x52e610`'s fourth
 /// argument: the level the `$`-tokens, the cost and the cast time scale by, and the cost's basis.
 #[derive(Clone, Copy)]
-pub(super) enum ViewCaster<'a> {
+pub(crate) enum ViewCaster<'a> {
     /// The active player ([`ViewCtx::store`]), selector 0.
     Player,
     /// Selector 1: the player's charm, else its summon (`0x6e3159`-`0x6e317f`, `0x6e31fe`-
@@ -44,7 +44,7 @@ impl ViewCaster<'_> {
 
 /// The caster-dependent inputs of a spell view: the worn set (`0x5f0c50`), the bags, the form and
 /// the bind point `$z` names.
-pub(super) struct ViewCtx<'a, 'w, 's> {
+pub(crate) struct ViewCtx<'a, 'w, 's> {
     pub(super) home_area: Option<&'a str>,
     /// The caster's shapeshift form, which the required-form line's colour reads (`0x52f1f2`).
     pub(super) form: u8,
@@ -77,7 +77,7 @@ pub(super) struct ViewCtx<'a, 'w, 's> {
 /// read ([`Deps`]). The range, cast, cooldown, form and item cells fill their `GlobalStrings.lua`
 /// keys; the cost, reagents and chance cells are composed in English, where the reference fills
 /// `MANA_COST` and its kin, `SPELL_REAGENTS` and `CHANCE_TO_*`.
-pub(super) fn build_view(
+pub(crate) fn build_view(
     spell_id: u32,
     spells: &Spells,
     vctx: &mut ViewCtx,
@@ -419,7 +419,7 @@ fn chance_line(
 /// were when the last frame looked. The reference rebuilds on every hover and keeps no such
 /// snapshot.
 #[derive(Default)]
-pub(super) struct SpellFeedMemory {
+pub(crate) struct SpellFeedMemory {
     /// The views built against the player, by spell, with what each read.
     pub(super) pushed: HashMap<u32, Deps>,
     /// The spells whose view built against the pet is in the VM's pet store, and what each read
@@ -514,7 +514,7 @@ impl PetInputs {
 
 /// The hoverable spell sources [`feed_spell_tooltips`] reads, one parameter under Bevy's 16.
 #[derive(bevy::ecs::system::SystemParam)]
-pub(super) struct SpellTooltipSources<'w> {
+pub(crate) struct SpellTooltipSources<'w> {
     spells: Option<Res<'w, Spells>>,
     trainer_subjects: Option<Res<'w, TrainerTooltipSubjects>>,
     talents: Option<Res<'w, crate::ui_talent::Talents>>,
@@ -524,7 +524,7 @@ pub(super) struct SpellTooltipSources<'w> {
 /// trainer's services, and what the VM holds: the pet's spells, the quest rewards, the craft's
 /// subjects, every unit's auras and the tracking spell) before it is hovered, as the reference
 /// reads them all locally; an ask for any other id too.
-pub(super) fn feed_spell_tooltips(
+pub(crate) fn feed_spell_tooltips(
     script: Option<NonSendMut<UiScript>>,
     actions: Option<Res<PlayerActions>>,
     spell_sources: SpellTooltipSources,

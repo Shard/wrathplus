@@ -12,12 +12,12 @@ use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
 
-mod feed;
+pub(crate) mod feed;
 pub(crate) mod net;
 mod pets;
 mod records;
-mod saved_instances;
-mod wrath;
+pub(crate) mod saved_instances;
+pub(crate) mod wrath;
 pub(crate) use feed::{
     raid_row_guid, raid_row_guids, synthetic_raid, synthetic_roster, GROUPTYPE_RAID,
     GROUP_MEMBER_SUBGROUP, PARTY_PET_TOKENS, PARTY_TOKENS, RAID_PET_TOKENS, RAID_TOKENS,

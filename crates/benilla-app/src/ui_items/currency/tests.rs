@@ -1,7 +1,7 @@
 use super::*;
 use benilla_protocol::messages::FieldLayout;
 
-fn fields(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
+pub(crate) fn fields(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
     ObjectFields::from_native_pairs(
         layout,
         &values
@@ -118,43 +118,6 @@ fn known_roster_keeps_unknown_categories_zero_counts_and_pending_metadata() {
         |_| (None, None)
     )
     .is_empty());
-}
-
-#[test]
-fn real_feed_preserves_optional_native_balances_and_clears_logout() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    app.insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
-    let mut schedule = Schedule::default();
-    schedule.add_systems(feed);
-    let entity = app
-        .world_mut()
-        .spawn((
-            SelfPlayer,
-            ObjectStore(fields(
-                FieldLayout::Wrath12340,
-                &[
-                    (Field::PlayerHonorCurrency, 0, 0),
-                    (Field::PlayerArenaCurrency, 0, u32::MAX),
-                ],
-            )),
-        ))
-        .id();
-    schedule.run(app.world_mut());
-    let script = app.world().non_send_resource::<UiScript>();
-    script.run("local h,hcap=GetHonorCurrency(); local a,acap=GetArenaCurrency(); assert(h==0 and hcap==75000 and a==4294967295 and acap==10000)").unwrap();
-    // An identical source must seed a new VM, not be hidden by the previous VM's memo.
-    app.insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
-    schedule.run(app.world_mut());
-    app.world()
-        .non_send_resource::<UiScript>()
-        .run("assert(GetArenaCurrency()==4294967295)")
-        .unwrap();
-    app.world_mut().despawn(entity);
-    schedule.run(app.world_mut());
-    app.world()
-        .non_send_resource::<UiScript>()
-        .run("assert(GetHonorCurrency()==0 and GetArenaCurrency()==0 and GetCurrencyListSize()==0)")
-        .unwrap();
 }
 
 #[test]

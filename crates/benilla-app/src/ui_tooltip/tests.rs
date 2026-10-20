@@ -828,18 +828,6 @@ fn the_locked_line_greens_when_the_lock_can_be_opened() {
     assert_eq!(locked_line_tint(None), TooltipTint::LockOpen);
 }
 
-/// A trainer list that lands this frame is hoverable in this frame's tick: the trainer feed derives
-/// the subjects the spell feed pushes.
-#[test]
-fn the_spell_feed_runs_after_the_trainer_feed() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    assert!(crate::test_support::runs_before(
-        &mut app,
-        crate::ui_trainer::feed_trainer,
-        feed_spell_tooltips
-    ));
-}
-
 const ME: u64 = 0x77;
 const WOLF: u64 = 0xF130_0000_4500_0001;
 const BOAR: u64 = 0xF130_0000_4600_0002;
@@ -1053,17 +1041,6 @@ fn the_mouseover_token_clears_when_no_unit_is_hovered() {
         hover(&mut app, leave, object);
         assert_eq!(named(&mut app), (None, None), "after {what}");
     }
-}
-
-/// A quest panel that opens this frame is hoverable in its tick.
-#[test]
-fn the_spell_feed_runs_after_the_quest_feed() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    assert!(crate::test_support::runs_before(
-        &mut app,
-        crate::ui_quest::feed_quest,
-        feed_spell_tooltips
-    ));
 }
 
 /// The pet bar, Beast Training and target-of-target hovers are whole on the first hover.

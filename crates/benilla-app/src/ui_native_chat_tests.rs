@@ -70,17 +70,3 @@ fn adapter_fifo_preserves_raw_gm_order_duplicates_and_clears_on_disconnect() {
     );
     assert!(app.world().resource::<NativeChatPackets>().0.is_empty());
 }
-#[test]
-fn full_client_has_exactly_one_native_chat_owner_separate_from_shared() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathChat];
-    assert_eq!(owners.len(), 1);
-    assert!(owners[0].contains("ui_native_chat::receive"));
-    assert!(!census[&SessionEventKind::Chat]
-        .iter()
-        .any(|owner| owner.contains("ui_native_chat")));
-}

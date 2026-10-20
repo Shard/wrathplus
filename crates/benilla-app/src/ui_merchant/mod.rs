@@ -548,7 +548,7 @@ impl RepairPurse<'_, '_> {
 
 /// What [`feed_repair_costs`] watches and last pushed.
 #[derive(Default)]
-struct RepairFeedMemo {
+pub(crate) struct RepairFeedMemo {
     templates: gate::Watch,
     discount: gate::Watch,
     repairer: gate::Watch,
@@ -556,7 +556,7 @@ struct RepairFeedMemo {
 }
 
 /// Push each item's repair cost, and `GetRepairAllCost`'s total while a repairer is open.
-fn feed_repair_costs(
+pub(crate) fn feed_repair_costs(
     script: Option<NonSendMut<UiScript>>,
     open: Res<MerchantOpen>,
     mut inv: crate::items::Inventory,
@@ -1100,18 +1100,6 @@ pub(crate) mod purse_fixture {
 mod tests {
     use super::*;
     use benilla_protocol::messages::{Field, FieldLayout};
-
-    /// A repair's `UNIT_INVENTORY_CHANGED` reads this frame's total: the stock handler refreshes
-    /// the Repair All button from `GetRepairAllCost` (`PaperDollFrame.lua:717-724`).
-    #[test]
-    fn the_repair_all_total_is_swept_before_the_inventory_event() {
-        let mut app = crate::game_plugins::schedule_tests::headless_client();
-        assert!(crate::test_support::runs_before(
-            &mut app,
-            feed_repair_costs,
-            crate::ui_char::feed_char
-        ));
-    }
 
     /// `GetRepairAllCost` sums each item's cost after the open merchant's discount (`0x4faf8a`):
     /// at Honored with a PvP-flagged vendor and honor rank byte 8, 0.2 comes off each item before

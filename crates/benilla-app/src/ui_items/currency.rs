@@ -12,7 +12,7 @@ use crate::net::{NetCommands, ObjectStore, Objects, SelfPlayer};
 use crate::ui_script::VmMemo;
 
 #[derive(Resource)]
-pub(super) struct CurrencyData {
+pub(crate) struct CurrencyData {
     types: benilla_formats::currencies::CurrencyCatalog,
     categories: benilla_formats::currencies::CurrencyCategoryCatalog,
 }
@@ -111,7 +111,7 @@ fn roster<'a>(
     entries
 }
 
-pub(super) fn feed(
+pub(crate) fn feed(
     script: Option<NonSendMut<UiScript>>,
     me: Query<&ObjectStore, With<SelfPlayer>>,
     objects: Objects,
@@ -164,4 +164,4 @@ pub(super) fn feed(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

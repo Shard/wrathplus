@@ -9,7 +9,7 @@ use benilla_protocol::{
     wrath_who::Packet,
 };
 
-pub(super) fn drain(packets: Option<ResMut<NativeWhoPackets>>, mut social: ResMut<SocialState>) {
+pub(crate) fn drain(packets: Option<ResMut<NativeWhoPackets>>, mut social: ResMut<SocialState>) {
     let Some(mut packets) = packets else {
         return;
     };

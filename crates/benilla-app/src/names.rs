@@ -58,7 +58,7 @@ pub(crate) struct NameCache {
     /// A `None` answer is an entry the server flagged unknown.
     creatures: QueryCache<u32, CreatureRecord>,
     /// No negative entry: Vanilla says nothing for missing pets; Wrath empty replies evict.
-    pets: QueryCache<u32, String>,
+    pub(crate) pets: QueryCache<u32, String>,
     /// Bumped by every landed answer and the pet-rename eviction, never by an ask: the gated
     /// feeds re-run when it moves.
     generation: u64,
@@ -1190,4 +1190,4 @@ mod tests {
 
 #[cfg(test)]
 #[path = "names_native_pet_tests.rs"]
-mod native_pet_tests;
+pub(crate) mod native_pet_tests;
