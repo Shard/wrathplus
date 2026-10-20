@@ -4,6 +4,7 @@
 
 mod names_native_pet_tests;
 mod net;
+mod net_apply_motion_seam_tests;
 mod net_apply_seam_tests;
 mod net_capture_replay_tests;
 mod net_handlers;
