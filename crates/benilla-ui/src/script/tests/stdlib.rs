@@ -438,3 +438,27 @@ fn a_runscript_error_reaches_the_handler_and_not_the_caller() {
         "a compile failure is reported under the same name, undecorated: {errs:?}"
     );
 }
+
+/// Build 12340's debug family: six bind the `return 0` stub `0x8e5250` and answer nothing; the
+/// profile pair answers elapsed milliseconds.
+#[test]
+fn the_wrath_debug_stubs_answer_nothing_and_the_profile_pair_counts_up() {
+    let s = script();
+    for name in [
+        "debuginfo",
+        "debugload",
+        "debugprint",
+        "debugdump",
+        "debugbreak",
+        "debugtimestamp",
+    ] {
+        assert!(
+            s.eval::<bool>(&format!("return select('#', {name}()) == 0"))
+                .unwrap(),
+            "{name}"
+        );
+    }
+    assert!(s
+        .eval::<bool>("debugprofilestart() local ms = debugprofilestop() return type(ms) == 'number' and ms >= 0")
+        .unwrap());
+}

@@ -48,7 +48,7 @@ pub use cinematics::{
 pub use creatures::{
     load_creature_catalog, CreatureCatalog, CreatureModel, FootprintParams, NpcAppearance,
 };
-pub use macro_icons::load_macro_icons;
+pub use macro_icons::{load_macro_icons, load_wrath_macro_icons, WrathMacroIcons};
 mod macro_icons;
 pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
@@ -293,8 +293,8 @@ pub use models::{
     accumulate_wmo_group_camera_collision, accumulate_wmo_group_camera_only_collision,
     accumulate_wmo_group_collision, authored_half_height, batch_footprint, glue_art_extent,
     load_m2_bone_spins, load_m2_bounds, load_m2_collision_hull, load_m2_mesh, load_m2_mesh_skinned,
-    load_object_model, load_wmo, load_wmo_collision_tris, m2_bone_spins, m2_owner_reach,
-    owner_last_rung, owner_last_rung_bucket, parse_m2_bounds, parse_m2_camera,
+    load_object_model, load_wmo, load_wmo_collision_tris, load_wrath_render_model, m2_bone_spins,
+    m2_owner_reach, owner_last_rung, owner_last_rung_bucket, parse_m2_bounds, parse_m2_camera,
     parse_m2_collision_hull, parse_m2_portrait_camera, parse_wmo_fogs, parse_wmo_lights,
     parse_wmo_portals, parse_wmo_root, rotation_2x2, shipped_glue_art_extent, uv_transform,
     wmo_group_doodad_refs, wmo_group_fixed_colors, wmo_group_footprint_tris, wmo_group_header,

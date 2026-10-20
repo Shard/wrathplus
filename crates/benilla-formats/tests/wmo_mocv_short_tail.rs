@@ -1,5 +1,6 @@
-//! A MOCV one record short is still a bake: in `Undercity_144.wmo` the chunk that clamps to EOF is
-//! MOCV, 1159 of its declared 1160 bytes, and the reader pads its 289 colours to the 290 vertices.
+//! A MOCV one record short is still a bake: in 1.12 `Undercity_144.wmo`'s MOCV clamped to EOF a
+//! byte short and the reader padded it. No installed 12340 group needs the tolerance; it stays for
+//! loose packs.
 
 use benilla_formats::{parse_wmo_root, wmo_group_raw_colors, Chain};
 
@@ -31,31 +32,26 @@ fn subchunk(group: &[u8], tag: &[u8; 4]) -> Option<(usize, usize)> {
 
 /// The bake is the warm orange the reference renders, not the white of an absent bake.
 #[test]
-fn undercity_144_keeps_its_bake_despite_a_short_mocv() {
+fn undercity_144_keeps_its_whole_bake() {
     let data = benilla_formats::wow_data_or_skip!();
-    let reader = Chain::open(&data).expect("open vanilla patch chain");
+    let reader = Chain::open(&data).expect("open patch chain");
     let g = reader
         .read("World\\wmo\\Lorderon\\Undercity\\Undercity_144.wmo")
         .expect("read Undercity_144");
 
     let (movt_declared, _) = subchunk(&g, b"TVOM").expect("MOVT");
     let (mocv_declared, mocv_present) = subchunk(&g, b"VCOM").expect("MOCV");
-    assert_eq!(movt_declared / 12, 290, "MOVT vertex count");
     assert_eq!(
         mocv_declared / 4,
-        290,
+        movt_declared / 12,
         "MOCV declares one colour per vertex"
     );
-    assert_eq!(
-        mocv_present,
-        mocv_declared - 1,
-        "MOCV is exactly one byte short"
-    );
+    assert_eq!(mocv_present, mocv_declared, "the 12340 MOCV is whole");
 
     let raw = wmo_group_raw_colors(&g).expect("a one-record-short MOCV is still a bake");
     assert_eq!(
         raw.len(),
-        290,
+        movt_declared / 12,
         "the buffer must come back parallel to the vertices"
     );
     // BGRA on disk.
@@ -66,12 +62,11 @@ fn undercity_144_keeps_its_bake_despite_a_short_mocv() {
     );
 }
 
-/// Exactly one group in the corpus has a MOCV that is not whole and parallel to its positions, so
-/// the padding covers that one file.
+/// No installed 12340 group has a MOCV that is not whole and parallel to its positions.
 #[test]
-fn only_one_group_in_the_corpus_has_a_short_mocv() {
+fn no_group_in_the_corpus_has_a_short_mocv() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut reader = Chain::open(&data).expect("open vanilla patch chain");
+    let mut reader = Chain::open(&data).expect("open patch chain");
     let mut roots: Vec<String> = reader
         .list()
         .expect("list the patch chain")
@@ -115,9 +110,8 @@ fn only_one_group_in_the_corpus_has_a_short_mocv() {
             }
         }
     }
-    assert_eq!(
-        short,
-        vec!["World\\wmo\\Lorderon\\Undercity\\Undercity_144.wmo".to_string()],
-        "the short-MOCV tolerance is meant to cover exactly one shipped file"
+    assert!(
+        short.is_empty(),
+        "short MOCVs in the 12340 corpus: {short:?}"
     );
 }

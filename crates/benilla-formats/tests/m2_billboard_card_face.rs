@@ -2,30 +2,30 @@
 //! side, away from the viewer its bone turns `+X` to, is lit off the face it presents; 3-D
 //! billboard geometry keeps its normals.
 
-use benilla_formats::{load_m2_mesh, open_chain, BillboardKind};
+use benilla_formats::{load_m2_mesh, load_wrath_render_model, open_chain, BillboardKind};
 
 /// The shop sign's two chains are 4-vertex lock-Z billboard cards on a tiled chain texture, each
 /// plane's normal on the −X side; the sign body is ordinary geometry.
 #[test]
 fn the_shop_signs_chain_cards_face_away_and_its_body_is_untouched() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
-    let subs = load_m2_mesh(
-        &mut chain,
-        "World\\Generic\\Human\\Passive Doodads\\Signs\\CheeseShop01.m2",
-    )
-    .expect("load CheeseShop01");
+    let mut chain = open_chain(&data).expect("open patch chain");
+    let path = "World\\Generic\\Human\\Passive Doodads\\Signs\\CheeseShop01.m2";
+    let subs = load_m2_mesh(&mut chain, path).expect("load CheeseShop01");
+    let model = load_wrath_render_model(&mut chain, path).expect("render model");
 
-    let cards: Vec<_> = subs.iter().filter(|s| s.billboard.is_some()).collect();
-    assert_eq!(cards.len(), 2, "the sign hangs on two billboard cards");
+    // Build 12340 keeps the two chain cards in one batch on their two billboard bones.
+    let cards: Vec<_> = subs.iter().filter(|s| s.welded_billboard).collect();
+    assert_eq!(cards.len(), 1, "the sign's chains are one billboard batch");
     for c in &cards {
-        let bb = c.billboard.as_ref().unwrap();
-        assert_eq!(
-            bb.kind,
-            BillboardKind::LockZ,
-            "a hanging chain card spins about model up (bone flag 0x40)"
-        );
-        assert_eq!(c.positions.len(), 4, "a card is one quad");
+        for j in &c.joints {
+            assert_eq!(
+                model.skeleton.bones[usize::from(j[0])].billboard,
+                Some(BillboardKind::LockZ),
+                "a hanging chain card spins about model up (bone flag 0x40)"
+            );
+        }
+        assert_eq!(c.positions.len(), 8, "two quads, one per chain");
         assert!(
             c.two_sided,
             "the card is two-sided (material 0x04), so the reference draws the back we see"
@@ -37,7 +37,7 @@ fn the_shop_signs_chain_cards_face_away_and_its_body_is_untouched() {
     }
     assert!(
         subs.iter()
-            .any(|s| s.billboard.is_none() && !s.billboard_card_faces_away()),
+            .any(|s| !s.welded_billboard && !s.billboard_card_faces_away()),
         "the sign body is not a billboard and is never re-normalled"
     );
 }
@@ -47,11 +47,11 @@ fn the_shop_signs_chain_cards_face_away_and_its_body_is_untouched() {
 #[test]
 fn the_questgiver_marker_is_3d_billboard_geometry_not_a_card() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let subs = load_m2_mesh(&mut chain, "Interface\\Buttons\\TalkToMeQuestionMark.m2")
         .expect("load TalkToMeQuestionMark");
 
-    let billboards: Vec<_> = subs.iter().filter(|s| s.billboard.is_some()).collect();
+    let billboards: Vec<_> = subs.iter().filter(|s| s.welded_billboard).collect();
     assert!(
         !billboards.is_empty(),
         "the marker rides a billboard bone (it faces the camera)"

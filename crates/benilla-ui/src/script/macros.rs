@@ -444,7 +444,11 @@ mod tests {
     use crate::script::UiScript;
 
     fn seeded() -> UiScript {
-        let mut s = UiScript::new().unwrap();
+        seed(UiScript::new().unwrap())
+    }
+
+    /// The 1.12 chooser list (`set_macro_icons`); a Wrath VM serves `wrath_macro_icons` instead.
+    fn seed(mut s: UiScript) -> UiScript {
         s.set_macro_icons(vec![
             "Interface\\Icons\\Ability_Ambush".into(),
             "Interface\\Icons\\Ability_BackStab".into(),
@@ -644,7 +648,7 @@ mod tests {
 
     #[test]
     fn the_icon_chooser_list_is_one_based_with_a_nil_tail() {
-        let s = seeded();
+        let s = seed(UiScript::new_vanilla().unwrap());
         assert_eq!(s.eval::<i64>("return GetNumMacroIcons()").unwrap(), 3);
         assert_eq!(
             s.eval::<String>("return GetMacroIconInfo(2)").unwrap(),

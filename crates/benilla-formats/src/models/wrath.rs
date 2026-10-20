@@ -122,11 +122,14 @@ fn adapt_wrath_render_model(
     }
     validate_track_sequence_counts(&wrath)?;
 
-    let submeshes = render_submeshes(&wrath, &skin, dir, skins)?;
+    let mut submeshes = render_submeshes(&wrath, &skin, dir, skins)?;
     let skeleton = skeleton(&wrath);
     let (animations, animation_interpolation) = animations(&wrath)?;
     let global_sequence_bones = global_sequence_bones(&wrath)?;
     let bounds = bounds(&wrath);
+    if is_white1_placeholder(bounds.bbox_min, bounds.bbox_max, &submeshes) {
+        submeshes.clear();
+    }
     let collision = collision(wrath.model())?;
     let model = wrath.model();
     let attachments = model
@@ -412,6 +415,23 @@ fn global_sequence_bones(wrath: &WrathM2) -> Result<Vec<GlobalSeqBone>> {
         }
     }
     Ok(out)
+}
+
+/// A flat render box whose every batch is opaque `WHITE1.BLP`, the invisible-trap placeholder
+/// (GameObject display 1287) the reference draws at per-instance alpha ~0: it renders nothing.
+/// Textured flat decals stay.
+fn is_white1_placeholder(bbox_min: [f32; 3], bbox_max: [f32; 3], subs: &[RenderSubmesh]) -> bool {
+    if subs.is_empty() {
+        return false;
+    }
+    let flat = (0..3).any(|k| (bbox_max[k] - bbox_min[k]).abs() < 1e-3);
+    flat && subs.iter().all(|s| {
+        matches!(s.blend, ModelBlend::Opaque)
+            && !s.additive
+            && s.texture
+                .as_deref()
+                .is_some_and(|t| t.to_ascii_lowercase().ends_with("white1.blp"))
+    })
 }
 
 pub(crate) fn bounds(wrath: &WrathM2) -> M2Bounds {
