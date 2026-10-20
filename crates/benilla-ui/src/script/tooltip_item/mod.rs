@@ -268,6 +268,30 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
     m.set(
         "SetHyperlink",
         lua.create_function(|lua, (this, link): (Table, String)| {
+            // Quest and achievement links have their own cores (`0x62dae0` → `0x622960`,
+            // `0x627220`); a spell link is the spell core with the id alone.
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "quest:") {
+                let id = payload.split(':').next().and_then(|f| f.trim().parse().ok());
+                return match id {
+                    Some(id) if id != 0 => super::tooltip_links::set_quest(lua, &this, id),
+                    _ => Ok(()),
+                };
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "achievement:") {
+                return super::tooltip_links::set_achievement(lua, &this, payload);
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "spell:") {
+                if let Some(id) = payload.split(':').next().and_then(|f| f.trim().parse().ok()) {
+                    return super::tooltip_spell::set_spell_by_id(
+                        lua,
+                        &this,
+                        id,
+                        link_name(&link).map(str::to_string),
+                        Default::default(),
+                        None,
+                    );
+                }
+            }
             // Build 12340's trade link opens the linker's TradeSkill window (`0x5de120`), no tooltip.
             if link.starts_with("trade:") || link.contains("|Htrade:") {
                 lua.app_data_mut::<Model>()
