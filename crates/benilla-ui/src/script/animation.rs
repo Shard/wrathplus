@@ -22,6 +22,32 @@ fn list(object: &Table, key: &str) -> mlua::Result<MultiValue> {
         .collect::<mlua::Result<Vec<_>>>()?
         .into())
 }
+/// An animation's script names (`0x497500`), and a group's, which adds `OnLoop` (`0x497800`),
+/// both after `OnEvent` (`0x816830`), matched case-insensitively.
+fn script_kind(t: &Table, name: &str) -> mlua::Result<Option<&'static str>> {
+    const KINDS: [&str; 8] = [
+        "OnEvent", "OnLoad", "OnPlay", "OnPause", "OnStop", "OnFinished", "OnUpdate", "OnLoop",
+    ];
+    let group = t.raw_get::<String>("_kind")? == "AnimationGroup";
+    Ok(KINDS
+        .iter()
+        .take(if group { 8 } else { 7 })
+        .copied()
+        .find(|k| k.eq_ignore_ascii_case(name)))
+}
+
+/// [`script_kind`], else the shared raise: `<name> doesn't have a "<script>" script`.
+fn required_script_kind(t: &Table, name: &str) -> mlua::Result<&'static str> {
+    script_kind(t, name)?.ok_or_else(|| {
+        let owner = t
+            .raw_get::<Option<String>>("_name")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "<unnamed>".to_string());
+        mlua::Error::RuntimeError(format!("{owner} doesn't have a \"{name}\" script"))
+    })
+}
+
 fn common(
     lua: &Lua,
     object: &Table,
@@ -54,23 +80,22 @@ fn common(
     object.set(
         "SetScript",
         lua.create_function(|_, (t, k, f): (Table, String, Option<Function>)| {
-            t.raw_get::<Table>("_scripts")?.raw_set(k, f)
+            let kind = required_script_kind(&t, &k)?;
+            t.raw_get::<Table>("_scripts")?.raw_set(kind, f)
         })?,
     )?;
     object.set(
         "GetScript",
         lua.create_function(|_, (t, k): (Table, String)| {
+            let kind = required_script_kind(&t, &k)?;
             t.raw_get::<Table>("_scripts")?
-                .raw_get::<Option<Function>>(k)
+                .raw_get::<Option<Function>>(kind)
         })?,
     )?;
     object.set(
         "HasScript",
-        lua.create_function(|_, (_t, k): (Table, String)| {
-            Ok(matches!(
-                k.as_str(),
-                "OnLoad" | "OnPlay" | "OnPause" | "OnStop" | "OnFinished" | "OnLoop" | "OnUpdate"
-            ))
+        lua.create_function(|_, (t, k): (Table, String)| {
+            Ok(super::binding_abi::flag(script_kind(&t, &k)?.is_some()))
         })?,
     )?;
     if let Some(name) = name {
