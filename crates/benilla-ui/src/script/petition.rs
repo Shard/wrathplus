@@ -126,20 +126,21 @@ impl super::UiScript {
     }
 }
 
-/// The guild-name check `BuyGuildCharter` and `RenamePetition` share (`0x4f5160`), which maps the
-/// checker `0x6c9b70`'s code to a message and accepts only `0xd`; `Err` carries the GlobalStrings
-/// key to show, and no packet is built. Only codes 0 (empty), 10 (an edge space) and 11
-/// (consecutive spaces) are built; the rest pass, as the checker's rules are untraced and the
-/// server re-checks every name (`ObjectMgr::IsValidCharterName`).
+/// The guild-name check `BuyGuildCharter` and `RenamePetition` share: `Err` carries the
+/// GlobalStrings key to show, and no packet is built. Only an empty name, an edge space and
+/// consecutive spaces are built; the rest pass, and the server re-checks every name
+/// (`ObjectMgr::IsValidCharterName`). The keys are build 12340's name-check rows (`0x257`,
+/// `0x25e`, `0x25f`, mapped by `0x5218c0`); the 1.12 `ERR_GUILD_*` keys are not in its table.
+/// Unresolved: the 12340 caller of the check (the 1.12 one was `0x4f5160` over `0x6c9b70`).
 pub fn validate_guild_name(name: &str) -> Result<(), &'static str> {
     if name.is_empty() {
-        return Err("ERR_GUILD_ENTER_NAME");
+        return Err("ERR_NAME_NO_NAME");
     }
     if name.starts_with(' ') || name.ends_with(' ') {
-        return Err("ERR_GUILD_NAME_INVALID_SPACE");
+        return Err("ERR_NAME_INVALID_SPACE");
     }
     if name.contains("  ") {
-        return Err("ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES");
+        return Err("ERR_NAME_CONSECUTIVE_SPACES");
     }
     Ok(())
 }
@@ -554,27 +555,27 @@ mod tests {
             s.take_petition_requests(),
             vec![
                 PetitionRequest::Buy("Legacy".into()),
-                PetitionRequest::NameRefused("ERR_GUILD_ENTER_NAME"),
+                PetitionRequest::NameRefused("ERR_NAME_NO_NAME"),
                 PetitionRequest::Rename("Legacy".into()),
-                PetitionRequest::NameRefused("ERR_GUILD_NAME_INVALID_SPACE"),
+                PetitionRequest::NameRefused("ERR_NAME_INVALID_SPACE"),
             ]
         );
     }
 
     #[test]
     fn the_validator_refuses_only_what_it_can_prove() {
-        assert_eq!(validate_guild_name(""), Err("ERR_GUILD_ENTER_NAME"));
+        assert_eq!(validate_guild_name(""), Err("ERR_NAME_NO_NAME"));
         assert_eq!(
             validate_guild_name(" Legacy"),
-            Err("ERR_GUILD_NAME_INVALID_SPACE")
+            Err("ERR_NAME_INVALID_SPACE")
         );
         assert_eq!(
             validate_guild_name("Legacy "),
-            Err("ERR_GUILD_NAME_INVALID_SPACE")
+            Err("ERR_NAME_INVALID_SPACE")
         );
         assert_eq!(
             validate_guild_name("Legacy  of Steel"),
-            Err("ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES")
+            Err("ERR_NAME_CONSECUTIVE_SPACES")
         );
         // Passed through: the length, profanity and script rules live in the untraced `0x6c9b70`,
         // and the server re-checks them.

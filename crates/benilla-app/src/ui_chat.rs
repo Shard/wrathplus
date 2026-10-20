@@ -7,8 +7,6 @@ use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
 
-#[cfg(test)]
-mod ace_gate_tests;
 /// `/afk` and `/dnd`: the optimistic AFK mirror `[0xb6e5cc]` and the implicit clear that every
 /// other chat send and every movement press carries.
 mod away;

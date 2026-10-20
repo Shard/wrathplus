@@ -53,7 +53,10 @@ pub fn by_id(id: u16) -> Option<&'static MessageRecord> {
 /// index. Its chat type 0 is build 12340's `CHAT_MSG_SYSTEM`, which is the 1.12 table's 10. Kind
 /// 0/1/2 is chat/info/error, as in 1.12.
 #[rustfmt::skip]
-pub static WRATH_SUPPLEMENT: [MessageRecord; 83] = [
+pub static WRATH_SUPPLEMENT: [MessageRecord; 99] = [
+    MessageRecord { id: 0x41, key: "ERR_INVITED_TO_GROUP_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x42, key: "ERR_INVITED_ALREADY_IN_GROUP_SS", kind: MsgKind::Chat, sound: None, type_tag: 0x14, chat_type: 10 },
+    MessageRecord { id: 0x58, key: "ERR_INVITED_TO_GUILD_SSS", kind: MsgKind::Chat, sound: Some("LEVELUP"), type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e0, key: "ERR_BATTLEGROUND_TOO_MANY_QUEUES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e1, key: "ERR_BATTLEGROUND_CANNOT_QUEUE_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x1e2, key: "ERR_BATTLEDGROUND_QUEUED_FOR_RATED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
@@ -92,6 +95,19 @@ pub static WRATH_SUPPLEMENT: [MessageRecord; 83] = [
     MessageRecord { id: 0x231, key: "ERR_USER_SQUELCHED", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x252, key: "ERR_LOOT_CANT_LOOT_THAT", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x255, key: "ERR_ALREADY_PICKPOCKETED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x256, key: "ERR_NAME_INVALID", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x257, key: "ERR_NAME_NO_NAME", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x258, key: "ERR_NAME_TOO_SHORT", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x259, key: "ERR_NAME_TOO_LONG", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25a, key: "ERR_NAME_MIXED_LANGUAGES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25b, key: "ERR_NAME_PROFANE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25c, key: "ERR_NAME_RESERVED", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25d, key: "ERR_NAME_THREE_CONSECUTIVE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25e, key: "ERR_NAME_INVALID_SPACE", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x25f, key: "ERR_NAME_CONSECUTIVE_SPACES", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x260, key: "ERR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x261, key: "ERR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
+    MessageRecord { id: 0x262, key: "ERR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME", kind: MsgKind::Error, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x27f, key: "ERR_PET_LEARN_SPELL_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x280, key: "ERR_PET_LEARN_ABILITY_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },
     MessageRecord { id: 0x281, key: "ERR_PET_SPELL_UNLEARNED_S", kind: MsgKind::Chat, sound: None, type_tag: 0x44, chat_type: 10 },

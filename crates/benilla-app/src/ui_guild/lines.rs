@@ -109,10 +109,11 @@ pub(super) fn command_line(result: &GuildCommandResult) -> Option<UiError> {
     }
 }
 
-/// `SMSG_GUILD_INVITE`'s notice line, printed beside the popup (`0x5e6f65`, message `0x4f`); the
-/// popup is the separate `GUILD_INVITE_REQUEST` at `0x5e6f53`.
+/// `SMSG_GUILD_INVITE`'s notice line, printed beside the popup: build 12340's handler (`0x6cc3b0`)
+/// fires `GUILD_INVITE_REQUEST` (`0x512570`) and raises message `0x58`,
+/// `ERR_INVITED_TO_GUILD_SSS`, whose player link takes the inviter twice before the guild.
 pub(super) fn invite_line(inviter: &str, guild: &str) -> UiError {
-    UiError::strings("ERR_INVITED_TO_GUILD_SS", &[inviter, guild])
+    UiError::strings("ERR_INVITED_TO_GUILD_SSS", &[inviter, inviter, guild])
 }
 
 /// `SMSG_GUILD_DECLINE`: our invitee said no (sent to the inviter only).
@@ -307,8 +308,8 @@ mod tests {
     #[test]
     fn the_invite_notice_names_both() {
         let e = invite_line("Tigole", "Legacy of Steel");
-        assert_eq!(e.key, "ERR_INVITED_TO_GUILD_SS");
-        assert_eq!(strings(&e), ["Tigole", "Legacy of Steel"]);
+        assert_eq!(e.key, "ERR_INVITED_TO_GUILD_SSS");
+        assert_eq!(strings(&e), ["Tigole", "Tigole", "Legacy of Steel"]);
         assert_eq!(decline_line("Kaplan").key, "ERR_GUILD_DECLINE_S");
     }
 }
