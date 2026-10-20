@@ -45,7 +45,7 @@ fn state(name: &str, guid: u64, health: u32) -> UnitState {
 /// holds. raid3 targets the add, raid4 a held unit with no snapshot, our pet its foe, and party2
 /// is out of range. Pushed by name: the bases. Pushed by guid: the units a chain ends on.
 fn world() -> UiScript {
-    let mut s = UiScript::new_vanilla().unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_unit_guids(&UnitGuids {
         player: ME,
         pet: PET,

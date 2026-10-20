@@ -326,14 +326,14 @@ fn set_button_state_drives_the_pushed_visual() {
 
 #[test]
 fn disabled_button_swallows_clicks_checkbutton_toggles_before_onclick() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
         clicks, seen_checked = 0, nil
         local cb = CreateFrame("CheckButton", "Toggler")
         cb:SetPoint("BOTTOMLEFT", 0, 0); cb:SetWidth(100); cb:SetHeight(100)
-        cb:SetScript("OnClick", function() local self, button, down = this, arg1, arg2
+        cb:SetScript("OnClick", function(self, button, down)
             clicks = clicks + 1
             seen_checked = self:GetChecked()
         end)
@@ -376,7 +376,7 @@ fn default_registration_is_left_click_only_right_click_reaches_nothing() {
         clicks = 0
         local btn = CreateFrame("Button", "Vendor")
         btn:SetPoint("BOTTOMLEFT", 0, 0); btn:SetWidth(100); btn:SetHeight(100)
-        btn:SetScript("OnClick", function() local self, button, down = this, arg1, arg2 clicks = clicks + 1 end)
+        btn:SetScript("OnClick", function(self, button, down) clicks = clicks + 1 end)
     "#,
     )
     .unwrap();

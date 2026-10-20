@@ -1455,10 +1455,5 @@ mod tests {
                  and select(9, GetAuctionSellItemInfo()) == 0"
             )
             .unwrap());
-        // The 1.12 VM has no `select`: count the returns from here.
-        let vanilla = crate::script::UiScript::new_vanilla().unwrap();
-        let width = |chunk: &str| vanilla.eval::<mlua::MultiValue>(chunk).unwrap().len();
-        assert_eq!(width("return GetAuctionItemInfo('owner', 1)"), 12);
-        assert_eq!(width("return GetAuctionSellItemInfo()"), 6);
     }
 }

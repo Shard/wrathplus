@@ -279,7 +279,7 @@ mod tests {
 
     /// A VM whose resolver names us as `player` and `TARGET` as `target`.
     fn script() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit_guids(&UnitGuids {
             player: ME,
             target: TARGET,
@@ -288,6 +288,7 @@ mod tests {
         s
     }
 
+    /// A 1.12 host for the tests a later step 9 batch converts.
     fn vanilla_script() -> UiScript {
         let mut s = UiScript::new_vanilla().unwrap();
         s.set_unit_guids(&UnitGuids {
@@ -459,7 +460,7 @@ mod tests {
     /// is over `MOB`. Each unit's list holds a buff and a debuff whose spell ids, and so icons, are
     /// its own: `base + 1` and `base + 2`.
     fn group_script() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit_guids(&UnitGuids {
             player: ME,
             target: TARGET,
@@ -499,8 +500,9 @@ mod tests {
     }
 
     /// The icon a read answers, the list's identity.
+    /// The aura's icon, build 12340's third return.
     fn icon_of(s: &UiScript, call: &str) -> Option<String> {
-        s.eval::<Option<String>>(&format!("return ({call})"))
+        s.eval::<Option<String>>(&format!("return (select(3, {call}))"))
             .unwrap()
     }
 
@@ -554,9 +556,9 @@ mod tests {
         }
         assert!(s
             .eval::<bool>(
-                r#"local a, n = UnitBuff("PLAYER", 1)
-                   local b, m = UnitBuff("player", 1)
-                   local c = UnitDebuff("targettargettargettarget", 1)
+                r#"local n, _, a = UnitBuff("PLAYER", 1)
+                   local m, _, b = UnitBuff("player", 1)
+                   local _, _, c = UnitDebuff("targettargettargettarget", 1)
                    return a == b and n == m and a == "Interface\\Icons\\Spell_2457"
                        and c == "Interface\\Icons\\Spell_11976""#
             )
@@ -581,12 +583,8 @@ mod tests {
                 "{call}"
             );
         }
-        for call in [
-            r#"UnitBuff("bogus", 1)"#,
-            r#"UnitDebuff("focus", 1)"#,
-            r#"UnitDebuff("npctarget", 1)"#,
-            r#"UnitBuff("bogus", 0)"#,
-        ] {
+        // `focus` and `npc` are 3.3.5 tokens; only a name no compare matches raises.
+        for call in [r#"UnitBuff("bogus", 1)"#, r#"UnitBuff("bogus", 0)"#] {
             let err = s.eval::<()>(call).unwrap_err().to_string();
             assert!(err.contains("Unknown unit name: "), "{call}: {err}");
         }

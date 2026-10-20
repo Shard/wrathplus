@@ -6,7 +6,7 @@ use crate::script::{PlateGeometry, PlateState, UiScript};
 
 /// A VM with a `WorldFrame` to hang plates off, all [`UiScript::sync_nameplates`] requires.
 fn vm() -> UiScript {
-    let mut s = UiScript::new_vanilla().unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     s.run(r#"WorldFrame = CreateFrame("WorldFrame", "WorldFrame") WorldFrame:SetAllPoints()"#)
         .unwrap();
@@ -298,7 +298,7 @@ fn an_engine_health_write_fires_onvaluechanged_with_the_plate_as_parent() {
         ParentIsPlate = false
         local plate = WorldFrame:GetChildren()
         local healthbar = plate:GetChildren()
-        healthbar:SetScript("OnValueChanged", function()
+        healthbar:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4)
             Fired = Fired + 1
             ParentIsPlate = (this:GetParent() == plate)
         end)

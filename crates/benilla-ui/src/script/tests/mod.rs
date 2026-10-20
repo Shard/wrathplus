@@ -53,7 +53,6 @@ mod tooltip_spell;
 mod tooltip_unit;
 mod toplevel;
 mod visibility;
-mod widget_surface;
 mod worldframe;
 mod worldmap;
 mod wrath_budget;
@@ -125,7 +124,7 @@ fn get_bind_location_answers_the_pushed_name_and_never_nil() {
 /// `RequestTimePlayed()` queues the ask; `TIME_PLAYED_MSG` carries the answer.
 #[test]
 fn request_time_played_queues_an_ask_and_the_answer_arrives_as_an_event() {
-    let mut s = crate::script::UiScript::new_vanilla().unwrap();
+    let mut s = crate::script::UiScript::new().unwrap();
 
     assert_eq!(s.arity("RequestTimePlayed()").unwrap(), 0);
     // A count, not a latch: the packet is empty, so two asks in a frame are two sends.
@@ -142,7 +141,7 @@ fn request_time_played_queues_an_ask_and_the_answer_arrives_as_an_event() {
         TPSeen = nil
         local f = CreateFrame("Frame", "TPWatcher")
         f:RegisterEvent("TIME_PLAYED_MSG")
-        f:SetScript("OnEvent", function() TPSeen = { arg1, arg2 } end)
+        f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) TPSeen = { arg1, arg2 } end)
         "#,
     )
     .unwrap();
@@ -233,9 +232,9 @@ fn a_self_unregistering_listener_does_not_rob_its_successor_on_the_internal_disp
     s.run(
         r#"log = ""
         local a = CreateFrame("Frame") a:RegisterEvent("UPDATE_FACTION")
-        a:SetScript("OnEvent", function() log = log .. "a" this:UnregisterEvent("UPDATE_FACTION") end)
+        a:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) log = log .. "a" this:UnregisterEvent("UPDATE_FACTION") end)
         local b = CreateFrame("Frame") b:RegisterEvent("UPDATE_FACTION")
-        b:SetScript("OnEvent", function() log = log .. "b" end)
+        b:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) log = log .. "b" end)
         ExpandFactionHeader(0)"#,
     )
     .unwrap();

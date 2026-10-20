@@ -695,7 +695,7 @@ mod tests {
             lb = CreateFrame("LootButton", "LB1", UIParent)
             lb:SetSlot(3)
             ran = 0
-            lb:SetScript("OnClick", function() ran = ran + 1 end)
+            lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) ran = ran + 1 end)
         "#,
         )
         .unwrap();
@@ -704,7 +704,7 @@ mod tests {
         assert_eq!(s.take_loot_picks(), vec![3], "and then the take, 1-based");
 
         // An erroring handler still loots: `0x4c1833`'s result is never tested.
-        s.run(r#"lb:SetScript("OnClick", function() error("boom") end)"#)
+        s.run(r#"lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) error("boom") end)"#)
             .unwrap();
         hardware_click(&mut s, "LB1", "LeftButton");
         assert_eq!(s.take_loot_picks(), vec![3], "a broken hook still loots");
@@ -743,7 +743,7 @@ mod tests {
                 lb = CreateFrame("LootButton", "LB1", UIParent)
                 lb:SetSlot(1)
                 ran = 0
-                lb:SetScript("OnClick", function() ran = ran + 1 end)
+                lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) ran = ran + 1 end)
             "#,
             )
             .unwrap();
@@ -767,7 +767,7 @@ mod tests {
             lb = CreateFrame("LootButton", "LB1", UIParent)
             lb:SetSlot(1)
             ran = 0
-            lb:SetScript("OnClick", function() ran = ran + 1 end)
+            lb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) ran = ran + 1 end)
             lb:Click()
         "#,
         )
@@ -783,7 +783,7 @@ mod tests {
             r#"
             b = CreateFrame("Button", "PlainB", UIParent)
             bran = 0
-            b:SetScript("OnClick", function() bran = bran + 1 end)
+            b:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) bran = bran + 1 end)
             b:Click()
         "#,
         )

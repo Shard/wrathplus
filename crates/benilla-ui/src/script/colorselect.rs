@@ -523,12 +523,12 @@ mod tests {
     /// It fires with the colour the widget now holds, and again on the same colour: no change gate.
     #[test]
     fn set_color_rgb_fires_on_color_select_every_time() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         s.run(
             r#"
             fired = {}
             cs = CreateFrame("ColorSelect", "TestColorSelect2")
-            cs:SetScript("OnColorSelect", function()
+            cs:SetScript("OnColorSelect", function(this, arg1, arg2, arg3, arg4)
                 table.insert(fired, arg1 .. "," .. arg2 .. "," .. arg3)
             end)
         "#,

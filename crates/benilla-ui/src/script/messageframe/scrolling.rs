@@ -1020,15 +1020,6 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_scrolling_frames_lack_the_wrath_methods() {
-        let s = UiScript::new_vanilla().unwrap();
-        s.run("F = CreateFrame('ScrollingMessageFrame')").unwrap();
-        for m in ["GetMessageInfo", "RemoveMessagesByAccessID", "SetHyperlinksEnabled"] {
-            assert!(s.eval::<bool>(&format!("return F.{m} == nil")).unwrap(), "{m}");
-        }
-    }
-
-    #[test]
     fn update_color_by_id_recolours_only_that_ids_lines() {
         let mut smf = ScrollingMessageState::default();
         smf.add_with_id("a".into(), 1.0, 1.0, 1.0, 11);

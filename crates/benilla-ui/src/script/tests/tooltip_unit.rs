@@ -1,7 +1,7 @@
 //! The engine unit tooltip builder: the level line, the flag lines, the world-mouseover drive and
 //! the health-bar watcher.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::*;
 
 /// Stand-in level-line strings, deliberately not the shipped wording: the enUS templates repeat
@@ -443,7 +443,7 @@ fn a_players_level_line_ignores_the_snapshots_creature_type() {
 /// `world_tooltip_unit` fires the default anchor, renders, then fires `UPDATE_MOUSEOVER_UNIT`.
 #[test]
 fn world_hover_drive_and_health_watcher() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.set_unit("mouseover", Some(wolf()));
     s.run(
@@ -456,13 +456,13 @@ fn world_hover_drive_and_health_watcher() {
         local tt = CreateFrame("GameTooltip", "GameTooltip")
         tt:Hide()
         -- The XML wiring, test-side: default anchor + the reaction recolor + a status bar child.
-        tt:SetScript("OnTooltipSetDefaultAnchor", function()
+        tt:SetScript("OnTooltipSetDefaultAnchor", function(this, arg1, arg2, arg3, arg4)
             anchored = anchored + 1
             GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
             GameTooltip:SetPoint("BOTTOMRIGHT", "UIParent", "BOTTOMRIGHT", -13, 70)
         end)
         tt:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
-        tt:SetScript("OnEvent", function()
+        tt:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4)
             recolored = recolored + 1
             getglobal("GameTooltipTextLeft1"):SetTextColor(1, 0, 0)
         end)

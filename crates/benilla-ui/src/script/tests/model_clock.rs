@@ -327,8 +327,8 @@ fn a_loop_completes_once_and_a_fileless_pane_paints_nothing() {
         r#"
         done = 0 painted = 0
         p = CreateFrame("Model", "Loop", UIParent)
-        p:SetScript("OnAnimFinished", function() done = done + 1 end)
-        p:SetScript("OnUpdateModel", function() painted = painted + 1 end)
+        p:SetScript("OnAnimFinished", function(this, arg1, arg2, arg3, arg4) done = done + 1 end)
+        p:SetScript("OnUpdateModel", function(this, arg1, arg2, arg3, arg4) painted = painted + 1 end)
     "#,
     )
     .unwrap();

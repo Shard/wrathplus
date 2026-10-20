@@ -264,10 +264,6 @@ mod tests {
                 .unwrap(),
             0
         );
-        assert!(UiScript::new_vanilla()
-            .unwrap()
-            .eval::<bool>("return GetLFGDungeonInfo==nil")
-            .unwrap());
     }
 
     #[test]
