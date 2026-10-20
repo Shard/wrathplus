@@ -142,6 +142,8 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
         "player",
         Some(UnitState {
             exists: true,
+            // The fixtures' player guid, so `UnitGUID("player")` answers as in a session.
+            guid: 0x0100_0000_0000_0001,
             name: Some("Benchone".into()),
             level: 1,
             race: Some("Human".into()),

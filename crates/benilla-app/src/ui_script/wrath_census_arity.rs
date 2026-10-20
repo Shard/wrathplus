@@ -31,9 +31,6 @@ const UNPROBED_REVIEWED: &[&str] = &[
     "KBArticle_GetData", "KBSetup_GetCategoryData", "KBSetup_GetSubCategoryData",
     // No debug zone map or debug objects in a retail client.
     "GetDebugZoneMap", "GetMapDebugObjectInfo",
-    // Fixture pending: the state each reads is not seeded yet.
-    "GetAchievementComparisonInfo", "GetBindingKey", "GetChannelRosterInfo",
-    "GetLatestThreeSenders", "GetLootRollItemInfo", "GetMapOverlayInfo", "GetPlayerInfoByGUID",
     // No voice-chat service: GetVoiceSessionInfo (`0x7db0b0`) answers one nil without sessions.
     "GetVoiceSessionInfo",
     // QuestPOIFrame's blob hit test answers nothing off a drawn blob (the map's blobs, Wire A).
@@ -230,12 +227,14 @@ pub(super) fn audit(
             end
             local best, miss, errors = 0, 0, 0
             -- Indexes, unit tokens, bag/slot pairs, aura filters, item and spell ids, quest-item types,
-            -- and a unit pair (a member against its mob).
+            -- a unit pair (a member against its mob), the player's GUID, a binding command and the
+            -- first channel row past the display list's three headers.
             local ladder = { {}, { 1 }, { "player" }, { 1, 1 }, { 1, 1, 1 }, { "player", 1 },
                 { 0, 1 }, { "player", 1, "HELPFUL" }, { "player", 1, "HARMFUL" }, { 6948 },
                 { "item:6948" }, { 6603 }, { "reward", 1 }, { "choice", 1 }, { "required", 1 },
                 { 2, 1 }, { 1, 1, 1, 1 }, { 1, 2 }, { "CRITTER", 1 }, { "MOUNT", 1 }, { 2 },
-                { "player", "target" }, { "HeadSlot" } }
+                { "player", "target" }, { "HeadSlot" }, { UnitGUID and UnitGUID("player") or "0x0" },
+                { "MOVEFORWARD" }, { 4, 1 } }
             for _, args in ipairs(ladder) do
                 local ok, n, hit
                 if method then

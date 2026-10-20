@@ -939,4 +939,62 @@ fn inspect_arena(s: &mut UiScript) {
         None,
         None,
     ]);
+
+    // The player known by GUID, a binding, and the mail's latest senders.
+    s.set_unit_by_guid(
+        ME,
+        Some(UnitState {
+            name: Some("Benchone".into()),
+            race: Some("Human".into()),
+            race_file: Some("Human".into()),
+            class: Some("Warrior".into()),
+            class_file: Some("WARRIOR".into()),
+            sex: 2,
+            ..Default::default()
+        }),
+    );
+    s.run("SetBinding('W', 'MOVEFORWARD') SetBinding('UP', 'MOVEFORWARD')").unwrap();
+    s.set_wrath_mail_latest_senders(vec!["Arthas".into(), "Jaina".into(), "Thrall".into()]);
+
+    // A native loot roll whose template has landed.
+    s.set_wrath_loot_rolls(WrathLootRollsState {
+        rolls: vec![WrathLootRollEntry {
+            roll_id: 1,
+            entry: 2589,
+            count: 1,
+            vote_mask: 0b1111,
+            texture: Some(r"Interface\Icons\INV_Fabric_Linen_01".into()),
+            name: Some("Linen Cloth".into()),
+            quality: Some(1),
+            time_left_ms: 60_000,
+            reasons: [Some(0), Some(0), Some(0)],
+            disenchant_skill_required: Some(0),
+            ..Default::default()
+        }],
+    });
+
+    // A custom channel, selected by its roster query, and its roster as the server answers it.
+    s.set_wrath_display_channels(vec![WrathDisplayChannel {
+        slot: 1,
+        name: "Bench".into(),
+        channel_id: 0,
+        active: true,
+        custom_state: 0,
+    }]);
+    s.run(
+        "for i = 1, GetNumDisplayChannels() do \
+            if GetChannelDisplayInfo(i) == 'Bench' then GetChannelRosterInfo(i, 1) end \
+         end",
+    )
+    .unwrap();
+    s.receive_wrath_channel_roster(
+        1,
+        "Bench",
+        0,
+        vec![WrathChannelRosterMember {
+            guid: ME,
+            flags: 1,
+            name: Some("Benchone".into()),
+        }],
+    );
 }
