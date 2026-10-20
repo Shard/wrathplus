@@ -508,10 +508,10 @@ pub(in crate::motion) fn ground_clamp_creatures(
         Option<&mut GroundClamped>,
         Has<CreatureSwimming>,
         // HOVER and WATERWALKING both move the answer.
-        Option<&crate::net::UnitMoveModes>,
+        Option<&crate::motion::UnitMoveModes>,
         // [`ground_derived`]'s other Z authorities: the controller and the relay's dead-reckoning.
         Has<crate::net::Embodied>,
-        Has<crate::net::RemoteMotion>,
+        Has<crate::motion::RemoteMotion>,
     )>,
 ) {
     let cost = clamp_cost_enabled();
@@ -785,7 +785,7 @@ type SwimMarkQuery = (
     Has<Spline>,
     Has<GroundClamped>,
     Has<crate::net::Embodied>,
-    Has<crate::net::RemoteMotion>,
+    Has<crate::motion::RemoteMotion>,
 );
 
 /// The stamp [`mark_swimming_creatures`] leaves once a unit's room claim settles; 1.12 water is
@@ -827,7 +827,7 @@ pub(crate) struct GroundClamped {
     /// The collider-set stamp the answer was computed against.
     epoch: u64,
     /// The granted modes the answer was computed under (HOVER and WATERWALKING change it).
-    modes: crate::net::UnitMoveModes,
+    modes: crate::motion::UnitMoveModes,
     /// The walker's `(spline id, start)` this continues; a new path re-seats, as the reference
     /// re-bases on every inbound movement packet (`0x7c6420`).
     path: Option<(u32, Instant)>,
@@ -1038,7 +1038,7 @@ mod under_floor {
         // The grant alone must re-arm the cast.
         app.world_mut()
             .entity_mut(npc)
-            .insert(crate::net::UnitMoveModes(
+            .insert(crate::motion::UnitMoveModes(
                 crate::app_core::movement::move_flags::HOVER,
             ));
         clamp(&mut app);
@@ -1092,7 +1092,7 @@ mod under_floor {
         let (mut app, npc) = half_arrived_world();
         app.world_mut()
             .entity_mut(npc)
-            .insert(crate::net::UnitMoveModes(
+            .insert(crate::motion::UnitMoveModes(
                 crate::app_core::movement::move_flags::WATER_WALKING,
             ));
         clamp(&mut app);
@@ -1404,7 +1404,8 @@ mod server_moved_players {
     use bevy::prelude::*;
 
     use super::{ground_clamp_creatures, ground_derived, CreatureSwimming, GroundClamped, Spline};
-    use crate::net::{Embodied, NetEntity, RemoteMotion};
+    use crate::motion::RemoteMotion;
+    use crate::net::{Embodied, NetEntity};
     use benilla_world::collision::ColliderEpoch;
 
     /// The rims the waypoints stand on, and the trench floor 2.5 yd below, within the probe.

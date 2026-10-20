@@ -508,7 +508,8 @@ fn fire_unit_combat(
 }
 
 /// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
-/// display name is also what `$R`/`$r` expand to.
+/// display name is also what `$R`/`$r` expand to. Build 12340's enUS `ChrRaces.dbc` rows 1-11,
+/// its name and `clientFileString` columns; its gendered name columns are empty in enUS.
 pub(crate) fn race_names(race: u8) -> Option<(&'static str, &'static str)> {
     Some(match race {
         1 => ("Human", "Human"),
@@ -519,6 +520,9 @@ pub(crate) fn race_names(race: u8) -> Option<(&'static str, &'static str)> {
         6 => ("Tauren", "Tauren"),
         7 => ("Gnome", "Gnome"),
         8 => ("Troll", "Troll"),
+        9 => ("Goblin", "Goblin"),
+        10 => ("Blood Elf", "BloodElf"),
+        11 => ("Draenei", "Draenei"),
         _ => return None,
     })
 }
@@ -544,7 +548,8 @@ pub(crate) fn class_names(class: u8) -> Option<(&'static str, &'static str)> {
 /// where addons concatenate `UnitFactionGroup("player")` at file scope; [`faction_group`] reads
 /// the live template.
 pub(crate) fn race_faction_group(race: u8) -> Option<&'static str> {
-    if !(1..=8).contains(&race) {
+    // The ten playable races; 9 (Goblin) is no player's.
+    if !matches!(race, 1..=8 | 10 | 11) {
         return None;
     }
     Some(if crate::char_create::ALLIANCE.contains(&race) {
@@ -2730,6 +2735,30 @@ mod tests {
     }
 
     /// [`race_pvp_team`] against the shipped DBCs, walked as `0x5efe00` walks them.
+    /// Every race row build 12340's `ChrRaces.dbc` ships up to 11, with its enUS name and
+    /// `clientFileString`, and the side of each playable one.
+    #[test]
+    fn race_names_cover_every_12340_race_and_side() {
+        for (race, display, file, side) in [
+            (1, "Human", "Human", Some("Alliance")),
+            (2, "Orc", "Orc", Some("Horde")),
+            (3, "Dwarf", "Dwarf", Some("Alliance")),
+            (4, "Night Elf", "NightElf", Some("Alliance")),
+            (5, "Undead", "Scourge", Some("Horde")),
+            (6, "Tauren", "Tauren", Some("Horde")),
+            (7, "Gnome", "Gnome", Some("Alliance")),
+            (8, "Troll", "Troll", Some("Horde")),
+            (9, "Goblin", "Goblin", None),
+            (10, "Blood Elf", "BloodElf", Some("Horde")),
+            (11, "Draenei", "Draenei", Some("Alliance")),
+        ] {
+            assert_eq!(race_names(race), Some((display, file)), "race {race}");
+            assert_eq!(race_faction_group(race), side, "race {race}");
+        }
+        assert_eq!(race_names(0), None);
+        assert_eq!(race_names(12), None);
+    }
+
     #[test]
     fn race_pvp_team_matches_the_shipped_tables() {
         let data = benilla_formats::wow_data_or_skip!();

@@ -5,7 +5,8 @@
 //! drain over one frame two ways and compares, the rest pin the speed-change ordering laws over
 //! consecutive packets.
 
-use crate::net::{GuidIndex, NetEvents, ObjectStore, UnitMoveModes, UnitSpeeds};
+use crate::motion::UnitMoveModes;
+use crate::net::{GuidIndex, NetEvents, ObjectStore, UnitSpeeds};
 use benilla_protocol::types::{ObjectType, SpeedKind, SplineMode};
 use benilla_protocol::{EntityKind, MoveSpeeds, ObjectFields, SessionEvent};
 use bevy::prelude::*;

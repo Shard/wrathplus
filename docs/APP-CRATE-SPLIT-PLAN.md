@@ -46,11 +46,11 @@ The cycles come from three patterns, not from tangled features:
 
 | Crate | Layer | Today's modules (examples) | Size | Lib tests |
 |---|---|---|---|---|
-| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `names`, `items`, `go_templates`, `query_cache`, `area`, `area_trigger`, `chr_classes`, `creature_type`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `preflight`, `probe_shield`, `shutdown`, `name_persist`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), plus the state extracted in step 0 | ~12k + extracted | ~150 |
-| `benilla-app-net` | session and wire drain | `net`, `realmlist`, `swing_refusal`, the `ui_native::wrath_*` capture FIFOs | ~25k | ~280 |
-| `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
+| `benilla-app-core` | shared state, schedule sets, cvar registry | `run_mode`, `local_state`, `query_cache`, `area`, `chr_classes`, `text_filter`, `text_reshape`, `glue_strings`, `crash`, `shutdown`, `pending_item_ops`, `quest_reputation`, `cvars` (registry only), `app_core` (the state extracted in step 0) | ~12k + extracted | ~150 |
+| `benilla-app-net` | session and wire drain | `net` (with the capture FIFOs), `realmlist`, and the wire-query caches `names`, `items`, `go_templates`, `area_trigger`, `name_persist`, `creature_type` (reassigned after the move dry run) | ~25k | ~280 |
+| `benilla-app-world` | world, rendering, gameplay | `entities`, `creature_anim`, `player`, `target`, `spell`, `motion`, `swing_refusal`, `sound`, `portrait`, `minimap`, `transport`, `video`, `cursor`, `death`, `nameplates`, `vplates`, `quest_markers`, `world_state`, `loading_screen`, the effect modules (`aura_visual`, `weapon_trail`, `bowstring`, `fishing_line`, `footprints`, …) | ~136k | ~1.4k |
 | `benilla-app-ui` | FrameXML host and feeds, glue screens | `ui_script`, every `ui_*`, `bindings`, `console`, `combat_log`, `char_select`, `char_create`, `realm_select`, `login`, `glue`, `textinput`, `tutorial`, `script_calls`, `experience_ui`, `world_state_ui` | ~234k | ~2.8k |
-| `benilla-app-tools` | capture, harness, dev | `capture`, `addon_harness`, `perf`, `debug_panel`, `dev`, `hover_log`, `showcase_capture` | ~35k | ~100 |
+| `benilla-app-tools` | capture, harness, dev | `capture`, `addon_harness`, `perf`, `debug_panel`, `dev`, `hover_log`, `showcase_capture`, `preflight`, `probe_shield` | ~35k | ~100 |
 | `benilla-app` (root) | assembly | `lib.rs` (`run`, `run_with`), `game_plugins`, the bins, `tests/` | ~1.4k | few |
 
 Dependencies point down only: root → tools → ui → world → net → core. `benilla-ui` (the Lua VM)
@@ -515,9 +515,15 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
    handlers. Nothing in core needs them except `name_persist` and `creature_type` (`NameCache`,
    `CreatureRecord`), which go with them, and `preflight` and `probe_shield`, which are dev
    instruments and belong in tools. With `SelfGuid` and `ServerSaidMessage` moved to `app_core::session`,
-   core has no net edge left. Wire B claims this, and the `MotionPlugin` install.
-2. The symbol-map rewrite for the move step (a script beside `layers.py`, run in each move commit).
-   Wire B claims it.
+   core has no net edge left. Done (Wire B): the layer table above carries the reassignment,
+   `SelfGuid` and `ServerSaidMessage` are in `app_core::session`, and `game_plugins` installs
+   `MotionPlugin` right after `NetPlugin`, with `net`'s `motion` re-exports dropped and their callers
+   repointed by the script below.
+2. The symbol-map rewrite for the move step: `scripts/split/canonical-paths.py`, a dry run by
+   default. It rewrites `crate::<old>::X` through every re-export to the defining path, splits
+   `use` lists, and with `--via <module> --drop-reexports` deletes that module's re-exports.
+   `--home` limits it to one destination. Done (Wire B); its first run moved net's 11 `motion`
+   re-exports (65 paths in 24 files).
 3. `swing_refusal` moves to the world layer, which is a table edit.
 4. Unclaimed, for the manager: `BuildId` to core; the lookup rows (`ui_unit` names and snapshot,
    `ui_macro::identity`, `creature_anim::disarmed_hand`); `LetterTexts`, `LoginIntent`; the 38
@@ -542,7 +548,9 @@ Mechanics for moving layer `X` with modules `m1 … mn`:
 4. In `benilla-app/src/lib.rs`: replace `mod m1;` with `pub use benilla_app_X::m1;` for each.
    `crate::m1::Foo` paths in the modules still in `benilla-app` keep resolving through the
    re-export, so nothing above the moved layer is edited.
-5. Inside the moved files, rewrite references to lower crates:
+5. First run `scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
+   names an item through an upper layer's re-export. Then, inside the moved files, rewrite
+   references to lower crates:
    `sed -i '' -E 's/crate::(core_mod_a|core_mod_b|…)::/benilla_app_core::\1::/g'` over the new
    crate's files, with the alternation listing only the lower layers' modules. References to
    modules of the same layer stay `crate::`.
