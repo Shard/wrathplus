@@ -30,19 +30,7 @@ use super::feed::ChatLog;
 #[derive(Resource)]
 pub(crate) struct ServerMessages(pub(crate) ServerMessagesCatalog);
 
-/// One parked world broadcast, as the wire sent it, awaiting the catalogs and the channel walk.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Broadcast {
-    /// `SMSG_ZONE_UNDER_ATTACK`: the attacked area's `AreaTable.dbc` id.
-    ZoneUnderAttack { area_id: u32 },
-    /// `SMSG_DEFENSE_MESSAGE`: the zone it is about, and the server's text.
-    Defense { zone_id: u32, text: String },
-    /// `SMSG_SERVER_MESSAGE`: a `ServerMessages.dbc` row id and the text for its `%s`.
-    Server { message_type: u32, text: String },
-    /// `SMSG_CHAT_RESTRICTED`, which carries nothing.
-    ChatRestricted,
-}
-
+pub(crate) use crate::app_core::chat::Broadcast;
 /// Load `ServerMessages.dbc`; it must run after `benilla_assets::AssetSet::Open`, or it finds no
 /// patch chain and loads nothing.
 pub(super) fn load_server_messages(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
