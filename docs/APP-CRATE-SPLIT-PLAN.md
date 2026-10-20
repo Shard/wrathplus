@@ -177,3 +177,7 @@ takes seconds and needs no build. Keep it next to this plan when execution start
   defaults and `on_cvar` calls, and pin it with the existing cvar tests.
 - The root crate keeps `game_plugins`, so a whole-client test still rebuilds everything; the
   savings are for edits and tests inside one layer.
+- `app_core::errors::UiErrorTexts` carries `benilla_ui::messages::MsgKind` (found in step 0
+  unit 2a), so a `benilla-app-core` crate would depend on `benilla-ui` and its mlua build. Before
+  the core move, put that plain enum in a small shared crate both can depend on, or mirror it in
+  core; it must stay a plain enum.
