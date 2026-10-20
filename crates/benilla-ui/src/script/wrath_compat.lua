@@ -372,9 +372,8 @@ do
 end
 
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
-SpellCanTargetItem, SpellTargetItem = none, none
-EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
-PickupEquipmentSet, SetMultiCastSpell = none, none
+PickupItem = PickupItem or none
+PickupEquipmentSet = none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 
