@@ -1,10 +1,10 @@
 //! Mouse input: hit order, hover, clicks, double clicks and the release capture.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 
 #[test]
 fn enable_mouse_gates_hit_testing() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -13,10 +13,10 @@ fn enable_mouse_gates_hit_testing() {
         -- transparent to hits; the enabled frame behind it (`a`) must capture.
         local a = CreateFrame("Frame", "A")
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(800); a:SetHeight(600); a:EnableMouse(true)
-        a:SetScript("OnEnter", function() local self = this who = self:GetName() end)
+        a:SetScript("OnEnter", function(self) who = self:GetName() end)
         local b = CreateFrame("Frame", "B")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(800); b:SetHeight(600); b:EnableMouse(false)
-        b:SetScript("OnEnter", function() local self = this who = self:GetName() end)
+        b:SetScript("OnEnter", function(self) who = self:GetName() end)
         -- 1/nil, not a boolean: this is the exact comparison shape that inverts, so the
         -- test asserts it rather than leaning on truthiness.
         assert(a:IsMouseEnabled() == 1 and b:IsMouseEnabled() == nil)
@@ -42,17 +42,17 @@ fn enable_mouse_gates_hit_testing() {
 /// top: `0x764aa0` appends equal keys after (strict `ja`) and `0x7660d0` sweeps from index 0.
 #[test]
 fn hit_order_is_strata_then_level_then_the_earlier_linked_frame() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
         who = nil
         local a = CreateFrame("Frame", "A")
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(800); a:SetHeight(600); a:EnableMouse(true)
-        a:SetScript("OnEnter", function() local self = this who = self:GetName() end)
+        a:SetScript("OnEnter", function(self) who = self:GetName() end)
         local b = CreateFrame("Frame", "B")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(800); b:SetHeight(600); b:EnableMouse(true)
-        b:SetScript("OnEnter", function() local self = this who = self:GetName() end)
+        b:SetScript("OnEnter", function(self) who = self:GetName() end)
     "#,
     )
     .unwrap();
@@ -83,7 +83,7 @@ fn hit_order_is_strata_then_level_then_the_earlier_linked_frame() {
 
 #[test]
 fn mouse_move_fires_enter_then_leave_across_a_boundary_with_correct_self() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -91,8 +91,8 @@ fn mouse_move_fires_enter_then_leave_across_a_boundary_with_correct_self() {
         enter_self_ok, leave_self_ok = false, false
         local a = CreateFrame("Frame", "A")   -- left half only
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
-        a:SetScript("OnEnter", function() local self = this enters = enters + 1; enter_self_ok = (self == a) end)
-        a:SetScript("OnLeave", function() local self = this leaves = leaves + 1; leave_self_ok = (self == a) end)
+        a:SetScript("OnEnter", function(self) enters = enters + 1; enter_self_ok = (self == a) end)
+        a:SetScript("OnLeave", function(self) leaves = leaves + 1; leave_self_ok = (self == a) end)
     "#,
     )
     .unwrap();
@@ -115,17 +115,17 @@ fn mouse_move_fires_enter_then_leave_across_a_boundary_with_correct_self() {
 
 #[test]
 fn onclick_fires_on_press_release_same_frame_not_when_release_lands_elsewhere() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
         clicks_a, clicks_b, click_btn = 0, 0, nil
         local a = CreateFrame("Frame", "A")   -- left half
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
-        a:SetScript("OnClick", function() local self, button, down = this, arg1, arg2 clicks_a = clicks_a + 1; click_btn = button end)
+        a:SetScript("OnClick", function(self, button, down) clicks_a = clicks_a + 1; click_btn = button end)
         local b = CreateFrame("Frame", "B")   -- right half
         b:SetPoint("BOTTOMLEFT", 400, 0); b:SetWidth(400); b:SetHeight(600); b:EnableMouse(true)
-        b:SetScript("OnClick", function() local self, button, down = this, arg1, arg2 clicks_b = clicks_b + 1 end)
+        b:SetScript("OnClick", function(self, button, down) clicks_b = clicks_b + 1 end)
     "#,
     )
     .unwrap();
@@ -161,14 +161,14 @@ fn hidden_or_effective_hidden_frame_never_captures() {
         -- own shown = false
         local own = CreateFrame("Frame", "OwnHidden")
         own:SetPoint("BOTTOMLEFT", 0, 0); own:SetWidth(800); own:SetHeight(600); own:EnableMouse(true)
-        own:SetScript("OnEnter", function() entered = true end)
+        own:SetScript("OnEnter", function(this, arg1, arg2, arg3, arg4) entered = true end)
         own:Hide()
         -- effective-hidden: child is shown but its parent is hidden
         local parent = CreateFrame("Frame", "Par")
         parent:SetPoint("BOTTOMLEFT", 0, 0); parent:SetWidth(800); parent:SetHeight(600)
         local child = CreateFrame("Frame", "Ch", parent)
         child:SetPoint("BOTTOMLEFT", 0, 0); child:SetWidth(800); child:SetHeight(600); child:EnableMouse(true)
-        child:SetScript("OnEnter", function() entered = true end)
+        child:SetScript("OnEnter", function(this, arg1, arg2, arg3, arg4) entered = true end)
         parent:Hide()
     "#,
     )
@@ -189,7 +189,7 @@ fn hidden_or_effective_hidden_frame_never_captures() {
 
 #[test]
 fn mouse_wheel_passes_delta_to_the_captured_frame() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -200,7 +200,7 @@ fn mouse_wheel_passes_delta_to_the_captured_frame() {
         -- XML-load-time only), so a runtime-created frame needs this explicitly, exactly as it
         -- needs EnableMouse. Mouse-enablement alone puts nothing in the wheel index.
         a:EnableMouseWheel(true)
-        a:SetScript("OnMouseWheel", function() local self, delta = this, arg1 wheel = delta end)
+        a:SetScript("OnMouseWheel", function(self, delta) wheel = delta end)
     "#,
     )
     .unwrap();
@@ -224,7 +224,7 @@ fn hit_rect_insets_shrink_the_mouse_rect_only() {
         entered = false
         local a = CreateFrame("Frame", "A")
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(100); a:SetHeight(100); a:EnableMouse(true)
-        a:SetScript("OnEnter", function() entered = true end)
+        a:SetScript("OnEnter", function(this, arg1, arg2, arg3, arg4) entered = true end)
         a:SetHitRectInsets(5, 5, 18, 5)
         local l, r, t, b = a:GetHitRectInsets()
         assert(l == 5 and r == 5 and t == 18 and b == 5)
@@ -337,15 +337,15 @@ fn an_enum_attribute_tolerates_the_whitespace_a_real_addon_ships() {
 
 #[test]
 fn a_second_fast_click_fires_on_double_click_instead_of_the_second_on_click() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
         clicks, doubles, dblbtn = 0, 0, nil
         local b = CreateFrame("Button", "DblB")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(200); b:SetHeight(200); b:EnableMouse(true)
-        b:SetScript("OnClick", function() local self, button = this, arg1 clicks = clicks + 1 end)
-        b:SetScript("OnDoubleClick", function() local self, button = this, arg1 doubles = doubles + 1 dblbtn = button end)
+        b:SetScript("OnClick", function(self, button) clicks = clicks + 1 end)
+        b:SetScript("OnDoubleClick", function(self, button) doubles = doubles + 1 dblbtn = button end)
     "#,
     )
     .unwrap();
@@ -398,7 +398,7 @@ fn a_frame_with_no_double_click_handler_keeps_every_rapid_on_click() {
         clicks = 0
         local b = CreateFrame("Button", "NoDbl")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(200); b:SetHeight(200); b:EnableMouse(true)
-        b:SetScript("OnClick", function() clicks = clicks + 1 end)
+        b:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) clicks = clicks + 1 end)
     "#,
     )
     .unwrap();
@@ -423,8 +423,8 @@ fn the_double_click_boundary_is_time_and_frame_and_clicks_pair_up() {
         r#"
         clicks, doubles = 0, 0
         local function watch(f)
-            f:SetScript("OnClick", function() clicks = clicks + 1 end)
-            f:SetScript("OnDoubleClick", function() doubles = doubles + 1 end)
+            f:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4) clicks = clicks + 1 end)
+            f:SetScript("OnDoubleClick", function(this, arg1, arg2, arg3, arg4) doubles = doubles + 1 end)
         end
         local a = CreateFrame("Button", "DblA")
         a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(100); a:SetHeight(100); a:EnableMouse(true); watch(a)
@@ -475,7 +475,7 @@ fn the_double_click_boundary_is_time_and_frame_and_clicks_pair_up() {
 /// double click across them, and `arg1` is the second click's button.
 #[test]
 fn a_multi_registered_button_pairs_a_left_click_with_a_right_one() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -483,7 +483,7 @@ fn a_multi_registered_button_pairs_a_left_click_with_a_right_one() {
         local b = CreateFrame("Button", "MixDbl")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(200); b:SetHeight(200); b:EnableMouse(true)
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        b:SetScript("OnDoubleClick", function() local self, button = this, arg1 doubles = doubles + 1 dblbtn = button end)
+        b:SetScript("OnDoubleClick", function(self, button) doubles = doubles + 1 dblbtn = button end)
     "#,
     )
     .unwrap();
@@ -514,7 +514,7 @@ fn a_half_finished_double_click_survives_the_cursor_leaving_the_window() {
         doubles = 0
         local b = CreateFrame("Button", "LeaveDbl")
         b:SetPoint("BOTTOMLEFT", 0, 0); b:SetWidth(200); b:SetHeight(200); b:EnableMouse(true)
-        b:SetScript("OnDoubleClick", function() doubles = doubles + 1 end)
+        b:SetScript("OnDoubleClick", function(this, arg1, arg2, arg3, arg4) doubles = doubles + 1 end)
     "#,
     )
     .unwrap();
@@ -542,7 +542,7 @@ fn set_script_on_double_click_is_accepted_because_something_fires_it() {
         ran = false
         Btn = CreateFrame("Button", "DblAccepted")
         Btn:SetPoint("BOTTOMLEFT", 0, 0); Btn:SetWidth(100); Btn:SetHeight(100); Btn:EnableMouse(true)
-        Btn:SetScript("OnDoubleClick", function() ran = true end)
+        Btn:SetScript("OnDoubleClick", function(this, arg1, arg2, arg3, arg4) ran = true end)
     "#,
     )
     .unwrap();
@@ -559,20 +559,13 @@ fn set_script_on_double_click_is_accepted_because_something_fires_it() {
     assert!(s.eval::<bool>("return ran").unwrap(), "…and it FIRED");
 }
 
-/// Script names nothing fires still raise; a name leaves this list only when something fires it.
+/// A script kind no 12340 widget has raises by name rather than being accepted silently.
 #[test]
-fn the_unfired_script_kinds_still_raise_rather_than_silently_accepting() {
-    let s = vanilla_script();
+fn an_unknown_script_kind_raises_by_name() {
+    let s = script();
     s.run(r#"Raiser = CreateFrame("EditBox", "RaiserBox")"#)
         .unwrap();
-    for name in [
-        // A 2.0 secure-frame slot; no 1.12 resolver has it.
-        "OnAttributeChanged",
-        // Real 1.12 slots that benilla does not fire.
-        "OnHyperlinkEnter",
-        "OnMessageScrollChanged",
-        "OnInputLanguageChanged",
-    ] {
+    for name in ["OnNoSuchScript", "OnClickTwice"] {
         let err = s
             .run(&format!(r#"Raiser:SetScript("{name}", function() end)"#))
             .unwrap_err();
@@ -596,8 +589,8 @@ fn hiding_the_hovered_frame_fires_its_onleave_before_onhide() {
         win:SetPoint("BOTTOMLEFT", 0, 0); win:SetWidth(800); win:SetHeight(600)
         local slot = CreateFrame("Button", "Slot", win)
         slot:SetPoint("BOTTOMLEFT", 100, 100); slot:SetWidth(100); slot:SetHeight(100); slot:EnableMouse(true)
-        slot:SetScript("OnLeave", function() table.insert(log, "leave") end)
-        slot:SetScript("OnHide", function() table.insert(log, "hide") end)
+        slot:SetScript("OnLeave", function(this, arg1, arg2, arg3, arg4) table.insert(log, "leave") end)
+        slot:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4) table.insert(log, "hide") end)
     "#,
     )
     .unwrap();
@@ -623,8 +616,8 @@ fn hiding_a_hovered_disabled_button_fires_onhide_but_no_onleave() {
         log = {}
         local slot = CreateFrame("Button", "Slot")
         slot:SetPoint("BOTTOMLEFT", 100, 100); slot:SetWidth(100); slot:SetHeight(100); slot:EnableMouse(true)
-        slot:SetScript("OnLeave", function() table.insert(log, "leave") end)
-        slot:SetScript("OnHide", function() table.insert(log, "hide") end)
+        slot:SetScript("OnLeave", function(this, arg1, arg2, arg3, arg4) table.insert(log, "leave") end)
+        slot:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4) table.insert(log, "hide") end)
         slot:Disable()
     "#,
     )
@@ -650,7 +643,7 @@ fn hiding_an_unhovered_frame_fires_no_onleave() {
         leaves = 0
         local a = CreateFrame("Button", "Away")
         a:SetPoint("BOTTOMLEFT", 500, 500); a:SetWidth(50); a:SetHeight(50); a:EnableMouse(true)
-        a:SetScript("OnLeave", function() leaves = leaves + 1 end)
+        a:SetScript("OnLeave", function(this, arg1, arg2, arg3, arg4) leaves = leaves + 1 end)
     "#,
     )
     .unwrap();
@@ -673,10 +666,10 @@ fn the_repick_re_hovers_without_a_mouse_move() {
         entered = {}
         local under = CreateFrame("Button", "Under")
         under:SetPoint("BOTTOMLEFT", 100, 100); under:SetWidth(100); under:SetHeight(100); under:EnableMouse(true)
-        under:SetScript("OnEnter", function() table.insert(entered, "under") end)
+        under:SetScript("OnEnter", function(this, arg1, arg2, arg3, arg4) table.insert(entered, "under") end)
         local over = CreateFrame("Button", "Over")
         over:SetPoint("BOTTOMLEFT", 100, 100); over:SetWidth(100); over:SetHeight(100); over:EnableMouse(true)
-        over:SetScript("OnEnter", function() table.insert(entered, "over") end)
+        over:SetScript("OnEnter", function(this, arg1, arg2, arg3, arg4) table.insert(entered, "over") end)
         -- Say "on top" with the LEVEL, not with declaration order: at equal levels the sweep takes
         -- the earlier-linked frame (`Under`), which is the tie law, not what this test is about.
         over:SetFrameLevel(10)
@@ -708,7 +701,7 @@ fn the_repick_re_hovers_without_a_mouse_move() {
 
 /// Two side-by-side frames, each recording every `OnMouseDown`/`OnMouseUp` it gets.
 fn two_frames() -> crate::script::UiScript {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -716,8 +709,8 @@ fn two_frames() -> crate::script::UiScript {
         local function mk(name, x)
             local f = CreateFrame("Frame", name)
             f:SetPoint("BOTTOMLEFT", x, 200); f:SetWidth(200); f:SetHeight(200); f:EnableMouse(true)
-            f:SetScript("OnMouseDown", function() local self = this table.insert(log, self:GetName()..":down") end)
-            f:SetScript("OnMouseUp", function() local self = this table.insert(log, self:GetName()..":up") end)
+            f:SetScript("OnMouseDown", function(self) table.insert(log, self:GetName()..":down") end)
+            f:SetScript("OnMouseUp", function(self) table.insert(log, self:GetName()..":up") end)
             return f
         end
         mk("A", 100)
@@ -791,7 +784,7 @@ fn the_capture_is_per_button() {
 /// `0x76b6f0`). It still takes the hover: the walk sets `[root+0x7c]` before the notify.
 #[test]
 fn a_disabled_button_takes_the_hover_but_fires_no_enter_or_leave() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -799,8 +792,8 @@ fn a_disabled_button_takes_the_hover_but_fires_no_enter_or_leave() {
         local function mk(name, x)
             local b = CreateFrame("Button", name)
             b:SetPoint("BOTTOMLEFT", x, 0); b:SetWidth(100); b:SetHeight(100); b:EnableMouse(true)
-            b:SetScript("OnEnter", function() local self = this table.insert(log, self:GetName()..":enter") end)
-            b:SetScript("OnLeave", function() local self = this table.insert(log, self:GetName()..":leave") end)
+            b:SetScript("OnEnter", function(self) table.insert(log, self:GetName()..":enter") end)
+            b:SetScript("OnLeave", function(self) table.insert(log, self:GetName()..":leave") end)
             return b
         end
         Off = mk("Off", 0)
