@@ -3,12 +3,7 @@
 //! keep ordered receipts as well as the latest snapshot so a feed cannot coalesce packet edges.
 use benilla_protocol::wrath_instance::RaidInstanceInfo;
 
-#[derive(Default)]
-pub(crate) struct NativeSavedInstances {
-    pub(crate) snapshot: Option<RaidInstanceInfo>,
-    pub(crate) receipts: Vec<RaidInstanceInfo>,
-}
-
+pub(crate) use crate::app_core::group::NativeSavedInstances;
 impl NativeSavedInstances {
     pub(super) fn receive(&mut self, info: RaidInstanceInfo) {
         self.snapshot = Some(info.clone());
@@ -38,9 +33,17 @@ mod tests {
             body.extend(row.reset_seconds.to_le_bytes());
         }
         let WrathDispatch::Handled { session_events, .. } = WrathEventAdapter::new()
-            .dispatch_packet(&WrathServerPacket { opcode: 0x2cc, body }, 1)
+            .dispatch_packet(
+                &WrathServerPacket {
+                    opcode: 0x2cc,
+                    body,
+                },
+                1,
+            )
             .unwrap()
-        else { panic!("saved-instance opcode not handled"); };
+        else {
+            panic!("saved-instance opcode not handled");
+        };
         assert_eq!(session_events.len(), 1);
         dispatch(app.world_mut(), session_events);
     }
@@ -56,7 +59,10 @@ mod tests {
             extended: 128,
             reset_seconds: 0x8000_0001,
         };
-        let other = SavedInstance { map: 1, ..row.clone() };
+        let other = SavedInstance {
+            map: 1,
+            ..row.clone()
+        };
         receipt(&mut app, &[row.clone(), other.clone(), row.clone()]);
         receipt(&mut app, &[]);
         receipt(&mut app, &[]);
@@ -72,19 +78,35 @@ mod tests {
     #[test]
     fn group_leave_keeps_native_lockouts_but_disconnect_clears_snapshot_and_receipts() {
         let mut app = crate::game_plugins::schedule_tests::headless_client();
-        assert!(app.world().resource::<GroupState>().wrath_saved_instances.snapshot.is_none());
+        assert!(app
+            .world()
+            .resource::<GroupState>()
+            .wrath_saved_instances
+            .snapshot
+            .is_none());
         receipt(&mut app, &[]);
         app.world_mut().resource_mut::<GroupState>().leave_group();
         let group = app.world().resource::<GroupState>();
         assert!(group.wrath_saved_instances.snapshot.is_some());
         assert_eq!(group.wrath_saved_instances.receipts.len(), 1);
-        dispatch(app.world_mut(), vec![SessionEvent::Disconnected {
-            reason: "fixture".into(), end: SessionEnd::Lost,
-        }]);
+        dispatch(
+            app.world_mut(),
+            vec![SessionEvent::Disconnected {
+                reason: "fixture".into(),
+                end: SessionEnd::Lost,
+            }],
+        );
         let group = app.world().resource::<GroupState>();
         assert!(group.wrath_saved_instances.snapshot.is_none());
         assert!(group.wrath_saved_instances.receipts.is_empty());
         receipt(&mut app, &[]);
-        assert_eq!(app.world().resource::<GroupState>().wrath_saved_instances.receipts.len(), 1);
+        assert_eq!(
+            app.world()
+                .resource::<GroupState>()
+                .wrath_saved_instances
+                .receipts
+                .len(),
+            1
+        );
     }
 }

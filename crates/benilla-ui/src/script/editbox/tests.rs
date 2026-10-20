@@ -6,9 +6,6 @@ fn script() -> UiScript {
     UiScript::new().expect("construct UiScript")
 }
 
-fn vanilla_script() -> UiScript {
-    UiScript::new_vanilla().expect("construct UiScript")
-}
 
 /// UP and DOWN, which recall history in a single-line box.
 const UP: EditAction = EditAction::Move {
@@ -172,7 +169,7 @@ fn set_focus_on_hidden_box_is_a_noop() {
         r#"
         gained = 0
         E = CreateFrame("EditBox", "E")
-        E:SetScript("OnEditFocusGained", function() gained = gained + 1 end)
+        E:SetScript("OnEditFocusGained", function(this, arg1, arg2, arg3, arg4) gained = gained + 1 end)
         E:Hide()
         E:SetFocus()
     "#,
@@ -199,8 +196,8 @@ fn click_focuses_regardless_of_autofocus_and_transition_order_is_lost_then_gaine
             f:SetAutoFocus(autoFocus)
             f:SetPoint("BOTTOMLEFT", nil, "BOTTOMLEFT", 0, y)
             f:SetWidth(100); f:SetHeight(20)
-            f:SetScript("OnEditFocusGained", function() table.insert(log, "gained"..name) end)
-            f:SetScript("OnEditFocusLost", function() table.insert(log, "lost"..name) end)
+            f:SetScript("OnEditFocusGained", function(this, arg1, arg2, arg3, arg4) table.insert(log, "gained"..name) end)
+            f:SetScript("OnEditFocusLost", function(this, arg1, arg2, arg3, arg4) table.insert(log, "lost"..name) end)
         end
         wire("A", 0, true)     -- rect bottom 0..20
         wire("B", 100, false)  -- rect bottom 100..120: a click focuses it without autoFocus
@@ -242,7 +239,7 @@ fn edits_between_two_flushes_coalesce_into_one_ontextchanged() {
     s.tick(0.0);
     s.run(
         r#"
-        E:SetScript("OnTextChanged", function() changed = changed + 1 seen = E:GetText() end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) changed = changed + 1 seen = E:GetText() end)
         E:Insert("a") E:Insert("b") E:Insert("c")
     "#,
     )
@@ -275,8 +272,8 @@ fn set_text_fires_ontextset_at_once_and_ontextchanged_at_the_drain() {
         r#"
         log = {}
         E = CreateFrame("EditBox", "E")
-        E:SetScript("OnTextSet", function() table.insert(log, "set") end)
-        E:SetScript("OnTextChanged", function() table.insert(log, "changed") end)
+        E:SetScript("OnTextSet", function(this, arg1, arg2, arg3, arg4) table.insert(log, "set") end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) table.insert(log, "changed") end)
         E:SetText("hi")     -- fires set NOW, marks changed for the drain
         E:SetText("hi")     -- unchanged → short-circuit, no events at all
         E:SetText("bye")    -- fires set NOW; the pending change simply becomes "bye"
@@ -319,8 +316,8 @@ fn a_non_digit_typed_over_a_numeric_selection_deletes_it() {
         E = CreateFrame("EditBox", "E")
         E:SetNumeric(true)
         E:SetText("125")
-        E:SetScript("OnChar", function() CHARS = CHARS + 1 end)
-        E:SetScript("OnTextChanged", function() CHANGES = CHANGES + 1 end)
+        E:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) CHARS = CHARS + 1 end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) CHANGES = CHANGES + 1 end)
         E:SetFocus()
         E:HighlightText()
     "#,
@@ -382,7 +379,7 @@ fn paste_inserts_at_the_cursor_and_replaces_the_selection() {
         r#"
         changed = 0
         E = CreateFrame("EditBox", "E")
-        E:SetScript("OnTextChanged", function() changed = changed + 1 end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) changed = changed + 1 end)
         E:SetText("ab")
         E:SetFocus()
     "#,
@@ -455,7 +452,7 @@ fn paste_does_not_fire_onspacepressed() {
         r#"
         spaces = 0
         E = CreateFrame("EditBox", "E")
-        E:SetScript("OnSpacePressed", function() spaces = spaces + 1 end)
+        E:SetScript("OnSpacePressed", function(this, arg1, arg2, arg3, arg4) spaces = spaces + 1 end)
         E:SetFocus()
     "#,
     )
@@ -495,10 +492,10 @@ fn enter_escape_tab_space_fire_their_slots() {
         r#"
         log = {}
         E = CreateFrame("EditBox", "E")
-        E:SetScript("OnEnterPressed", function() table.insert(log, "enter") end)
-        E:SetScript("OnEscapePressed", function() table.insert(log, "escape") end)
-        E:SetScript("OnTabPressed", function() table.insert(log, "tab") end)
-        E:SetScript("OnSpacePressed", function() table.insert(log, "space") end)
+        E:SetScript("OnEnterPressed", function(this, arg1, arg2, arg3, arg4) table.insert(log, "enter") end)
+        E:SetScript("OnEscapePressed", function(this, arg1, arg2, arg3, arg4) table.insert(log, "escape") end)
+        E:SetScript("OnTabPressed", function(this, arg1, arg2, arg3, arg4) table.insert(log, "tab") end)
+        E:SetScript("OnSpacePressed", function(this, arg1, arg2, arg3, arg4) table.insert(log, "space") end)
         E:SetFocus()
     "#,
     )
@@ -527,7 +524,7 @@ fn multiline_enter_inserts_a_newline_without_onspacepressed() {
         spaces = 0
         E = CreateFrame("EditBox", "E")
         E:SetMultiLine(true)
-        E:SetScript("OnSpacePressed", function() spaces = spaces + 1 end)
+        E:SetScript("OnSpacePressed", function(this, arg1, arg2, arg3, arg4) spaces = spaces + 1 end)
         E:SetFocus()
     "#,
     )
@@ -667,13 +664,13 @@ fn typing_fires_the_generic_on_char_with_what_was_inserted() {
     // The box's input vtable does not chain to the base, but Insert fires the generic `OnChar`
     // (`+0x180`) at `0x77c13c`, through the varargs firer `0x7026f0` (not the fixed-arity
     // `0x702690`) with the inserted string.
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         got = {}
         E = CreateFrame("EditBox", "E")
         E:EnableKeyboard(true)
-        E:SetScript("OnChar", function() table.insert(got, arg1) end)
+        E:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) table.insert(got, arg1) end)
         E:SetFocus()
     "#,
     )
@@ -706,7 +703,7 @@ fn key_paths_never_fire_the_generic_on_key_down() {
         fired = 0
         E = CreateFrame("EditBox", "E")
         E:EnableKeyboard(true)
-        E:SetScript("OnKeyDown", function() fired = fired + 1 end)
+        E:SetScript("OnKeyDown", function(this, arg1, arg2, arg3, arg4) fired = fired + 1 end)
         E:SetFocus()
     "#,
     )
@@ -1565,7 +1562,7 @@ fn set_max_bytes_caps_the_buffer_in_bytes_with_minus_one_unlimited() {
 /// distance down.
 #[test]
 fn the_caret_flush_fires_on_cursor_changed_with_the_references_four_args() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -1574,7 +1571,7 @@ fn the_caret_flush_fires_on_cursor_changed_with_the_references_four_args() {
         E:SetWidth(200); E:SetHeight(64)
         E:SetPoint("BOTTOMLEFT", 100, 50)
         E:SetMultiLine(true)
-        E:SetScript("OnCursorChanged", function()
+        E:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4)
             table.insert(fires, { x = arg1, y = arg2, w = arg3, h = arg4 })
         end)
         E:SetFocus()
