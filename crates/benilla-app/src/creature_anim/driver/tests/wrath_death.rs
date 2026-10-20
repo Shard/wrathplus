@@ -10,8 +10,8 @@ use benilla_world::rig_anim::RigPose;
 use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle};
 use bevy::animation::RepeatAnimation;
 
-fn fixture(dialect: SessionDialect) -> App {
-    let mut app = app_with_dialect(dialect).0;
+fn fixture() -> App {
+    let mut app = app_with_net().0;
     benilla_world::rig_anim::plugin(&mut app);
     app
 }
@@ -148,7 +148,7 @@ fn witnessed_death(app: &mut App, duration: f32) -> Entity {
 
 #[test]
 fn wrath_witnessed_death_holds_terminal_pose_across_many_clip_periods() {
-    let mut app = fixture(SessionDialect::Wrath12340);
+    let mut app = fixture();
     let unit = witnessed_death(&mut app, 1.0);
     advance(&mut app, 1000);
     assert_held(&app, unit, 1.0);
@@ -162,7 +162,7 @@ fn wrath_witnessed_death_holds_terminal_pose_across_many_clip_periods() {
 
 #[test]
 fn wrath_streamed_corpse_with_omitted_zero_health_starts_at_terminal_pose() {
-    let mut app = fixture(SessionDialect::Wrath12340);
+    let mut app = fixture();
     let store = ObjectStore(
         ObjectFields::from_pairs(&[(FIELD_UNIT_MAXHEALTH, 100)])
             .into_created(benilla_protocol::messages::ObjectType::Unit),
@@ -178,7 +178,7 @@ fn wrath_streamed_corpse_with_omitted_zero_health_starts_at_terminal_pose() {
 
 #[test]
 fn wrath_feign_death_holds_then_releases_when_the_server_flag_clears() {
-    let mut app = fixture(SessionDialect::Wrath12340);
+    let mut app = fixture();
     let unit = spawn(&mut app, fields(100, 0), 1.0, true);
     app.update();
     app.world_mut()
@@ -225,7 +225,7 @@ fn installed_wrath_wolf_death_residency_cannot_request_perpetual_corpse_playback
         .iter()
         .find(|s| s.anim_id == 1)
         .expect("Death");
-    let mut app = fixture(SessionDialect::Wrath12340);
+    let mut app = fixture();
     let unit = spawn(
         &mut app,
         fields(100, 0),

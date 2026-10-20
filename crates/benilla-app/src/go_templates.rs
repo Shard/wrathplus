@@ -6,7 +6,7 @@ use benilla_formats::{LockCatalog, LockTypeCatalog};
 use benilla_protocol::guid;
 use bevy::prelude::*;
 
-use crate::net::{ClientCommand, NetCommands, SessionDialect};
+use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;
 
 /// `Lock.dbc`: decides use against cast, and which `LockType` the opener spell must match.
@@ -76,20 +76,9 @@ pub(crate) struct TextPage {
 }
 
 /// Entry to template, asked once per connection.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub(crate) struct GameObjectTemplates {
     templates: QueryCache<u32, GoTemplate>,
-    /// The active wire dialect, build 12340 by default.
-    dialect: SessionDialect,
-}
-
-impl Default for GameObjectTemplates {
-    fn default() -> Self {
-        Self {
-            templates: QueryCache::default(),
-            dialect: SessionDialect::Wrath12340,
-        }
-    }
 }
 
 impl crate::query_cache::AskOnce for GameObjectTemplates {
@@ -108,17 +97,13 @@ impl GameObjectTemplates {
             return;
         }
         let command = ClientCommand::GameObjectQuery { entry, guid };
-        if !commands.supports(self.dialect, &command) {
+        if !commands.supports(&command) {
             return;
         }
         self.templates.get_or_ask(entry, || {
             debug!("go: asking template (entry {entry}, guid {guid:#x})");
             let _ = commands.0.send(command);
         });
-    }
-
-    pub(crate) fn set_dialect(&mut self, dialect: SessionDialect) {
-        self.dialect = dialect;
     }
 
     /// Records a `SMSG_GAMEOBJECT_QUERY_RESPONSE`; a miss arrives zeroed, so no lock.
@@ -199,10 +184,7 @@ mod tests {
     fn wrath_template_miss_asks_once() {
         let (tx, rx) = crossbeam_channel::unbounded();
         let commands = NetCommands(tx);
-        let templates = GameObjectTemplates {
-            dialect: SessionDialect::Wrath12340,
-            ..default()
-        };
+        let templates = GameObjectTemplates::default();
         let guid = 0xF110_0000_0000_0000 | (1731u64 << 24) | 0x40;
 
         templates.request(guid, &commands);

@@ -25,6 +25,11 @@ pub(crate) struct ChatDrain;
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct InWorldGated;
 
+/// The wire drain, `net::apply_net_updates` alone: what a core system that reads this frame's
+/// packets orders after.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct NetDrain;
+
 /// The player-UI feed phase, after [`benilla_world::schedule::WorldStage::Net`] and ungated
 /// ([`UnitFeed`] is the gated sub-phase): every push this frame's tick must see, as in the
 /// reference's frame, where packet dispatch precedes every `FrameScript_SignalEvent` and both

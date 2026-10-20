@@ -9,12 +9,12 @@ use bevy::animation::RepeatAnimation;
 const SWORD: u16 = 18;
 const SPAN: f32 = 1.0;
 
-fn fixture(dialect: SessionDialect, replay: (u32, u32)) -> (App, Entity) {
-    fixture_with_clock(dialect, replay, SPAN)
+fn fixture(replay: (u32, u32)) -> (App, Entity) {
+    fixture_with_clock(replay, SPAN)
 }
 
-fn fixture_with_clock(dialect: SessionDialect, replay: (u32, u32), span: f32) -> (App, Entity) {
-    let mut app = app_with_dialect(dialect).0;
+fn fixture_with_clock(replay: (u32, u32), span: f32) -> (App, Entity) {
+    let mut app = app_with_net().0;
     benilla_world::rig_anim::plugin(&mut app);
     let mut graph = AnimationGraph::new();
     let root = graph.root;
@@ -212,7 +212,7 @@ fn transplant_then_stop(app: &mut App, unit: Entity) {
 
 #[test]
 fn wrath_turn_transplant_finishes_and_fades_back_to_ready_then_stand() {
-    let (mut app, unit) = fixture(SessionDialect::Wrath12340, (0, 0));
+    let (mut app, unit) = fixture((0, 0));
     transplant_then_stop(&mut app, unit);
     advance(&mut app, 700); // PostUpdate marks completion; Update observes it next frame
     app.update();
@@ -241,7 +241,7 @@ fn wrath_turn_transplant_finishes_and_fades_back_to_ready_then_stand() {
 
 #[test]
 fn wrath_moving_sword_is_not_released_early_and_finishes_after_stopping() {
-    let (mut app, unit) = fixture(SessionDialect::Wrath12340, (0, 0));
+    let (mut app, unit) = fixture((0, 0));
     app.world_mut().entity_mut(unit).insert(MovementState {
         flags: move_flags::FORWARD,
         speed: 7.0,
@@ -271,7 +271,7 @@ fn wrath_moving_sword_is_not_released_early_and_finishes_after_stopping() {
 
 #[test]
 fn wrath_counted_overlay_waits_for_its_armed_replay_budget() {
-    let (mut app, unit) = fixture(SessionDialect::Wrath12340, (3, 3));
+    let (mut app, unit) = fixture((3, 3));
     app.world_mut().entity_mut(unit).insert(MovementState {
         flags: move_flags::FORWARD,
         speed: 7.0,
@@ -309,7 +309,7 @@ fn wrath_counted_overlay_waits_for_its_armed_replay_budget() {
 
 #[test]
 fn wrath_explicit_cast_hold_still_repeats_until_the_hold_ends() {
-    let (mut app, unit) = fixture(SessionDialect::Wrath12340, (0, 0));
+    let (mut app, unit) = fixture((0, 0));
     app.world_mut().entity_mut(unit).insert((
         MovementState {
             flags: move_flags::FORWARD,
@@ -398,7 +398,7 @@ fn installed_wrath_human_sword_residency_is_not_an_overlay_release_policy() {
     );
     assert_eq!(sequence.duration, duration_ms as f32 / 1000.0);
     assert_eq!((sequence.min_replay, sequence.max_replay), replay);
-    let (mut app, unit) = fixture_with_clock(SessionDialect::Wrath12340, replay, sequence.duration);
+    let (mut app, unit) = fixture_with_clock(replay, sequence.duration);
     transplant_then_stop(&mut app, unit);
     advance(&mut app, u64::from(duration_ms).max(2000));
     app.update();
@@ -408,7 +408,7 @@ fn installed_wrath_human_sword_residency_is_not_an_overlay_release_policy() {
 
 #[test]
 fn wrath_rearm_during_sword_release_drops_only_the_outgoing_twin() {
-    let (mut app, unit) = fixture(SessionDialect::Wrath12340, (0, 0));
+    let (mut app, unit) = fixture((0, 0));
     transplant_then_stop(&mut app, unit);
     advance(&mut app, 700);
     app.update();

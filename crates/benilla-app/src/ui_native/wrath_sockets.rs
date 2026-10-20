@@ -11,13 +11,13 @@
 //! `EndBoundTradeable("gem")` (`0x523370`, `0x5233d0` → `0x5c4ff0`), sends `CMSG_SOCKET_GEMS`.
 //! Labelled: which prompt `AcceptSockets` checks first is not traced (refund first here).
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, Objects, SelfPlayer};
+pub(crate) use crate::net::wrath_inventory_capture::{SocketSession, SocketTemplates, SOCKETS};
+use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_formats::gems::{
     GemCatalog, SOCKET_COLOR_BLUE, SOCKET_COLOR_META, SOCKET_COLOR_RED, SOCKET_COLOR_YELLOW,
 };
 use benilla_protocol::wrath_inventory::{Command, Packet};
-use benilla_protocol::wrath_items::{SocketMetadata, ITEM_SOCKET_BLOCKS};
-use benilla_protocol::{SessionEvent, SessionEventKind};
+use benilla_protocol::wrath_items::SocketMetadata;
 use benilla_ui::script::{
     ItemServiceRequest, ScriptDialect, ScriptValue, SocketGemView, SocketRequest,
     SocketSessionView, SocketSlotView, UiScript,
@@ -34,11 +34,6 @@ const ITEM_FIELD_FLAG_REFUNDABLE: u32 = 0x0000_1000;
 const PLAYER_ARRAY: u8 = 255;
 const BACKPACK_FIRST: u8 = 23;
 const BAG_SLOT_FIRST: u8 = 19;
-const SOCKETS: usize = ITEM_SOCKET_BLOCKS;
-
-/// Each template's socket blocks, by entry, as the item query answers them.
-#[derive(Resource, Default)]
-pub(crate) struct SocketTemplates(HashMap<u32, SocketMetadata>);
 
 #[derive(Resource)]
 pub(crate) struct Gems(GemCatalog);
@@ -47,25 +42,14 @@ pub(crate) struct Gems(GemCatalog);
 #[derive(Resource, Default)]
 pub(crate) struct SocketResume(pub(crate) u32);
 
-#[derive(Resource, Default)]
-pub(crate) struct SocketSession {
-    /// The item being socketed, while the window is open.
-    item: Option<u64>,
-    /// Gems placed this session, by socket, not yet accepted.
-    new: [Option<u64>; SOCKETS],
-}
-
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<SocketTemplates>()
-        .init_resource::<SocketSession>()
-        .init_resource::<SocketResume>()
-        .net_handler(SessionEventKind::WrathItemSocketMetadata, on_template)
+    app.init_resource::<SocketResume>()
         .add_systems(Startup, load.after(benilla_assets::AssetSet::Open))
         .add_systems(
             Update,
             (
                 feed_sockets
-                    .after(crate::net::wrath_equipment_sets::feed_equipment_sets)
+                    .after(super::wrath_equipment_sets::feed_equipment_sets)
                     .after(crate::ui_guild_bank::feed_guild_bank),
                 feed_item_gems,
             )
@@ -136,16 +120,6 @@ fn load(mut commands: Commands, assets: Option<Res<benilla_assets::WorldAssets>>
     match benilla_formats::gems::load_gem_catalog(&mut chain) {
         Ok(gems) => commands.insert_resource(Gems(gems)),
         Err(e) => warn!("gem tables unavailable, sockets show no existing gems: {e:#}"),
-    }
-}
-
-fn on_template(In(event): In<SessionEvent>, mut templates: ResMut<SocketTemplates>) {
-    if let SessionEvent::WrathItemSocketMetadata {
-        entry,
-        metadata: Some(metadata),
-    } = event
-    {
-        templates.0.insert(entry, metadata);
     }
 }
 
@@ -424,11 +398,6 @@ fn apply(
             None
         }
     }
-}
-
-/// A session boundary closes the window's session; templates and gem tables stay.
-pub(crate) fn clear(session: &mut SocketSession) {
-    *session = SocketSession::default();
 }
 
 #[cfg(test)]

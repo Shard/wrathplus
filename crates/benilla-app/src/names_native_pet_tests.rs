@@ -47,9 +47,6 @@ fn empty_evicts_answer_and_pending_allows_later_explicit_requery_without_auto_re
     let mut app = app();
     let (tx, rx) = crossbeam_channel::unbounded();
     let commands = crate::net::NetCommands(tx);
-    app.world_mut()
-        .resource_mut::<NameCache>()
-        .set_dialect(SessionDialect::Wrath12340);
     assert!(app
         .world()
         .resource::<NameCache>()

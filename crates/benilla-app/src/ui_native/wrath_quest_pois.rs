@@ -1,28 +1,18 @@
 //! Native quest POIs and PvP-kill ticks. As the reference's quest-log rebuild (`0x5e6940`) does,
 //! every logged quest without POI data is asked once with `CMSG_QUEST_POI_QUERY` (at most
-//! [`MAX_POI_QUERY`] ids a packet). Each `SMSG_QUEST_POI_QUERY_RESPONSE` merges into [`QuestPois`],
-//! the logged quests' POIs go to `set_wrath_quest_pois` whole, and `QUEST_POI_UPDATE` fires.
+//! [`MAX_POI_QUERY`] ids a packet). Each `SMSG_QUEST_POI_QUERY_RESPONSE` merges into [`QuestPois`]
+//! (`crate::net::wrath_quest_pois`), the logged quests' POIs go to `set_wrath_quest_pois` whole,
+//! and `QUEST_POI_UPDATE` fires.
 //! Labelled: that event (id `0x297`) fires once per response here; its native fire site is not
 //! traced (the quest module's only `push 0x297` is `0x5e7628`, unverified). A PvP-kill tick
 //! re-asks the givers' markers, as `SMSG_QUESTUPDATE_ADD_KILL` does; its count lives in the
 //! quest-log slot (`crate::ui_quest_log`), whose diff toasts it.
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, SelfPlayer};
-use benilla_protocol::wrath_quest::{Command, Packet, Poi, MAX_POI_QUERY};
-use benilla_protocol::{SessionEvent, SessionEventKind};
+pub(crate) use crate::net::wrath_quest_pois::QuestPois;
+use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
+use benilla_protocol::wrath_quest::{Command, MAX_POI_QUERY};
 use benilla_ui::script::{ScriptDialect, UiScript, WrathQuestPoi, WrathQuestPoiBlob};
 use bevy::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
-
-#[derive(Resource, Default)]
-pub(crate) struct QuestPois {
-    /// Each answered quest's POIs; empty for a quest the server has none for, which is not asked
-    /// again.
-    known: BTreeMap<u32, Vec<Poi>>,
-    /// Asked and not yet answered.
-    asked: BTreeSet<u32>,
-    /// A response landed since the last feed: `QUEST_POI_UPDATE` is due.
-    pub(crate) fresh: bool,
-}
+use std::collections::BTreeSet;
 
 impl QuestPois {
     /// The logged quests to ask for, in log order, in packets of at most [`MAX_POI_QUERY`]; they
@@ -61,52 +51,12 @@ impl QuestPois {
 }
 
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<QuestPois>()
-        .net_handler(SessionEventKind::WrathQuest, receive)
-        .net_handler(SessionEventKind::Connected, clear)
-        .net_handler(SessionEventKind::Disconnected, clear)
-        .add_systems(
-            Update,
-            feed_quest_pois
-                .in_set(crate::ui_script::UiFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
-        );
-}
-
-fn receive(
-    In(event): In<SessionEvent>,
-    mut pois: ResMut<QuestPois>,
-    mut quest: ResMut<crate::ui_quest::QuestGiver>,
-) {
-    let SessionEvent::WrathQuest { packet } = event else {
-        return;
-    };
-    match packet {
-        Packet::PoiResponse { quests } => {
-            for entry in quests {
-                pois.asked.remove(&entry.quest);
-                pois.known.insert(entry.quest, entry.pois);
-            }
-            pois.fresh = true;
-        }
-        Packet::PvpKill {
-            quest: id,
-            current,
-            required,
-        } => {
-            debug!("net: quest {id} PvP kills at {current}/{required}");
-            quest.bump_reask();
-        }
-    }
-}
-
-fn clear(In(event): In<SessionEvent>, mut pois: ResMut<QuestPois>) {
-    if matches!(
-        event,
-        SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
-    ) {
-        *pois = QuestPois::default();
-    }
+    app.add_systems(
+        Update,
+        feed_quest_pois
+            .in_set(crate::ui_script::UiFeed)
+            .run_if(crate::ui_script::ingame_ui_up),
+    );
 }
 
 /// The quest ids in the player's log slots, in slot order, each once.

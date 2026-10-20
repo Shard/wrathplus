@@ -94,7 +94,15 @@ the later moves are pure file moves. Each item names the symbols that point the 
    with the UI host; `client_tests::shipped_cvars` pins it to a built client's rows, the latched
    rows' commit order and the 22 hooks' registration order.
 5. **Capture FIFOs into `net`.** The `ui_native::wrath_*` capture modules that `net` re-exports
-   move under `net/` (the UI side keeps its drains).
+   move under `net/` (the UI side keeps its drains). Done: `net` names no `ui_native` module.
+   Seven families split into a `net/` capture half (FIFO, state, handlers, session clear) and a
+   `ui_native` feed of the same name: quests completed, UI timer, appearance, quest POIs, death,
+   movie, threat. The reducer feeds' state moved into the capture module that clears it:
+   `Achievements` (achievement capture), `ItemRefunds`, `EquipmentSets`, `SocketTemplates` and
+   `SocketSession` (inventory capture), `RaidBrowser` (social lists). The feeds register from
+   `ui_native::NativeFeedsPlugin`, after `UiNetPlugin`, and re-export the moved types under their
+   old paths. Left: `QuestPois::view` and `queries` stay an inherent impl in the feed (an
+   extension trait at the split); `ThreatStore` wraps `benilla_ui::script::ThreatTable`.
 6. **Tests that build the whole client.** `game_plugins::schedule_tests::headless_client` was
    named from 61 lower-module files (the first count, 44, missed the fixtures that call it, such
    as `ui_pet`'s `rig`). Done: every test that reaches it, directly or through a fixture, lives in
@@ -203,7 +211,7 @@ What has to hold, and how each is checked:
 1. *No handler between the two halves reads movement.* A kind's handlers run in registration order,
    and `crate::motion` registers after `NetPlugin`. Handlers on those kinds other than
    `net/objects.rs`: `net/wrath_auras` (`ObjectCreate`, `ObjectsRemoved`, `ObjectDestroyed`),
-   `combat_log::on_native_only` and `ui_native::wrath_threat` (`ObjectDestroyed`,
+   `combat_log::on_native_only` and `net::wrath_threat` (`ObjectDestroyed`,
    `ObjectsRemoved`). None reads a movement component: they key aura, threat and log state by guid.
    The two destroy kinds keep their whole handler in `net` (despawning is bookkeeping), so only
    `ObjectCreate` has a third-party handler between the halves, and it does not read movement. A
@@ -300,7 +308,6 @@ already resolve to `app_core` through the old paths' re-exports: the move steps 
 - Wire B, movement (item 3): `player::{server_ride, mover::{grounded_step, airborne_step,
   fall_step, Support}}`, `transport::{Transport, tick_transports}`, and the `app_core` references
   to `net::motion::spline::mark_swimming_creatures` and `creature_anim::EmoteAnim` (13).
-- Wire B, capture FIFOs into `net` (item 5): `net`'s `ui_native::wrath_*` re-exports (13).
 - Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
   and `nameplates` (3); `GuildMemberNotify` goes with it.
 
@@ -416,7 +423,7 @@ mechanisms itself ("App Migration's groups").
 | run conditions: `ingame_ui_up`, `seam_scale`, `load_stock_bindings` | event | `ui_script` sets a core `InGameUi` resource (up flag) that world reads; `seam_scale` is a pure fn and moves down; `load_stock_bindings` moves its caller (vplates) up. |
 | drawing helpers: `project_overlay`, `tile_quad_mesh`, `overlay_z`, `ui_render_layers`, `spawn_warm_tile_cam` | move down | Go with the world-layer overlay module (the pure-moves row). |
 | core up, pure: `creature_anim::disarmed_hand`, `entities::item_glow`, `combat_log::text::{melee_center_text, classify_source}`, `spell::mods` (chr_classes) | move down | Pure functions or catalogs; move into `app_core` with their tables. |
-| core up, wiring: `net::apply_net_updates` (query_cache), `perf::stall` (local_state), `capture::{ui_opted_in, start_state, probe_rig, probe_uncap_mode}`, `game_tip::{drive_game_tip, tip_bundle}` | event / move the caller up | `query_cache` and `local_state` read a core resource the owner fills; the capture and game-tip calls are tool or world wiring and move up into the plugin that registers them. |
+| core up, wiring: `net::apply_net_updates` (query_cache), `perf::stall` (local_state), `capture::{ui_opted_in, start_state, probe_rig, probe_uncap_mode}`, `game_tip::{drive_game_tip, tip_bundle}` | event / move the caller up | `query_cache` and `local_state` read a core resource the owner fills; the capture and game-tip calls are tool or world wiring and move up into the plugin that registers them. Done (Wire B) except `game_tip`: `query_cache` orders after `app_core::schedule::NetDrain` (the drain alone); `run_mode` asks a `DevSeam` the root installs at launch (`dev::install_run_mode_seam`); the probe and stall references were doc links, now prose. `net::session`'s pet-name and WHO queues moved with their whole FIFO modules to `net::{wrath_pet_name_capture, wrath_who_capture}`. |
 
 #### App Migration's groups: proposed mechanisms (2026-10-20)
 

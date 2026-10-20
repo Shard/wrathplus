@@ -122,7 +122,7 @@ pub(crate) fn wants_gm_off() -> bool {
         || std::env::var("WOW_RIG").is_ok_and(|spec| rig_asks_for_gm_off(&spec))
 }
 
-/// Whether a `WOW_RIG` spec carries `gm:off`, matched as [`crate::capture::probe_rig`] matches
+/// Whether a `WOW_RIG` spec carries `gm:off`, matched as `capture::probe_rig` matches
 /// it: case-insensitive key, anything but `on`/`1` false.
 fn rig_asks_for_gm_off(spec: &str) -> bool {
     spec.split_whitespace().any(|tok| {

@@ -62,7 +62,6 @@ pub(crate) struct Lifecycle<'w> {
     index: Res<'w, GuidIndex>,
     spells: Option<Res<'w, Spells>>,
     net: Res<'w, NetCommands>,
-    dialect: Res<'w, crate::net::SessionDialect>,
     actions: ResMut<'w, PlayerActions>,
     learned_in_tab: ResMut<'w, LearnedInTab>,
     cast_bar: ResMut<'w, CastBarFeed>,
@@ -320,7 +319,6 @@ fn on_spell_go(In(ev): In<SessionEvent>, mut l: Lifecycle, mut sc: Scene) {
                 l.spells.as_deref(),
                 &mut sc.items,
                 &l.net,
-                *l.dialect,
                 &mut l.pet_bar,
                 &l.spell_mods,
             ),
@@ -910,7 +908,6 @@ fn spell_go(
         Option<&Spells>,
         &mut crate::items::Items,
         &crate::net::NetCommands,
-        crate::net::SessionDialect,
         &mut crate::ui_pet::PetBar,
         &crate::spell::SpellModifiers,
     ),
@@ -949,7 +946,7 @@ fn spell_go(
     if let Some(go_guid) = go_target {
         go_lid.write(crate::go_anim::GoLidOpen { go_guid, spell_id });
     }
-    let (cooldowns, spells, items, net_commands, dialect, pet_bar, spell_mods) = cooldown_ctx;
+    let (cooldowns, spells, items, net_commands, pet_bar, spell_mods) = cooldown_ctx;
     let (auto_repeat, sheath, engaged) = attack_ctx;
     let now = Instant::now();
     let display = spells.and_then(|s| s.catalog.get(spell_id));
@@ -1006,7 +1003,6 @@ fn spell_go(
             {
                 debug!("net: spell go {spell_id} — deferred auto-attack start at {guid:#x}");
                 crate::creature_anim::start_attack_local(
-                    dialect,
                     me,
                     guid,
                     engaged,
@@ -1766,7 +1762,6 @@ mod tests {
                                 None,
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),
@@ -2023,7 +2018,6 @@ mod tests {
                                 Some(&spells),
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),
@@ -2190,7 +2184,6 @@ mod tests {
                             Some(&spells),
                             &mut items,
                             &net_commands,
-                            crate::net::SessionDialect::Wrath12340,
                             &mut pet_bar,
                             &mods,
                         ),
@@ -2402,7 +2395,6 @@ mod tests {
                             None,
                             &mut items,
                             &net_commands,
-                            crate::net::SessionDialect::Wrath12340,
                             &mut pet_bar,
                             &crate::spell::SpellModifiers::default(),
                         ),
@@ -2790,7 +2782,6 @@ mod tests {
                                 Some(&spells),
                                 &mut items,
                                 &net_commands,
-                                crate::net::SessionDialect::Wrath12340,
                                 &mut pet_bar,
                                 &crate::spell::SpellModifiers::default(),
                             ),

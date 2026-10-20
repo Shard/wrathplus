@@ -1527,7 +1527,7 @@ pub(super) fn clear(
             // The teardown `0x493910` closes the old target's loot before its own send.
             seam.close_loot_on(old);
         }
-        super::send_selection(&seam.net, *seam.dialect, 0);
+        super::send_selection(&seam.net, 0);
         // `SetSelection 0x493540`'s own `0x493a08 call 0x5ecac0`, the real StopAttack, which
         // also un-queues a pending on-next-swing strike.
         seam.stop(engaged);
@@ -2006,7 +2006,6 @@ mod tests {
             let (tx, _rx) = crossbeam_channel::unbounded();
             let mut world = World::new();
             world.insert_resource(NetCommands(tx));
-            world.insert_resource(crate::net::SessionDialect::Wrath12340);
             world.init_resource::<InspectMode>();
             world.init_resource::<crate::spell::QueuedMeleeSpell>();
             world.init_resource::<crate::spell::AutoRepeatActive>();
@@ -2083,7 +2082,6 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<Messages<WorldRightClick>>();
         world.init_resource::<PressPick>();
         world.init_resource::<Selection>();
@@ -2411,7 +2409,6 @@ mod tests {
             crate::player::ApproachVerb::Skin,
         ] {
             let (mut world, _vendor, rx) = walking_world(Vec3::new(2.5, 0.0, 0.0), true);
-            world.insert_resource(SessionDialect::Wrath12340);
             world.resource_mut::<crate::player::Approach>().arrived = Some((verb, VENDOR));
             world.run_system_once(act_on_arrival).unwrap();
             assert!(rx.try_iter().next().is_none());
@@ -3090,10 +3087,6 @@ mod tests {
     fn wrath_right_click_uses_chests_doors_and_goobers() {
         for go_type in [3, 0, 10] {
             let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
-            assert_eq!(
-                *world.resource::<crate::net::SessionDialect>(),
-                crate::net::SessionDialect::Wrath12340
-            );
             let object = spawn_object(&mut world, go_type, Vec3::new(2.0, 0.0, 0.0));
             *world.resource_mut::<PressPick>() = PressPick {
                 object: HoveredObject {

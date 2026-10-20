@@ -24,5 +24,5 @@ fn clear(In(_): In<SessionEvent>, mut packets: ResMut<NativeWhoPackets>) {
     packets.0.clear();
 }
 #[cfg(test)]
-#[path = "ui_native_who_tests.rs"]
+#[path = "wrath_who_capture_tests.rs"]
 mod tests;

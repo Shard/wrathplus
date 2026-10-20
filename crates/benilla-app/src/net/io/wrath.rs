@@ -33,9 +33,7 @@ use benilla_protocol::{CharEnumItem, Character, LoginStage, SessionEnd, SessionE
 use crossbeam_channel::{Receiver, Sender};
 
 use super::{note_inbound, Parks, PingClock, PING_INTERVAL, SEND_WARN_CAP};
-use crate::net::{
-    CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender, SessionDialect,
-};
+use crate::net::{CharRequest, ClientCommand, RealmRequest, SessionCommand, SessionCommandSender};
 
 // AzerothCore 3.3.5a Opcodes.h, also used by the validated `wrath_objects` probe.
 const CMSG_ITEM_QUERY_SINGLE: u32 = 0x056;
@@ -157,15 +155,6 @@ fn run(
     };
     let generation = request.generation;
     let canceled = || abandon.load(Ordering::SeqCst) != generation;
-    if request.dialect != SessionDialect::Wrath12340 {
-        send_login_failure(
-            events,
-            "network backend/data snapshot dialect mismatch: Wrath backend requires wrath-12340",
-            true,
-        );
-        return Ok(WrathCycle::Repark);
-    }
-
     send(
         events,
         SessionEvent::LoginStage {

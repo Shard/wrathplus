@@ -757,7 +757,6 @@ mod tests {
         };
         let (net, rx) = net();
         world.insert_resource(net);
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<LootState>();
         world.init_resource::<LootLatch>();
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
@@ -833,7 +832,6 @@ mod tests {
         use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
         use benilla_protocol::wrath_loot::{LOOT_SLOT_OWNER, SMSG_LOOT_RESPONSE};
         let (mut world, rx) = tabbed_world();
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.resource_mut::<crate::target::Selection>().guid = Some(CORPSE);
         let corpse = world.resource::<crate::net::GuidIndex>().0[&CORPSE];
         world.resource_mut::<crate::target::Selection>().target = Some(corpse);

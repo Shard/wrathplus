@@ -237,6 +237,7 @@ impl PluginGroup for GamePlugins {
             .add(crate::ui_paperdoll::UiPaperDollPlugin)
             .add(UiPetDollPlugin)
             .add(UiNetPlugin)
+            .add(crate::ui_native::NativeFeedsPlugin)
             .add(UiCastPlugin)
             .add(UiMirrorPlugin)
             .add(crate::combat_text::CombatTextPlugin)
@@ -690,8 +691,9 @@ pub(crate) mod schedule_tests {
     /// - `ui_quest::lines::feed_quest_lines` against `ui_items::feed_item_stats` and
     ///   `ui_tooltip::feed_spell_tooltips` over `Items` and the VM: it only reads templates, which
     ///   those two do not write, and a chat line commutes with their pushes;
-    /// - `net::wrath_item_refunds::feed_item_refunds`, `net::wrath_sockets::feed_sockets`
-    ///   (chained after it through the equipment-set feed) and `ui_guild_bank::feed_guild_bank`
+    /// - `ui_native::wrath_item_refunds::feed_item_refunds`,
+    ///   `ui_native::wrath_sockets::feed_sockets` (chained after it through the equipment-set feed)
+    ///   and `ui_guild_bank::feed_guild_bank`
     ///   (before the socket feed), against the same two and
     ///   `entities::evict_display_caches`: they read item templates for icons and links, which
     ///   none of those write, and their one push each commutes with theirs;
@@ -729,7 +731,7 @@ pub(crate) mod schedule_tests {
     /// - the native battlefield reducer and feed (`ui_battlefield::drain_native`,
     ///   `feed_battlefield`) against the terrain stream's release and rescatter: they read the
     ///   player's area through `WorldPoint`, which those systems only rebuild between frames' reads.
-    /// - the arena lines' drain (`net::wrath_arena_lines::drain_arena_lines`) against the arena
+    /// - the arena lines' drain (`ui_battlefield_arena_lines::drain_arena_lines`) against the arena
     ///   reducer (`ui_arena_team::feed_arena`) over `ArenaRosterRefresh`: a queue of team names the
     ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
     /// - the arena petition vendor (`ui_petition::vendor`): its walk-away guard against the

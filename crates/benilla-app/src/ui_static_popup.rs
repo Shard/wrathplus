@@ -373,7 +373,7 @@ pub(crate) struct PopupInputs<'w, 's> {
     forwards: (
         Option<ResMut<'w, crate::spell::targeting::glyph::GlyphPlacements>>,
         Option<ResMut<'w, crate::spell::EnchantResume>>,
-        Option<ResMut<'w, crate::net::wrath_sockets::SocketResume>>,
+        Option<ResMut<'w, crate::ui_native::wrath_sockets::SocketResume>>,
     ),
     /// `CannotBeResurrected`'s read: our auras and their spells' effects.
     auras: (

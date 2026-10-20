@@ -899,7 +899,7 @@ fn every_wrath_writer_route_is_admitted() {
             "fixture {name} lost its writer route"
         );
         assert!(
-            commands.supports(crate::net::SessionDialect::Wrath12340, &command),
+            commands.supports(&command),
             "writer route rejected by admission: {name}"
         );
         covered.insert(name);
@@ -910,7 +910,7 @@ fn every_wrath_writer_route_is_admitted() {
     {
         let command = ClientCommand::WorldportAck;
         assert!(!has_writer_route(&command));
-        assert!(!commands.supports(crate::net::SessionDialect::Wrath12340, &command));
+        assert!(!commands.supports(&command));
     }
     // These variants have routes, but invalid field values must remain inadmissible.
     for command in [
@@ -929,7 +929,7 @@ fn every_wrath_writer_route_is_admitted() {
         },
     ] {
         assert!(has_writer_route(&command));
-        assert!(!commands.supports(crate::net::SessionDialect::Wrath12340, &command));
+        assert!(!commands.supports(&command));
     }
     // Keep the table exhaustive when a new ClientCommand arm is added to route().
     // This is a structural census, not a codec test: failures request a real fixture.
