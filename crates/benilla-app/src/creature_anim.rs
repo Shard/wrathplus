@@ -111,15 +111,7 @@ pub(crate) struct Engaged(pub(crate) u64);
 #[derive(Component)]
 pub(crate) struct AutoRepeatArmed;
 
-/// The ranged weapon-visual hold, `[+0xd58] & 0x400`, set for any caster whose ranged visual
-/// plays (`0x60d020`); cleared by a non-ranged visual (`0x6ec39e`), the local cancel, melee
-/// attack-start or a spline move (`0x6020e8`), never by a sheath change or volley end. It gates
-/// nothing here: the reference re-arms the Hold at each completion while it holds (`0x5fc3f0`,
-/// via `0x7075af`), ours loops the Hold once armed. It is no entry into the drawn idle: read as
-/// one, it leaves a shooter aiming after a single Serpent Sting.
-#[derive(Component)]
-pub(crate) struct RangedHold;
-
+pub(crate) use crate::app_core::anim::{NockLatch, PlaySeq, RangedHold};
 /// The displayed nocked ammo, the reference's `[+0xd28]`/`[+0xd2c]` (`UpdateAmmoDisplay`
 /// `0x60ba30`): an `ItemDisplayInfo` model at HandArrow (35), bow only (`0x60bb19`), set per shot
 /// from the `SMSG_SPELL_START` ammo tail. Removed by the un-nock `0x60f530`: the local cancel,
@@ -129,11 +121,6 @@ pub(crate) struct NockedAmmo {
     /// Never 0: an id-0 refresh removes the component.
     pub(crate) display_id: u32,
 }
-
-/// The nock latch `[+0xd58] & 0x4000`: set at `$BWP` (`0x624b70`, LoadBow ~0.6 s), cleared at
-/// `$BWR` (`0x60016c`, AttackBow ~0.067 s) and on un-nock; the arrow model shows only while set.
-#[derive(Component)]
-pub(crate) struct NockLatch;
 
 /// `$BWP` latches a unit with `NockedAmmo` cached, `$BWR` clears; runs after `fire_anim_events`
 /// so a tag lands the frame it is crossed.
@@ -352,13 +339,6 @@ pub(crate) struct Casting {
     #[allow(dead_code)]
     pub(crate) until: Option<Instant>,
 }
-
-/// The reference's PlayAnimation order: handlers run in packet order and the later play wins
-/// bone 0 (`0x5fe2f0`). benilla's swing and cast pipelines are separate streams, so each
-/// animation-bearing message carries a stamp (the wire in packet order, scene-time emitters when
-/// they fire), and the driver resolves a same-frame collision by the highest.
-#[derive(Resource, Default)]
-pub(crate) struct PlaySeq(u64);
 
 impl PlaySeq {
     pub(crate) fn next(&mut self) -> u64 {

@@ -150,14 +150,7 @@ pub(crate) struct GoLidOpen {
     pub(crate) spell_id: u32,
 }
 
-/// `SMSG_GAMEOBJECT_CUSTOM_ANIM`, bridged from the net layer; the fishing bobber's bite sends
-/// `anim_id` 0 beside the forced state flip and the server's `SMSG_PLAY_OBJECT_SOUND`.
-#[derive(Message, Clone, Copy)]
-pub(crate) struct GoCustomAnim {
-    pub(crate) go_guid: u64,
-    pub(crate) anim_id: u32,
-}
-
+pub(crate) use crate::app_core::anim::{DespawnAnimAnnounced, GoCustomAnim, PendingDestroy};
 /// What a `GAMEOBJECT_STATE` plays: a held rest pose, or a one-shot motion onto the new pose.
 #[derive(Clone, Copy, Debug)]
 enum Play {
@@ -324,25 +317,6 @@ fn queue_custom_anim(
 fn custom_anim_id(anim_id: u32) -> Option<u16> {
     (anim_id < 4).then(|| 153 + anim_id as u16)
 }
-
-/// `SMSG_GAMEOBJECT_DESPAWN_ANIM` arrived: a component inserted at packet time, so it is on the
-/// entity before the same tick's `SMSG_DESTROY_OBJECT` frees it. It asserts nothing alone:
-/// `SendObjectDeSpawnAnim` also fires for totems, DynamicObjects and two boss scripts' living
-/// objects, so it only arms a [`GoAnim`] and defers a destroy that arrives.
-#[derive(Component)]
-pub(crate) struct DespawnAnimAnnounced;
-
-/// The reference's pending-destroy mark (`[GO+0xe4]` bit `0x10`), set by the destroy `0x464920` on
-/// a pinned object. Arming a non-resting substate pins (`0x5f3b27 call 0x4683e0`, refcount
-/// `[obj+0xe8]`), slot 14 unpins at the window end (`0x468410`), and the deferred destroy then runs
-/// (`0x46844a call 0x464920`). benilla pins only [`ANIM_DESPAWN`]; an object destroyed
-/// mid-transition still goes at once (not built).
-///
-/// The reference keeps a pinned object addressable by guid while it plays; benilla drops the guid
-/// at destroy time, so a respawn reusing it cannot refresh a condemned object. Nothing observable
-/// differs: the object still draws, and the server no longer answers for that guid.
-#[derive(Component)]
-pub(crate) struct PendingDestroy;
 
 /// Caller 5, the despawn-anim opcode: one arm per announcement, as `0x5f8c50(GO, 6)` is one per
 /// packet. `Changed`, not `Added`: a re-inserted component is not added, and a boss script can

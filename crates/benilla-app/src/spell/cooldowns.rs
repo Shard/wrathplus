@@ -22,13 +22,7 @@ use super::{SpellModifiers, OP_GCD};
 use benilla_formats::SpellDisplay;
 use benilla_protocol::messages::ItemUseSpell;
 
-/// One timer; a zero duration is untracked.
-#[derive(Clone, Copy, Debug)]
-struct Timer {
-    start: Instant,
-    duration: Duration,
-}
-
+pub(crate) use crate::app_core::cooldowns::{Cooldowns, Record, Timer};
 impl Timer {
     fn none(now: Instant) -> Self {
         Self {
@@ -40,24 +34,6 @@ impl Timer {
     fn remaining(&self, now: Instant) -> Duration {
         (self.start + self.duration).saturating_duration_since(now)
     }
-}
-
-/// One `SpellHistory` node (`0x6e12c0`).
-#[derive(Clone, Debug)]
-struct Record {
-    spell_id: u32,
-    /// The cast item's entry, 0 for a spell: records match on the spell and item pair.
-    item_id: u32,
-    recovery: Timer,
-    category: u32,
-    /// The category's `SpellCategory` row has flags bit 0x2, so it matches every query
-    /// (`0x6e1563`); wand Shoot's 351 is the only one.
-    category_wildcard: bool,
-    category_recovery: Timer,
-    /// The recovery timers hold their durations but have not started.
-    on_hold: bool,
-    gcd_category: u32,
-    gcd: Timer,
 }
 
 /// One action's cooldown read (`GetActionCooldown`): the winning timer's start, duration and
@@ -91,21 +67,6 @@ impl CooldownInfo {
             )
         })
     }
-}
-
-/// One cooldown list, the client's `SpellHistory`: the player's is this resource (`0xcecaec`), the
-/// pet's is [`crate::ui_pet::PetBar::cooldowns`] (`0xcecb04`), which the pet bar, the pet book and
-/// the pet's `SMSG_SPELL_GO` leg read and write. Each list's edge feeds its own events: the
-/// player's `feed_action_state`, the pet's `ui_pet::bar::fire_pet_cooldown_events`.
-#[derive(Resource, Default)]
-pub(crate) struct Cooldowns {
-    records: Vec<Record>,
-    /// Bumped on every mutation the reference flushes (`0x4b31b0`), the flush's edge. Only counts
-    /// up, across [`Self::clear_silent`] too, so a watcher reads a reset as no mutation.
-    pub(crate) generation: u64,
-    /// Bumped when [`Self::prune`] removes records. Kept apart from [`Self::generation`]: gated
-    /// feeds must see an expiry, but the reference never fires the event for one.
-    expiry_epoch: u64,
 }
 
 impl Cooldowns {
