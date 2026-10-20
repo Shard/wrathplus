@@ -45,7 +45,6 @@ fn harness(rank: u32) -> UiScript {
         r"Interface\FrameXML\UIPanelTemplates.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
         r"Interface\FrameXML\TabardFrame.xml",
-        "ScrollTemplates.xml", // ours: the scroll kits
     ] {
         super::test_ui::load_ui(&s, file);
     }

@@ -30,7 +30,6 @@ fn harness() -> UiScript {
     // Deviation: the seat refreshes on every alert recompute, because the stock one goes stale
     // when a side glyph appears while shown and hangs the shield off the screen edge. The layer
     // installs this after every stock file.
-    load_xml(&s, "FrameXMLFixes.xml");
     s
 }
 
@@ -369,11 +368,9 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
         "Interface\\FrameXML\\QuestFrame.xml",
         "Interface\\FrameXML\\QuestLogFrame.xml",
         "Interface\\FrameXML\\DurabilityFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, f);
     }
-    load_xml(&s, "FrameXMLFixes.xml");
 
     let mut inv: InventorySlots = Default::default();
     inv[18] = slot(2504, Some((0, 20)));

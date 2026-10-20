@@ -358,7 +358,7 @@ mod tests {
         );
 
         // 0 · a capture run resolves nothing, even with an override set.
-        let _c2 = EnvGuard::set("WOW_CAPTURE", "ui-options");
+        let _c2 = EnvGuard::set("WOW_CAPTURE", "ui-color-picker");
         assert_eq!(home(), None);
         assert_eq!(
             saved_account_path(),

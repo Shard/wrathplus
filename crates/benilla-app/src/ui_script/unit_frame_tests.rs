@@ -582,7 +582,6 @@ fn shipped_target_frame_runs_the_level_law() {
             "Interface\\FrameXML\\QuestFrame.xml",
             "Interface\\FrameXML\\QuestLogFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     );
     // Level 3 on both feeds, which the app keeps in step: the snapshot `UnitLevel("player")` reads

@@ -49,12 +49,6 @@ impl Addon {
         Addon { name, toc, source }
     }
 
-    /// benilla's layer, [`super::manifest::LAYER_MANIFEST`], which is in the binary and so cannot
-    /// be missing.
-    pub(super) fn layer() -> Self {
-        Self::shipped(super::manifest::LAYER_MANIFEST)
-    }
-
     /// The authored Wrath root. It is not an addon registry row and grants no game actions.
     pub(super) fn wrath_bootstrap() -> Self {
         let manifest = "wrath/bootstrap.toc";
@@ -63,21 +57,6 @@ impl Addon {
             toc: content::read(manifest)
                 .map(|text| Toc::parse(&text))
                 .unwrap_or_default(),
-            source: Source::Builtin,
-        }
-    }
-
-    /// The interface one shipped `.toc` names.
-    fn shipped(manifest: &str) -> Self {
-        let toc = content::read(manifest)
-            .map(|t| Toc::parse(&t))
-            .unwrap_or_else(|| {
-                error!("ui_script: {manifest} is not in the shipped UI — it will not load");
-                Toc::default()
-            });
-        Addon {
-            name: "benilla".to_string(),
-            toc,
             source: Source::Builtin,
         }
     }

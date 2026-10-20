@@ -11,40 +11,21 @@ use benilla_ui::script::UiScript;
 use super::addons::Addon;
 use super::reference_ui;
 
-/// benilla's own interface, one layer on the stock one, relative to `assets/ui`.
-pub(super) const LAYER_MANIFEST: &str = "layer.toc";
-
-/// Whether this run loads the layer: always in a player build; a dev build boots the stock UI
-/// alone under `WOW_STOCK_UI=1`.
-pub(super) fn layer_enabled() -> bool {
-    layer_enabled_by(
-        crate::run_mode::dev_affordances(),
-        std::env::var("WOW_STOCK_UI").ok().as_deref(),
-    )
-}
-
-/// [`layer_enabled`] over its two facts: a dev build, and the switch's value.
-pub(super) fn layer_enabled_by(dev_build: bool, stock_ui: Option<&str>) -> bool {
-    !(dev_build && stock_ui == Some("1"))
-}
-
-/// Every entry in load order: the core's rows, none without an install, then the layer's.
+/// Every entry in load order: the core's rows, none without an install, then the Wrath root's.
 #[cfg(test)]
 pub(super) fn manifest_files() -> Vec<String> {
     let mut files = reference_ui::core()
         .map(|core| core.toc.files)
         .unwrap_or_default();
-    files.extend(Addon::layer().toc.files);
+    files.extend(shipped_manifest_files());
     files
 }
 
-/// The entries that name a file we ship rather than one off the player's install: the layer's.
+/// The entries that name a file we ship rather than one off the player's install: the Wrath
+/// root's.
 #[cfg(test)]
 pub(super) fn shipped_manifest_files() -> Vec<String> {
-    manifest_files()
-        .into_iter()
-        .filter(|f| !reference_ui::is_chain_entry(f))
-        .collect()
+    Addon::wrath_bootstrap().toc.files
 }
 
 /// Runs `BuffButtons_UpdatePositions` at load, which `BuffFrame_OnLoad` never calls: until the
@@ -420,15 +401,15 @@ mod tests {
         );
     }
 
-    /// The core never reads our tree: a toc row that names one of the layer's files loads the
+    /// The core never reads our tree: a toc row that names one of the Wrath root's files loads the
     /// chain's file of that name or reports it missing, never ours.
     #[test]
     fn the_core_never_loads_a_file_of_ours() {
-        let ours = Addon::layer().toc.files;
+        let ours = Addon::wrath_bootstrap().toc.files;
         let row = ours
             .iter()
-            .find(|f| f.as_str() == "ScrollTemplates.xml")
-            .expect("the layer ships ScrollTemplates.xml");
+            .find(|f| f.as_str() == "wrath/UIParent.xml")
+            .expect("the Wrath root ships wrath/UIParent.xml");
         let toc = format!("{row}\n");
         let _chain = fixture::lay(&[
             (reference_ui::TOC, Some(toc.as_bytes())),
@@ -439,11 +420,6 @@ mod tests {
         assert!(
             failures.len() == 1 && failures[0].contains("not found"),
             "{failures:#?}"
-        );
-        assert!(
-            !s.eval::<bool>("return BenillaScrollBar_Step ~= nil")
-                .unwrap(),
-            "the core loaded the layer's own ScrollTemplates.xml"
         );
     }
 
@@ -510,11 +486,12 @@ mod tests {
         assert_eq!(order, ["ExhaustionTick", "PlayerFrame"]);
     }
 
-    /// A shipped `.xml` the layer does not list never loads, with no error to say so.
+    /// A shipped `.xml` the Wrath root does not list never loads, with no error to say so.
     #[test]
     fn the_manifest_lists_every_shipped_file_and_nothing_else() {
         let mut listed = shipped_manifest_files();
-        let mut shipped: Vec<String> = super::super::content::shipped_files()
+        let mut shipped: Vec<String> = super::super::content::shipped_tree_files()
+            .into_iter()
             .filter(|f| f.ends_with(".xml"))
             .map(str::to_owned)
             .collect();
