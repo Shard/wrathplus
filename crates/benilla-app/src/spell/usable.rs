@@ -46,7 +46,7 @@ pub(crate) struct UsableCtx<'a> {
     pub(crate) spell_mods: &'a SpellModifiers,
     /// Build 12340's combo points, which no descriptor carries.
     pub(crate) combo: &'a crate::net::wrath_combo_points::NativeComboPoints,
-    /// Every carried entry's count for the frame ([`crate::ui_items::carried_counts`]).
+    /// Every carried entry's count for the frame ([`crate::inventory::carried_counts`]).
     pub(crate) carried: &'a std::collections::HashMap<u32, u32>,
     /// `CanAttack`/`CanAssist`'s creature metadata and controller lookup.
     pub(crate) relations: crate::target::RelationContext<'a>,
@@ -297,7 +297,7 @@ fn equipped_slots_match(
 /// The item arm of the usable compute (`0x4e5050`), gate by gate:
 ///
 /// 1. a held count of 0 (the cache at `0xbc6390`) answers `(false, false)` (`4e50ab`). `held`
-///    is carried copies ([`crate::ui_items::InventoryScope::CARRIED`]) or a worn copy. The
+///    is carried copies ([`crate::inventory::InventoryScope::CARRIED`]) or a worn copy. The
 ///    reference's count (`0x4e6d20`, mask `0x47`) also takes the keyring and sums spell charges
 ///    for a charged item; ours does neither, so a key reads count 0 and a spent charged copy
 ///    stays lit.
@@ -787,7 +787,7 @@ mod tests {
         let commands = NetCommands(tx);
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();
-        let carried = crate::ui_items::carried_counts(&store.0, &objects);
+        let carried = crate::inventory::carried_counts(&store.0, &objects);
         let spell_mods = SpellModifiers::default();
         spell_usable(
             1,
@@ -1035,7 +1035,7 @@ mod tests {
         ));
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();
-        let carried = crate::ui_items::carried_counts(&me.0, &objects);
+        let carried = crate::inventory::carried_counts(&me.0, &objects);
         for (target, expect) in [(&healthy, false), (&low, true)] {
             let ctx = UsableCtx {
                 store: &me,

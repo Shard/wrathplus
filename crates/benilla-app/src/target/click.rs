@@ -606,7 +606,7 @@ impl Dispatch<'_, '_> {
             .and_then(|item| {
                 let slot0 = u8::try_from(item.slot.saturating_sub(1)).unwrap_or(0);
                 self_store.and_then(|s| {
-                    crate::ui_items::slot_guid(&s.0, item.bag, slot0, &self.go_inputs.objects)
+                    crate::inventory::slot_guid(&s.0, item.bag, slot0, &self.go_inputs.objects)
                 })
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
@@ -909,7 +909,7 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
             // Silent after the select: the click's `0x60c247 call 0x5ecb70` has no `DisplayError`,
             // and the red `ERR_ATTACK_*` lines are `0x612df0`'s (the Attack action, pet attack,
             // TryCast). The predicate is `0x612df0`'s; `0x5ecb70`'s own set is not transcribed.
-            if crate::ui_action::attack_actor_blocked(dispatch.self_store(), me.map(|(_, g, _)| g))
+            if super::attack_gate::attack_actor_blocked(dispatch.self_store(), me.map(|(_, g, _)| g))
                 .is_some()
             {
                 // refused: the selection stands, no swing, nothing said
@@ -1169,11 +1169,11 @@ pub(crate) fn resolve_go_action(
     let Some(store) = me_store else {
         return GoAction::Refuse(None);
     };
-    let Some((bag_index, slot, key_guid)) = crate::ui_items::find_item(
+    let Some((bag_index, slot, key_guid)) = crate::inventory::find_item(
         &store.0,
         &inputs.objects,
         key_entry,
-        crate::ui_items::ItemSearch::default(),
+        crate::inventory::ItemSearch::default(),
     ) else {
         // Held when the resolver ran, gone now: nothing to send.
         return GoAction::Refuse(None);
