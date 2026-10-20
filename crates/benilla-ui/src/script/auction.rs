@@ -1229,10 +1229,10 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_row_still_answers_twelve_values() {
-        let s = UiScript::new_vanilla().unwrap();
+    fn a_missing_row_still_answers_thirteen_values() {
+        let s = UiScript::new().unwrap();
         let n = s.arity(r#"GetAuctionItemInfo("list", 99)"#).unwrap();
-        assert_eq!(n, 12, "twelve, even with no session open at all");
+        assert_eq!(n, 13, "build 12340's thirteen, even with no session open at all");
         let (count, quality): (i64, i64) = s
             .eval(r#"local _, _, c, q = GetAuctionItemInfo("list", 99) return c, q"#)
             .unwrap();

@@ -255,23 +255,23 @@ mod tests {
 
     #[test]
     fn console_exec_writes_a_registered_cvar_and_queues_anything_else() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.register_cvars([("uiScale", "1")]);
-        s.run("ConsoleExec('uiscale 0.8') ConsoleExec('reloadui') ConsoleExec('  ') ConsoleExec('uiScale')")
+        let mut s = UiScript::new().unwrap();
+        s.register_cvars([("benchUiScale", "1")]);
+        s.run("ConsoleExec('benchuiscale 0.8') ConsoleExec('reloadui') ConsoleExec('  ') ConsoleExec('benchUiScale')")
             .unwrap();
         assert_eq!(
-            s.eval::<String>("return GetCVar('uiScale')").unwrap(),
+            s.eval::<String>("return GetCVar('benchUiScale')").unwrap(),
             "0.8",
             "the CVar store is the same one SetCVar writes, matched case-insensitively"
         );
         // A bare CVar name, whose value the reference prints, goes to the command lane.
         assert_eq!(
             s.take_console_lines(),
-            vec!["reloadui".to_string(), "uiScale".to_string()]
+            vec!["reloadui".to_string(), "benchUiScale".to_string()]
         );
         assert_eq!(
             s.take_cvar_changes(),
-            vec![("uiScale".to_string(), "0.8".to_string())],
+            vec![("benchUiScale".to_string(), "0.8".to_string())],
             "a bare name writes nothing"
         );
     }

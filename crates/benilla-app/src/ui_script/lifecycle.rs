@@ -46,9 +46,19 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
     seed_vm_clock(world, &mut script);
     crate::ui_spellbook::seed_spell_catalog(world, &mut script);
     crate::ui_achievements::seed(world, &mut script);
+    seed_class_names(world, &mut script);
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
     Some(script)
+}
+
+/// Seed a new VM with the classes' localized names before its FrameXML loads: stock
+/// `Constants.lua` fills `LOCALIZED_CLASS_NAMES_MALE`/`_FEMALE` through `FillLocalizedClassList`
+/// (`0x60a510`) at file scope.
+fn seed_class_names(world: &World, script: &mut UiScript) {
+    if let Some(table) = world.get_resource::<crate::chr_classes::ChrClassTable>() {
+        script.set_localized_class_names(table.0.localized_names());
+    }
 }
 
 fn wrath_profile(world: &World) -> bool {

@@ -156,32 +156,32 @@ mod tests {
 
     #[test]
     fn keyring_button_ids_map_past_the_buyback_band() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID(1)")
                 .unwrap(),
-            82
+            87
         );
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID(32)")
                 .unwrap(),
-            113
+            118
         );
         // No range check, a truncating cast and a numeric string, as `0x4c8150` reads them.
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID(0)")
                 .unwrap(),
-            81
+            86
         );
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID(-2.9)")
                 .unwrap(),
-            79
+            84
         );
         assert_eq!(
             s.eval::<i64>("return KeyRingButtonIDToInvSlotID('3')")
                 .unwrap(),
-            84
+            89
         );
         let err = s
             .run("KeyRingButtonIDToInvSlotID()")
@@ -197,7 +197,7 @@ mod tests {
     /// (`ContainerFrame.lua:617`) reads a key through `GetInventoryItem*` and the tooltip.
     #[test]
     fn a_key_reads_through_its_inventory_slot() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_container(-2, Some(keyring_with_key()));
         assert_eq!(
             s.eval::<Option<String>>(
@@ -208,13 +208,13 @@ mod tests {
             Some("Interface\\Icons\\INV_Misc_Key_03")
         );
         assert_eq!(
-            s.eval::<Option<String>>("return GetInventoryItemTexture('player', 82)")
+            s.eval::<Option<String>>("return GetInventoryItemTexture('player', 87)")
                 .unwrap(),
             None,
             "key slot 1 is empty"
         );
         assert_eq!(
-            s.eval::<i64>("return GetInventoryItemCount('player', 83)")
+            s.eval::<i64>("return GetInventoryItemCount('player', 88)")
                 .unwrap(),
             1
         );
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn inventory_sell_cursor_buys_over_a_worn_item_only() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut slots: crate::script::InventorySlots = Default::default();
         slots[16] = Some(InvSlotView {
             item_id: 2361,
@@ -243,13 +243,14 @@ mod tests {
         assert_eq!(s.ui_cursor(), Some(UiCursorMode::Buy));
         assert_eq!(
             s.eval::<i64>(
-                "local n = function(...) return arg.n end return n(ShowInventorySellCursor(16))"
+                "return select('#', ShowInventorySellCursor(16))"
             )
             .unwrap(),
             0
         );
 
-        for bad in ["24", "39", "70", "114", "-1", "'x'"] {
+        // Build 12340: the bank bags are 68..74, buyback 75..86 and the keyring 87..118.
+        for bad in ["24", "39", "75", "119", "-1", "'x'"] {
             let err = s
                 .run(&format!("ShowInventorySellCursor({bad})"))
                 .unwrap_err()

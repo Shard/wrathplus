@@ -4,6 +4,7 @@
 //! step 0); the owning modules re-export from their old paths.
 
 pub(crate) mod anim;
+pub(crate) mod chat;
 pub(crate) mod cooldowns;
 pub(crate) mod death;
 pub(crate) mod errors;

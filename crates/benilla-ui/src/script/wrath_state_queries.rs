@@ -200,8 +200,86 @@ fn carried_item(model: &Model, query: &ItemQuery) -> Option<(i64, u32)> {
     })
 }
 
+/// The main bar's page, 0-based (`0xc1e598`), which build 12340 keeps engine-side.
+#[derive(Default)]
+struct ActionBarPage(u32);
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    lua.set_app_data(ActionBarPage::default());
+    // GetActionBarPage() (`0x5a7fd0`): the page, 1-based. Labelled: the native answers 1 while
+    // `0xc1e5a0` is set, which is not modelled.
+    g.set(
+        "GetActionBarPage",
+        lua.create_function(|lua, ()| {
+            Ok(lua.app_data_ref::<ActionBarPage>().map_or(0, |p| p.0) + 1)
+        })?,
+    )?;
+    // ChangeActionBarPage(page) (`0x5a7f60`): pages 1-6, else an error; a new page fires
+    // `ACTIONBAR_PAGE_CHANGED` (event `0xaf`). Labelled: the `0x5191c0(0xe)` gate.
+    g.set(
+        "ChangeActionBarPage",
+        lua.create_function(|lua, page: Value| {
+            let page = lua
+                .coerce_number(page)?
+                .map_or(0, |n| n.round_ties_even() as i64)
+                - 1;
+            if !(0..6).contains(&page) {
+                return Err(mlua::Error::runtime(
+                    "ChangeActionBarPage() needs a page in the range 1 to 6",
+                ));
+            }
+            let moved = match lua.app_data_mut::<ActionBarPage>() {
+                Some(mut current) if current.0 != page as u32 => {
+                    current.0 = page as u32;
+                    true
+                }
+                _ => false,
+            };
+            if moved {
+                super::tick::fire_event_into(lua, "ACTIONBAR_PAGE_CHANGED", Vec::new());
+            }
+            Ok(())
+        })?,
+    )?;
+    // IsPetAttackAction(index) (`0x5d5a10` → `0x5d41b0`): a boolean, the slot holds the pet's
+    // Attack command. Labelled: read as the slot's `PET_ACTION_ATTACK` token, where the native
+    // tests the action word.
+    g.set(
+        "IsPetAttackAction",
+        lua.create_function(|lua, index: Value| {
+            let index = lua
+                .coerce_number(index)?
+                .ok_or_else(|| mlua::Error::runtime("Usage: IsPetAttackAction(index)"))?
+                .round_ties_even() as i64;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let attack = usize::try_from(index - 1)
+                .ok()
+                .and_then(|i| model.pet_bar.slots.get(i))
+                .is_some_and(|s| {
+                    s.view.is_token && s.view.name.as_deref() == Some("PET_ACTION_ATTACK")
+                });
+            Ok(attack)
+        })?,
+    )?;
+    // GetCVarBool("cvar") (`0x5100c0`, the in-game table's): 1 when the CVar exists and its value
+    // reads non-zero, else nil; a non-string raises. Labelled: its flag `0x40` (hidden from this
+    // table) is not modelled.
+    g.set(
+        "GetCVarBool",
+        lua.create_function(|lua, name: Value| {
+            let Value::String(name) = name else {
+                return Err(mlua::Error::runtime("Usage: GetCVarBool(\"cvar\")"));
+            };
+            let key = name.to_str()?.to_ascii_lowercase();
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let on = model
+                .cvars
+                .get(&key)
+                .is_some_and(|slot| slot.value.trim().parse::<f64>().is_ok_and(|n| n != 0.0));
+            Ok(on.then_some(1))
+        })?,
+    )?;
     // PickupItem(item) (`0x522fb0`): an item by id, link or cached name onto the cursor, mode 7,
     // as a dragged link; the cursor clears first, and an item naming nothing leaves it empty.
     g.set(
@@ -653,6 +731,39 @@ mod tests {
 
     fn vm() -> UiScript {
         UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    }
+
+    #[test]
+    fn the_bar_page_is_engine_side_and_the_bool_cvar_reads_its_value() {
+        let s = vm();
+        s.run(
+            "SEEN = 0 local f = CreateFrame('Frame') f:RegisterEvent('ACTIONBAR_PAGE_CHANGED') \
+             f:SetScript('OnEvent', function() SEEN = SEEN + 1 end)",
+        )
+        .unwrap();
+        assert_eq!(s.eval::<i64>("return GetActionBarPage()").unwrap(), 1);
+        s.run("ChangeActionBarPage(3) ChangeActionBarPage(3)")
+            .unwrap();
+        assert_eq!(s.eval::<i64>("return GetActionBarPage()").unwrap(), 3);
+        assert_eq!(
+            s.eval::<i64>("return SEEN").unwrap(),
+            1,
+            "only a new page fires"
+        );
+        assert!(s.run("ChangeActionBarPage(7)").is_err());
+        s.run("SetCVar('autoLootDefault', '1') SetCVar('scriptErrors', '0')")
+            .unwrap();
+        assert!(s
+            .eval::<bool>(
+                "return GetCVarBool('autolootdefault') == 1 and GetCVarBool('scriptErrors') == nil \
+                 and GetCVarBool('nosuchcvar') == nil"
+            )
+            .unwrap());
+        assert!(s.run("GetCVarBool(1)").is_err());
+        assert!(s
+            .eval::<bool>("return IsPetAttackAction(1) == false")
+            .unwrap());
+        assert!(s.run("IsPetAttackAction()").is_err());
     }
 
     #[test]

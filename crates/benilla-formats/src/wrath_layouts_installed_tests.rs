@@ -82,6 +82,18 @@ fn installed_wrath_skill_and_talent_known_rows() {
     let Some(mut chain) = chain() else { return };
     let skills = crate::load_skill_line_catalog(&mut chain).expect("skill lines");
     let smithing = skills.line(164).expect("Blacksmithing");
+    // `ChrClasses` 35 slots: the name blocks and file name `FillLocalizedClassList` reads.
+    let classes = crate::load_chr_classes(&mut chain)
+        .expect("classes")
+        .localized_names();
+    assert!(
+        classes.contains(&(
+            "DEATHKNIGHT".into(),
+            "Death Knight".into(),
+            "Death Knight".into()
+        )),
+        "{classes:?}"
+    );
     // `alternateVerb_lang`, file column 38: Enchanting's recipes create no item.
     assert_eq!(
         skills.line(333).map(|l| l.alternate_verb.as_str()),

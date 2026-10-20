@@ -247,7 +247,7 @@ unchanged.
 ### Progress and the unit 2c clusters
 
 Units 1 (schedule sets), 2a (UI error queues; spell, client, roster, NPC, loot-gate and pointer
-state) and 2b (quest giver, input map) are done. Five shared-state types stayed behind because
+state), 2b (quest giver, input map) and 2c (below) are done. Five shared-state types stayed behind because
 their fields hold types owned by the UI or world layer; moving one alone would leave `app_core`
 pointing back up. Measured (read-only) by following the type names in each definition's code,
 transitively, with name collisions checked by hand:
@@ -262,9 +262,97 @@ transitively, with name collisions checked by hand:
 | state `net` writes (Wire B's item 3 part 2, cut 4) | `go_anim::{GoCustomAnim, DespawnAnimAnnounced, PendingDestroy}` to `app_core::anim`; `world_state::WorldStates`, `target::ring::Factions`, `sound::emote::EmoteSounds`, `entities::collision_height::CollisionHeight` to `app_core::state` (`Cooldowns` is in the PetBar row) | 7 types, ~15 lines, each standalone (fields hold formats catalogs or std types) | with the PetBar batch, after the whole-client test move |
 | `ChatLog` (`ui_chat`) | `ChatLog`, `Pending`; `event::{ChatEvent, ChatEventKind}`; `broadcast::Broadcast`; `combat::{PendingCombat, Family, Variant, Fills, Named}` and the slot/keying types they hold | ~14 types, ~300 lines, all `ui_chat` | this is the chat event model, not a flag; either move it whole as `app_core::chat`, or keep it in UI and have the five lower callers (death lines, combat log) write a narrower queue. Decide before moving |
 
-Unit 2c waits for the whole-client test move (Experience) because `ui_pet` and `ui_chat/feed.rs`
-overlap; Vanilla-removal step 5 takes priority over it.
+Status: every row above has moved (2c part 1 group and loot, part 2a cooldowns, anim and the
+net-written state, part 2b `app_core::chat`, moved whole as decided) except `GuildState`, which
+waits for App's last step-4 batch. What is left of step 0 is in "Step 0 residue" below.
 
+## Step 0 residue
+
+Re-measured on wrath-hud after units 1, 2a, 2b and 2c (head afa6f7f0, 2026-10-20), with
+`app_core` in the core layer and `shipped_cvars` (Experience's cvar unit; it lists every
+feature's rows) in the root layer. A reference that resolves through `pub(crate) use` chains to a
+type now homed in a lower layer is not a back edge: the move step only rewrites its path.
+
+| Layer pair (from → to) | Baseline | Now |
+|---|---|---|
+| world → ui | 613 | 196 |
+| net → world | 153 | 10 |
+| core → world | 92 | 48 |
+| core → ui | 73 | 45 |
+| net → ui | 72 | 35 |
+| net → root | 41 | 0 |
+| core → net | 31 | 23 |
+| ui → root | 26 | 16 |
+| core → root | – | 19 |
+| core → tools | 11 | 10 |
+| tools → root | – | 7 |
+| others | 7 | 2 |
+| **total** | **~1,119** | **411** (20 in tests) |
+
+Another 423 references (world → ui 361, net → ui 27, net → world 17, core → ui 13, core → world 5)
+already resolve to `app_core` through the old paths' re-exports: the move steps rewrite them to
+`benilla_app_core::…` mechanically.
+
+### Checklist by owner
+
+**In flight**
+
+- Wire B, movement (item 3): `player::{server_ride, mover::{grounded_step, airborne_step,
+  fall_step, Support}}`, `transport::{Transport, tick_transports}`, and the `app_core` references
+  to `net::motion::spline::mark_swimming_creatures` and `creature_anim::EmoteAnim` (13).
+- Wire B, capture FIFOs into `net` (item 5): `net`'s `ui_native::wrath_*` re-exports (13).
+- Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
+  and `nameplates` (3); `GuildMemberNotify` goes with it.
+
+**The cvar registry (item 4 follow-up, 121): needs a short design note before moving.** After
+Experience's unit the rows register from their features, but `cvars` still names each feature's
+config resource and `on_cvar` hook (`video::VideoConfig`, `realmlist::Realmlist`,
+`ui_gamma::DisplayGamma`, `perf::FpsJournalSetting`, `player::camera*`, the 26 `on_cvar` calls,
+…), and `shipped_cvars` is read from core (`cvars`), UI (`ui_script`) and tools (`capture`,
+`addon_harness`). Finishing item 4 means each feature registering its hook as well as its rows,
+and the static table being passed in by the root instead of named.
+
+**Pure moves (~150 references, definitions only):**
+
+| Kind | Symbols (from) | Home |
+|---|---|---|
+| open-window and interaction state | `TrainerOpen` (ui_trainer), `MailOpen`, `Stationery`, `Packages` (ui_mail), `GuildBankOpen`, `ItemTextOpen`, `LetterTexts`, `PageMaterials` (ui_item_text), `GossipState`, `BinderState`, `MeetingStone`, `MeetingStoneUse`, `AreaSpiritHealer`, `AREA_SPIRIT_HEALER_AURA` (ui_dialog_verbs), `FlightMasterStatus` (ui_taxi), `TradeSkillOpens`, `MerchantOpen`, `SocialState`, `BindGate`, `TabardDesign`, `GoOpener`, `GoOpenerCasts`, `PlayerActions`, `SPELL_ATTACK` (ui_action), `ItemUse`, `ItemSearch`, `InventoryScope`, `ItemSubClasses` (ui_items), `UnitTokens`, `CombatTextEvent` (ui_unit), `LootKneel`, `LootMoveStart` (ui_loot), `AuraDurations`, `SkillLines`, `LearnedInTab`, `GROUPTYPE_RAID`, `PARTY_PET_TOKENS`, `AfkMirror`, `DURABILITYDAMAGE_DEATH`, `TutorialEvent`, `tutorial::id::LOOTING`, `InputHooks`, `InspectMode`, `UiScaleCvar`, `PendingEntryUiLoad`, `UiKeyboardCapture`, `PlayerUiClickConsumed`, `PlayerUiHover`, `UiClock`, `GlueCanvas`, `Realms`, `LoginIntent` | `app_core::state` |
+| catalogs the entity spawn reads | `PetFamilyTables`, `PetStatTables` (ui_pet_stats), `RepairTables` (ui_merchant), `BankPrices` (ui_bank), `StableSlotPrices` (ui_stable) | `app_core::catalogs` |
+| native packet queues `net` fills | `NativePetNamePackets`, `NativeBattlegroundRest`, `ArenaRosterRefresh`, `NativeWhoPackets`, `NativeTotems`, `combat_log::native::NativeCombatLog` | the `net` layer, beside Wire B's FIFOs |
+| UI overlay drawing world code uses | `ui_pass::{UiQuad, UiQuadMaterial, UiQuads, UvRect, PlayerUiCamera, PlayerUiPlugin}`, `ui_models::UiModelTiles`, `ui_text::TextSeat`, `area_poi::AreaPoiRes` | a world-layer overlay module (the quads are drawn by world systems) |
+| net and player items lower layers name | `net::{SelfPlayer, ObjectStore, NetOffline, Embodied, DisconnectedMessage, EnteredWorldMessage}`, `player::{Player, UNIT_FLAG_IN_COMBAT}`, `creature_anim::UNIT_FLAG_DISARMED`, `target::Selection`, `console::{ConsoleEcho, ConsoleCommandApp}`, `capture::ProbeAuctionPlugin` | `app_core::state` (resources, markers, constants); the plugins stay and their users move up |
+| test fixtures | `ui_items::TestObjects` and the other test-only references (20) | a `test-support` module or feature |
+
+**Needs design (~93 references): calls from a lower layer into a higher one.** Each wants an
+event, a message the higher layer drains, or the caller moving up:
+
+- `ui_script::VmMemo` (17): it holds the Lua VM, so it cannot go to core without `benilla-ui`.
+  Its world users (area, cinematic, cursor, death, minimap, sound, spell, video, vplates) want a
+  UI-layer event or a narrower memo.
+- UI helpers world code calls: `ui_items::{find_item, carried_counts, slot_guid,
+  collect_inventory, send_item_use}`, `ui_session::feed_interact_npc`,
+  `ui_merchant::end_repair_mode_on_right_press`, `ui_loot::{close_interaction,
+  resolve_loot_kneel, begin_wrath_corpse_loot, drain_loot}`, `ui_action::{show_messages,
+  attack_actor_blocked, attack_nearest_probe, cast_fail::from_wrath,
+  drop_item::drop_item_on_unit}`, `ui_unit::{snapshot, race_names, class_names,
+  player_token_guid}`, `ui_aura::buffs_visible_on`, `ui_cast::feed_cast_bar`,
+  `ui_pet::pet_stop_on_old_target_clear`, `script_calls::{apply_script_calls, in_call_order}`,
+  `ui_guild::{unit_guild_name, unit_guild_emblem, corpse_guild_emblem}`,
+  `ui_world_map::world_enter_selection`, `ui_macro::identity`.
+- Run conditions and drawing helpers: `ui_script::{ingame_ui_up, seam_scale,
+  load_stock_bindings}`, `ui_pass::{project_overlay, tile_quad_mesh, overlay_z,
+  ui_render_layers}`, `ui_models::spawn_warm_tile_cam` (with the overlay module above).
+- `net` calling UI drains: `ui_party::net::{member_deactivated, roster_deactivated}`,
+  `ui_trade::answer_trade_request`, `ui_battlefield::drain_native`,
+  `char_select::char_login_refusal_text`, `combat_log::chat::faction_standing`.
+- Core calling up: `net::apply_net_updates` (query_cache), `spell::mods` (chr_classes),
+  `perf::stall` (local_state), `capture::{ui_opted_in, start_state, probe_rig,
+  probe_uncap_mode}` (run_mode, probe_shield, video), `game_tip::{drive_game_tip, tip_bundle}`
+  (loading_screen), `entities::item_glow` and `creature_anim::disarmed_hand` (items),
+  `combat_log::text::{melee_center_text, classify_source}`.
+
+When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
+`world` and `ui` wait for the design items above.
 
 ## Moving a layer out (steps 1 to 4)
 

@@ -378,13 +378,13 @@ mod tests {
 
     /// The six returns, in the reference's own destructuring order.
     #[test]
-    fn get_petition_info_returns_the_reference_six_in_order() {
-        let mut s = UiScript::new_vanilla().unwrap();
+    fn get_petition_info_returns_build_12340s_values_in_order() {
+        let mut s = UiScript::new().unwrap();
         open(&mut s, record(), vec![]);
         let (kind, title, body, max, originator, is_originator) = s
             .eval::<(String, String, String, i32, String, Option<u32>)>("return GetPetitionInfo()")
             .unwrap();
-        assert_eq!(kind, "charter");
+        assert_eq!(kind, "guild", "build 12340's petition type, guild or arena");
         assert_eq!(title, "Legacy");
         assert_eq!(body, "");
         assert_eq!(max, 9);
@@ -408,12 +408,12 @@ mod tests {
     }
 
     #[test]
-    fn the_no_record_leg_is_six_values_with_a_numeric_zero() {
-        let s = UiScript::new_vanilla().unwrap();
+    fn the_no_record_leg_is_seven_values_with_a_numeric_zero() {
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.arity("GetPetitionInfo()").unwrap(),
-            6,
-            "six values even with nothing open"
+            7,
+            "seven values even with nothing open"
         );
         assert_eq!(
             s.eval::<i64>("local _,_,_,m = GetPetitionInfo(); return m")

@@ -687,6 +687,8 @@ mod tests {
                 autocast_allowed: true,
                 autocast_enabled: true,
                 cooldown: Some((9400, 1500, true)),
+                // A spell-typed action (type 1), whose cooldown build 12340 reads.
+                packed: 0x8100_0010,
                 ..Default::default()
             },
             PetActionView::default(),
@@ -752,15 +754,15 @@ mod tests {
 
     #[test]
     fn cooldown_triple_stamps_to_the_vm_clock_and_goes_cold() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.tick(10.0); // GetTime == 10
         s.set_pet_actions(true, true, true, slots());
 
         assert_eq!(
             s.eval::<(f64, f64, i32)>("return GetPetActionCooldown(1)")
                 .unwrap(),
-            (0.0, 0.0, 1),
-            "no cooldown reads cold"
+            (0.0, 0.0, 0),
+            "a command slot answers 0, 0, 0: build 12340 reads cooldowns for spell types only"
         );
         let (start, duration, enable) = s
             .eval::<(f64, f64, i32)>("return GetPetActionCooldown(2)")

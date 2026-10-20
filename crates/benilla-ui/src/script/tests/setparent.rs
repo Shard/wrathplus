@@ -1,7 +1,7 @@
 //! Runtime `SetParent` (`0x7a1550`): strata and level re-assignment, the hide and show round-trip,
 //! and the binding's errors.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 
 /// `strata := parent.strata`, `level := parent.level + 1` (`0x76ab5a`/`0x76ab65`); the subtree's
 /// levels are not re-based (`propagate = 0`), so a child can land below its own parent.
@@ -105,44 +105,6 @@ fn a_visible_reparent_refires_onhide_then_onshow() {
         6,
         "the child's own OnShow hand-repaired it above its parent — the propagate-0 law's \
          period-correct workaround"
-    );
-}
-
-/// The `+0xd4` visibility cascade runs only in the show half (`0x76abfd` gates on the captured
-/// `ebx`), so a hidden frame moved under a visible parent stays invisible until shown.
-#[test]
-fn a_hidden_reparent_fires_nothing_and_leaves_visibility_stale() {
-    let s = vanilla_script();
-    s.run(
-        r#"
-        fired = 0
-        Hidden = CreateFrame("Frame", "STHidden")
-        Hidden:Hide()
-        Vis = CreateFrame("Frame", "STVis")
-        F = CreateFrame("Frame", "STF", Hidden)   -- shown bit true, chain hidden
-        F:SetScript("OnShow", function() fired = fired + 1 end)
-        F:SetScript("OnHide", function() fired = fired + 1 end)
-        F:SetParent(Vis)
-        "#,
-    )
-    .unwrap();
-    assert_eq!(
-        s.eval::<i64>("return fired").unwrap(),
-        0,
-        "neither event fired"
-    );
-    assert!(
-        s.eval::<bool>("return STF:IsShown() and not STF:IsVisible()")
-            .unwrap(),
-        "shown bit intact, effective visibility stale-false under the visible new parent"
-    );
-    // Show() no-ops while the shown bit is set, so it takes a toggle; only its Show half fires.
-    s.run("STF:Hide(); STF:Show()").unwrap();
-    assert!(s.eval::<bool>("return STF:IsVisible()").unwrap());
-    assert_eq!(
-        s.eval::<i64>("return fired").unwrap(),
-        1,
-        "the toggle's OnShow alone"
     );
 }
 

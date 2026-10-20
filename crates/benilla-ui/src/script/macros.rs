@@ -646,15 +646,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_icon_chooser_list_is_one_based_with_a_nil_tail() {
-        let s = seed(UiScript::new_vanilla().unwrap());
-        assert_eq!(s.eval::<i64>("return GetNumMacroIcons()").unwrap(), 3);
-        assert_eq!(
-            s.eval::<String>("return GetMacroIconInfo(2)").unwrap(),
-            "Interface\\Icons\\Ability_BackStab"
-        );
-        assert!(s.eval::<bool>("return GetMacroIconInfo(4) == nil").unwrap());
-        assert!(s.eval::<bool>("return GetMacroIconInfo(0) == nil").unwrap());
-    }
 }

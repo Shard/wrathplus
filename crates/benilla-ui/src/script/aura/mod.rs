@@ -288,16 +288,6 @@ mod tests {
         s
     }
 
-    /// A 1.12 host for the tests a later step 9 batch converts.
-    fn vanilla_script() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.set_unit_guids(&UnitGuids {
-            player: ME,
-            target: TARGET,
-            ..Default::default()
-        });
-        s
-    }
 
     fn aura(spell_id: u32, name: &str, helpful: bool, cancelable: bool) -> AuraState {
         AuraState {
@@ -317,7 +307,7 @@ mod tests {
 
     #[test]
     fn unit_buff_enumerates_the_pushed_order_not_the_spell_id_order() {
-        let mut s = vanilla_script();
+        let mut s = script();
         s.set_player_auras(vec![
             aura(2457, "Battle Stance", true, true),
             aura(1126, "Mark of the Wild", true, true),
@@ -326,19 +316,19 @@ mod tests {
         assert_eq!(
             s.eval::<String>(r#"return (UnitBuff("player", 1))"#)
                 .unwrap(),
-            "Interface\\Icons\\Spell_2457"
+            "Battle Stance"
         );
-        // `UnitBuff` and `UnitDebuff` return the icon first, the 1.12 shape.
+        // Build 12340's `UnitBuff` and `UnitDebuff` answer the name first.
         assert_eq!(
             s.eval::<String>(r#"return (UnitBuff("player", 2))"#)
                 .unwrap(),
-            "Interface\\Icons\\Spell_1126"
+            "Mark of the Wild"
         );
         // The debuff is index 1 of its own filter, not index 3.
         assert_eq!(
             s.eval::<String>(r#"return (UnitDebuff("player", 1))"#)
                 .unwrap(),
-            "Interface\\Icons\\Spell_589"
+            "Shadow Word: Pain"
         );
         assert!(s
             .eval::<bool>(r#"return UnitBuff("player", 3) == nil"#)
@@ -357,8 +347,8 @@ mod tests {
     }
 
     #[test]
-    fn unit_buff_and_unit_debuff_return_the_1121_tuple() {
-        let mut s = vanilla_script();
+    fn unit_buff_and_unit_debuff_return_build_12340s_eleven() {
+        let mut s = script();
         let mut buff = aura(1126, "Mark of the Wild", true, true);
         buff.count = 1;
         let mut debuff = aura(589, "Shadow Word: Pain", false, false);
@@ -366,42 +356,36 @@ mod tests {
         debuff.debuff_type = Some("Magic".into());
         s.set_unit_auras(TARGET, Some(vec![buff, debuff]));
 
-        let (icon, count, third) = s
-            .eval::<(String, i64, Option<String>)>(
-                r#"local a, b, c = UnitBuff("target", 1) return a, b, c"#,
+        // name, rank, icon, count, debuffType, duration, expirationTime, caster, stealable,
+        // consolidate, spellId.
+        assert_eq!(s.arity(r#"UnitBuff("target", 1)"#).unwrap(), 11);
+        let (name, icon, count, id) = s
+            .eval::<(String, String, i64, i64)>(
+                r#"local n, _, i, c, _, _, _, _, _, _, id = UnitBuff("target", 1) return n, i, c, id"#,
             )
             .unwrap();
-        assert_eq!(icon, "Interface\\Icons\\Spell_1126");
-        assert_eq!(count, 1);
-        assert_eq!(third, None, "UnitBuff returns two values, never a third");
-
-        let (icon, count, dispel, fourth) = s
-            .eval::<(String, i64, String, Option<String>)>(
-                r#"local a, b, c, d = UnitDebuff("target", 1) return a, b, c, d"#,
-            )
-            .unwrap();
-        assert_eq!(icon, "Interface\\Icons\\Spell_589");
-        assert_eq!((count, dispel.as_str()), (3, "Magic"));
         assert_eq!(
-            fourth, None,
-            "UnitDebuff returns three values, never a fourth"
+            (name.as_str(), icon.as_str(), count, id),
+            ("Mark of the Wild", "Interface\\Icons\\Spell_1126", 1, 1126)
         );
-
-        // Stock `TargetFrame.lua:287-297`'s read, verbatim.
+        let (icon, count, dispel) = s
+            .eval::<(String, i64, String)>(
+                r#"local _, _, i, c, d = UnitDebuff("target", 1) return i, c, d"#,
+            )
+            .unwrap();
+        assert_eq!(
+            (icon.as_str(), count, dispel.as_str()),
+            ("Interface\\Icons\\Spell_589", 3, "Magic")
+        );
+        // Stock 3.3.5 TargetFrame's read: name, rank, icon, count, debuffType.
         assert!(s
             .eval::<bool>(
-                r#"local d, stack, dtype = UnitDebuff("target", 1)
+                r#"local _, _, _, stack, dtype = UnitDebuff("target", 1)
                    return stack > 1 and dtype == "Magic""#
             )
             .unwrap());
-
-        // The raidFilter flag is accepted and not applied.
-        assert_eq!(
-            s.eval::<String>(r#"return (UnitDebuff("target", 1, 1))"#)
-                .unwrap(),
-            "Interface\\Icons\\Spell_589"
-        );
     }
+
 
     #[test]
     fn tracking_bindings_read_the_pushed_state_and_cancel_by_spell_id() {
