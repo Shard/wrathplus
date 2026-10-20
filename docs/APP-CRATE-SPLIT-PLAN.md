@@ -351,6 +351,27 @@ event, a message the higher layer drains, or the caller moving up:
   (loading_screen), `entities::item_glow` and `creature_anim::disarmed_hand` (items),
   `combat_log::text::{melee_center_text, classify_source}`.
 
+**Proposed mechanism per group (draft, for batching).** Four kinds: *move down* (a pure function
+or catalog lookup that only looks like UI; a pure move), *drained message* (the lower layer writes
+a Bevy `Message` and the UI system drains it, as `UiError` already works), *event* (a core
+resource or run condition the higher layer sets and the lower one reads), and *move the caller up*
+(the system is a UI feed that lives in a world module). App Migration owns the world calls into
+`ui_items`, `ui_loot` and `ui_action` and the `net` calls into UI (`member_deactivated`,
+`roster_deactivated`, `answer_trade_request`, `ui_battlefield::drain_native`,
+`char_login_refusal_text`, `faction_standing`) and `end_repair_mode_on_right_press`, and writes those
+mechanisms itself ("App Migration's groups").
+
+| Group | Mechanism | One line |
+|---|---|---|
+| `VmMemo` (17) | move the caller up | Every world user is a Lua feed that already takes `UiScript`; move those systems into a UI-side feed module beside their world state, and `VmMemo` stays in `ui`. |
+| lookups: `race_names`, `class_names`, `player_token_guid`, `unit_guild_name`, `unit_guild_emblem`, `corpse_guild_emblem`, `buffs_visible_on`, `ui_macro::identity` | move down | Pure tables or reads over core state; move beside their data in `app_core`. |
+| other action requests: `feed_interact_npc`, `pet_stop_on_old_target_clear`, `world_enter_selection`, `apply_script_calls` / `in_call_order` | drained message | World writes a request message and the UI system that owns the session drains it in its existing set; check the frame order per row. |
+| UI feedback from world: `feed_cast_bar`, `ui_unit::snapshot` | drained message | A cast-bar message the UI drains; `snapshot` reads move down with the lookups. |
+| run conditions: `ingame_ui_up`, `seam_scale`, `load_stock_bindings` | event | `ui_script` sets a core `InGameUi` resource (up flag) that world reads; `seam_scale` is a pure fn and moves down; `load_stock_bindings` moves its caller (vplates) up. |
+| drawing helpers: `project_overlay`, `tile_quad_mesh`, `overlay_z`, `ui_render_layers`, `spawn_warm_tile_cam` | move down | Go with the world-layer overlay module (the pure-moves row). |
+| core up, pure: `creature_anim::disarmed_hand`, `entities::item_glow`, `combat_log::text::{melee_center_text, classify_source}`, `spell::mods` (chr_classes) | move down | Pure functions or catalogs; move into `app_core` with their tables. |
+| core up, wiring: `net::apply_net_updates` (query_cache), `perf::stall` (local_state), `capture::{ui_opted_in, start_state, probe_rig, probe_uncap_mode}`, `game_tip::{drive_game_tip, tip_bundle}` | event / move the caller up | `query_cache` and `local_state` read a core resource the owner fills; the capture and game-tip calls are tool or world wiring and move up into the plugin that registers them. |
+
 #### App Migration's groups: proposed mechanisms (2026-10-20)
 
 Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world code calls, and

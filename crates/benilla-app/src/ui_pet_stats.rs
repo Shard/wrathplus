@@ -24,22 +24,7 @@ const CLASS_HUNTER: u8 = 3;
 /// power is focus.
 const POWER_HAPPINESS: u8 = 4;
 
-/// `PetPersonality.dbc` and `PetLoyalty.dbc`, loaded once; without them happiness and loyalty
-/// answer the bindings' failure forms.
-#[derive(Resource)]
-pub(crate) struct PetStatTables {
-    pub(crate) personalities: benilla_formats::PetPersonalities,
-    pub(crate) loyalty: benilla_formats::PetLoyaltyNames,
-}
-
-/// `CreatureFamily.dbc` (the word and icon) and `ItemPetFood.dbc` (the diet a family's food mask
-/// names), apart from [`PetStatTables`] so each half degrades alone.
-#[derive(Resource)]
-pub(crate) struct PetFamilyTables {
-    pub(crate) families: benilla_formats::CreatureFamilies,
-    pub(crate) foods: benilla_formats::PetFoodNames,
-}
-
+pub(crate) use crate::app_core::catalogs::{PetFamilyTables, PetStatTables};
 /// The pet snapshot's push; anything that fires a pet event orders after it. `fire_event` runs Lua
 /// handlers synchronously and `PetTab_Update` tests only `HasPetUI()`, so a `UNIT_PET` fired
 /// before the push keeps the Pet tab hidden for the session.

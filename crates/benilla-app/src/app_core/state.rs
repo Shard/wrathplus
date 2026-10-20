@@ -308,3 +308,34 @@ pub(crate) struct EmoteSounds(pub(crate) EmoteSoundCatalog);
 /// [`crate::player::CAPSULE_HEIGHT`].
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CollisionHeight(pub(crate) f32);
+
+/// Our target, set the instant we click, as the 1.12 client does without waiting for the server,
+/// and cleared on deselect or when it streams out. `CMSG_SET_SELECTION` carries the guid, which the
+/// server records in our `UNIT_FIELD_TARGET`.
+#[derive(Resource, Default)]
+pub(crate) struct Selection {
+    pub(crate) target: Option<Entity>,
+    pub(crate) guid: Option<u64>,
+    /// The last-target pair `[0xb4e2e0]` that `TargetLastTarget` reads: `SetSelection` stamps the
+    /// outgoing selection, none included, on every change it makes, a select or a deselect
+    /// (`0x49361d`-`0x493628`); a teardown clear (`0x493910` alone) leaves it.
+    pub(crate) last: Option<u64>,
+}
+
+/// Lines a CVar's change callback prints to the console (`0x63cb50`), such as `spellEffectLevel`'s
+/// "Spell effect level set to %d.". A console command's own write collects them into its output;
+/// any other write (a Lua `SetCVar`, the boot load) sends them to the log, as the reference's go
+/// to a console screen nobody has open.
+#[derive(Resource, Default)]
+pub(crate) struct ConsoleEcho {
+    pub(crate) capture: Option<Vec<String>>,
+}
+
+/// `UNIT_FLAG_IN_COMBAT`, bit 19 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:564`), read by the
+/// client as `shr reg,0x13; test rl,1`. The local player has no separate combat latch: its two
+/// hardcoded readers (`0x482f70`, `0x4d6038`) and `UnitAffectingCombat("player")` read this bit.
+pub(crate) const UNIT_FLAG_IN_COMBAT: u32 = 0x0008_0000;
+
+/// `UNIT_FIELD_FLAGS` bit 21 (vmangos `UnitDefines.h:566`), tested inside `GetWeapon` at
+/// `0x5ec2b8` (CGPlayer) and `0x605e58`/`0x605e98` (CGUnit).
+pub(crate) const UNIT_FLAG_DISARMED: u32 = 0x0020_0000;
