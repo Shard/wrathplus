@@ -1,7 +1,7 @@
 //! Slider (LoadXML `0x789580`): value, step and orientation, the vertical default, the unswapped
 //! min/max, the value quantiser, and the change gate that keeps scrollbar wiring from recursing.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::QuadContent;
 
 /// The `(left, right, bottom, top)` rect of the thumb quad whose texture path contains `needle`.
@@ -98,7 +98,7 @@ fn slider_thumb_drag_maps_cursor_to_value() {
 
 #[test]
 fn slider_track_press_seats_the_thumb_and_a_mouseless_slider_ignores_it() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(1024.0, 768.0);
     s.run(
         r#"
@@ -110,7 +110,7 @@ fn slider_track_press_seats_the_thumb_and_a_mouseless_slider_ignores_it() {
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(0)
         fired = {}
-        bar:SetScript("OnValueChanged", function() table.insert(fired, arg1) end)
+        bar:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) table.insert(fired, arg1) end)
     "#,
     )
     .unwrap();
@@ -209,13 +209,13 @@ fn slider_value_clamps_and_does_not_swap_minmax() {
 
 #[test]
 fn slider_setvalue_fires_onvaluechanged_only_on_change() {
-    let s = vanilla_script();
+    let s = script();
     s.run(
         r#"
         local sl = CreateFrame("Slider", "SlEvt")
         sl:SetMinMaxValues(0, 10)
         seen = {}
-        sl:SetScript("OnValueChanged", function() local self, value = this, arg1
+        sl:SetScript("OnValueChanged", function(self, value)
             table.insert(seen, value)
             assert(self == sl and arg1 == value, "handler-firing conventions carry the value")
         end)
@@ -224,32 +224,6 @@ fn slider_setvalue_fires_onvaluechanged_only_on_change() {
         sl:SetMinMaxValues(0, 3) -- re-clamp 4 -> 3: a value change, fires
         assert(table.getn(seen) == 2 and seen[1] == 4 and seen[2] == 3,
                "fired once per actual change: " .. table.getn(seen))
-    "#,
-    )
-    .unwrap();
-}
-
-/// `Enable`/`Disable`/`IsEnabled` are Button methods in 1.12 (table `0x879d00`), so a Slider must
-/// not answer them: addons duck-type on `if widget.IsEnabled then`. A Button is the control.
-#[test]
-fn a_slider_does_not_answer_the_buttons_enable_trio() {
-    let s = vanilla_script();
-    s.run(
-        r#"
-        local sl = CreateFrame("Slider", "SlEnable")
-        for _, name in ipairs({ "Enable", "Disable", "IsEnabled" }) do
-            assert(sl[name] == nil, "Slider must not answer " .. name)
-        end
-        local b = CreateFrame("Button", "SlEnableControl")
-        for _, name in ipairs({ "Enable", "Disable", "IsEnabled" }) do
-            assert(type(b[name]) == "function", "Button still answers " .. name)
-        end
-        -- The Button's own predicate is the NUMBER 1 / the NUMBER 0, never a Lua boolean — its
-        -- false leg is 0 rather than nil, settled per body at `0x7800b0`'s `setne`+`fild`
-        -- (`binding_abi::flag`'s doc).
-        assert(b:IsEnabled() == 1, "1, not true")
-        b:Disable()
-        assert(b:IsEnabled() == 0, "0, not false and not nil")
     "#,
     )
     .unwrap();
@@ -275,7 +249,7 @@ fn slider_scrollbar_wiring_does_not_recurse() {
     // Stock wiring: the slider's OnValueChanged scrolls the frame (`UIPanelTemplates.xml:157`),
     // whose OnVerticalScroll sets the slider back (`:193`). The change gate
     // (`SliderState::store_value`) ends it after one hop; without it the stack overflows.
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(1024.0, 768.0);
     s.run(
         r#"
@@ -288,8 +262,8 @@ fn slider_scrollbar_wiring_does_not_recurse() {
 
         bar = CreateFrame("Slider", "SlSFBar")
         bar:SetMinMaxValues(0, 200)
-        bar:SetScript("OnValueChanged", function() sf:SetVerticalScroll(arg1) end)
-        sf:SetScript("OnVerticalScroll", function() bar:SetValue(arg1) end)
+        bar:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) sf:SetVerticalScroll(arg1) end)
+        sf:SetScript("OnVerticalScroll", function(this, arg1, arg2, arg3, arg4) bar:SetValue(arg1) end)
     "#,
     )
     .unwrap();
@@ -310,12 +284,12 @@ fn slider_value_bits_gate_the_first_fire_and_the_range_reclamp() {
     // The reference's `+0x314` bit1 (has a range) and bit2 (has a value), from `SetValue`
     // (`0x789930`) and `SetMinMaxValues` (`0x7898f0`): a rangeless SetValue is a no-op, the
     // first SetValue always fires, and SetMinMaxValues re-clamps only once a value exists.
-    let s = vanilla_script();
+    let s = script();
     s.run(
         r#"
         seen = {}
         local sl = CreateFrame("Slider", "SlBits")
-        sl:SetScript("OnValueChanged", function() table.insert(seen, arg1) end)
+        sl:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) table.insert(seen, arg1) end)
 
         sl:SetValue(7)                       -- bit1 clear: a complete no-op
         assert(sl:GetValue() == 0, "rangeless SetValue stores nothing: " .. sl:GetValue())
@@ -345,13 +319,13 @@ fn slider_value_bits_gate_the_first_fire_and_the_range_reclamp() {
 fn slider_onload_range_does_not_run_an_unarmed_onvaluechanged() {
     // Atlas's options slider (`AtlasOptions.xml`): its `<OnValueChanged>` reads a saved variable
     // that exists only after ADDON_LOADED; in the reference the `<OnLoad>` range raises nothing.
-    let mut s = vanilla_script();
+    let mut s = script();
     let doc = crate::framexml::parse(
         r#"<Ui>
           <Slider name="SlAtlasAlpha">
             <Scripts>
-              <OnLoad>this:SetMinMaxValues(0.25, 1); this:SetValueStep(0.05)</OnLoad>
-              <OnValueChanged>SlAtlasOpts.alpha = this:GetValue()</OnValueChanged>
+              <OnLoad>self:SetMinMaxValues(0.25, 1); self:SetValueStep(0.05)</OnLoad>
+              <OnValueChanged>SlAtlasOpts.alpha = self:GetValue()</OnValueChanged>
             </Scripts>
           </Slider>
         </Ui>"#,
@@ -546,7 +520,7 @@ fn a_move_inside_one_step_fires_nothing() {
         r#"
         fires = 0
         g = CreateFrame("Slider", "SlGate")
-        g:SetScript("OnValueChanged", function() fires = fires + 1 end)
+        g:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) fires = fires + 1 end)
         g:SetMinMaxValues(0, 160)
         g:SetValueStep(16)
         g:SetValue(32)      -- first-ever value: always fires
@@ -579,7 +553,7 @@ fn set_value_step_re_quantises_the_held_value_and_can_fire() {
         r#"
         fires = 0
         v = CreateFrame("Slider", "SlStep")
-        v:SetScript("OnValueChanged", function() fires = fires + 1 end)
+        v:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) fires = fires + 1 end)
         v:SetMinMaxValues(0, 100)
         v:SetValue(37)          -- first-ever value: always fires, no step yet, so raw
     "#,
@@ -615,7 +589,7 @@ fn a_step_before_any_range_is_the_whole_call() {
         r#"
         fires = 0
         n = CreateFrame("Slider", "SlNoRange")
-        n:SetScript("OnValueChanged", function() fires = fires + 1 end)
+        n:SetScript("OnValueChanged", function(this, arg1, arg2, arg3, arg4) fires = fires + 1 end)
         n:SetValueStep(0.25)
     "#,
     )

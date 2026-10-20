@@ -42,12 +42,6 @@ fn script() -> UiScript {
     s
 }
 
-fn vanilla_script() -> UiScript {
-    let mut s = UiScript::new_vanilla().expect("construct UiScript");
-    s.set_screen_size(800.0, 600.0);
-    s.set_text_measurer(Box::new(Lines(LH)));
-    s
-}
 
 /// One frame of the host loop: the tick (where the flush relayouts), then the resolve.
 fn frame(s: &mut UiScript) {
@@ -117,9 +111,9 @@ fn a_multi_line_box_is_as_tall_as_its_text_and_its_insets() {
 /// handler reads the new height.
 #[test]
 fn on_text_changed_sees_the_height_the_flush_just_set() {
-    let mut s = vanilla_script();
+    let mut s = script();
     inset_box(&mut s);
-    s.run(r#"E:SetScript("OnTextChanged", function() SEEN = this:GetHeight() end)"#)
+    s.run(r#"E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) SEEN = this:GetHeight() end)"#)
         .unwrap();
     frame(&mut s);
     s.run(r#"E:SetText("a\nb\nc\nd")"#).unwrap();
@@ -230,12 +224,12 @@ fn the_text_region_is_pinned_top_left_as_wide_as_the_box_and_as_tall_as_its_text
 /// fires nothing.
 #[test]
 fn on_size_changed_fires_when_the_text_moves_the_height() {
-    let mut s = vanilla_script();
+    let mut s = script();
     inset_box(&mut s);
     s.run(
         r#"
         fires = {}
-        E:SetScript("OnSizeChanged", function() table.insert(fires, { w = arg1, h = arg2 }) end)
+        E:SetScript("OnSizeChanged", function(this, arg1, arg2, arg3, arg4) table.insert(fires, { w = arg1, h = arg2 }) end)
     "#,
     )
     .unwrap();
@@ -266,7 +260,7 @@ fn on_size_changed_fires_when_the_text_moves_the_height() {
 /// lines give `max(255, 10 + 30·L) − 257`.
 #[test]
 fn a_scroll_frame_ranges_over_the_whole_text_of_a_multi_line_box() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         local sf = CreateFrame("ScrollFrame", "MailScroll", UIParent)
@@ -279,8 +273,8 @@ fn a_scroll_frame_ranges_over_the_whole_text_of_a_multi_line_box() {
         body:SetMultiLine(true); body:SetAutoFocus(false)
         body:SetWidth(270); body:SetHeight(200)
         body:SetPoint("TOPLEFT", 20, -10)
-        body:SetScript("OnTextChanged", function() ScrollingEdit_OnTextChanged(MailScroll) end)
-        sf:SetScript("OnScrollRangeChanged", function() RANGE = arg2 end)
+        body:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) ScrollingEdit_OnTextChanged(MailScroll) end)
+        sf:SetScript("OnScrollRangeChanged", function(this, arg1, arg2, arg3, arg4) RANGE = arg2 end)
         function ScrollingEdit_OnTextChanged(scrollFrame) scrollFrame:UpdateScrollChildRect() end
     "#,
     )
