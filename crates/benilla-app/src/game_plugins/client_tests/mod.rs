@@ -4,6 +4,7 @@
 
 mod names_native_pet_tests;
 mod net;
+mod net_apply_motion_seam_tests;
 mod net_apply_seam_tests;
 mod net_capture_replay_tests;
 mod net_handlers;
@@ -35,6 +36,7 @@ mod net_wrath_stream_tests;
 mod net_wrath_vehicle;
 mod net_wrath_world_objects_capture_tests;
 mod script_calls;
+mod shipped_cvars;
 mod spell_native_failure;
 mod target_ring;
 mod ui_arena_team_tests;

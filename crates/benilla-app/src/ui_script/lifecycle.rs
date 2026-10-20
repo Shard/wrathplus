@@ -337,7 +337,7 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
             script.set_cvar_saved_base(cvars.orphans());
             script.seed_cvars(cvars.vm_seed());
         }
-        None => script.register_cvars(crate::cvars::registered_pairs()),
+        None => script.register_cvars(crate::shipped_cvars::pairs()),
     }
     // The realm before the load, since addons read `GetRealmName()` at file scope; the roster
     // carries the realm-list entry this session connected to.

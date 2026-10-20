@@ -136,7 +136,7 @@ mod tests {
         script.set_screen_size(1024.0, 768.0);
         // The stock CVars the Wrath surface registers at birth.
         script.take_cvar_registrations();
-        let mut cvars = crate::cvars::Cvars::default();
+        let mut cvars = crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         cvars.set("gamma", "1.2");
         script.seed_cvars(cvars.vm_seed());
         assert!(load_bootstrap(&script).is_empty());
@@ -192,7 +192,9 @@ mod tests {
     fn observer_copies_are_bounded_and_unavailable_outside_live_player_state() {
         use benilla_ui::script::{ScriptDialect, ScriptValue, UnitState};
         let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-        script.seed_cvars(crate::cvars::Cvars::default().vm_seed());
+        script.seed_cvars(
+            crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed(),
+        );
         script
             .run_addon_chunk_named(
                 "AzerothBenchObserver",

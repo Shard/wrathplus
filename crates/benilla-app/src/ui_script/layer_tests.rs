@@ -74,7 +74,7 @@ pub(super) fn production_load_with(
     );
     // A reply that hid nothing, so `GetNumAddOns` counts the registry.
     s.note_addon_info_reply(&[]);
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s.run(before).unwrap();
     // The layer passed in, not set through `WOW_STOCK_UI`: every test in this process reads it.
     let mut failures = Vec::new();

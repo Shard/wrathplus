@@ -23,7 +23,7 @@ use benilla_assets::AssetSet;
 use benilla_world::interact::{WorldClick, WorldRightClick};
 use benilla_world::schedule::WorldStage;
 
-mod approach;
+pub(crate) mod approach;
 mod arc;
 mod net;
 // Writes the frame onto the body we drive: pose, `MovementState`, the counter-twist gap.
@@ -215,6 +215,8 @@ pub(crate) struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, camera_view::CVARS);
+        crate::cvars::RegisterCvars::register_cvars(app, approach::CVARS);
         // A Wrath reconnect clears the old mover before the new endpoint opens.
         app.world_mut()
             .get_resource_or_init::<crate::app_core::movement::ConnectResets>()

@@ -2372,7 +2372,9 @@ mod tests {
         let start = |identity: &(String, String)| {
             let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
             script.set_screen_size(1024.0, 768.0);
-            script.seed_cvars(crate::cvars::Cvars::default().vm_seed());
+            script.seed_cvars(
+                crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed(),
+            );
             assert!(
                 crate::ui_script::wrath_addons::load_bootstrap(&script).is_empty(),
                 "the authored root must load before addon widgets"

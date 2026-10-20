@@ -87,7 +87,7 @@ fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bo
     follow_production_order(s, entry);
     // The app registers its CVars before any file loads: stock `UIOptionsFrame.xml` reads two
     // camera CVars at `OnLoad` and raises on a nil. A value a test already set stands.
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     let path = entry.replace('\\', "/");
     let bytes = read(&path).unwrap_or_else(|| panic!("{entry}: not found"));
     if path.to_ascii_lowercase().ends_with(".lua") {

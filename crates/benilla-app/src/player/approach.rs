@@ -515,6 +515,17 @@ pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Approach>().add_observer(on_cvar);
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `AutoInteract` (`0x603390`, record `[0xc4d9a4]`), Click-to-Move (`UIOptionsFrame.lua:7`):
+        // "1" on koKR alone (`0x603368`). The knob is [`crate::player::Approach`].
+        same("AutoInteract", "0"),
+    ]
+};
+
 #[cfg(test)]
 mod tests {
     use super::super::state::{MoveSpeed, PlayerRide};

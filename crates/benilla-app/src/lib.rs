@@ -101,6 +101,7 @@ mod shaders;
 mod game_tip;
 mod name_persist;
 mod opaque2d;
+mod shipped_cvars;
 /// Where "the client is going down" is observed, in `Last`; every system that persists state on the
 /// way out registers through it.
 mod shutdown;

@@ -267,7 +267,7 @@ fn action_button_hover_takes_the_default_corner() {
         "Interface\\FrameXML\\ActionBarFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ]);
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s.run("this = ActionButton3 ActionButton_SetTooltip()")
         .unwrap();
     assert!(s.errors().is_empty(), "hover errors: {:?}", s.errors());
@@ -313,7 +313,7 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
         "KeyBindingsPage.xml",
         "OptionsFrame.xml",
     ]);
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s.set_cvar_engine("UberTooltips", "0");
 
     let seat = |s: &UiScript| {
@@ -379,7 +379,7 @@ fn ubertooltips_off_seats_stance_plates_beside_the_button() {
         "Interface\\FrameXML\\ActionBarFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
     ]);
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s.set_shapeshift_forms(vec![benilla_ui::script::ShapeshiftFormView {
         spell_id: 5487,
         name: "Bear Form".into(),

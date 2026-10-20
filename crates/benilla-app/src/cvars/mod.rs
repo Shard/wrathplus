@@ -30,7 +30,7 @@ use benilla_ui::script::{SeededCvar, UiScript};
 mod table;
 #[cfg(test)]
 use table::Reference;
-pub(crate) use table::{registered_pairs, REGISTERED};
+pub(crate) use table::{deviates, ours, same, Registered, REGISTERED};
 
 /// `config.toml`: a `[cvars]` table of `Name = "value"` strings, sorted so every save is stable.
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -138,6 +138,7 @@ pub(crate) struct Cvars {
 }
 
 impl Default for Cvars {
+    /// The core table alone; a feature's rows join through [`RegisterCvars`].
     fn default() -> Self {
         let mut cvars = Self {
             rows: Vec::with_capacity(REGISTERED.len()),
@@ -149,17 +150,31 @@ impl Default for Cvars {
             dirty: false,
             last_change: None,
         };
-        for r in REGISTERED {
-            cvars.insert_row(Row {
-                name: r.name.to_string(),
-                default: r.default.to_string(),
-                value: r.default.to_string(),
-                pending: None,
-                latched: r.latched,
-                addon: false,
-            });
-        }
+        cvars.add_rows(REGISTERED);
         cvars
+    }
+}
+
+/// Rows registered before [`CvarPlugin`] built the registry, appended when it does.
+#[derive(Resource, Default)]
+struct PendingCvarRows(Vec<&'static [Registered]>);
+
+/// A feature registers the CVar rows it owns in its own plugin, beside the observer on
+/// [`CvarChanged`] that applies them: the registry names no consumer. Rows join in registration
+/// order after the core table; only the latched rows' relative order is observable
+/// ([`Cvars::commit_latched`] fires in row order), and each latched family registers whole.
+pub(crate) trait RegisterCvars {
+    fn register_cvars(&mut self, rows: &'static [Registered]) -> &mut Self;
+}
+
+impl RegisterCvars for App {
+    fn register_cvars(&mut self, rows: &'static [Registered]) -> &mut Self {
+        let world = self.world_mut();
+        match world.get_resource_mut::<Cvars>() {
+            Some(mut cvars) => cvars.add_rows(rows),
+            None => world.get_resource_or_init::<PendingCvarRows>().0.push(rows),
+        }
+        self
     }
 }
 
@@ -177,6 +192,21 @@ impl Cvars {
                 value: String::new(),
                 pending: None,
                 latched: false,
+                addon: false,
+            });
+        }
+    }
+
+    /// Append `rows`, each at its default.
+    pub(crate) fn add_rows(&mut self, rows: &[Registered]) {
+        self.rows.reserve(rows.len());
+        for r in rows {
+            self.insert_row(Row {
+                name: r.name.to_string(),
+                default: r.default.to_string(),
+                value: r.default.to_string(),
+                pending: None,
+                latched: r.latched,
                 addon: false,
             });
         }
@@ -523,6 +553,29 @@ impl Cvars {
         cvars.events.clear();
         cvars
     }
+
+    /// The core table and `rows`, as the features owning them would register them.
+    #[cfg(test)]
+    pub(crate) fn with_rows(rows: &[&'static [Registered]]) -> Self {
+        let mut cvars = Self::default();
+        for rows in rows {
+            cvars.add_rows(rows);
+        }
+        cvars
+    }
+
+    /// [`Self::with_rows`] already holding one stored value.
+    #[cfg(test)]
+    pub(crate) fn with_rows_and_value(
+        rows: &[&'static [Registered]],
+        name: &str,
+        value: &str,
+    ) -> Self {
+        let mut cvars = Self::with_rows(rows);
+        cvars.load_file(BTreeMap::from([(name.to_string(), value.to_string())]));
+        cvars.events.clear();
+        cvars
+    }
 }
 
 /// How long a dirty config waits before saving: long enough to coalesce a slider drag.
@@ -538,7 +591,13 @@ pub(crate) struct CvarPlugin;
 
 impl Plugin for CvarPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Cvars>()
+        let mut cvars = Cvars::default();
+        if let Some(pending) = app.world_mut().remove_resource::<PendingCvarRows>() {
+            for rows in pending.0 {
+                cvars.add_rows(rows);
+            }
+        }
+        app.insert_resource(cvars)
             .add_systems(
                 Startup,
                 (load_config, publish_filter_policy)
@@ -941,7 +1000,7 @@ mod tests {
                 _ => ours == theirs,
             }
         }
-        for row in REGISTERED {
+        for row in crate::shipped_cvars::rows() {
             let name = row.name;
             match &row.reference {
                 Reference::Same(value) => assert!(
@@ -983,8 +1042,7 @@ mod tests {
 
     #[test]
     fn the_options_that_leave_the_reference_are_this_list_and_no_other() {
-        let mut names: Vec<&str> = REGISTERED
-            .iter()
+        let mut names: Vec<&str> = crate::shipped_cvars::rows()
             .filter(|r| matches!(r.reference, Reference::Deviates { .. }))
             .map(|r| r.name)
             .collect();
@@ -1008,8 +1066,7 @@ mod tests {
     /// checked in [`the_string_valued_cvars_are_the_realm_and_the_windowed_size`].
     #[test]
     fn registered_defaults_mirror_the_code_truths() {
-        let d: BTreeMap<&str, f32> = REGISTERED
-            .iter()
+        let d: BTreeMap<&str, f32> = crate::shipped_cvars::rows()
             .filter_map(|r| r.default.parse::<f32>().ok().map(|f| (r.name, f)))
             .collect();
         let sound = SoundConfig::default();
@@ -1440,21 +1497,19 @@ mod tests {
         // `benilla-ui`'s `SetWorldDetail`/`GetWorldDetail` name these CVars by const and cannot see
         // this table, so both must stay registered and the stops must stay `frillDensity`'s unit
         // times n.
-        assert!(REGISTERED
-            .iter()
-            .any(|r| r.name == benilla_ui::script::CVAR_WORLD_DETAIL));
-        assert!(REGISTERED
-            .iter()
-            .any(|r| r.name == benilla_ui::script::CVAR_FRILL_DENSITY));
+        assert!(
+            crate::shipped_cvars::rows().any(|r| r.name == benilla_ui::script::CVAR_WORLD_DETAIL)
+        );
+        assert!(
+            crate::shipped_cvars::rows().any(|r| r.name == benilla_ui::script::CVAR_FRILL_DENSITY)
+        );
         // The same for `GetGamma`/`SetGamma`, which read and write `1 - gamma`.
-        assert!(REGISTERED
-            .iter()
-            .any(|r| r.name == benilla_ui::script::CVAR_GAMMA));
+        assert!(crate::shipped_cvars::rows().any(|r| r.name == benilla_ui::script::CVAR_GAMMA));
         // `RestoreVideoDefaults`' row list lives in `benilla-ui` too; an unregistered row would be
         // skipped silently.
         for key in benilla_ui::script::VIDEO_DEFAULT_CVARS {
             assert!(
-                REGISTERED.iter().any(|r| r.name.eq_ignore_ascii_case(key)),
+                crate::shipped_cvars::rows().any(|r| r.name.eq_ignore_ascii_case(key)),
                 "{key}: RestoreVideoDefaults would restore it, and nothing registers it"
             );
         }
@@ -1465,7 +1520,7 @@ mod tests {
             .chain([&benilla_ui::script::CVAR_SMALL_CULL])
         {
             assert!(
-                REGISTERED.iter().any(|r| r.name.eq_ignore_ascii_case(key)),
+                crate::shipped_cvars::rows().any(|r| r.name.eq_ignore_ascii_case(key)),
                 "{key}: a video verb writes it, and nothing registers it"
             );
         }
@@ -1561,7 +1616,7 @@ mod tests {
 
     #[test]
     fn compose_writes_the_diff_and_preserves_what_it_does_not_own() {
-        let mut cvars = Cvars::default();
+        let mut cvars = Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         cvars.own_for_session("uiScale", Some("1.2")); // env-overridden this session
         cvars.load_file(
             [
@@ -1755,6 +1810,10 @@ mod tests {
             .init_resource::<crate::text_filter::TextFilterSwitches>()
             .init_resource::<crate::game_tip::GameTipSetting>()
             .add_plugins(CvarPlugin);
+        // No feature plugin here, so their rows join by hand, as each plugin would register them.
+        for rows in crate::shipped_cvars::FEATURE_ROWS {
+            app.register_cvars(rows);
+        }
         for observer in ALL_OBSERVERS {
             observer(&mut app);
         }
@@ -2028,8 +2087,7 @@ mod tests {
     /// ([`crate::video::parse_resolution`], [`crate::realmlist::normalize`]).
     #[test]
     fn the_string_valued_cvars_are_the_realm_and_the_windowed_size() {
-        let mut strings: Vec<&str> = REGISTERED
-            .iter()
+        let mut strings: Vec<&str> = crate::shipped_cvars::rows()
             .filter(|r| r.default.parse::<f32>().is_err())
             .map(|r| r.name)
             .collect();
@@ -2046,8 +2104,7 @@ mod tests {
             ]
         );
         let default_of = |name: &str| {
-            REGISTERED
-                .iter()
+            crate::shipped_cvars::rows()
                 .find(|r| r.name == name)
                 .map(|r| r.default)
                 .expect("registered")
@@ -2067,7 +2124,7 @@ mod tests {
 
     /// A registry loaded from `file`, with no disk.
     fn registry(file: &[(&str, &str)]) -> Cvars {
-        let mut cvars = Cvars::default();
+        let mut cvars = Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         cvars.load_file(
             file.iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -2081,7 +2138,7 @@ mod tests {
     /// (`0x63e060`) applies, fires, persists and mirrors it.
     #[test]
     fn a_latched_row_stages_the_write_until_the_boundary_commits_it() {
-        let mut cvars = Cvars::default();
+        let mut cvars = Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         assert!(
             cvars.row("gxVSync").unwrap().latched,
             "the reference's flags=3 row"
@@ -2140,7 +2197,7 @@ mod tests {
 
     #[test]
     fn a_numeric_row_refuses_what_does_not_parse_and_corrects_the_mirror() {
-        let mut cvars = Cvars::default();
+        let mut cvars = Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         assert_eq!(cvars.set_from_vm("uiScale", "banana"), SetOutcome::Refused);
         assert_eq!(cvars.get("uiScale"), Some("0.9"));
         assert!(!cvars.has_events());
@@ -2205,7 +2262,7 @@ mod tests {
 
     #[test]
     fn a_session_owned_row_answers_the_env_and_never_reaches_the_file() {
-        let mut cvars = Cvars::default();
+        let mut cvars = Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS);
         cvars.own_for_session("uiScale", Some("1.2"));
         cvars.load_file(BTreeMap::from([("uiScale".to_string(), "0.8".to_string())]));
         assert_eq!(
@@ -2349,7 +2406,7 @@ mod tests {
             }
         }
         let mut orphans = Vec::new();
-        for row in REGISTERED {
+        for row in crate::shipped_cvars::rows() {
             if LUA_ONLY.iter().any(|(n, _)| *n == row.name) {
                 continue;
             }
@@ -2366,7 +2423,7 @@ mod tests {
         );
         for (name, _) in LUA_ONLY {
             assert!(
-                REGISTERED.iter().any(|r| r.name == *name),
+                crate::shipped_cvars::rows().any(|r| r.name == *name),
                 "{name}: named Lua-only but not registered"
             );
         }
@@ -2377,8 +2434,7 @@ mod tests {
     /// `flags = 1` and apply live.
     #[test]
     fn the_latched_rows_are_the_references_own() {
-        let mut latched: Vec<&str> = REGISTERED
-            .iter()
+        let mut latched: Vec<&str> = crate::shipped_cvars::rows()
             .filter(|r| r.latched)
             .map(|r| r.name)
             .collect();

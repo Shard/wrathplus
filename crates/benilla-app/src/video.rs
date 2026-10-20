@@ -330,8 +330,107 @@ fn detail_doodad_alpha(world: &mut World, args: &str) -> Vec<String> {
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::{deviates, same};
+    &[
+        // `gxApi` (`0x63a833`: name `0x842a64`, default `0x864f7c` "direct3d", flags 3, callback
+        // `0x63b030`, record `[0xc4ea94]`): the reference builds D3D9 unless it reads "OpenGl"
+        // (`0x63a3c4`, `0x842a5c`). Here it reports the wgpu backend (`wgpu::Backend::to_str`), pushed
+        // from `RenderAdapterInfo` and owned by the session, so it is never persisted. pfUI's
+        // `panel.lua:185` concatenates it.
+        deviates(
+            "gxApi",
+            "",
+            "direct3d",
+            "descriptive, not a selector — benilla renders through wgpu, which has no D3D9 \
+             backend and no chooser; the value is the live adapter's own and is never persisted",
+        )
+        .latched(),
+        // `gxVSync` (`0x63a859`, "1", flags 3), `OptionsFrame.lua:9`. The knob is
+        // [`VideoConfig::vsync`], which the window's present mode follows at the
+        // `RestartGx` commit. `$WOW_NOVSYNC=1` overrides it for the session.
+        same("gxVSync", "1").latched(),
+        // `gxWindow` (`0x63a889`): "0" on enUS; zhCN registers "1", as it does `gxMaximize`
+        // (`0x63a8e0`), and koKR `AutoInteract` (`0x603390`). The knob is
+        // [`VideoConfig::display`]. Deviation: "0" raises a borderless fullscreen window
+        // instead of mode-setting the display, because Wayland and macOS offer no mode-set and X11's
+        // leaves the desktop changed after a crash ([`crate::video`]).
+        same("gxWindow", "0").latched(),
+        // `gxResolution`, a string row parsed by `video::on_cvar`. Here it is only the windowed size:
+        // fullscreen is the monitor's own and no mode list is offered.
+        deviates(
+            "gxResolution",
+            "1600x900",
+            "640x480",
+            "narrowed to the WINDOWED size only — fullscreen is the monitor's own and we expose \
+             no mode list, and 640x480 is not a window anyone would ship a client at",
+        )
+        .latched(),
+        // `gxMultisample` (`0x63a950`, flags 3). The reference formats its default from field 21 of the
+        // `VideoHardware.dbc` row `DetectHardware` (`0x641260`) matches, which is 1, no multisampling,
+        // on every fallback row a modern GPU reaches. The knob is [`benilla_world::view::MsaaSetting`],
+        // read once at the camera's spawn; `$WOW_MSAA` overrides it for the session.
+        same("gxMultisample", "1").latched(),
+        // `GetCurrentMultisampleFormat 0x48c580` looks up all three of the Video dropdown's values by
+        // name, so these must exist. They describe the swapchain's own pair and steer nothing;
+        // `SetMultisampleFormat` writes them as `0x48c640` does.
+        deviates(
+            "gxColorBits",
+            "32",
+            "16",
+            "these describe, they do not steer — the pair is our swapchain's own, and every \
+             format `MsaaFormats` publishes carries it",
+        )
+        .latched(),
+        deviates(
+            "gxDepthBits",
+            "32",
+            "16",
+            "as `gxColorBits` — the depth half of the same descriptive pair",
+        )
+        .latched(),
+        // `spellEffectLevel` (`0x688900`: name `0x869324`, default `0x843068` "2", flags 1, callback
+        // `0x689510`, record `[0xc7f2a4]`), the Spell Detail slider (`OptionsFrame.lua:32`). The
+        // callback's two effects here: the particle emission scalar ([`on_cvar`]) and
+        // the dynamic-object shard rate, read at each emitter's spawn (`crate::entities`). Its third,
+        // skipping one M2-scene ground decal below level 2 (`0x672b3a`), has no counterpart: benilla
+        // does not draw that projection.
+        same("spellEffectLevel", "2"),
+        // The latched `gx*` rows the stock window's boxes and refresh dropdown write (flags 3, committed
+        // by `RestartGx`), each callback storing one field of the device-format record `0xc4eb98`.
+        //
+        // `gxMaximize` (`0x63a8e0`: name `0x864edc`, "0", "1" on zhCN like `gxWindow`, callback
+        // `0x63b1f0` → `+0x09` `[0xc4eba1]`): the window rebuild `0x58cf10` makes a windowed, maximized
+        // window a borderless popup (style `0x90000000`) at the screen's full size (`GetSystemMetrics`
+        // 0 and 1). The knob is [`VideoConfig::maximize`].
+        same("gxMaximize", "0").latched(),
+        // `gxTripleBuffer` (`0x63a80d`: name `0x864f88`, "0", callback `0x63afe0` → `+0x18`), whose
+        // callback refuses any value but 0 or 1 ("TripleBuffer must be 0 or 1", `0x8650b8`), a range
+        // this registry has no way to refuse with. No effect here: wgpu's present modes offer no
+        // triple-buffer choice.
+        same("gxTripleBuffer", "0").latched(),
+        // `gxCursor` (`0x63a906`: name `0x864eb8`, "1", callback `0x63b220` → `+0x05` `[0xc4eb9d]`),
+        // Hardware Cursor. No effect here: benilla always draws the OS cursor (`crate::cursor`) and has
+        // no software cursor to fall back to.
+        same("gxCursor", "1").latched(),
+        // `gxFixLag` (`0x63a9c1`: name `0x864e40`, callback `0x63b310` → `+0x06` `[0xc4eb9e]`), Fix
+        // Input Lag: its default is `"%d"` of `VideoHardware.dbc` field 20 (`[[0xc4e6e4]+0x50]`) of the
+        // row `DetectHardware` matched, 1 on all three fallback rows (168, 169, 170) a modern GPU can
+        // reach. No effect here: benilla has no such switch in its frame pacing.
+        same("gxFixLag", "1").latched(),
+        // `gxRefresh` (`0x63a7e7`: name `0x864fa8`, "75", callback `0x63aed0` → `+0x28`), the refresh
+        // dropdown (`OptionsFrame.lua:242-245`, `:300`); the callback accepts only the eleven rates at
+        // `0x8645e0` (60 to 200). No effect here: fullscreen is borderless at the monitor's own rate,
+        // and `GetRefreshRates` answers the reference's no-rates sentinel, which disables the dropdown.
+        same("gxRefresh", "75").latched(),
+    ]
+};
+
 impl Plugin for VideoPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         use crate::console::ConsoleCommandApp;
         app.init_resource::<SpellEffectLevel>();
         app.add_observer(on_cvar);

@@ -618,7 +618,7 @@ fn a_slider_rows_readout_sits_on_its_labels_line() {
 /// A VM with the real registered CVar set, before any XML loads, as the app boots.
 fn audio_harness() -> UiScript {
     let s = UiScript::new().unwrap();
-    s.register_cvars(crate::cvars::registered_pairs());
+    s.register_cvars(crate::shipped_cvars::pairs());
     s
 }
 
@@ -4106,7 +4106,7 @@ fn every_cvar_the_reference_table_names_is_registered_or_listed_with_its_blocker
         named.len()
     );
 
-    let registered: std::collections::HashSet<String> = crate::cvars::registered_pairs()
+    let registered: std::collections::HashSet<String> = crate::shipped_cvars::pairs()
         .map(|(n, _)| n.to_ascii_lowercase())
         .collect();
     let listed: std::collections::HashSet<String> = UNBACKED_REFERENCE_CVARS
@@ -4189,7 +4189,7 @@ fn every_registered_reference_cvar_has_a_row_on_our_own_window() {
         .map(|c| c.to_ascii_lowercase())
         .collect();
 
-    let registered: std::collections::HashSet<String> = crate::cvars::registered_pairs()
+    let registered: std::collections::HashSet<String> = crate::shipped_cvars::pairs()
         .map(|(n, _)| n.to_ascii_lowercase())
         .collect();
     let excused: std::collections::HashSet<String> = UNREACHABLE_REFERENCE_CVARS
