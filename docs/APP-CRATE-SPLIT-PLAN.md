@@ -86,6 +86,13 @@ the later moves are pure file moves. Each item names the symbols that point the 
    (`register_cvar(name, default, on_change)`); each feature registers its own cvars and hook in
    its plugin (`player::camera_view`, `video`, `realmlist`, `ui_gamma`, `ui_loot`,
    `ui_chat::combat`, `ui_guild`, `perf`, …). This removes 92 core → world/ui/tools references.
+   Done: the hooks already were each feature's `on_cvar` observer, so only the rows moved. 47 of
+   the 138 rows live in their 15 features as `CVARS` and register through
+   `cvars::RegisterCvars` in the feature's plugin; the core table keeps 91 that name no feature
+   (`fpsJournal` among them, since `perf` registers only in `dev`). Static users (the VM seeds,
+   the addon harness, the whole-table tests) read `shipped_cvars`, the aggregate the split puts
+   with the UI host; `client_tests::shipped_cvars` pins it to a built client's rows, the latched
+   rows' commit order and the 22 hooks' registration order.
 5. **Capture FIFOs into `net`.** The `ui_native::wrath_*` capture modules that `net` re-exports
    move under `net/` (the UI side keeps its drains).
 6. **Tests that build the whole client.** `game_plugins::schedule_tests::headless_client` was

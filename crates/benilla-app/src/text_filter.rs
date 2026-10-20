@@ -492,8 +492,24 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut switches: ResMut<Te
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // Registered "1" (`0x82e748`), category 4. `profanityFilter` (`0x402e68`, name `0x82e7f4`,
+        // callback `0x403570`) masks `ChatProfanity.dbc` spans inside the shared masker `0x4a1a66`,
+        // covering all thirteen call sites; `spamFilter` (`0x402e8e`, name `0x82e7d4`, callback
+        // `0x4035b0`) silently drops a line matching `SpamMessages.dbc`. The knob is
+        // [`TextFilterSwitches`].
+        same("profanityFilter", "1"),
+        same("spamFilter", "1"),
+    ]
+};
+
 impl Plugin for TextFilterPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         app.init_resource::<TextFilterSwitches>()
             .init_resource::<TextFilter>()

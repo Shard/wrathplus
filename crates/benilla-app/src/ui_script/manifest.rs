@@ -145,7 +145,7 @@ pub(crate) fn load_default_ui(script: &UiScript) -> Vec<String> {
     // The client's CVar table first: the stock `UIOptionsFrame.xml` reads CVars in its OnLoads,
     // and a bare `UiScript::new()` has only `benilla-ui`'s own. A re-register only refreshes
     // defaults.
-    script.register_cvars(crate::cvars::registered_pairs());
+    script.register_cvars(crate::shipped_cvars::pairs());
     let mut failures = silenced_ui_load(&mut &*script, |script| {
         let mut failures = load_core(script);
         if layer_enabled() {

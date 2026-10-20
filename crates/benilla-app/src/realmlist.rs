@@ -25,8 +25,26 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut realmlist: ResMut<R
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::deviates;
+    &[
+        // The logon server address (register site `0x5ab6a6`), a string row judged by
+        // `realmlist::on_cvar`.
+        deviates(
+            CVAR_REALMLIST,
+            DEFAULT_REALMLIST,
+            "us.logon.worldofwarcraft.com:3724",
+            "that host has not resolved since 2019, so shipping it makes every first launch a \
+             DNS failure; benilla dials the machine it is running on",
+        ),
+    ]
+};
+
 impl Plugin for RealmlistPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         app.init_resource::<Realmlist>();
     }

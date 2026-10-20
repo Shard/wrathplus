@@ -285,7 +285,7 @@ fn the_realm_cvars_are_read_only_to_lua_only_in_the_world() {
     let set = |world: &World, chunk: &str| {
         let s = world.non_send_resource::<benilla_ui::script::UiScript>();
         // A bare test world has no registry to seed the VM from.
-        s.register_cvars(crate::cvars::registered_pairs());
+        s.register_cvars(crate::shipped_cvars::pairs());
         s.run(chunk).map_err(|e| e.to_string())
     };
 

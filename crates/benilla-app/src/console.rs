@@ -277,7 +277,8 @@ mod tests {
     fn console_app() -> App {
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
-            .init_resource::<Cvars>()
+            // `gxVSync`, the latched row these tests stage, is `video`'s.
+            .insert_resource(Cvars::with_rows(&[crate::video::CVARS]))
             .add_plugins(ConsolePlugin);
         app
     }

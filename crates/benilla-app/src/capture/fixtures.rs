@@ -1011,7 +1011,7 @@ pub(super) fn seed_ui_fixture(
             };
             // The Audio page: the real CVar set first, so the rows read real values, then the
             // live open and select paths.
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) = script.run(
                 "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowAudio:Click()",
             ) {
@@ -1023,7 +1023,7 @@ pub(super) fn seed_ui_fixture(
                 return;
             };
             // The Graphics page, as the Audio fixture.
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) =
                 script.run("ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowGraphics:Click()")
             {
@@ -1036,7 +1036,7 @@ pub(super) fn seed_ui_fixture(
             };
             // The Chat page, as the Audio fixture. Its Remove Chat Hover Delay row reads a saved
             // variable `ChatFrame.xml` declares, so it paints unchecked, the shipped "0".
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) = script.run(
                 "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowChat:Click()",
             ) {
@@ -1064,7 +1064,7 @@ pub(super) fn seed_ui_fixture(
             // The Camera Following Style list open. Its width lands inside the opening click:
             // `UIDropDownMenu_Refresh` sizes buttons from `normalText:GetWidth() + 60`
             // (`UIDropDownMenu.lua:405`), which the engine answers in the same call.
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) = script.run(
                 "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowControls:Click(); \
                  BenillaOptionsFrameContainerBodyControlsRowCameraFollowStyleDropdownButton:Click()",
@@ -1079,7 +1079,7 @@ pub(super) fn seed_ui_fixture(
             // The Keybindings page over the commands the load registered: the real CVar set
             // first, then the live open path, with Movement expanded to show a header row and the
             // default bindings.
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) = script.run(
                 "ShowUIPanel(BenillaOptionsFrame); \
                  BenillaOptionsFrameCategoryListRowKeybindings:Click(); \
@@ -1094,7 +1094,7 @@ pub(super) fn seed_ui_fixture(
             };
             // Mid-search: "volume" gathers the four volume sliders under the Audio head. The box
             // is focused, so the caret shows at the text's end.
-            script.register_cvars(crate::cvars::registered_pairs());
+            script.register_cvars(crate::shipped_cvars::pairs());
             if let Err(e) = script.run(
                 "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameSearchBox:SetText(\"volume\"); BenillaOptionsFrameSearchBox:SetFocus()",
             )

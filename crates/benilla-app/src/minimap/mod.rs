@@ -891,8 +891,21 @@ fn feed_game_time(
 /// (`0x494970` beside `0x494780`).
 pub(crate) struct MinimapPlugin;
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // Both registered "3" (`0x48fc6c`, `0x48fc88`); the minimap's +/- buttons write them through
+        // `Minimap:SetZoom`. The knob is [`MinimapZoom`].
+        same("minimapZoom", "3"),
+        same("minimapInsideZoom", "3"),
+    ]
+};
+
 impl Plugin for MinimapPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         ping::register(app);
         app.add_observer(on_cvar);
         app.init_resource::<MinimapWidget>()

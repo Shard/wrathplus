@@ -755,8 +755,25 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut rate: ResMut<PaneRa
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::ours;
+    &[
+        // benilla's own: a body pane's doll renders at half the frame rate while the pane is open; the
+        // reference draws it in the main pass. The knob is [`PaneRate`].
+        ours(
+            "boothHalfRate",
+            "1",
+            "benilla's own — the reference draws its doll inside the main pass and has no \
+             second view to rate-limit",
+        ),
+    ]
+};
+
 impl Plugin for PortraitPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.init_resource::<PortraitImages>()
             .init_resource::<PortraitBakes>()
             .init_resource::<PaneRate>()

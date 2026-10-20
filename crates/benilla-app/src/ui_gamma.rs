@@ -273,8 +273,33 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut gamma: ResMut<Displ
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `gamma` (`0x402d70`: name `0x82e924` "Gamma", default `0x82e92c` "1.0", flags 0, callback
+        // `0x4034d0`). The reference uploads `pow(i/255, gamma)` (`0x591680`) through
+        // `SetDeviceGammaRamp`, except when windowed (`byte[dev+0x20b]`). Deviation: benilla, which
+        // has no exclusive mode, applies the same curve in the composite pass
+        // ([`DisplayGamma`]), because the skipped upload would make a slider that
+        // moves no pixel. Spelled "1.000000" because `SetGamma 0x4891f0` formats with `"%f"`, and
+        // Restore Defaults must compare equal to the default; [`sync_cvars`] seeds it the same way.
+        same("gamma", "1.000000"),
+        // `DesktopGamma` (`0x402d4d`: name `0x82e930`, default "0" `0x82e570`, flags 0, callback
+        // `0x403500`, record `[0x8826d4]`), the stock window's Use Desktop Gamma box, which it also
+        // sets whenever Windowed Mode is ticked (`OptionsFrame.lua:399-408`). On 1 the callback puts
+        // the desktop's own ramp back, and `gamma`'s callback (`0x4034d0`) uploads only while this
+        // reads 0. No effect here: [`DisplayGamma`] follows `gamma` alone, because
+        // the stock window ticks this box whenever Windowed Mode is (`:399-408`), so honouring it would
+        // drop the gamma of every windowed player who opens that window.
+        same("DesktopGamma", "0"),
+    ]
+};
+
 impl Plugin for UiGammaPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         app.init_resource::<DisplayGamma>()
             .add_plugins(ExtractComponentPlugin::<UiGammaLane>::default())

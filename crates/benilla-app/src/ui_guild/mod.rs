@@ -695,8 +695,21 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut notify: ResMut<Guil
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `guildMemberNotify` (`0x5e24c7`, "0" `0x82e570`, record `0xc4d3c4`): guildmate log on/off
+        // lines, read only in `SMSG_GUILD_EVENT`'s handler. The knob is
+        // [`GuildMemberNotify`].
+        same("guildMemberNotify", "0"),
+    ]
+};
+
 impl Plugin for UiGuildPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         wrath::register(app);
         app.add_observer(on_cvar);

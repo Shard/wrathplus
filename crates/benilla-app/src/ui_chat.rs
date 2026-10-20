@@ -78,6 +78,7 @@ pub(crate) struct NativeChatFeedSet;
 
 impl Plugin for UiChatPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, combat::CVARS);
         net::register(app);
         native_roster::register(app);
         app.add_observer(combat::on_cvar);
