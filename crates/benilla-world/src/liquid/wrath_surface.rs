@@ -267,15 +267,8 @@ pub(crate) fn spawn_wrath_liquids<'a>(
             crate::exterior_cull::ExteriorScene,
         ));
         if let Some(kind) = policy.query_kind {
-            let layer = &surface.layer;
             entity.insert((
-                WaterChunkInfo::new(
-                    LiquidSource::AdtChunk,
-                    kind,
-                    [usize::from(layer.width) + 1, usize::from(layer.height) + 1],
-                    surface.positions.clone(),
-                    layer.exists.clone(),
-                ),
+                adt_water_info(surface, kind),
                 LiquidSoundSource {
                     nibble: sound_class(kind),
                 },
@@ -289,6 +282,18 @@ pub(crate) fn spawn_wrath_liquids<'a>(
         }
         entities.push(entity.id());
     }
+}
+
+/// An MH2O layer's query footprint: its vertex grid and per-cell `exists` mask, as `kind`.
+pub(crate) fn adt_water_info(surface: &WrathLiquidSurface, kind: LiquidKind) -> WaterChunkInfo {
+    let layer = &surface.layer;
+    WaterChunkInfo::new(
+        LiquidSource::AdtChunk,
+        kind,
+        [usize::from(layer.width) + 1, usize::from(layer.height) + 1],
+        surface.positions.clone(),
+        layer.exists.clone(),
+    )
 }
 
 /// LiquidType word 3 as the sound class: water 0, ocean 1, magma 2, slime 3.

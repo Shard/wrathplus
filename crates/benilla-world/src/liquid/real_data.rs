@@ -6,12 +6,17 @@ use bevy::prelude::*;
 use super::query::{
     liquid_at, submersion_at, wet_footprint, LiquidClaim, LiquidSource, WaterChunkInfo, WmoPool,
 };
+use super::wrath_inputs::mesh_inputs;
+use super::wrath_surface::{adt_water_info, lane_policy};
 use crate::wmo_portal::WmoRoom;
 use benilla_assets::coords::{bevy_to_wow, placement_rotation, wow_to_bevy};
-use benilla_formats::{parse_wmo_root, wmo_group_liquid_mesh, LiquidMesh, Submersion};
+use benilla_assets::WmoLiquidState;
+use benilla_formats::wrath_liquid::load_liquid_catalogs;
+use benilla_formats::{parse_wmo_root, wmo_group_liquid_mesh_of_kind, LiquidMesh, Submersion};
 
-/// The world-placed, owner-tagged liquid around a position: its tiles' MCLQ and every WMO
-/// placement's MLIQ, each placement under a synthetic instance id for the app's entity.
+/// The world-placed, owner-tagged liquid around a position, as the 3.3.5 spawn paths build it: its
+/// tiles' MH2O layers through their LiquidType lanes and every WMO placement's MLIQ grid of its
+/// native category, each placement under a synthetic instance id for the app's entity.
 struct LiquidScene {
     surfaces: Vec<WaterChunkInfo>,
     /// Each placement with its group boxes in model space, for the containment test.
@@ -60,6 +65,7 @@ impl LiquidScene {
 fn liquid_scene(map: &str, wow: [f32; 3]) -> Option<LiquidScene> {
     let data = benilla_formats::wow_data()?;
     let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    let catalogs = load_liquid_catalogs(&mut chain).expect("liquid catalogs");
     let (cx, cy) = benilla_formats::world_to_tile(wow[0], wow[1]);
     let mut scene = LiquidScene {
         surfaces: Vec::new(),
@@ -73,12 +79,24 @@ fn liquid_scene(map: &str, wow: [f32; 3]) -> Option<LiquidScene> {
             let Ok(tile) = benilla_formats::load_tile_mesh(&mut chain, map, tx, ty) else {
                 continue;
             };
-            for lq in tile.chunks.iter().flat_map(|c| c.liquids.iter()) {
-                scene.surfaces.push(wet_footprint(
-                    lq,
-                    &Transform::IDENTITY,
-                    LiquidSource::AdtChunk,
-                ));
+            for surface in &tile.wrath_liquids {
+                let Some(ty) = catalogs.liquid_type(u32::from(surface.layer.liquid_type)) else {
+                    continue;
+                };
+                let Ok(policy) = lane_policy(ty, catalogs.material_for(ty)) else {
+                    continue;
+                };
+                // As `spawn_wrath_liquids`: a dry or rejected layer spawns no query.
+                let drawn = mesh_inputs(
+                    surface,
+                    policy.material_selector,
+                    policy.depth_table,
+                    &surface.positions,
+                )
+                .is_ok_and(|inputs| !inputs.indices.is_empty());
+                if let (true, Some(kind)) = (drawn, policy.query_kind) {
+                    scene.surfaces.push(adt_water_info(surface, kind));
+                }
             }
             for w in &tile.wmos {
                 // Once per `unique_id`, as the streamer dedups a straddling building.
@@ -115,21 +133,28 @@ fn liquid_scene(map: &str, wow: [f32; 3]) -> Option<LiquidScene> {
                     let Ok(gb) = chain.read_file(&format!("{stem}_{gi:03}.wmo")) else {
                         continue;
                     };
-                    if let Some(lq) = wmo_group_liquid_mesh(&gb) {
-                        scene.surfaces.push(wet_footprint(
-                            lq_ref(&lq),
+                    let Some(lq) = WmoLiquidState::decode(&gb, &root, &catalogs)
+                        .ok()
+                        .and_then(|s| s.grid_kind())
+                        .and_then(|kind| {
+                            wmo_group_liquid_mesh_of_kind(&gb, root.flags().ok()?, kind)
+                        })
+                    else {
+                        continue;
+                    };
+                    scene.surfaces.push(wet_footprint(
+                        lq_ref(&lq),
+                        &transform,
+                        // The app's own constructor, so the test pins the app's floor rule.
+                        LiquidSource::WmoGroup(WmoPool::new(
+                            Some(WmoRoom {
+                                instance,
+                                group: gi as u16,
+                            }),
                             &transform,
-                            // The app's own constructor, so the test pins the app's floor rule.
-                            LiquidSource::WmoGroup(WmoPool::new(
-                                Some(WmoRoom {
-                                    instance,
-                                    group: gi as u16,
-                                }),
-                                &transform,
-                                root.group_infos().get(gi as usize),
-                            )),
-                        ));
-                    }
+                            root.group_infos().get(gi as usize),
+                        )),
+                    ));
                 }
             }
         }

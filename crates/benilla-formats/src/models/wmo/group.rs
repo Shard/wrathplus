@@ -356,8 +356,63 @@ pub fn wmo_group_liquid_mesh(group_bytes: &[u8]) -> Option<LiquidMesh> {
     build_wmo_liquid_mesh(&lq, group.group_liquid)
 }
 
+/// A Wrath group's MLIQ grid as a [`LiquidMesh`] of `kind`, the native resolver's category
+/// ([`wmo_group_wrath_liquid`] through `LiquidType.dbc`). Under MOHD flag 4 `groupLiquid` is the
+/// resolver's input itself, not a nibble: Stormwind's canals and Ironforge's two pools carry 5, an
+/// empty nibble slot, so [`wmo_group_liquid_mesh`] drops all seven.
+///
+/// [`LiquidMesh::sound_nibble`] keeps the native speed bits (`n − 1`, where `n` is the resolver's
+/// input) over `kind`'s class: over the shipped cities that reproduces the 1.12 nibbles exactly
+/// (Ironforge 2 and 6, Undercity 3, Blackrock 6, Stratholme 7). Labelled: that the 12340 liquid
+/// renderer gates its scroll on those bits is unread.
+pub fn wmo_group_liquid_mesh_of_kind(
+    group_bytes: &[u8],
+    root_flags: u32,
+    kind: LiquidKind,
+) -> Option<LiquidMesh> {
+    let Ok(ParsedWmo::Group(group)) = parse_wmo(&mut Cursor::new(group_bytes)) else {
+        return None;
+    };
+    let lq = group.liquid?;
+    let raw = group.group_liquid;
+    let n = if root_flags & 4 != 0 {
+        raw
+    } else if raw == NO_GROUP_LIQUID {
+        0
+    } else {
+        raw.wrapping_add(1)
+    };
+    // `n` 0 takes the first wet tile's nibble, as the legacy surface does; `n` ≥ 21 is a direct
+    // LiquidType id with no speed bits.
+    let speed = match n {
+        0 => lq.tile_flags.iter().map(|&f| f & 0xf).find(|&f| f != 0xf)? & 0xc,
+        1..=20 => ((n - 1) & 0xc) as u8,
+        _ => 0,
+    };
+    let class = match kind {
+        LiquidKind::Ocean => 1,
+        LiquidKind::Magma => 2,
+        LiquidKind::Slime => 3,
+        LiquidKind::Still | LiquidKind::Rapids => 0,
+    };
+    build_wmo_liquid_grid(&lq, kind, speed | class)
+}
+
 /// The [`LiquidMesh`] for a parsed [`WmoLiquid`] grid and its group's `groupLiquid`.
 fn build_wmo_liquid_mesh(lq: &WmoLiquid, group_liquid: u32) -> Option<LiquidMesh> {
+    // One kind per surface: the `groupLiquid` override, else the first wet nibble (`0x6ba970`).
+    let type_nibble = if group_liquid != NO_GROUP_LIQUID {
+        (group_liquid & 0xf) as u8
+    } else {
+        let first_wet = lq.tile_flags.iter().map(|&f| f & 0xf).find(|&n| n != 0xf)?;
+        first_wet
+    };
+    let kind = LiquidKind::from_nibble(type_nibble)?;
+    build_wmo_liquid_grid(lq, kind, type_nibble)
+}
+
+/// The grid of one `kind`; `sound_nibble` keys `SoundWaterType.dbc`.
+fn build_wmo_liquid_grid(lq: &WmoLiquid, kind: LiquidKind, sound_nibble: u8) -> Option<LiquidMesh> {
     let (xv, yv, xt, yt) = (
         lq.xverts as usize,
         lq.yverts as usize,
@@ -370,15 +425,6 @@ fn build_wmo_liquid_mesh(lq: &WmoLiquid, group_liquid: u32) -> Option<LiquidMesh
     if lq.heights.len() < xv * yv || lq.tile_flags.len() < xt * yt {
         return None;
     }
-
-    // One kind per surface: the `groupLiquid` override, else the first wet nibble (`0x6ba970`).
-    let type_nibble = if group_liquid != NO_GROUP_LIQUID {
-        (group_liquid & 0xf) as u8
-    } else {
-        let first_wet = lq.tile_flags.iter().map(|&f| f & 0xf).find(|&n| n != 0xf)?;
-        first_wet
-    };
-    let kind = LiquidKind::from_nibble(type_nibble)?;
     // Fullbright kinds read no ramp and their vertex bytes are a UV pair: the channel stays 0.
     let water = !kind.is_fullbright();
 
@@ -452,7 +498,7 @@ fn build_wmo_liquid_mesh(lq: &WmoLiquid, group_liquid: u32) -> Option<LiquidMesh
         depths,
         indices,
         // The resolved nibble is also the surface's ambient-sound key.
-        sound_nibble: type_nibble,
+        sound_nibble,
         // The body colour's MOMT index; MOMT is in the root, so the spawner resolves it.
         material_id: Some(lq.material_id),
         kind,
