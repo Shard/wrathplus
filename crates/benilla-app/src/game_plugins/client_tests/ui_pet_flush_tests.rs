@@ -382,9 +382,7 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         )];
     }
 
-    let mut script = benilla_ui::script::UiScript::new().unwrap();
-    script.set_screen_size(1024.0, 768.0);
-    let failures = crate::ui_script::load_default_ui(&script);
+    let (script, failures) = super::ui_pet_press_tests::stock_session_ui();
     assert!(failures.is_empty(), "load failures: {failures:?}");
     listen(&script);
     rig.app.world_mut().insert_non_send_resource(script);
@@ -421,12 +419,13 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
             .unwrap(),
         "the GCD sweeps the spellbook's button"
     );
+    // `GetCooldownTimes` answers in milliseconds; stock `CooldownFrame_SetTimer` keeps no field.
     assert!(
-        (s.eval::<f64>("return SpellButton1Cooldown.duration")
+        (s.eval::<f64>("return select(2, SpellButton1Cooldown:GetCooldownTimes())")
             .unwrap()
-            - 1.5)
+            - 1500.0)
             .abs()
-            < 1e-9,
+            < 1e-6,
         "and it is the 1.5 s the press started"
     );
     let errors = s.errors();

@@ -513,20 +513,19 @@ fn a_held_action_stays_held_while_the_pet_is_out_of_view() {
 /// The whole default UI on the rig's world in place of its listening VM: the stock pet bar, and
 /// the fed pet under it.
 fn with_stock_ui(rig: &mut Rig) {
-    let mut script = benilla_ui::script::UiScript::new().expect("a VM");
-    script.set_screen_size(1024.0, 768.0);
     // The in-game UI loads on world entry, so a player exists.
+    let (mut script, failures) = super::ui_pet_press_tests::stock_session_ui();
+    assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
+    // The client holds the pet's object, as the unit feed (not in this rig) tells the VM:
+    // 3.3.5's `PetActionBar_OnEvent` shows the bar only for a `UnitIsVisible("pet")` (l.40).
     script.set_unit(
-        "player",
+        "pet",
         Some(benilla_ui::script::UnitState {
             exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
+            has_object: true,
             ..Default::default()
         }),
     );
-    let failures = crate::ui_script::load_default_ui(&script);
-    assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     rig.app.world_mut().insert_non_send_resource(script);
 }
 
@@ -587,6 +586,9 @@ fn the_stock_bar_greys_a_stunned_pet_and_its_click_sends_nothing() {
         ..claw()
     };
     let mut rig = rig(vec![(CLAW, display)], &[CLAW], Some(owned_pet()));
+    // A Wrath session's bar is the native `SMSG_PET_SPELLS` (`WrathPetSpells`), which alone fills
+    // the slot's own usability that `GetPetActionSlotUsable` reads.
+    rig.app.world_mut().resource_mut::<PetBar>().native = Some(native_claw_bar());
     with_stock_ui(&mut rig);
     settle(&mut rig);
 
@@ -639,4 +641,17 @@ fn a_dead_pet_is_still_usable() {
         0,
         "the attack validator refuses the dead actor, past the gate"
     );
+}
+
+/// The native bar a Wrath session holds for [`PET`]: Claw, enabled, in slot 1 and in the book.
+fn native_claw_bar() -> benilla_protocol::wrath_pet::PetSpells {
+    use benilla_protocol::wrath_pet::{Action, PetSpells};
+    let mut actions = [Action(0); 10];
+    actions[0] = Action(CLAW_WORD);
+    PetSpells {
+        guid: PET,
+        actions,
+        spells: vec![Action(CLAW_WORD)],
+        ..Default::default()
+    }
 }
