@@ -10,6 +10,7 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
+use crate::app_core::death::DeathNet;
 use crate::go_templates::GameObjectTemplates;
 use crate::items::Items;
 use crate::names::NameCache;
@@ -99,7 +100,7 @@ pub(crate) struct Scene<'w, 's> {
     names: Res<'w, NameCache>,
     items: ResMut<'w, Items>,
     go_templates: ResMut<'w, GameObjectTemplates>,
-    death_net: ResMut<'w, crate::death::DeathNet>,
+    death_net: ResMut<'w, DeathNet>,
     group: ResMut<'w, crate::ui_party::GroupState>,
 }
 
@@ -119,7 +120,7 @@ fn on_object_create(In(ev): In<SessionEvent>, mut sc: Scene) {
         fields,
     } = ev
     {
-        crate::death::net::note_corpse(guid, kind, &fields, &sc.self_guid, &mut sc.death_net);
+        note_corpse(guid, kind, &fields, &sc.self_guid, &mut sc.death_net);
         object_create(
             guid,
             kind,
@@ -287,7 +288,7 @@ fn on_unit_move(In(ev): In<SessionEvent>, mut sc: Scene) {
 /// re-asked on that edge, as the reference's `FLAGS` handler does (`0x5d6d60`).
 fn on_object_values(In(ev): In<SessionEvent>, mut sc: Scene) {
     if let SessionEvent::ObjectValues { guid, fields } = ev {
-        crate::death::net::recheck_corpse(guid, &fields, &sc.self_guid, &mut sc.death_net);
+        recheck_corpse(guid, &fields, &sc.self_guid, &mut sc.death_net);
         object_values(
             guid,
             fields,
@@ -302,7 +303,7 @@ fn on_object_values(In(ev): In<SessionEvent>, mut sc: Scene) {
 /// The party hook runs first: the reference's deactivate reads the descriptor about to go.
 fn on_object_destroyed(In(ev): In<SessionEvent>, mut sc: Scene) {
     if let SessionEvent::ObjectDestroyed(guid) = ev {
-        crate::death::net::forget_corpse(guid, &mut sc.death_net);
+        forget_corpse(guid, &mut sc.death_net);
         let held = |g: u64| sc.index.0.get(&g).and_then(|e| sc.stores.get(*e).ok());
         crate::ui_party::net::member_deactivated(
             guid,
@@ -807,7 +808,7 @@ fn object_destroyed(guid: u64, commands: &mut Commands, index: &mut GuidIndex) {
     //
     // A pinned object only gets its pending-destroy bit and is freed when the last pin drops
     // (`0x464920`, `0x468410`). Our one pin is an announced `SMSG_GAMEOBJECT_DESPAWN_ANIM`, whose
-    // end runs the deferred teardown ([`crate::go_anim::release_despawn_pin`]).
+    // end runs the deferred teardown (`go_anim`'s `release_despawn_pin`).
     if let Some(e) = index.0.remove(&guid) {
         // An item has no model to fade, so it goes now with its countdown cells.
         if guid::is_item(guid) {
@@ -1172,6 +1173,57 @@ fn speed_changed(
     if !set_speed(guid, kind, speed, index, speeds) {
         // A speed broadcast can outrun the create block, which carries the same set.
         debug!("net: {kind:?} speed change for untracked mover {guid:#x} — nothing to write");
+    }
+}
+
+/// Our corpse streaming in: latch its guid for the reclaim send. The reference's latch
+/// `[0xb4e328]` has one writer, `0x4920d0`, gated on `CORPSE_FIELD_OWNER == me` and
+/// `CORPSE_FIELD_FLAGS` bit 0 clear, so bones never arm it; `RetrieveCorpse` sends whatever is in
+/// the latch.
+fn note_corpse(
+    guid: u64,
+    kind: EntityKind,
+    fields: &ObjectFields,
+    self_guid: &SelfGuid,
+    death_net: &mut DeathNet,
+) {
+    if kind == EntityKind::Corpse
+        && fields.corpse_owner() == self_guid.0
+        && !fields.corpse_is_bones()
+    {
+        death_net.corpse_guid = Some(guid);
+    }
+}
+
+/// The same latch, re-asked when `CORPSE_FIELD_FLAGS` changes under a live guid, as the
+/// reference's `FLAGS` mirror handler `0x5d6d60` does, so an in-place flip to bones drops it.
+fn recheck_corpse(
+    guid: u64,
+    fields: &ObjectFields,
+    self_guid: &SelfGuid,
+    death_net: &mut DeathNet,
+) {
+    // A delta carries only what changed: an absent FLAGS field is not a clear bit.
+    let Some(flags) = fields.corpse_flags_present() else {
+        return;
+    };
+    let mine = fields.corpse_owner() == self_guid.0 || death_net.corpse_guid == Some(guid);
+    if !mine {
+        return;
+    }
+    if flags & 0x01 != 0 {
+        if death_net.corpse_guid == Some(guid) {
+            death_net.corpse_guid = None;
+        }
+    } else if fields.corpse_owner() == self_guid.0 {
+        death_net.corpse_guid = Some(guid);
+    }
+}
+
+/// The corpse-to-bones swap destroys the corpse object; a stale guid must not ride a reclaim.
+fn forget_corpse(guid: u64, death_net: &mut DeathNet) {
+    if death_net.corpse_guid == Some(guid) {
+        death_net.corpse_guid = None;
     }
 }
 

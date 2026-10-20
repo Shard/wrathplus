@@ -449,7 +449,7 @@ fn character_login_failed(result: u8, out: &mut MessageWriter<CharacterLoginFail
     out.write(CharacterLoginFailedMessage { result });
 }
 
-/// `SMSG_TRIGGER_CINEMATIC`, handed to [`crate::cinematic`], which sends the ack at the end of
+/// `SMSG_TRIGGER_CINEMATIC`, handed to the world's `cinematic` module, which sends the ack at the end of
 /// playback. While a cinematic runs unacked, vmangos anchors visibility to the camera
 /// (`Player::UpdateCinematic`), so every path there must still ack.
 fn cinematic_triggered(
