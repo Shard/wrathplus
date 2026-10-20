@@ -164,7 +164,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!((cues, voices), (30, 56));
+        assert_eq!((cues, voices), (40, 64), "build 12340's table");
     }
 
     /// The most-heard refusals keep the tags the shipped `VocalUISounds.dbc` voices.

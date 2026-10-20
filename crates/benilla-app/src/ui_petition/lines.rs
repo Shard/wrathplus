@@ -69,12 +69,12 @@ pub(super) fn no_charter_line() -> Line {
 /// red line.
 pub(super) fn name_refused_line(key: &str) -> Line {
     UiError::key(match key {
-        "ERR_GUILD_ENTER_NAME" => "ERR_GUILD_ENTER_NAME",
-        "ERR_GUILD_NAME_INVALID_SPACE" => "ERR_GUILD_NAME_INVALID_SPACE",
-        "ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES" => "ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES",
-        "ERR_GUILD_NAME_TOO_SHORT" => "ERR_GUILD_NAME_TOO_SHORT",
-        // A key `0x6c9b70` is not known to produce becomes the generic row, never a raw key.
-        _ => "ERR_GUILD_NAME_INVALID",
+        "ERR_NAME_NO_NAME" => "ERR_NAME_NO_NAME",
+        "ERR_NAME_INVALID_SPACE" => "ERR_NAME_INVALID_SPACE",
+        "ERR_NAME_CONSECUTIVE_SPACES" => "ERR_NAME_CONSECUTIVE_SPACES",
+        "ERR_NAME_TOO_SHORT" => "ERR_NAME_TOO_SHORT",
+        // A key the check is not known to produce becomes the generic row, never a raw key.
+        _ => "ERR_NAME_INVALID",
     })
 }
 
@@ -175,11 +175,11 @@ mod tests {
         lines.extend((0..8).filter_map(turn_in_line));
         lines.extend(
             [
-                "ERR_GUILD_ENTER_NAME",
-                "ERR_GUILD_NAME_INVALID",
-                "ERR_GUILD_NAME_INVALID_SPACE",
-                "ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES",
-                "ERR_GUILD_NAME_TOO_SHORT",
+                "ERR_NAME_NO_NAME",
+                "ERR_NAME_INVALID",
+                "ERR_NAME_INVALID_SPACE",
+                "ERR_NAME_CONSECUTIVE_SPACES",
+                "ERR_NAME_TOO_SHORT",
             ]
             .map(name_refused_line),
         );
@@ -208,16 +208,16 @@ mod tests {
     #[test]
     fn refused_names_keep_their_key_and_degrade_safely() {
         assert_eq!(
-            shown(name_refused_line("ERR_GUILD_ENTER_NAME")),
-            ("ERR_GUILD_ENTER_NAME", MsgKind::Error)
+            shown(name_refused_line("ERR_NAME_NO_NAME")),
+            ("ERR_NAME_NO_NAME", MsgKind::Error)
         );
         assert_eq!(
-            shown(name_refused_line("ERR_GUILD_NAME_INVALID_SPACE")),
-            ("ERR_GUILD_NAME_INVALID_SPACE", MsgKind::Error)
+            shown(name_refused_line("ERR_NAME_INVALID_SPACE")),
+            ("ERR_NAME_INVALID_SPACE", MsgKind::Error)
         );
         assert_eq!(
             shown(name_refused_line("ERR_SOMETHING_UNCARVED")),
-            ("ERR_GUILD_NAME_INVALID", MsgKind::Error),
+            ("ERR_NAME_INVALID", MsgKind::Error),
             "never a raw key on screen"
         );
     }

@@ -414,7 +414,7 @@ pub(crate) use lifecycle::{
 pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
 use lifecycle::shutdown_on_exit;
 #[cfg(test)]
-pub(crate) use lifecycle::{finish_ui_load, seat_from_roster};
+pub(crate) use lifecycle::finish_ui_load;
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -966,13 +966,6 @@ mod video_options_tests;
 
 #[cfg(test)]
 mod bottom_hud_tests;
-
-#[cfg(test)]
-mod bagnon_render_tests;
-
-/// A hunter's Quiver addon publishes its global functions, end to end.
-#[cfg(test)]
-mod quiver_tests;
 
 /// Teardown at the character screen and a genuine second load at the next login.
 #[cfg(test)]

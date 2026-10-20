@@ -93,9 +93,11 @@ pub(crate) fn drain_pet_menu(
         });
     }
     for name in renames {
-        // `0x4bd840`: an empty name raises an error and sends nothing; the rest is truncated.
+        // An empty name raises an error and sends nothing; the rest is truncated (1.12 `0x4bd840`).
+        // Build 12340's table has no `ERR_NULL_PETNAME` row, so its empty-name row (`0x257`, the
+        // name check's code 2) stands in. Unresolved: the 12340 `PetRename` binding's own check.
         if name.is_empty() {
-            ui_errors.0.push(UiError::key("ERR_NULL_PETNAME"));
+            ui_errors.0.push(UiError::key("ERR_NAME_NO_NAME"));
             continue;
         }
         let name = clamp_pet_name(&name);
