@@ -1052,18 +1052,19 @@ mod tests {
         );
     }
 
-    /// Asserted by message id, since the English cannot tell a right key from a wrong one.
+    /// Asserted by message id, since the English cannot tell a right key from a wrong one: build
+    /// 12340's ids (`0xac8af0`) for the rows the 1.12 arms pushed; the 12340 arms are untraced.
     #[test]
     fn every_party_result_names_the_message_id_the_reference_pushes() {
         const TABLE: &[(u32, u16, bool)] = &[
-            (party_result::BAD_PLAYER_NAME, 0x47, true),
-            (party_result::TARGET_NOT_IN_GROUP, 0x49, true),
-            (party_result::GROUP_FULL, 0x4a, false),
-            (party_result::ALREADY_IN_GROUP, 0x3d, true),
-            (party_result::NOT_IN_GROUP, 0x48, false),
-            (party_result::NOT_LEADER, 0x4b, false),
-            (party_result::WRONG_FACTION, 0xff, false),
-            (party_result::IGNORING_YOU, 0x13d, true),
+            (party_result::BAD_PLAYER_NAME, 0x4f, true),
+            (party_result::TARGET_NOT_IN_GROUP, 0x51, true),
+            (party_result::GROUP_FULL, 0x53, false),
+            (party_result::ALREADY_IN_GROUP, 0x43, true),
+            (party_result::NOT_IN_GROUP, 0x50, false),
+            (party_result::NOT_LEADER, 0x54, false),
+            (party_result::WRONG_FACTION, 0x10d, false),
+            (party_result::IGNORING_YOU, 0x150, true),
         ];
         let mut g = GroupState::default();
         for &(result, id, takes_name) in TABLE {
@@ -1092,13 +1093,13 @@ mod tests {
             benilla_ui::messages::by_key(ok(party_operation::INVITE).unwrap().key)
                 .unwrap()
                 .id,
-            0x3a
+            0x3f
         );
         assert_eq!(
             benilla_ui::messages::by_key(ok(party_operation::LEAVE).unwrap().key)
                 .unwrap()
                 .id,
-            0x42
+            0x4a
         );
     }
 

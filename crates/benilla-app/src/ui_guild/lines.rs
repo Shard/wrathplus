@@ -86,7 +86,9 @@ pub(super) fn command_line(result: &GuildCommandResult) -> Option<UiError> {
         guild_command_error::ALREADY_IN_GUILD_S => named("ERR_ALREADY_IN_GUILD_S"),
         guild_command_error::INVITED_TO_GUILD => Some(UiError::key("ERR_INVITED_TO_GUILD")),
         guild_command_error::ALREADY_INVITED_TO_GUILD_S => named("ERR_ALREADY_INVITED_TO_GUILD_S"),
-        guild_command_error::NAME_INVALID => Some(UiError::key("ERR_GUILD_NAME_INVALID")),
+        // Build 12340's table has no `ERR_GUILD_NAME_INVALID` (1.12's row); its generic name refusal is
+        // `ERR_NAME_INVALID` (`0x256`). Unresolved: the 12340 result handler's own row for this code.
+        guild_command_error::NAME_INVALID => Some(UiError::key("ERR_NAME_INVALID")),
         guild_command_error::NAME_EXISTS_S => named("ERR_GUILD_NAME_EXISTS_S"),
         // `0x08` is `ERR_GUILD_LEADER_LEAVE` under `QUIT` and `ERR_GUILD_PERMISSIONS` otherwise.
         guild_command_error::PERMISSIONS if result.command == guild_command::QUIT => {
@@ -295,7 +297,7 @@ mod tests {
         }
 
         // The two name refusals are `kind 2`, the red `UI_ERROR_MESSAGE`, not chat.
-        for key in ["ERR_GUILD_NAME_INVALID", "ERR_GUILD_NAME_EXISTS_S"] {
+        for key in ["ERR_NAME_INVALID", "ERR_GUILD_NAME_EXISTS_S"] {
             assert_eq!(by_key(key).map(|r| r.kind), Some(MsgKind::Error), "{key}");
         }
         // The rest of the guild family is chat.
