@@ -961,40 +961,6 @@ pub fn framexml_digest() -> String {
     crate::ui_script::framexml_digest()
 }
 
-/// Every name our VM publishes into `_G`, with its Lua type, with no addons loaded: our side of the
-/// diff against the 1.12 client's in-world `_G` (`reference/1.12-globals.tsv`). Dumped in Lua,
-/// since `_G` is what an addon sees.
-pub fn surface() -> Vec<(String, String)> {
-    let Ok(mut script) = UiScript::new() else {
-        return Vec::new();
-    };
-    script.set_instruction_budget(ADDON_INSTRUCTION_BUDGET);
-    script.set_screen_size(1024.0, 768.0);
-    script.register_addons(Vec::new(), None, None, None);
-    seat_a_session(&mut script);
-    let _ = crate::ui_script::load_default_ui(&mut script);
-
-    let dump: String = script
-        .eval(
-            r#"
-            local out = {}
-            for k, v in pairs(_G) do
-              if type(k) == "string" then
-                out[table.getn(out) + 1] = k .. "\t" .. type(v)
-              end
-            end
-            table.sort(out)
-            return table.concat(out, "\n")
-        "#,
-        )
-        .unwrap_or_default();
-
-    dump.lines()
-        .filter_map(|l| l.split_once('\t'))
-        .map(|(n, t)| (n.to_string(), t.to_string()))
-        .collect()
-}
-
 /// Whether the survey is seated with the real `GlobalStrings.lua` off the install's patch chain
 /// (about 5,000 globals such as `FACTION_ALLIANCE` and every `ERR_*`, read at file scope). Without
 /// an install the survey still runs on a worse VM, and this says which mode a run was in.
