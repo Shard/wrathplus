@@ -10,6 +10,9 @@ use super::{
 };
 use crate::script::{Model, ScriptValue};
 
+/// The calendar's last year (`0x5b82a0`'s constant, `0x5b7a80`'s clamp at 31 past 2000).
+const MAX_YEAR: i32 = 2031;
+
 /// `CALENDAR_STATUS_*` by wire status (`0x5f1000`).
 const STATUS_KEYS: [&str; 9] = [
     "CALENDAR_STATUS_INVITED",
@@ -379,21 +382,24 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         });
         many(vec![])
     })?;
-    // CalendarGetMinDate (`0x5b81f0`): 24 November 2004. The history floor is the same.
+    // CalendarGetMinDate (`0x5b81f0`): 24 November 2004. Labelled: the history floor is the same,
+    // where `0x5b8350` steps a copy of today back 14 days and the decompile pushes today itself.
     for name in ["CalendarGetMinDate", "CalendarGetMinHistoryDate"] {
         set(lua, name, |_, _| {
             many(date4(&WrathCalendarDate::new(2004, 11, 24, 0, 0)))
         })?;
     }
-    // CalendarGetMaxCreateDate (`0x5b8410`); Labelled: a year from today, as is the view's end.
-    for name in ["CalendarGetMaxCreateDate", "CalendarGetMaxDate"] {
-        set(lua, name, |lua, _| {
-            let t = read(lua, State::today);
-            let (y, m) = super::date::add_months(t.year, t.month, 12);
-            let d = t.day.min(days_in_month(y, m));
-            many(date4(&WrathCalendarDate::new(y, m, d, 0, 0)))
-        })?;
-    }
+    // CalendarGetMaxCreateDate (`0x5b8410` → `0x5b7a80`): the first of the month thirteen months on
+    // from today, 23:59, its year at most 2031.
+    set(lua, "CalendarGetMaxCreateDate", |lua, _| {
+        let t = read(lua, State::today);
+        let (y, m) = super::date::add_months(t.year, t.month, 13);
+        many(date4(&WrathCalendarDate::new(y.min(MAX_YEAR), m, 1, 23, 59)))
+    })?;
+    // CalendarGetMaxDate (`0x5b82a0`): 1 January 2031, a constant.
+    set(lua, "CalendarGetMaxDate", |_, _| {
+        many(date4(&WrathCalendarDate::new(MAX_YEAR, 1, 1, 23, 59)))
+    })?;
     set(lua, "CalendarGetMonthNames", |lua, _| {
         many(
             MONTH_KEYS
