@@ -189,6 +189,7 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     script.set_screen_size(1600.0, 1000.0);
     // Enumerate the installed registry, not a guessed upper bound that raises API errors.
     let addon_count = script.eval::<usize>("return GetNumAddOns()").unwrap();
+    let mut not_loaded = Vec::new();
     for i in 1..=addon_count {
         let started = std::time::Instant::now();
         let row = script
@@ -198,8 +199,11 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
             ))
             .unwrap_or_else(|e| panic!("installed addon {i}/{addon_count} load raised: {e}"));
         eprintln!("LOAD {:>8.1} ms  {row}", started.elapsed().as_secs_f64() * 1000.0);
+        if row.split(' ').nth(1) != Some("1") {
+            not_loaded.push(row);
+        }
     }
-    let (wants, defined) = missing_surface(&script);
+    let (wants, defined, missing, shadow_guarded) = missing_surface(&script);
     let shown = script
         .eval::<bool>("return PlayerFrame ~= nil and PlayerFrame:IsShown() and TargetFrame ~= nil")
         .unwrap_or(false);
@@ -210,6 +214,11 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     eprintln!("hard failures: {hard}; PlayerFrame shown with TargetFrame built: {shown}");
     assert!(shown);
     assert!(!failures.iter().any(|f| f.contains("instruction budget")));
+    // The finish line, asserted rather than read: every count the census prints above.
+    assert_eq!(hard, 0, "hard failures (FAIL/ERROR lines above)");
+    assert_eq!(missing, 0, "missing surface names (listed above)");
+    assert_eq!(shadow_guarded, 0, "shadow-guarded names (listed above)");
+    assert!(not_loaded.is_empty(), "installed addons that did not load: {not_loaded:?}");
 }
 
 /// FrameXML-called names build 12340's `Wow.exe` itself lacks, so the native client would raise on
@@ -460,7 +469,10 @@ const CENSUS_ADDONS: [&str; 24] = super::addons::WRATH_BLIZZARD_ADDONS;
 
 /// Every `:Method(` and capitalised global `Name(` the installed FrameXML source calls that this
 /// VM lacks after the load: the remaining API surface, in one list, less [`NATIVE_ABSENT`].
-fn missing_surface(script: &UiScript) -> (census_arity::Wants, std::collections::HashSet<String>) {
+/// Returns the arity audit's inputs and the missing and shadow-guarded counts.
+fn missing_surface(
+    script: &UiScript,
+) -> (census_arity::Wants, std::collections::HashSet<String>, usize, usize) {
     let core = super::reference_ui::core().expect("FrameXML.toc");
     let mut sources = Vec::new();
     // Each scanned file's origin, FrameXML or its addon, for the per-addon breakdown.
@@ -704,6 +716,7 @@ fn missing_surface(script: &UiScript) -> (census_arity::Wants, std::collections:
         stale.is_empty(),
         "NATIVE_ABSENT rows that are answered or no longer called: {stale:?}"
     );
+    let shadow_guarded = shadowed.len();
     eprintln!("shadow-guarded: {} names", shadowed.len());
     for line in &shadowed {
         eprintln!("SHADOW-GUARDED {line}");
@@ -732,6 +745,7 @@ fn missing_surface(script: &UiScript) -> (census_arity::Wants, std::collections:
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         eprintln!("ORIGIN {origin} {}: {}", names.len(), names.join(" "));
     }
+    let missing = lines.len();
     eprintln!("missing surface: {} names", lines.len());
     for line in lines {
         eprintln!("{line}");
@@ -740,5 +754,5 @@ fn missing_surface(script: &UiScript) -> (census_arity::Wants, std::collections:
     for (src, path) in sources.iter().zip(&paths) {
         census_arity::scan(src, path, &census_lexer::local_names(src), &mut wants);
     }
-    (wants, defined)
+    (wants, defined, missing, shadow_guarded)
 }
