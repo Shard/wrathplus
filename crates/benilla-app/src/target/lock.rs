@@ -200,18 +200,18 @@ pub(crate) fn required_skill(slot: &LockSlot, go_level: u32) -> i32 {
     }
 }
 
-/// Whether we carry item `entry`, by the reference's own walker, [`crate::ui_items::find_item`]
+/// Whether we carry item `entry`, by the reference's own walker, [`crate::inventory::find_item`]
 /// (`0x622270 → 0x622420`, mode 0: equipment, bags, backpack and keyring).
 fn holds_item(
     store: &benilla_protocol::messages::ObjectFields,
     objects: &crate::net::Objects,
     entry: u32,
 ) -> bool {
-    crate::ui_items::find_item(
+    crate::inventory::find_item(
         store,
         objects,
         entry,
-        crate::ui_items::ItemSearch::default(),
+        crate::inventory::ItemSearch::default(),
     )
     .is_some()
 }

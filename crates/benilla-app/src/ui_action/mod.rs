@@ -44,9 +44,9 @@ pub(crate) struct ActionBook;
 
 pub(crate) use errors::global_string;
 pub(crate) use errors::{
-    attack_actor_blocked, attack_actor_refusal, keyed_line, keyed_line_s, reagent_totem_refusal,
-    show_messages, ui_error_text, ui_error_text_for_script, CastErrors, CastFail, Caster, FillArg,
-    MessageSink, MountErrors, PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
+    attack_actor_refusal, keyed_line, keyed_line_s, reagent_totem_refusal, show_messages,
+    ui_error_text, ui_error_text_for_script, CastErrors, CastFail, Caster, FillArg, MessageSink,
+    MountErrors, PetTameFailures, Shown, UiError, UiErrorKeys, UiErrorTexts,
 };
 pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon};
 
@@ -208,6 +208,21 @@ pub(crate) struct UiActionPlugin;
 impl Plugin for UiActionPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        // The target chain's slots: the script calls in the order the script made them, then
+        // `DropItemOnUnit`'s pet leg; and the melee probe's press, the player's Attack (the TAB keys
+        // and ATTACKTARGET run their bodies' `TargetNearestEnemy` and `AttackTarget` as script calls).
+        app.add_systems(
+            Update,
+            (
+                (
+                    crate::script_calls::apply_script_calls,
+                    drop_item::drop_item_on_unit,
+                )
+                    .chain()
+                    .in_set(crate::target::TargetSlot::ScriptCalls),
+                attack_nearest_probe.in_set(crate::target::TargetSlot::MeleeProbe),
+            ),
+        );
         app.init_resource::<PlayerActions>()
             .init_resource::<LearnedAbilities>()
             .init_resource::<CastErrors>()
