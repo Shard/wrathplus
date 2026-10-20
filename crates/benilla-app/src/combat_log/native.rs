@@ -255,7 +255,7 @@ impl NativeCombatLog {
             ),
             // `0x751ad0`: our own refused cast, with the reason's text.
             SessionEvent::WrathSpellFailure(f) => {
-                if let Some(key) = crate::ui_action::cast_fail::wrath_key(f.reason) {
+                if let Some(key) = crate::spell::cast_fail_keys::wrath_key(f.reason) {
                     self.push_with(
                         SPELL_CAST_FAILED,
                         f.caster,

@@ -105,6 +105,10 @@ pub(crate) struct UiMerchantPlugin;
 impl Plugin for UiMerchantPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        app.add_systems(
+            Update,
+            end_repair_mode_on_right_press.in_set(crate::target::TargetSlot::RightPress),
+        );
         app.init_resource::<MerchantOpen>()
             .init_resource::<MerchantErrors>()
             .add_systems(

@@ -14,6 +14,7 @@ use benilla_assets::AssetSet;
 use benilla_world::interact::{WorldClick, WorldRightClick};
 use benilla_world::schedule::WorldStage;
 
+pub(crate) mod attack_gate;
 mod by_name;
 // `pub(crate)` for the chest live probe, which drives the mouse's own `click::resolve_go_action`.
 pub(crate) mod click;
@@ -253,6 +254,18 @@ pub(crate) struct SelectionRadius(pub(crate) f32);
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TargetUpdate;
 
+/// The slots in [`TargetUpdate`]'s chain the UI layer fills, so `target` names no UI system.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum TargetSlot {
+    /// The right press's UI leg (the repair-mode reset), beside the targeting cancel.
+    RightPress,
+    /// The script calls that touch the selection, the cast or the targeting cursor, in call
+    /// order, then `DropItemOnUnit`'s pet leg.
+    ScriptCalls,
+    /// The melee probe's press.
+    MeleeProbe,
+}
+
 /// `deselectOnClick`, 1.12's CVar behind the "Sticky Targeting" checkbox, which shows it inverted
 /// (`UIOptionsFrame.lua:250`). On by default, as in the reference: an empty-world click clears the
 /// target.
@@ -334,10 +347,8 @@ impl Plugin for TargetPlugin {
                     // The right press's two legs of the reference's OnMouseDown hook (`0x492c20`),
                     // the targeting cancel and the repair-mode reset, before the cursor drive, so
                     // the press frame already reads both modes cleared.
-                    (
-                        crate::spell::targeting::cancel_targeting_on_right_press,
-                        crate::ui_merchant::end_repair_mode_on_right_press,
-                    ),
+                    // The UI leg is `TargetSlot::RightPress`.
+                    crate::spell::targeting::cancel_targeting_on_right_press,
                     // Overwrites the classifier's verdict while the targeting cursor is up, as the
                     // reference's dispatcher runs this branch before the object classifier.
                     crate::spell::targeting::drive_targeting_cursor,
@@ -361,14 +372,8 @@ impl Plugin for TargetPlugin {
                         .chain(),
                     // The loot close's guid-scoped deselect.
                     click::clear_target_requests,
-                    // The script calls that touch the selection, the cast or the targeting cursor
-                    // (`TargetUnit`, `/target`, `ClearTarget`, `/cast`, `UseAction`, …), applied
-                    // in the order the script made them; then `DropItemOnUnit`'s pet leg.
-                    (
-                        crate::script_calls::apply_script_calls,
-                        crate::ui_action::drop_item::drop_item_on_unit,
-                    )
-                        .chain(),
+                    // `TargetSlot::ScriptCalls` runs here: the script calls that touch the
+                    // selection (`TargetUnit`, `/target`, `ClearTarget`, `/cast`, `UseAction`, …).
                     // The chat layer's by-name asks: `/target` and `/assist` commit through
                     // `scan::commit`; `/follow` hands its subject to `crate::player`.
                     (
@@ -378,9 +383,7 @@ impl Plugin for TargetPlugin {
                     )
                         .chain(),
                     scan::auto_acquire_attacker,
-                    // The melee probe's press, the player's Attack; the TAB keys and ATTACKTARGET
-                    // run their bodies' `TargetNearestEnemy` and `AttackTarget` as script calls.
-                    crate::ui_action::attack_nearest_probe,
+                    // `TargetSlot::MeleeProbe` runs here: the melee probe's press.
                     flash::drive_flash,
                     // The last-enemy stamp before the ring's death-clear, so a hostile that dies
                     // selected is still remembered (the reference's `TargetLastEnemy` has no
@@ -390,6 +393,21 @@ impl Plugin for TargetPlugin {
                     .chain()
                     .in_set(TargetUpdate)
                     .after(WorldStage::Input),
+            )
+            .configure_sets(
+                Update,
+                (
+                    TargetSlot::RightPress
+                        .after(cursor_mode::classify_cursor)
+                        .before(crate::spell::targeting::drive_targeting_cursor),
+                    TargetSlot::ScriptCalls
+                        .after(click::clear_target_requests)
+                        .before(by_name::target_by_name_requests),
+                    TargetSlot::MeleeProbe
+                        .after(scan::auto_acquire_attacker)
+                        .before(flash::drive_flash),
+                )
+                    .in_set(TargetUpdate),
             )
             // PostUpdate: the brighten sets MeshTag bit 31 after every Update writer that
             // overwrites the whole tag.
