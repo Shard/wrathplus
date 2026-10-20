@@ -170,13 +170,12 @@ pub(crate) fn cancel_auto_repeat_local(
 /// `CMSG_CANCEL_CAST` (`0x6e4940`), which is why Auto Shot (`0x6e5976`) darkens a Raptor Strike
 /// ring. `Engaged` stays until the `SMSG_ATTACKSTOP` echo (`0x624e40`), as in the reference.
 pub(crate) fn stop_attack_local(
-    dialect: crate::net::SessionDialect,
     engaged: bool,
     queued_melee: &mut crate::spell::QueuedMeleeSpell,
     net: &crate::net::NetCommands,
 ) -> bool {
     let command = crate::net::ClientCommand::AttackStop;
-    if !net.supports(dialect, &command) {
+    if !net.supports(&command) {
         return false;
     }
     if !engaged {
@@ -187,7 +186,7 @@ pub(crate) fn stop_attack_local(
     let sent = net.0.send(command).is_ok();
     if let Some(spell_id) = queued_melee.current() {
         let cancel = crate::net::ClientCommand::CancelCast { spell_id };
-        if net.supports(dialect, &cancel) {
+        if net.supports(&cancel) {
             let _ = net.0.send(cancel);
             queued_melee.clear_if(spell_id);
         }
@@ -201,7 +200,6 @@ pub(crate) fn stop_attack_local(
 /// runs, so melee and auto-shot are exclusive. Callers own the entry checks: no call from a cast
 /// press while engaged (`0x6e51cb`), the attackability walk (`0x606980`) and `[0xb4b3e4]`.
 pub(crate) fn start_attack_local(
-    dialect: crate::net::SessionDialect,
     entity: Entity,
     target: u64,
     engaged: bool,
@@ -212,7 +210,7 @@ pub(crate) fn start_attack_local(
     net: &crate::net::NetCommands,
 ) -> bool {
     let swing = crate::net::ClientCommand::AttackSwing { guid: target };
-    if !net.supports(dialect, &swing) {
+    if !net.supports(&swing) {
         return false;
     }
     let wants_send = !engaged || stop_in_flight;
@@ -228,7 +226,7 @@ pub(crate) fn start_attack_local(
         state: 1,
         ceremony: false,
     });
-    if net.supports(dialect, &crate::net::ClientCommand::CancelAutoRepeat) {
+    if net.supports(&crate::net::ClientCommand::CancelAutoRepeat) {
         cancel_auto_repeat_local(Some(entity), auto_repeat, commands, net);
     }
     sent
@@ -238,7 +236,6 @@ pub(crate) fn start_attack_local(
 /// attacking, else start. Only the start arm cancels auto-repeat, so toggling melee off leaves
 /// Auto Shot running. The stop arm's `[0xb4b3e4]` world gate is not modelled.
 pub(crate) fn toggle_attack_local(
-    dialect: crate::net::SessionDialect,
     entity: Entity,
     target: u64,
     engaged: bool,
@@ -249,10 +246,9 @@ pub(crate) fn toggle_attack_local(
     net: &crate::net::NetCommands,
 ) -> bool {
     if engaged {
-        stop_attack_local(dialect, engaged, queued_melee, net)
+        stop_attack_local(engaged, queued_melee, net)
     } else {
         start_attack_local(
-            dialect,
             entity,
             target,
             engaged,
@@ -270,7 +266,6 @@ pub(crate) fn toggle_attack_local(
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct AttackSeam<'w, 's> {
     pub(crate) net: Res<'w, crate::net::NetCommands>,
-    pub(crate) dialect: Res<'w, crate::net::SessionDialect>,
     pub(crate) queued_melee: ResMut<'w, crate::spell::QueuedMeleeSpell>,
     pub(crate) auto_repeat: ResMut<'w, crate::spell::AutoRepeatActive>,
     pub(crate) sheath: MessageWriter<'w, SheathRequest>,
@@ -302,21 +297,20 @@ impl AttackSeam<'_, '_> {
 
     /// StopAttack (`0x5ecac0`). Unsupported wire dialects refuse before un-queuing a strike.
     pub(crate) fn stop(&mut self, engaged: bool) -> bool {
-        stop_attack_local(*self.dialect, engaged, &mut self.queued_melee, &self.net)
+        stop_attack_local(engaged, &mut self.queued_melee, &self.net)
     }
 
     /// StartAttack (`0x5ecb70`); refuses unsupported dialects before stand/sheath/repeat effects,
     /// and is a no-op before our own entity streams in.
     pub(crate) fn start(&mut self, target: u64, engaged: bool, stop_in_flight: bool) -> bool {
         let swing = crate::net::ClientCommand::AttackSwing { guid: target };
-        if !self.net.supports(*self.dialect, &swing) {
+        if !self.net.supports(&swing) {
             return false;
         }
         let Ok(e) = self.me.single() else {
             return false;
         };
         start_attack_local(
-            *self.dialect,
             e,
             target,
             engaged,
@@ -891,12 +885,7 @@ mod attack_stand_tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
-    fn start_once(
-        dialect: crate::net::SessionDialect,
-        engaged: bool,
-        stop_in_flight: bool,
-        keep_receiver: bool,
-    ) -> (bool, App) {
+    fn start_once(engaged: bool, stop_in_flight: bool, keep_receiver: bool) -> (bool, App) {
         let mut app = App::new();
         app.add_message::<SheathRequest>()
             .add_message::<crate::player::StandStateRequest>();
@@ -915,7 +904,6 @@ mod attack_stand_tests {
                       mut sheath: MessageWriter<SheathRequest>,
                       net: Res<crate::net::NetCommands>| {
                     start_attack_local(
-                        dialect,
                         me,
                         0xdead_beef,
                         engaged,
@@ -935,7 +923,7 @@ mod attack_stand_tests {
     /// jumps past the stand to `0x5ecd78` and sends no `CMSG_ATTACKSWING`.
     #[test]
     fn starting_an_attack_stands_you_even_when_the_swing_is_skipped() {
-        let (sent, mut app) = start_once(crate::net::SessionDialect::Wrath12340, true, false, true);
+        let (sent, mut app) = start_once(true, false, true);
         assert!(!sent, "the already-engaged tail did not enqueue a swing");
 
         let stands: Vec<u8> = app
@@ -953,7 +941,7 @@ mod attack_stand_tests {
 
     #[test]
     fn wrath_start_admits_native_melee_and_cancels_auto_repeat() {
-        let (sent, app) = start_once(crate::net::SessionDialect::Wrath12340, false, false, true);
+        let (sent, app) = start_once(false, false, true);
         assert!(sent);
         // `CMSG_CANCEL_AUTO_REPEAT_SPELL` has a native route, so the start arm cancels as 1.12 did.
         assert_eq!(
@@ -971,7 +959,7 @@ mod attack_stand_tests {
 
     #[test]
     fn wrath_closed_command_endpoint_publishes_no_attack_setters() {
-        let (sent, app) = start_once(crate::net::SessionDialect::Wrath12340, false, false, false);
+        let (sent, app) = start_once(false, false, false);
         assert!(!sent);
         assert_eq!(
             app.world().resource::<crate::spell::AutoRepeatActive>().0,

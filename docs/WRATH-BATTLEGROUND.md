@@ -20,7 +20,7 @@ queue reply and eject. 04F7 world-state UI timer keeps its existing capture (sta
 **Shared (handled)**, 1.12 shapes unchanged: 02EC/02ED player joined/left, 02E4 spirit-healer time,
 028C PvP credit.
 
-**Arena lines** (`A/net/wrath_arena_lines.rs`, drained from `ui_battlefield::NativeBattlegroundRest`
+**Arena lines** (`A/ui_battlefield_arena_lines.rs`, drained from `ui_battlefield::NativeBattlegroundRest`
 after Experience's `drain_native`): 0349 command result → its action's line on error 0
 (`ERR_ARENA_TEAM_CREATE_S`, `_INVITE_SS`, `_QUIT_S`, `_FOUNDER_S`), else the error code's
 `ERR_ARENA_TEAM_*`/`ERR_*_ARENA_TEAM*` line; 0357 event 3..8 → `ERR_ARENA_TEAM_JOIN_SS` ..

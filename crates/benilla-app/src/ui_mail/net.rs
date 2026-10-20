@@ -6,7 +6,7 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
 use super::{mail_refusal, send_supported, MailOpen, MailPending, MailSendAck};
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp, SessionDialect};
+use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
 use crate::ui_items::{EquipError, EquipErrors};
 
 pub(super) fn register(app: &mut App) {
@@ -20,14 +20,9 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::Disconnected, on_session_end);
 }
 
-fn on_mail_list(
-    In(ev): In<SessionEvent>,
-    mut mail: ResMut<MailOpen>,
-    commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
-) {
+fn on_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>, commands: Res<NetCommands>) {
     if let SessionEvent::MailList { mails } = ev {
-        mail_list(mails, &mut mail, &commands, *dialect);
+        mail_list(mails, &mut mail, &commands);
     }
 }
 
@@ -35,7 +30,6 @@ fn on_send_mail_result(
     In(ev): In<SessionEvent>,
     mut mail: ResMut<MailOpen>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
     mut equip_errors: ResMut<EquipErrors>,
 ) {
     if let SessionEvent::SendMailResult {
@@ -54,7 +48,6 @@ fn on_send_mail_result(
             item,
             &mut mail,
             &commands,
-            *dialect,
             &mut equip_errors,
         );
     }
@@ -71,10 +64,9 @@ fn on_received_mail(
     mut pending: ResMut<MailPending>,
     mail: Res<MailOpen>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
 ) {
     if let SessionEvent::ReceivedMail { seconds } = ev {
-        received_mail(seconds, &mut pending, &mail, &commands, *dialect);
+        received_mail(seconds, &mut pending, &mail, &commands);
     }
 }
 
@@ -99,12 +91,7 @@ fn on_session_end(
 /// `SMSG_MAIL_LIST_RESULT` replaces the rows; an expired row (`expire_days <= 0`) is deleted with
 /// `CMSG_MAIL_DELETE` and dropped, as the handler `0x4ad1b0` does. It never touches
 /// [`MailPending`]: nothing on the inbox path writes the countdown `0x845eac`.
-fn mail_list(
-    mails: Vec<MailListEntry>,
-    mail: &mut MailOpen,
-    commands: &NetCommands,
-    dialect: SessionDialect,
-) {
+fn mail_list(mails: Vec<MailListEntry>, mail: &mut MailOpen, commands: &NetCommands) {
     let mailbox = mail.mailbox;
     mail.mails = mails
         .into_iter()
@@ -113,7 +100,6 @@ fn mail_list(
                 if let Some(mailbox) = mailbox {
                     send_supported(
                         commands,
-                        dialect,
                         ClientCommand::MailDelete {
                             mailbox,
                             mail_id: e.message_id,
@@ -159,7 +145,6 @@ fn send_mail_result(
     _item: Option<(u32, u32)>,
     mail: &mut MailOpen,
     commands: &NetCommands,
-    dialect: SessionDialect,
     equip_errors: &mut EquipErrors,
 ) {
     // ITEM_TAKEN's `(entry, count)` tail is unused; vmangos sends no `SMSG_ITEM_PUSH_RESULT` for a
@@ -194,11 +179,7 @@ fn send_mail_result(
                 }
                 if take_empties(&mail.mails[pos], action) {
                     if let Some(mailbox) = mail.mailbox {
-                        send_supported(
-                            commands,
-                            dialect,
-                            ClientCommand::MailDelete { mailbox, mail_id },
-                        );
+                        send_supported(commands, ClientCommand::MailDelete { mailbox, mail_id });
                     }
                     mail.close_inbox.push(pos as u32 + 1);
                     mail.mails.remove(pos);
@@ -206,7 +187,7 @@ fn send_mail_result(
             }
             // Re-sync the inbox: the taken money/item or removed row is gone server-side.
             if let Some(mailbox) = mail.mailbox {
-                send_supported(commands, dialect, ClientCommand::GetMailList { mailbox });
+                send_supported(commands, ClientCommand::GetMailList { mailbox });
             }
         }
         mail_error::EQUIP_ERROR => equip_errors.0.push(EquipError {
@@ -228,16 +209,10 @@ fn mail_item_text(text_id: u32, text: String, mail: &mut MailOpen) {
 ///
 /// Deviation: an open mailbox also re-lists at once, past `CheckInbox`'s 60 s throttle, because a
 /// mail announced while the player stands there should show; the reference waits for the close.
-fn received_mail(
-    seconds: f32,
-    pending: &mut MailPending,
-    mail: &MailOpen,
-    commands: &NetCommands,
-    dialect: SessionDialect,
-) {
+fn received_mail(seconds: f32, pending: &mut MailPending, mail: &MailOpen, commands: &NetCommands) {
     pending.apply_received_mail(seconds, mail.mailbox.is_some());
     if let Some(mailbox) = mail.mailbox {
-        send_supported(commands, dialect, ClientCommand::GetMailList { mailbox });
+        send_supported(commands, ClientCommand::GetMailList { mailbox });
     }
 }
 
@@ -265,7 +240,6 @@ mod tests {
             .init_resource::<MailOpen>()
             .init_resource::<MailPending>()
             .init_resource::<EquipErrors>()
-            .insert_resource(SessionDialect::Wrath12340)
             .insert_resource(NetCommands(tx));
         register(&mut app);
 

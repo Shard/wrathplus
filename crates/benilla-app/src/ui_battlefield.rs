@@ -859,6 +859,7 @@ pub(crate) struct BattlefieldPlugin;
 impl Plugin for BattlefieldPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        crate::ui_battlefield_arena_lines::register(app);
         app.init_resource::<Battlefield>()
             .init_resource::<WorldPvp>()
             .init_resource::<NativeBattlegroundRest>()

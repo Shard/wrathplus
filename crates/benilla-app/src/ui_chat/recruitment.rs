@@ -90,7 +90,6 @@ pub(super) fn guild_recruitment_cascade(
     areas: Option<Res<AreaTableRes>>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
-    dialect: Res<crate::net::SessionDialect>,
 ) {
     let Some(mut script) = script else { return };
     // `SetGuildRecruitmentMode(1)` runs it even when the value did not move (`0x49ea70`).
@@ -144,7 +143,7 @@ pub(super) fn guild_recruitment_cascade(
     match action {
         Cascade::Leave => {
             info!("chat: guild recruitment cascade — guilded, leaving {name:?}");
-            cascade_leave(&mut channels, &commands, *dialect, name);
+            cascade_leave(&mut channels, &commands, name);
         }
         Cascade::Join => {
             info!("chat: guild recruitment cascade — unguilded in a capital, joining {name:?}");
@@ -165,7 +164,7 @@ pub(super) fn guild_recruitment_cascade(
                 password: String::new(),
                 channel_id: row.id,
             };
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
         Cascade::Deferred => {}
     }
@@ -176,26 +175,17 @@ pub(super) fn guild_recruitment_cascade(
 
 /// Leave by the full name (`0x49ee70`): the packet and the mask bit (`0x49f10a`/`0x49f11a`). No
 /// window loses its entry: the strip matches that name verbatim (`0x49f017`), which none holds.
-fn send_supported(
-    commands: &NetCommands,
-    dialect: crate::net::SessionDialect,
-    command: ClientCommand,
-) -> bool {
-    if !commands.supports(dialect, &command) {
+fn send_supported(commands: &NetCommands, command: ClientCommand) -> bool {
+    if !commands.supports(&command) {
         return false;
     }
     let _ = commands.0.send(command);
     true
 }
 
-fn cascade_leave(
-    channels: &mut ChannelState,
-    commands: &NetCommands,
-    dialect: crate::net::SessionDialect,
-    name: String,
-) {
+fn cascade_leave(channels: &mut ChannelState, commands: &NetCommands, name: String) {
     let command = ClientCommand::LeaveChannel { name: name.clone() };
-    send_supported(commands, dialect, command);
+    send_supported(commands, command);
     channels.note_zone_channel_left(&name);
 }
 
@@ -245,7 +235,6 @@ mod tests {
         cascade_leave(
             &mut channels,
             &NetCommands(tx),
-            crate::net::SessionDialect::Wrath12340,
             "GuildRecruitment - City".into(),
         );
 
@@ -275,11 +264,7 @@ mod tests {
                 name: "GuildRecruitment - City".into(),
             },
         ] {
-            assert!(send_supported(
-                &commands,
-                crate::net::SessionDialect::Wrath12340,
-                command,
-            ));
+            assert!(send_supported(&commands, command,));
         }
         assert_eq!(rx.try_iter().count(), 2);
     }
@@ -305,7 +290,6 @@ mod tests {
         cascade_leave(
             &mut channels,
             &NetCommands(tx),
-            crate::net::SessionDialect::Wrath12340,
             "GuildRecruitment - City".into(),
         );
 
