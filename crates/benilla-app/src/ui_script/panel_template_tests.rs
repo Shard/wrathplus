@@ -28,7 +28,6 @@ fn harness() -> UiScript {
         r"Interface\FrameXML\CharacterFrameTemplates.xml",
         r"Interface\FrameXML\UIOptionsFrame.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, file);
     }

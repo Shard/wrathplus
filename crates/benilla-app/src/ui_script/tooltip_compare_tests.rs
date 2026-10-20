@@ -29,11 +29,10 @@ fn harness() -> UiScript {
 }
 
 /// `MerchantFrame.xml`, then `ItemRef.xml` with its `ItemRefTooltip`, in `FrameXML.toc` order.
-const ROUTER_UI: [&str; 4] = [
+const ROUTER_UI: [&str; 3] = [
     "Interface\\FrameXML\\CharacterFrameTemplates.xml",
     "Interface\\FrameXML\\MerchantFrame.xml",
     "Interface\\FrameXML\\ItemRef.xml",
-    "ScrollTemplates.xml", // our scroll kits
 ];
 
 /// Race and class carry both halves: stock `PaperDollFrame_SetLevel` formats them unguarded on

@@ -1096,7 +1096,6 @@ fn an_addons_tab_click_selects_through_the_generic_entry_point() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\CharacterFrameTemplates.xml"); // the window tab
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
 
     // Tabs named `<frame>Tab1..N`, as `PanelTemplates_UpdateTabs` looks them up, each with its id.
     s.run(

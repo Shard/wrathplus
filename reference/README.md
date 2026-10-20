@@ -62,12 +62,6 @@ Regenerating: `1.12-shapes.tsv` is vendored as the reference analysis writes it.
 `1.12-event-firesites.tsv` (every fire site with the format string it pushes), so it runs from any
 clone and reproduces the committed file byte for byte.
 
-## `1.12-message-catalog.tsv`
-
-The client's message registry (`0xb4b498`: id, key, kind, sound, chat type).
-`scripts/gen-message-catalog.py` re-shapes it into `crates/benilla-ui/src/messages/catalog.rs`,
-the table `CGGameUI::DisplayError` indexes.
-
 ## `1.12-verb-events.tsv`
 
 Every event the reference fires from inside a Lua verb, keyed by the verb: the verb's own body, or
