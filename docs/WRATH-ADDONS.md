@@ -44,7 +44,7 @@ future-compatibility warning.
 
 ## Target and acceptance boundary
 
-Build 12340 / interface 30300, selected explicitly by the Wrath data profile. Vanilla remains the default and retains its Lua 5.0-shaped API. The interpreter is already vendored Lua 5.1; the Wrath host must not apply the Vanilla shim.
+Build 12340 / interface 30300, the default (and only) data profile: `UiScript::new()` builds the Wrath VM. The 1.12 VM, with its Lua 5.0-shaped API, survives only as `UiScript::new_vanilla()` for the 1.12 tests that Vanilla removal step 9 deletes. The interpreter is vendored Lua 5.1; the Wrath host must not apply the Vanilla shim.
 
 This work enables an incrementally tested authored-addon subset, not full stock Wrath FrameXML. Neither successful parsing nor an apparently clickable frame establishes unsupported gameplay API compatibility. Unsupported functions, events, XML features and secure templates must be reported, not implemented as fake successes or authoritative placeholder data.
 

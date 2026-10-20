@@ -10,8 +10,8 @@ use benilla_formats::{
     accumulate_wmo_group_camera_collision, accumulate_wmo_group_camera_only_collision,
     accumulate_wmo_group_collision, parse_wmo_lights, parse_wmo_root, wmo_group_doodad_refs,
     wmo_group_footprint_tris, wmo_group_header, wmo_group_light_refs, wmo_group_liquid_mesh,
-    wmo_group_submeshes, CollisionMesh, FootprintTris, LiquidMesh, WmoDoodad, WmoDoodadSet, WmoFog,
-    WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef,
+    wmo_group_liquid_mesh_of_kind, wmo_group_submeshes, CollisionMesh, FootprintTris, LiquidMesh,
+    WmoDoodad, WmoDoodadSet, WmoFog, WmoGroupInfo, WmoLight, WmoPortalInfo, WmoPortalRef,
 };
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext};
@@ -533,7 +533,18 @@ impl AssetLoader for WmoModelLoader {
                 *slot = wmo_group_footprint_tris(&gbytes);
             }
             if let Some(slot) = group_liquids.get_mut(gi as usize) {
-                *slot = wmo_group_liquid_mesh(&gbytes);
+                // Wrath: the grid takes the native state's category, as `groupLiquid` is then a
+                // raw LiquidType id, not a nibble (Stormwind's canals lost all five groups to it).
+                *slot = match &wrath_liquid_states {
+                    Some(states) => states
+                        .get(gi as usize)
+                        .and_then(Option::as_ref)
+                        .and_then(WmoLiquidState::grid_kind)
+                        .and_then(|kind| {
+                            wmo_group_liquid_mesh_of_kind(&gbytes, root.flags().ok()?, kind)
+                        }),
+                    None => wmo_group_liquid_mesh(&gbytes),
+                };
             }
             for sub in subs {
                 // Lowercased: Bevy's loader lookup is case-sensitive, and an uppercase `.BLP` falls

@@ -1,24 +1,27 @@
 # METHOD — how benilla is built
 
-benilla is a from-scratch World of Warcraft 1.12.1 client in Rust and Bevy. It reads the game's
-data from the player's own install, speaks the original protocol to any 1.12.1 server, and does
-not build a server or simulate the game. The reference client is the spec: benilla does what
-1.12.1 does, as a modern, idiomatic client.
+This fork of benilla is a from-scratch World of Warcraft 3.3.5a (build 12340) client in Rust and
+Bevy. It reads the game's data from the player's own install, speaks the build-12340 protocol to
+an AzerothCore server, and does not build a server or simulate the game. The reference client is
+the spec: in the default Classic preset the client does what 3.3.5a does, as a modern, idiomatic
+client; the optional Plus preset (`docs/EXPERIENCE.md`) is the recorded exception.
 
 ## The rule for every change
 
-A change is right when it makes benilla more like 1.12.1 or fixes a bug, with evidence from the
+A change is right when it makes the client more like 3.3.5a or fixes a bug, with evidence from the
 reference, in one small piece, with the gates green. A deviation from the reference is the
 maintainer's call alone, and each one is written down where it lives: a CVar's `Deviates` row, a
 comment naming the reference fact and why we differ. Anything else lives on top of benilla, in a
 crate of its own or a fork, and benilla opens a piece of itself to such a crate only when its own
-1.12.1 work creates that piece (`docs/CONTRIBUTING.md`, "Building on top").
+3.3.5a work creates that piece (`docs/CONTRIBUTING.md`, "Building on top").
 
 ## The loop
 
 1. **The reference first.** For anything fidelity-defining, get the mechanism from the real
-   client before building: its behaviour, a DBC field, a FrameXML line, a packet capture. The
-   names and shapes under `reference/` are the surface benilla tracks.
+   client before building: the build-12340 `Wow.exe`, a DBC field, a FrameXML line, a packet
+   capture, AzerothCore source for a wire layout. The 3.3.5 interface surface is the
+   installed-FrameXML census; the 1.12 tables under `reference/` serve only the 1.12 gates
+   that Vanilla removal step 9 deletes.
 2. **Build it idiomatically.** Modern Bevy and Rust, performance woven in from the start.
    Implement the mechanism well; do not ape a quirk that is a bug.
 3. **Measure, never eyeball.** Timing, delay, ordering and feel are settled with instruments:
@@ -47,14 +50,14 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
   beside the binary in the player build; every path to it resolves through `crate::local_state`.
   Player settings are CVars persisted as a diff in `benilla-config/config.toml`.
 - **The core UI is the stock UI; benilla's own is one layer on top.** The core loads the stock
-  1.12 FrameXML off the player's own chain, byte for byte, and builds the engine verbs those
+  3.3.5a FrameXML off the player's own archives, byte for byte, and builds the engine verbs those
   files call, never stubbing one to make a file load. benilla's own interface (its options
   window, its game-menu look, its fixes to the stock Lua) is one layer that loads after the
-  stock files and before third-party addons, the way an addon does: written against the 1.12 API
+  stock files and before third-party addons, the way an addon does: written against the stock API
   alone, listed in no addon list and always on, and offering nothing another addon can build on.
   Anything that changes what the stock UI does or shows lives in the layer, and the layer does
   not grow: a test names its files and fails on a new one.
-- **A setting's default is the reference's default.** Every option boots at the stock 1.12
+- **A setting's default is the reference's default.** Every option boots at the stock 3.3.5a
   value. Shipping another value costs an explicit `Deviates` row with the reason, and a test
   fails a row that drifts either way.
 - **Our code is MIT OR Apache-2.0**, which is a claim about provenance: no original client
@@ -66,7 +69,7 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
 - `docs/MAP.md`: what is built, generated from the code by `scripts/genmap.sh` at every land.
   Read it to orient; never edit or commit it by hand.
 - git: the history. No changelogs, no status docs, no "what we did" narratives.
-- The code: a comment says what the code does and the 1.12 fact behind it, in a line. No
+- The code: a comment says what the code does and the 3.3.5a fact behind it, in a line. No
   history, no stories.
 
 ## Gates
@@ -90,9 +93,9 @@ crate of its own or a fork, and benilla opens a piece of itself to such a crate 
 
 ## The local server
 
-benilla talks to any 1.12.1 server: `WOW_HOST` names it (default `localhost`), `WOW_USER` and
-`WOW_PASS` together log in without typing, `WOW_CHAR` picks the character. There is no default
-account. These bind every session and every agent:
+The client talks to an AzerothCore 3.3.5a server: `WOW_HOST` names it (default `localhost`),
+`WOW_USER` and `WOW_PASS` together log in without typing, `WOW_CHAR` picks the character. There is
+no default account. These bind every session and every agent:
 
 - A scripted run logs in as the account its checkout declares in `.probe-identity` (the three
   variables, one per line, never committed), or as the three variables name; never as a
