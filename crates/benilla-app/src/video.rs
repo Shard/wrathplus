@@ -11,7 +11,7 @@
 //! the window rather than re-creating the device, since wgpu reconfigures the surface live.
 //!
 //! Uncapped is `AutoNoVsync`, never `Immediate`: on Metal `Immediate` takes ~1 s `nextDrawable`
-//! stalls ([`crate::capture::probe_uncap_mode`]).
+//! stalls (`capture::probe_uncap_mode`).
 
 use benilla_ui::script::ScreenResolution;
 use bevy::prelude::*;

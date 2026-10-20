@@ -23,6 +23,16 @@ pub(crate) fn print_probe_vars() {
     crate::capture::probe_env::print();
 }
 
+/// Hands `run_mode` the capture harness's pre-plugin answers (`run_mode::DevSeam`); nothing in a
+/// player build, whose answers are the player's.
+pub(crate) fn install_run_mode_seam() {
+    #[cfg(feature = "dev")]
+    crate::run_mode::install_dev_seam(crate::run_mode::DevSeam {
+        capture_ui_opted_in: crate::capture::ui_opted_in,
+        capture_start_state: crate::capture::start_state,
+    });
+}
+
 /// `WOW_HOVER_LOG_REPORT=<csv>`: prints a recorded hover-log run's report, with no window or game.
 pub(crate) fn report_recorded_hover_log(_path: &str) {
     #[cfg(feature = "dev")]

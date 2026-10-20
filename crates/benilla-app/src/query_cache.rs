@@ -147,7 +147,7 @@ pub(crate) fn register<T: AskOnce>(app: &mut App) {
         Update,
         release_on_enter::<T>
             .in_set(benilla_world::schedule::WorldStage::Net)
-            .after(crate::net::apply_net_updates),
+            .after(crate::app_core::schedule::NetDrain),
     );
 }
 

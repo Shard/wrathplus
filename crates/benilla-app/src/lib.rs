@@ -144,8 +144,8 @@ mod ui_native;
 mod ui_guild_bank;
 mod ui_arena_team;
 mod ui_native_chat;
-mod ui_native_pet_name;
-mod ui_native_who;
+// The native pet-name and WHO capture FIFOs live in `net` (split step 0 residue); the old paths stay.
+use net::{wrath_pet_name_capture as ui_native_pet_name, wrath_who_capture as ui_native_who};
 mod ui_craft;
 mod ui_dialog_verbs;
 mod ui_dressup;
@@ -253,6 +253,8 @@ type Extension<'a> = Box<dyn FnOnce(&mut App) + 'a>;
 
 /// The one body behind [`run`] and [`run_with`], not generic, so a launcher compiles none of it.
 fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
+    // First: `run_mode`'s pre-plugin answers below read the capture harness through it.
+    dev::install_run_mode_seam();
     // `WOW_HOVER_LOG_REPORT=<csv>` and `WOW_CAPTURE=list` print and exit before any setup.
     if let Ok(path) = std::env::var("WOW_HOVER_LOG_REPORT") {
         dev::report_recorded_hover_log(&path);

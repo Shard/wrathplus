@@ -34,16 +34,27 @@ pub(crate) fn offline_active() -> bool {
     scenario_active() || showcase_active()
 }
 
-/// Is the player UI opted into this capture? Forwards [`crate::capture::ui_opted_in`] for readers
-/// outside the harness; `false` in a player build, which has no capture to opt into.
-#[cfg(feature = "dev")]
-pub(crate) fn capture_ui_opted_in() -> bool {
-    crate::capture::ui_opted_in()
+/// The capture harness's answers to the two questions asked before any plugin builds, installed
+/// once by the root (`dev::install_run_mode_seam`) at launch. A player build installs none, so
+/// every answer is the player's; this layer never names the harness.
+pub(crate) struct DevSeam {
+    /// Whether the player UI is opted into this capture (`capture::ui_opted_in`).
+    pub(crate) capture_ui_opted_in: fn() -> bool,
+    /// The screen a capture starts on (`capture::start_state`).
+    pub(crate) capture_start_state: fn() -> crate::char_select::ClientState,
 }
 
-#[cfg(not(feature = "dev"))]
+static DEV_SEAM: std::sync::OnceLock<DevSeam> = std::sync::OnceLock::new();
+
+/// Installs the harness's answers; the first install wins.
+pub(crate) fn install_dev_seam(seam: DevSeam) {
+    let _ = DEV_SEAM.set(seam);
+}
+
+/// Is the player UI opted into this capture? The harness's answer for readers outside it; `false`
+/// with no harness installed, as in a player build, which has no capture to opt into.
 pub(crate) fn capture_ui_opted_in() -> bool {
-    false
+    DEV_SEAM.get().is_some_and(|s| (s.capture_ui_opted_in)())
 }
 
 /// Do the credentials come from the environment (`$WOW_USER` and `$WOW_PASS`, both)? That means
@@ -95,20 +106,17 @@ pub(crate) fn fatal_when_driverless(why: &str) -> bool {
 }
 
 /// The screen the client starts on: a player at the login screen, a capture straight in the world,
-/// a glue capture on the screen it photographs. Needed before the plugins build, so it forwards
-/// into the dev half rather than reading a resource.
+/// a glue capture on the screen it photographs. Needed before the plugins build, so it asks the
+/// installed [`DevSeam`] rather than reading a resource; with none, the login screen.
 pub(crate) fn start_state() -> crate::char_select::ClientState {
-    #[cfg(feature = "dev")]
-    {
-        if showcase_active() {
-            crate::char_select::ClientState::InWorld
-        } else {
-            crate::capture::start_state()
-        }
-    }
-    #[cfg(not(feature = "dev"))]
-    {
-        crate::char_select::ClientState::Login
+    if showcase_active() {
+        crate::char_select::ClientState::InWorld
+    } else {
+        DEV_SEAM
+            .get()
+            .map_or(crate::char_select::ClientState::Login, |s| {
+                (s.capture_start_state)()
+            })
     }
 }
 
