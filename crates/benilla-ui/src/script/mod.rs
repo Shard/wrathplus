@@ -317,7 +317,8 @@ pub use container::{
 pub use craft::{CraftReagent, CraftRecipe, CraftState, CraftTooltip};
 pub use cursor::money::coin_icon;
 pub use cursor::{
-    CursorAction, CursorGuildBankItem, CursorItem, CursorMacro, CursorMerchantItem, CursorMoney,
+    CursorAction, CursorEquipmentSet, CursorGuildBankItem, CursorItem, CursorItemId, CursorMacro,
+    CursorMerchantItem, CursorMoney,
     CursorPayload,
     CursorPetAction, CursorSpell, CursorStablePet, EnchantConfirm, WorldPick, EQUIPMENT_BAG,
 };

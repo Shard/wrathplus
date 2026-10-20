@@ -202,6 +202,36 @@ fn carried_item(model: &Model, query: &ItemQuery) -> Option<(i64, u32)> {
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    // PickupItem(item) (`0x522fb0`): an item by id, link or cached name onto the cursor, mode 7,
+    // as a dragged link; the cursor clears first, and an item naming nothing leaves it empty.
+    g.set(
+        "PickupItem",
+        lua.create_function(|lua, item: Value| {
+            // Neither a number nor a string names nothing: no usage error.
+            let query = item_query(lua, item, "").unwrap_or(ItemQuery::Id(0));
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let id = match query {
+                ItemQuery::Id(id) => id,
+                ItemQuery::Name(name) => model
+                    .item_templates
+                    .iter()
+                    .find(|(_, t)| t.name.eq_ignore_ascii_case(&name))
+                    .map_or(0, |(id, _)| *id),
+            };
+            super::cursor::clear_cursor(&mut model);
+            if id != 0 {
+                let template = model.item_templates.get(&id);
+                let payload = super::CursorItemId {
+                    item_id: id,
+                    texture: template.and_then(|t| t.icon.clone()),
+                    link: template.map(|t| super::item_stats::item_link(id, &t.name, t.quality)),
+                };
+                model.cursor = Some(super::CursorPayload::ItemId(payload));
+                super::cursor::queue_cursor_update(&mut model);
+            }
+            Ok(())
+        })?,
+    )?;
     // SpellCanTargetItem() (`0x7fdd10`): 1 while the targeting spell takes an item (its word
     // `& 0x4010`, the app's `set_item_pick_armed`), else nil.
     g.set(
@@ -623,6 +653,42 @@ mod tests {
 
     fn vm() -> UiScript {
         UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    }
+
+    #[test]
+    fn pickup_item_holds_the_item_by_id_and_places_it_on_a_bar() {
+        use crate::script::ItemTemplateView;
+        let mut s = vm();
+        s.set_item_template(
+            2589,
+            ItemTemplateView {
+                name: "Linen Cloth".into(),
+                quality: 1,
+                icon: Some("Interface\\Icons\\INV_Fabric_Linen_01".into()),
+                ..Default::default()
+            },
+        );
+        s.run("PickupItem('linen cloth')").unwrap();
+        assert!(s
+            .eval::<bool>(
+                "local k, id, link = GetCursorInfo() \
+                 return k == 'item' and id == 2589 and link:find('Hitem:2589') ~= nil"
+            )
+            .unwrap());
+        s.run("PlaceAction(5)").unwrap();
+        assert_eq!(s.take_action_sets(), vec![(5, 0x8000_0000 | 2589)]);
+        s.run("PickupItem(99999)").unwrap();
+        assert!(
+            s.eval::<bool>("return select('#', GetCursorInfo()) == 0")
+                .unwrap(),
+            "uncached: no report"
+        );
+        s.run("PickupItem({})").unwrap();
+        assert!(
+            s.eval::<bool>("return select('#', GetCursorInfo()) == 0")
+                .unwrap(),
+            "cleared"
+        );
     }
 
     #[test]

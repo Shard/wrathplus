@@ -35,6 +35,9 @@ fn payload_icon(script: &benilla_ui::script::UiScript, covered: bool) -> Option<
         CursorPayload::Merchant(m) => m.texture,
         // Mode 11: the guild bank item's icon.
         CursorPayload::GuildBankItem(g) => g.texture,
+        // Mode 7, an item by id, and mode 0xd, an equipment set: their own icons.
+        CursorPayload::ItemId(i) => i.texture,
+        CursorPayload::EquipmentSet(e) => e.texture,
     }
 }
 

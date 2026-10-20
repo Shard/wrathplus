@@ -169,7 +169,7 @@ fn wrath_unit_is_unit_uses_the_existing_target_chain_resolver() {
 }
 
 #[test]
-fn wrath_setscript_and_xml_handlers_receive_positional_arguments_only() {
+fn wrath_setscript_and_xml_handlers_receive_arguments_and_restore_the_legacy_globals() {
     let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     s.run(
         "this,event,arg1='sentinel-this','sentinel-event','sentinel-arg'; \
@@ -210,12 +210,12 @@ fn wrath_setscript_and_xml_handlers_receive_positional_arguments_only() {
     let report = loader::load(&s, &doc, &|_| None);
     assert!(report.errors.is_empty(), "{:?}", report.errors);
     assert!(s
-        .eval::<bool>("return XML_SELF==XmlWrath and XML_THIS=='sentinel-this'")
+        .eval::<bool>("return XML_SELF==XmlWrath and XML_THIS==XmlWrath and this=='sentinel-this'")
         .unwrap());
 }
 
 #[test]
-fn wrath_nested_handlers_do_not_mutate_or_invent_legacy_globals() {
+fn wrath_nested_handlers_restore_the_legacy_globals() {
     let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     s.run(
         "outer=CreateFrame('Frame'); inner=CreateFrame('Frame'); \
@@ -231,6 +231,55 @@ fn wrath_nested_handlers_do_not_mutate_or_invent_legacy_globals() {
     assert!(s
         .eval::<bool>("return this==nil and event==nil and arg1==nil")
         .unwrap());
+}
+
+/// A 2.x-era handler reads `this`, `event` and `argN` as build 12340 sets them around every
+/// dispatch (`0x819ea0`): the frame, the event name on an event, and the values after it.
+#[test]
+fn wrath_this_style_addon_handlers_read_the_legacy_globals() {
+    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    s.run(
+        r#"
+        local f = CreateFrame("Button", "OldAddonFrame")
+        f:RegisterEvent("UNIT_HEALTH")
+        f:SetScript("OnEvent", function() EV = { this, event, arg1, arg2 } end)
+        f:SetScript("OnUpdate", function() UP = { this, arg1 } end)
+        f:SetScript("OnClick", function() CL = { this, arg1 } end)
+        local inner = CreateFrame("Frame", "OldInner")
+        inner:Hide()
+        inner:SetScript("OnShow", function() INNER_THIS = this end)
+        local outer = CreateFrame("Frame", "OldOuter")
+        outer:RegisterEvent("OUTER")
+        outer:SetScript("OnEvent", function()
+            OldInner:Show()
+            AFTER = { this, event, arg1 }
+        end)
+        "#,
+    )
+    .unwrap();
+    s.fire_event(
+        "UNIT_HEALTH",
+        vec![ScriptValue::Str("player".into()), ScriptValue::Int(42)],
+    );
+    s.tick(0.5);
+    s.run("OldAddonFrame:Click('LeftButton')").unwrap();
+    s.fire_event("OUTER", vec![ScriptValue::Int(9)]);
+    assert!(s.errors().is_empty(), "{:?}", s.errors());
+    assert!(s
+        .eval::<bool>(
+            "return EV[1] == OldAddonFrame and EV[2] == 'UNIT_HEALTH' and EV[3] == 'player' \
+             and EV[4] == 42"
+        )
+        .unwrap());
+    assert!(s.eval::<bool>("return UP[1] == OldAddonFrame and UP[2] == 0.5").unwrap());
+    assert!(s.eval::<bool>("return CL[1] == OldAddonFrame and CL[2] == 'LeftButton'").unwrap());
+    assert!(s
+        .eval::<bool>(
+            "return INNER_THIS == OldInner and AFTER[1] == OldOuter and AFTER[2] == 'OUTER' \
+             and AFTER[3] == 9"
+        )
+        .unwrap(), "the inner dispatch restores the outer handler's globals");
+    assert!(s.eval::<bool>("return this == nil and event == nil and arg1 == nil").unwrap());
 }
 
 #[test]
