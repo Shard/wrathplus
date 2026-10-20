@@ -163,14 +163,7 @@ fn ui_wanted(world: &World) -> bool {
         || crate::run_mode::capture_ui_opted_in()
 }
 
-/// The world-entry UI load still owed: armed at `OnEnter(InWorld)`, run by
-/// [`run_pending_entry_load`] once the loading cover is on screen. `OnEnter(InWorld)` runs on the
-/// frame that first presents the cover, so a load there would freeze the character screen for its
-/// whole duration. The wait is [`crate::loading_screen::EntryCover`]'s, and the loading
-/// screen does not clear while this exists, so the reveal never precedes the UI.
-#[derive(Resource, Default)]
-pub(crate) struct PendingEntryUiLoad;
-
+pub(crate) use crate::app_core::ui_flags::PendingEntryUiLoad;
 /// The boot VM, parked between the world-entry edge and the deferred load, out of every feed's
 /// reach: each feed takes the VM as an `Option` and returns on `None`.
 pub(crate) struct ParkedBootVm(UiScript);

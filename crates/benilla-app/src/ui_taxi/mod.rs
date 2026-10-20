@@ -58,16 +58,7 @@ impl TaxiState {
     }
 }
 
-/// A flight master's `SMSG_TAXINODE_STATUS`: `known = false` shows the green `TalkToMeGreen`
-/// overhead icon (`0x5ecdd0` to `0x607480`, resource table `0xc4d9d8` index 4). The query and the
-/// teardown belong to [`crate::quest_markers::query`]: the reference's only sender, `0x5eb170`, is
-/// called only from `0x607380` (at `0x6073e8`), the per-unit function that also sends the
-/// questgiver query, and both icons share one marker slot (`unit+0xb2c`).
-#[derive(Component, Clone, Copy)]
-pub(crate) struct FlightMasterStatus {
-    pub(crate) known: bool,
-}
-
+pub(crate) use crate::app_core::interaction::FlightMasterStatus;
 /// The range guard closes the map, as the close button does, when the flight master is out of
 /// range or gone.
 impl NpcSession for TaxiState {

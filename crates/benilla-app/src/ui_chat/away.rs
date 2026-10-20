@@ -11,14 +11,7 @@ use bevy::prelude::*;
 use super::event::{ChatEvent, ChatEventKind};
 use super::feed::ChatLog;
 
-/// The reference's optimistic mirror of our `PLAYER_FLAGS` AFK bit (`[0xb6e5cc]`): written at
-/// command time (`0x5eb7ae`, `0x5eb885`), reconciled from the descriptor (`0x5ee9f2`), reseeded
-/// at world enter (`0x4989c0`). A `u32` tested for non-zero: the reconcile stores
-/// `PLAYER_FLAGS & 2`, so a set mirror can read 2. DND has no mirror, so a second `/dnd` before
-/// the server's update re-marks where a second `/afk` clears.
-#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct AfkMirror(pub(crate) u32);
-
+pub(crate) use crate::app_core::state::AfkMirror;
 impl AfkMirror {
     /// Non-zero, as all six of the reference's readers test it.
     pub(crate) fn is_afk(self) -> bool {

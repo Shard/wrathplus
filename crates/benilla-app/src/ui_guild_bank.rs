@@ -29,14 +29,7 @@ const MONEY_LOG_TAB: u8 = 6;
 const TAB_VIEW: u32 = 1;
 const TAB_DEPOSIT: u32 = 2;
 
-/// The vault the player opened, set by the object click and cleared by the frame's close.
-#[derive(Resource, Default)]
-pub(crate) struct GuildBankOpen {
-    banker: Option<u64>,
-    /// The click is waiting for this feed to send the activate.
-    pending: bool,
-}
-
+pub(crate) use crate::app_core::interaction::GuildBankOpen;
 impl GuildBankOpen {
     /// The object click on a guild vault (`GAMEOBJECT_TYPE_GUILD_BANK`).
     pub(crate) fn open(&mut self, banker: u64) {

@@ -1961,9 +1961,10 @@ mod tests {
 
         // One opener per family (a menu, a quest panel, a specialized window) arms its own NPC.
         let with_gossip = armed(&|w| {
-            let mut g = crate::ui_gossip::GossipState::default();
-            g.npc = Some(NPC);
-            w.insert_resource(g);
+            w.insert_resource(crate::ui_gossip::GossipState {
+                npc: Some(NPC),
+                ..Default::default()
+            });
         });
         let with_quest = armed(&|w| {
             w.insert_resource(crate::ui_quest::QuestGiver {

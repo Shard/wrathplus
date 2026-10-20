@@ -26,25 +26,13 @@ use crate::ui_script::gate;
 use crate::ui_unit::UnitFeed;
 use benilla_assets::{AssetSet, LockRecover, WorldAssets};
 
-/// `SkillLine.dbc` × `SkillLineAbility.dbc`; absent when the data failed to load.
-#[derive(Resource)]
-pub(crate) struct SkillLines {
-    pub(crate) catalog: SkillLineCatalog,
-}
-
+pub(crate) use crate::app_core::state::{LearnedInTab, SkillLines};
 /// The General tab, key 0: pinned first, named from the `GENERAL` GlobalString (`0x846910`) with a
 /// fixed icon (`GetSpellTabInfo` `0x4b3ce0`); vmangos's `SKILL_NONE` is 0, so no line collides.
 const NO_LINE: u32 = 0;
 
 /// Hardcoded in the reference (`0x8468f0`), extensionless for the loader; key 0 has no DBC row.
 const GENERAL_TAB_ICON: &str = "Interface\\Icons\\Ability_Kick";
-
-/// Spells learned mid-session, queued for `LEARNED_SPELL_IN_TAB` (event 510). Filled by the learn
-/// and rank-up arms (`crate::spell::net`), never the `SMSG_INITIAL_SPELLS` load, which the
-/// reference passes with `0x4b25b0`'s live-mutation flag clear. A queue because the event follows
-/// the tab re-sort and `SPELLS_CHANGED` (`0x4b2b5a` before `0x4b2b92`).
-#[derive(Resource, Default)]
-pub(crate) struct LearnedInTab(pub(crate) Vec<u32>);
 
 pub(crate) struct UiSpellbookPlugin;
 

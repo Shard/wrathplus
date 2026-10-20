@@ -82,8 +82,7 @@ pub(crate) fn forward_native_ready(
 
 pub(crate) const PARTY_TOKENS: [&str; 4] = ["party1", "party2", "party3", "party4"];
 
-/// `partypet1..partypet4`, the pet of each [`PARTY_TOKENS`] slot (`0x4e81d0`).
-pub(crate) const PARTY_PET_TOKENS: [&str; 4] = ["partypet1", "partypet2", "partypet3", "partypet4"];
+pub(crate) use crate::app_core::state::PARTY_PET_TOKENS;
 
 /// A receipt's rows with their `Map.dbc` name, raid bit and `MapDifficulty` cap and string.
 fn saved_instances(
@@ -157,8 +156,7 @@ pub(crate) const RAID_PET_TOKENS: [&str; 40] = [
     "raidpet36", "raidpet37", "raidpet38", "raidpet39", "raidpet40",
 ];
 
-/// `SMSG_GROUP_LIST`'s first byte for a raid; 0 is a party (vmangos `Group/Group.h:119`).
-pub(crate) const GROUPTYPE_RAID: u8 = 1;
+pub(crate) use crate::app_core::state::GROUPTYPE_RAID;
 
 /// The subgroup bits (0-2) of a member's flags byte; `0x80` is the assistant bit.
 pub(crate) const GROUP_MEMBER_SUBGROUP: u8 = 0x07;

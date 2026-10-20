@@ -96,35 +96,7 @@ impl Plugin for LoginPlugin {
 
 // ── The credential policy ────────────────────────────────────────────────────────────────────────
 
-/// Where the IO thread's read loop is, as far as the app can tell; credentials are submitted
-/// only while it is parked pre-logon.
-#[derive(Default, PartialEq, Eq, Clone, Copy)]
-enum IoPark {
-    /// Parked pre-logon (boot, a failure, a disconnect, a Back).
-    #[default]
-    AtLogin,
-    /// Past logon: at select or in the world.
-    Active,
-}
-
-/// The credential policy's memory: the session's credentials, the in-flight and park state, and
-/// the resubmit timer.
-#[derive(Resource, Default)]
-pub(crate) struct LoginIntent {
-    /// Kept in-world so the logout relist and an unattended reconnect re-authenticate silently;
-    /// cleared by select's Back, a refusal, a Cancel and a lost session.
-    creds: Option<(String, String)>,
-    /// Between our send and its LoginFailed or CharacterList answer.
-    in_flight: bool,
-    /// The in-flight submit came from the screen, which shows its connecting dialog and failure.
-    announced: bool,
-    park: IoPark,
-    /// `Time::elapsed_secs` deadline for the next silent resubmit.
-    retry_at: Option<f32>,
-    /// The env fast path is read once, on the first policy run.
-    env_read: bool,
-}
-
+pub(crate) use crate::app_core::ui_flags::{IoPark, LoginIntent};
 impl LoginIntent {
     /// Forget the session's credentials and any scheduled retry.
     pub(crate) fn clear(&mut self) {

@@ -34,24 +34,7 @@ const TRAINER_TYPE_TRADESKILL: u32 = 2;
 /// A mount trainer, which the client calls "talent" (`IsTalentTrainer 0x4d8ed0`).
 const TRAINER_TYPE_MOUNT: u32 = 1;
 
-/// The open trainer as `SMSG_TRAINER_LIST` delivered it.
-#[derive(Resource, Default)]
-pub(crate) struct TrainerOpen {
-    pub(crate) trainer: Option<u64>,
-    /// In wire order, which is the 1-based display order.
-    pub(crate) services: Vec<TrainerSpell>,
-    pub(crate) trainer_type: u32,
-    pub(crate) greeting: String,
-    /// A list landed and the engine's filter, collapse set and selection are not yet reset, as
-    /// the reference's builder resets them per list (`0x4d7b42` for the selection); an open window
-    /// repaints through [`reeval`], never a second list.
-    pub(crate) fresh_list: bool,
-    /// One of the reference's twelve re-evaluation triggers fired with the window open; the feed
-    /// re-derives and fires `TRAINER_UPDATE` even if no state moved, as `0x4d7d40`'s tail does
-    /// (`0x4d83f4`), and the stock window re-reads `GetMoney()` on it.
-    pub(crate) re_derive: bool,
-}
-
+pub(crate) use crate::app_core::interaction::TrainerOpen;
 impl TrainerOpen {
     /// Open (or replace) the window with a trainer's freshly-listed services.
     pub(crate) fn open(

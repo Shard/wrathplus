@@ -8,8 +8,6 @@
 mod native;
 mod units;
 
-use std::collections::HashMap;
-
 use bevy::prelude::*;
 
 use benilla_formats::SpellCatalog;
@@ -25,24 +23,7 @@ use crate::ui_action::Spells;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
-/// The player's aura durations by raw slot, each `SMSG_UPDATE_AURA_DURATION` stamped with its
-/// arrival: the reference's expiry array `0xbc5f68`. Only the session's end clears it, never an
-/// empty slot, whose aura may be a frame behind its packet, nor a worldport. At most 48 entries.
-#[derive(Resource, Default)]
-pub(crate) struct AuraDurations {
-    by_slot: HashMap<u8, DurationStamp>,
-}
-
-struct DurationStamp {
-    /// Seconds: the full duration on an apply or refresh, only the remainder on a relog
-    /// (`Map::ExistingPlayerLogin`) or a cast pushback (`Unit::DelaySpellAuraHolder`).
-    total: f64,
-    /// The real-clock instant it runs out: a server-sent span counts down in real seconds.
-    expires_at: f64,
-    /// The real-clock arrival, the freshness gate against a recycled slot.
-    received_at: f64,
-}
-
+pub(crate) use crate::app_core::state::{AuraDurations, DurationStamp};
 impl AuraDurations {
     /// Records one `SMSG_UPDATE_AURA_DURATION`.
     pub(crate) fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {

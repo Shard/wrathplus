@@ -44,17 +44,7 @@ pub(crate) struct UnitCombatFeedback {
     pub(crate) school: u32,
 }
 
-/// One `COMBAT_TEXT_UPDATE` (event `0x21E`, via `0x703f50`), fired at packet parse by every
-/// producer, melee included (`0x6255b0` → `0x629d30`); `data`/`extra` are `arg2`/`arg3`. Fired only
-/// when the unit the line is about is the player: each emitter tests that unit's class (`0x5efea0`)
-/// for 0 before its helper (`0x629ef1`, `0x62d046`, `0x62834b`).
-#[derive(Message, Clone)]
-pub(crate) struct CombatTextEvent {
-    pub(crate) message_type: &'static str,
-    pub(crate) data: Option<String>,
-    pub(crate) extra: Option<String>,
-}
-
+pub(crate) use crate::app_core::state::CombatTextEvent;
 /// `PLAYER_LEAVING_WORLD` on a cross-map worldport. The reference fires event `0x111` at one site
 /// (`0x490b48`), gated only by the latch `[0xb4b424]`, from the local player's destructor
 /// (`0x5dd543`, this system), the shutdown tail `0x490bd0` (ours is `wrath_addons::shutdown`) and the

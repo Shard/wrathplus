@@ -2,8 +2,6 @@
 //! [`feed_gossip`] pushes the menu and fires its events, and [`drain_gossip`] sends the selects.
 //! As in the reference's `0x4e2010`, a menu opens only once its greeting is drawn.
 
-use std::collections::HashMap;
-
 use benilla_protocol::messages::{select_greeting, GossipOption, NpcTextBlock};
 use bevy::prelude::*;
 
@@ -15,23 +13,7 @@ use crate::ui_quest::{row_is_active, row_is_one_click};
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
-/// The open gossip menu, plus the NPC-text records by id, which outlive it. The cache holds whole
-/// records: the reference draws the greeting afresh at each open, from the NPC's gender and a roll.
-#[derive(Resource, Default)]
-pub(crate) struct GossipState {
-    pub(crate) npc: Option<u64>,
-    pub(crate) text_id: u32,
-    /// This open's drawn greeting; `None` while its text query is out.
-    pub(crate) greeting: Option<String>,
-    pub(crate) options: Vec<GossipOption>,
-    /// The packet's quest rows, `(quest_id, dialog-status icon, level, title)`. The level is kept
-    /// because `GetGossipAvailableQuests` and `GetGossipActiveQuests` return `(title, level)`
-    /// pairs, walked in twos by stock `GossipFrame.lua` (lines 66 and 90).
-    pub(crate) quests: Vec<(u32, u32, u32, String)>,
-    pub(crate) quest_info: Vec<benilla_protocol::messages::WrathQuestInfo>,
-    records: HashMap<u32, Vec<NpcTextBlock>>,
-}
-
+pub(crate) use crate::app_core::interaction::GossipState;
 impl GossipState {
     pub(crate) fn cached_record(&self, text_id: u32) -> Option<&[NpcTextBlock]> {
         self.records.get(&text_id).map(Vec::as_slice)

@@ -27,14 +27,9 @@ pub(crate) struct PageText {
     pub(crate) next: u32,
 }
 
-/// Build 12340's letter texts, by item GUID: `CMSG_ITEM_TEXT_QUERY` names the item and
-/// `SMSG_ITEM_TEXT_QUERY_RESPONSE` answers with it (AC `HandleItemTextQuery`); a `None` answer is
-/// an item the server has no text for.
-#[derive(Resource, Default)]
-pub(crate) struct LetterTexts {
-    texts: QueryCache<u64, String>,
-}
-
+pub(crate) use crate::app_core::interaction::{
+    ItemTextOpen, LetterTexts, PageMaterials, ReadSession, ReadSource,
+};
 impl LetterTexts {
     /// Record an answer (`wrath_inventory_capture`).
     pub(crate) fn insert(&mut self, item_guid: u64, text: Option<String>) {
@@ -74,38 +69,6 @@ impl PageTexts {
                 .send(ClientCommand::PageTextQuery { page_id, guid });
         })
     }
-}
-
-/// Which of the reference's two text sources a session shows; the object decides, not the click.
-pub(crate) enum ReadSource {
-    /// A mail-made letter: one body, asked by the letter's GUID, and a creator line.
-    Letter,
-    /// A page chain. `visited` runs from the first page to the one shown, as pages link only
-    /// forwards (the reference's array at `0xbc3fd0`); it is empty until the object's template
-    /// answers, since the reference asks for the page id at paint time (`0x5f59d0`).
-    Pages { visited: Vec<u32> },
-}
-
-pub(crate) struct ReadSession {
-    /// An item's or a GameObject's guid; reading the same object again closes the reader.
-    pub(crate) object_guid: u64,
-    pub(crate) source: ReadSource,
-    /// Keyed on the VM, so a `/reload` re-fires `ITEM_TEXT_BEGIN` for a reader still open.
-    told: crate::ui_script::VmMemo<ItemTextTold>,
-}
-
-#[derive(Default)]
-struct ItemTextTold {
-    /// `ITEM_TEXT_BEGIN` fired: once per open, before the text lands.
-    begun: bool,
-    ready: bool,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct ItemTextOpen {
-    pub(crate) pending: Option<ReadSession>,
-    /// A toggle closed the reader and the frame is not told yet; the feed holds the script.
-    closing: bool,
 }
 
 impl ItemTextOpen {
@@ -391,10 +354,6 @@ fn feed_item_text(
     script.fire_event("ITEM_TEXT_READY", vec![]);
     sess.told.get(&script).ready = true;
 }
-
-/// `PageTextMaterial.dbc`; absent without client data, leaving every reader on Parchment.
-#[derive(Resource)]
-pub(crate) struct PageMaterials(pub(crate) benilla_formats::PageTextMaterialCatalog);
 
 /// Drain the reader's intents: `CloseItemText()` clears the session and fires `ITEM_TEXT_CLOSED`;
 /// a page turn re-runs the feed from `ITEM_TEXT_READY`, as the reference does not re-fire BEGIN.

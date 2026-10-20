@@ -26,16 +26,7 @@ use crate::net::{ClientCommand, NetCommands};
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
-/// The innkeeper's pending bind question; everything the dialog reads rides the event's argument.
-#[derive(Resource, Default)]
-pub(crate) struct BinderState {
-    /// The innkeeper who asked, sent back on the wire; vmangos binds only a live one in range.
-    npc: Option<u64>,
-    /// A dialog the feed still owes, set per packet: asking again after a decline is a second
-    /// dialog, which a state diff would swallow.
-    ask: bool,
-}
-
+pub(crate) use crate::app_core::interaction::BinderState;
 impl BinderState {
     /// `SMSG_BINDER_CONFIRM`: parks the innkeeper's guid and owes the UI a dialog.
     pub(crate) fn ask(&mut self, npc: u64) {
