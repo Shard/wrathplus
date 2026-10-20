@@ -40,6 +40,15 @@ fn template(name: &str) -> ItemTemplateView {
     }
 }
 
+fn reward_spell() -> QuestRewardSpell {
+    QuestRewardSpell {
+        spell_id: 2050,
+        name: Some("Lesser Heal".into()),
+        texture: Some(r"Interface\Icons\Spell_Holy_LesserHeal".into()),
+        ..Default::default()
+    }
+}
+
 /// Seeds every list the audit's probes read with one representative row.
 pub(super) fn seed(s: &mut UiScript) {
     // Items, bags and the backpack.
@@ -138,6 +147,7 @@ pub(super) fn seed(s: &mut UiScript) {
                 detail: Some(QuestLogDetail {
                     description: "Go".into(),
                     objectives_text: "Kill".into(),
+                    reward_spell: Some(reward_spell()),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -310,6 +320,7 @@ pub(super) fn seed(s: &mut UiScript) {
         available_titles: vec!["Kobold Camp Cleanup".into()],
         active_info: vec![QuestGreetingInfo::default()],
         available_info: vec![QuestGreetingInfo::default()],
+        reward_spell: Some(reward_spell()),
         ..Default::default()
     }));
 
@@ -524,6 +535,14 @@ pub(super) fn seed(s: &mut UiScript) {
 
     // A worn chest piece, the pet's spellbook and the quest log's item extras.
     let mut worn: InventorySlots = Default::default();
+    worn[1] = Some(InvSlotView {
+        item_id: 6948,
+        icon: Some(r"Interface\Icons\INV_Helmet_01".into()),
+        count: 1,
+        quality: 2,
+        name: Some("Hearthstone".into()),
+        ..Default::default()
+    });
     worn[5] = Some(InvSlotView {
         item_id: 6948,
         icon: Some(r"Interface\Icons\INV_Chest_Cloth_17".into()),
@@ -631,6 +650,43 @@ pub(super) fn seed(s: &mut UiScript) {
         ..Default::default()
     });
 
+    // The barber's chair, a refundable purchase, a socketed item, a sanctuary and a comparison.
+    s.set_wrath_barber_shop(Some(WrathBarberShop {
+        base_cost: 100.0,
+        hair_styles: vec![WrathBarberStyle {
+            id: 1,
+            name: "Hair".into(),
+            description: "Short".into(),
+            cost_modifier: 1.0,
+            data: 0,
+        }],
+        hair_colors: 4,
+        hair_customization: "HAIR".into(),
+        facial_customization: "BEARD".into(),
+        ..Default::default()
+    }));
+    let refund = |bag: i32| (
+        false,
+        bag,
+        1,
+        ItemRefundView {
+            money: 100,
+            honor: 10,
+            arena: 0,
+            seconds_remaining: 3600,
+            items: vec![ItemRefundCost {
+                texture: Some(r"Interface\Icons\INV_Misc_Frostemblem_01".into()),
+                count: 2,
+                link: None,
+            }],
+        },
+    );
+    s.set_item_refunds(vec![refund(0), refund(1)]);
+    s.set_wrath_item_gems(vec![
+        (0, 1, [Some(40111), None, None]),
+        (EQUIPMENT_BAG, 1, [Some(40111), None, None]),
+    ]);
+
     // Equipment sets and companions.
     s.set_equipment_sets(vec![EquipmentSetView {
         name: "Tank".into(),
@@ -721,6 +777,23 @@ pub(super) fn seed(s: &mut UiScript) {
         pvp_faction: Some("Alliance".into()),
         ..Default::default()
     });
+    // Lua-side state: a saved chat position, the comparison unit and an item on the cursor.
+    s.run(
+        "SetChatWindowSavedPosition(1, 'TOPLEFT', 10, -10) \
+         SetChatWindowSavedDimensions(1, 430, 120) \
+         SetAchievementComparisonUnit('player') \
+         PickupContainerItem(1, 1)",
+    )
+    .expect("fixture verbs");
+    // The compared player's progress, after the comparison unit is set.
+    s.set_wrath_achievement_comparison(
+        ME,
+        WrathAchievementProgress {
+            earned: vec![(1, 0x0a2b_1c00)],
+            criteria: std::collections::BTreeMap::new(),
+            faction: 1,
+        },
+    );
 }
 
 /// Alterac Valley, listed, with one instance.

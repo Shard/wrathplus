@@ -968,8 +968,8 @@ fn quest_reward_spell_getters_and_hovers() {
     s.set_quest(Some(QuestState::default()));
     assert_eq!(
         s.arity("GetRewardSpell()").unwrap(),
-        3,
-        "three values on the empty path"
+        4,
+        "four values on the empty path (`0x58d670`)"
     );
     assert!(s
         .eval::<bool>(
@@ -985,6 +985,7 @@ fn quest_reward_spell_getters_and_hovers() {
         name: Some("Fireball".into()),
         texture: Some("Interface\\Icons\\Spell_Fire_FlameBolt".into()),
         tradeskill: false,
+        learned: false,
     };
     s.set_quest(Some(QuestState {
         panel: QuestPanel::Reward,

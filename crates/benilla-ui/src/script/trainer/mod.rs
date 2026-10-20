@@ -607,10 +607,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetTrainerServiceStepReq(index) → step, met: always nil, as the wire carries no step data.
+    // GetTrainerServiceStepReq(index) (`0x5957d0`) → step, met: two. Labelled: the step text and
+    // its skill gate read the spell's skill-step effect (44) against the player's skills, data the
+    // wire does not carry, so both answer nil.
     g.set(
         "GetTrainerServiceStepReq",
-        lua.create_function(|_, _index: usize| Ok(Value::Nil))?,
+        lua.create_function(|lua, index: Value| {
+            if lua.coerce_number(index)?.is_none() {
+                return Err(mlua::Error::runtime("Usage: GetTrainerServiceStepReq(index)"));
+            }
+            Ok((Value::Nil, Value::Nil))
+        })?,
     )?;
 
     g.set(

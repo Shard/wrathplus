@@ -38,6 +38,17 @@ fn unit(b: u8) -> f64 {
     f64::from(f32::from(b) * (1.0f32 / 255.0f32))
 }
 
+/// The ten windows' saved geometry (records `0xbcf0b0`, stride 0x100): width and height
+/// `+0xf8/+0xfc`, the anchor point, x and y `+0xec/+0xf0`, and the saved-position flag `+0xf4`.
+#[derive(Clone, Default)]
+struct SavedWindow {
+    dimensions: Option<(f32, f32)>,
+    position: Option<(String, f32, f32)>,
+}
+
+#[derive(Default)]
+struct SavedGeometry([SavedWindow; ENGINE_CHAT_WINDOW_SLOTS]);
+
 impl super::UiScript {
     /// Seeds the `ChatChannels.dbc` auto-join rows (`flags & 1`) as `(Shortcut, id)`, which
     /// `ResetChatWindows` registers in window 1. No event and no window change.
@@ -48,6 +59,67 @@ impl super::UiScript {
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    lua.set_app_data(SavedGeometry::default());
+
+    // GetChatWindowSavedDimensions(index) (`0x4fc020`) → width, height for a window 1..10;
+    // nothing outside. GetChatWindowSavedPosition(index) (`0x4fbf60`) → point, x, y once saved,
+    // else nothing. A non-number answers nothing. Deviation, labelled: the native record always
+    // holds dimensions, its defaults written by ResetChatWindows (`0x501f00`, unread for them);
+    // an unsaved window answers nothing here, as sizing to 0x0 would. The setters' own checks
+    // and the chat-cache persistence are unread; the setters store.
+    g.set(
+        "GetChatWindowSavedDimensions",
+        lua.create_function(|lua, id: Value| {
+            let Some(Some(slot)) = window_slot(lua, &id) else {
+                return Ok(MultiValue::new());
+            };
+            let saved = lua.app_data_ref::<SavedGeometry>().expect("geometry");
+            let Some((w, h)) = saved.0[slot].dimensions else {
+                return Ok(MultiValue::new());
+            };
+            Ok(MultiValue::from_vec(vec![Value::Number(f64::from(w)), Value::Number(f64::from(h))]))
+        })?,
+    )?;
+    g.set(
+        "SetChatWindowSavedDimensions",
+        lua.create_function(|lua, (id, w, h): (Value, Value, Value)| {
+            if let Some(Some(slot)) = window_slot(lua, &id) {
+                let (w, h) = (lua.coerce_number(w)?.unwrap_or(0.0), lua.coerce_number(h)?.unwrap_or(0.0));
+                let mut saved = lua.app_data_mut::<SavedGeometry>().expect("geometry");
+                saved.0[slot].dimensions = Some((w as f32, h as f32));
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "GetChatWindowSavedPosition",
+        lua.create_function(|lua, id: Value| {
+            let Some(Some(slot)) = window_slot(lua, &id) else {
+                return Ok(MultiValue::new());
+            };
+            let saved = lua.app_data_ref::<SavedGeometry>().expect("geometry");
+            let Some((point, x, y)) = saved.0[slot].position.clone() else {
+                return Ok(MultiValue::new());
+            };
+            Ok(MultiValue::from_vec(vec![
+                Value::String(lua.create_string(&point)?),
+                Value::Number(f64::from(x)),
+                Value::Number(f64::from(y)),
+            ]))
+        })?,
+    )?;
+    g.set(
+        "SetChatWindowSavedPosition",
+        lua.create_function(|lua, (id, point, x, y): (Value, Value, Value, Value)| {
+            if let Some(Some(slot)) = window_slot(lua, &id) {
+                let point = lua.coerce_string(point)?.map(|s| s.to_string_lossy()).unwrap_or_default();
+                let (x, y) = (lua.coerce_number(x)?.unwrap_or(0.0), lua.coerce_number(y)?.unwrap_or(0.0));
+                let mut saved = lua.app_data_mut::<SavedGeometry>().expect("geometry");
+                saved.0[slot].position = Some((point, x as f32, y as f32));
+            }
+            Ok(())
+        })?,
+    )?;
 
     // GetChatWindowInfo(index) → name, fontSize, r, g, b, alpha, shown, locked, docked,
     // uninteractable. A non-number raises the usage line; an index outside 1..=10 answers nothing.

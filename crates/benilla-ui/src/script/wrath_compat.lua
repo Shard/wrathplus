@@ -50,7 +50,9 @@ BNGetConversationInfo, BNGetCustomMessageTable, BNGetInfo = none, none, none
 IsVoiceChatEnabled, IsVoiceChatAllowed, IsVoiceChatAllowedByServer = none, none, none
 VoiceIsDisabledByClient = function() return 1 end
 GetNumVoiceSessions = zero
-GetVoiceCurrentSessionID, GetVoiceSessionInfo, GetVoiceStatus = none, none, none
+GetVoiceCurrentSessionID, GetVoiceStatus = none, none
+-- GetVoiceSessionInfo(index) (`0x7db0b0`): no voice session, so nil, one value.
+function GetVoiceSessionInfo() return nil end
 Sound_ChatSystem_GetNumInputDrivers, Sound_ChatSystem_GetNumOutputDrivers = zero, zero
 Sound_ChatSystem_GetInputDriverNameByIndex = none
 Sound_ChatSystem_GetOutputDriverNameByIndex = none
@@ -329,19 +331,6 @@ end
 IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
 GetPossessInfo = GetPossessInfo or none
-do
-    local dimensions, positions = {}, {}
-    function GetChatWindowSavedDimensions(id)
-        local d = dimensions[id]
-        if d then return d[1], d[2] end
-    end
-    function SetChatWindowSavedDimensions(id, width, height) dimensions[id] = { width, height } end
-    function GetChatWindowSavedPosition(id)
-        local p = positions[id]
-        if p then return p[1], p[2], p[3] end
-    end
-    function SetChatWindowSavedPosition(id, point, x, y) positions[id] = { point, x, y } end
-end
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
 RegisterStaticConstants = RegisterStaticConstants or none

@@ -682,7 +682,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
 
     // ── Reward spell and party ───────────────────────────────────────────────────────────────────
-    // `texture, name, isTradeskillSpell` (`0x4e1130`), three nils without a reward spell.
+    // `texture, name, isTradeskillSpell, isSpellLearned` (`0x5e4d10`), four nils without one.
     g.set(
         "GetQuestLogRewardSpell",
         lua.create_function(|lua, ()| {
