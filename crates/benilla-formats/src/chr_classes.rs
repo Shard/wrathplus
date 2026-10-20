@@ -32,7 +32,14 @@ const CHR_CLASSES: &str = "DBFilesClient\\ChrClasses.dbc";
 /// The patch copy's column count, which `benilla-dbc` enforces as the reference loader does
 /// (`0x54240e`, `0x542446`): the base archive's 16-column copy lacks the relic flag and is refused,
 /// never read one column short.
-const CHR_CLASSES_FIELDS: usize = 17;
+const CHR_CLASSES_FIELDS: usize = 35;
+/// Build 12340's enUS name blocks and the file name, `FillLocalizedClassList`'s inputs
+/// (`0x60a510`, record `+0x10` name, `+0x14` female, `+0x18` male, `+0x1c` file name): slot 5
+/// the name, 14 the file name, and the loader's 3.3.5-only slots 17 (female) and 26 (male).
+const NAME_FIELD: usize = 5;
+const FILE_NAME_FIELD: usize = 14;
+const NAME_FEMALE_FIELD: usize = 17;
+const NAME_MALE_FIELD: usize = 26;
 
 /// Field 2, read at `rec + 8` by `GetDamageBonusStat` (`0x48b569`).
 const DAMAGE_BONUS_STAT_FIELD: usize = 0x8 / 4;
@@ -56,6 +63,10 @@ struct ChrClass {
     pet_name_token: Option<String>,
     has_relic_slot: bool,
     spell_family: u32,
+    name: String,
+    name_female: String,
+    name_male: String,
+    file_name: String,
 }
 
 /// `ChrClasses.dbc`'s read columns by class id.
@@ -95,6 +106,32 @@ impl ChrClasses {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Every class as `(file name, male name, female name)` in id order, each name picked as
+    /// `0x7159e0` picks it: the gendered name, else the other gender's, else the plain name.
+    pub fn localized_names(&self) -> Vec<(String, String, String)> {
+        let mut ids: Vec<_> = self.0.keys().copied().collect();
+        ids.sort_unstable();
+        ids.into_iter()
+            .filter_map(|id| {
+                let c = &self.0[&id];
+                let pick = |first: &str, second: &str| {
+                    [first, second, c.name.as_str()]
+                        .into_iter()
+                        .find(|n| !n.is_empty())
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                (!c.file_name.is_empty()).then(|| {
+                    (
+                        c.file_name.clone(),
+                        pick(&c.name_male, &c.name_female),
+                        pick(&c.name_female, &c.name_male),
+                    )
+                })
+            })
+            .collect()
+    }
 }
 
 fn schema() -> Schema {
@@ -102,7 +139,15 @@ fn schema() -> Schema {
     for i in 0..CHR_CLASSES_FIELDS {
         // Only the token is a string; the rest, the class name block from field 5 included, stay
         // opaque dwords.
-        let ty = if i == PET_NAME_TOKEN_FIELD {
+        let ty = if [
+            PET_NAME_TOKEN_FIELD,
+            NAME_FIELD,
+            FILE_NAME_FIELD,
+            NAME_FEMALE_FIELD,
+            NAME_MALE_FIELD,
+        ]
+        .contains(&i)
+        {
             FieldType::String
         } else {
             FieldType::UInt32
@@ -129,6 +174,10 @@ pub fn load_chr_classes(chain: &mut Chain) -> Result<ChrClasses> {
                 pet_name_token: str_at(&rs, r, PET_NAME_TOKEN_FIELD),
                 has_relic_slot: relic_slot(u32_at(r, RELIC_SLOT_FIELD).unwrap_or(0), wrath),
                 spell_family: u32_at(r, SPELL_FAMILY_FIELD).unwrap_or(0),
+                name: str_at(&rs, r, NAME_FIELD).unwrap_or_default(),
+                name_female: str_at(&rs, r, NAME_FEMALE_FIELD).unwrap_or_default(),
+                name_male: str_at(&rs, r, NAME_MALE_FIELD).unwrap_or_default(),
+                file_name: str_at(&rs, r, FILE_NAME_FIELD).unwrap_or_default(),
             },
         );
     }
