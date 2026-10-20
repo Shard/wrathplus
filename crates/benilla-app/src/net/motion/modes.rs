@@ -3,7 +3,7 @@
 use benilla_protocol::SplineMode;
 use bevy::prelude::*;
 
-use crate::creature_anim::move_flags;
+use crate::app_core::movement::move_flags;
 
 /// A streamed unit's server-granted movement modes as `MOVEMENTFLAGS` bits: root, water-walk,
 /// feather-fall, hover, walk-mode and swim. The reference keeps one flags dword per unit
@@ -31,7 +31,8 @@ impl UnitMoveModes {
         self.0 & move_flags::ROOT != 0
     }
 
-    /// `MOVEFLAG_HOVER`: the body rests [`crate::player::HOVER_HEIGHT`] above the floor.
+    /// `MOVEFLAG_HOVER`: the body rests [`crate::app_core::movement::HOVER_HEIGHT`] above the
+    /// floor.
     pub(crate) fn hovering(self) -> bool {
         self.0 & move_flags::HOVER != 0
     }

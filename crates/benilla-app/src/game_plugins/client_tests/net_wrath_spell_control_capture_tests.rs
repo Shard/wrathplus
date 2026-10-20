@@ -137,7 +137,7 @@ fn an_impact_plays_its_kit_and_the_driven_units_combo_points_show() {
     assert_eq!((combo.points, combo.target), (4, 0x77));
     let kits: Vec<_> = app
         .world_mut()
-        .resource_mut::<Messages<crate::creature_anim::KitPush>>()
+        .resource_mut::<Messages<crate::app_core::movement::KitPush>>()
         .drain()
         .map(|k| (k.entity, k.kit_id))
         .collect();

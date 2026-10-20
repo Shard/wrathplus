@@ -20,14 +20,7 @@ use crate::ui_script::gate;
 
 use super::GroupState;
 
-/// Which roster a pet token counts its owner in: the two resolve the pet's guid apart
-/// (`0x4e81d0` behind the owner's online bit, `0x491960` with none).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Roster {
-    Party,
-    Raid,
-}
-
+pub(crate) use crate::app_core::group::Roster;
 /// The name cache with the handle that asks it, one parameter of [`super::feed::feed_party`],
 /// which sits at Bevy's 16-parameter limit: a held pet's name is asked of the server once, as any
 /// held unit's is. It derefs to the cache.

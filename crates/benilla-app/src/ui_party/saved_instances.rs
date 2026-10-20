@@ -3,15 +3,11 @@
 //! keep ordered receipts as well as the latest snapshot so a feed cannot coalesce packet edges.
 use benilla_protocol::wrath_instance::RaidInstanceInfo;
 
-#[derive(Default)]
-pub(crate) struct NativeSavedInstances {
-    pub(crate) snapshot: Option<RaidInstanceInfo>,
-    pub(crate) receipts: Vec<RaidInstanceInfo>,
-}
-
+pub(crate) use crate::app_core::group::NativeSavedInstances;
 impl NativeSavedInstances {
     pub(super) fn receive(&mut self, info: RaidInstanceInfo) {
         self.snapshot = Some(info.clone());
         self.receipts.push(info);
     }
 }
+

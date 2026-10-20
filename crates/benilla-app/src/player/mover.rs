@@ -365,7 +365,8 @@ pub(super) fn step(
 #[derive(Clone, Copy)]
 pub(crate) struct Support {
     /// The rise budget, the reference's `H` (`0x617430`), which also scales the certify reach:
-    /// [`STEP_UP_HEIGHT`] for a player body, [`super::CREATURE_STEP_UP_HEIGHT`] for a creature
+    /// [`STEP_UP_HEIGHT`] for a player body,
+    /// [`crate::app_core::movement::CREATURE_STEP_UP_HEIGHT`] for a creature
     /// (`0x5fa550`'s false leg).
     pub(crate) rise: f32,
     /// How far above the floor the body rests: [`super::HOVER_HEIGHT`] while hovering, else 0.

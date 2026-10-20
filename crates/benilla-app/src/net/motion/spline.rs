@@ -8,8 +8,8 @@ use benilla_assets::coords::{bevy_to_wow, wow_to_bevy};
 use benilla_protocol::{CreateSpline, EntityKind, SplineEffect, SplineInterpolation};
 use bevy::prelude::*;
 
+use crate::app_core::movement::swim_enter_depth;
 use crate::entities::CollisionHeight;
-use crate::player::swim_enter_depth;
 
 use super::super::{NetEntity, ObjectStore};
 
@@ -33,7 +33,8 @@ pub(crate) struct Spline {
     /// creature's gait comes from [`Spline::speed`].
     pub(crate) run_mode: Option<bool>,
     /// The transport of a deck path (`SMSG_MONSTER_MOVE_TRANSPORT`), whose points are deck-local:
-    /// sampled into the rider's [`crate::transport::TransportRider`] pose, never terrain-clamped.
+    /// sampled into the rider's [`crate::app_core::movement::TransportRider`] pose, never
+    /// terrain-clamped.
     pub(crate) deck: Option<u64>,
 }
 
@@ -335,7 +336,7 @@ pub(in crate::net) fn sample_splines(
         // For the `spl` trace only; the sampler never gates on it.
         Option<&super::super::Guid>,
         // A deck path's destination; `transport::compose_riders` carries it to the world later.
-        Option<&mut crate::transport::TransportRider>,
+        Option<&mut crate::app_core::movement::TransportRider>,
     )>,
     mut trace_next: Local<f32>,
     time: Res<Time>,
@@ -476,7 +477,7 @@ pub(crate) fn grounded_y(
         y = y.max(w);
     }
     if hover {
-        y = (y + crate::player::HOVER_HEIGHT).min(seat_y);
+        y = (y + crate::app_core::movement::HOVER_HEIGHT).min(seat_y);
     }
     y
 }
@@ -497,7 +498,7 @@ pub(in crate::net) fn ground_clamp_creatures(
     // The body a walker's step sweeps: the shared player capsule. The reference sweeps each
     // unit's own `CreatureModelData` radius and height (`[CMovement+0xb0]`/`+0xb4`); per-unit
     // extents are not built.
-    capsule: Res<crate::player::PlayerCapsule>,
+    capsule: Res<crate::app_core::movement::PlayerCapsule>,
     mut commands: Commands,
     mut q: Query<(
         Entity,
@@ -607,7 +608,7 @@ pub(in crate::net) fn ground_clamp_creatures(
         cast += 1;
         let (y, hit_ground) = if let Some((pxz, py)) = continuing {
             swept += 1;
-            let half_h = Vec3::Y * (crate::player::CAPSULE_HEIGHT * 0.5);
+            let half_h = Vec3::Y * (crate::app_core::movement::CAPSULE_HEIGHT * 0.5);
             let from = Vec3::new(pxz[0], py, pxz[1]) + half_h;
             // The frame's horizontal displacement as a one-second velocity: `grounded_step` travels
             // `speed · dt`, and the reference's walk step takes a distance and a direction
@@ -620,9 +621,9 @@ pub(in crate::net) fn ground_clamp_creatures(
                 delta,
                 Duration::from_secs(1),
                 crate::player::mover::Support {
-                    rise: crate::player::CREATURE_STEP_UP_HEIGHT,
+                    rise: crate::app_core::movement::CREATURE_STEP_UP_HEIGHT,
                     offset: if hover {
-                        crate::player::HOVER_HEIGHT
+                        crate::app_core::movement::HOVER_HEIGHT
                     } else {
                         0.0
                     },
@@ -801,9 +802,10 @@ const CREATURE_SWIM_EXIT_BAND: f32 = 1.0 / 36.0;
 /// walk `0x616800 → 0x615b10 → 0x616620`, the move apply `0x618c30`) and sets SWIMMING itself on
 /// a unit it does not steer (`0x60df70 → 0x61a130 → 0x61a230 → 0x7c6e50`).
 ///
-/// The decision reads `UNIT_FIELD_FLAGS` on both legs ([`crate::player::may_swim`]): a unit with
-/// none of the three bits walks the lakebed, where vmangos paths it (`Object.cpp:2007`). Depth
-/// uses the unit's own collision height; the point the reference measures it from is untraced.
+/// The decision reads `UNIT_FIELD_FLAGS` on both legs ([`crate::app_core::movement::may_swim`]): a
+/// unit with none of the three bits walks the lakebed, where vmangos paths it (`Object.cpp:2007`).
+/// Depth uses the unit's own collision height; the point the reference measures it from is
+/// untraced.
 /// The levitating bail (`0x400`) is not read: a spline-walked unit has no live flag word, and
 /// vmangos sets the bit on a creature only from a script (`boss_onyxia.cpp:679`). The splash
 /// (`sound::water`) sits outside the flag gate, as `0x60314a` does.
@@ -847,7 +849,7 @@ impl GroundClamped {
 ///
 /// A false flag term forces a stop at any depth (`0x6031eb → 0x60dff0`), not only a refused start.
 fn creature_swim_state(marked: bool, depth: f32, boundary: f32, unit_flags: u32) -> bool {
-    if !crate::player::may_swim(unit_flags) {
+    if !crate::app_core::movement::may_swim(unit_flags) {
         return false; // both legs: without a permit a unit can neither start nor stay
     }
     if marked {
@@ -960,9 +962,10 @@ mod under_floor {
         // The liquid and room facade, seeded empty: no liquid anywhere.
         benilla_world::world_point::init_world_point_resources(app.world_mut());
         // The body a walker's swept step sweeps.
-        app.insert_resource(crate::player::PlayerCapsule(Collider::capsule(
-            crate::player::CAPSULE_RADIUS,
-            crate::player::CAPSULE_HEIGHT - 2.0 * crate::player::CAPSULE_RADIUS,
+        app.insert_resource(crate::app_core::movement::PlayerCapsule(Collider::capsule(
+            crate::app_core::movement::CAPSULE_RADIUS,
+            crate::app_core::movement::CAPSULE_HEIGHT
+                - 2.0 * crate::app_core::movement::CAPSULE_RADIUS,
         )));
         // `update()` never runs plugin `finish()`, where avian adds its diagnostics resources.
         app.finish();
@@ -1036,12 +1039,12 @@ mod under_floor {
         app.world_mut()
             .entity_mut(npc)
             .insert(crate::net::UnitMoveModes(
-                crate::creature_anim::move_flags::HOVER,
+                crate::app_core::movement::move_flags::HOVER,
             ));
         clamp(&mut app);
         assert_eq!(
             y_of(&app, npc),
-            TERRAIN_Y + crate::player::HOVER_HEIGHT,
+            TERRAIN_Y + crate::app_core::movement::HOVER_HEIGHT,
             "a yard clear of the floor — and the grant alone re-armed the cast"
         );
 
@@ -1090,7 +1093,7 @@ mod under_floor {
         app.world_mut()
             .entity_mut(npc)
             .insert(crate::net::UnitMoveModes(
-                crate::creature_anim::move_flags::WATER_WALKING,
+                crate::app_core::movement::move_flags::WATER_WALKING,
             ));
         clamp(&mut app);
         assert_eq!(
@@ -1291,7 +1294,7 @@ mod tests {
 #[cfg(test)]
 mod swim_gate {
     use super::{creature_swim_state, CREATURE_SWIM_EXIT_BAND};
-    use crate::player::swim_enter_depth;
+    use crate::app_core::movement::swim_enter_depth;
 
     /// The Shore Strider from the DBCs: display 4945 → CreatureModelData 35 (`SeaGiant.mdx`),
     /// `collisionHeight` 2.083, `CreatureDisplayInfo.scale` 1.75, `modelScale` 1.0.
@@ -1448,9 +1451,10 @@ mod server_moved_players {
         app.init_asset::<Mesh>().init_resource::<ColliderEpoch>();
         benilla_world::world_point::init_world_point_resources(app.world_mut());
         // The body a walker's swept step sweeps.
-        app.insert_resource(crate::player::PlayerCapsule(Collider::capsule(
-            crate::player::CAPSULE_RADIUS,
-            crate::player::CAPSULE_HEIGHT - 2.0 * crate::player::CAPSULE_RADIUS,
+        app.insert_resource(crate::app_core::movement::PlayerCapsule(Collider::capsule(
+            crate::app_core::movement::CAPSULE_RADIUS,
+            crate::app_core::movement::CAPSULE_HEIGHT
+                - 2.0 * crate::app_core::movement::CAPSULE_RADIUS,
         )));
         app.finish();
         app.cleanup();
@@ -1494,7 +1498,7 @@ mod server_moved_players {
         RemoteMotion {
             wow_pos: [0.0, 0.0, RIM_Z],
             orientation: 0.0,
-            flags: crate::creature_anim::move_flags::FORWARD,
+            flags: crate::app_core::movement::move_flags::FORWARD,
             pitch: 0.0,
             speed: 7.0,
             vertical_velocity: 0.0,
@@ -1681,7 +1685,7 @@ mod server_moved_players {
             "a relayed player's swim state is the wire's; the mark must not touch it"
         );
         assert!(
-            crate::player::may_swim(0x8),
+            crate::app_core::movement::may_swim(0x8),
             "PLAYER_CONTROLLED alone admits a player to the depth decision (0x60310b bit 3)"
         );
     }
@@ -1820,9 +1824,10 @@ mod inside_a_hull {
         app.init_asset::<Mesh>().init_resource::<ColliderEpoch>();
         benilla_world::world_point::init_world_point_resources(app.world_mut());
         // The body a walker's swept step sweeps.
-        app.insert_resource(crate::player::PlayerCapsule(Collider::capsule(
-            crate::player::CAPSULE_RADIUS,
-            crate::player::CAPSULE_HEIGHT - 2.0 * crate::player::CAPSULE_RADIUS,
+        app.insert_resource(crate::app_core::movement::PlayerCapsule(Collider::capsule(
+            crate::app_core::movement::CAPSULE_RADIUS,
+            crate::app_core::movement::CAPSULE_HEIGHT
+                - 2.0 * crate::app_core::movement::CAPSULE_RADIUS,
         )));
         app.finish();
         app.cleanup();

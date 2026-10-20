@@ -72,29 +72,9 @@ impl Plugin for TransportPlugin {
     }
 }
 
-/// The create-block anchor: the server's path-progress ms and the local instant it arrived,
-/// inserted on every create that carries `UPDATE_FLAG_TRANSPORT`.
-#[derive(Component)]
-pub(crate) struct TransportAnchor {
-    pub(crate) progress_ms: u32,
-    pub(crate) at: Instant,
-}
+pub(crate) use crate::app_core::movement::TransportAnchor;
 
-/// A pending type-11 lift, captured off the create block: its keyframe path is keyed by the
-/// template entry, which `OBJECT_FIELD_ENTRY` carries, so no template query is needed.
-#[derive(Component)]
-pub(crate) struct ElevatorSeed {
-    /// `gameobject_template` entry, `TransportAnimation.dbc`'s `TransportID` key.
-    pub(crate) entry: u32,
-    /// Spawn position (raw WoW coords), from the movement block: a transport create carries no
-    /// `GAMEOBJECT_POS_*`.
-    pub(crate) base_pos: [f32; 3],
-    /// Spawn facing (WoW radians), the car's constant heading.
-    pub(crate) yaw: f32,
-    /// `GAMEOBJECT_ROTATION`, the spawn quaternion the keyframe offsets rotate through; `None`
-    /// falls back to the pure-yaw quat, which is what spawn rows encode.
-    pub(crate) quat: Option<[f32; 4]>,
-}
+pub(crate) use crate::app_core::movement::ElevatorSeed;
 
 /// A ticking transport, armed by [`arm_transports`].
 #[derive(Component)]
@@ -295,6 +275,7 @@ fn arm_transports(
                 seed.entry, guid.0
             );
             commands.entity(entity).remove::<ElevatorSeed>().insert((
+                crate::app_core::movement::TransportMaps(None),
                 Transport {
                     drive: Drive::Lift(Lift {
                         frames,
@@ -344,6 +325,7 @@ fn arm_transports(
             // Kinematic, not the GO default of Static: it moves every frame, and avian's static
             // tree is tuned for immobile geometry.
             commands.entity(entity).insert((
+                crate::app_core::movement::TransportMaps(Some(timetable.clone())),
                 Transport {
                     drive: Drive::Taxi(timetable),
                     was_moving: false,
@@ -549,17 +531,7 @@ fn watch_ridden_transport_map(
     );
 }
 
-/// An observed mover's pose in a transport's frame, the `MOVEFLAG_ONTRANSPORT` tail of its
-/// `LIVING` create block or `MSG_MOVE_*` relay. [`compose_riders`] carries it every frame; the
-/// local pose changes only per packet, with no extrapolation in the deck frame.
-#[derive(Component)]
-pub(crate) struct TransportRider {
-    pub(crate) transport_guid: u64,
-    /// Position in the transport's frame, raw WoW coords.
-    pub(crate) local_pos: [f32; 3],
-    /// Facing in the transport's frame (WoW radians); world facing is `local + transport yaw`.
-    pub(crate) local_orientation: f32,
-}
+pub(crate) use crate::app_core::movement::TransportRider;
 
 /// Compose each observed rider's world pose through its transport's this-frame pose, after
 /// [`tick_transports`], and refresh [`RemoteMotion`]'s WoW pose to match. A rider whose transport

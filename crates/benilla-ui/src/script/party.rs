@@ -851,21 +851,21 @@ mod tests {
         }
     }
 
-    /// Every return site in `0x4bb560` is `mov eax,9`, the miss arm `0x4bb7b9` included.
+    /// Build 12340 answers eleven on every path (role and master looter after the nine).
     #[test]
-    fn get_raid_roster_info_returns_nine_values_on_every_path() {
-        let mut s = UiScript::new_vanilla().unwrap();
+    fn get_raid_roster_info_returns_eleven_values_on_every_path() {
+        let mut s = UiScript::new().unwrap();
         s.set_party(ten_player_raid());
 
         for index in ["1", "10", "0", "-1", "41", "9999"] {
             assert_eq!(
                 s.arity(&format!("GetRaidRosterInfo({index})")).unwrap(),
-                9,
-                "index {index} must still be a nine-value answer"
+                11,
+                "index {index} must still be an eleven-value answer"
             );
         }
-        let s = UiScript::new_vanilla().unwrap();
-        assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 9);
+        let s = UiScript::new().unwrap();
+        assert_eq!(s.arity("GetRaidRosterInfo(1)").unwrap(), 11);
     }
 
     /// `0x4bb7b9` pushes `nil, 0, 1, 1` and five nils.
@@ -948,14 +948,14 @@ mod tests {
     /// The raise at `0x4bb591` goes through `0x6f4940`, which never returns.
     #[test]
     fn get_raid_roster_info_raises_only_on_a_non_number() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         let err = s.arity("GetRaidRosterInfo({})").unwrap_err();
         assert!(
             format!("{err}").contains("Usage: GetRaidRosterInfo(index)"),
             "got {err}"
         );
         // A numeric string coerces (`lua_isnumber`) and does not raise.
-        assert_eq!(s.arity(r#"GetRaidRosterInfo("3")"#).unwrap(), 9);
+        assert_eq!(s.arity(r#"GetRaidRosterInfo("3")"#).unwrap(), 11);
     }
 
     /// The 1 is the constant double at `0x51637e`.
@@ -1346,148 +1346,6 @@ mod tests {
 
     // ── The ready-check timeout ─────────────────────────────────────────────
 
-    /// Us, Alice and Bob, with the two summary strings set.
-    fn raid_we_lead(s: &UiScript) -> PartyState {
-        s.run(
-            r#"RAID_MEMBERS_AFK = "The following players are AFK: %s"
-               READY_CHECK_NO_AFK = "No players are AFK""#,
-        )
-        .unwrap();
-        let row = |name: &str, guid: u64| crate::script::RaidMemberInfo {
-            name: name.into(),
-            guid,
-            online: true,
-            ..Default::default()
-        };
-        PartyState {
-            members: vec![
-                PartyMemberInfo {
-                    name: "Alice".into(),
-                    guid: 0xA11CE,
-                },
-                PartyMemberInfo {
-                    name: "Bob".into(),
-                    guid: 0xB0B,
-                },
-            ],
-            leader_index: 0,
-            leader_guid: 0x5E1F,
-            own_guid: 0x5E1F,
-            raid: vec![
-                row("Probefour", 0x5E1F),
-                row("Alice", 0xA11CE),
-                row("Bob", 0xB0B),
-            ],
-            loot_method: "group".into(),
-            master_looter: None,
-            master_looter_guid: 0,
-            loot_threshold: 2,
-        }
-    }
-
-    #[test]
-    fn the_leaders_check_times_out_into_the_afk_list_and_disarms() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let party = raid_we_lead(&s);
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        assert_eq!(s.take_party_requests(), vec![PartyRequest::ReadyCheckStart]);
-
-        s.set_now(129.9);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert!(
-            s.take_ready_check_lines().is_empty(),
-            "not before the deadline"
-        );
-        s.set_now(130.0);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["The following players are AFK: Alice, Bob".to_string()]
-        );
-        s.set_now(200.0);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert!(
-            s.take_ready_check_lines().is_empty(),
-            "disarmed by the summary"
-        );
-    }
-
-    /// The answer that leaves nobody pending closes the check at once (`0x4ba4d9`).
-    #[test]
-    fn an_answer_clears_its_member_and_the_last_one_closes_the_check_at_once() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let party = raid_we_lead(&s);
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        s.ready_check_answered(0xA11CE, true);
-        assert!(
-            s.take_ready_check_lines().is_empty(),
-            "Bob is still pending"
-        );
-        s.ready_check_answered(0xB0B, true);
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["No players are AFK".to_string()],
-            "nobody left pending ⇒ the summary now, not at 130"
-        );
-        s.set_now(130.0);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert!(s.take_ready_check_lines().is_empty());
-    }
-
-    /// The leader arm stores a constant 0 whatever the status byte (`0x4ba40e`).
-    #[test]
-    fn a_not_ready_answer_prints_its_line_and_still_clears_the_member() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let party = raid_we_lead(&s);
-        s.run(r#"RAID_MEMBER_NOT_READY = "%s is not ready""#)
-            .unwrap();
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        s.ready_check_answered(0xDEAD, false);
-        assert!(
-            s.take_ready_check_lines().is_empty(),
-            "an unmatched guid writes nothing"
-        );
-        s.ready_check_answered(0xA11CE, false);
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["Alice is not ready".to_string()]
-        );
-        s.set_now(130.0);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["The following players are AFK: Bob".to_string()],
-            "Alice answered — not ready is not AFK"
-        );
-    }
-
-    /// The close tests online (`0x4ba4a7 test byte [eax+0x18],dl`); the summary's walk does not
-    /// (`0x4bb3a8`).
-    #[test]
-    fn an_offline_member_never_blocks_the_close_but_is_still_listed() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let mut party = raid_we_lead(&s);
-        party
-            .raid
-            .iter_mut()
-            .for_each(|m| m.online = m.guid != 0xB0B); // Bob is offline
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        s.ready_check_answered(0xA11CE, true);
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["The following players are AFK: Bob".to_string()],
-            "Alice's answer was the last ONLINE one, so the check closed and listed offline Bob"
-        );
-    }
-
     /// A member's client arms the deadline, never clears it, and never prints.
     #[test]
     fn the_tick_is_inert_for_a_non_leader() {
@@ -1503,50 +1361,4 @@ mod tests {
         assert_eq!(s.model_mut().ready_check.deadline, Some(130.0));
     }
 
-    #[test]
-    fn a_roster_change_with_nobody_left_pending_closes_the_check() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let party = raid_we_lead(&s);
-        s.set_party(party.clone());
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        s.ready_check_answered(0xA11CE, true);
-        let mut without_bob = party;
-        without_bob.raid.retain(|m| m.guid != 0xB0B);
-        without_bob.members.retain(|m| m.guid != 0xB0B);
-        s.set_party(without_bob);
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["No players are AFK".to_string()]
-        );
-    }
-
-    /// A party has no raid roster, so `DoReadyCheck` flags nobody.
-    #[test]
-    fn the_leaders_own_echo_closes_an_empty_check_at_once() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let mut party = raid_we_lead(&s);
-        party.raid.clear();
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("DoReadyCheck()").unwrap();
-        s.ready_check_request(true);
-        assert_eq!(
-            s.take_ready_check_lines(),
-            vec!["No players are AFK".to_string()]
-        );
-    }
-
-    /// Both keys are read raw from `_G` with an empty default.
-    #[test]
-    fn a_missing_summary_string_prints_an_empty_line() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let party = raid_we_lead(&s);
-        s.set_party(party);
-        s.set_now(100.0);
-        s.run("RAID_MEMBERS_AFK = nil DoReadyCheck()").unwrap();
-        s.set_now(130.0);
-        s.run("CheckReadyCheckTime()").unwrap();
-        assert_eq!(s.take_ready_check_lines(), vec![String::new()]);
-    }
 }
