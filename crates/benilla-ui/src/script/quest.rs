@@ -46,6 +46,9 @@ pub struct QuestItemView {
 /// (`QuestFrame.lua:332`). `tradeskill` is the third return, `isTradeskillSpell`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestRewardSpell {
+    /// The cast spell teaches one (effect 36 or 57), the fourth return. Labelled: App does not
+    /// read the cast spell's effects yet and feeds `false`.
+    pub learned: bool,
     pub spell_id: u32,
     pub name: Option<String>,
     pub texture: Option<String>,
@@ -184,12 +187,10 @@ pub(super) fn reward_spell_returns(
     lua: &Lua,
     spell: Option<QuestRewardSpell>,
 ) -> mlua::Result<MultiValue> {
+    // Build 12340 (`0x5e4d10`, `0x58d670`): texture, name, isTradeskillSpell, isSpellLearned,
+    // always four; the flags are 1 or nil.
     let Some(sp) = spell else {
-        return Ok(MultiValue::from_vec(vec![
-            Value::Nil,
-            Value::Nil,
-            Value::Nil,
-        ]));
+        return Ok(MultiValue::from_vec(vec![Value::Nil; 4]));
     };
     let texture = match &sp.texture {
         Some(t) => Value::String(lua.create_string(t)?),
@@ -204,7 +205,8 @@ pub(super) fn reward_spell_returns(
     } else {
         Value::Nil
     };
-    Ok(MultiValue::from_vec(vec![texture, name, tradeskill]))
+    let learned = super::binding_abi::flag(sp.learned);
+    Ok(MultiValue::from_vec(vec![texture, name, tradeskill, learned]))
 }
 
 /// The icon an empty offer row answers: display 0 has no `ItemDisplayInfo` row, so the icon
@@ -465,7 +467,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetRewardSpell() (`0x501df0`): three nils without a spell.
+    // GetRewardSpell() (`0x58d670`): four nils without a spell.
     g.set(
         "GetRewardSpell",
         lua.create_function(|lua, ()| {

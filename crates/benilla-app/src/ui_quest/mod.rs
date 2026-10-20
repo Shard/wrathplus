@@ -337,6 +337,8 @@ pub(crate) fn reward_spell_view(
         texture: d.and_then(|d| d.icon.clone()),
         // `isTradeskillSpell`: `Spell.dbc` col 6 `Attributes` bit `0x20` (`0x501e59`).
         tradeskill: d.is_some_and(|d| d.attributes & 0x20 != 0),
+        // `isSpellLearned` reads the cast spell's effects (36, 57); unread here, labelled.
+        learned: false,
     })
 }
 
