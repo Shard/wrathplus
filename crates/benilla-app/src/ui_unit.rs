@@ -13,7 +13,7 @@ use benilla_ui::script::{
     WornDisplay,
 };
 
-use crate::creature_type::CreatureTypeSources;
+use crate::creature_type::{creature_type_word, CreatureTypeSources};
 use crate::names::NameCache;
 use crate::net::{
     FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, ObjectStore, Reputations,
@@ -507,42 +507,7 @@ fn fire_unit_combat(
     }
 }
 
-/// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
-/// display name is also what `$R`/`$r` expand to. Build 12340's enUS `ChrRaces.dbc` rows 1-11,
-/// its name and `clientFileString` columns; its gendered name columns are empty in enUS.
-pub(crate) fn race_names(race: u8) -> Option<(&'static str, &'static str)> {
-    Some(match race {
-        1 => ("Human", "Human"),
-        2 => ("Orc", "Orc"),
-        3 => ("Dwarf", "Dwarf"),
-        4 => ("Night Elf", "NightElf"),
-        5 => ("Undead", "Scourge"),
-        6 => ("Tauren", "Tauren"),
-        7 => ("Gnome", "Gnome"),
-        8 => ("Troll", "Troll"),
-        9 => ("Goblin", "Goblin"),
-        10 => ("Blood Elf", "BloodElf"),
-        11 => ("Draenei", "Draenei"),
-        _ => return None,
-    })
-}
-
-/// The class id to `UnitClass`'s display name and uppercase `classFileName`.
-pub(crate) fn class_names(class: u8) -> Option<(&'static str, &'static str)> {
-    Some(match class {
-        1 => ("Warrior", "WARRIOR"),
-        2 => ("Paladin", "PALADIN"),
-        3 => ("Hunter", "HUNTER"),
-        4 => ("Rogue", "ROGUE"),
-        5 => ("Priest", "PRIEST"),
-        6 => ("Death Knight", "DEATHKNIGHT"),
-        7 => ("Shaman", "SHAMAN"),
-        8 => ("Mage", "MAGE"),
-        9 => ("Warlock", "WARLOCK"),
-        11 => ("Druid", "DRUID"),
-        _ => return None,
-    })
-}
+pub(crate) use crate::app_core::catalogs::{class_names, race_names};
 
 /// A playable race's fixed side, for where no faction template is at hand, as at world entry,
 /// where addons concatenate `UnitFactionGroup("player")` at file scope; [`faction_group`] reads
@@ -1156,25 +1121,6 @@ pub(crate) fn faction_group_localized(
         .map(str::to_string)
 }
 
-/// `CreatureType.dbc` id to the enUS word, a creature's level-line class slot.
-fn creature_type_word(t: u32) -> Option<&'static str> {
-    Some(match t {
-        1 => "Beast",
-        2 => "Dragonkin",
-        3 => "Demon",
-        4 => "Elemental",
-        5 => "Giant",
-        6 => "Undead",
-        7 => "Humanoid",
-        8 => "Critter",
-        9 => "Mechanical",
-        // The shipped table runs 1..11; the nameplate filter tests 11 (`0x605570`).
-        11 => "Totem",
-        // Deviation: 10, "Not specified", answers None because the word would print in the
-        // tooltip's level line; `UnitCreatureType` then answers nil where the reference names it.
-        _ => return None,
-    })
-}
 
 /// Build-12340 UnitFrame.lua listens for these per-resource events, not modern UNIT_POWER_UPDATE.
 fn fire_wrath_power_transitions(

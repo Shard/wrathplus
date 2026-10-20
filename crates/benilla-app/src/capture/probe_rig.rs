@@ -172,8 +172,8 @@ impl RigSpec {
                 format!(
                     "{} {} {}",
                     if g == 1 { "female" } else { "male" },
-                    crate::ui_unit::race_names(r).map_or("?", |(d, _)| d),
-                    crate::ui_unit::class_names(c).map_or("?", |(d, _)| d),
+                    crate::app_core::catalogs::race_names(r).map_or("?", |(d, _)| d),
+                    crate::app_core::catalogs::class_names(c).map_or("?", |(d, _)| d),
                 )
             });
         let mut extras = Vec::new();

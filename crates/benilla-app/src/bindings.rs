@@ -209,7 +209,7 @@ pub(crate) fn seed_bindings_for_vm(world: &mut World, script: &mut UiScript) {
     // No roster identity (a rigged or capture run) leaves set 2 unseeded.
     let id = world
         .get_resource::<crate::char_select::Roster>()
-        .and_then(crate::ui_macro::identity);
+        .and_then(crate::app_core::state::identity);
     let character = id
         .as_ref()
         .and_then(|(realm, name)| crate::local_state::bindings_character_path(realm, name));
