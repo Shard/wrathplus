@@ -96,6 +96,64 @@ the later moves are pure file moves. Each item names the symbols that point the 
 
 Done when the module graph, rerun with the script below, shows no back edge between layers.
 
+### Item 3, part 2: `Player`, the mover and the rest of net → world (design note)
+
+Measured on wrath-hud after part 1 (`e7a0fd7c`, movement model in `app_core::movement`), counting
+`crate::<module>` paths with this plan's layer table (`/tmp/azb-split/layers.py`, Wire B):
+
+| Direction | References | Distinct symbols | Largest |
+|---|---|---|---|
+| net → world | 57 | 33 | `player::Player` 10, `creature_anim::move_flags` 6 (in `net.rs`, kept for the clippy baseline), `go_anim` 7, the mover steps 6, `player::server_ride` 3 (doc links) |
+| world → net | 622 (513 outside test files) | 75 | bare `crate::net::{…}` imports 109, `ObjectStore` 95, `GuidIndex` 38, `NetCommands` 29, `NetEntity` 28, `Reputations` 28, `SessionDialect` 31, `SelfPlayer` 29 |
+
+**Inverting the order (core < world < net < ui) is not cheaper.** It would need the 75 world → net
+symbols cut, which are net's object model (`ObjectStore`, `GuidIndex`, `NetEntity`, `Guid`,
+`SelfPlayer`, `Embodied`), its command channel (`NetCommands`, `ClientCommand`) and its handler
+table (`NetHandlerApp`, `handlers::dispatch`): moving those into core is a larger redesign than the
+33 symbols the planned order leaves. The plan's order (core < net < world < ui) stays.
+
+**What the 33 are, and the cut for each** (behaviour-neutral unless marked):
+
+1. **`net::motion` is world simulation that lives under `net/`** (5.1k lines: remote
+   dead-reckoning, spline sampling, ground clamping, display facing, swim marking). It is where
+   every mover call comes from (`grounded_step`, `Support`, `airborne_step`, `fall_step`), and
+   `player::mover`'s one net reference (`net::motion::remote`) points back into it. Cut: move its
+   component and message types (`RemoteMotion`, `Spline`, `SplineStopped`, `UnitMoveModes`,
+   `CreatureSwimming`, `FacingStep`, `DisplayFacing`, `GroundClamped`, `RelayMove`, the
+   pending-move queue) to `app_core::movement`, since `net/objects.rs` writes them on create and
+   update (47 uses); move the systems and helpers to a world-layer module (`crate::motion`), registered by a world
+   plugin in the same sets with the same `.before/.after` edges. The mover stays in `player`: with
+   its callers in world, `player::mover` needs no change.
+2. **`Player` is a resource `net` resets once**: `activate_connected` clears it synchronously at a
+   Wrath `Connected`, before publishing the new endpoint, so the session-end reader cannot stream
+   the old pose to the new socket (`net.rs:589-623`). Cut: move the `activate_command_endpoint`
+   handler (one `Connected` system) from `net` into `player`, which then calls
+   `NetCommands::activate_connected(&endpoints, || *player = Player::default())`; world → net is
+   the allowed direction. Kept order: the handler stays where it is in the `Connected` dispatch
+   order, so it registers through a named hook that `net`'s plugin places (or `net` keeps the
+   registration and takes the reset as a resource-held `fn` that `player` installs). `Player` and its
+   impls do not move. The tests that seed `Player` in `net.rs` move with the handler.
+3. **`transport::Transport` in the worldport sweep**: `session.rs` asks only `touches_map(map_id)`
+   to spare a transport whose path crosses the new map (`session.rs:620-640`). Cut: a core
+   component (`TransportMaps`, the maps the path touches) inserted next to `Transport` by
+   `arm_transports`, queried by the sweep instead. Behaviour-neutral as long as it is inserted in
+   the same frame as `Transport`; pinned by the existing worldport sparing test.
+4. **State `net` writes**: `go_anim::{GoCustomAnim, DespawnAnimAnnounced, PendingDestroy}`,
+   `world_state::WorldStates`, `spell::Cooldowns`, `target::ring::Factions`,
+   `sound::EmoteSounds`, `entities::CollisionHeight` and the four animation components
+   (`RangedHold`, `PlaySeq`, `NockLatch`, `BodyTwist`): types to `app_core::state` with item 2.
+5. **Callbacks `net` calls**: `death::net::{note_corpse, recheck_corpse, forget_corpse}` and
+   `death::DeathNet`, `go_anim::release_despawn_pin`, `cinematic`: turn into messages `net` writes
+   and the feature reads, or move the function into the net layer when it only mutates core
+   state. Each needs a one-frame-order check; done one at a time with the module's tests.
+
+**Proposed unit (item 3, part 2a): relocate `net::motion`.** Cut 1 alone: types to
+`app_core::movement`, systems to `crate::motion` (world), plugin registration moved with identical
+sets and edges, `net` re-exports kept so callers compile. Moves only; gated by app `--lib --tests`,
+the census and the clippy ratchet, plus a schedule check that the ambiguity counts
+(`UPDATE_ACTIONABLE_CEILING`) and system order are unchanged. Cuts 2 and 3 follow as part 2b, one
+small design change each, with their tests; 4 joins Assets' item 2; 5 is part 2c.
+
 ## Moving a layer out (steps 1 to 4)
 
 Order: `core`, then `net`, then `tools`, then `world` and `ui` (world first, so `ui` can depend
