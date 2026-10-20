@@ -3,8 +3,9 @@
 //! player guid as `npcGuid`, and Accept sends `CMSG_QUESTGIVER_ACCEPT_QUEST` to that guid
 //! (`QuestHandler.cpp:111-114, 403-459`). The push-result guid names a different player each way.
 
-/// `QuestShareMessages` (vmangos `QuestDef.h:62-70`): the `u8` verdict of `MSG_QUEST_PUSH_RESULT`.
-/// A newtype, not an enum, so an unknown value survives the parse.
+/// `QuestShareMessages` (AzerothCore `QuestDef.h:64-77`): the `u8` verdict of
+/// `MSG_QUEST_PUSH_RESULT`. A newtype, not an enum, so an unknown value survives the parse; build
+/// 12340 also names 11 (`ERR_QUEST_PUSH_DIFFERENT_SERVER_DAILY_S`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QuestShareMsg(pub u8);
 
@@ -17,16 +18,22 @@ impl QuestShareMsg {
     pub const ACCEPT_QUEST: Self = Self(2);
     /// `QUEST_PARTY_MSG_DECLINE_QUEST`: the one value the client sends.
     pub const DECLINE_QUEST: Self = Self(3);
-    /// `QUEST_PARTY_MSG_TOO_FAR`: beyond `QUEST_SHARE_DISTANCE`, 14 yd (vmangos `Object.h:72`).
-    pub const TOO_FAR: Self = Self(4);
     /// `QUEST_PARTY_MSG_BUSY`: the member already has a share latched.
-    pub const BUSY: Self = Self(5);
+    pub const BUSY: Self = Self(4);
     /// `QUEST_PARTY_MSG_LOG_FULL`: the member's quest log is full.
-    pub const LOG_FULL: Self = Self(6);
+    pub const LOG_FULL: Self = Self(5);
     /// `QUEST_PARTY_MSG_HAVE_QUEST`: the member is already on the quest.
-    pub const HAVE_QUEST: Self = Self(7);
+    pub const HAVE_QUEST: Self = Self(6);
     /// `QUEST_PARTY_MSG_FINISH_QUEST`: the member has already completed the quest.
-    pub const FINISH_QUEST: Self = Self(8);
+    pub const FINISH_QUEST: Self = Self(7);
+    /// `QUEST_PARTY_MSG_CANT_BE_SHARED_TODAY`: a daily the sharer cannot share again today.
+    pub const CANT_BE_SHARED_TODAY: Self = Self(8);
+    /// `QUEST_PARTY_MSG_SHARING_TIMER_EXPIRED`: a timed quest whose timer ran out.
+    pub const SHARING_TIMER_EXPIRED: Self = Self(9);
+    /// `QUEST_PARTY_MSG_NOT_IN_PARTY`: the sharer is in no group.
+    pub const NOT_IN_PARTY: Self = Self(10);
+    /// The client's `ERR_QUEST_PUSH_DIFFERENT_SERVER_DAILY_S`, which AzerothCore never sends.
+    pub const DIFFERENT_SERVER_DAILY: Self = Self(11);
 }
 
 /// `MSG_QUEST_PUSH_RESULT` from the server (`Quest.cpp:81-85`). Its guid is the member the verdict
