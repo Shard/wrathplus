@@ -257,6 +257,19 @@ table.wipe = wipe
 function getglobal(name) return _G[name] end
 function setglobal(name, value) _G[name] = value end
 function GetLocale() return "enUS" end
+-- debug*: debuginfo, debugload, debugprint, debugdump, debugbreak and debugtimestamp all bind the
+-- shared `return 0` stub `0x8e5250`, answering nothing (`/tmp/azb-app-mig/ghidra/debugfam*.log`);
+-- 3.3.5's `_ERRORMESSAGE` calls debuginfo() unguarded. debugprofilestop (`0x817370`) answers the
+-- milliseconds since debugprofilestart (`0x817350`) latched, on `GetTime`'s clock here.
+do
+    local GetTime = GetTime
+    local function noop() end
+    debuginfo, debugload, debugprint = noop, noop, noop
+    debugdump, debugbreak, debugtimestamp = noop, noop, noop
+    local profileStart = 0
+    function debugprofilestart() profileStart = GetTime() end
+    function debugprofilestop() return (GetTime() - profileStart) * 1000 end
+end
 "##;
 
 /// LuaBitOp's `bit`, which build 12340 ships: 32-bit operations with signed results.

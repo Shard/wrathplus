@@ -314,22 +314,3 @@ fn held_bank_items_move_to_bank_bag_and_worn_slots() {
         "the head slot"
     );
 }
-
-#[test]
-fn the_item_icons_are_each_display_icon_once_by_display_id() {
-    let display = |icon: Option<&str>| benilla_formats::ItemDisplay {
-        icon: icon.map(str::to_string),
-        ..Default::default()
-    };
-    let catalog = benilla_formats::ItemDisplayCatalog::from_displays(
-        [
-            (30, display(Some("Interface\\Icons\\INV_Misc_Bag_07"))),
-            (10, display(Some("Interface\\Icons\\INV_Sword_04"))),
-            (20, display(Some("Interface\\Icons\\inv_misc_bag_07"))),
-            (40, display(None)),
-        ]
-        .into_iter()
-        .collect(),
-    );
-    assert_eq!(item_icon_names(&catalog), ["INV_Sword_04", "inv_misc_bag_07"]);
-}

@@ -401,8 +401,8 @@ mod tests {
         );
     }
 
-    /// Both Night Elf sexes carry two eye-glow cards (on geoset 0 in the stock data; an asset pack
-    /// may put them above 1700), and both survive the selection, bare and robed.
+    /// Both Night Elf sexes carry two 12340 eye-glow batches, the racial glow (1702) and the Death
+    /// Knight glow (1703); the selection shows the racial one, bare and robed.
     #[test]
     fn geoset_visibility_keeps_night_elf_eye_glow() {
         let data = crate::wow_data_or_skip!();
@@ -420,17 +420,23 @@ mod tests {
                 })
                 .collect();
             assert_eq!(eyes.len(), 2, "{name} has two eye-glow cards");
-            assert!(eyes.iter().all(|p| p.billboard.is_some() && p.additive));
+            // Build 12340 keeps the glow on its billboard bone in the joint palette.
+            assert!(eyes.iter().all(|p| p.welded_billboard && p.additive));
             let mut robe = EquipGeosets::default();
             robe.bodyslots[1] = Some([0, 0, 1]);
+            let ids: Vec<u16> = eyes.iter().map(|p| p.geoset_id).collect();
             for equip in [EquipGeosets::default(), robe] {
                 let visible = cg.visible_geosets(4, sex, 0, 0, &equip);
+                let shown: Vec<u16> = ids
+                    .iter()
+                    .copied()
+                    .filter(|g| visible.contains(g))
+                    .collect();
                 assert_eq!(
-                    eyes.iter()
-                        .filter(|p| visible.contains(&p.geoset_id))
-                        .count(),
-                    2,
-                    "{name}: both eye-glow cards must survive the character filter"
+                    shown,
+                    [1702],
+                    "{name}: the racial glow (1702) shows and the Death Knight glow (1703) does not; \
+                     eye-glow geosets {ids:?}"
                 );
             }
         }

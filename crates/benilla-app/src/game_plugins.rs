@@ -731,10 +731,10 @@ pub(crate) mod schedule_tests {
     ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
     /// - the arena petition vendor (`ui_petition::vendor`): its walk-away guard against the
     ///   motion, transport and net systems the guild registrar's guard already pairs with (the
-    ///   guard reads the NPC's `Transform` through `GuidIndex`, as that one does); and its feed and
-    ///   `ui_guild_bank::feed_item_icons` against the template-cache readers and the display-cache
-    ///   eviction, the classes `feed_guild_bank` is argued for above (the item and display caches
-    ///   only fill or evict between their reads), and the drain against the collider finish over
+    ///   guard reads the NPC's `Transform` through `GuidIndex`, as that one does); and its feed
+    ///   against the template-cache readers and the display-cache eviction, the classes
+    ///   `feed_guild_bank` is argued for above (the item and display caches only fill or evict
+    ///   between their reads), and the drain against the collider finish over
     ///   the object stores it reads only.
     /// - the vehicle UI feed (`ui_vehicle::feed_vehicles`) against the camera-pose load: the feed
     ///   reads only `Player::mover_pitch`, which the load never writes.

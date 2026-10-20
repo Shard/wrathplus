@@ -289,8 +289,8 @@ fn macro_icon_catalog_is_cached_per_source_and_reseeded_for_new_vms() {
     let source = std::sync::Arc::new(());
     let replacement = std::sync::Arc::new(());
     let mut catalog = super::IconCatalogCache::default();
-    let mut first = UiScript::new().unwrap();
-    let mut second = UiScript::new().unwrap();
+    let mut first = UiScript::new_vanilla().unwrap();
+    let mut second = UiScript::new_vanilla().unwrap();
     let (icons, hit) =
         catalog.get_or_load(&source, || Ok(vec!["Interface\\Icons\\Spell_Test".into()]));
     assert!(!hit);
@@ -323,7 +323,7 @@ fn macro_icon_catalog_is_cached_per_source_and_reseeded_for_new_vms() {
 fn macro_icon_catalog_failure_is_cached_only_for_its_source() {
     let source = std::sync::Arc::new(());
     let replacement = std::sync::Arc::new(());
-    let mut catalog = super::IconCatalogCache::default();
+    let mut catalog: super::IconCatalogCache<()> = super::IconCatalogCache::default();
     assert!(catalog
         .get_or_load(&source, || Err("missing listfile".into()))
         .0
@@ -358,7 +358,7 @@ fn the_wrath_feed_never_enumerates_the_icon_catalog() {
 
 #[test]
 fn dead_failed_catalog_source_is_not_reused() {
-    let mut catalog = super::IconCatalogCache::default();
+    let mut catalog: super::IconCatalogCache<()> = super::IconCatalogCache::default();
     {
         let source = std::sync::Arc::new(());
         let (result, hit) = catalog.get_or_load(&source, || Err("old failure".into()));
@@ -369,4 +369,33 @@ fn dead_failed_catalog_source_is_not_reused() {
     assert!(!hit && result.is_ok());
     let (result, hit) = catalog.get_or_load(&replacement, || panic!("replacement loaded once"));
     assert!(hit && result.is_ok());
+}
+
+#[test]
+fn a_wrath_vm_gets_both_build_12340_lists_once_per_source() {
+    let source = std::sync::Arc::new(());
+    let mut cache = super::IconCatalogCache::default();
+    let mut seeded = crate::ui_script::VmMemo::default();
+    let mut wrath = UiScript::new().unwrap();
+    let icons = benilla_formats::WrathMacroIcons {
+        spell: vec!["INV_Misc_QuestionMark".into(), "Spell_Holy_Heal".into()],
+        item: vec!["INV_Misc_QuestionMark".into(), "INV_Axe_01".into()],
+    };
+    super::seed_wrath_icon_catalog(&mut wrath, &source, &mut seeded, &mut cache, || {
+        Ok(icons.clone())
+    });
+    super::seed_wrath_icon_catalog(&mut wrath, &source, &mut seeded, &mut cache, || {
+        panic!("same VM/source must not reload")
+    });
+    assert!(wrath
+        .eval::<bool>(
+            "return GetNumMacroIcons() == 2 and GetMacroIconInfo(2) == 'Interface\\\\Icons\\\\Spell_Holy_Heal' \
+             and GetNumMacroItemIcons() == 2 and GetMacroItemIconInfo(2) == 'Interface\\\\Icons\\\\INV_Axe_01'"
+        )
+        .unwrap());
+    let mut second = UiScript::new().unwrap();
+    super::seed_wrath_icon_catalog(&mut second, &source, &mut seeded, &mut cache, || {
+        panic!("a new VM on the same source uses the cache")
+    });
+    assert_eq!(second.eval::<i64>("return GetNumMacroIcons()").unwrap(), 2);
 }

@@ -23,10 +23,7 @@ use crate::ui_script::{gate, UiInput};
 
 mod held;
 
-/// The unit-feed pass, gated so none of its login one-shots or per-VM memos runs before the in-game
-/// interface exists; the demo override orders itself after it.
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct UnitFeed;
+pub(crate) use crate::app_core::schedule::UnitFeed;
 
 /// One `UNIT_COMBAT` over a unit, the portrait hit indicator's feed. The emitter `0x494600` fires
 /// `(token, action, descriptor, amount, type)` once per token naming the unit, with no
@@ -1031,12 +1028,16 @@ fn drain_worn_display_toggles(
         let command = match (which, wrath) {
             (WornDisplay::Helm, false) => crate::net::ClientCommand::ToggleHelm,
             (WornDisplay::Cloak, false) => crate::net::ClientCommand::ToggleCloak,
-            (WornDisplay::Helm, true) => crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
-                show: hidden.is_some_and(|h| h.0),
-            }),
-            (WornDisplay::Cloak, true) => crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
-                show: hidden.is_some_and(|h| h.1),
-            }),
+            (WornDisplay::Helm, true) => {
+                crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
+                    show: hidden.is_some_and(|h| h.0),
+                })
+            }
+            (WornDisplay::Cloak, true) => {
+                crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
+                    show: hidden.is_some_and(|h| h.1),
+                })
+            }
         };
         let _ = commands.0.send(command);
     }

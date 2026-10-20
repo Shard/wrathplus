@@ -11,6 +11,13 @@ use crate::Chain;
 const ICON_DIR: &str = "Interface\\Icons\\";
 
 fn macro_icon_stem(path: &str) -> Option<&str> {
+    let stem = icon_stem(path)?;
+    has_prefix(stem, &["Spell_", "Ability_"]).then_some(stem)
+}
+
+/// A file directly under `Interface\Icons\` as the chooser stores it: the name after the prefix
+/// without a last-dot `.blp` or `.tga`.
+fn icon_stem(path: &str) -> Option<&str> {
     let prefix = path.get(..ICON_DIR.len())?;
     let is_icon_dir = prefix
         .bytes()
@@ -30,13 +37,14 @@ fn macro_icon_stem(path: &str) -> Option<&str> {
     if !ext.eq_ignore_ascii_case("blp") && !ext.eq_ignore_ascii_case("tga") {
         return None;
     }
-    ["Spell_", "Ability_"]
-        .iter()
-        .any(|prefix| {
-            stem.len() >= prefix.len()
-                && stem.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
-        })
-        .then_some(stem)
+    (!stem.is_empty()).then_some(stem)
+}
+
+fn has_prefix(stem: &str, prefixes: &[&str]) -> bool {
+    prefixes.iter().any(|prefix| {
+        stem.len() >= prefix.len()
+            && stem.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+    })
 }
 
 /// The chooser's list: every `Interface\Icons\` file whose name begins `Spell_` or `Ability_`,
@@ -66,6 +74,55 @@ pub fn load_macro_icons(chain: &mut Chain) -> Result<Vec<String>> {
         .into_iter()
         .map(|n| format!("{ICON_DIR}{n}"))
         .collect())
+}
+
+/// The first entry of both build-12340 lists, and the comparator's head (`0x564a20`).
+const QUESTION_MARK: &str = "INV_Misc_QuestionMark";
+
+/// Build 12340's two chooser lists (`BuildMacroIconLists`, `0x565840`), as names without the
+/// `Interface\Icons\` prefix `GetMacroIconInfo` and `GetMacroItemIconInfo` splice back on.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WrathMacroIcons {
+    /// `GetNumMacroIcons`: `Ability_` and `Spell_` files.
+    pub spell: Vec<String>,
+    /// `GetNumMacroItemIcons`: `INV_` files (`0xa0f944`).
+    pub item: Vec<String>,
+}
+
+/// Both lists start with `INV_Misc_QuestionMark`, take every `Interface\Icons\` archive file by
+/// prefix (`0x565630`), sort with the question mark first then by name (`0x564a20`), and drop
+/// adjacent duplicates. Labelled: the two loose-file scans (`0x5656b0`, which strips only `.bz`,
+/// and `0x565810`) are not built, as a stock install has no loose icons; the archive half's
+/// extension strip is the 1.12 builder's (its add `0x565550`/`0x5655c0` is unread); and the
+/// compares are taken as case-insensitive, as 1.12's `SStrCmpI`.
+pub fn load_wrath_macro_icons(chain: &mut Chain) -> Result<WrathMacroIcons> {
+    let mut icons = WrathMacroIcons {
+        spell: vec![QUESTION_MARK.to_string()],
+        item: vec![QUESTION_MARK.to_string()],
+    };
+    for entry in chain.list_filtered(|name| icon_stem(name).is_some())? {
+        let path = entry.name.replace('/', "\\");
+        let Some(stem) = icon_stem(&path) else {
+            continue;
+        };
+        if has_prefix(stem, &["Ability_", "Spell_"]) {
+            icons.spell.push(stem.to_string());
+        }
+        if has_prefix(stem, &["INV_"]) {
+            icons.item.push(stem.to_string());
+        }
+    }
+    for list in [&mut icons.spell, &mut icons.item] {
+        sort_wrath(list);
+    }
+    Ok(icons)
+}
+
+/// `0x564a20`'s order, then the adjacent-duplicate drop.
+fn sort_wrath(list: &mut Vec<String>) {
+    let head = |n: &str| !n.eq_ignore_ascii_case(QUESTION_MARK);
+    list.sort_by_key(|n| (head(n), n.to_ascii_lowercase()));
+    list.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
 }
 
 #[cfg(test)]
@@ -98,6 +155,29 @@ mod tests {
         assert_eq!(
             macro_icon_stem("Interface/Icons/Spell_Test.blp"),
             Some("Spell_Test")
+        );
+    }
+
+    #[test]
+    fn wrath_lists_put_the_question_mark_first_then_sort_and_dedup_without_case() {
+        let mut list: Vec<String> = [
+            "INV_Misc_QuestionMark",
+            "inv_sword_04",
+            "INV_Axe_01",
+            "INV_Sword_04",
+            "inv_misc_questionmark",
+        ]
+        .map(String::from)
+        .to_vec();
+        sort_wrath(&mut list);
+        assert_eq!(
+            list,
+            ["INV_Misc_QuestionMark", "INV_Axe_01", "inv_sword_04"]
+        );
+        assert!(has_prefix("inv_Bag", &["INV_"]) && !has_prefix("Spell_x", &["INV_"]));
+        assert_eq!(
+            icon_stem("Interface\\Icons\\INV_Axe_01.blp"),
+            Some("INV_Axe_01")
         );
     }
 }

@@ -66,8 +66,9 @@ fn culls_constant_zero_alpha_m2_batches() {
         "world/azeroth/elwynn/passivedoodads/lamppost/lamppost.m2",
     )
     .expect("mesh lamppost");
-    // Body, glass, and two billboard cards split off their mixed batch onto their own bones.
-    assert_eq!(lamppost.len(), 5, "a normal prop keeps all its batches");
+    // Build 12340 keeps billboards on the joint palette, so the glow stays in its batch: no card
+    // splits off, and none of the lamppost's four batches is culled.
+    assert_eq!(lamppost.len(), 4, "a normal prop keeps all its batches");
 }
 
 #[test]

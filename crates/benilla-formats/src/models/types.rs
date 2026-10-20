@@ -448,8 +448,11 @@ impl RenderSubmesh {
     /// bind rotation, so bone-local is model space). The reference skins that normal unflipped
     /// through the same palette row (`0x71a460`). Deviation: consumers light such a card off the
     /// side it presents, because the reference's shading of it is inverted and follows the camera.
+    /// A build-12340 batch keeps its billboard on the joint palette ([`Self::welded_billboard`]),
+    /// so it counts as a card too.
     pub fn billboard_card_faces_away(&self) -> bool {
-        self.billboard.is_some() && self.plane_normal().is_some_and(|n| n[0] < -Self::EDGE_ON_X)
+        (self.billboard.is_some() || self.welded_billboard)
+            && self.plane_normal().is_some_and(|n| n[0] < -Self::EDGE_ON_X)
     }
 
     /// A normal with |x| under this is edge-on to the camera axis: no facing to decide.

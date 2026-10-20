@@ -7,7 +7,7 @@ use benilla_formats::{load_m2_mesh, open_chain};
 #[test]
 fn tram_glass_batches_generate_their_texcoords() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let subs = load_m2_mesh(
         &mut chain,
         "World\\Generic\\Gnome\\Passive Doodads\\GnomeMachine\\GnomeSubwayGlass.m2",
@@ -28,30 +28,35 @@ fn tram_glass_batches_generate_their_texcoords() {
 }
 
 #[test]
-fn weapon_rack_splits_env_from_uv_batches() {
+fn weapon_rack_sheen_is_a_generated_second_stage() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let subs = load_m2_mesh(
         &mut chain,
         "World\\Generic\\Human\\Passive Doodads\\WeaponRacks\\GeneralWeaponrack01.m2",
     )
     .expect("load GeneralWeaponrack01");
 
-    // `texture_unit_lookup = [0, -1]`: the body reads UV channel 0, the sheen layers generate.
-    let env: Vec<&str> = subs
+    // `texture_unit_lookup = [0, -1]`: in build 12340 the ARMORREFLECT sheen is stage 2 of a
+    // two-texture batch, reading lookup entry 1 (generated); every stage 0 reads UV channel 0.
+    assert!(
+        subs.iter().all(|s| !s.env_map),
+        "every first stage reads its authored UVs"
+    );
+    let sheens: Vec<_> = subs
         .iter()
-        .filter(|s| s.env_map)
-        .filter_map(|s| s.texture.as_deref())
+        .filter_map(|s| s.stage2.as_ref())
+        .filter(|st| st.coord > 2)
         .collect();
     assert!(
-        !env.is_empty()
-            && env
-                .iter()
-                .all(|t| t.to_ascii_lowercase().contains("armorreflect")),
-        "only the ARMORREFLECT sheen layers env-map on the rack, got {env:?}"
+        !sheens.is_empty(),
+        "the rack carries a generated sheen stage"
     );
     assert!(
-        subs.iter().any(|s| !s.env_map),
-        "the rack's body and blade batches read their authored UVs"
+        sheens.iter().all(|st| st
+            .texture
+            .as_deref()
+            .is_some_and(|t| t.to_ascii_lowercase().contains("armorreflect"))),
+        "only the ARMORREFLECT sheen generates its texcoords"
     );
 }

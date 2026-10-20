@@ -70,10 +70,7 @@ pub(crate) use settings::restore_chat_looks;
 
 pub(crate) struct UiChatPlugin;
 
-/// The chat line drain, whose `DoEmote` arm writes the local [`crate::creature_anim::EmoteAnim`]:
-/// the animation chain runs after it, so the same frame's driver sees the play.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct ChatDrain;
+pub(crate) use crate::app_core::schedule::ChatDrain;
 
 /// The chat feed's drain of the native chat FIFO: a system queueing a line there runs before it.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]

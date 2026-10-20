@@ -272,6 +272,61 @@ fn a_draft_adds_with_its_invites() {
     assert_eq!(state.events[0].invite, Some((301, CONFIRMED, OWNER)));
 }
 
+/// Build 12340's switch (`0x6cd380`): its own keys for 9, 11 and 13, the limits it knows for the
+/// `%d` errors, the name only where the template takes one, and `0x5b9960`'s formatting.
+#[test]
+fn errors_take_the_build_12340_keys_and_arguments() {
+    let mut state = CalendarState::default();
+    reduce(&mut state, calendar_packet(), ME, &mut Vec::new());
+    let line = |state: &mut CalendarState, error: u32| {
+        let mut fired = Vec::new();
+        reduce(
+            state,
+            Packet::CommandResult {
+                raw_word: 0,
+                raw_byte: 0,
+                param: "Bob".into(),
+                error,
+            },
+            ME,
+            &mut fired,
+        );
+        match &fired[..] {
+            [("CALENDAR_UPDATE_ERROR", args)] => match &args[..] {
+                [V::Str(packed)] => packed.clone(),
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(line(&mut state, 9), "ERR_GUILD_PLAYER_NOT_IN_GUILD");
+    assert_eq!(line(&mut state, 11), "PLAYER_NOT_FOUND");
+    assert_eq!(line(&mut state, 13), "ERR_IGNORING_YOU_S\0Bob");
+    assert_eq!(line(&mut state, 1), "CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED\u{0}100");
+    assert_eq!(line(&mut state, 2), "CALENDAR_ERROR_EVENTS_EXCEEDED\u{0}30");
+
+    let script = UiScript::new().unwrap();
+    script
+        .run(
+            "CALENDAR_ERROR_EVENTS_EXCEEDED = \"limit of %d events\" \
+             ERR_IGNORING_YOU_S = \"%s is ignoring you.\" \
+             PLAYER_NOT_FOUND = \"Can't find that player.\"",
+        )
+        .unwrap();
+    assert_eq!(
+        error_line(&script, "CALENDAR_ERROR_EVENTS_EXCEEDED\u{0}30"),
+        "limit of 30 events"
+    );
+    assert_eq!(
+        error_line(&script, "ERR_IGNORING_YOU_S\0Bob"),
+        "Bob is ignoring you."
+    );
+    assert_eq!(
+        error_line(&script, "PLAYER_NOT_FOUND"),
+        "Can't find that player."
+    );
+}
+
 /// A result's error raises its line with the name; a lockout update moves its reset.
 #[test]
 fn errors_name_their_player_and_lockouts_update() {
