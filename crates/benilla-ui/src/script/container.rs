@@ -1400,7 +1400,7 @@ mod tests {
 
     #[test]
     fn container_id_to_inventory_id_is_two_lines_with_no_clamp() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         let slot = |id: &str| {
             s.eval::<i64>(&format!("return ContainerIDToInventoryID({id})"))
                 .unwrap()
@@ -1414,12 +1414,13 @@ mod tests {
             (20, 21, 22, 23)
         );
         // The `id >= 5` line: the bank bags.
-        assert_eq!(slot("5"), 64, "the jump — +59, not +19");
-        assert_eq!((slot("6"), slot("10")), (65, 69));
+        // Build 12340: the bank bags start at 68, so the line is +63.
+        assert_eq!(slot("5"), 68, "the jump — +63, not +19");
+        assert_eq!((slot("6"), slot("11")), (69, 74));
         // No range check, no clamp, and never nil: out of range is an ordinary number.
         assert_eq!(
             slot("99"),
-            158,
+            162,
             "the value `SetInventoryItem` would receive"
         );
         assert_eq!(slot("-100"), -81, "negatives run off the line too");

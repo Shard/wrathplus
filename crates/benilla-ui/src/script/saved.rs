@@ -133,10 +133,11 @@ fn quote(s: &[u8]) -> Vec<u8> {
     out
 }
 
-/// A table constructor, `{\n<tabs>[key] = value,\n<tabs-1>}`: every key bracketed, as the
-/// reference writes for every table shape (`[0x704607, 0x704989)`), integer keys ascending, then
-/// strings. It reloads a list as a list through the 1.12 parser: `recfield` gives a `[k] = v` field
-/// no size hint, so dense integer keys land in the array part, which `next` walks in order.
+/// A table constructor as build 12340 writes it: the dense run `1..n` positionally, each as
+/// `<tabs>value, -- [k]` (the format at `0x64300c`), so Lua 5.1 reloads it into the array part and
+/// `next` walks it in order; then the other integer keys ascending and the strings, bracketed as
+/// `[key] = value,`. Deviation, labelled: lines end in `\n`, where the client writes `\r\n`, and a
+/// hole ends the positional run rather than being written as `nil`.
 fn table(t: &Table, depth: usize, seen: &mut HashSet<*const c_void>) -> Option<Vec<u8>> {
     if depth > MAX_DEPTH || !seen.insert(t.to_pointer()) {
         return None;
@@ -164,6 +165,17 @@ fn table(t: &Table, depth: usize, seen: &mut HashSet<*const c_void>) -> Option<V
     let indent = "\t".repeat(depth);
     let close = "\t".repeat(depth.saturating_sub(1));
     let mut out = b"{\n".to_vec();
+    let dense = ints
+        .iter()
+        .enumerate()
+        .take_while(|(i, (k, _))| *k == *i as i64 + 1)
+        .count();
+    let mut ints = ints.into_iter();
+    for (k, v) in ints.by_ref().take(dense) {
+        out.extend_from_slice(indent.as_bytes());
+        out.extend_from_slice(&v);
+        out.extend_from_slice(format!(", -- [{k}]\n").as_bytes());
+    }
     let mut entry = |key: &[u8], value: &[u8]| {
         out.extend_from_slice(indent.as_bytes());
         out.push(b'[');
@@ -205,7 +217,7 @@ mod tests {
     /// Bagnon's shape: a saved bag list sorted with the keyring (-2) last, laid out by `pairs`.
     #[test]
     fn a_saved_list_still_walks_in_index_order_after_a_restart() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         s.run(
             r#"
             BAGS = { -2, 0, 1, 2, 3, 4 }
@@ -227,7 +239,7 @@ mod tests {
         assert_eq!(walk(&s), "0,1,2,3,4,-2,", "the live table, before any save");
 
         let text = s.saved_variables_bytes();
-        let fresh = UiScript::new_vanilla().unwrap();
+        let fresh = UiScript::new().unwrap();
         fresh.run_chunk(&text).unwrap();
         assert_eq!(
             walk(&fresh),
@@ -280,10 +292,10 @@ mod tests {
              CHAT_LABEL = \"say \\\"hi\\\"\\nnow\"\n\
              OPACITY = 0.5\n\
              SPELLBOOK_PAGENUMBERS = {\n\
-             \t[1] = 1,\n\
-             \t[2] = 3,\n\
+             \t1, -- [1]\n\
+             \t3, -- [2]\n\
              \t[\"odd key\"] = {\n\
-             \t\t[1] = true,\n\
+             \t\ttrue, -- [1]\n\
              \t},\n\
              }\n",
             "got:\n{text}"

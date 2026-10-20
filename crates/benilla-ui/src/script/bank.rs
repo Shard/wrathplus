@@ -166,9 +166,9 @@ mod tests {
     /// (`BankFrame.lua:28`).
     #[test]
     fn bank_bag_slots_read_through_the_inventory_api() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(s
-            .eval::<bool>("return GetInventoryItemTexture(\"player\", 64) == nil")
+            .eval::<bool>("return GetInventoryItemTexture(\"player\", 68) == nil")
             .unwrap());
 
         let mut bags: crate::script::BankBagSlots = Default::default();
@@ -185,28 +185,28 @@ mod tests {
         assert_eq!(
             s.eval::<i64>("return BankButtonIDToInvSlotID(5, 1)")
                 .unwrap(),
-            64,
+            68,
             "BankFrameBag1's own id is 5 — the container id, not a bag number"
         );
         assert_eq!(
-            s.eval::<String>("return GetInventoryItemTexture(\"player\", 64)")
+            s.eval::<String>("return GetInventoryItemTexture(\"player\", 68)")
                 .unwrap(),
             "Interface\\Icons\\INV_Misc_Bag_08"
         );
         assert_eq!(
             s.eval::<i64>(
-                "local _, _, id = string.find(GetInventoryItemLink(\"player\", 64), \"item:(%d+)\") \
+                "local _, _, id = string.find(GetInventoryItemLink(\"player\", 68), \"item:(%d+)\") \
                  return tonumber(id)"
             )
             .unwrap(),
             4500
         );
-        // Slot 65 is empty and 70 is past the band; neither falls through to the doll.
+        // Slot 69 is empty and 75 is past the band; neither falls through to the doll.
         assert!(s
-            .eval::<bool>("return GetInventoryItemTexture(\"player\", 65) == nil")
+            .eval::<bool>("return GetInventoryItemTexture(\"player\", 69) == nil")
             .unwrap());
         assert!(s
-            .eval::<bool>("return GetInventoryItemTexture(\"player\", 70) == nil")
+            .eval::<bool>("return GetInventoryItemTexture(\"player\", 75) == nil")
             .unwrap());
     }
 
@@ -283,34 +283,34 @@ mod tests {
             .unwrap());
     }
 
-    /// Item buttons 1..=24 map to 40..=63 and bag buttons, whose ids are the container ids 5..=10,
-    /// to 64..=69; the wire slot is one less.
+    /// Build 12340: item buttons 1..=28 map to 40..=67 and bag buttons, whose ids are the
+    /// container ids 5..=11, to 68..=74; the wire slot is one less.
     #[test]
     fn bank_button_to_inv_slot() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<i64>("return BankButtonIDToInvSlotID(1)").unwrap(),
             40
         );
         assert_eq!(
-            s.eval::<i64>("return BankButtonIDToInvSlotID(24)").unwrap(),
-            63
+            s.eval::<i64>("return BankButtonIDToInvSlotID(28)").unwrap(),
+            67
         );
         assert_eq!(
             s.eval::<i64>("return BankButtonIDToInvSlotID(5, 1)")
                 .unwrap(),
-            64,
+            68,
             "BankFrameBag1 carries id 5"
         );
         assert_eq!(
-            s.eval::<i64>("return BankButtonIDToInvSlotID(10, 1)")
+            s.eval::<i64>("return BankButtonIDToInvSlotID(11, 1)")
                 .unwrap(),
-            69,
-            "BankFrameBag6 carries id 10"
+            74,
+            "BankFrameBag7 carries id 11"
         );
         // The same map as `ContainerIDToInventoryID` for a bank bag; a drift would put the bag row
         // and the bag windows on different slots.
-        for id in 5..=10 {
+        for id in 5..=11 {
             assert_eq!(
                 s.eval::<i64>(&format!("return BankButtonIDToInvSlotID({id}, 1)"))
                     .unwrap(),
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn bank_button_to_inv_slot_follows_the_carved_abi() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
 
         // `isBag` is `lua_isnumber(L, 2)`: `true` takes the item arm as nil and false do, while
         // `0` and `"1"` take the bag arm.
@@ -332,8 +332,8 @@ mod tests {
             ("BankButtonIDToInvSlotID(5, nil)", 44),
             ("BankButtonIDToInvSlotID(5, {})", 44),
             ("BankButtonIDToInvSlotID(5)", 44),
-            ("BankButtonIDToInvSlotID(5, 0)", 64),
-            ("BankButtonIDToInvSlotID(5, \"1\")", 64),
+            ("BankButtonIDToInvSlotID(5, 0)", 68),
+            ("BankButtonIDToInvSlotID(5, \"1\")", 68),
         ] {
             assert_eq!(
                 s.eval::<i64>(&format!("return {call}")).unwrap(),

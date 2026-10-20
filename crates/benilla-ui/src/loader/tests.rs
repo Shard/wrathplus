@@ -313,7 +313,7 @@ mod loader_tests {
     /// Names, `$parent`, bottom-up `OnLoad` and the anchored texture rect, end to end.
     #[test]
     fn synthetic_full_document_materializes() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_screen_size(800.0, 600.0);
         s.run("loadorder = {}").unwrap();
 
@@ -816,12 +816,12 @@ mod loader_tests {
         assert!(s.eval::<bool>("return FineRan == true").unwrap());
     }
 
-    /// `OnAttributeChanged` is 2.0's; no 1.12 handler resolver has a slot for it.
+    /// A script element no 12340 widget has is a warning, not an error.
     #[test]
     fn unsupported_script_name_is_a_warning() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         let doc = parse(
-            r#"<Ui><Frame name="Keyed"><Scripts><OnAttributeChanged>x = 1</OnAttributeChanged></Scripts></Frame></Ui>"#,
+            r#"<Ui><Frame name="Keyed"><Scripts><OnNoSuchScript>x = 1</OnNoSuchScript></Scripts></Frame></Ui>"#,
         );
         let report = load(&s, &doc, &no_files);
         assert_eq!(report.frames, 1);
@@ -829,7 +829,7 @@ mod loader_tests {
         assert!(report
             .warnings
             .iter()
-            .any(|w| w.contains("OnAttributeChanged")));
+            .any(|w| w.contains("OnNoSuchScript")));
     }
 
     /// `Instantiate 0x6ee280` logs `"Unknown frame type: %s"` (`0x871124`) and builds nothing for
@@ -1088,7 +1088,7 @@ mod loader_tests {
     /// `<unnamed>` (`0x84c7f0`), and `0x704c70` loads the raw body, so body line n is chunk line n.
     #[test]
     fn an_xml_handler_chunk_is_named_by_its_frame_and_handler() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         let doc = parse(
             "<Ui>\n\
              <Button name=\"NamedBtn\">\n\
@@ -1119,21 +1119,22 @@ mod loader_tests {
                 .unwrap()
         };
 
-        // The `error` is on the body's second line: `:2:`.
+        // Named by frame and handler. Labelled: the line the 12340 wrapper reports for a body
+        // that opens with a newline is unverified, so only the name and message are pinned.
         let named = raised(r#"NamedBtn:GetScript("OnClick")"#);
         assert!(
-            named.starts_with(r#"[string "NamedBtn:OnClick"]:2: boom"#),
+            named.starts_with(r#"[string "NamedBtn:OnClick"]:"#) && named.ends_with(": boom"),
             "{named}"
         );
         // A `CreateFrame` instance is named by its own `GetName()`, not by its template.
         let made = raised(r#"Made:GetScript("OnClick")"#);
         assert!(
-            made.starts_with(r#"[string "Made:OnClick"]:1: tmpl"#),
+            made.starts_with(r#"[string "Made:OnClick"]:"#) && made.ends_with(": tmpl"),
             "{made}"
         );
         let anon = raised(r#"BenillaAnon:GetScript("OnClick")"#);
         assert!(
-            anon.starts_with(r#"[string "<unnamed>:OnClick"]:1: anon"#),
+            anon.starts_with(r#"[string "<unnamed>:OnClick"]:"#) && anon.ends_with(": anon"),
             "{anon}"
         );
     }
@@ -1989,7 +1990,7 @@ mod loader_tests {
     /// `ItemTextFrame.xml:214` uses the first.
     #[test]
     fn simplehtml_xml_declares_element_fonts_not_regions() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_screen_size(800.0, 600.0);
         let doc = parse(
             r#"<Ui>
@@ -2441,7 +2442,7 @@ mod chunk_name_tests {
     /// captures a handler with `GetScript` and calls it bare) reaches the same frame.
     #[test]
     fn a_handler_body_is_the_chunk_and_self_is_a_global() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         let doc = parse(
             r#"<Ui>
                 <Frame name="Hooked" hidden="true">
@@ -2457,10 +2458,9 @@ mod chunk_name_tests {
         s.run("self = 'the global' SEEN = nil Hooked:Show()")
             .unwrap();
         assert_eq!(s.eval::<String>("return SEEN").unwrap(), "Hooked");
-        assert_eq!(
-            s.eval::<String>("return SELF_SEEN").unwrap(),
-            "the global",
-            "`self` is no parameter of the body"
+        assert!(
+            s.eval::<bool>("return SELF_SEEN == Hooked").unwrap(),
+            "build 12340's body takes `self` as its first parameter"
         );
 
         s.run(
@@ -2474,11 +2474,10 @@ mod chunk_name_tests {
         assert_eq!(s.eval::<String>("return SEEN").unwrap(), "Hooked");
     }
 
-    /// The loader reads no `function=` attribute: a handler element with no body clears the
-    /// handler, whatever global the attribute names.
+    /// Build 12340's `function=` attribute binds the named global as the handler.
     #[test]
-    fn a_function_attribute_binds_nothing() {
-        let s = UiScript::new_vanilla().unwrap();
+    fn a_function_attribute_binds_the_named_global() {
+        let s = UiScript::new().unwrap();
         s.run("function NamedHandler() RAN = true end").unwrap();
         let doc = parse(
             r#"<Ui>
@@ -2490,9 +2489,9 @@ mod chunk_name_tests {
         let report = load_in(&s, &doc, "Test.xml", &no_files);
         assert!(report.errors.is_empty(), "{:?}", report.errors);
         s.run("Named:Show()").unwrap();
-        assert!(s.eval::<bool>("return RAN == nil").unwrap());
+        assert!(s.eval::<bool>("return RAN == true").unwrap());
         assert!(s
-            .eval::<bool>("return Named:GetScript(\"OnShow\") == nil")
+            .eval::<bool>("return Named:GetScript(\"OnShow\") == NamedHandler")
             .unwrap());
     }
 

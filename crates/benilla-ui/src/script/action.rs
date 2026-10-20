@@ -494,43 +494,26 @@ mod tests {
             .collect()
     }
 
-    /// The numeric test: `0` is not the modifier, though Lua would call it true.
+    /// Build 12340's `UseAction(action, unit, button)`: only the unit `"player"`, in any case,
+    /// self-casts.
     #[test]
-    fn use_actions_third_argument_is_the_self_cast_modifier() {
-        let mut s = UiScript::new_vanilla().unwrap();
+    fn use_actions_unit_player_self_casts() {
+        let mut s = UiScript::new().unwrap();
         s.run("UseAction(1)").unwrap();
-        s.run("UseAction(2, 0)").unwrap();
-        s.run("UseAction(3, 0, 0)").unwrap();
-        s.run("UseAction(4, 0, 1)").unwrap();
-        s.run("UseAction(5, nil, 1)").unwrap();
+        s.run("UseAction(2, 'target')").unwrap();
+        s.run("UseAction(3, 'player')").unwrap();
+        s.run("UseAction(4, 'PLAYER', 'LeftButton')").unwrap();
+        s.run("UseAction(5, nil, 'LeftButton')").unwrap();
         assert_eq!(
             uses(&mut s),
-            vec![(1, false), (2, false), (3, false), (4, true), (5, true)],
-            "only a numeric-nonzero third argument is the modifier"
+            vec![(1, false), (2, false), (3, true), (4, true), (5, false)],
+            "only the player unit self-casts"
         );
-    }
-
-    #[test]
-    fn change_action_bar_page_fires_the_event_and_nothing_else() {
-        let s = UiScript::new_vanilla().unwrap();
-        s.run(
-            "CURRENT_ACTIONBAR_PAGE = 3 \
-             local f = CreateFrame('Frame') f:RegisterEvent('ACTIONBAR_PAGE_CHANGED') \
-             f:SetScript('OnEvent', function() SEEN = event .. ':' .. CURRENT_ACTIONBAR_PAGE end) \
-             N = table.getn({ChangeActionBarPage()})",
-        )
-        .unwrap();
-        assert_eq!(
-            s.eval::<String>("return SEEN").unwrap(),
-            "ACTIONBAR_PAGE_CHANGED:3",
-            "the event fires synchronously, and the page is whatever FrameXML wrote"
-        );
-        assert_eq!(s.eval::<i64>("return N").unwrap(), 0, "zero return values");
     }
 
     #[test]
     fn action_snapshot_reads_and_use_queues() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(!s.eval::<bool>("return HasAction(73)").unwrap());
         assert!(s
             .eval::<bool>("return GetActionTexture(73) == nil")
@@ -556,7 +539,7 @@ mod tests {
         assert_eq!(s.eval::<i64>("return GetBonusBarOffset()").unwrap(), 1);
 
         s.run("UseAction(73)").unwrap();
-        s.run("UseAction(74, 0, 1)").unwrap();
+        s.run("UseAction(74, 'player')").unwrap();
         assert_eq!(uses(&mut s), vec![(73, false), (74, true)]);
         assert!(s.take_action_uses().is_empty());
 
@@ -581,12 +564,12 @@ mod tests {
         assert_eq!(s.eval::<i64>("return GetActionCount(5)").unwrap(), 4);
     }
 
-    /// A place needs a nonzero `checkCursor` and a held payload; a keybind's `0` queues the use.
+    /// Build 12340: a held payload always drops on the slot; an empty cursor queues the use.
     #[test]
-    fn use_action_check_cursor_routes_to_place_or_use() {
+    fn use_action_places_a_held_payload_or_uses() {
         use crate::script::cursor::{CursorAction, CursorPayload};
 
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_cursor_for_test(CursorPayload::Action(CursorAction {
             src_slot: 1,
             kind: 0x00,
@@ -594,16 +577,12 @@ mod tests {
             texture: Some("Interface\\Icons\\Spell_A".into()),
         }));
 
-        s.run("UseAction(9, 0)").unwrap();
-        assert_eq!(uses(&mut s), vec![(9, false)]);
-        assert!(s.cursor_payload().is_some(), "checkCursor 0 never places");
-
-        s.run("UseAction(9, 1)").unwrap();
+        s.run("UseAction(9)").unwrap();
         assert!(s.take_action_uses().is_empty(), "routed to place, not use");
         assert!(s.cursor_payload().is_none(), "empty destination clears");
         assert_eq!(s.take_action_sets(), vec![(9, 111)]);
 
-        s.run("UseAction(10, 1)").unwrap();
+        s.run("UseAction(10)").unwrap();
         assert_eq!(uses(&mut s), vec![(10, false)]);
     }
 

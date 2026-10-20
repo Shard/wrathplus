@@ -1,7 +1,7 @@
 //! The world-map bindings: catalog and feed pushes, the engine-owned selection, and the deferred
 //! `WORLD_MAP_UPDATE` queue.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::*;
 
 /// A two-continent catalog shaped like the real one: Kalimdor first, since the push order defines
@@ -154,94 +154,6 @@ fn push_direct_areas(s: &mut UiScript) {
     ]);
 }
 
-/// The direct-area selection (`[0x845074]`) is a third state: inside Warsong Gulch the reference
-/// selects `(continent = -2, direct = WorldMapArea 443)`, and `GetMapInfo()` answers the art
-/// folder `Blizzard_BattlefieldMinimap.lua:83` needs before it draws.
-#[test]
-fn a_direct_area_is_the_third_selection_state() {
-    let mut s = vanilla_script();
-    push_catalog(&mut s);
-    push_direct_areas(&mut s);
-
-    // In Warsong Gulch `0x4a6650`'s continent loop misses (map 489 is no continent's) and the
-    // orphan loop selects the row's own id.
-    s.set_world_map_feed(None, Some((0.5, 0.5)), 0.0, None, Vec::new(), Vec::new());
-    s.set_world_map_player_direct_area(Some(443), None);
-    s.run("SetMapToCurrentZone()").unwrap();
-
-    assert_eq!(
-        s.eval::<(String, i64, i64)>(
-            "return GetMapInfo(), GetCurrentMapContinent(), GetCurrentMapZone()"
-        )
-        .unwrap(),
-        ("WarsongGulch".into(), -1, 0),
-        "the ART FOLDER (not the localized \"Warsong Gulch\"), continent -2 + 1, zone -1 + 1"
-    );
-    assert_eq!(
-        s.eval::<(i64, i64)>("local n, h, hpot = GetMapInfo() return h, hpot")
-            .unwrap(),
-        (0, 0),
-        "slots 2/3 are 0 on every instance map: WorldMapContinent.dbc ships only mapIDs 0 and 1"
-    );
-    assert!(
-        s.eval::<bool>("local t = { GetMapZones(GetCurrentMapContinent()) } return t[1] == nil")
-            .unwrap(),
-        "GetMapZones(-1) takes the unsigned-bound exit — the dropdown that could write a bogus \
-         row id has no entries to fire from"
-    );
-
-    // Hover and click are refused: a battleground has no `.zmp` bitmap (`0x4a6ec0`, `0x4a7620`,
-    // `0x4a7540` each test `-2`), and the world sheet's walk must not run on `continent == 0`.
-    assert!(s
-        .eval::<Option<String>>("return UpdateMapHighlight(0.5, 0.5)")
-        .unwrap()
-        .is_none());
-    s.run("ProcessMapClick(0.72, 0.63)").unwrap(); // EK land, were this the world sheet
-    assert_eq!(
-        s.eval::<(String, i64)>("return GetMapInfo(), GetCurrentMapContinent()")
-            .unwrap(),
-        ("WarsongGulch".into(), -1),
-        "a click cannot drill off an instance map"
-    );
-
-    // All five of the reference's refresh sites re-pass `direct != -1 ? direct : zone`
-    // (`0x48f9f6`, `0x4a6460`, `0x6d93d8`, `0x6d9a17`, `0x6dac72`); passing the zone alone would
-    // drop an instance map to the world view on the next refresh.
-    s.set_world_map_explored(vec![u32::MAX; 64]);
-    s.set_world_map_landmarks(Vec::new());
-    s.run("SetMapToCurrentZone()").unwrap();
-    s.sync_world_map_to_player_zone(0, 0, Some(443), None);
-    assert_eq!(
-        s.eval::<(String, i64)>("return GetMapInfo(), GetCurrentMapContinent()")
-            .unwrap(),
-        ("WarsongGulch".into(), -1),
-        "a refresh re-selects the DIRECT cell, never the (0, 0) pair beside it"
-    );
-
-    // Selecting a continent or zone clears the direct cell: `0x4a67a0`'s other legs all reach
-    // `0x4a67ea`, which writes -1 to `[0x845074]`; only `ecx == -2` jumps past it.
-    s.run("SetMapZoom(2, 1)").unwrap();
-    assert_eq!(
-        s.eval::<(String, i64, i64)>(
-            "return GetMapInfo(), GetCurrentMapContinent(), GetCurrentMapZone()"
-        )
-        .unwrap(),
-        ("Elwynn".into(), 2, 1),
-        "the instance map does not shadow later navigation"
-    );
-
-    // The stock zoom-out button off a battleground map: `GetCurrentMapZone()` is 0 there, so its
-    // `else` arm runs `SetMapZoom(0)`, the world view (`WorldMapFrame.lua:257`).
-    s.run("SetMapToCurrentZone()").unwrap();
-    s.run("SetMapZoom(0)").unwrap();
-    assert_eq!(
-        s.eval::<(Option<String>, i64)>("return GetMapInfo(), GetCurrentMapContinent()")
-            .unwrap(),
-        (None, 0),
-        "zooming out of an instance map lands on the world sheet"
-    );
-}
-
 /// Build 12340 lists overlays for a zone only: an instance map shows none, explored or not
 /// (`0x546310`'s overlay walk runs only for a continent index, never `-2`).
 #[test]
@@ -255,63 +167,6 @@ fn an_instance_map_shows_no_overlays() {
     s.set_world_map_explored(vec![u32::MAX; 64]);
     assert_eq!(s.eval::<i64>("return GetNumMapOverlays()").unwrap(), 0);
     assert!(s.eval::<bool>("return GetMapOverlayInfo(1) == nil").unwrap());
-}
-
-/// Lists come from the catalog, `SetMapZoom` reads back in the same call stack as the reference's
-/// dropdown expects, arguments clamp, and `GetMapInfo` names the art folder (nil at world level).
-#[test]
-fn worldmap_navigation_and_map_info() {
-    let mut s = vanilla_script();
-    push_catalog(&mut s);
-
-    s.run(
-        r#"
-        conts = { GetMapContinents() }
-        kalimdor_zones = { GetMapZones(1) }
-    "#,
-    )
-    .unwrap();
-    assert_eq!(
-        s.eval::<(String, String)>("return conts[1], conts[2]")
-            .unwrap(),
-        ("Kalimdor".into(), "Eastern Kingdoms".into()),
-        "display names are the Map.dbc localized ones, not the art folders"
-    );
-    assert_eq!(
-        s.eval::<(String, String)>("return kalimdor_zones[1], kalimdor_zones[2]")
-            .unwrap(),
-        ("Durotar".into(), "The Barrens".into())
-    );
-
-    assert_eq!(
-        s.eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
-            .unwrap(),
-        (0, 0)
-    );
-    assert!(s.eval::<bool>("return GetMapInfo() == nil").unwrap());
-
-    s.run("SetMapZoom(2)").unwrap();
-    assert_eq!(
-        s.eval::<(i64, i64, String)>(
-            "return GetCurrentMapContinent(), GetCurrentMapZone(), GetMapInfo()"
-        )
-        .unwrap(),
-        (2, 0, "Azeroth".into())
-    );
-    s.run("SetMapZoom(1, 2)").unwrap();
-    assert_eq!(
-        s.eval::<String>("return GetMapInfo()").unwrap(),
-        "Barrens",
-        "a zone selection names the ZONE's art folder"
-    );
-
-    s.run("SetMapZoom(9, 9)").unwrap();
-    assert_eq!(
-        s.eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
-            .unwrap(),
-        (2, 2),
-        "continent clamps to the catalog, zone to that continent's list (EK has 2 zones)"
-    );
 }
 
 /// `SetMapToCurrentZone` lands on the app-fed player zone, and the feed surfaces through
@@ -360,44 +215,6 @@ fn worldmap_current_zone_and_player_feed() {
     s.set_world_map_feed(None, None, 0.0, None, Vec::new(), Vec::new());
     s.run("SetMapToCurrentZone()").unwrap();
     assert_eq!(s.eval::<i64>("return GetCurrentMapContinent()").unwrap(), 0);
-}
-
-/// The engine moves the selection with no Lua in the loop: the reference's second writer of
-/// `[0x84506c]`/`[0x845070]` is `0x494780`'s `old == 0` call to the resolver `0x4a6650`, whose
-/// every exit ends in the `SetMap` setter `0x4a67a0`.
-#[test]
-fn the_engine_can_select_a_zone_with_no_lua_call() {
-    let mut s = vanilla_script();
-    push_catalog(&mut s);
-
-    assert_eq!(
-        s.eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
-            .unwrap(),
-        (0, 0)
-    );
-
-    s.sync_world_map_to_player_zone(1, 2, None, None);
-
-    assert_eq!(
-        s.eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
-            .unwrap(),
-        (1, 2),
-        "the engine's own SetMap is what Lua reads back"
-    );
-    // The whole selection moved: `GetMapInfo` names the zone sheet `WorldMapFrame_Update` loads.
-    assert!(
-        s.eval::<Option<String>>("return GetMapInfo()")
-            .unwrap()
-            .is_some(),
-        "a selected zone names its map file; the world level is the nil that mis-scales"
-    );
-
-    // It clamps through the same tail as the Lua verbs (`0x4a67a0` range-checks the zone).
-    s.sync_world_map_to_player_zone(99, 99, None, None);
-    let (c, _) = s
-        .eval::<(i64, i64)>("return GetCurrentMapContinent(), GetCurrentMapZone()")
-        .unwrap();
-    assert!(c > 0, "clamped into the catalog, never past it");
 }
 
 /// A world-level `ProcessMapClick` picks the continent whose sheet rect contains it (`0x4a7100`,

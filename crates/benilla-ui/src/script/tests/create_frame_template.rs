@@ -1,7 +1,7 @@
 //! The runtime template path, `CreateFrame`'s fourth argument ([`crate::loader::apply_template`]),
 //! and `<ScrollChild>`. The caller's name wins: a template made as `Mine` publishes `MineTexture`.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::UiScript;
 
 /// Registers templates by loading a FrameXML document, the path an addon's own `.xml` takes.
@@ -17,7 +17,7 @@ fn register(s: &UiScript, xml: &str) {
 
 #[test]
 fn a_runtime_template_brings_size_anchors_regions_and_a_fired_onload() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     register(
         &s,
