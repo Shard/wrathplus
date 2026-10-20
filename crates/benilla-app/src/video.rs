@@ -428,9 +428,46 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
     ]
 };
 
+/// The vsync and window levers: `$WOW_NOVSYNC`, and `$WOW_WIN`, a capture scenario or an
+/// instrumented run, which owns the window geometry.
+pub(crate) const SESSION_LEVERS: &[crate::cvars::SessionLever] = &[
+    crate::cvars::SessionLever {
+        name: "novsync_env",
+        taken: novsync_env,
+        read: |world| {
+            let v = world.get_resource::<VideoConfig>();
+            vec![("gxVSync", v.map(|c| crate::cvars::lever_flag(c.vsync)))]
+        },
+    },
+    crate::cvars::SessionLever {
+        name: "windowed_env",
+        taken: windowed_env,
+        read: |world| {
+            let v = world.get_resource::<VideoConfig>();
+            vec![
+                (
+                    "gxWindow",
+                    v.map(|c| crate::cvars::lever_flag(c.display == DisplayMode::Windowed)),
+                ),
+                (
+                    "gxMaximize",
+                    v.map(|c| crate::cvars::lever_flag(c.maximize)),
+                ),
+                (
+                    "gxResolution",
+                    v.map(|c| format!("{}x{}", c.windowed.x, c.windowed.y)),
+                ),
+            ]
+        },
+    },
+];
+
 impl Plugin for VideoPlugin {
     fn build(&self, app: &mut App) {
         crate::cvars::RegisterCvars::register_cvars(app, CVARS);
+        for &lever in SESSION_LEVERS {
+            crate::cvars::RegisterCvars::register_session_lever(app, lever);
+        }
         use crate::console::ConsoleCommandApp;
         app.init_resource::<SpellEffectLevel>();
         app.add_observer(on_cvar);

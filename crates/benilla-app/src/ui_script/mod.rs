@@ -29,13 +29,11 @@ mod wrath_native;
 mod reference_ui;
 pub(crate) use reference_ui::initialize_asset_overrides;
 
-/// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
-mod session;
-
 /// The feed gate: a UI feed's input-side early-out, audited by `WOW_FEED_GATE_CHECK=1`.
 pub(crate) mod gate;
 
-pub(crate) use session::VmMemo;
+/// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
+pub(crate) use crate::app_core::vm_memo::VmMemo;
 
 // Not test-only: the addon harness loads the whole shipped interface under each addon.
 pub(crate) use manifest::default_bindings;
@@ -245,6 +243,16 @@ fn console_reload_ui(world: &mut World, _args: &str) -> Vec<String> {
     }
 }
 
+/// `$WOW_UI_SCALE` seeds [`UiScaleCvar`] and owns `uiScale` for the session.
+const UI_SCALE_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
+    name: "WOW_UI_SCALE",
+    taken: || crate::cvars::env_set("WOW_UI_SCALE"),
+    read: |world| {
+        let v = world.get_resource::<UiScaleCvar>();
+        vec![("uiScale", v.map(|s| s.0.to_string()))]
+    },
+};
+
 impl Plugin for UiScriptPlugin {
     fn build(&self, app: &mut App) {
         if uses_native_wrath_route(
@@ -262,6 +270,7 @@ impl Plugin for UiScriptPlugin {
         app.console_command("reloadUI", "Reload the interface.", console_reload_ui);
         // The quit root runs in `Last`: the close button's `AppExit` is written in `PostUpdate`.
         crate::shutdown::on_app_exit(app, shutdown_on_exit.into_configs());
+        crate::cvars::RegisterCvars::register_session_lever(app, UI_SCALE_LEVER);
         app.insert_resource(UiScaleCvar(default_ui_scale()))
             .init_resource::<UiFrameCost>()
             .init_resource::<crate::bindings::WheelNotches>()

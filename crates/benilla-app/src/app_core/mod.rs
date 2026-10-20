@@ -15,3 +15,4 @@ pub(crate) mod movement;
 pub(crate) mod player;
 pub(crate) mod schedule;
 pub(crate) mod state;
+pub(crate) mod vm_memo;

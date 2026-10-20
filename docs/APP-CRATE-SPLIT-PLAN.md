@@ -344,6 +344,20 @@ the `ui_script` VM-mirror seam (`VmMemo`, `UiInput`, `end_ui_session`), which go
 `HOOK_ORDER`) plus a new one: the lever list equals today's `session_values` rows in
 order.
 
+Done (Experience):
+- `cvars` names no feature now. Its production references are `app_core` (`vm_memo::VmMemo`, moved
+  from `ui_script/session.rs`, and `schedule::UiInput`), `shutdown` and `local_state`.
+- The whole-table tests moved to `client_tests::cvars` (21 of the 23); `cvars` keeps 2.
+- Levers: `CORE_LEVERS` holds farclip, clutter, trilinear, aniso and MSAA. `video`, `realmlist`,
+  `world_backdrop` and `ui_script` each register theirs.
+- The `client_tests::shipped_cvars` lever pin fixes the order to the real one: core first, then
+  plugin order. Each row is owned on its own, so the order fixes only the log's. The rows are the
+  same 13.
+- The capture fixtures read the live registry (`Cvars::defaults`), and the lifecycle's no-registry
+  fallback registers only the core rows.
+- Two production readers of `shipped_cvars` are left: `load_default_ui` and `addon_harness`. Their
+  table parameter comes after App's step 4b. The UI-layer tests' reads stay until the split.
+
 **Pure moves (~150 references, definitions only):**
 
 | Kind | Symbols (from) | Home |
