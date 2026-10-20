@@ -28,7 +28,7 @@ fn app() -> (App, Receiver<ClientCommand>) {
 
 /// A Wrath VM with one random dungeon row and an event recorder.
 fn vm() -> UiScript {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_wrath_lfg_catalog(
         Arc::new(WrathLfgCatalog {
             dungeons: vec![WrathLfgDungeon {

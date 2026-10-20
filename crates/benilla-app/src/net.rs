@@ -2020,10 +2020,6 @@ pub(crate) enum ClientCommand {
     /// `CMSG_TOGGLE_PVP`: nothing changes locally; the answer is the PvP bit, and flagging off
     /// waits out the server's 300 s timer.
     TogglePvp,
-    /// `CMSG_TOGGLE_HELM`: nothing changes locally; the answer is `PLAYER_FLAGS`' `HIDE_HELM`.
-    ToggleHelm,
-    /// `CMSG_TOGGLE_CLOAK`, as [`Self::ToggleHelm`].
-    ToggleCloak,
     // ── Guild ──
     // Members by name; rank 0 is the guild master. A change is answered by a fresh
     // `SMSG_GUILD_ROSTER`, never applied at the send; a refusal by `SMSG_GUILD_COMMAND_RESULT`.

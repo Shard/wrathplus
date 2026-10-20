@@ -12,9 +12,7 @@ use crate::net::wrath_notices::WrathProgress;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_achievement::{Packet, Snapshot};
 use benilla_protocol::wrath_chat::Message;
-use benilla_ui::script::{
-    ScriptDialect, UiScript, WrathAchievementProgress, WrathAchievementRequest,
-};
+use benilla_ui::script::{UiScript, WrathAchievementProgress, WrathAchievementRequest};
 use bevy::prelude::*;
 
 pub(crate) fn register(app: &mut App) {
@@ -93,9 +91,6 @@ fn feed_achievements(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let me = self_guid.0.unwrap_or(0);
     let faction = faction(self_q.iter().next().and_then(|s| s.0.unit_race()));
     let (earned_now, comparison, firsts) = absorb(&mut packets.0, &mut state, me);

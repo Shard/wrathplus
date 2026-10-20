@@ -2106,7 +2106,7 @@ mod tests {
     /// restores only the current character's saved state in a replacement VM.
     #[test]
     fn actual_wrath_observer_report_loads_on_demand_and_restores_per_character_state() {
-        use benilla_ui::script::{ScriptDialect, UnitState};
+        use benilla_ui::script::UnitState;
 
         let _l = crate::local_state::test_env::ENV_LOCK
             .lock()
@@ -2147,7 +2147,7 @@ mod tests {
         );
 
         let start = |identity: &(String, String)| {
-            let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            let mut script = UiScript::new().unwrap();
             script.set_screen_size(1024.0, 768.0);
             script.seed_cvars(
                 crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed(),

@@ -22,10 +22,9 @@ use super::frames::{route, ChatWindows};
 /// also reach the durable host log; this does not claim a visible native overlay. The event still
 /// dispatches normally so addons receive it.
 fn wrath_needs_raw_event_host_log(script: &benilla_ui::script::UiScript) -> bool {
-    script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340
-        && !script
-            .eval::<bool>("return ChatFrame1 ~= nil")
-            .unwrap_or(false)
+    !script
+        .eval::<bool>("return ChatFrame1 ~= nil")
+        .unwrap_or(false)
 }
 
 /// Frames a line waits on a name, about 2 s at 60 fps, before it gives up.
@@ -536,26 +535,22 @@ fn deliver_native(
     notices: Option<&mut super::native_roster::NativeChannelNotices>,
 ) {
     use benilla_protocol::wrath_channel::NotifyKind;
-    let native = if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        match (membership, notices) {
-            (Some(ledger), Some(notices)) => {
-                let expected = event.notice_byte();
-                let matches = notices.0.front().is_some_and(|notice| {
-                    notice.channel.eq_ignore_ascii_case(&event.channel)
-                        && matches!(
-                            (&notice.kind, expected),
-                            (
-                                NotifyKind::YouJoined { .. },
-                                Some(channel_notice::YOU_JOINED)
-                            ) | (NotifyKind::YouLeft { .. }, Some(channel_notice::YOU_LEFT))
-                        )
-                });
-                matches.then(|| (ledger, notices.0.pop_front().unwrap()))
-            }
-            _ => None,
+    let native = match (membership, notices) {
+        (Some(ledger), Some(notices)) => {
+            let expected = event.notice_byte();
+            let matches = notices.0.front().is_some_and(|notice| {
+                notice.channel.eq_ignore_ascii_case(&event.channel)
+                    && matches!(
+                        (&notice.kind, expected),
+                        (
+                            NotifyKind::YouJoined { .. },
+                            Some(channel_notice::YOU_JOINED)
+                        ) | (NotifyKind::YouLeft { .. }, Some(channel_notice::YOU_LEFT))
+                    )
+            });
+            matches.then(|| (ledger, notices.0.pop_front().unwrap()))
         }
-    } else {
-        None
+        _ => None,
     };
     if let Some((ledger, notice)) = native {
         let name = notice.channel;
@@ -635,14 +630,12 @@ pub(crate) fn feed_chat(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        if let Some(packets) = speaker.native_chat.as_deref_mut() {
-            log.pending.extend(
-                super::native_message::take_visible(&mut packets.0)
-                    .into_iter()
-                    .map(|msg| Pending::Native { msg, tries: 0 }),
-            );
-        }
+    if let Some(packets) = speaker.native_chat.as_deref_mut() {
+        log.pending.extend(
+            super::native_message::take_visible(&mut packets.0)
+                .into_iter()
+                .map(|msg| Pending::Native { msg, tries: 0 }),
+        );
     }
     if log.pending.is_empty() {
         return;
@@ -1229,10 +1222,7 @@ mod native_delivery_tests {
 
     #[test]
     fn ordered_native_self_notices_keep_suspension_and_explicit_leave_distinct() {
-        let mut script = benilla_ui::script::UiScript::new_with_dialect(
-            benilla_ui::script::ScriptDialect::Wrath12340,
-        )
-        .unwrap();
+        let mut script = benilla_ui::script::UiScript::new().unwrap();
         let mut windows = ChatWindows::default();
         let mut channels = ChannelState::default();
         let mut ledger = super::super::native_membership::NativeMembership::default();

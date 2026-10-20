@@ -11,7 +11,7 @@
 //! (AC `PetitionMgr.h:32-34`); the update fires on those edges.
 
 use benilla_protocol::types::{PetitionShowList, PetitionShowListEntry};
-use benilla_ui::script::{ScriptDialect, UiScript, WrathPetitionItem, WrathPetitionVendorRequest};
+use benilla_ui::script::{UiScript, WrathPetitionItem, WrathPetitionVendorRequest};
 use bevy::prelude::*;
 
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
@@ -100,9 +100,6 @@ fn feed_vendor(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let fed = fed.get(&script);
     let npc = vendor.npc();
     let rows = vendor.open.as_ref().map(|open| {
@@ -249,7 +246,7 @@ mod tests {
             .init_resource::<ArenaPetitionVendor>()
             .init_resource::<super::super::PetitionState>()
             .add_systems(Update, drain_vendor);
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_wrath_petition_vendor(Some(vec![WrathPetitionItem::default(); 3]));
         script
             .run("BuyPetition(2, 'Gladiators') TurnInArenaPetition(3) ClosePetitionVendor()")

@@ -16,9 +16,8 @@ use benilla_protocol::wrath_guild_bank_log::{Log, Payload};
 use benilla_protocol::wrath_guild_bank_swap::{BankSlot, Swap, Transfer};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{
-    ScriptDialect, ScriptValue, UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog,
-    WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab,
-    WrathGuildBankView,
+    ScriptValue, UiScript, WrathGuildBankItemLog, WrathGuildBankMoneyLog, WrathGuildBankRankRights,
+    WrathGuildBankRequest, WrathGuildBankSlot, WrathGuildBankTab, WrathGuildBankView,
 };
 use bevy::prelude::*;
 
@@ -305,9 +304,6 @@ pub(crate) fn feed_guild_bank(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     if open.pending {
         open.pending = false;
         if let Some(banker) = open.banker {

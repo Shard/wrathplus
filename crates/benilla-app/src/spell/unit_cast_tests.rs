@@ -46,7 +46,7 @@ fn app() -> (App, Receiver<crate::net::ClientCommand>) {
         .init_resource::<CastEdges>()
         .init_resource::<UnitCasts>()
         .add_systems(Update, feed);
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     script.set_unit_guids(&UnitGuids {
         player: ME,
         target: MOB,

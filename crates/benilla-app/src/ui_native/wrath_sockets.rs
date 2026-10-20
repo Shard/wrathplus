@@ -19,8 +19,8 @@ use benilla_formats::gems::{
 use benilla_protocol::wrath_inventory::{Command, Packet};
 use benilla_protocol::wrath_items::SocketMetadata;
 use benilla_ui::script::{
-    ItemServiceRequest, ScriptDialect, ScriptValue, SocketGemView, SocketRequest,
-    SocketSessionView, SocketSlotView, UiScript,
+    ItemServiceRequest, ScriptValue, SocketGemView, SocketRequest, SocketSessionView,
+    SocketSlotView, UiScript,
 };
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -96,9 +96,6 @@ fn feed_item_gems(
     let (Some(mut script), Some(gems)) = (script, gems) else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let Some(store) = self_q.iter().next() else {
         return;
     };
@@ -193,9 +190,6 @@ pub(crate) fn feed_sockets(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     absorb(&mut packets.0, &mut session);
     let Some(store) = self_q.iter().next() else {
         return;

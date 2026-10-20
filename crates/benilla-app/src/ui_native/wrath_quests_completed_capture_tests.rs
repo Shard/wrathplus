@@ -7,7 +7,7 @@ use benilla_protocol::SessionEvent;
 /// `QUEST_QUERY_COMPLETE` once; a new VM reads the stored list without an event.
 #[test]
 fn the_feed_sends_queries_and_applies_each_reply_in_order() {
-    use benilla_ui::script::{ScriptDialect, UiScript};
+    use benilla_ui::script::UiScript;
     let (tx, rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
     app.add_plugins(bevy::state::app::StatesPlugin)
@@ -16,7 +16,7 @@ fn the_feed_sends_queries_and_applies_each_reply_in_order() {
     crate::net::wrath_quests_completed_capture::register(&mut app);
     register(&mut app);
     let new_vm = || {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("N = 0 local f = CreateFrame('Frame') f:RegisterEvent('QUEST_QUERY_COMPLETE') f:SetScript('OnEvent', function() N = N + 1 end)").unwrap();
         s
     };

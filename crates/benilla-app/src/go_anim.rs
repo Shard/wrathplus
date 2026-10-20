@@ -703,11 +703,7 @@ mod tests {
             .expect("native state dependency exists");
         let (field, offset) = layout.field_at(ObjectType::GameObject, span.index).unwrap();
         assert_eq!((field, offset), (native_field, 0));
-        let packed = if layout == FieldLayout::Wrath12340 {
-            0x87654300
-        } else {
-            0
-        };
+        let packed = 0x87654300;
         let mut edge = crate::net::FieldChanged {
             entity: bevy::prelude::Entity::PLACEHOLDER,
             guid: 42,
@@ -722,16 +718,14 @@ mod tests {
         edge.old = packed;
         edge.new = packed | 1;
         assert_eq!(super::go_state_edge(&edge), Some(1));
-        if layout == FieldLayout::Wrath12340 {
-            for mask in [0x100, 0x10000, 0x1000000] {
-                edge.old = packed | 1;
-                edge.new = edge.old ^ mask;
-                assert_eq!(
-                    super::go_state_edge(&edge),
-                    None,
-                    "upper bytes aren't state"
-                );
-            }
+        for mask in [0x100, 0x10000, 0x1000000] {
+            edge.old = packed | 1;
+            edge.new = edge.old ^ mask;
+            assert_eq!(
+                super::go_state_edge(&edge),
+                None,
+                "upper bytes aren't state"
+            );
         }
         edge.kind = ObjectType::Unit;
         assert_eq!(super::go_state_edge(&edge), None);

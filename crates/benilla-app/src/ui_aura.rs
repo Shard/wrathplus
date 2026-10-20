@@ -18,7 +18,7 @@ use crate::char_select::ClientState;
 use crate::net::{
     ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, Reputations, SelfPlayer,
 };
-use crate::target::{can_assist, Factions, RelationContext, Selection};
+use crate::target::{Factions, Selection};
 use crate::ui_action::Spells;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
@@ -268,35 +268,6 @@ fn record_inputs<'a>(
         .filter(move |&(_, spell)| spell != 0 && shown_in_aura_ui(catalog, spell))
         .map(|(slot, spell)| (slot, spell, 1, 0))
 }
-
-/// `UnitBuff 0x519500`'s unit-level gate, before any slot: a unit's buffs are listed only if it
-/// has `UNIT_FLAG_AURAS_VISIBLE` or the uncharmed player can assist it (`0x5195aa`-`0x5195f7`),
-/// else every index is nil; `UnitDebuff` has no gate. vmangos sets the flag for Detect Magic
-/// (`UnitDefines.h:572`) and for a GM viewer (`Object.cpp:765-766`), so it is read as received.
-fn buffs_visible_on(
-    store: &ObjectStore,
-    self_store: Option<&ObjectStore>,
-    factions: Option<&Factions>,
-    reputations: &Reputations,
-    ctx: RelationContext,
-) -> bool {
-    if store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
-        // Native packet/roster lists apply their own whole-unit gate. No native snapshot
-        // establishes type 295 here; never reinterpret Wrath MOUNT as AURAS_VISIBLE.
-        return true;
-    }
-    if store.0.unit_flags() & UNIT_FLAG_AURAS_VISIBLE != 0 {
-        return true;
-    }
-    // While charmed you assist nobody (`0x5195f1`-`0x5195f7`).
-    if self_store.is_some_and(|s| s.0.unit_charmed_by().is_some()) {
-        return false;
-    }
-    can_assist(Some(store), factions, reputations, self_store, ctx)
-}
-
-/// `UNIT_FIELD_FLAGS` bit 27, `0x08000000` (`0x5195b6`).
-const UNIT_FLAG_AURAS_VISIBLE: u32 = 0x0800_0000;
 
 /// `AttributesEx & 0x4` (vmangos `SpellDefines.h:834`), the cancel gate's DBC arm (`0x4e4a10`).
 const SPELL_ATTR_EX_IS_CHANNELED: u32 = 0x4;
@@ -571,23 +542,10 @@ fn feed_auras(
     }
 
     let held = |guid: u64| index.0.get(&guid).and_then(|&e| stores.get(e).ok());
-    let held_lookup = crate::target::ByGuid::new(held);
     let pet_guid = units.pet.guid();
-    // `UnitBuff`'s unit gate on a live unit. `unit` is never `store`, the player's, which is the
-    // gate's second argument. The pet is ungated; the reference gates a pet too, but `CanAssist`'s
-    // player-controlled arm (`0x60673e`-`0x60679f`, the controlling players' duel and FFA-PvP
-    // state) passes for your own pet, leaving only the charm, selectable and reaction clauses to
-    // hide its buffs.
-    let buffs_visible = |guid: u64, unit: &ObjectStore| {
-        guid == pet_guid
-            || buffs_visible_on(
-                unit,
-                Some(store),
-                factions.as_deref(),
-                &reputations,
-                RelationContext::new(None, &held_lookup),
-            )
-    };
+    // `UnitBuff`'s unit gate: the native packet and roster lists apply their own whole-unit gate,
+    // and no native snapshot establishes type 295 here, so every live unit's list is shown.
+    let buffs_visible = |_guid: u64, _unit: &ObjectStore| true;
     let target_guid = units.selection.guid.unwrap_or(0);
     let catalog_moved = spells.as_ref().is_some_and(|s| s.is_changed());
     let unit_changed = memo.units.feed(

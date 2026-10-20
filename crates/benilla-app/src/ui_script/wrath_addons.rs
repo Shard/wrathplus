@@ -131,8 +131,8 @@ mod tests {
 
     #[test]
     fn actual_observer_lua_xml_lifecycle_observations_and_pointer_click() {
-        use benilla_ui::script::{ScriptDialect, ScriptValue, UnitState};
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        use benilla_ui::script::{ScriptValue, UnitState};
+        let mut script = UiScript::new().unwrap();
         script.set_instruction_budget(RUNTIME_INSTRUCTION_BUDGET);
         script.set_screen_size(1024.0, 768.0);
         // The stock CVars the Wrath surface registers at birth.
@@ -191,8 +191,8 @@ mod tests {
 
     #[test]
     fn observer_copies_are_bounded_and_unavailable_outside_live_player_state() {
-        use benilla_ui::script::{ScriptDialect, ScriptValue, UnitState};
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        use benilla_ui::script::{ScriptValue, UnitState};
+        let mut script = UiScript::new().unwrap();
         script.seed_cvars(
             crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed(),
         );
@@ -239,8 +239,7 @@ mod tests {
 
     #[test]
     fn authored_root_is_wrath_only_and_materializes_uiparent() {
-        let script = UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
-            .expect("Wrath VM");
+        let script = UiScript::new().expect("Wrath VM");
         let failures = load_bootstrap(&script);
         assert!(failures.is_empty(), "{failures:#?}");
         assert!(script.eval::<bool>("return UIParent ~= nil").unwrap());
@@ -248,8 +247,7 @@ mod tests {
 
     #[test]
     fn shutdown_events_are_ordered_and_bounded() {
-        let mut script =
-            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script
             .run(
                 "Seen = {}; local f = CreateFrame('Frame'); \

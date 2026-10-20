@@ -61,16 +61,14 @@ fn on_power(
 
 fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
     use benilla_protocol::types::{Field, FieldLayout};
-    if store.layout() == FieldLayout::Wrath12340 {
-        let Some(span) = store.layout().resolve(Field::UnitPower) else {
-            return;
-        };
-        if u16::from(power_type) < span.width {
-            store.merge(ObjectFields::from_native_pairs(
-                FieldLayout::Wrath12340,
-                &[(span.index + u16::from(power_type), value)],
-            ));
-        }
+    let Some(span) = store.layout().resolve(Field::UnitPower) else {
+        return;
+    };
+    if u16::from(power_type) < span.width {
+        store.merge(ObjectFields::from_native_pairs(
+            FieldLayout::Wrath12340,
+            &[(span.index + u16::from(power_type), value)],
+        ));
     }
 }
 

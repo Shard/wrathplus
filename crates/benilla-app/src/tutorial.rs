@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 
-use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript, WrathTutorialRequest};
+use benilla_ui::script::{ScriptValue, UiScript, WrathTutorialRequest};
 
 use crate::char_select::ClientState;
 use crate::net::{ClientCommand, EnteredWorldMessage, NetCommands, ObjectStore, SelfPlayer};
@@ -271,7 +271,6 @@ fn feed_tutorials(
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     items: Res<crate::items::Items>,
     mut sounds: ResMut<crate::sound::MessageSounds>,
-    mut told: Local<crate::ui_script::VmMemo<Option<Vec<u8>>>>,
     mut wrath_told: Local<
         crate::ui_script::VmMemo<Option<(u64, Option<Vec<u8>>, Option<Vec<u8>>)>>,
     >,
@@ -312,47 +311,27 @@ fn feed_tutorials(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        for published in std::mem::take(&mut tutorials.fired) {
-            sounds.push_cue(TUTORIAL_POPUP_SOUND);
-            script.fire_event(
-                "TUTORIAL_TRIGGER",
-                vec![ScriptValue::Int(i64::from(published))],
-            );
-        }
-    }
     // The bank is owed to every VM: what it has been told is per VM, so a `/reload`'s fresh VM
     // is told again.
-    if script.dialect() == ScriptDialect::Wrath12340 {
-        let snapshot = (
-            tutorials.packet_generation,
-            tutorials.fire_once.clone(),
-            tutorials.acknowledged.clone(),
-        );
-        let told = wrath_told.get(&script);
-        if told.as_ref() != Some(&snapshot) {
-            script.set_wrath_tutorial_banks(snapshot.1.clone(), snapshot.2.clone());
-            *told = Some(snapshot);
-        }
-    } else {
-        tutorials.history_appends.clear();
-        let told = told.get(&script);
-        if *told != tutorials.acknowledged {
-            told.clone_from(&tutorials.acknowledged);
-            script.set_tutorial_bank(tutorials.acknowledged.clone());
-        }
+    let snapshot = (
+        tutorials.packet_generation,
+        tutorials.fire_once.clone(),
+        tutorials.acknowledged.clone(),
+    );
+    let told = wrath_told.get(&script);
+    if told.as_ref() != Some(&snapshot) {
+        script.set_wrath_tutorial_banks(snapshot.1.clone(), snapshot.2.clone());
+        *told = Some(snapshot);
     }
-    if script.dialect() == ScriptDialect::Wrath12340 {
-        for id in std::mem::take(&mut tutorials.history_appends) {
-            script.append_wrath_tutorial_history(id);
-        }
-        for published in std::mem::take(&mut tutorials.fired) {
-            sounds.push_cue(TUTORIAL_POPUP_SOUND);
-            script.fire_event(
-                "TUTORIAL_TRIGGER",
-                vec![ScriptValue::Int(i64::from(published))],
-            );
-        }
+    for id in std::mem::take(&mut tutorials.history_appends) {
+        script.append_wrath_tutorial_history(id);
+    }
+    for published in std::mem::take(&mut tutorials.fired) {
+        sounds.push_cue(TUTORIAL_POPUP_SOUND);
+        script.fire_event(
+            "TUTORIAL_TRIGGER",
+            vec![ScriptValue::Int(i64::from(published))],
+        );
     }
 }
 
@@ -425,18 +404,16 @@ fn drain_tutorials(
     commands: Res<NetCommands>,
 ) {
     if let Some(mut script) = script {
-        if script.dialect() == ScriptDialect::Wrath12340 {
-            for request in script.take_wrath_tutorial_requests() {
-                match request {
-                    WrathTutorialRequest::Flag(id) => {
-                        tutorials.acknowledge(id);
-                        // Already appended synchronously in this VM; never re-append after a
-                        // later Reset in the same ordered batch.
-                        tutorials.history_appends.retain(|&pending| pending != id);
-                    }
-                    WrathTutorialRequest::Clear => tutorials.clear(),
-                    WrathTutorialRequest::Reset => tutorials.reset(),
+        for request in script.take_wrath_tutorial_requests() {
+            match request {
+                WrathTutorialRequest::Flag(id) => {
+                    tutorials.acknowledge(id);
+                    // Already appended synchronously in this VM; never re-append after a
+                    // later Reset in the same ordered batch.
+                    tutorials.history_appends.retain(|&pending| pending != id);
                 }
+                WrathTutorialRequest::Clear => tutorials.clear(),
+                WrathTutorialRequest::Reset => tutorials.reset(),
             }
         }
         for id in script.take_tutorial_flag_requests() {
@@ -748,9 +725,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Tutorials>()
             .apply_flags(&[0; 32]);
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
-        );
+        app.insert_non_send_resource(UiScript::new().unwrap());
         app.update();
         app.world()
             .non_send_resource::<UiScript>()
@@ -780,9 +755,7 @@ mod tests {
             .non_send_resource::<UiScript>()
             .run("assert(IsTutorialFlagged(17)==nil)")
             .unwrap();
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap(),
-        );
+        app.insert_non_send_resource(UiScript::new().unwrap());
         app.update();
         app.world().non_send_resource::<UiScript>().run("assert(IsTutorialFlagged(17)==nil); FlagTutorial(1); assert(IsTutorialFlagged(1)==1)").unwrap();
     }
@@ -797,7 +770,7 @@ mod tests {
         ));
         let mut cvars = crate::cvars::Cvars::default();
         cvars.register_wrath_tutorial_history();
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.seed_cvars(cvars.vm_seed());
         script.set_wrath_tutorial_banks(Some(vec![0; 32]), Some(vec![0; 32]));
         script.run("FlagTutorial(42); FlagTutorial(3)").unwrap();
