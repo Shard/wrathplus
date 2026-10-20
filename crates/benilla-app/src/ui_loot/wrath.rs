@@ -4,31 +4,13 @@
 //! client changes sources. Keep one source outstanding through its release acknowledgement and
 //! mutate the shared snapshot only after a server acknowledgement.
 
-use std::collections::VecDeque;
-
 use benilla_protocol::wrath_loot::InventoryChangeFailure;
 
 use super::{LootAction, LootLatch, LootState};
 use crate::net::{ClientCommand, NetCommands};
 use crate::ui_action::{UiError, UiErrorKeys};
 
-#[derive(Default)]
-pub(super) struct WrathLootState {
-    source: Option<u64>,
-    phase: Phase,
-    takes: VecDeque<u8>,
-    money: bool,
-}
-
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    #[default]
-    Idle,
-    Requesting,
-    Active,
-    Releasing,
-}
-
+pub(crate) use crate::app_core::loot::{Phase, WrathLootState};
 impl WrathLootState {
     pub(super) fn reset(&mut self) {
         *self = Self::default();
