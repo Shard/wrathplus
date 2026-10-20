@@ -178,6 +178,14 @@ impl ObjectFields {
     pub fn unit_stand_state(&self) -> u8 {
         (self.get(Field::UnitBytes1).unwrap_or(0) & 0xff) as u8
     }
+    /// `UNIT_VIRTUAL_ITEM_SLOT_ID + slot`: a creature's held item in slot 0 (main hand), 1 (off
+    /// hand) or 2 (ranged), as an item entry the client names through `Item.dbc`; 0 or absent is
+    /// an empty hand.
+    pub fn unit_virtual_item_entry(&self, slot: u8) -> Option<u32> {
+        (slot < 3)
+            .then(|| self.get_at(Field::UnitVirtualItemSlotId, u16::from(slot)))?
+            .filter(|&entry| entry != 0)
+    }
     /// `UNIT_FIELD_PETEXPERIENCE` and `UNIT_FIELD_PETNEXTLEVELEXP`: `GetPetExperience`'s
     /// `(currXP, nextXP)`; absent reads 0, the binding's own failure value, never nil.
     pub fn unit_pet_experience(&self) -> (u32, u32) {

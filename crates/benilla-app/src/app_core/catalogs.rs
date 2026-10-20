@@ -33,6 +33,12 @@ pub(crate) struct BankPrices(pub(crate) benilla_formats::BankBagSlotPrices);
 #[derive(Resource)]
 pub(crate) struct StableSlotPrices(pub(crate) benilla_formats::StableSlotPrices);
 
+/// `Item.dbc`, the client's record of every item entry: a creature's virtual items name only the
+/// entry (`UNIT_VIRTUAL_ITEM_SLOT_ID`), so their display, sheath and class come from here. Absent,
+/// creatures hold nothing.
+#[derive(Resource)]
+pub(crate) struct ItemRecords(pub(crate) benilla_formats::ItemRecordCatalog);
+
 /// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
 /// display name is also what `$R`/`$r` expand to. Build 12340's enUS `ChrRaces.dbc` rows 1-11,
 /// its name and `clientFileString` columns; its gendered name columns are empty in enUS.

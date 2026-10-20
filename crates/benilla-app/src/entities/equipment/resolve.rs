@@ -151,6 +151,8 @@ pub(in crate::entities) fn resolve_equipment(
     mut guilds: Option<ResMut<crate::ui_guild::GuildState>>,
     tabard_design: Option<Res<crate::ui_tabard::TabardDesign>>,
     barber: Option<Res<super::BarberPreview>>,
+    // A creature's held items: `UNIT_VIRTUAL_ITEM_SLOT_ID` names the entry, `Item.dbc` the rest.
+    records: Option<Res<crate::app_core::catalogs::ItemRecords>>,
 ) {
     let Some(mut held) = held else {
         return;
@@ -296,8 +298,22 @@ pub(in crate::entities) fn resolve_equipment(
         for slot in 0..HELD_SLOTS {
             // (display id, inventory type, item sheath type, class, subclass, material) per slot.
             resolved[slot] = match net_entity.kind {
-                // 12340 has no creature virtual-item display or info fields.
-                EntityKind::Unit => None,
+                // 12340's `UNIT_VIRTUAL_ITEM_SLOT_ID` holds the item entry; its `Item.dbc` row
+                // carries the display, inventory type, sheath, class pair and material.
+                EntityKind::Unit => s
+                    .unit_virtual_item_entry(slot as u8)
+                    .and_then(|entry| records.as_deref()?.0.get(entry))
+                    .filter(|r| r.display_id != 0)
+                    .map(|r| {
+                        (
+                            r.display_id,
+                            r.inventory_type,
+                            r.sheath as u8,
+                            r.class as u8,
+                            r.subclass as u8,
+                            r.material as u8,
+                        )
+                    }),
                 EntityKind::Player => s
                     .player_visible_item_entry(PLAYER_HELD_SLOTS[slot])
                     .filter(|e| *e != 0)
@@ -998,6 +1014,92 @@ mod tests {
             "a marked store rebuilds — the gate opens"
         );
         drop(rx);
+    }
+
+    /// A creature's weapon is its `UNIT_VIRTUAL_ITEM_SLOT_ID` entry named through `Item.dbc`: a
+    /// drawn main-hand sword reaches the right hand with its class pair, and with no `Item.dbc`
+    /// the creature holds nothing.
+    #[test]
+    fn a_creatures_virtual_item_entry_resolves_through_item_dbc() {
+        use crate::app_core::catalogs::ItemRecords;
+        use crate::creature_anim::Wielded;
+        use benilla_formats::{ItemRecord, ItemRecordCatalog};
+
+        const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
+        const VIRTUAL_ITEM: u16 = FieldLayout::Wrath12340.index_of(Field::UnitVirtualItemSlotId);
+        let spawn = |records: bool| {
+            let mut app = App::new();
+            app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+            let (tx, rx) = crossbeam_channel::unbounded::<ClientCommand>();
+            app.init_resource::<Items>();
+            app.init_resource::<crate::net::GuidIndex>();
+            app.insert_resource(NetCommands(tx));
+            app.insert_resource(ItemDisplays::icons_for_tests(
+                benilla_formats::ItemDisplayCatalog::from_displays(
+                    std::collections::HashMap::new(),
+                ),
+            ));
+            if records {
+                // Entry 25, Worn Shortsword, as the shipped `Item.dbc` row has it.
+                app.insert_resource(ItemRecords(ItemRecordCatalog::from_rows(
+                    std::collections::HashMap::from([(
+                        25,
+                        ItemRecord {
+                            class: 2,
+                            subclass: 7,
+                            material: 1,
+                            display_id: 1542,
+                            inventory_type: 21,
+                            sheath: 3,
+                        },
+                    )]),
+                )));
+            }
+            let unit = app
+                .world_mut()
+                .spawn((
+                    NetEntity {
+                        kind: EntityKind::Unit,
+                        display_id: Some(4000),
+                        scale: 1.0,
+                    },
+                    // Drawn (sheath state 1, melee), the sword in slot 0.
+                    ObjectStore(ObjectFields::from_pairs(&[
+                        (UNIT_BYTES_2, 1),
+                        (VIRTUAL_ITEM, 25),
+                    ])),
+                ))
+                .id();
+            app.add_systems(Update, resolve_equipment);
+            app.update();
+            (app, unit, rx)
+        };
+
+        let (app, unit, rx) = spawn(true);
+        let hand = app
+            .world()
+            .get::<HeldItems>(unit)
+            .and_then(|h| h.slots[0].as_ref())
+            .map(|slot| slot.attach);
+        assert_eq!(
+            hand,
+            Some(attach_id::HAND_RIGHT),
+            "drawn, in the right hand"
+        );
+        assert_eq!(app.world().get::<Wielded>(unit).unwrap().main, Some((2, 7)));
+        assert!(
+            rx.try_iter().next().is_none(),
+            "no item query: Item.dbc answers"
+        );
+
+        let (app, unit, _rx) = spawn(false);
+        assert!(
+            app.world()
+                .get::<HeldItems>(unit)
+                .is_none_or(|h| h.slots.iter().all(Option::is_none)),
+            "without Item.dbc the creature holds nothing"
+        );
+        assert_eq!(app.world().get::<Wielded>(unit).and_then(|w| w.main), None);
     }
 
     #[test]
