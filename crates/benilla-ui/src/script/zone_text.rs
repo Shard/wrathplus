@@ -59,48 +59,31 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetMinimapZoneText",
         lua.create_function(text(|z| &z.minimap))?,
     )?;
-    // GetZonePVPInfo() (`0x48d540`): always three values, `pvpType, factionName, isArena`; the
-    // type is never `"arena"`, and isArena is 1 or nil, never a boolean.
+    // GetZonePVPInfo() (`0x51ba50`).
     g.set(
         "GetZonePVPInfo",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let z = &model.zone;
-            let string = |s: &Option<String>| match s {
-                Some(s) => lua.create_string(s).map(Value::String),
-                None => Ok(Value::Nil),
+            // No values without territory context; special areas return (type, isSubZone),
+            // ordinary territory returns (type, nil, factionName).
+            let Some(kind) = z.pvp_type.as_deref() else {
+                return Ok(MultiValue::new());
             };
-            // Wrath 0x51ba50 returns no values without territory context; special
-            // areas return (type, isSubZone), ordinary territory returns
-            // (type, nil, factionName). Vanilla's tuple below is deliberately unchanged.
-            if model.dialect == super::ScriptDialect::Wrath12340 {
-                let Some(kind) = z.pvp_type.as_deref() else {
-                    return Ok(MultiValue::new());
-                };
-                let mut values = vec![Value::String(lua.create_string(kind)?)];
-                // isSubZone: 1 when the special flags came from the leaf (`FUN_0084e2a0(1.0)`).
-                let special = matches!(kind, "sanctuary" | "arena" | "combat");
-                values.push(if special && z.pvp_is_subzone {
-                    Value::Number(1.0)
-                } else {
-                    Value::Nil
-                });
-                if !special {
-                    values.push(Value::String(
-                        lua.create_string(z.pvp_faction.as_deref().unwrap_or(""))?,
-                    ));
-                }
-                return Ok(MultiValue::from_vec(values));
+            let mut values = vec![Value::String(lua.create_string(kind)?)];
+            // isSubZone: 1 when the special flags came from the leaf (`FUN_0084e2a0(1.0)`).
+            let special = matches!(kind, "sanctuary" | "arena" | "combat");
+            values.push(if special && z.pvp_is_subzone {
+                Value::Number(1.0)
+            } else {
+                Value::Nil
+            });
+            if !special {
+                values.push(Value::String(
+                    lua.create_string(z.pvp_faction.as_deref().unwrap_or(""))?,
+                ));
             }
-            Ok(MultiValue::from_vec(vec![
-                string(&z.pvp_type)?,
-                string(&z.pvp_faction)?,
-                if z.is_arena {
-                    Value::Number(1.0)
-                } else {
-                    Value::Nil
-                },
-            ]))
+            Ok(MultiValue::from_vec(values))
         })?,
     )?;
     Ok(())

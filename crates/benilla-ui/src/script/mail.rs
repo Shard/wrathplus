@@ -315,18 +315,11 @@ impl super::UiScript {
 
 /// A clone of the inbox row at a 1-based index.
 fn row_at(model: &Model, index: usize) -> Option<MailInboxRow> {
-    if model.dialect == super::ScriptDialect::Wrath12340 {
-        return model
-            .wrath_mail
-            .as_ref()
-            .and_then(|m| index.checked_sub(1).and_then(|i| m.rows.get(i)))
-            .map(|row| row.header.clone());
-    }
     model
-        .mail
+        .wrath_mail
         .as_ref()
-        .and_then(|m| index.checked_sub(1).and_then(|n| m.inbox.get(n)))
-        .cloned()
+        .and_then(|m| index.checked_sub(1).and_then(|i| m.rows.get(i)))
+        .map(|row| row.header.clone())
 }
 
 /// Register the mail globals.
@@ -337,19 +330,14 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetInboxNumItems",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            if model.dialect == super::ScriptDialect::Wrath12340 {
-                let (shown, total) = model
-                    .wrath_mail
-                    .as_ref()
-                    .map_or((0, 0), |m| (m.rows.len() as i64, i64::from(m.total_count)));
-                return Ok(MultiValue::from_vec(vec![
-                    Value::Integer(shown),
-                    Value::Integer(total),
-                ]));
-            }
-            Ok(MultiValue::from_vec(vec![Value::Integer(
-                model.mail.as_ref().map_or(0, |m| m.inbox.len()) as i64,
-            )]))
+            let (shown, total) = model
+                .wrath_mail
+                .as_ref()
+                .map_or((0, 0), |m| (m.rows.len() as i64, i64::from(m.total_count)));
+            Ok(MultiValue::from_vec(vec![
+                Value::Integer(shown),
+                Value::Integer(total),
+            ]))
         })?,
     )?;
 
@@ -371,7 +359,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 })
             };
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let native = model.dialect == super::ScriptDialect::Wrath12340;
             let first_quantity = model
                 .wrath_mail
                 .as_ref()
@@ -379,17 +366,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 .and_then(|r| r.attachments.first())
                 .map_or(0, |a| a.count);
             // Stock Wrath MailFrame.lua:154 consumes attachment count and first stack separately.
-            let package_icon = if (if native {
-                r.item_count != 0
-            } else {
-                r.item_id != 0
-            }) && !r.is_gm
-            {
+            let package_icon = if r.item_count != 0 && !r.is_gm {
                 opt_str(&r.package_icon)?
             } else {
                 Value::Nil
             };
-            let mut values = vec![
+            let values = vec![
                 package_icon,
                 opt_str(&r.stationery_icon)?,
                 opt_str(&r.sender)?,
@@ -407,10 +389,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 flag(r.text_created),
                 flag(r.can_reply),
                 flag(r.is_gm),
+                Value::Integer(i64::from(first_quantity)),
             ];
-            if native {
-                values.push(Value::Integer(i64::from(first_quantity)));
-            }
             Ok(MultiValue::from_vec(values))
         })?,
     )?;
@@ -458,22 +438,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "GetInboxInvoiceInfo",
         lua.create_function(|lua, index: usize| {
-            let (row, wrath) = {
+            let row = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                (row_at(&model, index), model.dialect == super::ScriptDialect::Wrath12340)
+                row_at(&model, index)
             };
-            let width = if wrath { 10 } else { 7 };
+            let width = 10;
             let Some(inv) = row.and_then(|r| r.invoice) else {
                 let mut miss = vec![Value::Nil, Value::Nil, Value::Nil];
                 miss.resize(width, Value::Integer(0));
                 return Ok(MultiValue::from_vec(miss));
             };
-            let kind = match (inv.seller, inv.pending && wrath) {
+            let kind = match (inv.seller, inv.pending) {
                 (true, true) => "seller_temp_invoice",
                 (true, false) => "seller",
                 (false, _) => "buyer",
             };
-            let mut out = vec![
+            Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(kind)?),
                 Value::String(lua.create_string(&inv.item_name)?),
                 Value::String(lua.create_string(&inv.player_name)?),
@@ -481,15 +461,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 Value::Integer(i64::from(inv.buyout)),
                 Value::Integer(i64::from(inv.deposit)),
                 Value::Integer(i64::from(inv.consignment)),
-            ];
-            if wrath {
-                out.extend([
-                    Value::Integer(i64::from(inv.money_delay)),
-                    Value::Integer(i64::from(inv.eta_hour)),
-                    Value::Integer(i64::from(inv.eta_min)),
-                ]);
-            }
-            Ok(MultiValue::from_vec(out))
+                Value::Integer(i64::from(inv.money_delay)),
+                Value::Integer(i64::from(inv.eta_hour)),
+                Value::Integer(i64::from(inv.eta_min)),
+            ]))
         })?,
     )?;
 
@@ -498,47 +473,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "GetInboxItem",
         lua.create_function(|lua, (index, attachment): (usize, Option<usize>)| {
-            {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                if model.dialect == super::ScriptDialect::Wrath12340 {
-                    return wrath::item(lua, &model, index, attachment.unwrap_or(1));
-                }
-            }
-            let (row, usable) = {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let row = row_at(&model, index);
-                let usable = row
-                    .as_ref()
-                    .is_none_or(|r| super::item_stats::item_usable_by_id(&model, r.item_id));
-                (row, usable)
-            };
-            // Five values on every path; with no item, `nil, nil, 0, 0, nil` (`0x4af5d0`).
-            let Some(r) = row.filter(|r| r.item_id != 0) else {
-                return Ok(MultiValue::from_vec(vec![
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Integer(0),
-                    Value::Integer(0),
-                    Value::Nil,
-                ]));
-            };
-            let name = match &r.item_name {
-                Some(n) => Value::String(lua.create_string(n)?),
-                None => Value::Nil,
-            };
-            let texture = match &r.item_texture {
-                Some(t) => Value::String(lua.create_string(t)?),
-                None => Value::Nil,
-            };
-            // A number on every path, as in `GetSendMailItem`.
-            let quality = Value::Integer(i64::from(r.item_quality.unwrap_or(0)));
-            Ok(MultiValue::from_vec(vec![
-                name,
-                texture,
-                Value::Integer(i64::from(r.item_count.max(1))),
-                quality,
-                flag(usable),
-            ]))
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            wrath::item(lua, &model, index, attachment.unwrap_or(1))
         })?,
     )?;
 

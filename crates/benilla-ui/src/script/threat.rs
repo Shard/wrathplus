@@ -1,7 +1,7 @@
 //! Native Wrath threat readers over the server's hundredths-of-threat table. The app
 //! supplies each member's aggro threshold (110% in melee, 130% outside) from world geometry.
 
-use super::{Model, ScriptDialect, UiScript};
+use super::{Model, UiScript};
 use mlua::{Lua, Value};
 use std::collections::HashMap;
 
@@ -65,9 +65,6 @@ impl UiScript {
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
-    if lua.app_data_ref::<Model>().expect("model").dialect != ScriptDialect::Wrath12340 {
-        return Ok(());
-    }
     let globals = lua.globals();
     globals.set(
         "UnitDetailedThreatSituation",
@@ -129,7 +126,7 @@ mod tests {
     use super::*;
     #[test]
     fn readers_distinguish_missing_zero_tanking_and_thresholds() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         ui.set_unit_guids(&super::super::UnitGuids {
             player: 1,
             target: 2,
@@ -181,14 +178,5 @@ mod tests {
                 .unwrap(),
             (1.0, 0.0, 0.0)
         );
-    }
-    #[test]
-    fn vanilla_does_not_publish_threat_globals() {
-        let ui = UiScript::new_with_dialect(ScriptDialect::Vanilla).unwrap();
-        assert!(ui
-            .eval::<bool>(
-                "return UnitDetailedThreatSituation == nil and UnitThreatSituation == nil"
-            )
-            .unwrap());
     }
 }
