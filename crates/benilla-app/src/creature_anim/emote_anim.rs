@@ -10,7 +10,8 @@
 
 use bevy::prelude::*;
 
-use crate::net::{EmoteKind, EmoteMessage, ObjectStore, RemoteMotion};
+use crate::motion::RemoteMotion;
+use crate::net::{EmoteKind, EmoteMessage, ObjectStore};
 use crate::sound::EmoteSounds;
 
 use super::{move_flags, select, EmoteAnim, Engaged, MovementState};

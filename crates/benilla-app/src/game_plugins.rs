@@ -136,6 +136,9 @@ impl PluginGroup for GamePlugins {
             .add(NetPlugin {
                 connect: self.connect,
             })
+            // Right after `NetPlugin`: the movement handlers follow the object layer's on the same
+            // events, and the movers chain after `net::NetApply`.
+            .add(crate::motion::MotionPlugin)
             .add(crate::death::DeathPlugin)
             .add(crate::glue::GluePlugin)
             .add(crate::char_select::CharSelectPlugin { start: self.start })

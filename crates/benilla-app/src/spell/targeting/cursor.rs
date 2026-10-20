@@ -930,7 +930,7 @@ mod tests {
                 ))
                 .id();
             if unit_runs {
-                world.entity_mut(unit).insert(crate::net::Spline {
+                world.entity_mut(unit).insert(crate::motion::Spline {
                     points: vec![[distance, 0.0, 0.0], [distance + 16.0, 0.0, 0.0]],
                     start: std::time::Instant::now(),
                     duration: std::time::Duration::from_secs(2),
