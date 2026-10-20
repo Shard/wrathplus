@@ -62,8 +62,10 @@ pub(super) fn melee_styled(spells: Option<&crate::ui_action::Spells>, spell_id: 
 }
 
 /// The spell arms' `UNIT_COMBAT` action and descriptor: a landed amount is `WOUND` (`CRITICAL` on
-/// a crit); zero damage takes `ABSORB` before `RESIST`, the order the reference's emitter
-/// `0x494600` tests them (`0x49463b`); a clean miss arrives via `SMSG_SPELLLOGMISS` instead.
+/// a crit); zero damage takes `ABSORB` before `RESIST`, the order 12340's emitter `0x5132c0` tests
+/// them; a clean miss arrives via `SMSG_SPELLLOGMISS` instead. Labelled: 12340's `WOUND` callers
+/// (`0x513380` from `0x755270`, `0x6d3750`, `0x6d3840`, `0x7531f0`) hand the emitter a hit-info word
+/// whose derivation from each log is not traced; these flags come from the log's fields.
 fn spell_feedback(
     damage: u32,
     absorb: u32,

@@ -25,14 +25,10 @@ pub(crate) mod held;
 
 pub(crate) use crate::app_core::schedule::UnitFeed;
 
-/// One `UNIT_COMBAT` over a unit, the portrait hit indicator's feed. The emitter `0x494600` fires
-/// `(token, action, descriptor, amount, type)` once per token naming the unit, with no
-/// self-suppression and no CVar gate; `type` is the school on the melee and spell-damage paths, 0
-/// from the miss and heal wrappers, and the 1.12 binary never emits `ENERGIZE`. The melee victim
-/// event waits for the impact keyframe (`0x6243e0`, reached only from `0x624530`).
-// Labelled: drained unread ([`fire_unit_combat`]) until build 12340's `UNIT_COMBAT` ABI is qualified
-// against this payload; the combat log still composes it.
-#[allow(dead_code)]
+/// One `UNIT_COMBAT` over a unit, the portrait hit indicator's feed (stock `CombatFeedback`). Build
+/// 12340's emitter `0x5132c0` fires `(token, action, flags, amount, school)` (event `0x8f`) once per
+/// token naming the unit ([`fire_unit_combat`]). The melee victim event waits for the swing's
+/// impact keyframe.
 #[derive(Message, Clone, Copy)]
 pub(crate) struct UnitCombatFeedback {
     pub(crate) unit: Entity,
@@ -404,40 +400,52 @@ fn load_exhaustion_rows(
     }
 }
 
-/// Melee swing to the `UNIT_COMBAT` action (victim-state table `0x83de28`, `0x4946d0`) and
-/// descriptor, HitInfo keyed on the amount's sign: above zero CRITICAL `0x80`, GLANCING `0x4000`,
-/// CRUSHING `0x8000`; else ABSORB `0x20`, BLOCK `0x800`, RESIST `0x40`.
-fn melee_feedback(hit_info: u32, victim_state: u32, damage: u32) -> (&'static str, &'static str) {
-    match victim_state {
-        2 => ("DODGE", ""),
-        3 => ("PARRY", ""),
-        5 => ("BLOCK", ""),
-        6 => ("EVADE", ""),
-        7 => ("IMMUNE", ""),
-        8 => ("DEFLECT", ""),
-        // 0 UNAFFECTED / 1 NORMAL / 4 INTERRUPT: WOUND, descriptor by the amount-sign key.
-        _ => {
-            if damage > 0 {
-                if hit_info & 0x80 != 0 {
-                    ("WOUND", "CRITICAL")
-                } else if hit_info & 0x4000 != 0 {
-                    ("WOUND", "GLANCING")
-                } else if hit_info & 0x8000 != 0 {
-                    ("WOUND", "CRUSHING")
-                } else {
-                    ("WOUND", "")
-                }
-            } else if hit_info & 0x20 != 0 {
-                ("WOUND", "ABSORB")
-            } else if hit_info & 0x800 != 0 {
-                ("WOUND", "BLOCK") // a full block the parse did not already make state 5
-            } else if hit_info & 0x40 != 0 {
-                ("WOUND", "RESIST")
-            } else {
-                ("MISS", "")
-            }
+/// Build 12340's victim-state action words, the table `0x00ac8050` its melee wrapper `0x5133b0`
+/// indexes (`rec+0x54 < 9`).
+const VICTIM_ACTIONS: [&str; 9] = [
+    "MISS",
+    "WOUND",
+    "DODGE",
+    "PARRY",
+    "INTERRUPT",
+    "BLOCK",
+    "EVADE",
+    "IMMUNE",
+    "DEFLECT",
+];
+
+/// A melee swing's `UNIT_COMBAT` action and flags, as `0x5133b0` passes them to `0x5132c0`: the
+/// action by victim state, the flags by `0x5132c0`'s hit-info ladder keyed on the amount's sign.
+/// `hit_info` is the presentation view's (`net::wrath_melee::presentation`), whose bits stand for
+/// 12340's: above zero CRITICAL (12340 `0x200`, here `0x80`), GLANCING (`0x10000`, `0x4000`),
+/// CRUSHING (`0x20000`, `0x8000`); else ABSORB (`0x20`), BLOCK (`0x2000`, `0x800`), RESIST (`0x80`,
+/// `0x40`). A state past the table fires nothing.
+fn melee_feedback(
+    hit_info: u32,
+    victim_state: u32,
+    damage: u32,
+) -> Option<(&'static str, &'static str)> {
+    let action = *VICTIM_ACTIONS.get(victim_state as usize)?;
+    let flags = if damage > 0 {
+        if hit_info & 0x80 != 0 {
+            "CRITICAL"
+        } else if hit_info & 0x4000 != 0 {
+            "GLANCING"
+        } else if hit_info & 0x8000 != 0 {
+            "CRUSHING"
+        } else {
+            ""
         }
-    }
+    } else if hit_info & 0x20 != 0 {
+        "ABSORB"
+    } else if hit_info & 0x800 != 0 {
+        "BLOCK"
+    } else if hit_info & 0x40 != 0 {
+        "RESIST"
+    } else {
+        ""
+    };
+    Some((action, flags))
 }
 
 /// The melee `UNIT_COMBAT` producer, on the swing's impact keyframe, `text_only` flushes included;
@@ -448,7 +456,9 @@ fn melee_unit_combat(
 ) {
     for crate::creature_anim::SwingImpact { swing: s, .. } in impacts.read() {
         let Some(victim) = s.victim else { continue };
-        let (action, flags) = melee_feedback(s.hit_info, s.victim_state, s.damage);
+        let Some((action, flags)) = melee_feedback(s.hit_info, s.victim_state, s.damage) else {
+            continue;
+        };
         out.write(UnitCombatFeedback {
             unit: victim,
             action,
@@ -480,11 +490,62 @@ fn fire_combat_text(
     }
 }
 
-/// Drain [`UnitCombatFeedback`] unfired. Labelled: the shared feedback carries 1.12's school-index
-/// and event semantics, and build 12340's Lua `UNIT_COMBAT` ABI is not yet qualified against it,
-/// so no `UNIT_COMBAT` is advertised.
-fn fire_unit_combat(mut events: MessageReader<UnitCombatFeedback>) {
-    events.read().for_each(|_| {});
+/// The tokens naming `unit`, in build 12340's order (`0x60bb70`): `player`, `vehicle`, `pet`, the
+/// first `partyN` or `partypetN`, the first `raidN` or `raidpetN`, then the arena units. Labelled:
+/// `vehicle` and `arenaN`/`arenapetN` resolve to nothing in [`UnitTokens`] yet, so they never fire.
+fn unit_combat_tokens(tokens: &UnitTokens, unit: Entity) -> Vec<String> {
+    let names = |token: &str| {
+        tokens
+            .resolve(token, &Selection::default())
+            .is_some_and(|(e, _)| e == unit)
+    };
+    let mut out: Vec<String> = ["player", "pet"]
+        .into_iter()
+        .filter(|t| names(t))
+        .map(str::to_string)
+        .collect();
+    for (group, rows) in [("party", 4), ("raid", 40)] {
+        for row in 1..=rows {
+            let member = format!("{group}{row}");
+            let pet = format!("{group}pet{row}");
+            if names(&member) {
+                out.push(member);
+                break;
+            }
+            if names(&pet) {
+                out.push(pet);
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Drain [`UnitCombatFeedback`] into `UNIT_COMBAT(token, action, flags, amount, school)`, once per
+/// token naming the unit, with no self-suppression and no CVar gate (`0x5132c0`).
+fn fire_unit_combat(
+    script: Option<NonSendMut<UiScript>>,
+    mut events: MessageReader<UnitCombatFeedback>,
+    tokens: UnitTokens,
+) {
+    let Some(mut script) = script else {
+        events.clear();
+        return;
+    };
+    for ev in events.read() {
+        for token in unit_combat_tokens(&tokens, ev.unit) {
+            script.fire_event(
+                "UNIT_COMBAT",
+                vec![
+                    ScriptValue::Str(token),
+                    ScriptValue::Str(ev.action.to_string()),
+                    ScriptValue::Str(ev.flags.to_string()),
+                    ScriptValue::Int(i64::from(ev.amount)),
+                    ScriptValue::Int(i64::from(ev.school)),
+                ],
+            );
+        }
+    }
 }
 
 /// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
@@ -1977,6 +2038,68 @@ mod tests {
 
         fn guid_of(app: &mut App, token: &str) -> Option<u64> {
             resolve(app, token).map(|(_, guid)| guid)
+        }
+
+        /// `UNIT_COMBAT` fires once per token naming the unit, in 12340's order (`0x60bb70`): a
+        /// party member is `party1` and nothing else; its pet is `partypet1`.
+        #[test]
+        fn unit_combat_fires_for_every_token_naming_the_unit() {
+            let mut app = party(2, true, true);
+            app.add_message::<UnitCombatFeedback>();
+            let script = UiScript::new().unwrap();
+            script
+                .run(
+                    "SEEN = {} local f = CreateFrame('Frame') f:RegisterEvent('UNIT_COMBAT') \
+                     f:SetScript('OnEvent', function(_, _, unit, action, flags, amount, school) \
+                     SEEN[#SEEN + 1] = unit .. ':' .. action .. ':' .. flags .. ':' .. amount .. ':' \
+                     .. school end)",
+                )
+                .unwrap();
+            app.insert_non_send_resource(script);
+            let (member_entity, _) = resolve(&mut app, "party1").expect("party1");
+            let (pet_entity, _) = resolve(&mut app, "partypet1").expect("partypet1");
+            app.world_mut().write_message(UnitCombatFeedback {
+                unit: member_entity,
+                action: "WOUND",
+                flags: "CRITICAL",
+                amount: 42,
+                school: 0,
+            });
+            app.world_mut().write_message(UnitCombatFeedback {
+                unit: pet_entity,
+                action: "HEAL",
+                flags: "",
+                amount: 7,
+                school: 0,
+            });
+            app.world_mut().run_system_once(fire_unit_combat).unwrap();
+            let seen: Vec<String> = app
+                .world()
+                .non_send_resource::<UiScript>()
+                .eval("return SEEN")
+                .unwrap();
+            assert_eq!(seen, ["party1:WOUND:CRITICAL:42:0", "partypet1:HEAL::7:0"]);
+        }
+
+        /// 12340's victim-state table (`0x00ac8050`): state 0 is `MISS` and 4 `INTERRUPT`, each
+        /// with the hit-info ladder's flags; a state past the table fires nothing.
+        #[test]
+        fn melee_feedback_takes_12340s_victim_state_table() {
+            assert_eq!(super::super::melee_feedback(0, 0, 0), Some(("MISS", "")));
+            assert_eq!(
+                super::super::melee_feedback(0x80, 1, 30),
+                Some(("WOUND", "CRITICAL"))
+            );
+            assert_eq!(
+                super::super::melee_feedback(0, 4, 5),
+                Some(("INTERRUPT", ""))
+            );
+            assert_eq!(
+                super::super::melee_feedback(0x20, 1, 0),
+                Some(("WOUND", "ABSORB"))
+            );
+            assert_eq!(super::super::melee_feedback(0, 2, 0), Some(("DODGE", "")));
+            assert_eq!(super::super::melee_feedback(0, 9, 0), None);
         }
 
         /// `partypetN` is the Nth party slot's pet, and `partyN` is still the slot's member: the
