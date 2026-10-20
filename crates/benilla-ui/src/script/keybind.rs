@@ -148,6 +148,51 @@ pub(crate) struct KeybindState {
     /// dispatch.
     generation: u64,
     requests: Vec<KeybindRequest>,
+    /// Build 12340's override bindings (`SetOverrideBinding` `0x563a90` and its kin), in set
+    /// order: a layer over [`Self::live`] that dispatch reads, never saved.
+    overrides: Vec<OverrideBinding>,
+}
+
+/// One override: the owner frame's id, whether it is a priority override, the key and its
+/// command.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct OverrideBinding {
+    pub(crate) owner: u32,
+    pub(crate) priority: bool,
+    pub(crate) key: String,
+    pub(crate) command: String,
+}
+
+impl KeybindState {
+    /// Set or (with no command) clear `owner`'s override of `key`.
+    pub(crate) fn set_override(
+        &mut self,
+        owner: u32,
+        priority: bool,
+        key: String,
+        command: Option<String>,
+    ) {
+        self.overrides
+            .retain(|o| !(o.owner == owner && o.key == key));
+        if let Some(command) = command.filter(|c| !c.is_empty()) {
+            self.overrides.push(OverrideBinding {
+                owner,
+                priority,
+                key,
+                command,
+            });
+        }
+        self.generation += 1;
+    }
+
+    /// Drop every override `owner` set (`ClearOverrideBindings`, `0x560560` → `0x5604f0`).
+    pub(crate) fn clear_overrides(&mut self, owner: u32) {
+        let before = self.overrides.len();
+        self.overrides.retain(|o| o.owner != owner);
+        if self.overrides.len() != before {
+            self.generation += 1;
+        }
+    }
 }
 
 /// `SetBinding(set, key, command)` on one key list: unbind `key` everywhere, then bind it to the
@@ -353,6 +398,25 @@ impl super::UiScript {
         self.model_mut().keybinds.load(set);
     }
 
+    /// The keys dispatch reads: the live table with the override layer on top, a non-priority
+    /// override over a normal binding and a priority one over both, a later override of a key
+    /// winning over an earlier one. Labelled: the order between owners at one level is taken as
+    /// set order.
+    pub fn effective_binding_keys(&self) -> Vec<KeyBinding> {
+        let model = self.model_mut();
+        let kb = &model.keybinds;
+        let mut keys = kb.live.clone();
+        for priority in [false, true] {
+            for o in kb.overrides.iter().filter(|o| o.priority == priority) {
+                match keys.iter_mut().find(|(k, _)| *k == o.key) {
+                    Some(slot) => slot.1 = o.command.clone(),
+                    None => keys.push((o.key.clone(), o.command.clone())),
+                }
+            }
+        }
+        keys
+    }
+
     /// The live keys as `(chord, command)` in bind order, for dispatch.
     pub fn binding_keys(&self) -> Vec<KeyBinding> {
         self.model_mut().keybinds.live.clone()
@@ -423,7 +487,8 @@ pub(crate) fn run_command(lua: &Lua, command: &str, down: bool) -> mlua::Result<
         let model = lua.app_data_ref::<Model>().expect("model app_data");
         let kb = &model.keybinds;
         let Some(&i) = kb.by_name.get(&command.to_ascii_uppercase()) else {
-            return Ok(false);
+            drop(model);
+            return run_command_form(lua, command, down);
         };
         let e = &kb.entries[i];
         if !down && !e.run_on_up {
@@ -440,6 +505,45 @@ pub(crate) fn run_command(lua: &Lua, command: &str, down: bool) -> mlua::Result<
         .exec();
     g.set("keystate", Value::Nil)?;
     ran.map(|()| true)
+}
+
+/// Build 12340's command forms beside a named command, which `SetBindingClick`, `SetBindingSpell`,
+/// `SetBindingItem`, `SetBindingMacro` and their override twins write: `CLICK button[:mouse]`,
+/// `SPELL name`, `ITEM name` and `MACRO name`, each run on the press through its Lua verb.
+/// Labelled: the native runner for these forms is untraced, and a release runs none of them.
+fn run_command_form(lua: &Lua, command: &str, down: bool) -> mlua::Result<bool> {
+    let Some((form, arg)) = command.split_once(' ') else {
+        return Ok(false);
+    };
+    if !down {
+        return Ok(false);
+    }
+    let verb = |name: &str| lua.globals().get::<Option<mlua::Function>>(name);
+    match form.to_ascii_uppercase().as_str() {
+        "CLICK" => {
+            let (name, button) = arg.split_once(':').unwrap_or((arg, "LeftButton"));
+            let Value::Table(frame) = lua.globals().get::<Value>(name)? else {
+                return Ok(false);
+            };
+            let Some(click) = frame.get::<Option<mlua::Function>>("Click")? else {
+                return Ok(false);
+            };
+            click.call::<()>((frame, button))?;
+        }
+        "SPELL" | "ITEM" | "MACRO" => {
+            let name = match form.to_ascii_uppercase().as_str() {
+                "SPELL" => "CastSpellByName",
+                "ITEM" => "UseItemByName",
+                _ => "RunMacro",
+            };
+            let Some(f) = verb(name)? else {
+                return Ok(false);
+            };
+            f.call::<()>(arg)?;
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
 }
 
 /// The binding globals. `GetBinding(i)` answers the row's name and then every key bound to it
