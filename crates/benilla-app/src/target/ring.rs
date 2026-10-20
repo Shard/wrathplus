@@ -61,11 +61,7 @@ const RING_DEAD: Color = Color::linear_rgb(0.498, 0.498, 0.498);
 const RING_PARTY: Color = Color::linear_rgb(0.667, 0.667, 1.0); // 0xFFAAAAFF
 const RING_PARTY_PVP: Color = Color::linear_rgb(0.667, 1.0, 0.667); // 0xFFAAFFAA
 
-/// The FactionTemplate.dbc catalog; absent if it failed to load, and the faction legs then read
-/// neutral.
-#[derive(Resource)]
-pub(crate) struct Factions(FactionCatalog);
-
+pub(crate) use crate::app_core::state::Factions;
 impl Factions {
     pub(crate) fn catalog(&self) -> &FactionCatalog {
         &self.0

@@ -153,6 +153,27 @@ mod tests {
     }
 
     #[test]
+    fn trigger_tutorial_marks_an_unseen_tutorial_and_fires_only_when_shown() {
+        let script = vm();
+        script
+            .run(
+                "SEEN = {} local f = CreateFrame('Frame') f:RegisterEvent('TUTORIAL_TRIGGER') \
+                 f:SetScript('OnEvent', function(self, event, n) table.insert(SEEN, n) end) \
+                 SetCVar('showTutorials', '1') TriggerTutorial(4) TriggerTutorial(4) \
+                 SetCVar('showTutorials', '0') TriggerTutorial(5) TriggerTutorial(61)",
+            )
+            .unwrap();
+        assert_eq!(
+            script
+                .eval::<String>("return table.concat(SEEN, ',')")
+                .unwrap(),
+            "4",
+            "once, and not while tutorials are hidden"
+        );
+        assert!(script.run("TriggerTutorial()").is_err());
+    }
+
+    #[test]
     fn synchronous_mutations_order_and_teardown_roundtrip() {
         let mut script = vm();
         script.run("FlagTutorial(42); assert(IsTutorialFlagged(42)==1); FlagTutorial(3); assert(GetNextCompleatedTutorial(42)==3); assert(GetPrevCompleatedTutorial(256)==3)").unwrap();
@@ -412,6 +433,45 @@ pub(super) fn install(lua: &mlua::Lua) -> mlua::Result<()> {
             })?,
         )?;
     }
+    // TriggerTutorial(n) (`0x5308d0` → `0x530840`): once the seen bank has loaded, an unseen
+    // tutorial 1-60 is marked seen and, with `showTutorials` on, fires `TUTORIAL_TRIGGER` (event
+    // `0x175`) with its number. Labelled: the event name for `0x175`, the popup sound and the
+    // `showTutorials`-off leg's `0x530450` are taken, not read.
+    globals.set(
+        "TriggerTutorial",
+        lua.create_function(|lua, value: Value| {
+            let id = number_arg(lua, value, "Usage: Trigger(\"tutorial\")")?.wrapping_sub(1);
+            if !(0..60).contains(&id) {
+                return Ok(());
+            }
+            let show = {
+                let mut model = lua.app_data_mut::<super::Model>().expect("model app_data");
+                if bit(&model.wrath_tutorial.seen, id as u32) != Some(false) {
+                    return Ok(());
+                }
+                if let Some(byte) = model
+                    .wrath_tutorial
+                    .seen
+                    .as_mut()
+                    .and_then(|b| b.get_mut(id as usize / 8))
+                {
+                    *byte |= 1 << (id % 8);
+                }
+                model
+                    .cvars
+                    .get("showtutorials")
+                    .is_some_and(|c| c.value.trim().parse::<f64>().is_ok_and(|n| n != 0.0))
+            };
+            if show {
+                super::tick::fire_event_into(
+                    lua,
+                    "TUTORIAL_TRIGGER",
+                    vec![super::ScriptValue::Int(i64::from(id) + 1)],
+                );
+            }
+            Ok(())
+        })?,
+    )?;
     globals.set(
         "IsTutorialFlagged",
         lua.create_function(|lua, value: Value| {

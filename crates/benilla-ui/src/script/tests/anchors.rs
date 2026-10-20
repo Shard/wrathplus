@@ -1,6 +1,6 @@
 //! `SetPoint` and the anchor resolve: sizes, rects, and the reference's `SetPoint` raises.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::layout::Rect;
 
 // FrameXML's anchor-to-the-screen idiom, `SetPoint("P", nil, "P", x, y)`: the explicit `nil`
@@ -133,26 +133,14 @@ fn setpoint_unresolved_name_raises() {
 /// `relativeTo` answers Usage.
 #[test]
 fn the_other_setpoint_raises() {
-    let s = vanilla_script();
+    let s = script();
     s.run(r#"f = CreateFrame("Frame", "Ladder")"#).unwrap();
-
-    let e = s
-        .run(r#"Ladder:SetPoint("CENTER")"#)
-        .unwrap_err()
-        .to_string();
-    assert!(e.contains("Usage: Ladder:SetPoint(\"point\""), "{e}");
 
     let e = s
         .run(r#"Ladder:SetPoint("MIDDLE", nil, "MIDDLE", 0, 0)"#)
         .unwrap_err()
         .to_string();
     assert!(e.contains("Ladder:SetPoint(): Unknown region point"), "{e}");
-
-    let e = s
-        .run(r#"Ladder:SetPoint("MIDDLE")"#)
-        .unwrap_err()
-        .to_string();
-    assert!(e.contains("Usage:"), "the tag gate runs first: {e}");
 
     let e = s
         .run(r#"Ladder:SetPoint("CENTER", Ladder, "CENTER", 0, 0)"#)
@@ -167,16 +155,14 @@ fn the_other_setpoint_raises() {
 /// `lua_type(L,3)` tells `LUA_TNIL` (0, the screen root) from `LUA_TNONE` (-1, Usage), so the
 /// raise ladder must see the argument count Lua saw, not a padded or trimmed tuple.
 #[test]
-fn a_trailing_nil_relative_to_is_present_where_an_absent_one_is_not() {
-    let s = vanilla_script();
+fn a_trailing_nil_relative_to_and_a_lone_point_both_anchor() {
+    let s = script();
     s.run(r#"f = CreateFrame("Frame", "Trail")"#).unwrap();
     s.run(r#"Trail:SetPoint("CENTER", nil)"#).unwrap();
     assert_eq!(s.eval::<i64>("return Trail:GetNumPoints()").unwrap(), 1);
-    let e = s
-        .run(r#"Trail:SetPoint("CENTER")"#)
-        .unwrap_err()
-        .to_string();
-    assert!(e.contains("Usage:"), "{e}");
+    // Build 12340 takes a lone point, relative to the parent.
+    s.run(r#"Trail:SetPoint("TOP")"#).unwrap();
+    assert_eq!(s.eval::<i64>("return Trail:GetNumPoints()").unwrap(), 2);
 }
 
 /// An explicit `nil` `relativeTo` is the screen root, not the parent (`0x7a2710` loads it from

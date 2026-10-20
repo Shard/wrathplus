@@ -12,17 +12,7 @@
 //! world-state UI list, and only then are the packet's pairs applied. The filter is the server's
 //! last init, never the avatar's position; only this clear and the logout reset write it.
 
-use std::collections::HashMap;
-
-use bevy::prelude::*;
-
-/// The live world-state table, keyed and valued by raw wire dwords.
-#[derive(Resource, Default)]
-pub(crate) struct WorldStates {
-    values: HashMap<u32, u32>,
-    generation: u64,
-    scope: Option<(u32, u32)>,
-}
+pub(crate) use crate::app_core::state::WorldStates;
 
 impl WorldStates {
     /// Bumped per write and per init, not per pair, the edge readers rebuild on: the reference's

@@ -208,18 +208,6 @@ mod tests {
     }
 
 
-    /// A 1.12 host for the tests a later step 9 batch converts.
-    fn vanilla_script() -> UiScript {
-        let s = UiScript::new_vanilla().unwrap();
-        s.register_cvars([
-            ("farclip", "350"),
-            ("shadowLevel", "1"),
-            ("doodadAnim", "1"),
-            ("texLodBias", "0.0"),
-            ("baseMip", "0"),
-        ]);
-        s
-    }
 
     #[test]
     fn every_pair_has_the_reference_shape() {
@@ -263,18 +251,20 @@ mod tests {
 
     #[test]
     fn the_getters_read_their_records_at_the_reference_defaults() {
-        let s = vanilla_script();
+        let s = script();
         let get = |e: &str| s.eval::<f64>(&format!("return {e}()")).unwrap();
         assert_eq!(get("GetWaterDetail"), 0.0);
-        assert_eq!(get("GetFarclip"), 350.0);
+        // Build 12340's stock `farclip` is registered at 1000 before the fixture's rows, which
+        // only reset its default.
+        assert_eq!(get("GetFarclip"), 1000.0);
         // `shadowLevel` "1" → `1 − 1`; `baseMip` "0" → `1 − 0`: both sliders at High.
         assert_eq!(get("GetTerrainMip"), 0.0);
         assert_eq!(get("GetBaseMip"), 1.0);
         assert_eq!(get("GetDoodadAnim"), 1.0);
         assert_eq!(get("GetTexLodBias"), 0.0);
         // A bare VM without the rows answers the registered defaults.
-        let bare = UiScript::new_vanilla().unwrap();
-        assert_eq!(bare.eval::<f64>("return GetFarclip()").unwrap(), 350.0);
+        let bare = UiScript::new().unwrap();
+        assert_eq!(bare.eval::<f64>("return GetFarclip()").unwrap(), 1000.0);
         assert_eq!(bare.eval::<f64>("return GetTerrainMip()").unwrap(), 0.0);
     }
 

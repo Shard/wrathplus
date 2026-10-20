@@ -523,7 +523,7 @@ fn unitname_reads_unknownobject_for_a_resolved_unit_whose_name_is_in_flight() {
 
 #[test]
 fn power_bindings_read_the_active_type() {
-    let mut s = UiScript::new_vanilla().unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_unit("player", Some(player())); // rage 35/100
                                           // One value: `0x517940` pushes a number, never a string.
     assert_eq!(
@@ -535,13 +535,7 @@ fn power_bindings_read_the_active_type() {
         s.eval::<i64>(r#"return UnitManaMax("player")"#).unwrap(),
         100
     );
-    // `UnitMana` reports the active power, here rage, as `UnitFrame.lua:218` reads it for every
-    // type; `UnitPower` and `UnitPowerMax` are not 1.12 verbs.
-    assert!(
-        s.eval::<bool>("return UnitPower == nil and UnitPowerMax == nil")
-            .unwrap(),
-        "UnitPower and UnitPowerMax are not 1.12 globals"
-    );
+    // `UnitMana` reports the active power, here rage.
     // An absent unit is the number 0, never nil: `UnitFrame.lua:122` indexes `ManaBarColor` by it.
     assert_eq!(
         s.eval::<i64>(r#"return UnitPowerType("target")"#).unwrap(),
@@ -1056,19 +1050,18 @@ fn seating_a_token_folds_its_key_too() {
 /// `0x515970` ends its nine compares in `luaL_error(L, "Unknown unit name: %s")`.
 #[test]
 fn an_unrecognised_unit_token_raises_and_a_recognised_empty_one_does_not() {
-    let mut s = UiScript::new_vanilla().unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_unit("player", Some(player()));
 
-    for bogus in ["bogus", "focus", "boss1", "arena1"] {
-        let err = s
-            .run(&format!(r#"UnitName("{bogus}")"#))
-            .expect_err(&format!("{bogus} must raise"))
-            .to_string();
-        assert!(
-            err.contains(&format!("Unknown unit name: {bogus}")),
-            "the raise carries the client's own text and the offending token: {err}"
-        );
-    }
+    // `focus`, `boss1..4` and `arena1..5` are build 12340 tokens.
+    let err = s
+        .run(r#"UnitName("bogus")"#)
+        .expect_err("bogus must raise")
+        .to_string();
+    assert!(
+        err.contains("Unknown unit name: bogus"),
+        "the raise carries the client's own text and the offending token: {err}"
+    );
     // `npc` is the one full-string compare, so a suffix on it matches nothing.
     assert!(s.run(r#"UnitName("npctarget")"#).is_err());
     assert!(s.run(r#"UnitName("NPC")"#).is_ok());

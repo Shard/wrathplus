@@ -125,12 +125,21 @@ fn census(script: &mut UiScript, failures: &[String]) -> usize {
 #[test]
 #[ignore = "reads the installed Wrath client; run with WOW_CLIENT_PROFILE=wrath WOW_DATA=…"]
 fn installed_wrath_framexml_builds_the_stock_hud() {
-    let _ = benilla_formats::wow_data_or_skip!();
+    let data = benilla_formats::wow_data_or_skip!();
     // Every attribute name the loader reads, for the unhandled-attribute audit.
     benilla_ui::framexml::record_queried_attributes(true);
     let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     // A live VM receives its display modes before FrameXML; UIParent uses their aspect ratio.
     script.set_screen_size(1600.0, 1000.0);
+    // As `lifecycle::new_vm` seeds it: stock `Constants.lua` fills the class names at file scope.
+    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    script.set_localized_class_names(
+        benilla_formats::load_chr_classes(&mut chain)
+            .expect("ChrClasses.dbc")
+            .localized_names(),
+    );
+    // A live Wrath account (expansion 2) on the installed locale.
+    script.set_wrath_session(Some(2), vec!["enUS".into()]);
     script.set_screen_resolutions(vec![], Some(benilla_ui::script::ScreenResolution {
         width: 1600, height: 1000,
     }));

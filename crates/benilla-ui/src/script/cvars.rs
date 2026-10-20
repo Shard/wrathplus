@@ -1012,7 +1012,9 @@ mod tests {
 
     #[test]
     fn an_addon_registration_is_reported_to_the_host_once() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
+        // The VM's own stock registrations come first; drain them.
+        s.take_cvar_registrations();
         s.run(r#"RegisterCVar("myAddonKnob", "7")"#).unwrap();
         s.run(r#"RegisterCVar("myAddonKnob", "9")"#).unwrap();
         assert_eq!(
@@ -1083,9 +1085,9 @@ mod tests {
     }
     #[test]
     fn registration_starts_at_the_saved_value_not_the_default() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_cvar_saved_base([("StatusBarText".to_string(), "1".to_string())]);
-        s.register_cvars([("statusBarText", "0"), ("farclip", "500")]);
+        s.register_cvars([("statusBarText", "0"), ("benchKnob", "500")]);
 
         assert_eq!(
             s.eval::<String>(r#"return GetCVar("statusBarText")"#)
@@ -1100,7 +1102,7 @@ mod tests {
             "…while the default stays the default"
         );
         assert_eq!(
-            s.eval::<String>(r#"return GetCVar("farclip")"#).unwrap(),
+            s.eval::<String>(r#"return GetCVar("benchKnob")"#).unwrap(),
             "500",
             "a key the file never carried starts at its default"
         );

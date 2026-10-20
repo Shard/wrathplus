@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn the_two_gossip_quest_lists_split_by_active_and_select_within_themselves() {
         use super::GossipQuestRow;
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         // No menu: `arg.n == 0`, not a nil.
         assert_eq!(s.arity("GetGossipAvailableQuests()").unwrap(), 0);
         assert_eq!(s.arity("GetGossipActiveQuests()").unwrap(), 0);
@@ -328,8 +328,11 @@ mod tests {
         s.set_gossip(Some(m));
 
         assert_eq!(
-            s.eval::<(String, i64, String, i64)>("return GetGossipAvailableQuests()")
-                .unwrap(),
+            // Build 12340: title, level, trivial, daily, repeatable per available row.
+            s.eval::<(String, i64, String, i64)>(
+                "local t1, l1, _, _, _, t2, l2 = GetGossipAvailableQuests() return t1, l1, t2, l2"
+            )
+            .unwrap(),
             (
                 "A Threat Within".to_string(),
                 7,
