@@ -9,7 +9,7 @@ use super::{
     loot_roll, macros, mail, merchant, party, petition, pvp, quest, quest_log,
     reputation, session, simplehtml, skills, slider, social, spellbook, stable, taxi, trade,
     tradeskill, trainer, weapon_enchant, ActionSlot, AuraState, FontObject, ItemTemplateView,
-    MusicRequest, PlayerReqState, RegionData, ScriptDialect, ScriptValue, SoundRequest, UnitState,
+    MusicRequest, PlayerReqState, RegionData, ScriptValue, SoundRequest, UnitState,
     UnitTokenParse,
 };
 
@@ -63,8 +63,6 @@ impl<T: Copy> IdMap<T> {
 /// persistent count the vendored `LUAI_MAXCSTACK` caps.
 pub(crate) struct Model {
     pub(crate) threat: super::ThreatTable,
-    /// The client script ABI this VM was constructed for; immutable for the VM's lifetime.
-    pub(crate) dialect: ScriptDialect,
     /// Every discovered addon in load order: the AddOn API's registry, filled at world entry.
     pub(crate) addons: Vec<super::addon::AddOnInfo>,
     /// The Lua index space into `addons`, a title-sorted, hidden-filtered list (`0x51da70`).
@@ -1128,9 +1126,8 @@ impl Model {
         }
     }
 
-    pub(crate) fn new(dialect: ScriptDialect) -> Model {
+    pub(crate) fn new() -> Model {
         Model {
-            dialect,
             threat: Default::default(),
             addons: Vec::new(),
             addon_index: Vec::new(),
@@ -1211,7 +1208,7 @@ impl Model {
             combat_text_unit: 0,
             unit_auras: HashMap::new(),
             unit_guids: super::UnitGuids {
-                wrath: dialect == super::ScriptDialect::Wrath12340,
+                wrath: true,
                 ..Default::default()
             },
             cancel_aura_requests: Vec::new(),

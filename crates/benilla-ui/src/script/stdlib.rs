@@ -1,17 +1,17 @@
-//! The sandbox and the 1.12 stdlib layer on top of stock Lua 5.1.
+//! The sandbox and the build 12340 stdlib layer on top of Lua 5.1.
 //!
 //! - [`sandbox`]: no filesystem, OS or native reach (`io`, `os`, `package`, `require`, `dofile`,
-//!   `loadfile`, `load`, `module`, `newproxy` and `debug` removed), the reference's `debugstack`,
-//!   and a text-only `loadstring`.
-//! - [`install`]: the 1.12 bare globals (string, table and math aliases, the `debug*` family, the
-//!   error-handler pair), `time` and `date`, the clock and zone getters ([`super::clock`],
-//!   [`super::zone_text`]), and a `string.format` that accepts positional `%N$` specs as the 1.12
-//!   client's does, rewriting them into a sequential format. Mixing positional and sequential
-//!   specs raises, as in the reference, whose single argument cursor a positional spec desyncs.
+//!   `loadfile`, `load`, `module` and `debug` removed), the reference's `debugstack` and
+//!   `debuglocals`, and a text-only `loadstring`.
+//! - [`install`]: the bare globals (string, table and math aliases, the `debug*` family, the
+//!   error-handler pair), `bit`, `time` and `date`, the clock and zone getters
+//!   ([`super::clock`], [`super::zone_text`]), and a `string.format` that accepts positional
+//!   `%N$` specs as the client's does, rewriting them into a sequential format. Mixing positional
+//!   and sequential specs raises, as in the reference, whose single argument cursor a positional
+//!   spec desyncs.
 
 use mlua::{Lua, Value, Variadic};
 
-use super::ScriptDialect;
 
 /// Put native protected operations behind a sticky host check. Lua 5.1 can catch a hook error, and
 /// `coroutine.resume` reports one as a false result. Once the shared budget trips, these wrappers
@@ -66,19 +66,13 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
 
     // Set to nil explicitly, whatever mlua's safe stdlib already leaves out. Build 12340 keeps
     // `newproxy`, which its restricted-environment handles are made of.
-    let wrath = lua
-        .named_registry_value::<bool>("benilla.wrath51")
-        .unwrap_or(false);
     for name in [
-        "io", "os", "package", "require", "dofile", "loadfile", "load", "module", "newproxy",
-        "debug",
+        "io", "os", "package", "require", "dofile", "loadfile", "load", "module", "debug",
     ] {
-        if !(wrath && name == "newproxy") {
-            g.set(name, Value::Nil)?;
-        }
+        g.set(name, Value::Nil)?;
     }
 
-    if wrath {
+    {
         g.set("debuglocals", lua.create_function(|lua, level: Option<usize>| {
             // Inspect primitive locals only; never call tostring/metamethods on addon objects.
             let level = level.unwrap_or(1).min(MAX_DEBUGSTACK_LEVELS);
@@ -170,42 +164,44 @@ pub(super) fn sandbox(lua: &Lua) -> mlua::Result<()> {
 }
 
 /// Install the stdlib layer: the bare globals, `time`/`date` and the positional `format`.
-pub(super) fn install(lua: &Lua, dialect: ScriptDialect) -> mlua::Result<()> {
+pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     install_error_handler(lua)?;
     install_time(lua)?;
     // Before the Lua layer, whose `debugprofile*` pair keeps its own `GetTime`.
     super::clock::install(lua)?;
     super::zone_text::install(lua)?;
-    let source = match dialect {
-        ScriptDialect::Vanilla => WOW_STDLIB,
-        ScriptDialect::Wrath12340 => {
-            install_bit(lua)?;
-            WRATH_STDLIB
-        }
-    };
-    lua.load(source)
+    install_bit(lua)?;
+    lua.load(WRATH_STDLIB)
         .set_name("=[benilla wow stdlib]")
         .set_mode(mlua::ChunkMode::Text)
         .exec()?;
-    // Leave the Vanilla stdlib and its existing wrapper unchanged.
-    if dialect == ScriptDialect::Wrath12340 {
-        let positional = POSITIONAL_FORMAT.replace(
-            "local function reformat(fmt, ...)",
-            "local function reformat(fmt, ...) local arg = {n = select('#', ...), ...}",
-        );
-        lua.load(&positional).set_name("=[benilla Wrath positional format]").exec()?;
-    }
+    let positional = POSITIONAL_FORMAT.replace(
+        "local function reformat(fmt, ...)",
+        "local function reformat(fmt, ...) local arg = {n = select('#', ...), ...}",
+    );
+    lua.load(&positional).set_name("=[benilla Wrath positional format]").exec()?;
     Ok(())
 }
 
 /// The build-12340 client's global aliases over Lua 5.1's libraries, plus its `bit` library.
 const WRATH_STDLIB: &str = r##"
 -- math
-abs, acos, asin, atan, atan2 = math.abs, math.acos, math.asin, math.atan, math.atan2
-ceil, cos, deg, exp, floor = math.ceil, math.cos, math.deg, math.exp, math.floor
+abs = math.abs
+ceil, deg, exp, floor = math.ceil, math.deg, math.exp, math.floor
 frexp, ldexp, log, log10 = math.frexp, math.ldexp, math.log, math.log10
 max, min, mod, rad, random = math.max, math.min, math.fmod, math.rad, math.random
-sin, sqrt, tan = math.sin, math.sqrt, math.tan
+sqrt = math.sqrt
+-- The trig globals take and return DEGREES, unlike `math.*`: stock 3.3.5 FrameXML slides its
+-- bars with `sin(fraction*90+90)` (`MainMenuBar.lua:14`) and pulses with `sin(elapsed*360)`
+-- (`VehicleMenuBar.lua:924`). Labelled: `tan` and the inverses follow sin/cos by convention; no
+-- stock caller pins them.
+function sin(d) return math.sin(math.rad(d)) end
+function cos(d) return math.cos(math.rad(d)) end
+function tan(d) return math.tan(math.rad(d)) end
+function asin(x) return math.deg(math.asin(x)) end
+function acos(x) return math.deg(math.acos(x)) end
+function atan(x) return math.deg(math.atan(x)) end
+function atan2(y, x) return math.deg(math.atan2(y, x)) end
 fastrandom = math.random
 PI = math.pi
 -- string
@@ -341,212 +337,14 @@ fn install_error_handler(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// The stdlib layer in Lua, run once at construction.
-const WOW_STDLIB: &str = r#"
--- ── the bare string family ─────────────────────────────────────────────────────────────────────
--- Every name here is present in the REAL 1.12 client's global table — the in-world `_G` captured
--- from the running reference client (19,572 entries), which is the
--- authority this file answers to.
---
--- `strmatch`, `strrev`, `gmatch`, `strlenutf8` and `strcmputf8i` come from Blizzard's *Era*
--- enumeration, which a Classic Era addon may reach for. **None of them exist in
--- 1.12** — `string.match`/`gmatch` are Lua 5.1 additions the 5.0 client never had — and Era is
--- not our target. They stay out; adding a global the client does not have is how an addon that
--- feature-detects gets sent down a path we cannot honour.
-strlen  = string.len
-strsub  = string.sub
-strupper = string.upper
-strlower = string.lower
-strrep  = string.rep
-strfind = string.find
-strbyte = string.byte
-strchar = string.char
-gsub    = string.gsub
-tinsert = table.insert
-tremove = table.remove
--- `getn`, `sort`, `foreach` and `foreachi` are bound by `lua50`, which owns the
--- 5.0 shapes of `table.getn`/`setn` and must not be shadowed by a second implementation here.
-
--- ── the bare math aliases (the same 1.12 global family; the reference FrameXML uses them
--- unqualified — WorldMapFrame's overlay pool calls ceil/mod, CooldownFrame floor, …). `mod` is
--- fmod under a 5.0-era name (stock 5.1 dropped math.mod).
-ceil  = math.ceil
-floor = math.floor
-abs   = math.abs
-max   = math.max
-min   = math.min
-sqrt  = math.sqrt
-mod   = math.mod        -- 5.0's name for fmod; `math.fmod` is removed by `lua50`
-random = math.random
--- `randomseed` is an ENGINE global in 1.12 exactly like `random` beside it (the captured `_G` types
--- both `function engine`), and it is the half that was missing: `IgniteStatus` calls it at file
--- scope in its OnLoad and dies on `attempt to call global 'randomseed'`. Seeding a PRNG is the one
--- thing an addon does that has no FrameXML counterpart to copy, so the bare name is all it has.
-randomseed = math.randomseed
--- `PI` is an ENGINE global in 1.12, not a FrameXML one: the reference reads it bare (UIParent.lua's
--- `elapsedTime * 2 * PI * ROTATIONS_PER_SECOND`, TabardFrame.lua l.61-68) and no shipped FrameXML
--- file ever assigns it (grepped over the whole 1.12 extraction) — so the client supplies it, here,
--- beside the rest of the bare math family.
-PI = math.pi
--- The 1.12 bare trig globals are DEGREE-based (the reference CombatText's fountain scroll calls
--- cos/sin with degree arguments); rad/deg ride along as the same family.
-function sin(d) return math.sin(math.rad(d)) end
-function cos(d) return math.cos(math.rad(d)) end
-rad = math.rad
-deg = math.deg
--- The rest of the bare math family, each verified present in the real 1.12 client's global
--- table (the captured `_G`).
--- `tan` and the inverses follow sin/cos into DEGREES — same family, same convention; that is
--- consistent-with the verified sin/cos finding rather than separately byte-verified, and it is
--- the convention every addon rotation helper assumes (`atan2` returning degrees is why
--- `atan2(dy, dx)` feeds a texture rotation directly).
-function tan(d) return math.tan(math.rad(d)) end
-function asin(x) return math.deg(math.asin(x)) end
-function acos(x) return math.deg(math.acos(x)) end
-function atan(x) return math.deg(math.atan(x)) end
-function atan2(y, x) return math.deg(math.atan2(y, x)) end
-exp = math.exp
-log = math.log
-log10 = math.log10
-frexp = math.frexp
-ldexp = math.ldexp
-
--- ── the debug* family: six verified STUBS and two real ones ────────────────────────────────────
---
--- All eight, read at the bytes (`0x7027e0`..`0x702860`):
--- `debuginfo`, `debugload`, `debugprint`, `debugdump`, `debugbreak` and `debugtimestamp` are
--- **byte-identical `xor eax,eax; ret` stubs** — three bytes, no `call`, no memory write. They
--- cannot print, log, write or set a global, and they return ZERO Lua values. So these are not
--- no-ops we invented under a real name (an "absent capability"); they are the
--- reference's own no-ops, transcribed.
---
--- That is what lets `BasicControls.xml` stop guarding its `debuginfo()` call and transcribe
--- `_ERRORMESSAGE` verbatim, which it now does.
---
--- `debugprofilestart`/`debugprofilestop` are the two that are REAL (RDTSC via `0x4293d0`): start
--- latches, stop answers the elapsed milliseconds since it. Modelled on `GetTime`'s own clock —
--- the same monotonic session seconds the tick advances — because benilla has no cycle counter and
--- an addon uses these to time its own work, which milliseconds answer honestly. The clock is
--- captured, so an addon that replaces the `GetTime` global cannot bend it.
-do
-    local GetTime = GetTime
-    local function noop() end
-    debuginfo = noop
-    debugload = noop
-    debugprint = noop
-    debugdump = noop
-    debugbreak = noop
-    debugtimestamp = noop
-
-    local profileStart = 0
-    function debugprofilestart() profileStart = GetTime() end
-    function debugprofilestop() return (GetTime() - profileStart) * 1000 end
-end
-
--- ── _G accessors (getglobal/setglobal: _G[name] get/set) ───────────────────────────────
-function getglobal(name) return _G[name] end
-function setglobal(name, value) _G[name] = value end
-
--- ── GetLocale: benilla ships/reads enUS data only (the 5875 MPQs + Spell.dbc enUS column) ──────
-function GetLocale() return "enUS" end
-
--- ── NOT here: wipe / tostringall / strsplit / strjoin / strconcat / strtrim ────────────────────
--- Six 2.0+ names benilla used to define. 1.12 has none of them (absent from
--- `reference/1.12-globals.tsv`, from the stock chain, and from every registrar table), and the
--- reason they were kept — that the vanilla addon ecosystem assumes them — did not survive being
--- checked: the corpus callers are multi-client addons whose vanilla paths raise on a real 1.12
--- client too, or that define the name themselves under their own namespace.
--- An addon reaching for one of these is reaching for a later client's API, and it should find
--- what it would find there: nothing.
-
--- ── Blizzard's positional string.format (%N$) ──────────────────────────────────────────────────
-do
-    -- `_find`/`_sub` are captured for the same reason `_format` is: this wrapper runs on every
-    -- `format` call in the UI and must not follow an addon's later replacement of `string.*`.
-    -- They are CALLS and not method syntax because 1.12 installs no string metatable, so
-    -- `fmt:find(...)` raises there, and here too (`lua50::install` removes the metatable). No
-    -- chunk of ours may use what the reference's VM cannot resolve; the parser enforces that
-    -- for the grammar, and this is its runtime twin.
-    local _format, _find, _sub, _len = string.format, string.find, string.sub, string.len
-    local CONV = "diouxXeEfgGqscp"  -- Lua 5.1 conversion letters
-
-    local function reformat(fmt, ...)
-        if type(fmt) ~= "string" then
-            return _format(fmt, unpack(arg, 1, arg.n))
-        end
-        -- fast path: no "%<digit>" at all ⇒ definitely no positional spec.
-        if not _find(fmt, "%%%d") then
-            return _format(fmt, unpack(arg, 1, arg.n))
-        end
-
-        local args = arg
-        local pieces = {}      -- rebuilt (sequential) format fragments
-        local order = {}       -- for each real conversion: the source arg index, or false=sequential
-        local seen_pos, seen_seq = false, false
-        local npieces, norder = 0, 0
-        local i, len = 1, _len(fmt)
-
-        while i <= len do
-            local c = _sub(fmt, i, i)
-            if c ~= "%" then
-                npieces = npieces + 1; pieces[npieces] = c
-                i = i + 1
-            elseif _sub(fmt, i + 1, i + 1) == "%" then
-                npieces = npieces + 1; pieces[npieces] = "%%"
-                i = i + 2
-            else
-                local j = i + 1
-                local ds, de = _find(fmt, "^%d+%$", j)  -- optional N$
-                if ds then
-                    seen_pos = true
-                    norder = norder + 1; order[norder] = tonumber(_sub(fmt, ds, de - 1))
-                    j = de + 1
-                else
-                    seen_seq = true
-                    norder = norder + 1; order[norder] = false
-                end
-                -- copy flags/width/precision + the conversion letter
-                local ce = _find(fmt, "[" .. CONV .. "]", j)
-                if not ce then
-                    error("invalid conversion in format string", 2)
-                end
-                npieces = npieces + 1; pieces[npieces] = "%" .. _sub(fmt, j, ce)
-                i = ce + 1
-            end
-        end
-
-        if seen_pos and seen_seq then
-            error("cannot mix positional and sequential arguments in format string", 2)
-        end
-
-        local out, seq = {}, 0
-        for k = 1, norder do
-            local idx = order[k]
-            if idx == false then
-                seq = seq + 1
-                out[k] = args[seq]
-            else
-                out[k] = args[idx]
-            end
-        end
-        return _format(table.concat(pieces, "", 1, npieces), unpack(out, 1, norder))
-    end
-
-    string.format = reformat
-    format = reformat
-end
-"#;
-
-// Wrath uses Lua 5.1 varargs for the same existing positional-format extension.
+// Blizzard's positional-format extension, over Lua 5.1 varargs.
 const POSITIONAL_FORMAT: &str = r#"
 -- ── Blizzard's positional string.format (%N$) ──────────────────────────────────────────────────
 do
     -- `_find`/`_sub` are captured for the same reason `_format` is: this wrapper runs on every
     -- `format` call in the UI and must not follow an addon's later replacement of `string.*`.
-    -- They are CALLS and not method syntax because 1.12 installs no string metatable, so
-    -- `fmt:find(...)` raises there, and here too (`lua50::install` removes the metatable). No
-    -- chunk of ours may use what the reference's VM cannot resolve; the parser enforces that
-    -- for the grammar, and this is its runtime twin.
+    -- They are CALLS and not method syntax so an addon replacing the string metatable's
+    -- `__index` cannot reach them either.
     local _format, _find, _sub, _len = string.format, string.find, string.sub, string.len
     local CONV = "diouxXeEfgGqscp"  -- Lua 5.1 conversion letters
 

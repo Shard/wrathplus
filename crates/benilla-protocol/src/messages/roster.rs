@@ -1,9 +1,7 @@
 //! Character select: the `SMSG_CHAR_ENUM` [`Character`] entry (vmangos `Player::BuildEnumData`
 //! order), the create/delete result codes and the create request.
 
-use std::io::{self, Read};
-
-use crate::wire::{read_cstring, read_u32_le, read_u64_le, read_u8, Vector3d};
+use crate::wire::Vector3d;
 
 /// `WorldResult::CharCreateSuccess` / `CharCreateNameInUse` (`SMSG_CHAR_CREATE`).
 pub const CHAR_CREATE_SUCCESS: u8 = 0x2E;
@@ -89,56 +87,4 @@ pub struct Character {
     pub pet_family: u32,
 }
 
-impl Character {
-    pub(super) fn read(r: &mut impl Read) -> io::Result<Self> {
-        let guid = read_u64_le(r)?;
-        let name = read_cstring(r)?;
-        let race = read_u8(r)?;
-        let class = read_u8(r)?;
-        let gender = read_u8(r)?;
-        let skin = read_u8(r)?;
-        let face = read_u8(r)?;
-        let hair_style = read_u8(r)?;
-        let hair_color = read_u8(r)?;
-        let facial_hair = read_u8(r)?;
-        let level = read_u8(r)?;
-        let zone = read_u32_le(r)?;
-        let map = read_u32_le(r)?;
-        let position = Vector3d::read(r)?;
-        let _guild_id = read_u32_le(r)?;
-        let flags = read_u32_le(r)?;
-        let _first_login = read_u8(r)?;
-        let pet_display_id = read_u32_le(r)?;
-        let pet_level = read_u32_le(r)?;
-        let pet_family = read_u32_le(r)?;
-        let mut equipment = [CharEnumItem::default(); 19];
-        for slot in &mut equipment {
-            slot.display_id = read_u32_le(r)?;
-            slot.inventory_type = read_u8(r)?;
-        }
-        let _first_bag_display_id = read_u32_le(r)?;
-        let _first_bag_inventory_id = read_u8(r)?;
-        Ok(Self {
-            guid,
-            name,
-            race,
-            class,
-            gender,
-            skin,
-            face,
-            hair_style,
-            hair_color,
-            facial_hair,
-            level,
-            zone,
-            map,
-            position,
-            flags,
-            customize_flags: 0,
-            equipment,
-            pet_display_id,
-            pet_level,
-            pet_family,
-        })
-    }
-}
+impl Character {}

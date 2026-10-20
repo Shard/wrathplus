@@ -10,15 +10,6 @@ impl Loader<'_> {
         parent_name: &str,
         dbg: &str,
     ) {
-        if self
-            .lua()
-            .app_data_ref::<crate::script::Model>()
-            .expect("model")
-            .dialect
-            != crate::script::ScriptDialect::Wrath12340
-        {
-            return;
-        }
         for container in children_named(el, "Animations") {
             for group in children_named(container, "AnimationGroup") {
                 let name = group.name().map(|n| framexml::resolve_name(n, parent_name));

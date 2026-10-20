@@ -467,15 +467,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     lua.globals().set(
         "SetBagPortaitTexture",
         lua.create_function(|lua, (region, container): (Table, i64)| {
-            if container
-                >= if lua.app_data_ref::<Model>().expect("model").dialect
-                    == super::ScriptDialect::Wrath12340
-                {
-                    12
-                } else {
-                    11
-                }
-            {
+            if container >= 12 {
                 return Err(mlua::Error::runtime("Invalid slot in SetBagPortaitTexture"));
             }
             if container <= 0 {

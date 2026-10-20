@@ -2,10 +2,6 @@
 //! `u32 language`, a per-type sender prefix, `u32 len` (NUL included), the text, `u8 chatTag`.
 //! Also the small chat-adjacent bodies: player not found, notification, played time, random roll.
 
-use std::io;
-
-use crate::wire::{read_cstring, read_u32_le, read_u64_le, read_u8};
-
 // ChatMsg values (vmangos `SharedDefines.h:1191-1301`), only those benilla receives or sends.
 // Text emotes, channel notices and combat, skill, loot and money lines come from other opcodes.
 pub const CHAT_MSG_SAY: u8 = 0x00;
@@ -95,101 +91,4 @@ impl ChatMessage {
     pub fn is_addon(&self) -> bool {
         self.language == super::LANGUAGE_ADDON
     }
-}
-
-/// Read the length-prefixed string shape (`u32 len` including NUL + bytes).
-fn read_len_string(r: &mut &[u8]) -> io::Result<String> {
-    let len = read_u32_le(r)? as usize;
-    if len == 0 {
-        return Ok(String::new());
-    }
-    // The NUL is inside `len`; read through it via the cstring reader and sanity-cap first.
-    if len > r.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            format!("chat text length {len} exceeds remaining {}", r.len()),
-        ));
-    }
-    read_cstring(r)
-}
-
-/// Read an `SMSG_MESSAGECHAT` body.
-pub(super) fn read_message_chat(r: &mut &[u8]) -> io::Result<ChatMessage> {
-    let chat_type = read_u8(r)?;
-    let language = read_u32_le(r)?;
-    let mut sender_guid = 0u64;
-    // 0 unless the shape carries an addressee; the macro expander then uses `sender_guid`.
-    let mut target_guid = 0u64;
-    let mut sender_name = None;
-    let mut channel = None;
-    match chat_type {
-        CHAT_MSG_MONSTER_WHISPER
-        | CHAT_MSG_RAID_BOSS_WHISPER
-        | CHAT_MSG_RAID_BOSS_EMOTE
-        | CHAT_MSG_MONSTER_EMOTE => {
-            sender_name = Some(read_len_string(r)?);
-            target_guid = read_u64_le(r)?;
-        }
-        CHAT_MSG_SAY | CHAT_MSG_PARTY | CHAT_MSG_YELL => {
-            sender_guid = read_u64_le(r)?;
-            // vmangos writes the sender's guid into both slots for these three.
-            target_guid = read_u64_le(r)?;
-        }
-        CHAT_MSG_MONSTER_SAY | CHAT_MSG_MONSTER_YELL => {
-            sender_guid = read_u64_le(r)?;
-            sender_name = Some(read_len_string(r)?);
-            target_guid = read_u64_le(r)?;
-        }
-        CHAT_MSG_CHANNEL => {
-            channel = Some(read_cstring(r)?);
-            let _player_rank = read_u32_le(r)?;
-            sender_guid = read_u64_le(r)?;
-        }
-        // Every other type is `BuildChatPacket`'s `default:` shape: one sender guid.
-        _ => {
-            sender_guid = read_u64_le(r)?;
-        }
-    }
-    let text = read_len_string(r)?;
-    let chat_tag = read_u8(r)?;
-    Ok(ChatMessage {
-        chat_type,
-        language,
-        sender_guid,
-        target_guid,
-        sender_name,
-        channel,
-        text,
-        chat_tag,
-    })
-}
-
-/// Read `SMSG_CHAT_PLAYER_NOT_FOUND`: one cstring, the unnormalized name of an offline or
-/// misspelled whisper target (vmangos `Server/Packets/Chat.cpp:26-29`).
-pub(super) fn read_chat_player_not_found(r: &mut &[u8]) -> io::Result<String> {
-    read_cstring(r)
-}
-
-/// Read `SMSG_NOTIFICATION`: one cstring of server-formatted notice text, which the 1.12 client
-/// shows in the red UIErrorsFrame (vmangos `Server/WorldSession.cpp:900-915`).
-pub(super) fn read_notification(r: &mut &[u8]) -> io::Result<String> {
-    read_cstring(r)
-}
-
-/// Read `SMSG_PLAYED_TIME`, the `/played` answer: total then this-level played time, both `u32`
-/// seconds (vmangos `Server/Packets/Misc.cpp:278-282`).
-pub(super) fn read_played_time(r: &mut &[u8]) -> io::Result<(u32, u32)> {
-    let total = read_u32_le(r)?;
-    let level = read_u32_le(r)?;
-    Ok((total, level))
-}
-
-/// Read the `MSG_RANDOM_ROLL` broadcast (`GroupHandler.cpp:394-422`): `u32` minimum, maximum and
-/// roll, then the roller's unpacked `u64` guid; the request on this opcode is only min and max.
-pub(super) fn read_random_roll(r: &mut &[u8]) -> io::Result<(u32, u32, u32, u64)> {
-    let min = read_u32_le(r)?;
-    let max = read_u32_le(r)?;
-    let roll = read_u32_le(r)?;
-    let guid = read_u64_le(r)?;
-    Ok((min, max, roll, guid))
 }

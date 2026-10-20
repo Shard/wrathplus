@@ -1,5 +1,5 @@
-//! World (`mangosd`) packet bodies: server packets decode into [`ServerPacket`] via
-//! [`parse_server`], client bodies are built here; the header framing lives in [`crate::world`].
+//! The world packets' shared payload types (`SessionEvent` payloads, the descriptor model) and
+//! the remaining 1.12-era bodies; build 12340's codecs live in the `wrath_*` modules.
 
 mod action_bar;
 pub mod addons;
@@ -27,13 +27,11 @@ mod loot;
 mod mail;
 mod meeting_stone;
 mod mirror_timer;
-mod monster_move;
 mod movement;
 pub mod opcode;
 mod opcode_names;
 mod packet;
 mod page_text;
-mod parse;
 mod pet;
 mod petition;
 mod pose;
@@ -57,21 +55,20 @@ mod update_object;
 mod vendor;
 mod world_state;
 pub use action_bar::{
-    set_action_button, set_actionbar_toggles, ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO,
+    set_action_button, ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO,
     ACTION_KIND_SPELL,
 };
-pub use addons::{hidden_from_reply, SecureAddon, STANDARD_MODULUS_CRC, STOCK_SECURE_ADDONS};
+pub use addons::{SecureAddon, STANDARD_MODULUS_CRC, STOCK_SECURE_ADDONS};
 pub use area_trigger::area_trigger;
-pub use attack::{attack_swing, AttackSwingError, AttackerState};
+pub use attack::{AttackSwingError, AttackerState};
 pub use auction::{
     auction_action, auction_duration, auction_error, auction_filter, auction_hello,
-    auction_list_bidder_items, auction_list_items, auction_list_owner_items, auction_place_bid,
+    auction_list_items, auction_place_bid,
     auction_remove_item, auction_sell_item, AuctionBidderNotification, AuctionCommandTail,
     AuctionListEntry, AuctionOwnerNotification, AUCTION_PAGE_SIZE, AUCTION_RECORD_BYTES,
 };
 pub use bank::{
-    autobank_item, autostore_bank_item, bank_slot_result, banker_activate, buy_bank_slot,
-};
+    bank_slot_result, };
 pub use battlefield::{
     battlefield_join, battlefield_list, battlefield_port, battlemaster_join, leave_battlefield,
     BattlefieldList, BattlefieldPosition, BattlefieldPositions, BattlefieldStatus, PvpLogData,
@@ -90,13 +87,9 @@ pub use chat::{
     CHAT_MSG_WHISPER_INFORM, CHAT_MSG_YELL, MACRO_EXPANDED_TYPES,
 };
 pub use client::{
-    auth_session, channel_announcements, channel_ban, channel_invite, channel_kick, channel_list,
-    channel_moderate, channel_moderator, channel_mute, channel_owner, channel_password,
-    channel_set_owner, channel_unban, channel_unmoderator, channel_unmute, char_create,
-    creature_query, force_speed_ack, full_guid, join_channel, knock_back_ack, leave_channel,
-    messagechat, messagechat_channel, messagechat_kind, messagechat_whisper, move_flag_ack,
-    move_spline_done, move_time_skipped, movement, pet_name_query, ping, played_time, query_time,
-    random_roll, teleport_ack, text_emote,
+    channel_list,
+    char_create,
+    creature_query, move_spline_done, movement, ping, played_time, text_emote,
 };
 pub use combat_log::{
     DamageShield, DispelFailed, DispelledAura, EnchantmentLog, EnvironmentalDamageLog, ExecuteLog,
@@ -117,30 +110,23 @@ pub use gm_ticket::{
     GMTICKET_STATUS_DEFAULT, GMTICKET_STATUS_HASTEXT, RESERVED_FOR_FUTURE_USE,
 };
 pub use gossip::{
-    gossip_hello, gossip_select_option, npc_text_query, select_greeting, GossipOption, GossipPoi,
+    npc_text_query, select_greeting, GossipOption, GossipPoi,
     NpcTextBlock, QuestOption, NPC_TEXT_BLOCKS,
 };
 pub use group::{
-    group_accept, group_assistant_leader, group_change_sub_group, group_decline, group_disband,
-    group_invite, group_raid_convert, group_set_leader, group_swap_sub_group, group_uninvite,
-    group_uninvite_guid, loot_method, member_status, minimap_ping, party_member_mask,
-    party_operation, party_result, patch_auras, raid_target_request, raid_target_set,
-    ready_check_answer, ready_check_start, request_party_member_stats, request_raid_info,
-    GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, RaidInstanceEntry, RaidTargetUpdate,
+    loot_method, member_status, minimap_ping, party_member_mask,
+    party_operation, party_result, patch_auras, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, RaidInstanceEntry, RaidTargetUpdate,
     ReadyCheck, GROUP_MEMBER_ASSISTANT,
 };
 pub use guild::{
-    guild_accept, guild_add_rank, guild_command, guild_command_error, guild_create, guild_decline,
-    guild_default_rank, guild_del_rank, guild_demote, guild_disband, guild_event, guild_info,
-    guild_info_text, guild_invite, guild_leader, guild_leave, guild_motd, guild_presence,
-    guild_promote, guild_query, guild_rank, guild_rank_right, guild_remove, guild_roster,
-    guild_set_officer_note, guild_set_public_note, GuildCommandResult, GuildEventNotice, GuildInfo,
+    guild_command, guild_command_error, guild_default_rank, guild_event, guild_presence,
+    guild_rank, guild_rank_right, GuildCommandResult, GuildEventNotice, GuildInfo,
     GuildQueryResponse, GuildRoster, GuildRosterMember, GUILD_INFO_MAX_LENGTH,
     GUILD_MOTD_MAX_LENGTH, GUILD_NAME_MAX_LENGTH, GUILD_NOTE_MAX_LENGTH, GUILD_RANKS_MAX_COUNT,
     GUILD_RANKS_MIN_COUNT, GUILD_RANK_MAX_LENGTH, GUILD_RANK_RIGHT_ORDER,
 };
 pub use instance::{
-    reset_instances, InstanceResetFailed, InstanceResetFailure, RaidGroupOnly, RaidInstanceMessage,
+    InstanceResetFailed, InstanceResetFailure, RaidGroupOnly, RaidInstanceMessage,
     RaidInstanceWarning,
 };
 pub use items::{
@@ -155,9 +141,9 @@ pub use loot::{
     LootRoll, LootRollWon, LootStartRoll,
 };
 pub use mail::{
-    get_mail_list, item_text_query, mail_action, mail_create_text_item, mail_delete, mail_error,
-    mail_mark_as_read, mail_message_type, mail_return_to_sender, mail_take_item, mail_take_money,
-    send_mail, MailAttachment, MailListEntry,
+    item_text_query, mail_action, mail_error,
+    mail_message_type, mail_take_money,
+    MailAttachment, MailListEntry,
 };
 pub use meeting_stone::{
     meeting_stone_join, meeting_stone_leave, MeetingStoneNotice, MeetingStoneSetQueue,
@@ -170,12 +156,10 @@ pub use movement::{
     JumpInfo, MoveMode, MovementInfo, RelayVerb, SpeedKind, SplineMode, TransportPose,
 };
 pub use opcode_names::opcode_name;
-pub use packet::{CreatureQueryInfo, MonsterMoveFacing, ServerPacket};
+pub use packet::{CreatureQueryInfo, MonsterMoveFacing};
 pub use page_text::page_text_query;
-pub use parse::{parse_server, parse_server_with_tail};
 pub use pet::{
-    pet_abandon, pet_action, pet_cancel_aura, pet_rename, pet_set_action, pet_spell_autocast,
-    pet_stop_attack, pet_tame_failure_key, pet_unlearn, PetActionEntry, PetMode, PetSpellCooldown,
+    pet_abandon, pet_action, pet_cancel_aura, pet_rename, pet_set_action, pet_stop_attack, pet_tame_failure_key, PetActionEntry, PetMode, PetSpellCooldown,
     PetSpells, PetUnlearnConfirm, PET_ACTION_SLOTS, PET_ACT_COMMAND, PET_ACT_DISABLED,
     PET_ACT_ENABLED, PET_ACT_PASSIVE, PET_ACT_REACTION, PET_AUTOCAST_ALLOWED, PET_AUTOCAST_ON,
     PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW, PET_COMMAND_STAY,
@@ -184,15 +168,13 @@ pub use pet::{
     PET_TYPE_SPELL_LAST, PET_UNUSABLE_UNIT_FLAGS,
 };
 pub use petition::{
-    offer_petition, petition_buy, petition_decline, petition_query, petition_rename,
-    petition_result, petition_show_list, petition_show_signatures, petition_sign, turn_in_petition,
-    PetitionQueryResponse, PetitionRename, PetitionShowList, PetitionShowListEntry,
+    petition_buy, petition_result, PetitionQueryResponse, PetitionRename, PetitionShowList, PetitionShowListEntry,
     PetitionShowSignatures, PetitionSignResults, PetitionSignature, CHARTER_DISPLAY_ID,
     CHARTER_ITEM_ENTRY, CHARTER_NAME_MAX_LENGTH, ITEM_FLAG_CHARTER, MAX_PETITION_SIGNATURES,
 };
-pub use pose::{set_sheathed, stand_state_change};
+pub use pose::{set_sheathed, };
 pub use progression::{
-    learn_talent, talent_wipe_confirm, ExplorationXp, LevelUpInfo, TalentWipeConfirm, XpGain,
+    talent_wipe_confirm, ExplorationXp, LevelUpInfo, TalentWipeConfirm, XpGain,
 };
 pub use pvp::{inspect_honor_stats, InspectHonorStats, PvpCredit};
 pub use quest::{
@@ -206,7 +188,7 @@ pub use quest::{
     QUEST_REWARDS_COUNT, QUEST_REWARD_CHOICES_COUNT,
 };
 pub use reputation::{
-    set_faction_at_war, set_faction_inactive, set_watched_faction, FACTION_LIST_LEN,
+    FACTION_LIST_LEN,
     WATCHED_FACTION_NONE,
 };
 pub use roster::{
@@ -215,7 +197,6 @@ pub use roster::{
     CHAR_CREATE_SERVER_LIMIT, CHAR_CREATE_SUCCESS, CHAR_DELETE_SUCCESS, CLASS_WARRIOR, GENDER_MALE,
     RACE_HUMAN,
 };
-pub use skills::unlearn_skill;
 pub use social::{
     add_friend, add_ignore, del_friend, del_ignore, friend_list, friend_result, friend_status,
     read_friend_list, read_friend_status, read_ignore_list, read_who, set_looking_for_group, who,
@@ -225,11 +206,11 @@ pub use social::{
 pub use spellbook::SpellCooldown;
 pub use spells::{
     cancel_aura, cast_spell, cast_spell_at_dest, cast_spell_at_source, cast_spell_corpse,
-    cast_spell_gameobject, cast_spell_item, CastOutcome, CorpseTarget, SpellCastTargets,
+    cast_spell_gameobject, CastOutcome, CorpseTarget, SpellCastTargets,
     SpellChainTargets, SpellGo, SpellStart,
 };
 pub use stable::{
-    buy_stable_slot, list_stabled_pets, stable_pet, stable_result, stable_swap_pet, unstable_pet,
+    list_stabled_pets, stable_result, stable_swap_pet, unstable_pet,
     StabledPet,
 };
 pub use summon::{summon_response, SummonRequest};
@@ -237,7 +218,6 @@ pub use tabard::{
     battlemaster_hello, save_guild_emblem, tabard_vendor_activate, GUILD_EMBLEM_RESULT_MESSAGES,
 };
 pub use taxi::{
-    activate_taxi, activate_taxi_express, taxi_node_status_query, taxi_query_available_nodes,
     taxi_reply, TaxiMask,
 };
 pub use trade::{
@@ -245,7 +225,7 @@ pub use trade::{
     TradeStatus, TradeStatusExtended, TRADE_SLOT_COUNT, TRADE_SLOT_NONTRADED,
     TRADE_SLOT_TRADED_COUNT,
 };
-pub use trainer::{train_fail, trainer_buy_spell, trainer_list, trainer_spell_state, TrainerSpell};
+pub use trainer::{train_fail, trainer_list, trainer_spell_state, TrainerSpell};
 pub use tutorial::{tutorial_flag, TutorialFlags};
 pub use update_object::field;
 pub use update_object::{
@@ -256,8 +236,7 @@ pub use update_object::{
     PLAYER_QUEST_LOG_SLOTS, PLAYER_SKILL_SLOTS, UNIT_AURA_POSITIVE_SLOTS, UNIT_AURA_SLOTS,
 };
 pub use vendor::{
-    buy_item, buy_item_in_slot, buy_result, buyback_item, list_inventory, repair_item, sell_item,
-    sell_result, VendorItem,
+    buy_result, buyback_item, sell_result, VendorItem,
 };
 pub use world_state::InitWorldStates;
 

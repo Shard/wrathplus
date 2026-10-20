@@ -242,9 +242,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             Ok(
-                if model.dialect == crate::script::ScriptDialect::Wrath12340
-                    && model.wrath_tracking_selection == Some(1)
-                {
+                if model.wrath_tracking_selection == Some(1) {
                     Some("Interface\\Minimap\\Tracking\\TrivialQuests".into())
                 } else {
                     model.tracking.as_ref().and_then(|t| t.icon.clone())

@@ -1,7 +1,6 @@
 use mlua::{Function, ObjectLike, Table};
 
 use crate::framexml::Element;
-use crate::script::{Model, ScriptDialect};
 
 use super::{children_named, Loader};
 
@@ -15,8 +14,6 @@ impl Loader<'_> {
         dbg: &str,
     ) -> Option<Function> {
         let mut onload = None;
-        // A handler's chunk name is `"<GetName()>:<Handler>"` off the wrapper, `<unnamed>` for a
-        // nameless frame (`0x7025fd`-`0x70263c`), never the loader's `dbg`.
         for scripts in children_named(el, "Scripts") {
             let owner = wrapper
                 .call_method::<Option<String>>("GetName", ())
@@ -48,10 +45,8 @@ impl Loader<'_> {
                 // function: `SetScript` (`0x7025c0`) tests only NULL and the first byte
                 // (`0x7025f8`), and nothing trims the body (`0x6f29d0`). The stock blanks
                 // (`BuffFrame.xml:101`) are whitespace, so their `GetScript` answers a function.
-                let named = (self.lua().app_data_ref::<Model>().expect("model").dialect
-                    == ScriptDialect::Wrath12340)
-                    .then(|| handler.attr("function"))
-                    .flatten()
+                let named = handler
+                    .attr("function")
                     // `function=""` names no handler: it clears, like an empty body.
                     .filter(|global| !global.is_empty());
                 let cleared = handler.body.is_empty() && named.is_none();
@@ -68,7 +63,7 @@ impl Loader<'_> {
                 } else if cleared {
                     None
                 } else {
-                    match self.compile_handler(handler, &el.tag, &name, &owner, dbg) {
+                    match self.compile_handler(handler, &el.tag, &name, dbg) {
                         Some(f) => Some(f),
                         None => continue,
                     }
@@ -110,15 +105,13 @@ impl Loader<'_> {
         onload
     }
 
-    /// Compile a handler body. 1.12 loads it as the chunk itself (`0x704c70`), reading its frame
-    /// from `this`. Build 12340 wraps it in its script's formals ([`native_formals`]) on one line
-    /// and names the chunk `*:<script>`.
+    /// Compile a handler body as build 12340 does: inside its script's formals
+    /// ([`native_formals`]) on one line, in a chunk named `*:<script>`.
     pub(super) fn compile_handler(
         &mut self,
         handler: &Element,
         tag: &str,
         name: &str,
-        owner: &str,
         dbg: &str,
     ) -> Option<Function> {
         // The raw body, never trimmed: a whitespace body is a real empty chunk (`apply_scripts`).
@@ -126,19 +119,10 @@ impl Loader<'_> {
         if body.is_empty() {
             return None;
         }
-        let dialect = self.lua().app_data_ref::<Model>().expect("model").dialect;
-        // Build 12340 names every XML handler chunk `*:<script>` (`0x48fef0`, `"*:%s"`).
-        let chunk_name = match dialect {
-            ScriptDialect::Vanilla => format!("{owner}:{name}"),
-            ScriptDialect::Wrath12340 => format!("*:{name}"),
-        };
-        let body = match dialect {
-            ScriptDialect::Vanilla => body.to_string(),
-            // One line, so an error's line number is the body's own, as in the client.
-            ScriptDialect::Wrath12340 => {
-                format!("return function({}) {body} end", native_formals(tag, name))
-            }
-        };
+        // `0x48fef0` names every XML handler chunk `*:<script>` (`"*:%s"`), and the one-line
+        // wrapper keeps an error's line number the body's own.
+        let chunk_name = format!("*:{name}");
+        let body = format!("return function({}) {body} end", native_formals(tag, name));
         let compiled = self
             .lua()
             .load(&body)
@@ -146,21 +130,15 @@ impl Loader<'_> {
             .set_mode(mlua::ChunkMode::Text)
             .into_function();
         match compiled {
-            Ok(chunk)
-                if self.lua().app_data_ref::<Model>().expect("model").dialect
-                    == ScriptDialect::Wrath12340 =>
-            {
-                match chunk.call::<Function>(()) {
-                    Ok(f) => Some(f),
-                    Err(e) => {
-                        self.report
-                            .errors
-                            .push(format!("{dbg}: compiling <{name}>: {e}"));
-                        None
-                    }
+            Ok(chunk) => match chunk.call::<Function>(()) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    self.report
+                        .errors
+                        .push(format!("{dbg}: compiling <{name}>: {e}"));
+                    None
                 }
-            }
-            Ok(f) => Some(f),
+            },
             Err(e) => {
                 self.report
                     .errors
