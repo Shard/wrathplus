@@ -20,8 +20,14 @@ if [[ -d $CARGO_TARGET_DIR ]] && (( $(du -sk "$CARGO_TARGET_DIR" | cut -f1) > 41
   echo 'quality: own target exceeds 40 GiB; clean it while idle before running' >&2
   exit 2
 fi
-# Re-enter once under the lock so sequential coverage + scoring remain one operation.
+# Re-enter once under a heavy-build slot so sequential coverage + scoring remain one operation:
+# the machine's two-slot `heavy.sh` where it is installed, else the single lock. A caller that
+# already holds a slot (gates.sh, check.sh, CI) sets AZB_QUALITY_LOCKED=1.
 if [[ ${AZB_QUALITY_LOCKED:-0} != 1 ]]; then
+  heavy=${AZB_HEAVY:-$HOME/Workspace/artivus/azerothbench-client/target/azb-live/heavy.sh}
+  if [[ -x $heavy ]]; then
+    exec "$heavy" env AZB_QUALITY_LOCKED=1 nice -n 15 "$0" "$check" "$@"
+  fi
   exec lockf -k /tmp/azb-heavy.lock env AZB_QUALITY_LOCKED=1 nice -n 15 "$0" "$check" "$@"
 fi
 # Test assumptions must not accidentally point vanilla fixtures at Wrath data.
@@ -31,15 +37,15 @@ if [[ $# == 0 ]]; then set -- --workspace; fi
 report=$(mktemp -d /tmp/azb-quality-report.XXXXXX)
 echo "quality artifacts: $report" >&2
 if [[ $check == clippy ]]; then
-  # Rust diagnostics promoted to errors are allowed only by exact committed allowlist.
+  # Every warning fails unless the exact committed allowlist names it. Warnings mode, not
+  # `-D warnings`: a promoted warning stops its dependents' check, hiding their diagnostics.
   set +e
-  cargo clippy --locked --all-targets --message-format=json "$@" -- -D warnings > "$report/clippy.json"
+  cargo clippy --locked --all-targets --message-format=json "$@" > "$report/clippy.json"
   status=$?
   set -e
   python3 scripts/quality/gate.py clippy-report "$report/clippy.json"
-  # Cargo emits build-finished=false for promoted legacy warnings too. Require at least
-  # one diagnostic when it failed; crashes/config/tool failures cannot silently pass.
-  if (( status != 0 )) && ! grep -q '"reason":"compiler-message"' "$report/clippy.json"; then exit "$status"; fi
+  # Warnings do not fail cargo here, so any failure is an error or a tool/config failure.
+  if (( status != 0 )); then exit "$status"; fi
 else
   for tool in cargo-llvm-cov cargo-crap; do command -v "$tool" >/dev/null; done
   # cargo-llvm-cov otherwise stops at an interactive install prompt, hanging an unattended run.

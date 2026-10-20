@@ -451,8 +451,8 @@ fn build_animations(
             .any(|&root| in_subtree(&semantic.skeleton, bone, root))
     };
     for bone in 0..semantic.skeleton.bones.len() {
-        for hand in 0..2 {
-            if !finger_roots[hand].is_empty() && !in_fingers(bone, hand) {
+        for (hand, roots) in finger_roots.iter().enumerate() {
+            if !roots.is_empty() && !in_fingers(bone, hand) {
                 graph.add_target_to_mask_group(bone_target_id(bone as u16), 3 + hand as u32);
                 pose.bone_masks[bone] |= 1 << (3 + hand);
             }

@@ -75,6 +75,14 @@ pub fn load_vehicle_indicators(chain: &mut Chain) -> Result<HashMap<u32, Vehicle
     Ok(out)
 }
 
+/// The `SpellIcon.dbc` row the possess bar's cancel slot shows (`GetPossessInfo(2)`, `0x5d5820`).
+pub const POSSESS_CANCEL_ICON: u32 = 0x2b5;
+
+/// That row's path; `None` when the row is missing.
+pub fn load_possess_cancel_icon(chain: &mut Chain) -> Result<Option<String>> {
+    Ok(crate::dbc::load_spell_icon_map(chain)?.remove(&POSSESS_CANCEL_ICON))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +105,19 @@ mod tests {
         assert!(seats
             .iter()
             .all(|&&(_, x, y)| (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)));
+    }
+
+    #[test]
+    fn installed_possess_cancel_icon_is_an_icon_path() {
+        let data = crate::wow_data_or_skip!();
+        let profile = crate::DataProfile::from_env().expect("profile");
+        let mut chain = Chain::open_profile(&data, &profile).expect("open chain");
+        let icon = load_possess_cancel_icon(&mut chain)
+            .expect("SpellIcon.dbc")
+            .expect("row 0x2b5");
+        assert!(
+            icon.to_ascii_lowercase().starts_with("interface\\icons\\"),
+            "{icon}"
+        );
     }
 }

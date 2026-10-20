@@ -250,7 +250,7 @@ pub use wrath_arena::{
 };
 pub use wrath_runes::{RuneView, WrathRunes};
 pub use wrath_vehicle::{
-    BattlefieldVehicleView, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
+    BattlefieldVehicleView, PossessView, UnitVehicleView, VehicleAimView, VehicleCall, VehicleIndicatorView, VehicleSeatView,
     WrathVehicles,
 };
 pub use wrath_totems::{TotemState, TotemView};

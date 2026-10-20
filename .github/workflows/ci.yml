@@ -41,7 +41,8 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        # The ratchet: warnings mode, every warning fails unless the committed baseline names it.
+        run: AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR=target scripts/quality/run.sh clippy --workspace
       - name: test
         run: cargo test --workspace
       - name: doc-links

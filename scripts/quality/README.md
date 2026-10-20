@@ -1,10 +1,12 @@
-# Opt-in quality ratchets (not enabled)
+# Quality ratchets
 
-Nothing here installs a hook, changes CI, modifies Rust, or rewrites a baseline automatically.
-Activation after cutover must integrate these ratchets into the existing `scripts/gates.sh`
-chain (fmt/clippy/test/doc-links/etc.), not establish a parallel gate system. CI already mirrors
-part of that chain; update its applicable bare-runner checks together when activating. Keep CRAP
-on demand/pre-merge and out of the fast hook. This unit does **not** change gates.sh or CI.
+**Enabled (2026-10-20):** the clippy ratchet is the clippy rung of `scripts/gates.sh`,
+`scripts/check.sh` and CI. LoC, CRAP, machete and typos stay opt-in until the activation plan's
+later steps.
+
+Nothing here installs a hook, modifies Rust, or rewrites a baseline automatically. Ratchets join
+the existing `scripts/gates.sh` chain (fmt/clippy/test/doc-links/etc.), not a parallel gate system;
+CI mirrors its bare-runner checks. Keep CRAP on demand/pre-merge and out of the fast hook.
 
 After cutover/rename the manager can install `scripts/quality/pre-commit`; until then run checks
 explicitly from the repository root. Python 3, Rust tools matching the project toolchain and
@@ -26,8 +28,10 @@ python3 scripts/quality/test_gate.py               # cheap synthetic contract te
   Deletions pass; moving an offender to a new path does not preserve its allowance.
 - Formatting is `rustfmt --check`, edition 2021, `skip_children=true` for explicitly selected
   files; no recursive check of unstaged module children and no automatic formatting.
-- Clippy is `--all-targets -- -D warnings`. Exact legacy diagnostics may be grandfathered by
-  the JSON allowlist: path, lint, message, source SHA-256 and multiplicity. Changing any byte
+- Clippy runs `--all-targets` in warnings mode and fails on every warning the JSON allowlist
+  does not name (`-D warnings` would stop each promoted crate's dependents and hide their
+  diagnostics). Exact legacy diagnostics may be grandfathered by the allowlist: path, lint,
+  message, source SHA-256 and multiplicity. Changing any byte
   in a file invalidates its legacy allowlist (intentionally stricter than changed functions).
   Compiler errors/tool failures cannot be grandfathered. The wrapper records JSON and filters
   promoted legacy warnings instead of globally disabling lints. No wildcard lint allowances.
@@ -57,7 +61,9 @@ unstaged fixes as if they were committed. Gate code/baselines are taken from the
 also. Bootstrap: commit tooling before installing it. Deleted files are skipped. No hook is
 installed by these scripts, and no hook runs merely by committing this unit.
 
-Heavy standalone clippy/coverage commands use `lockf -k /tmp/azb-heavy.lock`, `nice -n 15`,
+Heavy standalone clippy/coverage commands take a slot through the machine's
+`target/azb-live/heavy.sh` (two slots; override with `AZB_HEAVY`), else `lockf -k
+/tmp/azb-heavy.lock`; a caller already holding one sets `AZB_QUALITY_LOCKED=1`. They use `nice -n 15`,
 `CARGO_BUILD_JOBS=4`, `CARGO_INCREMENTAL=0`, and hermetic fixture environment. `CARGO_TARGET_DIR`
 must be set to your own directory (`run.sh` refuses without it), **never another worker's**. Check the 40-GiB cap/free space before a run; coverage must wait for its turn. Artifacts
 are left in a fresh `/tmp/azb-quality-report.*` directory for diagnosis, never committed.
