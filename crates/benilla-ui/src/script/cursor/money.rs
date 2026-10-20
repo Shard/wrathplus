@@ -188,7 +188,7 @@ mod tests {
     fn events(s: &mut UiScript) -> Vec<String> {
         s.run(
             r#"EV = {} F = F or CreateFrame("Frame") F:RegisterEvent("PLAYER_MONEY")
-               F:RegisterEvent("CURSOR_UPDATE") F:SetScript("OnEvent", function() table.insert(EV, event) end)"#,
+               F:RegisterEvent("CURSOR_UPDATE") F:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(EV, event) end)"#,
         )
         .unwrap();
         s.tick(0.0);
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn the_pickup_and_drop_fire_player_money_around_the_clear() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_money(1_000);
         let _ = events(&mut s);
         s.run("PickupPlayerMoney(10)").unwrap();

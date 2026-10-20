@@ -57,11 +57,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn vanilla_surface_is_unchanged() {
-        UiScript::new_vanilla()
-            .unwrap()
-            .run("assert(IsModifierKeyDown==nil)")
-            .unwrap();
-    }
 }

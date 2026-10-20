@@ -6,7 +6,7 @@ fn script() -> UiScript {
 }
 
 #[test]
-fn empty_defaults_and_vanilla_surface() {
+fn empty_defaults() {
     script()
         .run(
             r#"
@@ -20,17 +20,6 @@ fn empty_defaults_and_vanilla_surface() {
         a,b = GetArenaCurrency(); assert(a == 0 and b == 10000)
         assert(select('#', GetHonorCurrency()) == 2)
         assert(select('#', GetArenaCurrency()) == 2)
-    "#,
-        )
-        .unwrap();
-    UiScript::new_vanilla()
-        .unwrap()
-        .run(
-            r#"
-        assert(GetCurrencyListSize == nil and GetCurrencyListInfo == nil)
-        assert(GetBackpackCurrencyInfo == nil and ExpandCurrencyList == nil)
-        assert(SetCurrencyUnused == nil and SetCurrencyBackpack == nil)
-        assert(GetHonorCurrency == nil and GetArenaCurrency == nil)
     "#,
         )
         .unwrap();

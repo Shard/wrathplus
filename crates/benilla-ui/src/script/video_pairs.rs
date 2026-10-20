@@ -207,6 +207,8 @@ mod tests {
         s
     }
 
+
+    /// A 1.12 host for the tests a later step 9 batch converts.
     fn vanilla_script() -> UiScript {
         let s = UiScript::new_vanilla().unwrap();
         s.register_cvars([

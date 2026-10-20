@@ -248,17 +248,13 @@ mod tests {
     /// Three strings and no fourth, as the in-game registrar pushes (`0x4884a0`); this VM is the
     /// in-game one, not the glue (`0x46cd70`, five).
     #[test]
-    fn get_build_info_answers_as_the_1_12_1_client() {
-        let s = UiScript::new_vanilla().unwrap();
+    fn get_build_info_answers_as_the_12340_client() {
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<Vec<String>>("return { GetBuildInfo() }").unwrap(),
-            vec!["1.12.1", "5875", "Sep 19 2006"]
+            vec!["3.3.5", "12340", "Jun 24 2010", "30300"]
         );
-        assert_eq!(
-            s.arity("GetBuildInfo()").unwrap(),
-            3,
-            "three values, never a fourth"
-        );
+        assert_eq!(s.arity("GetBuildInfo()").unwrap(), 4, "the TOC number is fourth");
     }
 
     /// Never nil: addons index with it at file scope, and a nil index errors far from the cause.

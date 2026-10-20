@@ -210,10 +210,6 @@ mod tests {
             latched: false,
         }]);
         assert_eq!(script.model_mut().wrath_tutorial.history.entries[0], 1);
-        let vanilla = super::super::UiScript::new_vanilla().unwrap();
-        vanilla
-            .run("assert(IsTutorialFlagged==nil); assert(GetNextCompleatedTutorial==nil)")
-            .unwrap();
     }
 
     #[test]

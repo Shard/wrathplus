@@ -1,16 +1,16 @@
 //! Frame keyboard delivery: the walk (`0x765f10`) and its existence gate (`0x76b7d0`).
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 
 /// Bucket membership (`0x76af00`) is the keyboard-enabled flag, which `SetScript` never sets.
 #[test]
 fn a_key_script_alone_does_not_put_a_frame_in_the_walk() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         got = nil
         f = CreateFrame("Frame", "KbUnenabled")
-        f:SetScript("OnChar", function() got = arg1 end)
+        f:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) got = arg1 end)
     "#,
     )
     .unwrap();
@@ -42,7 +42,7 @@ fn only_an_onkeyup_still_swallows_the_key_down() {
         downs = 0
         f = CreateFrame("Frame", "KbUpOnly")
         f:EnableKeyboard(true)
-        f:SetScript("OnKeyUp", function() downs = downs + 1 end)
+        f:SetScript("OnKeyUp", function(this, arg1, arg2, arg3, arg4) downs = downs + 1 end)
     "#,
     )
     .unwrap();
@@ -70,7 +70,7 @@ fn the_walk_is_strata_then_level_then_registration() {
             f:SetFrameStrata(strata)
             f:SetFrameLevel(level)
             f:EnableKeyboard(true)
-            f:SetScript("OnKeyDown", function() winner = name end)
+            f:SetScript("OnKeyDown", function(this, arg1, arg2, arg3, arg4) winner = name end)
             return f
         end
         -- registered first, but the LOWEST stratum: must lose despite its huge level
@@ -114,7 +114,7 @@ fn the_first_consumer_ends_the_walk() {
             local f = CreateFrame("Frame", name)
             f:SetFrameStrata(strata)
             f:EnableKeyboard(true)
-            f:SetScript("OnChar", function() table.insert(seen, name) end)
+            f:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) table.insert(seen, name) end)
         end
         mk("KbTip", "TOOLTIP")
         mk("KbDlg", "DIALOG")
@@ -138,7 +138,7 @@ fn a_hidden_frame_is_not_in_the_walk() {
             local f = CreateFrame("Frame", name)
             f:SetFrameStrata(strata)
             f:EnableKeyboard(true)
-            f:SetScript("OnChar", function() winner = name end)
+            f:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) winner = name end)
             return f
         end
         top = mk("KbHidden", "TOOLTIP")
@@ -160,7 +160,7 @@ fn a_raising_handler_still_consumes_and_is_recorded() {
         r#"
         f = CreateFrame("Frame", "KbBoom")
         f:EnableKeyboard(true)
-        f:SetScript("OnChar", function() error("boom") end)
+        f:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) error("boom") end)
     "#,
     )
     .unwrap();
@@ -184,7 +184,7 @@ fn an_unfocused_editbox_declines_rather_than_eating_its_neighbours_keys() {
         decoy = CreateFrame("EditBox", "KbDecoyBox")
         decoy:SetAutoFocus(false)
         decoy:EnableKeyboard(true)
-        decoy:SetScript("OnChar", function() decoyChars = decoyChars + 1 end)
+        decoy:SetScript("OnChar", function(this, arg1, arg2, arg3, arg4) decoyChars = decoyChars + 1 end)
         target = CreateFrame("EditBox", "KbTargetBox")
         target:SetAutoFocus(false)
         target:SetFocus()
@@ -229,7 +229,7 @@ fn an_unfocused_editbox_does_not_swallow_a_focused_boxs_editing_key() {
         decoy = CreateFrame("EditBox", "KbDecoyBox2")
         decoy:SetAutoFocus(false)
         decoy:EnableKeyboard(true)
-        decoy:SetScript("OnKeyUp", function() end)
+        decoy:SetScript("OnKeyUp", function(this, arg1, arg2, arg3, arg4) end)
         target = CreateFrame("EditBox", "KbTargetBox2")
         target:SetAutoFocus(false)
         target:SetText("ab")

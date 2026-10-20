@@ -1098,7 +1098,7 @@ mod tests {
             f:RegisterEvent("CURSOR_UPDATE")
             f:RegisterEvent("ACTIONBAR_SHOWGRID")
             f:RegisterEvent("ACTIONBAR_HIDEGRID")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4)
                 if event == "CURSOR_UPDATE" then updates = updates + 1 end
                 if event == "ACTIONBAR_SHOWGRID" then shows = shows + 1 end
                 if event == "ACTIONBAR_HIDEGRID" then hides = hides + 1 end
@@ -1120,7 +1120,7 @@ mod tests {
     /// `ACTIONBAR_SHOWGRID` since mode 5 is not mode 7.
     #[test]
     fn a_vendor_grab_fires_cursor_update_but_not_the_bar_grid() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_merchant(Some(stock()));
         listen_cursor_events(&mut s);
         s.run("PickupMerchantItem(1)").unwrap();
@@ -1137,7 +1137,7 @@ mod tests {
     #[test]
     fn a_spell_dropped_on_the_vendor_is_a_real_clear() {
         use crate::script::cursor::{self, CursorPayload, CursorSpell};
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_merchant(Some(stock()));
         listen_cursor_events(&mut s);
         s.set_cursor_for_test(CursorPayload::Spell(CursorSpell {

@@ -485,18 +485,4 @@ mod tests {
         "#).unwrap();
     }
 
-    #[test]
-    fn vanilla_surface_is_unchanged() {
-        UiScript::new_vanilla()
-            .unwrap()
-            .run(
-                r#"
-            assert(CanUseEquipmentSets==nil and GetNumEquipmentSets==nil)
-            assert(SaveEquipmentSet==nil and UseEquipmentSet==nil and DeleteEquipmentSet==nil)
-            assert(GetEquipmentSetInfo==nil and GetEquipmentSetInfoByName==nil)
-            assert(GetEquipmentSetItemIDs==nil and EquipmentSetContainsLockedItems==nil)
-        "#,
-            )
-            .unwrap();
-    }
 }

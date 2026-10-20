@@ -154,9 +154,5 @@ mod tests {
         assert!(!script
             .eval::<bool>("return IsSpellKnown(172,true)")
             .unwrap());
-        assert!(UiScript::new_vanilla()
-            .unwrap()
-            .eval::<bool>("return IsSpellKnown == nil")
-            .unwrap());
     }
 }

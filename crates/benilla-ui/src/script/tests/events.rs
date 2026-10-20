@@ -1,21 +1,18 @@
-//! Event registration and dispatch (`0x704d50`, `0x704f10`). Handlers read varargs through Lua
-//! 5.0's implicit `arg` table: `...` is not a value in the 1.12 client's grammar.
+//! Event registration and dispatch.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::*;
 
-/// A handler gets no arguments (`0x705199` calls `lua_pcall` with zero); its inputs are the
-/// `this`, `event` and `argN` globals.
+/// A handler gets its frame, the event name and the event's arguments as parameters.
 #[test]
-fn an_event_handler_gets_no_arguments_and_reads_the_globals() {
-    let mut s = vanilla_script();
+fn an_event_handler_gets_self_event_and_its_arguments() {
+    let mut s = script();
     s.run(
         r#"
         local f = CreateFrame("Frame", "EF")
         f:RegisterEvent("UNIT_HEALTH")
-        f:SetScript("OnEvent", function(a, b, c)
-            r_args = (a == nil and b == nil and c == nil)
-            r_this = (this == EF)
+        f:SetScript("OnEvent", function(self, event, arg1, arg2)
+            r_this = (self == EF)
             r_event = event
             r_arg1 = arg1
             r_arg2 = arg2
@@ -30,10 +27,6 @@ fn an_event_handler_gets_no_arguments_and_reads_the_globals() {
     );
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 
-    assert!(
-        s.eval::<bool>("return r_args").unwrap(),
-        "a declared parameter is nil: no positional argument is passed"
-    );
     assert!(s.eval::<bool>("return r_this").unwrap());
     assert_eq!(s.eval::<String>("return r_event").unwrap(), "UNIT_HEALTH");
     assert_eq!(s.eval::<String>("return r_arg1").unwrap(), "player");
@@ -48,7 +41,7 @@ fn globals_are_restored_after_firing_nesting_safe() {
         this, event, arg1 = "outer_this", "outer_event", "outer_arg1"
         local f = CreateFrame("Frame", "NF")
         f:RegisterEvent("E")
-        f:SetScript("OnEvent", function() end)
+        f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) end)
     "#,
     )
     .unwrap();
@@ -68,7 +61,7 @@ fn handler_errors_are_collected_not_panicked() {
         r#"
         local f = CreateFrame("Frame", "BoomF")
         f:RegisterEvent("E")
-        f:SetScript("OnEvent", function() error("boom") end)
+        f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) error("boom") end)
     "#,
     )
     .unwrap();
@@ -90,9 +83,9 @@ fn events_fire_in_registration_order_fifo() {
         local b = CreateFrame("Frame", "FB")
         local c = CreateFrame("Frame", "FC")
         a:RegisterEvent("E"); b:RegisterEvent("E"); c:RegisterEvent("E")
-        a:SetScript("OnEvent", function() order = order .. "A" end)
-        b:SetScript("OnEvent", function() order = order .. "B" end)
-        c:SetScript("OnEvent", function() order = order .. "C" end)
+        a:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) order = order .. "A" end)
+        b:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) order = order .. "B" end)
+        c:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) order = order .. "C" end)
     "#,
     )
     .unwrap();
@@ -137,7 +130,7 @@ fn has_script_reports_the_kind_is_supported_not_that_one_is_set() {
             RAN = false
             if f:HasScript("OnMouseDown") then
                 local prev = f:GetScript("OnMouseDown")
-                f:SetScript("OnMouseDown", function() RAN = true end)
+                f:SetScript("OnMouseDown", function(this, arg1, arg2, arg3, arg4) RAN = true end)
             end
             f:GetScript("OnMouseDown")()
             return RAN
@@ -164,7 +157,7 @@ fn a_self_unregistering_handler_does_not_rob_its_successor() {
         for _, n in ipairs({"WalkA", "WalkB", "WalkC"}) do
             local f = CreateFrame("Frame", n)
             f:RegisterEvent("E")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4)
                 table.insert(log, n)
                 if n == "WalkB" then WalkB:UnregisterEvent("E") end
             end)
@@ -196,7 +189,7 @@ fn mid_dispatch_removal_of_the_next_stops_and_append_is_visited() {
         local function reg(n, body)
             local f = CreateFrame("Frame", n)
             f:RegisterEvent("E2")
-            f:SetScript("OnEvent", function() table.insert(log, n); if body then body() end end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(log, n); if body then body() end end)
             return f
         end
         reg("NxA", function()
@@ -221,12 +214,12 @@ fn mid_dispatch_removal_of_the_next_stops_and_append_is_visited() {
         local function reg(n, body)
             local f = CreateFrame("Frame", n)
             f:RegisterEvent("E3")
-            f:SetScript("OnEvent", function() table.insert(log, n); if body then body() end end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(log, n); if body then body() end end)
         end
         reg("ApA", function()
             local f = CreateFrame("Frame", "ApLate")
             f:RegisterEvent("E3")
-            f:SetScript("OnEvent", function() table.insert(log, "ApLate") end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(log, "ApLate") end)
         end)
         reg("ApB")
     "#,
@@ -246,12 +239,12 @@ fn mid_dispatch_removal_of_the_next_stops_and_append_is_visited() {
 /// per-event registration.
 #[test]
 fn register_all_events_takes_every_event_and_unregister_all_clears_it() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         seen = {}
         All = CreateFrame("Frame", "AllEv")
-        All:SetScript("OnEvent", function() table.insert(seen, event) end)
+        All:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(seen, event) end)
         "#,
     )
     .unwrap();
@@ -316,11 +309,11 @@ fn an_all_events_listener_runs_after_the_events_own() {
         r#"
         order = {}
         Named = CreateFrame("Frame", "NamedEv")
-        Named:SetScript("OnEvent", function() table.insert(order, "named") end)
+        Named:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(order, "named") end)
         Named:RegisterEvent("PLAYER_LOGIN")
 
         Everything = CreateFrame("Frame", "EveryEv")
-        Everything:SetScript("OnEvent", function() table.insert(order, "all") end)
+        Everything:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) table.insert(order, "all") end)
         Everything:RegisterAllEvents()
         "#,
     )

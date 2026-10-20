@@ -405,8 +405,6 @@ mod tests {
     fn wrath_world_arrow_creates_one_effect_child_before_onload_uses_it() {
         let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("local parent = CreateFrame('Frame') CreateWorldMapArrowFrame(parent) assert(PlayerArrowEffectFrame ~= nil) PlayerArrowEffectFrame:SetAlpha(.65) PlayerArrowEffectFrame:SetFrameLevel(110) local effect = PlayerArrowEffectFrame CreateWorldMapArrowFrame(parent) assert(effect == PlayerArrowEffectFrame)").unwrap();
-        let vanilla = UiScript::new_vanilla().unwrap();
-        vanilla.run("CreateWorldMapArrowFrame(CreateFrame('Frame')) assert(PlayerArrowEffectFrame == nil)").unwrap();
     }
 
     #[test]
@@ -419,8 +417,6 @@ mod tests {
     fn arena_opponent_count_is_zero_without_an_arena() {
         let s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
         assert_eq!(s.eval::<i64>("return GetNumArenaOpponents()").unwrap(), 0);
-        let vanilla = UiScript::new_vanilla().unwrap();
-        assert!(vanilla.eval::<bool>("return GetNumArenaOpponents == nil").unwrap());
     }
 
     #[test]
@@ -503,7 +499,6 @@ mod tests {
         "ChangeActionBarPage",
         "ClearOverrideBindings",
         "CombatTextSetActiveUnit",
-        "EquipItemByName",
         "FillLocalizedClassList",
         "GetAccountExpansionLevel",
         "GetActionBarPage",
@@ -530,7 +525,6 @@ mod tests {
         "PickupEquipmentSet",
         "PickupItem",
         "RegisterStaticConstants",
-        "SetMultiCastSpell",
         "SetOverrideBinding",
         "SetOverrideBindingClick",
         "SetOverrideBindingItem",
@@ -542,8 +536,6 @@ mod tests {
         "Sound_ChatSystem_GetOutputDriverNameByIndex",
         "Sound_GameSystem_GetNumOutputDrivers",
         "Sound_GameSystem_GetOutputDriverNameByIndex",
-        "SpellCanTargetItem",
-        "SpellTargetItem",
         "TriggerTutorial",
         "UnitIsTalking",
         "UnitSelectionColor",

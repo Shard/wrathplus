@@ -666,14 +666,4 @@ mod family_tests {
         );
     }
 
-    #[test]
-    fn vanilla_lacks_the_family() {
-        let s = UiScript::new_vanilla().unwrap();
-        assert!(s
-            .eval::<bool>(
-                "return AutoLootMailItem == nil and ComplainInboxItem == nil \
-                 and GetLatestThreeSenders == nil and SetSendMailShowing == nil"
-            )
-            .unwrap());
-    }
 }

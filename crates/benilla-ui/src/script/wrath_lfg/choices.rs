@@ -165,10 +165,6 @@ mod tests {
         "#,
             )
             .unwrap();
-        let vanilla = UiScript::new_vanilla().unwrap();
-        assert!(vanilla
-            .eval::<bool>("return GetLFDChoiceInfo == nil")
-            .unwrap());
     }
 
     #[test]

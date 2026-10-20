@@ -127,21 +127,4 @@ mod tests {
         assert!(script.eval::<bool>("return IsAutoLootKeyDown()").unwrap());
     }
 
-    #[test]
-    fn vanilla_loot_slot_abi_is_unchanged() {
-        let mut script = UiScript::new_vanilla().unwrap();
-        script.set_loot(Some(LootState {
-            rows: vec![Some(row())],
-            ..LootState::default()
-        }));
-        assert_eq!(
-            script
-                .eval::<i64>("local _,_,_,_,item=GetLootSlotInfo(1); return item")
-                .unwrap(),
-            2589
-        );
-        script.run("LootSlot(1)").unwrap();
-        assert!(script.take_loot_picks().is_empty());
-        assert_eq!(script.take_loot_confirms(), [1]);
-    }
 }

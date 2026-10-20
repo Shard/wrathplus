@@ -75,13 +75,13 @@ fn a_visible_reparent_refires_onhide_then_onshow() {
         New:SetFrameLevel(4)
         Mover = CreateFrame("Frame", "RTMover", Old)
         Kid = CreateFrame("Frame", "RTKid", Mover)
-        Mover:SetScript("OnHide", function()
+        Mover:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4)
             table.insert(log, "hide:" .. Mover:GetParent():GetName())
         end)
-        Mover:SetScript("OnShow", function()
+        Mover:SetScript("OnShow", function(this, arg1, arg2, arg3, arg4)
             table.insert(log, "show:" .. Mover:GetParent():GetName())
         end)
-        Kid:SetScript("OnShow", function()
+        Kid:SetScript("OnShow", function(this, arg1, arg2, arg3, arg4)
             Kid:SetFrameLevel(Kid:GetParent():GetFrameLevel() + 1)
             table.insert(log, "kidshow")
         end)
@@ -178,8 +178,8 @@ fn the_binding_raises_on_cycle_bad_name_and_absent_argument() {
         r#"
         B:SetFrameLevel(9)
         n = 0
-        B:SetScript("OnHide", function() n = n + 1 end)
-        B:SetScript("OnShow", function() n = n + 1 end)
+        B:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4) n = n + 1 end)
+        B:SetScript("OnShow", function(this, arg1, arg2, arg3, arg4) n = n + 1 end)
         B:SetParent(A)
         "#,
     )
