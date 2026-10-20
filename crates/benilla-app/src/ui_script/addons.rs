@@ -3031,11 +3031,11 @@ mod tests {
              \t[\"on\"] = true,\n\
              \t[\"s\"] = \"a\\\"b\",\n\
              \t[\"t\"] = {\n\
-             \t\t[1] = 1,\n\
+             \t\t1, -- [1]\n\
              \t},\n\
              }",
-            "keys always bracketed and quoted, TAB indent per level, trailing comma on every \
-             entry, `\\\"` escaped — the recorded grammar\nGOT:\n{account}"
+            "string keys bracketed and quoted, a list positionally with `-- [n]` (build 12340), TAB \
+             indent per level, trailing comma on every entry, `\\\"` escaped\nGOT:\n{account}"
         );
         assert!(!account.contains("GramChar"), "account file: {account}");
         let per_char = std::fs::read_to_string(home.join("saved/Realm-Char/Gram.lua")).unwrap();

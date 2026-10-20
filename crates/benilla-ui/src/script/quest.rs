@@ -687,7 +687,7 @@ mod tests {
 
     #[test]
     fn choose_reward_error_fires_the_error_event_with_the_global_string() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "ERR_QUEST_MUST_CHOOSE = 'Pick one.' \
              local f = CreateFrame('Frame') f:RegisterEvent('UI_ERROR_MESSAGE') \

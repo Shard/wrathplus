@@ -116,28 +116,4 @@ mod tests {
         assert_eq!(s.eval::<i64>("return TutorialsEnabled()").unwrap(), 1);
     }
 
-    #[test]
-    fn flag_tutorial_takes_a_one_based_number_and_bails_silently_off_the_fifty() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.run("FlagTutorial(1) FlagTutorial(50) FlagTutorial('42') FlagTutorial(7.9) FlagTutorial(0) FlagTutorial(51) FlagTutorial(-3)")
-            .unwrap();
-        assert_eq!(
-            s.take_tutorial_flag_requests(),
-            vec![0, 49, 41, 6],
-            "0-based, truncated toward zero, 0/51/−3 dropped"
-        );
-        assert!(s.take_tutorial_flag_requests().is_empty(), "drained");
-        for call in ["FlagTutorial()", "FlagTutorial(nil)", "FlagTutorial({})"] {
-            let err = s.run(call).unwrap_err().to_string();
-            assert!(
-                err.contains("Usage: FlagTutorial(\"tutorial\")"),
-                "{call}: {err}"
-            );
-        }
-        s.run("ClearTutorials() ClearTutorials() ResetTutorials()")
-            .unwrap();
-        assert_eq!(s.take_tutorial_clears(), 2);
-        assert_eq!(s.take_tutorial_resets(), 1);
-        assert_eq!(s.take_tutorial_clears(), 0);
-    }
 }

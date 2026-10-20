@@ -299,12 +299,12 @@ mod tests {
     /// The nil after the equip is the reference's (`0x4c7cae`), so the same click opens the bag.
     #[test]
     fn an_empty_bag_slot_equips_the_held_bag_and_still_answers_nil() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(Default::default());
         s.run("PickupContainerItem(0, 1)").unwrap();
 
-        assert!(s.eval::<bool>("return PutItemInBag(64) == nil").unwrap());
+        assert!(s.eval::<bool>("return PutItemInBag(68) == nil").unwrap());
         assert!(s.cursor_item().is_none(), "placed, not kept");
         assert_eq!(
             s.take_container_moves(),
@@ -312,7 +312,7 @@ mod tests {
                 src_bag: 0,
                 src_slot: 1,
                 dst_bag: EQUIPMENT_BAG,
-                dst_slot: 64,
+                dst_slot: 68,
                 count: None,
             }]
         );
@@ -333,12 +333,12 @@ mod tests {
 
     #[test]
     fn an_occupied_bag_slot_swaps_with_a_held_bag_and_answers_one() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 1)").unwrap();
 
-        assert_eq!(s.eval::<i64>("return PutItemInBag(64)").unwrap(), 1);
+        assert_eq!(s.eval::<i64>("return PutItemInBag(68)").unwrap(), 1);
         assert!(s.cursor_item().is_none());
         assert_eq!(
             s.take_container_moves(),
@@ -346,7 +346,7 @@ mod tests {
                 src_bag: 0,
                 src_slot: 1,
                 dst_bag: EQUIPMENT_BAG,
-                dst_slot: 64,
+                dst_slot: 68,
                 count: None,
             }]
         );
@@ -354,12 +354,12 @@ mod tests {
 
     #[test]
     fn an_occupied_bag_slot_auto_stores_an_ordinary_item() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 2)").unwrap();
 
-        assert_eq!(s.eval::<i64>("return PutItemInBag(64)").unwrap(), 1);
+        assert_eq!(s.eval::<i64>("return PutItemInBag(68)").unwrap(), 1);
         assert!(s.cursor_item().is_none());
         assert!(s.take_container_moves().is_empty(), "a store, not a swap");
         assert_eq!(
@@ -367,7 +367,7 @@ mod tests {
             vec![BagAutoStore {
                 src_bag: 0,
                 src_slot: 2,
-                // Container 5 is bank bag slot 1 (`ContainerIDToInventoryID(5) == 64`).
+                // Container 5 is bank bag slot 1 (`ContainerIDToInventoryID(5) == 68`).
                 dst_bag: 5,
                 count: None,
             }]
@@ -395,12 +395,12 @@ mod tests {
 
     #[test]
     fn the_answer_is_the_number_one_not_the_boolean_true() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_container(0, Some(backpack()));
         s.set_bank_bag_slots(one_bank_bag());
         s.run("PickupContainerItem(0, 2)").unwrap();
         assert!(s
-            .eval::<bool>("return PutItemInBag(64) == 1 and type(PutItemInBackpack()) ~= 'boolean'")
+            .eval::<bool>("return PutItemInBag(68) == 1 and type(PutItemInBackpack()) ~= 'boolean'")
             .unwrap());
     }
 
@@ -422,19 +422,19 @@ mod tests {
 
     #[test]
     fn pickup_bag_from_slot_takes_the_bag_and_returns_nothing() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_bank_bag_slots(one_bank_bag());
         assert_eq!(
-            s.arity("PickupBagFromSlot(64)").unwrap(),
+            s.arity("PickupBagFromSlot(68)").unwrap(),
             0,
             "the delegate's eax is never tested — no return values at all"
         );
         let held = s.cursor_item().expect("picked up");
         assert_eq!(
             (held.bag, held.slot, held.item_id),
-            (EQUIPMENT_BAG, 64, 4500)
+            (EQUIPMENT_BAG, 68, 4500)
         );
-        assert!(s.eval::<bool>("return IsInventoryItemLocked(64)").unwrap());
+        assert!(s.eval::<bool>("return IsInventoryItemLocked(68)").unwrap());
     }
 
     #[test]

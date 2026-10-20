@@ -1,7 +1,7 @@
 //! The talent bindings over a pushed snapshot, the learn queue, and `SetTalent`: the talent builder
 //! for a passive talent, the spell tooltip with the talent lines interleaved for an exceptional one.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::*;
 
 fn one_tab_state() -> TalentUiState {
@@ -66,7 +66,7 @@ fn one_tab_state() -> TalentUiState {
 
 #[test]
 fn bindings_read_the_pushed_snapshot() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_talents(one_tab_state());
     s.run(
         r#"
@@ -78,13 +78,14 @@ fn bindings_read_the_pushed_snapshot() {
 
         local n, icon, tier, col, rank, max, exc, meets = GetTalentInfo(1, 1)
         assert(n == "Improved Fireball" and tier == 1 and col == 1)
-        assert(rank == 3 and max == 5 and exc == 0 and meets == true)
+        -- Build 12340's flags are 1 or nil.
+        assert(rank == 3 and max == 5 and exc == nil and meets == 1)
         assert(icon == "Interface\\Icons\\Spell_Fire_FlameBolt")
         assert(GetTalentInfo(1, 9) == nil)
 
         -- The prereq triplets, flat (the reference walks arg[5], arg[6], arg[7], ...).
         local pt, pc, pl = GetTalentPrereqs(1, 2)
-        assert(pt == 1 and pc == 1 and pl == false)
+        assert(pt == 1 and pc == 1 and pl == nil)
         assert(GetTalentPrereqs(1, 1) == nil, "no prereqs is empty")
 
         local cp1, cp2 = UnitCharacterPoints("player")

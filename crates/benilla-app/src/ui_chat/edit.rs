@@ -117,23 +117,7 @@ pub(crate) struct ChannelSlot {
     pub state: SlotState,
 }
 
-/// The reference's per-slot state (`+0x9c`), in the values whose notice token differs: the stock
-/// `ChatFrame_OnEvent`'s `YOU_LEFT` branch deletes the window's channel registration.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum SlotState {
-    /// `0` (confirmed) and `1` (join sent) in one: the reference's walk sends a LEAVE only from 0,
-    /// so an unconfirmed slot here sends one the server answers "Not on channel".
-    #[default]
-    Joined,
-    /// `2`, renamed with its re-join pending (`0x49bcd3`, in the rename `0x49bc50`): the confirming
-    /// `YOU_JOINED` carries the `YOU_CHANGED` token, "Changed Channel: [%s]".
-    Renamed,
-    /// `3`, suspended (`0x49bcf0`): the row stopped applying, in 1.12 data a city-only channel
-    /// outside a capital. The record and number survive, and `YOU_LEFT` carries the `SUSPENDED`
-    /// token (`0x49c0e0`), which keeps the window's registration.
-    Suspended,
-}
-
+pub(crate) use crate::app_core::chat::SlotState;
 impl ChannelSlot {
     /// A new slot in state `Joined`: claimed by the walk at send time or by a confirmed join.
     pub(crate) fn joined(name: &str) -> Self {
