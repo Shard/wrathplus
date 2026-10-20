@@ -380,14 +380,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     g.set(
         "GetAuctionItemInfo",
         lua.create_function(|lua, (kind, index): (String, usize)| {
-            let (row, wrath) = {
+            let row = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                (row_at(&model, &kind, index), model.dialect == super::ScriptDialect::Wrath12340)
+                row_at(&model, &kind, index)
             };
             let sale_status = |mut v: Vec<Value>| {
-                if wrath {
-                    v.push(Value::Integer(0));
-                }
+                v.push(Value::Integer(0));
                 MultiValue::from_vec(v)
             };
             let Some(r) = row else {
@@ -782,12 +780,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, ()| {
             let (info, extras) = {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let extras = (model.dialect == super::ScriptDialect::Wrath12340)
-                    .then(|| sell_item_extras(&model));
-                (sell_item_info(&model), extras)
+                (sell_item_info(&model), sell_item_extras(&model))
             };
             let with_extras = |mut v: Vec<Value>| {
-                if let Some((per_unit, stack, total)) = extras {
+                let (per_unit, stack, total) = extras;
+                {
                     v.extend([
                         Value::Integer(i64::from(per_unit)),
                         Value::Integer(i64::from(stack)),

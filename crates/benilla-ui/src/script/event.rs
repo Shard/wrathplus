@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use mlua::{Function, Lua, Table, Value};
 
-use super::{Model, ScriptDialect, ScriptValue, REG_SCRIPTS};
+use super::{Model, ScriptValue, REG_SCRIPTS};
 use crate::script::object::frame_wrapper;
 use crate::widget::{ButtonState, FrameHandle};
 
@@ -215,7 +215,7 @@ fn fire(
     invoke_handler(lua, wrapper, &func, event_name, extra)
 }
 
-/// Invoke one engine handler according to the VM's immutable client ABI.
+/// Invoke one engine handler with build 12340's ABI.
 pub(crate) fn invoke_handler(
     lua: &Lua,
     wrapper: Table,
@@ -223,11 +223,7 @@ pub(crate) fn invoke_handler(
     event_name: Option<&str>,
     extra: Vec<Value>,
 ) -> mlua::Result<()> {
-    let dialect = lua.app_data_ref::<Model>().expect("model app_data").dialect;
-    match dialect {
-        ScriptDialect::Vanilla => invoke_with_globals(lua, wrapper, func, event_name, extra),
-        ScriptDialect::Wrath12340 => invoke_with_arguments(lua, wrapper, func, event_name, extra),
-    }
+    invoke_with_arguments(lua, wrapper, func, event_name, extra)
 }
 
 /// Build 12340's handler ABI (`0x819ea0`): `self`, then the event name for `OnEvent`, then the
@@ -298,42 +294,3 @@ fn arg_name(i: usize) -> Cow<'static, str> {
     }
 }
 
-/// The calling convention, shared by [`fire`] and the loader's `OnLoad`: sets `this`, `event` and
-/// `arg1..argN` and calls the handler with no arguments, as `0x705199` calls `lua_pcall` with
-/// zero; the globals are restored after the call, even on error, so nested fires are safe.
-pub(crate) fn invoke_with_globals(
-    lua: &Lua,
-    wrapper: Table,
-    func: &Function,
-    event_name: Option<&str>,
-    extra: Vec<Value>,
-) -> mlua::Result<()> {
-    let g = lua.globals();
-
-    let saved_this: Value = g.get("this")?;
-    let saved_event: Value = g.get("event")?;
-    let n = extra.len();
-    let mut saved_args: Vec<Value> = Vec::with_capacity(n);
-    for i in 1..=n {
-        saved_args.push(g.get::<Value>(arg_name(i).as_ref())?);
-    }
-
-    g.set("this", wrapper.clone())?;
-    if let Some(ev) = event_name {
-        g.set("event", lua.create_string(ev)?)?;
-    }
-    for (i, v) in extra.iter().enumerate() {
-        g.set(arg_name(i + 1).as_ref(), v.clone())?;
-    }
-
-    // A protected call; the globals are restored before its outcome returns.
-    let outcome = func.call::<()>(());
-
-    g.set("this", saved_this)?;
-    g.set("event", saved_event)?;
-    for (i, v) in saved_args.into_iter().enumerate() {
-        g.set(arg_name(i + 1).as_ref(), v)?;
-    }
-
-    outcome
-}

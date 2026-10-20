@@ -5,48 +5,6 @@ use crate::loader;
 use crate::script::{ScriptDialect, ScriptValue, SeededCvar, UiScript, UnitGuids, UnitState};
 
 #[test]
-fn vanilla_remains_the_default_and_keeps_legacy_semantics() {
-    let mut s = UiScript::new_vanilla().unwrap();
-    assert_eq!(s.dialect(), ScriptDialect::Vanilla);
-    assert!(s.eval::<bool>("return select == nil").unwrap());
-
-    s.run(
-        "f=CreateFrame('Frame'); f:RegisterEvent('E'); \
-         f:SetScript('OnEvent', function(a) LEGACY={a,this,event,arg1} end)",
-    )
-    .unwrap();
-    s.fire_event("E", vec![ScriptValue::Str("payload".into())]);
-    assert!(s
-        .eval::<bool>("return LEGACY[1] == nil and LEGACY[2] == f")
-        .unwrap());
-    assert_eq!(
-        s.eval::<String>("return LEGACY[3]..':'..LEGACY[4]")
-            .unwrap(),
-        "E:payload"
-    );
-}
-
-#[test]
-fn dialect_parser_and_generic_for_are_isolated_between_simultaneous_states() {
-    let vanilla = UiScript::new_vanilla().unwrap();
-    let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    for _ in 0..2 {
-        assert!(vanilla.run("return #{} ").is_err());
-        assert!(vanilla.run("return 5 % 2").is_err());
-        assert!(vanilla.run("return function(...) return ... end").is_err());
-        assert_eq!(
-            vanilla
-                .eval::<i64>("local n=0; for k,v in {a=2} do n=n+v end; return n")
-                .unwrap(),
-            2
-        );
-        assert_eq!(wrath.eval::<i64>("return #{1,2}, 5 % 2").unwrap(), 2);
-        assert_eq!(wrath.eval::<i64>("return 5 % 2").unwrap(), 1);
-        assert!(wrath.run("for k,v in {a=2} do end").is_err());
-    }
-}
-
-#[test]
 fn wrath_keeps_native_lua51_select_length_and_table_semantics() {
     let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     assert_eq!(s.dialect(), ScriptDialect::Wrath12340);
@@ -67,15 +25,15 @@ fn seeded_cvar(name: &str, value: &str) -> SeededCvar {
 }
 
 #[test]
-fn vanilla_cvar_surface_and_unbounded_registry_are_unchanged() {
+fn a_seeded_cvar_reads_back_and_a_host_write_records_no_change() {
     let mut s = UiScript::new().unwrap();
-    s.seed_cvars([seeded_cvar("realmName", "Vanilla Realm")]);
+    s.seed_cvars([seeded_cvar("realmName", "Seeded Realm")]);
 
     assert_eq!(
         s.eval::<(String, String)>("return GetCVar('REALMNAME'), GetCVarDefault('realmName')")
             .unwrap(),
         (
-            "Vanilla Realm".into(),
+            "Seeded Realm".into(),
             "host-default-not-a-wrath-claim".into()
         )
     );

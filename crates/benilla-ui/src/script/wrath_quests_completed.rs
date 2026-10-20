@@ -100,12 +100,4 @@ mod tests {
             .eval::<bool>("local t = GetQuestsCompleted() return t[3] == true and t[7] == nil")
             .unwrap());
     }
-
-    #[test]
-    fn the_vanilla_dialect_has_neither_function() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Vanilla).unwrap();
-        assert!(s
-            .eval::<bool>("return QueryQuestsCompleted == nil and GetQuestsCompleted == nil")
-            .unwrap());
-    }
 }

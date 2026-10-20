@@ -227,23 +227,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .and_then(|n| model.quest_log.entries.get(n))
                     .cloned()
             };
-            let wrath = lua.app_data_ref::<Model>().expect("model app_data").dialect
-                == super::ScriptDialect::Wrath12340;
             let Some(e) = entry else {
                 // `0x5e5cc0` out of range: no title, level 0, no tag, group 0, then nils and quest 0.
-                if wrath {
-                    let mut v = vec![Value::Nil, Value::Integer(0), Value::Nil, Value::Integer(0)];
-                    v.extend([Value::Nil, Value::Nil, Value::Nil, Value::Nil, Value::Integer(0)]);
-                    return Ok(MultiValue::from_vec(v));
-                }
-                return Ok(MultiValue::from_vec(vec![
-                    Value::Nil,
-                    Value::Integer(0),
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                    Value::Nil,
-                ]));
+                let mut v = vec![Value::Nil, Value::Integer(0), Value::Nil, Value::Integer(0)];
+                v.extend([Value::Nil, Value::Nil, Value::Nil, Value::Nil, Value::Integer(0)]);
+                return Ok(MultiValue::from_vec(v));
             };
             let tag = match &e.tag {
                 Some(t) => Value::String(lua.create_string(t)?),
@@ -259,26 +247,16 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             // `0x5e5cc0`: 2.0+ puts `suggestedGroup` fourth and appends `isDaily, questID`; a
             // header's level and quest are 0. A tenth (`displayQuestID`) follows only with that
             // debug cvar set: labelled, not served.
-            if wrath {
-                return Ok(MultiValue::from_vec(vec![
-                    Value::String(lua.create_string(&e.title)?),
-                    Value::Integer(if e.is_header { 0 } else { i64::from(e.level) }),
-                    tag,
-                    Value::Integer(i64::from(e.suggested_group)),
-                    flag(e.is_header),
-                    flag(e.is_header && e.collapsed),
-                    complete,
-                    flag(e.daily),
-                    Value::Integer(if e.is_header { 0 } else { i64::from(e.quest_id) }),
-                ]));
-            }
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&e.title)?),
-                Value::Integer(i64::from(e.level)),
+                Value::Integer(if e.is_header { 0 } else { i64::from(e.level) }),
                 tag,
+                Value::Integer(i64::from(e.suggested_group)),
                 flag(e.is_header),
                 flag(e.is_header && e.collapsed),
                 complete,
+                flag(e.daily),
+                Value::Integer(if e.is_header { 0 } else { i64::from(e.quest_id) }),
             ]))
         })?,
     )?;
@@ -378,70 +356,66 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         i64::from(d.required_money)
     })?;
 
-    if lua.app_data_ref::<Model>().expect("model app_data").dialect
-        == super::ScriptDialect::Wrath12340
-    {
-        install_detail_count(lua, "GetQuestLogRewardXP", |d| i64::from(d.reward_xp))?;
-        install_detail_count(lua, "GetQuestLogRewardHonor", |d| i64::from(d.reward_honor))?;
-        install_detail_count(lua, "GetQuestLogRewardTalents", |d| {
-            i64::from(d.reward_talents)
-        })?;
-        install_detail_count(lua, "GetQuestLogRewardArenaPoints", |d| {
-            i64::from(d.reward_arena_points)
-        })?;
+    install_detail_count(lua, "GetQuestLogRewardXP", |d| i64::from(d.reward_xp))?;
+    install_detail_count(lua, "GetQuestLogRewardHonor", |d| i64::from(d.reward_honor))?;
+    install_detail_count(lua, "GetQuestLogRewardTalents", |d| {
+        i64::from(d.reward_talents)
+    })?;
+    install_detail_count(lua, "GetQuestLogRewardArenaPoints", |d| {
+        i64::from(d.reward_arena_points)
+    })?;
+    g.set(
+        "GetQuestLogGroupNum",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(selected_quest(&model).map_or(0, |e| e.suggested_group))
+        })?,
+    )?;
+    for (name, title) in [
+        ("GetQuestLogRewardTitle", true),
+        ("GetQuestLogCompletionText", false),
+    ] {
         g.set(
-            "GetQuestLogGroupNum",
-            lua.create_function(|lua, ()| {
+            name,
+            lua.create_function(move |lua, ()| {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(selected_quest(&model).map_or(0, |e| e.suggested_group))
-            })?,
-        )?;
-        for (name, title) in [
-            ("GetQuestLogRewardTitle", true),
-            ("GetQuestLogCompletionText", false),
-        ] {
-            g.set(
-                name,
-                lua.create_function(move |lua, ()| {
-                    let model = lua.app_data_ref::<Model>().expect("model app_data");
-                    Ok(model.selected_quest_detail().and_then(|d| {
-                        if title {
-                            d.reward_title.clone()
-                        } else {
-                            d.completion_text.clone()
-                        }
-                    }))
-                })?,
-            )?;
-        }
-        // WatchFrame.lua:1468 passes watch positions, not quest-log indices.
-        g.set(
-            "ShiftQuestWatches",
-            lua.create_function(|lua, (from, to): (usize, usize)| {
-                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-                let watches = &mut model.quest_log_watched;
-                if from > 0 && to > 0 && from <= watches.len() && to <= watches.len() && from != to
-                {
-                    let id = watches.remove(from - 1);
-                    watches.insert(to - 1, id);
-                }
-                Ok(())
-            })?,
-        )?;
-        g.set(
-            "GetQuestWatchIndex",
-            lua.create_function(|lua, index: u32| {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(watch_id_at(&model, index).and_then(|id| {
-                    model
-                        .quest_log_watched
-                        .iter()
-                        .position(|w| *w == id)
-                        .map(|i| i + 1)
+                Ok(model.selected_quest_detail().and_then(|d| {
+                    if title {
+                        d.reward_title.clone()
+                    } else {
+                        d.completion_text.clone()
+                    }
                 }))
             })?,
         )?;
     }
+    // WatchFrame.lua:1468 passes watch positions, not quest-log indices.
+    g.set(
+        "ShiftQuestWatches",
+        lua.create_function(|lua, (from, to): (usize, usize)| {
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let watches = &mut model.quest_log_watched;
+            if from > 0 && to > 0 && from <= watches.len() && to <= watches.len() && from != to
+            {
+                let id = watches.remove(from - 1);
+                watches.insert(to - 1, id);
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "GetQuestWatchIndex",
+        lua.create_function(|lua, index: u32| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(watch_id_at(&model, index).and_then(|id| {
+                model
+                    .quest_log_watched
+                    .iter()
+                    .position(|w| *w == id)
+                    .map(|i| i + 1)
+            }))
+        })?,
+    )?;
 
     // `name, texture, numItems, quality, isUsable`, the giver panels' shape, as one stock routine
     // lays out both (`QuestFrameItems_Update`, `QuestFrame.lua:311`): five values, `isUsable` 1 or

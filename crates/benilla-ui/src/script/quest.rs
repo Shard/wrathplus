@@ -227,75 +227,71 @@ pub(super) fn item_vec<'a>(state: &'a QuestState, kind: &str) -> Option<&'a Vec<
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 
-    if lua.app_data_ref::<Model>().expect("model app_data").dialect
-        == super::ScriptDialect::Wrath12340
-    {
-        for (name, pick) in [
-            (
-                "GetRewardXP",
-                (|q: &QuestState| q.reward_xp) as fn(&QuestState) -> u32,
-            ),
-            ("GetRewardHonor", |q: &QuestState| q.reward_honor),
-            ("GetRewardTalents", |q: &QuestState| q.reward_talents),
-            ("GetRewardArenaPoints", |q: &QuestState| {
-                q.reward_arena_points
-            }),
-            ("GetSuggestedGroupNum", |q: &QuestState| {
-                q.suggested_group_num
-            }),
-        ] {
-            g.set(
-                name,
-                lua.create_function(move |lua, ()| {
-                    let model = lua.app_data_ref::<Model>().expect("model app_data");
-                    Ok(model.quest.as_ref().map_or(0, pick))
-                })?,
-            )?;
-        }
+    for (name, pick) in [
+        (
+            "GetRewardXP",
+            (|q: &QuestState| q.reward_xp) as fn(&QuestState) -> u32,
+        ),
+        ("GetRewardHonor", |q: &QuestState| q.reward_honor),
+        ("GetRewardTalents", |q: &QuestState| q.reward_talents),
+        ("GetRewardArenaPoints", |q: &QuestState| {
+            q.reward_arena_points
+        }),
+        ("GetSuggestedGroupNum", |q: &QuestState| {
+            q.suggested_group_num
+        }),
+    ] {
         g.set(
-            "GetRewardTitle",
-            lua.create_function(|lua, ()| {
+            name,
+            lua.create_function(move |lua, ()| {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model.quest.as_ref().and_then(|q| q.reward_title.clone()))
-            })?,
-        )?;
-        g.set(
-            "QuestGetAutoAccept",
-            lua.create_function(|lua, ()| {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model.quest.as_ref().is_some_and(|q| q.auto_accept))
-            })?,
-        )?;
-        g.set(
-            "GetAvailableQuestInfo",
-            lua.create_function(|lua, index: usize| {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let row = model
-                    .quest
-                    .as_ref()
-                    .and_then(|q| q.available_info.get(index.wrapping_sub(1)));
-                Ok(match row {
-                    Some(row) => MultiValue::from_vec(vec![
-                        Value::Boolean(row.trivial),
-                        Value::Boolean(row.daily),
-                        Value::Boolean(row.repeatable),
-                    ]),
-                    None => MultiValue::from_vec(vec![Value::Nil, Value::Nil, Value::Nil]),
-                })
-            })?,
-        )?;
-        g.set(
-            "IsActiveQuestTrivial",
-            lua.create_function(|lua, index: usize| {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model
-                    .quest
-                    .as_ref()
-                    .and_then(|q| q.active_info.get(index.wrapping_sub(1)))
-                    .map(|row| row.trivial))
+                Ok(model.quest.as_ref().map_or(0, pick))
             })?,
         )?;
     }
+    g.set(
+        "GetRewardTitle",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(model.quest.as_ref().and_then(|q| q.reward_title.clone()))
+        })?,
+    )?;
+    g.set(
+        "QuestGetAutoAccept",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(model.quest.as_ref().is_some_and(|q| q.auto_accept))
+        })?,
+    )?;
+    g.set(
+        "GetAvailableQuestInfo",
+        lua.create_function(|lua, index: usize| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let row = model
+                .quest
+                .as_ref()
+                .and_then(|q| q.available_info.get(index.wrapping_sub(1)));
+            Ok(match row {
+                Some(row) => MultiValue::from_vec(vec![
+                    Value::Boolean(row.trivial),
+                    Value::Boolean(row.daily),
+                    Value::Boolean(row.repeatable),
+                ]),
+                None => MultiValue::from_vec(vec![Value::Nil, Value::Nil, Value::Nil]),
+            })
+        })?,
+    )?;
+    g.set(
+        "IsActiveQuestTrivial",
+        lua.create_function(|lua, index: usize| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(model
+                .quest
+                .as_ref()
+                .and_then(|q| q.active_info.get(index.wrapping_sub(1)))
+                .map(|row| row.trivial))
+        })?,
+    )?;
 
     // ── Text getters ──
     fn install_text(lua: &Lua, name: &str, pick: fn(&QuestState) -> String) -> mlua::Result<()> {

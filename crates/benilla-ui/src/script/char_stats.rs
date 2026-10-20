@@ -893,10 +893,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     "Invalid inventory slot in GetInventorySlotInfo",
                 ));
             };
-            let id = if lua.app_data_ref::<Model>().expect("model").dialect
-                == super::ScriptDialect::Wrath12340
-                && *id >= 64
-            {
+            let id = if *id >= 64 {
                 *id + 4
             } else {
                 *id
