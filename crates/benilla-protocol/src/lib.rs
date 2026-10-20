@@ -78,14 +78,14 @@ pub mod wrath_world;
 pub mod wrath_misc;
 pub mod wrath_progress;
 pub use events::{
-    decode, CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
+    CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
     SessionEvent, SessionEventKind, SplineEffect, SplineInterpolation,
 };
 pub use messages::field;
 pub use messages::{
     AttackSwingError, CharCreateReq, CharEnumItem, Character, CorpseLook, CreateSpline, ItemInfo,
     JumpInfo, MonsterMoveFacing, MoveMode, MoverState, ObjectFields, OwnerFallback, RelayVerb,
-    ServerPacket, SpeedKind, SplineMode, TransportPose, CHARACTER_FLAG_GHOST,
+    SpeedKind, SplineMode, TransportPose, CHARACTER_FLAG_GHOST,
     CHARACTER_FLAG_HIDE_CLOAK, CHARACTER_FLAG_HIDE_HELM, CHARACTER_FLAG_RENAME,
 };
 

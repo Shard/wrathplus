@@ -2,16 +2,17 @@
 //! The first check that fires decides, in the reference's order: missing, the visiting guard (a
 //! cycle is loadable), enabled, banned, corrupt, version, dependencies, demand.
 //!
-//! The version gate is an exact `==` against a hard-coded 11200 (`0x51d7d0`), so 11201 is out of
-//! date and a missing `## Interface` compares as 0. With `checkAddonVersion` off the reason is
+//! The version gate is an exact `==` against the client's interface, 30300, so 30301 is out of
+//! date and a missing `## Interface` compares as 0. Labelled: the exact compare is 1.12's
+//! (`0x51d7d0`), carried to 12340. With `checkAddonVersion` off the reason is
 //! reset to none, so force-load falls through to the dependency and demand checks.
 //!
 //! The reason renders once (`0x51e930`): the addon's own token, else `DEP_` and the deepest failing
 //! dependency's token, else nil. `BANNED`, `CORRUPT` and `INSECURE` read the server's
 //! `SMSG_ADDON_INFO` signature state, which is not modelled; they are never produced.
 
-/// The `## Interface` this client implements, the reference's hard-coded `0x2bc0`.
-pub const CLIENT_INTERFACE: u32 = 11200;
+/// The `## Interface` build 12340 implements.
+pub const CLIENT_INTERFACE: u32 = 30300;
 
 /// One addon as the gate reads it; every addon registry lowers into this.
 pub struct GateRow<'a> {
@@ -66,7 +67,7 @@ pub fn can_load(rows: &[GateRow], index: usize, demand_only: bool, version_check
     can_load_for_interface(rows, index, demand_only, version_check, CLIENT_INTERFACE)
 }
 
-/// [`can_load`] with the exact interface selected by the hosting script dialect.
+/// [`can_load`] against an explicit client interface.
 pub(crate) fn can_load_for_interface(
     rows: &[GateRow],
     index: usize,

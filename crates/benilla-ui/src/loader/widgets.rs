@@ -221,15 +221,8 @@ impl Loader<'_> {
             for f in children_named_any(el, &children) {
                 // `<Font>`-typed elements (`0x778bf4` → `0x783c30`): `inherits=` and `font=` land
                 // in one slot and `font=` wins (`0x783d22`). `style=` is 2.0's spelling of the
-                // font object (`<NormalFont style="GameFontNormalLeft"/>`), read for Wrath only.
-                let wrath = self.lua().app_data_ref::<crate::script::Model>().expect("model").dialect
-                    == crate::script::ScriptDialect::Wrath12340;
-                let attrs: &[&str] = if wrath {
-                    &["style", "inherits", "font"]
-                } else {
-                    &["inherits", "font"]
-                };
-                for &attr in attrs {
+                // font object (`<NormalFont style="GameFontNormalLeft"/>`).
+                for attr in ["style", "inherits", "font"] {
                     if let Some(name) = f.attr(attr) {
                         self.call(wrapper, method, name.to_string(), dbg);
                     }

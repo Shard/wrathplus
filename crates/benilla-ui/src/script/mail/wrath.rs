@@ -482,7 +482,6 @@ mod tests {
     #[test]
     fn native_inbox_exposes_total_and_attachment_slot_without_stack_narrowing() {
         let mut script = crate::script::UiScript::new().unwrap();
-        script.model_mut().dialect = crate::script::ScriptDialect::Wrath12340;
         script.set_wrath_mail(Some(Inbox {
             total_count: 70,
             rows: vec![Row {

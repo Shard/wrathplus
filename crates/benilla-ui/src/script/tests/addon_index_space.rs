@@ -11,7 +11,7 @@ fn seeded() -> UiScript {
     let row = |name: &str, title: Option<&str>| AddOnInfo {
         name: name.into(),
         title: title.map(str::to_owned),
-        interface: 11200,
+        interface: 30300,
         enabled: true,
         ..Default::default()
     };

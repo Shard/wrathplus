@@ -137,7 +137,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // behind two vararg verbs (`0x4e2430`, `0x4e2580`); the app splits them at parse time.
     fn quest_rows(lua: &Lua, active: bool) -> mlua::Result<MultiValue> {
         let model = lua.app_data_ref::<Model>().expect("model app_data");
-        let wrath = model.dialect == super::ScriptDialect::Wrath12340;
         let rows: Vec<GossipQuestRow> = model.gossip.as_ref().map_or_else(Vec::new, |m| {
             m.quests
                 .iter()
@@ -150,14 +149,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         for q in rows {
             out.push(Value::String(lua.create_string(&q.title)?));
             out.push(Value::Integer(i64::from(q.level)));
-            if wrath {
-                out.push(Value::Boolean(q.trivial));
-                if active {
-                    out.push(Value::Boolean(q.complete));
-                } else {
-                    out.push(Value::Boolean(q.daily));
-                    out.push(Value::Boolean(q.repeatable));
-                }
+            out.push(Value::Boolean(q.trivial));
+            if active {
+                out.push(Value::Boolean(q.complete));
+            } else {
+                out.push(Value::Boolean(q.daily));
+                out.push(Value::Boolean(q.repeatable));
             }
         }
         Ok(MultiValue::from_vec(out))
@@ -172,31 +169,27 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, ()| quest_rows(lua, true))?,
     )?;
 
-    if lua.app_data_ref::<Model>().expect("model app_data").dialect
-        == super::ScriptDialect::Wrath12340
-    {
-        for (name, active) in [
-            ("GetNumGossipAvailableQuests", false),
-            ("GetNumGossipActiveQuests", true),
-        ] {
-            g.set(
-                name,
-                lua.create_function(move |lua, ()| {
-                    let model = lua.app_data_ref::<Model>().expect("model app_data");
-                    Ok(model.gossip.as_ref().map_or(0, |m| {
-                        m.quests.iter().filter(|q| q.active == active).count()
-                    }))
-                })?,
-            )?;
-        }
+    for (name, active) in [
+        ("GetNumGossipAvailableQuests", false),
+        ("GetNumGossipActiveQuests", true),
+    ] {
         g.set(
-            "GetNumGossipOptions",
-            lua.create_function(|lua, ()| {
+            name,
+            lua.create_function(move |lua, ()| {
                 let model = lua.app_data_ref::<Model>().expect("model app_data");
-                Ok(model.gossip.as_ref().map_or(0, |m| m.options.len()))
+                Ok(model.gossip.as_ref().map_or(0, |m| {
+                    m.quests.iter().filter(|q| q.active == active).count()
+                }))
             })?,
         )?;
     }
+    g.set(
+        "GetNumGossipOptions",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(model.gossip.as_ref().map_or(0, |m| m.options.len()))
+        })?,
+    )?;
 
     // A select's index is 1-based within its own list, as `GossipFrame.lua:73` numbers the
     // buttons; it maps back to the whole-menu position the app's queue holds.

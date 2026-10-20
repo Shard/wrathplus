@@ -313,33 +313,22 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
     // Build 12340's `GetPetActionSlotUsable(index)` (`0x5d5400` → `0x5d3fd0`): the bar's usability
     // and the slot's own; an empty slot is usable.
-    if lua.app_data_ref::<Model>().expect("model app_data").dialect
-        == crate::script::ScriptDialect::Wrath12340
-    {
-        g.set(
-            "GetPetActionSlotUsable",
-            lua.create_function(move |lua, i: u32| {
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let slot = slot_at(&model, i).is_none_or(|s| s.view.usable);
-                Ok(flag(model.pet_bar.actions_usable && slot))
-            })?,
-        )?;
-    }
+    g.set(
+        "GetPetActionSlotUsable",
+        lua.create_function(move |lua, i: u32| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let slot = slot_at(&model, i).is_none_or(|s| s.view.usable);
+            Ok(flag(model.pet_bar.actions_usable && slot))
+        })?,
+    )?;
 
-    // An out-of-range index answers a single nil, which the Lua reads as an empty slot.
+    // An out-of-range index answers seven nils, which the Lua reads as an empty slot.
     g.set(
         "GetPetActionInfo",
         lua.create_function(move |lua, i: u32| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let Some(slot) = slot_at(&model, i) else {
-                return Ok(MultiValue::from_vec(vec![
-                    Value::Nil;
-                    if model.dialect == crate::script::ScriptDialect::Wrath12340 {
-                        7
-                    } else {
-                        1
-                    }
-                ]));
+                return Ok(MultiValue::from_vec(vec![Value::Nil; 7]));
             };
             let v = &slot.view;
             let text = |s: &Option<String>| match s {
@@ -365,14 +354,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let now = crate::script::clock::now(lua);
             let model = lua.app_data_ref::<Model>().expect("model app_data");
             let slot = slot_at(&model, i);
-            let wrath = model.dialect == super::ScriptDialect::Wrath12340;
             // Native 0x5d5280 only queries cooldown history for spell types 1/8–17.
-            if wrath && !slot.is_some_and(|s| matches!((s.view.packed >> 24) & 0x3f, 1 | 8..=17)) {
+            if !slot.is_some_and(|s| matches!((s.view.packed >> 24) & 0x3f, 1 | 8..=17)) {
                 return Ok((0.0, 0.0, 0));
             }
             Ok(match slot.and_then(|s| s.cooldown) {
                 // Native history 0x807980 keeps held entries alive on the current clock.
-                Some((_, _, false)) if wrath => (now, 0.001, 0),
+                Some((_, _, false)) => (now, 0.001, 0),
                 Some((start, duration, enabled)) if start + duration > now || !enabled => {
                     (start, duration, i32::from(enabled))
                 }

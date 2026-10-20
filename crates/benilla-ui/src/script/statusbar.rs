@@ -104,8 +104,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                 (sb.min, sb.max) = range;
                 (range_changed, store_value(sb, sb.value), sb.min, sb.max)
             })?;
-            let wrath = lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Wrath12340;
-            if range_changed && wrath {
+            if range_changed {
                 event::fire_widget_handler(lua, super::object::decode_id(&this)?, "OnMinMaxChanged",
                     vec![Value::Number(min as f64), Value::Number(max as f64)])?;
             }

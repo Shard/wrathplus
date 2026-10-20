@@ -1,7 +1,7 @@
 //! The WoW stdlib: positional `format`, the bare-global aliases, the sandbox, `debugstack`,
 //! `GetTime`, `time`/`date`, `RunScript` and the Lua 5.0 dialect.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 
 // ── The positional format wrapper ──
 
@@ -40,7 +40,7 @@ fn positional_format_reorders_and_mix_is_an_error() {
 
 #[test]
 fn stdlib_aliases_and_helpers() {
-    let s = vanilla_script();
+    let s = script();
     s.run(
         r#"
         -- getglobal on a named frame
@@ -57,9 +57,10 @@ fn stdlib_aliases_and_helpers() {
         tremove(t, 1)
         assert(t[1] == 20)
 
-        -- and the six 2.0 names that are NOT here
-        assert(wipe == nil and tostringall == nil)
-        assert(strsplit == nil and strjoin == nil and strconcat == nil and strtrim == nil)
+        -- and the 2.0 string and table helpers 3.3.5 adds
+        assert(type(wipe) == "function" and type(tostringall) == "function")
+        assert(type(strsplit) == "function" and type(strjoin) == "function")
+        assert(type(strconcat) == "function" and type(strtrim) == "function")
     "#,
     )
     .unwrap();
@@ -136,10 +137,10 @@ fn the_first_debugstack_line_is_a_frame() {
     );
 }
 
-/// The reference's Lua 5.0 writes a named frame as `` in function `name' ``, opening with a
-/// backtick, which `AceLibrary.lua:139`'s `argCheck` pattern `` "([`<].-['>])" `` needs.
+/// `debugstack` writes a named frame as `` in function `name' ``, opening with a backtick: build
+/// 12340 carries that format string itself, apart from Lua's own `'%s'` quoting.
 #[test]
-fn a_named_frame_uses_the_5_0_backtick_quoting() {
+fn a_named_frame_uses_the_backtick_quoting() {
     let s = script();
     let found: String = s
         .eval(
@@ -250,17 +251,13 @@ fn gettime_starts_at_zero_and_tracks_tick() {
 /// The rest of the engine's bare string and math globals, and the later-client names it lacks.
 #[test]
 fn the_rest_of_the_bare_globals() {
-    let s = vanilla_script();
+    let s = script();
     s.run(
         r#"
         -- string family
         assert(strbyte("A") == 65 and strchar(65) == "A")
 
-        -- and the Era-only names are NOT here either: the 5.0 client has no
-        -- string.match/gmatch, and claiming otherwise misleads an addon that feature-detects.
-        assert(strmatch == nil and gmatch == nil and strrev == nil)
-        assert(strlenutf8 == nil and strcmputf8i == nil)
-        assert(securecall == nil and hooksecurefunc == nil and issecure == nil)
+        assert(strmatch("ab12", "%d+") == "12" and strrev("ab") == "ba")
 
         -- math family
         assert(exp(0) == 1 and log(1) == 0 and log10(100) == 2)
@@ -274,40 +271,6 @@ fn the_rest_of_the_bare_globals() {
         assert(math.abs(atan(1) - 45) < 1e-9)
         assert(math.abs(atan2(1, 0) - 90) < 1e-9)
     "#,
-    )
-    .unwrap();
-}
-
-/// 1.12 runs Lua 5.0 (`0x811b30`, "Lua: Lua 5.0 Copyright..."); this VM is mlua's `lua51`, and the
-/// 5.0 idioms vanilla addons use run on it, above all the implicit vararg `arg` table.
-#[test]
-fn the_lua_5_0_dialect_vanilla_addons_are_written_in_runs_here() {
-    let s = vanilla_script();
-    s.run(
-        r##"
-        -- The implicit vararg table, 5.0's spelling of what 5.1 does with `...`.
-        local function varargs(...) return arg.n, arg[1], arg[2] end
-        local n, first, second = varargs("a", "b")
-        assert(n == 2 and first == "a" and second == "b")
-
-        -- 5.1's parser synthesizes `arg` only for a vararg function that does NOT also mention
-        -- `...` in its body, so mixing the two spellings in one function would leave `arg` nil.
-        -- `...` as a value is not in this grammar at all, so nothing can clear the flag and
-        -- EVERY vararg function has its `arg`.
-        local function fixed_and_varargs(a, ...) return a, arg.n, arg[1] end
-        local a, n, first = fixed_and_varargs("a", "b", "c")
-        assert(a == "a" and n == 2 and first == "b")
-
-        -- 5.0's table/string/math spellings, all of which 5.1 renamed.
-        assert(table.getn({ 1, 2, 3 }) == 3)
-        assert(string.gfind ~= nil)          -- 5.1 renamed this to string.gmatch
-        assert(math.mod(7, 3) == 1)
-        -- ...and the 5.1 OPERATORS 5.0 lacks are not in the grammar: `%`, `#`, and `...` as a
-        -- value all fail to compile, exactly as they do on the 1.12 client.
-        assert(loadstring("return 7 % 3") == nil)
-        assert(loadstring("return #({1})") == nil)
-        assert(loadstring("return function(...) return ... end") == nil)
-    "##,
     )
     .unwrap();
 }
