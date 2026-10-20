@@ -30,7 +30,6 @@ pub(crate) use load::pvp_rp;
 use bevy::prelude::*;
 
 use crate::net::{RealmChoice, RealmListMessage, RealmRequest};
-use benilla_formats::RealmCategory;
 use benilla_protocol::RealmInfo;
 
 /// The persisted 1.12 CVar naming the last realm connected to (`0x83f2d0`); the SavedVariables
@@ -41,62 +40,7 @@ pub(crate) const CVAR_REALM_NAME: &str = "realmName";
 /// dialog is up.
 const REFRESH_SECS: f32 = 5.0;
 
-/// The realm list, the selection on it, and the policy's memory.
-#[derive(Resource, Default)]
-pub(crate) struct Realms {
-    /// Every realm the auth server advertised, in wire order.
-    pub(super) realms: Vec<RealmInfo>,
-    /// The highlighted row by realm name, so a refresh that adds or drops a realm cannot move it.
-    selected: Option<String>,
-    /// The client Region's categories ([`category`]), read once at startup; `None` until then,
-    /// and every realm lists untabbed.
-    pub(super) categories: Option<Vec<RealmCategory>>,
-    /// The tab in front, `RealmList.selectedCategory`: a 1-based ordinal over the categories
-    /// holding a realm.
-    pub(super) category: Option<usize>,
-    /// `[0x837e98]`, the stored category `GetSelectedCategory` opens the list on, by index into
-    /// [`Self::categories`]; `None` is its `-1` load value.
-    chosen_category: Option<usize>,
-    /// First visible row within the selected category (`RealmList.offset`).
-    pub(super) offset: usize,
-    /// Which column the list is sorted on, and which way.
-    pub(super) sort: Sort,
-    /// `RealmList:IsVisible()`. While set, a published list is a refresh and is never
-    /// auto-answered.
-    pub(super) shown: bool,
-    /// `GetRealmInfo`'s `currentRealm`, the row highlighted when nothing else is. The reference
-    /// case-folds the `realmName` CVar (`0x46ef9e`, via `0x5ab7d0` on the handle from `0x63db90`)
-    /// against the realm name, and `ConnectToRealm` (`0x46b217`) writes the CVar before it dials.
-    /// Ours is set when we answer a park and seeded from the persisted CVar, because benilla
-    /// writes `realmName` only at world entry (the VM's `set_realm_name`).
-    current: Option<String>,
-    /// Seconds until the next refresh request.
-    refresh_in: f32,
-    /// `WOW_REALM`, read once.
-    env_realm: Option<String>,
-    env_read: bool,
-}
-
-/// One of the four sort columns, `SortRealms`' string argument.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum SortKey {
-    /// `SortRealms("characters")`, comparator case 0: the account's character count.
-    Characters,
-    /// `SortRealms("load")`, case 1: the computed load band, not the raw population.
-    Load,
-    /// `SortRealms("name")`, case 2: a case-folding compare.
-    Name,
-    /// `SortRealms("mode")`, case 3: the `(pvp, rp)` pair.
-    Type,
-}
-
-/// The sort config (`0xb41f40`): four `{key, descending}` records. The comparator (`0x46e790`)
-/// walks them in order and the first that does not tie decides, negated by its own `descending`.
-/// The default, `[characters, load, name, mode]` all ascending, is written once per process
-/// (`0x46e430`), so a click persists for the session. Ascending characters is higher count first.
-#[derive(Clone, Copy)]
-pub(super) struct Sort(pub(super) [(SortKey, bool); 4]);
-
+pub(crate) use crate::app_core::ui_flags::{Realms, Sort, SortKey};
 impl Default for Sort {
     fn default() -> Self {
         Self([

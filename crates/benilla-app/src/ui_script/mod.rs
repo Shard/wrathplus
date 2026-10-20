@@ -59,13 +59,9 @@ pub(crate) struct CapturePointerPinned(pub(crate) bool);
 #[derive(Resource, Default)]
 pub(crate) struct EguiPointerOver(pub(crate) bool);
 
-/// Whether the dev `I` inspector's world picking is armed; `player::control` and `target::click`
-/// read it every frame, so it lives here, and the default (disarmed) is the player's.
-#[derive(Resource, Default)]
-pub(crate) struct InspectMode {
-    pub(crate) enabled: bool,
-}
-
+pub(crate) use crate::app_core::ui_flags::{
+    InspectMode, PlayerUiClickConsumed, PlayerUiHover, UiClock, UiKeyboardCapture, UiScaleCvar,
+};
 /// One frame's UI-pass phase split in μs, as the `[ui-cost]` line prints it; owned by the
 /// producer so it exists whether or not its reader, `hover_log`, is compiled in.
 #[derive(Resource, Default, Clone)]
@@ -93,33 +89,6 @@ pub(crate) struct UiFrameCost {
 /// Whether [`UiFrameCost`] is wanted this run: `WOW_UI_COST=1` or the hover recorder.
 #[derive(Resource, Default)]
 pub(crate) struct UiCostWanted(pub(crate) bool);
-
-/// The mouse-enabled player-UI frame under the cursor; world pick and camera look yield to it.
-#[derive(Resource, Default)]
-pub(crate) struct PlayerUiHover(pub(crate) Option<u32>);
-
-/// Who owns this frame's keys (the client's `DAT_00cf4dc8 != 0` gate), written in [`UiInput`] and
-/// read after it: a focused EditBox takes every key, a shown keyboard-enabled frame only the key
-/// it ate. Neither releases a held key: only the window deactivate (`0x514490`, from `0x493058`)
-/// and the world-enter cascade (`0x5144c0`) clear the direction bits, so W keeps running while
-/// you type.
-#[derive(Resource, Default)]
-pub(crate) struct UiKeyboardCapture {
-    /// A focused EditBox eats every key (`0x77b35e` returns 1 on every path but alt-arrow).
-    pub(crate) typing: bool,
-    /// Keys a shown keyboard-enabled frame consumed this frame (the existence gate, `0x76b7d0`),
-    /// per key so the map eating `M` suppresses no other binding; raw codes, as read.
-    pub(crate) consumed: Vec<bevy::input::keyboard::KeyCode>,
-    /// The arrows fall through: the focused box is in alt-arrow mode and ALT is up, so the
-    /// reference declines them at `0x77b1c4` and `CGWorldFrame` runs their bindings.
-    pub(crate) arrows_fall_through: bool,
-}
-
-/// A left press the UI consumed without hitting a frame (a payload dropped on empty world), which
-/// world click-pick and orbit-start yield to. Over a world object the reference keeps an item
-/// payload and runs SELECT instead.
-#[derive(Resource, Default)]
-pub(crate) struct PlayerUiClickConsumed(pub(crate) bool);
 
 /// What [`extract::tick_script`] hands [`extract::paint_script`]; with `live` false (no VM or
 /// window) the paint does nothing.
@@ -152,18 +121,6 @@ pub(crate) struct UiPaint;
 
 pub(crate) use crate::app_core::schedule::UiInput;
 
-/// The frame's atomic (`Instant`, `GetTime`) pair, the one base for mapping a store `Instant` onto
-/// `GetTime`: `anchor`'s steps are the VM clock's deltas, so a mapped start is stable frame to
-/// frame. Neither leg restarts with the VM: the reference's `GetTime` is `GetTickCount`, and stock
-/// `Cooldown.lua:3` gates on `start > 0`, so a reset would hide every running cooldown's sweep.
-#[derive(Resource)]
-pub(crate) struct UiClock {
-    /// `Time<Real>::last_update()` at the tick that produced [`Self::ui_now`].
-    pub(crate) anchor: std::time::Instant,
-    /// The VM clock after that tick, in seconds since this process started.
-    pub(crate) ui_now: f64,
-}
-
 /// The pre-boot pair, replaced by [`lifecycle::seed_vm_clock`] at the first VM.
 impl Default for UiClock {
     fn default() -> Self {
@@ -185,11 +142,6 @@ pub(crate) fn run_or_warn(script: &benilla_ui::script::UiScript, chunk: &str) {
         warn!("ui_script: chunk failed: {e}");
     }
 }
-
-/// The reference's `uiScale` CVar: the VM's screen is `768/uiScale` units tall, so
-/// `uiScale = 768/screenH` is pixel-perfect. Tests pin the `Default` 1.0.
-#[derive(Resource)]
-pub(crate) struct UiScaleCvar(pub(crate) f32);
 
 impl Default for UiScaleCvar {
     fn default() -> Self {

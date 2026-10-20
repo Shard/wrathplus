@@ -17,46 +17,7 @@ pub(crate) mod feed;
 pub(crate) mod native_who;
 mod query;
 
-/// The social session mirror: filled by the social handlers, read by the feed, cleared on
-/// disconnect.
-#[derive(Resource, Default)]
-pub(crate) struct SocialState {
-    /// The friend list in wire order (vmangos walks a guid-keyed map); the feed sorts for display.
-    friends: Vec<FriendEntry>,
-    /// Build 12340's contact notes by friend guid (`GetFriendInfo`'s seventh return).
-    notes: std::collections::HashMap<u64, String>,
-    ignores: Vec<u64>,
-    /// The selected friend as a guid, like the reference's `+0x648`; 0 is none.
-    selected_friend: u64,
-    /// The selected ignore as a guid (the reference's `+0x720`).
-    selected_ignore: u64,
-    /// The friend guids in the order the feed last showed them, for Lua's row indices.
-    display_order: Vec<u64>,
-    ignore_display_order: Vec<u64>,
-    /// The last `/who` answer; `who_total` is the server's full match count.
-    pub(crate) who: Vec<benilla_protocol::types::WhoEntry>,
-    who_total: u32,
-    /// Native routing compares the uncapped first wire count (006b8720).
-    native_who_count: Option<usize>,
-    pub(crate) pending_native_who:
-        std::collections::VecDeque<(u32, Vec<benilla_protocol::wrath_who::Entry>)>,
-    /// Native rows retained losslessly; shared display rows intentionally omit gender.
-    pub(crate) native_who_rows: Vec<benilla_protocol::wrath_who::Entry>,
-    /// The `/who` sort chain (`SortWho`'s seven `{key, dir}` slots at `0xc2817c`), pushed with the
-    /// rows so the binding can re-sort synchronously.
-    who_sort: benilla_ui::script::WhoSortChain,
-    /// `SetWhoToUI`, which the Who frame sets on show and clears on hide.
-    who_to_ui: bool,
-    /// Results whose line waits on a name query (the reference formats from the name cache).
-    pending_lines: Vec<FriendStatusUpdate>,
-    /// Set when the friend list changed, so the feed fires its list event.
-    friends_dirty: bool,
-    /// A `ShowFriends()` is out: the next list fires `FRIENDLIST_SHOW`, not `FRIENDLIST_UPDATE`.
-    pub(crate) friends_show_pending: bool,
-    ignores_dirty: bool,
-    who_dirty: bool,
-}
-
+pub(crate) use crate::app_core::interaction::SocialState;
 impl SocialState {
     /// Drop the session's state: the server re-sends both lists at login, and a stale ignore list
     /// would silence the wrong guids. The `/who` sort chain survives, since the reference

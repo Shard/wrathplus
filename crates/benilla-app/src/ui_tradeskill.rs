@@ -32,11 +32,7 @@ use crate::ui_spellbook::SkillLines;
 use crate::ui_unit::UnitFeed;
 use benilla_assets::{AssetSet, LockRecover, WorldAssets};
 
-/// Opener spell ids (effect 47) that `send_spell_cast` intercepted, opened by
-/// [`open_trade_skill`] the same frame.
-#[derive(Resource, Default)]
-pub(crate) struct TradeSkillOpens(pub(crate) Vec<u32>);
-
+pub(crate) use crate::app_core::interaction::TradeSkillOpens;
 /// The open book's skill line. The Lua close and the session end clear it: a logout replaces the
 /// VM without running the old `OnHide`, so the close alone never comes.
 #[derive(Resource, Default)]

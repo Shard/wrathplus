@@ -30,13 +30,7 @@ const NPC_FLAG_REPAIR: u32 = 0x1000;
 const BUYBACK_SLOT_FIRST: u32 = 74;
 
 pub(crate) use crate::app_core::catalogs::RepairTables;
-/// The open vendor and its `SMSG_LIST_INVENTORY` rows, until a close or a disconnect.
-#[derive(Resource, Default)]
-pub(crate) struct MerchantOpen {
-    pub(crate) vendor: Option<u64>,
-    /// In wire order, which is the 1-based display order.
-    pub(crate) items: Vec<VendorItem>,
-}
+pub(crate) use crate::app_core::interaction::MerchantOpen;
 
 impl MerchantOpen {
     pub(crate) fn open(&mut self, vendor: u64, items: Vec<VendorItem>) {

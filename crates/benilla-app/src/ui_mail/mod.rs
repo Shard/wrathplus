@@ -10,7 +10,7 @@
 //! the icon because opening a letter arms a deferred refresh (`[0xb6efcc]`) and the mailbox close
 //! re-asks the server.
 
-use benilla_protocol::types::{mail_error, MailListEntry};
+use benilla_protocol::types::mail_error;
 use bevy::prelude::*;
 
 use benilla_ui::script::{MailInboxRow, ScriptValue, StationeryView, UiScript};
@@ -21,7 +21,6 @@ use crate::names::NameCache;
 use crate::net::{
     ClientCommand, EnteredWorldMessage, NetCommands, ObjectStore, Objects, SelfPlayer,
 };
-use crate::query_cache::QueryCache;
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
@@ -48,14 +47,7 @@ const CHECK_INBOX_THROTTLE_SECS: f64 = 60.0;
 const STATIONERY_ICON_NORMAL: &str = "Interface\\Icons\\INV_Misc_Note_01";
 const STATIONERY_ICON_GM: &str = "Interface\\Icons\\Mail_GMIcon";
 
-/// The `Stationery.dbc` catalog; without it every mail gets the default backdrop.
-#[derive(Resource)]
-pub(crate) struct Stationery(pub(crate) benilla_formats::StationeryCatalog);
-
-/// `Package.dbc`'s rows, in file order; without them `GetNumPackages()` answers 0.
-#[derive(Resource)]
-pub(crate) struct Packages(pub(crate) Vec<benilla_formats::PackageRow>);
-
+pub(crate) use crate::app_core::interaction::{MailOpen, MailSendAck, Packages, Stationery};
 /// A package row as the engine answers it: the icon under `StringLookups.dbc` row 3's folder
 /// (`0x4ae4ab`, the `"%s%s"` of folder and `\`, then the basename appended).
 fn package_view(row: &benilla_formats::PackageRow) -> benilla_ui::script::PackageView {
@@ -65,37 +57,6 @@ fn package_view(row: &benilla_formats::PackageRow) -> benilla_ui::script::Packag
         icon: format!("Interface\\Icons\\{}", row.icon),
         cost: row.cost,
     }
-}
-
-/// A `SEND` result queued for [`feed_mail`]. `MAIL_FAILED` fires on every one, success included:
-/// the reference uses it as "the send resolved" (`0x4ad15f`), and the stock handler only
-/// re-enables the button.
-pub(crate) struct MailSendAck {
-    pub(crate) ok: bool,
-    /// The message key of a failure other than an equip error.
-    pub(crate) refusal: Option<&'static str>,
-}
-
-/// The open mailbox session: the guid, the inbox rows as the wire sent them, the letter-body cache
-/// and the result queues. Cleared on close and on disconnect.
-#[derive(Resource, Default)]
-pub(crate) struct MailOpen {
-    pub(crate) mailbox: Option<u64>,
-    /// Wire order, which is the 1-based display order.
-    pub(crate) mails: Vec<MailListEntry>,
-    /// Native inbox retained without projecting twelve attachments into one Vanilla slot.
-    pub(crate) wrath_inbox: Option<benilla_protocol::wrath_mail::Inbox>,
-    /// Letter bodies by `item_text_id`, asked once.
-    pub(crate) bodies: QueryCache<u32, String>,
-    /// `MAIL_SHOW` owed: every mailbox use re-shows the window (`0x4acd10`).
-    show_requested: bool,
-    /// When the last `CMSG_GET_MAIL_LIST` went out, in `Time::elapsed_secs_f64`.
-    last_list_query: Option<f64>,
-    pub(crate) send_acks: Vec<MailSendAck>,
-    /// 1-based rows a take emptied and purged, each owed a `CLOSE_INBOX_ITEM`.
-    pub(crate) close_inbox: Vec<u32>,
-    /// Take, return and delete refusals, as message keys.
-    pub(crate) errors: Vec<&'static str>,
 }
 
 impl crate::query_cache::AskOnce for MailOpen {
@@ -701,7 +662,7 @@ fn drain_mail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::mail_message_type;
+    use benilla_protocol::types::{mail_message_type, MailListEntry};
 
     #[test]
     fn next_mail_query_uses_the_native_writer_and_updates_pending() {

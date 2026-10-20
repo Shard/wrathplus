@@ -83,15 +83,7 @@ pub(crate) const TARGETING_DELAY_MS: u32 = 10_000;
 /// after world enter with no movement input; what the stamp (`0x5143e0`) holds is untraced.
 const MOVEMENT_SILENCE: Duration = Duration::from_millis(90_000);
 
-/// A site's ask of the tutorial system, written from wherever the reference's site lives.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TutorialEvent {
-    /// `TriggerTutorial(id, delayMs)`: the fire-once leg.
-    Trigger { id: u32, delay_ms: u32 },
-    /// `SetTutorialFlag(id)` (`0x4b54c0`): the acknowledge-and-send leg.
-    Acknowledge { id: u32 },
-}
-
+pub(crate) use crate::app_core::state::TutorialEvent;
 impl TutorialEvent {
     pub(crate) const fn trigger(id: u32) -> Self {
         Self::Trigger { id, delay_ms: 0 }

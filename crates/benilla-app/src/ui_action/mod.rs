@@ -3,11 +3,10 @@
 //! and checked state; [`drain`] sends `UseAction` as a cast, swing, item use or macro, and
 //! `PickupAction`/`PlaceAction` as `CMSG_SET_ACTION_BUTTON`.
 
-use std::collections::{BTreeSet, HashMap};
+#[cfg(test)]
+use std::collections::HashMap;
 
 use bevy::prelude::*;
-
-use benilla_protocol::types::ActionButton;
 
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
@@ -50,43 +49,9 @@ pub(crate) use errors::{
 };
 pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon};
 
-/// `Attack`, the auto-attack pseudo-spell: it toggles melee rather than casting. The use path
-/// keys on this id; the icon keys on `SPELL_EFFECT_ATTACK`, which only 6603 carries.
-pub(crate) const SPELL_ATTACK: u32 = 6603;
+pub(crate) use crate::app_core::state::SPELL_ATTACK;
 
-/// The action slots (wire 0..119) and the known spells. The bar is client-authoritative:
-/// [`drain::drain_action_sets`] writes it directly, and vmangos stores a slot without a reply
-/// (`MasterPlayer::addActionButton`).
-#[derive(Resource, Default)]
-pub(crate) struct PlayerActions {
-    /// Wire slot (0-based) to its packed action; the Lua action id is slot + 1.
-    pub buttons: HashMap<u8, ActionButton>,
-    /// The spell book (`SMSG_INITIAL_SPELLS`), ordered on purpose: the reference's first-hit
-    /// scans (the lock resolver `0x5f83d0`) pick between equal spells, 6478 and 22810 "Opening",
-    /// by array order, which is ascending id: the server sends the book from a `std::map`.
-    pub spells: BTreeSet<u32>,
-    /// Set by every book or bar change, cleared once the feed re-resolves slot identity, which a
-    /// landed item template ([`crate::items::Items::template_epoch`]) also triggers. Item counts
-    /// refresh every frame regardless.
-    pub dirty: bool,
-}
-
-/// The world right-click's GameObject openers, queued one frame for the cast ladder: the click
-/// system cannot also hold the ladder's resources, and only the ladder sends a cast, so a chest
-/// right-clicked mid-cast takes the reference's silent same-spell bail (`0x6e4d43`).
-#[derive(Resource, Default)]
-pub(crate) struct GoOpenerCasts(pub(crate) Vec<GoOpener>);
-
-/// A right-click's resolved opener ([`crate::target::click::resolve_go_action`]).
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum GoOpener {
-    /// A known `OPEN_LOCK` spell, cast with a GameObject target block.
-    Spell { spell_id: u32, go_guid: u64 },
-    /// A carried key: `CMSG_USE_ITEM` with `TARGET_FLAG_GAMEOBJECT`, the object's guid in
-    /// [`crate::ui_items::ItemUse::on_object`].
-    Key(crate::ui_items::ItemUse),
-}
-
+pub(crate) use crate::app_core::state::{GoOpener, GoOpenerCasts, PlayerActions};
 pub(crate) use crate::app_core::state::{LearnedAbilities, Spells};
 impl Spells {
     /// The cast time in ms as `GetCastTime 0x6e3340` returns it for argument 1, the tooltip's

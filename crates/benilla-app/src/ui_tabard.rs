@@ -73,10 +73,7 @@ impl NpcSession for TabardOpen {
     }
 }
 
-/// The design our own body wears while the frame is open.
-#[derive(Resource, Default)]
-pub(crate) struct TabardDesign(Option<[i32; 5]>);
-
+pub(crate) use crate::app_core::interaction::TabardDesign;
 impl TabardDesign {
     pub(crate) fn preview(&self) -> Option<GuildEmblem> {
         self.0.map(|d| GuildEmblem {

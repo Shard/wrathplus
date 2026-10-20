@@ -84,10 +84,7 @@ impl InstanceBoot {
     }
 }
 
-/// `UNIT_NPC_FLAGS` bit 6, `SPIRITGUIDE`, which the acquire callback `0x4924c0` tests (`0x4924fc`).
-/// The area spirit healer's aura, cancelled by `0x4921c0` and `CancelAreaSpiritHeal`; `0x6e7040`
-/// fires `AREA_SPIRIT_HEALER_OUT_OF_RANGE` for this spell id alone (`0x6e70b6`).
-pub(crate) const AREA_SPIRIT_HEALER_AURA: u32 = 2584;
+pub(crate) use crate::app_core::interaction::AREA_SPIRIT_HEALER_AURA;
 
 /// The acquire radius, `[0x8044d0]` = 20.0, compared squared in the enumerate callback `0x4924c0`.
 const SPIRIT_GUIDE_ACQUIRE_YD: f32 = 20.0;
@@ -105,15 +102,9 @@ pub(crate) struct SetHealerOutcome {
     pub(crate) query: Option<u64>,
 }
 
-/// The current-area spirit healer (`[0xb4e330/334]`) and its wave clock (`[0xb4e338]`).
-#[derive(Resource, Default)]
-pub(crate) struct AreaSpiritHealer {
-    /// Written only by [`Self::set_healer`], the reference's `0x4921c0`.
-    healer: Option<u64>,
-    deadline: Option<Instant>,
-    in_range: bool,
-}
-
+pub(crate) use crate::app_core::interaction::{
+    AreaSpiritHealer, MeetingStone, MeetingStoneUse, StoneText,
+};
 impl AreaSpiritHealer {
     /// `SMSG_AREA_SPIRIT_HEALER_TIME`: arms the clock only for the cached healer (`0x4922a0`) and
     /// a positive time, and owes `AREA_SPIRIT_HEALER_IN_RANGE`.
@@ -351,33 +342,8 @@ impl BattlefieldQueue {
     }
 }
 
-/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
-/// then a built line; localized at push time.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-enum StoneText {
-    #[default]
-    None,
-    Built(String),
-}
-
 /// `SStrPrintf`'s buffer at the rebuild: 256 bytes, so 255 of text.
 const STONE_TEXT_BYTES: usize = 255;
-
-/// The meeting-stone queue: the two globals and what the wire still owes the screen.
-#[derive(Resource, Default)]
-pub(crate) struct MeetingStone {
-    /// `[0xb72038]`, the queued area id, 0 for none.
-    pub(crate) area: u32,
-    text: StoneText,
-    /// `0x295` arrivals as `(previous area, status)`; the handler stores the new area before it
-    /// switches, so that one is already in `area`.
-    updates: Vec<(u32, u8)>,
-    notices: Vec<MeetingStoneNotice>,
-    /// `0x299` guids whose name has not resolved yet.
-    pending_members: Vec<u64>,
-    /// The VM's copy of the two globals is stale.
-    dirty: bool,
-}
 
 impl MeetingStone {
     /// `SMSG 0x295` (`0x4ca230`): the area is stored at once; the line and event wait for the feed.
@@ -567,12 +533,6 @@ fn feed_meeting_stone(
         };
         script.set_meeting_stone(stone.area, text);
     }
-}
-
-/// A right-click on a `GAMEOBJECT_TYPE_MEETINGSTONE` (23) that passed the shared click gates.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct MeetingStoneUse {
-    pub(crate) go_guid: u64,
 }
 
 /// The use drain: a click on a meeting stone, which build 12340 calls a summoning stone. 3.3.5 has

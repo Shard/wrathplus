@@ -470,8 +470,8 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 | Fixed since the dry-run base | 6 (and part of 2 more) | `net::{ObjectStore, SelfPlayer, NetOffline, EnteredWorldMessage, DisconnectedMessage}`, now in `app_core::session` | Done, 563f0119 |
 | core → net command API | 13 (4 in `names`' tests, 1 follow-on) | `names`, `items`, `go_templates` and `area_trigger` send through `ClientCommand`/`NetCommands`, key on `Guid`/`GuidIndex`/`Objects`, and register with `NetHandlerApp`; `names` reads `net::wrath_pet_name_capture`; `preflight` and `probe_shield` read `SelfGuid` and `ServerSaidMessage` | Proposed below |
 | core → world/ui lookups | 6 | `ui_unit::{snapshot, race_names, class_names}` (`creature_type`, `preflight`), `ui_macro::identity` (`name_persist`), `creature_anim::disarmed_hand` (`items`, 2) | The "lookups" and "core up, pure" rows above; unowned |
-| core → root | 1 | `crate::BuildId` (`crash`) | Unowned: `BuildId` moves to core, and the root re-exports it for the launcher API |
-| Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | The pure-moves table (Assets) |
+| core → root | 1 | `crate::BuildId` (`crash`) | Done (Assets, pure moves 2): `crash` names `benilla_world::build_id::BuildId`, where it is defined; the root keeps its re-export for the launcher API |
+| Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | Done (Assets, pure moves 2): `app_core::ui_flags` |
 | `cfg(test)` helper across layers | 1 | `app_core::vm_memo` tests use `crate::test_support` | See the test-helper item below |
 
 **Compiler, net (core+net crate, net files only): 43 distinct sites.**
@@ -482,7 +482,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
 | Fixed since the base | 2 | `ui_totems::NativeTotems`, `combat_log::native::NativeCombatLog` | Done, 563f0119 |
 | `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}`, `combat_log::chat::faction_standing` | App Migration's groups |
 | `net` installs and re-exports `crate::motion` | 5 | `MotionPlugin` (installed by `NetPlugin`), the `drive_display_facing`/`Spline`/… re-exports | Wire B: `game_plugins` installs `MotionPlugin` and the callers repoint (the ui_session ordering test then adds it) |
-| Pure move not done | 3 | `ui_item_text::LetterTexts` (`wrath_inventory_capture` and its test) | The pure-moves table (unowned) |
+| Pure move not done | 3 | `ui_item_text::LetterTexts` (`wrath_inventory_capture` and its test) | Done (Assets, pure moves 2): `app_core::interaction` |
 | `swing_refusal` → world | 2 | `creature_anim::{AttackSeam, Engaged}` (plus one `chain` follow-on error) | Proposed: `swing_refusal` is the attack seam's feedback, a world module, not net |
 
 **Static, both layers** (what rustc reports only after resolution succeeds):
