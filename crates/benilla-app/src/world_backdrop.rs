@@ -276,9 +276,20 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
     ]
 };
 
+/// `$WOW_RENDER_SCALE`: an instrument run must not pin its scale into the file.
+pub(crate) const SESSION_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
+    name: "WOW_RENDER_SCALE",
+    taken: || crate::cvars::env_set("WOW_RENDER_SCALE"),
+    read: |world| {
+        let v = world.get_resource::<RenderScale>();
+        vec![("renderScale", v.map(|r| r.0.to_string()))]
+    },
+};
+
 impl Plugin for WorldBackdropPlugin {
     fn build(&self, app: &mut App) {
         crate::cvars::RegisterCvars::register_cvars(app, CVARS);
+        crate::cvars::RegisterCvars::register_session_lever(app, SESSION_LEVER);
         app.add_observer(on_cvar);
         app.init_resource::<RenderScale>()
             .add_systems(Startup, setup_backdrop)

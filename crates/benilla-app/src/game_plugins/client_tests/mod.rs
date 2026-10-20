@@ -2,6 +2,7 @@
 //! layer so no lower module names `game_plugins` (APP-CRATE-SPLIT-PLAN, step 0 item 6). One
 //! file per source module, named after its path; each says where its tests came from.
 
+mod cvars;
 mod names_native_pet_tests;
 mod net;
 mod net_apply_motion_seam_tests;

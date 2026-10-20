@@ -42,9 +42,20 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
     ]
 };
 
+/// `$WOW_HOST` is the session's realmlist, which a test run must never write into the file.
+pub(crate) const SESSION_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
+    name: "WOW_HOST",
+    taken: || crate::cvars::env_set("WOW_HOST"),
+    read: |world| {
+        let v = world.get_resource::<Realmlist>();
+        vec![(CVAR_REALMLIST, v.map(|r| r.address().to_string()))]
+    },
+};
+
 impl Plugin for RealmlistPlugin {
     fn build(&self, app: &mut App) {
         crate::cvars::RegisterCvars::register_cvars(app, CVARS);
+        crate::cvars::RegisterCvars::register_session_lever(app, SESSION_LEVER);
         app.add_observer(on_cvar);
         app.init_resource::<Realmlist>();
     }
