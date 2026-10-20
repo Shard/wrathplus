@@ -145,7 +145,7 @@ fn seat_a_hunter(root: &Path) -> UiScript {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(
         failures.is_empty(),
         "our own FrameXML failed to load: {failures:#?}"

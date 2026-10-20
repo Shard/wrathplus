@@ -318,7 +318,7 @@ fn the_player_arrow_is_the_stock_model_pane_seated_and_turned_by_the_update() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     arrow_facts(&mut s);
     s.resolve();
@@ -469,7 +469,7 @@ fn the_maps_own_furniture_survives_the_hide_that_showing_it_performs() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
 
@@ -532,7 +532,7 @@ fn hovering_the_player_blip_on_a_scaled_map_names_the_player() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
     s.run("ShowUIPanel(WorldMapFrame)").unwrap();
@@ -581,7 +581,7 @@ fn the_player_arrow_draws_over_the_zones_explored_overlays() {
             ..Default::default()
         }),
     );
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
     s.resolve();
     arrow_facts(&mut s);
     s.run("ShowUIPanel(WorldMapFrame)").unwrap();
@@ -638,7 +638,7 @@ fn a_click_over_a_blip_still_answers_the_maps_uv() {
             ..Default::default()
         }),
     );
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
     s.resolve();
     s.run("ShowUIPanel(WorldMapFrame)").unwrap();
     s.resolve();
@@ -746,7 +746,7 @@ fn a_stale_layout_row_cannot_seat_a_stock_frame() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
 
@@ -833,7 +833,7 @@ fn the_fullscreen_quads_follow_a_resize() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
 

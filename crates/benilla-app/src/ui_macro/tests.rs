@@ -77,7 +77,7 @@ fn ui() -> UiScript {
             ..Default::default()
         }),
     );
-    let failures = crate::ui_script::load_default_ui(&s);
+    let failures = crate::ui_script::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s
 }
@@ -241,84 +241,6 @@ fn either_line_ending_splits_a_body() {
     );
 }
 
-/// Every chooser icon resolves through the renderer's own [`benilla_assets::sprite_candidates`]:
-/// one that does not draws as a white square. `Ability_Druid_Mangle.tga` resolves only through the
-/// second `.blp` candidate, since `Ability_Druid_Mangle.tga.blp` is what ships.
-#[test]
-fn every_macro_chooser_icon_resolves_in_the_client_archives() {
-    /// A stock 5875 install: `patch.MPQ` 77 + `interface.MPQ` 443 = 520 `Spell_`/`Ability_` names
-    /// under `Interface\Icons\`, less 3 that differ only by case or extension
-    /// (`BuildMacroIconList`, `0x4f0090`).
-    const CHOOSER_ICONS_5875: usize = 517;
-
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-    let icons = benilla_formats::load_macro_icons(&mut chain).expect("load chooser catalog");
-    assert_eq!(
-        icons.len(),
-        CHOOSER_ICONS_5875,
-        "chooser catalog size moved — the enumeration or its filter changed"
-    );
-
-    let missing: Vec<String> = icons
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| {
-            !benilla_assets::sprite_candidates(p)
-                .iter()
-                .any(|c| chain.contains(c))
-        })
-        .map(|(i, p)| format!("#{} {p}", i + 1))
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "chooser icons that resolve to nothing (each draws as a white square): {missing:#?}"
-    );
-
-    // Alphabetical: the reference `qsort`s without case before deduping.
-    let mut sorted = icons.clone();
-    sorted.sort_by_key(|p| p.to_ascii_lowercase());
-    assert_eq!(
-        icons, sorted,
-        "the chooser list must be case-insensitively sorted"
-    );
-}
-
-#[test]
-fn macro_icon_catalog_is_cached_per_source_and_reseeded_for_new_vms() {
-    let source = std::sync::Arc::new(());
-    let replacement = std::sync::Arc::new(());
-    let mut catalog = super::IconCatalogCache::default();
-    let mut first = UiScript::new_vanilla().unwrap();
-    let mut second = UiScript::new_vanilla().unwrap();
-    let (icons, hit) =
-        catalog.get_or_load(&source, || Ok(vec!["Interface\\Icons\\Spell_Test".into()]));
-    assert!(!hit);
-    first.set_macro_icons(icons.as_ref().unwrap().clone());
-    let (icons, hit) = catalog.get_or_load(&source, || {
-        panic!("new VM must not enumerate the same source")
-    });
-    assert!(hit);
-    second.set_macro_icons(icons.as_ref().unwrap().clone());
-    for vm in [&first, &second] {
-        assert_eq!(vm.eval::<u32>("return GetNumMacroIcons()").unwrap(), 1);
-        assert_eq!(
-            vm.eval::<String>("return GetMacroIconInfo(1)").unwrap(),
-            "Interface\\Icons\\Spell_Test"
-        );
-    }
-    let (icons, hit) = catalog.get_or_load(&replacement, || {
-        Ok(vec!["Interface\\Icons\\Ability_New".into()])
-    });
-    assert!(!hit);
-    assert_eq!(icons.as_ref().unwrap(), &["Interface\\Icons\\Ability_New"]);
-    drop(replacement);
-    assert!(
-        catalog.source.upgrade().is_none(),
-        "cache must not retain archives"
-    );
-}
-
 #[test]
 fn macro_icon_catalog_failure_is_cached_only_for_its_source() {
     let source = std::sync::Arc::new(());
@@ -334,26 +256,6 @@ fn macro_icon_catalog_failure_is_cached_only_for_its_source() {
     assert!(hit);
     assert_eq!(result.as_ref().unwrap_err(), "missing listfile");
     assert!(catalog.get_or_load(&replacement, || Ok(vec![])).0.is_ok());
-}
-
-#[test]
-fn wrath_does_not_enumerate_the_vanilla_macro_icon_catalog() {
-    use benilla_ui::script::ScriptDialect;
-    let wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    assert!(!super::macro_catalog_enabled(&wrath));
-}
-
-#[test]
-fn the_wrath_feed_never_enumerates_the_icon_catalog() {
-    use benilla_ui::script::ScriptDialect;
-    let source = std::sync::Arc::new(());
-    let mut cache = super::IconCatalogCache::default();
-    let mut seeded = crate::ui_script::VmMemo::default();
-    let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    super::seed_icon_catalog(&mut wrath, &source, &mut seeded, &mut cache, || {
-        panic!("Wrath must never enumerate icons")
-    });
-    assert!(cache.icons.is_none());
 }
 
 #[test]

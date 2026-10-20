@@ -7,6 +7,7 @@ use bevy::prelude::*;
 
 use benilla_ui::script::UiScript;
 
+#[cfg(test)]
 use super::addons::Addon;
 use super::reference_ui;
 
@@ -46,22 +47,10 @@ pub(super) fn shipped_manifest_files() -> Vec<String> {
         .collect()
 }
 
-/// Runs `UIParent_ManageFramePositions` after the interface has loaded, then the buff pass below.
-fn bootstrap_positions(script: &UiScript) -> Vec<String> {
-    if let Err(e) = script.run("UIParent_ManageFramePositions()") {
-        error!("ui_script: managed-positions bootstrap: {e}");
-        return vec![format!("managed-positions bootstrap: {e}")];
-    }
-    if let Err(e) = apply_buff_durations(script) {
-        error!("ui_script: buff-duration layout: {e}");
-        return vec![format!("buff-duration layout: {e}")];
-    }
-    Vec::new()
-}
-
 /// Runs `BuffButtons_UpdatePositions` at load, which `BuffFrame_OnLoad` never calls: until the
 /// stock `UIOptionsFrame.lua`'s `VARIABLES_LOADED` arm runs it (l.206), the second buff row and
 /// the debuff row keep `BuffFrame.xml`'s anchors whatever `SHOW_BUFF_DURATIONS` says.
+#[cfg(test)]
 pub(super) fn apply_buff_durations(script: &UiScript) -> Result<(), String> {
     script
         .run("if BuffButtons_UpdatePositions then BuffButtons_UpdatePositions() end")
@@ -138,22 +127,81 @@ pub(super) fn silenced_ui_load<S: std::borrow::Borrow<UiScript>, R>(
     out
 }
 
-/// Loads the core, then the layer unless [`layer_enabled`] says no, then the load-time repairs:
-/// [`load_ingame_ui`] without the addons, for the tests and [`crate::addon_harness`]. Returns every
+/// The in-game load without the third-party addons, for the tests and [`crate::addon_harness`]:
+/// [`load_wrath_ui`]'s core and AzerothBench root on a VM seeded as a live session seeds it
+/// (`lifecycle::load_ingame_ui_on_world_entry`). The CVar table first, since stock OnLoads read
+/// CVars; the installed `ChrClasses` names (`Constants.lua` fills its class tables at file
+/// scope); a live Wrath account on enUS; the screen and its one resolution
+/// (`UpdateMenuBarTop` divides by it, `UIParent.lua:1171`); and, unless the caller seated one, a
+/// player with a race and class (`DressUpFrame.lua:16` uppercases the race file). Returns every
 /// failure; a loader error is tagged `"<Addon>/<file>: <error>"`.
-pub(crate) fn load_default_ui(script: &UiScript) -> Vec<String> {
-    // The client's CVar table first: the stock `UIOptionsFrame.xml` reads CVars in its OnLoads,
-    // and a bare `UiScript::new()` has only `benilla-ui`'s own. A re-register only refreshes
-    // defaults.
+pub(crate) fn load_default_ui(script: &mut UiScript) -> Vec<String> {
+    load_session_ui(script, false)
+}
+
+/// [`load_default_ui`], with the AddOns root's third-party addons after the root when `addons`, as
+/// [`load_wrath_ui`] loads them (no character identity, version check on).
+pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String> {
+    use benilla_ui::script::{PlayerRecord, ScreenResolution, UnitState};
     script.register_cvars(crate::shipped_cvars::pairs());
-    let mut failures = silenced_ui_load(&mut &*script, |script| {
-        let mut failures = load_core(script);
-        if layer_enabled() {
-            failures.extend(load_layer(script));
-        }
-        failures.extend(bootstrap_positions(script));
-        failures
-    });
+    if let Some(names) = benilla_formats::wow_data().and_then(|data| {
+        let mut chain = benilla_formats::open_chain(&data).ok()?;
+        benilla_formats::load_chr_classes(&mut chain).ok()
+    }) {
+        script.set_localized_class_names(names.localized_names());
+    }
+    script.set_wrath_session(Some(2), vec!["enUS".into()]);
+    script.set_screen_size(1024.0, 768.0);
+    script.set_screen_resolutions(
+        vec![],
+        Some(ScreenResolution {
+            width: 1024,
+            height: 768,
+        }),
+    );
+    let seated = script
+        .lua()
+        .load("return UnitExists('player')")
+        .eval::<Option<i64>>()
+        .ok()
+        .flatten()
+        .is_some();
+    if !seated {
+        script.set_player_record(PlayerRecord {
+            name: "Probefour".into(),
+            race: Some(("Orc".into(), "Orc".into())),
+            class: Some(("Hunter".into(), "HUNTER".into())),
+            sex: 2,
+        });
+        script.set_unit(
+            "player",
+            Some(UnitState {
+                exists: true,
+                name: Some("Probefour".into()),
+                level: 60,
+                race: Some("Orc".into()),
+                race_file: Some("Orc".into()),
+                class: Some("Hunter".into()),
+                class_file: Some("HUNTER".into()),
+                ..Default::default()
+            }),
+        );
+    }
+    script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
+    // No sound during the load, as on the live edge (`silenced_ui_load`).
+    script.push_sound_suppression();
+    let mut failures = load_core(script);
+    failures.extend(super::wrath_addons::load_bootstrap(script));
+    if addons {
+        failures.extend(super::addons::load_wrath_third_party(
+            script,
+            None,
+            &[],
+            true,
+        ));
+    }
+    script.pop_sound_suppression();
+    script.clear_instruction_budget();
     // A raise one call below the loader's own dispatch (an OnLoad that shows a frame whose OnShow
     // raises) lands in the VM's error list, not the loader's report; it is a load failure too.
     failures.extend(
@@ -272,31 +320,6 @@ pub(crate) fn load_stock_bindings(script: &mut UiScript) {
     );
 }
 
-/// Every [`LAYER_MANIFEST`] entry, in order, after the whole core: the layer loads as more of the
-/// stock load, with no `ADDON_LOADED` and no registry row, as FrameXML does (`0x48ffed`).
-fn load_layer(script: &UiScript) -> Vec<String> {
-    let layer = Addon::layer();
-    layer.load_files(script, &layer.toc.files)
-}
-
-/// The in-game UI, the core, then the layer unless [`layer_enabled`] says no, then every
-/// third-party addon, on entering the world. The reference loads both in `CGGameUI::Initialize`
-/// (`0x48fbf0`), reached only from world entry (`0x401570` from `0x46c236`): `FrameXML.toc` at
-/// `0x48ffed`, its addons at `0x4900a3` (`0x51f600`).
-///
-/// `identity`, `(realm, character)`, names the character's AddOn enable-state file, as the
-/// reference keys `AddOns.txt` per character; `roster`, the realm's characters, decides an addon
-/// this one has no row for. `version_check` is the persisted `checkAddonVersion`, since this VM
-/// has no CVar table yet at load.
-pub(crate) fn load_ingame_ui(
-    script: &mut UiScript,
-    identity: Option<&(String, String)>,
-    roster: &[String],
-    version_check: bool,
-) -> Vec<String> {
-    load_ingame_ui_with(script, identity, roster, version_check, layer_enabled())
-}
-
 /// The Wrath host: the installed stock FrameXML, the authored AzerothBench root, then local-state
 /// addons. Every chunk runs trusted; see `benilla_ui`'s Wrath surface.
 pub(crate) fn load_wrath_ui(
@@ -309,32 +332,6 @@ pub(crate) fn load_wrath_ui(
     let mut failures = load_core(script);
     failures.extend(super::wrath_addons::load_bootstrap(script));
     failures.extend(super::addons::load_wrath_third_party(
-        script,
-        identity,
-        roster,
-        version_check,
-    ));
-    failures
-}
-
-/// [`load_ingame_ui`] with the layer decided by the caller.
-pub(super) fn load_ingame_ui_with(
-    script: &mut UiScript,
-    identity: Option<&(String, String)>,
-    roster: &[String],
-    version_check: bool,
-    layer: bool,
-) -> Vec<String> {
-    // Bounded, addons included: a chunk that never returns fails as a load error instead of
-    // freezing the loading screen. The caller disarms the budget once the edge is done.
-    script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
-    let mut failures = load_core(script);
-    if layer {
-        failures.extend(load_layer(script));
-    }
-    failures.extend(bootstrap_positions(script));
-    // Each addon's `ADDON_LOADED` fires as that addon finishes, as the reference does (`0x51f5ad`).
-    failures.extend(super::addons::load_third_party(
         script,
         identity,
         roster,
@@ -498,7 +495,7 @@ mod tests {
             "the stock toc's order"
         );
         let (mut s, failures) =
-            super::super::layer_tests::production_load_with("event-order", false, "", |_| {});
+            super::super::production_load::production_load_with("event-order", "", |_| {});
         assert!(failures.is_empty(), "load failures: {failures:#?}");
         s.run(
             r#"EVENT_ORDER = {}

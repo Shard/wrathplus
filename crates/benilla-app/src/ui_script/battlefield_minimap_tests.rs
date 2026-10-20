@@ -31,7 +31,7 @@ fn session() -> UiScript {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_BattlefieldMinimap");
     s.resolve();

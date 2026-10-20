@@ -218,7 +218,7 @@ mod tests {
         let mut s = UiScript::new().expect("VM");
         s.set_screen_size(1024.0, 768.0);
         seat_a_player(&mut s);
-        let failures = super::super::manifest::load_default_ui(&s);
+        let failures = super::super::manifest::load_default_ui(&mut s);
         assert!(failures.is_empty(), "the default UI: {failures:#?}");
 
         let (mut checked, mut uncovered, mut wrong) = (0usize, Vec::new(), Vec::new());
@@ -366,7 +366,7 @@ mod tests {
         s.set_screen_size(1024.0, 768.0);
 
         seat_a_player(&mut s);
-        let failures = super::super::manifest::load_default_ui(&s);
+        let failures = super::super::manifest::load_default_ui(&mut s);
         assert!(failures.is_empty(), "the default UI: {failures:#?}");
 
         // Only the stock `ContainerFrame.lua` defines these.
@@ -473,7 +473,7 @@ mod tests {
             let mut s = UiScript::new().expect("VM");
             s.set_screen_size(1024.0, 768.0);
             seat_a_player(&mut s);
-            let base = super::super::manifest::load_default_ui(&s);
+            let base = super::super::manifest::load_default_ui(&mut s);
             assert!(base.is_empty(), "the shipped manifest itself: {base:#?}");
             s.resolve();
             let before = s.errors().len();
@@ -552,7 +552,7 @@ mod tests {
         let mut s = UiScript::new().expect("VM");
         s.set_screen_size(1024.0, 768.0);
         seat_a_player(&mut s);
-        let failures = super::super::manifest::load_default_ui(&s);
+        let failures = super::super::manifest::load_default_ui(&mut s);
         assert!(failures.is_empty(), "the shipped manifest: {failures:#?}");
         let have: std::collections::HashSet<String> = s
             .eval::<Vec<String>>(
@@ -823,7 +823,7 @@ mod tests {
                 let mut probe = UiScript::new().expect("VM");
                 probe.set_screen_size(1024.0, 768.0);
                 seat_a_player(&mut probe);
-                let base = super::super::manifest::load_default_ui(&probe);
+                let base = super::super::manifest::load_default_ui(&mut probe);
                 assert!(base.is_empty(), "the shipped manifest itself: {base:#?}");
                 probe.resolve();
                 let before = probe.errors().len();
@@ -1174,7 +1174,7 @@ mod tests {
         let mut s = UiScript::new().expect("VM");
         s.set_screen_size(1024.0, 768.0);
         seat_a_player(&mut s);
-        let failures = super::super::manifest::load_default_ui(&s);
+        let failures = super::super::manifest::load_default_ui(&mut s);
         assert!(failures.is_empty(), "the shipped manifest: {failures:#?}");
         // The interface includes every LoadOnDemand addon it reaches: `ActionButton.lua` calls
         // `MacroFrame_SaveMacro`, which `Blizzard_MacroUI.lua` defines once `ShowMacroFrame`

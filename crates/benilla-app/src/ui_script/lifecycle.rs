@@ -9,7 +9,7 @@ use benilla_assets::LockRecover;
 use benilla_ui::script::UiScript;
 
 use super::manifest::silenced_ui_load;
-use super::{load_ingame_ui, CursorPayloadHeld, PlayerUiHover, UiClock, UiKeyboardCapture};
+use super::{CursorPayloadHeld, PlayerUiHover, UiClock, UiKeyboardCapture};
 use crate::ui_script::addons;
 
 pub(crate) fn setup_script(world: &mut World) {
@@ -24,10 +24,6 @@ fn install_boot_vm(world: &mut World) {
     let Some(script) = new_vm(world) else {
         return;
     };
-    if !wrath_profile(world) {
-        load_global_strings(world, &script);
-        load_emote_tokens(world, &script);
-    }
     world.insert_non_send_resource(script);
 }
 
@@ -76,12 +72,6 @@ fn seed_session(world: &World, script: &mut UiScript) {
         })
         .unwrap_or_default();
     script.set_wrath_session(expansion, locales);
-}
-
-fn wrath_profile(world: &World) -> bool {
-    world
-        .get_resource::<benilla_assets::ClientDataProfile>()
-        .is_some_and(|profile| matches!(profile.0, benilla_formats::DataProfile::Wrath { .. }))
 }
 
 /// Start the new VM's `GetTime()` where the process already is and re-anchor [`UiClock`] to it,
@@ -201,9 +191,6 @@ pub(crate) fn arm_entry_ui_load(world: &mut World) {
 /// [`super::VmMemo`], which is meant to reset here. It starts bare: `FrameXML.toc` runs
 /// `GlobalStrings.lua` and `Fonts.xml` as its first rows, and `ChatFrame.lua` the emote tokens.
 fn mint_entry_vm(world: &mut World) {
-    if !wrath_profile(world) {
-        crate::cvars::fold_dying_vm_cvars(world);
-    }
     if let Some(script) = new_vm(world) {
         world.insert_non_send_resource(script);
     }
@@ -324,7 +311,6 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
         warn!("ui_script: entering the world with no VM — the in-game UI will not load");
         return;
     };
-    let wrath = wrath_profile(world);
     // The character whose AddOn enable state gates which addons run.
     let identity = world
         .get_resource::<crate::char_select::Roster>()
@@ -426,27 +412,12 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
         let z = world.resource::<crate::minimap::MinimapZoom>();
         (z.outdoor, z.inside)
     };
-    // A plate setting `config.toml` still holds, carried into FrameXML's saved variables once.
-    // Only by a load with the layer, which registers `FRIENDNAMEPLATES_ON` for save; a stock-UI
-    // load leaves it for the next layered one.
-    let legacy_plates = if !wrath && super::manifest::layer_enabled() {
-        world
-            .get_resource_mut::<crate::cvars::Cvars>()
-            .map(|mut cvars| crate::vplates::take_legacy_settings(&mut cvars))
-            .unwrap_or_default()
-    } else {
-        Default::default()
-    };
     // No sound during the load edge, as in the reference's `UI_Init` (`0x48fbfa` → `0x49016d`).
     silenced_ui_load(&mut script, |script| {
-        if wrath {
-            for failure in
-                super::manifest::load_wrath_ui(script, identity.as_ref(), &roster, version_check)
-            {
-                warn!("ui_script: Wrath UI load: {failure}");
-            }
-        } else {
-            let _ = load_ingame_ui(script, identity.as_ref(), &roster, version_check);
+        for failure in
+            super::manifest::load_wrath_ui(script, identity.as_ref(), &roster, version_check)
+        {
+            warn!("ui_script: Wrath UI load: {failure}");
         }
         crate::ui_chat::commands::register_dev_commands(script, crate::run_mode::dev_affordances());
         // The new Minimap's zoom indices from the persisted CVars, as the reference's minimap reset
@@ -459,9 +430,7 @@ pub(crate) fn load_ingame_ui_on_world_entry(world: &mut World) {
         // events (`ChatFrame.lua:1261-1273`).
         finish_ui_load_with(
             script,
-            // Before `VARIABLES_LOADED`, whose `UIParent_OnEvent` arm runs the first
-            // `UpdateNameplates()` (`UIParent.lua:231-234`).
-            |script| crate::vplates::seat_legacy_settings(script, &legacy_plates),
+            |_| {},
             |script| {
                 crate::ui_chat::restore_chat_looks(world, script);
             },
@@ -560,7 +529,7 @@ pub(crate) struct AddOnIdentity(pub(crate) Option<(String, String)>);
 /// The world latch, the reference's `[0xb4b424]`: set at `0x4908ce` in the world-enter cascade
 /// `0x4908c0` and cleared at `0x490a8d` as `PLAYER_LEAVING_WORLD` fires (`0x490b4d`, its one
 /// site), so the first departure in a world fires and the rest are no-ops until the next entry.
-/// Ours has two producers, [`shutdown_ui_state`]'s tail and `ui_unit`'s worldport fire. A
+/// Ours has two producers, `wrath_addons::shutdown`'s tail and `ui_unit`'s worldport fire. A
 /// cross-map worldport spends it without leaving `InWorld`, so a quit on its loading screen
 /// fires nothing; a `/reload` fires, and its rebuild re-arms.
 #[derive(Resource, Default)]
@@ -596,33 +565,6 @@ pub(crate) fn arm_leaving_world_on_self_create(
     }
 }
 
-/// The UI shutdown in the reference's order, `0x490bd0`'s tail: `PLAYER_LEAVING_WORLD` (273) →
-/// `PLAYER_LOGOUT` (271, `0x490c2a`) → `layout-cache.txt` → the flat saved file (`0x490c7e`) →
-/// the per-addon files (`0x490c83`) → `AddOns.txt` (`0x490c88`) → destroy the frame-script owner
-/// (`0x490c97`) → nil all 216 C bindings out of `_G` (`0x490cba` → `0x490ce0`).
-///
-/// `PLAYER_LOGOUT` fires before any write, an addon's last chance to change a saved global. One
-/// function on every root because the steps are ordered against each other; the layout save is
-/// here because a `/reload` never leaves `InWorld`. No autosave, as the reference has none (the
-/// layout cache's crash-only debounce in [`crate::ui_layout`] is ours).
-pub(crate) fn shutdown_ui_state(
-    script: &mut UiScript,
-    identity: Option<&(String, String)>,
-    leaving_world: bool,
-) {
-    // The one conditional step: the reference reaches `0x490c20 call 0x490a80` only past the
-    // active-player guard (`0x490bee call 0x468550`, `0x490bf5 je 0x490c25`) and the world latch,
-    // while `PLAYER_LOGOUT` (`0x490c2a`) fires on every root. The caller spends the latch.
-    if leaving_world {
-        script.fire_event("PLAYER_LEAVING_WORLD", vec![]);
-    }
-    script.fire_event("PLAYER_LOGOUT", vec![]);
-    crate::ui_layout::save_now(script, identity);
-    crate::ui_saved::save(script);
-    addons::save_addon_variables(script, identity);
-    addons::save_enable_state(script, identity);
-}
-
 /// `OnExit(InWorld)`, a `/logout` or a disconnect (two of the reference's five roots): run the
 /// shutdown tail, then end this session's Lua state, so no frame, global or addon upvalue reaches
 /// the next login. The reference's state outlives `0x490bd0` and is replaced twice through
@@ -641,31 +583,19 @@ pub(crate) fn end_ui_session(world: &mut World) {
     let leaving_world = world
         .get_resource_mut::<LeavingWorldArmed>()
         .is_some_and(|mut l| l.spend());
-    let wrath = wrath_profile(world);
     if !ui_never_loaded {
         if let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() {
-            if wrath {
-                super::wrath_addons::shutdown(&mut script, identity.as_ref(), leaving_world);
-            } else {
-                shutdown_ui_state(&mut script, identity.as_ref(), leaving_world);
-            }
+            super::wrath_addons::shutdown(&mut script, identity.as_ref(), leaving_world);
         }
     }
-    // Only tutorial history is persisted from Wrath; generic CVar folding remains disabled.
-    if wrath {
-        let history = world
-            .get_non_send_resource_mut::<UiScript>()
-            .and_then(|mut script| script.persist_wrath_tutorial_history());
-        if let (Some(history), Some(mut cvars)) =
-            (history, world.get_resource_mut::<crate::cvars::Cvars>())
-        {
-            cvars.set("flaggedTutorials", &history);
-        }
-    }
-    // Vanilla retains its general CVar/chat shutdown fold.
-    if !wrath {
-        crate::cvars::fold_dying_vm_cvars(world);
-        crate::ui_chat::settings::fold_dying_vm_chat_cache(world);
+    // Only tutorial history is persisted; generic CVar folding stays off.
+    let history = world
+        .get_non_send_resource_mut::<UiScript>()
+        .and_then(|mut script| script.persist_wrath_tutorial_history());
+    if let (Some(history), Some(mut cvars)) =
+        (history, world.get_resource_mut::<crate::cvars::Cvars>())
+    {
+        cvars.set("flaggedTutorials", &history);
     }
     world.insert_resource(AddOnIdentity(None));
 
@@ -740,7 +670,7 @@ pub(crate) fn shutdown_on_exit(
     }
     let leaving_world = armed.spend();
     if let Some(mut script) = script {
-        shutdown_ui_state(&mut script, id.0.as_ref(), leaving_world);
+        super::wrath_addons::shutdown(&mut script, id.0.as_ref(), leaving_world);
     }
 }
 
@@ -781,98 +711,6 @@ pub(crate) fn finish_ui_load_with(
     crate::ui_saved::load_saved_variables(script, host_settings);
     between(script);
     script.fire_event("PLAYER_LOGIN", vec![]);
-}
-
-/// Run the patch chain's `Interface\FrameXML\GlobalStrings.lua`, the first file in the reference's
-/// `FrameXML.toc` and the source of every localized string global. Failures are logged loudly:
-/// without it every red error line is silently empty.
-fn load_global_strings(world: &mut World, script: &UiScript) {
-    let Some(assets) = world.get_resource::<benilla_assets::WorldAssets>() else {
-        warn!("ui_script: no patch chain — GlobalStrings absent, error lines will be empty");
-        return;
-    };
-    let bytes = {
-        let mut chain = assets.chain.lock_recover();
-        chain.read_file("Interface\\FrameXML\\GlobalStrings.lua")
-    };
-    let src = match bytes {
-        Ok(b) => String::from_utf8_lossy(&b).into_owned(),
-        Err(e) => {
-            error!("ui_script: GlobalStrings.lua read failed — error lines will be empty: {e:#}");
-            return;
-        }
-    };
-    if let Err(e) = script.run(&src) {
-        error!("ui_script: GlobalStrings.lua failed to run: {e}");
-        return;
-    }
-    // Sentinel: the cast-fail drain's own lookup, checked for presence only (any locale).
-    let sentinel: Option<String> = script.lua().globals().get("SPELL_FAILED_NO_AMMO").ok();
-    match sentinel {
-        Some(s) if !s.is_empty() => info!("ui_script: GlobalStrings loaded"),
-        other => {
-            error!("ui_script: GlobalStrings sentinel missing ({other:?}) — error lines broken")
-        }
-    }
-}
-
-/// Run the emote token table from the patch chain's `ChatFrame.lua` (`EMOTE87_TOKEN = "SIT"`),
-/// which maps each `GlobalStrings.lua` alias (`EMOTE87_CMD1 = "/sit"`) to its `EmotesText` name.
-/// Only whole lines matching [`is_emote_token_line`] run, none of the file's code.
-fn load_emote_tokens(world: &mut World, script: &UiScript) {
-    let Some(assets) = world.get_resource::<benilla_assets::WorldAssets>() else {
-        return; // already warned by `load_global_strings`
-    };
-    let bytes = {
-        let mut chain = assets.chain.lock_recover();
-        chain.read_file("Interface\\FrameXML\\ChatFrame.lua")
-    };
-    let src = match bytes {
-        Ok(b) => String::from_utf8_lossy(&b).into_owned(),
-        Err(e) => {
-            error!("ui_script: ChatFrame.lua read failed — emote commands will be dead: {e:#}");
-            return;
-        }
-    };
-    let table: Vec<&str> = src
-        .lines()
-        .map(str::trim)
-        .filter(|l| is_emote_token_line(l))
-        .collect();
-    let count = table.len();
-    if let Err(e) = script.run(&table.join("\n")) {
-        error!("ui_script: emote token table failed to run: {e}");
-        return;
-    }
-    // Sentinel: `EMOTE87` is `/sit`.
-    let sentinel: Option<String> = script.lua().globals().get("EMOTE87_TOKEN").ok();
-    match sentinel.as_deref() {
-        Some("SIT") => info!("ui_script: {count} emote tokens loaded"),
-        other => error!(
-            "ui_script: emote token sentinel is {other:?}, not \"SIT\" ({count} lines) — \
-             emote slash commands are broken"
-        ),
-    }
-}
-
-/// Whether a line is one of `ChatFrame.lua`'s `EMOTE<digits>_TOKEN = "<NAME>";` assignments, with
-/// `NAME` in `[A-Z0-9_]`; that whole-line shape makes running it the same as reading data.
-pub(crate) fn is_emote_token_line(line: &str) -> bool {
-    let Some(rest) = line.strip_prefix("EMOTE") else {
-        return false;
-    };
-    let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-    let Some(rest) = rest[digits..].strip_prefix("_TOKEN = \"") else {
-        return false;
-    };
-    let Some(name) = rest.strip_suffix("\";") else {
-        return false;
-    };
-    digits > 0
-        && !name.is_empty()
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
 #[cfg(test)]

@@ -309,22 +309,6 @@ impl Cvars {
         self.last_change = Some(Instant::now());
     }
 
-    /// Remove a `config.toml` entry no row claims, a setting retired from the table, and return
-    /// its value; the next save writes the file without it.
-    pub(crate) fn retire_file_entry(&mut self, name: &str) -> Option<String> {
-        if self.index.contains_key(&name.to_ascii_lowercase()) {
-            return None;
-        }
-        let key = self
-            .file
-            .keys()
-            .find(|k| k.eq_ignore_ascii_case(name))?
-            .clone();
-        let value = self.file.remove(&key);
-        self.touch();
-        value
-    }
-
     /// A write from either side of the VM boundary. A `from_vm` write is not echoed back, but a
     /// refusal is, because the mirror already stored the refused value.
     fn write(&mut self, name: &str, value: &str, from_vm: bool) -> SetOutcome {
@@ -918,43 +902,6 @@ pub(crate) fn sync_cvars(
         for event in cvars.take_events() {
             commands.trigger(event);
         }
-    }
-}
-
-/// Fold the dying VM's last writes into the registry. Called from the UI session end
-/// (`ui_script::end_ui_session`) after the shutdown events (a `PLAYER_LOGOUT` handler may
-/// `SetCVar`, and the reference keeps that write) and before the VM is replaced, so a final-frame
-/// write is not lost to the next VM's seed. The observers fire here.
-pub(crate) fn fold_dying_vm_cvars(world: &mut World) {
-    // No registry: a test or stripped world without the plugin.
-    if !world.contains_resource::<Cvars>() {
-        return;
-    }
-    let (registrations, changes) = {
-        let Some(mut script) = world.get_non_send_resource_mut::<UiScript>() else {
-            return;
-        };
-        (script.take_cvar_registrations(), script.take_cvar_changes())
-    };
-    let events = {
-        let mut cvars = world.resource_mut::<Cvars>();
-        for (name, default) in registrations {
-            cvars.learn_addon_row(&name, &default);
-        }
-        for (name, value) in changes {
-            cvars.set_from_vm(&name, &value);
-        }
-        if cvars.has_outbox() {
-            cvars.take_outbox(); // the VM this was for is going away
-        }
-        if cvars.has_events() {
-            cvars.take_events()
-        } else {
-            Vec::new()
-        }
-    };
-    for event in events {
-        world.trigger(event);
     }
 }
 

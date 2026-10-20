@@ -116,6 +116,7 @@ pub(super) fn shutdown(
         script.fire_event("PLAYER_LEAVING_WORLD", vec![]);
     }
     script.fire_event("PLAYER_LOGOUT", vec![]);
+    crate::ui_layout::save_now(script, identity);
     super::addons::save_addon_variables(script, identity);
     super::addons::save_enable_state(script, identity);
 }

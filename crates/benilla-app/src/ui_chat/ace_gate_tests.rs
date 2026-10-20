@@ -27,7 +27,7 @@ fn ace_vm(root: &Path) -> UiScript {
     let mut script = UiScript::new().expect("VM");
     script.set_screen_size(1024.0, 768.0);
     // Ace calls `CreateFrame`, `GetTime` and `ChatTypeInfo`, so the whole interface loads first.
-    let failures = crate::ui_script::load_default_ui(&script);
+    let failures = crate::ui_script::load_default_ui(&mut script);
     assert!(
         failures.is_empty(),
         "our own FrameXML failed to load: {failures:#?}"

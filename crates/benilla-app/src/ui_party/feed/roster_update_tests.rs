@@ -313,7 +313,7 @@ fn the_stock_raid_ui_repaints_a_member_who_dies_out_of_view() {
     benilla_formats::wow_data_or_skip!();
     let mut script = UiScript::new().unwrap();
     script.set_screen_size(1024.0, 768.0);
-    let failures = crate::ui_script::load_default_ui(&script);
+    let failures = crate::ui_script::load_default_ui(&mut script);
     assert!(failures.is_empty(), "load failures: {failures:?}");
     crate::ui_script::test_ui::seat_chain_addon(&mut script, "Blizzard_RaidUI");
     let mut app = app_with(script);

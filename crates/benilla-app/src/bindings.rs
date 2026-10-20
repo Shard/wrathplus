@@ -1802,7 +1802,7 @@ mod tests {
                 ..Default::default()
             }),
         );
-        let failures = crate::ui_script::load_default_ui(&script);
+        let failures = crate::ui_script::load_default_ui(&mut script);
         assert!(
             failures.is_empty(),
             "default UI failed to load: {failures:?}"
