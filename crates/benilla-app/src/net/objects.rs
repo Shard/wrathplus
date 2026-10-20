@@ -72,7 +72,6 @@ pub(super) fn register(app: &mut App) {
 pub(crate) struct Scene<'w, 's> {
     commands: Commands<'w, 's>,
     net: Res<'w, NetCommands>,
-    dialect: Res<'w, super::SessionDialect>,
     index: ResMut<'w, GuidIndex>,
     self_guid: Res<'w, SelfGuid>,
     transforms: Query<'w, 's, &'static mut Transform>,
@@ -254,7 +253,6 @@ fn on_object_destroyed(In(ev): In<SessionEvent>, mut sc: Scene) {
             held,
             &sc.names,
             &sc.net,
-            *sc.dialect,
         );
         object_destroyed(guid, &mut sc.commands, &mut sc.index);
     }
@@ -273,7 +271,6 @@ fn on_objects_removed(In(ev): In<SessionEvent>, mut sc: Scene) {
                 held,
                 &sc.names,
                 &sc.net,
-                *sc.dialect,
             );
         }
         objects_removed(guids, &mut sc.commands, &mut sc.index);

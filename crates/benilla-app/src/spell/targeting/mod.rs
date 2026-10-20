@@ -535,7 +535,6 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<crate::items::Items>();
         world.init_resource::<crate::net::GuidIndex>();
         world.insert_resource(crate::net::Reputations(Vec::new()));

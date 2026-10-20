@@ -20,7 +20,6 @@ use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{
     ClientCommand, EnteredWorldMessage, NetCommands, ObjectStore, Objects, SelfPlayer,
-    SessionDialect,
 };
 use crate::query_cache::QueryCache;
 use crate::ui_script::{UiFeed, UiInput};
@@ -193,11 +192,10 @@ impl Plugin for UiMailPlugin {
 fn send_query_next_mail_time_on_enter(
     mut entered: MessageReader<EnteredWorldMessage>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
     mut pending: ResMut<MailPending>,
 ) {
     if entered.read().next().is_some() {
-        query_next_mail_time(&commands, *dialect, &mut pending);
+        query_next_mail_time(&commands, &mut pending);
     }
 }
 
@@ -222,19 +220,15 @@ fn inbox_action(
     })
 }
 
-fn send_supported(commands: &NetCommands, dialect: SessionDialect, command: ClientCommand) -> bool {
-    if !commands.supports(dialect, &command) {
+fn send_supported(commands: &NetCommands, command: ClientCommand) -> bool {
+    if !commands.supports(&command) {
         return false;
     }
     commands.0.send(command).is_ok()
 }
 
-fn query_next_mail_time(
-    commands: &NetCommands,
-    dialect: SessionDialect,
-    pending: &mut MailPending,
-) {
-    if send_supported(commands, dialect, ClientCommand::QueryNextMailTime) {
+fn query_next_mail_time(commands: &NetCommands, pending: &mut MailPending) {
+    if send_supported(commands, ClientCommand::QueryNextMailTime) {
         pending.on_query_sent();
     }
 }
@@ -364,7 +358,6 @@ fn stationeries(
 /// The feed's remaining parameters, bundled under Bevy's 16-parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
 struct MailFeedExtras<'w, 's> {
-    dialect: Res<'w, SessionDialect>,
     wrath_snapshot: Local<'s, crate::ui_script::VmMemo<Option<benilla_ui::script::WrathMailInbox>>>,
     props: Option<Res<'w, crate::items::RandomProperties>>,
     enchants: Option<Res<'w, crate::items::Enchants>>,
@@ -427,7 +420,6 @@ fn feed_mail(
         return;
     };
     let MailFeedExtras {
-        dialect,
         wrath_snapshot: mut last_wrath,
         props,
         enchants,
@@ -558,7 +550,7 @@ fn feed_mail(
         // The close core's tail (`0x4acdad`, `0x4acdb1`): after a read, or an arrival while open,
         // re-ask the server, stamping "no mail". `CloseMail` and the range close both land here.
         if pending.take_refresh() {
-            query_next_mail_time(&commands, *dialect, &mut pending);
+            query_next_mail_time(&commands, &mut pending);
         }
     } else if mail.mailbox.is_some() {
         // A re-click re-shows the open window; `MAIL_SHOW`'s `CheckInbox` refreshes the list.
@@ -589,7 +581,6 @@ fn drain_mail(
     script: Option<NonSendMut<UiScript>>,
     mut mail: ResMut<MailOpen>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
     self_q: Query<&ObjectStore, With<SelfPlayer>>,
     objects: Objects,
     time: Res<Time>,
@@ -615,7 +606,7 @@ fn drain_mail(
         if mail
             .last_list_query
             .is_none_or(|t| now - t >= CHECK_INBOX_THROTTLE_SECS)
-            && send_supported(&commands, *dialect, ClientCommand::GetMailList { mailbox })
+            && send_supported(&commands, ClientCommand::GetMailList { mailbox })
         {
             mail.last_list_query = Some(now);
         }
@@ -626,7 +617,7 @@ fn drain_mail(
         for index in script.take_mail_opens() {
             if let Some(command) = wrath::mark_read(inbox, mailbox, index) {
                 pending.arm_refresh();
-                send_supported(&commands, *dialect, command);
+                send_supported(&commands, command);
             }
         }
     }
@@ -642,15 +633,15 @@ fn drain_mail(
         // Every open arms the refresh, read or not: `GetInboxText` calls the mark-as-read sender
         // unconditionally, which sets `[0xb6efcc]` (`0x4adda6`).
         let mark_read = ClientCommand::MailMarkAsRead { mailbox, mail_id };
-        if commands.supports(*dialect, &mark_read) {
+        if commands.supports(&mark_read) {
             pending.arm_refresh();
-            if !read && send_supported(&commands, *dialect, mark_read) {
+            if !read && send_supported(&commands, mark_read) {
                 mail.mark_read(index);
             }
         }
         if text_id != 0 {
             let command = ClientCommand::ItemTextQuery { text_id, mail_id };
-            if commands.supports(*dialect, &command) {
+            if commands.supports(&command) {
                 mail.bodies.get_or_ask(text_id, || {
                     let _ = commands.0.send(command);
                 });
@@ -660,7 +651,7 @@ fn drain_mail(
 
     for (index, slot) in script.take_mail_take_items() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeItem(slot)) {
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
     // The 12340 mail family's intents. Auto-loot sends the money take and the first item take;
@@ -681,7 +672,7 @@ fn drain_mail(
                 ];
                 for action in actions.into_iter().flatten() {
                     if let Some(command) = inbox_action(&mail, mailbox, row, action) {
-                        send_supported(&commands, *dialect, command);
+                        send_supported(&commands, command);
                     }
                 }
             }
@@ -694,22 +685,22 @@ fn drain_mail(
     }
     for index in script.take_mail_take_money() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeMoney) {
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
     for index in script.take_mail_deletes() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::Delete) {
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
     for index in script.take_mail_returns() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::Return) {
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
     for index in script.take_mail_take_texts() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::CreateTextItem) {
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
 
@@ -750,7 +741,7 @@ fn drain_mail(
                 req.money,
                 req.cod,
             );
-            send_supported(&commands, *dialect, command);
+            send_supported(&commands, command);
         }
     }
 
@@ -771,7 +762,7 @@ mod tests {
         pending.apply_query_reply(0.0);
         let _ = pending.take_notify();
         let commands = NetCommands(tx);
-        query_next_mail_time(&commands, SessionDialect::Wrath12340, &mut pending);
+        query_next_mail_time(&commands, &mut pending);
         assert!(!pending.has_new_mail());
         match rx.try_recv() {
             Ok(ClientCommand::QueryNextMailTime) => {}

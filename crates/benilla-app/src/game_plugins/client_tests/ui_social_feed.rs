@@ -37,7 +37,6 @@ fn packet(app: &mut App, name: &str) {
 fn real_handlers_clear_capture_and_pending_receipts_before_fresh_feed() {
     use bevy::ecs::system::RunSystemOnce;
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    app.insert_resource(crate::net::SessionDialect::Wrath12340);
     packet(&mut app, "OldPending");
     app.world_mut()
         .run_system_once(crate::ui_social::native_who::drain)

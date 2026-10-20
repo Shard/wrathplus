@@ -13,7 +13,7 @@ use super::super::{
 };
 use super::drive_animations;
 use crate::names::type_flags::{DO_NOT_PLAY_WOUND_ANIM, MORE_AUDIBLE, NO_FACTION_TOOLTIP};
-use crate::net::{ClientCommand, NetCommands, SessionDialect};
+use crate::net::{ClientCommand, NetCommands};
 use benilla_protocol::messages::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 
@@ -126,7 +126,7 @@ fn advance(app: &mut App, ms: u64) {
     app.update();
 }
 
-fn app_with_dialect(dialect: SessionDialect) -> (App, crossbeam_channel::Receiver<ClientCommand>) {
+fn app_with_net() -> (App, crossbeam_channel::Receiver<ClientCommand>) {
     let mut app = App::new();
     // The client's one `rand()` stream: the variation and replay rolls.
     app.init_resource::<benilla_assets::AnimRng>();
@@ -152,7 +152,6 @@ fn app_with_dialect(dialect: SessionDialect) -> (App, crossbeam_channel::Receive
     // A dead-letter net channel; the driver tolerates the dropped receiver.
     let (tx, rx) = crossbeam_channel::unbounded();
     app.insert_resource(NetCommands(tx));
-    app.insert_resource(dialect);
     app.init_resource::<crate::names::NameCache>();
     app.insert_resource(catalog());
     app.add_systems(Update, drive_animations);
@@ -160,7 +159,7 @@ fn app_with_dialect(dialect: SessionDialect) -> (App, crossbeam_channel::Receive
 }
 
 fn app() -> App {
-    app_with_dialect(SessionDialect::Wrath12340).0
+    app_with_net().0
 }
 
 fn self_sheath_unit(app: &mut App, descriptor: u8) -> Entity {
@@ -207,7 +206,7 @@ fn set_sheathed(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u32> {
 
 #[test]
 fn wrath_self_sheath_request_uses_the_native_codec_and_local_ceremony() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let (mut app, rx) = app_with_net();
     let unit = self_sheath_unit(&mut app, 0);
     app.update();
     app.world_mut().write_message(SheathRequest {
@@ -244,7 +243,7 @@ fn force_stow_self(app: &mut App) -> Entity {
 
 #[test]
 fn wrath_self_automatic_reconcile_stows_through_its_native_codec() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let (mut app, rx) = app_with_net();
     let unit = force_stow_self(&mut app);
     app.update();
 
@@ -254,7 +253,7 @@ fn wrath_self_automatic_reconcile_stows_through_its_native_codec() {
 
 #[test]
 fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let (mut app, rx) = app_with_net();
     let unit = app
         .world_mut()
         .spawn((
@@ -282,7 +281,7 @@ fn wrath_remote_automatic_reconcile_keeps_its_visual_stow() {
 
 #[test]
 fn wrath_self_descriptor_sheath_echo_still_applies() {
-    let (mut app, rx) = app_with_dialect(SessionDialect::Wrath12340);
+    let (mut app, rx) = app_with_net();
     let unit = self_sheath_unit(&mut app, 1);
     app.update();
     assert_eq!(sheath_state(&app, unit), Some(1));

@@ -91,7 +91,6 @@ fn an_inspected_item_keeps_its_gems_and_links_with_them() {
     let (tx, _rx) = crossbeam_channel::unbounded();
     let commands = NetCommands(tx);
     let mut items = Items::default();
-    items.set_dialect(crate::net::SessionDialect::Wrath12340);
     items.insert_template(
         40,
         Some(benilla_protocol::messages::ItemInfo {

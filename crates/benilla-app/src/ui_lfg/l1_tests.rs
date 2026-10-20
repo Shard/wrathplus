@@ -20,8 +20,7 @@ fn app() -> (App, Receiver<ClientCommand>) {
         .init_resource::<LfgL1>()
         .init_resource::<Items>()
         .add_systems(Update, feed);
-    let mut items = Items::default();
-    items.set_dialect(crate::net::SessionDialect::Wrath12340);
+    let items = Items::default();
     app.insert_resource(items);
     app.insert_non_send_resource(vm());
     (app, rx)

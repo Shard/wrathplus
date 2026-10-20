@@ -13,8 +13,8 @@ use bevy::prelude::*;
 
 use crate::names::type_flags::DO_NOT_PLAY_WOUND_ANIM;
 use crate::net::{
-    ClientCommand, FacingStep, NetCommands, ObjectStore, RemoteMotion, SelfPlayer, SessionDialect,
-    Spline, UnitSpeeds,
+    ClientCommand, FacingStep, NetCommands, ObjectStore, RemoteMotion, SelfPlayer, Spline,
+    UnitSpeeds,
 };
 use crate::sound::EmoteSounds;
 
@@ -311,16 +311,13 @@ pub(super) fn drive_animations(
         // The open NPC session's unit (`[0xb4e2d0]`): its state emote is passed over when the
         // row's `EmoteFlags` carry `0x2000` (`0x5fd7e2`-`0x5fd7fd`).
         Option<Res<crate::ui_session::InteractNpc>>,
-        // Capability admission requires an explicit session dialect, including fixture worlds.
-        Res<SessionDialect>,
     ),
     // The variation roll's LCG, the reference's single CRT `_rand` stream shared by every play.
     mut rng: ResMut<benilla_assets::AnimRng>,
     // The last anim trace line per traced unit; the trace writes only on change.
     mut anim_trace_last: Local<std::collections::HashMap<Entity, String>>,
 ) {
-    let (emote_sounds, loot_kneel, time, names, mut recomputes, riders, interact, dialect) = aux;
-    let dialect = *dialect;
+    let (emote_sounds, loot_kneel, time, names, mut recomputes, riders, interact) = aux;
     let dt = time.delta_secs();
     // This frame's one-shot plays per unit, replayed in the reference's call order (`PlaySeq`
     // stamps): a later call overwrites an earlier, and the combat fast path keys on what is playing
@@ -695,7 +692,7 @@ pub(super) fn drive_animations(
             // replays the reference's per-play force-stow (`0x5fdf80`); the result is the same.
             if req.state != cur
                 && !(mounted && req.state != 0)
-                && (!is_self || net.supports(dialect, &command))
+                && (!is_self || net.supports(&command))
             {
                 debug!(
                     "sheath: unit {entity} {cur} -> {} (request, ceremony {})",
@@ -1281,7 +1278,7 @@ pub(super) fn drive_animations(
                 let command = ClientCommand::SetSheathed {
                     state: u32::from(forced),
                 };
-                if forced != cur && (!is_self || net.supports(dialect, &command)) {
+                if forced != cur && (!is_self || net.supports(&command)) {
                     debug!(
                         "sheath: unit {entity} {cur} -> {forced} (anim {anim} flags {flags:#x}, \
                          engaged {engaged})"

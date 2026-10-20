@@ -731,7 +731,7 @@ pub(crate) mod schedule_tests {
     /// - the native battlefield reducer and feed (`ui_battlefield::drain_native`,
     ///   `feed_battlefield`) against the terrain stream's release and rescatter: they read the
     ///   player's area through `WorldPoint`, which those systems only rebuild between frames' reads.
-    /// - the arena lines' drain (`net::wrath_arena_lines::drain_arena_lines`) against the arena
+    /// - the arena lines' drain (`ui_battlefield_arena_lines::drain_arena_lines`) against the arena
     ///   reducer (`ui_arena_team::feed_arena`) over `ArenaRosterRefresh`: a queue of team names the
     ///   reducer re-asks under its 10 s per-slot throttle, so a push lands this frame or the next.
     /// - the arena petition vendor (`ui_petition::vendor`): its walk-away guard against the

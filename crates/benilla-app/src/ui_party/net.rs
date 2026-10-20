@@ -10,9 +10,7 @@ use benilla_protocol::{SessionEvent, SessionEventKind};
 
 use super::{GroupState, GROUPTYPE_RAID};
 use crate::names::NameCache;
-use crate::net::{
-    ClientCommand, GuidIndex, NetCommands, NetHandlerApp, ObjectStore, SelfGuid, SessionDialect,
-};
+use crate::net::{ClientCommand, GuidIndex, NetCommands, NetHandlerApp, ObjectStore, SelfGuid};
 use crate::sound::MessageSounds;
 use crate::ui_action::{UiError, UiErrorKeys};
 use crate::ui_quest::QuestGiver;
@@ -218,7 +216,6 @@ fn on_list(
     names: Res<NameCache>,
     index: Res<GuidIndex>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
 ) {
     if let SessionEvent::GroupList {
         group_type,
@@ -242,7 +239,6 @@ fn on_list(
             &names,
             &index,
             &commands,
-            *dialect,
         );
     }
 }
@@ -377,7 +373,6 @@ fn list(
     names: &NameCache,
     index: &GuidIndex,
     net_commands: &NetCommands,
-    dialect: SessionDialect,
 ) {
     let mut names_pending = false;
     for m in &members {
@@ -407,7 +402,7 @@ fn list(
     if shown.invite_accept {
         sounds.push_cue(INVITE_ACCEPT_SOUND);
     }
-    seat_new_records(group, &seats, index, net_commands, dialect);
+    seat_new_records(group, &seats, index, net_commands);
     quest.bump_reask();
 }
 
@@ -421,7 +416,6 @@ fn seat_new_records(
     seats: &[(u64, bool)],
     index: &GuidIndex,
     net_commands: &NetCommands,
-    dialect: SessionDialect,
 ) {
     for (guid, online) in seats {
         // `apply_list` kept only the staying members' records, so a missing one means new.
@@ -433,7 +427,7 @@ fn seat_new_records(
             .insert(*guid, PartyMemberStatsInfo::placeholder(*online));
         if !index.0.contains_key(guid) {
             let command = ClientCommand::RequestPartyMemberStats { guid: *guid };
-            if net_commands.supports(dialect, &command) {
+            if net_commands.supports(&command) {
                 let _ = net_commands.0.send(command);
             }
         }
@@ -452,7 +446,6 @@ pub(crate) fn member_deactivated<'a>(
     held: impl Fn(u64) -> Option<&'a ObjectStore>,
     names: &NameCache,
     net_commands: &NetCommands,
-    dialect: SessionDialect,
 ) {
     let Some(store) = store else {
         return;
@@ -471,7 +464,7 @@ pub(crate) fn member_deactivated<'a>(
         .or_default()
         .snapshot_descriptor(&store.0, pet.map(|p| &p.0), pet_name);
     let command = ClientCommand::RequestPartyMemberStats { guid };
-    if net_commands.supports(dialect, &command) {
+    if net_commands.supports(&command) {
         let _ = net_commands.0.send(command);
     }
 }
@@ -484,7 +477,6 @@ pub(crate) fn roster_deactivated(
     stores: &Query<&mut ObjectStore>,
     names: &NameCache,
     net_commands: &NetCommands,
-    dialect: SessionDialect,
 ) {
     let streamed: Vec<u64> = group
         .members
@@ -494,7 +486,7 @@ pub(crate) fn roster_deactivated(
         .collect();
     let held = |g: u64| index.0.get(&g).and_then(|e| stores.get(*e).ok());
     for guid in streamed {
-        member_deactivated(guid, group, held(guid), held, names, net_commands, dialect);
+        member_deactivated(guid, group, held(guid), held, names, net_commands);
     }
 }
 
@@ -556,7 +548,6 @@ mod tests {
             &names,
             &GuidIndex::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
 
         let asked: Vec<u64> = rx
@@ -588,7 +579,6 @@ mod tests {
             &names,
             &GuidIndex::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
         assert!(
             rx.try_iter()
@@ -627,7 +617,6 @@ mod tests {
                 names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Wrath12340,
             );
             group.roster_updates
         };
@@ -688,7 +677,6 @@ mod tests {
                 &names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Wrath12340,
             );
         };
 
@@ -742,13 +730,7 @@ mod tests {
         let guid = 0x1234;
         let mut group = GroupState::default();
 
-        seat_new_records(
-            &mut group,
-            &[(guid, true)],
-            &GuidIndex::default(),
-            &net,
-            SessionDialect::Wrath12340,
-        );
+        seat_new_records(&mut group, &[(guid, true)], &GuidIndex::default(), &net);
         assert!(
             group.stats.contains_key(&guid),
             "the UI record is still seated"
@@ -769,7 +751,6 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
         assert_eq!(
             group.stats[&guid].cur_hp,
@@ -806,7 +787,6 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
 
         let rec = group.stats.get(&guid).expect("the member has a record");
@@ -862,15 +842,7 @@ mod tests {
         let held = |g: u64| (g == pet_guid).then_some(&pet);
         let mut names = NameCache::default();
         names.insert_pet(4, "Whelp".into());
-        member_deactivated(
-            guid,
-            &mut group,
-            Some(&store),
-            held,
-            &names,
-            &net,
-            SessionDialect::Wrath12340,
-        );
+        member_deactivated(guid, &mut group, Some(&store), held, &names, &net);
 
         let rec = group.stats.get(&guid).expect("the member has a record");
         assert_eq!(
@@ -890,15 +862,7 @@ mod tests {
         assert_eq!(rec.pet_auras_negative, Some(vec![(40, 770)]));
 
         // The pet not held: its block is emptied, not left as it was.
-        member_deactivated(
-            guid,
-            &mut group,
-            Some(&store),
-            |_| None,
-            &names,
-            &net,
-            SessionDialect::Wrath12340,
-        );
+        member_deactivated(guid, &mut group, Some(&store), |_| None, &names, &net);
         let rec = group.stats.get(&guid).unwrap();
         assert_eq!((rec.pet_guid, rec.pet_auras_negative.clone()), (None, None));
         assert_eq!(rec.pet_name, None, "and its name with it (`0x5f0a0f`)");
@@ -922,7 +886,6 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
         assert!(asked(&rx).is_empty());
         assert!(!group.stats.contains_key(&0xdead));
@@ -935,7 +898,6 @@ mod tests {
             |_| None,
             &NameCache::default(),
             &net,
-            SessionDialect::Wrath12340,
         );
         assert!(asked(&rx).is_empty());
     }
@@ -973,7 +935,6 @@ mod tests {
                 &names,
                 &index,
                 &net,
-                SessionDialect::Wrath12340,
             );
         };
 
@@ -1046,7 +1007,6 @@ mod tests {
                 &names,
                 &GuidIndex::default(),
                 &net,
-                SessionDialect::Wrath12340,
             );
         };
 

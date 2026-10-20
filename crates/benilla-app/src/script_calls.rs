@@ -22,7 +22,6 @@ const MAX_NESTING: u8 = 8;
 #[allow(clippy::type_complexity)] // the appliers, one per owner of the state a call touches
 pub(crate) fn apply_script_calls(
     script: Option<NonSendMut<UiScript>>,
-    dialect: Res<crate::net::SessionDialect>,
     binds: Res<crate::bindings::BindingsState>,
     mut appliers: ParamSet<(
         crate::target::ScriptSelect,
@@ -45,20 +44,18 @@ pub(crate) fn apply_script_calls(
     let (auras, progress, self_guid) = wrath;
     // Native Wrath defaults use the existing ordered application seam, not a second system
     // with duplicate state dependencies or an addon gameplay API.
-    if *dialect == crate::net::SessionDialect::Wrath12340 {
-        for (input, reverse) in [
-            (crate::bindings::Input::TargetNearestEnemy, false),
-            (crate::bindings::Input::TargetPreviousEnemy, true),
-        ] {
-            if binds.fired(input) {
-                appliers
-                    .p0()
-                    .target_nearest(benilla_ui::script::NearestMode::Enemy, reverse);
-            }
+    for (input, reverse) in [
+        (crate::bindings::Input::TargetNearestEnemy, false),
+        (crate::bindings::Input::TargetPreviousEnemy, true),
+    ] {
+        if binds.fired(input) {
+            appliers
+                .p0()
+                .target_nearest(benilla_ui::script::NearestMode::Enemy, reverse);
         }
-        if binds.fired(crate::bindings::Input::AttackTarget) {
-            appliers.p7().attack_target();
-        }
+    }
+    if binds.fired(crate::bindings::Input::AttackTarget) {
+        appliers.p7().attack_target();
     }
     let Some(mut script) = script else {
         return;

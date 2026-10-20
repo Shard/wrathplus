@@ -14,7 +14,7 @@ use bevy::prelude::*;
 
 use benilla_protocol::guid;
 
-use crate::net::{ClientCommand, NetCommands, ObjectStore, SessionDialect};
+use crate::net::{ClientCommand, NetCommands, ObjectStore};
 use crate::query_cache::QueryCache;
 
 /// The creature template's `type_flags` dword from `SMSG_CREATURE_QUERY_RESPONSE`, cached by the
@@ -47,7 +47,7 @@ pub(crate) mod type_flags {
 }
 
 /// The name cache: players by guid, creatures by template entry, pets by pet number.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub(crate) struct NameCache {
     /// A `None` answer is an empty wire name: the server does not know the guid.
     players: QueryCache<u64, String>,
@@ -62,21 +62,6 @@ pub(crate) struct NameCache {
     /// Bumped by every landed answer and the pet-rename eviction, never by an ask: the gated
     /// feeds re-run when it moves.
     generation: u64,
-    /// The active wire dialect; direct/offline fixtures retain Vanilla query semantics.
-    dialect: SessionDialect,
-}
-
-impl Default for NameCache {
-    fn default() -> Self {
-        Self {
-            players: QueryCache::default(),
-            player_traits: HashMap::new(),
-            creatures: QueryCache::default(),
-            pets: QueryCache::default(),
-            generation: 0,
-            dialect: SessionDialect::Wrath12340,
-        }
-    }
 }
 
 /// One cached creature template head.
@@ -179,7 +164,7 @@ impl NameCache {
                     return self.players.get(guid_val).map(String::as_str);
                 }
                 let command = ClientCommand::NameQuery { guid: guid_val };
-                if !commands.supports(self.dialect, &command) {
+                if !commands.supports(&command) {
                     return None;
                 }
                 self.players
@@ -201,7 +186,7 @@ impl NameCache {
             return self.pets.get(pet_number).map(String::as_str);
         }
         let command = ClientCommand::PetNameQuery { pet_number, guid };
-        if !commands.supports(self.dialect, &command) {
+        if !commands.supports(&command) {
             return None;
         }
         self.pets
@@ -224,7 +209,7 @@ impl NameCache {
             return self.creatures.get(entry).map(|r| r.name.as_str());
         }
         let command = ClientCommand::CreatureQuery { entry, guid };
-        if !commands.supports(self.dialect, &command) {
+        if !commands.supports(&command) {
             return None;
         }
         self.creatures
@@ -233,10 +218,6 @@ impl NameCache {
                 let _ = commands.0.send(command);
             })
             .map(|r| r.name.as_str())
-    }
-
-    pub(crate) fn set_dialect(&mut self, dialect: SessionDialect) {
-        self.dialect = dialect;
     }
 
     /// A completed player-name query, preserving an empty/unknown answer as `Some("")`.
@@ -488,22 +469,21 @@ pub(crate) mod net {
     use bevy::prelude::*;
 
     use super::{CreatureRecord, NameCache};
-    use crate::net::{NetHandlerApp, SessionDialect};
+    use crate::net::NetHandlerApp;
 
     /// Register the four handlers.
     pub(crate) fn register(app: &mut App) {
         use SessionEventKind as K;
-        app.add_systems(PreStartup, configure_query_dialects)
-            .add_systems(
-                Update,
-                drain_native_pet_names
-                    .after(benilla_world::schedule::WorldStage::Net)
-                    .before(crate::ui_script::UiFeed),
-            )
-            .net_handler(K::PlayerName, on_player_name)
-            .net_handler(K::PetName, on_pet_name)
-            .net_handler(K::CreatureName, on_creature_name)
-            .net_handler(K::InvalidatePlayer, on_invalidate_player);
+        app.add_systems(
+            Update,
+            drain_native_pet_names
+                .after(benilla_world::schedule::WorldStage::Net)
+                .before(crate::ui_script::UiFeed),
+        )
+        .net_handler(K::PlayerName, on_player_name)
+        .net_handler(K::PetName, on_pet_name)
+        .net_handler(K::CreatureName, on_creature_name)
+        .net_handler(K::InvalidatePlayer, on_invalidate_player);
     }
 
     // Base-name display only: the lossless DTO carries timestamp/declensions, but this
@@ -525,27 +505,6 @@ pub(crate) mod net {
                     String::from_utf8_lossy(&response.name).into_owned(),
                 );
             }
-        }
-    }
-
-    fn configure_query_dialects(
-        dialect: Option<Res<SessionDialect>>,
-        names: Option<ResMut<NameCache>>,
-        items: Option<ResMut<crate::items::Items>>,
-        go_templates: Option<ResMut<crate::go_templates::GameObjectTemplates>>,
-    ) {
-        let dialect = dialect
-            .as_deref()
-            .copied()
-            .unwrap_or(SessionDialect::Wrath12340);
-        if let Some(mut names) = names {
-            names.set_dialect(dialect);
-        }
-        if let Some(mut items) = items {
-            items.set_dialect(dialect);
-        }
-        if let Some(mut go_templates) = go_templates {
-            go_templates.set_dialect(dialect);
         }
     }
 
@@ -683,10 +642,7 @@ mod tests {
     #[test]
     fn wrath_misses_ask_the_server_once() {
         let (cmds, rx) = commands();
-        let cache = NameCache {
-            dialect: SessionDialect::Wrath12340,
-            ..default()
-        };
+        let cache = NameCache::default();
         let player = compose(guid::HIGH_PLAYER, 0, 7);
         let creature = compose(guid::HIGH_UNIT, 69, 1);
 

@@ -845,8 +845,7 @@ mod tests {
             .init_resource::<crate::spell::HeldForPick>()
             .init_resource::<Items>()
             .init_resource::<crate::net::GuidIndex>()
-            .insert_resource(NetCommands(tx))
-            .insert_resource(crate::net::SessionDialect::Wrath12340);
+            .insert_resource(NetCommands(tx));
 
         app.world_mut().spawn((
             SelfPlayer,
