@@ -97,19 +97,7 @@ pub(crate) fn send_selection(commands: &NetCommands, dialect: SessionDialect, gu
     commands.0.send(command).is_ok()
 }
 
-/// Our target, set the instant we click, as the 1.12 client does without waiting for the server,
-/// and cleared on deselect or when it streams out. `CMSG_SET_SELECTION` carries the guid, which the
-/// server records in our `UNIT_FIELD_TARGET`.
-#[derive(Resource, Default)]
-pub(crate) struct Selection {
-    pub(crate) target: Option<Entity>,
-    pub(crate) guid: Option<u64>,
-    /// The last-target pair `[0xb4e2e0]` that `TargetLastTarget` reads: `SetSelection` stamps the
-    /// outgoing selection, none included, on every change it makes, a select or a deselect
-    /// (`0x49361d`-`0x493628`); a teardown clear (`0x493910` alone) leaves it.
-    pub(crate) last: Option<u64>,
-}
-
+pub(crate) use crate::app_core::state::Selection;
 /// This frame's character-model pick, by [`hover::update_hover`]. At most one slot is set: the
 /// reference makes one pick over all CGObjects and switches on type at the end (`0x480df0` →
 /// `0x7089c0`), and a corpse (`CGCorpse_C`) is not a unit, so it never answers as `target`.
