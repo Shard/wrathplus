@@ -75,7 +75,11 @@ pub(crate) fn place_action(model: &mut Model, id: u32) -> bool {
         CursorPayload::Merchant(_) => None,
         // Mode 11, a guild bank item, is outside `PlaceAction`'s modes.
         CursorPayload::GuildBankItem(_) => None,
+        CursorPayload::ItemId(i) => Some((ACTION_KIND_ITEM, i.item_id, i.texture.clone())),
+        // Labelled: build 12340's equipment-set action word is untraced, so a set stays held.
+        CursorPayload::EquipmentSet(_) => None,
     };
+
     let Some((kind, action, texture)) = placeable else {
         model.cursor = Some(held);
         return false;

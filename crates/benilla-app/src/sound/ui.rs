@@ -147,11 +147,16 @@ fn play_item_gesture_sounds(
         // Mode 5 takes the item arm: the vendor grab `0x4950f0` is handed the row's
         // `ItemDisplayInfo` id, so it plays the item's own pickup and put-down; so is mode 11's
         // guild bank grab (`0x520d30` from `0x5a6200`).
-        CursorPayload::Item(_) | CursorPayload::Merchant(_) | CursorPayload::GuildBankItem(_) => {
+        // Labelled: mode 7 (`PickupItem`) is taken as the item arm; its `0x4d0090` is unread.
+        CursorPayload::Item(_)
+        | CursorPayload::Merchant(_)
+        | CursorPayload::GuildBankItem(_)
+        | CursorPayload::ItemId(_) => {
             let item_id = match payload {
                 CursorPayload::Item(i) => i.item_id,
                 CursorPayload::Merchant(m) => m.item_id,
                 CursorPayload::GuildBankItem(g) => g.item_id,
+                CursorPayload::ItemId(i) => i.item_id,
                 _ => unreachable!("guarded by the arm's own pattern"),
             };
             let (Some(displays), Some(sounds)) = (&displays, &sounds) else {
@@ -190,7 +195,9 @@ fn play_item_gesture_sounds(
         | CursorPayload::StablePet(_)
         // Mode 2: money pickup and drop both play `LOOTWINDOWCOINSOUND`, never the generic drop
         // kit (`0x494cfe`/`0x49523a`).
-        | CursorPayload::Money(_) => {
+        | CursorPayload::Money(_)
+        // Mode 0xd: `0x520dc0` plays `INTERFACESOUND_CURSORGRABOBJECT` on the grab.
+        | CursorPayload::EquipmentSet(_) => {
             let kit_id = match (&payload, gesture) {
                 (CursorPayload::Money(_), _) => LOOTWINDOWCOINSOUND,
                 (_, CursorGesture::Gain) => INTERFACESOUND_CURSORGRABOBJECT,

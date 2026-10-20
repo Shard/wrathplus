@@ -144,6 +144,35 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "GetNumEquipmentSets",
         lua.create_function(|lua, ()| Ok(lua.app_data_ref::<State>().map_or(0, |s| s.sets.len())))?,
     )?;
+    // PickupEquipmentSet(setIndex) (`0x5af2c0`): the index-th set (`0x5ae580`, list order) onto
+    // the cursor, mode 0xd (`0x520dc0`); nothing for an index naming none. Its grab sound
+    // (`INTERFACESOUND_CURSORGRABOBJECT`) is the app's cursor-sound feed's.
+    globals.set(
+        "PickupEquipmentSet",
+        lua.create_function(|lua, index: Value| {
+            let index = lua
+                .coerce_number(index)?
+                .ok_or_else(|| mlua::Error::runtime("Usage: PickupEquipmentSet(setIndex)"))?
+                .round_ties_even() as i64;
+            let set = usize::try_from(index - 1).ok().and_then(|i| {
+                lua.app_data_ref::<State>()
+                    .and_then(|s| s.sets.get(i).cloned())
+            });
+            if let Some(set) = set {
+                let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+                super::cursor::clear_cursor(&mut model);
+                model.cursor = Some(super::CursorPayload::EquipmentSet(
+                    super::CursorEquipmentSet {
+                        texture: (!set.icon.is_empty())
+                            .then(|| format!("Interface\\Icons\\{}", set.icon)),
+                        name: set.name,
+                    },
+                ));
+                super::cursor::queue_cursor_update(&mut model);
+            }
+            Ok(())
+        })?,
+    )?;
     globals.set(
         "GetEquipmentSetInfo",
         lua.create_function(|lua, index: Value| {
@@ -449,6 +478,30 @@ mod tests {
             ]
         );
         assert!(ui.take_equipment_set_requests().is_empty());
+    }
+
+    #[test]
+    fn pickup_equipment_set_holds_the_set_and_reports_its_name() {
+        let mut ui = script();
+        ui.set_equipment_sets(vec![super::EquipmentSetView {
+            name: "Tank".into(),
+            icon: "INV_Shield_06".into(),
+            ..Default::default()
+        }]);
+        ui.run("PickupEquipmentSet(2)").unwrap();
+        assert!(ui
+            .eval::<bool>("return select('#', GetCursorInfo()) == 0")
+            .unwrap());
+        ui.run("PickupEquipmentSet(1)").unwrap();
+        assert!(ui
+            .eval::<bool>("local k, n = GetCursorInfo() return k == 'equipmentset' and n == 'Tank'")
+            .unwrap());
+        ui.run("PlaceAction(3)").unwrap();
+        assert!(
+            ui.take_action_sets().is_empty(),
+            "labelled: a set stays held"
+        );
+        assert!(ui.run("PickupEquipmentSet()").is_err());
     }
 
     #[test]

@@ -984,6 +984,8 @@ pub(super) fn paint_script(
             CursorPayload::StablePet(p) => Some(p.texture),
             CursorPayload::Merchant(m) => m.texture,
             CursorPayload::GuildBankItem(g) => g.texture,
+            CursorPayload::ItemId(i) => i.texture,
+            CursorPayload::EquipmentSet(e) => e.texture,
             CursorPayload::Money(m) => {
                 Some(benilla_ui::script::coin_icon(i64::from(m.copper)).to_string())
             }

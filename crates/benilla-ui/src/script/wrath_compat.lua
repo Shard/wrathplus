@@ -372,8 +372,6 @@ do
 end
 
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
-PickupItem = PickupItem or none
-PickupEquipmentSet = none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 

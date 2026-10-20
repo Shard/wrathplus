@@ -526,8 +526,6 @@ mod tests {
         "IsVoiceChatAllowed",
         "IsVoiceChatAllowedByServer",
         "IsVoiceChatEnabled",
-        "PickupEquipmentSet",
-        "PickupItem",
         "RegisterStaticConstants",
         "SetOverrideBinding",
         "SetOverrideBindingClick",

@@ -47,6 +47,27 @@ pub enum CursorPayload {
     /// Mode 11, a guild bank item (`PickupGuildBankItem` `0x5a6200`, `SplitGuildBankItem`
     /// `0x5a6600`). Not an `Item`: `CursorHasItem` (`0x515100`) answers modes 1 and 9 only.
     GuildBankItem(CursorGuildBankItem),
+    /// Mode 7, an item by id with no bag slot behind it (`PickupItem` `0x522fb0`), as a dragged
+    /// link: `PlaceAction` puts it on a bar.
+    ItemId(CursorItemId),
+    /// Mode 0xd, a saved equipment set (`PickupEquipmentSet` `0x5af2c0` → `0x520dc0`).
+    EquipmentSet(CursorEquipmentSet),
+}
+
+/// An item held by id, mode 7: its icon and, once the template is known, its link.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CursorItemId {
+    pub item_id: u32,
+    pub texture: Option<String>,
+    pub link: Option<String>,
+}
+
+/// An equipment set held on the cursor, mode 0xd: the set's name (`GetCursorInfo`'s second
+/// return, set `+0x114`) and icon.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CursorEquipmentSet {
+    pub name: String,
+    pub texture: Option<String>,
 }
 
 /// A guild bank item held on the cursor, mode 11: its 1-based tab and slot, and the split count
@@ -475,6 +496,11 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
                 Some(CursorPayload::GuildBankItem(i)) => {
                     vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
                 }
+                // Mode 7 shares the item case, which answers nothing for an uncached template.
+                Some(CursorPayload::ItemId(i)) if i.link.is_some() => {
+                    vec![text("item")?, Value::Integer(i.item_id.into()), link(&i.link)?]
+                }
+                Some(CursorPayload::EquipmentSet(e)) => vec![text("equipmentset")?, text(&e.name)?],
                 Some(CursorPayload::Money(m)) => vec![text("money")?, Value::Integer(m.copper.into())],
                 Some(CursorPayload::Spell(s)) => vec![
                     text("spell")?,
