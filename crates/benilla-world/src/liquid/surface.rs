@@ -663,16 +663,33 @@ mod tests {
 #[cfg(test)]
 mod real_data {
     use super::LiquidKind;
-    use benilla_formats::{parse_wmo_root, wmo_group_liquid_mesh};
+    use benilla_formats::wrath_liquid::{load_liquid_catalogs, LiquidCatalogs};
+    use benilla_formats::{
+        parse_wmo_root, wmo_group_liquid_mesh_of_kind, wmo_group_wrath_liquid, LiquidMesh, WmoRoot,
+    };
     use std::collections::HashMap;
 
-    /// The scroll gate over the shipped pools, where both behaviours share buildings: Ironforge has
+    /// A group's surface as the Wrath loader builds it: the native resolver's category, the
+    /// native speed bits.
+    fn wrath_group_liquid(
+        catalogs: &LiquidCatalogs,
+        root: &WmoRoot,
+        bytes: &[u8],
+    ) -> Option<LiquidMesh> {
+        let state = wmo_group_wrath_liquid(bytes, root).ok()?;
+        let kind = catalogs.liquid_type(state.resolved_id)?.kind()?;
+        wmo_group_liquid_mesh_of_kind(bytes, root.flags().ok()?, kind)
+    }
+
+    /// The scroll gate over the shipped pools through the 3.3.5 builder, whose native speed bits
+    /// reproduce the 1.12 nibbles, where both behaviours share buildings: Ironforge has
     /// 9 static nibble-2 and 2 scrolling nibble-6 magma groups, Blackrock is nibble 6 throughout,
     /// Undercity's 38 slime canals are nibble 3 and still, and Stratholme's are nibble 7 and flow.
     #[test]
     fn only_the_nibble_six_and_seven_pools_scroll_in_the_shipped_data() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        let catalogs = load_liquid_catalogs(&mut chain).expect("liquid catalogs");
         // Every liquid-bearing group of a WMO, as `(nibble, kind)` → count.
         let mut census = |root_path: &str| -> HashMap<(u8, LiquidKind), usize> {
             let bytes = chain.read_file(root_path).expect("root readable");
@@ -686,7 +703,7 @@ mod real_data {
                 let Ok(gb) = chain.read_file(&format!("{stem}_{gi:03}.wmo")) else {
                     continue;
                 };
-                if let Some(m) = wmo_group_liquid_mesh(&gb) {
+                if let Some(m) = wrath_group_liquid(&catalogs, &root, &gb) {
                     *tally.entry((m.sound_nibble, m.kind)).or_default() += 1;
                 }
             }
@@ -748,11 +765,13 @@ mod real_data {
     }
 
     /// A WMO pool's fog block follows its group's `MOGI & 0x48 == 0` class: Undercity's 38 liquid
-    /// groups are interior but for group 7, and Stormwind's 22 are all exterior.
+    /// groups are interior but for group 7, and Stormwind's 5 (3.3.5 reworked its canals from the
+    /// 1.12 file's 22 groups) are all exterior.
     #[test]
     fn a_wmo_pools_fog_block_follows_its_groups_interior_class() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+        let catalogs = load_liquid_catalogs(&mut chain).expect("liquid catalogs");
         // Which groups of a WMO carry liquid, and whether each is an interior group.
         let liquid_groups = |chain: &mut benilla_formats::Chain, root_path: &str| {
             let bytes = chain.read_file(root_path).expect("root readable");
@@ -764,7 +783,7 @@ mod real_data {
             (0..root.group_count() as usize)
                 .filter_map(|gi| {
                     let gb = chain.read_file(&format!("{stem}_{gi:03}.wmo")).ok()?;
-                    wmo_group_liquid_mesh(&gb)?;
+                    wrath_group_liquid(&catalogs, &root, &gb)?;
                     Some((gi, root.group_infos().get(gi).is_some_and(|g| g.interior)))
                 })
                 .collect::<Vec<_>>()
@@ -783,7 +802,7 @@ mod real_data {
             &mut chain,
             "world\\wmo\\azeroth\\buildings\\stormwind\\stormwind.wmo",
         );
-        assert_eq!(sw.len(), 22, "Stormwind's liquid group count moved: {sw:?}");
+        assert_eq!(sw.len(), 5, "Stormwind's liquid group count moved: {sw:?}");
         assert!(
             sw.iter().all(|(_, interior)| !interior),
             "Stormwind's canals and fountains are open to the sky — none takes the interior fog: {sw:?}",

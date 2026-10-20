@@ -123,8 +123,8 @@ pub struct WrathM2 {
     events: Vec<WrathEvent>,
 }
 
-/// A decoded external Wrath skin profile. Its records reuse the established skin semantics; the
-/// container is separate because [`crate::Skin`] specifically denotes an embedded `M2View`.
+/// A decoded external Wrath skin profile (`<stem>NN.skin`); its records reuse the shared
+/// [`SkinSection`] and [`SkinBatch`] semantics.
 pub struct WrathSkin {
     indices: Vec<u16>,
     triangles: Vec<u16>,
