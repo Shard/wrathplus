@@ -1,10 +1,6 @@
 //! The GM ticket family behind the Help window: create, update text, get, delete and queue
 //! status, each a request and a `u32`-led answer; the get, delete and status requests are empty.
 
-use std::io;
-
-use crate::wire::{read_cstring, read_f32_le, read_u32_le, read_u8};
-
 /// The second cstring of `CMSG_GMTICKET_CREATE`, the 1.12 client's constant at `0x860708`.
 pub const RESERVED_FOR_FUTURE_USE: &str = "Reserved for future use";
 
@@ -73,35 +69,6 @@ pub fn gm_ticket_updatetext(category: u8, text: &str) -> Vec<u8> {
     out
 }
 
-/// Read the `u32` answer shared by create, update text and delete (vmangos `GMTicketMgr.h:49-54`):
-/// 1 already exists, 2 created, 3 create failed, 4 updated, 5 update failed, 9 deleted.
-pub(super) fn read_gm_ticket_response(r: &mut &[u8]) -> io::Result<u32> {
-    read_u32_le(r)
-}
-
-/// Read `SMSG_GMTICKET_SYSTEMSTATUS`, 1 when the queue takes tickets and 0 when not. Signed: the
-/// 1.12 client hands it to Lua as a signed dword (`0x704fa6`), and `HelpFrame` branches on -1.
-pub(super) fn read_gm_ticket_system_status(r: &mut &[u8]) -> io::Result<i32> {
-    Ok(read_u32_le(r)? as i32)
-}
-
-/// Read `SMSG_GMTICKET_GETTICKET`: a status, then the ticket only for
-/// [`GMTICKET_STATUS_HASTEXT`]; any other status is no ticket, not an error.
-pub(super) fn read_gm_ticket(r: &mut &[u8]) -> io::Result<Option<GmTicket>> {
-    if read_u32_le(r)? != GMTICKET_STATUS_HASTEXT {
-        return Ok(None);
-    }
-    Ok(Some(GmTicket {
-        text: read_cstring(r)?,
-        category: read_u8(r)?,
-        ticket_age: read_f32_le(r)?,
-        oldest_ticket_age: read_f32_le(r)?,
-        update_time: read_f32_le(r)?,
-        assigned_to_gm: read_u8(r)?,
-        opened_by_gm: read_u8(r)?,
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,54 +99,5 @@ mod tests {
             gm_ticket_updatetext(7, "Still stuck."),
             b"\x07Still stuck.\0"
         );
-    }
-
-    /// The Lua `UPDATE_TICKET` event reverses this order; the wire does not.
-    #[test]
-    fn a_held_ticket_decodes_in_wire_order_text_before_category() {
-        let mut bytes = GMTICKET_STATUS_HASTEXT.to_le_bytes().to_vec();
-        bytes.extend_from_slice(b"Stuck in a rock.\0");
-        bytes.push(1);
-        bytes.extend_from_slice(&0.25f32.to_le_bytes());
-        bytes.extend_from_slice(&2.5f32.to_le_bytes());
-        bytes.extend_from_slice(&0.01f32.to_le_bytes());
-        bytes.push(2);
-        bytes.push(1);
-
-        assert_eq!(
-            read_gm_ticket(&mut &bytes[..]).unwrap(),
-            Some(GmTicket {
-                text: "Stuck in a rock.".to_string(),
-                category: 1,
-                ticket_age: 0.25,
-                oldest_ticket_age: 2.5,
-                update_time: 0.01,
-                assigned_to_gm: 2,
-                opened_by_gm: 1,
-            })
-        );
-    }
-
-    /// The stock Help frame branches on -1 ("GM Help Tickets are currently unavailable.").
-    #[test]
-    fn the_queue_status_is_signed_so_all_ones_reads_as_minus_one() {
-        assert_eq!(
-            read_gm_ticket_system_status(&mut &0xFFFF_FFFFu32.to_le_bytes()[..]).unwrap(),
-            -1
-        );
-        assert_eq!(
-            read_gm_ticket_system_status(&mut &1u32.to_le_bytes()[..]).unwrap(),
-            GMTICKET_QUEUE_ENABLED
-        );
-    }
-
-    /// Retail's answer to the client's own post-login ask.
-    #[test]
-    fn the_no_ticket_answer_is_four_bytes_and_is_not_an_error() {
-        let bytes = GMTICKET_STATUS_DEFAULT.to_le_bytes();
-        assert_eq!(read_gm_ticket(&mut &bytes[..]).unwrap(), None);
-        // Any other status is also no ticket.
-        let bytes = 0u32.to_le_bytes();
-        assert_eq!(read_gm_ticket(&mut &bytes[..]).unwrap(), None);
     }
 }

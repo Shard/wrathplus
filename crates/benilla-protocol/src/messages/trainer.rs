@@ -1,10 +1,6 @@
 //! Trainer window wire (opcodes 432-436). The window opens off the gossip trainer option
 //! (`GOSSIP_OPTION_TRAINER`), so there is no open verb, only a list refresh and a buy.
 
-use std::io;
-
-use crate::wire::{capacity_hint, read_cstring, read_u32_le, read_u64_le, read_u8};
-
 /// One 38-byte `SMSG_TRAINER_LIST` service (`NPCHandler.cpp:97-139`); the server already filters
 /// the list to the player's class and race.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,53 +47,4 @@ pub mod train_fail {
 /// `CMSG_TRAINER_LIST`: re-requests the list, as after a purchase to turn the service gray.
 pub fn trainer_list(trainer_guid: u64) -> Vec<u8> {
     trainer_guid.to_le_bytes().to_vec()
-}
-
-/// `CMSG_TRAINER_BUY_SPELL`: the server answers `SMSG_TRAINER_BUY_SUCCEEDED` plus
-/// `SMSG_LEARNED_SPELL`, or `SMSG_TRAINER_BUY_FAILED`.
-pub fn trainer_buy_spell(trainer_guid: u64, spell_id: u32) -> Vec<u8> {
-    let mut body = Vec::with_capacity(12);
-    body.extend_from_slice(&trainer_guid.to_le_bytes());
-    body.extend_from_slice(&spell_id.to_le_bytes());
-    body
-}
-
-/// `SMSG_TRAINER_LIST` (`NPCHandler.cpp:141-241`): the type is 0 class, 1 mount, 2 tradeskill or
-/// 3 pet, and the title is the greeting line.
-pub(super) fn read_trainer_list(
-    r: &mut &[u8],
-) -> io::Result<(u64, u32, Vec<TrainerSpell>, String)> {
-    let trainer = read_u64_le(r)?;
-    let trainer_type = read_u32_le(r)?;
-    let count = read_u32_le(r)?;
-    // No protocol bound (`NPCHandler.cpp:170` sums two lists); 1024 is past any real trainer.
-    let mut services = Vec::with_capacity(capacity_hint(count, 1024));
-    for _ in 0..count {
-        // Struct-literal fields evaluate top to bottom, so this reads in wire order.
-        services.push(TrainerSpell {
-            spell: read_u32_le(r)?,
-            state: read_u8(r)?,
-            cost: read_u32_le(r)?,
-            can_learn_primary_prof: read_u32_le(r)? != 0,
-            is_primary_prof_first_rank: read_u32_le(r)? != 0,
-            wrath_point_cost: None,
-            req_level: read_u8(r)?,
-            req_skill: read_u32_le(r)?,
-            req_skill_value: read_u32_le(r)?,
-            req_spells: [read_u32_le(r)?, read_u32_le(r)?, read_u32_le(r)?],
-        });
-    }
-    let title = read_cstring(r)?;
-    Ok((trainer, trainer_type, services, title))
-}
-
-/// `SMSG_TRAINER_BUY_SUCCEEDED` (trainer, spell) is confirmation only: the spell arrives by
-/// `SMSG_LEARNED_SPELL` and the gray repaint needs a `CMSG_TRAINER_LIST`.
-pub(super) fn read_trainer_buy_succeeded(r: &mut &[u8]) -> io::Result<(u64, u32)> {
-    Ok((read_u64_le(r)?, read_u32_le(r)?))
-}
-
-/// `SMSG_TRAINER_BUY_FAILED`: trainer, spell and a [`train_fail`] code.
-pub(super) fn read_trainer_buy_failed(r: &mut &[u8]) -> io::Result<(u64, u32, u32)> {
-    Ok((read_u64_le(r)?, read_u32_le(r)?, read_u32_le(r)?))
 }

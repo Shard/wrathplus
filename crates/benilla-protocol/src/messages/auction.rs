@@ -3,10 +3,6 @@
 //! pending-sales opcode. Every guid is a plain `u64`, and the auctioneer guid heads every CMSG
 //! because the server re-checks the 5 yd interact distance on each one.
 
-use std::io;
-
-use crate::wire::{capacity_hint, read_i32_le, read_u32_le, read_u64_le};
-
 /// `SMSG_AUCTION_COMMAND_RESULT`'s `action` (`AuctionAction`, `AuctionHouseMgr.h:53-58`).
 pub mod auction_action {
     /// Answers [`super::auction_sell_item`].
@@ -204,15 +200,6 @@ pub fn auction_list_items(
     body
 }
 
-/// `CMSG_AUCTION_LIST_OWNER_ITEMS`, the Auctions tab (`Server/Packets/AuctionHouse.cpp:23-27`);
-/// the server matches the account, then filters to this character.
-pub fn auction_list_owner_items(auctioneer: u64, list_from: u32) -> Vec<u8> {
-    let mut body = Vec::with_capacity(8 + 4);
-    body.extend_from_slice(&auctioneer.to_le_bytes());
-    body.extend_from_slice(&list_from.to_le_bytes());
-    body
-}
-
 /// `CMSG_AUCTION_PLACE_BID` (`Server/Packets/AuctionHouse.cpp:29-34`), also the buyout: a `price`
 /// equal to the buyout is one. An unaffordable bid gets no answer at all.
 pub fn auction_place_bid(auctioneer: u64, auction_id: u32, price: u32) -> Vec<u8> {
@@ -221,124 +208,4 @@ pub fn auction_place_bid(auctioneer: u64, auction_id: u32, price: u32) -> Vec<u8
     body.extend_from_slice(&auction_id.to_le_bytes());
     body.extend_from_slice(&price.to_le_bytes());
     body
-}
-
-/// `CMSG_AUCTION_LIST_BIDDER_ITEMS`, the Bid tab (`Server/Packets/AuctionHouse.cpp:8-21`). The
-/// ids are a refresh set, not a filter: the server lists them first, then every auction we lead,
-/// in one page, so an id in both appears twice. The reference sends those it was outbid on.
-pub fn auction_list_bidder_items(auctioneer: u64, list_from: u32, auction_ids: &[u32]) -> Vec<u8> {
-    let mut body = Vec::with_capacity(8 + 4 + 4 + 4 * auction_ids.len());
-    body.extend_from_slice(&auctioneer.to_le_bytes());
-    body.extend_from_slice(&list_from.to_le_bytes());
-    body.extend_from_slice(&(auction_ids.len() as u32).to_le_bytes());
-    for id in auction_ids {
-        body.extend_from_slice(&id.to_le_bytes());
-    }
-    body
-}
-
-/// The `MSG_AUCTION_HELLO` reply (`Server/Packets/AuctionHouse.cpp:72-76`): the guid and the
-/// `AuctionHouse.dbc` house id (1..7), whose row sets the deposit and cut rates.
-pub(super) fn read_auction_hello(r: &mut &[u8]) -> io::Result<(u64, u32)> {
-    Ok((read_u64_le(r)?, read_u32_le(r)?))
-}
-
-fn read_auction_list_entry(r: &mut &[u8]) -> io::Result<AuctionListEntry> {
-    Ok(AuctionListEntry {
-        auction_id: read_u32_le(r)?,
-        item_entry: read_u32_le(r)?,
-        perm_enchant: read_u32_le(r)?,
-        random_property_id: read_i32_le(r)?,
-        suffix_factor: read_u32_le(r)?,
-        count: read_u32_le(r)?,
-        spell_charges: read_i32_le(r)?,
-        owner_guid: read_u64_le(r)?,
-        start_bid: read_u32_le(r)?,
-        min_increment: read_u32_le(r)?,
-        buyout: read_u32_le(r)?,
-        time_left_ms: read_u32_le(r)?,
-        bidder_guid: read_u64_le(r)?,
-        current_bid: read_u32_le(r)?,
-    })
-}
-
-/// The body the three list results share (`AuctionHouseHandler.cpp:651-701`): `u32 count`, the
-/// records, then `u32 totalCount`, the match count before the page cap, at the very end.
-pub(super) fn read_auction_list_result(r: &mut &[u8]) -> io::Result<(Vec<AuctionListEntry>, u32)> {
-    let count = read_u32_le(r)?;
-    let mut auctions = Vec::with_capacity(capacity_hint(count, r.len() / AUCTION_RECORD_BYTES));
-    for _ in 0..count {
-        // `count` is an upper bound: vmangos's no-filter path (`AuctionHouseMgr.cpp:716-735`)
-        // counts an auction whose item is gone but writes no bytes for it.
-        if r.len() < AUCTION_RECORD_BYTES {
-            break;
-        }
-        auctions.push(read_auction_list_entry(r)?);
-    }
-    let total_count = if r.len() >= 4 {
-        read_u32_le(r)?
-    } else {
-        auctions.len() as u32
-    };
-    Ok((auctions, total_count))
-}
-
-/// `SMSG_AUCTION_COMMAND_RESULT` (`AuctionHouseHandler.cpp:70-96`): `u32` auction id, action,
-/// error, then the [`AuctionCommandTail`]; the auction id is 0 on most failures.
-pub(super) fn read_auction_command_result(
-    r: &mut &[u8],
-) -> io::Result<(u32, u32, u32, AuctionCommandTail)> {
-    let auction_id = read_u32_le(r)?;
-    let action = read_u32_le(r)?;
-    let error = read_u32_le(r)?;
-    let tail = match error {
-        auction_error::OK if action == auction_action::BID_PLACED && !r.is_empty() => {
-            AuctionCommandTail::BidPlaced {
-                new_min_outbid: read_u32_le(r)?,
-            }
-        }
-        auction_error::INVENTORY if !r.is_empty() => AuctionCommandTail::Inventory {
-            result: read_u32_le(r)?,
-        },
-        auction_error::HIGHER_BID if !r.is_empty() => AuctionCommandTail::HigherBid {
-            new_bidder_guid: read_u64_le(r)?,
-            new_bid: read_u32_le(r)?,
-            new_min_outbid: read_u32_le(r)?,
-        },
-        _ => AuctionCommandTail::Empty,
-    };
-    Ok((auction_id, action, error, tail))
-}
-
-pub(super) fn read_auction_bidder_notification(
-    r: &mut &[u8],
-) -> io::Result<AuctionBidderNotification> {
-    Ok(AuctionBidderNotification {
-        house_id: read_u32_le(r)?,
-        auction_id: read_u32_le(r)?,
-        bidder_guid: read_u64_le(r)?,
-        bid_or_zero: read_u32_le(r)?,
-        out_bid: read_u32_le(r)?,
-        item_entry: read_u32_le(r)?,
-        random_property_id: read_i32_le(r)?,
-    })
-}
-
-pub(super) fn read_auction_owner_notification(
-    r: &mut &[u8],
-) -> io::Result<AuctionOwnerNotification> {
-    Ok(AuctionOwnerNotification {
-        auction_id: read_u32_le(r)?,
-        bid: read_u32_le(r)?,
-        out_bid: read_u32_le(r)?,
-        bidder_guid: read_u64_le(r)?,
-        item_entry: read_u32_le(r)?,
-        random_property_id: read_i32_le(r)?,
-    })
-}
-
-/// `SMSG_AUCTION_REMOVED_NOTIFICATION` (`Server/Packets/AuctionHouse.cpp:65-70`), to a bidder
-/// whose auction was cancelled: `(auction_id, item_entry, random_property_id)`.
-pub(super) fn read_auction_removed_notification(r: &mut &[u8]) -> io::Result<(u32, u32, i32)> {
-    Ok((read_u32_le(r)?, read_u32_le(r)?, read_i32_le(r)?))
 }

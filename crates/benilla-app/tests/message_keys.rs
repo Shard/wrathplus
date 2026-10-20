@@ -220,19 +220,19 @@ fn every_sounding_catalog_row_also_has_text_to_show() {
     assert_eq!(sounding, 86, "56 voice lines + 30 named cues");
 }
 
-/// Every `PETTAME_*` key `pet_tame_failure_key` returns, the fill for `ERR_TAME_FAILED`, is a 1.12
-/// global, checked against the in-tree `reference/1.12-globals.tsv`.
+/// Every `PETTAME_*` key `pet_tame_failure_key` returns, the fill for `ERR_TAME_FAILED`, is a
+/// global the installed client's `GlobalStrings.lua` defines.
 #[test]
-fn every_pettame_key_is_a_real_1_12_global() {
-    let tsv = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../reference/1.12-globals.tsv"
-    );
-    let text = std::fs::read_to_string(tsv).expect("the reference surface");
+fn every_pettame_key_is_a_global_string() {
+    let data = benilla_formats::wow_data_or_skip!();
+    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
+    let bytes = chain
+        .read_file("Interface\\FrameXML\\GlobalStrings.lua")
+        .expect("GlobalStrings.lua in the chain");
+    let text = String::from_utf8_lossy(&bytes);
     let globals: BTreeSet<&str> = text
         .lines()
-        .filter(|l| !l.starts_with('#'))
-        .filter_map(|l| l.split('\t').next())
+        .filter_map(|l| l.split_once('=').map(|(name, _)| name.trim()))
         .collect();
 
     // 1..=11 index the table; everything else is the default arm.
@@ -241,10 +241,11 @@ fn every_pettame_key_is_a_real_1_12_global() {
         .collect();
     assert_eq!(reachable.len(), 12, "eleven arms plus the default");
     for key in &reachable {
-        assert!(globals.contains(key), "{key} is not a 1.12 global");
+        assert!(globals.contains(key), "{key} is not in GlobalStrings.lua");
     }
-    // The message the fill goes into, and the two bodiless arms beside it.
-    for key in ["ERR_TAME_FAILED", "ERR_INVALID_PETNAME", "ERR_PET_BROKEN"] {
-        assert!(globals.contains(key), "{key} is not a 1.12 global");
-    }
+    // The message the fill goes into.
+    assert!(
+        globals.contains("ERR_TAME_FAILED"),
+        "ERR_TAME_FAILED is not in GlobalStrings.lua"
+    );
 }

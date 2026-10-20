@@ -1,9 +1,5 @@
 //! The channel notices and member roster (vmangos `Chat/Channel.cpp`).
 
-use std::io;
-
-use crate::wire::{capacity_hint, read_cstring, read_u32_le, read_u64_le, read_u8};
-
 /// `SMSG_CHANNEL_NOTIFY`'s notice byte (`ChatNotify`, vmangos `Chat/Channel.h:35-71`).
 pub mod channel_notice {
     pub const JOINED: u8 = 0x00;
@@ -69,82 +65,4 @@ pub struct ChannelNotify {
     pub notice: u8,
     pub channel: String,
     pub tail: ChannelNoticeTail,
-}
-
-/// A notice byte past 0x1F errors, since the length of its tail is unknown.
-pub(super) fn read_channel_notify(r: &mut &[u8]) -> io::Result<ChannelNotify> {
-    use channel_notice as n;
-
-    let notice = read_u8(r)?;
-    let channel = read_cstring(r)?;
-    let tail = match notice {
-        n::JOINED | n::LEFT => ChannelNoticeTail::Guid(read_u64_le(r)?),
-        n::YOU_JOINED => {
-            let flags = read_u32_le(r)?;
-            let _reserved = read_u32_le(r)?; // always 0 on the wire
-            ChannelNoticeTail::YouJoined { flags }
-        }
-        n::YOU_LEFT
-        | n::WRONG_PASSWORD
-        | n::NOT_MEMBER
-        | n::NOT_MODERATOR
-        | n::NOT_OWNER
-        | n::MUTED
-        | n::BANNED
-        | n::INVITE_WRONG_FACTION
-        | n::WRONG_FACTION
-        | n::INVALID_NAME
-        | n::NOT_MODERATED
-        | n::THROTTLED => ChannelNoticeTail::Empty,
-        n::PASSWORD_CHANGED
-        | n::OWNER_CHANGED
-        | n::ANNOUNCEMENTS_ON
-        | n::ANNOUNCEMENTS_OFF
-        | n::MODERATION_ON
-        | n::MODERATION_OFF
-        | n::PLAYER_ALREADY_MEMBER
-        | n::INVITE => ChannelNoticeTail::Actor(read_u64_le(r)?),
-        n::PLAYER_NOT_FOUND
-        | n::CHANNEL_OWNER
-        | n::PLAYER_NOT_BANNED
-        | n::PLAYER_INVITED
-        | n::PLAYER_INVITE_BANNED => ChannelNoticeTail::Name(read_cstring(r)?),
-        n::MODE_CHANGE => ChannelNoticeTail::ModeChange {
-            guid: read_u64_le(r)?,
-            old_flags: read_u8(r)?,
-            new_flags: read_u8(r)?,
-        },
-        n::PLAYER_KICKED | n::PLAYER_BANNED | n::PLAYER_UNBANNED => ChannelNoticeTail::Actors {
-            target: read_u64_le(r)?,
-            source: read_u64_le(r)?,
-        },
-        other => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("SMSG_CHANNEL_NOTIFY: unknown notice type {other:#04x}"),
-            ))
-        }
-    };
-    Ok(ChannelNotify {
-        notice,
-        channel,
-        tail,
-    })
-}
-
-/// `SMSG_CHANNEL_LIST` (`Chat/Channel.cpp:513-556`): `(channel, flags, members)`, each member a
-/// guid and its `ChannelMemberFlags` (`Chat/Channel.h:119-130`).
-#[allow(clippy::type_complexity)]
-pub(super) fn read_channel_list(r: &mut &[u8]) -> io::Result<(String, u8, Vec<(u64, u8)>)> {
-    let channel = read_cstring(r)?;
-    let flags = read_u8(r)?;
-    let count = read_u32_le(r)?;
-    // The count is wire-controlled, so it only hints the allocation.
-    let mut members = Vec::with_capacity(capacity_hint(count, 256));
-    for _ in 0..count {
-        let guid = read_u64_le(r)?;
-        let member_flags = read_u8(r)?;
-        members.push((guid, member_flags));
-    }
-    Ok((channel, flags, members))
 }

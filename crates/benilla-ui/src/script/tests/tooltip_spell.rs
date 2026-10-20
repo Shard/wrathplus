@@ -1510,3 +1510,34 @@ fn a_wait_replaced_by_an_earlier_re_render_is_not_replayed() {
     );
     assert!(s.take_errors().is_empty());
 }
+
+/// `OnTooltipSetSpell` runs after the lines (`0x6238a0` runs `+0x4fc` last), with no arguments past
+/// `self`.
+#[test]
+fn the_spell_setters_run_on_tooltip_set_spell_between_content_and_show() {
+    let mut s = script();
+    s.set_screen_size(800.0, 600.0);
+    s.set_spell_tooltip(133, fireball());
+    s.set_spellbook(SpellBookState {
+        tabs: Vec::new(),
+        slots: vec![SpellSlotView {
+            spell_id: 133,
+            name: "Fireball".into(),
+            ..Default::default()
+        }],
+    });
+    s.run(
+        r#"
+        local a = CreateFrame("Button", "SB1"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
+        local tt = CreateFrame("GameTooltip", "TT")
+        tt:SetOwner(a, "ANCHOR_RIGHT")
+        tt:SetScript("OnTooltipSetSpell", function(self, ...)
+            SEEN = { self == tt, self:NumLines(), select('#', ...) }
+        end)
+        tt:SetSpell(1, "spell")
+        assert(SEEN[1] and SEEN[2] == 4 and SEEN[3] == 0)
+        assert(tt:IsShown())
+    "#,
+    )
+    .unwrap();
+}

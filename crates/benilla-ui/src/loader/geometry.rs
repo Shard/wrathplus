@@ -11,23 +11,20 @@ impl Loader<'_> {
     pub(super) fn apply_attrs(&mut self, el: &Element, wrapper: &Table, dbg: &str) {
         // UIParent.xml supplies panel offsets here; inherited templates use the same path.
         // Trusted Wrath attributes are ordinary frame state, not secure execution.
-        let wrath = self.lua().app_data_ref::<crate::script::Model>().expect("model").dialect == crate::script::ScriptDialect::Wrath12340;
-        if wrath {
-            for attrs in children_named(el, "Attributes") {
-                for attr in children_named(attrs, "Attribute") {
-                    let Some(name) = attr.attr("name") else { continue };
-                    let text = attr.attr("value").unwrap_or("");
-                    let value = match attr.attr("type").unwrap_or("string") {
-                        "string" => self.lua().create_string(text).map(mlua::Value::String),
-                        "number" => text.parse::<f64>().map(mlua::Value::Number)
-                            .map_err(mlua::Error::external),
-                        "boolean" => Ok(mlua::Value::Boolean(text == "true")),
-                        kind => Err(mlua::Error::external(format!("unknown attribute type {kind}"))),
-                    };
-                    match value {
-                        Ok(value) => self.call(wrapper, "SetAttribute", (name.to_string(), value), dbg),
-                        Err(e) => self.report.errors.push(format!("{dbg}: <Attribute> {name}: {e}")),
-                    }
+        for attrs in children_named(el, "Attributes") {
+            for attr in children_named(attrs, "Attribute") {
+                let Some(name) = attr.attr("name") else { continue };
+                let text = attr.attr("value").unwrap_or("");
+                let value = match attr.attr("type").unwrap_or("string") {
+                    "string" => self.lua().create_string(text).map(mlua::Value::String),
+                    "number" => text.parse::<f64>().map(mlua::Value::Number)
+                        .map_err(mlua::Error::external),
+                    "boolean" => Ok(mlua::Value::Boolean(text == "true")),
+                    kind => Err(mlua::Error::external(format!("unknown attribute type {kind}"))),
+                };
+                match value {
+                    Ok(value) => self.call(wrapper, "SetAttribute", (name.to_string(), value), dbg),
+                    Err(e) => self.report.errors.push(format!("{dbg}: <Attribute> {name}: {e}")),
                 }
             }
         }

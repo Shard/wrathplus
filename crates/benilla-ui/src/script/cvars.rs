@@ -726,19 +726,17 @@ fn install_video_verbs(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    // Wrath's resolution-panel Defaults button restores only display-mode CVars.
-    if lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Wrath12340 {
-        lua.globals().set("RestoreVideoResolutionDefaults", lua.create_function(|lua, ()| {
-            let mut model = lua.app_data_mut::<Model>().expect("model");
-            for name in ["gxResolution", "gxRefresh", "gxMultisample", "gxWindow", "gxMaximize", "gxVSync", "gxTripleBuffer", "gxCursor", "gxFixLag", "windowResizeLock"] {
-                if let Some(default) = model.cvars.get(&name.to_ascii_lowercase()).map(|s| s.default.clone()) {
-                    set_from_engine(&mut model, name, default);
-                }
+    // The resolution-panel Defaults button restores only display-mode CVars.
+    lua.globals().set("RestoreVideoResolutionDefaults", lua.create_function(|lua, ()| {
+        let mut model = lua.app_data_mut::<Model>().expect("model");
+        for name in ["gxResolution", "gxRefresh", "gxMultisample", "gxWindow", "gxMaximize", "gxVSync", "gxTripleBuffer", "gxCursor", "gxFixLag", "windowResizeLock"] {
+            if let Some(default) = model.cvars.get(&name.to_ascii_lowercase()).map(|s| s.default.clone()) {
+                set_from_engine(&mut model, name, default);
             }
-            model.restart_gx_asks += 1;
-            Ok(())
-        })?)?;
-    }
+        }
+        model.restart_gx_asks += 1;
+        Ok(())
+    })?)?;
     // ── RestoreVideoDefaults ─────────────────────────────────────────────────────────────────
     // The Defaults button's whole effect: `OptionsFrame_SetDefaults` only sets the widgets, which
     // the button's `OnClick` then hides without `_Save` (`OptionsFrame.xml:688-690`). Ends with a

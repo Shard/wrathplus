@@ -1,30 +1,19 @@
 //! Supported non-spell Wrath tracking: trivial quests. The other native NPC tracking types
 //! need their own classifiers before being advertised to FrameXML.
-use crate::script::{model::Model, ScriptDialect};
+use crate::script::model::Model;
 use mlua::{Lua, MultiValue, Value};
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
-    // Wrath-only API names must not extend the Vanilla global surface.
-    if lua.app_data_ref::<Model>().expect("model app_data").dialect != ScriptDialect::Wrath12340 {
-        return Ok(());
-    }
     let g = lua.globals();
     g.set(
         "GetNumTrackingTypes",
-        lua.create_function(|lua, ()| {
-            let m = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(if m.dialect == ScriptDialect::Wrath12340 {
-                1
-            } else {
-                0
-            })
-        })?,
+        lua.create_function(|_, ()| Ok(1))?,
     )?;
     g.set(
         "GetTrackingInfo",
         lua.create_function(|lua, index: i64| {
             let m = lua.app_data_ref::<Model>().expect("model app_data");
-            if m.dialect != ScriptDialect::Wrath12340 || index != 1 {
+            if index != 1 {
                 return Ok(MultiValue::new());
             }
             // Wow.exe 0x57eb00 enumerates the 20-byte table at 0xa11c50; final row
@@ -45,11 +34,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "SetTracking",
         lua.create_function(|lua, index: Option<usize>| {
             let mut m = lua.app_data_mut::<Model>().expect("model app_data");
-            if m.dialect == ScriptDialect::Wrath12340 {
-                m.wrath_tracking_selection = index.filter(|i| *i == 1);
-                m.pending_events
-                    .push(("MINIMAP_UPDATE_TRACKING".into(), Vec::new()));
-            }
+            m.wrath_tracking_selection = index.filter(|i| *i == 1);
+            m.pending_events
+                .push(("MINIMAP_UPDATE_TRACKING".into(), Vec::new()));
             Ok(())
         })?,
     )?;
@@ -60,7 +47,7 @@ impl crate::script::UiScript {
     /// Native 0x57bf30: selected non-spell tracking entry has type 3.
     pub fn track_trivial_quests(&self) -> bool {
         let m = self.model_ref();
-        m.dialect == ScriptDialect::Wrath12340 && m.wrath_tracking_selection == Some(1)
+        m.wrath_tracking_selection == Some(1)
     }
 }
 

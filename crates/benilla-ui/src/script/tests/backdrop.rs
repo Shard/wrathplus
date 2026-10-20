@@ -52,9 +52,8 @@ fn get_backdrop_reconstructs_from_the_struct() {
         r#"
         local f = CreateFrame("Frame", "GB")
 
-        -- How many values did that return? 5.0 answers with the implicit vararg table's `n`;
-        -- `select` is 5.1's base library and is not a 1.12 global (`lua50::install`).
-        local function count(...) return arg.n end
+        -- How many values did that return?
+        local function count(...) return select('#', ...) end
 
         -- TRAP 2: no backdrop => ZERO values, not nil. The count is the only way to see it.
         assert(count(f:GetBackdrop()) == 0, "unset backdrop must return no values at all")

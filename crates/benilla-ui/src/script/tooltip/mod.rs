@@ -357,6 +357,29 @@ pub(super) fn fire_cleared(lua: &Lua, h: FrameHandle) {
     }
 }
 
+/// A content setter's tail as build 12340 ends it: the content's own script (`OnTooltipSetItem`,
+/// `OnTooltipSetSpell` or `OnTooltipSetUnit`) with no arguments, after the lines. Each core builds
+/// its lines, runs its slot (`+0x4f4`, `+0x4fc`, `+0x4ec`: item `0x6277f0` and its
+/// `RETRIEVING_ITEM_INFO` placeholder `0x623760`, spell `0x6238a0`, unit `0x621070`), then calls
+/// `0x48f660`. Labelled: the script runs only when the setter produced a line, standing in for the
+/// client's early returns before its core; `0x48f660` is unidentified, and here the tooltip is
+/// already shown by its first line; a script error is recorded, never propagated.
+pub(super) fn finish_content(lua: &Lua, h: FrameHandle, script: &'static str) {
+    let (lines, id) = {
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        let lines = tip_mut(&mut model, h).map_or(0, |t| t.num_lines);
+        (lines, model.frame_id(h))
+    };
+    if lines > 0 {
+        if let Err(e) = event::fire_widget_handler(lua, id, script, Vec::new()) {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .record_script_error(e.to_string());
+        }
+    }
+    show_or_hide_empty(lua, h);
+}
+
 /// A content `Set*`'s tail: shown with lines, hidden without. The reference leaves an uncached
 /// tooltip cleared and collapsed to nothing; this plate keeps its declared size, so it hides. It
 /// hides without [`hide_tooltip`] to keep the owner, which the hover loop's `IsOwned` needs.

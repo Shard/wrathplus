@@ -1,22 +1,11 @@
 //! Meeting-stone wire messages: the queue state, the right-click join and the leave request.
 
-use std::io::{self, Read};
-
-use crate::wire::{read_u32_le, read_u8};
-
 /// `SMSG 0x295` (reference handler `0x4ca230`): the queued area and a status byte, which the
 /// client turns into one of five messages before firing `MEETINGSTONE_CHANGED`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MeetingStoneSetQueue {
     pub area: u32,
     pub status: u8,
-}
-
-pub(super) fn read_meeting_stone_set_queue(r: &mut impl Read) -> io::Result<MeetingStoneSetQueue> {
-    Ok(MeetingStoneSetQueue {
-        area: read_u32_le(r)?,
-        status: read_u8(r)?,
-    })
 }
 
 /// `CMSG 0x292` (reference builder `0x4c9ff0`): the right-clicked stone's guid (GO type 23) and
@@ -41,16 +30,6 @@ pub enum MeetingStoneNotice {
     MemberAdded { guid: u64 },
     /// `0x2BB`, `u8 code`.
     JoinFailed { code: u8 },
-}
-
-pub(super) fn read_meeting_stone_member_added(r: &mut impl Read) -> io::Result<MeetingStoneNotice> {
-    Ok(MeetingStoneNotice::MemberAdded {
-        guid: crate::wire::read_u64_le(r)?,
-    })
-}
-
-pub(super) fn read_meeting_stone_join_failed(r: &mut impl Read) -> io::Result<MeetingStoneNotice> {
-    Ok(MeetingStoneNotice::JoinFailed { code: read_u8(r)? })
 }
 
 #[cfg(test)]

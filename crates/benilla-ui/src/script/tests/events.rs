@@ -334,14 +334,12 @@ fn an_all_events_listener_runs_after_the_events_own() {
 }
 
 #[test]
-fn host_byte_strings_reach_event_handlers_losslessly_in_both_dialects() {
-    for dialect in [ScriptDialect::Vanilla, ScriptDialect::Wrath12340] {
-        let mut s = UiScript::new_with_dialect(dialect).unwrap();
-        let handler = if dialect == ScriptDialect::Vanilla {
-            "function() received = arg2; prefix = arg1; suffix = arg3 end"
-        } else {
-            "function(self, event, a, b, c) received = b; prefix = a; suffix = c end"
-        };
+fn host_byte_strings_reach_event_handlers_losslessly_as_arguments_and_legacy_globals() {
+    for handler in [
+        "function() received = arg2; prefix = arg1; suffix = arg3 end",
+        "function(self, event, a, b, c) received = b; prefix = a; suffix = c end",
+    ] {
+        let mut s = UiScript::new().unwrap();
         s.run(&format!(
             "local f = CreateFrame('Frame'); f:RegisterEvent('CHAT_MSG_ADDON'); \
              f:SetScript('OnEvent', {handler})"
