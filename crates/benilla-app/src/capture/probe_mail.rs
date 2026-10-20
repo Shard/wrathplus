@@ -14,7 +14,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::MailListEntry;
+use benilla_protocol::types::MailListEntry;
 use benilla_protocol::EntityKind;
 use benilla_ui::script::UiScript;
 

@@ -4,7 +4,7 @@
 //!
 //! The window shows slots 0..=2: 0 is the current pet, 1 and 2 the stable slots a hunter buys
 //! (`NUM_PET_STABLE_SLOTS` 2, two `StableSlotPrices.dbc` rows, vmangos `MAX_PET_STABLES` 2). The
-//! wire's 1-based slot arrives rebased ([`benilla_protocol::messages::StabledPet::slot`]). Slot 0
+//! wire's 1-based slot arrives rebased ([`benilla_protocol::types::StabledPet::slot`]). Slot 0
 //! can hold a row with no pet out: a dismissed or distant pet still comes from the server's
 //! character-pet cache, and the stock window falls back to `GetStablePetInfo(0)` when
 //! `UnitExists("pet")` is false (`PetStable.lua:138`).

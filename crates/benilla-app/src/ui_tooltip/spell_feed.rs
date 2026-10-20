@@ -158,7 +158,7 @@ pub(crate) fn build_view(
     }
     let cost = {
         // The shared per-type divisor (`0x6e7130`), never a local `power_type == 1` test.
-        let div = benilla_protocol::messages::power_display_scale(d.power_type);
+        let div = benilla_protocol::types::power_display_scale(d.power_type);
         let unit = match d.power_type {
             0 => "Mana",
             1 => "Rage",

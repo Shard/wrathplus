@@ -2,7 +2,7 @@
 //! converted to Vanilla records; native u32 health/spells and aura flags remain held.
 use super::{GroupState, ListOutcome};
 use benilla_protocol::{
-    messages::{GroupLootInfo, GroupMemberEntry},
+    types::{GroupLootInfo, GroupMemberEntry},
     wrath_group::{Roster, Stats},
 };
 

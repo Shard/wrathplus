@@ -1,6 +1,5 @@
 //! The group loot roll: build 12340's native feed, presentation and outcomes ([`wrath`]), and the
-//! drain that sends the Lua votes. The 1.12 roll model (`SMSG_LOOT_START_ROLL` and its siblings
-//! through `events::decode`) went with the 1.12 session.
+//! drain that sends the Lua votes.
 
 mod wrath;
 

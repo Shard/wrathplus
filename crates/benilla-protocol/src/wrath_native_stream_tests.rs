@@ -1,6 +1,6 @@
 //! Independent build-12340 bytes: no update-object encoder or projected descriptor fixtures.
 use crate::events::SessionEvent;
-use crate::messages::{FieldLayout, ObjectFields};
+use crate::types::{FieldLayout, ObjectFields};
 use crate::wrath_events::{WrathDispatch, WrathEventAdapter, SMSG_UPDATE_OBJECT};
 
 fn guid(out: &mut Vec<u8>, value: u8) {

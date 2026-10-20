@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use benilla_formats::{
     char_proc_type, CharProc, SpellVisualCatalog, VisualKit, VisualStages, KIT_CHAR_PROCS,
 };
-use benilla_protocol::messages::ObjectFields;
+use benilla_protocol::types::ObjectFields;
 
 use super::*;
 use crate::creature_anim::SpellVisuals;
@@ -211,7 +211,7 @@ fn the_tint_head_node_is_the_newest_installed() {
 /// A streamed unit's descriptor; its auras come by packet ([`set_auras`]).
 fn aura_store() -> crate::net::ObjectStore {
     crate::net::ObjectStore(
-        ObjectFields::default().into_created(benilla_protocol::messages::ObjectType::Unit),
+        ObjectFields::default().into_created(benilla_protocol::types::ObjectType::Unit),
     )
 }
 

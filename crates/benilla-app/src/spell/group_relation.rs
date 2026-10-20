@@ -12,7 +12,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{ObjectType, OwnerFallback};
+use benilla_protocol::types::{ObjectType, OwnerFallback};
 
 use super::cast_target::TargetRelations;
 use crate::net::{ObjectStore, SelfGuid};
@@ -160,18 +160,18 @@ pub(crate) mod fixture {
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_CHARMEDBY`,
     /// `UNIT_FIELD_CREATEDBY`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FACTIONTEMPLATE` and
     /// `UNIT_FIELD_FLAGS`.
-    pub(crate) const TYPE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ObjectType);
-    pub(crate) const CHARMED_BY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitCharmedby);
-    pub(crate) const CREATED_BY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitCreatedby);
-    pub(crate) const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitHealth);
-    pub(crate) const TEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-    pub(crate) const FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    pub(crate) const TYPE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ObjectType);
+    pub(crate) const CHARMED_BY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitCharmedby);
+    pub(crate) const CREATED_BY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitCreatedby);
+    pub(crate) const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitHealth);
+    pub(crate) const TEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+    pub(crate) const FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitFlags);
     /// `TYPEMASK_OBJECT | UNIT | PLAYER`, and `TYPEMASK_OBJECT | UNIT`.
     pub(crate) const PLAYER_TYPE: u32 = 0x19;
     pub(crate) const CREATURE_TYPE: u32 = 0x09;
@@ -227,7 +227,7 @@ mod tests {
     };
     use crate::spell::targeting::corpse_fixture as fx;
     use benilla_formats::SpellDisplay;
-    use benilla_protocol::messages::GroupMemberEntry;
+    use benilla_protocol::types::GroupMemberEntry;
     use bevy::ecs::system::RunSystemOnce;
 
     const ME: u64 = 1;

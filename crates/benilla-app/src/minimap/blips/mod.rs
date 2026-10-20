@@ -359,7 +359,7 @@ fn push_rim_arrow(
 /// A party member's position: the streamed transform, else the `PARTY_MEMBER_STATS` position
 /// (whole yards on the wire).
 pub(crate) fn party_member_pos(
-    m: &benilla_protocol::messages::GroupMemberEntry,
+    m: &benilla_protocol::types::GroupMemberEntry,
     group: &crate::ui_party::GroupState,
     guids: &GuidIndex,
     unit_pos: &Query<&GlobalTransform, With<NetEntity>>,

@@ -124,7 +124,7 @@ fn play_bark(
 }
 
 fn is_death_edge(edge: &FieldChanged) -> bool {
-    use benilla_protocol::{field::UNIT_DYNFLAG_DEAD, messages::Field};
+    use benilla_protocol::{field::UNIT_DYNFLAG_DEAD, types::Field};
     edge.is_unit()
         && ((edge.named_field(Field::UnitHealth) && edge.old > 0 && edge.new == 0)
             || (edge.named_field(Field::UnitDynamicFlags)
@@ -278,8 +278,8 @@ fn pet_talk_vocals(
     let listener = listener.pos;
     for t in talks.read() {
         let state = match t.talk {
-            benilla_protocol::messages::PET_TALK_ORDER => BARK_PET_ORDER,
-            benilla_protocol::messages::PET_TALK_ATTACK => BARK_PET_ATTACK,
+            benilla_protocol::types::PET_TALK_ORDER => BARK_PET_ORDER,
+            benilla_protocol::types::PET_TALK_ATTACK => BARK_PET_ATTACK,
             _ => continue,
         };
         let Ok((net, transform)) = units.get(t.unit) else {
@@ -689,7 +689,7 @@ mod tests {
     fn death_edges_preserve_health_and_feign_transitions_in_both_layouts() {
         use benilla_protocol::{
             field::UNIT_DYNFLAG_DEAD,
-            messages::{Field, FieldLayout, ObjectType},
+            types::{Field, FieldLayout, ObjectType},
         };
         let layout = FieldLayout::Wrath12340;
         let mut edge = FieldChanged {

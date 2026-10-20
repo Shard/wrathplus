@@ -1,5 +1,5 @@
 use benilla_protocol::events::SessionEvent;
-use benilla_protocol::messages::AttackSwingError;
+use benilla_protocol::types::AttackSwingError;
 use benilla_protocol::wrath_combat::{
     decode_ai_reaction, decode_attack_start, decode_attack_stop, decode_attack_swing_refusal,
     decode_attacker_state, encode_attack_stop, encode_attack_swing, encode_set_selection,

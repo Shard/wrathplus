@@ -5,7 +5,7 @@
 //! seat, different spline flags, and optional animation/parabolic fields.
 
 use crate::events::{SessionEvent, SplineEffect, SplineInterpolation};
-use crate::messages::MonsterMoveFacing;
+use crate::types::MonsterMoveFacing;
 use crate::wire::packed_to_vector3d;
 use crate::wrath_gameplay::{CodecError, MAX_SPLINE_NODES};
 

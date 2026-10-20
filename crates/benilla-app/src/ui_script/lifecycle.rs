@@ -43,6 +43,7 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
     crate::ui_spellbook::seed_spell_catalog(world, &mut script);
     crate::ui_achievements::seed(world, &mut script);
     seed_class_names(world, &mut script);
+    seed_link_catalogs(world, &mut script);
     seed_session(world, &mut script);
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
@@ -55,6 +56,33 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
 fn seed_class_names(world: &World, script: &mut UiScript) {
     if let Some(table) = world.get_resource::<crate::chr_classes::ChrClassTable>() {
         script.set_localized_class_names(table.0.localized_names());
+    }
+}
+
+/// Seed a new VM with Talent.dbc and GlyphProperties/GlyphSlot.dbc, which `GameTooltip:
+/// SetHyperlink`'s `talent:` and `glyph:` links read (`0x62dae0`): a linked talent or glyph can be
+/// any class's, not only the player's tree and sockets.
+fn seed_link_catalogs(world: &World, script: &mut UiScript) {
+    if let Some(talents) = world.get_resource::<crate::ui_talent::Talents>() {
+        script.set_talent_link_catalog(
+            talents
+                .catalog
+                .talents()
+                .map(|t| {
+                    let view = benilla_ui::script::TalentLinkView {
+                        ranks: t.ranks.to_vec(),
+                        exceptional: t.exceptional,
+                    };
+                    (t.id, view)
+                })
+                .collect(),
+        );
+    }
+    if let Some(glyphs) = world.get_resource::<crate::spell::targeting::glyph::GlyphTables>() {
+        script.set_glyph_link_catalog(benilla_ui::script::GlyphLinkCatalog {
+            glyph_spells: glyphs.0.properties().map(|p| (p.id, p.spell_id)).collect(),
+            slots: glyphs.0.slots().map(|s| (s.id, (s.type_flags, s.order))).collect(),
+        });
     }
 }
 

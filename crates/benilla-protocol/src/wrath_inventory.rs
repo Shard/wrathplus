@@ -7,7 +7,7 @@
 //! bank-slot result, show-bank, page text) decode into it. The rest are capture-only [`Packet`]s:
 //! no equipment sets, refunds, sockets, read permission or item text are inferred. Strict framing
 //! of the AC emitted shapes; raw codes are preserved.
-use crate::messages::UseItemTarget;
+use crate::types::UseItemTarget;
 use crate::wire::{read_cstring, read_packed_guid, write_packed_guid};
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};

@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use benilla_protocol::messages::{MonsterMoveFacing, ObjectType, RelayVerb};
+use benilla_protocol::types::{MonsterMoveFacing, ObjectType, RelayVerb};
 use benilla_protocol::{
     EntityKind, ObjectFields, SessionEvent, SessionEventKind, SplineInterpolation,
 };
@@ -17,8 +17,8 @@ use bevy::prelude::*;
 use crate::net::{GuidIndex, NetEvents, NetHandlerApp, RemoteMotion, Spline, UnitMoveModes};
 
 const GUID: u64 = 0xF130_0000_4321_0001;
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitHealth);
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitHealth);
 
 fn create() -> SessionEvent {
     SessionEvent::ObjectCreate {

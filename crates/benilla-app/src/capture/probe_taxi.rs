@@ -184,7 +184,7 @@ fn taxi_probe(
                     && store
                         .0
                         .unit_npc_services()
-                        .has(benilla_protocol::messages::NpcService::FlightMaster)
+                        .has(benilla_protocol::types::NpcService::FlightMaster)
                     && tf.translation.distance(me) < 15.0
             });
             if let Some((guid, ..)) = fm {
@@ -247,7 +247,7 @@ fn taxi_probe(
         }
         Phase::Activated { sent_at } => {
             if let Some(code) = taxi.reply {
-                if code == benilla_protocol::messages::taxi_reply::OK {
+                if code == benilla_protocol::types::taxi_reply::OK {
                     info!("PROBE taxi: ACTIVATETAXIREPLY OK");
                 } else {
                     error!("PROBE taxi: FAILURE — ACTIVATETAXIREPLY code {code}");

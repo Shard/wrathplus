@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
@@ -124,9 +124,9 @@ fn feed_cost_per_invalidation() {
     const TARGET: u64 = 0xF130_0000_0000_0042;
     let target_fields = |reach: f32| {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[(
-                benilla_protocol::messages::Field::UnitCombatreach,
+                benilla_protocol::types::Field::UnitCombatreach,
                 reach.to_bits(),
             )],
         ))

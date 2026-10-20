@@ -1,6 +1,6 @@
 //! The trainer window's packet handlers, filling [`TrainerOpen`] and [`TrainerErrors`].
 
-use benilla_protocol::messages::TrainerSpell;
+use benilla_protocol::types::TrainerSpell;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 

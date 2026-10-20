@@ -21,7 +21,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{auction_action, auction_duration, auction_error};
+use benilla_protocol::types::{auction_action, auction_duration, auction_error};
 use benilla_protocol::EntityKind;
 use benilla_ui::script::{UiScript, LIST, OWNER};
 
@@ -446,7 +446,7 @@ fn auction_probe(
                         && store
                             .0
                             .unit_npc_services()
-                            .has(benilla_protocol::messages::NpcService::Auctioneer)
+                            .has(benilla_protocol::types::NpcService::Auctioneer)
                         && tf.translation.distance(me) < SCAN_RANGE
                 })
                 .map(|(guid, _, store, tf)| {

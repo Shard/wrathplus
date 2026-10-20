@@ -14,8 +14,8 @@ use crate::ui_pet::press_tests::{
 };
 use crate::ui_pet::usable_tests::{FARSIGHT, OTHER};
 use crate::ui_pet::PetBar;
-use benilla_protocol::messages::{Field, FieldLayout};
-use benilla_protocol::messages::{
+use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::{
     PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
     PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE, PET_STATE_BAR_DISABLED,
 };

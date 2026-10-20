@@ -8,7 +8,7 @@
 //! (`Player.cpp:16175`) and makes only raid binds permanent (`Map.cpp:3528`), so the server alone
 //! would never offer the reset after a 5-man.
 
-use benilla_protocol::messages::{InstanceResetFailure, RaidInstanceMessage, RaidInstanceWarning};
+use benilla_protocol::types::{InstanceResetFailure, RaidInstanceMessage, RaidInstanceWarning};
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
@@ -262,7 +262,7 @@ fn raid_instance_line(message: &RaidInstanceMessage) -> Option<LockoutLine> {
 pub(crate) mod net {
     use super::*;
 
-    use benilla_protocol::messages::InstanceResetFailed;
+    use benilla_protocol::types::InstanceResetFailed;
     use benilla_protocol::{SessionEvent, SessionEventKind};
 
     use crate::net::NetHandlerApp;
@@ -634,7 +634,7 @@ mod tests {
             let mut state = InstanceState::default();
             net::instance_reset_failed(
                 &mut state,
-                benilla_protocol::messages::InstanceResetFailed { reason, map: 36 },
+                benilla_protocol::types::InstanceResetFailed { reason, map: 36 },
             );
             let lines = state.take_lines();
             assert_eq!(lines.len(), 1, "reason {reason} makes one line");
@@ -648,7 +648,7 @@ mod tests {
         let mut state = InstanceState::default();
         net::instance_reset_failed(
             &mut state,
-            benilla_protocol::messages::InstanceResetFailed { reason: 3, map: 36 },
+            benilla_protocol::types::InstanceResetFailed { reason: 3, map: 36 },
         );
         assert!(state.take_lines().is_empty());
     }
@@ -971,7 +971,7 @@ mod tests {
         let mut state = InstanceState::default();
         net::instance_reset_failed(
             &mut state,
-            benilla_protocol::messages::InstanceResetFailed { reason: 0, map: 36 },
+            benilla_protocol::types::InstanceResetFailed { reason: 0, map: 36 },
         );
         assert_eq!(
             lockout_text(&state.take_lines()[0], Some("Deadmines"), &real).as_deref(),

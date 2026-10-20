@@ -56,7 +56,7 @@ impl NativeChatFeed {
     }
 }
 
-/// AzerothCore SharedDefines.h ChatMsg (12340), not messages::CHAT_MSG_* (5875).
+/// AzerothCore SharedDefines.h ChatMsg (12340), not types::CHAT_MSG_* (5875).
 fn token(kind: u8) -> Option<&'static str> {
     Some(match kind {
         0x00 => "SYSTEM",

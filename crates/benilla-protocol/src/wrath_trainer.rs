@@ -3,7 +3,7 @@
 //! thing. Retain them separately; the server's usable state remains authoritative on the wire.
 
 use crate::events::SessionEvent;
-use crate::messages::TrainerSpell;
+use crate::types::TrainerSpell;
 use crate::wrath_session::{cstring, u32_le, u64_le, u8_le};
 use std::io::{self, Cursor};
 

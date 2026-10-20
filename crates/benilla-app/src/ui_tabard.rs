@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 
 use benilla_formats::GuildEmblem;
-use benilla_protocol::messages::GUILD_EMBLEM_RESULT_MESSAGES;
+use benilla_protocol::types::GUILD_EMBLEM_RESULT_MESSAGES;
 use benilla_ui::script::{TabardHost, TabardIntent, UiScript, TABARD_COUNTS, TABARD_CREATION_COST};
 
 use crate::net::{ClientCommand, EnteredWorldMessage, NetCommands, ObjectStore, SelfPlayer};

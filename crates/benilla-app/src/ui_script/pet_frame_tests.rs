@@ -8,7 +8,7 @@ use benilla_ui::script::{
 };
 
 use super::test_ui::load_ui as load_xml;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 /// The pet frame's load chain, with a player seated: `PetFrame` is a child of `PlayerFrame`
 /// (PetFrame.xml:4), and `UnitFrame_Update` hides a frame whose unit does not exist.

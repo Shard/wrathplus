@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 
 use benilla_formats::{SkillLineCatalog, SpellCatalog};
-use benilla_protocol::messages::TrainerSpell;
+use benilla_protocol::types::TrainerSpell;
 use bevy::prelude::*;
 
 use benilla_ui::script::{
@@ -17,8 +17,8 @@ use benilla_ui::script::{
 use crate::entities::ItemDisplays;
 use crate::items::Items;
 use crate::names::NameCache;
-use benilla_protocol::messages::PLAYER_SKILL_SLOTS;
-use benilla_protocol::messages::{Field, ObjectType};
+use benilla_protocol::types::PLAYER_SKILL_SLOTS;
+use benilla_protocol::types::{Field, ObjectType};
 use bevy::ecs::system::SystemParam;
 
 use crate::net::{ClientCommand, FieldChanged, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
@@ -125,7 +125,7 @@ impl Plugin for UiTrainerPlugin {
 /// `0x860494`, `0x860464`) to the developer console (`0x63cd00`) from its arms (`0x5e5f95`,
 /// `0x5e5fb8`, `0x5e5fdc`), and `BuyTrainerService` (`0x4da210`) tests nothing before sending.
 fn train_error_log_line(code: u32) -> &'static str {
-    use benilla_protocol::messages::train_fail;
+    use benilla_protocol::types::train_fail;
     match code {
         train_fail::NOT_ENOUGH_MONEY => "Not enough money for trainer service",
         train_fail::NOT_ENOUGH_SKILL => "Not enough skill points for trainer service",

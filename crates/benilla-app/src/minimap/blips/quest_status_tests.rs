@@ -108,7 +108,7 @@ fn native_status_lifetime_matches_object_and_session_lifetime() {
 
 #[test]
 fn native_status_packets_emit_a_wrath_question_mark_quad() {
-    use benilla_protocol::messages::{FieldLayout, ObjectType};
+    use benilla_protocol::types::{FieldLayout, ObjectType};
     use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
     use benilla_protocol::{wrath_npc as n, ObjectFields};
     use bevy::ecs::system::SystemState;

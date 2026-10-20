@@ -11,7 +11,7 @@ mod units;
 use bevy::prelude::*;
 
 use benilla_formats::SpellCatalog;
-use benilla_protocol::messages::{UnitAuraSlot, AURA_FLAG_CANCELABLE, UNIT_AURA_POSITIVE_SLOTS};
+use benilla_protocol::types::{UnitAuraSlot, AURA_FLAG_CANCELABLE, UNIT_AURA_POSITIVE_SLOTS};
 use benilla_ui::script::{AuraState, ScriptValue, TrackingState, UiScript};
 
 use crate::char_select::ClientState;
@@ -280,7 +280,7 @@ fn buffs_visible_on(
     reputations: &Reputations,
     ctx: RelationContext,
 ) -> bool {
-    if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+    if store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
         // Native packet/roster lists apply their own whole-unit gate. No native snapshot
         // establishes type 295 here; never reinterpret Wrath MOUNT as AURAS_VISIBLE.
         return true;

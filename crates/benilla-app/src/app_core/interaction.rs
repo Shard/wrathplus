@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     FriendEntry, FriendStatusUpdate, GossipOption, MailListEntry, MeetingStoneNotice, NpcTextBlock,
     TrainerSpell, VendorItem,
 };
@@ -135,7 +135,7 @@ pub(crate) struct GossipState {
     /// because `GetGossipAvailableQuests` and `GetGossipActiveQuests` return `(title, level)`
     /// pairs, walked in twos by stock `GossipFrame.lua` (lines 66 and 90).
     pub(crate) quests: Vec<(u32, u32, u32, String)>,
-    pub(crate) quest_info: Vec<benilla_protocol::messages::WrathQuestInfo>,
+    pub(crate) quest_info: Vec<benilla_protocol::types::WrathQuestInfo>,
     pub(crate) records: HashMap<u32, Vec<NpcTextBlock>>,
 }
 
@@ -229,7 +229,7 @@ pub(crate) struct SocialState {
     pub(crate) display_order: Vec<u64>,
     pub(crate) ignore_display_order: Vec<u64>,
     /// The last `/who` answer; `who_total` is the server's full match count.
-    pub(crate) who: Vec<benilla_protocol::messages::WhoEntry>,
+    pub(crate) who: Vec<benilla_protocol::types::WhoEntry>,
     pub(crate) who_total: u32,
     /// Native routing compares the uncapped first wire count (006b8720).
     pub(crate) native_who_count: Option<usize>,

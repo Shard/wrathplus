@@ -10,7 +10,7 @@
 //! shared events; this build's level-up carries seven power deltas (the rune and runic-power pair
 //! are framed and dropped), weather has no sound id (0) and played time a trigger byte (dropped).
 //! Account-data times and updates are capture-only.
-use crate::messages::LevelUpInfo;
+use crate::types::LevelUpInfo;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
 

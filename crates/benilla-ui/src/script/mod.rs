@@ -201,7 +201,7 @@ mod wrath_achievements;
 pub use wrath_achievements::{
     WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
 };
-pub use tooltip_links::QuestLinkView;
+pub use tooltip_links::{GlyphLinkCatalog, QuestLinkView, TalentLinkView};
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;

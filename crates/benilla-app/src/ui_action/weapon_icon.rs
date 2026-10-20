@@ -123,11 +123,11 @@ pub(super) fn auto_attack_icon(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use std::collections::HashMap;
 
     use benilla_formats::{ItemDisplay, ItemDisplayCatalog, ShapeshiftForm};
-    use benilla_protocol::messages::{ItemInfo, ObjectFields};
+    use benilla_protocol::types::{ItemInfo, ObjectFields};
 
     use super::*;
     use crate::items::TestDeps;

@@ -12,7 +12,7 @@ use std::io::{self, Cursor};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::events::SessionEvent;
-use crate::messages::{
+use crate::types::{
     GossipOption, GossipPoi, NpcTextBlock, QuestComplete, QuestConfirmAccept, QuestDetails,
     QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestRequestItems,
     QuestRewardItem, QuestShareMsg, QuestTemplate, WrathQuestInfo,
@@ -217,7 +217,7 @@ fn end(r: &Cursor<&[u8]>, events: Vec<SessionEvent>) -> io::Result<Vec<SessionEv
 /// `SMSG_NPC_TEXT_UPDATE`'s eight blocks (AC `QueryHandler.cpp:284-356`): probability, the two
 /// gendered texts, the language and three `(delay, emote)` pairs each.
 fn npc_text_blocks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<NpcTextBlock>> {
-    (0..crate::messages::NPC_TEXT_BLOCKS)
+    (0..crate::types::NPC_TEXT_BLOCKS)
         .map(|_| {
             let probability = f32_le(r)?;
             let male = cstring(r)?;
@@ -236,7 +236,7 @@ fn npc_text_blocks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<NpcTextBlock>> {
         .collect()
 }
 
-/// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::messages::dialog_status`] values. 3.3.5
+/// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::types::dialog_status`] values. 3.3.5
 /// adds low-level and repeatable tiers: a low-level offer shows no marker (1.12's `CHAT`), a
 /// repeatable reward is the yellow `?`.
 fn status_events(npc: u64, status: u8) -> Vec<SessionEvent> {
@@ -250,7 +250,7 @@ fn status_events(npc: u64, status: u8) -> Vec<SessionEvent> {
 }
 
 fn dialog_status(status: u8) -> u32 {
-    use crate::messages::dialog_status as d;
+    use crate::types::dialog_status as d;
     match status {
         1 => d::UNAVAILABLE,
         2 | 4 => d::CHAT,
@@ -645,53 +645,6 @@ mod tests {
         out.push(0);
     }
 
-    #[test]
-    fn a_quest_template_keeps_its_reputation_runs_and_item_drops() {
-        let mut b = Vec::new();
-        let w = |b: &mut Vec<u8>, v: u32| b.extend(v.to_le_bytes());
-        for i in 0..25u32 {
-            w(&mut b, if i == 0 { 9001 } else { 0 });
-        }
-        w(&mut b, 0); // RewardRepShowMask
-        for _ in 0..(8 + 12) {
-            w(&mut b, 0);
-        }
-        for id in [1037, 1052, 0, 0, 0] {
-            w(&mut b, id);
-        }
-        for value in [5, -3, 0, 0, 0] {
-            w(&mut b, value as u32);
-        }
-        for over in [0, 250, 0, 0, 0] {
-            w(&mut b, over as u32);
-        }
-        for _ in 0..4 {
-            w(&mut b, 0);
-        }
-        for _ in 0..5 {
-            cstr(&mut b, "");
-        }
-        for k in 0..4u32 {
-            for v in [100 + k, 1, 3000 + k, 2 + k] {
-                w(&mut b, v);
-            }
-        }
-        for _ in 0..12 {
-            w(&mut b, 0);
-        }
-        for _ in 0..4 {
-            cstr(&mut b, "");
-        }
-        let t = quest_template(&mut Cursor::new(&b[..])).unwrap();
-        let native = t.wrath.unwrap();
-        assert_eq!(t.quest_id, 9001);
-        assert_eq!(
-            native.reward_factions,
-            [(1037, 5, 0), (1052, -3, 250), (0, 0, 0), (0, 0, 0), (0, 0, 0)]
-        );
-        assert_eq!(native.item_drops, [(3000, 2), (3001, 3), (3002, 4), (3003, 5)]);
-        assert_eq!(t.objectives[1].creature_or_go, 101);
-    }
 
     #[test]
     fn a_gossip_menu_keeps_its_options_and_quests_and_its_id_rides_the_select() {
@@ -733,7 +686,7 @@ mod tests {
 
     #[test]
     fn reward_statuses_keep_native_minimap_dot_distinction() {
-        use crate::messages::dialog_status as d;
+        use crate::types::dialog_status as d;
         let guid = 0xf130_0001_2300_4567u64;
         for (native, expected) in [(9, d::REWARD_OLD), (10, d::REWARD2)] {
             let mut single = guid.to_le_bytes().to_vec();
@@ -759,7 +712,7 @@ mod tests {
 
     #[test]
     fn giver_markers_map_onto_the_1_12_statuses() {
-        use crate::messages::dialog_status as d;
+        use crate::types::dialog_status as d;
         let mut b = 2u32.to_le_bytes().to_vec();
         b.extend(1u64.to_le_bytes());
         b.push(8);

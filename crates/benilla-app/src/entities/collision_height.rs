@@ -70,7 +70,7 @@ pub(super) fn stamp_collision_heights(
 mod native_display {
     use super::prism_display_id;
     use crate::net::ObjectStore;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_NATIVEDISPLAYID`, between DISPLAYID (131) and MOUNTDISPLAYID (133).

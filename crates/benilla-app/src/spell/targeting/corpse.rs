@@ -14,7 +14,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::CorpseTarget;
+use benilla_protocol::types::CorpseTarget;
 
 use crate::net::ObjectStore;
 use crate::spell::cast_send::TargetedBind;
@@ -186,11 +186,11 @@ pub(crate) mod fixture {
     /// A human caster, template 1, with this `UNIT_FIELD_COMBATREACH` (field 130).
     pub(crate) fn caster(reach: f32) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
                 (
-                    benilla_protocol::messages::Field::UnitCombatreach,
+                    benilla_protocol::types::Field::UnitCombatreach,
                     reach.to_bits(),
                 ),
             ],
@@ -201,14 +201,14 @@ pub(crate) mod fixture {
     /// `CORPSE_FLAG_BONES` in `CORPSE_FIELD_FLAGS` (field 35).
     pub(crate) fn corpse(race: u8, bones: bool) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
                 (
-                    benilla_protocol::messages::Field::CorpseBytes1,
+                    benilla_protocol::types::Field::CorpseBytes1,
                     u32::from(race) << 8,
                 ),
                 (
-                    benilla_protocol::messages::Field::CorpseFlags,
+                    benilla_protocol::types::Field::CorpseFlags,
                     u32::from(bones),
                 ),
             ],

@@ -1,6 +1,6 @@
 //! Raw template-spell feed regressions: API data is independent of tooltip text.
 use super::*;
-use benilla_protocol::messages::ItemSpellEntry;
+use benilla_protocol::types::ItemSpellEntry;
 
 fn entry(index: u8, trigger: u32, spell_id: u32) -> ItemSpellEntry {
     ItemSpellEntry {

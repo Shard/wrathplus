@@ -1,7 +1,7 @@
 //! The questgiver packet handlers: each fills the [`QuestGiver`] the feed reads, and each panel
 //! packet replaces the open view.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     QuestComplete, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems, QuestShareMsg,
 };
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -364,7 +364,7 @@ mod tests {
     /// Typemask 8 is `TYPEMASK_UNIT`, which a creature (`0x9`) and a player (`0x19`) both carry.
     #[test]
     fn a_gameobjects_dialog_status_is_dropped_and_a_creatures_is_not() {
-        use benilla_protocol::messages::dialog_status;
+        use benilla_protocol::types::dialog_status;
 
         // A GameObject (Goldshire's Wanted Poster), a transport (an elevator), a creature and a
         // player.

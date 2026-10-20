@@ -2,7 +2,7 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::wrath_spell_log_capture::*;
-use benilla_protocol::messages::{DispelledAura, SpellDispelLog};
+use benilla_protocol::types::{DispelledAura, SpellDispelLog};
 use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use benilla_protocol::wrath_logs::Packet;
 use benilla_protocol::SessionEvent;

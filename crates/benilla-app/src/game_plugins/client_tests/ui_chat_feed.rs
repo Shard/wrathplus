@@ -95,8 +95,8 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
         .resource_mut::<crate::net::GuidIndex>()
         .0
         .insert(42, entity);
-    let layout = benilla_protocol::messages::FieldLayout::Wrath12340;
-    use benilla_protocol::messages::Field;
+    let layout = benilla_protocol::types::FieldLayout::Wrath12340;
+    use benilla_protocol::types::Field;
     let fields = [(Field::ItemDurability, 17), (Field::ItemMaxdurability, 80)]
         .map(|(f, v)| (layout.resolve(f).unwrap().index, v));
     let item = app

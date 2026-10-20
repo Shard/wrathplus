@@ -179,7 +179,7 @@ fn every_wrath_writer_route_is_admitted() {
         ("QuestPoiQuery", ClientCommand::NativeQuest(benilla_protocol::wrath_quest::Command::PoiQuery { quests: vec![783] })),
         (
             "QuestPushResult",
-            ClientCommand::QuestPushResult { sharer: 1, quest: 783, msg: benilla_protocol::messages::QuestShareMsg::DECLINE_QUEST },
+            ClientCommand::QuestPushResult { sharer: 1, quest: 783, msg: benilla_protocol::types::QuestShareMsg::DECLINE_QUEST },
         ),
         ("NativeCalendar", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::GetCalendar)),
         ("CalendarRsvp", ClientCommand::NativeCalendar(benilla_protocol::wrath_calendar::Command::Rsvp { event_id: 1, invite_id: 2, status: 1 })),
@@ -229,7 +229,7 @@ fn every_wrath_writer_route_is_admitted() {
                 spell_id: 8690,
                 item_guid: 1,
                 glyph_index: 0,
-                target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
+                target: benilla_protocol::types::UseItemTarget::SelfImplicit,
             },
         ),
         ("OpenItem", ClientCommand::OpenItem { bag_index: 255, slot: 23 }),
@@ -615,7 +615,7 @@ fn every_wrath_writer_route_is_admitted() {
             "CastSpellCorpse",
             ClientCommand::CastSpellCorpse {
                 spell_id: Default::default(),
-                target: benilla_protocol::messages::CorpseTarget::Ally,
+                target: benilla_protocol::types::CorpseTarget::Ally,
                 corpse_guid: Default::default(),
             },
         ),

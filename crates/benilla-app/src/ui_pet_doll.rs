@@ -70,8 +70,8 @@ fn feed_pet_doll(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
-    use benilla_protocol::messages::{ObjectFields, ObjectType};
+    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::{ObjectFields, ObjectType};
 
     use crate::net::ObjectStore;
 

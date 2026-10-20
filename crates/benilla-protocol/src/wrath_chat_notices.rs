@@ -6,7 +6,7 @@
 //! ChatPackets.cpp, Chat.cpp (`SendNotification`), WorldSession.cpp (`SendAreaTriggerMessage`),
 //! Creature.cpp (`SendZoneUnderAttackMessage`), MotdMgr.cpp, MiscPackets.cpp (`Playsound`),
 //! Channel.cpp (`Make*`), ChannelHandler.cpp. Strict framing.
-use crate::messages::{ChatMessage, ChannelNoticeTail, CHAT_MSG_SYSTEM};
+use crate::types::{ChatMessage, ChannelNoticeTail, CHAT_MSG_SYSTEM};
 use crate::wire::read_cstring;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};

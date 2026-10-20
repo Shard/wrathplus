@@ -211,13 +211,13 @@ mod tests {
         let bytes_1 = 1u32 << 8;
         let flesh = ObjectStore(
             ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::CorpseBytes1, bytes_1),
-                    (benilla_protocol::messages::Field::CorpseBytes2, 0),
+                    (benilla_protocol::types::Field::CorpseBytes1, bytes_1),
+                    (benilla_protocol::types::Field::CorpseBytes2, 0),
                 ],
             )
-            .into_created(benilla_protocol::messages::ObjectType::Corpse),
+            .into_created(benilla_protocol::types::ObjectType::Corpse),
         );
         assert_eq!(
             corpse_model(&net, Some(&flesh)),
@@ -225,14 +225,14 @@ mod tests {
         );
         let bones = ObjectStore(
             ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::CorpseBytes1, bytes_1),
-                    (benilla_protocol::messages::Field::CorpseBytes2, 0),
-                    (benilla_protocol::messages::Field::CorpseFlags, 0x01),
+                    (benilla_protocol::types::Field::CorpseBytes1, bytes_1),
+                    (benilla_protocol::types::Field::CorpseBytes2, 0),
+                    (benilla_protocol::types::Field::CorpseFlags, 0x01),
                 ],
             )
-            .into_created(benilla_protocol::messages::ObjectType::Corpse),
+            .into_created(benilla_protocol::types::ObjectType::Corpse),
         );
         assert_eq!(
             corpse_model(&net, Some(&bones)),

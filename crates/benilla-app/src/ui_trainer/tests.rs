@@ -5,7 +5,7 @@ use benilla_formats::{
     ItemDisplay, ItemDisplayCatalog, SpellDisplay, SPELL_ATTR_IS_TRADESKILL,
     SPELL_EFFECT_CREATE_ITEM, SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL,
 };
-use benilla_protocol::messages::trainer_spell_state;
+use benilla_protocol::types::trainer_spell_state;
 use benilla_ui::script::TrainerTooltip;
 use std::collections::HashMap;
 
@@ -1064,7 +1064,7 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
 
 #[test]
 fn trainer_rederive_edges_preserve_skill_halves_and_class_gates_in_both_layouts() {
-    use benilla_protocol::messages::FieldLayout;
+    use benilla_protocol::types::FieldLayout;
     let layout = FieldLayout::Wrath12340;
     let native_edge = |field: Field, offset: u16| {
         let span = layout
@@ -1119,9 +1119,9 @@ fn wrath_profession_eligibility_reads_free_descriptor_slots_not_vanilla_flag() {
     service.is_primary_prof_first_rank = true;
     service.wrath_point_cost = Some([0, 1]);
     assert!(!service.can_learn_primary_prof);
-    let layout = benilla_protocol::messages::FieldLayout::Wrath12340;
+    let layout = benilla_protocol::types::FieldLayout::Wrath12340;
     let index = layout
-        .resolve(benilla_protocol::messages::Field::PlayerCharacterPoints2)
+        .resolve(benilla_protocol::types::Field::PlayerCharacterPoints2)
         .unwrap()
         .index;
     for (free, eligible) in [(0, false), (1, true), (2, true)] {

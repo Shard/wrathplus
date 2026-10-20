@@ -12,7 +12,7 @@
 //! `SMSG_PETITION_QUERY_RESPONSE`, the signer names from the name cache. It answers our request
 //! and delivers an offer alike (`PetitionsHandler.cpp:390-397`); only `owner` tells them apart.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     petition_result, PetitionQueryResponse, PetitionRename, PetitionShowList,
     PetitionShowSignatures, PetitionSignResults,
 };
@@ -339,11 +339,11 @@ pub(crate) mod net {
                 .map(|s| {
                     let flags = s.0.unit_npc_services();
                     // Legacy registrar model requires both services; decode native bits first.
-                    (if flags.has(benilla_protocol::messages::NpcService::Petitioner) {
+                    (if flags.has(benilla_protocol::types::NpcService::Petitioner) {
                         crate::target::cursor_mode::npc_flags::PETITIONER
                     } else {
                         0
-                    }) | (if flags.has(benilla_protocol::messages::NpcService::TabardDesigner) {
+                    }) | (if flags.has(benilla_protocol::types::NpcService::TabardDesigner) {
                         crate::target::cursor_mode::npc_flags::TABARDDESIGNER
                     } else {
                         0
@@ -534,7 +534,7 @@ pub(crate) mod net {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{PetitionShowListEntry, PetitionSignature};
+    use benilla_protocol::types::{PetitionShowListEntry, PetitionSignature};
     use crossbeam_channel::unbounded;
 
     fn commands() -> (NetCommands, crossbeam_channel::Receiver<ClientCommand>) {
@@ -550,8 +550,8 @@ mod tests {
                 .enumerate()
                 .map(|(i, (cost, flags))| PetitionShowListEntry {
                     index: i as u32 + 1,
-                    charter_entry: benilla_protocol::messages::CHARTER_ITEM_ENTRY,
-                    charter_display_id: benilla_protocol::messages::CHARTER_DISPLAY_ID,
+                    charter_entry: benilla_protocol::types::CHARTER_ITEM_ENTRY,
+                    charter_display_id: benilla_protocol::types::CHARTER_DISPLAY_ID,
                     charter_cost: *cost,
                     entry_flags: *flags,
                 })

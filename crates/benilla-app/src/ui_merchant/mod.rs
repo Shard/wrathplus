@@ -3,7 +3,7 @@
 //! [`feed_repair_costs`] the repair costs, and [`drain_merchant`] sends the Lua intents. A
 //! bag click sells through [`crate::ui_items`].
 
-use benilla_protocol::messages::{buy_result, sell_result, VendorItem};
+use benilla_protocol::types::{buy_result, sell_result, VendorItem};
 use benilla_world::interact::WorldRightPress;
 use bevy::prelude::*;
 
@@ -18,7 +18,7 @@ use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, Objects, SelfPla
 use crate::ui_items::{item_link, slot_guid, wire_pos_for};
 use crate::ui_script::{gate, UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
-use benilla_protocol::messages::BAG_PLAYER_INVENTORY;
+use benilla_protocol::types::BAG_PLAYER_INVENTORY;
 
 /// A vendor row's unlimited `current_count` (vmangos `ItemHandler.cpp:795`), `-1` to Lua.
 const STOCK_UNLIMITED: u32 = 0xFFFF_FFFF;
@@ -165,7 +165,7 @@ fn personal_rating_met(
         player
             .and_then(|f| {
                 f.get_at(
-                    benilla_protocol::messages::Field::PlayerArenaTeamInfo11,
+                    benilla_protocol::types::Field::PlayerArenaTeamInfo11,
                     slot * 7 + i,
                 )
             })
@@ -860,7 +860,7 @@ fn drain_merchant(
             wire_pos_for(
                 self_store
                     .map(|s| s.0.layout())
-                    .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340),
+                    .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340),
                 bag,
                 slot,
             ),
@@ -924,24 +924,24 @@ pub(crate) fn end_repair_mode_on_right_press(
 #[cfg(test)]
 pub(crate) mod purse_fixture {
     use super::*;
-    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerCoinage);
-    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
+    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerCoinage);
+    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitNpcFlags);
     use benilla_protocol::ObjectFields;
 
     pub(crate) const VENDOR: u64 = 0xF130_0000_0000_0043;
     pub(crate) const SWORD: u64 = 0x4000_0000_0000_0707;
     pub(crate) const SWORD_ENTRY: u32 = 2488;
     /// Absolute descriptor indices.
-    const OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ObjectEntry);
-    const ITEM_DURABILITY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ItemDurability);
-    const ITEM_MAXDURABILITY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ItemMaxdurability);
-    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+    const OBJECT_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ObjectEntry);
+    const ITEM_DURABILITY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ItemDurability);
+    const ITEM_MAXDURABILITY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ItemMaxdurability);
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
     /// The string `ERR_NOT_ENOUGH_MONEY` holds in 1.12's `GlobalStrings.lua`.
     pub(crate) const NOT_ENOUGH_MONEY: &str = "You don't have enough money.";
 
@@ -1110,19 +1110,19 @@ pub(crate) mod purse_fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// `GetRepairAllCost` sums each item's cost after the open merchant's discount (`0x4faf8a`):
     /// at Honored with a PvP-flagged vendor and honor rank byte 8, 0.2 comes off each item before
     /// its rounding, and the undiscounted total is not what the VM reads.
     #[test]
     fn the_repair_all_total_takes_the_merchants_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
@@ -1213,8 +1213,8 @@ mod tests {
         slot_field: u16,
         money: u32,
     ) -> (Vec<ClientCommand>, Vec<String>, Vec<&'static str>) {
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
@@ -1262,8 +1262,8 @@ mod tests {
     fn repair_all_does_nothing_at_a_vendor_that_does_not_repair() {
         /// `UNIT_NPC_FLAG_VENDOR` in build 12340.
         const NPC_FLAG_VENDOR: u32 = 0x80;
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1292,8 +1292,8 @@ mod tests {
     /// total of 0 and the repair-all goes out.
     #[test]
     fn repair_all_tests_the_purse_against_the_worn_gear_alone() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1328,8 +1328,8 @@ mod tests {
     /// An item's cost is discounted at the vendor and full once it closes (`0x4faf30`).
     #[test]
     fn each_items_cost_takes_the_open_vendors_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
 
@@ -1369,10 +1369,10 @@ mod tests {
     /// item is priced but left out of the total (`0x4fbd60`).
     #[test]
     fn each_input_alone_reopens_the_repair_cost_gate() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
         use purse_fixture::*;
 
@@ -1608,7 +1608,7 @@ mod tests {
         let commands = NetCommands(tx);
         items.insert_template(
             2129,
-            Some(benilla_protocol::messages::ItemInfo {
+            Some(benilla_protocol::types::ItemInfo {
                 class: 4,
                 subclass: 6,
                 name: "Chipped Buckler".into(),
@@ -1700,7 +1700,7 @@ mod tests {
 #[cfg(test)]
 #[test]
 fn repair_service_uses_native_flags_in_each_layout() {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     let (layout, repair, unrelated) = (FieldLayout::Wrath12340, 0x1000, 0x4000);
     let span = layout
         .resolve(Field::UnitNpcFlags)

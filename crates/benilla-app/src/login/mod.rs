@@ -202,7 +202,7 @@ fn fail_text(
 /// The world server's `SMSG_AUTH_RESPONSE` refusal text: the client's dispatch (`0x5aa960`,
 /// key table `0x85cae8`), numbered as `AuthResponseCodes` in cmangos `SharedDefines.h:1721+`.
 fn world_refusal_text(strings: &GlueStrings, code: u8) -> &str {
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
     let (key, fallback): (&str, &str) = match code {
         m::AUTH_FAILED => ("AUTH_FAILED", "Authentication failed"),
         m::AUTH_REJECT => ("AUTH_REJECT", "Login unavailable"),
@@ -1456,7 +1456,7 @@ mod tests {
     /// `AUTH_LOGON_FAILED_SUSPENDED` to realmd and `AUTH_OK` to the world server.
     #[test]
     fn the_two_auth_enums_do_not_share_a_byte() {
-        use benilla_protocol::messages as m;
+        use benilla_protocol::types as m;
         let strings = GlueStrings::default();
         let logon = |b| fail_text(&strings, Some(LoginRefusal::Logon(b)), None);
         let world = |b| fail_text(&strings, Some(LoginRefusal::World(b)), None);

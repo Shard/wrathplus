@@ -2,7 +2,7 @@
 //! into the VM, fire the party events on their edges, and turn the Lua [`PartyRequest`] intents
 //! into `CMSG_*` sends. The state and its lines live in the parent module.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     member_status, GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo, GROUP_MEMBER_ASSISTANT,
 };
 use benilla_ui::script::{

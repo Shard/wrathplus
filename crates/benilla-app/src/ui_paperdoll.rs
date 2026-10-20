@@ -2,7 +2,7 @@
 use crate::net::{ObjectStore, SelfPlayer};
 use benilla_assets::{AssetSet, ClientDataProfile, LockRecover, WorldAssets};
 use benilla_formats::{GameTable, WrathGameTables};
-use benilla_protocol::messages::{Field, ObjectFields};
+use benilla_protocol::types::{Field, ObjectFields};
 use benilla_ui::script::{UiScript, WrathPaperDollStats, WrathStatConversions};
 use bevy::prelude::*;
 
@@ -170,7 +170,7 @@ fn feed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::FieldLayout;
+    use benilla_protocol::types::FieldLayout;
     #[test]
     fn named_wrath_fields_feed_values_and_signed_school_bonuses() {
         let layout = FieldLayout::Wrath12340;

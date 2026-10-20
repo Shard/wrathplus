@@ -15,7 +15,7 @@ use crate::net::ObjectStore;
 pub(crate) fn active_action_toggle(spell_id: u32, d: &SpellDisplay, _store: &ObjectStore) -> bool {
     // 12340 descriptors carry no aura slots; native auras arrive by packet.
     d.active_icon_id != 0
-        && std::iter::empty::<benilla_protocol::messages::UnitAuraSlot>()
+        && std::iter::empty::<benilla_protocol::types::UnitAuraSlot>()
             .any(|a| a.spell_id == spell_id && a.is_cancelable())
 }
 

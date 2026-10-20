@@ -20,7 +20,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     DamageShield, DispelFailed, ExecuteLog, PartyKillLog, PeriodicAuraLog, PeriodicTick,
     SpellDamageLog, SpellDispelLog, SpellEnergizeLog, SpellHealLog, SpellInstaKillLog,
     SpellLogExecute, SpellLogMiss,

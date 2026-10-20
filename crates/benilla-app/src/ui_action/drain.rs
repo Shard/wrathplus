@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
 };
 use benilla_ui::script::UiScript;
@@ -368,7 +368,7 @@ pub(crate) fn use_action(
                         spell_index,
                         use_spell: template.use_spell.map(|u| u.spell_id),
                         on_object: None,
-                        is_charter: template.flags & benilla_protocol::messages::ITEM_FLAG_CHARTER
+                        is_charter: template.flags & benilla_protocol::types::ITEM_FLAG_CHARTER
                             != 0,
                     },
                     &targeting.context(),

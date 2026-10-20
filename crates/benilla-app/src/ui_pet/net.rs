@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{PetMode, PetSpells};
+use benilla_protocol::types::{PetMode, PetSpells};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 
 use benilla_assets::coords::wow_to_bevy;
@@ -162,8 +162,8 @@ fn pet_spells(spells: PetSpells, catalog: Option<&Spells>, bar: &mut PetBar) {
             .enumerate()
             .map(|(i, e)| {
                 let what = match e.kind() {
-                    benilla_protocol::messages::PET_ACT_COMMAND => format!("cmd {}", e.action()),
-                    benilla_protocol::messages::PET_ACT_REACTION => format!("react {}", e.action()),
+                    benilla_protocol::types::PET_ACT_COMMAND => format!("cmd {}", e.action()),
+                    benilla_protocol::types::PET_ACT_REACTION => format!("react {}", e.action()),
                     _ if e.is_empty() => "empty".to_string(),
                     _ => match catalog.and_then(|c| c.catalog.get(e.action())) {
                         Some(d) => format!("{} ({})", d.name, e.action()),
@@ -243,7 +243,7 @@ fn pet_feedback_key(reason: u8) -> Option<&'static str> {
 fn pet_tame_failure(reason: u8, failures: &mut PetTameFailures) {
     debug!(
         "net: pet tame failure {reason} ({})",
-        benilla_protocol::messages::pet_tame_failure_key(reason)
+        benilla_protocol::types::pet_tame_failure_key(reason)
     );
     failures.0.push(reason);
 }
@@ -326,7 +326,7 @@ fn pet_cast_failed(spell_id: u32, reason: Option<u8>, errors: &mut CastErrors) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{PetActionEntry, PET_ACT_COMMAND, PET_COMMAND_ATTACK};
+    use benilla_protocol::types::{PetActionEntry, PET_ACT_COMMAND, PET_COMMAND_ATTACK};
 
     #[test]
     fn native_capture_is_lossless_replacement_and_session_scoped() {

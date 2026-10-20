@@ -273,10 +273,7 @@ fn hold_for_gm_off(gm_flag_set: bool, wants_off: bool, shield: ShieldReport, wai
 }
 
 /// Everything about this avatar that will quietly invalidate a run's readings, worst first.
-fn findings(
-    fields: &benilla_protocol::messages::ObjectFields,
-    shield: ShieldReport,
-) -> Vec<String> {
+fn findings(fields: &benilla_protocol::types::ObjectFields, shield: ShieldReport) -> Vec<String> {
     let mut out = Vec::new();
     let unit_flags = fields.unit_flags();
 
@@ -384,8 +381,8 @@ fn findings(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::ObjectFields;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::ObjectFields;
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// Build a player descriptor from `(field index, value)` pairs.
     fn player(fields: &[(u16, u32)]) -> ObjectFields {

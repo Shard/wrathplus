@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     power_display_scale, AttackerState, DamageShield, DispelFailed, EnchantmentLog,
     EnvironmentalDamageLog, PartyKillLog, PeriodicAuraLog, PeriodicTick, SpellDamageLog,
     SpellDispelLog, SpellEnergizeLog, SpellHealLog, SpellInstaKillLog, SpellLogExecute,
@@ -736,7 +736,7 @@ pub(super) fn spell_log_execute(
     poses: &Query<&mut Transform>,
     log: &mut ChatLog,
 ) {
-    use benilla_protocol::messages::ExecuteLog as E;
+    use benilla_protocol::types::ExecuteLog as E;
 
     let caster = ctx.classify(s.caster, stores);
     let Some(spell) = ctx.spell_name(s.spell_id) else {

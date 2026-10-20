@@ -2,7 +2,7 @@
 //! replies, [`feed_taxi`] pushes the known nodes on the current node's continent with their
 //! routes (built in [`routing`]) and fires the map events, and [`drain_taxi`] sends the activate.
 
-use benilla_protocol::messages::TaxiMask;
+use benilla_protocol::types::TaxiMask;
 use bevy::prelude::*;
 
 use benilla_ui::script::{TaxiUiState, UiScript};
@@ -299,8 +299,8 @@ impl Plugin for UiTaxiPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitFlags);
+    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitFlags);
     use benilla_protocol::ObjectFields;
 
     /// `1` with the bit, `nil` without it; the feed reads nothing about server splines.
@@ -348,8 +348,8 @@ mod tests {
     /// flight master unresolved the fares show 0 (`0x4dc423`).
     #[test]
     fn the_map_shows_discounted_fares_and_the_express_sends_the_raw_sum() {
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
         use bevy::ecs::system::RunSystemOnce;
 
         const MASTER: u64 = 0xF130_0000_0000_0099;
@@ -375,10 +375,10 @@ mod tests {
         app.world_mut().spawn((
             SelfPlayer,
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
                     (
-                        benilla_protocol::messages::Field::UnitBytes0,
+                        benilla_protocol::types::Field::UnitBytes0,
                         crate::target::HUMAN_WARRIOR,
                     ),
                 ],

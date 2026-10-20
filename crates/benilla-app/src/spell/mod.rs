@@ -148,7 +148,7 @@ pub(crate) fn spell_skill_value(
 pub(crate) fn skill_line_value(me: Option<&crate::net::ObjectStore>, line: u32) -> u32 {
     let Some(store) = me else { return 0 };
     line_skill_value(
-        (0..benilla_protocol::messages::PLAYER_SKILL_SLOTS)
+        (0..benilla_protocol::types::PLAYER_SKILL_SLOTS)
             .filter_map(|slot| store.0.player_skill(slot)),
         line,
     )
@@ -158,7 +158,7 @@ pub(crate) fn skill_line_value(me: Option<&crate::net::ObjectStore>, line: u32) 
 /// half read unsigned when the value is positive (`0x5ea571`-`0x5ea580`), plus its low half read
 /// signed (`0x5ea5ac`-`0x5ea5ba`), floored at 0 (`0x5ea5bc`).
 fn line_skill_value(
-    slots: impl Iterator<Item = benilla_protocol::messages::PlayerSkillSlot>,
+    slots: impl Iterator<Item = benilla_protocol::types::PlayerSkillSlot>,
     line: u32,
 ) -> u32 {
     for s in slots {
@@ -176,7 +176,7 @@ fn line_skill_value(
 /// Each skill slot's line and effective value, all [`spell_skill_value`] reads: a text built
 /// against one snapshot is rebuilt when the next differs.
 pub(crate) type SkillSnapshot =
-    [(u16, u32); benilla_protocol::messages::PLAYER_SKILL_SLOTS as usize];
+    [(u16, u32); benilla_protocol::types::PLAYER_SKILL_SLOTS as usize];
 
 /// The [`SkillSnapshot`] of the player; all zeros without one.
 pub(crate) fn skill_snapshot(me: Option<&crate::net::ObjectStore>) -> SkillSnapshot {
@@ -216,7 +216,7 @@ pub(crate) fn changed_skill_lines(prev: &SkillSnapshot, now: &SkillSnapshot) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::PlayerSkillSlot;
+    use benilla_protocol::types::PlayerSkillSlot;
 
     fn slot(value: u16, temp_bonus: i16, perm_bonus: i16) -> PlayerSkillSlot {
         PlayerSkillSlot {
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn the_changed_lines_are_those_whose_value_moved() {
         let snapshot = |slots: &[(u16, u32)]| -> SkillSnapshot {
-            let mut s = [(0, 0); benilla_protocol::messages::PLAYER_SKILL_SLOTS as usize];
+            let mut s = [(0, 0); benilla_protocol::types::PLAYER_SKILL_SLOTS as usize];
             s[..slots.len()].copy_from_slice(slots);
             s
         };
