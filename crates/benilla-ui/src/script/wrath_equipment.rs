@@ -325,7 +325,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     )?;
     // GameTooltip:SetEquipmentSet(name) (PaperDollFrame.lua:2524): the set's name, then the
     // tooltip's `OnTooltipSetEquipmentSet`. The equipped/bags/missing count lines are not drawn.
-    // Labelled: the handler runs before `Show`, an order not read from the client.
+    // The handler runs after the content, as the 12340 cores do (`0x622dd0` runs `+0x514`).
     let tooltip: Table = lua.named_registry_value(super::tooltip::REG_TOOLTIP_METHODS)?;
     tooltip.set(
         "SetEquipmentSet",

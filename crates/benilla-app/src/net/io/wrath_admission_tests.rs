@@ -37,9 +37,9 @@ fn every_wrath_writer_route_is_admitted() {
         ),
         (
             "GmTicketCreate",
-            ClientCommand::GmTicketCreate { category: 1, map: 0, pos: [1.0, 2.0, 3.0], text: "help".into() },
+            ClientCommand::GmTicketCreate { map: 0, pos: [1.0, 2.0, 3.0], text: "help".into() },
         ),
-        ("GmTicketUpdate", ClientCommand::GmTicketUpdate { category: 1, text: "more".into() }),
+        ("GmTicketUpdate", ClientCommand::GmTicketUpdate { text: "more".into() }),
         ("GmTicketGet", ClientCommand::GmTicketGet),
         ("GmTicketDelete", ClientCommand::GmTicketDelete),
         ("GmTicketSystemStatus", ClientCommand::GmTicketSystemStatus),
@@ -147,7 +147,7 @@ fn every_wrath_writer_route_is_admitted() {
         ("TogglePvp", ClientCommand::TogglePvp),
         ("RequestBattlefieldScoreData", ClientCommand::RequestBattlefieldScoreData),
         ("RequestBattlefieldPositions", ClientCommand::RequestBattlefieldPositions),
-        ("LeaveBattlefield", ClientCommand::LeaveBattlefield { map_id: 489 }),
+        ("LeaveBattlefield", ClientCommand::LeaveBattlefield),
         (
             "Chat",
             ClientCommand::Chat { kind: crate::net::ChatKind::Say, target: None, text: "hi".into(), language: None },
@@ -231,7 +231,6 @@ fn every_wrath_writer_route_is_admitted() {
             ClientCommand::UseItem {
                 bag_index: 255,
                 slot: 23,
-                spell_index: 0,
                 spell_id: 8690,
                 item_guid: 1,
                 glyph_index: 0,
@@ -403,10 +402,8 @@ fn every_wrath_writer_route_is_admitted() {
             "NotActiveMover",
             ClientCommand::NotActiveMover {
                 guid: Default::default(),
-                flags: 0,
                 pos: [0.0; 3],
                 orientation: 0.0,
-                fall_time: 0,
             },
         ),
         (
@@ -620,6 +617,14 @@ fn every_wrath_writer_route_is_admitted() {
             },
         ),
         (
+            "CastSpellCorpse",
+            ClientCommand::CastSpellCorpse {
+                spell_id: Default::default(),
+                target: benilla_protocol::messages::CorpseTarget::Ally,
+                corpse_guid: Default::default(),
+            },
+        ),
+        (
             "CancelCast",
             ClientCommand::CancelCast {
                 spell_id: Default::default(),
@@ -793,7 +798,6 @@ fn every_wrath_writer_route_is_admitted() {
             "ActivateTaxiExpress",
             ClientCommand::ActivateTaxiExpress {
                 guid: Default::default(),
-                total_cost: Default::default(),
                 nodes: Default::default(),
             },
         ),
@@ -941,14 +945,7 @@ fn every_wrath_writer_route_is_admitted() {
         .split("/// Only implemented wire routes")
         .next()
         .unwrap();
-    let disabled = [
-        "ForceSpeedAck",
-        "WorldportAck",
-        "MoveModeAck",
-        "KnockBackAck",
-        // ForceSpeedAck, MoveModeAck and KnockBackAck are acknowledged by the writer itself
-        // (`send_mover_ack`); their controller commands are no-ops, not admitted routes.
-    ];
+    let disabled = ["WorldportAck"];
     for tail in route_body.split("ClientCommand::").skip(1) {
         let name = tail
             .split(|c: char| !c.is_alphanumeric() && c != '_')

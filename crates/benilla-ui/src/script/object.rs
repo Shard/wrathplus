@@ -262,10 +262,7 @@ pub fn frame_kind_from_tag(s: &str) -> Option<FrameKind> {
 pub(crate) fn registered_frame_kind(lua: &Lua, kind: &str) -> Option<FrameKind> {
     // Wrath's `<Cooldown>` and `<QuestPOIFrame>` are plain frames here; their methods are the
     // Wrath surface's.
-    if matches!(enum_token(kind).as_str(), "COOLDOWN" | "QUESTPOIFRAME")
-        && lua.app_data_ref::<Model>().expect("model app_data").dialect
-            == super::ScriptDialect::Wrath12340
-    {
+    if matches!(enum_token(kind).as_str(), "COOLDOWN" | "QUESTPOIFRAME") {
         return Some(FrameKind::Frame);
     }
     let frame_kind = frame_kind_from_str(kind)?;

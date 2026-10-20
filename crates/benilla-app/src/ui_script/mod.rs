@@ -774,14 +774,6 @@ mod faux_scroll_tests;
 #[cfg(test)]
 mod panel_template_tests;
 
-/// The event argument-shape gate: every fire site against `reference/1.12-events.tsv`.
-#[cfg(test)]
-mod event_shape_gate;
-
-/// The verb-fired event gate, against `reference/1.12-verb-events.tsv`.
-#[cfg(test)]
-mod verb_event_gate;
-
 /// The stock BasicControls.xml, which benilla never calls, entered from Lua as an addon does.
 #[cfg(test)]
 mod basic_controls_tests;

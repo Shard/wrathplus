@@ -565,7 +565,6 @@ mod tests {
             slot: 24,
             entry: 7148,
             item_guid: 0x4000_0000_0000_0001,
-            spell_index: 0,
             on_object: None,
         };
         let (sent, _, _) = clicked(0x8000, cables, friend(), 10.0);

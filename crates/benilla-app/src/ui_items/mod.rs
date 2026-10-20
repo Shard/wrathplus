@@ -384,7 +384,6 @@ pub(crate) fn send_item_use(
                     slot: it.slot,
                     entry: it.entry,
                     item_guid: it.guid.unwrap_or(0),
-                    spell_index: it.spell_index,
                     on_object: it.on_object,
                 },
             );

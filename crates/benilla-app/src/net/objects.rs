@@ -681,12 +681,7 @@ fn force_speed_change(
                  (no live speed set) — we still ack, so the server and we now disagree"
             );
         }
-        speed_changes.write(SpeedChangeMessage {
-            guid,
-            kind,
-            counter,
-            speed,
-        });
+        speed_changes.write(SpeedChangeMessage);
     } else {
         debug!("net: force speed change for foreign mover {guid:#x} — applied {applied}, no ack");
     }

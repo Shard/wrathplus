@@ -429,63 +429,59 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
     // GetFactionInfoByID(id) (`0x5d11e0` → `0x5d0da0`): the same thirteen for a Faction.dbc id,
-    // listed or not; a faction the player has no row for answers the miss. Build 12340 only.
-    let wrath = lua.app_data_ref::<Model>().expect("model app_data").dialect
-        == super::ScriptDialect::Wrath12340;
-    if wrath {
-        g.set(
-            "GetFactionInfoByID",
-            lua.create_function(|lua, id: Value| {
-                let id = binding_abi::number_arg(lua, id, "Usage: GetFactionInfoByID(id)")?;
-                let model = lua.app_data_ref::<Model>().expect("model app_data");
-                let all = rows(&model);
-                let found = all.iter().find_map(|r| match *r {
-                    Row::Header(gi) => {
-                        let key = model.reputation_groups[gi].key;
-                        (key == i64::from(id)).then_some((
-                            None,
-                            Some(model.reputation_collapsed.contains(&key)),
-                            false,
-                        ))
-                    }
-                    Row::SubHeader(hi) => (i64::from(model.reputation.entries[hi].faction_id)
-                        == i64::from(id))
-                    .then(|| {
-                        (
-                            Some(hi),
-                            Some(model.reputation_collapsed.contains(&i64::from(id))),
-                            false,
-                        )
-                    }),
-                    Row::Entry { ei, child } => {
-                        (i64::from(model.reputation.entries[ei].faction_id) == i64::from(id))
-                            .then_some((Some(ei), None, child))
-                    }
-                });
-                let entry = |ei: Option<usize>| {
-                    ei.map(|i| &model.reputation.entries[i]).or_else(|| {
-                        model
-                            .reputation
-                            .entries
-                            .iter()
-                            .find(|e| i64::from(e.faction_id) == i64::from(id))
-                    })
-                };
-                match found {
-                    Some((ei, header, child)) => match entry(ei) {
-                        Some(e) => faction_tuple(lua, &model, e, header, child),
-                        None => Ok(unknown_faction()),
-                    },
-                    None => match entry(None) {
-                        Some(e) => {
-                            faction_tuple(lua, &model, e, e.is_header.then_some(false), false)
-                        }
-                        None => Ok(unknown_faction()),
-                    },
+    // listed or not; a faction the player has no row for answers the miss.
+    g.set(
+        "GetFactionInfoByID",
+        lua.create_function(|lua, id: Value| {
+            let id = binding_abi::number_arg(lua, id, "Usage: GetFactionInfoByID(id)")?;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let all = rows(&model);
+            let found = all.iter().find_map(|r| match *r {
+                Row::Header(gi) => {
+                    let key = model.reputation_groups[gi].key;
+                    (key == i64::from(id)).then_some((
+                        None,
+                        Some(model.reputation_collapsed.contains(&key)),
+                        false,
+                    ))
                 }
-            })?,
-        )?;
-    }
+                Row::SubHeader(hi) => (i64::from(model.reputation.entries[hi].faction_id)
+                    == i64::from(id))
+                .then(|| {
+                    (
+                        Some(hi),
+                        Some(model.reputation_collapsed.contains(&i64::from(id))),
+                        false,
+                    )
+                }),
+                Row::Entry { ei, child } => {
+                    (i64::from(model.reputation.entries[ei].faction_id) == i64::from(id))
+                        .then_some((Some(ei), None, child))
+                }
+            });
+            let entry = |ei: Option<usize>| {
+                ei.map(|i| &model.reputation.entries[i]).or_else(|| {
+                    model
+                        .reputation
+                        .entries
+                        .iter()
+                        .find(|e| i64::from(e.faction_id) == i64::from(id))
+                })
+            };
+            match found {
+                Some((ei, header, child)) => match entry(ei) {
+                    Some(e) => faction_tuple(lua, &model, e, header, child),
+                    None => Ok(unknown_faction()),
+                },
+                None => match entry(None) {
+                    Some(e) => {
+                        faction_tuple(lua, &model, e, e.is_header.then_some(false), false)
+                    }
+                    None => Ok(unknown_faction()),
+                },
+            }
+        })?,
+    )?;
 
     // GetSelectedFaction() → the selected row's visible index, or 0 for none, as
     // `ReputationFrame.lua:146` tests; re-found each call, since the selection is held by slot.

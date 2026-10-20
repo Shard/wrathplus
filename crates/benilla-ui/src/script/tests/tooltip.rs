@@ -878,3 +878,27 @@ fn tooltip_anchor_type_round_trips_every_reachable_mode() {
         s.warnings()
     );
 }
+
+/// `OnTooltipSetItem` runs once, after the lines (`0x6277f0` runs `+0x4f4` last); a link naming an
+/// uncached item still has its name line, so it runs too.
+#[test]
+fn set_hyperlink_runs_on_tooltip_set_item_between_content_and_show() {
+    let mut s = script();
+    s.set_screen_size(800.0, 600.0);
+    s.run(
+        r#"
+        local a = CreateFrame("Button", "IB1"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
+        local tt = CreateFrame("GameTooltip", "TT")
+        tt:SetOwner(a, "ANCHOR_RIGHT")
+        RUNS = 0
+        tt:SetScript("OnTooltipSetItem", function(self)
+            RUNS = RUNS + 1
+            SEEN = { self:NumLines(), self:IsShown() }
+        end)
+        tt:SetHyperlink("|cffffffff|Hitem:987654:0:0:0:0:0:0:0|h[Probe Item]|h|r")
+        assert(RUNS == 1 and SEEN[1] == 1)
+        assert(TTTextLeft1:GetText() == "Probe Item" and tt:IsShown())
+    "#,
+    )
+    .unwrap();
+}

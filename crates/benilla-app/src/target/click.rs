@@ -173,7 +173,7 @@ pub(crate) struct Feedback<'w> {
     // The opener queue: this system cannot also hold `CastLadder` (a second `Items` and
     // `CastErrors` borrow), so the lock verdict goes to `ui_action::drain::drain_go_openers`.
     openers: ResMut<'w, crate::ui_action::GoOpenerCasts>,
-    // The stone's refusals need the roster, so they run in `drain_meeting_stone_joins`.
+    // The stone's use goes out from `ui_dialog_verbs::drain_meeting_stone_joins`.
     stone_uses: MessageWriter<'w, crate::ui_dialog_verbs::MeetingStoneUse>,
 }
 
@@ -393,10 +393,8 @@ impl Dispatch<'_, '_> {
             }
             return;
         }
-        // MEETINGSTONE (type 23) has its own use slot `0x5f69d0`: four client-side refusals, then
-        // `CMSG 0x292 {u64 goGuid}` (`0x4c9ff0`), never `CMSG_GAMEOBJ_USE`, whose type-23 arm in
-        // vmangos does nothing (`GameObject.cpp:1836`). Types 9, 19, 23 and 28 override the shared
-        // sender `0x5f33e0`.
+        // MEETINGSTONE (type 23): a summoning stone in 3.3.5, used with `CMSG_GAMEOBJ_USE` from the
+        // stone drain (AzerothCore `GameObject::Use`'s type-23 arm), with no lock to resolve.
         if go_type == cursor_mode::GO_TYPE_MEETINGSTONE {
             if in_reach {
                 debug!("right-click meeting stone: {guid:#x}");

@@ -109,9 +109,7 @@ impl WrathAchievementMetadata {
 impl super::UiScript {
     /// Install genuine static metadata before FrameXML runs; this carries no player progress.
     pub fn set_wrath_achievement_metadata(&mut self, metadata: WrathAchievementMetadata) {
-        if self.dialect() == super::ScriptDialect::Wrath12340 {
-            self.model_mut().wrath_achievements = Some(metadata);
-        }
+        self.model_mut().wrath_achievements = Some(metadata);
     }
 }
 

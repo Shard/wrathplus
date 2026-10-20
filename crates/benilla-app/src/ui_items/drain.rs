@@ -425,7 +425,7 @@ impl ScriptItemUse<'_, '_> {
                     "ui_items: read letter {:#x} (text {}, lua bag {bag} slot {slot})",
                     c.guid, c.item_text_id
                 );
-                item_text.open_letter(c.guid, c.item_text_id);
+                item_text.open_letter(c.guid);
             }
             return;
         }

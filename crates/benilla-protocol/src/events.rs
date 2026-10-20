@@ -61,22 +61,6 @@ pub struct MoveSpeeds {
     pub pitch_rate: f32,
 }
 
-impl MoveSpeeds {
-    fn from_wire(s: [f32; 6]) -> Self {
-        Self {
-            walk: s[0],
-            run: s[1],
-            run_back: s[2],
-            swim: s[3],
-            swim_back: s[4],
-            turn_rate: s[5],
-            flight: 7.0,
-            flight_back: 4.5,
-            pitch_rate: std::f32::consts::PI,
-        }
-    }
-}
-
 /// How the server evaluates points between a movement spline's nodes. This is independent of
 /// `flying`: Wrath permits a smooth ground path and a linear path that retains wire Z.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1340,5 +1324,3 @@ pub enum Poll {
     Skipped { opcode: u16, reason: String },
 }
 
-mod decode;
-pub use decode::decode;

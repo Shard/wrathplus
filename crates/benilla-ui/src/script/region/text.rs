@@ -17,9 +17,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             // Wrath's lua_tostring gate treats non-string/non-number values as no text.
             // Stock ChatConfig initially passes a dynamic-label function, then writes its
             // evaluated result during UpdateCheckboxes; the sink must not invoke it.
-            let wrath = lua.app_data_ref::<Model>().expect("model").dialect
-                == crate::script::ScriptDialect::Wrath12340;
-            let text = if wrath && !matches!(text, None | Some(Value::Nil | Value::String(_) | Value::Integer(_) | Value::Number(_))) {
+            let text = if !matches!(text, None | Some(Value::Nil | Value::String(_) | Value::Integer(_) | Value::Number(_))) {
                 None
             } else {
                 crate::script::binding_abi::text_arg(lua, text)?

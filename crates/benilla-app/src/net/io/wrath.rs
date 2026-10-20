@@ -1584,7 +1584,6 @@ enum WrathRoute {
     NativeWorldportAck,
     NativeTeleportAck,
     NativeMovementMisc,
-    AuthorityAcked,
     NativeArenaTeam,
     DisabledMovement,
     DisabledGameAction,
@@ -1703,7 +1702,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::TogglePvp
         | ClientCommand::RequestBattlefieldScoreData
         | ClientCommand::RequestBattlefieldPositions
-        | ClientCommand::LeaveBattlefield { .. } => WrathRoute::NativeBattleground,
+        | ClientCommand::LeaveBattlefield => WrathRoute::NativeBattleground,
         ClientCommand::NativeRaidBrowser(_) => WrathRoute::NativeRaidBrowser,
         ClientCommand::JoinChannel { .. }
         | ClientCommand::GetChannelMemberCount { .. }
@@ -1812,6 +1811,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::CastSpellAtSource { .. }
         | ClientCommand::CastSpellGameObject { .. }
         | ClientCommand::CastSpellItem { .. }
+        | ClientCommand::CastSpellCorpse { .. }
         | ClientCommand::UseItem { .. }
         | ClientCommand::CancelCast { .. }
         | ClientCommand::CancelAura { .. }
@@ -1860,10 +1860,6 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::BattlefieldStatusRequest => WrathRoute::NativeBattleground,
         ClientCommand::MoveSplineDone { .. } => WrathRoute::TaxiSplineDone,
         ClientCommand::TeleportAck { .. } => WrathRoute::NativeTeleportAck,
-        // The writer acknowledged these orders itself from the reported pose (`send_mover_ack`).
-        ClientCommand::ForceSpeedAck { .. }
-        | ClientCommand::MoveModeAck { .. }
-        | ClientCommand::KnockBackAck { .. } => WrathRoute::AuthorityAcked,
         ClientCommand::MountSpecial
         | ClientCommand::MoveTimeSkipped { .. }
         | ClientCommand::NativeMovementMisc(_) => WrathRoute::NativeMovementMisc,
@@ -1879,9 +1875,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
 pub(in crate::net) fn has_writer_route(command: &ClientCommand) -> bool {
     !matches!(
         route(command),
-        WrathRoute::DisabledMovement
-            | WrathRoute::DisabledGameAction
-            | WrathRoute::AuthorityAcked
+        WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction
     )
 }
 
@@ -2371,10 +2365,6 @@ fn writer_loop(
                         let (opcode, body) = encode(&native);
                         active.writer.send_raw(opcode, &body)
                     }
-                    WrathRoute::AuthorityAcked => {
-                        bevy::log::debug!("net(wrath): already acknowledged by the movement writer: {command:?}");
-                        continue;
-                    }
                     // Not yet encoded for build 12340: dropped, never sent in Vanilla's format, and
                     // never fatal: the stock UI issues many of these routinely.
                     WrathRoute::DisabledMovement | WrathRoute::DisabledGameAction => {
@@ -2502,14 +2492,14 @@ fn help_command(command: ClientCommand) -> benilla_protocol::wrath_help::Command
     use benilla_protocol::wrath_help::Command as H;
     match command {
         ClientCommand::NativeHelp(command) => command,
-        ClientCommand::GmTicketCreate { map, pos, text, .. } => H::Create {
+        ClientCommand::GmTicketCreate { map, pos, text } => H::Create {
             map,
             pos,
             text,
             need_response: true,
             need_more_help: false,
         },
-        ClientCommand::GmTicketUpdate { text, .. } => H::UpdateText { text },
+        ClientCommand::GmTicketUpdate { text } => H::UpdateText { text },
         ClientCommand::GmTicketGet => H::GetTicket,
         ClientCommand::GmTicketDelete => H::DeleteTicket,
         ClientCommand::GmTicketSystemStatus => H::SystemStatus,
@@ -2612,7 +2602,7 @@ fn battleground_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         ClientCommand::RequestBattlefieldScoreData => (0x02e0, Vec::new()),
         ClientCommand::RequestBattlefieldPositions => (0x02e9, Vec::new()),
         // AC reads none of the body and leaves the current battleground.
-        ClientCommand::LeaveBattlefield { .. } => encode_leave(),
+        ClientCommand::LeaveBattlefield => encode_leave(),
         other => unreachable!("not a battleground route: {other:?}"),
     }
 }
@@ -2907,6 +2897,21 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             cast(spell_id, target.map_or(CastTarget::None, CastTarget::Unit))
         }
         ClientCommand::CastSpellAtDest { spell_id, dest } => cast(spell_id, CastTarget::Dest(dest)),
+        ClientCommand::CastSpellCorpse {
+            spell_id,
+            target,
+            corpse_guid,
+        } => cast(
+            spell_id,
+            match target {
+                benilla_protocol::messages::CorpseTarget::Ally => {
+                    CastTarget::CorpseAlly(corpse_guid)
+                }
+                benilla_protocol::messages::CorpseTarget::Enemy => {
+                    CastTarget::CorpseEnemy(corpse_guid)
+                }
+            },
+        ),
         // One counter with `CMSG_CAST_SPELL`: the server echoes it in the cast results.
         ClientCommand::NativePetCastSpell {
             caster,
@@ -3052,7 +3057,7 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
             benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXI,
             benilla_protocol::wrath_taxi::encode_activate(guid, source_node, dest_node),
         ),
-        ClientCommand::ActivateTaxiExpress { guid, nodes, .. } => (
+        ClientCommand::ActivateTaxiExpress { guid, nodes } => (
             benilla_protocol::wrath_taxi::CMSG_ACTIVATETAXIEXPRESS,
             benilla_protocol::wrath_taxi::encode_express(guid, &nodes),
         ),
@@ -3879,7 +3884,7 @@ mod tests {
         let use_item = || ClientCommand::UseItem {
             bag_index: 255,
             slot: 23,
-            spell_index: 0,
+
             spell_id: 8690,
             item_guid: 0x4000_0000_0000_0001,
             glyph_index: 0,
@@ -5391,23 +5396,6 @@ mod mover_order_tests {
         assert_eq!(*opcode, 0x00e3);
         assert_eq!(body[body.len() - 4..], 14.0f32.to_le_bytes());
         assert_eq!(authority.with_movement_send(|| 1), Some(1));
-        // The controller's own ACK is a no-op on this route.
-        assert_eq!(
-            route(&ClientCommand::ForceSpeedAck {
-                kind: benilla_protocol::messages::SpeedKind::Run,
-                guid: 0x501,
-                counter: 3,
-                speed: 14.0,
-                flags: 0,
-                pos: [0.0; 3],
-                orientation: 0.0,
-                pitch: 0.0,
-                fall_time: 0,
-                jump: None,
-                transport: None,
-            }),
-            WrathRoute::AuthorityAcked
-        );
     }
 
     #[test]

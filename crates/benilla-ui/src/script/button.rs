@@ -218,9 +218,8 @@ fn set_enabled(lua: &Lua, this: &Table, on: bool) -> mlua::Result<()> {
     } else {
         frame.disabled_layers |= bit;
     }
-    let wrath = model.dialect == super::ScriptDialect::Wrath12340;
     drop(model);
-    if changed && wrath {
+    if changed {
         event::fire_widget_handler(lua, super::object::decode_id(this)?,
             if on { "OnEnable" } else { "OnDisable" }, vec![])?;
     }
@@ -1008,10 +1007,8 @@ pub(super) fn click_button(lua: &Lua, id: u32, button: &str, down: bool, scripte
         Ok(s) => Value::String(s),
         Err(_) => return,
     };
-    let wrath = lua.app_data_ref::<Model>().expect("model").dialect == super::ScriptDialect::Wrath12340;
-    let scripts: &[&str] = if wrath { &["PreClick", "OnClick", "PostClick"] } else { &["OnClick"] };
-    for script in scripts {
-        let args = if wrath { vec![btn.clone(), Value::Boolean(down)] } else { vec![btn.clone()] };
+    for script in ["PreClick", "OnClick", "PostClick"] {
+        let args = vec![btn.clone(), Value::Boolean(down)];
         if let Err(e) = event::fire_widget_handler(lua, id, script, args) {
             lua.app_data_mut::<Model>().expect("model app_data").record_script_error(e.to_string());
         }
