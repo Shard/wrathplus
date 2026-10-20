@@ -1051,6 +1051,34 @@ mod tests {
         }
     }
 
+    /// A 1.12-style inbox as build 12340's store holds it: each row's item as attachment slot 0.
+    fn wrath(st: MailState) -> crate::script::WrathMailInbox {
+        crate::script::WrathMailInbox {
+            total_count: st.inbox.len() as u32,
+            rows: st
+                .inbox
+                .into_iter()
+                .map(|header| crate::script::WrathMailRow {
+                    attachments: (header.item_id != 0)
+                        .then(|| crate::script::WrathMailAttachment {
+                            slot: 0,
+                            entry: header.item_id,
+                            count: header.item_count.max(1),
+                            name: header.item_name.clone(),
+                            texture: header.item_texture.clone(),
+                            quality: header.item_quality,
+                            ..Default::default()
+                        })
+                        .into_iter()
+                        .collect(),
+                    header,
+                    kind: 0,
+                    sender_guid: 0,
+                })
+                .collect(),
+        }
+    }
+
     fn state() -> MailState {
         MailState {
             inbox: vec![row(2589), row(0)],
@@ -1058,73 +1086,12 @@ mod tests {
     }
 
     #[test]
-    fn the_invoice_answers_seven_values_or_a_three_nil_four_zero_miss() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        let mut st = state();
-        st.inbox[0].is_invoice = true;
-        st.inbox[0].invoice = Some(MailInvoice {
-            seller: true,
-            item_name: "Linen Cloth".into(),
-            player_name: "Twowarrior".into(),
-            bid: 10_000,
-            buyout: 10_000,
-            deposit: 25,
-            consignment: 500,
-            ..Default::default()
-        });
-        s.set_mail(Some(st));
-
-        assert_eq!(s.arity("GetInboxInvoiceInfo(1)").unwrap(), 7);
-        let vals: Vec<String> = (1..=7)
-            .map(|i| {
-                let discards = "_, ".repeat(i - 1);
-                s.eval::<String>(&format!(
-                    "local {discards}v = GetInboxInvoiceInfo(1) return tostring(v)"
-                ))
-                .unwrap()
-            })
-            .collect();
-        assert_eq!(
-            vals,
-            [
-                "seller",
-                "Linen Cloth",
-                "Twowarrior",
-                "10000",
-                "10000",
-                "25",
-                "500"
-            ],
-            "a seller invoice, in the reference's own order"
-        );
-
-        // Row 2 has no invoice, and index 99 is off the end.
-        for idx in [2, 99] {
-            assert_eq!(
-                s.arity(&format!("GetInboxInvoiceInfo({idx})")).unwrap(),
-                7,
-                "the miss is still seven values"
-            );
-            let tail: Vec<String> = (1..=7)
-                .map(|i| {
-                    let discards = "_, ".repeat(i - 1);
-                    s.eval::<String>(&format!(
-                        "local {discards}v = GetInboxInvoiceInfo({idx}) return tostring(v)"
-                    ))
-                    .unwrap()
-                })
-                .collect();
-            assert_eq!(tail, ["nil", "nil", "nil", "0", "0", "0", "0"]);
-        }
-    }
-
-    #[test]
     fn an_invoice_has_no_letter_body() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut st = state();
         st.inbox[0].is_invoice = true;
         st.inbox[0].body = Some("6C:10000:10000:25:500".into());
-        s.set_mail(Some(st));
+        s.set_wrath_mail(Some(wrath(st)));
 
         assert_eq!(
             s.arity("GetInboxText(1)").unwrap(),
@@ -1146,7 +1113,7 @@ mod tests {
 
     #[test]
     fn a_buyer_invoice_is_the_literal_token_buyer() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut st = state();
         st.inbox[0].is_invoice = true;
         st.inbox[0].invoice = Some(MailInvoice {
@@ -1159,7 +1126,7 @@ mod tests {
             consignment: 0,
             ..Default::default()
         });
-        s.set_mail(Some(st));
+        s.set_wrath_mail(Some(wrath(st)));
         assert_eq!(
             s.eval::<String>("return (GetInboxInvoiceInfo(1))").unwrap(),
             "buyer"
@@ -1168,13 +1135,13 @@ mod tests {
 
     #[test]
     fn inbox_header_reads_the_reference_tuple() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.eval::<i64>("return GetInboxNumItems()").unwrap(), 0);
         assert!(s
             .eval::<bool>("return GetInboxHeaderInfo(1) == nil")
             .unwrap());
 
-        s.set_mail(Some(state()));
+        s.set_wrath_mail(Some(wrath(state())));
         assert_eq!(s.eval::<i64>("return GetInboxNumItems()").unwrap(), 2);
 
         let (pkg, sta, sender, subject, money, cod, days): (
@@ -1213,8 +1180,8 @@ mod tests {
 
     #[test]
     fn get_inbox_text_returns_body_and_queues_open() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.set_mail(Some(state()));
+        let mut s = UiScript::new().unwrap();
+        s.set_wrath_mail(Some(wrath(state())));
         let (body, tex, takeable, invoice): (String, String, Value, Value) =
             s.eval("return GetInboxText(1)").unwrap();
         assert_eq!(body, "Lok'tar.");
@@ -1229,8 +1196,8 @@ mod tests {
 
     #[test]
     fn get_inbox_item_and_can_delete() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.set_mail(Some(state()));
+        let mut s = UiScript::new().unwrap();
+        s.set_wrath_mail(Some(wrath(state())));
         let (name, _tex, count, quality, canuse): (String, String, i64, i64, i64) =
             s.eval("return GetInboxItem(1)").unwrap();
         assert_eq!(
@@ -1247,7 +1214,7 @@ mod tests {
     #[test]
     fn intents_queue_and_drain() {
         let mut s = UiScript::new().unwrap();
-        s.set_mail(Some(state()));
+        s.set_wrath_mail(Some(wrath(state())));
         s.run("CheckInbox()").unwrap();
         assert!(s.take_mail_check_inbox());
         assert!(!s.take_mail_check_inbox(), "drained");
@@ -1429,7 +1396,7 @@ mod tests {
     #[test]
     fn clear_send_mail_resets_the_form_and_fires_its_events() {
         use crate::script::cursor::{CursorItem, CursorPayload};
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         select_default_stationery(&mut s);
         s.set_mail_packages(vec![PackageView {
             id: 2,
@@ -1455,11 +1422,11 @@ mod tests {
         s.run(
             r#"FIRED = {}
                local f = CreateFrame("Frame")
-               for _, e in { "ITEM_LOCK_CHANGED", "SEND_MAIL_MONEY_CHANGED",
-                             "SEND_MAIL_COD_CHANGED", "MAIL_SEND_SUCCESS" } do
+               for _, e in ipairs({ "ITEM_LOCK_CHANGED", "SEND_MAIL_MONEY_CHANGED",
+                             "SEND_MAIL_COD_CHANGED", "MAIL_SEND_SUCCESS" }) do
                    f:RegisterEvent(e)
                end
-               f:SetScript("OnEvent", function() table.insert(FIRED, event) end)"#,
+               f:SetScript("OnEvent", function(self, event) table.insert(FIRED, event) end)"#,
         )
         .unwrap();
         assert_eq!(
@@ -1533,7 +1500,7 @@ mod tests {
     #[test]
     fn clearing_the_mail_empties_it() {
         let mut s = UiScript::new().unwrap();
-        s.set_mail(Some(state()));
+        s.set_wrath_mail(Some(wrath(state())));
         s.set_mail(None);
         assert_eq!(s.eval::<i64>("return GetInboxNumItems()").unwrap(), 0);
         assert!(s.eval::<bool>("return HasNewMail() == nil").unwrap());
@@ -1679,14 +1646,5 @@ mod stationery_tests {
                  and select('#', GetInboxInvoiceInfo(2)) == 10"
             )
             .unwrap());
-        // The 1.12 VM has no `select`: count the returns from here.
-        let vanilla = UiScript::new_vanilla().unwrap();
-        assert_eq!(
-            vanilla
-                .eval::<mlua::MultiValue>("return GetInboxInvoiceInfo(1)")
-                .unwrap()
-                .len(),
-            7
-        );
     }
 }

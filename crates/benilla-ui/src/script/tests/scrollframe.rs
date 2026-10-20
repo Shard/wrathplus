@@ -1,7 +1,7 @@
 //! ScrollFrame: the scroll-child layout override, the live scroll ranges, the clip on `extract`
 //! and the clip-gated `hit_test`.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::layout::Rect;
 use crate::script::QuadContent;
 
@@ -155,7 +155,7 @@ fn scroll_child_top_tracks_vertical_scroll_unclamped_then_restores_on_clear() {
 /// still a change.
 #[test]
 fn set_vertical_scroll_fires_on_vertical_scroll_only_on_a_change() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -163,7 +163,7 @@ fn set_vertical_scroll_fires_on_vertical_scroll_only_on_a_change() {
         local frame = CreateFrame("ScrollFrame", "SF")
         frame:SetPoint("TOPLEFT", 0, -100)
         frame:SetWidth(300); frame:SetHeight(200)
-        frame:SetScript("OnVerticalScroll", function() table.insert(Fires, arg1) end)
+        frame:SetScript("OnVerticalScroll", function(this, arg1, arg2, arg3, arg4) table.insert(Fires, arg1) end)
         local child = CreateFrame("Frame", "Child")
         child:SetWidth(300); child:SetHeight(600)
         frame:SetScrollChild(child)
@@ -276,7 +276,7 @@ fn vertical_scroll_range_is_local_units_on_a_scaled_frame() {
 /// handler conventions of `0x704f10`.
 #[test]
 fn vertical_scroll_fires_as_given_and_update_rect_fires_range_changed() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -288,12 +288,12 @@ fn vertical_scroll_fires_as_given_and_update_rect_fires_range_changed() {
         frame:SetScrollChild(child)
 
         seen_v = nil
-        frame:SetScript("OnVerticalScroll", function() local self, offset = this, arg1
+        frame:SetScript("OnVerticalScroll", function(self, offset)
             seen_v = offset
-            assert(self == frame and arg1 == offset, "handler-firing conventions carry the value")
+            assert(self == frame, "the handler receives its frame")
         end)
         seen_lo, seen_hi = nil, nil
-        frame:SetScript("OnScrollRangeChanged", function() local self, lo, hi = this, arg1, arg2
+        frame:SetScript("OnScrollRangeChanged", function(self, lo, hi)
             seen_lo, seen_hi = lo, hi
         end)
     "#,
@@ -318,7 +318,7 @@ fn vertical_scroll_fires_as_given_and_update_rect_fires_range_changed() {
 /// app resolves only once per frame.
 #[test]
 fn update_scroll_child_rect_sees_a_same_tick_resize_with_no_intervening_resolve() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -336,7 +336,7 @@ fn update_scroll_child_rect_sees_a_same_tick_resize_with_no_intervening_resolve(
     s.run(
         r#"
         seen_hi = nil
-        SF:SetScript("OnScrollRangeChanged", function() local self, lo, hi = this, arg1, arg2 seen_hi = hi end)
+        SF:SetScript("OnScrollRangeChanged", function(self, lo, hi) seen_hi = hi end)
         Child:SetWidth(300); Child:SetHeight(600) -- grows well past the frame — all in this ONE tick
         SF:UpdateScrollChildRect()
     "#,
@@ -524,7 +524,7 @@ fn update_scroll_child_rect_measures_the_childs_text_before_it_reads_the_range()
             }
         }
     }
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.set_text_measurer(Box::new(Rows));
     s.run(
@@ -535,7 +535,7 @@ fn update_scroll_child_rect_measures_the_childs_text_before_it_reads_the_range()
         child:SetWidth(100); child:SetHeight(50); sf:SetScrollChild(child)
         local fs = child:CreateFontString("SFText", "ARTWORK")
         fs:SetPoint("TOPLEFT", 0, 0); fs:SetWidth(70)
-        sf:SetScript("OnScrollRangeChanged", function() RANGE = arg2 end)
+        sf:SetScript("OnScrollRangeChanged", function(this, arg1, arg2, arg3, arg4) RANGE = arg2 end)
         fs:SetText(string.rep("x", 40))   -- 280px of ink over a 70px column: four 14px rows
         sf:UpdateScrollChildRect()
         "#,
@@ -554,7 +554,7 @@ fn update_scroll_child_rect_measures_the_childs_text_before_it_reads_the_range()
 /// offset pushes the child right.
 #[test]
 fn scroll_child_left_tracks_horizontal_scroll_unclamped_and_fires_on_change() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
 
     s.run(
@@ -572,7 +572,7 @@ fn scroll_child_left_tracks_horizontal_scroll_unclamped_and_fires_on_change() {
 
         frame:SetScrollChild(child)
         hfired = {}
-        frame:SetScript("OnHorizontalScroll", function() table.insert(hfired, arg1) end)
+        frame:SetScript("OnHorizontalScroll", function(this, arg1, arg2, arg3, arg4) table.insert(hfired, arg1) end)
     "#,
     )
     .unwrap();
@@ -662,7 +662,7 @@ fn scroll_child_left_tracks_horizontal_scroll_unclamped_and_fires_on_change() {
 /// pushed deepest and lands as `arg2`.
 #[test]
 fn update_scroll_child_rect_reports_both_ranges_horizontal_first() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -674,7 +674,7 @@ fn update_scroll_child_rect_reports_both_ranges_horizontal_first() {
         child:SetWidth(500); child:SetHeight(600)
         frame:SetScrollChild(child)
         seen = nil
-        frame:SetScript("OnScrollRangeChanged", function() seen = { arg1, arg2 } end)
+        frame:SetScript("OnScrollRangeChanged", function(this, arg1, arg2, arg3, arg4) seen = { arg1, arg2 } end)
     "#,
     )
     .unwrap();

@@ -37,12 +37,6 @@ fn script() -> UiScript {
     s
 }
 
-fn vanilla_script() -> UiScript {
-    let mut s = UiScript::new_vanilla().expect("construct UiScript");
-    s.set_screen_size(800.0, 600.0);
-    s.set_text_measurer(Box::new(Mono));
-    s
-}
 
 /// The `LOG` entries since the last call, joined by spaces.
 fn take_log(s: &UiScript) -> String {
@@ -58,16 +52,16 @@ fn logged_box(s: &mut UiScript) {
         r#"
         LOG = {}
         EARLY = CreateFrame("Frame", "Early")
-        EARLY:SetScript("OnUpdate", function() table.insert(LOG, "early") end)
+        EARLY:SetScript("OnUpdate", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "early") end)
         E = CreateFrame("EditBox", "E")
         E:SetAutoFocus(false)
         E:SetPoint("BOTTOMLEFT", 100, 50)
         E:SetWidth(200); E:SetHeight(32)
-        E:SetScript("OnUpdate", function() table.insert(LOG, "update") end)
-        E:SetScript("OnCursorChanged", function() table.insert(LOG, "cursor@" .. arg1) end)
-        E:SetScript("OnTextChanged", function() table.insert(LOG, "text:" .. this:GetText()) end)
+        E:SetScript("OnUpdate", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "update") end)
+        E:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "cursor@" .. arg1) end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "text:" .. this:GetText()) end)
         LATE = CreateFrame("Frame", "Late")
-        LATE:SetScript("OnUpdate", function() table.insert(LOG, "late") end)
+        LATE:SetScript("OnUpdate", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "late") end)
     "#,
     )
     .unwrap();
@@ -82,7 +76,7 @@ fn logged_box(s: &mut UiScript) {
 /// (`0x77d498`); a frame walked after the box updates after all three.
 #[test]
 fn the_flush_follows_the_boxs_own_on_update_cursor_then_text() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(r#"E:SetText("abc")"#).unwrap();
     s.tick(0.016);
@@ -104,11 +98,11 @@ fn the_flush_follows_the_boxs_own_on_update_cursor_then_text() {
 /// the same tick.
 #[test]
 fn an_edit_in_the_boxs_own_on_update_fires_its_events_the_same_tick() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnUpdate", function()
+        E:SetScript("OnUpdate", function(this, arg1, arg2, arg3, arg4)
             table.insert(LOG, "update")
             if not EDITED then EDITED = true this:SetText("hello") end
         end)
@@ -130,11 +124,11 @@ fn a_new_box_fires_on_text_changed_once_at_its_first_flush_once_shown() {
         SHOWN, HIDDEN = 0, 0
         local a = CreateFrame("EditBox", "A")
         a:SetAutoFocus(false)
-        a:SetScript("OnTextChanged", function() SHOWN = SHOWN + 1 end)
+        a:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) SHOWN = SHOWN + 1 end)
         local b = CreateFrame("EditBox", "B")
         b:SetAutoFocus(false)
         b:Hide()
-        b:SetScript("OnTextChanged", function() HIDDEN = HIDDEN + 1 end)
+        b:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) HIDDEN = HIDDEN + 1 end)
     "#,
     )
     .unwrap();
@@ -171,7 +165,7 @@ fn each_re_seat_of_the_text_fires_one_on_text_changed_at_the_next_flush() {
         E:SetPoint("BOTTOMLEFT", 100, 50)
         E:SetWidth(200); E:SetHeight(32)
         E:SetText("same")
-        E:SetScript("OnTextChanged", function() N = N + 1 end)
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) N = N + 1 end)
     "#,
     )
     .unwrap();
@@ -214,7 +208,7 @@ fn each_re_seat_of_the_text_fires_one_on_text_changed_at_the_next_flush() {
         M = 0
         F = CreateFrame("EditBox", "F")
         F:SetAutoFocus(false)
-        F:SetScript("OnTextChanged", function() M = M + 1 end)
+        F:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4) M = M + 1 end)
     "#,
     )
     .unwrap();
@@ -234,11 +228,11 @@ fn each_re_seat_of_the_text_fires_one_on_text_changed_at_the_next_flush() {
 /// loops inside one; `SetText` of an equal text raises nothing (`0x77be4b`), which ends it.
 #[test]
 fn an_on_text_changed_that_sets_its_own_text_fires_once_more_next_frame() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnTextChanged", function()
+        E:SetScript("OnTextChanged", function(this, arg1, arg2, arg3, arg4)
             table.insert(LOG, "text:" .. this:GetText())
             this:SetText(strupper(this:GetText()))
         end)
@@ -259,11 +253,11 @@ fn an_on_text_changed_that_sets_its_own_text_fires_once_more_next_frame() {
 /// not reported again; the text it inserts keeps bit 0 for the next frame.
 #[test]
 fn a_caret_moved_by_on_cursor_changed_is_cleared_with_the_bit() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnCursorChanged", function()
+        E:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4)
             table.insert(LOG, "cursor@" .. arg1)
             if not EDITED then EDITED = true this:Insert("!") end
         end)
@@ -286,14 +280,14 @@ fn a_caret_moved_by_on_cursor_changed_is_cleared_with_the_bit() {
 /// `OnCursorChanged` at its next flush, the one that lost the keyboard included.
 #[test]
 fn a_focus_change_runs_the_caret_leg_of_both_boxes() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         LOG = {}
         for _, name in ipairs({ "A", "B" }) do
             local f = CreateFrame("EditBox", name)
             f:SetAutoFocus(false)
-            f:SetScript("OnCursorChanged", function() table.insert(LOG, this:GetName()) end)
+            f:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, this:GetName()) end)
         end
     "#,
     )
@@ -317,7 +311,7 @@ fn a_focus_change_runs_the_caret_leg_of_both_boxes() {
 /// nothing.
 #[test]
 fn a_caret_move_that_goes_nowhere_raises_nothing() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(r#"E:SetText("ab") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -355,11 +349,11 @@ fn a_caret_move_that_goes_nowhere_raises_nothing() {
 /// script, so `OnEnterPressed` sees the `OnTextChanged` of the text it ends.
 #[test]
 fn a_key_flushes_the_box_before_it_acts() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnEnterPressed", function() table.insert(LOG, "enter") end)
+        E:SetScript("OnEnterPressed", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, "enter") end)
         E:SetFocus()
     "#,
     )
@@ -387,7 +381,7 @@ fn a_key_flushes_the_box_before_it_acts() {
 /// the caret bit stays down, so no `OnCursorChanged` fires at the flush.
 #[test]
 fn highlight_text_and_ctrl_a_fire_no_on_cursor_changed() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(r#"E:SetText("hello") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -422,7 +416,7 @@ fn highlight_text_and_ctrl_a_fire_no_on_cursor_changed() {
 /// solid, whatever phase it lost it in.
 #[test]
 fn taking_the_keyboard_restarts_the_caret_blink() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(r#"E:SetText("ab") E:SetFocus()"#).unwrap();
     s.tick(0.016);
@@ -452,11 +446,11 @@ fn taking_the_keyboard_restarts_the_caret_blink() {
 /// row pitch down (`0x77db31`); a single-line box would recall history instead.
 #[test]
 fn up_and_down_move_a_multi_line_boxs_caret_by_rows() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnCursorChanged", function()
+        E:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4)
             table.insert(LOG, format("cursor@%d,%d", arg1, arg2))
         end)
         E:SetMultiLine(true)
@@ -494,11 +488,11 @@ fn up_and_down_move_a_multi_line_boxs_caret_by_rows() {
 /// Lua prints as "0", never "-0".
 #[test]
 fn on_cursor_changed_reports_the_first_row_at_plus_zero() {
-    let mut s = vanilla_script();
+    let mut s = script();
     logged_box(&mut s);
     s.run(
         r#"
-        E:SetScript("OnCursorChanged", function() table.insert(LOG, tostring(arg2)) end)
+        E:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4) table.insert(LOG, tostring(arg2)) end)
         E:SetText("ab")
     "#,
     )
