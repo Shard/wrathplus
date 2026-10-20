@@ -748,9 +748,6 @@ impl UiScript {
     /// [`UiScript::new`], for callers that still name the dialect.
     pub fn new_with_dialect(_dialect: ScriptDialect) -> mlua::Result<UiScript> {
         let lua = Lua::new();
-        // The vendored parser/VM's compatibility mode is per-state. Set it before compiling any
-        // bootstrap or addon chunk.
-        lua.set_named_registry_value("benilla.wrath51", true)?;
         lua.set_memory_limit(WRATH_MEMORY_LIMIT)?;
         let instruction_budget = std::sync::Arc::new(InstructionBudget::new());
         {

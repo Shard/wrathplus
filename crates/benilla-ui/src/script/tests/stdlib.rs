@@ -137,10 +137,10 @@ fn the_first_debugstack_line_is_a_frame() {
     );
 }
 
-/// The reference's Lua 5.0 writes a named frame as `` in function `name' ``, opening with a
-/// backtick, which `AceLibrary.lua:139`'s `argCheck` pattern `` "([`<].-['>])" `` needs.
+/// `debugstack` writes a named frame as `` in function `name' ``, opening with a backtick: build
+/// 12340 carries that format string itself, apart from Lua's own `'%s'` quoting.
 #[test]
-fn a_named_frame_uses_the_5_0_backtick_quoting() {
+fn a_named_frame_uses_the_backtick_quoting() {
     let s = script();
     let found: String = s
         .eval(

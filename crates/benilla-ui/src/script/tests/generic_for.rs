@@ -80,3 +80,20 @@ fn repeated_semicolons_are_rejected() {
         "statement-level `;;` is rejected: {err}"
     );
 }
+
+/// Build 12340's Lua quotes program elements with apostrophes (`bad argument #%d to '%s'` in its
+/// `.rdata`) and keeps 5.1's advisory error on a nested long string.
+#[test]
+fn errors_quote_with_apostrophes_and_nested_long_strings_are_rejected() {
+    let s = script();
+    let err = s.run("NoSuchGlobalFunction()").unwrap_err().to_string();
+    assert!(
+        err.contains("global 'NoSuchGlobalFunction'"),
+        "5.1 quoting: {err}"
+    );
+    let err = s.run("local x = [[ a [[ b ]] c ]]").unwrap_err().to_string();
+    assert!(
+        err.contains("nesting of [[...]] is deprecated"),
+        "5.1 long strings: {err}"
+    );
+}

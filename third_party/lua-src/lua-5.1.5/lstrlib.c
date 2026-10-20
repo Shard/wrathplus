@@ -19,8 +19,6 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-#include "ldialect.h"
-
 
 /* macro to `unsign' a character */
 #define uchar(c)        ((unsigned char)(c))
@@ -169,7 +167,7 @@ static int str_dump (lua_State *L) {
 #define CAP_UNFINISHED	(-1)
 #define CAP_POSITION	(-2)
 
-/* Wrath-only deterministic limits for one public matcher invocation. */
+/* BENILLA: deterministic limits for one public matcher invocation (see BENILLA.md). */
 #define WRATH_MATCH_STEPS	100000000
 #define WRATH_MATCH_DEPTH	200
 
@@ -179,7 +177,6 @@ typedef struct MatchState {
   lua_State *L;
   unsigned long matchsteps;
   unsigned int matchdepth;
-  int limited;
   int level;  /* total number of captures (finished or unfinished) */
   struct {
     const char *init;
@@ -195,21 +192,18 @@ static void matchinit (MatchState *ms, lua_State *L, const char *src,
   ms->src_end = end;
   ms->matchsteps = WRATH_MATCH_STEPS;
   ms->matchdepth = 0;
-  ms->limited = benilla_iswrath51(L);
 }
 
 
 static void matchstep (MatchState *ms) {
-  if (ms->limited) {
-    if (ms->matchsteps == 0)
-      luaL_error(ms->L, "pattern matching work limit exceeded");
-    ms->matchsteps--;
-  }
+  if (ms->matchsteps == 0)
+    luaL_error(ms->L, "pattern matching work limit exceeded");
+  ms->matchsteps--;
 }
 
 
 static void matchenter (MatchState *ms) {
-  if (ms->limited && ++ms->matchdepth > WRATH_MATCH_DEPTH)
+  if (++ms->matchdepth > WRATH_MATCH_DEPTH)
     luaL_error(ms->L, "pattern matching recursion limit exceeded");
 }
 
@@ -493,32 +487,10 @@ static const char *match (MatchState *ms, const char *s, const char *p) {
   const char *result;
   matchenter(ms);
   result = match_impl(ms, s, p);
-  if (ms->limited) ms->matchdepth--;
+  ms->matchdepth--;
   return result;
 }
 
-
-
-static const char *lmemfind (const char *s1, size_t l1,
-                               const char *s2, size_t l2) {
-  if (l2 == 0) return s1;  /* empty strings are everywhere */
-  else if (l2 > l1) return NULL;  /* avoids a negative `l1' */
-  else {
-    const char *init;  /* to search for a `*s2' inside `s1' */
-    l2--;  /* 1st char will be checked by `memchr' */
-    l1 = l1-l2;  /* `s2' cannot be found after that */
-    while (l1 > 0 && (init = (const char *)memchr(s1, *s2, l1)) != NULL) {
-      init++;   /* 1st char is already checked */
-      if (memcmp(init, s2+1, l2) == 0)
-        return init-1;
-      else {  /* correct `l1' and `s1' to try again */
-        l1 -= init-s1;
-        s1 = init;
-      }
-    }
-    return NULL;  /* not found */
-  }
-}
 
 
 static const char *limited_lmemfind (MatchState *ms, const char *s1,
@@ -576,15 +548,11 @@ static int str_find_aux (lua_State *L, int find) {
   else if ((size_t)(init) > l1) init = (ptrdiff_t)l1;
   if (find && (lua_toboolean(L, 4) ||  /* explicit request? */
       strpbrk(p, SPECIALS) == NULL)) {  /* or no special characters? */
-    /* do a plain search; Wrath charges byte comparisons too */
+    /* do a plain search; byte comparisons are charged too */
     const char *s2;
-    if (benilla_iswrath51(L)) {
-      MatchState ms;
-      matchinit(&ms, L, s, s+l1);
-      s2 = limited_lmemfind(&ms, s+init, l1-init, p, l2);
-    }
-    else
-      s2 = lmemfind(s+init, l1-init, p, l2);
+    MatchState ms;
+    matchinit(&ms, L, s, s+l1);
+    s2 = limited_lmemfind(&ms, s+init, l1-init, p, l2);
     if (s2) {
       lua_pushinteger(L, s2-s+1);
       lua_pushinteger(L, s2-s+l2);
