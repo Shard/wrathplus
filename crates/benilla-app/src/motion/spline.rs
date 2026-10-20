@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use crate::app_core::movement::swim_enter_depth;
 use crate::entities::CollisionHeight;
 
-use super::super::{NetEntity, ObjectStore};
+use crate::net::{NetEntity, ObjectStore};
 
 /// A server-dictated path (`SMSG_MONSTER_MOVE`) in raw WoW coordinates, walked at constant speed
 /// over `duration` from `start`; present only while the unit is on it.
@@ -186,7 +186,7 @@ fn valid_path(path: &[[f32; 3]]) -> bool {
 
 /// The [`Spline`] for one `SMSG_MONSTER_MOVE` along `path` (`[start, …, endpoint]`), or `None`
 /// for a stop, a zero duration or a path under two points.
-pub(in crate::net) fn monster_move_spline(
+pub(in crate::motion) fn monster_move_spline(
     path: Vec<[f32; 3]>,
     spline_id: u32,
     stop: bool,
@@ -223,7 +223,7 @@ pub(in crate::net) fn monster_move_spline(
 /// The [`Spline`] a unit is already riding in its create block, back-dated by
 /// [`CreateSpline::time_passed_ms`]; `None` for a degenerate path, a zero duration, a finished
 /// ride, or anything under `WOW_CREATE_SPLINE=off`.
-pub(in crate::net) fn create_spline(spline: CreateSpline) -> Option<Spline> {
+pub(in crate::motion) fn create_spline(spline: CreateSpline) -> Option<Spline> {
     if !create_spline_enabled()
         || spline.duration_ms == 0
         || spline.path.len() < 2
@@ -253,7 +253,7 @@ pub(in crate::net) fn create_spline(spline: CreateSpline) -> Option<Spline> {
 
 /// One `csp` trace line per create block with a live spline, in either `WOW_CREATE_SPLINE` leg;
 /// `left` is the yards still ahead at create time.
-pub(in crate::net) fn trace_create_spline(guid: u64, spline: Option<&CreateSpline>) {
+pub(in crate::motion) fn trace_create_spline(guid: u64, spline: Option<&CreateSpline>) {
     if !benilla_assets::trace::enabled() {
         return;
     }
@@ -288,7 +288,7 @@ pub(in crate::net) fn trace_create_spline(guid: u64, spline: Option<&CreateSplin
 
 /// One `mmv` trace line per `SMSG_MONSTER_MOVE`: the jump to the new path's start, `xy` the
 /// desync and `z` only our terrain against the wire's.
-pub(in crate::net) fn trace_move_snap(
+pub(in crate::motion) fn trace_move_snap(
     guid: u64,
     from: Option<[f32; 3]>,
     start: [f32; 3],
@@ -326,7 +326,7 @@ fn create_spline_enabled() -> bool {
 /// Writes every path-walking entity's translation and rotation from its [`Spline`] each frame;
 /// scale is left alone.
 #[allow(clippy::type_complexity)] // one Bevy system's full input set
-pub(in crate::net) fn sample_splines(
+pub(in crate::motion) fn sample_splines(
     mut commands: Commands,
     mut q: Query<(
         Entity,
@@ -334,7 +334,7 @@ pub(in crate::net) fn sample_splines(
         &mut Transform,
         Has<CreatureSwimming>,
         // For the `spl` trace only; the sampler never gates on it.
-        Option<&super::super::Guid>,
+        Option<&crate::net::Guid>,
         // A deck path's destination; `transport::compose_riders` carries it to the world later.
         Option<&mut crate::app_core::movement::TransportRider>,
     )>,
@@ -490,7 +490,7 @@ pub(crate) fn grounded_y(
 /// paths it in 3D without the flying flag, `MoveSplineInit.cpp:191`; the reference keeps Δz under
 /// SWIMMING, `[CMovement+0x40] & 0x200000` at `0x616cfa`).
 #[allow(clippy::type_complexity)] // one Bevy system's full input set
-pub(in crate::net) fn ground_clamp_creatures(
+pub(in crate::motion) fn ground_clamp_creatures(
     world: benilla_world::collision::WorldCollision,
     // The liquid query: a water-walker's floor is the surface.
     points: benilla_world::world_point::WorldPoint,
@@ -791,7 +791,7 @@ type SwimMarkQuery = (
 /// The stamp [`mark_swimming_creatures`] leaves once a unit's room claim settles; 1.12 water is
 /// static, so it holds until the unit moves or the `ColliderEpoch` bumps.
 #[derive(Component)]
-pub(in crate::net) struct SwimEvaluated;
+pub(in crate::motion) struct SwimEvaluated;
 
 /// The exit band (yd) below the swim boundary: the player boundary's 1/36-yd hysteresis
 /// (`0x7ff9d0`), an absolute distance, not scaled with collision height.
@@ -861,7 +861,7 @@ fn creature_swim_state(marked: bool, depth: f32, boundary: f32, unit_flags: u32)
 
 /// Maintains [`CreatureSwimming`] on every [`ground_derived`] body from the water over its feet.
 /// Chained before [`ground_clamp_creatures`] so a fresh mark exempts the clamp the same frame.
-pub(in crate::net) fn mark_swimming_creatures(
+pub(in crate::motion) fn mark_swimming_creatures(
     mut commands: Commands,
     units: Query<SwimMarkQuery, SwimMarkGate>,
     stamped: Query<Entity, With<SwimEvaluated>>,

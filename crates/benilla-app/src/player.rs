@@ -52,7 +52,7 @@ pub(crate) mod land;
 mod move_trace;
 mod movement_net;
 mod posture;
-// `pub(crate)`: a remote mover's dead-reckon (`crate::net::motion::remote`) steps through the same
+// `pub(crate)`: a remote mover's dead-reckon (`crate::motion::remote`) steps through the same
 // walk resolve, as the reference runs every mover through one controller.
 pub(crate) mod mover;
 mod scoped_view;
