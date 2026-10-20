@@ -68,6 +68,26 @@ fn race_creature_type(race: u8) -> u32 {
 /// `CreatureType.dbc` id 7.
 const CREATURE_TYPE_HUMANOID: u32 = 7;
 
+/// `CreatureType.dbc` id to the enUS word, a creature's level-line class slot.
+pub(crate) fn creature_type_word(t: u32) -> Option<&'static str> {
+    Some(match t {
+        1 => "Beast",
+        2 => "Dragonkin",
+        3 => "Demon",
+        4 => "Elemental",
+        5 => "Giant",
+        6 => "Undead",
+        7 => "Humanoid",
+        8 => "Critter",
+        9 => "Mechanical",
+        // The shipped table runs 1..11; the nameplate filter tests 11 (`0x605570`).
+        11 => "Totem",
+        // Deviation: 10, "Not specified", answers None because the word would print in the
+        // tooltip's level line; `UnitCreatureType` then answers nil where the reference names it.
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,7 +225,7 @@ mod tests {
         }
     }
 
-    /// The unit snapshot carries the resolver's word for every unit, players included: a
+    /// The resolver's word for every unit, players included, as the unit snapshot carries it: a
     /// shapeshifted player a Beast, an unshifted one a Humanoid by race, a form of no type the
     /// same, and a creature its template's.
     #[test]
@@ -217,7 +237,7 @@ mod tests {
             forms: Some(&forms),
         };
         let word = |store: &ObjectStore| {
-            crate::ui_unit::snapshot(store, 0, None, 0, None, sources).creature_type_name
+            creature_type_word(sources.of(store)).map(str::to_string)
         };
         assert_eq!(word(&store(0, 1, 1)).as_deref(), Some("Beast"), "cat form");
         assert_eq!(

@@ -339,3 +339,32 @@ pub(crate) const UNIT_FLAG_IN_COMBAT: u32 = 0x0008_0000;
 /// `UNIT_FIELD_FLAGS` bit 21 (vmangos `UnitDefines.h:566`), tested inside `GetWeapon` at
 /// `0x5ec2b8` (CGPlayer) and `0x605e58`/`0x605e98` (CGUnit).
 pub(crate) const UNIT_FLAG_DISARMED: u32 = 0x0020_0000;
+
+/// `ItemClass` 2, weapon: the disarm ladder's whole test, so a shield is never the hand it hides.
+pub(crate) const ITEM_CLASS_WEAPON: u8 = 2;
+
+/// The one held slot the disarm hides: the main hand if it holds a weapon, else the off hand if it
+/// does (`GetWeapon(slot, 0)`, `0x5ec2ae`/`0x5ec262`); the ranged slot is never gated
+/// (`0x5ec25e`), as vmangos agrees (`Unit.h:991`). Over classes so the action bar's
+/// equipped-item test (`0x5ea5d0`) can use it on raw inventory.
+pub(crate) fn disarmed_hand(main_class: Option<u8>, off_class: Option<u8>) -> Option<usize> {
+    if main_class == Some(ITEM_CLASS_WEAPON) {
+        return Some(0);
+    }
+    if off_class == Some(ITEM_CLASS_WEAPON) {
+        return Some(1);
+    }
+    None
+}
+
+/// `(realm, character)` off the roster's login pick, keying the per-character files.
+pub(crate) fn identity(roster: &Roster) -> Option<(String, String)> {
+    let guid = roster.pending_pick?;
+    let name = roster.chars.iter().find(|c| c.guid == guid)?.name.clone();
+    let realm = roster
+        .realm
+        .as_ref()
+        .map(|r| r.name.clone())
+        .unwrap_or_else(|| "Realm".into());
+    Some((realm, name))
+}

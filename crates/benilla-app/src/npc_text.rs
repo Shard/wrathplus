@@ -99,9 +99,9 @@ pub(crate) fn substitute_checked(text: &str, ctx: &MacroContext) -> (String, boo
                 Some(s) => {
                     // An id outside the table faults the reference; we emit nothing.
                     let name = if matches!(tok, 'R' | 'r') {
-                        crate::ui_unit::race_names(s.race).map_or("", |(display, _)| display)
+                        crate::app_core::catalogs::race_names(s.race).map_or("", |(display, _)| display)
                     } else {
-                        crate::ui_unit::class_names(s.class).map_or("", |(display, _)| display)
+                        crate::app_core::catalogs::class_names(s.class).map_or("", |(display, _)| display)
                     };
                     if tok.is_ascii_lowercase() {
                         out.push_str(&name.to_ascii_lowercase());

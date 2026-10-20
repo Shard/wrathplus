@@ -233,12 +233,12 @@ fn report_session(
     let race = store
         .0
         .unit_race()
-        .and_then(|r| crate::ui_unit::race_names(r).map(|(d, _)| d))
+        .and_then(|r| crate::app_core::catalogs::race_names(r).map(|(d, _)| d))
         .unwrap_or("?");
     let class = store
         .0
         .unit_class()
-        .and_then(|c| crate::ui_unit::class_names(c).map(|(d, _)| d))
+        .and_then(|c| crate::app_core::catalogs::class_names(c).map(|(d, _)| d))
         .unwrap_or("?");
     let zone = zone.unwrap_or_default();
     // The raw WoW triple, as `.go xyz <x> <y> <z> <map>` takes it.
