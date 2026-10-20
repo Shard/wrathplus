@@ -13,7 +13,7 @@ use crate::net::{ClientCommand, Embodied, NetCommands, Spline, SplineStopped};
 use super::Player;
 
 /// The walkable surface under a ride's pose: a one-sided down-ray from the server's own Z, through
-/// the same window as `net::motion::spline`'s clamp.
+/// the same window as `motion::spline`'s clamp.
 fn ride_ground(world: &benilla_world::collision::WorldCollision, pos: Vec3) -> Option<f32> {
     const UP: f32 = 2.5;
     const DOWN: f32 = 4.0;

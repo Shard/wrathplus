@@ -95,7 +95,6 @@ pub(crate) struct Bridge<'w, 's> {
     proficiencies: ResMut<'w, Proficiencies>,
     dropped: ResMut<'w, DroppedOpcodes>,
     net: Res<'w, NetCommands>,
-    dialect: Res<'w, super::SessionDialect>,
     stores: Query<'w, 's, &'static mut ObjectStore>,
     transports: Query<'w, 's, &'static crate::app_core::movement::TransportMaps>,
 }
@@ -142,8 +141,8 @@ fn on_connected(
     In(ev): In<SessionEvent>,
     mut e: Edges,
     mut b: Bridge,
-    native_pet_names: Option<ResMut<crate::ui_native_pet_name::NativePetNamePackets>>,
-    native_who: Option<ResMut<crate::ui_native_who::NativeWhoPackets>>,
+    native_pet_names: Option<ResMut<super::wrath_pet_name_capture::NativePetNamePackets>>,
+    native_who: Option<ResMut<super::wrath_who_capture::NativeWhoPackets>>,
 ) {
     if let SessionEvent::Connected {
         self_guid: guid,
@@ -289,9 +288,7 @@ fn on_worldport(
     };
     {
         // Every streamed roster member is about to be purged; the reference deactivates each.
-        crate::ui_party::net::roster_deactivated(
-            &mut group, &b.index, &b.stores, &b.names, &b.net, *b.dialect,
-        );
+        crate::ui_party::net::roster_deactivated(&mut group, &b.index, &b.stores, &b.names, &b.net);
         worldport(
             map_id,
             position,

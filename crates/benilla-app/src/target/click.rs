@@ -606,7 +606,7 @@ impl Dispatch<'_, '_> {
             .and_then(|item| {
                 let slot0 = u8::try_from(item.slot.saturating_sub(1)).unwrap_or(0);
                 self_store.and_then(|s| {
-                    crate::ui_items::slot_guid(&s.0, item.bag, slot0, &self.go_inputs.objects)
+                    crate::inventory::slot_guid(&s.0, item.bag, slot0, &self.go_inputs.objects)
                 })
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
@@ -909,7 +909,7 @@ fn interact(dispatch: &mut Dispatch, press: &PressPick, mut select: Select) {
             // Silent after the select: the click's `0x60c247 call 0x5ecb70` has no `DisplayError`,
             // and the red `ERR_ATTACK_*` lines are `0x612df0`'s (the Attack action, pet attack,
             // TryCast). The predicate is `0x612df0`'s; `0x5ecb70`'s own set is not transcribed.
-            if crate::ui_action::attack_actor_blocked(dispatch.self_store(), me.map(|(_, g, _)| g))
+            if super::attack_gate::attack_actor_blocked(dispatch.self_store(), me.map(|(_, g, _)| g))
                 .is_some()
             {
                 // refused: the selection stands, no swing, nothing said
@@ -1169,11 +1169,11 @@ pub(crate) fn resolve_go_action(
     let Some(store) = me_store else {
         return GoAction::Refuse(None);
     };
-    let Some((bag_index, slot, key_guid)) = crate::ui_items::find_item(
+    let Some((bag_index, slot, key_guid)) = crate::inventory::find_item(
         &store.0,
         &inputs.objects,
         key_entry,
-        crate::ui_items::ItemSearch::default(),
+        crate::inventory::ItemSearch::default(),
     ) else {
         // Held when the resolver ran, gone now: nothing to send.
         return GoAction::Refuse(None);
@@ -1527,7 +1527,7 @@ pub(super) fn clear(
             // The teardown `0x493910` closes the old target's loot before its own send.
             seam.close_loot_on(old);
         }
-        super::send_selection(&seam.net, *seam.dialect, 0);
+        super::send_selection(&seam.net, 0);
         // `SetSelection 0x493540`'s own `0x493a08 call 0x5ecac0`, the real StopAttack, which
         // also un-queues a pending on-next-swing strike.
         seam.stop(engaged);
@@ -2006,7 +2006,6 @@ mod tests {
             let (tx, _rx) = crossbeam_channel::unbounded();
             let mut world = World::new();
             world.insert_resource(NetCommands(tx));
-            world.insert_resource(crate::net::SessionDialect::Wrath12340);
             world.init_resource::<InspectMode>();
             world.init_resource::<crate::spell::QueuedMeleeSpell>();
             world.init_resource::<crate::spell::AutoRepeatActive>();
@@ -2083,7 +2082,6 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<Messages<WorldRightClick>>();
         world.init_resource::<PressPick>();
         world.init_resource::<Selection>();
@@ -2411,7 +2409,6 @@ mod tests {
             crate::player::ApproachVerb::Skin,
         ] {
             let (mut world, _vendor, rx) = walking_world(Vec3::new(2.5, 0.0, 0.0), true);
-            world.insert_resource(SessionDialect::Wrath12340);
             world.resource_mut::<crate::player::Approach>().arrived = Some((verb, VENDOR));
             world.run_system_once(act_on_arrival).unwrap();
             assert!(rx.try_iter().next().is_none());
@@ -3090,10 +3087,6 @@ mod tests {
     fn wrath_right_click_uses_chests_doors_and_goobers() {
         for go_type in [3, 0, 10] {
             let (mut world, _vendor, rx) = walking_world(Vec3::new(30.0, 0.0, 0.0), false);
-            assert_eq!(
-                *world.resource::<crate::net::SessionDialect>(),
-                crate::net::SessionDialect::Wrath12340
-            );
             let object = spawn_object(&mut world, go_type, Vec3::new(2.0, 0.0, 0.0));
             *world.resource_mut::<PressPick>() = PressPick {
                 object: HoveredObject {

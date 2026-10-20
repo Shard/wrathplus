@@ -57,7 +57,7 @@ pub(crate) struct CombatTextEvent {
 
 /// `PLAYER_LEAVING_WORLD` on a cross-map worldport. The reference fires event `0x111` at one site
 /// (`0x490b48`), gated only by the latch `[0xb4b424]`, from the local player's destructor
-/// (`0x5dd543`, this system), the shutdown tail `0x490bd0` (ours is `shutdown_ui_state`) and the
+/// (`0x5dd543`, this system), the shutdown tail `0x490bd0` (ours is `wrath_addons::shutdown`) and the
 /// local player's DESTROY or OUT_OF_RANGE (`0x5e9b5a`); a same-map teleport destroys nothing.
 ///
 /// Deviation: fires with our descriptor present, so `UnitExists("player")` answers true where the

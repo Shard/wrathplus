@@ -260,7 +260,7 @@ fn survey_one(
     // `LoadAddOn("<folder addon>")` does not answer `MISSING`.
     script.register_addons(registry.to_vec(), Some(root.to_path_buf()), None, None);
     seat_a_session(&mut script);
-    let _ = crate::ui_script::load_default_ui(&script);
+    let _ = crate::ui_script::load_default_ui(&mut script);
     // The addon's dependencies, first and recursively, as `AddOn_Load` (`0x51f240`) does in its
     // first two steps. Loaded before `globals_of` below, so a name a dependency provides is not
     // missing.
@@ -972,7 +972,7 @@ pub fn surface() -> Vec<(String, String)> {
     script.set_screen_size(1024.0, 768.0);
     script.register_addons(Vec::new(), None, None, None);
     seat_a_session(&mut script);
-    let _ = crate::ui_script::load_default_ui(&script);
+    let _ = crate::ui_script::load_default_ui(&mut script);
 
     let dump: String = script
         .eval(
@@ -1030,7 +1030,7 @@ fn seat_a_session(script: &mut UiScript) {
         let _ = script.run(src);
     }
     // The shipped CVar table, before the realm below writes into it.
-    script.register_cvars(crate::cvars::registered_pairs());
+    script.register_cvars(crate::shipped_cvars::pairs());
     // A display: `GetScreenResolutions()` empty and `GetCurrentResolution()` 0 is no state the 1.12
     // client can be in (`CT_Viewport` indexes its screen size by it at load). One mode, the
     // `set_screen_size(1024, 768)` the interface is already told.
@@ -3491,7 +3491,7 @@ mod dependency_tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
-        let _ = crate::ui_script::load_default_ui(&script);
+        let _ = crate::ui_script::load_default_ui(&mut script);
         script
     }
 
@@ -3803,7 +3803,7 @@ mod dependency_tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
-        let _ = crate::ui_script::load_default_ui(&script);
+        let _ = crate::ui_script::load_default_ui(&mut script);
 
         // Bagnon's idiom, on the verb Bagnon replaces.
         script
@@ -3825,7 +3825,7 @@ mod dependency_tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
-        let _ = crate::ui_script::load_default_ui(&script);
+        let _ = crate::ui_script::load_default_ui(&mut script);
         script
             .run("ToggleBackpack = function() error('addon blew up') end")
             .unwrap();
@@ -3845,7 +3845,7 @@ mod dependency_tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
-        let _ = crate::ui_script::load_default_ui(&script);
+        let _ = crate::ui_script::load_default_ui(&mut script);
         // The corpus shape: hook the tooltip's own OnShow, which runs only if something shows it.
         script
             .run(
@@ -3869,7 +3869,7 @@ mod dependency_tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         seat_a_session(&mut script);
-        let _ = crate::ui_script::load_default_ui(&script);
+        let _ = crate::ui_script::load_default_ui(&mut script);
         // Each entry point is `try`-guarded in `drive_ui_probe`, so a missing one would pass
         // silently.
         for entry in [

@@ -1,6 +1,6 @@
 //! Button / CheckButton: method sets, state textures, click registration, additive highlight.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::*;
 
 #[test]
@@ -391,7 +391,7 @@ fn default_registration_is_left_click_only_right_click_reaches_nothing() {
 
 #[test]
 fn register_for_clicks_grows_right_click_and_carries_the_button_name() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -399,7 +399,7 @@ fn register_for_clicks_grows_right_click_and_carries_the_button_name() {
         local btn = CreateFrame("Button", "Vendor")
         btn:SetPoint("BOTTOMLEFT", 0, 0); btn:SetWidth(100); btn:SetHeight(100)
         btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        btn:SetScript("OnClick", function() local self, button, down = this, arg1, arg2
+        btn:SetScript("OnClick", function(self, button, down)
             clicks = clicks + 1
             click_btn = button
             arg1_btn = arg1   -- the 1.12 legacy-global convention, same value
@@ -423,7 +423,7 @@ fn register_for_clicks_grows_right_click_and_carries_the_button_name() {
 
 #[test]
 fn down_registration_fires_on_press_and_toggles_checked_once() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -432,7 +432,7 @@ fn down_registration_fires_on_press_and_toggles_checked_once() {
         local cb = CreateFrame("CheckButton", "QuickSell")
         cb:SetPoint("BOTTOMLEFT", 0, 0); cb:SetWidth(100); cb:SetHeight(100)
         cb:RegisterForClicks("LeftButtonDown")
-        cb:SetScript("OnClick", function()
+        cb:SetScript("OnClick", function(this, arg1, arg2, arg3, arg4)
             clicks = clicks + 1
             seen_button, seen_arg2 = arg1, arg2
         end)
@@ -443,11 +443,11 @@ fn down_registration_fires_on_press_and_toggles_checked_once() {
 
     s.mouse_button(50.0, 50.0, "LeftButton", true);
     assert_eq!(s.eval::<i64>("return clicks").unwrap(), 1);
-    // `0x779540` fires `OnClick` with the format `"%s"`: the button name in `arg1` and no `arg2`.
+    // Build 12340's `OnClick(self, button, down)`: the button in `arg1`, `down` in `arg2`.
     assert_eq!(
-        s.eval::<(String, String)>("return seen_button, seen_arg2")
+        s.eval::<(String, bool)>("return seen_button, seen_arg2")
             .unwrap(),
-        ("LeftButton".to_string(), "untouched".to_string())
+        ("LeftButton".to_string(), true)
     );
     assert!(s.eval::<bool>("return QuickSell:GetChecked()").unwrap());
 

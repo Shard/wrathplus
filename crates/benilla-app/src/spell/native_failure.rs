@@ -140,7 +140,6 @@ mod tests {
     fn native_receipts_preserve_order_duplicates_and_raw_fields_without_shared_projection() {
         let mut app = App::new();
         register(&mut app);
-        app.insert_resource(crate::net::SessionDialect::Wrath12340);
         let mut adapter = WrathEventAdapter::new();
         let mut expected = VecDeque::new();
         for opcode in [0x133, 0x138, 0x133, 0x138] {

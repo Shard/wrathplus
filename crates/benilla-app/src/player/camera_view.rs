@@ -319,6 +319,32 @@ pub(super) fn plugin(app: &mut App) {
         );
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // The five saved camera views and the live index, at the reference's names and default strings;
+        // owned by [`crate::player::camera_view`]. Registered so a `SaveView` persists.
+        same(CVAR_ACTIVE_VIEW, ACTIVE_VIEW_DEFAULT),
+        same(VIEW_CVARS[0][0], VIEW_DEFAULTS[0][0]),
+        same(VIEW_CVARS[0][1], VIEW_DEFAULTS[0][1]),
+        same(VIEW_CVARS[0][2], VIEW_DEFAULTS[0][2]),
+        same(VIEW_CVARS[1][0], VIEW_DEFAULTS[1][0]),
+        same(VIEW_CVARS[1][1], VIEW_DEFAULTS[1][1]),
+        same(VIEW_CVARS[1][2], VIEW_DEFAULTS[1][2]),
+        same(VIEW_CVARS[2][0], VIEW_DEFAULTS[2][0]),
+        same(VIEW_CVARS[2][1], VIEW_DEFAULTS[2][1]),
+        same(VIEW_CVARS[2][2], VIEW_DEFAULTS[2][2]),
+        same(VIEW_CVARS[3][0], VIEW_DEFAULTS[3][0]),
+        same(VIEW_CVARS[3][1], VIEW_DEFAULTS[3][1]),
+        same(VIEW_CVARS[3][2], VIEW_DEFAULTS[3][2]),
+        same(VIEW_CVARS[4][0], VIEW_DEFAULTS[4][0]),
+        same(VIEW_CVARS[4][1], VIEW_DEFAULTS[4][1]),
+        same(VIEW_CVARS[4][2], VIEW_DEFAULTS[4][2]),
+    ]
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,7 +497,7 @@ mod tests {
     #[test]
     fn the_view_cvars_are_registered_with_the_references_defaults() {
         let registered = |name: &str| {
-            crate::cvars::REGISTERED
+            CVARS
                 .iter()
                 .find(|r| r.name.eq_ignore_ascii_case(name))
                 .map(|r| r.default)

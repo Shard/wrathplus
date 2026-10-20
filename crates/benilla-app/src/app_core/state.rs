@@ -1,16 +1,19 @@
 //! Game state that world, net and UI code all read: the spell catalogs and learned latches, the
-//! client lifecycle and roster, the open NPC, loot gates and UI pointer flags. Each owner keeps
-//! its systems and impls and re-exports the type from its old path.
+//! client lifecycle and roster, the open NPC, loot gates and UI pointer flags, the quest giver,
+//! the input map, the pet bar, world states, factions, emote sounds and collision heights. Each
+//! owner keeps its systems and impls and re-exports the type from its old path.
 
 use std::collections::HashMap;
+use std::time::Instant;
 
-use benilla_formats::SpellCatalog;
+use benilla_formats::{EmoteSoundCatalog, FactionCatalog, SpellCatalog};
 use benilla_protocol::messages::{
-    QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
+    PetSpells, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
 };
 use benilla_protocol::Character;
 use bevy::prelude::*;
 
+use super::cooldowns::Cooldowns;
 use super::errors::UiError;
 
 /// The spell DBC catalogs, absent without client data; the cast-visual router shares the catalog.
@@ -244,3 +247,95 @@ pub(crate) enum Input {
     /// `CameraZoomOut([yards])`, its yards in [`BindingsState::amount`].
     CameraZoomOut,
 }
+
+/// The pet action bar's state. A zero `spells.pet_guid` means no bar: the teardown packet carries
+/// only that guid.
+#[derive(Resource, Default)]
+pub(crate) struct PetBar {
+    /// Lossless native 12340 initialization. Capture only: the native visible feed is separate;
+    /// `None` means unavailable, not a known empty spellbook. Never use Vanilla action helpers.
+    pub(crate) native: Option<benilla_protocol::wrath_pet::PetSpells>,
+    /// The last `SMSG_PET_SPELLS`, with `SMSG_PET_MODE` and local presses folded in.
+    pub(crate) spells: PetSpells,
+    /// The pet's own cooldowns, the list at `0xcecb04`. Seeded from `SMSG_PET_SPELLS`, topped up
+    /// by `SMSG_SPELL_COOLDOWN` for the pet's guid, by the pet's own `SMSG_SPELL_GO` and by a
+    /// press's GCD. Each mutation but the seed fires the flush, off [`Cooldowns::generation`]
+    /// (`bar::fire_pet_cooldown_events`).
+    pub(crate) cooldowns: Cooldowns,
+    /// The client's `[0xb714b0]`, a local latch: all of `IsPetAttackActive`, and the only thing
+    /// that lights Attack (`0x4bdf16`-`0x4bdf22`). Raised only for a possessed unit (`0x4bd420`),
+    /// so never on a hunter's bar; lowered by `PetStopAttack` (`0x4bd650`), a new pet (`0x4bc8ce`)
+    /// and the old-target clear (`0x493a18`). `PET_ATTACK_*` read the pet's flag `0x800` instead.
+    pub(crate) attacking: bool,
+    /// `PET_BAR_UPDATE` signals, counted. Both state writes signal unconditionally (`0x4bc940`,
+    /// `0x4bc960`), and `OnClick`'s `SetChecked(0)` needs that repaint to relight a press on the
+    /// current mode, so the count is in the feed's dedup key. Wrapping: only a change is read.
+    pub(crate) bar_signals: u32,
+    /// `[0xb714a8]`: the charm or possess expiry, the packet's duration past its arrival; `None`
+    /// when the duration is 0, as for a hunter's or warlock's own pet.
+    pub(crate) expires: Option<Instant>,
+}
+
+/// The live world-state table, keyed and valued by raw wire dwords.
+#[derive(Resource, Default)]
+pub(crate) struct WorldStates {
+    pub(crate) values: HashMap<u32, u32>,
+    pub(crate) generation: u64,
+    pub(crate) scope: Option<(u32, u32)>,
+}
+
+/// The FactionTemplate.dbc catalog; absent if it failed to load, and the faction legs then read
+/// neutral.
+#[derive(Resource)]
+pub(crate) struct Factions(pub(crate) FactionCatalog);
+
+/// The emote-audio catalog (also the chat sender's `/name` → text-id resolver).
+#[derive(Resource)]
+pub(crate) struct EmoteSounds(pub(crate) EmoteSoundCatalog);
+
+/// A unit's collision height in yards, the reference's `CMovement+0xb4`: the `h` whose fractions
+/// are the depth lines (swim `0.75·h`, splash `0.4·h`, foam gate `max(2·h, 1.0)`; `0x6030c0`,
+/// `0x5fa760`). It is `CreatureModelData.collisionHeight`, the MD20 collision box's Z extent in
+/// model units, times `k = max(SCALE_X, CreatureDisplayInfo.creatureModelScale)`: `0x60b270`
+/// passes the larger (`0x60b312`) to `0x6174b0`, which stores the product (`0x617501`), and the
+/// unit model build `0x5fb9dd` runs it for every unit.
+///
+/// The `max` is a floor, not a second multiplier: `SCALE_X` already folds the DBC scales in
+/// (vmangos `Unit.cpp:9579`) and is the whole render scale (`0x613fc9`); it bites only where a
+/// shrink aura or a `display_scale` override sinks `SCALE_X` under the display's column. The
+/// display is the native one (`UNIT_FIELD_NATIVEDISPLAYID`, index 132 at `0x60b270`), so a
+/// transform keeps the unit's own depth lines. Not the movement capsule,
+/// [`crate::player::CAPSULE_HEIGHT`].
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CollisionHeight(pub(crate) f32);
+
+/// Our target, set the instant we click, as the 1.12 client does without waiting for the server,
+/// and cleared on deselect or when it streams out. `CMSG_SET_SELECTION` carries the guid, which the
+/// server records in our `UNIT_FIELD_TARGET`.
+#[derive(Resource, Default)]
+pub(crate) struct Selection {
+    pub(crate) target: Option<Entity>,
+    pub(crate) guid: Option<u64>,
+    /// The last-target pair `[0xb4e2e0]` that `TargetLastTarget` reads: `SetSelection` stamps the
+    /// outgoing selection, none included, on every change it makes, a select or a deselect
+    /// (`0x49361d`-`0x493628`); a teardown clear (`0x493910` alone) leaves it.
+    pub(crate) last: Option<u64>,
+}
+
+/// Lines a CVar's change callback prints to the console (`0x63cb50`), such as `spellEffectLevel`'s
+/// "Spell effect level set to %d.". A console command's own write collects them into its output;
+/// any other write (a Lua `SetCVar`, the boot load) sends them to the log, as the reference's go
+/// to a console screen nobody has open.
+#[derive(Resource, Default)]
+pub(crate) struct ConsoleEcho {
+    pub(crate) capture: Option<Vec<String>>,
+}
+
+/// `UNIT_FLAG_IN_COMBAT`, bit 19 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:564`), read by the
+/// client as `shr reg,0x13; test rl,1`. The local player has no separate combat latch: its two
+/// hardcoded readers (`0x482f70`, `0x4d6038`) and `UnitAffectingCombat("player")` read this bit.
+pub(crate) const UNIT_FLAG_IN_COMBAT: u32 = 0x0008_0000;
+
+/// `UNIT_FIELD_FLAGS` bit 21 (vmangos `UnitDefines.h:566`), tested inside `GetWeapon` at
+/// `0x5ec2b8` (CGPlayer) and `0x605e58`/`0x605e98` (CGUnit).
+pub(crate) const UNIT_FLAG_DISARMED: u32 = 0x0020_0000;

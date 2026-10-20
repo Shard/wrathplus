@@ -17,7 +17,7 @@ mod content;
 pub(crate) mod extract;
 mod input;
 #[cfg(test)]
-mod layer_tests;
+mod production_load;
 mod load_log;
 mod manifest;
 mod wrath_addons;
@@ -29,18 +29,15 @@ mod wrath_native;
 mod reference_ui;
 pub(crate) use reference_ui::initialize_asset_overrides;
 
-/// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
-mod session;
-
 /// The feed gate: a UI feed's input-side early-out, audited by `WOW_FEED_GATE_CHECK=1`.
 pub(crate) mod gate;
 
-pub(crate) use session::VmMemo;
+/// What the host remembers per VM, so a seed or change-memo never outlives the VM it was for.
+pub(crate) use crate::app_core::vm_memo::VmMemo;
 
 // Not test-only: the addon harness loads the whole shipped interface under each addon.
 pub(crate) use manifest::default_bindings;
 pub(crate) use manifest::load_default_ui;
-pub(crate) use manifest::load_ingame_ui;
 #[cfg(test)]
 pub(crate) use manifest::{load_stock_bindings, stock_bindings_file};
 
@@ -243,6 +240,16 @@ fn console_reload_ui(world: &mut World, _args: &str) -> Vec<String> {
     }
 }
 
+/// `$WOW_UI_SCALE` seeds [`UiScaleCvar`] and owns `uiScale` for the session.
+const UI_SCALE_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
+    name: "WOW_UI_SCALE",
+    taken: || crate::cvars::env_set("WOW_UI_SCALE"),
+    read: |world| {
+        let v = world.get_resource::<UiScaleCvar>();
+        vec![("uiScale", v.map(|s| s.0.to_string()))]
+    },
+};
+
 impl Plugin for UiScriptPlugin {
     fn build(&self, app: &mut App) {
         if uses_native_wrath_route(
@@ -260,6 +267,7 @@ impl Plugin for UiScriptPlugin {
         app.console_command("reloadUI", "Reload the interface.", console_reload_ui);
         // The quit root runs in `Last`: the close button's `AppExit` is written in `PostUpdate`.
         crate::shutdown::on_app_exit(app, shutdown_on_exit.into_configs());
+        crate::cvars::RegisterCvars::register_session_lever(app, UI_SCALE_LEVER);
         app.insert_resource(UiScaleCvar(default_ui_scale()))
             .init_resource::<UiFrameCost>()
             .init_resource::<crate::bindings::WheelNotches>()
@@ -406,9 +414,7 @@ pub(crate) use lifecycle::{
 pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
 use lifecycle::shutdown_on_exit;
 #[cfg(test)]
-pub(crate) use lifecycle::{
-    finish_ui_load, is_emote_token_line, seat_from_roster, shutdown_ui_state,
-};
+pub(crate) use lifecycle::{finish_ui_load, seat_from_roster};
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -768,14 +774,6 @@ mod faux_scroll_tests;
 #[cfg(test)]
 mod panel_template_tests;
 
-/// The return-shape gate: `reference/1.12-shapes.tsv` against what this client answers.
-#[cfg(test)]
-mod shape_gate;
-
-/// The surface gate: the production load's globals and widget methods against the 1.12 tables.
-#[cfg(test)]
-mod surface_gate;
-
 /// The event argument-shape gate: every fire site against `reference/1.12-events.tsv`.
 #[cfg(test)]
 mod event_shape_gate;
@@ -839,8 +837,6 @@ mod tooltip_template_tests;
 #[cfg(test)]
 mod escape_tests;
 
-#[cfg(test)]
-mod game_menu_addon_tests;
 #[cfg(test)]
 mod game_menu_tests;
 

@@ -26,5 +26,5 @@ fn clear(In(_): In<SessionEvent>, mut packets: ResMut<NativePetNamePackets>) {
 }
 
 #[cfg(test)]
-#[path = "ui_native_pet_name_tests.rs"]
+#[path = "wrath_pet_name_capture_tests.rs"]
 mod tests;

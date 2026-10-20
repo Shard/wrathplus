@@ -61,15 +61,7 @@ impl ConsoleCommandApp for App {
     }
 }
 
-/// Lines a CVar's change callback prints to the console (`0x63cb50`), such as `spellEffectLevel`'s
-/// "Spell effect level set to %d.". A console command's own write collects them into its output;
-/// any other write (a Lua `SetCVar`, the boot load) sends them to the log, as the reference's go
-/// to a console screen nobody has open.
-#[derive(Resource, Default)]
-pub(crate) struct ConsoleEcho {
-    capture: Option<Vec<String>>,
-}
-
+pub(crate) use crate::app_core::state::ConsoleEcho;
 impl ConsoleEcho {
     pub(crate) fn print(&mut self, line: String) {
         match &mut self.capture {
@@ -277,7 +269,8 @@ mod tests {
     fn console_app() -> App {
         let mut app = App::new();
         app.add_plugins(bevy::MinimalPlugins)
-            .init_resource::<Cvars>()
+            // `gxVSync`, the latched row these tests stage, is `video`'s.
+            .insert_resource(Cvars::with_rows(&[crate::video::CVARS]))
             .add_plugins(ConsolePlugin);
         app
     }

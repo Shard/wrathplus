@@ -139,11 +139,20 @@ fn has_script_reports_the_kind_is_supported_not_that_one_is_set() {
         .unwrap();
     assert!(fired, "the guarded hook must install and run");
 
-    // The flat table: a Frame says true for a Button-only kind, where the reference says false.
+    // Per type (`0x48e680` and the type's own lookup): a Frame has no Button kind, and setting
+    // one raises the client's message.
     assert!(
-        s.eval::<bool>(r#"return f:HasScript("OnClick")"#).unwrap(),
-        "over-permissive by design today — see the comment at the binding"
+        !s.eval::<bool>(r#"return f:HasScript("OnClick")"#).unwrap(),
+        "a plain Frame has no OnClick"
     );
+    assert!(s
+        .eval::<bool>(r#"return CreateFrame("Button"):HasScript("onclick")"#)
+        .unwrap());
+    let err = s
+        .run(r#"f:SetScript("OnClick", function() end)"#)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains(r#"doesn't have a "OnClick" script"#), "{err}");
 }
 
 /// The walk saves the next node before the handler runs (`0x703ee8`); AceEvent-2.0's fire-once

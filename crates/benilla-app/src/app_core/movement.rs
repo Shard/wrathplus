@@ -6,6 +6,7 @@
 use std::time::Instant;
 
 use avian3d::prelude::Collider;
+use benilla_assets::coords::{wow_rotation_to_bevy, wow_to_bevy};
 use bevy::prelude::*;
 
 /// The client's `MOVEMENTFLAGS` bits (cached at `unit+0x9e8`), tested as the binary tests them.
@@ -178,7 +179,7 @@ const SWIM_DEPTH_FRAC: f32 = 0.75;
 /// cannot enter and is stopped at any depth (`0x6031b4`, then `0x60dff0`). The client's only reads
 /// of 0x8000 are this predicate (`0x5fb922`, `0x603111`, `0x6031d0`). Every body a player can be
 /// [`crate::net::Embodied`] in has 0x8, so only the creature marker
-/// (`crate::net::motion::spline::mark_swimming_creatures`) needs this.
+/// (`crate::motion::spline::mark_swimming_creatures`) needs this.
 pub(crate) const SWIM_UNIT_FLAGS: u32 = 0x8 | 0x800 | 0x8000;
 
 /// Whether a unit may swim at all ([`SWIM_UNIT_FLAGS`]): false blocks entry and forces an exit.
@@ -293,3 +294,52 @@ impl TransportMaps {
 /// socket. Each layer installs the reset of the state it owns; the wire layer owns none of it.
 #[derive(Resource, Default)]
 pub(crate) struct ConnectResets(pub(crate) Vec<fn(&mut World)>);
+
+/// The Bevy rotation of a wire yaw (radians about WoW +Z): a Bevy +Y yaw with no 180° offset,
+/// unlike doodad and WMO placement.
+pub(crate) fn wire_yaw(orientation: f32) -> Quat {
+    Quat::from_rotation_y(orientation)
+}
+
+/// The Bevy rotation of a GameObject placement: its `GAMEOBJECT_ROTATION` quaternion, which the
+/// reference's render matrix and collision use (`0x5f7910`); `GAMEOBJECT_FACING` (`0x5f9fb0`) is
+/// never consulted for placement.
+///
+/// vmangos fills `rotation2/3` from the facing when the spawn row leaves them zero
+/// (`GameObject::UpdateRotationFields`), so a yaw-only row still sends `rot_z(o)`, and a row with
+/// a tilt may send a non-unit quat, which `wow_rotation_to_bevy` normalizes. An absent or all-zero
+/// quat (a create block folds absent fields to zero) falls back to the facing, since it would
+/// normalize to `NaN`.
+pub(crate) fn gameobject_rotation(quat: Option<[f32; 4]>, orientation: f32) -> Quat {
+    match quat {
+        Some(q) if q.iter().map(|c| c * c).sum::<f32>() > 0.5 => wow_rotation_to_bevy(q),
+        _ => wire_yaw(orientation),
+    }
+}
+
+/// A spawn [`Transform`] from a raw-WoW position and a resolved rotation ([`wire_yaw`] or
+/// [`gameobject_rotation`]).
+pub(crate) fn pose_transform(position: [f32; 3], rotation: Quat) -> Transform {
+    Transform {
+        translation: wow_to_bevy(position),
+        rotation,
+        ..default()
+    }
+}
+
+/// Writes a raw-WoW pose onto an existing entity, keeping the renderer's baked scale; an entity
+/// not yet query-visible on its spawn frame is skipped, as its spawn pose already placed it.
+/// Whether it was written: `crate::motion`'s `write_pose` then drops the display smoother.
+pub(crate) fn set_pose(
+    transforms: &mut Query<&mut Transform>,
+    e: Entity,
+    position: [f32; 3],
+    rotation: Quat,
+) -> bool {
+    let Ok(mut t) = transforms.get_mut(e) else {
+        return false;
+    };
+    t.translation = wow_to_bevy(position);
+    t.rotation = rotation;
+    true
+}

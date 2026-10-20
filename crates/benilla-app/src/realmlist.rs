@@ -25,8 +25,37 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut realmlist: ResMut<R
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::deviates;
+    &[
+        // The logon server address (register site `0x5ab6a6`), a string row judged by
+        // `realmlist::on_cvar`.
+        deviates(
+            CVAR_REALMLIST,
+            DEFAULT_REALMLIST,
+            "us.logon.worldofwarcraft.com:3724",
+            "that host has not resolved since 2019, so shipping it makes every first launch a \
+             DNS failure; benilla dials the machine it is running on",
+        ),
+    ]
+};
+
+/// `$WOW_HOST` is the session's realmlist, which a test run must never write into the file.
+pub(crate) const SESSION_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
+    name: "WOW_HOST",
+    taken: || crate::cvars::env_set("WOW_HOST"),
+    read: |world| {
+        let v = world.get_resource::<Realmlist>();
+        vec![(CVAR_REALMLIST, v.map(|r| r.address().to_string()))]
+    },
+};
+
 impl Plugin for RealmlistPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
+        crate::cvars::RegisterCvars::register_session_lever(app, SESSION_LEVER);
         app.add_observer(on_cvar);
         app.init_resource::<Realmlist>();
     }

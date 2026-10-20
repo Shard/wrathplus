@@ -183,6 +183,28 @@ fn watch_layout(script: Option<NonSendMut<UiScript>>, mut file: ResMut<LayoutFil
     file.last_change = Some(std::time::Instant::now());
 }
 
+/// The reference's step of the UI shutdown (1.12 `0x490c79`, after `PLAYER_LOGOUT`, before the
+/// saved files; build 12340's order is assumed the same, untraced): write the layout from the live
+/// VM now. Called from `ui_script::wrath_addons::shutdown`, it runs on every end including
+/// `/reload`, which never leaves `InWorld`; an `OnExit(InWorld)` saver would miss a reload and
+/// race the VM's teardown.
+///
+/// It takes the identity the UI loaded under, which the tail holds because the roster's pick can
+/// be gone by shutdown, and writes unconditionally: the file is composed whole from the live tree,
+/// and the tail does not run for a session whose UI never loaded.
+pub(crate) fn save_now(script: &UiScript, identity: Option<&(String, String)>) {
+    let Some((realm, character)) = identity else {
+        return; // no character loaded under: a capture, a scenario, a test world
+    };
+    let Some(path) = crate::local_state::layout_character_path(realm, character) else {
+        return; // hermetic capture or no state folder: session-only
+    };
+    let body = render(&script.user_placed_layouts());
+    if let Err(e) = crate::local_state::write_atomic(&path, &body) {
+        warn!("layout: cannot write {}: {e}", path.display());
+    }
+}
+
 /// The autosave: dirty and one quiet second rewrite the file atomically. Every orderly end is
 /// [`save_now`]'s.
 fn save_layout(script: Option<NonSendMut<UiScript>>, mut file: ResMut<LayoutFile>) {
@@ -204,27 +226,6 @@ fn save_layout(script: Option<NonSendMut<UiScript>>, mut file: ResMut<LayoutFile
         warn!("layout: cannot write {}: {e}", path.display());
     }
     *file.dirty.get(&script) = false;
-}
-
-/// The reference's step of the UI shutdown (`0x490c79`, after `PLAYER_LOGOUT`, before the flat
-/// saved file): write the layout from the live VM now. Called from
-/// [`crate::ui_script::shutdown_ui_state`], it runs on every end including `/reload`, which never
-/// leaves `InWorld`; an `OnExit(InWorld)` saver would miss a reload and race the VM's teardown.
-///
-/// It takes the identity the UI loaded under, which the tail holds because the roster's pick can
-/// be gone by shutdown, and writes unconditionally: the file is composed whole from the live tree,
-/// and the tail does not run for a session whose UI never loaded.
-pub(crate) fn save_now(script: &UiScript, identity: Option<&(String, String)>) {
-    let Some((realm, character)) = identity else {
-        return; // no character loaded under: a capture, a scenario, a test world
-    };
-    let Some(path) = crate::local_state::layout_character_path(realm, character) else {
-        return; // hermetic capture or no state folder: session-only
-    };
-    let body = render(&script.user_placed_layouts());
-    if let Err(e) = crate::local_state::write_atomic(&path, &body) {
-        warn!("layout: cannot write {}: {e}", path.display());
-    }
 }
 
 /// The layout cache's restore, watch and autosave; the plugin owns no session edge, as every

@@ -1,5 +1,4 @@
 use super::*;
-use crate::net::SessionDialect;
 #[test]
 fn independent_limits_short_circuit_without_fabricating_unknown_counts() {
     assert_eq!(
@@ -27,8 +26,7 @@ fn script() -> UiScript {
 fn app() -> (App, crossbeam_channel::Receiver<crate::net::ClientCommand>) {
     let (tx, rx) = crossbeam_channel::unbounded();
     let mut app = App::new();
-    app.insert_resource(SessionDialect::Wrath12340)
-        .init_resource::<Presentation>()
+    app.init_resource::<Presentation>()
         .init_resource::<NativeRolls>()
         .init_resource::<NativeRollTemplates>()
         .init_resource::<Items>()
@@ -225,9 +223,6 @@ fn category_quantity_and_missing_row_are_independent_readiness() {
         let (mut app, rx) = app();
         start(&mut app, category, 0);
         inventory(&mut app);
-        app.world_mut()
-            .resource_mut::<Items>()
-            .set_dialect(SessionDialect::Wrath12340);
         app.update();
         assert_eq!(number(&app, "STARTS"), 0, "catalog absent is unknown");
         app.insert_resource(category_catalog(limit));

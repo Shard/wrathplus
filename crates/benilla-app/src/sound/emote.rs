@@ -5,7 +5,6 @@
 
 use bevy::prelude::*;
 
-use benilla_formats::EmoteSoundCatalog;
 use benilla_protocol::messages::ObjectType;
 
 use crate::entities::{AttachPoints, Creatures};
@@ -20,10 +19,7 @@ use super::kit::{
 };
 use super::{AudioListener, SoundConfig, SoundOutput};
 
-/// The emote-audio catalog (also the chat sender's `/name` → text-id resolver).
-#[derive(Resource)]
-pub(crate) struct EmoteSounds(pub(crate) EmoteSoundCatalog);
-
+pub(crate) use crate::app_core::state::EmoteSounds;
 impl EmoteSounds {
     /// Resolve a `/command` name (case-insensitive) to its EmotesText id.
     pub(crate) fn text_id(&self, name: &str) -> Option<u32> {

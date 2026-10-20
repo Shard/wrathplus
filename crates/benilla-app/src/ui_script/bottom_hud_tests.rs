@@ -264,7 +264,7 @@ fn no_bottom_band_frame_overlaps_a_raised_bar() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     s.run(
@@ -382,7 +382,7 @@ fn the_item_push_card_shares_the_band_with_a_raised_bar_exactly_as_the_reference
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     // The stock `<Model>` card sizes from its file's box: `ForcedBackpackItem.m2` has one 1000 ms
     // non-looping sequence and a 0.02707 x 0.07962 box, in model units.

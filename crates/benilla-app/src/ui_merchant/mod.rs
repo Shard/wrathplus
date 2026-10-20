@@ -29,11 +29,7 @@ const NPC_FLAG_REPAIR: u32 = 0x4000;
 /// The first absolute buyback slot (`BUYBACK_SLOT_START`, slots 69-80).
 const BUYBACK_SLOT_FIRST: u32 = 69;
 
-/// `DurabilityCosts.dbc` and `DurabilityQuality.dbc`, the client's repair prices; absent, every
-/// cost shows 0.
-#[derive(Resource)]
-pub(crate) struct RepairTables(pub(crate) benilla_formats::DurabilityTables);
-
+pub(crate) use crate::app_core::catalogs::RepairTables;
 /// The open vendor and its `SMSG_LIST_INVENTORY` rows, until a close or a disconnect.
 #[derive(Resource, Default)]
 pub(crate) struct MerchantOpen {
@@ -105,6 +101,10 @@ pub(crate) struct UiMerchantPlugin;
 impl Plugin for UiMerchantPlugin {
     fn build(&self, app: &mut App) {
         net::register(app);
+        app.add_systems(
+            Update,
+            end_repair_mode_on_right_press.in_set(crate::target::TargetSlot::RightPress),
+        );
         app.init_resource::<MerchantOpen>()
             .init_resource::<MerchantErrors>()
             .add_systems(

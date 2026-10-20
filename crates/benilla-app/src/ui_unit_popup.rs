@@ -190,10 +190,7 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         for command in &sent {
-            assert!(
-                net.supports(crate::net::SessionDialect::Wrath12340, command),
-                "{command:?}"
-            );
+            assert!(net.supports(command), "{command:?}");
         }
         assert!(command_for(R::ChannelSilenceVoice {
             channel: "x".into(),

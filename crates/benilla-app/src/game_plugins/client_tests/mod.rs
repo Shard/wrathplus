@@ -2,8 +2,10 @@
 //! layer so no lower module names `game_plugins` (APP-CRATE-SPLIT-PLAN, step 0 item 6). One
 //! file per source module, named after its path; each says where its tests came from.
 
+mod cvars;
 mod names_native_pet_tests;
 mod net;
+mod net_apply_motion_seam_tests;
 mod net_apply_seam_tests;
 mod net_capture_replay_tests;
 mod net_handlers;
@@ -35,6 +37,7 @@ mod net_wrath_stream_tests;
 mod net_wrath_vehicle;
 mod net_wrath_world_objects_capture_tests;
 mod script_calls;
+mod shipped_cvars;
 mod spell_native_failure;
 mod target_ring;
 mod ui_arena_team_tests;

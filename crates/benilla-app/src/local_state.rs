@@ -202,7 +202,7 @@ pub(crate) fn screenshots_dir() -> Option<PathBuf> {
     home().map(|h| h.join("Screenshots"))
 }
 
-/// `benilla-config/Diagnostics/`: the stuck-thread sampler's profiles ([`crate::perf::stall`]) and
+/// `benilla-config/Diagnostics/`: the stuck-thread sampler's profiles (`perf::stall`) and
 /// the FPS journal; `None` on a capture run like every path here, so a capture has no sampler.
 pub(crate) fn diagnostics_dir() -> Option<PathBuf> {
     home().map(|h| h.join("Diagnostics"))

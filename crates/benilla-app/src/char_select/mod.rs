@@ -19,8 +19,8 @@ use crate::net::{
     EnteredWorldMessage, LoggedOutMessage,
 };
 
-pub(crate) use crate::app_core::state::{ClientState, Roster};
 pub(crate) use crate::app_core::schedule::InWorldGated;
+pub(crate) use crate::app_core::state::{ClientState, Roster};
 
 /// The character-select subsystem: the state machine + the select screen.
 pub(crate) struct CharSelectPlugin {
@@ -41,8 +41,21 @@ fn publish_world_live(
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `lastCharacterIndex` (`0x402d93`, "0" `0x82e570`, category 4, handle `[0x882674]`), help
+        // "Last character selected": a 0-based row (the selection cell `[0x83856c]` under `"%d"`), so
+        // "0" is the first character. It mirrors [`Roster::pending_index`].
+        same(CVAR_LAST_CHARACTER, "0"),
+    ]
+};
+
 impl Plugin for CharSelectPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.insert_state(self.start)
             .configure_sets(Update, InWorldGated.run_if(in_state(ClientState::InWorld)))
             .init_resource::<Roster>()
@@ -1525,8 +1538,10 @@ mod tests {
             .init_resource::<Roster>()
             .insert_resource(CharPick(tx))
             .insert_resource(match stored {
-                Some(v) => crate::cvars::Cvars::with_value(CVAR_LAST_CHARACTER, v),
-                None => crate::cvars::Cvars::default(),
+                Some(v) => {
+                    crate::cvars::Cvars::with_rows_and_value(&[CVARS], CVAR_LAST_CHARACTER, v)
+                }
+                None => crate::cvars::Cvars::with_rows(&[CVARS]),
             })
             .add_message::<CharListMessage>()
             .add_message::<AppExit>()
@@ -1686,7 +1701,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .init_resource::<Roster>()
-            .init_resource::<crate::cvars::Cvars>()
+            .insert_resource(crate::cvars::Cvars::with_rows(&[CVARS]))
             .insert_resource(CharPick(tx))
             .add_systems(Update, persist_last_character);
         {

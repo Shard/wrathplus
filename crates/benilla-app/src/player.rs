@@ -23,7 +23,7 @@ use benilla_assets::AssetSet;
 use benilla_world::interact::{WorldClick, WorldRightClick};
 use benilla_world::schedule::WorldStage;
 
-mod approach;
+pub(crate) mod approach;
 mod arc;
 mod net;
 // Writes the frame onto the body we drive: pose, `MovementState`, the counter-twist gap.
@@ -52,7 +52,7 @@ pub(crate) mod land;
 mod move_trace;
 mod movement_net;
 mod posture;
-// `pub(crate)`: a remote mover's dead-reckon (`crate::net::motion::remote`) steps through the same
+// `pub(crate)`: a remote mover's dead-reckon (`crate::motion::remote`) steps through the same
 // walk resolve, as the reference runs every mover through one controller.
 pub(crate) mod mover;
 mod scoped_view;
@@ -130,10 +130,7 @@ pub(crate) fn self_controlled(unit_flags: u32) -> bool {
     unit_flags & NOT_SELF_CONTROLLED == 0
 }
 
-/// `UNIT_FLAG_IN_COMBAT`, bit 19 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:564`), read by the
-/// client as `shr reg,0x13; test rl,1`. The local player has no separate combat latch: its two
-/// hardcoded readers (`0x482f70`, `0x4d6038`) and `UnitAffectingCombat("player")` read this bit.
-pub(crate) const UNIT_FLAG_IN_COMBAT: u32 = 0x0008_0000;
+pub(crate) use crate::app_core::state::UNIT_FLAG_IN_COMBAT;
 
 /// `UNIT_FLAG_TAXI_FLIGHT`, bit 20 of `UNIT_FIELD_FLAGS` (vmangos `UnitDefines.h:565`), read by the
 /// client as `shr reg,0x14; test rl,1` at 20 sites with no shared gate, among them
@@ -215,6 +212,8 @@ pub(crate) struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, camera_view::CVARS);
+        crate::cvars::RegisterCvars::register_cvars(app, approach::CVARS);
         // A Wrath reconnect clears the old mover before the new endpoint opens.
         app.world_mut()
             .get_resource_or_init::<crate::app_core::movement::ConnectResets>()

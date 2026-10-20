@@ -73,7 +73,7 @@ pub fn probe(root: &Path, name: &str, steps: &[Step]) -> Option<ProbeOutcome> {
     // root is passed as the survey passes it, so `LoadAddOn` resolves.
     script.register_addons(registry, Some(root.to_path_buf()), None, None);
     super::seat_a_session(&mut script);
-    let _ = crate::ui_script::load_default_ui(&script);
+    let _ = crate::ui_script::load_default_ui(&mut script);
 
     let mut dep_order: Vec<super::LoadedDep> = Vec::new();
     super::load_dependencies(

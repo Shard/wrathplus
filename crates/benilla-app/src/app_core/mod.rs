@@ -3,10 +3,16 @@
 //! state the wire fills. The first piece of the crate split (`docs/APP-CRATE-SPLIT-PLAN.md`,
 //! step 0); the owning modules re-export from their old paths.
 
+pub(crate) mod anim;
+pub(crate) mod catalogs;
+pub(crate) mod chat;
+pub(crate) mod cooldowns;
 pub(crate) mod death;
 pub(crate) mod errors;
 pub(crate) mod group;
 pub(crate) mod loot;
 pub(crate) mod movement;
+pub(crate) mod player;
 pub(crate) mod schedule;
 pub(crate) mod state;
+pub(crate) mod vm_memo;

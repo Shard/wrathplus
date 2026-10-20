@@ -1433,13 +1433,14 @@ mod tests {
 
     /// The count is the assertion: `(GetSpellTabInfo(0)) == nil` holds for a single nil too.
     #[test]
-    fn out_of_range_answers_four_values() {
-        let s = UiScript::new_vanilla().unwrap();
+    fn out_of_range_answers_six_values() {
+        let s = UiScript::new().unwrap();
         for idx in ["0", "1", "99", "-1", "0.5"] {
+            // Build 12340 adds highestRankOffset and highestRankNumSpells (SpellBookFrame.lua:657).
             assert_eq!(
                 s.arity(&format!("GetSpellTabInfo({idx})")).unwrap(),
-                4,
-                "GetSpellTabInfo({idx}) must answer four values"
+                6,
+                "GetSpellTabInfo({idx}) must answer six values"
             );
             assert_eq!(
                 s.eval::<i64>(&format!(

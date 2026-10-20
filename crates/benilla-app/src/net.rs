@@ -22,7 +22,6 @@ use benilla_world::schedule::WorldStage;
 pub(crate) mod apply;
 pub(crate) mod handlers;
 pub(crate) mod io;
-mod motion;
 pub(crate) mod objects;
 pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
@@ -32,24 +31,18 @@ pub(crate) mod wrath_auras;
 pub(crate) mod wrath_exchange_capture;
 pub(crate) mod wrath_instance_control_capture;
 pub(crate) mod wrath_inventory_capture;
-pub(crate) use crate::ui_native::wrath_achievements;
-pub(crate) use crate::ui_native::wrath_equipment_sets;
-pub(crate) use crate::ui_native::wrath_item_refunds;
-pub(crate) use crate::ui_native::wrath_sockets;
 pub(crate) mod wrath_mail_capture;
 pub(crate) mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
-pub(crate) use crate::ui_native::wrath_quests_completed_capture;
+pub(crate) mod wrath_quests_completed_capture;
 pub(crate) mod wrath_achievement_capture;
-pub(crate) use crate::ui_native::wrath_appearance;
+pub(crate) mod wrath_appearance;
 pub(crate) mod wrath_social_lists_capture;
-pub(crate) use crate::ui_native::wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
-pub(crate) use crate::ui_native::wrath_quest_pois;
-mod wrath_arena_lines;
+pub(crate) mod wrath_quest_pois;
 pub(crate) mod wrath_chat_notice_capture;
 pub(crate) mod wrath_battleground_capture;
-pub(crate) use crate::ui_native::wrath_death_capture;
+pub(crate) mod wrath_death_capture;
 pub(crate) mod wrath_session_meta_capture;
 pub(crate) mod wrath_help_capture;
 pub(crate) mod wrath_refer_friend_capture;
@@ -65,50 +58,39 @@ pub(crate) mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
-pub(crate) use crate::ui_native::wrath_threat;
-pub(crate) use crate::ui_native::wrath_ui_timer_capture;
+pub(crate) mod wrath_movie;
+pub(crate) mod wrath_pet_name_capture;
+pub(crate) mod wrath_threat;
+pub(crate) mod wrath_ui_timer_capture;
+pub(crate) mod wrath_who_capture;
 
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
 pub(crate) use handlers::NetHandlerApp;
 
 pub(crate) use io::LoginRequest;
-use motion::{
-    drain_pending_moves, extrapolate_remote_units, ground_clamp_creatures, mark_swimming_creatures,
-    sample_splines,
-};
+// The movement model's apply and its movers live in `crate::motion` (`docs/APP-CRATE-SPLIT-PLAN.md`,
+// item 3 part A); these paths keep their callers compiling.
 // `pub(crate)`: `creature_anim` reads the shuffle latch it produces, and a test runs both.
-pub(crate) use motion::drive_display_facing;
-pub(crate) use motion::{
+pub(crate) use crate::motion::drive_display_facing;
+pub(crate) use crate::motion::{
     ground_derived, grounded_y, jump_seed, CreatureSwimming, FacingStep, RemoteMotion, Spline,
     SplineStopped, UnitMoveModes,
 };
 // Only the ground-census probe reads this, so a build without the instruments leaves it unused.
 // Not a `cfg`: seam knowledge lives in three fixed places, and this file is not one of them.
 #[allow(unused_imports)]
-pub(crate) use motion::GroundClamped;
+pub(crate) use crate::motion::GroundClamped;
+
+/// The drain and the self-player tag, which every mover in `crate::motion` runs after.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct NetApply;
 
 /// The net subsystem: spawns the background IO threads and drives the per-frame event drain.
 pub(crate) struct NetPlugin {
     /// `false` in capture mode ([`crate::capture`]): the channels exist, sends are no-ops, and no
     /// IO thread runs.
     pub(crate) connect: bool,
-}
-
-/// The wire/snapshot dialect fixed when the app is built. It is copied into every login request,
-/// so a changed environment cannot silently cross an asset/network dialect boundary mid-session.
-#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SessionDialect {
-    Vanilla5875,
-    Wrath12340,
-}
-
-impl SessionDialect {
-    fn from_profile(profile: &benilla_formats::DataProfile) -> Self {
-        match profile {
-            benilla_formats::DataProfile::Wrath { .. } => Self::Wrath12340,
-        }
-    }
 }
 
 /// This process has no IO thread ([`NetPlugin::connect`] false); `crate::preflight` announces it.
@@ -122,19 +104,8 @@ impl Plugin for NetPlugin {
         crate::query_cache::register::<crate::names::NameCache>(app);
         crate::query_cache::register::<crate::go_templates::GameObjectTemplates>(app);
         crate::query_cache::register::<crate::items::Items>(app);
-        let profile = benilla_formats::DataProfile::from_env()
+        benilla_formats::DataProfile::from_env()
             .expect("valid explicit WOW_CLIENT_PROFILE/WOW_LOCALE network configuration");
-        let dialect = SessionDialect::from_profile(&profile);
-        if let Some(snapshot) = app
-            .world()
-            .get_resource::<benilla_assets::ClientDataProfile>()
-        {
-            assert_eq!(
-                dialect,
-                SessionDialect::from_profile(&snapshot.0),
-                "network backend/data snapshot dialect mismatch"
-            );
-        }
         let handles = io::spawn_net(self.connect);
         if !self.connect {
             app.insert_resource(NetOffline);
@@ -164,10 +135,8 @@ impl Plugin for NetPlugin {
         wrath_achievement_capture::register(app);
         wrath_appearance::register(app);
         wrath_social_lists_capture::register(app);
-        wrath_raid_browser_feed::register(app);
         wrath_calendar_capture::register(app);
         wrath_quest_pois::register(app);
-        wrath_arena_lines::register(app);
         wrath_chat_notice_capture::register(app);
         wrath_battleground_capture::register(app);
         wrath_death_capture::register(app);
@@ -175,7 +144,7 @@ impl Plugin for NetPlugin {
         wrath_help_capture::register(app);
         wrath_refer_friend_capture::register(app);
         wrath_world_objects_capture::register(app);
-        crate::ui_native::wrath_movie::register(app);
+        wrath_movie::register(app);
         wrath_session_misc_capture::register(app);
         wrath_inspect_capture::register(app);
         wrath_char_service_capture::register(app);
@@ -189,8 +158,7 @@ impl Plugin for NetPlugin {
         wrath_runes::register(app);
         wrath_threat::register(app);
         crate::names::net::register(app);
-        app.insert_resource(dialect)
-            .insert_resource(NetEvents(handles.events))
+        app.insert_resource(NetEvents(handles.events))
             .insert_resource(handles.commands)
             .insert_resource(CommandEndpoints(handles.command_endpoints))
             .insert_resource(CharPick(handles.pick))
@@ -242,23 +210,13 @@ impl Plugin for NetPlugin {
             .add_message::<DisconnectedMessage>()
             .add_systems(
                 Update,
+                // The movers follow in `crate::motion::MotionPlugin`, chained after this set.
                 (
-                    apply_net_updates,
+                    apply_net_updates.in_set(crate::app_core::schedule::NetDrain),
                     tag_self_player,
-                    sample_splines,
-                    // Swim state from the water at the feet (the wire never carries it for
-                    // creatures), before the clamp so a swimmer is exempt the same frame.
-                    mark_swimming_creatures,
-                    // After the raw spline Z: re-ground walkers (the client discards a ground
-                    // spline's Z); a swimmer keeps its wire Z.
-                    ground_clamp_creatures,
-                    // Due relays fire before the extrapolator advances the fresh state.
-                    drain_pending_moves,
-                    extrapolate_remote_units,
-                    // After the movers, so a turn reads the goal's position this frame.
-                    drive_display_facing,
                 )
                     .chain()
+                    .in_set(NetApply)
                     .in_set(WorldStage::Net),
                 // `ui_session::feed_interact_npc` seats itself inside this chain, after
                 // `apply_net_updates` and before `drive_display_facing`, so the `"npc"` token is
@@ -266,7 +224,11 @@ impl Plugin for NetPlugin {
             )
             // Not part of the movement chain above: one send on the world-enter message.
             .add_systems(Update, send_query_time.in_set(WorldStage::Net))
-            .add_systems(Update, population_pulse.in_set(WorldStage::Net));
+            .add_systems(Update, population_pulse.in_set(WorldStage::Net))
+            // Last, so its handlers follow every one above on the same event. Here rather than in
+            // `game_plugins` while net and the movers share a crate: an app built on `NetPlugin` alone
+            // keeps the whole movement chain.
+            .add_plugins(crate::motion::MotionPlugin);
     }
 }
 
@@ -626,56 +588,46 @@ fn activate_command_endpoint(In(event): In<SessionEvent>, world: &mut World) {
 }
 
 impl NetCommands {
-    /// Commands the selected dialect can currently encode without borrowing another build's wire.
-    /// Wrath admits its implemented on-foot, lifecycle, item, loot, melee, query, action-bar and
-    /// cast codecs.
-    pub(crate) fn supports(&self, dialect: SessionDialect, command: &ClientCommand) -> bool {
-        match dialect {
-            SessionDialect::Vanilla5875 => true,
-            SessionDialect::Wrath12340 => {
-                if let ClientCommand::Move {
-                    kind,
-                    flags,
-                    pos,
-                    orientation,
-                    pitch,
-                    fall_time,
-                    jump,
-                    transport,
-                } = command
-                {
-                    return *pitch == 0.0
-                        && transport.is_none()
-                        && benilla_protocol::wrath_ground::encode_on_foot(
-                            u32::from(kind.opcode()),
-                            1,
-                            *flags,
-                            0,
-                            *pos,
-                            *orientation,
-                            *fall_time,
-                            jump.map(|jump| benilla_protocol::wrath_ground::FallTail {
-                                vertical_speed: jump.zspeed,
-                                sin_angle: jump.sin_angle,
-                                cos_angle: jump.cos_angle,
-                                horizontal_speed: jump.xy_speed,
-                            }),
-                        )
-                        .is_ok();
-                }
-                // Route ownership is the source of truth. Keep value-level validation separate
-                // from admission so adding a native writer cannot silently strand its producer.
-                match command {
-                    ClientCommand::AutostoreLootItem { slot } if *slot > 17 => false,
-                    ClientCommand::SetSheathed { state } if *state > 2 => false,
-                    ClientCommand::StandStateChange { state }
-                        if !matches!(state, 0 | 1 | 3 | 8) =>
-                    {
-                        false
-                    }
-                    _ => io::wrath::has_writer_route(command),
-                }
-            }
+    /// Commands the session can currently encode: its implemented on-foot, lifecycle, item, loot,
+    /// melee, query, action-bar and cast codecs.
+    pub(crate) fn supports(&self, command: &ClientCommand) -> bool {
+        if let ClientCommand::Move {
+            kind,
+            flags,
+            pos,
+            orientation,
+            pitch,
+            fall_time,
+            jump,
+            transport,
+        } = command
+        {
+            return *pitch == 0.0
+                && transport.is_none()
+                && benilla_protocol::wrath_ground::encode_on_foot(
+                    u32::from(kind.opcode()),
+                    1,
+                    *flags,
+                    0,
+                    *pos,
+                    *orientation,
+                    *fall_time,
+                    jump.map(|jump| benilla_protocol::wrath_ground::FallTail {
+                        vertical_speed: jump.zspeed,
+                        sin_angle: jump.sin_angle,
+                        cos_angle: jump.cos_angle,
+                        horizontal_speed: jump.xy_speed,
+                    }),
+                )
+                .is_ok();
+        }
+        // Route ownership is the source of truth. Keep value-level validation separate
+        // from admission so adding a native writer cannot silently strand its producer.
+        match command {
+            ClientCommand::AutostoreLootItem { slot } if *slot > 17 => false,
+            ClientCommand::SetSheathed { state } if *state > 2 => false,
+            ClientCommand::StandStateChange { state } if !matches!(state, 0 | 1 | 3 | 8) => false,
+            _ => io::wrath::has_writer_route(command),
         }
     }
 }
@@ -872,7 +824,6 @@ const RESYNC_AFTER: Duration = Duration::from_secs(3600);
 fn send_query_time(
     mut entered: MessageReader<EnteredWorldMessage>,
     commands: Res<NetCommands>,
-    dialect: Res<SessionDialect>,
     clock: Res<ServerWallClock>,
     status: Res<NetStatus>,
     mut asked_at: Local<Option<Instant>>,
@@ -881,7 +832,7 @@ fn send_query_time(
     // Only while connected; the world-enter send covers a reconnect.
     let due =
         status.connected && clock.stale() && asked_at.is_none_or(|t| t.elapsed() >= RESYNC_AFTER);
-    if (entering || due) && commands.supports(*dialect, &ClientCommand::QueryTime) {
+    if (entering || due) && commands.supports(&ClientCommand::QueryTime) {
         *asked_at = Some(Instant::now());
         let _ = commands.0.send(ClientCommand::QueryTime);
     }
@@ -1106,8 +1057,9 @@ pub(crate) static CAST_TRACE: std::sync::LazyLock<bool> =
 
 /// A message to the server through the write thread, carrying any pose it needs.
 #[derive(Debug)]
-// The 1.12-only variants and fields go with `SessionDialect::Vanilla5875` (Vanilla removal step 4);
-// the deleted 1.12 writer was their last reader.
+// Some variants and fields only the deleted 1.12 writer read (`SendMail`, the mail ids, the BG
+// join's fields, …): their producers still build them. Pruning them is a follow-up to Vanilla
+// removal step 4.
 #[allow(dead_code)]
 pub(crate) enum ClientCommand {
     /// A self-movement packet. Each tail is written iff its flag is set (`JUMPING`, `SWIMMING`,
@@ -1893,7 +1845,7 @@ pub(crate) enum ClientCommand {
         target: u64,
     },
     /// `CMSG_BEGIN_TRADE`: accept a request; the server sends `OPEN_WINDOW` to both. Sent only by
-    /// [`crate::ui_trade::answer_trade_request`].
+    /// `ui_trade::answer_trade_request`.
     BeginTrade,
     /// `CMSG_IGNORE_TRADE` (`0x119`): the refusal ladder's ignore leg (`0x4bf759` to `0x5d41c0`);
     /// vmangos answers the initiator `TRADE_STATUS_IGNORE_YOU`.
@@ -2448,7 +2400,7 @@ pub(crate) struct WrathCharActionResultMessage {
 }
 
 /// `SMSG_CHARACTER_LOGIN_FAILED`: the picked character was refused. `result` is the raw reason,
-/// read by [`crate::char_select::char_login_refusal_text`].
+/// read by `char_select::char_login_refusal_text`.
 #[derive(Message, Clone, Copy)]
 pub(crate) struct CharacterLoginFailedMessage {
     pub(crate) result: u8,
@@ -2727,38 +2679,23 @@ mod tests {
                 lag_ms: 2_210,
             },
         ] {
-            assert!(net.supports(SessionDialect::Wrath12340, &command));
+            assert!(net.supports(&command));
         }
         for command in [
             ClientCommand::SetSheathed { state: 3 },
             ClientCommand::StandStateChange { state: 2 },
             ClientCommand::AutostoreLootItem { slot: 18 },
         ] {
-            assert!(!net.supports(SessionDialect::Wrath12340, &command));
-            assert!(net.supports(SessionDialect::Vanilla5875, &command));
+            assert!(!net.supports(&command));
         }
-    }
-
-    #[test]
-    fn the_default_profile_selects_the_wrath_session() {
-        assert_eq!(
-            SessionDialect::from_profile(&benilla_formats::DataProfile::default()),
-            SessionDialect::Wrath12340
-        );
-        assert_eq!(
-            SessionDialect::from_profile(&benilla_formats::DataProfile::Wrath {
-                locale: "enUS".into()
-            }),
-            SessionDialect::Wrath12340
-        );
     }
 
     /// A re-create of a live object notifies like a delta.
     #[test]
     fn the_merge_emits_one_edge_per_moved_dword_and_none_for_a_first_create() {
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::UnitHealth);
-        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::UnitLevel);
         use benilla_protocol::messages::ObjectType;
 
@@ -2775,8 +2712,11 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)])
-                .into_created(ObjectType::Unit),
+            ObjectFields::from_native_pairs(
+                benilla_protocol::messages::FieldLayout::Wrath12340,
+                &[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)],
+            )
+            .into_created(ObjectType::Unit),
         );
         assert!(drain(&mut world).is_empty(), "a create is not an edge");
 
@@ -2784,7 +2724,10 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)]),
+            ObjectFields::from_native_pairs(
+                benilla_protocol::messages::FieldLayout::Wrath12340,
+                &[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)],
+            ),
         );
         assert_eq!(
             drain(&mut world),
@@ -2794,7 +2737,7 @@ mod tests {
                 kind: ObjectType::Unit,
                 field: benilla_protocol::messages::Field::UnitHealth,
                 offset: 0,
-                layout: benilla_protocol::messages::FieldLayout::Vanilla5875,
+                layout: benilla_protocol::messages::FieldLayout::Wrath12340,
                 old: 100,
                 new: 0,
             }],
@@ -2805,7 +2748,11 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 10)]).into_created(ObjectType::Unit),
+            ObjectFields::from_native_pairs(
+                benilla_protocol::messages::FieldLayout::Wrath12340,
+                &[(FIELD_UNIT_LEVEL, 10)],
+            )
+            .into_created(ObjectType::Unit),
         );
         let edges = drain(&mut world);
         assert_eq!(edges.len(), 1);
@@ -2839,56 +2786,28 @@ mod tests {
             Field::PlayerSkillInfo11,
         ];
         let entity = Entity::PLACEHOLDER;
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            for (kind, fields) in [
-                (ObjectType::Unit, unit_fields.as_slice()),
-                (ObjectType::Player, player_fields.as_slice()),
-                (ObjectType::GameObject, [Field::GameobjectState].as_slice()),
-                (ObjectType::Corpse, [Field::CorpseDynamicFlags].as_slice()),
-            ] {
-                for &field in fields {
-                    let Some(span) = layout.resolve(field) else {
-                        continue;
-                    };
-                    let mut store = ObjectFields::from_native_pairs(layout, &[(span.index, 1)])
-                        .into_created(kind);
-                    let delta = ObjectFields::from_native_pairs(layout, &[(span.index, 2)]);
-                    let mut edges = Vec::new();
-                    merge_store_fields(&mut store, delta, entity, 42, |edge| edges.push(edge));
-                    assert_eq!(edges.len(), 1, "{layout:?}/{field:?}");
-                    let edge = edges[0];
-                    assert!(edge.named_field(field));
-                    assert_eq!((edge.field, edge.offset), (field, 0));
-                    assert_eq!((edge.old, edge.new), (1, 2));
-                    assert!(FieldEdges::semantic_of(&[(42, field, 0)]).moved_field(42, field, 0));
-                }
-            }
-            for field in [
-                Field::UnitAura,
-                Field::UnitAuraFlags,
-                Field::UnitAuraApplications,
-            ] {
+        let layout = FieldLayout::Wrath12340;
+        for (kind, fields) in [
+            (ObjectType::Unit, unit_fields.as_slice()),
+            (ObjectType::Player, player_fields.as_slice()),
+            (ObjectType::GameObject, [Field::GameobjectBytes1].as_slice()),
+            (ObjectType::Corpse, [Field::CorpseDynamicFlags].as_slice()),
+        ] {
+            for &field in fields {
                 let Some(span) = layout.resolve(field) else {
                     continue;
                 };
-                for offset in [0, span.width - 1] {
-                    let (resolved, member) = layout
-                        .field_at(ObjectType::Player, span.index + offset)
-                        .unwrap();
-                    let edge = FieldChanged {
-                        entity,
-                        guid: 42,
-                        kind: ObjectType::Player,
-                        field: resolved,
-                        offset: member,
-                        layout,
-                        old: 1,
-                        new: 2,
-                    };
-                    assert_eq!(edge.unit_slot(field, span.width), Some(offset));
-                    assert_eq!(edge.unit_slot(field, offset), None);
-                    assert!(!edge.named_field(Field::UnitHealth));
-                }
+                let mut store =
+                    ObjectFields::from_native_pairs(layout, &[(span.index, 1)]).into_created(kind);
+                let delta = ObjectFields::from_native_pairs(layout, &[(span.index, 2)]);
+                let mut edges = Vec::new();
+                merge_store_fields(&mut store, delta, entity, 42, |edge| edges.push(edge));
+                assert_eq!(edges.len(), 1, "{layout:?}/{field:?}");
+                let edge = edges[0];
+                assert!(edge.named_field(field));
+                assert_eq!((edge.field, edge.offset), (field, 0));
+                assert_eq!((edge.old, edge.new), (1, 2));
+                assert!(FieldEdges::semantic_of(&[(42, field, 0)]).moved_field(42, field, 0));
             }
         }
     }
@@ -2896,20 +2815,20 @@ mod tests {
     #[test]
     fn semantic_edge_keys_disambiguate_overlapping_classes_and_array_members() {
         use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-        // Vanilla corpse flags overlap a unit word: semantic keys must not alias them.
-        let layout = FieldLayout::Vanilla5875;
+        // Corpse flags overlap a unit word: semantic keys must not alias them.
+        let layout = FieldLayout::Wrath12340;
         let index = layout.resolve(Field::CorpseDynamicFlags).unwrap().index;
         let (unit_field, _) = layout.field_at(ObjectType::Unit, index).unwrap();
         assert_ne!(unit_field, Field::CorpseDynamicFlags);
         let edges = FieldEdges::semantic_of(&[
             (42, Field::CorpseDynamicFlags, 0),
-            (42, Field::UnitAura, 47),
+            (42, Field::PlayerExploredZones1, 127),
         ]);
         assert!(!edges.moved_field(42, unit_field, 0));
         assert!(!edges.moved_field(43, Field::CorpseDynamicFlags, 0));
-        assert!(edges.moved_field(42, Field::UnitAura, 47));
-        assert!(!edges.moved_field(42, Field::UnitAura, 46));
-        assert!(!edges.moved_field(42, Field::UnitAuraFlags, 0));
+        assert!(edges.moved_field(42, Field::PlayerExploredZones1, 127));
+        assert!(!edges.moved_field(42, Field::PlayerExploredZones1, 126));
+        assert!(!edges.moved_field(42, Field::PlayerSkillInfo11, 0));
     }
 
     /// Login env vars alone do not make a run unattended: a person's launch line sets them too.

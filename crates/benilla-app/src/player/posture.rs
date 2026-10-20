@@ -15,7 +15,6 @@ pub(super) fn update(
     body: &BodyQuery,
     binds: &crate::bindings::BindingsState,
     net: &NetCommands,
-    dialect: crate::net::SessionDialect,
     sheath: &mut MessageWriter<crate::creature_anim::SheathRequest>,
     asks: &mut MessageReader<StandStateRequest>,
     server: &mut MessageReader<super::ServerStandState>,
@@ -88,9 +87,9 @@ pub(super) fn update(
         let command = ClientCommand::StandStateChange {
             state: u32::from(s),
         };
-        // A volunteered state is one transaction: if this dialect cannot encode its packet, do
+        // A volunteered state is one transaction: if this session cannot encode its packet, do
         // not publish either the prediction or the setter's forced local sheath change.
-        if net.supports(dialect, &command) {
+        if net.supports(&command) {
             move_trace::posture("commit", s, stand_state, player.move_flags());
             // `0x5ed430` sends at `0x5ed501`, then calls the local apply at `0x5ed53f`.
             let _ = net.0.send(command);
@@ -184,7 +183,7 @@ mod setter_tests {
     use crossbeam_channel::{unbounded, Receiver};
 
     use super::{predict, update};
-    use crate::net::{Embodied, NetCommands, ObjectStore, SessionDialect};
+    use crate::net::{Embodied, NetCommands, ObjectStore};
     use crate::player::{BodyQuery, ClientCommand, Player, ServerStandState, StandStateRequest};
 
     #[derive(Resource)]
@@ -195,7 +194,6 @@ mod setter_tests {
         body: BodyQuery,
         binds: Res<crate::bindings::BindingsState>,
         net: Res<crate::net::NetCommands>,
-        dialect: Res<SessionDialect>,
         moving: Res<Moving>,
         mut sheath: MessageWriter<crate::creature_anim::SheathRequest>,
         mut asks: MessageReader<StandStateRequest>,
@@ -206,7 +204,6 @@ mod setter_tests {
             &body,
             &binds,
             &net,
-            *dialect,
             &mut sheath,
             &mut asks,
             &mut server,
@@ -215,17 +212,12 @@ mod setter_tests {
         );
     }
 
-    fn world(
-        dialect: SessionDialect,
-        stand_state: u32,
-        moving: bool,
-    ) -> (App, Receiver<ClientCommand>) {
+    fn world(stand_state: u32, moving: bool) -> (App, Receiver<ClientCommand>) {
         let (tx, rx) = unbounded();
         let mut app = App::new();
         app.init_resource::<Player>()
             .init_resource::<crate::bindings::BindingsState>()
             .insert_resource(NetCommands(tx))
-            .insert_resource(dialect)
             .insert_resource(Moving(moving))
             .add_message::<StandStateRequest>()
             .add_message::<ServerStandState>()
@@ -271,12 +263,12 @@ mod setter_tests {
 
     #[test]
     fn wrath_qualified_posture_commits_movement_stand_and_requested_sit() {
-        let (mut moving, move_rx) = world(SessionDialect::Wrath12340, 1, true);
+        let (mut moving, move_rx) = world(1, true);
         moving.update();
         assert_eq!(stand_change(&move_rx), Some(0));
         assert_eq!(moving.world().resource::<Player>().stand_pending, Some(0));
 
-        let (mut sitting, sit_rx) = world(SessionDialect::Wrath12340, 0, false);
+        let (mut sitting, sit_rx) = world(0, false);
         sitting
             .world_mut()
             .write_message(StandStateRequest { state: 1 });
@@ -296,7 +288,7 @@ mod setter_tests {
 
     #[test]
     fn wrath_server_stand_echo_still_applies_locally_without_a_command() {
-        let (mut app, rx) = world(SessionDialect::Wrath12340, 0, false);
+        let (mut app, rx) = world(0, false);
         app.world_mut().write_message(ServerStandState { state: 1 });
         app.update();
         assert_eq!(stand_change(&rx), None);

@@ -94,6 +94,52 @@ impl crate::script::UiScript {
     pub fn take_focus_request(&mut self) -> Option<u64> {
         self.model_mut().focus_request.take()
     }
+
+    /// Publish `ChrClasses.dbc`'s `(file name, male name, female name)` rows, in id order, for
+    /// `FillLocalizedClassList`.
+    pub fn set_localized_class_names(&mut self, names: Vec<(String, String, String)>) {
+        self.lua.set_app_data(ClassNames(names));
+    }
+}
+
+#[derive(Default)]
+struct ClassNames(Vec<(String, String, String)>);
+
+/// `0xbd0c94`: the selection colours by reaction rank 0 (hated) to 7 (exalted), as `(r, g, b)`;
+/// `0xbd0c8c`, the friendly player's blue.
+const REACTION_COLORS: [(f64, f64, f64); 8] = [
+    (1.0, 0.0, 0.0),
+    (1.0, 0.0, 0.0),
+    (1.0, 128.0 / 255.0, 0.0),
+    (1.0, 1.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, 1.0, 0.0),
+];
+const FRIENDLY_PLAYER_COLOR: (f64, f64, f64) = (0.0, 0.0, 1.0);
+
+/// `0x521bf0` with no party or friend tint, as `UnitSelectionColor` asks it: a player-controlled
+/// unit is red while either side can attack the other (`0x729740`), its reaction colour while
+/// PvP-flagged, else blue; any other unit its reaction colour; no unit blue. Labelled: benilla's
+/// `can_attack` answers both directions alike, so the native's one-way yellow and blue legs fold
+/// into red, and the sanctuary terms (`UNIT_FIELD_BYTES_2` `0x08`) are not modelled.
+fn selection_color(unit: Option<&super::UnitState>) -> (f64, f64, f64) {
+    let reaction = |u: &super::UnitState| REACTION_COLORS[usize::from(u.reaction.clamp(1, 8) - 1)];
+    match unit.filter(|u| u.exists) {
+        None => FRIENDLY_PLAYER_COLOR,
+        Some(u) if u.player_controlled => {
+            if u.can_attack {
+                REACTION_COLORS[0]
+            } else if u.pvp && u.reaction != 0 {
+                reaction(u)
+            } else {
+                FRIENDLY_PLAYER_COLOR
+            }
+        }
+        Some(u) if u.reaction != 0 => reaction(u),
+        Some(_) => REACTION_COLORS[3],
+    }
 }
 
 pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -133,6 +179,59 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
                 u.has_object && u.dynamic_flags & UNIT_DYNFLAG_TAPPED_BY_ALL_THREAT_LIST != 0
             })?;
             Ok(flag(hit))
+        })?,
+    )?;
+    // UnitSelectionColor(unit) (`0x60da00`): r, g, b, a of `0x521bf0`'s colour; a non-string
+    // raises.
+    g.set(
+        "UnitSelectionColor",
+        lua.create_function(|lua, token: Value| {
+            let Value::String(token) = token else {
+                return Err(mlua::Error::runtime("Usage: UnitSelectionColor(\"unit\")"));
+            };
+            let token = token.to_str()?.to_string();
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let (r, g, b) = selection_color(model.unit(&token));
+            Ok((r, g, b, 1.0))
+        })?,
+    )?;
+    // GetNumFriends() (`0x6b4060`): the friend count, then how many are online; 0, 0 without a
+    // list.
+    g.set(
+        "GetNumFriends",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let friends = &model.social.friends;
+            Ok((
+                friends.len() as i64,
+                friends.iter().filter(|f| f.connected).count() as i64,
+            ))
+        })?,
+    )?;
+    // FillLocalizedClassList(classTable[, isFemale]) (`0x60a510`, bound outside the main table at
+    // `0xad2718`): every class's file name keyed to its localized name; answers the table.
+    g.set(
+        "FillLocalizedClassList",
+        lua.create_function(|lua, (table, female): (Value, Value)| {
+            let Value::Table(table) = table else {
+                return Err(mlua::Error::runtime(
+                    "Usage: FillLocalizedClassList(classTable[, isFemale])",
+                ));
+            };
+            let female = !matches!(female, Value::Nil | Value::Boolean(false));
+            if let Some(names) = lua.app_data_ref::<ClassNames>() {
+                for (file, male_name, female_name) in &names.0 {
+                    table.set(
+                        file.as_str(),
+                        if female {
+                            female_name.as_str()
+                        } else {
+                            male_name.as_str()
+                        },
+                    )?;
+                }
+            }
+            Ok(table)
         })?,
     )?;
     // FocusUnit(unit) (`0x522480`) focuses the unit a token names, and nothing for one that names
@@ -395,6 +494,51 @@ mod tests {
         assert_eq!(s.take_focus_request(), None, "taken once");
         s.run("ClearFocus()").unwrap();
         assert_eq!(s.take_focus_request(), Some(0));
+    }
+
+    #[test]
+    fn selection_colour_friends_and_class_names_follow_build_12340() {
+        use crate::script::social::{FriendInfo, SocialState};
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let unit = |reaction, player_controlled, can_attack| UnitState {
+            exists: true,
+            reaction,
+            player_controlled,
+            can_attack,
+            ..Default::default()
+        };
+        s.set_unit("target", Some(unit(2, false, true)));
+        s.set_unit("focus", Some(unit(5, true, false)));
+        s.set_unit("mouseover", Some(unit(5, true, true)));
+        for check in [
+            "local r, g, b, a = UnitSelectionColor('target') return r == 1 and g == 0 and b == 0 and a == 1",
+            "local r, g, b = UnitSelectionColor('focus') return r == 0 and g == 0 and b == 1",
+            "local r, g, b = UnitSelectionColor('mouseover') return r == 1 and g == 0 and b == 0",
+            "local r, g, b = UnitSelectionColor('party4') return r == 0 and g == 0 and b == 1",
+        ] {
+            assert!(s.eval::<bool>(check).unwrap(), "{check}");
+        }
+        assert!(s.run("UnitSelectionColor()").is_err());
+        let friend = |name: &str, connected| FriendInfo {
+            name: name.into(),
+            connected,
+            ..Default::default()
+        };
+        s.set_social(SocialState {
+            friends: vec![friend("Alia", true), friend("Brog", false)],
+            ..Default::default()
+        });
+        assert!(s
+            .eval::<bool>("local n, on = GetNumFriends() return n == 2 and on == 1")
+            .unwrap());
+        s.set_localized_class_names(vec![("PRIEST".into(), "Priest".into(), "Priestess".into())]);
+        assert!(s
+            .eval::<bool>(
+                "local m, f = FillLocalizedClassList({}), FillLocalizedClassList({}, true) \
+                 return m.PRIEST == 'Priest' and f.PRIEST == 'Priestess'"
+            )
+            .unwrap());
+        assert!(s.run("FillLocalizedClassList(1)").is_err());
     }
 
     #[test]

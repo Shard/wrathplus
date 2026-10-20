@@ -6,28 +6,20 @@
 //! Labelled: a member is never shown ignored or a friend; `unknown_64`/`flag_8c` read 0; the
 //! totals are the listed counts.
 use crate::net::wrath_social_lists_capture::NativeRaidBrowser;
+pub(crate) use crate::net::wrath_social_lists_capture::RaidBrowser;
 use crate::net::{ClientCommand, NetCommands};
-use benilla_protocol::wrath_raid_browser::{Command, Group, Packet, Player};
+#[cfg(test)]
+use benilla_protocol::wrath_raid_browser::Group;
+use benilla_protocol::wrath_raid_browser::{Command, Packet, Player};
 use benilla_ui::script::{
     ScriptDialect, UiScript, WrathRaidBrowserGroup, WrathRaidBrowserMember,
     WrathRaidBrowserRequest, WrathRaidBrowserStats, WrathRaidBrowserView,
 };
 use bevy::prelude::*;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
-#[derive(Resource, Default)]
-pub(crate) struct RaidBrowser {
-    dungeon: u32,
-    groups: BTreeMap<u64, Group>,
-    players: BTreeMap<u64, Player>,
-    dirty: bool,
-    /// The name cache's generation at the last publish, for names that land later.
-    names_seen: u64,
-}
-
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<RaidBrowser>().add_systems(
+    app.add_systems(
         Update,
         feed_raid_browser
             .in_set(crate::ui_script::UiFeed)
@@ -203,11 +195,6 @@ fn feed_raid_browser(
     }
     script.set_wrath_raid_browser(Arc::new(shown));
     script.queue_event("UPDATE_LFG_LIST", Vec::new());
-}
-
-/// A session boundary forgets the list.
-pub(crate) fn clear(browser: &mut RaidBrowser) {
-    *browser = RaidBrowser::default();
 }
 
 #[cfg(test)]

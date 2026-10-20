@@ -3,7 +3,7 @@
 //! getters over them read the client's own state, which Lua cannot reach. So a global an addon
 //! assigns under one of benilla's old host names is a global no getter reads.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::{ActionState, AuraState, UiScript};
 
 /// Each old host name, the Lua that writes it, and a probe of every answer it once fed. The probe
@@ -144,8 +144,8 @@ fn rewinding_the_old_clock_name_leaves_the_session_clock_running() {
 /// string each, never nil (`0x48a0a0`..`0x48a100`); `GetZonePVPInfo` three values, isArena 1 or
 /// nil (`0x48d540`); `GetGameTime` two numbers (`0x515ee0`); `GetTime` one (`0x515ea0`).
 #[test]
-fn the_getters_answer_the_pushed_state_in_their_1_12_shapes() {
-    let mut s = vanilla_script();
+fn the_getters_answer_the_pushed_state_in_their_12340_shapes() {
+    let mut s = script();
     for call in [
         "GetZoneText()",
         "GetRealZoneText()",
@@ -155,7 +155,8 @@ fn the_getters_answer_the_pushed_state_in_their_1_12_shapes() {
     ] {
         assert_eq!(s.arity(call).unwrap(), 1, "{call}");
     }
-    assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 3);
+    // Build 12340 (`0x51ba50`): nothing without territory context.
+    assert_eq!(s.arity("GetZonePVPInfo()").unwrap(), 0);
     assert_eq!(s.arity("GetGameTime()").unwrap(), 2);
     assert_eq!(
         s.eval::<String>(
@@ -195,10 +196,11 @@ fn the_getters_answer_the_pushed_state_in_their_1_12_shapes() {
             "Stormwind City".into()
         )
     );
+    // Build 12340 (`0x51ba50`): ordinary territory answers type, nil, faction.
     assert_eq!(
-        s.eval::<(String, String, f64)>("return GetZonePVPInfo()")
+        s.eval::<(String, Option<String>, String)>("return GetZonePVPInfo()")
             .unwrap(),
-        ("friendly".into(), "Alliance".into(), 1.0)
+        ("friendly".into(), None, "Alliance".into())
     );
     assert_eq!(
         s.eval::<(f64, f64)>("return GetGameTime()").unwrap(),

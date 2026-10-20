@@ -12,7 +12,7 @@ use benilla_protocol::ObjectFields;
 use benilla_ui::script::{LastOnline, UnitGuild};
 use bevy::prelude::*;
 
-use crate::net::{ClientCommand, NetCommands, SessionDialect};
+use crate::net::{ClientCommand, NetCommands};
 use crate::query_cache::QueryCache;
 use crate::ui_script::{UiFeed, UiInput};
 
@@ -88,8 +88,6 @@ pub(crate) struct GuildMemberNotify(pub(crate) bool);
 /// The guild session mirror: filled by the packet handlers, read by the feed, reset on disconnect.
 #[derive(Resource, Default)]
 pub(crate) struct GuildState {
-    /// Selected wire dialect; `None` is the vanilla default used by isolated tests.
-    dialect: Option<SessionDialect>,
     /// Our `PLAYER_GUILDID` (field 191), `0` when guildless; `IsInGuild` reads it, not the roster.
     guild_id: u32,
     /// Our `PLAYER_GUILDRANK` (field 192), 0-based, `0` = guild master.
@@ -185,18 +183,13 @@ impl GuildState {
     fn request_identity(&self, guild_id: u32, commands: &NetCommands) {
         if guild_id != 0 {
             let command = ClientCommand::GuildQuery { guild_id };
-            let dialect = self.dialect.unwrap_or(SessionDialect::Wrath12340);
-            if !commands.supports(dialect, &command) {
+            if !commands.supports(&command) {
                 return;
             }
             self.identities.get_or_ask(guild_id, || {
                 let _ = commands.0.send(command);
             });
         }
-    }
-
-    fn set_dialect(&mut self, dialect: SessionDialect) {
-        self.dialect = Some(dialect);
     }
 
     /// A guild's identity if we hold a real one; `None` while in flight and for no such guild.
@@ -588,9 +581,7 @@ pub(crate) mod net {
     /// cache goes too, where the reference keeps it in `guildcache.wdb`, because a renamed guild
     /// would otherwise show its old name.
     fn on_session_end(In(_): In<SessionEvent>, mut guild: ResMut<GuildState>) {
-        let dialect = guild.dialect;
         *guild = GuildState::default();
-        guild.dialect = dialect;
     }
 
     /// Queue the message ids [`lines`] named.
@@ -695,15 +686,27 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut notify: ResMut<Guil
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `guildMemberNotify` (`0x5e24c7`, "0" `0x82e570`, record `0xc4d3c4`): guildmate log on/off
+        // lines, read only in `SMSG_GUILD_EVENT`'s handler. The knob is
+        // [`GuildMemberNotify`].
+        same("guildMemberNotify", "0"),
+    ]
+};
+
 impl Plugin for UiGuildPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         wrath::register(app);
         app.add_observer(on_cvar);
         crate::query_cache::register::<GuildState>(app);
         app.init_resource::<GuildState>()
             .init_resource::<GuildMemberNotify>()
-            .add_systems(PreStartup, configure_dialect)
             .add_systems(
                 Update,
                 (
@@ -714,17 +717,6 @@ impl Plugin for UiGuildPlugin {
                     // an edge spent on a VM with no frames, such as the login MOTD, is lost.
                     .run_if(crate::ui_script::ingame_ui_up),
             );
-    }
-}
-
-fn configure_dialect(dialect: Option<Res<SessionDialect>>, guild: Option<ResMut<GuildState>>) {
-    if let Some(mut guild) = guild {
-        guild.set_dialect(
-            dialect
-                .as_deref()
-                .copied()
-                .unwrap_or(SessionDialect::Wrath12340),
-        );
     }
 }
 
@@ -892,8 +884,7 @@ mod tests {
     #[test]
     fn wrath_identity_misses_send_native_query_once_and_mark_pending() {
         let (commands, rx) = net_commands();
-        let mut guild = GuildState::default();
-        guild.set_dialect(SessionDialect::Wrath12340);
+        let guild = GuildState::default();
 
         assert!(guild.resolve_identity(7, &commands).is_none());
         assert!(guild.resolve_identity(7, &commands).is_none());

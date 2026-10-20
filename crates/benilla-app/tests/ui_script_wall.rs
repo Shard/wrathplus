@@ -43,7 +43,10 @@ fn family(rel: &str) -> Family {
 }
 
 /// The standing count of `Game` files; raise it only with the reason written down.
-const CEILING: usize = 40;
+/// 41: `app_core/vm_memo.rs`, the per-VM memo moved out of `ui_script` so the core `cvars`
+/// registry (already counted) can use it without naming the UI layer; it keys on
+/// `UiScript::session`.
+const CEILING: usize = 41;
 
 /// How far under [`CEILING`] the count may sit before the test asks for the ceiling to follow it.
 const SLACK: usize = 4;

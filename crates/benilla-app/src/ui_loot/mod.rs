@@ -327,8 +327,21 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut loot: ResMut<LootCo
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::same;
+    &[
+        // `showLootSpam` (`0x48fd1c`, name `0x8430a0`, "1" `0x82e748`, record `0xb4e2bc`): off, group
+        // loot-roll lines are hidden and only the winner shows. Its three readers are the roll-line
+        // composers; the knob is [`LootConfig::show_loot_spam`].
+        same("showLootSpam", "1"),
+    ]
+};
+
 impl Plugin for UiLootPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         net::register(app);
         app.add_observer(on_cvar);
         app.init_resource::<LootState>()
@@ -1184,7 +1197,7 @@ mod tests {
             .resource_mut::<LootState>()
             .open(0x42, loot_type::CORPSE, gold, rows);
 
-        let mut script = UiScript::new_vanilla().unwrap();
+        let mut script = UiScript::new().unwrap();
         script
             .run(
                 "BIND_CONFIRMS = {}\n\
@@ -1591,10 +1604,10 @@ mod tests {
         ));
     }
 
-    /// The confirm arm (`0x4c27c0`).
+    /// The confirm arm: `ConfirmLootSlot` (`0x589590`), the popup's accept.
     #[test]
     fn loot_slot_completes_the_pending_confirm_exactly_once() {
-        let (mut app, rx) = drain_with(0, vec![item(7, FELSTRIKER, 1)], &[1], "LootSlot(1)");
+        let (mut app, rx) = drain_with(0, vec![item(7, FELSTRIKER, 1)], &[1], "ConfirmLootSlot(1)");
         assert!(
             matches!(
                 sent(&rx)[..],
@@ -1607,25 +1620,10 @@ mod tests {
         // A second accept over the same dialog: nothing left to complete.
         app.world_mut()
             .non_send_resource_mut::<UiScript>()
-            .run("LootSlot(1)")
+            .run("ConfirmLootSlot(1)")
             .unwrap();
         app.world_mut().run_system_once(drain_loot).unwrap();
         assert!(sent(&rx).is_empty(), "a second accept sends nothing");
-    }
-
-    /// The flag-1 arm opens with `cmp edi,[0x847cec]`, the pending row.
-    #[test]
-    fn loot_slot_on_an_ordinary_row_sends_nothing() {
-        let (_app, rx) = drain_with(
-            0,
-            vec![item(0, TOUGH_JERKY, 1), item(1, FLURRY_AXE, 1)],
-            &[],
-            "LootSlot(1) LootSlot(2)",
-        );
-        assert!(
-            sent(&rx).is_empty(),
-            "no confirm is pending, so neither call reaches the wire"
-        );
     }
 
     #[test]
@@ -1671,7 +1669,7 @@ mod tests {
         // The accept, with the same number, reaches the right wire slot.
         app.world_mut()
             .non_send_resource_mut::<UiScript>()
-            .run("LootSlot(2)")
+            .run("ConfirmLootSlot(2)")
             .unwrap();
         app.world_mut().run_system_once(drain_loot).unwrap();
         assert!(matches!(
@@ -1766,7 +1764,7 @@ mod tests {
                 item(7, TOUGH_JERKY, 1),
             ],
         );
-        let script = UiScript::new_vanilla().unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 "BIND_CONFIRMS = {}\n\

@@ -510,7 +510,7 @@ pub(super) fn commit(
         // `0x493a08`: the real StopAttack, which also un-queues a next-swing strike (`0x6e6f30`).
         seam.stop(engaged);
     }
-    super::send_selection(&seam.net, *seam.dialect, guid);
+    super::send_selection(&seam.net, guid);
     // `0x4938c8`: an admitted swing goes out despite the lock and cancels auto-repeat
     // (`0x6ea080`). Unsupported dialects refuse before either effect.
     let wants_swing = stop_and_repoint && new_attackable && self_guid != Some(guid);
@@ -905,7 +905,6 @@ mod tests {
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::AutoRepeatActive>();
         world.init_resource::<Messages<crate::creature_anim::SheathRequest>>();
@@ -936,7 +935,6 @@ mod tests {
 
         {
             let (mut world, rx) = commit_world();
-            world.insert_resource(crate::net::SessionDialect::Wrath12340);
             *world.resource_mut::<Selection>() = Selection {
                 target: Some(Entity::PLACEHOLDER),
                 guid: Some(0xA),

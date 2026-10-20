@@ -68,7 +68,7 @@ const INSTALLED: &[&str] = &[
 /// Whether the VM has its `"player"` ([`super::seat_from_roster`]) before the addons load.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Seat {
-    /// The app's order: the roster row goes in ahead of `load_ingame_ui`.
+    /// The app's order: the roster row goes in ahead of `load_wrath_ui`.
     BeforeAddons,
     /// Nothing writes `"player"` until `ui_unit::feed_units` sees the self descriptor.
     AfterAddons,
@@ -140,7 +140,7 @@ fn seat(root: &Path, seat: Seat) -> UiScript {
         // `UnitName("player")` answers at addon file scope and Bagnon reads the live bags.
         s.set_unit("player", Some(player.clone()));
     }
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(
         failures.is_empty(),
         "our own FrameXML failed to load: {failures:#?}"
@@ -375,7 +375,7 @@ fn the_item_button_helpers_paint_a_slots_icon_and_count() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "our own FrameXML: {failures:#?}");
 
     // A button with the children the family finds by name, built as an addon builds it.

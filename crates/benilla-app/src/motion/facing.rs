@@ -13,7 +13,7 @@ use benilla_assets::coords::bevy_to_wow;
 use benilla_protocol::{EntityKind, MonsterMoveFacing};
 use bevy::prelude::*;
 
-use super::super::{ActiveMover, GuidIndex, NetEntity, ObjectStore, SelfPlayer};
+use crate::net::{ActiveMover, GuidIndex, NetEntity, ObjectStore, SelfPlayer};
 use super::{yaw_of, RemoteMotion, Spline};
 
 /// The turn-shuffle latch's sign band, `[0x80c5c8]` = +1e-5 and `[0x80c5c4]` = -1e-5
@@ -75,7 +75,7 @@ impl GoalSource {
 
 /// A [`MonsterMoveFacing`] as a WoW orientation for a unit at `unit_pos`: `Spot` and `Target`
 /// are the horizontal `atan2(dy, dx)` bearing; `None` also for an unstreamed or coincident target.
-pub(in crate::net) fn resolve_facing(
+pub(in crate::motion) fn resolve_facing(
     facing: MonsterMoveFacing,
     unit_pos: [f32; 3],
     target_pos: impl FnOnce(u64) -> Option<[f32; 3]>,

@@ -469,3 +469,11 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
     );
     assert!(!latched(&rig).2, "an ordinary pet's Attack raises no latch");
 }
+
+/// A Wrath VM with the stock interface loaded as a session loads it, through
+/// [`crate::ui_script::load_default_ui`]. Returns every failure.
+pub(super) fn stock_session_ui() -> (benilla_ui::script::UiScript, Vec<String>) {
+    let mut script = benilla_ui::script::UiScript::new().expect("a VM");
+    let failures = crate::ui_script::load_default_ui(&mut script);
+    (script, failures)
+}

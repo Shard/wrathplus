@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn hyperlink_span_release_fires_on_hyperlink_click() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_screen_size(800.0, 600.0);
         s.run(
             "local f = CreateFrame('ScrollingMessageFrame', 'CF')\n\

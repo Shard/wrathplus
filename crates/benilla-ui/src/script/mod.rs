@@ -48,6 +48,7 @@ mod wrath_friends_frame;
 mod wrath_guild_bank;
 mod wrath_macro_icons;
 mod wrath_override_bindings;
+mod wrath_session;
 mod wrath_unit_popup;
 pub use wrath_calendar::{
     WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent, WrathCalendarFields,
@@ -432,7 +433,7 @@ use mlua::Lua;
 
 use crate::layout::Rect;
 use crate::order::ZTarget;
-use crate::widget::{FrameHandle, KindState};
+use crate::widget::{FrameHandle, FrameKind, KindState};
 
 // Registry keys, the only roots of Lua-side state (the `LUAI_MAXCSTACK` discipline).
 const REG_FRAME_META: &str = "__benilla_frame_meta";
@@ -541,101 +542,109 @@ const REG_SCRIPTS: &str = "__benilla_scripts";
 /// which a top-level `SetPoint` without `relativeTo` anchors to; frame ids, from 1, are the rest.
 pub const SCREEN: crate::layout::Handle = 0;
 
-/// The FrameScript handler kinds `SetScript` accepts, each only with the code that fires it
-/// ([`crate::script::object::events_regions::set_script`]). The list is flat, where the reference
-/// resolves names per widget type (base map `0x76a0d0` plus the type's own; a `<Frame>` has no
-/// `OnClick`), so any widget accepts any kind here.
-///
-/// `OnValueChanged` is the StatusBar's (`+0x32c`) and the Slider's (`+0x330`) own slot; the
-/// ScrollFrame's three scroll kinds are `+0x32c`/`+0x334`/`+0x33c` (script-name map `0x786c40`).
-/// The EditBox's vtable (`0x81c910`) replaces the key and char slots: an EditBox never fires
-/// `OnKeyDown`, and fires `OnChar` only from `Insert`, with the inserted text (`0x77c13c`).
-const SCRIPT_KINDS: [&str; 39] = [
-    "OnLoad",
+/// The frame base's script names (`0x48e680`), after `OnEvent` (`0x816830`): every frame type has
+/// these.
+const BASE_SCRIPT_KINDS: [&str; 20] = [
     "OnEvent",
+    "OnLoad",
+    "OnSizeChanged",
     "OnUpdate",
-    // The model pane's two, fired by the tick's model pass (`tick_model_panes`): `OnUpdateModel`
-    // at the top of a visible pane's paint, `OnAnimFinished` when the armed sequence completes.
-    "OnUpdateModel",
-    "OnAnimFinished",
     "OnShow",
     "OnHide",
-    "OnClick",
     "OnEnter",
     "OnLeave",
     "OnMouseDown",
     "OnMouseUp",
     "OnMouseWheel",
-    "OnValueChanged",
-    "OnEnterPressed",
-    "OnEscapePressed",
-    "OnSpacePressed",
-    "OnTabPressed",
-    "OnTextChanged",
-    "OnTextSet",
-    // The caret leg's own (`0x77da80`), fired by the box's flush on dirty bit 2, which a caret
-    // move, an edit, a focus change and a re-seat raise: the edge `ScrollingEdit_OnCursorChanged`
-    // scrolls a multiline box by.
-    "OnCursorChanged",
-    "OnEditFocusGained",
-    "OnEditFocusLost",
-    "OnHorizontalScroll",
-    "OnVerticalScroll",
-    "OnScrollRangeChanged",
     "OnDragStart",
     "OnDragStop",
     "OnReceiveDrag",
-    // A release over a message-frame hyperlink span, `OnHyperlinkClick(link, text, button)`;
-    // `ChatFrameTemplate` passes it to `SetItemRef` (`ChatFrame.xml:15`, `ChatFrame.lua:1534`).
-    "OnHyperlinkClick",
-    // The GameTooltip's engine-fired scripts: money render, money clear and world-hover default
-    // placement, all three wired by the stock template (`GameTooltipTemplate.xml:617-625`).
-    "OnTooltipAddMoney",
-    "OnTooltipCleared",
-    "OnTooltipSetDefaultAnchor",
-    // The ColorSelect's own slot (script map `0x78b4f0`, `+0x338`), fired by its `SetColorRGB`.
-    "OnColorSelect",
-    // The Button/CheckButton double click (script map `0x778c50`, `+0x4d4`), fired by
-    // [`pointer`]'s release edge in place of the second `OnClick` within 300 ms (`0x77937b`).
-    "OnDoubleClick",
-    // The layout event (base map `0x76a0d0`, `+0x120`), fired by the resolve pass on a size change.
-    "OnSizeChanged",
-    // The key channels, fired by [`keyboard`]'s walk (`0x765f10`). `OnKeyUp` never fires, as the
-    // host feeds no key-up, but a frame carrying only `OnKeyUp` still consumes every key-down and
-    // runs nothing, the reference's own asymmetry.
     "OnChar",
     "OnKeyDown",
     "OnKeyUp",
-];
-
-/// Script kinds only the Wrath dialect has: `OnAttributeChanged` is fired by its `SetAttribute`.
-const WRATH_SCRIPT_KINDS: [&str; 14] = [
     "OnAttributeChanged",
     "OnEnable",
     "OnDisable",
-    "PreClick",
-    "PostClick",
-    "OnTooltipSetUnit",
-    "OnTooltipSetItem",
-    "OnTooltipSetSpell",
-    "OnMinMaxChanged",
-    "OnMovieFinished",
-    "OnMovieShowSubtitle",
-    "OnMovieHideSubtitle",
-    "OnHyperlinkEnter",
-    "OnHyperlinkLeave",
 ];
 
-/// The canonical spelling of script kind `name` in `lua`'s dialect, or `None` if it has no slot.
-fn script_kind(lua: &Lua, name: &str) -> Option<&'static str> {
-    let wrath = lua.app_data_ref::<Model>().expect("model").dialect == ScriptDialect::Wrath12340;
-    SCRIPT_KINDS
-        .iter()
-        .chain(if wrath {
-            WRATH_SCRIPT_KINDS.iter()
-        } else {
-            [].iter()
-        })
+/// The hyperlink trio (`0x978610`): SimpleHTML and both message frames.
+const HYPERLINK_SCRIPT_KINDS: [&str; 3] = ["OnHyperlinkEnter", "OnHyperlinkLeave", "OnHyperlinkClick"];
+
+/// Each frame type's own script names, which build 12340's lookup for that type tests before
+/// falling back to [`BASE_SCRIPT_KINDS`] (Button `0x96f200`, EditBox `0x9628f0`, GameTooltip
+/// `0x61a280`, MovieFrame `0x95db80`, Model `0x95f420`, StatusBar `0x961630`, Slider `0x96bca0`,
+/// ScrollFrame `0x96b0b0`, ColorSelect `0x96dc50`, ScrollingMessageFrame `0x969040` over the
+/// hyperlink trio). Labelled: which class owns each lookup is read from the names it tests, not
+/// from the vtables' RTTI.
+///
+/// Not every accepted kind fires: `OnCharComposition` and `OnInputLanguageChanged` need an IME the
+/// host does not have (capture-only); `OnTooltipSetQuest` and `OnTooltipSetAchievement` need the
+/// quest and achievement link tooltips, which `SetHyperlink` does not render yet; and
+/// `OnTooltipSetUnit`, `OnTooltipSetItem`, `OnTooltipSetSpell` and `OnTooltipSetFrameStack` are
+/// not fired by their setters yet.
+fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'static str]) {
+    const NONE: &[&str] = &[];
+    match kind {
+        FrameKind::Button | FrameKind::CheckButton | FrameKind::LootButton => {
+            (&["PreClick", "OnClick", "PostClick", "OnDoubleClick"], NONE)
+        }
+        FrameKind::EditBox => (
+            &[
+                "OnEnterPressed",
+                "OnEscapePressed",
+                "OnSpacePressed",
+                "OnTabPressed",
+                "OnTextChanged",
+                "OnTextSet",
+                "OnCursorChanged",
+                "OnInputLanguageChanged",
+                "OnEditFocusGained",
+                "OnEditFocusLost",
+                "OnCharComposition",
+            ],
+            NONE,
+        ),
+        FrameKind::GameTooltip => (
+            &[
+                "OnTooltipSetDefaultAnchor",
+                "OnTooltipCleared",
+                "OnTooltipAddMoney",
+                "OnTooltipSetUnit",
+                "OnTooltipSetItem",
+                "OnTooltipSetSpell",
+                "OnTooltipSetQuest",
+                "OnTooltipSetAchievement",
+                "OnTooltipSetEquipmentSet",
+                "OnTooltipSetFrameStack",
+            ],
+            NONE,
+        ),
+        FrameKind::MovieFrame => (
+            &["OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle"],
+            NONE,
+        ),
+        FrameKind::Model | FrameKind::PlayerModel | FrameKind::DressUpModel | FrameKind::TabardModel => {
+            (&["OnUpdateModel", "OnAnimFinished"], NONE)
+        }
+        FrameKind::StatusBar | FrameKind::Slider => (&["OnValueChanged", "OnMinMaxChanged"], NONE),
+        FrameKind::ScrollFrame => (
+            &["OnHorizontalScroll", "OnVerticalScroll", "OnScrollRangeChanged"],
+            NONE,
+        ),
+        FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
+        FrameKind::SimpleHtml | FrameKind::MessageFrame => (&HYPERLINK_SCRIPT_KINDS, NONE),
+        FrameKind::ScrollingMessageFrame => (&["OnMessageScrollChanged"], &HYPERLINK_SCRIPT_KINDS),
+        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap => (NONE, NONE),
+    }
+}
+
+/// The canonical spelling of script kind `name` on a frame of type `kind`, or `None` if that type
+/// has no such script, matched case-insensitively as the client's lookups do.
+pub(crate) fn script_kind(kind: FrameKind, name: &str) -> Option<&'static str> {
+    let (own, inherited) = own_script_kinds(kind);
+    own.iter()
+        .chain(inherited)
+        .chain(BASE_SCRIPT_KINDS.iter())
         .copied()
         .find(|k| k.eq_ignore_ascii_case(name))
 }
@@ -927,6 +936,7 @@ impl UiScript {
             wrath_guild_bank::install(&lua)?;
             wrath_macro_icons::install(&lua)?;
             wrath_override_bindings::install(&lua)?;
+            wrath_session::install(&lua)?;
             cursor::install_wrath(&lua)?;
             wrath_unit_popup::install(&lua)?;
             wrath_titles::install(&lua)?;
