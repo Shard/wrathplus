@@ -15,7 +15,7 @@ Verdicts:
 - **real**: a real build-12340 binding still served by the shim; each needs a native binding
   (the suggested owner in brackets), or a recorded no-op where the client has no such service.
 
-## Native now (32)
+## Native now (38)
 
 | Global | Address | Native behaviour |
 |---|---|---|
@@ -42,6 +42,7 @@ Verdicts:
 | `SetMultiCastSpell` | `0x5ab8a0` | totem-bar slots 133-144 take a spell action, or spell 0 clears, through the `PlaceAction` queue (labelled: the totem check `0x5a7bc0` and its message `0x299`) |
 | `PickupItem` | `0x522fb0` | an item by id, link or cached name onto the cursor as mode 7 (`GetCursorInfo` "item", id, link; `PlaceAction` puts it on a bar) |
 | `PickupEquipmentSet` | `0x5af2c0` → `0x520dc0` | the index-th set onto the cursor as mode 0xd (`GetCursorInfo` "equipmentset", name); labelled: `PlaceAction` keeps it held, the set action word being untraced |
+| `ClearOverrideBindings`, `SetOverrideBinding`, `SetOverrideBindingClick`, `SetOverrideBindingItem`, `SetOverrideBindingMacro`, `SetOverrideBindingSpell` | `0x560560`, `0x563a90`, `0x563f10`, `0x563cb0`, `0x563de0`, `0x563b80` | an owner frame's key layer over the live table (priority over non-priority over normal), never saved; the command variants write `CLICK button:mouse`, `ITEM`, `MACRO` and `SPELL` forms, which a press runs through the matching verb (labelled: the priority gate `0x5191c0(0xd)` and the native form runner) |
 | `FocusUnit`, `ClearFocus` | `0x522480`, `0x5225e0` | the unit a token names, or none, into the focus guid (`0x51ff20`): the `"focus"` token and `PLAYER_FOCUS_CHANGED` (event `0x9e`); labelled: the setter's protected-state refusal and its `0x2000` render flag |
 | `IsPossessBarVisible` | `0x5a8820` | a boolean: the possess spell `GetPossessInfo` reads is present (labelled: its `AttributesEx7 & 0x1000`, attribute `0xec`, is not loaded) |
 | `GetLFGDeserterExpiration`, `GetLFGRandomCooldownExpiration` | `0x5580e0`, `0x558060` | the player's Dungeon Deserter (71041) or Dungeon Cooldown (71328) aura's expiry in `GetTime` seconds; nothing without it |
@@ -75,7 +76,7 @@ string in `Wow.exe`, no caller in stock `Blizzard_CombatText.lua`, `WorldStateFr
 The `COMBATLOG_OBJECT_*` block (masks, `RAIDTARGET1..8`): stock `Constants.lua` defines all 33.
 It goes with the file.
 
-## Still on the shim (58), 2026-10-20
+## Still on the shim (52), 2026-10-20
 
 Enforced by `wrath_surface::tests::the_compat_chunk_serves_exactly_the_listed_globals`, which lists
 every global function the compat chunk still serves in a live Wrath VM. A native binding installed
@@ -83,7 +84,6 @@ after the chunk drops its name there; a line a native binding already replaces i
 
 | Family | Globals | Owner |
 |---|---|---|
-| Override bindings | `ClearOverrideBindings`, `SetOverrideBinding`, `SetOverrideBindingClick`, `SetOverrideBindingItem`, `SetOverrideBindingMacro`, `SetOverrideBindingSpell` | App Migration |
 | Units and friends | `UnitSelectionColor`, `GetNumFriends`, `FillLocalizedClassList` | App Migration |
 | Actions | `IsPetAttackAction`, `GetActionBarPage`, `ChangeActionBarPage` (retire the pair together: the shim replaces the native `ChangeActionBarPage`) | Native UI (assigned) |
 | Session, client, tutorial | `GetAccountExpansionLevel`, `GetExpansionLevel`, `GetExistingLocales`, `GetCVarBool`, `GetCVarMin`, `GetCVarMax`, `GetCVarAbsoluteMin`, `GetCVarAbsoluteMax`, `RegisterStaticConstants`, `TriggerTutorial`, `CombatTextSetActiveUnit` | Native UI (assigned) |

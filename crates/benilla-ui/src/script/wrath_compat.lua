@@ -371,8 +371,3 @@ do
     end
 end
 
--- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
-ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
-SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
-
-
