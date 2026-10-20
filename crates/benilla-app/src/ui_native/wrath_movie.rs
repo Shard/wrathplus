@@ -16,7 +16,7 @@ pub(crate) use crate::net::wrath_movie::PendingMovie;
 use crate::net::wrath_world_objects_capture::NativeWorldObjectsPackets;
 use crate::net::{ClientCommand, NetCommands};
 use benilla_protocol::wrath_world_objects::{Command, Packet};
-use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript};
+use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
 
 #[derive(Resource)]
@@ -66,9 +66,6 @@ fn feed_movie(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     // The triggers leave the capture; its other receipts stay, in order.
     let mut kept = std::collections::VecDeque::new();
     for packet in packets.0.drain(..) {

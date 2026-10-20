@@ -147,8 +147,7 @@ mod tests {
         use crate::net::wrath_runes::Rune;
         use benilla_protocol::types::FieldLayout;
         let mut app = App::new();
-        let script =
-            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+        let script = UiScript::new().unwrap();
         script
             .run(
                 r#"seen = {} local f = CreateFrame("Frame")

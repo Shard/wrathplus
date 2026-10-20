@@ -105,7 +105,7 @@ rewrites them with `--live-dir`, and the play binary must be rebuilt and copied 
 ones are not.
 
 CI (`.github/workflows/ci.yml`), `scripts/{gates,check,smoke,visual,cine,summon-live,soundprobe,
-showcase-pair,api-coverage,genmap}.sh` and `scripts/quality/*` carry `-p benilla*` package lists;
+showcase-pair,genmap}.sh` and `scripts/quality/*` carry `-p benilla*` package lists;
 the script rewrites them with everything else.
 
 ## The script

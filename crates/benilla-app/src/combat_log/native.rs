@@ -791,7 +791,7 @@ pub(super) fn feed(
     mut log: bevy::prelude::ResMut<NativeCombatLog>,
     inputs: FeedInputs,
 ) {
-    use benilla_ui::script::{ScriptDialect, WrathCombatLogEntry, WrathCombatLogUnit};
+    use benilla_ui::script::{WrathCombatLogEntry, WrathCombatLogUnit};
     let FeedInputs {
         names,
         commands,
@@ -815,7 +815,7 @@ pub(super) fn feed(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 || entries.is_empty() {
+    if entries.is_empty() {
         return;
     }
     let me = self_guid.0.unwrap_or(0);

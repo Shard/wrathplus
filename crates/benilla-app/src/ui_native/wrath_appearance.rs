@@ -15,7 +15,7 @@
 pub(crate) use crate::net::wrath_appearance::{AppearanceReceipts, BarberChair};
 use crate::net::{ObjectStore, SelfGuid, SelfPlayer};
 use benilla_protocol::wrath_appearance::Packet;
-use benilla_ui::script::{ScriptDialect, UiScript};
+use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 /// `UNIT_STAND_STATE_SIT_LOW_CHAIR`..`SIT_HIGH_CHAIR`: the barber chair sits the player at
@@ -159,9 +159,6 @@ fn feed_barber(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let sitter = self_q.iter().next().and_then(|s| {
         let s = &s.0;
         Some(Sitter {
@@ -228,9 +225,6 @@ fn feed_appearance(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let stand_state = self_q.iter().next().map(|s| s.0.unit_stand_state());
     if chair_step(&mut chair, stand_state) {
         script.queue_event("BARBER_SHOP_CLOSE", Vec::new());
@@ -303,9 +297,6 @@ fn feed_titles(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let (sent, _) = catalog_sent.get_reset(&script);
     if !*sent {
         if let Some(titles) = tables.as_ref().and_then(|t| t.char_titles()) {

@@ -49,7 +49,7 @@ mod tests {
     fn threat_feed_publishes_packets_before_the_same_frames_lua_tick() {
         use crate::ui_script::{UiFeed, UiInput};
         use benilla_protocol::SessionEvent;
-        use benilla_ui::script::{ScriptDialect, UnitGuids};
+        use benilla_ui::script::UnitGuids;
         use benilla_world::schedule::WorldStage;
 
         fn packet(world: &mut World) {
@@ -70,7 +70,7 @@ mod tests {
                 3
             );
         }
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_unit_guids(&UnitGuids {
             player: 1,
             target: 2,

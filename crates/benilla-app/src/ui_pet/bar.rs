@@ -184,22 +184,20 @@ pub(crate) fn feed_pet_bar(
     };
     // Full learned sets, never the filtered visible spellbook. Re-push into a replacement VM
     // and on every pet/player mutation, including teardown; no packet receipt is replayed.
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        script.set_wrath_known_spells(
-            actions
-                .as_ref()
-                .into_iter()
-                .flat_map(|a| a.spells.iter().copied()),
-            bar.native
-                .as_ref()
-                .into_iter()
-                .flat_map(|p| p.spells.iter().map(|a| a.id())),
-            bar.native
-                .as_ref()
-                .into_iter()
-                .flat_map(|p| p.actions.iter().map(|a| a.0)),
-        );
-    }
+    script.set_wrath_known_spells(
+        actions
+            .as_ref()
+            .into_iter()
+            .flat_map(|a| a.spells.iter().copied()),
+        bar.native
+            .as_ref()
+            .into_iter()
+            .flat_map(|p| p.spells.iter().map(|a| a.id())),
+        bar.native
+            .as_ref()
+            .into_iter()
+            .flat_map(|p| p.actions.iter().map(|a| a.0)),
+    );
     let memory = memory.get(&script);
     let now = Instant::now();
     let (anchor, ui_now) = (clock.anchor, clock.ui_now);

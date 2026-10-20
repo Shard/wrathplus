@@ -8,7 +8,7 @@ use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_protocol::wrath_inventory::{Command, EquipmentSet, Packet, EQUIPMENT_SLOTS};
 use benilla_ui::script::{
-    EquipmentSetRequest, EquipmentSetView, ScriptDialect, UiScript, EQUIPMENT_SET_IGNORED_SLOT,
+    EquipmentSetRequest, EquipmentSetView, UiScript, EQUIPMENT_SET_IGNORED_SLOT,
 };
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -42,9 +42,6 @@ pub(crate) fn feed_equipment_sets(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let (finished, deletes) = absorb(&mut packets.0, &mut sets);
     for (completed, name) in finished {
         script.equipment_swap_finished(completed, name);

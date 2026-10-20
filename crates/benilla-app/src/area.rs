@@ -214,23 +214,8 @@ fn feed_zone_events(
         .as_deref()
         .and_then(|f| f.catalog().faction_group_name(zone_mask))
         .unwrap_or("");
-    let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
-    let (pvp, pvp_is_subzone) = if wrath {
-        let (kind, from_leaf) = wrath_zone_pvp(Some(leaf_row), zone_row, template);
-        (kind.map(|k| (k, faction_name)), from_leaf)
-    } else {
-        let pvp = template.flatten().map(|tpl| {
-            let ty = if zone_mask & tpl.friend_group_mask != 0 {
-                "friendly"
-            } else if zone_mask & tpl.enemy_group_mask != 0 {
-                "hostile"
-            } else {
-                "contested"
-            };
-            (ty, faction_name)
-        });
-        (pvp, false)
-    };
+    let (kind, pvp_is_subzone) = wrath_zone_pvp(Some(leaf_row), zone_row, template);
+    let pvp = kind.map(|k| (k, faction_name));
     let pvp_type = pvp.map_or("", |(ty, _)| ty);
 
     script.set_zone_texts(benilla_ui::script::ZoneTexts {

@@ -1,6 +1,6 @@
 //! The installed build-12340 FrameXML, loaded whole into a trusted Wrath VM.
 
-use benilla_ui::script::{ScriptDialect, UiScript, UnitState};
+use benilla_ui::script::{UiScript, UnitState};
 
 #[path = "wrath_census_lexer.rs"]
 mod census_lexer;
@@ -128,7 +128,7 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     let data = benilla_formats::wow_data_or_skip!();
     // Every attribute name the loader reads, for the unhandled-attribute audit.
     benilla_ui::framexml::record_queried_attributes(true);
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     // A live VM receives its display modes before FrameXML; UIParent uses their aspect ratio.
     script.set_screen_size(1600.0, 1000.0);
     // As `lifecycle::new_vm` seeds it: stock `Constants.lua` fills the class names at file scope.

@@ -38,59 +38,13 @@ pub(super) fn apply_buff_durations(script: &UiScript) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// What a screen-size change re-runs, from `extract::tick_script`'s resize arm: anchors follow the
-/// screen, but not a size or seat computed from the old one. The managed pass re-wraps the open
-/// bags, whose columns `updateContainerFrameAnchors` lays out by `GetScreenHeight()`.
-/// Deviation: [`FULLSCREEN_QUADS_RESEAT`] re-sizes the full-screen quads, which the stock files
-/// size only in their OnLoads, because a resize or `uiScale` change here keeps the loaded UI and
-/// the blackout would stop short of the new screen. Host-side, not in the layer: it adapts the
-/// engine's resizable window, and changes nothing the stock UI does at a fixed size.
+/// What a screen-size change re-runs, from `extract::tick_script`'s resize arm: the Wrath root's
+/// `UIParent` follows the screen, as its OnLoad sized it.
 pub(super) fn on_screen_resized(script: &UiScript) {
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        if let Err(error) = script.run("if UIParent then UIParent:SetWidth(GetScreenWidth()); UIParent:SetHeight(GetScreenHeight()) end") {
-            error!("ui_script: Wrath root resize: {error}");
-        }
-        return;
-    }
-    let _ = script.run("if UIParent_ManageFramePositions then UIParent_ManageFramePositions() end");
-    if let Err(e) = script.run(FULLSCREEN_QUADS_RESEAT) {
-        error!("ui_script: full-screen quad re-seat: {e}");
+    if let Err(error) = script.run("if UIParent then UIParent:SetWidth(GetScreenWidth()); UIParent:SetHeight(GetScreenHeight()) end") {
+        error!("ui_script: Wrath root resize: {error}");
     }
 }
-
-/// The sizing arithmetic of `WorldMapFrame_OnLoad` (`WorldMapFrame.lua:19-28`) and
-/// `CinematicFrame_OnLoad` (`CinematicFrame.lua:6-21`), each existence-guarded: the glue screens
-/// have neither. Below 4:3 the bars go back to `CinematicFrame.xml`'s declared 1024 x 128, where
-/// the stock OnLoad leaves them.
-const FULLSCREEN_QUADS_RESEAT: &str = r#"
-if BlackoutWorld then
-    local width = GetScreenWidth()
-    local height = GetScreenHeight()
-    if ( width / height < 4 / 3 ) then
-        width = width * 1.25
-        height = height * 1.25
-    end
-    BlackoutWorld:SetWidth( width )
-    BlackoutWorld:SetHeight( height )
-end
-if UpperBlackBar and LowerBlackBar then
-    local width = GetScreenWidth()
-    local height = GetScreenHeight()
-    local barWidth, blackBarHeight = 1024, 128
-    if ( width / height > 4 / 3 ) then
-        local desiredHeight = width / 2
-        if ( desiredHeight > height ) then
-            desiredHeight = height
-        end
-        barWidth = width
-        blackBarHeight = ( height - desiredHeight ) / 2
-    end
-    UpperBlackBar:SetHeight( blackBarHeight )
-    UpperBlackBar:SetWidth( barWidth )
-    LowerBlackBar:SetHeight( blackBarHeight )
-    LowerBlackBar:SetWidth( barWidth )
-end
-"#;
 
 /// Runs a UI load in the counted sound-suppression scope, as `CGGameUI::Initialize` (`0x48fbf0`,
 /// called at login `0x48f681` and `/reloadui` `0x495669`) runs its own: enter (`0x458f50`) at
