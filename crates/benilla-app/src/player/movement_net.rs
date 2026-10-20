@@ -160,42 +160,15 @@ pub(super) fn stream_self_movement(
             xy_speed: xy,
         }
     });
-    // A forced speed change is acked within the server's 4 s window with this frame's live
-    // payload, which vmangos relocates us to and runs its anticheat position tests on.
-    for ack in speed_acks {
-        let _ = sender.send(ClientCommand::ForceSpeedAck {
-            kind: ack.kind,
-            guid: ack.guid,
-            counter: ack.counter,
-            speed: ack.speed,
-            flags: wire_flags,
-            pos: wow_pos,
-            orientation: facing,
-            pitch: swim_pitch,
-            fall_time,
-            jump: wire_jump,
-            transport,
-        });
-        // The ack relocates us server-side, so it is a position report too.
+    // A forced speed change is acked by the writer itself (`net::io::wrath`'s `send_mover_ack`),
+    // from the reported pose; the frame still counts as a position report, as it always has.
+    if !speed_acks.is_empty() {
         player.last_pos = wow_pos;
     }
 
-    // The knockback ack goes out on the take-off frame with the take-off pose, as the reference
-    // applies the launch and then sends (`0x61624d` call `0x6179c0`, then `0x616261` push `0xf0`).
-    // `launch` is echoed bit for bit, as the reference copies its live fields: vmangos matches the
-    // four floats within 0.01 (`Unit.cpp:7097-7100`), and a re-derived quad has no direction at
-    // `xy_speed == 0`.
-    if let Some(k) = knock_ack {
-        let _ = sender.send(ClientCommand::KnockBackAck {
-            guid: k.guid,
-            counter: k.counter,
-            launch: k.launch,
-            flags: wire_flags,
-            pos: wow_pos,
-            orientation: facing,
-            transport,
-        });
-        // A position report too, like a speed ack.
+    // The knockback is acked by the writer itself, as a speed change is; the take-off frame still
+    // counts as a position report.
+    if knock_ack.is_some() {
         player.last_pos = wow_pos;
     }
     let prev = player.move_flags;
@@ -1500,7 +1473,7 @@ mod tests {
     }
 
     #[test]
-    fn a_knockback_acks_and_sends_no_jump() {
+    fn a_knockback_sends_no_jump() {
         let (raw_tx, rx) = crossbeam_channel::unbounded();
         let tx = CommandSender::Raw(raw_tx);
         // Mid-launch, the arc seeded from the quad below: Bevy −Z is WoW +X (north), so a 25 yd/s
@@ -1538,28 +1511,7 @@ mod tests {
             None,
         );
 
-        let ClientCommand::KnockBackAck {
-            guid,
-            counter,
-            launch: acked,
-            flags,
-            ..
-        } = rx.try_recv().expect("the launch owes an ack")
-        else {
-            panic!("expected the knockback ack first");
-        };
-        assert_eq!((guid, counter), (0x1234, 7), "the counter must be echoed");
-        assert_eq!(
-            acked, launch,
-            "the four floats go back bit-for-bit — vmangos matches them within 0.01 before it will \
-             relay the knockback to anyone"
-        );
-        assert_ne!(
-            flags & move_flags::FALLING,
-            0,
-            "the ack's MovementInfo must carry JUMPING, or the jump tail it needs is never written"
-        );
-
+        // The writer acks the knockback itself; the movement stream only must not jump.
         for extra in rx.try_iter() {
             if let ClientCommand::Move { kind, .. } = extra {
                 assert_ne!(

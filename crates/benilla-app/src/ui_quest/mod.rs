@@ -1062,7 +1062,7 @@ mod tests {
         if let Some(flags) = npc_flags {
             // 147 = `UNIT_NPC_FLAGS` (the descriptor index `unit_npc_flags()` reads).
             let fields = benilla_protocol::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitNpcFlags, flags)],
             );
             let e = app.world_mut().spawn(ObjectStore(fields)).id();

@@ -300,15 +300,8 @@ pub(in crate::entities) fn resolve_equipment(
         for slot in 0..HELD_SLOTS {
             // (display id, inventory type, item sheath type, class, subclass, material) per slot.
             resolved[slot] = match net_entity.kind {
-                EntityKind::Unit => {
-                    let display = s.unit_virtual_item_display(slot as u8).filter(|d| *d != 0);
-                    display.map(|d| {
-                        let (class, subclass, material, inv) =
-                            s.unit_virtual_item_info(slot as u8).unwrap_or((0, 0, 0, 0));
-                        let sheath = s.unit_virtual_item_sheath(slot as u8).unwrap_or(0);
-                        (d, inv as u32, sheath, class, subclass, material)
-                    })
-                }
+                // 12340 has no creature virtual-item display or info fields.
+                EntityKind::Unit => None,
                 EntityKind::Player => s
                     .player_visible_item_entry(PLAYER_HELD_SLOTS[slot])
                     .filter(|e| *e != 0)
@@ -684,12 +677,16 @@ mod tests {
     fn corpse_dresses_from_its_own_snapshot() {
         use benilla_protocol::messages::ObjectType;
 
-        /// `CORPSE_FIELD_ITEM` is field 13, each slot `DisplayInfoID | InventoryType << 24`.
+        let at = |field| FieldLayout::Wrath12340.index_of(field);
+        /// `CORPSE_FIELD_ITEM`, each slot `DisplayInfoID | InventoryType << 24`.
         fn item(slot: u16, display: u32, inv: u32) -> (u16, u32) {
-            (13 + slot, display | (inv << 24))
+            (
+                FieldLayout::Wrath12340.index_of(Field::CorpseItem) + slot,
+                display | (inv << 24),
+            )
         }
-        // Fields 32, 33 and 35 are `CORPSE_FIELD_BYTES_1` (race and sex in bytes 1 and 2),
-        // `CORPSE_FIELD_BYTES_2` and `CORPSE_FIELD_FLAGS`.
+        // `CORPSE_FIELD_BYTES_1` (race and sex in bytes 1 and 2), `CORPSE_FIELD_BYTES_2` and
+        // `CORPSE_FIELD_FLAGS`.
         let dressed = |flags: u32| {
             let mut pairs = vec![
                 item(0, 900, 1),
@@ -698,11 +695,11 @@ mod tests {
                 item(14, 903, 16),
                 item(15, 904, 13),
                 item(17, 905, 15),
-                (32, 1 << 8),
-                (33, 0),
+                (at(Field::CorpseBytes1), 1 << 8),
+                (at(Field::CorpseBytes2), 0),
             ];
             if flags != 0 {
-                pairs.push((35, flags));
+                pairs.push((at(Field::CorpseFlags), flags));
             }
             ObjectStore(ObjectFields::from_pairs(&pairs).into_created(ObjectType::Corpse))
         };
@@ -810,10 +807,10 @@ mod tests {
         assert_eq!(ammo_attach(None, true), None); // no ranged record
     }
 
-    /// Raw field indices, private to benilla-protocol: `PLAYER_FLAGS` is 190, and the visible-item
-    /// blocks start at 258 (`PLAYER_VISIBLE_ITEM_1_CREATOR`), 12 per slot, the entry at +2.
-    const PLAYER_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
-    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+    /// `PLAYER_FLAGS`, and `UNIT_FIELD_BYTES_0`; the visible items are two dwords per slot, the
+    /// entry first.
+    const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
 
     fn wearing(flags: u32, entries: &[(u8, u32)]) -> ObjectStore {
         let mut pairs = vec![
@@ -821,7 +818,10 @@ mod tests {
             (PLAYER_FLAGS, flags),
         ];
         for (slot, entry) in entries {
-            pairs.push((258 + 2 + 12 * u16::from(*slot), *entry));
+            pairs.push((
+                FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * u16::from(*slot),
+                *entry,
+            ));
         }
         ObjectStore(ObjectFields::from_pairs(&pairs))
     }
@@ -980,8 +980,8 @@ mod tests {
             .bypass_change_detection()
             .0
             .merge(ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
-                &[(Field::PlayerVisibleItems, 2, 101)],
+                FieldLayout::Wrath12340,
+                &[(Field::PlayerVisibleItems, 0, 101)],
             ));
         app.update();
         assert_eq!(
@@ -1009,9 +1009,10 @@ mod tests {
         use crate::creature_anim::Wielded;
 
         /// Raw field indices; byte 0 of `UNIT_FIELD_BYTES_2` is the sheath state.
-        const UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-        const UNIT_BYTES_2: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes2);
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = 258 + 2 + 12 * 15;
+        const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+        const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * 15;
         /// `UNIT_FLAG_DISARMED`.
         const DISARMED: u32 = 0x0020_0000;
 
@@ -1131,8 +1132,9 @@ mod tests {
     fn the_hands_keep_the_worn_reading_through_a_disarm() {
         use crate::creature_anim::Wielded;
 
-        const UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = 258 + 2 + 12 * 15;
+        const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * 15;
         const DISARMED: u32 = 0x0020_0000;
 
         let mut app = App::new();

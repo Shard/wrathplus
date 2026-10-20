@@ -46,23 +46,21 @@ fn pending_slot(layout: FieldLayout, current: Option<u32>, max: Option<u32>) -> 
 
 #[test]
 fn pending_template_keeps_native_item_id_count_and_durability() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        for current in [0, 17] {
-            let slot = pending_slot(layout, Some(current), Some(80));
-            assert_eq!((slot.item_id, slot.count), (117, 3));
-            assert_eq!(slot.durability, Some((current, 80)));
-            assert!(slot.texture.is_none());
-            assert!(slot.link.is_none());
-            assert!(slot.quality.is_none());
-        }
+    let layout = FieldLayout::Wrath12340;
+    for current in [0, 17] {
+        let slot = pending_slot(layout, Some(current), Some(80));
+        assert_eq!((slot.item_id, slot.count), (117, 3));
+        assert_eq!(slot.durability, Some((current, 80)));
+        assert!(slot.texture.is_none());
+        assert!(slot.link.is_none());
+        assert!(slot.quality.is_none());
     }
 }
 
 #[test]
 fn pending_template_does_not_invent_missing_or_indestructible_durability() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        for (current, max) in [(Some(0), Some(0)), (None, Some(80)), (Some(17), None)] {
-            assert_eq!(pending_slot(layout, current, max).durability, None);
-        }
+    let layout = FieldLayout::Wrath12340;
+    for (current, max) in [(Some(0), Some(0)), (None, Some(80)), (Some(17), None)] {
+        assert_eq!(pending_slot(layout, current, max).durability, None);
     }
 }

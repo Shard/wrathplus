@@ -86,7 +86,9 @@ pub(super) fn command_line(result: &GuildCommandResult) -> Option<UiError> {
         guild_command_error::ALREADY_IN_GUILD_S => named("ERR_ALREADY_IN_GUILD_S"),
         guild_command_error::INVITED_TO_GUILD => Some(UiError::key("ERR_INVITED_TO_GUILD")),
         guild_command_error::ALREADY_INVITED_TO_GUILD_S => named("ERR_ALREADY_INVITED_TO_GUILD_S"),
-        guild_command_error::NAME_INVALID => Some(UiError::key("ERR_GUILD_NAME_INVALID")),
+        // Build 12340's table has no `ERR_GUILD_NAME_INVALID` (1.12's row); its generic name refusal is
+        // `ERR_NAME_INVALID` (`0x256`). Unresolved: the 12340 result handler's own row for this code.
+        guild_command_error::NAME_INVALID => Some(UiError::key("ERR_NAME_INVALID")),
         guild_command_error::NAME_EXISTS_S => named("ERR_GUILD_NAME_EXISTS_S"),
         // `0x08` is `ERR_GUILD_LEADER_LEAVE` under `QUIT` and `ERR_GUILD_PERMISSIONS` otherwise.
         guild_command_error::PERMISSIONS if result.command == guild_command::QUIT => {
@@ -109,10 +111,11 @@ pub(super) fn command_line(result: &GuildCommandResult) -> Option<UiError> {
     }
 }
 
-/// `SMSG_GUILD_INVITE`'s notice line, printed beside the popup (`0x5e6f65`, message `0x4f`); the
-/// popup is the separate `GUILD_INVITE_REQUEST` at `0x5e6f53`.
+/// `SMSG_GUILD_INVITE`'s notice line, printed beside the popup: build 12340's handler (`0x6cc3b0`)
+/// fires `GUILD_INVITE_REQUEST` (`0x512570`) and raises message `0x58`,
+/// `ERR_INVITED_TO_GUILD_SSS`, whose player link takes the inviter twice before the guild.
 pub(super) fn invite_line(inviter: &str, guild: &str) -> UiError {
-    UiError::strings("ERR_INVITED_TO_GUILD_SS", &[inviter, guild])
+    UiError::strings("ERR_INVITED_TO_GUILD_SSS", &[inviter, inviter, guild])
 }
 
 /// `SMSG_GUILD_DECLINE`: our invitee said no (sent to the inviter only).
@@ -294,7 +297,7 @@ mod tests {
         }
 
         // The two name refusals are `kind 2`, the red `UI_ERROR_MESSAGE`, not chat.
-        for key in ["ERR_GUILD_NAME_INVALID", "ERR_GUILD_NAME_EXISTS_S"] {
+        for key in ["ERR_NAME_INVALID", "ERR_GUILD_NAME_EXISTS_S"] {
             assert_eq!(by_key(key).map(|r| r.kind), Some(MsgKind::Error), "{key}");
         }
         // The rest of the guild family is chat.
@@ -307,8 +310,8 @@ mod tests {
     #[test]
     fn the_invite_notice_names_both() {
         let e = invite_line("Tigole", "Legacy of Steel");
-        assert_eq!(e.key, "ERR_INVITED_TO_GUILD_SS");
-        assert_eq!(strings(&e), ["Tigole", "Legacy of Steel"]);
+        assert_eq!(e.key, "ERR_INVITED_TO_GUILD_SSS");
+        assert_eq!(strings(&e), ["Tigole", "Tigole", "Legacy of Steel"]);
         assert_eq!(decline_line("Kaplan").key, "ERR_GUILD_DECLINE_S");
     }
 }

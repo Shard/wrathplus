@@ -175,6 +175,7 @@ mod taxi;
 mod tick;
 mod tooltip;
 mod tooltip_item;
+mod tooltip_links;
 mod tooltip_spell;
 mod tooltip_unit;
 mod ui_errors;
@@ -200,6 +201,7 @@ mod wrath_achievements;
 pub use wrath_achievements::{
     WrathAchievement, WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
 };
+pub use tooltip_links::QuestLinkView;
 mod wrath_tutorial;
 mod wrath_ready_check;
 mod wrath_calendar;
@@ -862,6 +864,7 @@ impl UiScript {
         movie::install(&lua)?;
         modelframe::install(&lua)?;
         tooltip::install(&lua)?;
+        tooltip_links::install(&lua)?;
         worldmap::install(&lua)?;
         worldstate::install(&lua)?;
         net_stats::install(&lua)?;

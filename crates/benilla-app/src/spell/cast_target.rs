@@ -590,14 +590,14 @@ mod tests {
         // arm; with no catalog the reaction resolves neutral, so the enemy bit clears. Both carry
         // `UNIT_FIELD_HEALTH` (22): a store with none reads dead to the gates.
         let me = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitHealth, 100),
                 (benilla_protocol::messages::Field::UnitFlags, 1 << 3),
             ],
         ));
         let it = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitHealth, 100),
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 0),
@@ -671,26 +671,27 @@ mod tests {
         let factions = Factions::from_catalog(
             benilla_formats::load_faction_catalog(&mut chain).expect("FactionTemplate.dbc"),
         );
-        // Faction templates 35 and 1 are a real friendly pair. Field 46 is UNIT_FIELD_FLAGS.
+        // Faction templates 35 and 1 are a real friendly pair.
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
                 (benilla_protocol::messages::Field::UnitFlags, 0x8),
             ],
         ));
         let quiet = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
                 (benilla_protocol::messages::Field::UnitFlags, 0),
             ],
         ));
         let pvp = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
-                (benilla_protocol::messages::Field::UnitFlags, 0x1000),
+                // `UNIT_FIELD_BYTES_2` byte 1 bit `0x01`, 12340's `UNIT_BYTE2_FLAG_PVP`.
+                (benilla_protocol::messages::Field::UnitBytes2, 0x0000_0100),
             ],
         ));
         let reputations = Reputations(Vec::new());
@@ -711,7 +712,7 @@ mod tests {
         );
         assert!(
             unit_word_binds(TF_UNIT_ASSIST, false, &rel(&pvp)),
-            "the same friendly NPC becomes assistable with UNIT_FLAG_PVP"
+            "the same friendly NPC becomes assistable with the PvP flag"
         );
     }
 
@@ -904,7 +905,7 @@ mod tests {
 
         let health = |hp| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitHealth, hp)],
             ))
         };

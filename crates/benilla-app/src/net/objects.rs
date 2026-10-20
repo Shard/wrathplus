@@ -374,9 +374,8 @@ fn object_create(
             at: std::time::Instant::now(),
         });
     // The placement, and on a type-11 lift the basis its keyframe offsets rotate through.
-    let go_quat = (kind == EntityKind::GameObject)
-        .then(|| fields.gameobject_rotation())
-        .flatten();
+    // 12340 descriptors carry no `GAMEOBJECT_ROTATION`.
+    let go_quat: Option<[f32; 4]> = None;
     // A type-11 lift's seed: keyframes keyed by the entry, rotated by the quat, based at the
     // create position. One whose create carried no progress u32 has no clock and stays frozen.
     let elevator_seed = (matches!(go_type, Some(11)) && transport_anchor.is_some())
@@ -682,12 +681,7 @@ fn force_speed_change(
                  (no live speed set) — we still ack, so the server and we now disagree"
             );
         }
-        speed_changes.write(SpeedChangeMessage {
-            guid,
-            kind,
-            counter,
-            speed,
-        });
+        speed_changes.write(SpeedChangeMessage);
     } else {
         debug!("net: force speed change for foreign mover {guid:#x} — applied {applied}, no ack");
     }

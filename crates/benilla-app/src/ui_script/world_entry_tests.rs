@@ -23,7 +23,8 @@ const PROBE_TOC: &str = "\
 SwitchProbe.lua
 ";
 
-/// A roster with a pending pick named `name`, the state [`super::seat_from_roster`] reads.
+/// A roster with a pending pick named `name`, the state
+/// [`super::lifecycle::seat_from_roster`] reads.
 fn roster_named(name: &str, guid: u64) -> Roster {
     let row = benilla_protocol::Character {
         guid,
@@ -816,7 +817,7 @@ fn the_login_one_shots_wait_for_the_in_game_ui() {
         crate::net::Guid(1),
         crate::net::ObjectStore(
             benilla_protocol::messages::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[],
             )
             .into_created(benilla_protocol::messages::ObjectType::Player),
@@ -1358,9 +1359,9 @@ ScreenProbeHeight = GetScreenHeight()
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// [`super::seat_from_roster`]'s `"player"` push is replaced when the descriptor streams in, but
-/// `UnitName("player")` reads only the record seeded beside it, which neither a nameless snapshot
-/// nor a despawn clears, as the reference never clears `0xc27d88`.
+/// [`super::lifecycle::seat_from_roster`]'s `"player"` push is replaced when the descriptor
+/// streams in, but `UnitName("player")` reads only the record seeded beside it, which neither a
+/// nameless snapshot nor a despawn clears, as the reference never clears `0xc27d88`.
 #[test]
 fn the_entry_load_seeds_a_record_the_feed_cannot_take_away() {
     let _l = ENV_LOCK

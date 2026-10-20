@@ -260,7 +260,7 @@ mod tests {
         let fighter = app
             .world_mut()
             .spawn(ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitFlags, 0x800)],
             )))
             .id();

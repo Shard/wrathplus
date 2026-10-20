@@ -16,7 +16,6 @@ use crate::creature_anim::spell_visual::{meeting_stone_join_fx, SpellKitFx, Spel
 use crate::names::NameCache;
 
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
-use crate::ui_party::GroupState;
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
@@ -352,13 +351,12 @@ impl BattlefieldQueue {
     }
 }
 
-/// The status text (`[0xb7203c]`): none before world enter and after world leave, the bare
-/// `UNKNOWN` until the server's `0x295` lands, then a built line; localized at push time.
+/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
+/// then a built line; localized at push time.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 enum StoneText {
     #[default]
     None,
-    Unknown,
     Built(String),
 }
 
@@ -392,12 +390,6 @@ impl MeetingStone {
     /// One of the four display-only replies.
     pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
         self.notices.push(notice);
-    }
-
-    /// The enter-world bring-up (`0x4c9f40`): the text becomes the bare `UNKNOWN`, the area stays.
-    fn enter_world(&mut self) {
-        self.text = StoneText::Unknown;
-        self.dirty = true;
     }
 
     /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
@@ -571,34 +563,10 @@ fn feed_meeting_stone(
     if std::mem::take(&mut stone.dirty) {
         let text = match &stone.text {
             StoneText::None => None,
-            StoneText::Unknown => Some(global_text(&script, "UNKNOWN")),
             StoneText::Built(t) => Some(t.clone()),
         };
         script.set_meeting_stone(stone.area, text);
     }
-}
-
-/// The enter-world bring-up's meeting-stone leg: the text reset, then the empty `CMSG 0x296`.
-/// Once per VM, a [`crate::ui_script::VmMemo`] claim: the UI teardown clears the run-once byte
-/// `[0xb4b424]` (`0x490a8d`) and `UI_Init` (`0x48fbf0`) re-runs the bring-up, so a `/reload`
-/// re-asks the server; until the reply fires `MEETINGSTONE_CHANGED` (`0x4ca38f`) the minimap icon
-/// is hidden, as in the reference. The queued area survives the reload.
-fn meeting_stone_enter_world(
-    script: Option<NonSendMut<UiScript>>,
-    mut stone: ResMut<MeetingStone>,
-    commands: Res<NetCommands>,
-    mut asked: Local<crate::ui_script::VmMemo<bool>>,
-) {
-    let Some(script) = script else {
-        return;
-    };
-    // This bring-up opcode belongs to Vanilla. An authored Wrath addon VM is not permission
-    // to enqueue an unported command through the live Wrath transport.
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 || !asked.claim(&script) {
-        return;
-    }
-    stone.enter_world();
-    let _ = commands.0.send(ClientCommand::MeetingStoneStatusQuery);
 }
 
 /// A right-click on a `GAMEOBJECT_TYPE_MEETINGSTONE` (23) that passed the shared click gates.
@@ -607,106 +575,30 @@ pub(crate) struct MeetingStoneUse {
     pub(crate) go_guid: u64,
 }
 
-/// What the meeting stone's use slot `0x5f69d0` does with one click.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StoneJoin {
-    /// No local player (`0x5f69f8`): no message and no packet.
-    Silent,
-    /// One of the four refusals (`0x496720`): an error-frame line with no sound, never chat.
-    Refuse(&'static str),
-    /// The tail `0x5f6af6`: `CMSG 0x292` with the stone's guid, and nothing else.
-    Send,
-}
-
-/// The meeting stone's use slot `0x5f69d0`. With no local player it is silent (`0x5f69f8`);
-/// otherwise four refusals in this order, the first two only in a group (`0x5f6a10`):
-///
-/// 1. not the leader (`0x5f6a2f`, the full 64-bit guid against `[0xbc75f8]`);
-/// 2. four other members (`0x5f6a4f`, `GetNumPartyMembers` at `0x4e86d0`);
-/// 3. a level outside `data[0]..=data[1]`, unsigned (`0x5f6ab4`);
-/// 4. in a raid (`0x5f6ad3`, the raid member count `[0xb713e0]`).
-///
-/// vmangos repeats all but the level test (`LFGHandler.cpp:49-68`), which is the client's alone.
-/// An uncached template reads 0/0 (`0x5f8150`), so it refuses every level.
-pub(crate) fn meeting_stone_join_refusal(
-    group: Option<&GroupState>,
-    self_guid: Option<u64>,
-    level: Option<u32>,
-    stone: Option<crate::go_templates::MeetingStoneTemplate>,
-) -> StoneJoin {
-    let (Some(self_guid), Some(level)) = (self_guid, level) else {
-        return StoneJoin::Silent;
-    };
-    let in_group = group.is_some_and(|g| g.in_group);
-    if in_group {
-        if group.map(|g| g.leader) != Some(self_guid) {
-            return StoneJoin::Refuse("ERR_MEETING_STONE_MUST_BE_LEADER");
-        }
-        if group.is_some_and(|g| g.members.len() >= MEETING_STONE_PARTY_CAP) {
-            return StoneJoin::Refuse("ERR_MEETING_STONE_GROUP_FULL");
-        }
-    }
-    // An uncached template reads 0/0, which refuses.
-    let (min_level, max_level) = stone.map_or((0, 0), |s| (s.min_level, s.max_level));
-    if level < min_level || level > max_level {
-        return StoneJoin::Refuse("ERR_MEETING_STONE_INVALID_LEVEL");
-    }
-    if in_group && group.is_some_and(|g| g.group_type == crate::ui_party::GROUPTYPE_RAID) {
-        return StoneJoin::Refuse("ERR_MEETING_STONE_NO_RAID_GROUP");
-    }
-    StoneJoin::Send
-}
-
-/// Four other members is a full party: [`GroupState::members`] omits the player, so this is
-/// vmangos's five (`Group/Group.h:49,232`) and the client's `>= 4` (`0x5f6a4f`), with no `+ 1`.
-const MEETING_STONE_PARTY_CAP: usize = 4;
-
-/// The join drain: the meeting stone's use slot, run with the click's guid.
+/// The use drain: a click on a meeting stone, which build 12340 calls a summoning stone. 3.3.5 has
+/// no `CMSG_MEETINGSTONE_JOIN`: AzerothCore's 0x292 is `CMSG_SET_SAVED_INSTANCE_EXTEND`, and a
+/// type-23 stone is reached only through `CMSG_GAMEOBJ_USE` (`GameObject::Use`, which casts the
+/// summon 23598 at our target when they share our raid and both meet the stone's level). The server
+/// refuses silently. Labelled: build 12340's own client-side gates for type 23 are untraced, so none
+/// are applied here.
 fn drain_meeting_stone_joins(
-    script: Option<NonSendMut<UiScript>>,
     mut uses: MessageReader<MeetingStoneUse>,
-    group: Option<Res<GroupState>>,
     self_guid: Res<SelfGuid>,
-    templates: Res<crate::go_templates::GameObjectTemplates>,
-    self_q: Query<&ObjectStore, With<SelfPlayer>>,
     commands: Res<NetCommands>,
-    mut sink: crate::ui_action::MessageSink,
 ) {
-    let Some(mut script) = script else {
-        uses.clear();
-        return;
-    };
-    let level = self_q.single().ok().and_then(|s| s.0.unit_level());
-    let mut lines = Vec::new();
     for &MeetingStoneUse { go_guid } in uses.read() {
-        let stone = templates.get(go_guid).and_then(|t| t.meeting_stone);
-        let verdict = meeting_stone_join_refusal(group.as_deref(), self_guid.0, level, stone);
-        // Traced on the click's own `use` tag: a refusal, the no-player silence, or the send.
+        // With no local player the click is silent.
+        if self_guid.0.is_none() {
+            continue;
+        }
         if benilla_assets::trace::enabled_for("use") {
             benilla_assets::trace::line(
                 "use",
-                &match verdict {
-                    StoneJoin::Silent => format!("meeting stone {go_guid:#x}: no local player"),
-                    StoneJoin::Refuse(key) => {
-                        format!("meeting stone {go_guid:#x} refused: {key}")
-                    }
-                    StoneJoin::Send => {
-                        format!("SEND CMSG_MEETINGSTONE_JOIN guid={go_guid:#x}")
-                    }
-                },
+                &format!("SEND CMSG_GAMEOBJ_USE meeting stone guid={go_guid:#x}"),
             );
         }
-        match verdict {
-            StoneJoin::Silent => {}
-            StoneJoin::Refuse(key) => lines.extend(crate::ui_action::keyed_line(&script, key)),
-            StoneJoin::Send => {
-                debug!("meeting stone: join {go_guid:#x}");
-                let _ = commands.0.send(ClientCommand::MeetingStoneJoin { go_guid });
-            }
-        }
-    }
-    if !lines.is_empty() {
-        crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", lines);
+        debug!("meeting stone: use {go_guid:#x}");
+        let _ = commands.0.send(ClientCommand::GameObjUse { guid: go_guid });
     }
 }
 
@@ -788,28 +680,18 @@ fn drain_latch_verbs(
         return;
     };
 
-    // ConfirmPetUnlearn: `cost > coinage` shows ERR_NOT_ENOUGH_MONEY and sends nothing.
-    let confirms = script.take_pet_unlearn_confirms();
-    if confirms > 0 {
-        if let Some(npc) = pet.pending() {
-            let money = self_q
-                .single()
-                .ok()
-                .and_then(|store| store.0.player_money())
-                .unwrap_or(0);
-            if pet.cost > money {
-                if let Some(line) = crate::ui_action::keyed_line(&script, "ERR_NOT_ENOUGH_MONEY") {
-                    crate::ui_action::show_messages(
-                        &mut script,
-                        &mut sink,
-                        "ui_dialog_verbs",
-                        [line],
-                    );
-                }
-            } else {
-                for _ in 0..confirms {
-                    let _ = commands.0.send(ClientCommand::PetUnlearn { trainer: npc });
-                }
+    // ConfirmPetUnlearn: `cost > coinage` shows ERR_NOT_ENOUGH_MONEY. Otherwise nothing goes out
+    // either: 3.3.5's `CMSG_PET_UNLEARN` is `STATUS_NEVER` in AzerothCore (`Opcodes.cpp`, 0x2F0),
+    // which resets pet talents from the gossip option instead.
+    if script.take_pet_unlearn_confirms() > 0 && pet.pending().is_some() {
+        let money = self_q
+            .single()
+            .ok()
+            .and_then(|store| store.0.player_money())
+            .unwrap_or(0);
+        if pet.cost > money {
+            if let Some(line) = crate::ui_action::keyed_line(&script, "ERR_NOT_ENOUGH_MONEY") {
+                crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", [line]);
             }
         }
     }
@@ -825,36 +707,11 @@ fn drain_latch_verbs(
     }
 }
 
-/// The meeting-stone leave, the drain over the stone's queue.
-fn drain_queue_verbs(
-    script: Option<NonSendMut<UiScript>>,
-    group: Option<Res<GroupState>>,
-    self_guid: Res<SelfGuid>,
-    commands: Res<NetCommands>,
-    mut sink: crate::ui_action::MessageSink,
-) {
-    let Some(mut script) = script else {
-        return;
-    };
-
-    // CancelMeetingStoneRequest: in a party we do not lead, ERR_MEETING_STONE_NOT_LEADER;
-    // otherwise `0x293`, queued or not.
-    let cancels = script.take_meeting_stone_cancels();
-    if cancels > 0 {
-        let not_leader = group
-            .as_deref()
-            .is_some_and(|g| g.in_group && Some(g.leader) != self_guid.0);
-        if not_leader {
-            if let Some(line) =
-                crate::ui_action::keyed_line(&script, "ERR_MEETING_STONE_NOT_LEADER")
-            {
-                crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", [line]);
-            }
-        } else {
-            for _ in 0..cancels {
-                let _ = commands.0.send(ClientCommand::MeetingStoneLeave);
-            }
-        }
+/// `CancelMeetingStoneRequest`, drained: 3.3.5 has no meeting-stone queue to leave (AzerothCore's 0x293
+/// is `SMSG_LFG_OFFER_CONTINUE`), so nothing goes out.
+fn drain_queue_verbs(script: Option<NonSendMut<UiScript>>) {
+    if let Some(mut script) = script {
+        let _ = script.take_meeting_stone_cancels();
     }
 }
 
@@ -1053,11 +910,6 @@ impl Plugin for UiDialogVerbsPlugin {
                         .after(crate::target::TargetUpdate)
                         .run_if(crate::ui_script::ingame_ui_up)
                         .in_set(crate::char_select::InWorldGated),
-                    // In world only: the query is a world packet, and the glue screen has a VM.
-                    meeting_stone_enter_world
-                        .in_set(crate::ui_script::UiFeed)
-                        .before(feed_meeting_stone)
-                        .in_set(crate::char_select::InWorldGated),
                     feed_meeting_stone.in_set(UiFeed),
                     // Before the target chain, where the poll and the click can change the
                     // healer: the reference resolves an Accept press in the UI dispatch, before
@@ -1097,7 +949,7 @@ mod tests {
     use benilla_protocol::messages::{Field, FieldLayout};
 
     /// `UNIT_FIELD_LEVEL`, absolute field 34.
-    const LEVEL_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
+    const LEVEL_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
 
     #[test]
     fn setting_the_same_healer_is_a_complete_no_op() {
@@ -1189,11 +1041,11 @@ mod tests {
     }
 
     /// `UNIT_FIELD_FLAGS`, absolute field 46; `UNIT_FLAG_PVP` (`0x1000`) passes `can_assist`.
-    const UNIT_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const UNIT_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
     /// `UNIT_NPC_FLAGS`, absolute field 147.
-    const NPC_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNpcFlags);
+    const NPC_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
     /// `PLAYER_FLAGS`, absolute field 190; bit `0x10` is GHOST.
-    const PLAYER_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
+    const PLAYER_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
 
     fn fields(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs))
@@ -1233,7 +1085,7 @@ mod tests {
                 scale: 1.0,
             },
             fields(&[
-                (NPC_FLAGS_FIELD, if guide { 1 << 6 } else { 0 }),
+                (NPC_FLAGS_FIELD, if guide { 0x8000 } else { 0 }),
                 (UNIT_FLAGS_FIELD, 0x1000),
                 (FACTION_TEMPLATE_FIELD, 35),
             ]),
@@ -1244,7 +1096,7 @@ mod tests {
 
     /// `UNIT_FIELD_FACTIONTEMPLATE`, absolute field 35.
     const FACTION_TEMPLATE_FIELD: u16 =
-        FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+        FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
 
     macro_rules! catalog_or_skip {
         () => {{
@@ -1363,124 +1215,13 @@ mod tests {
     }
 
     #[test]
-    fn the_meeting_stone_join_refuses_in_the_references_order() {
-        use crate::go_templates::MeetingStoneTemplate;
-        const ME: u64 = 0x5e1f;
-        const MATE: u64 = 0xa11e;
-        let stone = Some(MeetingStoneTemplate {
-            min_level: 15,
-            max_level: 60,
-            area: 1519,
-        });
-        let party = |leader: u64, others: usize, group_type: u8| GroupState {
-            in_group: true,
-            group_type,
-            leader,
-            members: (0..others)
-                .map(|i| benilla_protocol::messages::GroupMemberEntry {
-                    name: format!("Mate{i}"),
-                    guid: 0xb000 + i as u64,
-                    status: 1,
-                    flags: 0,
-                })
-                .collect(),
-            ..GroupState::default()
-        };
-
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(40), stone),
-            StoneJoin::Send
-        );
-        // Leading a party of four, three others: not full.
-        assert_eq!(
-            meeting_stone_join_refusal(Some(&party(ME, 3, 0)), Some(ME), Some(40), stone),
-            StoneJoin::Send
-        );
-
-        // 1: in a party someone else leads.
-        assert_eq!(
-            meeting_stone_join_refusal(Some(&party(MATE, 1, 0)), Some(ME), Some(40), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_MUST_BE_LEADER")
-        );
-        // 2: leading a full party, four others.
-        assert_eq!(
-            meeting_stone_join_refusal(Some(&party(ME, 4, 0)), Some(ME), Some(40), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_GROUP_FULL")
-        );
-        // 3: the level band, both ends inclusive.
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(14), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_INVALID_LEVEL")
-        );
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(61), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_INVALID_LEVEL")
-        );
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(15), stone),
-            StoneJoin::Send
-        );
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(60), stone),
-            StoneJoin::Send
-        );
-        // 4: a raid, its leader included.
-        assert_eq!(
-            meeting_stone_join_refusal(Some(&party(ME, 1, 1)), Some(ME), Some(40), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_NO_RAID_GROUP")
-        );
-
-        // Where two terms hold, the leader term answers first.
-        assert_eq!(
-            meeting_stone_join_refusal(Some(&party(MATE, 4, 1)), Some(ME), Some(40), stone),
-            StoneJoin::Refuse("ERR_MEETING_STONE_MUST_BE_LEADER")
-        );
-
-        // An uncached template reads 0/0 (`0x5f8150`) and refuses.
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(5), None),
-            StoneJoin::Refuse("ERR_MEETING_STONE_INVALID_LEVEL")
-        );
-        // The same arithmetic on a shipped `0/0` band; `0/60` is the open one.
-        let closed = Some(MeetingStoneTemplate {
-            min_level: 0,
-            max_level: 0,
-            area: 1519,
-        });
-        let open = Some(MeetingStoneTemplate {
-            min_level: 0,
-            max_level: 60,
-            area: 1519,
-        });
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(1), closed),
-            StoneJoin::Refuse("ERR_MEETING_STONE_INVALID_LEVEL")
-        );
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), Some(60), open),
-            StoneJoin::Send
-        );
-
-        // No active player, whether the guid or the level is missing: silent (`0x5f69f8`).
-        assert_eq!(
-            meeting_stone_join_refusal(None, Some(ME), None, stone),
-            StoneJoin::Silent
-        );
-        assert_eq!(
-            meeting_stone_join_refusal(None, None, Some(40), stone),
-            StoneJoin::Silent
-        );
-    }
-
-    #[test]
-    fn the_join_drain_sends_the_clicked_stone_and_refuses_silently_on_the_wire() {
+    fn the_use_drain_sends_the_clicked_stone_as_a_gameobject_use() {
         use crate::go_templates::GameObjectTemplates;
         // A real GameObject guid, `counter | entry << 24 | HIGH_GAMEOBJECT << 48`: the template
         // cache is keyed by the entry it carries.
         const STONE_ENTRY: u32 = 0x5701;
         const STONE: u64 = 0xF110 << 48 | (STONE_ENTRY as u64) << 24 | 0x22;
         const ME: u64 = 0x5e1f;
-        const MATE: u64 = 0xa11e;
 
         let (tx, rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
@@ -1492,7 +1233,6 @@ mod tests {
         app.insert_resource(templates)
             .insert_resource(NetCommands(tx))
             .insert_resource(SelfGuid(Some(ME)))
-            .init_resource::<GroupState>()
             .init_resource::<crate::ui_action::UiErrorKeys>()
             .init_resource::<crate::ui_chat::ChatLog>()
             .init_resource::<crate::sound::MessageSounds>()
@@ -1510,7 +1250,7 @@ mod tests {
         let joins = |rx: &crossbeam_channel::Receiver<ClientCommand>| {
             rx.try_iter()
                 .filter_map(|c| match c {
-                    ClientCommand::MeetingStoneJoin { go_guid } => Some(go_guid),
+                    ClientCommand::GameObjUse { guid } => Some(guid),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -1521,36 +1261,12 @@ mod tests {
         app.update();
         assert_eq!(joins(&rx), vec![STONE], "the clicked stone's own guid");
 
-        // In a party led by someone else: the same click sends nothing.
-        app.world_mut().resource_mut::<GroupState>().in_group = true;
-        app.world_mut().resource_mut::<GroupState>().leader = MATE;
+        // With no local player the click is silent.
+        app.world_mut().resource_mut::<SelfGuid>().0 = None;
         app.world_mut()
             .write_message(MeetingStoneUse { go_guid: STONE });
         app.update();
-        assert!(
-            joins(&rx).is_empty(),
-            "a refusal is a local line, never a packet"
-        );
-    }
-
-    /// A registered schedule: `run_system_once` would build a fresh `Local<VmMemo<bool>>` per call,
-    /// an unclaimed memo every frame.
-    #[test]
-    fn a_wrath_addon_vm_never_enqueues_vanilla_meeting_stone_bringup() {
-        let (tx, rx) = crossbeam_channel::unbounded();
-        let mut app = App::new();
-        app.init_resource::<MeetingStone>()
-            .insert_resource(NetCommands(tx))
-            .add_systems(Update, meeting_stone_enter_world);
-        for _ in 0..2 {
-            app.insert_non_send_resource(
-                UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
-                    .expect("Wrath VM"),
-            );
-            app.update();
-            app.update();
-            assert!(rx.try_iter().next().is_none());
-        }
+        assert!(joins(&rx).is_empty(), "no player, no packet");
     }
 
     #[test]
@@ -1611,13 +1327,11 @@ mod tests {
         stone.apply(12, 9);
         assert_eq!(stone.area, 12);
         assert_eq!(stone.updates, vec![(0, 1), (1519, 1), (1519, 0), (0, 9)]);
-        stone.enter_world();
-        assert_eq!(stone.text, StoneText::Unknown);
+        stone.leave_world();
         assert_eq!(
             stone.area, 12,
-            "the enter-world reset leaves the area alone"
+            "the leave-world sweep leaves the area alone"
         );
-        stone.leave_world();
         assert_eq!(stone.text, StoneText::None);
     }
 

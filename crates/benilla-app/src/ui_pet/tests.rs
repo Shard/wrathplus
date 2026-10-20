@@ -386,9 +386,9 @@ fn only_a_possessed_units_attack_press_raises_the_latch() {
 /// `0x5ee5a0` asks for the unit we possess, not the one we own.
 #[test]
 fn the_latch_gate_is_possession_not_ownership() {
-    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-    const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
+    const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -553,9 +553,9 @@ fn touching_your_target_calls_the_pet_off() {
 /// The owner test falls back to SUMMONEDBY, not `0x5ee5a0`'s CREATEDBY.
 #[test]
 fn the_attack_events_read_the_pets_combat_flag_not_the_click_latch() {
-    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-    const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
+    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
+    const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -617,17 +617,6 @@ fn only_the_attack_order_is_gated() {
     )));
 }
 
-/// A pet with one aura in slot 0. `AURAFLAGS` packs a nibble per slot: `0x2` is an effect-index
-/// bit (the slot is live), `0x1` is `AFLAG_CANCELABLE`, the bit `0x4bcea0` tests.
-fn pet_running(spell_id: u32, nibble: u32) -> ObjectStore {
-    const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
-    const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
-    ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-        (AURA, spell_id),
-        (AURAFLAGS, nibble),
-    ]))
-}
-
 /// A spell with an active icon, which the predicate requires.
 fn toggle_spell() -> benilla_formats::SpellDisplay {
     benilla_formats::SpellDisplay {
@@ -635,36 +624,6 @@ fn toggle_spell() -> benilla_formats::SpellDisplay {
         active_icon: Some("Interface\\Icons\\Ability_Druid_Cower".into()),
         ..spell("Cower", Some("Rank 1"))
     }
-}
-
-#[test]
-fn a_pet_spell_shows_active_only_while_it_is_a_live_cancelable_aura_on_the_pet() {
-    let slot = packed(2645, benilla_protocol::messages::PET_TYPE_SPELL_FIRST);
-    let running = pet_running(2645, 0x3);
-    let d = toggle_spell();
-
-    assert_eq!(
-        active_aura_press(slot, Some(&running), Some(&d)),
-        Some(2645)
-    );
-
-    // No ActiveIconID: never active, so a press re-casts.
-    let plain = spell("Growl", None);
-    assert_eq!(active_aura_press(slot, Some(&running), Some(&plain)), None);
-    // Live but not cancelable.
-    let uncancelable = pet_running(2645, 0x2);
-    assert_eq!(active_aura_press(slot, Some(&uncancelable), Some(&d)), None);
-    // A different spell's aura, and no pet descriptor at all.
-    assert_eq!(
-        active_aura_press(slot, Some(&pet_running(768, 0x3)), Some(&d)),
-        None
-    );
-    assert_eq!(active_aura_press(slot, None, Some(&d)), None);
-    // A command slot with the same action: the type decides.
-    assert_eq!(
-        active_aura_press(packed(2645, PET_ACT_COMMAND), Some(&running), Some(&d)),
-        None
-    );
 }
 
 #[test]
@@ -708,35 +667,31 @@ fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
         messages::{Field, FieldLayout},
         ObjectFields,
     };
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let make = |flags, bytes, owner| {
-            let pairs = [
-                (Field::UnitFlags, flags),
-                (Field::UnitBytes2, bytes),
-                (Field::UnitSummonedby, owner),
-                (Field::UnitCharmedby, 7),
-            ]
-            .map(|(field, value)| (layout.resolve(field).unwrap().index, value));
-            ObjectFields::from_native_pairs(layout, &pairs)
-        };
-        for (rename, abandon) in [(false, false), (true, false), (false, true), (true, true)] {
-            let permissions = u32::from(rename) | (u32::from(abandon) << 1);
-            let (flags, bytes) = match layout {
-                FieldLayout::Vanilla5875 => (permissions << 4, 0),
-                FieldLayout::Wrath12340 => (0x30, permissions << 16),
-            };
-            let pet = make(flags, bytes, 7);
-            assert_eq!(menu_predicates(42, Some(&pet), Some(7)), (abandon, rename));
-            assert_eq!(menu_predicates(0, Some(&pet), Some(7)), (false, false));
-            assert_eq!(menu_predicates(42, Some(&pet), Some(8)), (false, false));
-            let charmed_only = make(flags, bytes, 0);
-            assert_eq!(
-                menu_predicates(42, Some(&charmed_only), Some(7)),
-                (false, false)
-            );
-        }
-        assert_eq!(menu_predicates(42, None, Some(7)), (false, false));
+    let layout = FieldLayout::Wrath12340;
+    let make = |flags, bytes, owner| {
+        let pairs = [
+            (Field::UnitFlags, flags),
+            (Field::UnitBytes2, bytes),
+            (Field::UnitSummonedby, owner),
+            (Field::UnitCharmedby, 7),
+        ]
+        .map(|(field, value)| (layout.resolve(field).unwrap().index, value));
+        ObjectFields::from_native_pairs(layout, &pairs)
+    };
+    for (rename, abandon) in [(false, false), (true, false), (false, true), (true, true)] {
+        let permissions = u32::from(rename) | (u32::from(abandon) << 1);
+        let (flags, bytes) = (0x30, permissions << 16);
+        let pet = make(flags, bytes, 7);
+        assert_eq!(menu_predicates(42, Some(&pet), Some(7)), (abandon, rename));
+        assert_eq!(menu_predicates(0, Some(&pet), Some(7)), (false, false));
+        assert_eq!(menu_predicates(42, Some(&pet), Some(8)), (false, false));
+        let charmed_only = make(flags, bytes, 0);
+        assert_eq!(
+            menu_predicates(42, Some(&charmed_only), Some(7)),
+            (false, false)
+        );
     }
+    assert_eq!(menu_predicates(42, None, Some(7)), (false, false));
 }
 
 #[test]
@@ -1001,7 +956,7 @@ fn a_held_pet_names_its_templates_creature_type() {
     use bevy::prelude::*;
     const PET: u64 = 0xF140_0000_0000_002A;
     /// `OBJECT_FIELD_ENTRY`, and the Imp's template entry.
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
+    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
     const IMP: u32 = 416;
 
     let mut names = crate::names::NameCache::default();

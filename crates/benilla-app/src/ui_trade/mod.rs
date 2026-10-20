@@ -738,7 +738,7 @@ fn drain_trade(
         let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(
             store
                 .map(|s| s.0.layout())
-                .unwrap_or(benilla_protocol::messages::FieldLayout::Vanilla5875),
+                .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340),
             bag,
             slot,
         ) else {
@@ -1320,9 +1320,9 @@ mod tests {
     fn a_dead_or_ghost_initiator_is_refused() {
         // The `UNIT_FIELD_HEALTH`, `UNIT_FIELD_MAXHEALTH` and `PLAYER_FLAGS` field ids, and
         // `PLAYER_FLAGS_GHOST`.
-        const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-        const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
-        const PLAYER_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
+        const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+        const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+        const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
         const GHOST: u32 = 0x10;
         for (label, fields) in [
             ("dead", vec![(HEALTH, 0u32), (MAXHEALTH, 100)]),

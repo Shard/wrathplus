@@ -6,8 +6,15 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 /// Fixtures for the unknown-key fallback (`ui_petition::lines` and `benilla_ui::messages`'
-/// `kind_of`), which need a key the client does not have.
-const NOT_A_MESSAGE: &[&str] = &["ERR_SOMETHING_UNCARVED", "ERR_NOT_A_REAL_MESSAGE"];
+/// `kind_of`), which need a key the client does not have, and the 1.12 rows
+/// `benilla_ui::messages` asserts build 12340 dropped.
+const NOT_A_MESSAGE: &[&str] = &[
+    "ERR_SOMETHING_UNCARVED",
+    "ERR_NOT_A_REAL_MESSAGE",
+    "ERR_INVALID_PETNAME",
+    "ERR_INVITED_TO_GUILD_SS",
+    "ERR_GUILD_ENTER_NAME",
+];
 
 /// The generated catalog, skipped: walking it would make every key trivially present.
 const GENERATED: &str = "catalog.rs";
@@ -59,7 +66,7 @@ fn every_error_key_in_the_source_is_a_catalog_row() {
         .collect();
     assert!(
         strays.is_empty(),
-        "these keys are not rows of the message catalog (1.12 plus the 12340 supplement), so the \
+        "these keys are not rows of the message catalog (build 12340's table), so the \
          client would show nothing for them: {strays:?}"
     );
 }
@@ -68,12 +75,14 @@ fn every_error_key_in_the_source_is_a_catalog_row() {
 /// shipped file has no entry for many rows, which the reference then never shows.
 #[test]
 fn every_error_key_in_the_source_resolves_to_real_text() {
-    /// Keys the shipped `GlobalStrings.lua` has no string for, so the reference shows nothing:
-    /// raised by `ui_items::equip_error` (errorId 362), `ui_action::cast_fail` (pet happiness)
-    /// and `ui_pet::net` (errorId 337). `PET_SPELL_NOPATH` exists but is not row 337's key and
-    /// nothing in the client raises it.
-    const SILENT_IN_5875: &[&str] = &[
+    /// Rows of build 12340's table (`0xac8af0`) its `GlobalStrings.lua` has no string for, so the
+    /// reference shows nothing either: raised by `ui_items::equip_error` (row `0x182`),
+    /// `ui_action::cast_fail` (pet happiness `0x180`, no path `0x167`), `ui_battlefield` (the XP-gain
+    /// join refusal `0x29c`) and `ui_dialog_verbs` (the meeting-stone kick `0x1ca`).
+    const SILENT_IN_12340: &[&str] = &[
+        "ERR_BATTLEGROUND_JOIN_XP_GAIN",
         "ERR_CANT_BE_DISENCHANTED",
+        "ERR_MEETING_STONE_PARTY_KICKED_FROM_QUEUE",
         "ERR_NOT_HAPPY_ENOUGH",
         "ERR_PET_SPELL_NOPATH",
     ];
@@ -95,7 +104,7 @@ fn every_error_key_in_the_source_resolves_to_real_text() {
     let silent: Vec<&String> = keys
         .iter()
         .filter(|k| !NOT_A_MESSAGE.contains(&k.as_str()))
-        .filter(|k| !SILENT_IN_5875.contains(&k.as_str()))
+        .filter(|k| !SILENT_IN_12340.contains(&k.as_str()))
         .filter(|k| {
             let text: String = vm.lua().globals().get(k.as_str()).unwrap_or_default();
             resolved += usize::from(!text.is_empty());
@@ -210,14 +219,14 @@ fn every_sounding_catalog_row_also_has_text_to_show() {
         let text: String = vm.lua().globals().get(r.key).unwrap_or_default();
         assert!(
             !text.is_empty(),
-            "{} sounds (tag {:#04x}, cue {:?}) but has no 1.12 string — benilla would be silent \
+            "{} sounds (tag {:#04x}, cue {:?}) but has no 12340 string — benilla would be silent \
              where the reference is not",
             r.key,
             r.type_tag,
             r.sound
         );
     }
-    assert_eq!(sounding, 86, "56 voice lines + 30 named cues");
+    assert_eq!(sounding, 104, "64 voice lines + 40 named cues");
 }
 
 /// Every `PETTAME_*` key `pet_tame_failure_key` returns, the fill for `ERR_TAME_FAILED`, is a

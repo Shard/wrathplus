@@ -292,7 +292,7 @@ pub(super) fn seed_ui_fixture(
             const G_BANKBAG: u64 = 0x2005;
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, entry),
                         (benilla_protocol::messages::Field::ItemStackCount, stack),
@@ -322,7 +322,7 @@ pub(super) fn seed_ui_fixture(
                 &mut index,
                 G_BANKBAG,
                 ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::ObjectEntry, 94_005),
                         (Field::ItemStackCount, 1),
@@ -337,7 +337,7 @@ pub(super) fn seed_ui_fixture(
             // purse, under which the 10g third-slot cost (`BankBagSlotPrices.dbc`) is affordable.
             const PLAYER_GUID: u64 = 0x51;
             let fields = ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::PlayerBytes2, 0, 2 << 16), // bankBagSlots (byte 2) = 2
                     (Field::PlayerBankSlot1, 0, G_SHIELD as u32), // BANK_SLOT_1 (vault slot 0)
@@ -595,7 +595,7 @@ pub(super) fn seed_ui_fixture(
             // Slot 0 is quest 783 (counter 0 at 3), slot 1 quest 7 (counter 0 at 10, state
             // COMPLETE), packed as vmangos's `SetQuestSlotCounter` and `SetQuestSlotState` write.
             let fields = ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::PlayerQuestLog, 0, 783),
                     (benilla_protocol::messages::Field::PlayerQuestLog, 1, 3),
@@ -827,7 +827,7 @@ pub(super) fn seed_ui_fixture(
             const G_ARROWS: u64 = 0x1004;
 
             let fields = ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::UnitLevel, 0, 12),
                     (Field::UnitBytes0, 0, 4 | 1 << 8), // night elf warrior, male, mana
@@ -860,9 +860,9 @@ pub(super) fn seed_ui_fixture(
                     (Field::PlayerSkillInfo11, 7, 55 | 60 << 16),
                     // Stat buffs (INT on the wire): +10 stamina, -5 spirit, +10 fire resistance. The
                     // -5 is the two's-complement word an x86 server sends; an arm64 one sends 0.
-                    (Field::PlayerPosstat2, 0, 10),
-                    (Field::PlayerNegstat4, 0, (-5i32) as u32),
-                    (Field::PlayerResistancebuffmodspositive, 2, 10), // RESISTANCEBUFFMODSPOSITIVE[2] (fire)
+                    (Field::UnitPosstat2, 0, 10),
+                    (Field::UnitNegstat4, 0, (-5i32) as u32),
+                    (Field::UnitResistancebuffmodspositive, 2, 10), // RESISTANCEBUFFMODSPOSITIVE[2] (fire)
                     // Equipment guids (INV_SLOT_HEAD base 486 + 2·slot): chest 4, main hand 15,
                     // ranged 17; the first backpack slot (PACK_SLOT_1, 532) holds the arrows.
                     (Field::PlayerInvSlotHead, 8, G_CHEST as u32),
@@ -877,7 +877,7 @@ pub(super) fn seed_ui_fixture(
             // stand-in.
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, entry),
                         (benilla_protocol::messages::Field::ItemStackCount, stack),
@@ -935,7 +935,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
@@ -974,7 +974,7 @@ pub(super) fn seed_ui_fixture(
                         scale: 1.0,
                     },
                     crate::net::ObjectStore(ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[
                             (Field::UnitHealth, 100),
                             (Field::UnitMaxHealth, 100),
@@ -1021,7 +1021,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_field_slots(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 0, 12),
                         (Field::UnitBytes0, 0, 1 | 1 << 8), // human (race 1), warrior (class 1)
@@ -1037,7 +1037,7 @@ pub(super) fn seed_ui_fixture(
                 &mut index,
                 G_SWORD,
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, 93_011),
                         (benilla_protocol::messages::Field::ItemStackCount, 1),
@@ -1214,7 +1214,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(SELF_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
@@ -1250,7 +1250,7 @@ pub(super) fn seed_ui_fixture(
                     scale: 1.0,
                 },
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitHealth, 100),
                         (Field::UnitMaxHealth, 100),
@@ -1287,7 +1287,7 @@ pub(super) fn seed_ui_fixture(
                             scale: 1.0,
                         },
                         crate::net::ObjectStore(ObjectFields::from_fields(
-                            FieldLayout::Vanilla5875,
+                            FieldLayout::Wrath12340,
                             &[
                                 (Field::UnitHealth, 100),
                                 (Field::UnitMaxHealth, 100),

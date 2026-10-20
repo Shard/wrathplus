@@ -50,30 +50,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn quest_log_slot_unpacks_counters_and_state() {
-        // Slot 2 (198 + 6 = 204): counters 5/10/63/0 at 6-bit strides, state COMPLETE, a timer
-        // (`Player.h:1100-1106`).
-        let count_state =
-            5u32 | (10 << 6) | (63 << 12) | ((quest_slot_state::COMPLETE as u32) << 24);
-        let f = ObjectFields::from_pairs(&[(204, 783), (205, count_state), (206, 4242)]);
-        assert_eq!(
-            f.player_quest_log(2),
-            Some(QuestLogSlot {
-                quest_id: 783,
-                counters: [5, 10, 63, 0],
-                state: quest_slot_state::COMPLETE,
-                timer: 4242,
-            })
-        );
-        assert_eq!(f.player_quest_log(1), None);
-        assert_eq!(f.player_quest_log(3), None);
-        assert_eq!(f.player_quest_log(PLAYER_QUEST_LOG_SLOTS), None);
-    }
-
-    #[test]
     fn quest_log_cleared_slot_reads_zero_id() {
         // An abandoned slot: the server zeroes the id and the pair.
-        let f = ObjectFields::from_pairs(&[(198, 0), (199, 0), (200, 0)]);
+        let f = ObjectFields::from_pairs(&[(158, 0), (159, 0), (160, 0)]);
         assert_eq!(f.player_quest_log(0).map(|s| s.quest_id), Some(0));
     }
 }

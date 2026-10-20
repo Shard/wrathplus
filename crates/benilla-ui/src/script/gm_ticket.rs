@@ -25,13 +25,14 @@ pub enum GmTicketIntent {
     NeedMoreHelp { text: String },
 }
 
-/// One `NewGMTicket` or `UpdateGMTicket` call.
+/// One `NewGMTicket(ticketDescription, needResponse)` or `UpdateGMTicket(ticketDescription)`
+/// call, build 12340's shapes (their usage strings); 12340 files no category.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GmTicketWrite {
-    /// The selected `GMTicketCategory.dbc` id (`HelpFrameOpenTicket.ticketType`).
-    pub category: u32,
     /// The text as typed; the EditBox caps it at 500, under the reference's 1999.
     pub text: String,
+    /// `NewGMTicket`'s `needResponse`, as Lua truth (`HelpFrame.lua:326`); false for an update.
+    pub need_response: bool,
     /// `NewGMTicket` or `UpdateGMTicket`, two opcodes: the window picks by its own `hasTicket`
     /// flag, and the app must not re-derive it.
     pub is_new: bool,
@@ -91,17 +92,24 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         )?;
     }
 
-    // Submit and Save Changes: one signature, `(type, text)` in the reference's usage string.
-    for (name, is_new) in [("NewGMTicket", true), ("UpdateGMTicket", false)] {
+    // Submit and Save Changes (`HelpFrame.lua:324-326`): `NewGMTicket(ticketDescription,
+    // needResponse)` and `UpdateGMTicket(ticketDescription)`, each raising its usage string on a
+    // non-string description.
+    for (name, is_new, usage) in [
+        ("NewGMTicket", true, "Usage: NewGMTicket(ticketDescription, needResponse)"),
+        ("UpdateGMTicket", false, "Usage: UpdateGMTicket(ticketDescription)"),
+    ] {
         g.set(
             name,
-            lua.create_function(move |lua, (category, text): (u32, String)| {
+            lua.create_function(move |lua, (text, need_response): (Value, Value)| {
+                let text = super::binding_abi::string_arg(lua, text, usage)?;
+                let need_response = is_new && !matches!(need_response, Value::Nil | Value::Boolean(false));
                 lua.app_data_mut::<Model>()
                     .expect("model app_data")
                     .gm_ticket_intents
                     .push(GmTicketIntent::Write(GmTicketWrite {
-                        category,
                         text,
+                        need_response,
                         is_new,
                     }));
                 Ok(())

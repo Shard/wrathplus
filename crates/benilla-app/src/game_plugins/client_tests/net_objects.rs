@@ -24,7 +24,7 @@ fn item_countdowns_live_on_the_item_and_a_queued_enchant_waits_for_it() {
         guid,
         container: false,
         fields: ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(benilla_protocol::messages::Field::ObjectEntry, 117)],
         ),
     };

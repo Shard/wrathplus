@@ -128,6 +128,12 @@ pub(crate) fn drop_item_on_unit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::Field;
+
+    /// `field`'s native descriptor index.
+    const fn at(field: Field) -> u16 {
+        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    }
 
     /// `0x6ea1e0`'s three gates, each failed alone.
     #[test]
@@ -138,11 +144,11 @@ mod tests {
         let pet = |created_by_spell: Option<u32>, created_by: Option<u64>| {
             let mut pairs: Vec<(u16, u32)> = Vec::new();
             if let Some(s) = created_by_spell {
-                pairs.push((146, s));
+                pairs.push((at(Field::UnitCreatedBySpell), s));
             }
             if let Some(g) = created_by {
-                pairs.push((14, g as u32));
-                pairs.push((15, (g >> 32) as u32));
+                pairs.push((at(Field::UnitCreatedby), g as u32));
+                pairs.push((at(Field::UnitCreatedby) + 1, (g >> 32) as u32));
             }
             ObjectFields::from_pairs(&pairs)
         };

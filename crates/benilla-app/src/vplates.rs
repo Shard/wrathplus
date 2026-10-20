@@ -363,10 +363,6 @@ fn drive_vplates(
         if store.is_none_or(|s| s.0.unit_health().unwrap_or(0) == 0) {
             continue;
         }
-        // `0x60f62e`: `bytes_1` byte 3 `& 3` (ghost or creep) has no plate.
-        if store.is_some_and(|s| s.0.unit_is_ghost_visual()) {
-            continue;
-        }
         if (tf.translation - self_tf.translation).length_squared() > MAX_DIST_SQ {
             continue;
         }

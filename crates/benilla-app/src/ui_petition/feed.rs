@@ -319,7 +319,7 @@ mod tests {
     /// The player's display ids, `UNIT_FIELD_DISPLAYID` (131) and `UNIT_FIELD_NATIVEDISPLAYID`.
     fn player(display: u32, native: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitDisplayId, display),
                 (

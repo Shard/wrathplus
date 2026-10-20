@@ -407,11 +407,6 @@ pub(crate) fn drain_social(
                 }
                 let _ = commands.0.send(ClientCommand::AddFriend { name });
             }
-            SocialRequest::SetLookingForGroup { slots, comment } => {
-                let _ = commands
-                    .0
-                    .send(ClientCommand::SetLookingForGroup { slots, comment });
-            }
             SocialRequest::RemoveFriendIndex(index) => {
                 if let Some(guid) = row_guid(&social.display_order, index) {
                     let _ = commands.0.send(ClientCommand::DelFriend { guid });

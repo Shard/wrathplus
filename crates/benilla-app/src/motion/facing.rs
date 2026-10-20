@@ -549,7 +549,7 @@ mod tests {
                     scale: 1.0,
                 },
                 ObjectStore(ObjectFields::from_field_slots(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::UnitTarget, 0, 7),
                         (benilla_protocol::messages::Field::UnitTarget, 1, 0),

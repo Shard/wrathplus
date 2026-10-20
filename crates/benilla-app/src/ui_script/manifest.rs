@@ -164,9 +164,29 @@ pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String
                 race_file: Some("Orc".into()),
                 class: Some("Hunter".into()),
                 class_file: Some("HUNTER".into()),
+                // `BattlefieldFrame_Update` concatenates it (`BattlefieldFrame.lua:387`).
+                faction_group: Some("Horde".into()),
+                faction_group_localized: Some("Horde".into()),
                 ..Default::default()
             }),
         );
+    } else {
+        // A caller's own player still has the Enter World record a session always holds:
+        // `UnitRace("player")` and `UnitClass("player")` read only that record (`0x518269`),
+        // never the unit, so a seat without one leaves `DressUpTexturePath` a nil race file.
+        let (name, race_file) = script
+            .lua()
+            .load("local _, f = UnitRace('player') return UnitName('player'), f")
+            .eval::<(Option<String>, Option<String>)>()
+            .unwrap_or_default();
+        if race_file.is_none() {
+            script.set_player_record(PlayerRecord {
+                name: name.unwrap_or_default(),
+                race: Some(("Orc".into(), "Orc".into())),
+                class: Some(("Hunter".into(), "HUNTER".into())),
+                sex: 2,
+            });
+        }
     }
     script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
     // No sound during the load, as on the live edge (`silenced_ui_load`).

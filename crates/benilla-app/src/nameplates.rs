@@ -366,10 +366,6 @@ pub(crate) fn drive_nameplates(
         // creature shows only as the target, as in the reference; that gate leg is untraced.
         let show = if vplates.0.contains(&entity) || bubbles.0.contains(&entity) {
             false
-        } else if store.is_some_and(|s| s.0.unit_is_ghost_visual()) {
-            // The ghost vis-flag suppresses the name, target rescue included: `0x607101` and
-            // `0x60f62e` both test `bytes_1` byte 3 `& 3`.
-            false
         } else if is_self {
             // The own CVar, before the rescue; no name over a fully faded first-person avatar
             // (our reading of `ShouldShowName`'s untraced `vtable+0x58` leg).

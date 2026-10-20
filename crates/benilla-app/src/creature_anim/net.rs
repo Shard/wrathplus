@@ -521,7 +521,7 @@ mod tests {
         let attacker = world
             .spawn(ObjectStore(
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[(benilla_protocol::messages::Field::UnitHealth, 100)],
                 )
                 .into_created(ObjectType::Unit),
@@ -530,7 +530,7 @@ mod tests {
         let victim = world
             .spawn(ObjectStore(
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[(benilla_protocol::messages::Field::UnitHealth, 100)],
                 )
                 .into_created(ObjectType::Unit),

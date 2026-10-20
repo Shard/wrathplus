@@ -263,13 +263,12 @@ fn aura_list(catalog: Option<&SpellCatalog>, inputs: &[AuraInput]) -> Vec<AuraSt
 /// slot within each half, no durations, through the display filter. `buffs_visible` false drops
 /// the helpful half, the unit-level gate's nil at every index ([`buffs_visible_on`]).
 fn other_unit_inputs<'a>(
-    store: &'a ObjectStore,
+    _store: &'a ObjectStore,
     catalog: Option<&'a SpellCatalog>,
     buffs_visible: bool,
 ) -> impl Iterator<Item = AuraInput> + 'a {
-    store
-        .0
-        .unit_auras()
+    // 12340 descriptors carry no aura slots; native auras arrive by packet.
+    std::iter::empty::<UnitAuraSlot>()
         .filter(move |a| buffs_visible || a.slot >= UNIT_AURA_POSITIVE_SLOTS)
         .filter(move |a| shown_in_aura_ui(catalog, a.spell_id))
         .map(|a| (a.slot, a.spell_id, a.stacks, a.flags))
@@ -460,7 +459,8 @@ fn feed_auras(
     let bevy_now = time.elapsed_secs_f64();
     let catalog = spells.as_ref().map(|s| &s.catalog);
     let spell_durations = spells.as_ref().map(|s| &s.durations);
-    let occupied: Vec<UnitAuraSlot> = store.0.unit_auras().collect();
+    // 12340 descriptors carry no aura slots; native auras arrive by packet.
+    let occupied: Vec<UnitAuraSlot> = Vec::new();
     // Filtered before the cache, so a hidden aura takes no position (`0x4e42b6`-`0x4e4308`).
     let live: Vec<UnitAuraSlot> = occupied
         .iter()
@@ -741,17 +741,6 @@ fn drain_aura_cancels(script: Option<NonSendMut<UiScript>>, net: Res<NetCommands
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
-
-    /// [`other_unit_inputs`] as the list.
-    fn other_unit_auras(
-        store: &ObjectStore,
-        catalog: Option<&SpellCatalog>,
-        buffs_visible: bool,
-    ) -> Vec<AuraState> {
-        let inputs: Vec<AuraInput> = other_unit_inputs(store, catalog, buffs_visible).collect();
-        aura_list(catalog, &inputs)
-    }
 
     /// The plugin on a bare app: without a `UiScript` the systems that need one skip.
     fn aura_app() -> App {
@@ -991,94 +980,6 @@ mod tests {
         assert!(
             (expiry - 1199.95).abs() < 1e-9,
             "expiry rebased onto the script clock, got {expiry}"
-        );
-    }
-    // == `UnitBuff`'s unit-level gate (`0x519500`) ==
-    // A stealthed Ridge Stalker carries 5916 in a positive slot and 22766 in a negative one; the
-    // reference draws only 22766, as `UnitBuff` lists no hostile creature's buffs.
-
-    /// `UNIT_FIELD_FLAGS`'s index.
-    const F_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    /// `UNIT_FIELD_CHARMEDBY`'s low dword; the high half is the next index.
-    const F_CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-
-    /// The Ridge Stalker's two slots: 5916 helpful, 22766 harmful.
-    fn ridge_stalker_slots(flags: u32) -> ObjectStore {
-        ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-            (F_FLAGS, flags),
-            (47, 5916),            // UNIT_FIELD_AURA slot 0, the positive half
-            (47 + 32, 22766),      // slot 32, the negative half
-            (95, 0x0000_0008),     // AURAFLAGS slot 0 nibble 0x8 (eff0)
-            (95 + 4, 0x0000_0008), // slot 32 nibble 0x8
-        ]))
-    }
-
-    /// Denied, `UnitBuff` is nil at every index; `UnitDebuff` is untouched.
-    #[test]
-    fn the_unit_gate_drops_the_whole_helpful_half_and_never_the_harmful_one() {
-        let store = ridge_stalker_slots(0);
-
-        let denied = other_unit_auras(&store, None, false);
-        assert_eq!(
-            denied.iter().map(|a| a.spell_id).collect::<Vec<_>>(),
-            [22766],
-            "a hostile creature shows its debuffs and NOT its buffs — `UnitBuff`'s unit gate"
-        );
-        assert!(denied.iter().all(|a| !a.helpful));
-
-        let allowed = other_unit_auras(&store, None, true);
-        assert_eq!(
-            allowed.iter().map(|a| a.spell_id).collect::<Vec<_>>(),
-            [5916, 22766],
-            "with the gate open both halves enumerate, ascending slot"
-        );
-    }
-
-    /// vmangos sets `UNIT_FLAG_AURAS_VISIBLE` for a GM viewer too (`Object.cpp:765-766`).
-    #[test]
-    fn detect_magic_or_gm_mode_opens_the_gate_on_the_flag_alone() {
-        let reputations = Reputations::default();
-        // No factions catalog: the reaction is neutral (3), below the `>= 4` bar.
-        let hostile = ridge_stalker_slots(0);
-        assert!(
-            !buffs_visible_on(&hostile, None, None, &reputations, RelationContext::none()),
-            "neutral reaction, not player-controlled, no PvP flag → no buffs"
-        );
-
-        let detected = ridge_stalker_slots(UNIT_FLAG_AURAS_VISIBLE);
-        assert!(
-            buffs_visible_on(&detected, None, None, &reputations, RelationContext::none()),
-            "UNIT_FLAG_AURAS_VISIBLE alone opens it, whatever the reaction says"
-        );
-    }
-
-    /// `NOT_SELECTABLE` is `CanAssist`'s; the charm clause is `UnitBuff`'s (`0x5195f1`-`0x5195f7`).
-    #[test]
-    fn not_selectable_and_being_charmed_each_close_the_gate_on_their_own() {
-        let reputations = Reputations::default();
-
-        // AURAS_VISIBLE is tested before `CanAssist`, so it wins over NOT_SELECTABLE.
-        let both = ridge_stalker_slots(UNIT_FLAG_AURAS_VISIBLE | (1 << 25));
-        assert!(
-            buffs_visible_on(&both, None, None, &reputations, RelationContext::none()),
-            "AURAS_VISIBLE is tested FIRST and short-circuits CanAssist entirely"
-        );
-
-        // Being charmed closes the gate before `CanAssist` runs.
-        let friendly_pc = ridge_stalker_slots(0x8);
-        let charmed_self = ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
-            (F_CHARMEDBY, 0x1234),
-            (F_CHARMEDBY + 1, 0),
-        ]));
-        assert!(
-            !buffs_visible_on(
-                &friendly_pc,
-                Some(&charmed_self),
-                None,
-                &reputations,
-                RelationContext::none()
-            ),
-            "activePlayer.CHARMEDBY != 0 → no buffs on anyone"
         );
     }
 
