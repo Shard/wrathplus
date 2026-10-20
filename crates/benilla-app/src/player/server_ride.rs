@@ -8,7 +8,9 @@ use benilla_assets::coords::bevy_to_wow;
 use bevy::prelude::*;
 
 use crate::creature_anim::{move_flags, BodyTwist, MovementState};
-use crate::net::{ClientCommand, Embodied, NetCommands, Spline, SplineStopped};
+use crate::motion::Spline;
+use crate::motion::SplineStopped;
+use crate::net::{ClientCommand, Embodied, NetCommands};
 
 use super::Player;
 
@@ -48,7 +50,7 @@ fn ride_z(
             .liquid_at(benilla_world::world_point::Subject::Player, wow)
             .map(|l| pos.y + (l.surface_z - wow[2])),
     );
-    crate::net::grounded_y(pos.y, floor, water, player.modes.hover)
+    crate::motion::grounded_y(pos.y, floor, water, player.modes.hover)
 }
 
 /// The yaw of a pure-Y facing rotation, as the net bridge and `sample_splines` write it; Bevy yaw

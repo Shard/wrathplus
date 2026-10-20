@@ -1,10 +1,10 @@
 //! Whole-client tests of `crate::net::objects`, from `net/objects.rs` (`tests`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
+use crate::motion::Spline;
+use crate::motion::SplineStopped;
 use crate::net::GuidIndex;
 use crate::net::SelfGuid;
-use crate::net::Spline;
-use crate::net::SplineStopped;
 use benilla_assets::coords::bevy_to_wow;
 use benilla_protocol::ObjectFields;
 use benilla_protocol::SessionEvent;

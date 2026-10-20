@@ -35,7 +35,7 @@ fn kind_color(kind: ModelKind) -> egui::Color32 {
 }
 
 /// The granted movement modes by name, `None` for a unit with none (nearly all of them).
-fn granted_modes(modes: Option<&crate::net::UnitMoveModes>) -> Option<String> {
+fn granted_modes(modes: Option<&crate::motion::UnitMoveModes>) -> Option<String> {
     use crate::creature_anim::move_flags as f;
     let w = modes?.0;
     let named = [
@@ -65,11 +65,11 @@ type GoCollisionReadout = (
 /// motion ([`crate::net::RemoteMotion`]) and the modes the server granted it
 /// ([`crate::net::UnitMoveModes`]), which explain a hovering, water-walking or rooted body.
 type MotionReadout = (
-    Option<&'static crate::net::Spline>,
-    Option<&'static crate::net::RemoteMotion>,
-    Option<&'static crate::net::UnitMoveModes>,
+    Option<&'static crate::motion::Spline>,
+    Option<&'static crate::motion::RemoteMotion>,
+    Option<&'static crate::motion::UnitMoveModes>,
     // The ground clamp's memo, for the card's `ground` line.
-    Option<&'static crate::net::GroundClamped>,
+    Option<&'static crate::motion::GroundClamped>,
     // Where the unit stands now, which the `ground` line reads the terrain against.
     &'static Transform,
 );

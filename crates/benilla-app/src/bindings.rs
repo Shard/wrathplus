@@ -1927,4 +1927,50 @@ mod tests {
         );
         assert_eq!(found, ["x\\\"y", "ToggleBackpack();"]);
     }
+    /// A physical ESC on the production load, through the App's key dispatch: the install's
+    /// `bind ESCAPE TOGGLEGAMEMENU` runs stock `ToggleGameMenu`, which first closes an open window
+    /// (`CloseAllWindows`, here the friends panel) and only then toggles `GameMenuFrame`.
+    #[test]
+    fn a_physical_escape_closes_a_window_then_toggles_the_game_menu() {
+        benilla_formats::wow_data_or_skip!();
+        let mut script = UiScript::new().expect("VM");
+        let failures = crate::ui_script::load_default_ui(&mut script);
+        assert!(failures.is_empty(), "load failures: {failures:#?}");
+        script.set_default_bindings(crate::ui_script::default_bindings());
+        script.load_binding_set(1);
+        let mut app = vm_harness(script);
+        let shown = |app: &App, frame: &str| {
+            app.world()
+                .non_send_resource::<UiScript>()
+                .eval::<bool>(&format!("return {frame}:IsShown() == 1"))
+                .unwrap()
+        };
+        let escape = |app: &mut App| {
+            press_key(app, KeyCode::Escape);
+            app.update();
+            release_key(app, KeyCode::Escape);
+            app.update();
+        };
+        app.update();
+
+        escape(&mut app);
+        assert!(shown(&app, "GameMenuFrame"), "ESC opens the game menu");
+        escape(&mut app);
+        assert!(!shown(&app, "GameMenuFrame"), "a second ESC closes it");
+
+        app.world_mut()
+            .non_send_resource_mut::<UiScript>()
+            .run("ShowUIPanel(FriendsFrame)")
+            .unwrap();
+        app.update();
+        assert!(shown(&app, "FriendsFrame"), "the friends window is up");
+        escape(&mut app);
+        assert!(
+            !shown(&app, "FriendsFrame"),
+            "ESC closes the open window first"
+        );
+        assert!(!shown(&app, "GameMenuFrame"), "and opens no menu with it");
+        escape(&mut app);
+        assert!(shown(&app, "GameMenuFrame"), "the next ESC opens the menu");
+    }
 }

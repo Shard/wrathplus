@@ -469,7 +469,8 @@ fn apply_self_move(
     // when it just cleared.
     match (was_falling, now_falling) {
         (_, true) => {
-            let (vel_y, xy) = crate::net::jump_seed(m.jump, m.fall_time, player.modes.feather_fall);
+            let (vel_y, xy) =
+                crate::motion::jump_seed(m.jump, m.fall_time, player.modes.feather_fall);
             let t = m.fall_time as f32 / 1000.0;
             player.airborne_since = Some(time.elapsed_secs() - t);
             player.jump_zspeed = m.jump.map_or(0.0, |j| -j.zspeed);

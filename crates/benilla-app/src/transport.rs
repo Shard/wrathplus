@@ -543,7 +543,7 @@ fn compose_riders(
         (
             &TransportRider,
             &mut Transform,
-            Option<&mut crate::net::RemoteMotion>,
+            Option<&mut crate::motion::RemoteMotion>,
         ),
         Without<Transport>,
     >,
@@ -588,8 +588,8 @@ fn ground_deck_riders(
     mut riders: Query<
         (
             &mut Transform,
-            Option<&mut crate::net::RemoteMotion>,
-            &crate::net::Spline,
+            Option<&mut crate::motion::RemoteMotion>,
+            &crate::motion::Spline,
         ),
         (With<TransportRider>, Without<Transport>),
     >,
