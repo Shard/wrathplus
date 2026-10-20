@@ -519,7 +519,7 @@ causes (inherent impls, visibility, test helpers) were measured statically on th
    `SelfGuid` and `ServerSaidMessage` are in `app_core::session`, and `game_plugins` installs
    `MotionPlugin` right after `NetPlugin`, with `net`'s `motion` re-exports dropped and their callers
    repointed by the script below.
-2. The symbol-map rewrite for the move step: `scripts/split/canonical-paths.py`, a dry run by
+2. The symbol-map rewrite for the move step: `uv run scripts/split/canonical-paths.py`, a dry run by
    default. It rewrites `crate::<old>::X` through every re-export to the defining path, splits
    `use` lists, and with `--via <module> --drop-reexports` deletes that module's re-exports.
    `--home` limits it to one destination. Done (Wire B); its first run moved net's 11 `motion`
@@ -548,7 +548,7 @@ Mechanics for moving layer `X` with modules `m1 … mn`:
 4. In `benilla-app/src/lib.rs`: replace `mod m1;` with `pub use benilla_app_X::m1;` for each.
    `crate::m1::Foo` paths in the modules still in `benilla-app` keep resolving through the
    re-export, so nothing above the moved layer is edited.
-5. First run `scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
+5. First run `uv run scripts/split/canonical-paths.py --via <each upper module> --apply`, so no moved file
    names an item through an upper layer's re-export. Then, inside the moved files, rewrite
    references to lower crates:
    `sed -i '' -E 's/crate::(core_mod_a|core_mod_b|…)::/benilla_app_core::\1::/g'` over the new
