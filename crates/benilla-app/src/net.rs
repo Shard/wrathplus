@@ -318,7 +318,7 @@ pub(crate) struct UnitSpeeds(pub(crate) MoveSpeeds);
 /// No zero-`walk` fallback: the ctor's zeroed speeds (`0x7c48e8`) are never observable, since
 /// the post-create apply `0x5fad50` applies our own speed block as it does a remote one.
 pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
-    use crate::creature_anim::move_flags as f;
+    use crate::app_core::movement::move_flags as f;
     // A swimmer or flier on its ascend or descend key moves without a direction bit.
     let vertical = flags & (f::SWIMMING | f::FLYING) != 0
         && flags & (f::ASCENDING | f::DESCENDING) != 0;
@@ -586,20 +586,15 @@ impl NetCommandsRaw {
         Self(CommandSender::Session(sender))
     }
 
+    /// A session-stamped sender, as a Wrath reconnect in-process has.
+    fn is_session(&self) -> bool {
+        matches!(self.0, CommandSender::Session(_))
+    }
+
     /// Activates the endpoint paired with the `Connected` event currently crossing the ECS
     /// barrier. Raw fixture/Vanilla senders have no endpoint side channel.
-    fn activate_connected(
-        &mut self,
-        endpoints: &CommandEndpoints,
-        player: Option<&mut crate::player::Player>,
-    ) {
-        if matches!(self.0, CommandSender::Session(_)) {
-            // Wrath reconnects in-process. Clear the old mover synchronously, before publishing
-            // the new endpoint: the deferred session-end message reader runs later in Input and
-            // must not get one frame in which it can stream the old pose to the new socket.
-            if let Some(player) = player {
-                *player = crate::player::Player::default();
-            }
+    fn activate_connected(&mut self, endpoints: &CommandEndpoints) {
+        if self.is_session() {
             self.0 = CommandSender::Session(
                 endpoints
                     .0
@@ -610,15 +605,28 @@ impl NetCommandsRaw {
     }
 }
 
-fn activate_command_endpoint(
-    In(event): In<SessionEvent>,
-    endpoints: Res<CommandEndpoints>,
-    mut commands: ResMut<NetCommands>,
-    mut player: Option<ResMut<crate::player::Player>>,
-) {
-    if matches!(event, SessionEvent::Connected { .. }) {
-        commands.activate_connected(&endpoints, player.as_deref_mut());
+fn activate_command_endpoint(In(event): In<SessionEvent>, world: &mut World) {
+    if !matches!(event, SessionEvent::Connected { .. }) {
+        return;
     }
+    if !world.contains_resource::<CommandEndpoints>() || !world.contains_resource::<NetCommands>() {
+        error!("net: handler `activate_command_endpoint` did not run: no command endpoint");
+        return;
+    }
+    // Wrath reconnects in-process. Clear the old mover synchronously, before publishing the new
+    // endpoint: each layer's `ConnectResets` hook runs here, ahead of the session-end reader.
+    if world.resource::<NetCommands>().is_session() {
+        let resets = world
+            .get_resource::<crate::app_core::movement::ConnectResets>()
+            .map(|r| r.0.clone())
+            .unwrap_or_default();
+        for reset in resets {
+            reset(world);
+        }
+    }
+    world.resource_scope(|world, mut commands: Mut<NetCommands>| {
+        commands.activate_connected(world.resource::<CommandEndpoints>());
+    });
 }
 
 impl NetCommands {
@@ -2553,7 +2561,7 @@ pub(crate) struct TeleportMessage {
 pub(crate) struct SelfMoveMessage {
     pub(crate) position: [f32; 3],
     pub(crate) orientation: f32,
-    /// Merged under [`crate::creature_anim::move_flags::SERVER_AUTHORED`], never assigned.
+    /// Merged under [`crate::app_core::movement::move_flags::SERVER_AUTHORED`], never assigned.
     pub(crate) flags: u32,
     pub(crate) pitch: f32,
     pub(crate) fall_time: u32,
@@ -3064,7 +3072,7 @@ mod tests {
     /// The walk arm (`0x7c4d11`) precedes the backward min (`0x7c4d1d`).
     #[test]
     fn the_walk_arm_outranks_the_backward_min() {
-        use crate::creature_anim::move_flags as f;
+        use crate::app_core::movement::move_flags as f;
         let s = vanilla();
         assert_eq!(current_speed(&s, f::FORWARD), 7.0, "plain run");
         assert_eq!(current_speed(&s, f::BACKWARD), 4.5, "the backward min");
@@ -3081,7 +3089,7 @@ mod tests {
     /// `0x7c4cd9` precedes `0x7c4d11`.
     #[test]
     fn swimming_is_tested_first_so_there_is_no_swim_walk() {
-        use crate::creature_anim::move_flags as f;
+        use crate::app_core::movement::move_flags as f;
         let s = vanilla();
         assert_eq!(
             current_speed(&s, f::FORWARD | f::SWIMMING | f::WALK_MODE),
@@ -3098,7 +3106,7 @@ mod tests {
     /// fast one.
     #[test]
     fn every_arm_that_looks_like_a_select_is_really_a_min() {
-        use crate::creature_anim::move_flags as f;
+        use crate::app_core::movement::move_flags as f;
         let s = MoveSpeeds {
             walk: 12.0, // a walk-speed buff above run
             run: 7.0,
@@ -3120,7 +3128,7 @@ mod tests {
     /// speed block like any other (`0x5fad50`).
     #[test]
     fn a_mode_is_not_a_motion_and_a_zero_walk_speed_is_a_zero() {
-        use crate::creature_anim::move_flags as f;
+        use crate::app_core::movement::move_flags as f;
         let s = vanilla();
         assert_eq!(current_speed(&s, 0), 0.0);
         assert_eq!(

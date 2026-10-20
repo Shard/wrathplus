@@ -269,3 +269,27 @@ pub(crate) const GRAVITY: f32 = 19.291_105;
 /// Terminal fall speed (yd/s), `[0x87d894]` and vmangos's `terminalVelocity`; [`crate::net`]'s arc
 /// replay caps at it too.
 pub(crate) const TERMINAL_VELOCITY: f32 = 60.148_003;
+
+/// The maps a transport's cycle lies on, the cross-map worldport's spare predicate: the wire
+/// layer's despawn sweep keeps a transport whose path touches the destination. Inserted beside
+/// `crate::transport::Transport` when it arms, so the sweep need not read the drive. A lift
+/// carries no timetable and answers no: the server re-sends the destination's transports on
+/// arrival (`SendInitTransports`), so a lift despawns and streams back like any object.
+#[derive(Component, Clone)]
+pub(crate) struct TransportMaps(
+    pub(crate) Option<std::sync::Arc<benilla_formats::TransportTimetable>>,
+);
+
+impl TransportMaps {
+    /// Whether any leg of the cycle lies on `map_id`.
+    pub(crate) fn touches_map(&self, map_id: u32) -> bool {
+        self.0.as_ref().is_some_and(|t| t.touches_map(map_id))
+    }
+}
+
+/// The resets a Wrath `Connected` runs synchronously, before the new command endpoint is
+/// published (the wire layer's `activate_command_endpoint`), so the session-end reader, which runs
+/// later in `Input`, never gets a frame in which it can stream the old session's state to the new
+/// socket. Each layer installs the reset of the state it owns; the wire layer owns none of it.
+#[derive(Resource, Default)]
+pub(crate) struct ConnectResets(pub(crate) Vec<fn(&mut World)>);
