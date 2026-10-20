@@ -19,25 +19,25 @@ use crossbeam_channel::{Receiver, Sender};
 
 use benilla_world::schedule::WorldStage;
 
-mod apply;
+pub(crate) mod apply;
 pub(crate) mod handlers;
 pub(crate) mod io;
 mod motion;
-mod objects;
+pub(crate) mod objects;
 pub(crate) mod wrath_melee;
 pub(crate) use objects::tear_down;
 mod session;
 mod world;
 pub(crate) mod wrath_auras;
-mod wrath_exchange_capture;
+pub(crate) mod wrath_exchange_capture;
 pub(crate) mod wrath_instance_control_capture;
 pub(crate) mod wrath_inventory_capture;
 pub(crate) use crate::ui_native::wrath_achievements;
 pub(crate) use crate::ui_native::wrath_equipment_sets;
 pub(crate) use crate::ui_native::wrath_item_refunds;
 pub(crate) use crate::ui_native::wrath_sockets;
-mod wrath_mail_capture;
-mod wrath_mirror_image_capture;
+pub(crate) mod wrath_mail_capture;
+pub(crate) mod wrath_mirror_image_capture;
 pub(crate) mod wrath_notices;
 pub(crate) use crate::ui_native::wrath_quests_completed_capture;
 pub(crate) mod wrath_achievement_capture;
@@ -47,28 +47,24 @@ pub(crate) use crate::ui_native::wrath_raid_browser_feed;
 pub(crate) mod wrath_calendar_capture;
 pub(crate) use crate::ui_native::wrath_quest_pois;
 mod wrath_arena_lines;
-mod wrath_chat_notice_capture;
+pub(crate) mod wrath_chat_notice_capture;
 pub(crate) mod wrath_battleground_capture;
 pub(crate) use crate::ui_native::wrath_death_capture;
-mod wrath_session_meta_capture;
-mod wrath_help_capture;
+pub(crate) mod wrath_session_meta_capture;
+pub(crate) mod wrath_help_capture;
 pub(crate) mod wrath_refer_friend_capture;
 pub(crate) mod wrath_world_objects_capture;
 pub(crate) mod wrath_session_misc_capture;
-#[cfg(test)]
-mod capture_replay_tests;
 pub(crate) mod wrath_inspect_capture;
 pub(crate) mod wrath_char_service_capture;
-mod wrath_faction_capture;
-mod wrath_spell_log_capture;
-mod wrath_spell_control_capture;
-mod wrath_movement_capture;
-mod wrath_bootstrap_capture;
+pub(crate) mod wrath_faction_capture;
+pub(crate) mod wrath_spell_log_capture;
+pub(crate) mod wrath_spell_control_capture;
+pub(crate) mod wrath_movement_capture;
+pub(crate) mod wrath_bootstrap_capture;
 pub(crate) mod wrath_vehicle;
 pub(crate) mod wrath_combo_points;
 pub(crate) mod wrath_runes;
-#[cfg(test)]
-mod wrath_stream_tests;
 pub(crate) use crate::ui_native::wrath_threat;
 pub(crate) use crate::ui_native::wrath_ui_timer_capture;
 
@@ -504,12 +500,12 @@ pub(crate) struct ActiveMover;
 
 /// The inbound event channel, drained each frame by [`apply_net_updates`].
 #[derive(Resource)]
-pub(crate) struct NetEvents(Receiver<SessionEvent>);
+pub(crate) struct NetEvents(pub(crate) Receiver<SessionEvent>);
 
 /// Fresh producer endpoints published immediately before their ordered [`SessionEvent::Connected`]
 /// edge. The connection handler installs one only when that edge reaches ECS.
 #[derive(Resource)]
-pub(crate) struct CommandEndpoints(Receiver<SessionCommandSender>);
+pub(crate) struct CommandEndpoints(pub(crate) Receiver<SessionCommandSender>);
 
 /// One app command stamped with the connection epoch observed by its producer. Stamping happens
 /// here, before enqueue, so an old producer backlog can never be relabelled for a new socket.
@@ -1101,7 +1097,6 @@ impl ChatKind {
             Self::BattlegroundLeader => 0x2d,
         }
     }
-
 }
 
 /// `WOW_CAST_TRACE=1`: log our own cast packets and every outbound movement packet. vmangos
@@ -2742,98 +2737,6 @@ mod tests {
             assert!(!net.supports(SessionDialect::Wrath12340, &command));
             assert!(net.supports(SessionDialect::Vanilla5875, &command));
         }
-    }
-
-    fn connected() -> SessionEvent {
-        SessionEvent::Connected {
-            self_guid: 0x1234,
-            name: "New".into(),
-            billing_time_rested: 0,
-            tutorial_flags: None,
-            addon_info: None,
-        }
-    }
-
-    fn old_pose_move(pos: Vec3) -> ClientCommand {
-        ClientCommand::Move {
-            kind: MoveKind::Heartbeat,
-            flags: 0,
-            pos: [pos.x, pos.y, pos.z],
-            orientation: 0.0,
-            pitch: 0.0,
-            fall_time: 0,
-            jump: None,
-            transport: None,
-        }
-    }
-
-    #[test]
-    fn wrath_connected_clears_old_pose_before_publishing_the_new_endpoint() {
-        let mut app = crate::game_plugins::schedule_tests::headless_client();
-        let (wire_tx, wire_rx) = crossbeam_channel::unbounded();
-        let old = SessionCommandSender::new(wire_tx.clone(), 7);
-        let old_clone = old.clone();
-        let new = SessionCommandSender::new(wire_tx, 8);
-        let (endpoint_tx, endpoint_rx) = crossbeam_channel::unbounded();
-        endpoint_tx.send(new).unwrap();
-        app.insert_resource(NetCommands::session_stamped(old))
-            .insert_resource(CommandEndpoints(endpoint_rx))
-            .init_resource::<crate::player::Player>();
-        {
-            let mut player = app.world_mut().resource_mut::<crate::player::Player>();
-            player.active = true;
-            player.pos = Vec3::new(11.0, 22.0, 33.0);
-        }
-
-        // The prior session edge and the new connection are drained in one ECS frame.
-        handlers::dispatch(app.world_mut(), vec![SessionEvent::LoggedOut, connected()]);
-
-        let player = app.world().resource::<crate::player::Player>();
-        assert!(*player == crate::player::Player::default());
-        // Even a producer retaining the old clone remains stamped old. The normal movement gate
-        // sees inactive and therefore cannot copy the old pose through the newly active endpoint.
-        old_clone
-            .send(old_pose_move(Vec3::new(11.0, 22.0, 33.0)))
-            .unwrap();
-        if player.active {
-            app.world()
-                .resource::<NetCommands>()
-                .0
-                .send(old_pose_move(player.pos))
-                .unwrap();
-        }
-        app.world()
-            .resource::<NetCommands>()
-            .0
-            .send(ClientCommand::Logout)
-            .unwrap();
-        let queued: Vec<_> = wire_rx.try_iter().collect();
-        assert_eq!(queued.len(), 2);
-        assert_eq!(queued[0].epoch, 7);
-        assert!(matches!(queued[0].command, ClientCommand::Move { .. }));
-        assert_eq!(queued[1].epoch, 8);
-        assert!(matches!(queued[1].command, ClientCommand::Logout));
-    }
-
-    #[test]
-    fn raw_offline_connected_neither_waits_for_a_sidechannel_nor_resets_vanilla_player() {
-        let mut app = crate::game_plugins::schedule_tests::headless_client();
-        let (raw_tx, _raw_rx) = crossbeam_channel::unbounded();
-        let (_endpoint_tx, endpoint_rx) = crossbeam_channel::unbounded();
-        app.insert_resource(NetCommands(raw_tx))
-            .insert_resource(CommandEndpoints(endpoint_rx))
-            .init_resource::<crate::player::Player>();
-        app.world_mut()
-            .resource_mut::<crate::player::Player>()
-            .active = true;
-
-        handlers::dispatch(app.world_mut(), vec![connected()]);
-
-        assert!(app.world().resource::<crate::player::Player>().active);
-        assert!(matches!(
-            app.world().resource::<NetCommands>().0,
-            CommandSender::Raw(_)
-        ));
     }
 
     #[test]

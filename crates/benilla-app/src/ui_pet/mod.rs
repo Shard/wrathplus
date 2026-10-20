@@ -15,9 +15,9 @@ use crate::ui_action::CooldownEvents;
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
-mod bar;
-mod drain;
-mod menu;
+pub(crate) mod bar;
+pub(crate) mod drain;
+pub(crate) mod menu;
 mod net;
 mod unit;
 mod usable;
@@ -31,13 +31,11 @@ use menu::{drain_pet_menu, feed_pet_menu};
 use unit::feed_pet_unit;
 
 #[cfg(test)]
-mod flush_tests;
-#[cfg(test)]
-mod press_tests;
+pub(crate) mod press_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod usable_tests;
+pub(crate) mod usable_tests;
 
 /// The pet action bar's state. A zero `spells.pet_guid` means no bar: the teardown packet carries
 /// only that guid.

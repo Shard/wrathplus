@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeHelpPackets>) {
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_help_capture_tests.rs"]
-mod tests;

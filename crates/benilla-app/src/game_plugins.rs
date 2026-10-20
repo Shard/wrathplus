@@ -280,6 +280,9 @@ impl PluginGroup for GamePlugins {
 }
 
 #[cfg(test)]
+mod client_tests;
+
+#[cfg(test)]
 pub(crate) mod schedule_tests {
     use std::any::TypeId;
     use std::collections::{BTreeMap, HashMap, HashSet};

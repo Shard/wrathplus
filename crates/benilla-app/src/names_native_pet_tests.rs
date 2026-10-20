@@ -11,13 +11,13 @@ fn response(name: &[u8]) -> Response {
         declined_names: None,
     }
 }
-fn app() -> App {
+pub(crate) fn app() -> App {
     let mut app = App::new();
     app.init_resource::<NameCache>()
         .add_plugins(UiNativePetNamePlugin);
     app
 }
-fn packet(app: &mut App, name: &[u8]) {
+pub(crate) fn packet(app: &mut App, name: &[u8]) {
     crate::net::handlers::dispatch(
         app.world_mut(),
         vec![SessionEvent::WrathPetName {
@@ -25,7 +25,7 @@ fn packet(app: &mut App, name: &[u8]) {
         }],
     );
 }
-fn drain(app: &mut App) {
+pub(crate) fn drain(app: &mut App) {
     app.world_mut()
         .run_system_once(net::drain_native_pet_names)
         .unwrap();
@@ -89,66 +89,4 @@ fn queued_response_disconnect_cannot_repopulate_cache() {
     app.world_mut().resource_mut::<NameCache>().clear_pending();
     drain(&mut app);
     assert!(!app.world().resource::<NameCache>().pets.answered(7));
-}
-#[test]
-fn queued_response_world_entry_cannot_repopulate_previous_session() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    packet(&mut app, b"stale");
-    crate::net::handlers::dispatch(
-        app.world_mut(),
-        vec![SessionEvent::Connected {
-            self_guid: 123,
-            name: "Synthetic".into(),
-            billing_time_rested: 0,
-            tutorial_flags: None,
-            addon_info: None,
-        }],
-    );
-    drain(&mut app);
-    assert!(!app.world().resource::<NameCache>().pets.answered(7));
-    assert!(app.world().resource::<NativePetNamePackets>().0.is_empty());
-}
-
-/// Use the registered schedule, not run_system_once: consumers see this frame's
-/// answer after Net and before UiFeed, including a reply after the login reset.
-#[test]
-fn scheduled_drain_exposes_fresh_post_connected_name_to_ui_feed_same_frame() {
-    #[derive(Resource, Default)]
-    struct Seen(Vec<Option<String>>);
-    fn observe(names: Res<NameCache>, mut seen: ResMut<Seen>) {
-        seen.0.push(names.pets.get(7).cloned());
-    }
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    packet(&mut app, b"old-session");
-    crate::net::handlers::dispatch(
-        app.world_mut(),
-        vec![SessionEvent::Connected {
-            self_guid: 123,
-            name: "Synthetic".into(),
-            billing_time_rested: 0,
-            tutorial_flags: None,
-            addon_info: None,
-        }],
-    );
-    packet(&mut app, b"fresh-session");
-    // Preserve the real Connected-handler result, but run the registered name
-    // schedule in a CPU-only app: full client startup requires a RenderDevice.
-    let names = app.world_mut().remove_resource::<NameCache>().unwrap();
-    let packets = app
-        .world_mut()
-        .remove_resource::<NativePetNamePackets>()
-        .unwrap();
-    let mut app = App::new();
-    app.insert_resource(names)
-        .insert_resource(packets)
-        .insert_resource(SessionDialect::Wrath12340)
-        .init_resource::<Seen>();
-    net::register(&mut app);
-    app.add_systems(Update, observe.in_set(crate::ui_script::UiFeed));
-    app.update();
-    assert_eq!(
-        app.world().resource::<Seen>().0,
-        vec![Some("fresh-session".into())]
-    );
-    assert!(app.world().resource::<NativePetNamePackets>().0.is_empty());
 }

@@ -54,21 +54,3 @@ fn fifo_retains_duplicate_mailboxes_rejects_partial_packets_and_skips_results() 
         .0
         .is_empty());
 }
-
-#[test]
-fn built_client_has_one_capture_owner_and_connected_reset() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathMailMutation];
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(owners[0].contains("wrath_mail_capture::receive"));
-    assert!(census[&SessionEventKind::Connected]
-        .iter()
-        .any(|name| name.contains("wrath_mail_capture::clear")));
-    assert!(census[&SessionEventKind::Disconnected]
-        .iter()
-        .any(|name| name.contains("wrath_mail_capture::clear")));
-}

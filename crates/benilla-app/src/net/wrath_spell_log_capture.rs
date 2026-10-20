@@ -38,7 +38,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeSpellLogPackets>
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_spell_log_capture_tests.rs"]
-mod tests;

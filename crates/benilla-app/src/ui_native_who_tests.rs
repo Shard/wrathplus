@@ -52,12 +52,3 @@ fn malformed_packets_are_unhandled_without_leaking_body() {
         ));
     }
 }
-
-#[test]
-fn full_client_has_one_native_owner_separate_from_shared_who() {
-    let app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app.world().resource::<crate::net::handlers::NetHandlers>().census();
-    assert_eq!(census[&SessionEventKind::WrathWho].len(),1);
-    assert!(census[&SessionEventKind::WrathWho][0].contains("ui_native_who::receive"));
-    assert!(!census[&SessionEventKind::WhoResults].iter().any(|s| s.contains("ui_native_who")));
-}

@@ -21,8 +21,8 @@ pub(crate) mod commands;
 /// The edit box's send path: the chat-type token passed to `SendChatMessage` and its wire kind.
 /// `pub(crate)` for `ui_script::chat_tests`, which joins the stock file's token to this resolve.
 pub(crate) mod edit;
-mod event;
-mod feed;
+pub(crate) mod event;
+pub(crate) mod feed;
 mod frames;
 /// The idle handler: the 5-minute auto-sit and auto-AFK, and the 30-minute camp.
 pub(crate) mod idle;

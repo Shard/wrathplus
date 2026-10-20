@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use crate::ui_script::{UiFeed, UiInput};
 
 pub(crate) mod feed;
-mod native_who;
+pub(crate) mod native_who;
 mod query;
 
 /// The social session mirror: filled by the social handlers, read by the feed, cleared on
@@ -34,13 +34,14 @@ pub(crate) struct SocialState {
     display_order: Vec<u64>,
     ignore_display_order: Vec<u64>,
     /// The last `/who` answer; `who_total` is the server's full match count.
-    who: Vec<benilla_protocol::messages::WhoEntry>,
+    pub(crate) who: Vec<benilla_protocol::messages::WhoEntry>,
     who_total: u32,
     /// Native routing compares the uncapped first wire count (006b8720).
     native_who_count: Option<usize>,
-    pending_native_who: std::collections::VecDeque<(u32, Vec<benilla_protocol::wrath_who::Entry>)>,
+    pub(crate) pending_native_who:
+        std::collections::VecDeque<(u32, Vec<benilla_protocol::wrath_who::Entry>)>,
     /// Native rows retained losslessly; shared display rows intentionally omit gender.
-    native_who_rows: Vec<benilla_protocol::wrath_who::Entry>,
+    pub(crate) native_who_rows: Vec<benilla_protocol::wrath_who::Entry>,
     /// The `/who` sort chain (`SortWho`'s seven `{key, dir}` slots at `0xc2817c`), pushed with the
     /// rows so the binding can re-sort synchronously.
     who_sort: benilla_ui::script::WhoSortChain,

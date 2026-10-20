@@ -31,7 +31,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeExchangePackets>
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_exchange_capture_tests.rs"]
-mod tests;

@@ -77,17 +77,6 @@ fn adapter_fifo_is_lossless_repeated_ordered_and_disconnect_scoped() {
         .0
         .is_empty());
 }
-#[test]
-fn built_client_has_one_native_owner_separate_from_vanilla() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathArenaTeam];
-    assert_eq!(owners.len(), 1);
-    assert!(owners[0].contains("ui_arena_team::receive"));
-}
 fn row(guid: u64, name: &[u8], online: u8, class: u8) -> Member {
     Member {
         guid,

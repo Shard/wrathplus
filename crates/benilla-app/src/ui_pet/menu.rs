@@ -51,7 +51,7 @@ pub(super) fn feed_pet_menu(script: Option<NonSendMut<UiScript>>, bar: Res<PetBa
 
 /// Send the menu's verbs under [`PetBar`]'s pet guid. Nothing is applied locally: the server
 /// answers by removing the pet or moving its name timestamp.
-pub(super) fn drain_pet_menu(
+pub(crate) fn drain_pet_menu(
     script: Option<NonSendMut<UiScript>>,
     bar: Res<PetBar>,
     commands: Res<NetCommands>,

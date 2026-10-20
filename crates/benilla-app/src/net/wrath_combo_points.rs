@@ -42,7 +42,3 @@ fn clear(In(event): In<SessionEvent>, mut combo: ResMut<NativeComboPoints>) {
         combo.set_if_neq(NativeComboPoints::default());
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_combo_points_tests.rs"]
-mod tests;

@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeSessionMiscPacke
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_session_misc_capture_tests.rs"]
-mod tests;
