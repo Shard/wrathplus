@@ -460,7 +460,7 @@ pub(super) fn set_spell_with_talent(
             }
         }
     }
-    super::tooltip::show_or_hide_empty(lua, h);
+    super::tooltip::finish_content(lua, h, "OnTooltipSetSpell");
     Ok(())
 }
 
@@ -478,7 +478,7 @@ fn set_reward_spell(
                 let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                 clear_content(&mut model, h);
             }
-            super::tooltip::show_or_hide_empty(lua, h);
+            super::tooltip::finish_content(lua, h, "OnTooltipSetSpell");
             Ok(())
         }
     }
@@ -534,7 +534,7 @@ fn fill_spell(
             }
         }
     }
-    super::tooltip::show_or_hide_empty(lua, h);
+    super::tooltip::finish_content(lua, h, "OnTooltipSetSpell");
     Ok(())
 }
 
@@ -745,7 +745,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     }
                 }
             }
-            super::tooltip::show_or_hide_empty(lua, h);
+            super::tooltip::finish_content(lua, h, "OnTooltipSetSpell");
             Ok(())
         })?,
     )?;
@@ -817,6 +817,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     if let Some(name) = name {
                         append_line(lua, &this, (name, WHITE), None, false)?;
                     }
+                    // A macro's name line is no spell: labelled, no content script.
                     super::tooltip::show_or_hide_empty(lua, h);
                     Ok(())
                 }

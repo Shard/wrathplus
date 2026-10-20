@@ -152,7 +152,7 @@ fn render_unit(lua: &Lua, this: &Table, token: &str) -> mlua::Result<bool> {
     // An unresolved guid (0) is no subject: nothing can push for it.
     set_subject(lua, h, Some(u.guid).filter(|&g| g != 0));
     update_bar(lua, h, Some(&u));
-    show_or_hide_empty(lua, h);
+    super::tooltip::finish_content(lua, h, "OnTooltipSetUnit");
     Ok(true)
 }
 

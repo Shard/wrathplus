@@ -580,3 +580,31 @@ fn minimap_blip_tooltip_shows_and_fades() {
         .unwrap();
     assert!(s.take_errors().is_empty());
 }
+
+/// `OnTooltipSetUnit` runs after the lines (`0x621070` runs `+0x4ec` last); an absent unit draws
+/// nothing and runs nothing.
+#[test]
+fn set_unit_runs_on_tooltip_set_unit_between_content_and_show() {
+    let mut s = script();
+    seed_level_strings(&mut s);
+    s.set_screen_size(800.0, 600.0);
+    s.set_unit("target", Some(wolf()));
+    s.run(
+        r#"
+        local a = CreateFrame("Button", "UF1"); a:SetPoint("CENTER", 0, 0); a:SetWidth(10); a:SetHeight(10)
+        local tt = CreateFrame("GameTooltip", "TT")
+        tt:SetOwner(a, "ANCHOR_RIGHT")
+        RUNS = 0
+        tt:SetScript("OnTooltipSetUnit", function(self)
+            RUNS = RUNS + 1
+            SEEN = TTTextLeft1:GetText()
+        end)
+        assert(tt:SetUnit("target") == 1)
+        assert(RUNS == 1 and SEEN == "Timber Wolf")
+        assert(tt:IsShown())
+        tt:SetUnit("party4")
+        assert(RUNS == 1, "an absent unit runs nothing")
+    "#,
+    )
+    .unwrap();
+}
