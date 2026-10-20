@@ -15,7 +15,7 @@ Verdicts:
 - **real**: a real build-12340 binding still served by the shim; each needs a native binding
   (the suggested owner in brackets), or a recorded no-op where the client has no such service.
 
-## Native now (19)
+## Native now (26)
 
 | Global | Address | Native behaviour |
 |---|---|---|
@@ -35,19 +35,26 @@ Verdicts:
 | `HasDebugZoneMap` | `0x8e5250` | no results |
 | `GetQuestWorldMapAreaID` | `0x5e56c0` → `0x5e2b60` | the marked POI blob on the shown map and floor, else the shown continent's nearest floor then nearest the player, else the first; no blob: the header's top zone's `WorldMapArea` row, floor 0 |
 | `GetQuestLogSpellLink`, `GetQuestSpellLink` | `0x5e4840`, `0x58dab0` | the selected quest-log quest's, or the quest panel's (`0xc0d680`), reward spell as a `spell:` link (`0x61e4b0`); nil without one |
+| `UnitIsPossessed` | `0x60d860` | `UNIT_FIELD_FLAGS & 0x1000000`, 1 or nil |
+| `IsStackableAction` | `0x5a8720` → `0x5a8470` | 1 when action slot 1-144 holds an item whose template stacks past one, else nil (labelled: template `+0x5c` taken as the stack size) |
+| `FocusUnit`, `ClearFocus` | `0x522480`, `0x5225e0` | the unit a token names, or none, into the focus guid (`0x51ff20`): the `"focus"` token and `PLAYER_FOCUS_CHANGED` (event `0x9e`); labelled: the setter's protected-state refusal and its `0x2000` render flag |
+| `IsPossessBarVisible` | `0x5a8820` | a boolean: the possess spell `GetPossessInfo` reads is present (labelled: its `AttributesEx7 & 0x1000`, attribute `0xec`, is not loaded) |
+| `GetLFGDeserterExpiration`, `GetLFGRandomCooldownExpiration` | `0x5580e0`, `0x558060` | the player's Dungeon Deserter (71041) or Dungeon Cooldown (71328) aura's expiry in `GetTime` seconds; nothing without it |
 
 Unresolved, labelled in code: the writers of the reset, the mirror table and the PvP end; the chord
 matcher `0x55d6b0`; the condition compiler `0x5f0040` and its handlers (each asks the native Lua
 reader of the same state); `GetQuestWorldMapAreaID`'s blob point (taken as the centroid), header-zone
 row order (lowest id) and its pre-pass `0x547170(0)`.
 
-## Dead lines deleted (19)
+## Dead lines deleted (18)
 
 `CanShowAchievementUI`, `GetActionBarToggles`, `GetBonusBarOffset`, `GetDungeonDifficulty`,
 `GetRaidDifficulty`, `GetReadyCheckStatus`, `HasCompletedAnyAchievement`, `QueryGuildEventLog`,
 `SaveBindings`, `UnitDetailedThreatSituation`, `UnitThreatSituation`, `UnitGroupRolesAssigned`,
 `debuginfo`, and on 2026-10-20 `GetAchievementInfo`, `GetTrackedAchievements`,
-`GetNumTrackedAchievements`, `GetTotalAchievementPoints`, `IsStackableAction`, `GetPossessInfo`.
+`GetNumTrackedAchievements`, `GetTotalAchievementPoints`, `GetPossessInfo`. (`IsStackableAction` was not dead:
+its line aliased the native `IsConsumableAction`, which the served-list census read as native;
+it is native now, and `the_compat_chunk_aliases_no_other_native` bans the alias pattern.)
 
 `debuginfo` was deleted as dead with no native to replace it on Wrath; the `debug*` family is now
 the Wrath stdlib's (`0x8e5250`, 13672e61). That gap is why the list below is test-enforced.
@@ -63,7 +70,7 @@ string in `Wow.exe`, no caller in stock `Blizzard_CombatText.lua`, `WorldStateFr
 The `COMBATLOG_OBJECT_*` block (masks, `RAIDTARGET1..8`): stock `Constants.lua` defines all 33.
 It goes with the file.
 
-## Still on the shim (70), 2026-10-20
+## Still on the shim (64), 2026-10-20
 
 Enforced by `wrath_surface::tests::the_compat_chunk_serves_exactly_the_listed_globals`, which lists
 every global function the compat chunk still serves in a live Wrath VM. A native binding installed
@@ -71,8 +78,7 @@ after the chunk drops its name there; a line a native binding already replaces i
 
 | Family | Globals | Owner |
 |---|---|---|
-| Possess and LFG timers | `UnitIsPossessed`, `IsPossessBarVisible`, `GetLFGDeserterExpiration`, `GetLFGRandomCooldownExpiration` | App Migration |
-| Secure-template helpers | `SpellCanTargetItem`, `SpellTargetItem`, `FocusUnit`, `ClearFocus`, `EquipItemByName`, `PickupItem`, `PickupEquipmentSet`, `SetMultiCastSpell`, `ClearOverrideBindings`, `SetOverrideBinding`, `SetOverrideBindingClick`, `SetOverrideBindingItem`, `SetOverrideBindingMacro`, `SetOverrideBindingSpell` | App Migration |
+| Secure-template helpers | `SpellCanTargetItem`, `SpellTargetItem`, `EquipItemByName`, `PickupItem`, `PickupEquipmentSet`, `SetMultiCastSpell`, `ClearOverrideBindings`, `SetOverrideBinding`, `SetOverrideBindingClick`, `SetOverrideBindingItem`, `SetOverrideBindingMacro`, `SetOverrideBindingSpell` | App Migration |
 | Units and friends | `UnitSelectionColor`, `GetNumFriends`, `FillLocalizedClassList` | App Migration |
 | Actions | `IsPetAttackAction`, `GetActionBarPage`, `ChangeActionBarPage` (retire the pair together: the shim replaces the native `ChangeActionBarPage`) | Native UI (assigned) |
 | Session, client, tutorial | `GetAccountExpansionLevel`, `GetExpansionLevel`, `GetExistingLocales`, `GetCVarBool`, `GetCVarMin`, `GetCVarMax`, `GetCVarAbsoluteMin`, `GetCVarAbsoluteMax`, `RegisterStaticConstants`, `TriggerTutorial`, `CombatTextSetActiveUnit` | Native UI (assigned) |

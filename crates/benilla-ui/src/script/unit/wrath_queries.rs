@@ -36,12 +36,18 @@ use crate::script::binding_abi::flag;
 const SUMMON_FRIEND: u32 = 45927;
 /// The battleground "Inactive" aura `PlayerIsPVPInactive` scans for.
 const AURA_INACTIVE: u32 = 43681;
+/// The LFG auras `GetLFGDeserterExpiration` (`0x5580e0`) and `GetLFGRandomCooldownExpiration`
+/// (`0x558060`) look up: Dungeon Deserter and Dungeon Cooldown.
+const AURA_DUNGEON_DESERTER: u32 = 71041;
+const AURA_DUNGEON_COOLDOWN: u32 = 71328;
 
 const PLAYER_FLAGS_AFK: u32 = 0x2;
 const PLAYER_FLAGS_DND: u32 = 0x4;
 const PLAYER_FLAGS_NO_XP_GAIN: u32 = 0x0200_0000;
 const UNIT_DYNFLAG_REFER_A_FRIEND: u32 = 0x40;
 const UNIT_DYNFLAG_TAPPED_BY_ALL_THREAT_LIST: u32 = 0x80;
+/// `UNIT_FIELD_FLAGS` byte 3 bit 0 (`0x60d860` reads descriptor `+0xd7 & 1`).
+const UNIT_FLAG_POSSESSED: u32 = 0x0100_0000;
 
 /// `0xa394af`: each class id's role bits.
 const CLASS_ROLES: [u8; 12] = [
@@ -83,6 +89,13 @@ fn summon_cooldown(lua: &Lua) -> (f64, f64, f64) {
     (n(0), n(1), if v.len() > 2 { n(2) } else { 1.0 })
 }
 
+impl crate::script::UiScript {
+    /// The focus guid `FocusUnit`/`ClearFocus` asked for this frame (0 clears), taken once.
+    pub fn take_focus_request(&mut self) -> Option<u64> {
+        self.model_mut().focus_request.take()
+    }
+}
+
 pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     for (name, usage, bit) in [
@@ -122,6 +135,61 @@ pub(crate) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(flag(hit))
         })?,
     )?;
+    // FocusUnit(unit) (`0x522480`) focuses the unit a token names, and nothing for one that names
+    // none; ClearFocus() (`0x5225e0`) passes guid 0. Both through `0x51ff20`, the host's half.
+    g.set(
+        "FocusUnit",
+        lua.create_function(|lua, token: Option<String>| {
+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+            let guid = token
+                .as_deref()
+                .and_then(|t| model.unit(t))
+                .filter(|u| u.exists && u.guid != 0)
+                .map(|u| u.guid);
+            if let Some(guid) = guid {
+                model.focus_request = Some(guid);
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "ClearFocus",
+        lua.create_function(|lua, ()| {
+            lua.app_data_mut::<Model>()
+                .expect("model app_data")
+                .focus_request = Some(0);
+            Ok(())
+        })?,
+    )?;
+    // UnitIsPossessed(unit) (`0x60d860`): 1 or nil, no usage error.
+    g.set(
+        "UnitIsPossessed",
+        lua.create_function(|lua, token: Option<String>| {
+            let hit = with_unit(lua, &token, false, |u| {
+                u.has_object && u.flags & UNIT_FLAG_POSSESSED != 0
+            })?;
+            Ok(flag(hit))
+        })?,
+    )?;
+    // The player's LFG aura's expiry (the aura's `+0x14` times 0.001: `GetTime` seconds), nothing
+    // without the aura.
+    for (name, spell) in [
+        ("GetLFGDeserterExpiration", AURA_DUNGEON_DESERTER),
+        ("GetLFGRandomCooldownExpiration", AURA_DUNGEON_COOLDOWN),
+    ] {
+        g.set(
+            name,
+            lua.create_function(move |lua, ()| {
+                let model = lua.app_data_ref::<Model>().expect("model app_data");
+                Ok(
+                    match model.player_auras.iter().find(|a| a.spell_id == spell) {
+                        Some(a) => MultiValue::from_vec(vec![Value::Number(a.expiration_time)]),
+                        None => MultiValue::new(),
+                    },
+                )
+            })?,
+        )?;
+    }
     g.set(
         "IsReferAFriendLinked",
         lua.create_function(|lua, token: Option<String>| {
@@ -269,6 +337,7 @@ mod tests {
                 exists: true,
                 has_object: true,
                 dynamic_flags: 0x80,
+                flags: 0x0100_0000,
                 guid: 2,
                 ..Default::default()
             }),
@@ -278,7 +347,8 @@ mod tests {
                 "return UnitIsAFK('player') == 1 and UnitIsDND('player') == nil \
                  and IsXPUserDisabled() == true and UnitIsTappedByAllThreatList('target') == 1 \
                  and UnitIsTappedByAllThreatList('player') == nil \
-                 and IsReferAFriendLinked('target') == nil and UnitIsSameServer('player', 'target') == 1"
+                 and IsReferAFriendLinked('target') == nil and UnitIsSameServer('player', 'target') == 1 \
+                 and UnitIsPossessed('target') == 1 and UnitIsPossessed('player') == nil"
             )
             .unwrap());
         assert!(s
@@ -300,6 +370,46 @@ mod tests {
             .unwrap());
         assert!(s
             .eval::<bool>("return UnitInBattleground('target') == nil")
+            .unwrap());
+    }
+
+    #[test]
+    fn focus_unit_asks_for_the_named_units_guid_and_clear_focus_for_none() {
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        s.set_unit(
+            "target",
+            Some(UnitState {
+                exists: true,
+                guid: 0x42,
+                ..Default::default()
+            }),
+        );
+        s.run("FocusUnit('mouseover') FocusUnit()").unwrap();
+        assert_eq!(
+            s.take_focus_request(),
+            None,
+            "a token naming no unit asks nothing"
+        );
+        s.run("FocusUnit('target')").unwrap();
+        assert_eq!(s.take_focus_request(), Some(0x42));
+        assert_eq!(s.take_focus_request(), None, "taken once");
+        s.run("ClearFocus()").unwrap();
+        assert_eq!(s.take_focus_request(), Some(0));
+    }
+
+    #[test]
+    fn the_lfg_timers_answer_their_aura_expiry_or_nothing() {
+        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        assert!(s
+            .eval::<bool>("return select('#', GetLFGDeserterExpiration()) == 0 and select('#', GetLFGRandomCooldownExpiration()) == 0")
+            .unwrap());
+        s.set_player_auras(vec![crate::script::AuraState {
+            spell_id: 71041,
+            expiration_time: 950.5,
+            ..Default::default()
+        }]);
+        assert!(s
+            .eval::<bool>("return GetLFGDeserterExpiration() == 950.5 and select('#', GetLFGRandomCooldownExpiration()) == 0")
             .unwrap());
     }
 }

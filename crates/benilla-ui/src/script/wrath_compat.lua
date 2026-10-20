@@ -56,8 +56,6 @@ Sound_GameSystem_GetNumOutputDrivers = Sound_GameSystem_GetNumOutputDrivers or z
 Sound_GameSystem_GetOutputDriverNameByIndex = none
 
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
-GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
-UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
 
 -- ── the stock UI's CVars, at build 12340's defaults, for any the host has not registered ────────
@@ -375,7 +373,6 @@ end
 
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none
-FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none

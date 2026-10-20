@@ -501,12 +501,10 @@ mod tests {
         "BNGetNumFriends",
         "BNGetToonInfo",
         "ChangeActionBarPage",
-        "ClearFocus",
         "ClearOverrideBindings",
         "CombatTextSetActiveUnit",
         "EquipItemByName",
         "FillLocalizedClassList",
-        "FocusUnit",
         "GetAccountExpansionLevel",
         "GetActionBarPage",
         "GetActiveVoiceChannel",
@@ -517,8 +515,6 @@ mod tests {
         "GetCVarMin",
         "GetExistingLocales",
         "GetExpansionLevel",
-        "GetLFGDeserterExpiration",
-        "GetLFGRandomCooldownExpiration",
         "GetNumFriends",
         "GetNumVoiceSessionMembersBySessionID",
         "GetNumVoiceSessions",
@@ -527,7 +523,6 @@ mod tests {
         "GetVoiceStatus",
         "IsPetAttackAction",
         "IsPlayerResolutionAvailable",
-        "IsPossessBarVisible",
         "IsStereoVideoAvailable",
         "IsVoiceChatAllowed",
         "IsVoiceChatAllowedByServer",
@@ -550,11 +545,38 @@ mod tests {
         "SpellCanTargetItem",
         "SpellTargetItem",
         "TriggerTutorial",
-        "UnitIsPossessed",
         "UnitIsTalking",
         "UnitSelectionColor",
         "VoiceIsDisabledByClient",
     ];
+
+    /// A shim line `X = X or Y` may fall back only to the chunk's own `none`/`zero` or a function
+    /// literal: an alias to another native (`IsStackableAction = … or IsConsumableAction`) serves
+    /// the other native's source, so the served-list census reads it as native and its removal
+    /// leaves the name unbound.
+    #[test]
+    fn the_compat_chunk_aliases_no_other_native() {
+        for line in include_str!("wrath_compat.lua").lines() {
+            let Some((lhs, rhs)) = line.split_once(" = ") else {
+                continue;
+            };
+            if lhs.starts_with([' ', '-']) {
+                continue;
+            }
+            for (name, value) in lhs.split(", ").zip(rhs.split(", ")) {
+                let mut alternatives = value.split(" or ").map(str::trim);
+                if alternatives.next() != Some(name) {
+                    continue;
+                }
+                for alt in alternatives {
+                    assert!(
+                        matches!(alt, "none" | "zero") || alt.starts_with("function"),
+                        "{name} falls back to another binding, {alt}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn the_compat_chunk_serves_exactly_the_listed_globals() {

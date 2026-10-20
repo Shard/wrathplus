@@ -91,6 +91,8 @@ pub(super) struct Inputs<'g, 'a, H, V, N> {
     pub(super) target: u64,
     pub(super) mouseover: u64,
     pub(super) npc: u64,
+    /// The focus guid, 0 for none.
+    pub(super) focus: u64,
     /// The object manager's lookup (`0x468460`).
     pub(super) held: H,
     /// `UnitBuff`'s unit gate on a live unit, by guid.
@@ -159,6 +161,7 @@ impl UnitAuras {
             target,
             mouseover,
             npc,
+            focus,
             held,
             buffs_visible,
             native_visible,
@@ -183,10 +186,11 @@ impl UnitAuras {
         let mut g = std::mem::take(&mut self.guids);
         let mut walk = std::mem::take(&mut self.walk);
         (g.player, g.pet, g.target, g.mouseover, g.npc) = (me, pet, target, mouseover, npc);
+        g.focus = focus;
         fill_group(&mut g, group, me, &held);
         g.held.clear();
         walk.clear();
-        walk.extend([me, pet, target, mouseover, npc].map(|g| (g, false)));
+        walk.extend([me, pet, target, mouseover, npc, focus].map(|g| (g, false)));
         walk.extend(g.party.iter().chain(&g.party_pets).map(|&g| (g, true)));
         walk.extend(g.raid.iter().chain(&g.raid_pets).map(|&g| (g, true)));
         while let Some((guid, record_ok)) = walk.pop() {
@@ -466,6 +470,7 @@ mod tests {
                         target: MEMBER,
                         mouseover: 0,
                         npc: 0,
+                        focus: 0,
                         held: |_| None,
                         buffs_visible: |_, _: &ObjectStore| true,
                         native_visible: |_, _: Option<&ObjectStore>, auras: &[StampedAura]| {

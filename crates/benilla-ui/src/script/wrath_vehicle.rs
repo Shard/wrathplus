@@ -620,6 +620,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Value::Boolean(enabled),
         ]))
     })?;
+    // IsPossessBarVisible() (`0x5a8820`): a boolean, false without a possess spell (`0xc234e0`, the
+    // slot GetPossessInfo reads). Labelled: the spell's `AttributesEx7 & 0x1000` (attribute 0xec,
+    // which hides the bar) is not loaded, so a present spell shows it.
+    set("IsPossessBarVisible", |lua, _| {
+        let model = lua.app_data_ref::<Model>().expect("model");
+        Ok(MultiValue::from_vec(vec![Value::Boolean(
+            model.wrath_vehicles.possess.is_some(),
+        )]))
+    })?;
     set("GetNumBattlefieldVehicles", |lua, _| {
         let model = lua.app_data_ref::<Model>().expect("model");
         one(Value::Integer(model.wrath_vehicles.battlefield.len() as i64))
@@ -889,6 +898,9 @@ mod tests {
         let mut s = vm();
         s.run("assert(select('#', GetPossessInfo(1)) == 3 and GetPossessInfo(1) == nil)")
             .unwrap();
+        assert!(s
+            .eval::<bool>("return IsPossessBarVisible() == false")
+            .unwrap());
         let mut v = s.model_mut().wrath_vehicles.clone();
         v.possess = Some(PossessView {
             texture: Some("Interface\\Icons\\Spell_Shadow_ShadowWordDominate".into()),
@@ -905,6 +917,7 @@ mod tests {
             assert(t == "Interface\\Icons\\Spell_ChargeNegative" and n == "Mind Control" and e == false)
             assert(select("#", GetPossessInfo(3)) == 3 and GetPossessInfo(3) == nil)
             assert(not pcall(GetPossessInfo))
+            assert(IsPossessBarVisible() == true)
             "##,
         )
         .unwrap();
