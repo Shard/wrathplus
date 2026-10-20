@@ -15,7 +15,7 @@ Verdicts:
 - **real**: a real build-12340 binding still served by the shim; each needs a native binding
   (the suggested owner in brackets), or a recorded no-op where the client has no such service.
 
-## Native now (45)
+## Native now (55)
 
 | Global | Address | Native behaviour |
 |---|---|---|
@@ -49,6 +49,12 @@ Verdicts:
 | `GetActionBarPage`, `ChangeActionBarPage` | `0x5a7fd0`, `0x5a7f60` | the page engine-side (1-6, an error out of range, `ACTIONBAR_PAGE_CHANGED` on a change); labelled: `0xc1e5a0` and the `0x5191c0(0xe)` gate |
 | `IsPetAttackAction` | `0x5d5a10` | a boolean: the pet slot holds the Attack command (labelled: read as its `PET_ACTION_ATTACK` token) |
 | `GetCVarBool` | `0x5100c0` | 1 for an existing CVar whose value reads non-zero, else nil (labelled: flag `0x40`) |
+| `GetAccountExpansionLevel`, `GetExpansionLevel` | `0x4ddc20` | the account's expansion byte from `SMSG_AUTH_RESPONSE`, seeded into each VM; 0 before it |
+| `GetExistingLocales` | `0x511c80` | each installed locale code (the chain's locale) |
+| `GetCVarMin`, `GetCVarMax`, `GetCVarAbsoluteMin`, `GetCVarAbsoluteMax` | `0x514d40`, `0x514e30`, `0x514f60`, `0x515010` | only `farclip` (176-1250) and `extShadowQuality` are bounded, nil for the rest; an unknown CVar raises (labelled: `extShadowQuality`'s hardware maxima read 0) |
+| `RegisterStaticConstants` | `0x5ac320` | `STATIC_CONSTANTS`, `Loot`, `AuctionHouse`, `Mail`, `Chat`, `Movement`, `Spell` valued 0-6 |
+| `TriggerTutorial` | `0x5308d0` → `0x530840` | an unseen tutorial 1-60 is marked seen and, with `showTutorials` on, fires `TUTORIAL_TRIGGER` (labelled: event `0x175`'s name, the sound, `0x530450`) |
+| `CombatTextSetActiveUnit` | `0x74d580` | stores the unit's guid (labelled: the combat-text feed still reads the player) |
 | `FocusUnit`, `ClearFocus` | `0x522480`, `0x5225e0` | the unit a token names, or none, into the focus guid (`0x51ff20`): the `"focus"` token and `PLAYER_FOCUS_CHANGED` (event `0x9e`); labelled: the setter's protected-state refusal and its `0x2000` render flag |
 | `IsPossessBarVisible` | `0x5a8820` | a boolean: the possess spell `GetPossessInfo` reads is present (labelled: its `AttributesEx7 & 0x1000`, attribute `0xec`, is not loaded) |
 | `GetLFGDeserterExpiration`, `GetLFGRandomCooldownExpiration` | `0x5580e0`, `0x558060` | the player's Dungeon Deserter (71041) or Dungeon Cooldown (71328) aura's expiry in `GetTime` seconds; nothing without it |
@@ -82,7 +88,11 @@ string in `Wow.exe`, no caller in stock `Blizzard_CombatText.lua`, `WorldStateFr
 The `COMBATLOG_OBJECT_*` block (masks, `RAIDTARGET1..8`): stock `Constants.lua` defines all 33.
 It goes with the file.
 
-## Still on the shim (45), 2026-10-20
+**Vanilla-removal step 8 is done (2026-10-20):** every global the compat chunk served is native or
+in the reviewed offline-services set below, the step's end state. The served list is test-enforced,
+so a later edit that puts a real binding back on the shim fails the build.
+
+## Still on the shim (35), 2026-10-20: offline services only
 
 Enforced by `wrath_surface::tests::the_compat_chunk_serves_exactly_the_listed_globals`, which lists
 every global function the compat chunk still serves in a live Wrath VM. A native binding installed
@@ -90,7 +100,6 @@ after the chunk drops its name there; a line a native binding already replaces i
 
 | Family | Globals | Owner |
 |---|---|---|
-| Session, client, tutorial | `GetAccountExpansionLevel`, `GetExpansionLevel`, `GetExistingLocales`, `GetCVarMin`, `GetCVarMax`, `GetCVarAbsoluteMin`, `GetCVarAbsoluteMax`, `RegisterStaticConstants`, `TriggerTutorial`, `CombatTextSetActiveUnit` | App Migration (moved from Native UI) |
 | Offline services, the intended end state | the 16 `BN*` rows, `IsVoiceChatEnabled`, `IsVoiceChatAllowed`, `IsVoiceChatAllowedByServer`, `VoiceIsDisabledByClient`, `GetNumVoiceSessions`, `GetVoiceCurrentSessionID`, `GetVoiceSessionInfo`, `GetVoiceStatus`, `GetActiveVoiceChannel`, `GetNumVoiceSessionMembersBySessionID`, `UnitIsTalking`, the six `Sound_*` driver rows, `IsStereoVideoAvailable`, `IsPlayerResolutionAvailable` | — |
 
 Natives already landed since the 2026-10-16 audit: the App Migration quest, unit, item and area rows
