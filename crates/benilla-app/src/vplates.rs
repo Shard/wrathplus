@@ -225,47 +225,6 @@ pub(crate) fn clear_at_world_entry(world: &mut World) {
     }
 }
 
-/// The `config.toml` names benilla once kept the two bits under, with the FrameXML global each
-/// carries over to. 1.12 has no nameplate CVar; the setting is FrameXML's saved variables.
-const LEGACY_CVARS: [(&str, &str); 2] = [
-    ("nameplateShowEnemies", "NAMEPLATES_ON"),
-    ("nameplateShowFriends", "FRIENDNAMEPLATES_ON"),
-];
-
-/// A plate setting still in `config.toml` from before it moved to FrameXML's saved variables:
-/// each global and whether it was on.
-#[derive(Default)]
-pub(crate) struct LegacyPlateSettings(Vec<(&'static str, bool)>);
-
-/// Take the legacy plate settings out of `config.toml`, once: the next save drops them, and from
-/// then on the saved-variables file carries them.
-pub(crate) fn take_legacy_settings(cvars: &mut crate::cvars::Cvars) -> LegacyPlateSettings {
-    LegacyPlateSettings(
-        LEGACY_CVARS
-            .iter()
-            .filter_map(|&(cvar, global)| {
-                let value = cvars.retire_file_entry(cvar)?;
-                Some((global, value.trim() == "1"))
-            })
-            .collect(),
-    )
-}
-
-/// Seat the legacy settings over the saved-variables chunk's values, before `VARIABLES_LOADED`,
-/// as the number 1 or nil (a Lua 0 is truthy). Until now the setting was the CVar, which
-/// outranked the file.
-pub(crate) fn seat_legacy_settings(
-    script: &benilla_ui::script::UiScript,
-    legacy: &LegacyPlateSettings,
-) {
-    let g = script.lua().globals();
-    for &(global, on) in &legacy.0 {
-        if let Err(e) = g.set(global, on.then_some(1i64)) {
-            warn!("nameplates: carrying {global} over: {e}");
-        }
-    }
-}
-
 /// The world and reaction inputs of the plate gate, bundled under the 16-param ceiling.
 #[derive(SystemParam)]
 #[allow(clippy::type_complexity)] // one bundled system param
@@ -865,53 +824,6 @@ mod tests {
                 .take_cvar_changes()
                 .is_empty(),
             "no CVar: nothing reaches config.toml"
-        );
-    }
-
-    /// A player's plate setting from `config.toml` is carried into the saved-variables globals
-    /// once, over what the file said, and leaves `config.toml`.
-    #[test]
-    fn a_legacy_config_setting_carries_over_once() {
-        use crate::cvars::Cvars;
-        let mut cvars = Cvars::with_value("nameplateShowFriends", "1");
-        let legacy = take_legacy_settings(&mut cvars);
-        assert_eq!(legacy.0, vec![("FRIENDNAMEPLATES_ON", true)]);
-        assert!(
-            take_legacy_settings(&mut cvars).0.is_empty(),
-            "taken once: the file no longer holds it"
-        );
-        assert!(
-            !cvars
-                .orphans()
-                .iter()
-                .any(|(k, _)| k == "nameplateShowFriends"),
-            "and the next save drops it"
-        );
-
-        let s = benilla_ui::script::UiScript::new().unwrap();
-        // The saved-variables chunk said off; the CVar was the store, so it wins.
-        s.run("FRIENDNAMEPLATES_ON = nil NAMEPLATES_ON = 1")
-            .unwrap();
-        seat_legacy_settings(&s, &legacy);
-        assert_eq!(
-            s.eval::<Option<i64>>("return FRIENDNAMEPLATES_ON").unwrap(),
-            Some(1),
-            "the number 1, never a truthy `0`"
-        );
-        assert_eq!(
-            s.eval::<Option<i64>>("return NAMEPLATES_ON").unwrap(),
-            Some(1),
-            "a global with no legacy entry is left as the file set it"
-        );
-
-        let mut off = Cvars::with_value("NamePlateShowEnemies", "0");
-        let legacy = take_legacy_settings(&mut off);
-        s.run("NAMEPLATES_ON = 1").unwrap();
-        seat_legacy_settings(&s, &legacy);
-        assert_eq!(
-            s.eval::<Option<i64>>("return NAMEPLATES_ON").unwrap(),
-            None,
-            "an entry of 0 is off, whatever its spelling"
         );
     }
 

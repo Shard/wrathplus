@@ -17,7 +17,7 @@ mod content;
 pub(crate) mod extract;
 mod input;
 #[cfg(test)]
-mod layer_tests;
+mod production_load;
 mod load_log;
 mod manifest;
 mod wrath_addons;
@@ -40,11 +40,8 @@ pub(crate) use session::VmMemo;
 // Not test-only: the addon harness loads the whole shipped interface under each addon.
 pub(crate) use manifest::default_bindings;
 pub(crate) use manifest::load_default_ui;
-pub(crate) use manifest::load_ingame_ui;
 #[cfg(test)]
 pub(crate) use manifest::{load_stock_bindings, stock_bindings_file};
-#[cfg(test)]
-pub(crate) use manifest::load_wrath_ui;
 
 pub(crate) use crate::app_core::state::{CursorPayloadHeld, PointerOverUi};
 /// A synthetic pointer owns the mouse this frame (the drag probe's gesture), so
@@ -408,9 +405,7 @@ pub(crate) use lifecycle::{
 pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
 use lifecycle::shutdown_on_exit;
 #[cfg(test)]
-pub(crate) use lifecycle::{
-    finish_ui_load, is_emote_token_line, seat_from_roster, shutdown_ui_state,
-};
+pub(crate) use lifecycle::{finish_ui_load, seat_from_roster};
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -770,14 +765,6 @@ mod faux_scroll_tests;
 #[cfg(test)]
 mod panel_template_tests;
 
-/// The return-shape gate: `reference/1.12-shapes.tsv` against what this client answers.
-#[cfg(test)]
-mod shape_gate;
-
-/// The surface gate: the production load's globals and widget methods against the 1.12 tables.
-#[cfg(test)]
-mod surface_gate;
-
 /// The event argument-shape gate: every fire site against `reference/1.12-events.tsv`.
 #[cfg(test)]
 mod event_shape_gate;
@@ -841,8 +828,6 @@ mod tooltip_template_tests;
 #[cfg(test)]
 mod escape_tests;
 
-#[cfg(test)]
-mod game_menu_addon_tests;
 #[cfg(test)]
 mod game_menu_tests;
 

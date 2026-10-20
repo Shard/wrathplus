@@ -635,27 +635,6 @@ fn save_chat_looks(
     flush(&script, &channels, &mut file, exiting);
 }
 
-/// The session-end flush, the reference's chat teardown (`0x499a80` from `0x490c55`), called from
-/// [`crate::ui_script::end_ui_session`] after the shutdown events and before the VM is replaced,
-/// on logout, character switch and `/reload` alike. Not an `OnExit(InWorld)` system: `/reload`
-/// never crosses it, and the debounce's state dies with the VM.
-pub(crate) fn fold_dying_vm_chat_cache(world: &mut World) {
-    // No plugin in this world (a test world): nothing to flush.
-    if !world.contains_resource::<ChatWindowFile>() {
-        return;
-    }
-    // Lift the file out, leaving the VM and the roster as shared borrows of the world.
-    world.resource_scope(|world, mut file: Mut<ChatWindowFile>| {
-        let (Some(script), Some(channels)) = (
-            world.get_non_send_resource::<UiScript>(),
-            world.get_resource::<super::edit::ChannelState>(),
-        ) else {
-            return;
-        };
-        flush(script, channels, &mut file, true);
-    });
-}
-
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<ChatWindowFile>()
         // The restore runs from the world-entry UI load, not here: its events must precede the
@@ -1066,81 +1045,6 @@ mod tests {
     fn an_empty_messages_block_is_an_empty_set() {
         let got = parse("ADDEDVERSION 13\nWINDOW 1\nMESSAGES\nEND\nEND\n", &rows());
         assert!(got.looks[0].1.messages.is_empty());
-    }
-
-    /// A rename inside [`SAVE_QUIET`] of a `/reload`, which never crosses `OnExit(InWorld)`,
-    /// reaches the file through the flush in `end_ui_session` and comes back in the rebuilt VM.
-    #[test]
-    fn a_window_renamed_just_before_a_reload_reaches_the_file() {
-        use bevy::ecs::system::RunSystemOnce;
-
-        let _l = crate::local_state::test_env::ENV_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let tmp = std::env::temp_dir().join(format!("benilla-chat-reload-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("benilla-config")).expect("hermetic home");
-        let _capture = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
-        let _home = crate::local_state::test_env::EnvGuard::set(
-            "BENILLA_HOME",
-            tmp.join("benilla-config")
-                .to_str()
-                .expect("utf-8 temp path"),
-        );
-
-        let mut world = World::new();
-        world.init_resource::<crate::ui_script::AddOnIdentity>();
-        world.init_resource::<crate::minimap::MinimapZoom>();
-        world.init_resource::<crate::ui_script::ReloadUiPending>();
-        world.init_resource::<super::super::edit::ChannelState>();
-        world.init_resource::<ChatWindowFile>();
-        crate::ui_script::setup_script(&mut world);
-        world.insert_resource(probe_roster("Reloadprobe"));
-        crate::ui_script::load_ingame_ui_on_world_entry(&mut world);
-
-        let path = world
-            .resource::<ChatWindowFile>()
-            .path
-            .clone()
-            .expect("the character's chat cache path is seated by the entry load");
-
-        // A Lua rename of window 1, which arms the debounce.
-        world
-            .non_send_resource_mut::<UiScript>()
-            .run(r#"SetChatWindowName(1, "Reloaded")"#)
-            .expect("rename");
-        world
-            .run_system_once(watch_chat_looks)
-            .expect("the watcher arms the debounce");
-        assert!(
-            world.resource::<ChatWindowFile>().last_change.is_some(),
-            "precondition: the rename armed the debounce, so the write is owed but not yet due"
-        );
-
-        // `/reload` at once, inside `SAVE_QUIET`.
-        world.insert_resource(State::new(crate::char_select::ClientState::InWorld));
-        world.resource_mut::<crate::ui_script::ReloadUiPending>().0 = true;
-        crate::ui_script::run_pending_reload(&mut world);
-
-        let on_disk = std::fs::read_to_string(&path).expect("the flush wrote the file");
-        assert!(
-            on_disk.contains("Reloaded"),
-            "the rename must survive the reload — the dying VM's cache is folded out by \
-             `fold_dying_vm_chat_cache`; file was:\n{on_disk}"
-        );
-
-        // The rebuilt VM reads it back.
-        let name = world
-            .non_send_resource_mut::<UiScript>()
-            .eval::<String>("GetChatWindowInfo(1)")
-            .unwrap_or_default();
-        assert_eq!(
-            name, "Reloaded",
-            "the rebuilt VM restored the renamed window, not the stale one"
-        );
-
-        drop(world);
-        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     /// A roster with one character picked, which keys the chat cache path.

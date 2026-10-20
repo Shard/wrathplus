@@ -485,10 +485,11 @@ pub fn decode(packet: ServerPacket) -> Vec<SessionEvent> {
             vec![SessionEvent::LootMoneyNotify { amount }]
         }
         ServerPacket::LootClearMoney => vec![SessionEvent::LootClearMoney],
-        ServerPacket::LootStartRoll(p) => vec![SessionEvent::LootStartRoll(p)],
-        ServerPacket::LootRoll(p) => vec![SessionEvent::LootRoll(p)],
-        ServerPacket::LootRollWon(p) => vec![SessionEvent::LootRollWon(p)],
-        ServerPacket::LootAllPassed(p) => vec![SessionEvent::LootAllPassed(p)],
+        // 1.12 rolls: build 12340 decodes its own (`wrath_roll`, `SessionEvent::WrathLootRoll`).
+        ServerPacket::LootStartRoll(_)
+        | ServerPacket::LootRoll(_)
+        | ServerPacket::LootRollWon(_)
+        | ServerPacket::LootAllPassed(_) => vec![],
         ServerPacket::LootMasterList { candidates } => {
             vec![SessionEvent::LootMasterList { candidates }]
         }

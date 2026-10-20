@@ -932,7 +932,7 @@ fn a_held_pet_reads_connected_and_its_stock_power_bar_shows_its_power() {
 
     let mut script = benilla_ui::script::UiScript::new().unwrap();
     script.set_screen_size(1024.0, 768.0);
-    let failures = crate::ui_script::load_default_ui(&script);
+    let failures = crate::ui_script::load_default_ui(&mut script);
     assert!(failures.is_empty(), "load failures: {failures:?}");
 
     let mut app = App::new();

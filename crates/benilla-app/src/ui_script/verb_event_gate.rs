@@ -76,26 +76,26 @@ const ELSEWHERE: &[(&str, &str, &str)] = &[
         "UPDATE_TRADESKILL_RECAST",
         "benilla-app/src/ui_tradeskill.rs",
     ),
-    // `take_loot_roll_confirms`: a Need/Greed on a bind-on-pickup roll is diverted to the popup.
+    // The native drain: a Need/Greed on a bind-on-pickup roll is diverted to the popup.
     (
         "ConfirmLootRoll",
         "CANCEL_LOOT_ROLL",
-        "benilla-app/src/ui_loot_roll.rs",
+        "benilla-app/src/ui_loot_roll/wrath/feed.rs",
     ),
     (
         "ConfirmLootRoll",
         "CONFIRM_LOOT_ROLL",
-        "benilla-app/src/ui_loot_roll.rs",
+        "benilla-app/src/ui_loot_roll/wrath/feed.rs",
     ),
     (
         "RollOnLoot",
         "CANCEL_LOOT_ROLL",
-        "benilla-app/src/ui_loot_roll.rs",
+        "benilla-app/src/ui_loot_roll/wrath/feed.rs",
     ),
     (
         "RollOnLoot",
         "CONFIRM_LOOT_ROLL",
-        "benilla-app/src/ui_loot_roll.rs",
+        "benilla-app/src/ui_loot_roll/wrath/feed.rs",
     ),
     // `keybinds.generation` moves; `sync_dispatch` re-derives the table and fires.
     (

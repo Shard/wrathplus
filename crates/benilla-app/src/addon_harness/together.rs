@@ -95,7 +95,7 @@ fn survey_together_once(root: &Path) -> Vec<(String, Vec<String>)> {
     script.set_screen_size(1024.0, 768.0);
     script.register_addons(registry, Some(root.to_path_buf()), None, None);
     super::seat_a_session(&mut script);
-    let _ = crate::ui_script::load_default_ui(&script);
+    let _ = crate::ui_script::load_default_ui(&mut script);
 
     // `seen` spans the whole walk: a library declared by many dependents loads once.
     let mut seen: BTreeSet<String> = BTreeSet::new();

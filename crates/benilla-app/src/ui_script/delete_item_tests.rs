@@ -474,7 +474,7 @@ fn the_world_drop_survives_the_whole_shipped_interface() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.set_money(0);
     s.set_container(0, Some(one_item_backpack(117, "Tough Jerky", 1)));

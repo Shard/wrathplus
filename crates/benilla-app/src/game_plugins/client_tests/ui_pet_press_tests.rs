@@ -470,66 +470,10 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
     assert!(!latched(&rig).2, "an ordinary pet's Attack raises no latch");
 }
 
-/// A Wrath VM with the stock interface loaded as a session loads it (`ui_script::lifecycle`): the
-/// CVar table, the class names, the session, the display modes and the Enter World player (record,
-/// then unit) are seated first, then `load_wrath_ui` without addons, its load budget disarmed
-/// after. Returns every failure.
-///
-/// Not `load_default_ui`: that is the 1.12 shape, which also loads the benilla layer and seats
-/// neither the display modes nor the player. Stock `UpdateMenuBarTop` divides by the current
-/// mode's height (`UIParent.lua:1171`) and `DressUpTexturePath` upper-cases the player's race
-/// file (`DressUpFrame.lua:16`), so both raise on that bare VM, as no live load can.
+/// A Wrath VM with the stock interface loaded as a session loads it, through
+/// [`crate::ui_script::load_default_ui`]. Returns every failure.
 pub(super) fn stock_session_ui() -> (benilla_ui::script::UiScript, Vec<String>) {
-    use benilla_ui::script::{PlayerRecord, ScreenResolution, UiScript, UnitState};
-    let mut script = UiScript::new().expect("a VM");
-    script.register_cvars(crate::shipped_cvars::pairs());
-    // As `lifecycle::new_vm` seeds it: stock `Constants.lua` fills the class names at file scope.
-    // Callers have already gated on the install, so `wow_data` answers.
-    let data = benilla_formats::wow_data().expect("a WoW install");
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-    script.set_localized_class_names(
-        benilla_formats::load_chr_classes(&mut chain)
-            .expect("ChrClasses.dbc")
-            .localized_names(),
-    );
-    // A live Wrath account (expansion 2) on the installed locale.
-    script.set_wrath_session(Some(2), vec!["enUS".into()]);
-    script.set_screen_size(1024.0, 768.0);
-    script.set_screen_resolutions(
-        vec![],
-        Some(ScreenResolution {
-            width: 1024,
-            height: 768,
-        }),
-    );
-    script.set_player_record(PlayerRecord {
-        name: "Probefour".into(),
-        race: Some(("Orc".into(), "Orc".into())),
-        class: Some(("Hunter".into(), "HUNTER".into())),
-        sex: 2,
-    });
-    script.set_unit(
-        "player",
-        Some(UnitState {
-            exists: true,
-            name: Some("Probefour".into()),
-            level: 60,
-            race: Some("Orc".into()),
-            race_file: Some("Orc".into()),
-            class: Some("Hunter".into()),
-            class_file: Some("HUNTER".into()),
-            ..Default::default()
-        }),
-    );
-    script.push_sound_suppression();
-    let mut failures = crate::ui_script::load_wrath_ui(&mut script, None, &[], true);
-    script.pop_sound_suppression();
-    script.clear_instruction_budget();
-    failures.extend(
-        script
-            .errors()
-            .into_iter()
-            .map(|e| format!("a handler raised during the load walk: {e}")),
-    );
+    let mut script = benilla_ui::script::UiScript::new().expect("a VM");
+    let failures = crate::ui_script::load_default_ui(&mut script);
     (script, failures)
 }

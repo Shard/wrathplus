@@ -378,8 +378,7 @@ fn the_page_works_after_the_stock_binding_ui_loads_and_the_stock_window_reads_th
     let _l = crate::local_state::test_env::ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (mut s, failures) =
-        super::layer_tests::production_load_with("bindingui", false, "", |_| {});
+    let (mut s, failures) = super::production_load::production_load_with("bindingui", "", |_| {});
     assert!(failures.is_empty(), "load failures: {failures:#?}");
     seed_defaults(&mut s);
     s.run(r#"assert(LoadAddOn("Blizzard_BindingUI") == 1)"#)
@@ -915,7 +914,7 @@ fn every_stock_body_calls_what_the_load_defines() {
     let _l = crate::local_state::test_env::ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (s, failures) = super::layer_tests::production_load_with("bindcalls", false, "", |_| {});
+    let (s, failures) = super::production_load::production_load_with("bindcalls", "", |_| {});
     assert!(failures.is_empty(), "load failures: {failures:#?}");
     let stock = benilla_ui::bindings_xml::parse(
         &crate::ui_script::stock_bindings_file().expect("the install's Bindings.xml"),
@@ -968,7 +967,7 @@ fn toggleui_hides_uiparent_and_closes_the_windows() {
     let _l = crate::local_state::test_env::ENV_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (mut s, failures) = super::layer_tests::production_load_with("toggleui", false, "", |_| {});
+    let (mut s, failures) = super::production_load::production_load_with("toggleui", "", |_| {});
     assert!(failures.is_empty(), "load failures: {failures:#?}");
     s.run("ShowUIPanel(GameMenuFrame)").unwrap();
     assert!(s
