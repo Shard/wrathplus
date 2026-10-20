@@ -18,7 +18,6 @@ use crate::items::Items;
 use crate::names::NameCache;
 use crate::net::{ClientCommand, NetCommands, Objects};
 use crate::query_cache::QueryCache;
-use crate::ui_mail::MailOpen;
 use crate::ui_script::{UiFeed, UiInput};
 
 /// One page of a book as the wire gave it (`SMSG_PAGE_TEXT_QUERY_RESPONSE`).
@@ -79,8 +78,8 @@ impl PageTexts {
 
 /// Which of the reference's two text sources a session shows; the object decides, not the click.
 pub(crate) enum ReadSource {
-    /// A mail-made letter's `ITEM_FIELD_ITEM_TEXT_ID`: one body and a creator line.
-    Letter { text_id: u32 },
+    /// A mail-made letter: one body, asked by the letter's GUID, and a creator line.
+    Letter,
     /// A page chain. `visited` runs from the first page to the one shown, as pages link only
     /// forwards (the reference's array at `0xbc3fd0`); it is empty until the object's template
     /// answers, since the reference asks for the page id at paint time (`0x5f59d0`).
@@ -111,8 +110,8 @@ pub(crate) struct ItemTextOpen {
 
 impl ItemTextOpen {
     /// Open a bag letter; re-opening restarts from `ITEM_TEXT_BEGIN`.
-    pub(crate) fn open_letter(&mut self, item_guid: u64, text_id: u32) {
-        self.open(item_guid, ReadSource::Letter { text_id });
+    pub(crate) fn open_letter(&mut self, item_guid: u64) {
+        self.open(item_guid, ReadSource::Letter);
     }
 
     /// Open a page chain; the feed asks the object's template for the first page.
@@ -266,7 +265,6 @@ fn readable(
 fn feed_item_text(
     script: Option<NonSendMut<UiScript>>,
     mut open: ResMut<ItemTextOpen>,
-    mail: Res<MailOpen>,
     letters: Res<LetterTexts>,
     pages: Res<PageTexts>,
     objects: Objects,
@@ -328,7 +326,7 @@ fn feed_item_text(
     }
 
     let (creator, text, page, has_next) = match &mut sess.source {
-        ReadSource::Letter { text_id } => {
+        ReadSource::Letter => {
             let creator_guid = objects
                 .object(sess.object_guid)
                 .and_then(|o| o.item_creator());
@@ -341,26 +339,15 @@ fn feed_item_text(
             };
             // The body, from the client's one item-text cache, which mail shares. 12340 asks by
             // the letter's GUID instead of its text id.
-            let body = if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-                let item_guid = sess.object_guid;
-                letters
-                    .texts
-                    .get_or_ask(item_guid, || {
-                        let _ = commands.0.send(ClientCommand::NativeInventory(
-                            benilla_protocol::wrath_inventory::Command::ItemTextQuery { item_guid },
-                        ));
-                    })
-                    .cloned()
-            } else {
-                mail.bodies
-                    .get_or_ask(*text_id, || {
-                        let _ = commands.0.send(ClientCommand::ItemTextQuery {
-                            text_id: *text_id,
-                            mail_id: 0,
-                        });
-                    })
-                    .cloned()
-            };
+            let item_guid = sess.object_guid;
+            let body = letters
+                .texts
+                .get_or_ask(item_guid, || {
+                    let _ = commands.0.send(ClientCommand::NativeInventory(
+                        benilla_protocol::wrath_inventory::Command::ItemTextQuery { item_guid },
+                    ));
+                })
+                .cloned();
             let Some(text) = body else {
                 return; // body query in flight
             };

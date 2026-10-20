@@ -40,7 +40,6 @@ fn flightmaster_commands_use_native_layout_without_vanilla_express_fare() {
         (
             ClientCommand::ActivateTaxiExpress {
                 guid,
-                total_cost: 0xdeadbeef,
                 nodes: vec![2, 300, 448],
             },
             0x312,

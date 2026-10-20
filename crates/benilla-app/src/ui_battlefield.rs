@@ -163,6 +163,11 @@ impl Battlefield {
     pub(crate) fn battlemaster(&self) -> Option<u64> {
         (self.battlemaster != 0).then_some(self.battlemaster)
     }
+
+    /// The listed battleground type, `CMSG_BATTLEMASTER_JOIN`'s `bgTypeId` (0 before a list).
+    pub(crate) fn bg_type(&self) -> u32 {
+        self.bg_type
+    }
 }
 
 /// The world-PvP queue (`0xbea4a8..b4`) and the battlefield-manager events owed.

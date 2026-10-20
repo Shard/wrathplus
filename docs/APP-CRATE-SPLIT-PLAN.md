@@ -305,11 +305,23 @@ already resolve to `app_core` through the old paths' re-exports: the move steps 
 
 **In flight**
 
+- Wire B (agreed with Assets): the `net`-filled native queues (`NativeBattlegroundRest`,
+  `ArenaRosterRefresh`, `NativeTotems`, `combat_log::native::NativeCombatLog`) into the `net` layer,
+  and `net::{SelfPlayer, ObjectStore, NetOffline, Embodied, DisconnectedMessage,
+  EnteredWorldMessage}` into `app_core::state`.
 - Wire B, movement (item 3): `player::{server_ride, mover::{grounded_step, airborne_step,
   fall_step, Support}}`, `transport::{Transport, tick_transports}`, and the `app_core` references
   to `net::motion::spline::mark_swimming_creatures` and `creature_anim::EmoteAnim` (13).
 - Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
   and `nameplates` (3); `GuildMemberNotify` goes with it.
+
+**Queued for Wire A (Native Wire): producer-less native writers.** Wire B's `ClientCommand` dead-field
+audit (d20aeba3) kept seven admitted Wrath writers that nothing constructs, each under its own
+`#[allow(dead_code)]` in `net.rs`: `MoveTimeSkipped`, `NativeChatCommand`, `NativeMirrorImageQuery`,
+`NativeParty`, `GetChannelMemberCount`, `ClearChannelWatch`, `DeclineChannelInvite`. For each,
+check whether the stock 12340 UI or client sends it (a missing producer is a player-facing gap, as
+`DeclineChannelInvite` or `NativeParty` may be), then wire the producer or delete the variant, and
+drop its allow.
 
 **The cvar registry (item 4 follow-up, 121): needs a short design note before moving.** After
 Experience's unit the rows register from their features, but `cvars` still names each feature's

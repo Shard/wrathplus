@@ -507,13 +507,20 @@ pub enum CastTarget {
     /// A world position, not on a transport.
     Dest([f32; 3]),
     Source([f32; 3]),
+    /// A friendly player's corpse (`TARGET_FLAG_CORPSE_ALLY`): a resurrection on a released
+    /// player.
+    CorpseAlly(u64),
+    /// A hostile player's corpse (`TARGET_FLAG_CORPSE_ENEMY`).
+    CorpseEnemy(u64),
 }
 
 const TARGET_FLAG_UNIT: u32 = 0x0002;
 const TARGET_FLAG_ITEM: u32 = 0x0010;
 const TARGET_FLAG_SOURCE_LOCATION: u32 = 0x0020;
 const TARGET_FLAG_DEST_LOCATION: u32 = 0x0040;
+const TARGET_FLAG_CORPSE_ENEMY: u32 = 0x0200;
 const TARGET_FLAG_GAMEOBJECT: u32 = 0x0800;
+const TARGET_FLAG_CORPSE_ALLY: u32 = 0x8000;
 
 /// `CMSG_PET_CAST_SPELL`: a cast whose caster is not the active player, our pet, charm or
 /// possessed unit (`Wow.exe` `0x80ac90` opens it instead of `CMSG_CAST_SPELL` then). AzerothCore
@@ -567,6 +574,15 @@ pub fn encode_cast_spell(cast_count: u8, spell_id: u32, target: &CastTarget) -> 
         CastTarget::Source(at) => {
             body.extend(TARGET_FLAG_SOURCE_LOCATION.to_le_bytes());
             position(at, &mut body);
+        }
+        // `SpellCastTargets::Read` takes a corpse's packed guid under either corpse bit.
+        CastTarget::CorpseAlly(guid) => {
+            body.extend(TARGET_FLAG_CORPSE_ALLY.to_le_bytes());
+            packed(*guid, &mut body);
+        }
+        CastTarget::CorpseEnemy(guid) => {
+            body.extend(TARGET_FLAG_CORPSE_ENEMY.to_le_bytes());
+            packed(*guid, &mut body);
         }
     }
     body
@@ -630,6 +646,11 @@ mod tests {
         assert_eq!(body, [1, 78, 0, 0, 0, 0, 2, 0, 0, 0, 0x01, 0x05]);
         let body = encode_cast_spell(2, 6603, &CastTarget::None);
         assert_eq!(body, [2, 0xCB, 0x19, 0, 0, 0, 0, 0, 0, 0]);
+        // Resurrection (2006) on a friendly corpse, then a hostile one: mask, then the packed guid.
+        let body = encode_cast_spell(3, 2006, &CastTarget::CorpseAlly(0xF100_0000_0000_0007));
+        assert_eq!(body, [3, 0xD6, 0x07, 0, 0, 0, 0x00, 0x80, 0, 0, 0x81, 0x07, 0xF1]);
+        let body = encode_cast_spell(3, 2006, &CastTarget::CorpseEnemy(0x07));
+        assert_eq!(body, [3, 0xD6, 0x07, 0, 0, 0, 0x00, 0x02, 0, 0, 0x01, 0x07]);
     }
 
     /// A death knight's Plague Strike: power word, then runes 0b111111 before and 0b111010

@@ -45,16 +45,6 @@ fn native_mutations_route_with_complete_wire_fields() {
         expected.extend(tail);
         assert_eq!(native_mail_packet(&command).unwrap(), (opcode, expected));
     }
-    for legacy in [
-        ClientCommand::MailTakeItem { mailbox, mail_id },
-        ClientCommand::MailReturnToSender { mailbox, mail_id },
-        ClientCommand::MailTakeMoney { mailbox, mail_id },
-        ClientCommand::MailDelete { mailbox, mail_id },
-        ClientCommand::MailMarkAsRead { mailbox, mail_id },
-        ClientCommand::MailCreateTextItem { mailbox, mail_id },
-    ] {
-        assert_eq!(route(&legacy), WrathRoute::DisabledGameAction);
-    }
 }
 
 #[test]
