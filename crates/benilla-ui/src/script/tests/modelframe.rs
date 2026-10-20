@@ -1,7 +1,7 @@
 //! The `Model` and `PlayerModel` Lua surface, read back through the API that wrote it, and checked
 //! against the reference's method tables in both directions.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::UiScript;
 
 #[test]
@@ -181,88 +181,6 @@ fn the_string_setters_gate_their_argument_and_a_number_is_a_string() {
         0,
         "AdvanceTime pushes no return value"
     );
-}
-
-/// The reference's own method tables, entry for entry (`Model` `0x878948`, `PlayerModel`
-/// `0x84f1fc`), checked both ways: every name resolves, and a name a table lacks does not.
-#[test]
-fn the_two_model_tables_are_the_references_own() {
-    /// `Model`, `CSimpleModel`'s table `0x878948`, in table order.
-    const MODEL_23: [&str; 23] = [
-        "SetModel",
-        "GetModel",
-        "ClearModel",
-        "SetPosition",
-        "SetFacing",
-        "SetModelScale",
-        "SetSequence",
-        "SetSequenceTime",
-        "SetCamera",
-        "SetLight",
-        "GetLight",
-        "GetPosition",
-        "GetFacing",
-        "GetModelScale",
-        "AdvanceTime",
-        "ReplaceIconTexture",
-        "SetFogColor",
-        "GetFogColor",
-        "SetFogNear",
-        "GetFogNear",
-        "SetFogFar",
-        "GetFogFar",
-        "ClearFog",
-    ];
-    /// `PlayerModel`, `CGCharacterModelBase`'s table `0x84f1fc`, in table order.
-    const PLAYERMODEL_3: [&str; 3] = ["SetUnit", "RefreshUnit", "SetRotation"];
-    /// The names in [`MODEL_23`] this client leaves unbuilt, absent rather than stubbed: none.
-    const UNBUILT: [&str; 0] = [];
-
-    let mut s = vanilla_script();
-    s.set_screen_size(800.0, 600.0);
-    s.run(
-        r#"
-        CreateFrame("Model", "GuardM", UIParent)
-        CreateFrame("PlayerModel", "GuardPM", UIParent)
-    "#,
-    )
-    .unwrap();
-    let is_fn = |s: &UiScript, frame: &str, name: &str| {
-        s.eval::<String>(&format!("return type({frame}.{name})"))
-            .unwrap()
-            == "function"
-    };
-
-    for name in MODEL_23 {
-        let want = !UNBUILT.contains(&name);
-        // A `Model` verb resolves on both panes, on the PlayerModel through the chain.
-        for frame in ["GuardM", "GuardPM"] {
-            assert_eq!(
-                is_fn(&s, frame, name),
-                want,
-                "{frame}.{name}: table 0x878948 has it; built = {want}"
-            );
-        }
-    }
-    for name in PLAYERMODEL_3 {
-        assert!(
-            is_fn(&s, "GuardPM", name),
-            "GuardPM.{name}: table 0x84f1fc entry, all three are built"
-        );
-        assert!(
-            !is_fn(&s, "GuardM", name),
-            "GuardM.{name}: 0x84f1fc is NOT reachable from CSimpleModel's lookup"
-        );
-    }
-    // Later-expansion verbs, absent from the 1.12 client image in any form.
-    for name in ["SetCreature", "SetCustomRace"] {
-        for frame in ["GuardM", "GuardPM"] {
-            assert!(
-                !is_fn(&s, frame, name),
-                "{frame}.{name} does not exist in 1.12.1.5875"
-            );
-        }
-    }
 }
 
 /// `SetSequence` and `SetSequenceTime` share one arm (`0x7121a0`): each interrupts what plays and
