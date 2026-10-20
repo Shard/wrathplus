@@ -292,7 +292,8 @@ fn sync_dispatch(
     }
     *dispatch.seen_generation.get(&script) = Some(generation);
     dispatch.map.clear();
-    for (key, command) in script.binding_keys() {
+    // The live table with build 12340's override layer on top (`SetOverrideBinding`).
+    for (key, command) in script.effective_binding_keys() {
         match Chord::parse(&key) {
             Some(ch) => {
                 dispatch.map.insert(ch, command);
