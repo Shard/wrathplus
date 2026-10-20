@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn showgrid_hidegrid_fire_on_gain_and_loss_not_on_a_hop() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_action(1, Some(action_slot("Interface\\Icons\\Spell_A", 0x00, 111)));
         s.set_action(2, Some(action_slot("Interface\\Icons\\Spell_B", 0x00, 222)));
         s.run(
@@ -289,7 +289,7 @@ mod tests {
             local f = CreateFrame("Frame", "GridListener")
             f:RegisterEvent("ACTIONBAR_SHOWGRID")
             f:RegisterEvent("ACTIONBAR_HIDEGRID")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4)
                 if event == "ACTIONBAR_SHOWGRID" then shows = shows + 1 end
                 if event == "ACTIONBAR_HIDEGRID" then hides = hides + 1 end
             end)

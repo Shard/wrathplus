@@ -77,18 +77,12 @@ mod tests {
             );
             s.run("for stat=3,5 do assert(GetAttackPowerForStat(stat,100)==0) end assert(GetAttackPowerForStat(1,0)==0)").unwrap();
         }
-        let vanilla = UiScript::new_vanilla().unwrap();
-        vanilla.run("assert(GetAttackPowerForStat == nil)").unwrap();
     }
 
     #[test]
     fn wrath_max_health_display_multiplier_is_neutral_for_every_unit() {
         let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
         s.run("for _, unit in ipairs({'player', 'target', 'pet', 'party1', 'unknown'}) do assert(GetUnitMaxHealthModifier(unit) == 1) end assert(GetUnitMaxHealthModifier() == 1)").unwrap();
-        UiScript::new_vanilla()
-            .unwrap()
-            .run("assert(GetUnitMaxHealthModifier == nil)")
-            .unwrap();
     }
 
     #[test]

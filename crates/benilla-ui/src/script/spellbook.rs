@@ -936,7 +936,7 @@ mod tests {
             cursorUpdates = 0
             local f = CreateFrame("Frame", "CursorListener")
             f:RegisterEvent("CURSOR_UPDATE")
-            f:SetScript("OnEvent", function() cursorUpdates = cursorUpdates + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) cursorUpdates = cursorUpdates + 1 end)
             "#,
         )
         .unwrap();
@@ -1406,7 +1406,7 @@ mod tests {
             fired = 0
             local f = CreateFrame("Frame", "SpellsWatcher")
             f:RegisterEvent("SPELLS_CHANGED")
-            f:SetScript("OnEvent", function() fired = fired + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) fired = fired + 1 end)
             "#,
         )
         .unwrap();

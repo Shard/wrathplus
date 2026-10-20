@@ -38,28 +38,6 @@ fn hook_script_runs_after_the_original_for_every_widget_kind() {
 }
 
 #[test]
-fn vanilla_keeps_flat_script_acceptance_and_has_no_hookscript() {
-    let script = UiScript::new_vanilla().unwrap();
-    assert!(script
-        .eval::<bool>(
-            r#"
-            local frame = CreateFrame("Frame")
-            local handler = function() end
-            if frame.HookScript ~= nil then return false end
-            if frame:HasScript("OnClick") ~= 1 or frame:HasScript("onvaluechanged") ~= 1 then
-                return false
-            end
-            if frame:GetScript("OnClick") ~= nil then return false end
-            frame:SetScript("onclick", handler)
-            return frame:GetScript("ONCLICK") == handler
-                and frame:HasScript("NotARealScript") == nil
-                and frame:GetScript("NotARealScript") == nil
-            "#,
-        )
-        .unwrap());
-}
-
-#[test]
 fn get_attribute_resolves_the_secure_templates_modified_lookup() {
     let script = wrath();
     assert!(script

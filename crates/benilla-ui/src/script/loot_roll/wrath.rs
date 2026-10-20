@@ -222,14 +222,6 @@ mod tests {
                 .unwrap(),
             0
         );
-        let vanilla = UiScript::new_vanilla().unwrap();
-        vanilla.run("function count(...) return arg.n end").unwrap();
-        assert_eq!(
-            vanilla
-                .eval::<usize>("return count(GetLootRollItemInfo(999))")
-                .unwrap(),
-            6
-        );
     }
 
     #[test]

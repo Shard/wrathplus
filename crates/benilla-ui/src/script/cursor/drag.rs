@@ -92,7 +92,7 @@ mod tests {
     use crate::script::UiScript;
 
     fn drag_script() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_screen_size(800.0, 600.0);
         s
     }
@@ -108,13 +108,13 @@ mod tests {
             local a = CreateFrame("Frame", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
-            a:SetScript("OnDragStart", function() local self, button = this, arg1 drag_starts = drag_starts + 1; drag_button = button end)
-            a:SetScript("OnDragStop", function() local self = this drag_stops = drag_stops + 1 end)
-            a:SetScript("OnClick", function() local self = this click_a = click_a + 1 end)
+            a:SetScript("OnDragStart", function(self, button) drag_starts = drag_starts + 1; drag_button = button end)
+            a:SetScript("OnDragStop", function(self) drag_stops = drag_stops + 1 end)
+            a:SetScript("OnClick", function(self) click_a = click_a + 1 end)
             local b = CreateFrame("Frame", "B")
             b:SetPoint("BOTTOMLEFT", 400, 0); b:SetWidth(400); b:SetHeight(600); b:EnableMouse(true)
-            b:SetScript("OnReceiveDrag", function() local self = this receives = receives + 1 end)
-            b:SetScript("OnClick", function() local self = this click_b = click_b + 1 end)
+            b:SetScript("OnReceiveDrag", function(self) receives = receives + 1 end)
+            b:SetScript("OnClick", function(self) click_b = click_b + 1 end)
             "#,
         )
         .unwrap();
@@ -170,7 +170,7 @@ mod tests {
             local a = CreateFrame("Frame", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
-            a:SetScript("OnClick", function() local self = this clicks = clicks + 1 end)
+            a:SetScript("OnClick", function(self) clicks = clicks + 1 end)
             "#,
         )
         .unwrap();
@@ -192,7 +192,7 @@ mod tests {
             local a = CreateFrame("Frame", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
-            a:SetScript("OnClick", function() local self = this clicks = clicks + 1 end)
+            a:SetScript("OnClick", function(self) clicks = clicks + 1 end)
             "#,
         )
         .unwrap();
@@ -221,7 +221,7 @@ mod tests {
             a:RegisterForDrag("LeftButton")
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -271,7 +271,7 @@ mod tests {
             heard, name, quality = 0, nil, nil
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() local self, event, n, q = this, event, arg1, arg2 heard = heard + 1; name = n; quality = q end)
+            f:SetScript("OnEvent", function(self, event, n, q) heard = heard + 1; name = n; quality = q end)
             "#,
         )
         .unwrap();
@@ -309,7 +309,7 @@ mod tests {
             heard = 0
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -351,7 +351,7 @@ mod tests {
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -410,7 +410,7 @@ mod tests {
             heard = 0
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -449,7 +449,7 @@ mod tests {
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -485,7 +485,7 @@ mod tests {
             a:RegisterForDrag("LeftButton")
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
-            f:SetScript("OnEvent", function() heard = heard + 1 end)
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
             "#,
         )
         .unwrap();
@@ -524,8 +524,8 @@ mod tests {
             a:SetPoint("BOTTOMLEFT", 100, 100); a:SetWidth(200); a:SetHeight(100)
             a:EnableMouse(true); a:SetMovable(true)
             a:RegisterForDrag("LeftButton")
-            a:SetScript("OnDragStart", function() this:StartMoving() end)
-            a:SetScript("OnDragStop", function() stops = stops + 1; this:StopMovingOrSizing() end)
+            a:SetScript("OnDragStart", function(this, arg1, arg2, arg3, arg4) this:StartMoving() end)
+            a:SetScript("OnDragStop", function(this, arg1, arg2, arg3, arg4) stops = stops + 1; this:StopMovingOrSizing() end)
             "#,
         )
         .unwrap();
@@ -569,8 +569,8 @@ mod tests {
             a:SetPoint("BOTTOMLEFT", 100, 100); a:SetWidth(200); a:SetHeight(100)
             a:EnableMouse(true); a:SetMovable(true)
             a:RegisterForDrag("LeftButton")
-            a:SetScript("OnDragStart", function() starts = starts + 1; this:StartMoving() end)
-            a:SetScript("OnDragStop", function() stops = stops + 1; this:StopMovingOrSizing() end)
+            a:SetScript("OnDragStart", function(this, arg1, arg2, arg3, arg4) starts = starts + 1; this:StartMoving() end)
+            a:SetScript("OnDragStop", function(this, arg1, arg2, arg3, arg4) stops = stops + 1; this:StopMovingOrSizing() end)
             "#,
         )
         .unwrap();

@@ -1,6 +1,6 @@
 //! Show and Hide fire OnShow/OnHide only on effective transitions; OnUpdate runs only when visible.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 
 #[test]
 fn show_hide_fires_only_on_effective_transitions() {
@@ -9,8 +9,8 @@ fn show_hide_fires_only_on_effective_transitions() {
         r#"
         shows, hides = 0, 0
         local f = CreateFrame("Frame", "Vis")
-        f:SetScript("OnShow", function() shows = shows + 1 end)
-        f:SetScript("OnHide", function() hides = hides + 1 end)
+        f:SetScript("OnShow", function(this, arg1, arg2, arg3, arg4) shows = shows + 1 end)
+        f:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4) hides = hides + 1 end)
         f:Hide()   -- true→false: OnHide (1)
         f:Hide()   -- no transition: nothing
         f:Show()   -- false→true: OnShow (1)
@@ -31,7 +31,7 @@ fn mid_tree_hide_fires_onhide_for_the_subtree() {
         childhides = 0
         local p = CreateFrame("Frame", "PH")
         local c = CreateFrame("Frame", "CH", p)
-        c:SetScript("OnHide", function() childhides = childhides + 1 end)
+        c:SetScript("OnHide", function(this, arg1, arg2, arg3, arg4) childhides = childhides + 1 end)
         p:Hide()   -- child loses effective visibility though its own shown stays true
     "#,
     )
@@ -42,12 +42,12 @@ fn mid_tree_hide_fires_onhide_for_the_subtree() {
 
 #[test]
 fn tick_runs_onupdate_only_when_effectively_visible() {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.run(
         r#"
         ticks, last = 0, 0
         local f = CreateFrame("Frame", "UF")
-        f:SetScript("OnUpdate", function() local self, elapsed = this, arg1 ticks = ticks + 1; last = elapsed end)
+        f:SetScript("OnUpdate", function(self, elapsed) ticks = ticks + 1; last = elapsed end)
     "#,
     )
     .unwrap();

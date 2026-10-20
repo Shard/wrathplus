@@ -54,13 +54,13 @@ fn a_titleless_addon_sorts_under_its_folder_name() {
             AddOnInfo {
                 name: "Yankee".into(),
                 title: Some("zzz".into()),
-                interface: 11200,
+                interface: 30300,
                 enabled: true,
                 ..Default::default()
             },
             AddOnInfo {
                 name: "bravo".into(),
-                interface: 11200,
+                interface: 30300,
                 enabled: true,
                 ..Default::default()
             },
@@ -121,7 +121,7 @@ fn a_reply_that_hides_nothing_still_builds_the_array() {
 /// A player's addon `Probe` and a hidden chain addon `Blizzard_AuctionUI`, LoadOnDemand, whose one
 /// file sets `AuctionLoaded`; the reply hides the Blizzard one, as a vmangos realm does.
 fn with_hidden_blizzard(blizzard_enabled: bool) -> UiScript {
-    let mut s = UiScript::new_vanilla().unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_addon_chain_reader(Box::new(|path| {
         (path == "Interface/AddOns/Blizzard_AuctionUI/Blizzard_AuctionUI.lua")
             .then(|| b"AuctionLoaded = 1".to_vec())
@@ -130,7 +130,7 @@ fn with_hidden_blizzard(blizzard_enabled: bool) -> UiScript {
         vec![
             AddOnInfo {
                 name: "Blizzard_AuctionUI".into(),
-                interface: 11200,
+                interface: 30300,
                 load_on_demand: true,
                 chain: true,
                 files: vec!["Blizzard_AuctionUI.lua".into()],
@@ -139,7 +139,7 @@ fn with_hidden_blizzard(blizzard_enabled: bool) -> UiScript {
             },
             AddOnInfo {
                 name: "Probe".into(),
-                interface: 11200,
+                interface: 30300,
                 enabled: true,
                 ..Default::default()
             },

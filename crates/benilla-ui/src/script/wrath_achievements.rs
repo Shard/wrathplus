@@ -485,8 +485,4 @@ mod tests {
             .contains("COPPER_AMOUNT_SYMBOL"));
     }
 
-    #[test]
-    fn vanilla_surface_unchanged() {
-        UiScript::new_vanilla().unwrap().run("assert(GetAchievementCategory==nil); assert(GetAchievementNumCriteria==nil); assert(GetAchievementCriteriaInfo==nil); assert(GetAchievementLink==nil)").unwrap();
-    }
 }

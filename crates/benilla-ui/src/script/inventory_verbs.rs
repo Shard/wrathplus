@@ -352,7 +352,7 @@ mod tests {
             r#"ALERTS = 0
                local f = CreateFrame("Frame")
                f:RegisterEvent("UPDATE_INVENTORY_ALERTS")
-               f:SetScript("OnEvent", function() ALERTS = ALERTS + 1 end)"#,
+               f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) ALERTS = ALERTS + 1 end)"#,
         )
         .unwrap();
         assert_eq!(
