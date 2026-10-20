@@ -423,8 +423,7 @@ mod tests {
         use bevy::ecs::system::RunSystemOnce;
 
         let mut world = World::new();
-        let mut script =
-            UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).expect("VM");
+        let mut script = UiScript::new().expect("VM");
         script.set_talents(TalentUiState {
             tabs: vec![TalentTabView::default()],
             talents: vec![vec![TalentView {

@@ -9,8 +9,7 @@ use bevy::prelude::*;
 use benilla_formats::ChrClasses;
 use benilla_protocol::types::ObjectType;
 use benilla_ui::script::{
-    parse_unit_token, power_token, ScriptValue, UiScript, UnitBase, UnitState, UnitTokenParse,
-    WornDisplay,
+    parse_unit_token, ScriptValue, UiScript, UnitBase, UnitState, UnitTokenParse, WornDisplay,
 };
 
 use crate::creature_type::CreatureTypeSources;
@@ -31,6 +30,9 @@ pub(crate) use crate::app_core::schedule::UnitFeed;
 /// self-suppression and no CVar gate; `type` is the school on the melee and spell-damage paths, 0
 /// from the miss and heal wrappers, and the 1.12 binary never emits `ENERGIZE`. The melee victim
 /// event waits for the impact keyframe (`0x6243e0`, reached only from `0x624530`).
+// Labelled: drained unread ([`fire_unit_combat`]) until build 12340's `UNIT_COMBAT` ABI is qualified
+// against this payload; the combat log still composes it.
+#[allow(dead_code)]
 #[derive(Message, Clone, Copy)]
 pub(crate) struct UnitCombatFeedback {
     pub(crate) unit: Entity,
@@ -478,43 +480,11 @@ fn fire_combat_text(
     }
 }
 
-/// Drain [`UnitCombatFeedback`] into `UNIT_COMBAT` for `"player"` and `"target"` only; the
-/// reference fires once per token naming the unit, and stock `PetFrame.lua:13` listens for `"pet"`.
-fn fire_unit_combat(
-    script: Option<NonSendMut<UiScript>>,
-    mut events: MessageReader<UnitCombatFeedback>,
-    self_q: Query<(), With<SelfPlayer>>,
-    selection: Res<Selection>,
-) {
-    let Some(mut script) = script else {
-        return;
-    };
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        // Shared feedback carries Vanilla school-index/event semantics. Do not advertise
-        // that payload as Wrath's Lua UNIT_COMBAT ABI before independent qualification.
-        events.read().for_each(|_| {});
-        return;
-    }
-    for ev in events.read() {
-        let mut fire = |token: &str| {
-            script.fire_event(
-                "UNIT_COMBAT",
-                vec![
-                    ScriptValue::Str(token.to_string()),
-                    ScriptValue::Str(ev.action.to_string()),
-                    ScriptValue::Str(ev.flags.to_string()),
-                    ScriptValue::Int(i64::from(ev.amount)),
-                    ScriptValue::Int(i64::from(ev.school)),
-                ],
-            );
-        };
-        if self_q.contains(ev.unit) {
-            fire("player");
-        }
-        if selection.target == Some(ev.unit) {
-            fire("target");
-        }
-    }
+/// Drain [`UnitCombatFeedback`] unfired. Labelled: the shared feedback carries 1.12's school-index
+/// and event semantics, and build 12340's Lua `UNIT_COMBAT` ABI is not yet qualified against it,
+/// so no `UNIT_COMBAT` is advertised.
+fn fire_unit_combat(mut events: MessageReader<UnitCombatFeedback>) {
+    events.read().for_each(|_| {});
 }
 
 /// The race id to `UnitRace`'s display name and `raceFile` token (`"Scourge"`, `"NightElf"`); the
@@ -1064,25 +1034,18 @@ fn drain_worn_display_toggles(
     let Some(mut script) = script else {
         return;
     };
-    let wrath = script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340;
     let hidden = self_q
         .iter()
         .next()
         .map(|s| (s.0.player_hides_helm(), s.0.player_hides_cloak()));
     for which in script.take_worn_display_toggles() {
-        let command = match (which, wrath) {
-            (WornDisplay::Helm, false) => crate::net::ClientCommand::ToggleHelm,
-            (WornDisplay::Cloak, false) => crate::net::ClientCommand::ToggleCloak,
-            (WornDisplay::Helm, true) => {
-                crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
-                    show: hidden.is_some_and(|h| h.0),
-                })
-            }
-            (WornDisplay::Cloak, true) => {
-                crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
-                    show: hidden.is_some_and(|h| h.1),
-                })
-            }
+        let command = match which {
+            WornDisplay::Helm => crate::net::ClientCommand::NativeAppearance(A::ShowingHelm {
+                show: hidden.is_some_and(|h| h.0),
+            }),
+            WornDisplay::Cloak => crate::net::ClientCommand::NativeAppearance(A::ShowingCloak {
+                show: hidden.is_some_and(|h| h.1),
+            }),
         };
         let _ = commands.0.send(command);
     }
@@ -1267,23 +1230,7 @@ pub(crate) fn fire_transitions(
     ) {
         script.fire_event("UNIT_DYNAMIC_FLAGS", vec![tok()]);
     }
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        fire_wrath_power_transitions(script, token, prev, cur);
-    } else {
-        // Preserve the 1.12 active-resource event contract.
-        if changed(|u| u64::from(u.power)) {
-            script.fire_event(
-                &format!("UNIT_{}", power_token(cur.power_type)),
-                vec![tok()],
-            );
-        }
-        if changed(|u| u64::from(u.max_power)) {
-            script.fire_event(
-                &format!("UNIT_MAX{}", power_token(cur.power_type)),
-                vec![tok()],
-            );
-        }
-    }
+    fire_wrath_power_transitions(script, token, prev, cur);
     if prev.is_none_or(|p| p.name != cur.name) {
         script.fire_event("UNIT_NAME_UPDATE", vec![tok()]);
     }
@@ -1835,7 +1782,6 @@ mod tests {
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
         use benilla_protocol::types::ObjectFields;
         use benilla_protocol::types::{Field, FieldLayout};
-        use benilla_ui::script::ScriptDialect;
         let layout = FieldLayout::Wrath12340;
         let power = layout.resolve(Field::UnitPower).unwrap();
         let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
@@ -1859,7 +1805,7 @@ mod tests {
         current.powers.as_mut().unwrap()[0].current = 731;
         current.powers.as_mut().unwrap()[6].current = 439;
         current.powers.as_mut().unwrap()[6].maximum = 1250;
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.run("SEEN={} local f=CreateFrame('Frame') for _,e in ipairs({'UNIT_MANA','UNIT_RUNIC_POWER','UNIT_MAXRUNIC_POWER','UNIT_RAGE'}) do f:RegisterEvent(e) end f:SetScript('OnEvent',function(self,event,unit) table.insert(SEEN,event..':'..UnitPower(unit,6)) end)").unwrap();
         script.set_unit("player", Some(current.clone()));
         fire_transitions(
@@ -3734,7 +3680,6 @@ mod tests {
     #[test]
     fn wrath_unit_is_unit_tracks_actual_player_and_target_snapshots() {
         use benilla_protocol::types::{ObjectFields, ObjectType};
-        use benilla_ui::script::ScriptDialect;
 
         const PLAYER: u64 = 0x77;
         const OTHER: u64 = 0xF130_0000_4500_0001;
@@ -3751,9 +3696,7 @@ mod tests {
         app.add_message::<FieldChanged>();
         let (tx, _rx) = crossbeam_channel::unbounded();
         app.insert_resource(NetCommands(tx));
-        app.insert_non_send_resource(
-            UiScript::new_with_dialect(ScriptDialect::Wrath12340).expect("Wrath VM"),
-        );
+        app.insert_non_send_resource(UiScript::new().expect("Wrath VM"));
         app.add_systems(Update, feed_units);
 
         let player = app

@@ -117,7 +117,6 @@ pub(crate) fn seed(world: &World, script: &mut UiScript) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_ui::script::ScriptDialect;
 
     #[test]
     fn static_snapshot_is_available_to_each_fresh_vm_before_ui_execution() {
@@ -153,7 +152,7 @@ mod tests {
         metadata.linked_criteria.insert(1, vec![12, 10]);
         world.insert_resource(AchievementMetadata(metadata));
         for _ in 0..2 {
-            let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+            let mut script = UiScript::new().unwrap();
             seed(&world, &mut script);
             script.run("assert(GetAchievementCategory(1)==42); assert(GetAchievementNumCriteria(1)==2); local d,t,c,q,r,n,f,a,s,id=GetAchievementCriteriaInfo(1,1); assert(id==12 and c==false and q==0 and r==8 and n==nil)").unwrap();
         }
@@ -162,7 +161,7 @@ mod tests {
     #[test]
     fn absent_catalog_is_not_replaced_with_fabricated_metadata() {
         let world = World::new();
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         seed(&world, &mut script);
         script.run("assert(select('#',GetAchievementCategory(1))==0); assert(select('#',GetAchievementCriteriaInfo(1,1))==0)").unwrap();
     }

@@ -25,9 +25,9 @@ use std::sync::Arc;
 
 use benilla_protocol::wrath_lfg::{self, DungeonLock, Packet, PartyMemberLocks, PlayerInfo};
 use benilla_ui::script::{
-    ScriptDialect, UiScript, WrathLfgItemRequest, WrathLfgLock, WrathLfgLockRequest,
-    WrathLfgLockSnapshot, WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation,
-    WrathLfgPreview, WrathLfgRewardItem,
+    UiScript, WrathLfgItemRequest, WrathLfgLock, WrathLfgLockRequest, WrathLfgLockSnapshot,
+    WrathLfgMemberLocks, WrathLfgPlayerLocks, WrathLfgPresentation, WrathLfgPreview,
+    WrathLfgRewardItem,
 };
 use bevy::prelude::*;
 
@@ -240,9 +240,6 @@ pub(super) fn feed(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let l1 = &mut *l1;
     // The native self object's level, 0 without one (contract: links fall back to level 0).
     let level = self_q

@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 use benilla_formats::SpellDisplay;
 use benilla_protocol::{SessionEvent, SessionEventKind};
-use benilla_ui::script::{ScriptDialect, ScriptValue, UiScript, WrathUnitCast};
+use benilla_ui::script::{ScriptValue, UiScript, WrathUnitCast};
 use bevy::prelude::*;
 
 use crate::net::{GuidIndex, NetCommands, NetHandlerApp, SelfGuid};
@@ -206,10 +206,6 @@ fn feed(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        edges.0.clear();
-        return;
-    }
     let spells = spells.as_deref();
     let def = |id: u32| spells.and_then(|s| s.catalog.get(id));
     let me = self_guid.0;

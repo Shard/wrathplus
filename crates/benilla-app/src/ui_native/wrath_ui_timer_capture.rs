@@ -8,7 +8,7 @@
 //! projection.
 pub(crate) use crate::net::wrath_ui_timer_capture::{NativeUiTimerPackets, ServerClock};
 use crate::net::{ClientCommand, NetCommands};
-use benilla_ui::script::{ScriptDialect, UiScript};
+use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 /// `0x5488f0`'s query period (`iVar1 + 20000` ms).
@@ -32,7 +32,7 @@ fn local_time() -> i64 {
 }
 
 /// One frame of `0x5488f0`'s query leg, then each reply's offset, then the VM's copy. A new VM gets
-/// the current offset. Vanilla VMs read no server clock.
+/// the current offset; with no VM nothing is asked.
 fn tick_server_clock(
     script: Option<NonSendMut<UiScript>>,
     time: Res<Time>,
@@ -41,11 +41,9 @@ fn tick_server_clock(
     commands: Option<Res<NetCommands>>,
     mut memo: Local<crate::ui_script::VmMemo<()>>,
 ) {
-    let wrath = script
-        .as_ref()
-        .is_some_and(|s| s.dialect() == ScriptDialect::Wrath12340);
+    let has_vm = script.is_some();
     let now = time.elapsed_secs_f64();
-    if wrath && clock.due.is_some_and(|due| now >= due) {
+    if has_vm && clock.due.is_some_and(|due| now >= due) {
         clock.due = Some(now + QUERY_PERIOD_SECS);
         if let Some(commands) = &commands {
             let _ = commands.0.send(ClientCommand::NativeUiTimerQuery);
@@ -56,7 +54,7 @@ fn tick_server_clock(
         clock.offset = Some((packet.time as i32).wrapping_sub(local_time() as i32));
         clock.dirty = true;
     }
-    let Some(mut script) = script.filter(|_| wrath) else {
+    let Some(mut script) = script else {
         return;
     };
     let fresh_vm = memo.get_reset(&script).1;

@@ -37,10 +37,9 @@ use benilla_protocol::wrath_calendar::{
     AddInvitee, Calendar, Command, Event, EventInvitee, EventRow, Lockout, Packet, RaidReset,
 };
 use benilla_ui::script::{
-    ScriptDialect, ScriptValue as V, UiScript, WrathCalendarDate, WrathCalendarEntry,
-    WrathCalendarEvent, WrathCalendarFields, WrathCalendarInvitee, WrathCalendarKind,
-    WrathCalendarRaid, WrathCalendarRaidReset, WrathCalendarRequest as R, WrathCalendarTexture,
-    WrathCalendarView,
+    ScriptValue as V, UiScript, WrathCalendarDate, WrathCalendarEntry, WrathCalendarEvent,
+    WrathCalendarFields, WrathCalendarInvitee, WrathCalendarKind, WrathCalendarRaid,
+    WrathCalendarRaidReset, WrathCalendarRequest as R, WrathCalendarTexture, WrathCalendarView,
 };
 use bevy::prelude::*;
 
@@ -262,9 +261,6 @@ fn feed_calendar(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let me = self_q.single().ok();
     let my_guid = me.map_or(0, |(g, _)| g.0);
     let mut fired: Vec<(&'static str, Vec<V>)> = Vec::new();

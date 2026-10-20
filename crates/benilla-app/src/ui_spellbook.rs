@@ -87,9 +87,6 @@ fn load_skill_lines(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
 /// Seed static Spell.dbc metadata before FrameXML executes. No per-frame catalog walk.
 /// Character-specific cost/cast modifiers remain the live action/tooltip feeds' concern.
 pub(crate) fn seed_spell_catalog(world: &World, script: &mut UiScript) {
-    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
-        return;
-    }
     if let Some(spells) = world.get_resource::<Spells>() {
         script.set_spell_catalog(
             spells
@@ -596,8 +593,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(spells);
         for _ in 0..2 {
-            let mut script =
-                UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();
+            let mut script = UiScript::new().unwrap();
             seed_spell_catalog(&world, &mut script);
             script
                 .run(

@@ -496,7 +496,6 @@ pub(super) fn drain_chat_input(
                         reputations,
                         target_store,
                         own_store,
-                        is_player,
                         relations,
                     ),
                 ));
@@ -916,10 +915,8 @@ pub(super) fn drain_chat_input(
                         channels.note_custom_channel_left(&name);
                         // Wrath 0x5093f0 writes +0xa0=1 on the explicit local intent,
                         // before its acknowledgment. Automatic walk leaves do not use this path.
-                        if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-                            if let Some(native) = chat_out.native_channels.as_deref_mut() {
-                                native.explicit_leave(&name);
-                            }
+                        if let Some(native) = chat_out.native_channels.as_deref_mut() {
+                            native.explicit_leave(&name);
                         }
                         ClientCommand::LeaveChannel { name }
                     }

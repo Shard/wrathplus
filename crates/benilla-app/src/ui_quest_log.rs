@@ -942,9 +942,6 @@ fn feed_quest_special_items(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != benilla_ui::script::ScriptDialect::Wrath12340 {
-        return;
-    }
     let Some(store) = self_q.iter().next() else {
         return;
     };

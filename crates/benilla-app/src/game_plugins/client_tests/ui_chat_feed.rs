@@ -14,10 +14,7 @@ use bevy::prelude::*;
 fn one_native_say_fires_exactly_one_chat_msg_say() {
     use bevy::ecs::system::RunSystemOnce;
     let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let script = benilla_ui::script::UiScript::new_with_dialect(
-        benilla_ui::script::ScriptDialect::Wrath12340,
-    )
-    .unwrap();
+    let script = benilla_ui::script::UiScript::new().unwrap();
     script
         .lua()
         .load(

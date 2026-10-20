@@ -45,9 +45,7 @@ use bevy::prelude::*;
 
 use benilla_protocol::wrath_instance_control::Packet;
 use benilla_ui::script::ScriptValue as V;
-use benilla_ui::script::{
-    ScriptDialect, UiScript, WrathInstanceLock, WrathPopupRequest, WrathPopupState,
-};
+use benilla_ui::script::{UiScript, WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 
@@ -401,9 +399,6 @@ pub(crate) fn drive(
     summon: &mut crate::ui_summon::SummonState,
     inputs: PopupInputs,
 ) {
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let PopupInputs {
         packets,
         refer,

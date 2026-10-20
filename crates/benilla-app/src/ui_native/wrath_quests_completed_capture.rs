@@ -5,7 +5,7 @@ pub(crate) use crate::net::wrath_quests_completed_capture::{
     NativeQuestsCompletedPackets, QuestsCompleted,
 };
 use crate::net::{ClientCommand, NetCommands};
-use benilla_ui::script::{ScriptDialect, UiScript};
+use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 pub(crate) fn register(app: &mut App) {
@@ -31,10 +31,6 @@ fn feed_quests_completed(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        packets.0.clear();
-        return;
-    }
     if std::mem::take(&mut stored.cleared) {
         script.set_wrath_quests_completed(Vec::new());
     }

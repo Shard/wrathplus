@@ -759,10 +759,9 @@ fn a_lua_setcvar_lands_in_config_toml_end_to_end() {
 
 #[test]
 fn wrath_cvar_mirror_tracks_host_sync_and_vm_replacement() {
-    use benilla_ui::script::ScriptDialect;
     let mut app = cvar_app();
     app.world_mut()
-        .insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
+        .insert_non_send_resource(UiScript::new().unwrap());
     app.update();
     app.world_mut().resource_mut::<Cvars>().set("gamma", "1.2");
     app.update();
@@ -778,7 +777,7 @@ fn wrath_cvar_mirror_tracks_host_sync_and_vm_replacement() {
     check(&mut app);
     assert_eq!(res::<crate::ui_gamma::DisplayGamma>(&app).0, 1.2);
     app.world_mut()
-        .insert_non_send_resource(UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap());
+        .insert_non_send_resource(UiScript::new().unwrap());
     app.update();
     check(&mut app);
 }

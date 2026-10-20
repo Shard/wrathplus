@@ -12,8 +12,8 @@ use crate::net::{ClientCommand, NetCommands};
 use benilla_protocol::wrath_raid_browser::Group;
 use benilla_protocol::wrath_raid_browser::{Command, Packet, Player};
 use benilla_ui::script::{
-    ScriptDialect, UiScript, WrathRaidBrowserGroup, WrathRaidBrowserMember,
-    WrathRaidBrowserRequest, WrathRaidBrowserStats, WrathRaidBrowserView,
+    UiScript, WrathRaidBrowserGroup, WrathRaidBrowserMember, WrathRaidBrowserRequest,
+    WrathRaidBrowserStats, WrathRaidBrowserView,
 };
 use bevy::prelude::*;
 use std::sync::Arc;
@@ -156,9 +156,6 @@ fn feed_raid_browser(
     let Some(mut script) = script else {
         return;
     };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     for request in script.take_wrath_raid_browser_requests() {
         let command = match request {
             WrathRaidBrowserRequest::Join { dungeon } => Command::Join { dungeon },

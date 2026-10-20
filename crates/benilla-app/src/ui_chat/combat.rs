@@ -302,7 +302,6 @@ pub(crate) fn classify(
             reputations,
             Some(store),
             me_store,
-            benilla_protocol::guid::is_player(guid),
             relations,
         )
     };

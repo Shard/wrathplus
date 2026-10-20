@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use benilla_protocol::{types::Field, ObjectFields};
-use benilla_ui::script::{ScriptDialect, UiScript, WrathCurrencyEntry, WrathCurrencySnapshot};
+use benilla_ui::script::{UiScript, WrathCurrencyEntry, WrathCurrencySnapshot};
 use bevy::prelude::*;
 
 use crate::entities::ItemDisplays;
@@ -122,9 +122,6 @@ pub(crate) fn feed(
     mut memo: Local<VmMemo<Option<WrathCurrencySnapshot>>>,
 ) {
     let Some(mut script) = script else { return };
-    if script.dialect() != ScriptDialect::Wrath12340 {
-        return;
-    }
     let last = memo.get(&script);
     let mut fresh = WrathCurrencySnapshot::default();
     if let Ok(player) = me.single() {
