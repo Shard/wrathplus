@@ -57,10 +57,8 @@ fn yield_own_body(net_cmds: &NetCommands, player: &mut Player, self_guid: Option
     super::move_trace::mover_claim("NOT_ACTIVE_MOVER", me);
     let _ = net_cmds.0.send(ClientCommand::NotActiveMover {
         guid: me,
-        flags: 0,
         pos: bevy_to_wow(player.pos),
         orientation: player.face_yaw.rem_euclid(std::f32::consts::TAU),
-        fall_time: 0,
     });
 }
 
@@ -295,16 +293,7 @@ pub(super) fn apply_server_moves(
                 | crate::creature_anim::move_flags::DESCENDING
                 | crate::creature_anim::move_flags::CAN_FLY);
         }
-        let facing = player.face_yaw.rem_euclid(std::f32::consts::TAU);
-        let _ = net_cmds.0.send(ClientCommand::MoveModeAck {
-            guid: m.guid,
-            counter: m.counter,
-            mode: m.mode,
-            apply: m.apply,
-            flags: player.modes.wire_flags(),
-            pos: bevy_to_wow(player.pos),
-            orientation: facing,
-        });
+        // The writer acks the order itself (`net::io::wrath`'s `send_mover_ack`).
         info!(
             "mover mode {:?} {} (acked)",
             m.mode,
@@ -380,28 +369,9 @@ pub(super) fn apply_server_moves(
         }
     }
 
-    // Forced speed changes: the bridge applied the speed; the ack carries our wire state, which the
-    // server relocates us to. Controlled, the movement stream acks; otherwise our state is the
-    // parked pose, so ack here.
-    let speed_acks: Vec<SpeedChangeMessage> = speed_msgs.read().copied().collect();
-    if !player.active || player.detached {
-        for ack in &speed_acks {
-            let _ = net_cmds.0.send(ClientCommand::ForceSpeedAck {
-                kind: ack.kind,
-                guid: ack.guid,
-                counter: ack.counter,
-                speed: ack.speed,
-                flags: 0,
-                pos: bevy_to_wow(player.pos),
-                orientation: player.face_yaw.rem_euclid(std::f32::consts::TAU),
-                pitch: 0.0,
-                fall_time: 0,
-                jump: None,
-                transport: None, // flags 0 → no transport tail
-            });
-        }
-    }
-    speed_acks
+    // Forced speed changes: the bridge applied the speed, and the writer acks each itself
+    // (`send_mover_ack`). Controlled, the movement stream counts the frame as a position report.
+    speed_msgs.read().copied().collect()
 }
 
 /// Apply one same-map teleport's snap (`MSG_MOVE_TELEPORT_ACK` inbound); the caller echoes it.

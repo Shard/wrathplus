@@ -141,12 +141,14 @@ fn bg_queue_probe(
             // Wait for the list: the join quotes its guid, and it proves the level gate cleared.
             if battlefield.battlemaster() == Some(master) {
                 info!("PROBE bgqueue: list landed — queueing for map {WSG_MAP}");
-                let _ = net.0.send(ClientCommand::BattlemasterJoin {
-                    battlemaster: master,
-                    map_id: WSG_MAP,
-                    instance_id: 0,
-                    as_group: false,
-                });
+                let _ = net.0.send(ClientCommand::NativeBattleground(
+                    benilla_protocol::wrath_battleground::Command::Join {
+                        battlemaster: master,
+                        bg_type: battlefield.bg_type(),
+                        instance_id: 0,
+                        as_group: 0,
+                    },
+                ));
                 probe.phase = Phase::Joined { sent_at: now };
             } else if now - sent_at > 8.0 {
                 error!(

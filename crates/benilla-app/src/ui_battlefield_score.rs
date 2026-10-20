@@ -226,9 +226,7 @@ fn drain_battlefield_score(
     // Unresolved, labelled: the reference sends the active slot's eight queue-id bytes; the
     // writer sends zeroes, which AzerothCore never reads.
     for _ in 0..script.take_battlefield_leave_requests() {
-        let _ = commands.0.send(ClientCommand::LeaveBattlefield {
-            map_id: queue.active_map().unwrap_or(0),
-        });
+        let _ = commands.0.send(ClientCommand::LeaveBattlefield);
     }
 }
 

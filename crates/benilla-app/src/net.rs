@@ -10,8 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use benilla_protocol::{
-    messages::WhoRequest, EntityKind, JumpInfo, MoveMode, MoveSpeeds, ObjectFields, SessionEvent,
-    SpeedKind, TransportPose,
+    EntityKind, JumpInfo, MoveMode, MoveSpeeds, ObjectFields, SessionEvent, TransportPose,
 };
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -1057,10 +1056,6 @@ pub(crate) static CAST_TRACE: std::sync::LazyLock<bool> =
 
 /// A message to the server through the write thread, carrying any pose it needs.
 #[derive(Debug)]
-// Some variants and fields only the deleted 1.12 writer read (`SendMail`, the mail ids, the BG
-// join's fields, …): their producers still build them. Pruning them is a follow-up to Vanilla
-// removal step 4.
-#[allow(dead_code)]
 pub(crate) enum ClientCommand {
     /// A self-movement packet. Each tail is written iff its flag is set (`JUMPING`, `SWIMMING`,
     /// `ON_TRANSPORT`): a flag without its tail desyncs the server's parse.
@@ -1084,24 +1079,12 @@ pub(crate) enum ClientCommand {
         orientation: f32,
         spline_id: u32,
     },
-    /// `CMSG_FORCE_*_SPEED_CHANGE_ACK`: echoes guid, counter and exact speed with a live movement
-    /// payload. Unacked, the server force-resolves after ~4 s and flags the session.
-    ForceSpeedAck {
-        kind: SpeedKind,
-        guid: u64,
-        counter: u32,
-        speed: f32,
-        flags: u32,
-        pos: [f32; 3],
-        orientation: f32,
-        pitch: f32,
-        fall_time: u32,
-        jump: Option<JumpInfo>,
-        transport: Option<TransportPose>,
-    },
     /// `CMSG_MOVE_TIME_SKIPPED`: our mover skipped `lag_ms` without integrating; `guid` must be the
     /// active mover (`0x600be0`). Just after boarding, the server answers with the transport's
     /// create update.
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     MoveTimeSkipped {
         guid: u64,
         lag_ms: u32,
@@ -1114,10 +1097,8 @@ pub(crate) enum ClientCommand {
     /// `CMSG_MOVE_NOT_ACTIVE_MOVER`: the server re-broadcasts a stop from this pose.
     NotActiveMover {
         guid: u64,
-        flags: u32,
         pos: [f32; 3],
         orientation: f32,
-        fall_time: u32,
     },
     /// Build 12340: dismiss the vehicle we drive, or change seats on it. The writer adds the
     /// vehicle's guid and halted pose.
@@ -1176,12 +1157,10 @@ pub(crate) enum ClientCommand {
     },
     /// `CMSG_USE_ITEM` by wire position: bag 255 and an absolute slot for the player's own array
     /// (equipment, backpack, keyring), else the bag's slot 19-22 and the inner slot.
-    /// `spell_index` is the template's spell block ordinal. `target` is the same cast-targets
-    /// block as a cast's (`SendCast 0x6e54f0` writes both).
+    /// `target` is the same cast-targets block as a cast's (`SendCast 0x6e54f0` writes both).
     UseItem {
         bag_index: u8,
         slot: u8,
-        spell_index: u8,
         /// Build 12340 names the cast spell and the item GUID; AC checks both.
         spell_id: u32,
         item_guid: u64,
@@ -1421,19 +1400,16 @@ pub(crate) enum ClientCommand {
         vendor: u64,
         item_guid: u64,
     },
-    /// `CMSG_GMTICKET_CREATE`: `category` is a `GMTicketCategory.dbc` id (1..10), `map`/`pos`
-    /// where we stand. vmangos refuses several cases silently (queue off, under
-    /// `GMTickets.MinLevel`, category >= 11).
+    /// `CMSG_GMTICKET_CREATE`: `map`/`pos` where we stand and the text; 3.3.5 carries no category
+    /// (AzerothCore `HandleGMTicketCreateOpcode`).
     GmTicketCreate {
-        category: u8,
         map: u32,
         pos: [f32; 3],
         text: String,
     },
-    /// `CMSG_GMTICKET_UPDATETEXT`, with the category byte vmangos discards. vmangos kicks past 2
-    /// per world tick, so one send per click.
+    /// `CMSG_GMTICKET_UPDATETEXT`: the text alone (AzerothCore `HandleGMTicketUpdateOpcode`); one
+    /// send per click.
     GmTicketUpdate {
-        category: u8,
         text: String,
     },
     /// `CMSG_GMTICKET_GETTICKET`: `GetGMTicket()`.
@@ -1471,13 +1447,7 @@ pub(crate) enum ClientCommand {
     /// `RequestBattlefieldScoreData()`: `MSG_PVP_LOG_DATA`.
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
-    LeaveBattlefield {
-        map_id: u32,
-    },
-    /// A meeting stone right-click past the client's four refusals: `CMSG 0x292`.
-    MeetingStoneJoin {
-        go_guid: u64,
-    },
+    LeaveBattlefield,
     /// `CancelMeetingStoneRequest()`: `CMSG 0x293`.
     MeetingStoneLeave,
     /// The enter-world meeting-stone status query: `CMSG 0x296`.
@@ -1492,13 +1462,6 @@ pub(crate) enum ClientCommand {
     /// `ResetTutorials()`: `CMSG_TUTORIAL_RESET`.
     TutorialReset,
     // ── The battleground list window ──
-    /// `JoinBattlefield` when the list came from a battlemaster: `CMSG_BATTLEMASTER_JOIN`.
-    BattlemasterJoin {
-        battlemaster: u64,
-        map_id: u32,
-        instance_id: u32,
-        as_group: bool,
-    },
     /// `RequestBattlefieldPositions()`: `MSG_BATTLEGROUND_PLAYER_POSITIONS`, throttled to the
     /// reference's 5000 ms.
     RequestBattlefieldPositions,
@@ -1518,10 +1481,6 @@ pub(crate) enum ClientCommand {
     },
     /// The world-enter status request: `CMSG_BATTLEFIELD_STATUS`.
     BattlefieldStatusRequest,
-    /// `ConfirmPetUnlearn()`: `CMSG_PET_UNLEARN` with the latched trainer.
-    PetUnlearn {
-        trainer: u64,
-    },
     /// `CMSG_BANKER_ACTIVATE`: a pure banker's direct opener (bit 8 the lowest service bit); a
     /// gossip banker goes through the menu. Answered by `SMSG_SHOW_BANK`.
     BankerActivate {
@@ -1720,55 +1679,6 @@ pub(crate) enum ClientCommand {
     /// `CMSG_GET_MAIL_LIST`: the window's open and refresh.
     GetMailList {
         mailbox: u64,
-    },
-    /// `CMSG_SEND_MAIL`; `item_guid` 0 is no attachment.
-    SendMail {
-        mailbox: u64,
-        receiver: String,
-        subject: String,
-        body: String,
-        /// The `Stationery.dbc` id, the sixth field.
-        stationery: u32,
-        /// The `Package.dbc` id, the seventh field, 0 without an item.
-        package: u32,
-        item_guid: u64,
-        money: u32,
-        cod: u32,
-    },
-    /// `CMSG_MAIL_TAKE_MONEY`.
-    MailTakeMoney {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_MAIL_TAKE_ITEM`.
-    MailTakeItem {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_MAIL_MARK_AS_READ`, when a letter opens. No response.
-    MailMarkAsRead {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_MAIL_RETURN_TO_SENDER`.
-    MailReturnToSender {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_MAIL_DELETE`.
-    MailDelete {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_MAIL_CREATE_TEXT_ITEM`; answered by `SMSG_SEND_MAIL_RESULT` with `MADE_PERMANENT`.
-    MailCreateTextItem {
-        mailbox: u64,
-        mail_id: u32,
-    },
-    /// `CMSG_ITEM_TEXT_QUERY`, once per mail with a nonzero `item_text_id`.
-    ItemTextQuery {
-        text_id: u32,
-        mail_id: u32,
     },
     /// `MSG_QUERY_NEXT_MAIL_TIME`, on entering the world, to seed `HasNewMail()`.
     QueryNextMailTime,
@@ -1977,30 +1887,6 @@ pub(crate) enum ClientCommand {
     /// `CMSG_NEXT_CINEMATIC_CAMERA`, for every shot including the first: the send is in the shot
     /// arm (`0x48ef11`), so a single-camera intro sends one.
     NextCinematicCamera,
-    /// Acknowledge a root, water-walk, feather-fall or hover on [`MoveMode::ack_opcode`];
-    /// unacked, the server never applies it. `flags` must carry the mode bit: vmangos kicks a
-    /// root ack without `MOVEFLAG_ROOT` and takes the word as the new flags for the others.
-    MoveModeAck {
-        guid: u64,
-        counter: u32,
-        mode: MoveMode,
-        apply: bool,
-        flags: u32,
-        pos: [f32; 3],
-        orientation: f32,
-    },
-    /// `CMSG_MOVE_KNOCK_BACK_ACK`, `launch` echoed as the jump tail. Sent on the frame the mover
-    /// takes off, never on receipt: the reference applies (`0x61624d call 0x6179c0`) then sends
-    /// (`0x616261`) in one call, so the wire pose is post-launch.
-    KnockBackAck {
-        guid: u64,
-        counter: u32,
-        launch: JumpInfo,
-        flags: u32,
-        pos: [f32; 3],
-        orientation: f32,
-        transport: Option<TransportPose>,
-    },
     /// `CMSG_REPOP_REQUEST`: Release Spirit.
     RepopRequest,
     /// `MSG_CORPSE_QUERY`, on becoming a ghost and on login dead.
@@ -2092,12 +1978,18 @@ pub(crate) enum ClientCommand {
         ready: bool,
     },
     /// Native arena-team transport only; no UI producer or inferred authority.
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     NativeChatCommand(benilla_protocol::wrath_chat::Command),
     /// Explicit transport only; no shared WHO UI producer or permission inference.
     NativeWhoCommand(benilla_protocol::wrath_who::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     NativeMirrorImageQuery {
         guid: u64,
     },
@@ -2119,6 +2011,9 @@ pub(crate) enum ClientCommand {
     /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
     NativeQuest(benilla_protocol::wrath_quest::Command),
     /// Native party commands with no Vanilla twin; transport does not claim leadership.
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     NativeParty(benilla_protocol::wrath_party::Command),
     /// Native battleground/arena/battlefield commands keyed by this build's bg type; no UI producer.
     NativeBattleground(benilla_protocol::wrath_battleground::Command),
@@ -2148,10 +2043,19 @@ pub(crate) enum ClientCommand {
     /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
     NativeAppearance(benilla_protocol::wrath_appearance::Command),
     /// `CMSG_GET_CHANNEL_MEMBER_COUNT`.
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     GetChannelMemberCount { name: String },
     /// `CMSG_CLEAR_CHANNEL_WATCH`: stop a channel's roster deltas.
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     ClearChannelWatch { name: String },
     /// `CMSG_DECLINE_CHANNEL_INVITE` (AC reads nothing from it).
+    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
+    // family). Kept, not a 1.12 leftover.
+    #[allow(dead_code)]
     DeclineChannelInvite { name: String },
     /// The raid browser's search join and leave.
     NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command),
@@ -2181,11 +2085,6 @@ pub(crate) enum ClientCommand {
     AddFriend {
         name: String,
     },
-    /// `CMSG_SET_LOOKING_FOR_GROUP`, only when the commit changed something.
-    SetLookingForGroup {
-        slots: [u32; 3],
-        comment: String,
-    },
     /// `CMSG_DEL_FRIEND`.
     DelFriend {
         guid: u64,
@@ -2202,10 +2101,6 @@ pub(crate) enum ClientCommand {
     /// reports, and the sender hears they are ignored.
     ChatIgnored {
         guid: u64,
-    },
-    /// `CMSG_WHO`, parsed into wire fields by `ui_social::who_query`.
-    Who {
-        request: Box<WhoRequest>,
     },
     /// `CMSG_TOGGLE_PVP`: nothing changes locally; the answer is the PvP bit, and flagging off
     /// waits out the server's 300 s timer.
@@ -2261,13 +2156,6 @@ pub(crate) enum ClientCommand {
     /// `CMSG_GUILD_MOTD`; empty clears.
     GuildMotd {
         motd: String,
-    },
-    /// `CMSG_GUILD_RANK`: name and rights always together. Rank 0's rights are forced to all; a
-    /// name over `messages::GUILD_RANK_MAX_LENGTH` gets the session kicked.
-    GuildRank {
-        rank_id: u32,
-        rights: u32,
-        name: String,
     },
     /// `CMSG_GUILD_ADD_RANK`: appended at the bottom.
     GuildAddRank {
@@ -2361,10 +2249,9 @@ pub(crate) enum ClientCommand {
         dest_node: u32,
     },
     /// `CMSG_ACTIVATETAXIEXPRESS`: sent when no direct `TaxiPath` edge joins the two nodes, not by
-    /// hop count; the combined fare and the node chain in order.
+    /// hop count; the node chain in order (AzerothCore reads no fare).
     ActivateTaxiExpress {
         guid: u64,
-        total_cost: u32,
         nodes: Vec<u32>,
     },
 }
@@ -2527,23 +2414,15 @@ pub(crate) struct ClientControlMessage {
     pub(crate) allow_move: bool,
 }
 
-/// `SMSG_FORCE_*_SPEED_CHANGE` for our mover; the controller answers
-/// [`ClientCommand::ForceSpeedAck`] with its live pose.
+/// `SMSG_FORCE_*_SPEED_CHANGE` for our mover, already applied: the writer acks it itself
+/// (`send_mover_ack`), and the controller counts the frame as a position report.
 #[derive(Message, Clone, Copy)]
-pub(crate) struct SpeedChangeMessage {
-    pub(crate) guid: u64,
-    pub(crate) kind: SpeedKind,
-    pub(crate) counter: u32,
-    pub(crate) speed: f32,
-}
+pub(crate) struct SpeedChangeMessage;
 
 /// Root, water-walk, feather-fall or hover granted or revoked on our mover: the server's
-/// `IsFlagAckOpcode` set. The controller acks with its live pose.
+/// `IsFlagAckOpcode` set. The writer acks it itself (`send_mover_ack`).
 #[derive(Message, Clone, Copy)]
 pub(crate) struct MoveModeMessage {
-    /// Our mover's guid, echoed in the ack.
-    pub(crate) guid: u64,
-    pub(crate) counter: u32,
     pub(crate) mode: MoveMode,
     pub(crate) apply: bool,
 }

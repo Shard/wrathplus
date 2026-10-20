@@ -37,7 +37,7 @@ pub(crate) enum CastCommit {
     /// Build 12340's `CMSG_PET_CAST_SPELL` (0x1f0): our pet's, charm's or possessed unit's spell,
     /// raised to the cursor by its bar ([`super::cast_target::pet_cursor_word`]).
     Pet { caster: u64 },
-    /// `CMSG_USE_ITEM` (0xab): the item's wire position and spell ordinal, plus a caller-bound
+    /// `CMSG_USE_ITEM` (0xab): the item's wire position, plus a caller-bound
     /// GameObject.
     Item {
         bag_index: u8,
@@ -46,7 +46,6 @@ pub(crate) enum CastCommit {
         entry: u32,
         /// The item's GUID: build 12340's `CMSG_USE_ITEM` names it, and AC refuses a mismatch.
         item_guid: u64,
-        spell_index: u8,
         /// `CGItem::Use`'s own target argument, set only for a key in a lock; it bypasses the
         /// binder, as TryCast's target resolve (`6e4ef4`) takes the pair it was passed.
         on_object: Option<u64>,
@@ -206,13 +205,11 @@ impl CastLadder<'_, '_> {
             CastCommit::Item {
                 bag_index,
                 slot,
-                spell_index,
                 item_guid,
                 ..
             } => ClientCommand::UseItem {
                 bag_index,
                 slot,
-                spell_index,
                 spell_id,
                 item_guid,
                 glyph_index: match bound {
@@ -776,14 +773,12 @@ fn send_spell_cast(
         CastCommit::Item {
             bag_index,
             slot,
-            spell_index,
             on_object,
             item_guid,
             ..
         } => ClientCommand::UseItem {
             bag_index,
             slot,
-            spell_index,
             spell_id,
             item_guid,
             glyph_index: 0,
@@ -858,7 +853,6 @@ mod tests {
         slot: 24,
         entry: 6948,
         item_guid: 0x4000_0000_0000_0001,
-        spell_index: 0,
         on_object: None,
     };
 
@@ -1518,7 +1512,6 @@ mod tests {
             Ok(ClientCommand::UseItem {
                 bag_index: 255,
                 slot: 24,
-                spell_index: 0,
                 target: UseItemTarget::SelfImplicit,
                 ..
             })
@@ -1533,7 +1526,6 @@ mod tests {
                 slot: 81,
                 entry: 6948,
                 item_guid: 0x4000_0000_0000_0001,
-                spell_index: 0,
                 on_object: Some(0xF110_000C_1F00_A3B2),
             },
         );
