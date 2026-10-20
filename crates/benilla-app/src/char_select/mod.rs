@@ -19,23 +19,7 @@ use crate::net::{
     EnteredWorldMessage, LoggedOutMessage,
 };
 
-/// The app's lifecycle: which screen owns the session.
-#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub(crate) enum ClientState {
-    /// Parked pre-logon at the login screen, the IO thread waiting for credentials. The realm list
-    /// is no state: `GlueParent.lua`'s `GlueScreenInfo` omits it, a `DIALOG` frame over any screen
-    /// ([`crate::realm_select::Realms::shown`]).
-    #[default]
-    Login,
-    /// Parked at character select, the IO thread waiting for a pick.
-    CharSelect,
-    /// The character-creation screen, still parked at select (the IO thread serves create and
-    /// delete in place).
-    CharCreate,
-    /// A character is in (or entering) the world.
-    InWorld,
-}
-
+pub(crate) use crate::app_core::state::{ClientState, Roster};
 pub(crate) use crate::app_core::schedule::InWorldGated;
 
 /// The character-select subsystem: the state machine + the select screen.
@@ -136,31 +120,6 @@ impl Plugin for CharSelectPlugin {
 }
 
 // ── The roster and pick policy ──────────────────────────────────────────────────────────────────
-
-/// The account roster and the pick policy's memory.
-#[derive(Resource, Default)]
-pub(crate) struct Roster {
-    pub(super) chars: Vec<Character>,
-    /// The selected row, `CharacterSelect.selectedIndex` 0-based. Written only through
-    /// [`Roster::select`].
-    selected: Option<usize>,
-    /// Bumped by every [`Roster::select`], changed row or not: the reference's `SelectCharacter`
-    /// zeroes the facing unconditionally (`0x472950` writes `0xb4217c` above its already-built
-    /// check), so a roster refresh re-selecting the same index re-squares too. Only a row click is
-    /// gated, in the stock Lua ([`Roster::click_row`]).
-    pub(super) select_seq: u64,
-    /// The guid picked; kept in-world so a reconnect's roster is answered with it, cleared by a
-    /// logout so the roster is shown.
-    pub(super) pending_pick: Option<u64>,
-    /// `WOW_CHAR`: auto-pick this name on the first roster only.
-    env_char: Option<String>,
-    /// A just-created character's name, whose row gets selected (the reference's
-    /// `SELECT_LAST_CHARACTER`, keyed by name to survive the create/enum race).
-    just_created: Option<String>,
-    /// The realm-list entry this session connected to, refreshed with each roster.
-    pub(super) realm: Option<benilla_protocol::RealmInfo>,
-    env_read: bool,
-}
 
 impl Roster {
     /// A roster with a pick in flight, for tests outside this module.

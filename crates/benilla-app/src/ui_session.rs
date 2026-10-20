@@ -99,11 +99,7 @@ pub(crate) fn close_npc_session_out_of_range<T: NpcSession>(
     }
 }
 
-/// The `"npc"` unit: the open [`NpcSession`]'s world entity and guid, read by the portrait booth
-/// as it reads [`crate::target::Selection`] for `"target"`. Only one session is open in play.
-#[derive(Resource, Default, PartialEq, Eq)]
-pub(crate) struct InteractNpc(pub(crate) Option<Entity>, pub(crate) Option<u64>);
-
+pub(crate) use crate::app_core::state::InteractNpc;
 /// Collapse the portrait-bound sessions into [`InteractNpc`]: they are mutually exclusive, so the
 /// first open one in the chain wins. `Option<Res<_>>` lets a test mount it without every window.
 pub(crate) fn feed_interact_npc(
