@@ -17,7 +17,7 @@ use crate::ui_trainer::TrainerFeed;
 use crate::ui_unit::{enrich_unit, snapshot, unit_reaction, SnapshotTables, UnitFeed};
 
 mod spell_deps;
-mod spell_feed;
+pub(crate) mod spell_feed;
 use spell_feed::feed_spell_tooltips;
 
 pub struct UiTooltipPlugin;

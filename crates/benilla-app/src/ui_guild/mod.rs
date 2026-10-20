@@ -19,7 +19,7 @@ use crate::ui_script::{UiFeed, UiInput};
 mod feed;
 mod lines;
 mod sort;
-mod wrath;
+pub(crate) mod wrath;
 pub(crate) use wrath::NativeGuild;
 
 pub(crate) use sort::RosterRow;

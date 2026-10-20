@@ -231,14 +231,14 @@ pub(crate) fn drain_vehicle_requests(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     const ME: u64 = 0x10;
-    const CAR: u64 = 0xF150_0000_0000_0007;
+    pub(crate) const CAR: u64 = 0xF150_0000_0000_0007;
     const TURRET: u64 = 0xF150_0000_0000_0008;
 
-    fn world() -> VehicleWorld {
+    pub(crate) fn world() -> VehicleWorld {
         let mut world = VehicleWorld::default();
         world.kits.insert(CAR, 312);
         world.riders.insert(ME, (CAR, 0));
@@ -305,49 +305,5 @@ mod tests {
             }))
         ));
         assert!(command_for(VehicleRequest::AimPitch(0.2), &driving).is_none());
-    }
-
-    #[test]
-    fn one_owner_and_both_boundaries_clear() {
-        let mut app = crate::game_plugins::schedule_tests::headless_client();
-        let census = app
-            .world()
-            .resource::<crate::net::handlers::NetHandlers>()
-            .census();
-        let owners = &census[&SessionEventKind::WrathVehicle];
-        assert_eq!(owners.len(), 1, "{owners:?}");
-        assert!(owners[0].contains("wrath_vehicle::receive"));
-        crate::net::handlers::dispatch(
-            app.world_mut(),
-            vec![
-                SessionEvent::WrathVehicle(VehicleEvent::Kit {
-                    unit: CAR,
-                    vehicle_id: 312,
-                }),
-                SessionEvent::WrathVehicle(VehicleEvent::Seat {
-                    passenger: 0x20,
-                    seat: Some((CAR, 1)),
-                }),
-            ],
-        );
-        assert_eq!(app.world().resource::<VehicleWorld>().riders.len(), 1);
-        crate::net::handlers::dispatch(
-            app.world_mut(),
-            vec![SessionEvent::WrathVehicle(VehicleEvent::Gone {
-                unit: 0x20,
-            })],
-        );
-        assert!(app.world().resource::<VehicleWorld>().riders.is_empty());
-        crate::net::handlers::dispatch(
-            app.world_mut(),
-            vec![SessionEvent::Disconnected {
-                reason: "test".into(),
-                end: benilla_protocol::SessionEnd::Lost,
-            }],
-        );
-        assert_eq!(
-            *app.world().resource::<VehicleWorld>(),
-            VehicleWorld::default()
-        );
     }
 }

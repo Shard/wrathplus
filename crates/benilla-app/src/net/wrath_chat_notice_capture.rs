@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeChatNoticePacket
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_chat_notice_capture_tests.rs"]
-mod tests;

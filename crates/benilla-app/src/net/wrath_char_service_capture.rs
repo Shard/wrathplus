@@ -30,7 +30,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeCharServiceRepli
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_char_service_capture_tests.rs"]
-mod tests;

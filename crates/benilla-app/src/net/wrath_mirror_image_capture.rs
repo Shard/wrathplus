@@ -32,4 +32,4 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeMirrorImagePacke
 
 #[cfg(test)]
 #[path = "wrath_mirror_image_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

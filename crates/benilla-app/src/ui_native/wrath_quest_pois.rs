@@ -21,7 +21,7 @@ pub(crate) struct QuestPois {
     /// Asked and not yet answered.
     asked: BTreeSet<u32>,
     /// A response landed since the last feed: `QUEST_POI_UPDATE` is due.
-    fresh: bool,
+    pub(crate) fresh: bool,
 }
 
 impl QuestPois {
@@ -37,7 +37,7 @@ impl QuestPois {
     }
 
     /// The logged quests' POIs, in log order; an unanswered or POI-less quest has no entry.
-    fn view(&self, logged: &[u32]) -> Vec<WrathQuestPoi> {
+    pub(crate) fn view(&self, logged: &[u32]) -> Vec<WrathQuestPoi> {
         logged
             .iter()
             .filter_map(|&quest_id| {
@@ -204,4 +204,4 @@ fn feed_quest_pois(
 
 #[cfg(test)]
 #[path = "wrath_quest_pois_tests.rs"]
-mod tests;
+pub(crate) mod tests;

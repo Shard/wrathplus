@@ -7,9 +7,6 @@ use bevy::prelude::*;
 
 use super::{Guid, NetEvents, SelfGuid, SelfPlayer};
 
-#[cfg(test)]
-mod seam_tests;
-
 // ── The per-frame bridge systems ─────────────────────────────────────────────────────────────────
 
 /// Runs this frame's events through the handler table ([`super::handlers`]) in wire order, each

@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeReferFriendPacke
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_refer_friend_capture_tests.rs"]
-mod tests;

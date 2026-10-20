@@ -98,16 +98,3 @@ fn the_roster_reaches_the_shared_owner_and_keeps_its_bank_words_and_the_log_is_r
 fn events_for(log: &[EventLogEntry], name: impl Fn(u64) -> Option<String>) -> Vec<WrathGuildEvent> {
     events(log, name, |rank| format!("R{rank}"))
 }
-
-#[test]
-fn built_client_has_one_native_owner() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathGuild];
-    assert_eq!(owners.len(), 1);
-    assert!(owners[0].contains("ui_guild::wrath::receive"));
-    assert!(census[&SessionEventKind::GuildRoster][0].contains("ui_guild::net::on_roster"));
-}

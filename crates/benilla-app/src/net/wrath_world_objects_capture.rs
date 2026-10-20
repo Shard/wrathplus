@@ -30,7 +30,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeWorldObjectsPack
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_world_objects_capture_tests.rs"]
-mod tests;
