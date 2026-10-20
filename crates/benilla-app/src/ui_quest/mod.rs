@@ -3,10 +3,9 @@
 
 use std::collections::HashMap;
 
-use benilla_protocol::messages::{
-    QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems, QuestRewardItem,
-    QuestShareMsg,
-};
+#[cfg(test)]
+use benilla_protocol::messages::{QuestDetails, QuestGiverList, QuestRequestItems};
+use benilla_protocol::messages::{QuestRewardItem, QuestShareMsg};
 use bevy::prelude::*;
 
 use benilla_ui::script::{
@@ -21,48 +20,7 @@ use crate::ui_action::{show_messages, ui_error_text, MessageSink, Shown, Spells,
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
-/// The wire packet that opened the current panel.
-pub(crate) enum QuestView {
-    Greeting(QuestGiverList),
-    Detail(QuestDetails),
-    Progress(QuestRequestItems),
-    Reward(QuestOfferReward),
-}
-
-/// The open questgiver window; the per-guid dialog statuses survive a close.
-#[derive(Resource, Default)]
-pub(crate) struct QuestGiver {
-    pub(crate) completed_fanfare: bool,
-    /// The panel's source: an NPC, a GameObject, a quest-starter item or a sharing player.
-    pub(crate) npc: Option<u64>,
-    pub(crate) view: Option<QuestView>,
-    /// The reference's latch `0xbe0824`, written by DETAILS and OFFER_REWARD (`0x500ef0`) and by
-    /// REQUEST_ITEMS' `closeOnCancel` (`0x501070`), and zeroed only on world enter (`0x500af0`).
-    /// Non-zero turns a plain unit's decline into the silent teardown
-    /// ([`decline_leg_native`]). vmangos sends 1 on every DETAILS and OFFER_REWARD; REQUEST_ITEMS
-    /// carries 1 on a single-quest auto-open and 0 on `COMPLETE_QUEST`
-    /// (`QuestHandler.cpp:390-395`).
-    pub(crate) close_on_cancel: u32,
-    /// The reference's already-acted latch `0xbe0844`, set by `AcceptQuest` and by a re-opening
-    /// `DeclineQuest`, which keeps the panel up; both refuse while it is set (`0x5013a8`,
-    /// `0x5013fe`) until a panel publish clears it ([`Self::open`]).
-    pub(crate) acted: bool,
-    /// The reference's `0xbe0828`: the chosen reward's item id, latched by `GetQuestReward`
-    /// (`0x50161a`) for the turn-in's item line (`0x5dc676`-`0x5dc6c6`), and zeroed by a panel
-    /// publish (`0x500d8c`), world enter (`0x500b15`) and the turn-in.
-    pub(crate) chosen_reward: u32,
-    /// Per-guid dialog status from `SMSG_QUESTGIVER_STATUS`, the `!`/`?` marker's value.
-    statuses: HashMap<u64, u32>,
-    wrath_statuses: HashMap<u64, u32>,
-    /// Messages queued for [`feed_quest`], each a GlobalStrings key and its fills.
-    messages: Vec<UiError>,
-    reask: u32,
-    /// The dialog statuses dropped at the reference's typemask-8 lookup (GameObject answers, which
-    /// vmangos sends), per guid, so a live probe can tell a drop from a query never sent.
-    refused: HashMap<u64, u32>,
-    refused_count: u32,
-}
-
+pub(crate) use crate::app_core::state::{QuestGiver, QuestView};
 impl QuestGiver {
     /// The quest the panel shows; a greeting lists several and names none.
     pub(crate) fn shown_quest(&self) -> Option<u32> {

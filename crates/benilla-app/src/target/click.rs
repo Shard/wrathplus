@@ -1953,9 +1953,10 @@ mod tests {
             w.insert_resource(g);
         });
         let with_quest = armed(&|w| {
-            let mut q = crate::ui_quest::QuestGiver::default();
-            q.npc = Some(NPC);
-            w.insert_resource(q);
+            w.insert_resource(crate::ui_quest::QuestGiver {
+                npc: Some(NPC),
+                ..Default::default()
+            });
         });
         let with_trainer = armed(&|w| {
             let mut t = crate::ui_trainer::TrainerOpen::default();

@@ -102,39 +102,7 @@ impl BindingDispatch {
     }
 }
 
-/// This frame's binding activity, which engine-side consumers read instead of raw keys: the
-/// [`Input`]s the running bodies' Lua calls set.
-#[derive(Resource, Default)]
-pub(crate) struct BindingsState {
-    /// Live latches, (base input, command): a press not yet released, whose release runs the
-    /// command's `runOnUp` half. The reference replays the press-time chord at key-up (`0x483bd0`);
-    /// latching the resolved command is equivalent.
-    latched: Vec<(Held, String)>,
-    /// The held bits a Start set and no Stop has cleared.
-    held: Vec<Input>,
-    /// Inputs whose Start, or whose one-shot, came this frame (the press edge).
-    just: Vec<Input>,
-    /// One-shots fired this frame.
-    fired: Vec<Input>,
-    /// Amount per one-shot this frame: a zoom's yards, else 1.0.
-    amounts: Vec<(Input, f32)>,
-    /// The keys we believe are down: a press of one is a repeat. The reference classifies
-    /// auto-repeat off its own list (`0x4248b3`), never the Win32 `lParam` repeat bit.
-    /// Normalized like [`latched`](Self::latched) and reconciled against `ButtonInput` every
-    /// pass, so a window deactivate empties it and a key held across an alt-tab resumes, as in
-    /// the reference. Keyboard only: mouse edges cannot repeat.
-    down: Vec<KeyCode>,
-}
-
-/// The physical input a latch waits on: a keyboard key by its code, not its name, so its release
-/// ends the latch whatever the layout names it by then.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Held {
-    Key(KeyCode),
-    Mouse(MouseButton),
-    Wheel,
-}
-
+pub(crate) use crate::app_core::state::{BindingsState, Held};
 impl BindingsState {
     /// Is a held bit set right now (the reference's `[InputControl+4]`)?
     pub(crate) fn pressed(&self, i: Input) -> bool {

@@ -9,54 +9,7 @@ use benilla_ui::script::{BindingInput, FiredInput, HeldInput};
 
 use super::BindingsState;
 
-/// One engine input a binding function drives: a held bit of `[InputControl+4]` or a one-shot.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Input {
-    /// `MoveForwardStart`/`Stop`, bit `0x10`.
-    MoveForward,
-    /// `MoveBackwardStart`/`Stop`, bit `0x20`.
-    MoveBackward,
-    /// `TurnLeftStart`/`Stop`, bit `0x100`.
-    TurnLeft,
-    /// `TurnRightStart`/`Stop`, bit `0x200`.
-    TurnRight,
-    /// `StrafeLeftStart`/`Stop`, bit `0x40`.
-    StrafeLeft,
-    /// `StrafeRightStart`/`Stop`, bit `0x80`.
-    StrafeRight,
-    /// `TurnOrActionStart`/`Stop`, bit `0x1`.
-    TurnOrAction,
-    /// `CameraOrSelectOrMoveStart`/`Stop`, bit `0x2`.
-    CameraOrSelectOrMove,
-    /// `PitchUpStart`/`Stop`, bit `0x400`: the swimmer's or flier's pitch keys.
-    PitchUp,
-    /// `PitchDownStart`/`Stop`, bit `0x800`.
-    PitchDown,
-    /// `JumpOrAscendStart`/`AscendStop`: the flier's ascend key.
-    Ascend,
-    /// `SitStandOrDescendStart`/`DescendStop`: the flier's descend key.
-    Descend,
-    /// `Jump()`.
-    Jump,
-    /// `ToggleRun()`, the walk toggle.
-    ToggleRun,
-    /// `ToggleAutoRun()`.
-    ToggleAutoRun,
-    /// `SitOrStand()`.
-    SitOrStand,
-    /// `ToggleSheath()`.
-    ToggleSheath,
-    /// Native ATTACKTARGET binding while the Wrath stock binding VM is not yet qualified.
-    AttackTarget,
-    /// Native TARGETNEARESTENEMY / reverse direction, using the ordinary target cycler.
-    TargetNearestEnemy,
-    TargetPreviousEnemy,
-    /// `CameraZoomIn([yards])`, its yards in [`BindingsState::amount`].
-    CameraZoomIn,
-    /// `CameraZoomOut([yards])`, its yards in [`BindingsState::amount`].
-    CameraZoomOut,
-}
-
+pub(crate) use crate::app_core::state::Input;
 /// The bit a Start or Stop names.
 fn held_input(input: HeldInput) -> Input {
     match input {
