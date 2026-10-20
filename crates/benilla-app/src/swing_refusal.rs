@@ -33,7 +33,7 @@
 
 use std::time::Duration;
 
-use benilla_protocol::messages::AttackSwingError;
+use benilla_protocol::types::AttackSwingError;
 use bevy::prelude::*;
 
 use crate::creature_anim::{AttackSeam, Engaged};

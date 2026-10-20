@@ -515,7 +515,7 @@ impl ScriptCursor<'_, '_> {
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_ui::script::UiScript;
     use crossbeam_channel::Receiver;
     use std::collections::HashMap;
@@ -1098,7 +1098,7 @@ mod tests {
         use crate::spell::group_relation::{fixture as gf, publish_group_roster, GroupRoster};
         use crate::spell::targeting::corpse_fixture as fx;
         use benilla_formats::SpellDisplay;
-        use benilla_protocol::messages::GroupMemberEntry;
+        use benilla_protocol::types::GroupMemberEntry;
         use bevy::ecs::system::RunSystemOnce;
 
         const SPELL: u32 = 3001;

@@ -4,7 +4,7 @@
 //! surface and the sound. The `GUILD_MOTD` line is the FrameXML's (`ChatFrame.lua:1335-1340`) and
 //! `/ginfo`'s are not catalog rows (built in [`super::feed`]), so neither is here.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     guild_command, guild_command_error, guild_event, GuildCommandResult, GuildEventNotice,
 };
 

@@ -3,7 +3,7 @@
 //! catalog row gives the text, the surface and the sound. [`member_deactivated`] and
 //! [`roster_deactivated`] are the object layer's hooks on a roster member's stream-out.
 
-use benilla_protocol::messages::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
+use benilla_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
 use bevy::prelude::*;
 
 use benilla_protocol::{SessionEvent, SessionEventKind};
@@ -512,8 +512,8 @@ mod tests {
     use super::*;
     use crate::net::ClientCommand;
     use benilla_protocol::guid;
-    use benilla_protocol::messages::member_status;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::member_status;
+    use benilla_protocol::types::{Field, FieldLayout};
 
     fn member(g: u64, name: &str) -> GroupMemberEntry {
         GroupMemberEntry {
@@ -745,7 +745,7 @@ mod tests {
         );
 
         group.members = vec![member(guid, "Brisca")];
-        let store = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[(
+        let store = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[(
             HEALTH, 40,
         )]));
         member_deactivated(
@@ -776,7 +776,7 @@ mod tests {
         let _ = asked(&rx); // start from an empty queue
 
         // A warrior: rage is stored raw, ten times the shown value, as in the descriptor.
-        let store = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
+        let store = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[
             (HEALTH, 2400),
             (MAXHEALTH, 3000),
             (POWER2, 570),
@@ -824,13 +824,13 @@ mod tests {
         let pet_guid = 0xF140_0000_0000_0077;
         let mut group = grouped(&[member(guid, "Brisca")]);
 
-        let store = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
+        let store = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[
             (SUMMON, pet_guid as u32),
             (SUMMON + 1, (pet_guid >> 32) as u32),
         ]));
         // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
         const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
-        let pet = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
+        let pet = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[
             (HEALTH, 900),
             (PETNUMBER, 4),
         ]));
@@ -867,7 +867,7 @@ mod tests {
         let mut group = grouped(&[member(0x1234, "Brisca")]);
         let _ = asked(&rx);
         // A live object, so only the roster gate can stop it.
-        let store = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[(
+        let store = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[(
             HEALTH, 40,
         )]));
         member_deactivated(

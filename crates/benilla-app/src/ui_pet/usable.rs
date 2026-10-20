@@ -4,7 +4,7 @@
 //! (`0x4bc9d0`, for the drop `0x4bce33` and the pickup's blank `0x4be27f`). A zero answer leaves
 //! each of them at its epilogue, before anything is latched, armed, cancelled or sent.
 
-use benilla_protocol::messages::{OwnerFallback, PET_UNUSABLE_UNIT_FLAGS};
+use benilla_protocol::types::{OwnerFallback, PET_UNUSABLE_UNIT_FLAGS};
 
 use crate::net::ObjectStore;
 

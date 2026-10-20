@@ -74,7 +74,7 @@ pub enum NotifyKind {
 impl Notify {
     /// Compatibility lifecycle projection only; native metadata consumers use this struct.
     pub fn session_event(&self) -> SessionEvent {
-        use crate::messages::ChannelNoticeTail;
+        use crate::types::ChannelNoticeTail;
         let (notice, tail) = match self.kind {
             NotifyKind::YouJoined { flags, .. } => (
                 2,

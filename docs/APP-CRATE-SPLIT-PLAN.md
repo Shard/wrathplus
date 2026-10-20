@@ -453,6 +453,80 @@ Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world 
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
 
+### Move dry run: core and net (Wire B, 2026-10-21)
+
+On a throwaway detached worktree of wrath-hud f051c2e5 (which predates 563f0119), the moves were done
+as "Moving a layer out" describes. The plan's 22 core modules were `git mv`'d into
+`crates/benilla-app-core`, `#[path]` test files included, with `pub use benilla_app_core::m;` in the
+root and the root depending on the crate. Then `cargo check -p benilla-app-core --lib --tests` was
+run. A second pass moved core and net together (25 modules: the 22 plus `net`, `realmlist` and
+`swing_refusal`) into one crate, so net's own edges show without core compiling first. rustc stops
+after name resolution, so the compiler counts below are resolution errors only. The later-phase
+causes (inherent impls, visibility, test helpers) were measured statically on the same tree.
+
+**Compiler, core alone: 45 distinct error sites** (82 with the lib and lib-test duplicates).
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| Path through an upper module's re-export of an `app_core` item | 17 | `char_select::ClientState` (6), `ui_script::{VmMemo, UiFeed, UiInput}`, `char_select::{InWorldGated, Roster}`, `target::Factions`, `ui_action::Spells`, `player::{Player, UNIT_FLAG_IN_COMBAT}`, `creature_anim::UNIT_FLAG_DISARMED`, `entities::CollisionHeight` | The move step, mechanically. The plan's step-5 `sed` rewrites module prefixes only; it needs a symbol map instead (108 `pub(crate) use crate::app_core::…` re-exports today) that turns `crate::<upper>::X` into `crate::app_core::<m>::X`. |
+| Fixed since the dry-run base | 6 (and part of 2 more) | `net::{ObjectStore, SelfPlayer, NetOffline, EnteredWorldMessage, DisconnectedMessage}`, now in `app_core::session` | Done, 563f0119 |
+| core → net command API | 13 (4 in `names`' tests, 1 follow-on) | `names`, `items`, `go_templates` and `area_trigger` send through `ClientCommand`/`NetCommands`, key on `Guid`/`GuidIndex`/`Objects`, and register with `NetHandlerApp`; `names` reads `net::wrath_pet_name_capture`; `preflight` and `probe_shield` read `SelfGuid` and `ServerSaidMessage` | Proposed below |
+| core → world/ui lookups | 6 | `ui_unit::{snapshot, race_names, class_names}` (`creature_type`, `preflight`), `ui_macro::identity` (`name_persist`), `creature_anim::disarmed_hand` (`items`, 2) | The "lookups" and "core up, pure" rows above; unowned |
+| core → root | 1 | `crate::BuildId` (`crash`) | Unowned: `BuildId` moves to core, and the root re-exports it for the launcher API |
+| Pure-move rows not done yet | 1 | `login::LoginIntent` (`probe_shield`) | The pure-moves table (Assets) |
+| `cfg(test)` helper across layers | 1 | `app_core::vm_memo` tests use `crate::test_support` | See the test-helper item below |
+
+**Compiler, net (core+net crate, net files only): 43 distinct sites.**
+
+| Cause | Sites | What | Owner |
+|---|---|---|---|
+| Re-export path to an `app_core` item | 27 | `world_state::WorldStates`, `go_anim::{GoCustomAnim, DespawnAnimAnnounced, PendingDestroy}`, `ui_party::GroupState`, `ui_quest::QuestGiver`, `target::ring::Factions`, `ui_chat::ChatLog`, `spell::Cooldowns`, `ui_action::{UiError, UiErrorKeys, Spells, FillArg}`, `creature_anim::PlaySeq`, `ui_script::UiInput`, `ui_unit::UnitFeed`, `char_select::ClientState` | The move step's symbol map |
+| Fixed since the base | 2 | `ui_totems::NativeTotems`, `combat_log::native::NativeCombatLog` | Done, 563f0119 |
+| `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}`, `combat_log::chat::faction_standing` | App Migration's groups |
+| `net` installs and re-exports `crate::motion` | 5 | `MotionPlugin` (installed by `NetPlugin`), the `drive_display_facing`/`Spline`/… re-exports | Wire B: `game_plugins` installs `MotionPlugin` and the callers repoint (the ui_session ordering test then adds it) |
+| Pure move not done | 3 | `ui_item_text::LetterTexts` (`wrath_inventory_capture` and its test) | The pure-moves table (unowned) |
+| `swing_refusal` → world | 2 | `creature_anim::{AttackSeam, Engaged}` (plus one `chain` follow-on error) | Proposed: `swing_refusal` is the attack seam's feedback, a world module, not net |
+
+**Static, both layers** (what rustc reports only after resolution succeeds):
+
+- *Inherent impls on a moved type*: 38 `impl T {}` blocks in upper layers on 34 types defined in core or
+  net, which become E0116 after the split. Most are step 0's state types, whose helpers stayed with the
+  feature: `Spells` (2), `GroupState` (4), `ChatLog` (2), `BindingsState` (2), `Player` (2), `LootState`,
+  `LootLatch`, `WrathLootState`, `QuestGiver`, `PetBar`, `Roster`, `UiError`, `CastErrors`,
+  `CastFail`, `UiErrorTexts`, `Cooldowns`, `Timer`, `Factions`, `WorldStates`, `EmoteSounds`,
+  `ConsoleEcho`, `PlaySeq`, `BodyTwist`, `Channel`, `MoveModes`, `ChatEvent`, `ChatEventKind`,
+  `Family`, `Variant`, `NativeSavedInstances` and `QuestPois` (item 5's feed). These were matched by
+  name and need a check per row. Fix per row: the impl moves with the type when it is pure (the
+  plan's rule), or becomes an extension trait in the feature.
+- *Visibility*: 428 distinct `crate::<core|net module>::…` symbols named from upper layers (254 core,
+  174 net; an upper bound, since it counts re-export paths and module paths). The plan's estimate was
+  about 115 and 114. Each still widens to `pub` only when the compiler names it.
+- *`cfg(test)` helpers across the boundary*: upper-layer tests use 7 core or net `tests::` helpers from
+  9 files (`net::…::tests::dispatch` and similar, from `game_plugins::client_tests`), and one core test
+  uses `test_support`. `#[cfg(test)]` items are invisible to another crate, so these need a
+  `test-support` cargo feature on the lower crate, or the helper moving to the root's `client_tests`.
+- `env!("CARGO_MANIFEST_DIR")`, `include_str!` and `include_dir!` in moved files resolve against the new
+  crate's directory. None failed in this pass; the move commit still needs to check them.
+
+**Proposed:**
+
+1. Reassign layers rather than move net's API into core. `names`, `items`, `go_templates` and
+   `area_trigger` are wire-query caches: they send `ClientCommand`s, key on `GuidIndex` and register
+   handlers. Nothing in core needs them except `name_persist` and `creature_type` (`NameCache`,
+   `CreatureRecord`), which go with them, and `preflight` and `probe_shield`, which are dev
+   instruments and belong in tools. With `SelfGuid` and `ServerSaidMessage` moved to `app_core::session`,
+   core has no net edge left. Wire B claims this, and the `MotionPlugin` install.
+2. The symbol-map rewrite for the move step (a script beside `layers.py`, run in each move commit).
+   Wire B claims it.
+3. `swing_refusal` moves to the world layer, which is a table edit.
+4. Unclaimed, for the manager: `BuildId` to core; the lookup rows (`ui_unit` names and snapshot,
+   `ui_macro::identity`, `creature_anim::disarmed_hand`); `LetterTexts`, `LoginIntent`; the 38
+   inherent impls; the test-support feature.
+
+`ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
+`experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
+plain-text `ui_auction` comment. They stay with the world → ui rows.
+
 ## Moving a layer out (steps 1 to 4)
 
 Order: `core`, then `net`, then `tools`, then `world` and `ui` (world first, so `ui` can depend

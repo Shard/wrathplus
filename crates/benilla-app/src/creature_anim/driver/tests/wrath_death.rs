@@ -165,7 +165,7 @@ fn wrath_streamed_corpse_with_omitted_zero_health_starts_at_terminal_pose() {
     let mut app = fixture();
     let store = ObjectStore(
         ObjectFields::from_pairs(&[(FIELD_UNIT_MAXHEALTH, 100)])
-            .into_created(benilla_protocol::messages::ObjectType::Unit),
+            .into_created(benilla_protocol::types::ObjectType::Unit),
     );
     let unit = spawn(&mut app, store, 1.0, true);
     app.update();

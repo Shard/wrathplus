@@ -11,8 +11,8 @@ use crate::net::ObjectStore;
 use crate::ui_pet::press_tests::{claw, growl, listen, listening_vm, CLAW, GROWL, ME, PET};
 use crate::ui_pet::PetBar;
 use benilla_formats::SpellDisplay;
-use benilla_protocol::messages::{Field, FieldLayout};
-use benilla_protocol::messages::{PetSpellCooldown, PetSpells};
+use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::{PetSpellCooldown, PetSpells};
 use benilla_protocol::SessionEvent;
 use bevy::prelude::*;
 use std::time::{Duration, Instant};
@@ -300,8 +300,8 @@ fn a_teardown_and_a_new_bar_do_not_hide_the_next_flush() {
 
     let mut bar = rig.app.world().resource::<PetBar>().spells.clone();
     bar.pet_guid = PET;
-    bar.bar[0] = benilla_protocol::messages::PetActionEntry::from(
-        GROWL | (u32::from(benilla_protocol::messages::PET_ACT_ENABLED) << 24),
+    bar.bar[0] = benilla_protocol::types::PetActionEntry::from(
+        GROWL | (u32::from(benilla_protocol::types::PET_ACT_ENABLED) << 24),
     );
     rig.receive(vec![SessionEvent::PetSpells(Box::new(bar))]);
     assert_eq!(rig.frame(), ["PET_BAR_UPDATE"], "the new bar");
@@ -359,7 +359,7 @@ fn a_new_vm_is_not_flushed_for_a_list_that_already_moved() {
 #[test]
 fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
     benilla_formats::wow_data_or_skip!();
-    use benilla_protocol::messages::{PetActionEntry, PET_ACT_ENABLED};
+    use benilla_protocol::types::{PetActionEntry, PET_ACT_ENABLED};
 
     let mut rig = rig(
         vec![(CLAW, claw_book_spell())],

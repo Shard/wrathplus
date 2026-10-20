@@ -7,7 +7,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{PET_ACT_COMMAND, PET_COMMAND_DISMISS};
+use benilla_protocol::types::{PET_ACT_COMMAND, PET_COMMAND_DISMISS};
 use benilla_ui::script::UiScript;
 
 use crate::net::{ClientCommand, NetCommands};

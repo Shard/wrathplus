@@ -1,6 +1,6 @@
 //! The pet spellbook, the spellbook window's second tab, built from the packed words
 //! `SMSG_PET_SPELLS` carries after the ten bar slots
-//! ([`benilla_protocol::messages::PetSpells::spells`]).
+//! ([`benilla_protocol::types::PetSpells::spells`]).
 //!
 //! Unlike the player book, its add-gate (`0x4b2f90`) refuses only `Attributes & 0x80`
 //! (`DO_NOT_DISPLAY`); it has no tabs, so a button's 1..12 id is the book id; and each slot
@@ -18,7 +18,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use benilla_formats::SpellDisplay;
-use benilla_protocol::messages::PetActionEntry;
+use benilla_protocol::types::PetActionEntry;
 use benilla_ui::script::{PetBookState, SpellSlotView, UiScript};
 
 use crate::net::{ClientCommand, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
@@ -310,10 +310,7 @@ fn flip_native_autocast(
 /// whose type and action match under `& 0x3FFFFFFF` (`0x4bcd20`-`0x4bcd5a`), or the bar's sparkle
 /// stays stale until the next `SMSG_PET_SPELLS`. `None` where the reference aborts unsent: the
 /// word is not autocast-allowed (`0x4bccf5`), as a passive's and a command token's are not.
-fn flip_autocast(
-    spells: &mut benilla_protocol::messages::PetSpells,
-    spell_id: u32,
-) -> Option<bool> {
+fn flip_autocast(spells: &mut benilla_protocol::types::PetSpells, spell_id: u32) -> Option<bool> {
     let word = spells
         .spells
         .iter_mut()
@@ -332,9 +329,7 @@ fn flip_autocast(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{
-        PetSpells, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
-    };
+    use benilla_protocol::types::{PetSpells, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE};
 
     #[test]
     fn native_book_cast_and_toggle_preserve_full_ids_and_raw_words() {

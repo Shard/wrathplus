@@ -591,7 +591,7 @@ fn a_channel_notice_fires_its_token_and_the_reference_reads_arg7_and_arg10_bare(
 #[test]
 fn a_mode_change_notice_never_becomes_an_event() {
     let _data = benilla_formats::wow_data_or_skip!();
-    use benilla_protocol::messages::{channel_notice, ChannelNoticeTail};
+    use benilla_protocol::types::{channel_notice, ChannelNoticeTail};
 
     let mut log = super::feed::ChatLog::default();
     log.push_channel_notice(
@@ -1085,7 +1085,7 @@ fn the_invite_notice_reorders_its_two_names() {
     let mut e = ChatEvent::text_only(K::ChannelNoticeUser, String::new());
     e.channel = "2. Trade - City".into();
     e.sender = "Ann".into();
-    e.notice = benilla_protocol::messages::channel_notice::INVITE.to_string();
+    e.notice = benilla_protocol::types::channel_notice::INVITE.to_string();
     let line = GLOBAL_STRINGS.with(|s| {
         super::frames::compose_notice(&e, K::ChannelNoticeUser, &|key| {
             s.lua().globals().get::<String>(key).ok()
@@ -1519,7 +1519,7 @@ fn unconditional_and_sleep_dead_rules() {
 fn an_inbound_addon_line_splits_on_the_first_tab_only() {
     let _data = benilla_formats::wow_data_or_skip!();
     // The lane bytes come from the protocol crate, never copied by hand.
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
     let party = m::CHAT_TYPE_PARTY as u8;
     let raid = m::CHAT_TYPE_RAID as u8;
     let guild = m::CHAT_TYPE_GUILD as u8;
@@ -1691,7 +1691,7 @@ fn the_language_header_suppresses_only_the_frames_own_default_tongue() {
 fn the_talk_gesture_reads_the_plaintext_not_the_garbled_line() {
     let _data = benilla_formats::wow_data_or_skip!();
     use crate::creature_anim::{select_gesture, Gesture};
-    use benilla_protocol::messages::CHAT_MSG_SAY;
+    use benilla_protocol::types::CHAT_MSG_SAY;
 
     let Some(data) = benilla_formats::wow_data() else {
         return; // no client data
@@ -1723,7 +1723,7 @@ fn the_talk_gesture_reads_the_plaintext_not_the_garbled_line() {
 fn a_speaker_that_cannot_animate_queues_no_talk_gesture() {
     use super::feed::gesture_prevented;
     use crate::creature_anim::select_gesture;
-    use benilla_protocol::messages::CHAT_MSG_SAY;
+    use benilla_protocol::types::CHAT_MSG_SAY;
 
     let laugh_words = |n: u32| (n == 1).then(|| "lol".to_string());
     let speak = |tries: u16, flags: Option<u32>| {
@@ -2066,7 +2066,7 @@ fn the_posture_emotes_carry_no_swim_suppression_flag() {
 /// `SMSG_LEVELUP_INFO`'s gains park on `ChatLog` until the level edge that matches them.
 #[test]
 fn level_up_gains_are_matched_by_level_and_a_miss_is_not_an_absence() {
-    use benilla_protocol::messages::LevelUpInfo;
+    use benilla_protocol::types::LevelUpInfo;
 
     let mut log = super::feed::ChatLog::default();
     let ding = LevelUpInfo {
@@ -2094,7 +2094,7 @@ fn level_up_gains_are_matched_by_level_and_a_miss_is_not_an_absence() {
 #[test]
 fn the_ding_block_is_printed_once() {
     let _data = benilla_formats::wow_data_or_skip!();
-    use benilla_protocol::messages::LevelUpInfo;
+    use benilla_protocol::types::LevelUpInfo;
     let mut s = chat_vm();
     let mut log = super::ChatLog::default();
 

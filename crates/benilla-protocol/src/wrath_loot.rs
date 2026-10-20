@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use crate::messages::{ItemPushResult, LootItem};
+use crate::types::{ItemPushResult, LootItem};
 
 pub const CMSG_AUTOSTORE_LOOT_ITEM: u32 = 0x0108;
 pub const SMSG_INVENTORY_CHANGE_FAILURE: u16 = 0x0112;

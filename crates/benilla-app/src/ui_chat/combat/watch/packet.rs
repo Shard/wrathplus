@@ -61,8 +61,8 @@ pub(super) fn aura_lines(
             if !matches!(
                 store.0.created_as(),
                 Some(
-                    benilla_protocol::messages::ObjectType::Unit
-                        | benilla_protocol::messages::ObjectType::Player
+                    benilla_protocol::types::ObjectType::Unit
+                        | benilla_protocol::types::ObjectType::Player
                 )
             ) {
                 continue;

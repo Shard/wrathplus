@@ -389,10 +389,10 @@ impl UnitAuras {
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{
+    use benilla_protocol::types::{
         member_status, GroupMemberEntry, ObjectFields, PartyMemberStatsInfo,
     };
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_ui::script::UiScript;
     use bevy::prelude::*;
 

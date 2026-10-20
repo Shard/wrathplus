@@ -98,7 +98,7 @@ const DESTROYED_EFFECTS: [u32; 10] = [50, 74, 87, 88, 89, 90, 104, 105, 106, 107
 
 fn is_death_edge(edge: &FieldChanged) -> bool {
     edge.is_unit()
-        && edge.named_field(benilla_protocol::messages::Field::UnitHealth)
+        && edge.named_field(benilla_protocol::types::Field::UnitHealth)
         && edge.old > 0
         && edge.new == 0
 }

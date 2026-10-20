@@ -1,5 +1,5 @@
 use super::*;
-use benilla_protocol::messages::ItemInfo;
+use benilla_protocol::types::ItemInfo;
 use benilla_protocol::wrath_lfg::{RandomDungeonReward, RewardItem};
 use benilla_protocol::SessionEvent;
 use benilla_ui::script::{WrathLfgCatalog, WrathLfgDungeon};

@@ -1,6 +1,6 @@
 //! Instance data remains available while the item-template query is pending.
 use super::*;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use bevy::ecs::system::SystemState;
 
 fn pending_slot(layout: FieldLayout, current: Option<u32>, max: Option<u32>) -> ContainerSlot {

@@ -36,7 +36,7 @@ impl QuestRewardTables {
     pub(crate) fn fill_log(
         &self,
         detail: &mut benilla_ui::script::QuestLogDetail,
-        native: &benilla_protocol::messages::WrathQuestInfo,
+        native: &benilla_protocol::types::WrathQuestInfo,
         quest_level: u32,
         player_level: Option<u32>,
         subject: Option<&crate::npc_text::Subject>,
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(tables.honor(7, 1.0, Some(101)), Some(17));
         assert_eq!(tables.honor(7, 1.0, Some(21)), None);
         assert_eq!(tables.honor(7, 1.0, None), None);
-        let native = benilla_protocol::messages::WrathQuestInfo {
+        let native = benilla_protocol::types::WrathQuestInfo {
             title_id: 123,
             reward_xp_id: 9,
             reward_honor: 7,

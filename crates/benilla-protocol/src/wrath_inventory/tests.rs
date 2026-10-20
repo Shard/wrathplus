@@ -1,5 +1,5 @@
 use super::*;
-use crate::messages::CorpseTarget;
+use crate::types::CorpseTarget;
 
 fn cost_bytes() -> Vec<u8> {
     (1..=13u32).flat_map(u32::to_le_bytes).collect()

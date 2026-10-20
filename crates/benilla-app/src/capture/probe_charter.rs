@@ -22,7 +22,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{CHARTER_ITEM_ENTRY, ITEM_FLAG_CHARTER};
+use benilla_protocol::types::{CHARTER_ITEM_ENTRY, ITEM_FLAG_CHARTER};
 use benilla_protocol::EntityKind;
 use benilla_ui::script::UiScript;
 
@@ -447,7 +447,7 @@ fn charter_probe(
                         || store
                             .0
                             .unit_npc_services()
-                            .has(benilla_protocol::messages::NpcService::Petitioner))
+                            .has(benilla_protocol::types::NpcService::Petitioner))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = found {
@@ -574,9 +574,8 @@ fn charter_probe(
                         "no registrar window within {REGISTRAR_TIMEOUT_SECS}s of the select: \
                          GuildRegistrarState npc={:?} (wanted {npc:#x}), \
                          GuildRegistrarFrame:IsVisible()={visible}, GetGuildCharterCost()={cost}. \
-                         An SMSG_PETITION_SHOWLIST with no parse arm at all \
-                         falls through to ServerPacket::Other — that is what this reading looks \
-                         like. Lines seen: {:?}",
+                         An SMSG_PETITION_SHOWLIST with no decoder at all is dropped \
+                         unhandled — that is what this reading looks like. Lines seen: {:?}",
                         registrar.npc(),
                         probe_lines(&script)
                     ),

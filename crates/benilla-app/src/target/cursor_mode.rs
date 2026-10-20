@@ -433,17 +433,17 @@ fn go_cursor_kind(type_id: i32, lock_cursor: Option<CursorKind>) -> CursorKind {
 /// server sends it unprompted. Without the gate a quest-less questgiver opens an empty gossip frame
 /// that vmangos fills with placeholder "Greetings $N" text (`QueryHandler.cpp:313-319`).
 pub(crate) fn questgiver_has_quest(quest_status: Option<u32>) -> bool {
-    use benilla_protocol::messages::dialog_status::{NONE, UNAVAILABLE};
+    use benilla_protocol::types::dialog_status::{NONE, UNAVAILABLE};
     !matches!(quest_status, None | Some(NONE) | Some(UNAVAILABLE))
 }
 
 /// The service cursor ladder (`FUN_004f7a50`), independent of the click ladder. `None` when no
 /// tested bit is set.
 fn service_cursor_native(
-    flags: benilla_protocol::messages::NpcFlags,
+    flags: benilla_protocol::types::NpcFlags,
     status: Option<u32>,
 ) -> Option<CursorKind> {
-    use benilla_protocol::messages::NpcService as f;
+    use benilla_protocol::types::NpcService as f;
     // Quest/custom cursor artwork is not represented here yet; retain Speak for quests.
     let bit = |service| flags.has(service);
     Some(if flags.bits() != 0 && matches!(status, Some(2..=10)) {
@@ -702,7 +702,7 @@ pub(super) fn classify(
             Some(self_store),
         ) {
             let status = hovered.guid.and_then(|g| match store.0.layout() {
-                benilla_protocol::messages::FieldLayout::Wrath12340 => {
+                benilla_protocol::types::FieldLayout::Wrath12340 => {
                     quest.wrath_statuses().get(&g).copied()
                 }
             });
@@ -757,11 +757,11 @@ pub(super) fn classify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::Field;
+    use benilla_protocol::types::Field;
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
     }
 
     /// `CanLootNow 0x5ec110` skips its range under `CanAutoInteract` (`0x5ec11b`), so the click
@@ -769,7 +769,7 @@ mod tests {
     #[test]
     fn wrath_cursor_priority_is_not_the_click_priority() {
         use super::super::click::{service_arm_native, ServiceArm};
-        use benilla_protocol::messages::{FieldLayout, NpcFlags};
+        use benilla_protocol::types::{FieldLayout, NpcFlags};
         for (bits, click, cursor) in [
             (
                 0x2080,
@@ -825,7 +825,7 @@ mod tests {
     #[test]
     fn native_wrath_services_never_use_vanilla_bit_positions() {
         use super::super::click::{service_arm_native, ServiceArm};
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::{Field, FieldLayout};
         for (bits, arm, cursor) in [
             (0x80, Some(ServiceArm::Vendor), Some(CursorKind::Pickup)),
             (

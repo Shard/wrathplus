@@ -1,6 +1,6 @@
 //! The gossip window's packet handlers: they fill [`GossipState`] and never touch the VM.
 
-use benilla_protocol::messages::{GossipOption, NpcTextBlock};
+use benilla_protocol::types::{GossipOption, NpcTextBlock};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 

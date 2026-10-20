@@ -7,7 +7,7 @@
 //! flag bits (1 friend, 2 ignored), and the friends' notes ride `WrathContactNotes`; the mute bit
 //! has no place there. The duel countdown is AC's milliseconds (3000) as the shared whole
 //! seconds; a winner mode of 1 is a retreat.
-use crate::messages::{FriendEntry, FriendOnline, FriendStatusUpdate};
+use crate::types::{FriendEntry, FriendOnline, FriendStatusUpdate};
 use crate::SessionEvent;
 use std::io;
 

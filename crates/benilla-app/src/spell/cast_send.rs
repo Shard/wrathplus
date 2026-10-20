@@ -17,7 +17,7 @@
 
 use std::time::Instant;
 
-use benilla_protocol::messages::UseItemTarget;
+use benilla_protocol::types::UseItemTarget;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -127,7 +127,7 @@ pub(crate) enum TargetedBind {
     /// The world click's unit guid.
     Unit(u64),
     /// The world click's corpse guid and the corpse bit `BindTarget`'s corpse arm bound.
-    Corpse(u64, benilla_protocol::messages::CorpseTarget),
+    Corpse(u64, benilla_protocol::types::CorpseTarget),
     /// Build 12340's glyph socket, 0-based: `PlaceGlyphInSocket` (`0x80c3e0`) fills the item
     /// use's glyph index and the cast goes out self-implicit.
     Glyph(u8),
@@ -843,13 +843,13 @@ mod tests {
     use super::*;
     use crate::net::Reputations;
     use crate::ui_action::CastFail;
-    use benilla_protocol::messages::Field;
+    use benilla_protocol::types::Field;
     use bevy::ecs::system::RunSystemOnce;
     use crossbeam_channel::Receiver;
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
     }
 
     const HEARTHSTONE: u32 = 8690;
@@ -1302,8 +1302,8 @@ mod tests {
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
                     let me = crate::net::ObjectStore(ObjectFields::from_fields(
-                        benilla_protocol::messages::FieldLayout::Wrath12340,
-                        &[(benilla_protocol::messages::Field::UnitBytes0, class << 8)],
+                        benilla_protocol::types::FieldLayout::Wrath12340,
+                        &[(benilla_protocol::types::Field::UnitBytes0, class << 8)],
                     ));
                     let ctx = cast_target::CastContext {
                         rel: cast_target::TargetRelations {
@@ -1468,7 +1468,7 @@ mod tests {
     #[test]
     fn the_not_ready_reason_forks_on_item_present() {
         let (mut world, rx) = world();
-        let use_spell = benilla_protocol::messages::ItemUseSpell {
+        let use_spell = benilla_protocol::types::ItemUseSpell {
             spell_id: HEARTHSTONE,
             cooldown_ms: 1_800_000,
             category: 0,
@@ -1503,7 +1503,7 @@ mod tests {
     /// `TARGET_FLAG_GAMEOBJECT|LOCKED`.
     #[test]
     fn the_commit_picks_the_opcode_and_the_block() {
-        use benilla_protocol::messages::UseItemTarget;
+        use benilla_protocol::types::UseItemTarget;
         let (mut world, rx) = world();
 
         send(&mut world, HEARTHSTONE, CastCommit::Spell);
@@ -1623,7 +1623,7 @@ mod tests {
     fn in_flight_outranks_not_ready() {
         let (mut world, rx) = world();
         // A long cooldown on MOUNT...
-        let use_spell = benilla_protocol::messages::ItemUseSpell {
+        let use_spell = benilla_protocol::types::ItemUseSpell {
             spell_id: MOUNT,
             cooldown_ms: 60_000,
             category: 0,
@@ -1652,7 +1652,7 @@ mod tests {
     /// word.
     #[test]
     fn the_targeting_commit_tail_covers_every_seam() {
-        use benilla_protocol::messages::UseItemTarget;
+        use benilla_protocol::types::UseItemTarget;
         const DEST: [f32; 3] = [1.0, 2.0, 3.0];
         const ITEM: u64 = 0xF150_0000_0000_ABCD;
         const GO: u64 = 0xF110_000C_1F00_A3B2;

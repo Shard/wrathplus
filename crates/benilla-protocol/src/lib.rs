@@ -3,7 +3,7 @@
 
 pub mod events;
 pub mod guid;
-pub mod messages;
+pub mod types;
 pub mod wire;
 pub mod wrath_auth;
 pub mod wrath_bootstrap;
@@ -76,13 +76,14 @@ pub mod wrath_taxi_ack;
 pub mod wrath_trainer;
 pub mod wrath_world;
 pub mod wrath_misc;
+pub mod wrath_opcode_names;
 pub mod wrath_progress;
 pub use events::{
     CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,
     SessionEvent, SessionEventKind, SplineEffect, SplineInterpolation,
 };
-pub use messages::field;
-pub use messages::{
+pub use types::field;
+pub use types::{
     AttackSwingError, CharCreateReq, CharEnumItem, Character, CorpseLook, CreateSpline, ItemInfo,
     JumpInfo, MonsterMoveFacing, MoveMode, MoverState, ObjectFields, OwnerFallback, RelayVerb,
     SpeedKind, SplineMode, TransportPose, CHARACTER_FLAG_GHOST,

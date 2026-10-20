@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn sockets_read_the_descriptor_rows_and_the_pending_glyph() {
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::{Field, FieldLayout};
         let tables = GlyphCatalog::from_rows(
             [
                 GlyphProperty {

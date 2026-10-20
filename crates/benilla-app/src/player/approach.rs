@@ -530,7 +530,7 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
 mod tests {
     use super::super::state::{MoveSpeed, PlayerRide};
     use super::*;
-    use benilla_protocol::messages::ObjectFields;
+    use benilla_protocol::types::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 
     const fn object(verb: ApproachVerb) -> Toward {
@@ -626,11 +626,11 @@ mod tests {
             SelfPlayer,
             Guid(ME),
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitHealth, 100),
-                    (benilla_protocol::messages::Field::UnitMaxHealth, 100),
-                    (benilla_protocol::messages::Field::UnitBytes1, stand_state),
+                    (benilla_protocol::types::Field::UnitHealth, 100),
+                    (benilla_protocol::types::Field::UnitMaxHealth, 100),
+                    (benilla_protocol::types::Field::UnitBytes1, stand_state),
                 ],
             )),
         ));

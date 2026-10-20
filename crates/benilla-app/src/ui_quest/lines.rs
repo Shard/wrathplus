@@ -145,7 +145,7 @@ fn quest<'a>(
     id: u32,
     quest_log: &'a QuestLog,
     commands: &NetCommands,
-) -> Result<&'a benilla_protocol::messages::QuestTemplate, Resolved> {
+) -> Result<&'a benilla_protocol::types::QuestTemplate, Resolved> {
     match quest_log.template(id, commands) {
         Some(t) => Ok(t),
         None if quest_log.template_answered_unknown(id) => Err(Resolved::Drop),
@@ -170,7 +170,7 @@ pub(crate) fn coin_text(copper: u32, get: &dyn Fn(&str) -> String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{QuestObjective, QuestTemplate};
+    use benilla_protocol::types::{QuestObjective, QuestTemplate};
 
     use crate::net::ClientCommand;
 

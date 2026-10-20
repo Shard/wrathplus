@@ -626,7 +626,7 @@ pub(crate) mod net {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use crossbeam_channel::TryRecvError;
 
     /// Compose a guid the way the server does: `counter | (entry << 24) | (high << 48)`.

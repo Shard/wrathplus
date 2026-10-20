@@ -11,7 +11,7 @@
 //! 4's `AttributesEx3` sub-conditions. CanAssist in leg 10b is a reaction-rank test (friendly or
 //! better), not the reference's `0x6066f0`.
 
-use benilla_protocol::messages::ItemUseSpell;
+use benilla_protocol::types::ItemUseSpell;
 
 use benilla_formats::{
     SpellDisplay, ATTR_CASTABLE_WHILE_DEAD, ATTR_NOT_IN_COMBAT, ATTR_ONLY_STEALTHED,
@@ -549,12 +549,12 @@ pub(crate) fn can_afford(d: &SpellDisplay, store: &ObjectStore, mods: &SpellModi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// `field`'s native descriptor index.
-    const fn at(field: benilla_protocol::messages::Field) -> u16 {
-        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    const fn at(field: benilla_protocol::types::Field) -> u16 {
+        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
     }
 
     // Field indices, private in the protocol crate: health 22, power1 23, max health 28, flags
@@ -608,7 +608,7 @@ mod tests {
                 );
                 deps.items.insert_template(
                     entry,
-                    Some(benilla_protocol::messages::ItemInfo {
+                    Some(benilla_protocol::types::ItemInfo {
                         class: 2,
                         subclass: 7,
                         ..crate::items::test_template("Sword")
@@ -666,7 +666,7 @@ mod tests {
                 );
                 deps.items.insert_template(
                     entry,
-                    Some(benilla_protocol::messages::ItemInfo {
+                    Some(benilla_protocol::types::ItemInfo {
                         class: 2,
                         subclass: 7,
                         flags: *flags,
@@ -742,7 +742,7 @@ mod tests {
                 );
                 deps.items.insert_template(
                     entry,
-                    Some(benilla_protocol::messages::ItemInfo {
+                    Some(benilla_protocol::types::ItemInfo {
                         class: 2,
                         subclass: 7,
                         ..crate::items::test_template("Sword")

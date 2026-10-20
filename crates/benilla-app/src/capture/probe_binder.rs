@@ -248,7 +248,7 @@ fn binder_probe(
                         || store
                             .0
                             .unit_npc_services()
-                            .has(benilla_protocol::messages::NpcService::Innkeeper))
+                            .has(benilla_protocol::types::NpcService::Innkeeper))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = found {
@@ -332,8 +332,8 @@ fn binder_probe(
                     "PROBE_BINDER: FAIL (5 confirm) — no answered question within \
                      {CONFIRM_TIMEOUT_SECS}s of the select: BinderState pending={:?} (wanted \
                      {innkeeper:#x}), CONFIRM_BINDER fired={fired}, arg1={area:?}. A packet with \
-                     no parse arm at all falls through to \
-                     ServerPacket::Other — that is what this reading looks like.",
+                     no decoder at all is dropped unhandled — that is what this reading looks \
+                     like.",
                     binder.npc()
                 );
                 probe.fails += 1;

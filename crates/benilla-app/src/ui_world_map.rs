@@ -839,7 +839,7 @@ fn feed_world_map(
         .iter()
         .next()
         .map(|store| {
-            (0..benilla_protocol::messages::PLAYER_EXPLORED_ZONES_SLOTS)
+            (0..benilla_protocol::types::PLAYER_EXPLORED_ZONES_SLOTS)
                 .map(|i| store.0.player_explored_zone_slot(i))
                 .collect()
         })
@@ -983,7 +983,7 @@ fn feed_world_map(
     // The `party1..4` blips: a streamed member's transform, else the `i16` position from
     // `SMSG_PARTY_MEMBER_STATS`. That packet carries a zone, not a map, so the map is the
     // continent owning that zone, else ours.
-    let member_uv = |m: &benilla_protocol::messages::GroupMemberEntry| {
+    let member_uv = |m: &benilla_protocol::types::GroupMemberEntry| {
         let (px, py) = crate::minimap::party_member_pos(m, &group, &guids, &unit_pos)?;
         let member_map = group
             .stats

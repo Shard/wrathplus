@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use benilla_protocol::messages::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
+use benilla_protocol::types::{GroupLootInfo, GroupMemberEntry, PartyMemberStatsInfo};
 use benilla_protocol::wrath_instance::RaidInstanceInfo;
 use bevy::prelude::*;
 

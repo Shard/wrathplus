@@ -128,17 +128,17 @@ pub(crate) fn drop_item_on_unit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::Field;
+    use benilla_protocol::types::Field;
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
     }
 
     /// `0x6ea1e0`'s three gates, each failed alone.
     #[test]
     fn the_feed_gates_are_ownership_and_provenance() {
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
         const ME: u64 = 0xDEAD_BEEF;
         // Field 146 is `UNIT_CREATED_BY_SPELL`; 14/15 are `UNIT_FIELD_CREATEDBY`'s guid pair.
         let pet = |created_by_spell: Option<u32>, created_by: Option<u64>| {

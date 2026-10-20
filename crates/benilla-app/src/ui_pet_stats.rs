@@ -250,7 +250,7 @@ fn feed_pet_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);

@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::PLAYER_SKILL_SLOTS;
+use benilla_protocol::types::PLAYER_SKILL_SLOTS;
 use benilla_ui::script::{
     weapon_subclass_skill, BankBagSlots, InvSlotView, InventorySlots, ScriptValue, SkillEntry,
     SkillsState, UiScript, UnitCombatStats, BANK_BAG_SLOT_COUNT, EQUIPMENT_BAG, SKILL_DEFENSE,
@@ -266,7 +266,7 @@ fn feed_skills(
 /// One skill slot as a Skills-tab row, or `None` where the reference's list build (`0x4d2cb0`)
 /// skips it; the checks run in that build's order.
 pub(crate) fn skills_row(
-    slot: &benilla_protocol::messages::PlayerSkillSlot,
+    slot: &benilla_protocol::types::PlayerSkillSlot,
     catalog: &benilla_formats::SkillLineCatalog,
     race: u8,
     class: u8,
@@ -1066,8 +1066,8 @@ fn weapon_enchant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::ObjectFields;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::ObjectFields;
+    use benilla_protocol::types::{Field, FieldLayout};
     use bevy::ecs::system::RunSystemOnce;
 
     const BANK_BAG_LIVE_FIRST: u32 = 68;
@@ -1193,7 +1193,7 @@ mod tests {
     /// Lock identity is the live inventory ID, not the Vanilla bank item's ID on Wrath.
     #[test]
     fn bank_bag_lock_identity_follows_descriptor_geometry() {
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::{Field, FieldLayout};
         let layout = FieldLayout::Wrath12340;
         for (live, slot) in [(68, 0), (74, 6)] {
             let mut app = world_with_bank_bag(Some(BAG));

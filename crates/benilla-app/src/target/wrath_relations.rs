@@ -11,7 +11,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::{Entity, Query, Res};
 
 use crate::net::{GuidIndex, ObjectStore};
-use benilla_protocol::messages::{ObjectType, OwnerFallback};
+use benilla_protocol::types::{ObjectType, OwnerFallback};
 
 /// A live descriptor by guid: the object manager's lookup (`0x468460`), asked afresh at every
 /// controller hop. Never a second object cache.
@@ -261,7 +261,7 @@ pub(super) fn assist(actor: &ObjectStore, target: &ObjectStore, toward: u8, ctx:
 mod tests {
     use super::*;
     use crate::names::{CreatureRecord, NameCache};
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
     use std::collections::HashMap;
 
     const ENTRY: u32 = 1423;

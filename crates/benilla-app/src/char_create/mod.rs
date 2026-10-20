@@ -693,7 +693,7 @@ fn create_result(
             msg.code,
             char_result_text(&strings, msg.code)
         );
-        if msg.code == benilla_protocol::messages::CHAR_CREATE_SUCCESS {
+        if msg.code == benilla_protocol::types::CHAR_CREATE_SUCCESS {
             // `net::io` re-enumerates and emits the fresh roster before the result, so the new
             // row is selected against the list already in hand; no later roster update comes.
             roster.note_created(sel.name.text.clone());

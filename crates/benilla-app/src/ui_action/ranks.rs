@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::ACTION_KIND_SPELL;
+use benilla_protocol::types::ACTION_KIND_SPELL;
 
 use super::PlayerActions;
 use crate::net::{ClientCommand, NetCommands};
@@ -57,7 +57,7 @@ pub(super) fn normalize_action_ranks(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO};
+    use benilla_protocol::types::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_MACRO};
     use crossbeam_channel::Receiver;
 
     use super::*;

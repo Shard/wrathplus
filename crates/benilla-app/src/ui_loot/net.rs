@@ -1,7 +1,7 @@
 //! The loot window's packet handlers: the [`LootState`] session and the [`LootLatch`] the feed
 //! reads, the fishing verdicts, and the item push behind "You receive …".
 
-use benilla_protocol::messages::ItemPushResult;
+use benilla_protocol::types::ItemPushResult;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -350,7 +350,7 @@ fn item_push_result(
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, NetCommands};
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use bevy::ecs::system::RunSystemOnce;
 
     use crate::pending_item_ops::{LockTransitions, PendingItemOps};
@@ -427,7 +427,7 @@ mod tests {
                     scale: 1.0,
                 },
                 // `UNIT_FIELD_HEALTH` (22) at 0.
-                crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
                     FieldLayout::Wrath12340,
                     &[(Field::UnitHealth, 0)],
                 )),
@@ -656,9 +656,9 @@ mod tests {
     /// latch names the roll's source.
     #[test]
     fn a_resolved_roll_releases_the_latched_window_row() {
-        use benilla_protocol::messages::slot_type;
+        use benilla_protocol::types::slot_type;
         use benilla_protocol::wrath_roll::{Item, Roll};
-        let row = benilla_protocol::messages::LootItem {
+        let row = benilla_protocol::types::LootItem {
             slot: 2,
             item_id: 25,
             count: 1,
@@ -734,12 +734,12 @@ mod tests {
     /// [`tabbed_world`]'s seating, into any world.
     fn seat_tabbed(world: &mut World) -> crossbeam_channel::Receiver<ClientCommand> {
         use crate::net::{Guid, GuidIndex, NetEntity, ObjectStore, SelfPlayer};
-        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFlags);
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitHealth);
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFlags);
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitHealth);
         use benilla_protocol::EntityKind::{GameObject, Unit};
-        use benilla_protocol::messages::{ObjectFields, ObjectType};
+        use benilla_protocol::types::{ObjectFields, ObjectType};
         let unit = |kind, type_mask, pairs: &[(u16, u32)]| {
             let mut fields = vec![(OBJECT_FIELD_TYPE, type_mask)];
             fields.extend_from_slice(pairs);
@@ -967,11 +967,11 @@ mod tests {
     #[test]
     fn looting_a_hostile_body_while_swinging_never_swings_at_it() {
         use crate::net::{ObjectStore, SelfPlayer};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitHealth);
-        use benilla_protocol::messages::{ObjectFields, ObjectType};
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitHealth);
+        use benilla_protocol::types::{ObjectFields, ObjectType};
         const UNIT_FIELD_BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");

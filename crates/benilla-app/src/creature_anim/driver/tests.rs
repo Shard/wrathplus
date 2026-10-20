@@ -14,7 +14,7 @@ use super::super::{
 use super::drive_animations;
 use crate::names::type_flags::{DO_NOT_PLAY_WOUND_ANIM, MORE_AUDIBLE, NO_FACTION_TOOLTIP};
 use crate::net::{ClientCommand, NetCommands};
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 
 #[cfg(test)]
@@ -1241,7 +1241,7 @@ fn the_swim_relatch_holds_the_kick_but_a_ground_cut_freezes_it() {
 /// A remote unit kneels on `UNIT_FLAG_LOOTING` (field 46); moving outranks it (`0x5fd8b0`).
 #[test]
 fn unit_flag_looting_kneels_stationary_units_only() {
-    use benilla_protocol::messages::ObjectFields;
+    use benilla_protocol::types::ObjectFields;
 
     let mut app = app();
     let model = ModelAnimations {
@@ -1294,7 +1294,7 @@ fn unit_flag_looting_kneels_stationary_units_only() {
 /// The self unit kneels off its loot latch (`[player+0x1d28]`, `0x6126b0`), not the flag.
 #[test]
 fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
-    use benilla_protocol::messages::ObjectFields;
+    use benilla_protocol::types::ObjectFields;
 
     let mut app = app();
     app.init_resource::<crate::ui_loot::LootKneel>();
@@ -1354,7 +1354,7 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
 /// read off the self unit's own descriptor too.
 #[test]
 fn the_creep_vis_flag_prowls_the_body() {
-    use benilla_protocol::messages::ObjectFields;
+    use benilla_protocol::types::ObjectFields;
 
     const CREEP: u32 = 0x0002_0000;
     let mut app = app();
@@ -4163,8 +4163,8 @@ mod base_anim_lock {
 mod routing {
     use super::*;
 
-    const FIELD_MOUNTDISPLAYID: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitMountDisplayId);
     const MOUNT: u16 = 91;
     const PRAY: u16 = 75; // EmoteKneel, not CLASS_A
     const CHEER: u16 = 68; // CLASS_A
@@ -4467,8 +4467,8 @@ mod emote_state {
     const STUBBORN: u32 = 29;
     /// `/stand`'s state 26 (vmangos `ChatHandler.cpp` `HandleTextEmoteOpcode`): AnimID 0.
     const STAND_STATE: u32 = 26;
-    const FIELD_NPC_EMOTESTATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitNpcEmotestate);
+    const FIELD_NPC_EMOTESTATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitNpcEmotestate);
 
     /// Real graph nodes, so loop windows complete: every clip lasts 0.1 s, and the loops are one
     /// pass per window.

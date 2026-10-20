@@ -9,7 +9,7 @@ use std::io::{self, Cursor};
 use std::sync::Mutex;
 
 use crate::events::SessionEvent;
-use crate::messages::VendorItem;
+use crate::types::VendorItem;
 use crate::wrath_session::{u32_le, u64_le, u8_le};
 
 pub const SMSG_LIST_INVENTORY: u16 = 0x019F;

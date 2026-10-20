@@ -705,7 +705,7 @@ pub(crate) fn wrath_char_result_key(code: u8) -> Option<&'static str> {
 /// transcribed here, and no server sends one.
 pub(crate) fn char_delete_refusal_text(strings: &GlueStrings, code: u8) -> Option<&str> {
     let (key, fallback): (&str, &str) = match code {
-        benilla_protocol::messages::CHAR_DELETE_SUCCESS => return None,
+        benilla_protocol::types::CHAR_DELETE_SUCCESS => return None,
         0x38 => ("CHAR_DELETE_IN_PROGRESS", "Deleting character"),
         0x3B => (
             "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
@@ -1280,7 +1280,7 @@ mod tests {
 
         app.world_mut().write_message(CharActionResultMessage {
             action: CharAction::Delete,
-            code: benilla_protocol::messages::CHAR_DELETE_SUCCESS,
+            code: benilla_protocol::types::CHAR_DELETE_SUCCESS,
         });
         app.update();
         assert!(

@@ -12,7 +12,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::Field;
+use benilla_protocol::types::Field;
 use benilla_ui::script::{RuneView, ScriptValue, UiScript, WrathRunes};
 
 use crate::net::wrath_runes::{NativeRunes, RUNES};
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn the_feed_times_runes_and_fires_the_rune_events() {
         use crate::net::wrath_runes::Rune;
-        use benilla_protocol::messages::FieldLayout;
+        use benilla_protocol::types::FieldLayout;
         let mut app = App::new();
         let script =
             UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340).unwrap();

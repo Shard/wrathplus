@@ -276,7 +276,7 @@ fn text(bytes: Vec<u8>) -> String {
 /// carry it, so the existing guild owners (roster, chat lines, tabard, invite) consume it; the
 /// roster also stays raw (`WrathGuild`) for its per-rank bank words, as does the event log.
 pub fn session_events(packet: Packet) -> Vec<crate::SessionEvent> {
-    use crate::messages::{
+    use crate::types::{
         GuildCommandResult, GuildEventNotice, GuildInfo, GuildQueryResponse, GuildRoster,
         GuildRosterMember,
     };

@@ -2,7 +2,7 @@
 //! streamed unit. The swing record and the environmental-damage log also feed
 //! [`crate::combat_log`], whose handlers are registered first and so run first.
 
-use benilla_protocol::messages::{AttackSwingError, AttackerState, EnvironmentalDamageLog};
+use benilla_protocol::types::{AttackSwingError, AttackerState, EnvironmentalDamageLog};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -498,7 +498,7 @@ fn mount_special(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{ObjectFields, ObjectType};
+    use benilla_protocol::types::{ObjectFields, ObjectType};
     use benilla_protocol::wrath_combat::{self, MeleeDamage};
     use bevy::ecs::system::RunSystemOnce;
 
@@ -521,8 +521,8 @@ mod tests {
         let attacker = world
             .spawn(ObjectStore(
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::UnitHealth, 100)],
                 )
                 .into_created(ObjectType::Unit),
             ))
@@ -530,8 +530,8 @@ mod tests {
         let victim = world
             .spawn(ObjectStore(
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::UnitHealth, 100)],
                 )
                 .into_created(ObjectType::Unit),
             ))

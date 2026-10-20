@@ -7,7 +7,7 @@
 //! Slot 0 is read from the wire like every row, because a dismissed pet still has one; stock
 //! `PetStable.lua:123-138` prefers the live pet and falls back to it.
 
-use benilla_protocol::messages::StabledPet;
+use benilla_protocol::types::StabledPet;
 use bevy::prelude::*;
 
 use benilla_ui::script::{StableIntent, StablePetSlot, StableState, UiScript, NUM_STABLE_SLOTS};

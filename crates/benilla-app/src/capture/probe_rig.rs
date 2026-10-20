@@ -30,7 +30,7 @@
 //! (`ObjectMgr.cpp:12079-12117`), so re-dressing a body leaves the old set in its bags or mailed;
 //! a fresh rig-named character starts with empty bags.
 
-use benilla_protocol::{messages, CharAction, CharCreateReq};
+use benilla_protocol::{types, CharAction, CharCreateReq};
 use bevy::prelude::*;
 
 use super::probes::ProbeClock;
@@ -298,8 +298,8 @@ fn drive_rig(
                 return;
             };
             match r.code {
-                messages::CHAR_CREATE_SUCCESS => rig.phase = RigPhase::AwaitRoster,
-                messages::CHAR_CREATE_SERVER_LIMIT if !rig.evicted => {
+                types::CHAR_CREATE_SUCCESS => rig.phase = RigPhase::AwaitRoster,
+                types::CHAR_CREATE_SERVER_LIMIT if !rig.evicted => {
                     rig.evicted = true;
                     match crate::run_mode::rig_suffix().and_then(|word| {
                         evictable(&rig.roster, rig_char_name(&rig.spec).as_deref(), &word)

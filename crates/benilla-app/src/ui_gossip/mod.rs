@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use benilla_protocol::messages::{select_greeting, GossipOption, NpcTextBlock};
+use benilla_protocol::types::{select_greeting, GossipOption, NpcTextBlock};
 use bevy::prelude::*;
 
 use benilla_ui::script::{GossipMenu, GossipOptionView, GossipQuestRow, ScriptValue, UiScript};
@@ -28,7 +28,7 @@ pub(crate) struct GossipState {
     /// because `GetGossipAvailableQuests` and `GetGossipActiveQuests` return `(title, level)`
     /// pairs, walked in twos by stock `GossipFrame.lua` (lines 66 and 90).
     pub(crate) quests: Vec<(u32, u32, u32, String)>,
-    pub(crate) quest_info: Vec<benilla_protocol::messages::WrathQuestInfo>,
+    pub(crate) quest_info: Vec<benilla_protocol::types::WrathQuestInfo>,
     records: HashMap<u32, Vec<NpcTextBlock>>,
 }
 
@@ -238,7 +238,7 @@ fn quest_complete(store: &benilla_protocol::ObjectFields, quest: u32) -> bool {
         .filter_map(|i| store.player_quest_log(i))
         .any(|slot| {
             slot.quest_id == quest
-                && slot.state & benilla_protocol::messages::quest_slot_state::COMPLETE != 0
+                && slot.state & benilla_protocol::types::quest_slot_state::COMPLETE != 0
         })
 }
 
@@ -409,8 +409,8 @@ mod tests {
 
     #[test]
     fn greeting_completion_uses_log_state_not_the_shared_icon() {
-        const BASE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerQuestLog);
+        const BASE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerQuestLog);
         let incomplete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7)]);
         assert!(!quest_complete(&incomplete, 7));
         let complete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1)]);
@@ -424,7 +424,7 @@ mod tests {
         state.quests.push((7, 4, 80, "daily".into()));
         state
             .quest_info
-            .push(benilla_protocol::messages::WrathQuestInfo {
+            .push(benilla_protocol::types::WrathQuestInfo {
                 flags: 0x1000,
                 repeatable: true,
                 ..Default::default()

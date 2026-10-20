@@ -192,7 +192,7 @@ fn category_catalog(limit: u32) -> CategoryLimits {
 }
 fn inventory(app: &mut App) {
     use crate::net::{GuidIndex, ObjectStore};
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     let layout = FieldLayout::Wrath12340;
     let mut pairs = Vec::new();
     for (field, n) in [

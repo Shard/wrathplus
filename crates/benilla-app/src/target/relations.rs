@@ -11,7 +11,7 @@
 //!
 //! A corpse has its own reaction gate, `0x6067d0` ([`corpse_friendly`]).
 
-use benilla_protocol::messages::{ObjectType, OwnerFallback};
+use benilla_protocol::types::{ObjectType, OwnerFallback};
 
 use crate::net::{ObjectStore, Reputations};
 
@@ -153,7 +153,7 @@ pub(crate) fn can_assist(
     let Some(store) = store else {
         return false;
     };
-    if store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+    if store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
         let Some(actor) = self_store else {
             return false;
         };
@@ -207,8 +207,8 @@ mod tests {
         assert!(!corpse_friendly(&human, None, Some(&me)), "no catalog");
         assert!(!corpse_friendly(&human, Some(&factions), None), "no player");
         let no_template = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
-            &[(benilla_protocol::messages::Field::UnitFactionTemplate, 999)],
+            benilla_protocol::types::FieldLayout::Wrath12340,
+            &[(benilla_protocol::types::Field::UnitFactionTemplate, 999)],
         ));
         assert!(
             !corpse_friendly(&human, Some(&factions), Some(&no_template)),
@@ -242,21 +242,13 @@ mod tests {
     fn possession_is_the_flag_and_the_charmer_else_the_creator() {
         let store = |flags: u32, charmed_by: u32, created_by: u32| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitFlags, 0, flags),
-                    (
-                        benilla_protocol::messages::Field::UnitCharmedby,
-                        0,
-                        charmed_by,
-                    ),
-                    (benilla_protocol::messages::Field::UnitCharmedby, 1, 0),
-                    (
-                        benilla_protocol::messages::Field::UnitCreatedby,
-                        0,
-                        created_by,
-                    ),
-                    (benilla_protocol::messages::Field::UnitCreatedby, 1, 0),
+                    (benilla_protocol::types::Field::UnitFlags, 0, flags),
+                    (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+                    (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
+                    (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
+                    (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
                 ],
             ))
         };

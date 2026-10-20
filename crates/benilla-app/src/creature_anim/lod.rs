@@ -404,8 +404,8 @@ mod tests {
             .entity_mut(behind)
             .insert(crate::net::ObjectStore(
                 benilla_protocol::ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::ObjectEntry, ENTRY)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::ObjectEntry, ENTRY)],
                 ),
             ));
         app.world_mut()

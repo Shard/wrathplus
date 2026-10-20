@@ -72,7 +72,7 @@ const CREATURE_TYPE_HUMANOID: u32 = 7;
 mod tests {
     use super::*;
     use crate::names::CreatureRecord;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_BYTES_2` (byte 3 the form) and `UNIT_FIELD_BYTES_0`, absolute descriptor indices.

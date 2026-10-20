@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     PetActionEntry, PET_COMMAND_ATTACK, PET_COMMAND_FOLLOW, PET_COMMAND_STAY,
 };
 use benilla_ui::script::UiScript;
@@ -455,8 +455,7 @@ pub(super) fn possessing(store: Option<&ObjectStore>, self_guid: Option<u64>) ->
 /// The Attack order, the one press validated before it sends: the type-7 arm branches only on
 /// `action <= 1` and `action == 2`, so every other command sends as it is.
 pub(super) fn is_attack_order(entry: PetActionEntry) -> bool {
-    entry.kind() == benilla_protocol::messages::PET_ACT_COMMAND
-        && entry.action() == PET_COMMAND_ATTACK
+    entry.kind() == benilla_protocol::types::PET_ACT_COMMAND && entry.action() == PET_COMMAND_ATTACK
 }
 
 /// Apply a press and answer whether it is sent. A veto from the validator (`0x4bd40d`, the pet as
@@ -482,21 +481,19 @@ pub(super) fn commit_press(
 pub(super) fn latch_press(bar: &mut PetBar, entry: PetActionEntry, possessing: bool) {
     let action = entry.action();
     match entry.kind() {
-        benilla_protocol::messages::PET_ACT_COMMAND
+        benilla_protocol::types::PET_ACT_COMMAND
             if action == PET_COMMAND_STAY || action == PET_COMMAND_FOLLOW =>
         {
             // `0x4bc960` signals `PET_BAR_UPDATE` even when the command is unchanged.
             bar.spells.state = (bar.spells.state & 0x0800_00FF) | (action << 8);
             bar.bar_signals = bar.bar_signals.wrapping_add(1);
         }
-        benilla_protocol::messages::PET_ACT_COMMAND
-            if action == PET_COMMAND_ATTACK && possessing =>
-        {
+        benilla_protocol::types::PET_ACT_COMMAND if action == PET_COMMAND_ATTACK && possessing => {
             // `0x4bd42e` signals too; an ordinary pet never gets here.
             bar.attacking = true;
             bar.bar_signals = bar.bar_signals.wrapping_add(1);
         }
-        benilla_protocol::messages::PET_ACT_REACTION => {
+        benilla_protocol::types::PET_ACT_REACTION => {
             // `0x4bc940`: the same, on byte 0.
             bar.spells.state = (bar.spells.state & 0xFFFF_FF00) | action;
             bar.bar_signals = bar.bar_signals.wrapping_add(1);
