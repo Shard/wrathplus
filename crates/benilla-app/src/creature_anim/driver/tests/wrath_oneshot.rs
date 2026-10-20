@@ -393,8 +393,8 @@ fn installed_wrath_human_sword_residency_is_not_an_overlay_release_policy() {
         .find(|s| s.anim_id == SWORD && s.seq_index == sequence_index)
         .expect("resident Sword18 render metadata");
     assert!(
-        sequence.looping,
-        "legacy residency-derived hint reaches the driver"
+        !sequence.looping,
+        "resident (0x20) but clamped: the wrap is flag bit 0x1 (`0x82e140`), not residency"
     );
     assert_eq!(sequence.duration, duration_ms as f32 / 1000.0);
     assert_eq!((sequence.min_replay, sequence.max_replay), replay);

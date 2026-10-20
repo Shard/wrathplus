@@ -588,20 +588,25 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let Some(s) = info else {
                 return Ok(mlua::MultiValue::new());
             };
-            Ok(mlua::MultiValue::from_vec(vec![
-                match &s.texture {
+            // `0x5d7a90`: texture, count, locked, quality, readable, lootable, link; the flags are
+            // 1 or nil. An uncached template's quality is -1. Lootable reads `ITEM_FIELD_FLAGS`
+            // bit 2 as the binding does (labelled: the bit's meaning for every item is unread).
+            let text = |v: &Option<String>| -> mlua::Result<Value> {
+                Ok(match v {
                     Some(p) => Value::String(lua.create_string(p.as_str())?),
                     None => Value::Nil,
-                },
+                })
+            };
+            Ok(mlua::MultiValue::from_vec(vec![
+                text(&s.texture)?,
                 Value::Integer(i64::from(s.count)),
                 // A held item's source slot reads locked, derived from the cursor so the app's
                 // re-push cannot wipe it.
-                Value::Boolean(s.locked || held_here),
-                match s.quality {
-                    Some(q) => Value::Integer(i64::from(q)),
-                    None => Value::Nil,
-                },
-                Value::Boolean(s.readable),
+                super::binding_abi::flag(s.locked || held_here),
+                Value::Integer(s.quality.map_or(-1, i64::from)),
+                super::binding_abi::flag(s.readable),
+                super::binding_abi::flag(s.flags & 4 != 0),
+                text(&s.link)?,
             ]))
         })?,
     )?;
@@ -865,13 +870,14 @@ mod tests {
             .eval::<bool>("local _, _, _, _, readable = GetContainerItemInfo(0, 4) return readable")
             .unwrap());
 
-        // An in-flight slot: texture and quality nil, itemCount real.
+        // An in-flight slot: texture nil, quality -1 (`0x5d7a90`), itemCount real; seven values.
         assert!(s
             .eval::<bool>(
                 "local texture, itemCount, locked, quality = GetContainerItemInfo(0, 3)\n\
-                 return texture == nil and quality == nil and itemCount ~= nil",
+                 return texture == nil and quality == -1 and itemCount ~= nil",
             )
             .unwrap());
+        assert_eq!(s.arity("GetContainerItemInfo(0, 3)").unwrap(), 7);
         assert!(s
             .eval::<bool>("return GetContainerItemLink(0, 3) == nil")
             .unwrap());

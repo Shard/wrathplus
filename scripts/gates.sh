@@ -106,7 +106,9 @@ run() {
 }
 
 run fmt cargo fmt --all -- --check
-run clippy cargo clippy --workspace --all-targets -- -D warnings
+# The clippy ratchet: every warning fails unless scripts/quality/clippy-baseline.json names it.
+run clippy env AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}" \
+    scripts/quality/run.sh clippy --workspace
 
 # test: where the install resolves and the `wow-addons-vanilla` corpus link exists,
 # BENILLA_REQUIRE_DATA=1 refuses a data-gated test that skips; with the install alone it would
