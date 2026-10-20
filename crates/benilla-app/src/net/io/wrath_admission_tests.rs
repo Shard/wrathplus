@@ -70,8 +70,7 @@ fn every_wrath_writer_route_is_admitted() {
         ("TabardVendorActivate", ClientCommand::TabardVendorActivate { npc: 1 }),
         ("GuildEventLogQuery", ClientCommand::GuildEventLogQuery),
         ("BattlefieldStatusRequest", ClientCommand::BattlefieldStatusRequest),
-        ("GetChannelMemberCount", ClientCommand::GetChannelMemberCount { name: "Trade".into() }),
-        ("ClearChannelWatch", ClientCommand::ClearChannelWatch { name: "Trade".into() }),
+        ("ClearChannelWatch", ClientCommand::ClearChannelWatch),
         ("DeclineChannelInvite", ClientCommand::DeclineChannelInvite { name: "Trade".into() }),
         (
             "NativeRaidBrowser",
@@ -354,15 +353,6 @@ fn every_wrath_writer_route_is_admitted() {
         (
             "SpellControlPetLearnTalent",
             ClientCommand::NativeSpellControl(benilla_protocol::wrath_spell_control::Command::PetLearnTalent { pet: 1, talent_id: 2107, rank: 0 }),
-        ),
-        (
-            "NativeChatCommand",
-            ClientCommand::NativeChatCommand(benilla_protocol::wrath_chat::Command {
-                chat_type: 1,
-                language: 0,
-                target: None,
-                text: b"test".to_vec(),
-            }),
         ),
         (
             "NativeWorldportAck",

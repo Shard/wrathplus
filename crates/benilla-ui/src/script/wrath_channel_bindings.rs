@@ -1,7 +1,7 @@
 //! Build-12340 channel getters, native 0x504f30/0x505190 and display-list controls.
 use super::{
     wrath_channel_display::{entries, selected_index},
-    wrath_channel_roster::{Identity, WrathChannelRosterMember},
+    wrath_channel_roster::{Identity, WrathChannelRosterMember, WrathChannelRosterRequest},
     Model,
 };
 use mlua::{Lua, MultiValue, Value};
@@ -74,6 +74,34 @@ fn select(model: &mut Model, identity: Identity) -> bool {
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    // SetChannelWatch("channel") (`0x4ffc30` → `0x4fe460(0x3ef)`) and ClearChannelWatch()
+    // (`0x4ffc50`, `0x3F3` with no body). Labelled: the name resolver (`0x4fe160`) is not read, so
+    // the argument goes out as given and an empty one sends nothing.
+    g.set(
+        "SetChannelWatch",
+        lua.create_function(|lua, value: Value| {
+            let Some(name) = lua.coerce_string(value)?.map(|s| s.to_string_lossy()) else {
+                return Err(mlua::Error::runtime("Usage: SetChannelWatch(\"channel\")"));
+            };
+            if !name.is_empty() {
+                let mut m = lua.app_data_mut::<Model>().expect("model");
+                m.wrath_channel_roster
+                    .requests
+                    .push(WrathChannelRosterRequest::Watch { name });
+            }
+            Ok(())
+        })?,
+    )?;
+    g.set(
+        "ClearChannelWatch",
+        lua.create_function(|lua, ()| {
+            let mut m = lua.app_data_mut::<Model>().expect("model");
+            m.wrath_channel_roster
+                .requests
+                .push(WrathChannelRosterRequest::ClearWatch);
+            Ok(())
+        })?,
+    )?;
     g.set(
         "GetNumDisplayChannels",
         lua.create_function(|lua, ()| {
@@ -256,6 +284,23 @@ mod tests {
         s.run("GetNumChannelMembers(5); GetChannelRosterInfo(5,1)")
             .unwrap();
         assert!(s.take_wrath_channel_roster_requests().is_empty());
+    }
+    #[test]
+    fn addon_watch_calls_send_as_given_and_clear_is_bodyless() {
+        use crate::script::WrathChannelRosterRequest as R;
+        let mut s = script();
+        s.run("SetChannelWatch('Trade'); SetChannelWatch(''); ClearChannelWatch()")
+            .unwrap();
+        assert!(s.run("SetChannelWatch()").is_err());
+        assert_eq!(
+            s.take_wrath_channel_roster_requests(),
+            vec![
+                R::Watch {
+                    name: "Trade".into()
+                },
+                R::ClearWatch
+            ]
+        );
     }
     #[test]
     fn userlist_deltas_patch_the_selected_roster() {

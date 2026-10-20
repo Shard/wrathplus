@@ -139,6 +139,7 @@ pub(super) fn drain_requests(
             WrathChannelRosterRequest::DisplayList { name } => {
                 ClientCommand::ChannelDisplayList { name }
             }
+            WrathChannelRosterRequest::ClearWatch => ClientCommand::ClearChannelWatch,
         };
         let _ = commands.0.send(command);
     }

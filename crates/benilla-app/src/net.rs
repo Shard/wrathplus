@@ -307,7 +307,6 @@ pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     s.run
 }
 
-
 /// One descriptor dword moved on a streamed object, the reference's `CMirrorHandler` edge: the
 /// values notifier (`0x465330`) diffs live against a shadow copy and passes the old value
 /// (`0x465570`). A first create fires nothing; a re-create of a live guid fires like a delta.
@@ -1051,12 +1050,9 @@ pub(crate) enum ClientCommand {
         orientation: f32,
         spline_id: u32,
     },
-    /// `CMSG_MOVE_TIME_SKIPPED`: our mover skipped `lag_ms` without integrating; `guid` must be the
-    /// active mover (`0x600be0`). Just after boarding, the server answers with the transport's
-    /// create update.
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
+    /// `CMSG_MOVE_TIME_SKIPPED`: our mover skipped `lag_ms` without integrating, a frame's rest past
+    /// the 250 ms step (`player::mover::capped_step`); `guid` must be the active mover
+    /// (`0x600be0`). Just after boarding, the server answers with the transport's create update.
     MoveTimeSkipped {
         guid: u64,
         lag_ms: u32,
@@ -1933,19 +1929,13 @@ pub(crate) enum ClientCommand {
     ReadyCheckAnswer {
         ready: bool,
     },
-    /// Native arena-team transport only; no UI producer or inferred authority.
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
-    NativeChatCommand(benilla_protocol::wrath_chat::Command),
     /// Explicit transport only; no shared WHO UI producer or permission inference.
     NativeWhoCommand(benilla_protocol::wrath_who::Command),
     /// Transport-only native mail; no legacy mail conversion or UI producer.
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
+    /// `CMSG_GET_MIRRORIMAGE_DATA`: a mirror-image unit's look, once per object
+    /// (`net::wrath_mirror_image_capture`).
     NativeMirrorImageQuery {
         guid: u64,
     },
@@ -1966,10 +1956,8 @@ pub(crate) enum ClientCommand {
     NativeCalendar(benilla_protocol::wrath_calendar::Command),
     /// Native quest commands with no Vanilla twin; transport does not claim acceptance.
     NativeQuest(benilla_protocol::wrath_quest::Command),
-    /// Native party commands with no Vanilla twin; transport does not claim leadership.
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
+    /// Native party commands: `UninviteUnit`'s guid kick with its reason and the ready-check
+    /// initiator's close; transport does not claim leadership.
     NativeParty(benilla_protocol::wrath_party::Command),
     /// Native battleground/arena/battlefield commands keyed by this build's bg type; no UI producer.
     NativeBattleground(benilla_protocol::wrath_battleground::Command),
@@ -1998,20 +1986,10 @@ pub(crate) enum ClientCommand {
     NativeGuildBankText(benilla_protocol::wrath_guild_bank_text::Command),
     /// `CMSG_SHOWING_HELM`/`CMSG_SHOWING_CLOAK` (the desired state) and `CMSG_ALTER_APPEARANCE`.
     NativeAppearance(benilla_protocol::wrath_appearance::Command),
-    /// `CMSG_GET_CHANNEL_MEMBER_COUNT`.
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
-    GetChannelMemberCount { name: String },
-    /// `CMSG_CLEAR_CHANNEL_WATCH`: stop a channel's roster deltas.
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
-    ClearChannelWatch { name: String },
-    /// `CMSG_DECLINE_CHANNEL_INVITE` (AC reads nothing from it).
-    // An admitted writer with no producer yet: its feature wires the sender (Native Wire's
-    // family). Kept, not a 1.12 leftover.
-    #[allow(dead_code)]
+    /// `CMSG_CLEAR_CHANNEL_WATCH`: `ClearChannelWatch()`, bodyless in build 12340 (`0x4ffc50`).
+    ClearChannelWatch,
+    /// `CMSG_DECLINE_CHANNEL_INVITE`: `DeclineInvite("channel")` (`0x4ffcc0`); AC reads nothing
+    /// from it.
     DeclineChannelInvite { name: String },
     /// The raid browser's search join and leave.
     NativeRaidBrowser(benilla_protocol::wrath_raid_browser::Command),
