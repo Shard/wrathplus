@@ -76,13 +76,13 @@ mod tests {
     use crate::net::ObjectStore;
 
     // The UNIT-block field indices the core reads (`benilla_protocol`'s `fields::FIELD_UNIT_*`).
-    const BASEATTACKTIME: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBaseattacktime);
-    const MINDAMAGE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMindamage);
-    const MAXDAMAGE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxdamage);
-    const STAT0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitStat0);
-    const RESISTANCES0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitResistances);
-    const ATTACK_POWER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAttackPower);
-    const ATTACK_POWER_MODS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAttackPowerMods);
+    const BASEATTACKTIME: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBaseattacktime);
+    const MINDAMAGE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMindamage);
+    const MAXDAMAGE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxdamage);
+    const STAT0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitStat0);
+    const RESISTANCES0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitResistances);
+    const ATTACK_POWER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitAttackPower);
+    const ATTACK_POWER_MODS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitAttackPowerMods);
 
     /// A boar's descriptor: the UNIT block alone, built as a create block, because a live pet
     /// arrives as one and a create reads an absent field as 0, not unknown.
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn an_unstreamed_pet_reads_the_absent_shape() {
         let s = unit_combat_stats(&ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[],
         )));
         assert_eq!(s.stats, [0; 5]);

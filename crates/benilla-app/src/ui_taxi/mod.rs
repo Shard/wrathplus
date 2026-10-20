@@ -309,7 +309,7 @@ impl Plugin for UiTaxiPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitFlags);
     use benilla_protocol::ObjectFields;
 
@@ -353,15 +353,13 @@ mod tests {
     }
 
     /// The map's fares take the flight master's discount and the express leg sends the raw route
-    /// sum (`0x4dc3d0` against `0x4dc96f`). Honored, a PvP-flagged flight master and honor rank
-    /// byte 6 make 0.15: Sentinel Hill's direct 110 shows 94, and Thelsamar's route through
-    /// Ironforge, 50 + 110, shows 136 and sends 160. With the flight master unresolved the fares
-    /// show 0 (`0x4dc423`).
+    /// sum (`0x4dc3d0` against `0x4dc96f`). Honored makes 0.10: Sentinel Hill's direct 110 shows
+    /// 99, and Thelsamar's route through Ironforge, 50 + 110, shows 144 and sends 160. With the
+    /// flight master unresolved the fares show 0 (`0x4dc423`).
     #[test]
     fn the_map_shows_discounted_fares_and_the_express_sends_the_raw_sum() {
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use bevy::ecs::system::RunSystemOnce;
 
         const MASTER: u64 = 0xF130_0000_0000_0099;
@@ -387,13 +385,12 @@ mod tests {
         app.world_mut().spawn((
             SelfPlayer,
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (
                         benilla_protocol::messages::Field::UnitBytes0,
                         crate::target::HUMAN_WARRIOR,
                     ),
-                    (benilla_protocol::messages::Field::PlayerBytes3, 6 << 24),
                 ],
             )),
         ));
@@ -403,7 +400,6 @@ mod tests {
                 crate::net::Guid(MASTER),
                 ObjectStore(ObjectFields::from_pairs(&[
                     (FIELD_UNIT_FACTIONTEMPLATE, template),
-                    (FIELD_UNIT_FLAGS, 0x1000),
                 ])),
             ))
             .id();
@@ -429,10 +425,10 @@ mod tests {
                 .unwrap()
         };
         app.world_mut().run_system_once(feed_taxi).unwrap();
-        assert_eq!(node(&mut app, "Sentinel Hill, Westfall").1, 94);
-        assert_eq!(node(&mut app, "Ironforge, Dun Morogh").1, 42);
+        assert_eq!(node(&mut app, "Sentinel Hill, Westfall").1, 99);
+        assert_eq!(node(&mut app, "Ironforge, Dun Morogh").1, 45);
         let (thelsamar, shown) = node(&mut app, "Thelsamar, Loch Modan");
-        assert_eq!(shown, 136);
+        assert_eq!(shown, 144);
 
         app.world_mut()
             .non_send_resource_mut::<UiScript>()

@@ -74,7 +74,7 @@ mod native_display {
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_NATIVEDISPLAYID`, between DISPLAYID (131) and MOUNTDISPLAYID (133).
-    const NATIVE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNativeDisplayId);
+    const NATIVE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNativeDisplayId);
 
     fn store(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(pairs))

@@ -247,32 +247,6 @@ fn a_client_targeted_spell_press_starts_no_pet_gcd() {
     assert!(rig.frame().is_empty());
 }
 
-/// `0x4bd24f`: a press on a running aura cancels it and returns before the arm.
-#[test]
-fn an_aura_cancel_press_starts_no_pet_gcd() {
-    let running = owned_pet_with(&[(AURA, COWER), (AURAFLAGS, 0x3)]);
-    let mut rig = rig(vec![(COWER, cower())], &[COWER], Some(running));
-
-    rig.press(1);
-
-    let sent = rig.sent();
-    assert_eq!(pet_actions(&sent), 0, "the cancel sends no pet action");
-    assert!(sent.iter().any(|c| matches!(
-        c,
-        ClientCommand::PetCancelAura {
-            spell_id: COWER,
-            ..
-        }
-    )));
-    assert!(rig.pet_list_untouched());
-    assert!(rig.frame().is_empty());
-
-    // The same spell with its aura down is an ordinary press, and starts the GCD.
-    let mut rig = self::rig(vec![(COWER, cower())], &[COWER], Some(owned_pet()));
-    rig.press(1);
-    assert_eq!(rig.pet_reads(COWER, &cower()).1, 1500);
-}
-
 /// What a press latched: the mode word, its signal count and the attack latch.
 pub(super) fn latched(rig: &Rig) -> (u32, u32, bool) {
     let bar = rig.app.world().resource::<PetBar>();
@@ -334,25 +308,6 @@ fn a_spell_press_with_no_player_object_sends_nothing() {
         .remove(&ME);
     // The bar greys as the player leaves, which is its own repaint.
     assert_eq!(rig.frame(), ["PET_BAR_UPDATE"]);
-    let before = latched(&rig);
-
-    rig.press(1);
-
-    assert_press_refused(&mut rig, before);
-}
-
-/// `0x4bd1f2`: the aura leg (`0x4bd240`) sits behind the predicate, so with the active player
-/// unresolved a running aura is not cancelled either.
-#[test]
-fn an_aura_cancel_press_with_no_player_object_sends_nothing() {
-    let running = owned_pet_with(&[(AURA, COWER), (AURAFLAGS, 0x3)]);
-    let mut rig = rig(vec![(COWER, cower())], &[COWER], Some(running));
-    rig.app
-        .world_mut()
-        .resource_mut::<GuidIndex>()
-        .0
-        .remove(&ME);
-    assert_eq!(rig.frame(), ["PET_BAR_UPDATE"], "the bar greys");
     let before = latched(&rig);
 
     rig.press(1);
@@ -429,7 +384,7 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
             Guid(FOE),
             Transform::default(),
             ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
             )),
         ))
@@ -453,7 +408,21 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
     // Attack raises no latch.
     let world = rig.app.world_mut();
     let pet = world
-        .spawn((Guid(PET), owned_pet_with(&[(22, 100), (28, 100)])))
+        .spawn((
+            Guid(PET),
+            owned_pet_with(&[
+                (
+                    benilla_protocol::messages::FieldLayout::Wrath12340
+                        .index_of(benilla_protocol::messages::Field::UnitHealth),
+                    100,
+                ),
+                (
+                    benilla_protocol::messages::FieldLayout::Wrath12340
+                        .index_of(benilla_protocol::messages::Field::UnitMaxHealth),
+                    100,
+                ),
+            ]),
+        ))
         .id();
     world.resource_mut::<GuidIndex>().0.insert(PET, pet);
 

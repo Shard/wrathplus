@@ -50,8 +50,9 @@ pub(super) fn apply_scoped_view(
         .single()
         .ok()
         .zip(catalog)
-        .and_then(|(store, catalog)| {
-            store.0.unit_auras().find_map(|slot| {
+        .and_then(|(_store, catalog)| {
+            // 12340 descriptors carry no aura slots; native auras arrive by packet.
+            std::iter::empty::<benilla_protocol::messages::UnitAuraSlot>().find_map(|slot| {
                 let rec = catalog.get(slot.spell_id)?;
                 (0..3).find_map(|i| {
                     // The reference reads the misc value from the aura name's own effect index.

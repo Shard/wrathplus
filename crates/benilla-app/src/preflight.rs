@@ -392,10 +392,10 @@ mod tests {
         ObjectFields::from_pairs(fields)
     }
 
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
-    const UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const PLAYER_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
 
     /// A `WOW_GM=off` run is not warned about GM mode while its `.gm off` is in flight.
     #[test]

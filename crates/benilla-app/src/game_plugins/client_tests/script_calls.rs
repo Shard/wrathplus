@@ -30,11 +30,11 @@ const HEAL: u32 = 2050;
 const MOB: u64 = 0x31;
 
 /// `UNIT_FIELD_FACTIONTEMPLATE`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FLAGS`.
-const TEMPLATE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+const TEMPLATE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
 
-const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
+const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
 
-const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
 
 /// The fixture's templates: ours (group 1, friendly toward group 2, enemy of group 4), a
 /// friendly NPC's (group 2) and a hostile mob's (group 4).
@@ -63,7 +63,7 @@ fn frame(selected: bool) -> Frame {
             Transform::from_xyz(x, 0.0, 0.0),
             GlobalTransform::from_translation(Vec3::new(x, 0.0, 0.0)),
             ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
             )),
         )
@@ -74,7 +74,7 @@ fn frame(selected: bool) -> Frame {
     world
         .entity_mut(me)
         .insert(ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[
                 (Field::ObjectType, 0x19),
                 (Field::UnitHealth, 100),

@@ -700,13 +700,13 @@ mod tests {
     // ── The out-of-range record ──────────────────────────────────────────────
 
     /// Unit descriptor field indices, build 5875.
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
     /// `UNIT_FIELD_POWER2`/`MAXPOWER2`, the rage slot (`POWER1 + POWER_RAGE`).
-    const POWER2: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPower) + 1;
-    const MAXPOWER2: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxPower) + 1;
-    const LEVEL: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
-    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+    const POWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower) + 1;
+    const MAXPOWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower) + 1;
+    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
+    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
 
     fn asked(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u64> {
         rx.try_iter()
@@ -809,13 +809,11 @@ mod tests {
         assert_eq!(asked(&rx), vec![guid], "and the server is asked, once");
     }
 
-    /// `0x5f098d`-`0x5f09f2`: a slot is copied when its id is set and its `AURAFLAGS` nibble has an
-    /// effect bit; the pet block comes off the pet's own object (`0x5f0a1f`-`0x5f0b72`).
+    /// The pet block comes off the pet's own object (`0x5f0a1f`-`0x5f0b72`); 12340 descriptors
+    /// carry no aura slots, so both aura blocks are empty.
     #[test]
     fn a_members_despawn_snapshots_their_auras_and_their_pets() {
-        const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
-        const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
-        const SUMMON: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummon);
+        const SUMMON: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummon);
         let (tx, _rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let guid = 0x1234;
@@ -823,21 +821,14 @@ mod tests {
         let mut group = grouped(&[member(guid, "Brisca")]);
 
         let store = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
-            (AURA, 1126),     // slot 0, live (nibble 0x8)
-            (AURA + 1, 6673), // slot 1, a stale id: its nibble has no effect bit
-            (AURA + 33, 589), // slot 33, live
-            (AURAFLAGS, 0x0000_0018),
-            (AURAFLAGS + 4, 0x0000_0020),
             (SUMMON, pet_guid as u32),
             (SUMMON + 1, (pet_guid >> 32) as u32),
         ]));
         // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
-        const PETNUMBER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnumber);
+        const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
         let pet = ObjectStore(benilla_protocol::messages::ObjectFields::from_pairs(&[
             (HEALTH, 900),
             (PETNUMBER, 4),
-            (AURA + 40, 770),
-            (AURAFLAGS + 5, 0x0000_0002),
         ]));
         let held = |g: u64| (g == pet_guid).then_some(&pet);
         let mut names = NameCache::default();
@@ -845,12 +836,8 @@ mod tests {
         member_deactivated(guid, &mut group, Some(&store), held, &names, &net);
 
         let rec = group.stats.get(&guid).expect("the member has a record");
-        assert_eq!(
-            rec.auras,
-            Some(vec![(0, 1126)]),
-            "the stale slot 1 is dropped"
-        );
-        assert_eq!(rec.auras_negative, Some(vec![(33, 589)]));
+        assert_eq!(rec.auras, Some(vec![]));
+        assert_eq!(rec.auras_negative, Some(vec![]));
         assert_eq!(rec.pet_guid, Some(pet_guid));
         assert_eq!(
             rec.pet_name.as_deref(),
@@ -859,14 +846,14 @@ mod tests {
         );
         assert_eq!(rec.pet_cur_hp, Some(900));
         assert_eq!(rec.pet_auras, Some(vec![]));
-        assert_eq!(rec.pet_auras_negative, Some(vec![(40, 770)]));
+        assert_eq!(rec.pet_auras_negative, Some(vec![]));
 
         // The pet not held: its block is emptied, not left as it was.
         member_deactivated(guid, &mut group, Some(&store), |_| None, &names, &net);
         let rec = group.stats.get(&guid).unwrap();
         assert_eq!((rec.pet_guid, rec.pet_auras_negative.clone()), (None, None));
         assert_eq!(rec.pet_name, None, "and its name with it (`0x5f0a0f`)");
-        assert_eq!(rec.auras, Some(vec![(0, 1126)]));
+        assert_eq!(rec.auras, Some(vec![]));
     }
 
     #[test]

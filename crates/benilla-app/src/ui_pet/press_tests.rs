@@ -11,18 +11,14 @@ pub(crate) const ME: u64 = 0x10;
 pub(crate) const PET: u64 = 0x2A;
 /// `UNIT_FIELD_CHARMEDBY`, `UNIT_FIELD_SUMMONEDBY` and `UNIT_FIELD_CREATEDBY`, low words; the high
 /// words stay 0.
-pub(crate) const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-pub(crate) const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
-pub(crate) const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
-pub(crate) const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-/// `UNIT_FIELD_AURA` slot 0 and `UNIT_FIELD_AURAFLAGS`, a nibble per slot.
-pub(crate) const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
-pub(crate) const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
+pub(crate) const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
+pub(crate) const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
+pub(crate) const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+pub(crate) const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
 
 pub(crate) const CLAW: u32 = 16829;
 pub(crate) const BITE: u32 = 17258;
 pub(crate) const GROWL: u32 = 14918;
-pub(crate) const COWER: u32 = 1742;
 
 /// Claw's shape: no timer of its own, and the ordinary pet GCD, category 133 for 1500 ms.
 pub(crate) fn claw() -> SpellDisplay {
@@ -51,15 +47,6 @@ pub(crate) fn growl() -> SpellDisplay {
         category: 82,
         category_recovery_ms: 5_000,
         ..Default::default()
-    }
-}
-
-/// Cower's shape here: a toggle with an active icon, so a press with its aura up cancels it.
-pub(crate) fn cower() -> SpellDisplay {
-    SpellDisplay {
-        name: "Cower".into(),
-        active_icon_id: 122,
-        ..claw()
     }
 }
 

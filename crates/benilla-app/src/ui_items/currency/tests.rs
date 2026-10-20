@@ -25,7 +25,7 @@ fn native_mask_requires_both_words_and_keeps_high_bits() {
     );
     assert_eq!(known_currencies(&complete), Some((1 << 63) | 1));
     assert_eq!(
-        known_currencies(&fields(FieldLayout::Vanilla5875, &[])),
+        known_currencies(&fields(FieldLayout::Wrath12340, &[])),
         None
     );
 }

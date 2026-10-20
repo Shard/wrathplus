@@ -1235,19 +1235,6 @@ single!(
      carries an EMPTY body, so the line has no arguments at all."
 );
 single!(
-    PET_LOYALTY_GAIN,
-    "PET_LOYALTY_GAIN",
-    [],
-    "`\"Your pet's loyalty has increased.\"` (:3043). The reference emits it as `(\"%s\", GetText(key))`; \
-     a no-slot family is the same sentence by a shorter road."
-);
-single!(
-    PET_LOYALTY_LOSS,
-    "PET_LOYALTY_LOSS",
-    [],
-    "`\"Your pet's loyalty has decreased.\"` (:3044)"
-);
-single!(
     FACTION_STANDING_INCREASED,
     "FACTION_STANDING_INCREASED",
     [Named, Amount],
@@ -1395,8 +1382,6 @@ pub(crate) const ALL_FAMILIES: &[Family] = &[
     SPELLFAILCAST,
     SPELLFAILPERFORM,
     DURABILITYDAMAGE_DEATH,
-    PET_LOYALTY_GAIN,
-    PET_LOYALTY_LOSS,
     FACTION_STANDING_INCREASED,
     FACTION_STANDING_DECREASED,
     VSENV_FATIGUE,

@@ -212,11 +212,11 @@ pub(crate) mod tests {
     const EXTRA: u64 = 0xF130_0000_4B00_0001;
 
     /// `OBJECT_FIELD_TYPE`, `UNIT_FIELD_TARGET`, `_HEALTH`, `_MAXHEALTH` and `_LEVEL`.
-    const OBJECT_TYPE: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectType);
-    const TARGET: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitTarget);
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
-    const LEVEL: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
+    const OBJECT_TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
+    const TARGET: u16 = FieldLayout::Wrath12340.index_of(Field::UnitTarget);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
 
     fn unit(kind: u32, target: u64, health: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[

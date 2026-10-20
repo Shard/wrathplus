@@ -18,6 +18,43 @@ pub(crate) struct PacketAuras {
     pub by_guid: HashMap<u64, Vec<StampedAura>>,
 }
 
+/// Replace `guid`'s snapshot with helpful `(slot, spell)` auras, as `SMSG_AURA_UPDATE_ALL` does.
+#[cfg(test)]
+pub(crate) fn set_for_test(world: &mut World, guid: u64, auras: &[(u8, u32)]) {
+    let helpful: Vec<_> = auras
+        .iter()
+        .map(|&(slot, spell)| (slot, spell, true))
+        .collect();
+    set_signed_for_test(world, guid, &helpful);
+}
+
+/// [`set_for_test`] with each aura's polarity: `AFLAG_POSITIVE` (`0x10`) or `AFLAG_NEGATIVE`
+/// (`0x80`).
+#[cfg(test)]
+pub(crate) fn set_signed_for_test(world: &mut World, guid: u64, auras: &[(u8, u32, bool)]) {
+    let snapshot = auras
+        .iter()
+        .map(|&(slot, spell_id, helpful)| StampedAura {
+            aura: NativeAura {
+                slot,
+                spell_id,
+                flags: if helpful { 0x10 } else { 0x80 },
+                level: 80,
+                stacks: 1,
+                caster_guid: None,
+                max_duration_ms: None,
+                remaining_ms: None,
+            },
+            received_at: 0.0,
+        })
+        .collect();
+    world.init_resource::<PacketAuras>();
+    world
+        .resource_mut::<PacketAuras>()
+        .by_guid
+        .insert(guid, snapshot);
+}
+
 pub(super) fn register(app: &mut App) {
     use SessionEventKind as K;
     app.init_resource::<PacketAuras>()

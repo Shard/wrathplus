@@ -208,9 +208,9 @@ mod tests {
     use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
 
     /// Descriptor indices, spelled here so a fixture reads like the field it sets.
-    const UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const MOUNT_DISPLAY_ID: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMountDisplayId);
-    const BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
+    const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const MOUNT_DISPLAY_ID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+    const BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
 
     const FIVE_MIN: Duration = Duration::from_millis(300_000);
     const THIRTY_MIN: Duration = Duration::from_millis(1_800_000);

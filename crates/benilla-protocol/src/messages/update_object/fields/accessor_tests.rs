@@ -5,25 +5,24 @@ use super::*;
 fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
     macro_rules! check {
         ($name:literal, $field:expr, $read:expr, $expected:expr) => {
-            for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-                let span = layout.resolve($field);
-                let pairs: Vec<_> = (0..layout.descriptor_len(ObjectType::Player))
-                    .map(|index| (index, 0x3f00_0000 + u32::from(index) * 257))
-                    .collect();
-                let fields = ObjectFields::from_native_pairs(layout, &pairs);
-                let raw = span.map(|s| 0x3f00_0000 + u32::from(s.index) * 257);
-                let guid = span.filter(|s| s.width >= 2).map(|s| {
-                    u64::from(0x3f00_0000 + u32::from(s.index) * 257)
-                        | (u64::from(0x3f00_0000 + u32::from(s.index + 1) * 257) << 32)
-                });
-                assert_eq!(
-                    $read(&fields),
-                    $expected(raw, guid),
-                    "{} {:?}",
-                    $name,
-                    layout
-                );
-            }
+            let layout = FieldLayout::Wrath12340;
+            let span = layout.resolve($field);
+            let pairs: Vec<_> = (0..layout.descriptor_len(ObjectType::Player))
+                .map(|index| (index, 0x3f00_0000 + u32::from(index) * 257))
+                .collect();
+            let fields = ObjectFields::from_native_pairs(layout, &pairs);
+            let raw = span.map(|s| 0x3f00_0000 + u32::from(s.index) * 257);
+            let guid = span.filter(|s| s.width >= 2).map(|s| {
+                u64::from(0x3f00_0000 + u32::from(s.index) * 257)
+                    | (u64::from(0x3f00_0000 + u32::from(s.index + 1) * 257) << 32)
+            });
+            assert_eq!(
+                $read(&fields),
+                $expected(raw, guid),
+                "{} {:?}",
+                $name,
+                layout
+            );
         };
     }
     check!(
@@ -60,15 +59,6 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
         |raw: Option<u32>, guid: Option<u64>| {
             let _ = (raw, guid);
             guid.filter(|&g| g != 0)
-        }
-    );
-    check!(
-        "item_text_id",
-        Field::ItemItemTextId,
-        |fields: &ObjectFields| fields.item_text_id(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw
         }
     );
     check!(
@@ -342,15 +332,6 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
         }
     );
     check!(
-        "player_combo_target",
-        Field::PlayerComboTarget,
-        |fields: &ObjectFields| fields.player_combo_target(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            guid.unwrap_or(0)
-        }
-    );
-    check!(
         "player_action_bar_toggles",
         Field::PlayerFieldBytes,
         |fields: &ObjectFields| fields.player_action_bar_toggles(),
@@ -369,81 +350,9 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
         }
     );
     check!(
-        "player_session_kills",
-        Field::PlayerSessionKills,
-        |fields: &ObjectFields| fields.player_session_kills(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw.map(|v| (v as u16, (v >> 16) as u16))
-        }
-    );
-    check!(
-        "player_yesterday_kills",
-        Field::PlayerYesterdayKills,
-        |fields: &ObjectFields| fields.player_yesterday_kills(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw.map(|v| (v as u16, (v >> 16) as u16))
-        }
-    );
-    check!(
-        "player_last_week_kills",
-        Field::PlayerLastWeekKills,
-        |fields: &ObjectFields| fields.player_last_week_kills(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw.map(|v| (v as u16, (v >> 16) as u16))
-        }
-    );
-    check!(
-        "player_this_week_kills",
-        Field::PlayerThisWeekKills,
-        |fields: &ObjectFields| fields.player_this_week_kills(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw.map(|v| (v as u16, (v >> 16) as u16))
-        }
-    );
-    check!(
-        "player_this_week_contribution",
-        Field::PlayerThisWeekContribution,
-        |fields: &ObjectFields| fields.player_this_week_contribution(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw
-        }
-    );
-    check!(
         "player_yesterday_contribution",
         Field::PlayerYesterdayContribution,
         |fields: &ObjectFields| fields.player_yesterday_contribution(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw
-        }
-    );
-    check!(
-        "player_last_week_contribution",
-        Field::PlayerLastWeekContribution,
-        |fields: &ObjectFields| fields.player_last_week_contribution(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw
-        }
-    );
-    check!(
-        "player_last_week_rank",
-        Field::PlayerLastWeekRank,
-        |fields: &ObjectFields| fields.player_last_week_rank(),
-        |raw: Option<u32>, guid: Option<u64>| {
-            let _ = (raw, guid);
-            raw
-        }
-    );
-    check!(
-        "player_lifetime_dishonorable_kills",
-        Field::PlayerLifetimeDishonorbaleKills,
-        |fields: &ObjectFields| fields.player_lifetime_dishonorable_kills(),
         |raw: Option<u32>, guid: Option<u64>| {
             let _ = (raw, guid);
             raw
@@ -977,547 +886,369 @@ fn fixture(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
 
 #[test]
 fn dialect_packed_bytes_never_borrow_neighbor_meanings() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let fields = fixture(
-            layout,
-            &[
-                (Field::UnitBytes0, 0, 0x0403_0201),
-                (
-                    Field::UnitBytes1,
-                    0,
-                    if wrath { 0xa107_9908 } else { 0x0711_0608 },
-                ),
-                (Field::UnitBytes2, 0, 0x1200_0002),
-                (Field::PlayerBytes, 0, 0x1817_1615),
-                (Field::PlayerBytes2, 0, 0x0207_0019),
-                (Field::PlayerBytes3, 0, 0x1c1b_1a03),
-                (Field::PlayerFieldBytes, 0, 0x1e1d_050a),
-                (Field::PlayerFieldBytes2, 0, 0x40),
-                (Field::PlayerFlags, 0, 0xc31),
-            ],
-        );
-        assert_eq!(fields.unit_race(), Some(1));
-        assert_eq!(fields.unit_class(), Some(2));
-        assert_eq!(fields.unit_gender(), Some(3));
-        assert_eq!(fields.unit_power_type(), 4);
-        assert_eq!(fields.unit_stand_state(), 8);
-        assert_eq!(fields.unit_loyalty_level(), if wrath { 0 } else { 6 });
-        assert_eq!(fields.unit_shapeshift_form(), if wrath { 18 } else { 17 });
-        assert!(fields.unit_is_stealthed());
-        assert!(fields.unit_is_untrackable());
-        assert_eq!(fields.unit_is_ghost_visual(), !wrath);
-        assert_eq!(fields.unit_sheath_state(), Some(2));
-        assert_eq!(fields.player_skin(), Some(21));
-        assert_eq!(fields.player_face(), Some(22));
-        assert_eq!(fields.player_hair_style(), Some(23));
-        assert_eq!(fields.player_hair_color(), Some(24));
-        assert_eq!(fields.player_facial_hair(), Some(25));
-        assert_eq!(fields.player_bank_bag_slots_purchased(), Some(7));
-        assert_eq!(fields.player_rest_state(), Some(2));
-        assert_eq!(fields.player_drunk_byte(), Some(26));
-        assert_eq!(fields.player_pvp_rank(), Some(if wrath { 27 } else { 28 }));
-        assert_eq!(
-            fields.player_pvp_medal(),
-            if wrath { None } else { Some(27) }
-        );
-        assert_eq!(
-            fields.player_combo_points(),
-            if wrath { None } else { Some(5) }
-        );
-        assert_eq!(fields.player_action_bar_toggles(), Some(29));
-        assert_eq!(fields.player_honor_rank(), Some(30));
-        assert_eq!(
-            fields.player_honor_rank_bar(),
-            if wrath { None } else { Some(64) }
-        );
-        assert!(fields.player_release_timer_running());
-        assert!(fields.player_track_stealthed());
-        assert!(fields.player_is_group_leader());
-        assert!(fields.player_is_ghost());
-        assert!(fields.player_is_resting());
-        assert!(fields.player_hides_helm());
-        assert!(fields.player_hides_cloak());
-        assert!(fields.is_dead_or_ghost());
-    }
+    let layout = FieldLayout::Wrath12340;
+    let fields = fixture(
+        layout,
+        &[
+            (Field::UnitBytes0, 0, 0x0403_0201),
+            (Field::UnitBytes1, 0, 0xa107_9908),
+            (Field::UnitBytes2, 0, 0x1200_0002),
+            (Field::PlayerBytes, 0, 0x1817_1615),
+            (Field::PlayerBytes2, 0, 0x0207_0019),
+            (Field::PlayerBytes3, 0, 0x1c1b_1a03),
+            (Field::PlayerFieldBytes, 0, 0x1e1d_050a),
+            (Field::PlayerFieldBytes2, 0, 0x40),
+            (Field::PlayerFlags, 0, 0xc31),
+        ],
+    );
+    assert_eq!(fields.unit_race(), Some(1));
+    assert_eq!(fields.unit_class(), Some(2));
+    assert_eq!(fields.unit_gender(), Some(3));
+    assert_eq!(fields.unit_power_type(), 4);
+    assert_eq!(fields.unit_stand_state(), 8);
+    assert_eq!(fields.unit_shapeshift_form(), 18);
+    assert!(fields.unit_is_stealthed());
+    assert!(fields.unit_is_untrackable());
+    assert_eq!(fields.unit_sheath_state(), Some(2));
+    assert_eq!(fields.player_skin(), Some(21));
+    assert_eq!(fields.player_face(), Some(22));
+    assert_eq!(fields.player_hair_style(), Some(23));
+    assert_eq!(fields.player_hair_color(), Some(24));
+    assert_eq!(fields.player_facial_hair(), Some(25));
+    assert_eq!(fields.player_bank_bag_slots_purchased(), Some(7));
+    assert_eq!(fields.player_rest_state(), Some(2));
+    assert_eq!(fields.player_drunk_byte(), Some(26));
+    assert_eq!(fields.player_pvp_rank(), Some(27));
+    assert_eq!(fields.player_action_bar_toggles(), Some(29));
+    assert_eq!(fields.player_honor_rank(), Some(30));
+    assert!(fields.player_release_timer_running());
+    assert!(fields.player_track_stealthed());
+    assert!(fields.player_is_group_leader());
+    assert!(fields.player_is_ghost());
+    assert!(fields.player_is_resting());
+    assert!(fields.player_hides_helm());
+    assert!(fields.player_hides_cloak());
+    assert!(fields.is_dead_or_ghost());
 }
 
 #[test]
 fn native_go_and_dynamicobject_fields_do_not_alias_movement_or_parent_rotation() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let fields = fixture(
-            layout,
-            &[
-                (Field::GameobjectState, 0, 2),
-                (Field::GameobjectBytes1, 0, 0xabcd_0b02),
-                (Field::GameobjectTypeId, 0, 11),
-                (Field::GameobjectDynFlags, 0, 0x35),
-                (Field::GameobjectDynamic, 0, 0xbeef_0035),
-                (Field::GameobjectParentrotation, 0, 8f32.to_bits()),
-                (Field::GameobjectRotation, 0, 1f32.to_bits()),
-                (Field::GameobjectRotation, 1, 2f32.to_bits()),
-                (Field::GameobjectRotation, 2, 3f32.to_bits()),
-                (Field::GameobjectRotation, 3, 4f32.to_bits()),
-                (Field::GameobjectPosX, 0, 5f32.to_bits()),
-                (Field::GameobjectPosY, 0, 6f32.to_bits()),
-                (Field::GameobjectPosZ, 0, 7f32.to_bits()),
-                (Field::GameobjectFacing, 0, 9f32.to_bits()),
-            ],
-        );
-        assert_eq!(fields.gameobject_state(), Some(2));
-        assert_eq!(fields.gameobject_type_id(), 11);
-        assert_eq!(fields.gameobject_dynamic_flags(), 0x35);
-        assert_eq!(
-            fields.gameobject_rotation(),
-            if wrath { None } else { Some([1., 2., 3., 4.]) }
-        );
-        assert_eq!(fields.gameobject_pos_sent(), !wrath);
-        let position = fields
-            .gameobject_position()
-            .map(|(p, o)| ([p.x, p.y, p.z], o));
-        assert_eq!(
-            position,
-            if wrath {
-                None
-            } else {
-                Some(([5., 6., 7.], 9.))
-            }
-        );
-        let dynamic = fixture(
-            layout,
-            &[
-                (Field::DynamicobjectPosX, 0, 10f32.to_bits()),
-                (Field::DynamicobjectPosY, 0, 11f32.to_bits()),
-                (Field::DynamicobjectPosZ, 0, 12f32.to_bits()),
-                (Field::DynamicobjectFacing, 0, 13f32.to_bits()),
-                (Field::DynamicobjectCasttime, 0, 99),
-            ],
-        );
-        assert_eq!(
-            dynamic.dynamicobject_position(),
-            if wrath {
-                None
-            } else {
-                Some(([10., 11., 12.], 13.))
-            }
-        );
-        let created =
-            ObjectFields::from_native_pairs(layout, &[]).into_created(ObjectType::GameObject);
-        assert_eq!(created.gameobject_state(), Some(0));
-        assert_eq!(created.gameobject_rotation(), None);
-        assert_eq!(
-            ObjectFields::from_native_pairs(layout, &[]).gameobject_state(),
-            None
-        );
-    }
+    let layout = FieldLayout::Wrath12340;
+    let fields = fixture(
+        layout,
+        &[
+            (Field::GameobjectBytes1, 0, 0xabcd_0b02),
+            (Field::GameobjectDynamic, 0, 0xbeef_0035),
+            (Field::GameobjectParentrotation, 0, 8f32.to_bits()),
+        ],
+    );
+    assert_eq!(fields.gameobject_state(), Some(2));
+    assert_eq!(fields.gameobject_type_id(), 11);
+    assert_eq!(fields.gameobject_dynamic_flags(), 0x35);
+    let created = ObjectFields::from_native_pairs(layout, &[]).into_created(ObjectType::GameObject);
+    assert_eq!(created.gameobject_state(), Some(0));
+    assert_eq!(
+        ObjectFields::from_native_pairs(layout, &[]).gameobject_state(),
+        None
+    );
 }
 
 #[test]
 fn native_array_accessors_obey_spans_and_distinct_elements() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let roots = [
-            Field::PlayerInvSlotHead,
-            Field::PlayerPackSlot1,
-            Field::PlayerBankSlot1,
-            Field::PlayerBankbagSlot1,
-            Field::PlayerKeyringSlot1,
-            Field::PlayerVendorbuybackSlot1,
-            Field::ContainerSlot1,
-        ];
-        let readers: [fn(&ObjectFields, u8) -> Option<u64>; 7] = [
-            ObjectFields::player_inv_slot,
-            ObjectFields::player_pack_slot,
-            ObjectFields::player_bank_slot,
-            ObjectFields::player_bank_bag_slot,
-            ObjectFields::player_keyring_slot,
-            ObjectFields::player_buyback_slot,
-            ObjectFields::container_slot,
-        ];
-        for (root, read) in roots.into_iter().zip(readers) {
-            let span = layout.resolve(root).unwrap();
-            let pairs: Vec<_> = (0..span.width)
-                .map(|i| (span.index + i, 700 + u32::from(i)))
-                .collect();
-            let fields = ObjectFields::from_native_pairs(layout, &pairs);
-            for i in 0..span.width / 2 {
-                assert_eq!(
-                    read(&fields, i as u8),
-                    Some(
-                        u64::from(700 + 2 * u32::from(i))
-                            | (u64::from(701 + 2 * u32::from(i)) << 32)
-                    )
-                );
-            }
-            assert_eq!(read(&fields, (span.width / 2) as u8), None);
+    let layout = FieldLayout::Wrath12340;
+    let roots = [
+        Field::PlayerInvSlotHead,
+        Field::PlayerPackSlot1,
+        Field::PlayerBankSlot1,
+        Field::PlayerBankbagSlot1,
+        Field::PlayerKeyringSlot1,
+        Field::PlayerVendorbuybackSlot1,
+        Field::ContainerSlot1,
+    ];
+    let readers: [fn(&ObjectFields, u8) -> Option<u64>; 7] = [
+        ObjectFields::player_inv_slot,
+        ObjectFields::player_pack_slot,
+        ObjectFields::player_bank_slot,
+        ObjectFields::player_bank_bag_slot,
+        ObjectFields::player_keyring_slot,
+        ObjectFields::player_buyback_slot,
+        ObjectFields::container_slot,
+    ];
+    for (root, read) in roots.into_iter().zip(readers) {
+        let span = layout.resolve(root).unwrap();
+        let pairs: Vec<_> = (0..span.width)
+            .map(|i| (span.index + i, 700 + u32::from(i)))
+            .collect();
+        let fields = ObjectFields::from_native_pairs(layout, &pairs);
+        for i in 0..span.width / 2 {
+            assert_eq!(
+                read(&fields, i as u8),
+                Some(u64::from(700 + 2 * u32::from(i)) | (u64::from(701 + 2 * u32::from(i)) << 32))
+            );
         }
-        let fields = fixture(
-            layout,
-            &[
-                (Field::PlayerVisibleItems, if wrath { 36 } else { 218 }, 765),
-                (
-                    Field::PlayerVisibleItems,
-                    if wrath { 37 } else { 219 },
-                    if wrath { 0x0016_0015 } else { 21 },
-                ),
-                (Field::PlayerVisibleItems, 220, 22),
-                (Field::PlayerVisibleItems, 226, 23),
-                (Field::ItemEnchantment, 0, 31),
-                (Field::ItemEnchantment, 2, 32),
-                (Field::ItemSpellCharges, 4, (-33i32) as u32),
-                (Field::PlayerSkillInfo11, 381, 0x0004_0029),
-                (Field::PlayerSkillInfo11, 382, 0x0064_0032),
-                (Field::PlayerSkillInfo11, 383, 0xfffd_fffe),
-                (Field::PlayerBuybackPrice1, 11, 34),
-                (Field::PlayerBuybackTimestamp1, 11, 35),
-                (Field::PlayerExploredZones1, 63, 36),
-            ],
-        );
-        assert_eq!(fields.player_visible_item_entry(18), Some(765));
-        assert_eq!(fields.player_visible_item_entry(19), None);
-        assert_eq!(fields.player_visible_item_enchant(18, 0), Some(21));
-        assert_eq!(fields.player_visible_item_enchant(18, 1), Some(22));
-        assert_eq!(
-            fields.player_visible_item_properties(18),
-            if wrath { 0 } else { 23 }
-        );
-        assert_eq!(fields.item_enchant(0), Some(31));
-        assert_eq!(fields.item_enchant_charges(0), 32);
-        assert_eq!(fields.item_enchant(255), None);
-        assert_eq!(fields.item_spell_charges(4), Some(-33));
-        assert_eq!(fields.item_spell_charges(5), None);
-        let skill = fields.player_skill(127).unwrap();
-        assert_eq!(
-            (
-                skill.skill_id,
-                skill.step,
-                skill.value,
-                skill.max,
-                skill.temp_bonus,
-                skill.perm_bonus
-            ),
-            (41, 4, 50, 100, -2, -3)
-        );
-        assert_eq!(fields.player_skill(128), None);
-        assert_eq!(fields.player_buyback_price(11), Some(34));
-        assert_eq!(fields.player_buyback_timestamp(11), Some(35));
-        assert_eq!(fields.player_buyback_price(12), None);
-        assert_eq!(fields.player_buyback_timestamp(12), None);
-        assert_eq!(fields.player_explored_zone_slot(63), 36);
-        assert_eq!(fields.player_explored_zone_slot(u16::MAX), 0);
+        assert_eq!(read(&fields, (span.width / 2) as u8), None);
     }
+    let fields = fixture(
+        layout,
+        &[
+            (Field::PlayerVisibleItems, 36, 765),
+            (Field::PlayerVisibleItems, 37, 0x0016_0015),
+            (Field::PlayerVisibleItems, 220, 22),
+            (Field::PlayerVisibleItems, 226, 23),
+            (Field::ItemEnchantment, 0, 31),
+            (Field::ItemEnchantment, 2, 32),
+            (Field::ItemSpellCharges, 4, (-33i32) as u32),
+            (Field::PlayerSkillInfo11, 381, 0x0004_0029),
+            (Field::PlayerSkillInfo11, 382, 0x0064_0032),
+            (Field::PlayerSkillInfo11, 383, 0xfffd_fffe),
+            (Field::PlayerBuybackPrice1, 11, 34),
+            (Field::PlayerBuybackTimestamp1, 11, 35),
+            (Field::PlayerExploredZones1, 63, 36),
+        ],
+    );
+    assert_eq!(fields.player_visible_item_entry(18), Some(765));
+    assert_eq!(fields.player_visible_item_entry(19), None);
+    assert_eq!(fields.player_visible_item_enchant(18, 0), Some(21));
+    assert_eq!(fields.player_visible_item_enchant(18, 1), Some(22));
+    assert_eq!(fields.item_enchant(0), Some(31));
+    assert_eq!(fields.item_enchant_charges(0), 32);
+    assert_eq!(fields.item_enchant(255), None);
+    assert_eq!(fields.item_spell_charges(4), Some(-33));
+    assert_eq!(fields.item_spell_charges(5), None);
+    let skill = fields.player_skill(127).unwrap();
+    assert_eq!(
+        (
+            skill.skill_id,
+            skill.step,
+            skill.value,
+            skill.max,
+            skill.temp_bonus,
+            skill.perm_bonus
+        ),
+        (41, 4, 50, 100, -2, -3)
+    );
+    assert_eq!(fields.player_skill(128), None);
+    assert_eq!(fields.player_buyback_price(11), Some(34));
+    assert_eq!(fields.player_buyback_timestamp(11), Some(35));
+    assert_eq!(fields.player_buyback_price(12), None);
+    assert_eq!(fields.player_buyback_timestamp(12), None);
+    assert_eq!(fields.player_explored_zone_slot(63), 36);
+    assert_eq!(fields.player_explored_zone_slot(u16::MAX), 0);
 }
 
 #[test]
 fn unit_composites_and_legacy_only_values_keep_native_semantics() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let fields = fixture(
-            layout,
-            &[
-                (Field::UnitCharm, 0, 41),
-                (Field::UnitSummon, 0, 42),
-                (Field::UnitSummonedby, 0, 43),
-                (Field::UnitCreatedby, 0, 44),
-                (Field::UnitPetnumber, 0, 45),
-                (Field::UnitPetexperience, 0, 46),
-                (Field::UnitPetnextlevelexp, 0, 47),
-                (Field::UnitTrainingPoints, 0, 0x0031_0030),
-                (Field::UnitDynamicFlags, 0, 0x2d),
-                (Field::UnitHealth, 0, 0),
-                (Field::UnitMaxHealth, 0, 999),
-                (Field::UnitAura, 0, 51),
-                (Field::UnitAuraFlags, 0, 0x2),
-                (Field::UnitAuraLevels, 0, 52),
-                (Field::UnitAuraApplications, 0, 2),
-                (Field::UnitVirtualItemSlotDisplay, 2, 53),
-                (Field::UnitVirtualItemInfo, 4, 0x0403_0201),
-                (Field::UnitVirtualItemInfo, 5, 5),
-                (Field::UnitVirtualItemSlotId, 2, 999),
-                (Field::UnitAttackPowerMods, 0, 0xfffe_0036),
-                (Field::UnitRangedAttackPowerMods, 0, 0xfffc_0037),
-            ],
-        );
-        assert_eq!(fields.unit_pet_guid(), Some(41));
-        assert_eq!(fields.unit_owner(OwnerFallback::CreatedBy), Some(44));
-        assert_eq!(fields.unit_owner(OwnerFallback::SummonedBy), Some(43));
-        assert!(fields.unit_is_pet_or_charm());
-        assert_eq!(fields.unit_pet_experience(), (46, 47));
-        assert_eq!(
-            fields.unit_training_points(),
-            if wrath { (0, 0) } else { (49, 48) }
-        );
-        assert!(fields.unit_is_dead());
-        assert!(fields.unit_reads_dead());
-        assert!(fields.unit_dynflag_dead());
-        assert!(fields.unit_tapped());
-        assert!(fields.unit_tapped_by_player());
-        assert!(fields.unit_lootable());
-        assert_eq!(fields.unit_attack_power_mods(), (54, -2));
-        assert_eq!(fields.unit_ranged_attack_power_mods(), (55, -4));
-        assert_eq!(
-            fields.unit_virtual_item_display(2),
-            if wrath { None } else { Some(53) }
-        );
-        assert_eq!(
-            fields.unit_virtual_item_info(2),
-            if wrath { None } else { Some((1, 2, 3, 4)) }
-        );
-        assert_eq!(
-            fields.unit_virtual_item_sheath(2),
-            if wrath { None } else { Some(5) }
-        );
-        assert_eq!(fields.unit_virtual_item_display(3), None);
-        assert_eq!(fields.unit_virtual_item_info(3), None);
-        assert_eq!(fields.unit_virtual_item_sheath(3), None);
-        assert_eq!(fields.unit_auras().count(), if wrath { 0 } else { 1 });
-        assert_eq!(
-            fields.unit_aura_ids().next(),
-            if wrath { None } else { Some(51) }
-        );
-        let aura = fields.unit_aura(0);
-        assert_eq!(
-            aura.map(|a| (a.spell_id, a.flags, a.level, a.stacks)),
-            if wrath { None } else { Some((51, 2, 52, 3)) }
-        );
-        assert_eq!(fields.unit_aura(48), None);
-    }
+    let layout = FieldLayout::Wrath12340;
+    let fields = fixture(
+        layout,
+        &[
+            (Field::UnitCharm, 0, 41),
+            (Field::UnitSummon, 0, 42),
+            (Field::UnitSummonedby, 0, 43),
+            (Field::UnitCreatedby, 0, 44),
+            (Field::UnitPetnumber, 0, 45),
+            (Field::UnitPetexperience, 0, 46),
+            (Field::UnitPetnextlevelexp, 0, 47),
+            (Field::UnitDynamicFlags, 0, 0x2d),
+            (Field::UnitHealth, 0, 0),
+            (Field::UnitMaxHealth, 0, 999),
+            (Field::UnitVirtualItemSlotId, 2, 999),
+            (Field::UnitAttackPowerMods, 0, 0xfffe_0036),
+            (Field::UnitRangedAttackPowerMods, 0, 0xfffc_0037),
+        ],
+    );
+    assert_eq!(fields.unit_pet_guid(), Some(41));
+    assert_eq!(fields.unit_owner(OwnerFallback::CreatedBy), Some(44));
+    assert_eq!(fields.unit_owner(OwnerFallback::SummonedBy), Some(43));
+    assert!(fields.unit_is_pet_or_charm());
+    assert_eq!(fields.unit_pet_experience(), (46, 47));
+    assert!(fields.unit_is_dead());
+    assert!(fields.unit_reads_dead());
+    assert!(fields.unit_dynflag_dead());
+    assert!(fields.unit_tapped());
+    assert!(fields.unit_tapped_by_player());
+    assert!(fields.unit_lootable());
+    assert_eq!(fields.unit_attack_power_mods(), (54, -2));
+    assert_eq!(fields.unit_ranged_attack_power_mods(), (55, -4));
 }
 
 #[test]
 fn moved_stats_resistances_and_native_honor_aliases_read_distinct_values() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let positives = if wrath {
-            [
-                Field::UnitPosstat0,
-                Field::UnitPosstat1,
-                Field::UnitPosstat2,
-                Field::UnitPosstat3,
-                Field::UnitPosstat4,
-            ]
-        } else {
-            [
-                Field::PlayerPosstat0,
-                Field::PlayerPosstat1,
-                Field::PlayerPosstat2,
-                Field::PlayerPosstat3,
-                Field::PlayerPosstat4,
-            ]
-        };
-        let negatives = if wrath {
-            [
-                Field::UnitNegstat0,
-                Field::UnitNegstat1,
-                Field::UnitNegstat2,
-                Field::UnitNegstat3,
-                Field::UnitNegstat4,
-            ]
-        } else {
-            [
-                Field::PlayerNegstat0,
-                Field::PlayerNegstat1,
-                Field::PlayerNegstat2,
-                Field::PlayerNegstat3,
-                Field::PlayerNegstat4,
-            ]
-        };
-        let stats = [
-            Field::UnitStat0,
-            Field::UnitStat1,
-            Field::UnitStat2,
-            Field::UnitStat3,
-            Field::UnitStat4,
-        ];
-        let mut values = Vec::new();
-        for i in 0..5 {
-            values.extend([
-                (positives[i], 0, 61 + i as u32),
-                (negatives[i], 0, (-71 - i as i32) as u32),
-                (stats[i], 0, 81 + i as u32),
-            ]);
-        }
-        let pos = if wrath {
-            Field::UnitResistancebuffmodspositive
-        } else {
-            Field::PlayerResistancebuffmodspositive
-        };
-        let neg = if wrath {
-            Field::UnitResistancebuffmodsnegative
-        } else {
-            Field::PlayerResistancebuffmodsnegative
-        };
-        for i in 0..7 {
-            values.extend([
-                (pos, i, 91 + u32::from(i)),
-                (neg, i, (-101 - i as i32) as u32),
-                (Field::UnitResistances, i, 111 + u32::from(i)),
-                (Field::PlayerModDamageDonePos, i, 121 + u32::from(i)),
-                (Field::PlayerModDamageDoneNeg, i, (-131 - i as i32) as u32),
-                (
-                    Field::PlayerModDamageDonePct,
-                    i,
-                    (1.5 + f32::from(i)).to_bits(),
-                ),
-            ]);
-        }
+    let layout = FieldLayout::Wrath12340;
+    let positives = [
+        Field::UnitPosstat0,
+        Field::UnitPosstat1,
+        Field::UnitPosstat2,
+        Field::UnitPosstat3,
+        Field::UnitPosstat4,
+    ];
+    let negatives = [
+        Field::UnitNegstat0,
+        Field::UnitNegstat1,
+        Field::UnitNegstat2,
+        Field::UnitNegstat3,
+        Field::UnitNegstat4,
+    ];
+    let stats = [
+        Field::UnitStat0,
+        Field::UnitStat1,
+        Field::UnitStat2,
+        Field::UnitStat3,
+        Field::UnitStat4,
+    ];
+    let mut values = Vec::new();
+    for i in 0..5 {
         values.extend([
-            (Field::PlayerLifetimeHonorbaleKills, 0, 141),
-            (Field::PlayerLifetimeHonorableKills, 0, 142),
+            (positives[i], 0, 61 + i as u32),
+            (negatives[i], 0, (-71 - i as i32) as u32),
+            (stats[i], 0, 81 + i as u32),
         ]);
-        let fields = fixture(layout, &values);
-        for i in 0..5 {
-            assert_eq!(fields.player_posstat(i), Some(61 + i as i32));
-            assert_eq!(fields.player_negstat(i), Some(-71 - i as i32));
-            assert_eq!(fields.unit_stat(i), Some(81 + u32::from(i)));
-        }
-        for i in 0..7 {
-            assert_eq!(fields.player_resistance_buff_pos(i), Some(91 + i as i32));
-            assert_eq!(fields.player_resistance_buff_neg(i), Some(-101 - i as i32));
-            assert_eq!(fields.unit_resistance(i), Some(111 + i as i32));
-            assert_eq!(fields.player_mod_damage_done_pos(i), Some(121 + i as i32));
-            assert_eq!(fields.player_mod_damage_done_neg(i), Some(-131 - i as i32));
-            assert_eq!(
-                fields.player_mod_damage_done_pct(i),
-                Some(1.5 + f32::from(i))
-            );
-        }
-        assert_eq!(fields.player_posstat(5), None);
-        assert_eq!(fields.player_negstat(5), None);
-        assert_eq!(fields.unit_stat(5), None);
-        assert_eq!(fields.player_resistance_buff_pos(7), None);
-        assert_eq!(fields.player_resistance_buff_neg(7), None);
-        assert_eq!(fields.unit_resistance(7), None);
+    }
+    let pos = Field::UnitResistancebuffmodspositive;
+    let neg = Field::UnitResistancebuffmodsnegative;
+    for i in 0..7 {
+        values.extend([
+            (pos, i, 91 + u32::from(i)),
+            (neg, i, (-101 - i as i32) as u32),
+            (Field::UnitResistances, i, 111 + u32::from(i)),
+            (Field::PlayerModDamageDonePos, i, 121 + u32::from(i)),
+            (Field::PlayerModDamageDoneNeg, i, (-131 - i as i32) as u32),
+            (
+                Field::PlayerModDamageDonePct,
+                i,
+                (1.5 + f32::from(i)).to_bits(),
+            ),
+        ]);
+    }
+    values.extend([(Field::PlayerLifetimeHonorableKills, 0, 142)]);
+    let fields = fixture(layout, &values);
+    for i in 0..5 {
+        assert_eq!(fields.player_posstat(i), Some(61 + i as i32));
+        assert_eq!(fields.player_negstat(i), Some(-71 - i as i32));
+        assert_eq!(fields.unit_stat(i), Some(81 + u32::from(i)));
+    }
+    for i in 0..7 {
+        assert_eq!(fields.player_resistance_buff_pos(i), Some(91 + i as i32));
+        assert_eq!(fields.player_resistance_buff_neg(i), Some(-101 - i as i32));
+        assert_eq!(fields.unit_resistance(i), Some(111 + i as i32));
+        assert_eq!(fields.player_mod_damage_done_pos(i), Some(121 + i as i32));
+        assert_eq!(fields.player_mod_damage_done_neg(i), Some(-131 - i as i32));
         assert_eq!(
-            fields.player_lifetime_honorable_kills(),
-            Some(if wrath { 142 } else { 141 })
+            fields.player_mod_damage_done_pct(i),
+            Some(1.5 + f32::from(i))
         );
     }
+    assert_eq!(fields.player_posstat(5), None);
+    assert_eq!(fields.player_negstat(5), None);
+    assert_eq!(fields.unit_stat(5), None);
+    assert_eq!(fields.player_resistance_buff_pos(7), None);
+    assert_eq!(fields.player_resistance_buff_neg(7), None);
+    assert_eq!(fields.unit_resistance(7), None);
+    assert_eq!(fields.player_lifetime_honorable_kills(), Some(142));
 }
 
 #[test]
 fn corpse_quest_resource_and_object_accessors_preserve_both_native_shapes() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let wrath = layout == FieldLayout::Wrath12340;
-        let mut values = vec![
+    let layout = FieldLayout::Wrath12340;
+    let mut values = vec![
+        (Field::CorpseBytes1, 0, 0x0403_0200),
+        (Field::CorpseBytes2, 0, 0x0807_0605),
+        (Field::CorpseFlags, 0, 0x3d),
+        (Field::CorpseDynamicFlags, 0, 1),
+        (Field::CorpseItem, 18, 0x1300_0065),
+        (Field::ObjectType, 0, 0x17),
+        (Field::UnitMaxHealth, 0, 999),
+        (Field::UnitHealth, 0, 777),
+        (Field::UnitBytes0, 0, 0x0300_0000),
+    ];
+    let last = 24;
+    let stride = 5;
+    values.extend([
+        (Field::PlayerQuestLog, stride * last, 301),
+        (Field::PlayerQuestLog, stride * last + 1, 2),
+    ]);
+    values.extend([
+        (Field::PlayerQuestLog, stride * last + 2, 0x0082_0081),
+        (Field::PlayerQuestLog, stride * last + 3, 0x0084_0083),
+        (Field::PlayerQuestLog, stride * last + 4, 302),
+    ]);
+    for i in 0..7 {
+        values.extend([
+            (Field::UnitPower, i, 401 + u32::from(i)),
+            (Field::UnitMaxPower, i, 501 + u32::from(i)),
+        ]);
+    }
+    let fields = fixture(layout, &values);
+    let corpse = fixture(
+        layout,
+        &[
             (Field::CorpseBytes1, 0, 0x0403_0200),
             (Field::CorpseBytes2, 0, 0x0807_0605),
             (Field::CorpseFlags, 0, 0x3d),
             (Field::CorpseDynamicFlags, 0, 1),
             (Field::CorpseItem, 18, 0x1300_0065),
-            (Field::ObjectType, 0, 0x17),
-            (Field::UnitMaxHealth, 0, 999),
-            (Field::UnitHealth, 0, 777),
-            (Field::UnitBytes0, 0, 0x0300_0000),
-        ];
-        let last = if wrath { 24 } else { 19 };
-        let stride = if wrath { 5 } else { 3 };
-        values.extend([
-            (Field::PlayerQuestLog, stride * last, 301),
-            (
-                Field::PlayerQuestLog,
-                stride * last + 1,
-                if wrath { 2 } else { 0x020c_2041 },
-            ),
-        ]);
-        if wrath {
-            values.extend([
-                (Field::PlayerQuestLog, stride * last + 2, 0x0082_0081),
-                (Field::PlayerQuestLog, stride * last + 3, 0x0084_0083),
-                (Field::PlayerQuestLog, stride * last + 4, 302),
-            ]);
-        } else {
-            values.push((Field::PlayerQuestLog, stride * last + 2, 302));
-        }
-        for i in 0..if wrath { 7 } else { 5 } {
-            values.extend([
-                (Field::UnitPower, i, 401 + u32::from(i)),
-                (Field::UnitMaxPower, i, 501 + u32::from(i)),
-            ]);
-        }
-        let fields = fixture(layout, &values);
-        let corpse = fixture(
-            layout,
-            &[
-                (Field::CorpseBytes1, 0, 0x0403_0200),
-                (Field::CorpseBytes2, 0, 0x0807_0605),
-                (Field::CorpseFlags, 0, 0x3d),
-                (Field::CorpseDynamicFlags, 0, 1),
-                (Field::CorpseItem, 18, 0x1300_0065),
-            ],
-        );
-        let look = corpse.corpse_look().unwrap();
-        assert_eq!(
-            (
-                look.race,
-                look.sex,
-                look.skin,
-                look.face,
-                look.hair_style,
-                look.hair_color,
-                look.facial_hair
-            ),
-            (2, 3, 4, 5, 6, 7, 8)
-        );
-        assert_eq!(corpse.corpse_race(), 2);
-        assert_eq!(corpse.corpse_item(18), Some((101, 19)));
-        assert_eq!(corpse.corpse_item(19), None);
-        assert!(corpse.corpse_is_bones());
-        assert!(corpse.corpse_hides_helm());
-        assert!(corpse.corpse_hides_cloak());
-        assert!(corpse.corpse_pvp_insignia());
-        assert!(corpse.corpse_lootable());
-        assert!(fields.is_container());
-        assert_eq!(fields.object_type(), Some(ObjectType::Player));
-        assert_eq!(fields.player_quest_log_slots(), if wrath { 25 } else { 20 });
-        let quest = fields.player_quest_log(last as u8).unwrap();
-        assert_eq!((quest.quest_id, quest.state, quest.timer), (301, 2, 302));
-        assert_eq!(
-            quest.counters,
-            if wrath {
-                [129, 130, 131, 132]
-            } else {
-                [1, 1, 2, 3]
-            }
-        );
-        assert_eq!(fields.player_quest_log(last as u8 + 1), None);
-        assert_eq!(fields.unit_base_attack_time(2), None);
-        assert_eq!(fields.unit_base_attack_time(0), None);
-        assert_eq!(fields.unit_power_slots(), if wrath { 7 } else { 5 });
-        for i in 0..fields.unit_power_slots() {
-            assert_eq!(fields.unit_power(i), Some(401 + u32::from(i)));
-            assert_eq!(fields.unit_max_power(i), Some(501 + u32::from(i)));
-        }
-        assert_eq!(fields.unit_power(fields.unit_power_slots()), None);
-        assert_eq!(fields.unit_max_power(fields.unit_power_slots()), None);
-        assert_eq!(fields.unit_shown_health(), Some(777));
-        assert_eq!(fields.unit_shown_power(3), Some(404));
-        assert_eq!(fields.unit_shown_max_power(3), Some(504));
-        assert_eq!(
-            fields.wrath_powers().map(|p| p[6]),
-            if wrath { Some((407, 507)) } else { None }
-        );
-        assert!(!fields.is_empty());
-        assert!(fields.raw_fields().count() > 0);
-        assert_eq!(fields.created_as(), None);
-        let created = fields.clone().into_created(ObjectType::Player);
-        assert_eq!(created.created_as(), Some(ObjectType::Player));
-        assert_eq!(created.layout(), layout);
-        assert!(created.field_present(Field::ObjectType, 0));
-        assert_eq!(created.get_field_guid(Field::UnitSummon, 0), None);
-        assert_eq!(created.get(Field::ObjectType), Some(0x17));
-        assert_eq!(created.get_at(Field::ObjectType, 1), None);
-        assert_eq!(created.get_float(Field::ObjectScaleX, 0), Some(0.));
-        let mut merged = created.clone();
-        let delta = fixture(layout, &[(Field::UnitHealth, 0, 222)]);
-        let mut edges = Vec::new();
-        merged.merge_diff(delta, |index, old, new| edges.push((index, old, new)));
-        assert_eq!(merged.unit_health(), Some(222));
-        assert_eq!(edges.len(), 1);
-        merged.merge(fixture(layout, &[(Field::UnitHealth, 0, 333)]));
-        assert_eq!(merged.unit_health(), Some(333));
+        ],
+    );
+    let look = corpse.corpse_look().unwrap();
+    assert_eq!(
+        (
+            look.race,
+            look.sex,
+            look.skin,
+            look.face,
+            look.hair_style,
+            look.hair_color,
+            look.facial_hair
+        ),
+        (2, 3, 4, 5, 6, 7, 8)
+    );
+    assert_eq!(corpse.corpse_race(), 2);
+    assert_eq!(corpse.corpse_item(18), Some((101, 19)));
+    assert_eq!(corpse.corpse_item(19), None);
+    assert!(corpse.corpse_is_bones());
+    assert!(corpse.corpse_hides_helm());
+    assert!(corpse.corpse_hides_cloak());
+    assert!(corpse.corpse_pvp_insignia());
+    assert!(corpse.corpse_lootable());
+    assert!(fields.is_container());
+    assert_eq!(fields.object_type(), Some(ObjectType::Player));
+    assert_eq!(fields.player_quest_log_slots(), 25);
+    let quest = fields.player_quest_log(last as u8).unwrap();
+    assert_eq!((quest.quest_id, quest.state, quest.timer), (301, 2, 302));
+    assert_eq!(quest.counters, [129, 130, 131, 132]);
+    assert_eq!(fields.player_quest_log(last as u8 + 1), None);
+    assert_eq!(fields.unit_base_attack_time(2), None);
+    assert_eq!(fields.unit_base_attack_time(0), None);
+    assert_eq!(fields.unit_power_slots(), 7);
+    for i in 0..fields.unit_power_slots() {
+        assert_eq!(fields.unit_power(i), Some(401 + u32::from(i)));
+        assert_eq!(fields.unit_max_power(i), Some(501 + u32::from(i)));
     }
+    assert_eq!(fields.unit_power(fields.unit_power_slots()), None);
+    assert_eq!(fields.unit_max_power(fields.unit_power_slots()), None);
+    assert_eq!(fields.unit_shown_health(), Some(777));
+    assert_eq!(fields.unit_shown_power(3), Some(404));
+    assert_eq!(fields.unit_shown_max_power(3), Some(504));
+    assert_eq!(fields.wrath_powers().map(|p| p[6]), Some((407, 507)));
+    assert!(!fields.is_empty());
+    assert!(fields.raw_fields().count() > 0);
+    assert_eq!(fields.created_as(), None);
+    let created = fields.clone().into_created(ObjectType::Player);
+    assert_eq!(created.created_as(), Some(ObjectType::Player));
+    assert_eq!(created.layout(), layout);
+    assert!(created.field_present(Field::ObjectType, 0));
+    assert_eq!(created.get_field_guid(Field::UnitSummon, 0), None);
+    assert_eq!(created.get(Field::ObjectType), Some(0x17));
+    assert_eq!(created.get_at(Field::ObjectType, 1), None);
+    assert_eq!(created.get_float(Field::ObjectScaleX, 0), Some(0.));
+    let mut merged = created.clone();
+    let delta = fixture(layout, &[(Field::UnitHealth, 0, 222)]);
+    let mut edges = Vec::new();
+    merged.merge_diff(delta, |index, old, new| edges.push((index, old, new)));
+    assert_eq!(merged.unit_health(), Some(222));
+    assert_eq!(edges.len(), 1);
+    merged.merge(fixture(layout, &[(Field::UnitHealth, 0, 333)]));
+    assert_eq!(merged.unit_health(), Some(333));
 }
 
 /// Adding a public reader requires adding it to a dual-layout fixture, not merely compiling it.
@@ -1549,120 +1280,112 @@ fn public_accessor_fixture_census_has_no_unreviewed_reader() {
 
 #[test]
 fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let absent = fixture(layout, &[]);
-        assert!(!absent.unit_pet_can_be_renamed());
-        assert!(!absent.unit_pet_can_be_abandoned());
-        for field in [Field::UnitFlags, Field::UnitBytes2] {
-            for bit in 0..32 {
-                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
-                let (source, rename_bit, abandon_bit) = match layout {
-                    FieldLayout::Vanilla5875 => (Field::UnitFlags, 4, 5),
-                    FieldLayout::Wrath12340 => (Field::UnitBytes2, 16, 17),
-                };
-                assert_eq!(
-                    fields.unit_pet_can_be_renamed(),
-                    field == source && bit == rename_bit,
-                    "rename {layout:?} {field:?} bit {bit}"
-                );
-                assert_eq!(
-                    fields.unit_pet_can_be_abandoned(),
-                    field == source && bit == abandon_bit,
-                    "abandon {layout:?} {field:?} bit {bit}"
-                );
-            }
+    let layout = FieldLayout::Wrath12340;
+    let absent = fixture(layout, &[]);
+    assert!(!absent.unit_pet_can_be_renamed());
+    assert!(!absent.unit_pet_can_be_abandoned());
+    for field in [Field::UnitFlags, Field::UnitBytes2] {
+        for bit in 0..32 {
+            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+            let (source, rename_bit, abandon_bit) = (Field::UnitBytes2, 16, 17);
+            assert_eq!(
+                fields.unit_pet_can_be_renamed(),
+                field == source && bit == rename_bit,
+                "rename {layout:?} {field:?} bit {bit}"
+            );
+            assert_eq!(
+                fields.unit_pet_can_be_abandoned(),
+                field == source && bit == abandon_bit,
+                "abandon {layout:?} {field:?} bit {bit}"
+            );
         }
-        let both = fixture(
-            layout,
-            &[
-                (Field::UnitFlags, 0, u32::MAX),
-                (Field::UnitBytes2, 0, u32::MAX),
-            ],
-        );
-        assert!(both.unit_pet_can_be_renamed());
-        assert!(both.unit_pet_can_be_abandoned());
-        let zero = fixture(
-            layout,
-            &[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
-        );
-        assert!(!zero.unit_pet_can_be_renamed());
-        assert!(!zero.unit_pet_can_be_abandoned());
     }
+    let both = fixture(
+        layout,
+        &[
+            (Field::UnitFlags, 0, u32::MAX),
+            (Field::UnitBytes2, 0, u32::MAX),
+        ],
+    );
+    assert!(both.unit_pet_can_be_renamed());
+    assert!(both.unit_pet_can_be_abandoned());
+    let zero = fixture(
+        layout,
+        &[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
+    );
+    assert!(!zero.unit_pet_can_be_renamed());
+    assert!(!zero.unit_pet_can_be_abandoned());
 }
 
 #[test]
 fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let absent = fixture(layout, &[]);
-        assert!(!absent.unit_is_pvp());
-        assert!(!absent.unit_is_ffa_pvp());
-        for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
-            for bit in 0..32 {
-                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
-                let (pvp_source, pvp_bit, ffa_source, ffa_bit) = match layout {
-                    FieldLayout::Vanilla5875 => (Field::UnitFlags, 12, Field::PlayerFlags, 7),
-                    FieldLayout::Wrath12340 => (Field::UnitBytes2, 8, Field::UnitBytes2, 10),
-                };
-                assert_eq!(
-                    fields.unit_is_pvp(),
-                    field == pvp_source && bit == pvp_bit,
-                    "PvP {layout:?} {field:?} bit {bit}"
-                );
-                assert_eq!(
-                    fields.unit_is_ffa_pvp(),
-                    field == ffa_source && bit == ffa_bit,
-                    "FFA {layout:?} {field:?} bit {bit}"
-                );
-            }
-        }
-        for (word, expected) in [(0, false), (u32::MAX, true)] {
-            let fields = fixture(
-                layout,
-                &[
-                    (Field::UnitFlags, 0, word),
-                    (Field::PlayerFlags, 0, word),
-                    (Field::UnitBytes2, 0, word),
-                ],
+    let layout = FieldLayout::Wrath12340;
+    let absent = fixture(layout, &[]);
+    assert!(!absent.unit_is_pvp());
+    assert!(!absent.unit_is_ffa_pvp());
+    for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
+        for bit in 0..32 {
+            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+            let (pvp_source, pvp_bit, ffa_source, ffa_bit) =
+                (Field::UnitBytes2, 8, Field::UnitBytes2, 10);
+            assert_eq!(
+                fields.unit_is_pvp(),
+                field == pvp_source && bit == pvp_bit,
+                "PvP {layout:?} {field:?} bit {bit}"
             );
-            assert_eq!(fields.unit_is_pvp(), expected);
-            assert_eq!(fields.unit_is_ffa_pvp(), expected);
+            assert_eq!(
+                fields.unit_is_ffa_pvp(),
+                field == ffa_source && bit == ffa_bit,
+                "FFA {layout:?} {field:?} bit {bit}"
+            );
         }
+    }
+    for (word, expected) in [(0, false), (u32::MAX, true)] {
+        let fields = fixture(
+            layout,
+            &[
+                (Field::UnitFlags, 0, word),
+                (Field::PlayerFlags, 0, word),
+                (Field::UnitBytes2, 0, word),
+            ],
+        );
+        assert_eq!(fields.unit_is_pvp(), expected);
+        assert_eq!(fields.unit_is_ffa_pvp(), expected);
     }
 }
 
 #[test]
 fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let absent = fixture(layout, &[]);
-        assert_eq!(absent.unit_pvp_state_flags(), None);
-        assert!(!absent.unit_is_in_sanctuary());
-        for byte in 0..=255u32 {
-            // Nonzero neighboring bytes must not leak into the returned byte.
-            let fields = fixture(layout, &[(Field::UnitBytes2, 0, 0xffff_00ff | (byte << 8))]);
-            let expected = (layout == FieldLayout::Wrath12340).then_some(byte as u8);
-            assert_eq!(fields.unit_pvp_state_flags(), expected);
+    let layout = FieldLayout::Wrath12340;
+    let absent = fixture(layout, &[]);
+    assert_eq!(absent.unit_pvp_state_flags(), None);
+    assert!(!absent.unit_is_in_sanctuary());
+    for byte in 0..=255u32 {
+        // Nonzero neighboring bytes must not leak into the returned byte.
+        let fields = fixture(layout, &[(Field::UnitBytes2, 0, 0xffff_00ff | (byte << 8))]);
+        let expected = (layout == FieldLayout::Wrath12340).then_some(byte as u8);
+        assert_eq!(fields.unit_pvp_state_flags(), expected);
+        assert_eq!(
+            fields.unit_is_in_sanctuary(),
+            expected.is_some_and(|b| b & 8 != 0)
+        );
+    }
+    for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
+        for bit in 0..32 {
+            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
             assert_eq!(
                 fields.unit_is_in_sanctuary(),
-                expected.is_some_and(|b| b & 8 != 0)
+                layout == FieldLayout::Wrath12340 && field == Field::UnitBytes2 && bit == 11,
+                "sanctuary {layout:?} {field:?} bit {bit}"
             );
         }
-        for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
-            for bit in 0..32 {
-                let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
-                assert_eq!(
-                    fields.unit_is_in_sanctuary(),
-                    layout == FieldLayout::Wrath12340 && field == Field::UnitBytes2 && bit == 11,
-                    "sanctuary {layout:?} {field:?} bit {bit}"
-                );
-            }
-        }
-        let zero = fixture(layout, &[(Field::UnitBytes2, 0, 0)]);
-        assert_eq!(
-            zero.unit_pvp_state_flags(),
-            (layout == FieldLayout::Wrath12340).then_some(0)
-        );
-        assert!(!zero.unit_is_in_sanctuary());
     }
+    let zero = fixture(layout, &[(Field::UnitBytes2, 0, 0)]);
+    assert_eq!(
+        zero.unit_pvp_state_flags(),
+        (layout == FieldLayout::Wrath12340).then_some(0)
+    );
+    assert!(!zero.unit_is_in_sanctuary());
 }
 
 #[test]
@@ -1677,11 +1400,11 @@ fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
         ],
     );
     assert_eq!(
-        (0..4).map(|s| wrath.player_arena_team_id(s)).collect::<Vec<_>>(),
+        (0..4)
+            .map(|s| wrath.player_arena_team_id(s))
+            .collect::<Vec<_>>(),
         [Some(11), Some(0), Some(33), None]
     );
-    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
-    assert_eq!(vanilla.player_arena_team_id(0), None);
 }
 
 #[test]
@@ -1696,28 +1419,35 @@ fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
         ],
     );
     assert_eq!(
-        (wrath.player_glyph_slot(0), wrath.player_glyph_slot(5), wrath.player_glyph_slot(6)),
+        (
+            wrath.player_glyph_slot(0),
+            wrath.player_glyph_slot(5),
+            wrath.player_glyph_slot(6)
+        ),
         (Some(21), Some(26), None)
     );
-    assert_eq!((wrath.player_glyph(1), wrath.player_glyph(6)), (Some(251), None));
-    assert_eq!(wrath.player_glyphs_enabled(), Some(0b11));
-    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
     assert_eq!(
-        (vanilla.player_glyph_slot(0), vanilla.player_glyph(0), vanilla.player_glyphs_enabled()),
-        (None, None, None)
+        (wrath.player_glyph(1), wrath.player_glyph(6)),
+        (Some(251), None)
     );
+    assert_eq!(wrath.player_glyphs_enabled(), Some(0b11));
 }
 
 #[test]
 fn daily_quest_slots_are_native_only() {
     let wrath = ObjectFields::from_field_slots(
         FieldLayout::Wrath12340,
-        &[(Field::PlayerDailyQuests1, 0, 11389), (Field::PlayerDailyQuests1, 24, 13240)],
+        &[
+            (Field::PlayerDailyQuests1, 0, 11389),
+            (Field::PlayerDailyQuests1, 24, 13240),
+        ],
     );
     assert_eq!(
-        (wrath.player_daily_quest(0), wrath.player_daily_quest(24), wrath.player_daily_quest(25)),
+        (
+            wrath.player_daily_quest(0),
+            wrath.player_daily_quest(24),
+            wrath.player_daily_quest(25)
+        ),
         (Some(11389), Some(13240), None)
     );
-    let vanilla = ObjectFields::from_field_slots(FieldLayout::Vanilla5875, &[]);
-    assert_eq!(vanilla.player_daily_quest(0), None);
 }

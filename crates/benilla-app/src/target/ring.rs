@@ -780,57 +780,49 @@ pub(crate) mod tests {
     fn ffa_reaction_uses_native_source_and_keeps_control_and_duel_precedence() {
         use crate::net::{ObjectStore, Reputations};
         use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
-                let mut pairs = Vec::new();
-                let mut set =
-                    |field, value| pairs.push((layout.resolve(field).unwrap().index, value));
-                set(Field::UnitFlags, if pc { 8 } else { 0 });
-                set(Field::PlayerFlags, if old_ffa { 0x80 } else { 0 });
-                set(Field::UnitBytes2, if ffa { 0x400 } else { 0 });
-                set(Field::PlayerDuelTeam, team);
-                let arbiter = layout.resolve(Field::PlayerDuelArbiter).unwrap().index;
-                pairs.extend([(arbiter, 17), (arbiter + 1, 9)]);
-                ObjectStore(ObjectFields::from_native_pairs(layout, &pairs))
-            };
-            let native = |pc, ffa, team| make(pc, ffa, ffa, team);
-            for own_pc in [false, true] {
-                for target_pc in [false, true] {
-                    for own_ffa in [false, true] {
-                        for target_ffa in [false, true] {
-                            let own = native(own_pc, own_ffa, 0);
-                            let target = native(target_pc, target_ffa, 0);
-                            assert_eq!(
-                                super::ffa_reaction(&target.0, &own.0),
-                                own_pc && target_pc && own_ffa && target_ffa
-                            );
-                        }
+        let layout = FieldLayout::Wrath12340;
+        let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
+            let mut pairs = Vec::new();
+            let mut set = |field, value| pairs.push((layout.resolve(field).unwrap().index, value));
+            set(Field::UnitFlags, if pc { 8 } else { 0 });
+            set(Field::PlayerFlags, if old_ffa { 0x80 } else { 0 });
+            set(Field::UnitBytes2, if ffa { 0x400 } else { 0 });
+            set(Field::PlayerDuelTeam, team);
+            let arbiter = layout.resolve(Field::PlayerDuelArbiter).unwrap().index;
+            pairs.extend([(arbiter, 17), (arbiter + 1, 9)]);
+            ObjectStore(ObjectFields::from_native_pairs(layout, &pairs))
+        };
+        let native = |pc, ffa, team| make(pc, ffa, ffa, team);
+        for own_pc in [false, true] {
+            for target_pc in [false, true] {
+                for own_ffa in [false, true] {
+                    for target_ffa in [false, true] {
+                        let own = native(own_pc, own_ffa, 0);
+                        let target = native(target_pc, target_ffa, 0);
+                        assert_eq!(
+                            super::ffa_reaction(&target.0, &own.0),
+                            own_pc && target_pc && own_ffa && target_ffa
+                        );
                     }
                 }
             }
-            for (packed, old) in [(true, false), (false, true)] {
-                let unit = make(true, packed, old, 0);
-                assert_eq!(
-                    super::ffa_reaction(&unit.0, &unit.0),
-                    match layout {
-                        FieldLayout::Vanilla5875 => old,
-                        FieldLayout::Wrath12340 => packed,
-                    }
-                );
-            }
-            let reps = Reputations::default();
-            let own = native(true, true, 1);
-            for (team, expected) in [(1, 4), (2, 1)] {
-                let target = native(true, true, team);
-                assert_eq!(
-                    ring_reaction(None, &reps, Some(&target), Some(&own)),
-                    expected
-                );
-                assert_eq!(
-                    super::reaction_from_player(None, &reps, Some(&target), Some(&own)),
-                    expected
-                );
-            }
+        }
+        for (packed, old) in [(true, false), (false, true)] {
+            let unit = make(true, packed, old, 0);
+            assert_eq!(super::ffa_reaction(&unit.0, &unit.0), packed);
+        }
+        let reps = Reputations::default();
+        let own = native(true, true, 1);
+        for (team, expected) in [(1, 4), (2, 1)] {
+            let target = native(true, true, team);
+            assert_eq!(
+                ring_reaction(None, &reps, Some(&target), Some(&own)),
+                expected
+            );
+            assert_eq!(
+                super::reaction_from_player(None, &reps, Some(&target), Some(&own)),
+                expected
+            );
         }
     }
 
@@ -891,13 +883,13 @@ pub(crate) mod tests {
         // Field indices: 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS.
         let unit = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
             ))
         };
         // Us: a player-controlled Human, faction template 1.
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
                 (
@@ -960,15 +952,14 @@ pub(crate) mod tests {
     fn the_reputation_rank_is_capped_at_revered() {
         use crate::net::ObjectStore;
         use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
 
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(benilla_protocol::messages::Field::UnitBytes0, HUMAN_WARRIOR)],
         ));
         // Both sides of the Honored, Revered and Exalted thresholds, and the wire's own ceiling.
@@ -1012,17 +1003,20 @@ pub(crate) mod tests {
         // 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS, 147 = UNIT_NPC_FLAGS.
         let npc = |tpl: u32, npc_flags: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
                     (benilla_protocol::messages::Field::UnitNpcFlags, npc_flags),
                 ],
             ))
         };
-        let me = ObjectStore(ObjectFields::from_pairs(&[
-            (35, 1), // Human
-            (46, UNIT_FLAG_PVP_ATTACKABLE),
-        ]));
+        let me = ObjectStore(ObjectFields::from_fields(
+            benilla_protocol::messages::FieldLayout::Wrath12340,
+            &[
+                (benilla_protocol::messages::Field::UnitFactionTemplate, 1), // Human
+                (benilla_protocol::messages::Field::UnitFlags, UNIT_FLAG_PVP_ATTACKABLE),
+            ],
+        ));
         let quiet = Reputations::default(); // nothing at war
         let mut slots = vec![(0u8, 0i32); 64];
         slots[36] = (benilla_formats::faction_flags::AT_WAR, 0); // Cenarion Circle = slot 36
@@ -1102,7 +1096,7 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let player = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
                     (
@@ -1158,7 +1152,7 @@ pub(crate) mod tests {
         // …while NPCs keep theirs: `CanCooperate` is never asked for an NPC.
         let npc = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
             ))
         };
@@ -1193,7 +1187,7 @@ pub(crate) mod tests {
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
                 (
@@ -1205,7 +1199,7 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let mob = |flags: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::UnitFactionTemplate, 14),
                     (benilla_protocol::messages::Field::UnitFlags, flags),

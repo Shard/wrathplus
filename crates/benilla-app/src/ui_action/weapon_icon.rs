@@ -133,10 +133,11 @@ mod tests {
     use crate::items::TestDeps;
 
     /// Raw indices: `PLAYER_FIELD_INV_SLOT_HEAD + 2×15` (the main hand), `UNIT_FIELD_FLAGS`, and
-    /// `UNIT_FIELD_BYTES_1`, whose third byte is the form.
-    const INV_SLOT_MAINHAND: u16 = 486 + 2 * 15;
-    const UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const UNIT_BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
+    const INV_SLOT_MAINHAND: u16 =
+        FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+    const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    /// `UNIT_FIELD_BYTES_2`, whose fourth byte is the form.
+    const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
     /// `UNIT_FLAG_DISARMED`.
     const DISARMED: u32 = 0x0020_0000;
     const SWORD_ICON: &str = "Interface\\Icons\\INV_Sword_04";
@@ -146,12 +147,12 @@ mod tests {
     /// sword's display, so only the law moves the answer.
     fn icon(flags: u32, hand: Option<u32>, form: u8) -> String {
         let mut deps = TestDeps::new();
-        let mut pairs = vec![(UNIT_FLAGS, flags), (UNIT_BYTES_1, u32::from(form) << 16)];
+        let mut pairs = vec![(UNIT_FLAGS, flags), (UNIT_BYTES_2, u32::from(form) << 24)];
         if let Some(class) = hand {
             pairs.push((INV_SLOT_MAINHAND, 0x2a));
             deps.spawn_item(
                 0x2a,
-                ObjectFields::from_fields(FieldLayout::Vanilla5875, &[(Field::ObjectEntry, 500)]),
+                ObjectFields::from_fields(FieldLayout::Wrath12340, &[(Field::ObjectEntry, 500)]),
             );
             deps.items.insert_template(
                 500,

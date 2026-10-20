@@ -123,7 +123,7 @@ mod tests {
                 SelfPlayer,
                 Transform::default(),
                 ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[],
                 )),
             ))
@@ -136,7 +136,7 @@ mod tests {
         assert!(votes(&rx).is_empty(), "no field, no vote");
 
         // Far sight set, the object not streamed: still the body, not the origin.
-        const FARSIGHT: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFarsight);
+        const FARSIGHT: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFarsight);
         let set = |app: &mut App, lo: u32| {
             *app.world_mut().get_mut::<ObjectStore>(me).unwrap() =
                 ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[

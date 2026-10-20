@@ -654,7 +654,8 @@ fn resolve_slot(
                     .filter(|&(_, max)| max > 0),
                 // Letter text on the instance, which the hover magnifier keys off; a template
                 // `PageText` book does not set it.
-                fields.item_text_id().is_some_and(|id| id != 0),
+                // (12340 items carry no `ITEM_FIELD_ITEM_TEXT_ID`.)
+                false,
                 // The creator's name for "<Made by %s>" and "Written by %s", `None` until the
                 // name query answers.
                 fields

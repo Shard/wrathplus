@@ -200,7 +200,7 @@ mod tests {
 
     fn store(typemask: u32, reach: f32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::ObjectType, typemask),
                 (benilla_protocol::messages::Field::UnitHealth, 100),

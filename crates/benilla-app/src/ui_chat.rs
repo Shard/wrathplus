@@ -124,12 +124,7 @@ impl Plugin for UiChatPlugin {
             // Descriptor-diff combat-log lines, ahead of the drain so none lands a frame late.
             .add_systems(
                 Update,
-                (
-                    combat::watch::death_lines,
-                    combat::watch::aura_lines,
-                    combat::watch::pet_loyalty_lines,
-                )
-                    .before(feed::feed_chat),
+                (combat::watch::death_lines, combat::watch::aura_lines).before(feed::feed_chat),
             )
             // Before the drain, so a broadcast lands on the frame it decodes.
             .add_systems(

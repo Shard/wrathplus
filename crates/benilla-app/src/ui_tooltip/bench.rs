@@ -95,7 +95,7 @@ fn feed_cost_per_invalidation() {
             (Field::UnitLevel, 0, 60),
             (Field::UnitBaseMana, 0, 1373),
             (Field::UnitCombatreach, 0, reach.to_bits()),
-            (Field::UnitBytes1, 0, form << 16),
+            (Field::UnitBytes2, 0, form << 24),
             (Field::PlayerInvSlotHead, 0, head),
             (Field::PlayerBlockPercentage, 0, 5.0f32.to_bits()),
             (Field::PlayerDodgePercentage, 0, dodge.to_bits()),
@@ -112,7 +112,7 @@ fn feed_cost_per_invalidation() {
             ));
         }
         ObjectStore(ObjectFields::from_field_slots(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &slots,
         ))
     };
@@ -124,7 +124,7 @@ fn feed_cost_per_invalidation() {
     const TARGET: u64 = 0xF130_0000_0000_0042;
     let target_fields = |reach: f32| {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(
                 benilla_protocol::messages::Field::UnitCombatreach,
                 reach.to_bits(),

@@ -56,12 +56,12 @@ fn load_pet_frame() -> UiScript {
 fn pet(name: &str, health: u32, power: u32, max_power: u32, power_type: u8) -> UnitState {
     // `UNIT_FIELD_` HEALTH, POWER1, MAXHEALTH, MAXPOWER1, LEVEL, BYTES_0 (the power type is its
     // byte 3), the power pair at its type's slot.
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const POWER1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPower);
-    const MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
-    const MAXPOWER1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxPower);
-    const LEVEL: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
-    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const POWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower);
+    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const MAXPOWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower);
+    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
+    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
     let slot = u16::from(power_type);
     let store = crate::net::ObjectStore(benilla_protocol::ObjectFields::from_pairs(&[
         (HEALTH, health),
