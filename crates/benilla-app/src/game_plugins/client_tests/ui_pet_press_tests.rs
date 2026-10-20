@@ -469,3 +469,55 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
     );
     assert!(!latched(&rig).2, "an ordinary pet's Attack raises no latch");
 }
+
+/// A Wrath VM with the stock interface loaded as a session loads it (`ui_script::lifecycle`): the
+/// CVar table, the display modes and the Enter World player (record, then unit) are seated first,
+/// then `load_wrath_ui` without addons, its load budget disarmed after. Returns every failure.
+///
+/// Not `load_default_ui`: that is the 1.12 shape, which also loads the benilla layer and seats
+/// neither the display modes nor the player. Stock `UpdateMenuBarTop` divides by the current
+/// mode's height (`UIParent.lua:1171`) and `DressUpTexturePath` upper-cases the player's race
+/// file (`DressUpFrame.lua:16`), so both raise on that bare VM, as no live load can.
+pub(super) fn stock_session_ui() -> (benilla_ui::script::UiScript, Vec<String>) {
+    use benilla_ui::script::{PlayerRecord, ScreenResolution, UiScript, UnitState};
+    let mut script = UiScript::new().expect("a VM");
+    script.register_cvars(crate::shipped_cvars::pairs());
+    script.set_screen_size(1024.0, 768.0);
+    script.set_screen_resolutions(
+        vec![],
+        Some(ScreenResolution {
+            width: 1024,
+            height: 768,
+        }),
+    );
+    script.set_player_record(PlayerRecord {
+        name: "Probefour".into(),
+        race: Some(("Orc".into(), "Orc".into())),
+        class: Some(("Hunter".into(), "HUNTER".into())),
+        sex: 2,
+    });
+    script.set_unit(
+        "player",
+        Some(UnitState {
+            exists: true,
+            name: Some("Probefour".into()),
+            level: 60,
+            race: Some("Orc".into()),
+            race_file: Some("Orc".into()),
+            class: Some("Hunter".into()),
+            class_file: Some("HUNTER".into()),
+            ..Default::default()
+        }),
+    );
+    script.push_sound_suppression();
+    let mut failures = crate::ui_script::load_wrath_ui(&mut script, None, &[], true);
+    script.pop_sound_suppression();
+    script.clear_instruction_budget();
+    failures.extend(
+        script
+            .errors()
+            .into_iter()
+            .map(|e| format!("a handler raised during the load walk: {e}")),
+    );
+    (script, failures)
+}
