@@ -663,9 +663,9 @@ mod tests {
     use crate::script::UiScript;
 
     #[test]
-    fn get_chat_window_info_answers_the_nine_value_tuple() {
-        let s = UiScript::new_vanilla().unwrap();
-        assert_eq!(s.arity("GetChatWindowInfo(1)").unwrap(), 9);
+    fn get_chat_window_info_answers_build_12340s_ten_values() {
+        let s = UiScript::new().unwrap();
+        assert_eq!(s.arity("GetChatWindowInfo(1)").unwrap(), 10);
     }
 
     #[test]
@@ -781,18 +781,24 @@ mod tests {
     /// `__ftol(x · 255.0)` truncates: 0.4 stores 102 and 0.5 stores 127.
     #[test]
     fn the_setters_round_trip_through_the_engine_byte() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         s.run("SetChatWindowAlpha(1, 0.4)").unwrap();
         let a: f64 = s
             .eval("local _,_,_,_,_,a = GetChatWindowInfo(1) return a")
             .unwrap();
-        assert_eq!(a, 102.0 / 255.0, "alpha quantises to the stored byte");
+        // The stored byte times 1/255 in f32 (`[0xa45564]`), as build 12340 pushes it.
+        assert_eq!(
+            a,
+            f64::from(102f32 * (1.0f32 / 255.0f32)),
+            "alpha quantises to the stored byte"
+        );
 
         s.run("SetChatWindowColor(1, 1, 0.5, 0)").unwrap();
         let (r, g, b): (f64, f64, f64) = s
             .eval("local _,_,r,g,b = GetChatWindowInfo(1) return r, g, b")
             .unwrap();
-        assert_eq!((r, g, b), (1.0, 127.0 / 255.0, 0.0));
+        let byte = |b: u8| f64::from(f32::from(b) * (1.0f32 / 255.0f32));
+        assert_eq!((r, g, b), (1.0, byte(127), 0.0));
 
         s.run("SetChatWindowSize(1, 16)").unwrap();
         let size: i64 = s
@@ -804,11 +810,7 @@ mod tests {
         let a: f64 = s
             .eval("local _,_,_,_,_,a = GetChatWindowInfo(1) return a")
             .unwrap();
-        assert_eq!(
-            a,
-            127.0 / 255.0,
-            "__ftol truncates; 128/255 would be a round"
-        );
+        assert_eq!(a, byte(127), "__ftol truncates; 128/255 would be a round");
     }
 
     #[test]

@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn change_chat_color_truncates_stores_and_fires_the_renormalised_bytes() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "local f = CreateFrame('Frame') f:RegisterEvent('UPDATE_CHAT_COLOR') \
              f:SetScript('OnEvent', function() SEEN = {arg1, arg2, arg3, arg4} end) \

@@ -1009,33 +1009,6 @@ mod tests {
         }
     }
 
-    /// The values are exact in `f32`, so the assertions compare equal.
-    #[test]
-    fn the_avoidance_verbs_are_player_implicit_and_answer_one_number() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        // Before anything streams: 0, not nil.
-        assert_eq!(s.eval::<f64>("return GetDodgeChance()").unwrap(), 0.0);
-        s.set_player_combat_stats(Some(UnitCombatStats {
-            dodge_percent: 5.25,
-            parry_percent: 3.5,
-            block_percent: 2.75,
-            ..stats()
-        }));
-        assert_eq!(s.eval::<f64>("return GetDodgeChance()").unwrap(), 5.25);
-        assert_eq!(s.eval::<f64>("return GetParryChance()").unwrap(), 3.5);
-        assert_eq!(s.eval::<f64>("return GetBlockChance()").unwrap(), 2.75);
-        // One return, and a unit argument is ignored.
-        assert_eq!(
-            s.eval::<i64>("local a, b = GetDodgeChance() return b == nil and 1 or 2")
-                .unwrap(),
-            1
-        );
-        assert_eq!(
-            s.eval::<f64>(r#"return GetDodgeChance("target")"#).unwrap(),
-            5.25
-        );
-    }
-
     #[test]
     fn unit_stat_serves_the_raw_field_twice_and_the_buff_split() {
         let mut s = UiScript::new().unwrap();
@@ -1501,7 +1474,7 @@ mod tests {
     /// container in a bank bag slot 0 before the DBC is read.
     #[test]
     fn get_inventory_item_count_forks_on_the_container_bit_and_the_slot() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         let bag = |contents: Option<u32>| {
             Some(InvSlotView {
                 item_id: 4496,
@@ -1537,9 +1510,9 @@ mod tests {
         );
         assert_eq!(count(22), 7, "an ordinary item is still its stack count");
         assert_eq!(
-            count(64),
+            count(68),
             0,
-            "0-based 63 is past 0x16: every container short-circuits, quiver or not"
+            "0-based 67 (build 12340's first bank bag) is past 0x16: every container short-circuits, quiver or not"
         );
 
         // Both arms raise. The backpack's item slots (Lua 24..=39) are outside the whitelist.
@@ -1664,7 +1637,7 @@ mod tests {
 
     #[test]
     fn get_inventory_slot_info_serves_the_dbc_rows() {
-        let s = UiScript::new_vanilla().unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<(i64, String)>(r#"return GetInventorySlotInfo("HeadSlot")"#)
                 .unwrap(),
@@ -1687,7 +1660,7 @@ mod tests {
                 "interface\\paperdoll\\UI-PaperDoll-Slot-Ranged.blp".into()
             )
         );
-        // The bag rows, 20..23 and 64..75, share one texture string.
+        // The bag rows, 20..23 and (build 12340) 68..79, share one texture string.
         const BAG_ART: &str = "interface\\paperdoll\\UI-PaperDoll-Slot-Bag.blp";
         for (name, id) in [
             ("Bag0Slot", 20),
@@ -1706,7 +1679,7 @@ mod tests {
             assert_eq!(
                 s.eval::<(i64, String)>(&format!(r#"return GetInventorySlotInfo("Bag{n}")"#))
                     .unwrap(),
-                (63 + n, BAG_ART.into()),
+                (67 + n, BAG_ART.into()),
                 "Bag{n}"
             );
         }

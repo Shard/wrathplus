@@ -54,72 +54,7 @@ pub(super) fn load_emote_texts(mut commands: Commands, assets: Option<Res<WorldA
     }
 }
 
-/// One queued item awaiting its turn through [`feed_chat`].
-pub(crate) enum Pending {
-    Native {
-        msg: benilla_protocol::wrath_chat::Message,
-        tries: u16,
-    },
-    /// A decoded `SMSG_MESSAGECHAT`; the player types wait on the sender's name.
-    Wire { msg: ChatMessage, tries: u16 },
-    /// A channel notice with guids to name (`b_guid` is a kick's or ban's actor, 0 when absent).
-    Notice {
-        notice: u8,
-        channel: String,
-        a_guid: u64,
-        b_guid: u64,
-        tries: u16,
-    },
-    /// An inbound addon line waiting on its sender's name: the reference fires `CHAT_MSG_ADDON`
-    /// (event 227, `0x49a95f`) from the name-query callback (`0x49ccc0`), so `sender` is a name.
-    Addon {
-        prefix: String,
-        message: String,
-        distribution: String,
-        guid: u64,
-        tries: u16,
-    },
-    /// A `/random` broadcast awaiting the roller's name.
-    Roll {
-        min: u32,
-        max: u32,
-        roll: u32,
-        guid: u64,
-        tries: u16,
-    },
-    /// An XP award waiting on the victim's name (0: unnamed); `bonus` is total minus base.
-    XpGain {
-        victim: u64,
-        total: u32,
-        bonus: u32,
-        tries: u16,
-    },
-    /// An honor award waiting on the victim's name; `rank` (0 none) becomes a title at the drain,
-    /// from the victim's side in the same name-query record.
-    HonorGain {
-        victim: u64,
-        honor: i32,
-        rank: u8,
-        tries: u16,
-    },
-    /// A text emote waiting on its performer's name: the reference's `PENDINGTEXTEMOTE` node
-    /// (`0x49cc00`), queued when `0x49dbe0` finds no cached name and drained by `0x49d0d0`.
-    /// `target` is the wire's name, empty when untargeted, used as sent.
-    TextEmote {
-        performer: u64,
-        text_id: u32,
-        target: String,
-        tries: u16,
-    },
-    /// An area discovery (`SMSG_EXPLORATION_EXPERIENCE`), fired at the drain, which holds the VM.
-    Discovery { area: String, xp: u32 },
-    /// One combat-log line, classified at the packet, waiting on its two endpoint names; the
-    /// reference's deferred queue (`0xc4e208`) waits only on an item name.
-    Combat(Box<super::combat::PendingCombat>),
-    /// A ready event (client-composed lines; name-carrying notices).
-    Event(ChatEvent),
-}
-
+pub(crate) use crate::app_core::chat::{ChatLog, Pending};
 /// Fire `CHAT_MSG_ADDON(prefix, message, distribution, sender)` (`0x49a95f`), not through
 /// [`route`]: it is no `ChatTypeInfo` key and takes four arguments, not ten.
 pub(super) fn fire_addon_message(
@@ -151,18 +86,6 @@ pub(super) fn text_emote_event(
         sender: line.performer.to_string(),
         ..Default::default()
     })
-}
-
-/// The chat items the feeds queue and [`feed_chat`] drains. World broadcasts wait apart, as their
-/// resolve needs more than [`feed_chat`] can hold at Bevy's `SystemParam` limit;
-/// `feed_broadcasts` resolves them onto `pending` earlier in the same frame.
-#[derive(Resource, Default)]
-pub(crate) struct ChatLog {
-    pub(crate) pending: Vec<Pending>,
-    broadcasts: Vec<super::broadcast::Broadcast>,
-    /// A level-up's gains for `ui_unit`'s `PLAYER_LEVEL_UP` fire, matched by level: the fire
-    /// follows a descriptor change and the gains a packet.
-    level_up_gains: Vec<(LevelUpInfo, u32)>,
 }
 
 impl ChatLog {

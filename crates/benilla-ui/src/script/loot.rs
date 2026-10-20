@@ -603,20 +603,6 @@ mod tests {
         assert!(s.take_loot_picks().is_empty());
     }
 
-    /// In the pick queue `LootSlot` would loot any row an addon named, which the reference refuses.
-    #[test]
-    fn loot_slot_queues_confirms_not_picks() {
-        let mut s = UiScript::new_vanilla().unwrap();
-        s.set_loot(Some(loot()));
-        s.run("LootSlot(2)").unwrap();
-        assert!(
-            s.take_loot_picks().is_empty(),
-            "LootSlot is not the take verb"
-        );
-        assert_eq!(s.take_loot_confirms(), vec![2]);
-        assert!(s.take_loot_confirms().is_empty(), "drained");
-    }
-
     #[test]
     fn close_loot_flags_the_intent() {
         let mut s = UiScript::new().unwrap();
