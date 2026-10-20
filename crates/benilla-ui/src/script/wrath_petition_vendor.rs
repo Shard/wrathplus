@@ -291,7 +291,7 @@ mod tests {
                     index: 2,
                     name: "Gladiators".into()
                 },
-                WrathPetitionVendorRequest::NameRefused("ERR_GUILD_ENTER_NAME"),
+                WrathPetitionVendorRequest::NameRefused("ERR_NAME_NO_NAME"),
                 WrathPetitionVendorRequest::TurnIn {
                     team_size: 3,
                     banner: [0xffff_0000, 12, 0xff00_00ff, 3, 0xff80_8080]

@@ -106,7 +106,6 @@ fn b_opens_the_backpack_alone_and_closes_every_bag() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -180,7 +179,6 @@ fn shift_b_toggles_every_bag_at_once() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -262,7 +260,6 @@ fn bag_bar_buttons_light_while_their_bag_is_open() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -374,7 +371,6 @@ fn bag_tooltip_hangs_left_when_the_slot_sits_in_the_right_half() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -451,7 +447,6 @@ fn hovered_bag_tooltip_fills_itself_when_the_stats_land() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -558,7 +553,6 @@ fn vendor_bag_hover_shows_sell_price_and_arms_the_pouch_cursor() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -696,7 +690,6 @@ fn readable_letter_hover_shows_the_inspect_magnifier() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -767,7 +760,6 @@ fn drag_across_two_slots_queues_the_same_move_a_click_pickup_would() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -853,7 +845,6 @@ fn a_second_bag_window_feeds_and_paints_via_the_bag_bar() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -928,7 +919,6 @@ fn equipped_bag_window_snug_fits_its_row_count() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -989,7 +979,6 @@ fn open_backpack_with_a_five_stack(s: &mut UiScript) -> (f32, f32) {
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\StackSplitFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(s, file);
@@ -1309,7 +1298,6 @@ fn bag_slot_cooldown_sweeps_through_the_xml() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -1369,7 +1357,6 @@ fn the_bar_bag_buttons_name_themselves_on_hover() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -1498,7 +1485,6 @@ fn keyring_surface(s: &UiScript) {
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\UIErrorsFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(s, file);
@@ -1790,7 +1776,6 @@ fn an_item_push_drops_its_icon_into_the_bag_that_took_it() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -1951,7 +1936,6 @@ fn an_addon_that_hooks_toggle_backpack_receives_the_click() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -2000,7 +1984,6 @@ fn the_bag_slots_carry_the_references_names_and_icon_names() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);
@@ -2054,7 +2037,6 @@ fn the_backpack_buttons_ring_follows_its_own_window_through_real_clicks() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kit
         ],
     ]) {
         load_xml(&s, file);

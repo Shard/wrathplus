@@ -528,7 +528,6 @@
 ## Scripts (`scripts/`)
 
 - `doc-links.py` — Fail on a doc link whose target is declared nowhere in the workspace.
-- `gen-message-catalog.py` — Generate `crates/benilla-ui/src/messages/catalog.rs` from `reference/1.12-message-catalog.tsv`.
 - `gen-reference-events.py` — Regenerate `reference/1.12-events.tsv`: each 1.12 FrameScript event and the arguments it carries.
 - `gen-reference-globals.py` — Regenerate `reference/1.12-globals.tsv`: the 1.12.1 client's global namespace, by origin.
 - `gen-reference-verb-events.py` — Regenerate `reference/1.12-verb-events.tsv`: the events 1.12 Lua verbs fire, keyed by verb.

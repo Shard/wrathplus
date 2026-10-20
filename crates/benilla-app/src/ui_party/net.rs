@@ -60,7 +60,11 @@ fn on_wrath_group(
             inviter,
             ..
         } => invited(&mut group, &mut errors, &inviter),
-        Packet::Invite { invited: false, .. } => {}
+        Packet::Invite {
+            invited: false,
+            inviter,
+            ..
+        } => push_group_lines(&mut errors, group.apply_invited_while_grouped(&inviter)),
         Packet::Decline { name } => declined(&mut group, &mut errors, &name),
         Packet::Uninvite => {
             uninvited(&mut group, &mut errors);

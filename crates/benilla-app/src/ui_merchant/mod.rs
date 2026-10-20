@@ -1485,36 +1485,37 @@ mod tests {
                 .unwrap_or_else(|| panic!("{key} is not a catalog row"))
                 .id
         };
-        // `SMSG_BUY_FAILED`, the switch at `0x5dcdd8`: 1 and 7 share `0x23`, 6 is silent, and
-        // codes outside the table fall to `0x17`.
+        // Build 12340's ids (`0xac8af0`) for the rows the 1.12 switches showed; the 12340 arms are
+        // untraced. `SMSG_BUY_FAILED` (1.12 `0x5dcdd8`): 1 and 7 share `0x25`, 6 is silent, and
+        // codes outside the table fall to `0x19`.
         for (code, want) in [
-            (0u8, Some(0x17u16)),
-            (1, Some(0x23)),
-            (2, Some(0x25)),
-            (3, Some(0x17)),
-            (4, Some(0x22)),
-            (5, Some(0x24)),
+            (0u8, Some(0x19u16)),
+            (1, Some(0x25)),
+            (2, Some(0x28)),
+            (3, Some(0x19)),
+            (4, Some(0x24)),
+            (5, Some(0x26)),
             (6, None),
-            (7, Some(0x23)),
-            (8, Some(0x12)),
-            (9, Some(0x17)),
-            (10, Some(0x17)),
+            (7, Some(0x25)),
+            (8, Some(0x14)),
+            (9, Some(0x19)),
+            (10, Some(0x19)),
             (11, Some(0x05)),
-            (12, Some(0x06)),
-            (13, Some(0x17)),
-            (255, Some(0x17)),
+            (12, Some(0x07)),
+            (13, Some(0x19)),
+            (255, Some(0x19)),
         ] {
             assert_eq!(buy_error_key(code).map(id), want, "buy code {code}");
         }
         // `SMSG_SELL_ITEM`, the switch at `0x5dd22c`, where the default is silence.
         for (code, want) in [
             (0u8, None),
-            (1, Some(0x17u16)),
-            (2, Some(0x21)),
-            (3, Some(0x22)),
-            (4, Some(0x1b)),
+            (1, Some(0x19u16)),
+            (2, Some(0x23)),
+            (3, Some(0x24)),
+            (4, Some(0x1d)),
             (5, None),
-            (6, Some(0x0b)),
+            (6, Some(0x0d)),
             (7, None),
             (255, None),
         ] {

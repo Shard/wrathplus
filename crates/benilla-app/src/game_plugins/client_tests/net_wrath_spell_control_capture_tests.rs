@@ -32,9 +32,14 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
         .world()
         .resource::<crate::net::handlers::NetHandlers>()
         .census();
+    // The capture, then the totem bar's own handler.
     let owners = &census[&SessionEventKind::WrathSpellControl];
-    assert_eq!(owners.len(), 1, "{owners:?}");
+    assert_eq!(owners.len(), 2, "{owners:?}");
     assert!(owners[0].contains("wrath_spell_control_capture::receive"));
+    assert!(
+        owners[1].contains("ui_totems::on_totem_created"),
+        "{owners:?}"
+    );
     let mut adapter = WrathEventAdapter::new();
     // Slot 1, totem guid 9, 120 s, Searing Totem.
     let mut totem = vec![1];

@@ -455,7 +455,6 @@ fn shipped_loot_pushed_to_center_by_merchant() {
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
             "Interface\\FrameXML\\LootFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, f);

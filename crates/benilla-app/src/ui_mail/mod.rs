@@ -695,8 +695,8 @@ mod tests {
         );
     }
 
-    /// The result table at `0x4ad17c` (indexed at `0x4ad1a0`), asserted as the message ids its
-    /// arms push.
+    /// The 1.12 result table at `0x4ad17c` (indexed at `0x4ad1a0`), asserted as build 12340's ids
+    /// (`0xac8af0`) for the rows its arms push; the 12340 arms are untraced.
     #[test]
     fn the_mail_result_table_is_the_references_own() {
         let id = |key: &str| {
@@ -705,22 +705,22 @@ mod tests {
                 .id
         };
         for (code, want) in [
-            (mail_error::CANNOT_SEND_TO_SELF, 0x164u16),
-            (mail_error::NOT_ENOUGH_MONEY, 0x25),
-            (mail_error::RECIPIENT_NOT_FOUND, 0x165),
-            (mail_error::NOT_YOUR_TEAM, 0xff),
-            (mail_error::INTERNAL_ERROR, 0x166),
-            (mail_error::TRIAL_ACCOUNT, 0x1be),
-            (mail_error::TOO_MANY_ATTACHMENTS, 0x1c4),
+            (mail_error::CANNOT_SEND_TO_SELF, 0x17bu16),
+            (mail_error::NOT_ENOUGH_MONEY, 0x28),
+            (mail_error::RECIPIENT_NOT_FOUND, 0x17c),
+            (mail_error::NOT_YOUR_TEAM, 0x10d),
+            (mail_error::INTERNAL_ERROR, 0x17d),
+            (mail_error::TRIAL_ACCOUNT, 0x1e8),
+            (mail_error::TOO_MANY_ATTACHMENTS, 0x1f1),
         ] {
             assert_eq!(id(mail_refusal(code)), want, "mail error {code}");
         }
         // `ja 0x4ad147` and the index table's `08` run: 7..13 and past 15 share the database error.
         for code in [7, 8, 13, 16, 99, u32::MAX] {
-            assert_eq!(id(mail_refusal(code)), 0x166, "mail error {code}");
+            assert_eq!(id(mail_refusal(code)), 0x17d, "mail error {code}");
         }
         // A success shows on the yellow info line.
-        assert_eq!(id(MAIL_SENT_KEY), 0x167);
+        assert_eq!(id(MAIL_SENT_KEY), 0x17f);
         assert_eq!(
             benilla_ui::messages::by_key(MAIL_SENT_KEY)
                 .expect("row")

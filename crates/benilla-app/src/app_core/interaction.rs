@@ -158,13 +158,12 @@ pub(crate) struct AreaSpiritHealer {
     pub(crate) in_range: bool,
 }
 
-/// The status text (`[0xb7203c]`): none before world enter and after world leave, the bare
-/// `UNKNOWN` until the server's `0x295` lands, then a built line; localized at push time.
+/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
+/// then a built line; localized at push time.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) enum StoneText {
     #[default]
     None,
-    Unknown,
     Built(String),
 }
 

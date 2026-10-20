@@ -66,6 +66,11 @@ pub(crate) mod wrath_who_capture;
 pub(crate) use apply::apply_net_updates;
 use apply::tag_self_player;
 pub(crate) use handlers::NetHandlerApp;
+// The session markers and edges lower layers name live in `app_core::session` (crate split, step 0
+// residue); these paths keep their users compiling.
+pub(crate) use crate::app_core::session::{
+    DisconnectedMessage, Embodied, EnteredWorldMessage, NetOffline, ObjectStore, SelfPlayer,
+};
 
 pub(crate) use io::LoginRequest;
 // The movement model's apply and its movers live in `crate::motion` (`docs/APP-CRATE-SPLIT-PLAN.md`,
@@ -92,10 +97,6 @@ pub(crate) struct NetPlugin {
     pub(crate) connect: bool,
 }
 
-/// This process has no IO thread ([`NetPlugin::connect`] false); `crate::preflight` announces it.
-/// Not [`NetStatus`]'s `connected`, which a dropped connection also clears.
-#[derive(Resource)]
-pub(crate) struct NetOffline;
 
 impl Plugin for NetPlugin {
     fn build(&self, app: &mut App) {
@@ -306,22 +307,6 @@ pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
     s.run
 }
 
-/// A streamed object's descriptor fields, seeded by the create block and merged with each
-/// `Values` delta. Speeds and pose are movement-block data, not here.
-#[derive(Component, Clone, Default)]
-pub(crate) struct ObjectStore(pub(crate) ObjectFields);
-
-impl ObjectStore {
-    /// The object manager's unit lookup (`0x468460`, `ecx = 8`): a unit or a player, which share
-    /// the unit block; a game object, corpse or item is not one.
-    pub(crate) fn is_unit(&self) -> bool {
-        use benilla_protocol::messages::ObjectType;
-        matches!(
-            self.0.object_type(),
-            Some(ObjectType::Unit | ObjectType::Player)
-        )
-    }
-}
 
 /// One descriptor dword moved on a streamed object, the reference's `CMirrorHandler` edge: the
 /// values notifier (`0x465330`) diffs live against a shadow copy and passes the old value
@@ -433,19 +418,7 @@ pub(crate) fn apply_fields_for_test(world: &mut World, entity: Entity, delta: Ob
         .write_batch(edges);
 }
 
-/// Our own character's entity (guid == [`SelfGuid`]): identity, not what we steer ([`Embodied`]).
-#[derive(Component)]
-pub(crate) struct SelfPlayer;
 
-/// The body this client is attached to: the reference's camera anchor (`camera+0x88`), written
-/// only by the constructor and `SetTarget 0x50d0f0`, never by a control update. Normally our own
-/// body; under possession, the possessed unit.
-///
-/// At most one entity carries it, and a claimed mover not yet streamed is none: outbound
-/// `MSG_MOVE_*` carry no guid, so a fallback to our body would write our pose onto the creature.
-/// Whether it may move is [`ActiveMover`]. [`crate::player`] owns the placement.
-#[derive(Component)]
-pub(crate) struct Embodied;
 
 /// The unit this client authors motion for: the reference's active-mover global
 /// (`0xc4da98`/`0xc4da9c`, written only by `SetActiveMover 0x6006e0`). A control update that
@@ -1400,18 +1373,6 @@ pub(crate) enum ClientCommand {
         vendor: u64,
         item_guid: u64,
     },
-    /// `CMSG_GMTICKET_CREATE`: `map`/`pos` where we stand and the text; 3.3.5 carries no category
-    /// (AzerothCore `HandleGMTicketCreateOpcode`).
-    GmTicketCreate {
-        map: u32,
-        pos: [f32; 3],
-        text: String,
-    },
-    /// `CMSG_GMTICKET_UPDATETEXT`: the text alone (AzerothCore `HandleGMTicketUpdateOpcode`); one
-    /// send per click.
-    GmTicketUpdate {
-        text: String,
-    },
     /// `CMSG_GMTICKET_GETTICKET`: `GetGMTicket()`.
     GmTicketGet,
     /// `CMSG_GMTICKET_DELETETICKET`.
@@ -1448,10 +1409,6 @@ pub(crate) enum ClientCommand {
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
     LeaveBattlefield,
-    /// `CancelMeetingStoneRequest()`: `CMSG 0x293`.
-    MeetingStoneLeave,
-    /// The enter-world meeting-stone status query: `CMSG 0x296`.
-    MeetingStoneStatusQuery,
     // ── The tutorial system ──
     /// `FlagTutorial` or an auto-acknowledge: `CMSG_TUTORIAL_FLAG`, the 0-based id.
     TutorialFlag {
@@ -2293,14 +2250,6 @@ pub(crate) struct CharacterLoginFailedMessage {
     pub(crate) result: u8,
 }
 
-/// We entered the world.
-#[derive(Message)]
-pub(crate) struct EnteredWorldMessage {
-    /// Rested billing minutes from `SMSG_AUTH_RESPONSE`, the only time they arrive.
-    pub(crate) billing_time_rested: u32,
-    /// The tutorial flags, if `SMSG_TUTORIAL_FLAGS` came during the login handshake.
-    pub(crate) tutorial_flags: Option<Vec<u8>>,
-}
 
 /// `SMSG_ADDON_INFO`: the addons the server hid from the Lua index space, or `None` if it did
 /// not answer. A resource, since it must exist before the world-entry UI load runs any addon;
@@ -2338,32 +2287,6 @@ pub(crate) struct LoginQueuedMessage {
     pub(crate) realm: Option<String>,
 }
 
-/// The session ended; the IO thread is back at its pre-logon park.
-#[derive(Message, Clone)]
-pub(crate) struct DisconnectedMessage {
-    pub(crate) reason: String,
-    pub(crate) end: benilla_protocol::SessionEnd,
-    /// The reference's `DISCONNECTED_FROM_SERVER`: back at the account screen, nothing retried.
-    /// Decided once in [`Self::new`], so its four readers (teardown, screen, cover, credentials)
-    /// cannot disagree.
-    pub(crate) session_over: bool,
-}
-
-impl DisconnectedMessage {
-    /// `session_over` is false after a logout (the relist is the select the player asked for) and
-    /// in a run declared unattended ([`crate::run_mode::unattended`]), which reconnects. Not the
-    /// login env vars: a person's launch line sets them too, and a reconnect would take the
-    /// account back from whoever displaced us.
-    pub(crate) fn new(reason: String, end: benilla_protocol::SessionEnd) -> Self {
-        let session_over =
-            end == benilla_protocol::SessionEnd::Lost && !crate::run_mode::unattended();
-        Self {
-            reason,
-            end,
-            session_over,
-        }
-    }
-}
 
 /// A login attempt failed before the roster; the IO thread is back at its pre-logon park.
 /// `terminal` is a failure retrying cannot fix (the server requires Warden, say): never resubmit.

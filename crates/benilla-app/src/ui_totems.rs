@@ -72,6 +72,8 @@ pub(crate) struct UiTotemsPlugin;
 impl Plugin for UiTotemsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NativeTotems>()
+            // After `net::wrath_spell_control_capture` keeps the receipt.
+            .net_handler(SessionEventKind::WrathSpellControl, on_totem_created)
             .net_handler(SessionEventKind::Connected, clear)
             .net_handler(SessionEventKind::Disconnected, clear)
             .add_systems(
@@ -80,6 +82,22 @@ impl Plugin for UiTotemsPlugin {
                     .in_set(crate::ui_unit::UnitFeed)
                     .after(crate::ui_action::ActionBook),
             );
+    }
+}
+
+/// `SMSG_TOTEM_CREATED` into its slot.
+fn on_totem_created(In(event): In<SessionEvent>, mut totems: ResMut<NativeTotems>) {
+    if let SessionEvent::WrathSpellControl {
+        packet:
+            benilla_protocol::wrath_spell_control::Packet::TotemCreated {
+                slot,
+                totem,
+                duration_ms,
+                spell_id,
+            },
+    } = event
+    {
+        totems.created(slot, totem, duration_ms, spell_id);
     }
 }
 

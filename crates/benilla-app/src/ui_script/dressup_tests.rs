@@ -31,7 +31,6 @@ const ROOM_UI: &[&str] = &[
     "Interface\\FrameXML\\ItemRef.xml",
     // After the panel kit: the room's Close and Reset buttons inherit its templates at load.
     "Interface\\FrameXML\\DressUpFrame.xml",
-    "ScrollTemplates.xml", // our scroll kits
 ];
 
 /// The room with no bag window, for the click sites that never touch a container.

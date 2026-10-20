@@ -105,7 +105,7 @@ fn on_tame_failure(In(ev): In<SessionEvent>, mut failures: ResMut<PetTameFailure
 
 fn on_refusal_line(In(ev): In<SessionEvent>, mut errors: ResMut<UiErrorKeys>) {
     match ev {
-        SessionEvent::PetNameInvalid { .. } => pet_name_invalid(&mut errors),
+        SessionEvent::PetNameInvalid { reason, .. } => pet_name_invalid(reason, &mut errors),
         SessionEvent::PetBroken => pet_broken(&mut errors),
         _ => {}
     }
@@ -248,11 +248,34 @@ fn pet_tame_failure(reason: u8, failures: &mut PetTameFailures) {
     failures.0.push(reason);
 }
 
-/// `SMSG_PET_NAME_INVALID`, an empty body: the reference raises `ERR_INVALID_PETNAME` and reads
-/// nothing (`0x5e3e33`). No local name was applied, so nothing rolls back.
-fn pet_name_invalid(errors: &mut UiErrorKeys) {
-    debug!("net: pet name refused");
-    errors.0.push(UiError::key("ERR_INVALID_PETNAME"));
+/// `SMSG_PET_NAME_INVALID`: build 12340's handler (`0x6e2e90`, case `0x178`) reads the reason and
+/// raises its name-check message ([`name_check_key`]). No local name was applied, so nothing rolls
+/// back. Unresolved: with declined forms it also fires event `0x252` with the name and its five
+/// forms, which no handler here receives (only Russian clients send them).
+fn pet_name_invalid(reason: u32, errors: &mut UiErrorKeys) {
+    debug!("net: pet name refused ({reason})");
+    errors.0.push(UiError::key(name_check_key(reason)));
+}
+
+/// Build 12340's name-check code to its message (`0x5218c0`), AzerothCore's
+/// `PetNameInvalidReason`: rows `0x256`-`0x262`, and the generic `ERR_NAME_INVALID` for any other
+/// code.
+pub(crate) fn name_check_key(code: u32) -> &'static str {
+    match code {
+        2 => "ERR_NAME_NO_NAME",
+        3 => "ERR_NAME_TOO_SHORT",
+        4 => "ERR_NAME_TOO_LONG",
+        6 => "ERR_NAME_MIXED_LANGUAGES",
+        7 => "ERR_NAME_PROFANE",
+        8 => "ERR_NAME_RESERVED",
+        0xb => "ERR_NAME_THREE_CONSECUTIVE",
+        0xc => "ERR_NAME_INVALID_SPACE",
+        0xd => "ERR_NAME_CONSECUTIVE_SPACES",
+        0xe => "ERR_NAME_RUSSIAN_CONSECUTIVE_SILENT_CHARACTERS",
+        0xf => "ERR_NAME_RUSSIAN_SILENT_CHARACTER_AT_BEGINNING_OR_END",
+        0x10 => "ERR_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME",
+        _ => "ERR_NAME_INVALID",
+    }
 }
 
 /// `SMSG_PET_BROKEN`, an empty body: loyalty hit zero; raise `ERR_PET_BROKEN` (`0x4bdc00`). The
@@ -458,6 +481,32 @@ mod tests {
                 benilla_ui::messages::MsgKind::Error,
                 "{key} is the red line"
             );
+        }
+    }
+
+    /// Every reason a refused rename can carry lands on a build-12340 row, the red line, never the
+    /// 1.12 `ERR_INVALID_PETNAME` the 12340 table lacks.
+    #[test]
+    fn every_pet_name_refusal_is_a_12340_red_line() {
+        use benilla_ui::messages::{by_key, MsgKind};
+        let mut errors = UiErrorKeys::default();
+        for reason in 0..=0x12 {
+            pet_name_invalid(reason, &mut errors);
+        }
+        assert_eq!(errors.0[2].key, "ERR_NAME_NO_NAME");
+        assert_eq!(errors.0[0xd].key, "ERR_NAME_CONSECUTIVE_SPACES");
+        assert_eq!(
+            errors.0[1].key, "ERR_NAME_INVALID",
+            "an unmapped code is the generic row"
+        );
+        for e in &errors.0 {
+            let row = by_key(e.key).unwrap_or_else(|| panic!("{} is not a catalog row", e.key));
+            assert!(
+                row.id >= 0x256 && row.id <= 0x262,
+                "{} is a 12340 name row",
+                e.key
+            );
+            assert_eq!(row.kind, MsgKind::Error, "{} is the red line", e.key);
         }
     }
 }

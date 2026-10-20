@@ -218,10 +218,24 @@ impl GroupState {
             .take(4)
     }
 
-    /// `SMSG_GROUP_INVITE`: the popup plus a chat line, as the reference's `0x5e6730` does.
+    /// `SMSG_GROUP_INVITE` we may accept: the popup plus a chat line. Build 12340's handler
+    /// (`0x6df1a0`) opens the popup (`0x512540`) and raises message `0x41`,
+    /// `ERR_INVITED_TO_GROUP_SS`, whose player link takes the name twice.
     pub fn apply_invited(&mut self, inviter: &str) -> Vec<UiError> {
         self.pending_invite = Some(inviter.to_string());
-        vec![UiError::s("ERR_INVITED_TO_GROUP_S", inviter)]
+        vec![UiError::strings(
+            "ERR_INVITED_TO_GROUP_SS",
+            &[inviter, inviter],
+        )]
+    }
+
+    /// `SMSG_GROUP_INVITE` with its accept byte 0, because we are already grouped: no popup, and
+    /// message `0x42`, `ERR_INVITED_ALREADY_IN_GROUP_SS` (`0x6df1a0`).
+    pub fn apply_invited_while_grouped(&self, inviter: &str) -> Vec<UiError> {
+        vec![UiError::strings(
+            "ERR_INVITED_ALREADY_IN_GROUP_SS",
+            &[inviter, inviter],
+        )]
     }
 
     /// `SMSG_GROUP_DECLINE`: our invitee said no; only the inviter gets it.
@@ -906,9 +920,21 @@ mod tests {
         let mut g = GroupState::default();
         assert_eq!(
             g.apply_invited("Bob"),
-            vec![UiError::s("ERR_INVITED_TO_GROUP_S", "Bob")]
+            vec![UiError::strings("ERR_INVITED_TO_GROUP_SS", &["Bob", "Bob"])]
         );
         assert_eq!(g.pending_invite.as_deref(), Some("Bob"));
+        assert_eq!(
+            g.apply_invited_while_grouped("Dan"),
+            vec![UiError::strings(
+                "ERR_INVITED_ALREADY_IN_GROUP_SS",
+                &["Dan", "Dan"]
+            )]
+        );
+        assert_eq!(
+            g.pending_invite.as_deref(),
+            Some("Bob"),
+            "no popup for that one"
+        );
         assert_eq!(
             g.apply_command_result(party_operation::INVITE, "Carol", party_result::OK),
             Some(UiError::s("ERR_INVITE_PLAYER_S", "Carol"))
@@ -1026,18 +1052,19 @@ mod tests {
         );
     }
 
-    /// Asserted by message id, since the English cannot tell a right key from a wrong one.
+    /// Asserted by message id, since the English cannot tell a right key from a wrong one: build
+    /// 12340's ids (`0xac8af0`) for the rows the 1.12 arms pushed; the 12340 arms are untraced.
     #[test]
     fn every_party_result_names_the_message_id_the_reference_pushes() {
         const TABLE: &[(u32, u16, bool)] = &[
-            (party_result::BAD_PLAYER_NAME, 0x47, true),
-            (party_result::TARGET_NOT_IN_GROUP, 0x49, true),
-            (party_result::GROUP_FULL, 0x4a, false),
-            (party_result::ALREADY_IN_GROUP, 0x3d, true),
-            (party_result::NOT_IN_GROUP, 0x48, false),
-            (party_result::NOT_LEADER, 0x4b, false),
-            (party_result::WRONG_FACTION, 0xff, false),
-            (party_result::IGNORING_YOU, 0x13d, true),
+            (party_result::BAD_PLAYER_NAME, 0x4f, true),
+            (party_result::TARGET_NOT_IN_GROUP, 0x51, true),
+            (party_result::GROUP_FULL, 0x53, false),
+            (party_result::ALREADY_IN_GROUP, 0x43, true),
+            (party_result::NOT_IN_GROUP, 0x50, false),
+            (party_result::NOT_LEADER, 0x54, false),
+            (party_result::WRONG_FACTION, 0x10d, false),
+            (party_result::IGNORING_YOU, 0x150, true),
         ];
         let mut g = GroupState::default();
         for &(result, id, takes_name) in TABLE {
@@ -1066,13 +1093,13 @@ mod tests {
             benilla_ui::messages::by_key(ok(party_operation::INVITE).unwrap().key)
                 .unwrap()
                 .id,
-            0x3a
+            0x3f
         );
         assert_eq!(
             benilla_ui::messages::by_key(ok(party_operation::LEAVE).unwrap().key)
                 .unwrap()
                 .id,
-            0x42
+            0x4a
         );
     }
 
@@ -1192,6 +1219,7 @@ mod tests {
         list(&mut g, 1, &[("Alice", 1), ("Dave", 4)], 1);
         list(&mut g, 1, &[("Alice", 1)], 1);
         lines.extend(g.apply_invited("Bob"));
+        lines.extend(g.apply_invited_while_grouped("Dan"));
         lines.extend(g.apply_declined("Carol"));
         lines.extend(g.apply_leader_changed("Alice", Some("Us")));
         lines.extend(g.apply_leader_changed("Us", Some("Us")));
@@ -1209,7 +1237,8 @@ mod tests {
             [
                 "ERR_DECLINE_GROUP_S",
                 "ERR_GROUP_DISBANDED",
-                "ERR_INVITED_TO_GROUP_S",
+                "ERR_INVITED_ALREADY_IN_GROUP_SS",
+                "ERR_INVITED_TO_GROUP_SS",
                 "ERR_JOINED_GROUP_S",
                 "ERR_LEFT_GROUP_S",
                 "ERR_NEW_LEADER_S",
@@ -1221,7 +1250,7 @@ mod tests {
                 "ERR_RAID_YOU_LEFT",
                 "ERR_UNINVITE_YOU",
             ],
-            "all thirteen keys this window can raise are exercised below"
+            "all fourteen keys this window can raise are exercised below"
         );
 
         for msg in &lines {

@@ -3,7 +3,7 @@
 //! naming are [`super::addons::Addon`]'s.
 //!
 //! The core is the chain's own `FrameXML.toc` ([`core`]), its rows in its order, as `UI_Init`
-//! walks it; benilla's layer (`assets/ui/layer.toc`) follows it. An entry with a path separator
+//! walks it; the AzerothBench root (`assets/ui/wrath/bootstrap.toc`) follows it. An entry with a path separator
 //! comes off the chain, a bare filename is a file we ship ([`is_chain_entry`]). Without client
 //! data the chain files are absent, and the log says so once.
 

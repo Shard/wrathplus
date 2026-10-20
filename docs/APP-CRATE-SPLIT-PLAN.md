@@ -311,6 +311,14 @@ already resolve to `app_core` through the old paths' re-exports: the move steps 
 - Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
   and `nameplates` (3); `GuildMemberNotify` goes with it.
 
+**Queued for Wire A (Native Wire): producer-less native writers.** Wire B's `ClientCommand` dead-field
+audit (d20aeba3) kept seven admitted Wrath writers that nothing constructs, each under its own
+`#[allow(dead_code)]` in `net.rs`: `MoveTimeSkipped`, `NativeChatCommand`, `NativeMirrorImageQuery`,
+`NativeParty`, `GetChannelMemberCount`, `ClearChannelWatch`, `DeclineChannelInvite`. For each,
+check whether the stock 12340 UI or client sends it (a missing producer is a player-facing gap, as
+`DeclineChannelInvite` or `NativeParty` may be), then wire the producer or delete the variant, and
+drop its allow.
+
 **The cvar registry (item 4 follow-up, 121): needs a short design note before moving.** After
 Experience's unit the rows register from their features, but `cvars` still names each feature's
 config resource and `on_cvar` hook (`video::VideoConfig`, `realmlist::Realmlist`,
@@ -371,9 +379,9 @@ Done (Experience):
 |---|---|---|
 | open-window and interaction state | `TrainerOpen` (ui_trainer), `MailOpen`, `Stationery`, `Packages` (ui_mail), `GuildBankOpen`, `ItemTextOpen`, `LetterTexts`, `PageMaterials` (ui_item_text), `GossipState`, `BinderState`, `MeetingStone`, `MeetingStoneUse`, `AreaSpiritHealer`, `AREA_SPIRIT_HEALER_AURA` (ui_dialog_verbs), `FlightMasterStatus` (ui_taxi), `TradeSkillOpens`, `MerchantOpen`, `SocialState`, `BindGate`, `TabardDesign`, `GoOpener`, `GoOpenerCasts`, `PlayerActions`, `SPELL_ATTACK` (ui_action), `ItemUse`, `ItemSearch`, `InventoryScope`, `ItemSubClasses` (ui_items), `UnitTokens`, `CombatTextEvent` (ui_unit), `LootKneel`, `LootMoveStart` (ui_loot), `AuraDurations`, `SkillLines`, `LearnedInTab`, `GROUPTYPE_RAID`, `PARTY_PET_TOKENS`, `AfkMirror`, `DURABILITYDAMAGE_DEATH`, `TutorialEvent`, `tutorial::id::LOOTING`, `InputHooks`, `InspectMode`, `UiScaleCvar`, `PendingEntryUiLoad`, `UiKeyboardCapture`, `PlayerUiClickConsumed`, `PlayerUiHover`, `UiClock`, `GlueCanvas`, `Realms`, `LoginIntent` | `app_core::state` |
 | catalogs the entity spawn reads | `PetFamilyTables`, `PetStatTables` (ui_pet_stats), `RepairTables` (ui_merchant), `BankPrices` (ui_bank), `StableSlotPrices` (ui_stable) | `app_core::catalogs` |
-| native packet queues `net` fills | `NativePetNamePackets`, `NativeBattlegroundRest`, `ArenaRosterRefresh`, `NativeWhoPackets`, `NativeTotems`, `combat_log::native::NativeCombatLog` | the `net` layer, beside Wire B's FIFOs |
+| native packet queues `net` fills | `NativePetNamePackets`, `NativeBattlegroundRest`, `ArenaRosterRefresh`, `NativeWhoPackets`, `NativeTotems`, `combat_log::native::NativeCombatLog` | the `net` layer, beside Wire B's FIFOs. Done (Wire B): the pet-name and WHO FIFOs moved whole; App's 4a took the arena lines out of `net`, so it names neither BG queue; the spell-log and spell-control captures keep only their FIFOs, and `combat_log` and `ui_totems` record steals and totems from their own handlers on the same kinds. |
 | UI overlay drawing world code uses | `ui_pass::{UiQuad, UiQuadMaterial, UiQuads, UvRect, PlayerUiCamera, PlayerUiPlugin}`, `ui_models::UiModelTiles`, `ui_text::TextSeat`, `area_poi::AreaPoiRes` | a world-layer overlay module (the quads are drawn by world systems) |
-| net and player items lower layers name | `net::{SelfPlayer, ObjectStore, NetOffline, Embodied, DisconnectedMessage, EnteredWorldMessage}`, `player::{Player, UNIT_FLAG_IN_COMBAT}`, `creature_anim::UNIT_FLAG_DISARMED`, `target::Selection`, `console::{ConsoleEcho, ConsoleCommandApp}`, `capture::ProbeAuctionPlugin` | `app_core::state` (resources, markers, constants); the plugins stay and their users move up |
+| net and player items lower layers name | `net::{SelfPlayer, ObjectStore, NetOffline, Embodied, DisconnectedMessage, EnteredWorldMessage}`, `player::{Player, UNIT_FLAG_IN_COMBAT}`, `creature_anim::UNIT_FLAG_DISARMED`, `target::Selection`, `console::{ConsoleEcho, ConsoleCommandApp}`, `capture::ProbeAuctionPlugin` | `app_core::state` (resources, markers, constants); the plugins stay and their users move up. Done (Wire B): the `net::*` half is in `app_core::session`, re-exported from `net`. |
 | test fixtures | `ui_items::TestObjects` and the other test-only references (20) | a `test-support` module or feature |
 
 **Needs design (~93 references): calls from a lower layer into a higher one.** Each wants an
