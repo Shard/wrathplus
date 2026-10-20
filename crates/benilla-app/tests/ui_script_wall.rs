@@ -28,7 +28,12 @@ fn family(rel: &str) -> Family {
     let file = rel.rsplit('/').next().unwrap_or(rel);
     if rel.starts_with("capture/") {
         Family::Probe
-    } else if file == "tests.rs" || file.ends_with("_tests.rs") || rel.contains("/tests/") {
+    } else if file == "tests.rs"
+        || file.ends_with("_tests.rs")
+        || rel.contains("/tests/")
+        // The whole-client tests, gathered in the root layer (`game_plugins::client_tests`).
+        || rel.starts_with("game_plugins/client_tests/")
+    {
         Family::Test
     } else if rel.starts_with("ui_") {
         Family::Feed

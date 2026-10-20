@@ -65,4 +65,4 @@ fn clear(
 
 #[cfg(test)]
 #[path = "wrath_inventory_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

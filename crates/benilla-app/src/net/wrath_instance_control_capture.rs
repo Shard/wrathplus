@@ -32,4 +32,4 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeInstanceControlP
 
 #[cfg(test)]
 #[path = "wrath_instance_control_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

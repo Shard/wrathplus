@@ -88,11 +88,15 @@ the later moves are pure file moves. Each item names the symbols that point the 
    `ui_chat::combat`, `ui_guild`, `perf`, …). This removes 92 core → world/ui/tools references.
 5. **Capture FIFOs into `net`.** The `ui_native::wrath_*` capture modules that `net` re-exports
    move under `net/` (the UI side keeps its drains).
-6. **Tests that build the whole client.** 44 references to
-   `game_plugins::schedule_tests::headless_client` sit in lower modules' unit tests. Move those
-   tests to `crates/benilla-app/tests/` (root integration tests) or give each layer a narrower
-   harness that adds only its own plugins. Test-only back references total 112; the rest are
-   `Spells` (31, fixed by item 2) and a handful of `InteractNpc`/`HardLanding`/`QuestGiver`.
+6. **Tests that build the whole client.** `game_plugins::schedule_tests::headless_client` was
+   named from 61 lower-module files (the first count, 44, missed the fixtures that call it, such
+   as `ui_pet`'s `rig`). Done: every test that reaches it, directly or through a fixture, lives in
+   the root layer's `#[cfg(test)] mod client_tests` under `game_plugins`, one file per source
+   module; fixtures that do not build the client stay in their layer. Kept inside the crate
+   rather than moved to `tests/`, so nothing became public: the moved code reaches its modules
+   through `pub(crate)`, and the cross-crate widening happens once, at the split, from its
+   resolved edge list. Test-only back references total 112; the rest are `Spells` (31, fixed by
+   item 2) and a handful of `InteractNpc`/`HardLanding`/`QuestGiver`.
 
 Done when the module graph, rerun with the script below, shows no back edge between layers.
 

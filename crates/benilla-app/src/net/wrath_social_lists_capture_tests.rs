@@ -44,19 +44,3 @@ fn receipts_queue_in_order_reject_malformed_and_clear_on_both_boundaries() {
         assert!(app.world().resource::<NativeRaidBrowser>().0.is_empty());
     }
 }
-
-#[test]
-fn built_client_has_one_owner_each() {
-    let app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    for kind in [
-        SessionEventKind::WrathChannelMembers,
-        SessionEventKind::WrathRaidBrowser,
-    ] {
-        assert_eq!(census[&kind].len(), 1, "{kind:?}");
-        assert!(census[&kind][0].contains("wrath_social_lists_capture"));
-    }
-}

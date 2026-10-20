@@ -29,7 +29,3 @@ fn clear(In(event): In<SessionEvent>, mut packets: ResMut<NativeBattlegroundPack
         packets.0.clear();
     }
 }
-
-#[cfg(test)]
-#[path = "wrath_battleground_capture_tests.rs"]
-mod tests;

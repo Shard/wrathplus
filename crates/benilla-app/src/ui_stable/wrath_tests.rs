@@ -71,16 +71,3 @@ fn adapter_fifo_is_lossless_repeated_ordered_and_disconnect_scoped() {
     );
     assert!(app.world().resource::<NativeStablePackets>().0.is_empty());
 }
-#[test]
-fn built_client_has_one_native_owner_separate_from_vanilla() {
-    let mut app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world_mut()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathStable];
-    assert_eq!(owners.len(), 1);
-    assert!(owners[0].contains("ui_stable::wrath::receive"));
-    assert!(census[&SessionEventKind::ListStabledPets][0].contains("ui_stable::net::on_list"));
-    assert!(census[&SessionEventKind::StableResult][0].contains("ui_stable::net::on_result"));
-}

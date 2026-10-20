@@ -98,4 +98,4 @@ fn feed_quests_completed(
 
 #[cfg(test)]
 #[path = "wrath_quests_completed_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -20,11 +20,11 @@ use crate::pending_item_ops::{LockTransitions, PendingItemOps};
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;
 
-mod currency;
+pub(crate) mod currency;
 mod drain;
 mod equip_error;
 pub(crate) mod feed;
-mod net;
+pub(crate) mod net;
 mod owned;
 pub(crate) use owned::{owned_category_count, owned_entry_count};
 

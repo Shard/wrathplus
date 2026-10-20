@@ -180,7 +180,7 @@ pub(super) fn feed_chain_units(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::names::CreatureRecord;
     use crate::net::GuidIndex;
@@ -260,7 +260,7 @@ mod tests {
     /// targets `EXTRA`. The group is a raid of us, `A`, `B` and `C`, all in our subgroup, so the
     /// three are also party slots 1 to 3. The aura feed, whose resolver inputs the chain feed
     /// reads, and the chain feed run.
-    fn app() -> App {
+    pub(crate) fn app() -> App {
         let (tx, _rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin))
@@ -339,7 +339,7 @@ mod tests {
         app.world().non_send_resource::<UiScript>()
     }
 
-    fn name(app: &App, token: &str) -> Option<String> {
+    pub(crate) fn name(app: &App, token: &str) -> Option<String> {
         script(app)
             .eval(&format!("return UnitName({token:?})"))
             .unwrap()
@@ -466,36 +466,5 @@ mod tests {
         app.update();
         // The name would be the name cache's (`0x5171eb`), which a chain's end does not read yet.
         assert_eq!(health(&app, "raid3target"), 0);
-    }
-
-    /// The chain feed reads the resolver inputs the aura feed pushes in the same frame, so the
-    /// declared order puts the feed after it: read off the schedule graph.
-    #[test]
-    fn the_chain_feed_runs_after_the_aura_feed_it_reads() {
-        use crate::game_plugins::schedule_tests::{census, headless_client, SyncPoints};
-
-        let mut app = headless_client();
-        let c = census(&mut app, Update, SyncPoints::Declared);
-        if !c.systems.values().any(|s| s.name.contains("benilla_app::")) {
-            eprintln!("skipped: this build carries no type names");
-            return;
-        }
-        let one = |suffix: &str| {
-            let mut hits = c.systems.iter().filter(|(_, s)| s.name.ends_with(suffix));
-            match (hits.next(), hits.next()) {
-                (Some((k, _)), None) => *k,
-                _ => panic!("exactly one system named `…{suffix}` in Update"),
-            }
-        };
-        let aura = one("::ui_aura::feed_auras");
-        for feed in [
-            "::ui_unit::held::feed_chain_units",
-            "::targeting::feed_targeting_to_vm",
-        ] {
-            assert!(
-                c.dependencies.contains(&(aura, one(feed))),
-                "{feed} is declared after feed_auras"
-            );
-        }
     }
 }

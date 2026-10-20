@@ -40,18 +40,6 @@ fn appearance_replies_queue_in_order_and_session_boundaries_clear_them() {
 }
 
 #[test]
-fn built_client_has_one_owner() {
-    let app = crate::game_plugins::schedule_tests::headless_client();
-    let census = app
-        .world()
-        .resource::<crate::net::handlers::NetHandlers>()
-        .census();
-    let owners = &census[&SessionEventKind::WrathAppearance];
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(owners[0].contains("wrath_appearance::receive"));
-}
-
-#[test]
 fn the_barber_window_closes_when_the_player_leaves_the_chair() {
     let mut chair = BarberChair::default();
     assert!(!chair_step(&mut chair, Some(0)), "nothing open");

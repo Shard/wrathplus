@@ -114,4 +114,4 @@ fn tick_server_clock(
 
 #[cfg(test)]
 #[path = "wrath_ui_timer_capture_tests.rs"]
-mod tests;
+pub(crate) mod tests;

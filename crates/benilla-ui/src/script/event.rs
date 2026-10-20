@@ -230,8 +230,11 @@ pub(crate) fn invoke_handler(
     }
 }
 
-/// Wrath's handler ABI: `self`, then the event name for `OnEvent`, then event/widget values.
-/// No legacy `this`, `event` or `argN` globals are created or modified.
+/// Build 12340's handler ABI (`0x819ea0`): `self`, then the event name for `OnEvent`, then the
+/// event's or widget's values, as parameters; and, for the 2.x-era handlers that read them, the
+/// `this` global (the frame), `event` (an event dispatch only) and `arg1..argN` (the values after
+/// the event name). Each global is saved before and restored after the call, even on error, so
+/// nested dispatches are safe.
 fn invoke_with_arguments(
     lua: &Lua,
     wrapper: Table,
@@ -239,13 +242,46 @@ fn invoke_with_arguments(
     event_name: Option<&str>,
     extra: Vec<Value>,
 ) -> mlua::Result<()> {
+    let g = lua.globals();
+    let saved_this: Value = g.get("this")?;
+    let saved_event: Option<Value> = match event_name {
+        Some(_) => Some(g.get("event")?),
+        None => None,
+    };
+    let mut saved_args: Vec<Value> = Vec::with_capacity(extra.len());
+    for i in 1..=extra.len() {
+        saved_args.push(g.get::<Value>(arg_name(i).as_ref())?);
+    }
+
+    g.set("this", wrapper.clone())?;
+    let event_value = match event_name {
+        Some(name) => {
+            let v = Value::String(lua.create_string(name)?);
+            g.set("event", v.clone())?;
+            Some(v)
+        }
+        None => None,
+    };
+    for (i, v) in extra.iter().enumerate() {
+        g.set(arg_name(i + 1).as_ref(), v.clone())?;
+    }
+
     let mut args = mlua::MultiValue::with_capacity(extra.len() + 2);
     args.push_back(Value::Table(wrapper));
-    if let Some(event_name) = event_name {
-        args.push_back(Value::String(lua.create_string(event_name)?));
+    if let Some(v) = event_value {
+        args.push_back(v);
     }
     args.extend(extra);
-    func.call(args)
+    let outcome = func.call::<()>(args);
+
+    g.set("this", saved_this)?;
+    if let Some(v) = saved_event {
+        g.set("event", v)?;
+    }
+    for (i, v) in saved_args.into_iter().enumerate() {
+        g.set(arg_name(i + 1).as_ref(), v)?;
+    }
+    outcome
 }
 
 /// The `argN` global names, spelled out so the common arities allocate nothing.
