@@ -6,18 +6,18 @@
 //! consecutive packets.
 
 use crate::net::{GuidIndex, NetEvents, ObjectStore, UnitMoveModes, UnitSpeeds};
-use benilla_protocol::messages::{ObjectType, SpeedKind, SplineMode};
+use benilla_protocol::types::{ObjectType, SpeedKind, SplineMode};
 use benilla_protocol::{EntityKind, MoveSpeeds, ObjectFields, SessionEvent};
 use bevy::prelude::*;
 
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitHealth);
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitHealth);
 
-const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitLevel);
+const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitLevel);
 
-const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
+const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitMaxHealth);
 
 const GUID: u64 = 0xF130_0000_1234_0001;
 

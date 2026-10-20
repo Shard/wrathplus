@@ -20,7 +20,7 @@
 //! survive a reload.
 use crate::net::{ClientCommand, NetCommands, NetHandlerApp, ObjectStore, SelfPlayer};
 use crate::ui_unit::UnitFeed;
-use benilla_protocol::messages::Field;
+use benilla_protocol::types::Field;
 use benilla_protocol::{
     wrath_arena_team::{Command, Member, Packet},
     SessionEvent, SessionEventKind,

@@ -4,7 +4,7 @@
 //! `SMSG_GUILD_QUERY_RESPONSE`, cached by guild id and filled lazily, as in the reference.
 
 use benilla_formats::GuildEmblem;
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     guild_event, GuildCommandResult, GuildEventNotice, GuildInfo, GuildQueryResponse, GuildRoster,
     GuildRosterMember, GUILD_RANKS_MAX_COUNT,
 };
@@ -312,7 +312,7 @@ impl GuildState {
     /// `0x13`/`0x14` or result `0x14` on command `0x05` (`0x5e7792`); the server re-sends the
     /// roster for any real change.
     fn apply_command_result(&mut self, result: &GuildCommandResult) {
-        use benilla_protocol::messages::{guild_command, guild_command_error};
+        use benilla_protocol::types::{guild_command, guild_command_error};
         let stale = match result.result {
             guild_command_error::PLAYER_NO_MORE_IN_GUILD => {
                 matches!(result.command, guild_command::UNK19 | guild_command::UNK20)
@@ -724,7 +724,7 @@ impl Plugin for UiGuildPlugin {
 mod tests {
     use super::*;
     use crate::ui_social::SocialState;
-    use benilla_protocol::messages::{guild_command, guild_command_error, guild_presence};
+    use benilla_protocol::types::{guild_command, guild_command_error, guild_presence};
 
     fn identity(name: &str, ranks: &[&str]) -> Identity {
         let mut rank_names: [String; GUILD_RANKS_MAX_COUNT] = Default::default();
@@ -761,7 +761,7 @@ mod tests {
         let mut social = SocialState::default();
         crate::ui_social::net::friend_list(
             &mut social,
-            vec![benilla_protocol::messages::FriendEntry {
+            vec![benilla_protocol::types::FriendEntry {
                 guid: 7,
                 ..Default::default()
             }],
@@ -1150,16 +1150,16 @@ mod tests {
 
         // A creature or a guildless player: no `PLAYER_GUILDID`.
         let guildless =
-            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Wrath12340, &[]);
+            ObjectFields::from_fields(benilla_protocol::types::FieldLayout::Wrath12340, &[]);
         assert!(unit_guild(&guildless, &mut guild, &commands).is_none());
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
         // Fields 191/192 = PLAYER_GUILDID/PLAYER_GUILDRANK.
         let unknown = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::PlayerGuildid, 9),
-                (benilla_protocol::messages::Field::PlayerGuildrank, 1),
+                (benilla_protocol::types::Field::PlayerGuildid, 9),
+                (benilla_protocol::types::Field::PlayerGuildrank, 1),
             ],
         );
         assert!(
@@ -1169,10 +1169,10 @@ mod tests {
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
         let member = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::PlayerGuildid, 7),
-                (benilla_protocol::messages::Field::PlayerGuildrank, 1),
+                (benilla_protocol::types::Field::PlayerGuildid, 7),
+                (benilla_protocol::types::Field::PlayerGuildrank, 1),
             ],
         );
         let resolved = unit_guild(&member, &mut guild, &commands).expect("cached");
@@ -1182,10 +1182,10 @@ mod tests {
 
         // A rank past the ten slots names nothing.
         let odd_rank = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::PlayerGuildid, 7),
-                (benilla_protocol::messages::Field::PlayerGuildrank, 99),
+                (benilla_protocol::types::Field::PlayerGuildid, 7),
+                (benilla_protocol::types::Field::PlayerGuildrank, 99),
             ],
         );
         assert_eq!(
@@ -1207,13 +1207,13 @@ mod tests {
         guild.identities.insert(8, Some(identity("", &[])));
 
         let guildless =
-            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Wrath12340, &[]);
+            ObjectFields::from_fields(benilla_protocol::types::FieldLayout::Wrath12340, &[]);
         assert_eq!(unit_guild_name(&guildless, &mut guild, &commands), None);
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
         let unknown = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
-            &[(benilla_protocol::messages::Field::PlayerGuildid, 9)],
+            benilla_protocol::types::FieldLayout::Wrath12340,
+            &[(benilla_protocol::types::Field::PlayerGuildid, 9)],
         );
         assert_eq!(
             unit_guild_name(&unknown, &mut guild, &commands),
@@ -1223,8 +1223,8 @@ mod tests {
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
         let blank = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
-            &[(benilla_protocol::messages::Field::PlayerGuildid, 8)],
+            benilla_protocol::types::FieldLayout::Wrath12340,
+            &[(benilla_protocol::types::Field::PlayerGuildid, 8)],
         );
         assert_eq!(unit_guild_name(&blank, &mut guild, &commands), None);
         assert_eq!(
@@ -1234,10 +1234,10 @@ mod tests {
         );
 
         let member = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::PlayerGuildid, 7),
-                (benilla_protocol::messages::Field::PlayerGuildrank, 1),
+                (benilla_protocol::types::Field::PlayerGuildid, 7),
+                (benilla_protocol::types::Field::PlayerGuildrank, 1),
             ],
         );
         assert_eq!(

@@ -8,7 +8,7 @@ use benilla_formats::{
     load_taxi_nodes, load_taxi_paths, load_world_map_continent_catalog, TaxiNodes, TaxiPaths,
     WorldMapContinent, WorldMapContinentCatalog,
 };
-use benilla_protocol::messages::{taxi_reply, TaxiMask};
+use benilla_protocol::types::{taxi_reply, TaxiMask};
 use bevy::prelude::*;
 
 use benilla_ui::script::{TaxiNodeType, TaxiUiNode};

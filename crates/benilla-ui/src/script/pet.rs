@@ -10,7 +10,7 @@ use mlua::{Lua, MultiValue, Value};
 use super::Model;
 
 // The slot-word values the one-shot orders synthesize, restated from
-// `benilla_protocol::messages::pet` because this crate does not depend on the protocol.
+// `benilla_protocol::types::pet` because this crate does not depend on the protocol.
 const PET_ACT_COMMAND: u8 = 0x07;
 const PET_ACT_REACTION: u8 = 0x06;
 const PET_COMMAND_STAY: u32 = 0;

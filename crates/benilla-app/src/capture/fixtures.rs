@@ -1,7 +1,7 @@
 //! The capture UI fixtures: each arm seeds one window's synthetic but realistic state.
 
 use super::*;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 /// The `vplates` fixture's wolf, the reference screenshot's subject (vmangos `creature_template`
 /// 69 "Timber Wolf": level 2, faction template 32, display 604), at the scenario's look point.
@@ -90,7 +90,7 @@ pub(super) fn seed_ui_fixture(
     const DISP_SHIELD: u32 = 18730;
     const DISP_STONE: u32 = 6418;
 
-    let template = |name: &str, quality: u32| benilla_protocol::messages::ItemInfo {
+    let template = |name: &str, quality: u32| benilla_protocol::types::ItemInfo {
         class: 4,
         subclass: 0,
         name: name.into(),
@@ -187,7 +187,7 @@ pub(super) fn seed_ui_fixture(
                     let mut t = template(name, 1);
                     t.required_level = *req_level;
                     items.insert_template(entry, Some(t));
-                    benilla_protocol::messages::VendorItem {
+                    benilla_protocol::types::VendorItem {
                         slot: i as u32 + 1,
                         entry,
                         display_id: *disp,
@@ -249,7 +249,7 @@ pub(super) fn seed_ui_fixture(
                 "I allow the man to take enough corn to feed his family for a couple of days, \
                  encouraging him to leave the land.",
             ];
-            gossip.options = vec![benilla_protocol::messages::GossipOption {
+            gossip.options = vec![benilla_protocol::types::GossipOption {
                 index: 0,
                 icon: 1,
                 coded: false,
@@ -258,7 +258,7 @@ pub(super) fn seed_ui_fixture(
             gossip
                 .options
                 .extend(judgement.iter().enumerate().map(|(i, message)| {
-                    benilla_protocol::messages::GossipOption {
+                    benilla_protocol::types::GossipOption {
                         index: i as u32 + 1,
                         icon: 0,
                         coded: false,
@@ -269,7 +269,7 @@ pub(super) fn seed_ui_fixture(
         UiFixture::Bank => {
             // A pure banker and the vault, fed through the descriptor and caches that `feed_bank`
             // and `ui_items` push into the VM as live wire data would.
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             names.insert_creature(
                 NPC_ENTRY,
                 Some(crate::names::CreatureRecord {
@@ -294,10 +294,10 @@ pub(super) fn seed_ui_fixture(
             const G_BANKBAG: u64 = 0x2005;
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     &[
-                        (benilla_protocol::messages::Field::ObjectEntry, entry),
-                        (benilla_protocol::messages::Field::ItemStackCount, stack),
+                        (benilla_protocol::types::Field::ObjectEntry, entry),
+                        (benilla_protocol::types::Field::ItemStackCount, stack),
                     ],
                 ) // OBJECT_ENTRY, STACK_COUNT
             };
@@ -394,14 +394,14 @@ pub(super) fn seed_ui_fixture(
             items.insert_template(92_001, Some(template("Brackwater Cudgel", 2)));
             items.insert_template(92_002, Some(template("Militia Warhammer", 1)));
             items.insert_template(92_003, Some(template("Bandit Cloak", 1)));
-            let choice = |entry: u32, disp: u32| benilla_protocol::messages::QuestRewardItem {
+            let choice = |entry: u32, disp: u32| benilla_protocol::types::QuestRewardItem {
                 item_id: entry,
                 count: 1,
                 display_id: disp,
             };
             quest.open(
                 NPC_GUID,
-                crate::ui_quest::QuestView::Detail(benilla_protocol::messages::QuestDetails {
+                crate::ui_quest::QuestView::Detail(benilla_protocol::types::QuestDetails {
                     wrath: None,
                     npc: NPC_GUID,
                     quest_id: 783,
@@ -438,20 +438,20 @@ pub(super) fn seed_ui_fixture(
             // The multi-quest greeting: two available quests, bullet rows under "Available Quests".
             quest.open(
                 NPC_GUID,
-                crate::ui_quest::QuestView::Greeting(benilla_protocol::messages::QuestGiverList {
+                crate::ui_quest::QuestView::Greeting(benilla_protocol::types::QuestGiverList {
                     npc: NPC_GUID,
                     greeting: "Greetings, $N. The town of Goldshire needs able hands.".into(),
                     emote_delay: 0,
                     emote: 0,
                     quests: vec![
-                        benilla_protocol::messages::QuestListEntry {
+                        benilla_protocol::types::QuestListEntry {
                             wrath: None,
                             quest_id: 84,
                             icon: 0,
                             level: 4,
                             title: "Brotherhood of Thieves".into(),
                         },
-                        benilla_protocol::messages::QuestListEntry {
+                        benilla_protocol::types::QuestListEntry {
                             wrath: None,
                             quest_id: 40,
                             icon: 0,
@@ -466,7 +466,7 @@ pub(super) fn seed_ui_fixture(
             // The log reads the self player's PLAYER_QUEST_LOG slots, so a synthetic self player
             // carries two and `feed_quest_log` runs the real chain. A slot is id, packed 6-bit
             // counters plus a state byte, and timer, from field 198.
-            use benilla_protocol::messages::{ObjectFields, QuestObjective, QuestTemplate};
+            use benilla_protocol::types::{ObjectFields, QuestObjective, QuestTemplate};
             const KOBOLD_ENTRY: u32 = 90_002;
             names.insert_creature(
                 KOBOLD_ENTRY,
@@ -597,18 +597,18 @@ pub(super) fn seed_ui_fixture(
             // Slot 0 is quest 783 (counter 0 at 3), slot 1 quest 7 (counter 0 at 10, state
             // COMPLETE), packed as vmangos's `SetQuestSlotCounter` and `SetQuestSlotState` write.
             let fields = ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::PlayerQuestLog, 0, 783),
-                    (benilla_protocol::messages::Field::PlayerQuestLog, 1, 3),
-                    (benilla_protocol::messages::Field::PlayerQuestLog, 2, 0),
-                    (benilla_protocol::messages::Field::PlayerQuestLog, 3, 7),
+                    (benilla_protocol::types::Field::PlayerQuestLog, 0, 783),
+                    (benilla_protocol::types::Field::PlayerQuestLog, 1, 3),
+                    (benilla_protocol::types::Field::PlayerQuestLog, 2, 0),
+                    (benilla_protocol::types::Field::PlayerQuestLog, 3, 7),
                     (
-                        benilla_protocol::messages::Field::PlayerQuestLog,
+                        benilla_protocol::types::Field::PlayerQuestLog,
                         4,
                         10 | (0x01 << 24),
                     ),
-                    (benilla_protocol::messages::Field::PlayerQuestLog, 5, 0),
+                    (benilla_protocol::types::Field::PlayerQuestLog, 5, 0),
                 ],
             );
             // A guid and cached name, as the feeds resolve the player through the self query.
@@ -632,10 +632,10 @@ pub(super) fn seed_ui_fixture(
             items.insert_template(90_118, Some(template("Ruined Pelt", 1)));
             loot.open(
                 NPC_GUID,
-                benilla_protocol::messages::loot_type::CORPSE,
+                benilla_protocol::types::loot_type::CORPSE,
                 4, // 4 copper, the coin row
                 vec![
-                    benilla_protocol::messages::LootItem {
+                    benilla_protocol::types::LootItem {
                         slot: 0,
                         item_id: 90_117,
                         count: 1,
@@ -643,7 +643,7 @@ pub(super) fn seed_ui_fixture(
                         random_property_id: 0,
                         slot_type: 0,
                     },
-                    benilla_protocol::messages::LootItem {
+                    benilla_protocol::types::LootItem {
                         slot: 1,
                         item_id: 90_118,
                         count: 3,
@@ -820,7 +820,7 @@ pub(super) fn seed_ui_fixture(
             // A synthetic self player carrying the full stat block, which the `ui_char` feed turns
             // into snapshots and events as live. A level-12 warrior; positive (stamina, fire) and
             // negative (spirit) buffs exercise the green and red stat colours.
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             const PLAYER_GUID: u64 = 0x51;
             // Equipped item guids (chest, main hand, ranged) and an arrow stack in the backpack.
             const G_CHEST: u64 = 0x1001;
@@ -879,10 +879,10 @@ pub(super) fn seed_ui_fixture(
             // stand-in.
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     &[
-                        (benilla_protocol::messages::Field::ObjectEntry, entry),
-                        (benilla_protocol::messages::Field::ItemStackCount, stack),
+                        (benilla_protocol::types::Field::ObjectEntry, entry),
+                        (benilla_protocol::types::Field::ItemStackCount, stack),
                     ],
                 ) // OBJECT_ENTRY, STACK_COUNT
             };
@@ -930,7 +930,7 @@ pub(super) fn seed_ui_fixture(
             }
         }
         UiFixture::VPlates => {
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             // The self player at the camera eye (the 20 yd plate gate measures from here): a
             // level-2 human, so the wolf cons yellow as in the reference screenshot.
             const PLAYER_GUID: u64 = 0x51;
@@ -1121,7 +1121,7 @@ pub(super) fn seed_ui_fixture(
             // the real chain: names, icons and ranks from `Spell.dbc`, tabs from
             // `SkillLineAbility.dbc`, the General collapse from `SkillRaceClassInfo.dbc` keyed on
             // the descriptor's race and class.
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             const PLAYER_GUID: u64 = 0x51;
             const G_SWORD: u64 = 0x1002;
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
@@ -1143,10 +1143,10 @@ pub(super) fn seed_ui_fixture(
                 &mut index,
                 G_SWORD,
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     &[
-                        (benilla_protocol::messages::Field::ObjectEntry, 93_011),
-                        (benilla_protocol::messages::Field::ItemStackCount, 1),
+                        (benilla_protocol::types::Field::ObjectEntry, 93_011),
+                        (benilla_protocol::types::Field::ItemStackCount, 1),
                     ],
                 ),
                 false,
@@ -1307,7 +1307,7 @@ pub(super) fn seed_ui_fixture(
             }
         }
         UiFixture::NameWater => {
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             // The subject is an NPC's overhead name, and `UnitNameNPC` defaults to "0"; set
             // through Lua as a player would, so the sync drains it into `NameConfig`.
             if let Some(script) = script.as_deref_mut() {
@@ -1377,7 +1377,7 @@ pub(super) fn seed_ui_fixture(
         // The lighting matrix: one spawn with a streamed entity's component set, anonymous and
         // with plates off, so no glyph rides over the body.
         UiFixture::Subject { kind, at } => {
-            use benilla_protocol::messages::ObjectFields;
+            use benilla_protocol::types::ObjectFields;
             let transform = Transform {
                 translation: wow_to_bevy(at),
                 rotation: Quat::from_rotation_y(SUBJECT_YAW),

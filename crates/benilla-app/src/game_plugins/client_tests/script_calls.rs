@@ -4,10 +4,10 @@
 use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
 use crate::script_calls::*;
 use crate::target::Selection;
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     ActionButton, GroupMemberEntry, ACTION_KIND_MACRO, ACTION_KIND_SPELL,
 };
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use benilla_ui::script::ScriptCall;
 use benilla_ui::script::UiScript;
 use benilla_ui::script::{PetBookState, SpellBookState, SpellSlotView, SpellTabView};
@@ -498,7 +498,7 @@ fn attack_with_a_friend_selected_swings_at_the_nearest_enemy_instead() {
                 ActionButton {
                     slot: 0,
                     action: crate::ui_action::SPELL_ATTACK,
-                    kind: benilla_protocol::messages::ACTION_KIND_SPELL,
+                    kind: benilla_protocol::types::ACTION_KIND_SPELL,
                 },
             );
         run(&mut f, lua);

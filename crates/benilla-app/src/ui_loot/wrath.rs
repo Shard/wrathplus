@@ -212,7 +212,7 @@ pub(super) fn inventory_failure(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::LootItem;
+    use benilla_protocol::types::LootItem;
     use benilla_protocol::wrath_loot::InventoryChangeFailure;
 
     const OLD: u64 = 0xF130_0000_0000_0001;
@@ -230,7 +230,7 @@ mod tests {
             count: 1,
             display_info_id: 1,
             random_property_id: 0,
-            slot_type: benilla_protocol::messages::slot_type::ALLOW_LOOT,
+            slot_type: benilla_protocol::types::slot_type::ALLOW_LOOT,
         }
     }
 

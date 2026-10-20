@@ -3,24 +3,24 @@
 
 use crate::net::{ClientCommand, Guid, GuidIndex, NetCommands, ObjectStore, SelfPlayer};
 use crate::target::{AttackPick, Selection};
-use benilla_protocol::messages::ObjectType;
+use benilla_protocol::types::ObjectType;
 use benilla_protocol::{EntityKind, ObjectFields, SessionEvent};
 use benilla_world::model_fade::DespawnFade;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use crossbeam_channel::Receiver;
 
-const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitFlags);
+const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitFlags);
 
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitHealth);
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitHealth);
 
-const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitLevel);
+const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitLevel);
 
-const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
+const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::UnitMaxHealth);
 
 const ME: u64 = 0x0000_0000_0000_0007;
 

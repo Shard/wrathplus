@@ -3,7 +3,7 @@
 //! carried items. Pure over the descriptor and the object manager, so world code (death,
 //! spell, target) and the UI feeds share it; `crate::ui_items` re-exports it for its own users.
 
-use benilla_protocol::messages::{BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST};
+use benilla_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST};
 use benilla_protocol::ObjectFields;
 
 use crate::items::Items;
@@ -90,8 +90,8 @@ pub(crate) struct StorageSlots {
 }
 
 impl StorageSlots {
-    pub fn for_layout(layout: benilla_protocol::messages::FieldLayout) -> Self {
-        if layout == benilla_protocol::messages::FieldLayout::Wrath12340 {
+    pub fn for_layout(layout: benilla_protocol::types::FieldLayout) -> Self {
+        if layout == benilla_protocol::types::FieldLayout::Wrath12340 {
             Self {
                 bank_slots: 28,
                 bank_bags: 7,

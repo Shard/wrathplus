@@ -63,7 +63,7 @@ mod tests {
     use crate::creature_type::CreatureTypeSources;
     use crate::names::{CreatureRecord, NameCache};
     use crate::net::{ObjectStore, Reputations};
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     /// Absolute descriptor indices: `OBJECT_FIELD_ENTRY`, `UNIT_FIELD_BYTES_0` (the race byte),
@@ -303,8 +303,8 @@ mod tests {
 
         const ME: u64 = 1;
         const THEM: u64 = 42;
-        const TEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const TEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
         /// A creature entry whose cached template is a Humanoid (type 7) and one that is a
         /// Beast (type 1).
         const HUMANOID_ENTRY: u32 = 69;

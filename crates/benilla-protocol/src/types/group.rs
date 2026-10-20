@@ -2,7 +2,7 @@
 //! subgroups, raid target icons, ready checks and lockouts (vmangos `Server/Packets/Group.cpp`).
 //! Every guid here is a full `u64` except the party member stats subject, which is packed.
 
-use crate::messages::update_object::power_display_scale;
+use crate::types::update_object::power_display_scale;
 
 /// The raid-assistant bit of a member's flags byte; bits 0-2 are the subgroup
 /// (`Group/Group.cpp:1382,1394`).
@@ -192,11 +192,11 @@ impl PartyMemberStatsInfo {
     /// Deviation: zone and position are kept, not set to the viewer's zone and the object's
     /// position, because nothing in benilla reads them.
     ///
-    /// [`ObjectFields::unit_pet_guid`]: crate::messages::update_object::ObjectFields::unit_pet_guid
+    /// [`ObjectFields::unit_pet_guid`]: crate::types::update_object::ObjectFields::unit_pet_guid
     pub fn snapshot_descriptor(
         &mut self,
-        fields: &crate::messages::update_object::ObjectFields,
-        pet: Option<&crate::messages::update_object::ObjectFields>,
+        fields: &crate::types::update_object::ObjectFields,
+        pet: Option<&crate::types::update_object::ObjectFields>,
         pet_name: Option<&str>,
     ) {
         let mut status = member_status::ONLINE;

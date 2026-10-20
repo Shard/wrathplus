@@ -119,7 +119,7 @@ fn bg_queue_probe(
                     && store
                         .0
                         .unit_npc_services()
-                        .has(benilla_protocol::messages::NpcService::BattleMaster)
+                        .has(benilla_protocol::types::NpcService::BattleMaster)
                     && tf.translation.distance(here) < NEAR_YD
             });
             if let Some((guid, ..)) = master {

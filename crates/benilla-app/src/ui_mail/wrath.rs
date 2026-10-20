@@ -1,6 +1,6 @@
 //! Native mailbox snapshot: inline text and attachment slots are never narrowed to Vanilla mail.
 use super::*;
-use benilla_protocol::messages::mail_message_type;
+use benilla_protocol::types::mail_message_type;
 use benilla_ui::script::{WrathMailAttachment, WrathMailInbox, WrathMailRow};
 
 pub(super) fn snapshot(
@@ -110,7 +110,7 @@ pub(super) fn snapshot(
 // incomplete link while instance-name metadata or the live player level is unavailable.
 fn attachment_link(
     attachment: &benilla_protocol::wrath_mail::Attachment,
-    template: &benilla_protocol::messages::ItemInfo,
+    template: &benilla_protocol::types::ItemInfo,
     rolls: crate::items::RollCatalogs,
     player_level: Option<u32>,
 ) -> Option<String> {

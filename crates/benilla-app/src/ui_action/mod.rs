@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::ActionButton;
+use benilla_protocol::types::ActionButton;
 
 use crate::ui_script::UiInput;
 use crate::ui_unit::UnitFeed;

@@ -10,7 +10,7 @@
 //! category (0) and adds a ticket id and a needs-more-help byte (dropped); its escalation and
 //! viewed bytes are 1.12's assigned and opened bytes. The GM response, the survey-offer status and
 //! the complaint receipt have no 1.12 counterpart and are capture-only.
-use crate::messages::GmTicket;
+use crate::types::GmTicket;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
 

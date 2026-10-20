@@ -12,7 +12,7 @@ use std::io::{self, Cursor};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::events::SessionEvent;
-use crate::messages::{
+use crate::types::{
     GossipOption, GossipPoi, NpcTextBlock, QuestComplete, QuestConfirmAccept, QuestDetails,
     QuestGiverList, QuestListEntry, QuestObjective, QuestOfferReward, QuestRequestItems,
     QuestRewardItem, QuestShareMsg, QuestTemplate, WrathQuestInfo,
@@ -217,7 +217,7 @@ fn end(r: &Cursor<&[u8]>, events: Vec<SessionEvent>) -> io::Result<Vec<SessionEv
 /// `SMSG_NPC_TEXT_UPDATE`'s eight blocks (AC `QueryHandler.cpp:284-356`): probability, the two
 /// gendered texts, the language and three `(delay, emote)` pairs each.
 fn npc_text_blocks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<NpcTextBlock>> {
-    (0..crate::messages::NPC_TEXT_BLOCKS)
+    (0..crate::types::NPC_TEXT_BLOCKS)
         .map(|_| {
             let probability = f32_le(r)?;
             let male = cstring(r)?;
@@ -236,7 +236,7 @@ fn npc_text_blocks(r: &mut Cursor<&[u8]>) -> io::Result<Vec<NpcTextBlock>> {
         .collect()
 }
 
-/// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::messages::dialog_status`] values. 3.3.5
+/// Build 12340's `DIALOG_STATUS_*` onto 1.12's [`crate::types::dialog_status`] values. 3.3.5
 /// adds low-level and repeatable tiers: a low-level offer shows no marker (1.12's `CHAT`), a
 /// repeatable reward is the yellow `?`.
 fn status_events(npc: u64, status: u8) -> Vec<SessionEvent> {
@@ -250,7 +250,7 @@ fn status_events(npc: u64, status: u8) -> Vec<SessionEvent> {
 }
 
 fn dialog_status(status: u8) -> u32 {
-    use crate::messages::dialog_status as d;
+    use crate::types::dialog_status as d;
     match status {
         1 => d::UNAVAILABLE,
         2 | 4 => d::CHAT,
@@ -686,7 +686,7 @@ mod tests {
 
     #[test]
     fn reward_statuses_keep_native_minimap_dot_distinction() {
-        use crate::messages::dialog_status as d;
+        use crate::types::dialog_status as d;
         let guid = 0xf130_0001_2300_4567u64;
         for (native, expected) in [(9, d::REWARD_OLD), (10, d::REWARD2)] {
             let mut single = guid.to_le_bytes().to_vec();
@@ -712,7 +712,7 @@ mod tests {
 
     #[test]
     fn giver_markers_map_onto_the_1_12_statuses() {
-        use crate::messages::dialog_status as d;
+        use crate::types::dialog_status as d;
         let mut b = 2u32.to_le_bytes().to_vec();
         b.extend(1u64.to_le_bytes());
         b.push(8);

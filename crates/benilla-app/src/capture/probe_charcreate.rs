@@ -5,7 +5,7 @@
 //! `WOW_CHAR`, which would enter the world; the switches are `docs/CONTRIBUTING.md`, "Running it
 //! unattended".
 
-use benilla_protocol::{messages, CharAction, CharCreateReq};
+use benilla_protocol::{types, CharAction, CharCreateReq};
 use bevy::prelude::*;
 
 use crate::net::{CharActionResultMessage, CharListMessage, CharPick, CharRequest};
@@ -40,9 +40,9 @@ fn parse_req(spec: &str) -> Option<CharCreateReq> {
     let mut next_u8 = |default: u8| parts.next().and_then(|p| p.parse().ok()).unwrap_or(default);
     Some(CharCreateReq {
         name,
-        race: next_u8(messages::RACE_HUMAN),
-        class: next_u8(messages::CLASS_WARRIOR),
-        gender: next_u8(messages::GENDER_MALE),
+        race: next_u8(types::RACE_HUMAN),
+        class: next_u8(types::CLASS_WARRIOR),
+        gender: next_u8(types::GENDER_MALE),
         skin: next_u8(0),
         face: next_u8(0),
         hair_style: next_u8(0),
@@ -115,7 +115,7 @@ fn drive_charcreate_probe(
                     r.code,
                     result_label(CharAction::Create, r.code)
                 );
-                let created = r.code == messages::CHAR_CREATE_SUCCESS;
+                let created = r.code == types::CHAR_CREATE_SUCCESS;
                 if created && !probe.keep {
                     match probe
                         .roster
@@ -163,9 +163,9 @@ fn drive_charcreate_probe(
 /// A name for the result bytes the probe checks; the create screen has the full table.
 fn result_label(action: CharAction, code: u8) -> &'static str {
     match (action, code) {
-        (CharAction::Create, messages::CHAR_CREATE_SUCCESS) => "CHAR_CREATE_SUCCESS",
-        (CharAction::Create, messages::CHAR_CREATE_NAME_IN_USE) => "CHAR_NAME_ALREADY_IN_USE",
-        (CharAction::Delete, messages::CHAR_DELETE_SUCCESS) => "CHAR_DELETE_SUCCESS",
+        (CharAction::Create, types::CHAR_CREATE_SUCCESS) => "CHAR_CREATE_SUCCESS",
+        (CharAction::Create, types::CHAR_CREATE_NAME_IN_USE) => "CHAR_NAME_ALREADY_IN_USE",
+        (CharAction::Delete, types::CHAR_DELETE_SUCCESS) => "CHAR_DELETE_SUCCESS",
         _ => "other",
     }
 }

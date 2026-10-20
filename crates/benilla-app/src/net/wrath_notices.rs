@@ -60,7 +60,7 @@ fn on_power(
 }
 
 fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     if store.layout() == FieldLayout::Wrath12340 {
         let Some(span) = store.layout().resolve(Field::UnitPower) else {
             return;
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn power_updates_preserve_all_seven_native_resources_and_maxima() {
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::{Field, FieldLayout};
         let layout = FieldLayout::Wrath12340;
         let power = layout.resolve(Field::UnitPower).unwrap();
         let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn power_update_writes_native_layout_without_touching_maxima() {
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::{Field, FieldLayout};
         let layout = FieldLayout::Wrath12340;
         let power = layout.resolve(Field::UnitPower).unwrap();
         let maximum = layout.resolve(Field::UnitMaxPower).unwrap();

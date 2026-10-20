@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{auction_filter, AuctionListEntry};
+use benilla_protocol::types::{auction_filter, AuctionListEntry};
 use benilla_ui::script::{
     AuctionCategory, AuctionHighBidder, AuctionItemRow, AuctionListState, AuctionState,
     AuctionSubCategory, UiScript, BIDDER, LIST, OWNER,

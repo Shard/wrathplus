@@ -586,7 +586,7 @@ pub(crate) fn can_attack_from_player(
         return false; // fields not streamed yet; the reference's null path refuses too
     };
     // 12340's `CanAttack 00729740`, on both reaction directions and `ctx`'s live owner lookup.
-    if own.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340 {
+    if own.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340 {
         return super::wrath_relations::attack(
             own,
             target,
@@ -779,7 +779,7 @@ pub(crate) mod tests {
     #[test]
     fn ffa_reaction_uses_native_source_and_keeps_control_and_duel_precedence() {
         use crate::net::{ObjectStore, Reputations};
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
         let layout = FieldLayout::Wrath12340;
         let make = |pc: bool, ffa: bool, old_ffa: bool, team: u32| {
             let mut pairs = Vec::new();
@@ -883,17 +883,17 @@ pub(crate) mod tests {
         // Field indices: 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS.
         let unit = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitFactionTemplate, tpl)],
             ))
         };
         // Us: a player-controlled Human, faction template 1.
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
                 (
-                    benilla_protocol::messages::Field::UnitFlags,
+                    benilla_protocol::types::Field::UnitFlags,
                     UNIT_FLAG_PVP_ATTACKABLE,
                 ),
             ],
@@ -952,15 +952,15 @@ pub(crate) mod tests {
     fn the_reputation_rank_is_capped_at_revered() {
         use crate::net::ObjectStore;
         use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
 
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
-            &[(benilla_protocol::messages::Field::UnitBytes0, HUMAN_WARRIOR)],
+            benilla_protocol::types::FieldLayout::Wrath12340,
+            &[(benilla_protocol::types::Field::UnitBytes0, HUMAN_WARRIOR)],
         ));
         // Both sides of the Honored, Revered and Exalted thresholds, and the wire's own ceiling.
         for (total, want) in [
@@ -1003,18 +1003,18 @@ pub(crate) mod tests {
         // 35 = UNIT_FIELD_FACTIONTEMPLATE, 46 = UNIT_FIELD_FLAGS, 147 = UNIT_NPC_FLAGS.
         let npc = |tpl: u32, npc_flags: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
-                    (benilla_protocol::messages::Field::UnitNpcFlags, npc_flags),
+                    (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
+                    (benilla_protocol::types::Field::UnitNpcFlags, npc_flags),
                 ],
             ))
         };
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 1), // Human
-                (benilla_protocol::messages::Field::UnitFlags, UNIT_FLAG_PVP_ATTACKABLE),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 1), // Human
+                (benilla_protocol::types::Field::UnitFlags, UNIT_FLAG_PVP_ATTACKABLE),
             ],
         ));
         let quiet = Reputations::default(); // nothing at war
@@ -1096,11 +1096,11 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let player = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitFactionTemplate, tpl),
+                    (benilla_protocol::types::Field::UnitFactionTemplate, tpl),
                     (
-                        benilla_protocol::messages::Field::UnitFlags,
+                        benilla_protocol::types::Field::UnitFlags,
                         UNIT_FLAG_PVP_ATTACKABLE,
                     ),
                 ],
@@ -1152,8 +1152,8 @@ pub(crate) mod tests {
         // …while NPCs keep theirs: `CanCooperate` is never asked for an NPC.
         let npc = |tpl: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitFactionTemplate, tpl)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitFactionTemplate, tpl)],
             ))
         };
         let npc_category = |subject: &ObjectStore, me: &ObjectStore| {
@@ -1187,11 +1187,11 @@ pub(crate) mod tests {
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let factions = Factions(benilla_formats::load_faction_catalog(&mut chain).expect("dbc"));
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
                 (
-                    benilla_protocol::messages::Field::UnitFlags,
+                    benilla_protocol::types::Field::UnitFlags,
                     UNIT_FLAG_PVP_ATTACKABLE,
                 ),
             ],
@@ -1199,10 +1199,10 @@ pub(crate) mod tests {
         let reps = Reputations::default();
         let mob = |flags: u32| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitFactionTemplate, 14),
-                    (benilla_protocol::messages::Field::UnitFlags, flags),
+                    (benilla_protocol::types::Field::UnitFactionTemplate, 14),
+                    (benilla_protocol::types::Field::UnitFlags, flags),
                 ],
             ))
         };

@@ -8,7 +8,7 @@
 //! is matched by name, vmangos `FriendsResult` to `ERR_FRIEND_*`/`ERR_IGNORE_*`; the reference's
 //! own mapping is untraced.
 
-use benilla_protocol::messages::{friend_result, friend_status, FriendEntry, FriendStatusUpdate};
+use benilla_protocol::types::{friend_result, friend_status, FriendEntry, FriendStatusUpdate};
 use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
@@ -34,7 +34,7 @@ pub(crate) struct SocialState {
     display_order: Vec<u64>,
     ignore_display_order: Vec<u64>,
     /// The last `/who` answer; `who_total` is the server's full match count.
-    pub(crate) who: Vec<benilla_protocol::messages::WhoEntry>,
+    pub(crate) who: Vec<benilla_protocol::types::WhoEntry>,
     who_total: u32,
     /// Native routing compares the uncapped first wire count (006b8720).
     native_who_count: Option<usize>,
@@ -187,7 +187,7 @@ impl SocialState {
     }
 
     /// `SMSG_WHO`: the answer to the last query.
-    fn apply_who(&mut self, results: benilla_protocol::messages::WhoResults) {
+    fn apply_who(&mut self, results: benilla_protocol::types::WhoResults) {
         self.native_who_rows.clear();
         self.native_who_count = None;
         self.who = results.entries;
@@ -329,7 +329,7 @@ pub(crate) mod net {
     }
 
     /// `SMSG_WHO`.
-    pub(crate) fn who(social: &mut SocialState, results: benilla_protocol::messages::WhoResults) {
+    pub(crate) fn who(social: &mut SocialState, results: benilla_protocol::types::WhoResults) {
         social.apply_who(results);
     }
 }
@@ -356,7 +356,7 @@ impl Plugin for UiSocialPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::FriendOnline;
+    use benilla_protocol::types::FriendOnline;
 
     fn status(result: u8, guid: u64) -> FriendStatusUpdate {
         FriendStatusUpdate {

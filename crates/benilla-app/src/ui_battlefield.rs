@@ -29,7 +29,7 @@ use bevy::prelude::*;
 
 use benilla_assets::{AssetSet, LockRecover, MapCatalogRes, WorldAssets};
 use benilla_formats::{Battlemasters, MapCatalog, RANDOM_BATTLEGROUND};
-use benilla_protocol::messages::Field;
+use benilla_protocol::types::Field;
 use benilla_protocol::wrath_battleground::{
     BattlefieldList, Command as Bg, Packet, Rewards, StatusTail,
 };

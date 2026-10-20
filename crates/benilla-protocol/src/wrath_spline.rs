@@ -7,7 +7,7 @@
 use std::io::{self, Cursor};
 
 use crate::events::SessionEvent;
-use crate::messages::SplineMode;
+use crate::types::SplineMode;
 use crate::wire::read_packed_guid;
 
 pub const SMSG_SPLINE_MOVE_UNROOT: u16 = 0x0304;

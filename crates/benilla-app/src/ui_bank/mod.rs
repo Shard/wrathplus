@@ -2,7 +2,7 @@
 //! intents. The vault itself is descriptor fields that [`crate::ui_items`] feeds as containers
 //! `-1` and `5..=10`, and moves items in and out of on a right-click.
 
-use benilla_protocol::messages::bank_slot_result;
+use benilla_protocol::types::bank_slot_result;
 use bevy::prelude::*;
 
 use benilla_ui::script::{BankState, UiScript};

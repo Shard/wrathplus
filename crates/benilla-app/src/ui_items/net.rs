@@ -199,12 +199,12 @@ mod tests {
 #[cfg(test)]
 mod open_container_tests {
     use super::*;
-    const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+    const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
 
     /// `PLAYER_FIELD_BANK_BAG_SLOT_1`, field 612 (private to the fields module).
-    const BANK_BAG_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerBankbagSlot1);
+    const BANK_BAG_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerBankbagSlot1);
 
     /// A self descriptor holding the given guids at the given first-dword indices.
     fn store(guids: &[(u16, u64)]) -> ObjectFields {

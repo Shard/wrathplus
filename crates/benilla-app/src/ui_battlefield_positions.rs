@@ -13,7 +13,7 @@ use bevy::prelude::*;
 
 use benilla_assets::coords::bevy_to_wow;
 use benilla_assets::MapCatalogRes;
-use benilla_protocol::messages::{BattlefieldPosition, BattlefieldPositions as PositionsPacket};
+use benilla_protocol::types::{BattlefieldPosition, BattlefieldPositions as PositionsPacket};
 use benilla_ui::script::{BattlefieldFlagView, BattlefieldPositionView, UiScript};
 
 use crate::names::NameCache;

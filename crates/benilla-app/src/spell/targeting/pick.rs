@@ -202,8 +202,8 @@ mod tests {
     use crate::net::{GuidIndex, Reputations};
     use crate::spell::group_relation::publish_group_roster;
     use crate::spell::targeting::corpse_fixture as fx;
-    use benilla_protocol::messages::GroupMemberEntry;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::GroupMemberEntry;
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 

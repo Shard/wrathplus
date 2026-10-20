@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use benilla_formats::{EmoteSoundCatalog, FactionCatalog, SpellCatalog};
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     PetSpells, QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
 };
 use benilla_protocol::Character;

@@ -404,7 +404,7 @@ pub(in crate::minimap) fn emit_party_dots(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// Creature type 7, Humanoid: a player's, by race (`ChrRaces.dbc` column 9).
     const CREATURE_TYPE_HUMANOID: u32 = 7;

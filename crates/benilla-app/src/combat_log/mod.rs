@@ -7,7 +7,7 @@
 //! The completed swing and the environmental-damage log also drive animation; those handlers
 //! ([`crate::creature_anim::net`]) register after these, so the line runs before the animation.
 
-use benilla_protocol::messages::SpellOutcomeLog;
+use benilla_protocol::types::SpellOutcomeLog;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;

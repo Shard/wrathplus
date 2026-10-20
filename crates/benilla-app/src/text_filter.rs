@@ -432,7 +432,7 @@ impl ChatTextFilter<'_> {
         viewer_is_gm: bool,
         text: &str,
     ) -> bool {
-        use benilla_protocol::messages::{chat_tag as tag, CHAT_MSG_FILTERED};
+        use benilla_protocol::types::{chat_tag as tag, CHAT_MSG_FILTERED};
         if chat_type == CHAT_MSG_FILTERED || chat_tag == tag::GM || viewer_is_gm {
             return false;
         }

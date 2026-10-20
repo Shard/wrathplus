@@ -229,7 +229,7 @@ fn resolve(prev: Option<u32>, cur: u32) -> Option<Play> {
 
 /// Wrath folds state into BYTES_1; the other bytes must not drive lids or collision.
 fn go_state_edge(edge: &crate::net::FieldChanged) -> Option<u32> {
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
     if edge.kind != ObjectType::GameObject {
         return None;
     }
@@ -695,7 +695,7 @@ pub(crate) fn plugin(app: &mut App) {
 mod tests {
     #[test]
     fn state_edges_use_real_layout_fields_and_normalize_wrath_bytes() {
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
         let layout = FieldLayout::Wrath12340;
         let native_field = Field::GameobjectBytes1;
         let span = layout

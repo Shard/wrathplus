@@ -21,10 +21,10 @@ const PLAYER_FLAGS_GM: u32 = 0x8;
 /// Chat types forced to language 0 whatever the wire says (`0x49a970`-`0x49a986`), which drops
 /// both the garble and the `[Language]` header.
 const ALWAYS_UNIVERSAL: [u8; 4] = [
-    benilla_protocol::messages::CHAT_MSG_EMOTE,
-    benilla_protocol::messages::CHAT_MSG_SYSTEM,
-    benilla_protocol::messages::CHAT_MSG_MONSTER_EMOTE,
-    benilla_protocol::messages::CHAT_MSG_RAID_BOSS_EMOTE,
+    benilla_protocol::types::CHAT_MSG_EMOTE,
+    benilla_protocol::types::CHAT_MSG_SYSTEM,
+    benilla_protocol::types::CHAT_MSG_MONSTER_EMOTE,
+    benilla_protocol::types::CHAT_MSG_RAID_BOSS_EMOTE,
 ];
 
 /// The garble word pool and the character's fluency per language.
@@ -170,7 +170,7 @@ pub(super) fn feed_default_language(
 /// A skill's `PLAYER_SKILL_INFO` value as `0x5ec720` sums it: base, plus the permanent bonus only
 /// when base is non-zero, plus the signed temporary bonus; 0 with no row.
 fn skill_value(store: &ObjectStore, line: u32) -> u32 {
-    for i in 0..benilla_protocol::messages::PLAYER_SKILL_SLOTS {
+    for i in 0..benilla_protocol::types::PLAYER_SKILL_SLOTS {
         let Some(s) = store.0.player_skill(i) else {
             continue;
         };
@@ -189,7 +189,7 @@ fn skill_value(store: &ObjectStore, line: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{
+    use benilla_protocol::types::{
         CHAT_MSG_EMOTE, CHAT_MSG_MONSTER_EMOTE, CHAT_MSG_MONSTER_SAY, CHAT_MSG_RAID_BOSS_EMOTE,
         CHAT_MSG_SAY, CHAT_MSG_SYSTEM,
     };

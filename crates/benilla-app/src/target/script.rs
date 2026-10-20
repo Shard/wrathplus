@@ -135,11 +135,11 @@ impl ScriptSelect<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::Field;
+    use benilla_protocol::types::Field;
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
     }
 
     /// A world holding what [`ScriptSelect`] reads, with a bare VM and no units.
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn target_unit_selects_a_party_pet() {
         use crate::net::{Guid, ObjectStore, SelfPlayer};
-        use benilla_protocol::messages::{member_status, GroupMemberEntry};
+        use benilla_protocol::types::{member_status, GroupMemberEntry};
         use benilla_ui::script::UiScript;
         use bevy::ecs::system::RunSystemOnce;
 
@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn target_and_assist_unit_follow_a_target_chain() {
         use crate::net::{Guid, ObjectStore, SelfPlayer};
-        use benilla_protocol::messages::{member_status, GroupMemberEntry};
+        use benilla_protocol::types::{member_status, GroupMemberEntry};
         use benilla_ui::script::UiScript;
         use bevy::ecs::system::RunSystemOnce;
 
@@ -385,26 +385,18 @@ mod tests {
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::ObjectType, 0, kind),
+                    (benilla_protocol::types::Field::ObjectType, 0, kind),
+                    (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
                     (
-                        benilla_protocol::messages::Field::UnitSummon,
-                        0,
-                        summon as u32,
-                    ),
-                    (
-                        benilla_protocol::messages::Field::UnitSummon,
+                        benilla_protocol::types::Field::UnitSummon,
                         1,
                         (summon >> 32) as u32,
                     ),
+                    (benilla_protocol::types::Field::UnitTarget, 0, target as u32),
                     (
-                        benilla_protocol::messages::Field::UnitTarget,
-                        0,
-                        target as u32,
-                    ),
-                    (
-                        benilla_protocol::messages::Field::UnitTarget,
+                        benilla_protocol::types::Field::UnitTarget,
                         1,
                         (target >> 32) as u32,
                     ),

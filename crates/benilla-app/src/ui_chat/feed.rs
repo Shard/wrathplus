@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     channel_notice, ChannelNoticeTail, ChatMessage, LevelUpInfo, XpGain, MACRO_EXPANDED_TYPES,
 };
 
@@ -174,7 +174,7 @@ impl ChatLog {
         };
         // The protocol's `CHAT_TYPE_*` constants.
         let distribution = {
-            use benilla_protocol::messages as m;
+            use benilla_protocol::types as m;
             match u32::from(chat_type) {
                 m::CHAT_TYPE_PARTY => "PARTY",
                 m::CHAT_TYPE_RAID => "RAID",
@@ -1170,7 +1170,7 @@ pub(crate) fn feed_chat(
 
 /// Whether a wire chat type carries a player guid to name (not a monster's inline name).
 fn needs_name(chat_type: u8) -> bool {
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
     matches!(
         chat_type,
         m::CHAT_MSG_SAY

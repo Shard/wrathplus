@@ -15,7 +15,7 @@ pub struct ItemInfo {
     pub quality: u32,
     /// `ItemPrototypeFlags` bits (conjured, lootable, wrapper, …); tooltip lines key on them.
     pub flags: u32,
-    /// Copper a vendor charges per [`crate::messages::VendorItem::buy_count`] stack.
+    /// Copper a vendor charges per [`crate::types::VendorItem::buy_count`] stack.
     pub buy_price: u32,
     /// Copper a vendor pays per unit; 0 is unsellable, the tooltip's "No sell price" line.
     pub sell_price: u32,

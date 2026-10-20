@@ -2,7 +2,7 @@
 //! pushes it into the VM and fires the trade events, [`drain_trade`] sends the Lua intents, and
 //! [`answer_trade_request`] answers an incoming request.
 
-use benilla_protocol::messages::{TradeItem, TradeStatusExtended, TRADE_SLOT_COUNT};
+use benilla_protocol::types::{TradeItem, TradeStatusExtended, TRADE_SLOT_COUNT};
 use bevy::prelude::*;
 
 use benilla_ui::script::{ScriptValue, TradeSideState, TradeSlotItem, TradeState, UiScript};
@@ -738,7 +738,7 @@ fn drain_trade(
         let Some((wire_bag, wire_slot)) = crate::ui_items::wire_pos_for(
             store
                 .map(|s| s.0.layout())
-                .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340),
+                .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340),
             bag,
             slot,
         ) else {
@@ -827,8 +827,8 @@ fn resolve_trade_target(token: &str, selection: &Selection, group: &GroupState) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
-    use benilla_protocol::messages::{TradeStatus, TradeStatusExtended};
+    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::{TradeStatus, TradeStatusExtended};
 
     fn wire_item(entry: u32) -> TradeItem {
         TradeItem {
@@ -1334,7 +1334,7 @@ mod tests {
             let (mut app, rx) = request_app(false, false, true);
             let entity = app.world().resource::<GuidIndex>().0[&0x7];
             app.world_mut().entity_mut(entity).insert(ObjectStore(
-                benilla_protocol::messages::ObjectFields::from_pairs(&fields),
+                benilla_protocol::types::ObjectFields::from_pairs(&fields),
             ));
             app.world_mut().resource_mut::<TradeSession>().request(0x7);
             app.update();

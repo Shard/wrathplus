@@ -3,7 +3,7 @@
 //! and the refusals `0x145`-`0x149` and `0x7c` to the red `UI_ERROR_MESSAGE` line, a split the
 //! key names do not predict. The sink also plays the sound a row names (`0x142`-`0x149` do).
 
-use benilla_protocol::messages::petition_result;
+use benilla_protocol::types::petition_result;
 
 use crate::ui_action::UiError;
 

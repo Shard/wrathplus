@@ -108,7 +108,7 @@ impl ObjectFields {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::Field;
+    use crate::types::Field;
 
     #[test]
     fn guild_banker_is_exact_wrath_bit_and_absent_in_vanilla() {

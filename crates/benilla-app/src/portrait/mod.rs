@@ -2319,7 +2319,7 @@ mod tests {
     /// record (`0x51a0ce`), and nothing while the UI is not drawing the slot.
     #[test]
     fn a_party_pets_portrait_is_its_bake_else_the_roster_pets_stand_in() {
-        use benilla_protocol::messages::{
+        use benilla_protocol::types::{
             member_status, GroupMemberEntry, ObjectFields, PartyMemberStatsInfo,
         };
         const MEMBER: u64 = 0x1001;
@@ -2328,15 +2328,15 @@ mod tests {
         let held = world.spawn_empty().id();
         let summon = |guid: u64| {
             crate::net::ObjectStore(ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
                     (
-                        benilla_protocol::messages::Field::UnitSummon,
+                        benilla_protocol::types::Field::UnitSummon,
                         0,
                         guid as u32,
                     ),
                     (
-                        benilla_protocol::messages::Field::UnitSummon,
+                        benilla_protocol::types::Field::UnitSummon,
                         1,
                         (guid >> 32) as u32,
                     ),

@@ -1,5 +1,5 @@
 use super::*;
-use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
 use benilla_protocol::wrath_group::{Member, Roster};
 use std::collections::HashMap;
 

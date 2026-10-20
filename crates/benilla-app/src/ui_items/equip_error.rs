@@ -135,7 +135,7 @@ mod tests {
         s.run(&String::from_utf8_lossy(&src)).expect("runs clean");
         let g = |key: &str| s.lua().globals().get::<String>(key).ok();
 
-        // Reason 0 never reaches this table (gated at `events::decode`).
+        // Reason 0 never reaches this table (the inventory decoder gates it).
         for reason in 1..=66u8 {
             let key = equip_error_key(reason);
             let text = g(key).unwrap_or_default();

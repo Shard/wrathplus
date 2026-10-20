@@ -1,6 +1,6 @@
 //! The stable master's packet handlers: they fill [`StableOpen`] and [`StableErrors`].
 
-use benilla_protocol::messages::StabledPet;
+use benilla_protocol::types::StabledPet;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -82,7 +82,7 @@ fn stable_result(
     errors: &mut StableErrors,
     net_commands: &NetCommands,
 ) {
-    use benilla_protocol::messages::stable_result as code;
+    use benilla_protocol::types::stable_result as code;
     // Before the guid test, as `0x4cacf3` precedes `0x4cad05`: the count moves even with no
     // stable open.
     if result == code::SUCCESS_BUY_SLOT {

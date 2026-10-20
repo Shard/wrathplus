@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::ObjectType;
+use benilla_protocol::types::ObjectType;
 
 use crate::entities::{AttachPoints, Creatures};
 use crate::net::{EmoteKind, EmoteMessage, ObjectStore, SelfGuid};

@@ -14,7 +14,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use benilla_formats::{SpellFocusCatalog, SPELL_ATTR_IS_TRADESKILL, SPELL_EFFECT_CREATE_ITEM};
-use benilla_protocol::messages::PLAYER_SKILL_SLOTS;
+use benilla_protocol::types::PLAYER_SKILL_SLOTS;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use benilla_ui::script::{
     TradeSkillDifficulty, TradeSkillReagent, TradeSkillRecipe, TradeSkillState, UiScript,
@@ -856,7 +856,7 @@ mod tests {
 
     #[test]
     fn our_list_link_marks_the_known_rows_our_race_may_take() {
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
         let spells = Spells {
             catalog: benilla_formats::SpellCatalog::from_displays(HashMap::from([(
                 2259,

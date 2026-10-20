@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
+use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
 use benilla_ui::script::{ActionSlot, ScriptValue, UiScript};
 
 use crate::entities::ItemDisplays;
@@ -274,7 +274,7 @@ pub(super) fn feed_actions(
         .0
         .drain(..)
         .filter_map(|reason| {
-            let reason_key = benilla_protocol::messages::pet_tame_failure_key(reason);
+            let reason_key = benilla_protocol::types::pet_tame_failure_key(reason);
             let reason_text = global_string(&script, reason_key)?;
             super::keyed_line_s(&script, "ERR_TAME_FAILED", &[&reason_text])
         })

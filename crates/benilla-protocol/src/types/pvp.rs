@@ -11,7 +11,7 @@ pub struct InspectHonorStats {
     /// target gets no answer at all (`MiscHandler.cpp:977`).
     pub player_guid: u64,
     /// The highest lifetime rank (`MiscHandler.cpp:985`), internal 0..18 like
-    /// [`crate::messages::ObjectFields::player_honor_rank`], not the visual number.
+    /// [`crate::types::ObjectFields::player_honor_rank`], not the visual number.
     pub highest_rank: u8,
     /// Today's kills, the packed `PLAYER_FIELD_SESSION_KILLS` dword (`MiscHandler.cpp:988`).
     pub session_kills: u32,
@@ -40,7 +40,7 @@ pub struct InspectHonorStats {
     /// Last week's standing, the ladder position and not a rank; 0 if unranked that week.
     pub last_week_rank: u32,
     /// Progress within the target's current rank, 0..255, computed as
-    /// [`crate::messages::ObjectFields::player_honor_rank_bar`] is.
+    /// [`crate::types::ObjectFields::player_honor_rank_bar`] is.
     pub rank_bar: u8,
 }
 

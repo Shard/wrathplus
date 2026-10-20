@@ -28,7 +28,7 @@ use crate::creature_type::CreatureTypeSources;
 use crate::names::NameCache;
 use crate::net::{GuidIndex, ObjectStore, Reputations, SelfGuid, SelfPlayer};
 use crate::target::{can_assist, can_attack, Factions, RelationContext, Selection};
-use benilla_protocol::messages::OwnerFallback;
+use benilla_protocol::types::OwnerFallback;
 
 /// `TARGET_FLAG_*` bits of the client's targeting flag word (`0xcecac0`).
 const TF_UNIT: u16 = 0x0002;
@@ -590,17 +590,17 @@ mod tests {
         // arm; with no catalog the reaction resolves neutral, so the enemy bit clears. Both carry
         // `UNIT_FIELD_HEALTH` (22): a store with none reads dead to the gates.
         let me = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitHealth, 100),
-                (benilla_protocol::messages::Field::UnitFlags, 1 << 3),
+                (benilla_protocol::types::Field::UnitHealth, 100),
+                (benilla_protocol::types::Field::UnitFlags, 1 << 3),
             ],
         ));
         let it = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitHealth, 100),
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 0),
+                (benilla_protocol::types::Field::UnitHealth, 100),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 0),
             ],
         ));
         let rel = TargetRelations {
@@ -673,25 +673,25 @@ mod tests {
         );
         // Faction templates 35 and 1 are a real friendly pair.
         let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
-                (benilla_protocol::messages::Field::UnitFlags, 0x8),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 1),
+                (benilla_protocol::types::Field::UnitFlags, 0x8),
             ],
         ));
         let quiet = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
-                (benilla_protocol::messages::Field::UnitFlags, 0),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 35),
+                (benilla_protocol::types::Field::UnitFlags, 0),
             ],
         ));
         let pvp = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 35),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 35),
                 // `UNIT_FIELD_BYTES_2` byte 1 bit `0x01`, 12340's `UNIT_BYTE2_FLAG_PVP`.
-                (benilla_protocol::messages::Field::UnitBytes2, 0x0000_0100),
+                (benilla_protocol::types::Field::UnitBytes2, 0x0000_0100),
             ],
         ));
         let reputations = Reputations(Vec::new());
@@ -905,8 +905,8 @@ mod tests {
 
         let health = |hp| {
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitHealth, hp)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitHealth, hp)],
             ))
         };
         let (corpse, live) = (health(0), health(100));

@@ -1086,14 +1086,14 @@ mod tests {
     /// `UNIT_FIELD_HEALTH` (22), on [`fx::factions`]' rows: template 1 the caster's Human, 2 an Orc.
     fn unit_store(template: u32, flags: u32, health: u32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
                 (
-                    benilla_protocol::messages::Field::UnitFactionTemplate,
+                    benilla_protocol::types::Field::UnitFactionTemplate,
                     template,
                 ),
-                (benilla_protocol::messages::Field::UnitFlags, flags),
-                (benilla_protocol::messages::Field::UnitHealth, health),
+                (benilla_protocol::types::Field::UnitFlags, flags),
+                (benilla_protocol::types::Field::UnitHealth, health),
             ],
         ))
     }
@@ -1252,23 +1252,15 @@ mod tests {
     /// (10) and `UNIT_FIELD_CREATEDBY` (14) the guids `charmed_by` and `created_by`, 0 for none.
     fn owned(flags: u32, charmed_by: u32, created_by: u32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitFactionTemplate, 0, 2),
-                (benilla_protocol::messages::Field::UnitFlags, 0, flags),
-                (benilla_protocol::messages::Field::UnitHealth, 0, 100),
-                (
-                    benilla_protocol::messages::Field::UnitCharmedby,
-                    0,
-                    charmed_by,
-                ),
-                (benilla_protocol::messages::Field::UnitCharmedby, 1, 0),
-                (
-                    benilla_protocol::messages::Field::UnitCreatedby,
-                    0,
-                    created_by,
-                ),
-                (benilla_protocol::messages::Field::UnitCreatedby, 1, 0),
+                (benilla_protocol::types::Field::UnitFactionTemplate, 0, 2),
+                (benilla_protocol::types::Field::UnitFlags, 0, flags),
+                (benilla_protocol::types::Field::UnitHealth, 0, 100),
+                (benilla_protocol::types::Field::UnitCharmedby, 0, charmed_by),
+                (benilla_protocol::types::Field::UnitCharmedby, 1, 0),
+                (benilla_protocol::types::Field::UnitCreatedby, 0, created_by),
+                (benilla_protocol::types::Field::UnitCreatedby, 1, 0),
             ],
         ))
     }

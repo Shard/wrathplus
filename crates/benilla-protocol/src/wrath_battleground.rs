@@ -12,7 +12,7 @@
 //! level range, rated flag, random rewards and arena ratings, so status, list, score, honor and
 //! arena replies are capture-only native [`Packet`]s. Player joined/left, spirit-healer time and PvP
 //! credit keep 1.12's shapes and feed the shared events. Strict framing; raw words kept.
-use crate::messages::PvpCredit;
+use crate::types::PvpCredit;
 use crate::wire::read_cstring;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};

@@ -507,7 +507,7 @@ fn bg_probe(
                     && store
                         .0
                         .unit_npc_services()
-                        .has(benilla_protocol::messages::NpcService::BattleMaster)
+                        .has(benilla_protocol::types::NpcService::BattleMaster)
                     && benilla_protocol::guid::entry(guid.0) == Some(arena.npc_entry)
                     && tf.translation.distance(here) < NEAR_YD
             });
@@ -852,7 +852,7 @@ fn bg_probe(
                         && st
                             .0
                             .unit_npc_services()
-                            .has(benilla_protocol::messages::NpcService::SpiritGuide)
+                            .has(benilla_protocol::types::NpcService::SpiritGuide)
                 })
                 .map(|(g, _, _, tf)| (g.0, tf.translation.distance(player.pos)))
                 .min_by(|a, b| a.1.total_cmp(&b.1));
@@ -985,7 +985,7 @@ fn census(
                 if store
                     .0
                     .unit_npc_services()
-                    .has(benilla_protocol::messages::NpcService::SpiritGuide)
+                    .has(benilla_protocol::types::NpcService::SpiritGuide)
                 {
                     let d = tf.translation.distance(p);
                     if nearest_guide.is_none_or(|(_, best)| d < best) {

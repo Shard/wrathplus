@@ -11,7 +11,7 @@
 //! reference reads its name cache (`0xc0e228` via `0x55f080`) with a null callback and drops the
 //! message on a miss, because benilla's cache may not hold a party member yet.
 
-use benilla_protocol::messages::{QuestConfirmAccept, QuestShareMsg};
+use benilla_protocol::types::{QuestConfirmAccept, QuestShareMsg};
 use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
 
@@ -93,7 +93,7 @@ fn verdict_message(msg: QuestShareMsg) -> Option<&'static str> {
 /// The quest-share packet handlers. Both park in [`QuestShare`]: the guid may need a name query a
 /// handler cannot await.
 mod net {
-    use benilla_protocol::messages::{QuestConfirmAccept, QuestShareMsg};
+    use benilla_protocol::types::{QuestConfirmAccept, QuestShareMsg};
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 

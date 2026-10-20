@@ -4,7 +4,7 @@
 //! zone names, not ids (`0x4d1355`, `0x4d1391`), and the rank name from the cached guild record.
 
 use benilla_formats::AreaTableCatalog;
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     guild_presence, GuildInfo, GuildRosterMember, GUILD_RANKS_MAX_COUNT, GUILD_RANKS_MIN_COUNT,
     GUILD_RANK_MAX_LENGTH,
 };

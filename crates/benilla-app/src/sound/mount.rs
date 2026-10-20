@@ -18,7 +18,7 @@ const DISMOUNT_KIT: &str = "SpiritWolf (DONOTRENAME)";
 
 fn is_dismount(edge: &FieldChanged) -> bool {
     edge.is_unit()
-        && edge.named_field(benilla_protocol::messages::Field::UnitMountDisplayId)
+        && edge.named_field(benilla_protocol::types::Field::UnitMountDisplayId)
         && edge.new == 0
 }
 
@@ -68,7 +68,7 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
 
     #[test]
     fn dismount_edges_keep_class_field_and_zero_transition_rules_in_both_layouts() {

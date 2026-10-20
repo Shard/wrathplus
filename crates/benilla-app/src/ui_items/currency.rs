@@ -2,7 +2,7 @@
 //! token bag supplies instance counts. Honor/arena are separate native descriptor balances.
 use std::collections::BTreeMap;
 
-use benilla_protocol::{messages::Field, ObjectFields};
+use benilla_protocol::{types::Field, ObjectFields};
 use benilla_ui::script::{ScriptDialect, UiScript, WrathCurrencyEntry, WrathCurrencySnapshot};
 use bevy::prelude::*;
 

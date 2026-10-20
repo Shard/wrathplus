@@ -61,7 +61,7 @@ pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
     const FIELD_UNIT_FACTIONTEMPLATE: u16 =

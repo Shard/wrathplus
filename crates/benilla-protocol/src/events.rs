@@ -1,6 +1,6 @@
 //! Decoded session events; coordinates stay raw WoW, which the app maps to `bevy = (-y, z, -x)`.
 
-use crate::messages::{
+use crate::types::{
     ActionButton, AttackSwingError, AttackerState, AuctionBidderNotification, AuctionCommandTail,
     AuctionListEntry, AuctionOwnerNotification, ChannelNoticeTail, Character, CreateSpline,
     DamageShield, DispelFailed, EnchantmentLog, EnvironmentalDamageLog, ExplorationXp, FriendEntry,
@@ -239,7 +239,7 @@ pub enum SessionEvent {
         /// the reference paces a remote's apply by the deltas between consecutive stamps.
         time: u32,
         /// What the opcode adds to the pose: a heartbeat, a teleport, a root, or nothing.
-        verb: crate::messages::RelayVerb,
+        verb: crate::types::RelayVerb,
         fall_time: u32,
         jump: Option<JumpInfo>,
         transport: Option<TransportPose>,
@@ -355,13 +355,13 @@ pub enum SessionEvent {
     /// `GetAreaSpiritHealerTime` and fires `AREA_SPIRIT_HEALER_IN_RANGE`.
     AreaSpiritHealerTime { healer: u64, ms: u32 },
     /// One of the client's three battleground queue slots (`SMSG_BATTLEFIELD_STATUS`).
-    BattlefieldStatus(crate::messages::BattlefieldStatus),
+    BattlefieldStatus(crate::types::BattlefieldStatus),
     /// The battleground scoreboard (`MSG_PVP_LOG_DATA`), rows in wire order, unsorted.
-    PvpLogData(crate::messages::PvpLogData),
+    PvpLogData(crate::types::PvpLogData),
     /// The battleground instance list (`SMSG_BATTLEFIELD_LIST`); fires `BATTLEFIELDS_SHOW`.
-    BattlefieldList(crate::messages::BattlefieldList),
+    BattlefieldList(crate::types::BattlefieldList),
     /// Teammate and flag-carrier positions (`MSG_BATTLEGROUND_PLAYER_POSITIONS`), raw WoW.
-    BattlefieldPositions(crate::messages::BattlefieldPositions),
+    BattlefieldPositions(crate::types::BattlefieldPositions),
     /// `MSG_TABARDVENDOR_ACTIVATE`: the vendor whose tabard designer opens.
     TabardVendorActivate(u64),
     /// `MSG_SAVE_GUILD_EMBLEM`: the save's result row.
@@ -374,7 +374,7 @@ pub enum SessionEvent {
     /// The meeting-stone queue state (`SMSG 0x295`): the area queued for and a status byte.
     MeetingStoneSetQueue { area: u32, status: u8 },
     /// One of the meeting stone's four chat-line-only replies (`0x297/0x298/0x299/0x2BB`).
-    MeetingStoneNotice(crate::messages::MeetingStoneNotice),
+    MeetingStoneNotice(crate::types::MeetingStoneNotice),
     /// The tutorial bank bytes (`SMSG_TUTORIAL_FLAGS`); the client copies both its banks from them.
     TutorialFlags(Vec<u8>),
     /// The bind took (`SMSG_PLAYERBOUND`); `area` matches the [`Self::BindPoint`] sent beside it.
@@ -433,7 +433,7 @@ pub enum SessionEvent {
         civilian: bool,
         /// The tooltip's white LEADER line.
         racial_leader: bool,
-        /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::messages::CreatureQueryInfo`]).
+        /// Wrath's HealthModifier/PowerModifier as f32 bits ([`crate::types::CreatureQueryInfo`]).
         modifiers: Option<[u32; 2]>,
     },
     /// `SMSG_GAMEOBJECT_QUERY_RESPONSE`, keyed by template `entry`; `data` is the type-specific
@@ -485,7 +485,7 @@ pub enum SessionEvent {
     /// The spell book at login (`SMSG_INITIAL_SPELLS`), ids widened from `u16`, and live cooldowns.
     SpellBook {
         spell_ids: Vec<u32>,
-        cooldowns: Vec<crate::messages::SpellCooldown>,
+        cooldowns: Vec<crate::types::SpellCooldown>,
     },
     /// The saved action bar at login (`SMSG_ACTION_BUTTONS`): slots 0..119, 0..11 the main bar.
     ActionButtons { buttons: Vec<ActionButton> },
@@ -554,7 +554,7 @@ pub enum SessionEvent {
         metadata: Option<crate::wrath_items::SocketMetadata>,
     },
     /// One chat line (`SMSG_MESSAGECHAT`); system lines (type `0x0A`) carry GM command feedback.
-    Chat(crate::messages::ChatMessage),
+    Chat(crate::types::ChatMessage),
     /// A channel notice (`SMSG_CHANNEL_NOTIFY`); `notice` selects the `tail` payload.
     ChannelNotify {
         notice: u8,
@@ -796,15 +796,15 @@ pub enum SessionEvent {
     /// Our own level-up (`SMSG_LEVELUP_INFO`, self-only).
     LevelUp(LevelUpInfo),
     /// A gossip menu (`SMSG_GOSSIP_MESSAGE`): `text_id` is the greeting for
-    /// [`crate::messages::npc_text_query`]; `quests` rows are `(quest_id, icon, level, title)`.
+    /// [`crate::types::npc_text_query`]; `quests` rows are `(quest_id, icon, level, title)`.
     GossipMenu {
         npc: u64,
         text_id: u32,
         options: Vec<GossipOption>,
         quests: Vec<(u32, u32, u32, String)>,
-        quest_info: Vec<crate::messages::WrathQuestInfo>,
+        quest_info: Vec<crate::types::WrathQuestInfo>,
     },
-    /// An NPC's `!`/`?` marker (`SMSG_QUESTGIVER_STATUS`), a [`crate::messages::dialog_status`].
+    /// An NPC's `!`/`?` marker (`SMSG_QUESTGIVER_STATUS`), a [`crate::types::dialog_status`].
     QuestGiverStatus { npc: u64, status: u32 },
     /// Build 12340 dialog status, retained before the legacy world-marker projection.
     WrathQuestGiverStatus { npc: u64, status: u8 },
@@ -837,7 +837,7 @@ pub enum SessionEvent {
     /// The log refused a new quest: no free slot (`SMSG_QUESTLOG_FULL`).
     QuestLogFull,
     /// A member's verdict on a quest we shared (`MSG_QUEST_PUSH_RESULT`). `member` is that
-    /// member, never the sharer ([`crate::messages::QuestPushResult`]); it fills the `%s`.
+    /// member, never the sharer ([`crate::types::QuestPushResult`]); it fills the `%s`.
     QuestPushResult { member: u64, msg: QuestShareMsg },
     /// A member's escort quest offered to us too (`SMSG_QUEST_CONFIRM_ACCEPT`).
     QuestConfirmAccept(QuestConfirmAccept),
@@ -850,12 +850,12 @@ pub enum SessionEvent {
     /// The gossip window closes (`SMSG_GOSSIP_COMPLETE`); no menu is open server-side.
     GossipComplete,
     /// A guard's directions (`SMSG_GOSSIP_POI`): a map marker sent for an `action_poi_id` option.
-    GossipPoi(crate::messages::GossipPoi),
+    GossipPoi(crate::types::GossipPoi),
     /// All 8 greeting blocks, undrawn (`SMSG_NPC_TEXT_UPDATE`): the pick depends on the NPC's
     /// gender and a roll as the frame opens; `$N` and its kin are still unsubstituted.
     NpcGreeting {
         text_id: u32,
-        blocks: Vec<crate::messages::NpcTextBlock>,
+        blocks: Vec<crate::types::NpcTextBlock>,
     },
     /// A vendor's stock (`SMSG_LIST_INVENTORY`); `current_count == 0xFFFF_FFFF` is unlimited.
     VendorInventory { vendor: u64, items: Vec<VendorItem> },
@@ -875,12 +875,12 @@ pub enum SessionEvent {
         num_stable_slots: u8,
         pets: Vec<StabledPet>,
     },
-    /// Every stable verb's answer (`SMSG_STABLE_RESULT`), a [`crate::messages::stable_result`];
+    /// Every stable verb's answer (`SMSG_STABLE_RESULT`), a [`crate::types::stable_result`];
     /// no success carries a list, so repaint with a fresh `MSG_LIST_STABLED_PETS`.
     StableResult { result: u8 },
     /// A purchase took (`SMSG_TRAINER_BUY_SUCCEEDED`); the server never resends the list itself.
     TrainerBuySucceeded { trainer: u64, spell_id: u32 },
-    /// A refused purchase (`SMSG_TRAINER_BUY_FAILED`), `error` a [`crate::messages::train_fail`].
+    /// A refused purchase (`SMSG_TRAINER_BUY_FAILED`), `error` a [`crate::types::train_fail`].
     TrainerBuyFailed {
         trainer: u64,
         spell_id: u32,
@@ -893,13 +893,13 @@ pub enum SessionEvent {
         new_count: u32,
         purchase_count: u32,
     },
-    /// A refused sale (`SMSG_SELL_ITEM`, a [`crate::messages::sell_result`]); a success is silent.
+    /// A refused sale (`SMSG_SELL_ITEM`, a [`crate::types::sell_result`]); a success is silent.
     VendorSellFailed {
         vendor: u64,
         item_guid: u64,
         reason: u8,
     },
-    /// A refused purchase (`SMSG_BUY_FAILED`), `reason` a [`crate::messages::buy_result`].
+    /// A refused purchase (`SMSG_BUY_FAILED`), `reason` a [`crate::types::buy_result`].
     VendorBuyFailed {
         vendor: u64,
         item_entry: u32,
@@ -940,14 +940,14 @@ pub enum SessionEvent {
     /// `MovementInfo`, or vmangos flags anticheat in about 4 s (`CheckPendingMovementChanges`).
     ForceSpeedChange {
         guid: u64,
-        kind: crate::messages::SpeedKind,
+        kind: crate::types::SpeedKind,
         counter: u32,
         speed: f32,
     },
     /// Another unit's speed (`SMSG_SPLINE_SET_*_SPEED`/`MSG_MOVE_SET_*_SPEED`), no ack.
     SpeedChanged {
         guid: u64,
-        kind: crate::messages::SpeedKind,
+        kind: crate::types::SpeedKind,
         speed: f32,
     },
     /// `SMSG_MOUNTRESULT` (or `_DISMOUNTRESULT` if not `mount`): OK is 10 mounting, 3 dismounting.
@@ -959,8 +959,8 @@ pub enum SessionEvent {
     /// `allow_move = false`, so "about me" and "may move" are separate questions. A grant needs
     /// `CMSG_SET_ACTIVE_MOVER`: vmangos drops every `MSG_MOVE_*` for an unconfirmed mover.
     ClientControl { mover: u64, allow_move: bool },
-    /// A dropped packet: `unparseable` is false when no parse arm exists
-    /// (`ServerPacket::Other`), true when its parser errored and the body was skipped.
+    /// A dropped packet: `unparseable` is false when no decoder handles the opcode, true when its
+    /// decoder errored and the body was skipped.
     PacketDropped { opcode: u16, unparseable: bool },
     /// Where our corpse is (`MSG_CORPSE_QUERY`); `found == false` also comes unasked when it turns
     /// to bones. `display_map`/`position` are entrance-adjusted, `corpse_map` the real map.
@@ -990,7 +990,7 @@ pub enum SessionEvent {
     MoveMode {
         guid: u64,
         counter: u32,
-        mode: crate::messages::MoveMode,
+        mode: crate::types::MoveMode,
         apply: bool,
     },
     /// Any unit's movement mode (the sixteen `SMSG_SPLINE_MOVE_*` toggles, [`crate::wrath_spline`]),
@@ -998,7 +998,7 @@ pub enum SessionEvent {
     /// reference then re-runs the unit's gait selector (`0x6014ec`).
     SplineMoveMode {
         guid: u64,
-        mode: crate::messages::SplineMode,
+        mode: crate::types::SplineMode,
         apply: bool,
     },
     /// A knockback on our mover (`SMSG_MOVE_KNOCK_BACK`): a launch we fly ourselves, `zspeed`
@@ -1007,7 +1007,7 @@ pub enum SessionEvent {
     KnockBack {
         guid: u64,
         counter: u32,
-        launch: crate::messages::JumpInfo,
+        launch: crate::types::JumpInfo,
     },
     /// Someone invited us to their group (`SMSG_GROUP_INVITE`): the invite popup.
     GroupInvite { inviter: String },
@@ -1032,7 +1032,7 @@ pub enum SessionEvent {
         loot: Option<GroupLootInfo>,
     },
     /// A group command's verdict (`SMSG_PARTY_COMMAND_RESULT`): a
-    /// [`crate::messages::party_operation`] and a [`crate::messages::party_result`] code.
+    /// [`crate::types::party_operation`] and a [`crate::types::party_result`] code.
     PartyCommandResult {
         operation: u32,
         member: String,
@@ -1056,14 +1056,14 @@ pub enum SessionEvent {
     ReadyCheckAnswer { guid: u64, ready: u8 },
     /// Our saved raid lockouts (`SMSG_RAID_INSTANCE_INFO`), replacing the list; empty is normal.
     RaidInstanceInfo {
-        entries: Vec<crate::messages::RaidInstanceEntry>,
+        entries: Vec<crate::types::RaidInstanceEntry>,
     },
     // ── Instance lockouts ─────────────────────────────────────────────────────────────────
     // Four become client-composed `CHAT_MSG_SYSTEM` lines and two feed `CanShowResetInstances()`;
     // the map name is never on the wire, only a `Map.dbc` id.
     /// A raid lockout's welcome/countdown line (`SMSG_RAID_INSTANCE_MESSAGE`).
     RaidInstanceMessage {
-        message: crate::messages::RaidInstanceMessage,
+        message: crate::types::RaidInstanceMessage,
     },
     /// We are now saved to this instance (`SMSG_INSTANCE_SAVE_CREATED`); vmangos always sends
     /// `flag` 0, and 1 is the reference's debug wrapper.
@@ -1072,7 +1072,7 @@ pub enum SessionEvent {
     InstanceReset { map: u32 },
     /// An instance reset was refused (`SMSG_INSTANCE_RESET_FAILED`).
     InstanceResetFailed {
-        failure: crate::messages::InstanceResetFailed,
+        failure: crate::types::InstanceResetFailed,
     },
     /// The `Map.dbc` id of the dungeon we were last inside (`SMSG_UPDATE_LAST_INSTANCE`).
     UpdateLastInstance { map: u32 },
@@ -1118,7 +1118,7 @@ pub enum SessionEvent {
     /// The whole ignore list (`SMSG_IGNORE_LIST`), replacing what is held; guids only.
     IgnoreList { guids: Vec<u64> },
     /// A friend/ignore result (`SMSG_FRIEND_STATUS`): an add/remove ack or a friend's login or
-    /// logout broadcast; the [`friend_result`](crate::messages::friend_result) code says which.
+    /// logout broadcast; the [`friend_result`](crate::types::friend_result) code says which.
     FriendStatus(FriendStatusUpdate),
     /// A `/who` answer (`SMSG_WHO`): at most 49 rows, plus the true match total.
     WhoResults(WhoResults),
@@ -1128,11 +1128,11 @@ pub enum SessionEvent {
     GuildQueryResponse(GuildQueryResponse),
     /// The whole guild (`SMSG_GUILD_ROSTER`), a complete snapshot that replaces what is held.
     GuildRoster(GuildRoster),
-    /// A guild event (`SMSG_GUILD_EVENT`): a [`guild_event`](crate::messages::guild_event) id and
+    /// A guild event (`SMSG_GUILD_EVENT`): a [`guild_event`](crate::types::guild_event) id and
     /// its display-text arguments; a guid rides only on sign-on/off.
     GuildEvent(GuildEventNotice),
     /// A guild verb's verdict (`SMSG_GUILD_COMMAND_RESULT`); its command tag tells result `0x08`'s
-    /// two meanings apart ([`guild_command_error`](crate::messages::guild_command_error)).
+    /// two meanings apart ([`guild_command_error`](crate::types::guild_command_error)).
     GuildCommandResult(GuildCommandResult),
     /// A guild invite (`SMSG_GUILD_INVITE`); `CMSG_GUILD_ACCEPT`/`_DECLINE` do not name it.
     GuildInvite { inviter: String, guild: String },
@@ -1166,7 +1166,7 @@ pub enum SessionEvent {
     /// Whether the flight master's nearest node is known (`SMSG_TAXINODE_STATUS`); also sent with
     /// [`Self::NewTaxiPath`] on a first visit (vmangos `SendLearnNewTaxiNode`).
     TaxiNodeStatus { guid: u64, known: bool },
-    /// A flight request's verdict (`SMSG_ACTIVATETAXIREPLY`), a [`crate::messages::taxi_reply`]:
+    /// A flight request's verdict (`SMSG_ACTIVATETAXIREPLY`), a [`crate::types::taxi_reply`]:
     /// 0 is OK; a refusal starts no flight and sends no mount or spline.
     ActivateTaxiReply { code: u32 },
     /// `SMSG_NEW_TAXI_PATH`, empty, sent with [`Self::TaxiNodeStatus`] on a first visit.

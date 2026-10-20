@@ -1,4 +1,4 @@
-use crate::messages::movement::TransportPose;
+use crate::types::movement::TransportPose;
 use crate::wire::Vector3d;
 
 /// Object class (the `TypeId` on a create packet).

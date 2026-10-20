@@ -193,7 +193,7 @@ fn feed_vehicles(
     let seats = &seats.0;
     let is_player = |g: u64| {
         objects.object(g).and_then(|f| f.object_type())
-            == Some(benilla_protocol::messages::ObjectType::Player)
+            == Some(benilla_protocol::types::ObjectType::Player)
     };
     let unit = |g: u64| {
         bodies

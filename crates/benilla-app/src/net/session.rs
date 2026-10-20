@@ -2,7 +2,7 @@
 //! server clocks, reputations and the player's login-scoped stores. Registered ahead of every
 //! window plugin, so the teardown runs before the windows' own `Disconnected` listeners.
 
-use benilla_protocol::messages::Character;
+use benilla_protocol::types::Character;
 use benilla_protocol::JumpInfo;
 use bevy::prelude::*;
 
@@ -731,10 +731,10 @@ fn reputation_visible(list_id: u32, reputations: &mut Reputations) {
 /// (vmangos `MAX_FACTION_COUNT` 64); unchecked, `0xFFFF_FFFF` would resize the store to 34 GB.
 fn reputation_slot(list_id: u32, opcode: &str) -> Option<usize> {
     let i = usize::try_from(list_id).ok()?;
-    if i >= benilla_protocol::messages::FACTION_LIST_LEN {
+    if i >= benilla_protocol::types::FACTION_LIST_LEN {
         warn!(
             "net: {opcode} names reputation slot {list_id}, past the {}-entry faction list — dropped",
-            benilla_protocol::messages::FACTION_LIST_LEN
+            benilla_protocol::types::FACTION_LIST_LEN
         );
         return None;
     }

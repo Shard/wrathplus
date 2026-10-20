@@ -4,7 +4,7 @@ use super::*;
 #[cfg(test)]
 mod native_death_tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
 
     #[test]
     fn death_watch_resolves_native_health_and_preserves_alive_to_dead_gate() {
@@ -102,7 +102,7 @@ mod packet_aura_tests {
 mod packet_aura_system_tests {
     use super::*;
     use crate::net::wrath_auras::{PacketAuras, StampedAura};
-    use benilla_protocol::messages::{FieldLayout, ObjectFields, ObjectType};
+    use benilla_protocol::types::{FieldLayout, ObjectFields, ObjectType};
     use benilla_protocol::wrath_auras::NativeAura;
 
     fn app() -> (App, Entity) {

@@ -6,7 +6,7 @@
 use std::io::{self, Cursor, Read};
 
 use crate::events::SessionEvent;
-use crate::messages::{ActionButton, SpellCooldown};
+use crate::types::{ActionButton, SpellCooldown};
 use crate::wire::read_packed_guid;
 
 pub const SMSG_NAME_QUERY_RESPONSE: u16 = 0x0051;
@@ -106,7 +106,7 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
             };
             let _recruit_a_friend = u8_le(&mut r)?;
             strict(&r, body, "LOG_XPGAIN")?;
-            vec![SessionEvent::XpGain(crate::messages::XpGain {
+            vec![SessionEvent::XpGain(crate::types::XpGain {
                 victim,
                 total,
                 base,
@@ -115,7 +115,7 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
         }
         // AC `Unit::Kill`: the killing blow's player and the victim.
         SMSG_PARTYKILLLOG => {
-            let log = crate::messages::PartyKillLog {
+            let log = crate::types::PartyKillLog {
                 killer: u64_le(&mut r)?,
                 victim: u64_le(&mut r)?,
             };
@@ -124,7 +124,7 @@ pub fn decode(opcode: u16, body: &[u8], self_guid: Option<u64>) -> io::Result<Ve
         }
         // AC `Player::CheckAreaExploreAndOutdoor`: the area and the XP.
         SMSG_EXPLORATION_EXPERIENCE => {
-            let xp = crate::messages::ExplorationXp {
+            let xp = crate::types::ExplorationXp {
                 area_id: u32_le(&mut r)?,
                 xp: u32_le(&mut r)?,
             };
