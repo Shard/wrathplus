@@ -27,7 +27,7 @@ pub(crate) fn one_quest_body(quest: u32) -> Vec<u8> {
 fn a_response_becomes_the_logged_quests_blobs_in_log_order() {
     let mut app = App::new();
     app.init_resource::<crate::ui_quest::QuestGiver>();
-    register(&mut app);
+    crate::net::wrath_quest_pois::register(&mut app);
     let mut adapter = WrathEventAdapter::new();
     dispatch(&mut app, &mut adapter, 0x1e4, &one_quest_body(7));
     // An empty answer is data too: quest 8 has no POIs and is not asked again.

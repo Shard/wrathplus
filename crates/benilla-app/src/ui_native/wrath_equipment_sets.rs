@@ -3,6 +3,7 @@
 //! client keeps its own copy: a save or delete updates it at once, and `SMSG_EQUIPMENT_SET_SAVED`
 //! brings a new set's GUID (`Player::SetEquipmentSet`). A set use's
 //! `SMSG_EQUIPMENT_SET_USE_RESULT` (0 done, 4 bags full) becomes `EQUIPMENT_SWAP_FINISHED`.
+pub(crate) use crate::net::wrath_inventory_capture::EquipmentSets;
 use crate::net::wrath_inventory_capture::NativeInventoryPackets;
 use crate::net::{ClientCommand, NetCommands, ObjectStore, Objects, SelfPlayer};
 use benilla_protocol::wrath_inventory::{Command, EquipmentSet, Packet, EQUIPMENT_SLOTS};
@@ -10,7 +11,7 @@ use benilla_ui::script::{
     EquipmentSetRequest, EquipmentSetView, ScriptDialect, UiScript, EQUIPMENT_SET_IGNORED_SLOT,
 };
 use bevy::prelude::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 /// `MAX_EQUIPMENT_SET_INDEX` (AzerothCore Player.h).
 const MAX_SETS: u32 = 10;
@@ -18,22 +19,11 @@ const MAX_SETS: u32 = 10;
 const PLAYER_ARRAY: u8 = 255;
 const IGNORED: u64 = EQUIPMENT_SET_IGNORED_SLOT as u64;
 
-#[derive(Resource, Default)]
-pub(crate) struct EquipmentSets {
-    /// By server index; a new set's GUID is 0 until `SMSG_EQUIPMENT_SET_SAVED`.
-    sets: BTreeMap<u32, EquipmentSet>,
-    /// The set a use is waiting on, for `EQUIPMENT_SWAP_FINISHED`.
-    pending_use: Option<String>,
-    /// Indexes deleted before `SMSG_EQUIPMENT_SET_SAVED` numbered them: the delete goes out with
-    /// the GUID.
-    pending_delete: Vec<u32>,
-}
-
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<EquipmentSets>().add_systems(
+    app.add_systems(
         Update,
         feed_equipment_sets
-            .after(crate::net::wrath_item_refunds::feed_item_refunds)
+            .after(super::wrath_item_refunds::feed_item_refunds)
             .in_set(crate::ui_script::UiFeed)
             .run_if(crate::ui_script::ingame_ui_up),
     );
@@ -216,11 +206,6 @@ fn apply(
             Some(Command::EquipmentSetUse { items })
         }
     }
-}
-
-/// A session boundary forgets the sets; the next login's list brings them back.
-pub(crate) fn clear(sets: &mut EquipmentSets) {
-    *sets = EquipmentSets::default();
 }
 
 #[cfg(test)]

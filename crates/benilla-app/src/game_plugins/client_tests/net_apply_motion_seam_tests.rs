@@ -182,7 +182,7 @@ fn create_move_and_destroy_in_one_drain_apply_in_wire_order() {
 
 /// The movement kinds' handlers other than the object layer's and the movement apply's: none of
 /// them reads movement state, so where the apply sits among them cannot change what they see.
-/// The object layer's handler comes first on every kind.
+/// The object layer's or the movement handlers' handler comes first on every kind.
 #[test]
 fn the_movement_kinds_other_handlers_are_pinned() {
     let app = crate::game_plugins::schedule_tests::headless_client();
