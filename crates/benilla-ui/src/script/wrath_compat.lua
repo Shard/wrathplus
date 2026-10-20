@@ -35,10 +35,6 @@ GetExpansionLevel = GetExpansionLevel or function() return 2 end
 GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
 
--- ── maps and instances ─────────────────────────────────────────────────────────────────────────
-
--- ── PvP, arena, battlefields ───────────────────────────────────────────────────────────────────
-
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
 BNFeaturesEnabled, BNFeaturesEnabledAndConnected, BNConnected = none, none, none
 BNGetNumFriends = function() return 0, 0 end
@@ -59,13 +55,7 @@ Sound_ChatSystem_GetOutputDriverNameByIndex = none
 Sound_GameSystem_GetNumOutputDrivers = Sound_GameSystem_GetNumOutputDrivers or zero
 Sound_GameSystem_GetOutputDriverNameByIndex = none
 
--- ── dungeon finder, achievements, calendar, companions, vehicles ───────────────────────────────
-GetTrackedAchievements, GetAchievementInfo = none, none
-GetNumTrackedAchievements, GetTotalAchievementPoints = zero, zero
-
 -- ── misc build-12340 queries ───────────────────────────────────────────────────────────────────
-GetLFGDeserterExpiration, GetLFGRandomCooldownExpiration = none, none
-UnitIsPossessed, IsPossessBarVisible = none, none
 GetActiveVoiceChannel, GetNumVoiceSessionMembersBySessionID = none, zero
 
 -- ── the stock UI's CVars, at build 12340's defaults, for any the host has not registered ────────
@@ -328,9 +318,7 @@ do
         return t
     end
 end
-IsStackableAction = IsStackableAction or IsConsumableAction or none
 IsPetAttackAction = IsPetAttackAction or none
-GetPossessInfo = GetPossessInfo or none
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
 RegisterStaticConstants = RegisterStaticConstants or none
@@ -385,12 +373,9 @@ end
 
 -- ── the secure templates' remaining helpers ────────────────────────────────────────────────────
 SpellCanTargetItem, SpellTargetItem = none, none
-FocusUnit, ClearFocus = FocusUnit or none, ClearFocus or none
 EquipItemByName, PickupItem = EquipItemByName or none, PickupItem or none
 PickupEquipmentSet, SetMultiCastSpell = none, none
 ClearOverrideBindings, SetOverrideBinding, SetOverrideBindingClick = none, none, none
 SetOverrideBindingItem, SetOverrideBindingMacro, SetOverrideBindingSpell = none, none, none
 
--- ── gossip and the quest panels ────────────────────────────────────────────────────────────────
-GetQuestLogSpellLink, GetQuestSpellLink = GetQuestLogSpellLink or none, GetQuestSpellLink or none
 

@@ -248,6 +248,8 @@ pub(crate) struct Model {
     /// The player's auras in the reference cache's insertion order (`0xbc6040`), durations joined:
     /// the `GetPlayerBuff` family's list, and any token naming the player's.
     pub(crate) player_auras: Vec<AuraState>,
+    /// The last `FocusUnit`/`ClearFocus` this frame, a guid (0 clears) for the host to take.
+    pub(crate) focus_request: Option<u64>,
     /// Every other unit's auras by guid, ascending aura slot: one list per unit, whatever token
     /// names it.
     pub(crate) unit_auras: HashMap<u64, Vec<AuraState>>,
@@ -1203,6 +1205,7 @@ impl Model {
             units_by_lower: HashMap::new(),
             units_by_guid: HashMap::new(),
             player_auras: Vec::new(),
+            focus_request: None,
             unit_auras: HashMap::new(),
             unit_guids: super::UnitGuids {
                 wrath: dialect == super::ScriptDialect::Wrath12340,

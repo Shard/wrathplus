@@ -392,6 +392,7 @@ struct AuraUnits<'w> {
     hovered: Option<Res<'w, crate::target::Hovered>>,
     hovered_go: Option<Res<'w, crate::target::HoveredObject>>,
     interact: Option<Res<'w, crate::ui_session::InteractNpc>>,
+    focus: Option<Res<'w, crate::ui_unit::FocusUnit>>,
     packets: Option<Res<'w, crate::net::wrath_auras::PacketAuras>>,
     names: Option<Res<'w, crate::names::NameCache>>,
     commands: Res<'w, NetCommands>,
@@ -624,6 +625,7 @@ fn feed_auras(
                 })
                 .map_or(0, |(_, guid)| guid),
             npc: units.interact.as_deref().and_then(|i| i.1).unwrap_or(0),
+            focus: units.focus.as_deref().map_or(0, |f| f.guid),
             held,
             buffs_visible,
             native_visible:
