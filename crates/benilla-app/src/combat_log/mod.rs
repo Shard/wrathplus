@@ -121,13 +121,14 @@ impl Plugin for CombatLogPlugin {
             .net_handler(K::SpellGo, on_native_only)
             .net_handler(K::UnitAuras, on_native_only)
             .net_handler(K::ObjectDestroyed, on_native_only)
-            .net_handler(K::ObjectsRemoved, on_native_only);
+            .net_handler(K::ObjectsRemoved, on_native_only)
+            .net_handler(K::WrathSpellLog, on_native_only);
     }
 }
 
-/// The kinds only the build-12340 log reads: casts, aura snapshots and a unit leaving (its aura
-/// snapshot goes). Our refused casts and steals record from their sole owners
-/// ([`crate::spell::native_failure`], [`crate::net::wrath_spell_log_capture`]).
+/// The kinds only the build-12340 log reads: casts, aura snapshots, a unit leaving (its aura
+/// snapshot goes) and a spell steal, beside `net::wrath_spell_log_capture`'s receipt. Our
+/// refused casts record from their sole owner ([`crate::spell::native_failure`]).
 fn on_native_only(In(ev): In<SessionEvent>, native: Option<ResMut<native::NativeCombatLog>>) {
     if let (
         Some(mut native),
@@ -135,7 +136,8 @@ fn on_native_only(In(ev): In<SessionEvent>, native: Option<ResMut<native::Native
         | SessionEvent::SpellGo { .. }
         | SessionEvent::UnitAuras { .. }
         | SessionEvent::ObjectDestroyed(_)
-        | SessionEvent::ObjectsRemoved(_),
+        | SessionEvent::ObjectsRemoved(_)
+        | SessionEvent::WrathSpellLog { .. },
     ) = (native, &ev)
     {
         native.record(&ev);
