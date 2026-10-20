@@ -362,7 +362,7 @@ fn set_inventory_item_renders_full_outside_compare() {
 }
 
 #[test]
-fn set_hyperlink_renders_items_and_ignores_other_links() {
+fn set_hyperlink_renders_items_and_raises_for_other_links() {
     let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.set_item_template(
@@ -381,8 +381,8 @@ fn set_hyperlink_renders_items_and_ignores_other_links() {
         tt:SetOwner(a, "ANCHOR_RIGHT")
         tt:SetHyperlink("|cff1eff00|Hitem:7002:0:0:0|h[New Loop]|h|r")
         assert(TTTextLeft1:GetText() == "New Loop", "escaped link renders")
-        tt:SetHyperlink("player:Bob")
-        assert(TTTextLeft1:GetText() == "New Loop", "non-item link leaves the content alone")
+        assert(not pcall(tt.SetHyperlink, tt, "player:Bob"), "an unknown link type raises")
+        assert(TTTextLeft1:GetText() == "New Loop", "and leaves the content alone")
         tt:SetOwner(a, "ANCHOR_RIGHT")
         tt:SetHyperlink("item:7002")
         assert(TTTextLeft1:GetText() == "New Loop", "bare item: form renders")

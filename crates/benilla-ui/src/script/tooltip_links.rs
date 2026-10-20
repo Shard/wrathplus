@@ -42,6 +42,25 @@ struct State {
     views: HashMap<u32, QuestLinkView>,
     requests: Vec<u32>,
     pending: HashMap<FrameHandle, u32>,
+    talents: HashMap<u32, TalentLinkView>,
+    glyphs: GlyphLinkCatalog,
+}
+
+/// One Talent.dbc row as a `talent:` link reads it (`0x65c290` returns the row).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TalentLinkView {
+    /// The rank spells in rank order, up to the last non-zero one.
+    pub ranks: Vec<u32>,
+    /// Flags bit 0: the exceptional talents 12340 hands to the spell builder instead.
+    pub exceptional: bool,
+}
+
+/// What a `glyph:<slot>:<glyph>` link reads: GlyphProperties.dbc's spell per glyph id, and
+/// GlyphSlot.dbc's `(type, tooltip order)` per slot id, type 0 major and 1 minor.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GlyphLinkCatalog {
+    pub glyph_spells: HashMap<u32, u32>,
+    pub slots: HashMap<u32, (u32, u32)>,
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
@@ -76,6 +95,20 @@ impl super::UiScript {
                     self.model_mut().record_script_error(e.to_string());
                 }
             }
+        }
+    }
+
+    /// Install Talent.dbc for `talent:` links, keyed by talent id; links name any class's talents.
+    pub fn set_talent_link_catalog(&mut self, talents: HashMap<u32, TalentLinkView>) {
+        if let Some(mut state) = self.lua.app_data_mut::<State>() {
+            state.talents = talents;
+        }
+    }
+
+    /// Install GlyphProperties.dbc and GlyphSlot.dbc for `glyph:` links.
+    pub fn set_glyph_link_catalog(&mut self, catalog: GlyphLinkCatalog) {
+        if let Some(mut state) = self.lua.app_data_mut::<State>() {
+            state.glyphs = catalog;
         }
     }
 
@@ -259,6 +292,117 @@ pub(super) fn set_achievement(lua: &Lua, this: &Table, payload: &str) -> mlua::R
     Ok(())
 }
 
+/// `talent:<id>:<rank>` (`0x62dae0` → `0x65c290`, then `0x626e20(row, 0, 0, 1, rank)`): the rank
+/// in range is shown, else none; the shown rank's spell (the next one's when none) names the
+/// tooltip, then `TOOLTIP_TALENT_RANK` as rank+1 of max+1, its description, and the next rank's
+/// under `TOOLTIP_TALENT_NEXT_RANK`, through the shared talent renderer. A talent with no row
+/// writes nothing.
+///
+/// Labelled: the exceptional-talent spell builder and the requirement lines (`0x6224f0`,
+/// `0x622800`) are not reproduced; the shared renderer draws the talent shape for every row.
+pub(super) fn set_talent(lua: &Lua, this: &Table, payload: &str) -> mlua::Result<()> {
+    let mut fields = payload.split(':');
+    let Some(id) = fields.next().and_then(|f| f.trim().parse::<u32>().ok()) else {
+        return Ok(());
+    };
+    let rank = fields
+        .next()
+        .and_then(|f| f.trim().parse::<i64>().ok())
+        .unwrap_or(-1);
+    let row = lua
+        .app_data_ref::<State>()
+        .and_then(|s| s.talents.get(&id).cloned());
+    let Some(row) = row else {
+        return Ok(());
+    };
+    let ranks: Vec<u32> = {
+        let last = row.ranks.iter().rposition(|&s| s != 0);
+        last.map_or_else(Vec::new, |n| row.ranks[..=n].to_vec())
+    };
+    if ranks.is_empty() {
+        return Ok(());
+    }
+    let top = ranks.len() as i64 - 1;
+    let shown = (0..=top).contains(&rank).then_some(rank as usize);
+    let current = shown.map(|r| ranks[r]);
+    let next = ranks.get(shown.map_or(0, |r| r + 1)).copied();
+    let Some(display) = current.or(next) else {
+        return Ok(());
+    };
+    let next_spell = current.and(next).unwrap_or(0);
+    let next_desc = (next_spell != 0)
+        .then(|| {
+            lua.app_data_ref::<Model>()
+                .expect("model app_data")
+                .spell_tooltips
+                .get(&next_spell)
+                .map(|v| v.description.clone())
+        })
+        .flatten();
+    let rank_line = crate::strings::global(lua, "TOOLTIP_TALENT_RANK").map(|tmpl| {
+        crate::strings::fill(
+            &tmpl,
+            &[
+                crate::strings::Arg::D(shown.map_or(0, |r| r as i64 + 1)),
+                crate::strings::Arg::D(top + 1),
+            ],
+        )
+    });
+    super::tooltip_spell::set_spell_with_talent(
+        lua,
+        this,
+        display,
+        super::tooltip_spell::TalentLines {
+            exceptional: row.exceptional,
+            rank_line,
+            reqs: Vec::new(),
+            next_spell,
+            next_desc,
+            learn: false,
+        },
+    )
+}
+
+/// `glyph:<slot>:<glyph>` (`0x62dae0` → `0x622ba0(slot, glyph, 1, 1, 0)`): the glyph's spell name
+/// (white), else `GLYPH_INACTIVE` (gray); `MAJOR_GLYPH` or `MINOR_GLYPH` (glyph blue); then the
+/// spell's description (gold, wrapped), or `GLYPH_EMPTY_DESC` for no glyph. A link draws no
+/// remove line, and 12340 runs no content script here.
+pub(super) fn set_glyph(lua: &Lua, this: &Table, payload: &str) -> mlua::Result<()> {
+    let mut fields = payload.split(':').map(|f| f.trim().parse::<u32>().unwrap_or(0));
+    let (slot, glyph) = (fields.next().unwrap_or(0), fields.next().unwrap_or(0));
+    let (spell, slot_row) = {
+        let state = lua.app_data_ref::<State>().expect("link tooltip state");
+        (
+            state.glyphs.glyph_spells.get(&glyph).copied(),
+            state.glyphs.slots.get(&slot).copied(),
+        )
+    };
+    let h = frame_handle_of(lua, this)?;
+    {
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        clear_content(&mut model, h);
+    }
+    fire_cleared(lua, h);
+    let view = spell.and_then(|s| super::tooltip_spell::spell_view_of(lua, s, false));
+    let text = |key: &str| lua.globals().get::<Option<String>>(key).map(Option::unwrap_or_default);
+    match &view {
+        Some(v) => append_line(lua, this, (v.name.clone(), WHITE), None, false)?,
+        None => append_line(lua, this, (text("GLYPH_INACTIVE")?, CRITERION), None, false)?,
+    }
+    let minor = slot_row.is_some_and(|(kind, _)| kind != 0);
+    let kind = if minor { "MINOR_GLYPH" } else { "MAJOR_GLYPH" };
+    append_line(lua, this, (text(kind)?, super::wrath_glyphs::GLYPH_BLUE), None, false)?;
+    match &view {
+        Some(v) if !v.description.is_empty() => {
+            append_line(lua, this, (v.description.clone(), GOLD), None, true)?
+        }
+        Some(_) => {}
+        None => append_line(lua, this, (text("GLYPH_EMPTY_DESC")?, GOLD), None, true)?,
+    }
+    show_or_hide_empty(lua, h);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::QuestLinkView;
@@ -424,5 +568,68 @@ mod tests {
         // An unknown id writes nothing.
         s.run("TT:SetHyperlink('achievement:999:0:0:0:0:0:0:0:0:0')").unwrap();
         assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1);
+    }
+
+    /// `talent:<id>:<rank>` draws the shown rank's spell and the next; `glyph:<slot>:<glyph>` the
+    /// glyph's spell with its type; `unit:<guid>` a held unit; an unknown link type raises.
+    #[test]
+    fn talent_glyph_unit_and_unknown_links() {
+        use crate::script::{SpellTooltipView, UnitState};
+        use std::collections::HashMap;
+        let mut s = UiScript::new().unwrap();
+        s.set_screen_size(800.0, 600.0);
+        for (id, name, desc) in [(10, "Improved Fireball", "Rank one."), (11, "Improved Fireball", "Rank two."), (20, "Glyph of Fireball", "Faster fireballs.")] {
+            s.set_spell_tooltip(
+                id,
+                SpellTooltipView {
+                    name: name.into(),
+                    description: desc.into(),
+                    ..Default::default()
+                },
+            );
+        }
+        s.set_talent_link_catalog(HashMap::from([(
+            31,
+            super::TalentLinkView {
+                ranks: vec![10, 11, 0],
+                exceptional: false,
+            },
+        )]));
+        s.set_glyph_link_catalog(super::GlyphLinkCatalog {
+            glyph_spells: HashMap::from([(5, 20)]),
+            slots: HashMap::from([(21, (0, 1))]),
+        });
+        s.set_unit(
+            "target",
+            Some(UnitState {
+                exists: true,
+                guid: 0xF130_0000_4500_0001,
+                name: Some("Timber Wolf".into()),
+                ..Default::default()
+            }),
+        );
+        tooltip(&s);
+        s.run(
+            r#"
+            TOOLTIP_TALENT_RANK = "Rank %d/%d"
+            TOOLTIP_TALENT_NEXT_RANK = "Next rank:"
+            MAJOR_GLYPH = "Major Glyph"
+            TT:SetScript("OnTooltipSetSpell", function() RUNS = RUNS + 1 end)
+            TT:SetHyperlink("|cff4e96f7|Htalent:31:0|h[Improved Fireball]|h|r")
+            "#,
+        )
+        .unwrap();
+        let talent = lines(&s);
+        assert_eq!(talent.first().map(String::as_str), Some("Improved Fireball"));
+        assert!(talent.iter().any(|l| l == "Rank 1/2"), "{talent:?}");
+        assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1);
+        s.run(r#"TT:SetHyperlink("|cff66bbff|Hglyph:21:5|h[Glyph of Fireball]|h|r")"#)
+            .unwrap();
+        assert_eq!(lines(&s), ["Glyph of Fireball", "Major Glyph", "Faster fireballs."]);
+        assert_eq!(s.eval::<i64>("return RUNS").unwrap(), 1, "the glyph core runs no script");
+        s.run(r#"TT:SetHyperlink("unit:F130000045000001")"#).unwrap();
+        assert_eq!(lines(&s).first().map(String::as_str), Some("Timber Wolf"));
+        let err = s.run(r#"TT:SetHyperlink("bogus:1")"#).unwrap_err().to_string();
+        assert!(err.contains("TT:SetHyperlink(): Unknown link type"), "{err}");
     }
 }

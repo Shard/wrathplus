@@ -263,8 +263,8 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GameTooltip:SetHyperlink(link): the chat-link tooltip (`ItemRef.lua:60`). Takes an item
-    // link, escaped or a bare "item:<id>", or an enchant link; any other link does nothing.
+    // GameTooltip:SetHyperlink(link): the chat-link tooltip (`ItemRef.lua:60`), dispatched as
+    // `0x62dae0` does on the link's type, escaped or bare; an unknown type raises.
     m.set(
         "SetHyperlink",
         lua.create_function(|lua, (this, link): (Table, String)| {
@@ -291,6 +291,24 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                         None,
                     );
                 }
+                return Ok(());
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "unit:") {
+                if let Ok(guid) = u64::from_str_radix(payload.trim(), 16) {
+                    super::tooltip_unit::render_unit_guid(lua, &this, guid)?;
+                }
+                return Ok(());
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "talent:") {
+                return super::tooltip_links::set_talent(lua, &this, payload);
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "glyph:") {
+                return super::tooltip_links::set_glyph(lua, &this, payload);
+            }
+            // `dance:` opens the dance studio's entry (`0x575d70`), which has no surface here:
+            // labelled, a no-op.
+            if super::tooltip_links::link_payload(&link, "dance:").is_some() {
+                return Ok(());
             }
             // Build 12340's trade link opens the linker's TradeSkill window (`0x5de120`), no tooltip.
             if link.starts_with("trade:") || link.contains("|Htrade:") {
@@ -312,6 +330,14 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     Default::default(),
                     None,
                 );
+            }
+            if super::tooltip_links::link_payload(&link, "item:").is_none() {
+                // Every other link type raises (`0x62dae0`), naming the tooltip.
+                let name = mlua::ObjectLike::call_method::<Option<String>>(&this, "GetName", ())?
+                    .unwrap_or_default();
+                return Err(mlua::Error::RuntimeError(format!(
+                    "{name}:SetHyperlink(): Unknown link type"
+                )));
             }
             let Some((id, _enchant_id, roll)) = hyperlink_item_fields(&link) else {
                 return Ok(());
