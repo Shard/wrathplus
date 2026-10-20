@@ -255,21 +255,13 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
             let mut rest = rest.iter();
             // 3.3.5 is `UseAction(action, unit, button)` (`SecureTemplates.lua:310`): a held
-            // cursor always drops on the slot, and only an explicit `"player"` self-casts. 1.12's
-            // second and third arguments are the cursor check and the self-cast flag.
-            let (check_cursor, on_self) = if model.dialect == super::ScriptDialect::Wrath12340 {
-                let unit = rest.next().and_then(|v| match v {
-                    Value::String(s) => s.to_str().ok().map(|s| s.to_ascii_lowercase()),
-                    _ => None,
-                });
-                (true, unit.as_deref() == Some("player"))
-            } else {
-                (
-                    rest.next().is_some_and(truthy_nonzero),
-                    rest.next().is_some_and(truthy_nonzero),
-                )
-            };
-            if check_cursor && model.cursor.is_some() {
+            // cursor always drops on the slot, and only an explicit `"player"` self-casts.
+            let unit = rest.next().and_then(|v| match v {
+                Value::String(s) => s.to_str().ok().map(|s| s.to_ascii_lowercase()),
+                _ => None,
+            });
+            let on_self = unit.as_deref() == Some("player");
+            if model.cursor.is_some() {
                 super::cursor::place_action(&mut model, action);
             } else {
                 model

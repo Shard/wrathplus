@@ -13,7 +13,7 @@
 use mlua::{Lua, MultiValue, Table, Value};
 
 use super::object::frame_handle_of;
-use super::tooltip::{append_line, clear_content, fire_cleared, show_or_hide_empty};
+use super::tooltip::{append_line, clear_content, finish_content, fire_cleared};
 use super::{ItemTemplateView, Model};
 
 mod names;
@@ -173,7 +173,7 @@ pub(super) fn render_by_id(
             }
         }
     }
-    show_or_hide_empty(lua, h);
+    finish_content(lua, h, "OnTooltipSetItem");
     Ok(())
 }
 
@@ -190,7 +190,7 @@ fn set_quest_item_view(
                 let mut model = lua.app_data_mut::<Model>().expect("model app_data");
                 clear_content(&mut model, h);
             }
-            super::tooltip::show_or_hide_empty(lua, h);
+            super::tooltip::finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         }
     }
@@ -268,6 +268,30 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
     m.set(
         "SetHyperlink",
         lua.create_function(|lua, (this, link): (Table, String)| {
+            // Quest and achievement links have their own cores (`0x62dae0` → `0x622960`,
+            // `0x627220`); a spell link is the spell core with the id alone.
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "quest:") {
+                let id = payload.split(':').next().and_then(|f| f.trim().parse().ok());
+                return match id {
+                    Some(id) if id != 0 => super::tooltip_links::set_quest(lua, &this, id),
+                    _ => Ok(()),
+                };
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "achievement:") {
+                return super::tooltip_links::set_achievement(lua, &this, payload);
+            }
+            if let Some(payload) = super::tooltip_links::link_payload(&link, "spell:") {
+                if let Some(id) = payload.split(':').next().and_then(|f| f.trim().parse().ok()) {
+                    return super::tooltip_spell::set_spell_by_id(
+                        lua,
+                        &this,
+                        id,
+                        link_name(&link).map(str::to_string),
+                        Default::default(),
+                        None,
+                    );
+                }
+            }
             // Build 12340's trade link opens the linker's TradeSkill window (`0x5de120`), no tooltip.
             if link.starts_with("trade:") || link.contains("|Htrade:") {
                 lua.app_data_mut::<Model>()
@@ -326,7 +350,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     }
                 }
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -427,7 +451,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                         }
                     }
                 }
-                show_or_hide_empty(lua, h);
+                finish_content(lua, h, "OnTooltipSetItem");
                 Ok(MultiValue::from_vec(vec![
                     Value::Integer(1),
                     // hasCooldown is the builder's `[ebp-0x38]`, set by four lines:
@@ -530,7 +554,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     }
                 }
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(MultiValue::from_vec(vec![
                 // The builder's `[ebp-0x38]`: a running cooldown or the item's duration line.
                 Value::Boolean(has_cd || inst.duration_ms.is_some()),
@@ -583,7 +607,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                         }
                     }
                 }
-                show_or_hide_empty(lua, h);
+                finish_content(lua, h, "OnTooltipSetItem");
                 Ok(())
             })?,
         )?;
@@ -636,7 +660,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     }
                 }
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -686,7 +710,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                     }
                 }
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -875,7 +899,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
                         render_view(lua, &this, &v, BuilderFlags::default(), None)?;
                     }
                 }
-                show_or_hide_empty(lua, h);
+                finish_content(lua, h, "OnTooltipSetItem");
                 Ok(())
             })?,
         )?;
@@ -914,7 +938,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             if let Some(v) = view_of(lua, item_id) {
                 render_view(lua, &this, &v, BuilderFlags::default(), Some(&inst))?;
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -956,7 +980,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             if let Some(v) = view_of(lua, item_id) {
                 render_view(lua, &this, &v, BuilderFlags::default(), Some(&inst))?;
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -987,7 +1011,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             if let Some(v) = view_of(lua, item_id) {
                 render_view(lua, &this, &v, BuilderFlags::default(), None)?;
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;
@@ -1021,7 +1045,7 @@ pub(super) fn install_methods(lua: &Lua, m: &Table) -> mlua::Result<()> {
             if let Some(v) = view_of(lua, item_id) {
                 render_view(lua, &this, &v, BuilderFlags::default(), None)?;
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetItem");
             Ok(())
         })?,
     )?;

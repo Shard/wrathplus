@@ -409,12 +409,11 @@ mod tests {
 
     #[test]
     fn greeting_completion_uses_log_state_not_the_shared_icon() {
-        const BASE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const BASE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::PlayerQuestLog);
         let incomplete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7)]);
         assert!(!quest_complete(&incomplete, 7));
-        let complete =
-            benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1 << 24)]);
+        let complete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1)]);
         assert!(quest_complete(&complete, 7));
         assert!(!quest_complete(&complete, 8));
         let mut state = GossipState {

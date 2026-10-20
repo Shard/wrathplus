@@ -1061,7 +1061,7 @@ mod tests {
 
     /// Quest-id dword in a Vanilla fixture; production reads packed slots through ObjectFields.
     fn quest_id_field(slot: u8) -> u16 {
-        let span = FieldLayout::Vanilla5875
+        let span = FieldLayout::Wrath12340
             .resolve(Field::PlayerQuestLog)
             .unwrap();
         let stride = span.width / u16::from(PLAYER_QUEST_LOG_SLOTS);

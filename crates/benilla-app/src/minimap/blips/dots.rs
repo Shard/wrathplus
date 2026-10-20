@@ -415,12 +415,12 @@ mod tests {
         use crate::net::ObjectStore;
         use benilla_protocol::ObjectFields;
 
-        const FIELD_HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth); // UNIT_FIELD_HEALTH
-        const FIELD_SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby); // UNIT_FIELD_SUMMONEDBY (2 dwords)
-        const FIELD_CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby); // UNIT_FIELD_CHARMEDBY (2 dwords)
-        const FIELD_BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
-        /// `UNIT_FIELD_BYTES_1` byte 3 bit 2, the `& 4` the classifier tests.
-        const UNTRACKABLE: u32 = 0x4 << 24;
+        const FIELD_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth); // UNIT_FIELD_HEALTH
+        const FIELD_SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby); // UNIT_FIELD_SUMMONEDBY (2 dwords)
+        const FIELD_CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby); // UNIT_FIELD_CHARMEDBY (2 dwords)
+        const FIELD_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
+        /// `UNIT_FIELD_BYTES_1` byte 2 bit 2, the `& 4` the classifier tests.
+        const UNTRACKABLE: u32 = 0x4 << 16;
         const ME: u64 = 0x0000_0000_0000_0007;
         const SOMEONE_ELSE: u64 = 0x0000_0000_0000_0042;
 
@@ -665,10 +665,10 @@ mod tests {
             0,
             false
         ));
-        // A cat-form player (`UNIT_FIELD_BYTES_1` byte 2 is form 1).
+        // A cat-form player (`UNIT_FIELD_BYTES_2` byte 3 is form 1).
         let cat_druid = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
-            &[(Field::UnitBytes1, 1 << 16)],
+            FieldLayout::Wrath12340,
+            &[(Field::UnitBytes2, 1 << 24)],
         ));
         let cat = Some(
             CreatureTypeSources {

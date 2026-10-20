@@ -28,14 +28,10 @@ fn is_token(packed: u32) -> bool {
     matches!(kind(packed), 6 | 7)
 }
 
-/// Payload types: Vanilla `0x494e20` accepts 1–7; Wrath `0x520a80` accepts
-/// spell types 1/8–17 and reaction/command types 6/7. Empty slots carry nothing.
-pub(crate) fn accepts_payload(packed: u32, wrath: bool) -> bool {
-    if wrath {
-        matches!(kind(packed), 1 | 6 | 7 | 8..=17)
-    } else {
-        (1..=7).contains(&kind(packed))
-    }
+/// Payload types (`0x520a80`): spell types 1/8–17 and reaction/command types 6/7. Empty slots
+/// carry nothing.
+pub(crate) fn accepts_payload(packed: u32) -> bool {
+    matches!(kind(packed), 1 | 6 | 7 | 8..=17)
 }
 
 /// The duplicate scan's compare (`0x4bca44`, `0x4bca57`): all but the autocast bits, any type.
@@ -56,20 +52,9 @@ struct Assigned {
 /// a duplicate's slot takes the occupant, which makes a drag a swap (`0x4bca78`), else a token
 /// occupant needs a candidate slot or the drop aborts. The reference's return (`0x4bcb92`), 1
 /// only when nothing was relocated, cannot tell an abort from a relocation; this one can.
-#[cfg(test)]
 fn assign(slots: &mut [u32], target: usize, source: u32, passive: bool) -> Option<Assigned> {
-    assign_native(slots, target, source, passive, false)
-}
-
-fn assign_native(
-    slots: &mut [u32],
-    target: usize,
-    source: u32,
-    passive: bool,
-    wrath: bool,
-) -> Option<Assigned> {
-    // Wrath assign `0x5d5ad0` tests all 24 ID bits for blank spells/relocation slots.
-    let id_mask = if wrath { 0x00ff_ffff } else { 0xffff };
+    // Assign `0x5d5ad0` tests all 24 ID bits for blank spells/relocation slots.
+    let id_mask = 0x00ff_ffff;
     let occupant = *slots.get(target)?;
     if occupant == source {
         return None;
@@ -96,7 +81,7 @@ fn assign_native(
         reloc,
         displaced: reloc
             .is_none()
-            .then(|| accepts_payload(occupant, wrath).then_some(occupant))
+            .then(|| accepts_payload(occupant).then_some(occupant))
             .flatten(),
     })
 }
@@ -119,8 +104,7 @@ pub(super) fn pickup_pet_action(model: &mut Model, slot: u32) -> bool {
         return false;
     };
     let view = model.pet_bar.slots[index].view.clone();
-    let wrath = model.dialect == crate::script::ScriptDialect::Wrath12340;
-    let Some(packed) = accepts_payload(view.packed, wrath).then_some(view.packed) else {
+    let Some(packed) = accepts_payload(view.packed).then_some(view.packed) else {
         return false;
     };
 
@@ -136,7 +120,7 @@ pub(super) fn pickup_pet_action(model: &mut Model, slot: u32) -> bool {
         write_slot(
             model,
             index,
-            packed & if wrath { 0xff00_0000 } else { 0xffff_0000 },
+            packed & 0xff00_0000,
             false,
         );
     }
@@ -194,13 +178,7 @@ fn write_slot(model: &mut Model, target: usize, source: u32, passive: bool) -> O
         return None;
     }
     let mut words: Vec<u32> = model.pet_bar.slots.iter().map(|s| s.view.packed).collect();
-    let assigned = assign_native(
-        &mut words,
-        target,
-        source,
-        passive,
-        model.dialect == crate::script::ScriptDialect::Wrath12340,
-    )?;
+    let assigned = assign(&mut words, target, source, passive)?;
 
     // One `CMSG_PET_SET_ACTION`: the relocation pair first whenever there was one, changed or
     // not, then the target pair (`0x4bcad4`).
@@ -637,19 +615,19 @@ mod wrath_words {
     #[test]
     fn full_ids_are_not_empty_relocation_slots() {
         let mut slots = [0x07000002, 0x01010000];
-        assert!(assign_native(&mut slots, 0, 0x01020000, false, true).is_none());
+        assert!(assign(&mut slots, 0, 0x01020000, false).is_none());
         assert_eq!(slots, [0x07000002, 0x01010000]);
     }
     #[test]
     fn native_payload_types_and_duplicate_swap_preserve_low24() {
         for kind in 0..64 {
             assert_eq!(
-                accepts_payload(kind << 24 | 0x010001, true),
+                accepts_payload(kind << 24 | 0x010001),
                 matches!(kind, 1 | 6 | 7 | 8..=17)
             );
         }
         let mut slots = [0xc1010001, 0x01020001];
-        let assigned = assign_native(&mut slots, 1, 0x81010001, false, true).unwrap();
+        let assigned = assign(&mut slots, 1, 0x81010001, false).unwrap();
         assert_eq!(assigned.reloc, Some(0));
         assert_eq!(slots, [0x01020001, 0x81010001]);
     }

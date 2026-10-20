@@ -1,6 +1,6 @@
 //! Wrath animation objects. Groups schedule parallel animations by order; XML and Lua use
 //! the same constructors. State is private engine-owned Lua tables, not compatibility globals.
-use super::{Model, ScriptDialect};
+use super::Model;
 use mlua::{Function, Lua, MultiValue, ObjectLike, Table, Value};
 #[path = "animation/lifecycle.rs"]
 mod lifecycle;
@@ -351,9 +351,6 @@ fn restore(lua: &Lua, g: &Table) -> mlua::Result<()> {
     Ok(())
 }
 pub(super) fn install(lua: &Lua, methods: &Table) -> mlua::Result<()> {
-    if lua.app_data_ref::<Model>().expect("model").dialect != ScriptDialect::Wrath12340 {
-        return Ok(());
-    }
     methods.set(
         "CreateAnimationGroup",
         lua.create_function(|lua, (t, name): (Table, Option<String>)| group(lua, t, name))?,

@@ -17,7 +17,7 @@ use bevy::prelude::*;
 use crate::net::{GuidIndex, NetEvents, NetHandlerApp, RemoteMotion, Spline, UnitMoveModes};
 
 const GUID: u64 = 0xF130_0000_4321_0001;
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
     .index_of(benilla_protocol::messages::Field::UnitHealth);
 
 fn create() -> SessionEvent {

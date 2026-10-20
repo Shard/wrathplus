@@ -500,11 +500,9 @@ mod tests {
     const ME: u64 = 0x10;
     const MEMBER: u64 = 0x1234;
     const PET: u64 = 0xF140_0000_0000_0077;
-    const AURA: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAura);
-    const AURAFLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitAuraFlags);
-    const SUMMON: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummon);
+    const SUMMON: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummon);
     /// `UNIT_FIELD_FLAGS`; bit 27 is `UNIT_FLAG_AURAS_VISIBLE`, which opens `UnitBuff`'s gate.
-    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
 
     /// The feed on a bare app with a VM, us, and a party of one, `MEMBER`, with no record.
     fn party_app() -> App {
@@ -561,7 +559,7 @@ mod tests {
         use crate::net::wrath_auras::{PacketAuras, StampedAura};
         use benilla_protocol::wrath_auras::NativeAura;
         let mut app = party_app();
-        stream(&mut app, MEMBER, &[(AURA, 999), (AURAFLAGS, 3)]);
+        stream(&mut app, MEMBER, &[]);
         let aura = StampedAura {
             received_at: 0.0,
             aura: NativeAura {
@@ -593,6 +591,11 @@ mod tests {
         app.update();
         assert!(listed(&mut app, "player", false).is_empty());
         assert!(listed(&mut app, "party1", false).is_empty());
+    }
+
+    /// `guid`'s native aura snapshot, `(slot, spell, helpful)` per aura.
+    fn packet(app: &mut App, guid: u64, auras: &[(u8, u32, bool)]) {
+        crate::net::wrath_auras::set_signed_for_test(app.world_mut(), guid, auras);
     }
 
     /// Stream `guid` in with these fields, as the object manager holds it.
@@ -649,23 +652,16 @@ mod tests {
             .unwrap()
     }
 
-    /// A live member reads its own `UNIT_FIELD_AURA` slots; `UnitBuff` keeps the unit gate, open
-    /// here through `UNIT_FLAG_AURAS_VISIBLE` (`0x5195bc`), and a stale slot stays out.
+    /// A live member reads its own packet auras; `UnitBuff` keeps the unit gate, open here
+    /// through `UNIT_FLAG_AURAS_VISIBLE` (`0x5195bc`).
     #[test]
-    fn a_live_members_auras_come_off_its_descriptor() {
+    fn a_live_members_packet_auras_win_over_its_record() {
         let mut app = party_app();
-        stream(
+        stream(&mut app, MEMBER, &[(FLAGS, 0x0800_0000)]);
+        packet(
             &mut app,
             MEMBER,
-            &[
-                (FLAGS, 0x0800_0000),
-                (AURA, 1126),
-                (AURA + 1, 6673), // stale: nibble 0x1 has no effect bit
-                (AURA + 33, 589),
-                (AURA + 34, 11976),
-                (AURAFLAGS, 0x0000_0018),
-                (AURAFLAGS + 4, 0x0000_0880),
-            ],
+            &[(0, 1126, true), (33, 589, false), (34, 11976, false)],
         );
         // A record that disagrees, to show the live object wins.
         stats(
@@ -887,17 +883,14 @@ mod tests {
         assert_eq!(seen(&mut app), ["partypet1"]);
 
         // Member and pet in view: the pet guid comes off the member's SUMMON, the list off the
-        // pet's own slots.
+        // pet's own packet.
         stream(
             &mut app,
             MEMBER,
             &[(SUMMON, PET as u32), (SUMMON + 1, (PET >> 32) as u32)],
         );
-        stream(
-            &mut app,
-            PET,
-            &[(AURA + 35, 11976), (AURAFLAGS + 4, 0x0000_2000)],
-        );
+        stream(&mut app, PET, &[]);
+        packet(&mut app, PET, &[(35, 11976, false)]);
         app.update();
         assert_eq!(listed(&mut app, "partypet1", true), [11976]);
         assert!(listed(&mut app, "partypet1", false).is_empty());
@@ -954,27 +947,16 @@ mod tests {
         }
     }
 
-    /// A raid member in view reads its own `UNIT_FIELD_AURA` slots under `raidN`, whatever its
-    /// subgroup, and its buffs keep the unit gate.
+    /// A raid member in view reads its own packet auras under `raidN`, whatever its subgroup; the
+    /// native list applies its own whole-unit gate, which passes a raid member's buffs.
     #[test]
-    fn a_live_raid_members_auras_come_off_its_descriptor() {
+    fn a_live_raid_members_packet_auras_list_under_its_raid_token() {
         let mut app = raid_app();
-        stream(
-            &mut app,
-            FAR,
-            &[
-                (AURA, 1126),
-                (AURA + 33, 589),
-                (AURAFLAGS, 0x0000_0008),
-                (AURAFLAGS + 4, 0x0000_0080),
-            ],
-        );
+        stream(&mut app, FAR, &[]);
+        packet(&mut app, FAR, &[(0, 1126, true), (33, 589, false)]);
         app.update();
         assert_eq!(listed(&mut app, "raid5", true), [589]);
-        assert!(
-            listed(&mut app, "raid5", false).is_empty(),
-            "no factions, so `CanAssist` fails and the gate drops the buffs"
-        );
+        assert_eq!(listed(&mut app, "raid5", false), [1126]);
         assert_eq!(seen(&mut app), ["raid5"]);
         for token in ["party1", "party2", "raid6"] {
             assert!(listed(&mut app, token, true).is_empty(), "{token}");
@@ -1105,12 +1087,7 @@ mod tests {
     #[test]
     fn our_raid_row_mirrors_the_player_list() {
         let mut app = raid_app();
-        let me = app.world_mut().resource::<GuidIndex>().0[&ME];
-        *app.world_mut().get_mut::<ObjectStore>(me).unwrap() =
-            ObjectStore(ObjectFields::from_pairs(&[
-                (AURA + 32, 589),
-                (AURAFLAGS + 4, 0x0000_0008),
-            ]));
+        packet(&mut app, ME, &[(32, 589, false)]);
         app.update();
         assert_eq!(listed(&mut app, "player", true), [589]);
         assert_eq!(listed(&mut app, "raid1", true), [589]);
@@ -1147,20 +1124,18 @@ mod tests {
     // == Any token the resolver parses ==
 
     /// `OBJECT_FIELD_TYPE`; a unit's typemask is `0x9`, a player's `0x19`.
-    const TYPE: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectType);
+    const TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
     /// `UNIT_FIELD_TARGET`'s low dword; the high half is the next index.
-    const TARGET: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitTarget);
+    const TARGET: u16 = FieldLayout::Wrath12340.index_of(Field::UnitTarget);
     const MOB: u64 = 0xF130_0000_0000_0001;
     const ADD: u64 = 0xF130_0000_0000_0002;
 
-    /// A unit of typemask `ty` targeting `target`, with one debuff in slot 32.
-    fn unit_fields(ty: u32, target: u64, debuff: u32) -> Vec<(u16, u32)> {
+    /// A unit of typemask `ty` targeting `target`.
+    fn unit_fields(ty: u32, target: u64) -> Vec<(u16, u32)> {
         vec![
             (TYPE, ty),
             (TARGET, target as u32),
             (TARGET + 1, (target >> 32) as u32),
-            (AURA + 32, debuff),
-            (AURAFLAGS + 4, 0x0000_0008),
         ]
     }
 
@@ -1172,11 +1147,20 @@ mod tests {
         app.init_resource::<crate::target::Hovered>();
         let me = app.world_mut().resource::<GuidIndex>().0[&ME];
         *app.world_mut().get_mut::<ObjectStore>(me).unwrap() =
-            ObjectStore(ObjectFields::from_pairs(&unit_fields(0x19, MOB, 6788)));
-        stream(&mut app, MOB, &unit_fields(0x9, MEMBER, 589));
-        stream(&mut app, MEMBER, &unit_fields(0x19, ADD, 11976));
-        stream(&mut app, ADD, &unit_fields(0x9, ME, 770));
-        stream(&mut app, PET, &unit_fields(0x9, MOB, 1));
+            ObjectStore(ObjectFields::from_pairs(&unit_fields(0x19, MOB)));
+        stream(&mut app, MOB, &unit_fields(0x9, MEMBER));
+        stream(&mut app, MEMBER, &unit_fields(0x19, ADD));
+        stream(&mut app, ADD, &unit_fields(0x9, ME));
+        stream(&mut app, PET, &unit_fields(0x9, MOB));
+        for (guid, debuff) in [
+            (ME, 6788),
+            (MOB, 589),
+            (MEMBER, 11976),
+            (ADD, 770),
+            (PET, 1),
+        ] {
+            packet(&mut app, guid, &[(32, debuff, false)]);
+        }
         app.world_mut()
             .resource_mut::<crate::ui_pet::PetBar>()
             .spells
@@ -1233,12 +1217,7 @@ mod tests {
 
         // `ADD`'s list moves: it is the mouseover, party1's target and three hops off ours, and
         // no token that fires names it.
-        let add = app.world().resource::<GuidIndex>().0[&ADD];
-        let mut fields = unit_fields(0x9, ME, 770);
-        fields.push((AURA + 33, 589));
-        fields[4].1 = 0x0000_0088;
-        *app.world_mut().get_mut::<ObjectStore>(add).unwrap() =
-            ObjectStore(ObjectFields::from_pairs(&fields));
+        packet(&mut app, ADD, &[(32, 770, false), (33, 589, false)]);
         app.update();
         assert!(seen(&mut app).is_empty());
         assert_eq!(listed(&mut app, "mouseover", true), [770, 589]);
@@ -1272,7 +1251,8 @@ mod tests {
         let mut app = raid_app();
         stats_of(&mut app, FAR, true, online(vec![(32, 589)]));
         // `raid3` is 0x2002, in view and targeting `FAR`, which is not.
-        stream(&mut app, 0x2002, &unit_fields(0x19, FAR, 770));
+        stream(&mut app, 0x2002, &unit_fields(0x19, FAR));
+        packet(&mut app, 0x2002, &[(32, 770, false)]);
         app.update();
         assert_eq!(listed(&mut app, "raid3", true), [770]);
         assert_eq!(listed(&mut app, "raid3target", true), [589]);

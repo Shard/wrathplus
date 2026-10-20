@@ -209,13 +209,13 @@ mod tests {
 
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH`,
     /// `UNIT_FIELD_FLAGS`, `UNIT_FIELD_CHARMEDBY` and `UNIT_FIELD_CREATEDBY`.
-    const TYPE: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectType);
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const CHARMED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-    const CREATED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+    const TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const CHARMED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
+    const CREATED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
     /// `UNIT_FIELD_FACTIONTEMPLATE`, on [`fx::factions`]' rows 1 (Human) and 2 (Orc).
-    const TEMPLATE: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+    const TEMPLATE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
     const PLAYER_TYPE: u32 = 0x19;
 
     // The words: `TARGET_FLAG_*`.

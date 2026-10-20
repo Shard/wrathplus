@@ -72,31 +72,30 @@ mod tests {
 
     #[test]
     fn dismount_edges_keep_class_field_and_zero_transition_rules_in_both_layouts() {
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            let mut edge = FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind: ObjectType::Unit,
-                field: Field::UnitMountDisplayId,
-                offset: 0,
-                layout,
-                old: 123,
-                new: 0,
-            };
-            assert!(is_dismount(&edge));
-            edge.kind = ObjectType::Player;
-            assert!(is_dismount(&edge));
-            edge.new = 456;
-            assert!(!is_dismount(&edge), "remount is silent");
-            edge.new = 0;
-            edge.kind = ObjectType::Corpse;
-            assert!(!is_dismount(&edge));
-            edge.kind = ObjectType::Unit;
-            edge.field = Field::UnitHealth;
-            assert!(!is_dismount(&edge));
-            edge.field = Field::UnitMountDisplayId;
-            edge.offset = 1;
-            assert!(!is_dismount(&edge));
-        }
+        let layout = FieldLayout::Wrath12340;
+        let mut edge = FieldChanged {
+            entity: Entity::PLACEHOLDER,
+            guid: 42,
+            kind: ObjectType::Unit,
+            field: Field::UnitMountDisplayId,
+            offset: 0,
+            layout,
+            old: 123,
+            new: 0,
+        };
+        assert!(is_dismount(&edge));
+        edge.kind = ObjectType::Player;
+        assert!(is_dismount(&edge));
+        edge.new = 456;
+        assert!(!is_dismount(&edge), "remount is silent");
+        edge.new = 0;
+        edge.kind = ObjectType::Corpse;
+        assert!(!is_dismount(&edge));
+        edge.kind = ObjectType::Unit;
+        edge.field = Field::UnitHealth;
+        assert!(!is_dismount(&edge));
+        edge.field = Field::UnitMountDisplayId;
+        edge.offset = 1;
+        assert!(!is_dismount(&edge));
     }
 }

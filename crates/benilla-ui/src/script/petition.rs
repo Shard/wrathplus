@@ -126,20 +126,21 @@ impl super::UiScript {
     }
 }
 
-/// The guild-name check `BuyGuildCharter` and `RenamePetition` share (`0x4f5160`), which maps the
-/// checker `0x6c9b70`'s code to a message and accepts only `0xd`; `Err` carries the GlobalStrings
-/// key to show, and no packet is built. Only codes 0 (empty), 10 (an edge space) and 11
-/// (consecutive spaces) are built; the rest pass, as the checker's rules are untraced and the
-/// server re-checks every name (`ObjectMgr::IsValidCharterName`).
+/// The guild-name check `BuyGuildCharter` and `RenamePetition` share: `Err` carries the
+/// GlobalStrings key to show, and no packet is built. Only an empty name, an edge space and
+/// consecutive spaces are built; the rest pass, and the server re-checks every name
+/// (`ObjectMgr::IsValidCharterName`). The keys are build 12340's name-check rows (`0x257`,
+/// `0x25e`, `0x25f`, mapped by `0x5218c0`); the 1.12 `ERR_GUILD_*` keys are not in its table.
+/// Unresolved: the 12340 caller of the check (the 1.12 one was `0x4f5160` over `0x6c9b70`).
 pub fn validate_guild_name(name: &str) -> Result<(), &'static str> {
     if name.is_empty() {
-        return Err("ERR_GUILD_ENTER_NAME");
+        return Err("ERR_NAME_NO_NAME");
     }
     if name.starts_with(' ') || name.ends_with(' ') {
-        return Err("ERR_GUILD_NAME_INVALID_SPACE");
+        return Err("ERR_NAME_INVALID_SPACE");
     }
     if name.contains("  ") {
-        return Err("ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES");
+        return Err("ERR_NAME_CONSECUTIVE_SPACES");
     }
     Ok(())
 }
@@ -157,46 +158,38 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
 
     // ── The petition window ──────────────────────────────────────────────────────────────────
-    // GetPetitionInfo() (`0x4f43d0`): six values on both legs (`0x4f4493`, `0x4f44d4`), in the
-    // order `PetitionFrame.lua:9` destructures them; with no record, `nil, nil, nil, 0, nil, nil`,
-    // the fourth the number 0 (`0x4f44b4`). Build 12340 names the type `"guild"` or `"arena"`,
-    // answers the packet's cap fourth and adds `minSignatures` seventh (`PetitionFrame.lua:8`).
-    // Labelled: its miss leg is taken as 1.12's plus a 0.
+    // GetPetitionInfo(): seven values in the order `PetitionFrame.lua:8` destructures them. The
+    // type is `"guild"` or `"arena"`, the fourth is the packet's cap and the seventh
+    // `minSignatures`. Labelled: the miss leg, `nil, nil, nil, 0, nil, nil, 0`, is 1.12's plus a 0.
     g.set(
         "GetPetitionInfo",
         lua.create_function(|lua, ()| {
             let model = lua.app_data_ref::<Model>().expect("model app_data");
-            let wrath = model.dialect == super::ScriptDialect::Wrath12340;
             let Some(r) = model.petition.record.as_ref() else {
-                let mut miss = vec![
+                let miss = vec![
                     Value::Nil,
                     Value::Nil,
                     Value::Nil,
                     Value::Integer(0),
                     Value::Nil,
                     Value::Nil,
+                    Value::Integer(0),
                 ];
-                if wrath {
-                    miss.push(Value::Integer(0));
-                }
                 return Ok(MultiValue::from_vec(miss));
             };
             let kind = match r.petition_type.as_str() {
-                PETITION_TYPE_CHARTER if wrath => "guild",
+                PETITION_TYPE_CHARTER => "guild",
                 other => other,
             };
-            let mut out = vec![
+            Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(kind)?),
                 Value::String(lua.create_string(&r.title)?),
                 Value::String(lua.create_string(&r.body_text)?),
-                Value::Integer(i64::from(if wrath { r.max_named } else { r.max_signatures })),
+                Value::Integer(i64::from(r.max_named)),
                 name_value(lua, r.originator.as_ref())?,
                 binding_abi::flag(r.is_originator),
-            ];
-            if wrath {
-                out.push(Value::Integer(i64::from(r.min_signatures)));
-            }
-            Ok(MultiValue::from_vec(out))
+                Value::Integer(i64::from(r.min_signatures)),
+            ]))
         })?,
     )?;
 
@@ -554,27 +547,27 @@ mod tests {
             s.take_petition_requests(),
             vec![
                 PetitionRequest::Buy("Legacy".into()),
-                PetitionRequest::NameRefused("ERR_GUILD_ENTER_NAME"),
+                PetitionRequest::NameRefused("ERR_NAME_NO_NAME"),
                 PetitionRequest::Rename("Legacy".into()),
-                PetitionRequest::NameRefused("ERR_GUILD_NAME_INVALID_SPACE"),
+                PetitionRequest::NameRefused("ERR_NAME_INVALID_SPACE"),
             ]
         );
     }
 
     #[test]
     fn the_validator_refuses_only_what_it_can_prove() {
-        assert_eq!(validate_guild_name(""), Err("ERR_GUILD_ENTER_NAME"));
+        assert_eq!(validate_guild_name(""), Err("ERR_NAME_NO_NAME"));
         assert_eq!(
             validate_guild_name(" Legacy"),
-            Err("ERR_GUILD_NAME_INVALID_SPACE")
+            Err("ERR_NAME_INVALID_SPACE")
         );
         assert_eq!(
             validate_guild_name("Legacy "),
-            Err("ERR_GUILD_NAME_INVALID_SPACE")
+            Err("ERR_NAME_INVALID_SPACE")
         );
         assert_eq!(
             validate_guild_name("Legacy  of Steel"),
-            Err("ERR_GUILD_NAME_NAME_CONSECUTIVE_SPACES")
+            Err("ERR_NAME_CONSECUTIVE_SPACES")
         );
         // Passed through: the length, profanity and script rules live in the untraced `0x6c9b70`,
         // and the server re-checks them.

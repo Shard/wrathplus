@@ -541,7 +541,7 @@ mod tests {
         const SWUNG_AT: u64 = 0xA1;
         const SELECTED: u64 = 0xB2;
         /// `UNIT_FIELD_COMBATREACH`.
-        const REACH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCombatreach);
+        const REACH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCombatreach);
 
         let verdict = |distance: f32| {
             let (tx, _rx) = crossbeam_channel::unbounded();
@@ -608,7 +608,7 @@ mod tests {
                 Engaged(SWUNG_AT),
                 Transform::default(),
                 ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
                 )),
             ));
@@ -618,7 +618,7 @@ mod tests {
                 .spawn((
                     Transform::from_xyz(distance, 0.0, 0.0),
                     ObjectStore(ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[(Field::UnitHealth, 100)],
                     )),
                 ))
@@ -738,7 +738,7 @@ mod tests {
                 speeds,
                 Transform::default(),
                 ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[(Field::UnitHealth, 100), (Field::UnitPower, 500)],
                 )),
             ));
@@ -749,7 +749,7 @@ mod tests {
                     speeds,
                     Transform::from_xyz(distance, 0.0, 0.0),
                     ObjectStore(ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[(Field::UnitHealth, 100)],
                     )),
                 ))
@@ -803,8 +803,8 @@ mod tests {
         const FOOD_ITEM: u32 = 1487;
         const FOOD_SPELL: u32 = 433;
         // Raw indices: `ITEM_FIELD_STACK_COUNT`, and `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1.
-        const STACK: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemStackCount);
-        const PACK_SLOT_1: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerPackSlot1);
+        const STACK: u16 = FieldLayout::Wrath12340.index_of(Field::ItemStackCount);
+        const PACK_SLOT_1: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerPackSlot1);
 
         let lit = |in_combat: bool| {
             let (tx, _rx) = crossbeam_channel::unbounded();
@@ -879,9 +879,9 @@ mod tests {
                 SelfPlayer,
                 Transform::default(),
                 ObjectStore(ObjectFields::from_pairs(&[
-                    (22, 100),
-                    (23, 500),
-                    (46, flags),
+                    (FieldLayout::Wrath12340.index_of(Field::UnitHealth), 100),
+                    (FieldLayout::Wrath12340.index_of(Field::UnitPower), 500),
+                    (FieldLayout::Wrath12340.index_of(Field::UnitFlags), flags),
                     (PACK_SLOT_1, 0xF0),
                 ])),
             ));

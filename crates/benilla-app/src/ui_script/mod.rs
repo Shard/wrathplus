@@ -414,7 +414,7 @@ pub(crate) use lifecycle::{
 pub(crate) use lifecycle::load_ingame_ui_on_world_entry;
 use lifecycle::shutdown_on_exit;
 #[cfg(test)]
-pub(crate) use lifecycle::{finish_ui_load, seat_from_roster};
+pub(crate) use lifecycle::finish_ui_load;
 
 /// `GetFramerate()`'s host half: FPS on `Time<Real>`, smoothed by a one-second pole; how the
 /// reference averages it is untraced.
@@ -774,14 +774,6 @@ mod faux_scroll_tests;
 #[cfg(test)]
 mod panel_template_tests;
 
-/// The event argument-shape gate: every fire site against `reference/1.12-events.tsv`.
-#[cfg(test)]
-mod event_shape_gate;
-
-/// The verb-fired event gate, against `reference/1.12-verb-events.tsv`.
-#[cfg(test)]
-mod verb_event_gate;
-
 /// The stock BasicControls.xml, which benilla never calls, entered from Lua as an addon does.
 #[cfg(test)]
 mod basic_controls_tests;
@@ -974,13 +966,6 @@ mod video_options_tests;
 
 #[cfg(test)]
 mod bottom_hud_tests;
-
-#[cfg(test)]
-mod bagnon_render_tests;
-
-/// A hunter's Quiver addon publishes its global functions, end to end.
-#[cfg(test)]
-mod quiver_tests;
 
 /// Teardown at the character screen and a genuine second load at the next login.
 #[cfg(test)]

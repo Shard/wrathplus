@@ -82,38 +82,10 @@ impl Plugin for UiHonorPlugin {
     }
 }
 
-/// Read the honor block off our own descriptor, `None` until it streams. That decides only when
-/// the first push and its events happen: the reference reads a field it was never sent as 0
-/// (`0x51a4b0`-`0x51a7c0`), and so do our bindings.
-fn honor_snapshot(store: &ObjectStore) -> Option<HonorState> {
-    let f = &store.0;
-    let session = f.player_session_kills();
-    let yesterday = f.player_yesterday_kills();
-    let last_week = f.player_last_week_kills();
-    let this_week = f.player_this_week_kills();
-    // Presence is tested on a private field: the public rank byte streams with the unit block.
-    session?;
-    Some(HonorState {
-        session_hk: session.map_or(0, |(hk, _)| hk),
-        session_dk: session.map_or(0, |(_, dk)| dk),
-        yesterday_hk: yesterday.map_or(0, |(hk, _)| hk),
-        yesterday_dk: yesterday.map_or(0, |(_, dk)| dk),
-        yesterday_honor: f.player_yesterday_contribution().unwrap_or(0),
-        this_week_hk: this_week.map_or(0, |(hk, _)| hk),
-        this_week_honor: f.player_this_week_contribution().unwrap_or(0),
-        last_week_hk: last_week.map_or(0, |(hk, _)| hk),
-        last_week_dk: last_week.map_or(0, |(_, dk)| dk),
-        last_week_honor: f.player_last_week_contribution().unwrap_or(0),
-        last_week_standing: f.player_last_week_rank().unwrap_or(0),
-        lifetime_hk: f.player_lifetime_honorable_kills().unwrap_or(0),
-        lifetime_dk: f.player_lifetime_dishonorable_kills().unwrap_or(0),
-        // The highest lifetime rank, private `PLAYER_FIELD_BYTES` byte 3.
-        highest_rank: f.player_honor_rank().unwrap_or(0),
-        // The current rank, public `PLAYER_BYTES_3` byte 3: another field, equal to the highest
-        // until the player ranks down, so a swap would pass unnoticed.
-        rank: f.player_pvp_rank().unwrap_or(0),
-        rank_bar: f.player_honor_rank_bar().unwrap_or(0),
-    })
+/// Read the honor block off our own descriptor: `None`, since 12340 has none of 1.12's private
+/// session, yesterday and weekly kill fields that gate the first push.
+fn honor_snapshot(_store: &ObjectStore) -> Option<HonorState> {
+    None
 }
 
 /// `(kills changed, rank changed)` between two snapshots, from the three watched fields only; a

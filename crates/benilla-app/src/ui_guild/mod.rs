@@ -1150,13 +1150,13 @@ mod tests {
 
         // A creature or a guildless player: no `PLAYER_GUILDID`.
         let guildless =
-            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Vanilla5875, &[]);
+            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Wrath12340, &[]);
         assert!(unit_guild(&guildless, &mut guild, &commands).is_none());
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
         // Fields 191/192 = PLAYER_GUILDID/PLAYER_GUILDRANK.
         let unknown = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::PlayerGuildid, 9),
                 (benilla_protocol::messages::Field::PlayerGuildrank, 1),
@@ -1169,7 +1169,7 @@ mod tests {
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
         let member = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::PlayerGuildid, 7),
                 (benilla_protocol::messages::Field::PlayerGuildrank, 1),
@@ -1182,7 +1182,7 @@ mod tests {
 
         // A rank past the ten slots names nothing.
         let odd_rank = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::PlayerGuildid, 7),
                 (benilla_protocol::messages::Field::PlayerGuildrank, 99),
@@ -1207,12 +1207,12 @@ mod tests {
         guild.identities.insert(8, Some(identity("", &[])));
 
         let guildless =
-            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Vanilla5875, &[]);
+            ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Wrath12340, &[]);
         assert_eq!(unit_guild_name(&guildless, &mut guild, &commands), None);
         assert_eq!(rx.try_iter().count(), 0, "guild id 0 asks nothing");
 
         let unknown = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(benilla_protocol::messages::Field::PlayerGuildid, 9)],
         );
         assert_eq!(
@@ -1223,7 +1223,7 @@ mod tests {
         assert_eq!(rx.try_iter().count(), 1, "and the miss asked for it");
 
         let blank = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(benilla_protocol::messages::Field::PlayerGuildid, 8)],
         );
         assert_eq!(unit_guild_name(&blank, &mut guild, &commands), None);
@@ -1234,7 +1234,7 @@ mod tests {
         );
 
         let member = ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::PlayerGuildid, 7),
                 (benilla_protocol::messages::Field::PlayerGuildrank, 1),

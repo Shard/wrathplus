@@ -314,7 +314,7 @@ impl State {
 }
 
 pub(super) fn initialize_from_seed(model: &mut super::Model) {
-    if model.dialect != super::ScriptDialect::Wrath12340 || model.wrath_tutorial.initialized {
+    if model.wrath_tutorial.initialized {
         return;
     }
     let Some(row) = model.cvars.get("flaggedtutorials") else {
@@ -329,7 +329,7 @@ impl super::UiScript {
     /// lets the host fold this one setting without enabling generic Wrath CVar persistence.
     pub fn persist_wrath_tutorial_history(&mut self) -> Option<String> {
         let mut model = self.model_mut();
-        if model.dialect != super::ScriptDialect::Wrath12340 || !model.wrath_tutorial.initialized {
+        if !model.wrath_tutorial.initialized {
             return None;
         }
         let bytes = model.wrath_tutorial.history.encode();

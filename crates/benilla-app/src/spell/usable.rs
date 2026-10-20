@@ -383,8 +383,7 @@ pub(crate) fn spell_usable(
     // test) fails while the caster's combo-point byte (`PLAYER_FIELD_BYTES` byte 1) is 0. It reads
     // no target, so a point banked on another mob leaves the button lit and the server refuses the
     // cast. No class gate, unlike Lua `GetComboPoints 0x51a190`: a warrior's Overpower greys here.
-    if d.needs_combo_points() && crate::net::wrath_combo_points::banked(ctx.store, ctx.combo).0 == 0
-    {
+    if d.needs_combo_points() && crate::net::wrath_combo_points::banked(ctx.combo).0 == 0 {
         return (false, false);
     }
     // Leg 6 (`0x612480`): the form's `SpellShapeshiftForm.dbc` stance flag decides whether it
@@ -553,12 +552,21 @@ mod tests {
     use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
+    /// `field`'s native descriptor index.
+    const fn at(field: benilla_protocol::messages::Field) -> u16 {
+        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    }
+
     // Field indices, private in the protocol crate: health 22, power1 23, max health 28, flags
     // 46, aurastate 125, bytes_1 138, player flags 190.
     fn player(pairs: &[(u16, u32)]) -> ObjectStore {
         // `UNIT_FLAG_PVP_ATTACKABLE` (bit 3), which every player carries: `CanAttack 0x606980`
         // picks its arm on that bit for both parties.
-        let mut base = vec![(22u16, 100u32), (23, 500), (46, 1 << 3)];
+        let mut base = vec![
+            (at(Field::UnitHealth), 100u32),
+            (at(Field::UnitPower), 500),
+            (at(Field::UnitFlags), 1 << 3),
+        ];
         base.extend_from_slice(pairs);
         ObjectStore(ObjectFields::from_pairs(&base))
     }
@@ -569,8 +577,10 @@ mod tests {
         use crate::items::TestDeps;
 
         // `PLAYER_FIELD_INV_SLOT_HEAD + 2 * slot` for equipment slots 15 and 16.
-        const INV_MAINHAND: u16 = 486 + 2 * 15;
-        const INV_OFFHAND: u16 = 486 + 2 * 16;
+        const INV_MAINHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+        const INV_OFFHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         // A class-2 weapon requirement.
@@ -582,14 +592,17 @@ mod tests {
         };
         let fits = |disarmed: bool, hands: &[(u16, u64)]| {
             let mut deps = TestDeps::new();
-            let mut pairs = vec![(46u16, (1 << 3) | if disarmed { DISARMED } else { 0 })];
+            let mut pairs = vec![(
+                at(Field::UnitFlags),
+                (1 << 3) | if disarmed { DISARMED } else { 0 },
+            )];
             for (i, (field, guid)) in hands.iter().enumerate() {
                 pairs.push((*field, *guid as u32));
                 let entry = 500 + i as u32;
                 deps.spawn_item(
                     *guid,
                     ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[(Field::ObjectEntry, entry)],
                     ),
                 );
@@ -622,12 +635,13 @@ mod tests {
     fn the_equipped_item_search_masks_by_hand_and_rejects_broken_gear() {
         use crate::items::TestDeps;
 
-        const INV_MAINHAND: u16 = 486 + 2 * 15;
-        const INV_OFFHAND: u16 = 486 + 2 * 16;
+        const INV_MAINHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+        const INV_OFFHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
         // `ITEM_FIELD_DURABILITY` / `_MAXDURABILITY`, instance fields.
-        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
-        const ITEM_MAX_DURABILITY: u16 =
-            FieldLayout::Vanilla5875.index_of(Field::ItemMaxdurability);
+        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
+        const ITEM_MAX_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemMaxdurability);
 
         let spell = |ex3: u32| SpellDisplay {
             equipped_item_class: 2,
@@ -638,7 +652,7 @@ mod tests {
         // `hands`: (inv field, guid, template flags, max durability, durability).
         let fits = |d: &SpellDisplay, hands: &[(u16, u64, u32, u32, u32)]| {
             let mut deps = TestDeps::new();
-            let mut pairs = vec![(46u16, 1u32 << 3)];
+            let mut pairs = vec![(at(Field::UnitFlags), 1u32 << 3)];
             for (i, (field, guid, flags, max_dur, dur)) in hands.iter().enumerate() {
                 pairs.push((*field, *guid as u32));
                 let entry = 500 + i as u32;
@@ -703,13 +717,18 @@ mod tests {
     fn a_main_hand_only_ability_is_dead_while_that_hand_is_disarmed() {
         use crate::items::TestDeps;
 
-        const INV_MAINHAND: u16 = 486 + 2 * 15;
-        const INV_OFFHAND: u16 = 486 + 2 * 16;
+        const INV_MAINHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+        const INV_OFFHAND: u16 =
+            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         let fits = |ex3: u32, disarmed: bool| {
             let mut deps = TestDeps::new();
-            let mut pairs = vec![(46u16, (1 << 3) | if disarmed { DISARMED } else { 0 })];
+            let mut pairs = vec![(
+                at(Field::UnitFlags),
+                (1 << 3) | if disarmed { DISARMED } else { 0 },
+            )];
             for (i, field) in [INV_MAINHAND, INV_OFFHAND].iter().enumerate() {
                 let guid = 0x2a + i as u64;
                 pairs.push((*field, guid as u32));
@@ -717,7 +736,7 @@ mod tests {
                 deps.spawn_item(
                     guid,
                     ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[(Field::ObjectEntry, entry)],
                     ),
                 );
@@ -809,16 +828,28 @@ mod tests {
             ..Default::default()
         };
         let mods = SpellModifiers::default();
-        let with_gear = player(&[(22, 400), (28, 4_000), (163, 1_689)]);
+        let with_gear = player(&[
+            (at(Field::UnitHealth), 400),
+            (at(Field::UnitMaxHealth), 4_000),
+            (at(Field::UnitBaseHealth), 1_689),
+        ]);
         assert_eq!(power_cost(&bloodrage, &with_gear, &mods), 337);
         assert!(can_afford(&bloodrage, &with_gear, &mods));
         assert_eq!(walk(&bloodrage, &with_gear), (true, false));
 
-        let below_cost = player(&[(22, 336), (28, 4_000), (163, 1_689)]);
+        let below_cost = player(&[
+            (at(Field::UnitHealth), 336),
+            (at(Field::UnitMaxHealth), 4_000),
+            (at(Field::UnitBaseHealth), 1_689),
+        ]);
         assert!(!can_afford(&bloodrage, &below_cost, &mods));
         assert_eq!(walk(&bloodrage, &below_cost), (false, true));
 
-        let without_gear = player(&[(22, 400), (28, 1_689), (163, 1_689)]);
+        let without_gear = player(&[
+            (at(Field::UnitHealth), 400),
+            (at(Field::UnitMaxHealth), 1_689),
+            (at(Field::UnitBaseHealth), 1_689),
+        ]);
         assert_eq!(power_cost(&bloodrage, &without_gear, &mods), 337);
     }
 
@@ -827,14 +858,14 @@ mod tests {
     #[test]
     fn percentage_cost_bases_follow_power_type() {
         let store = player(&[
-            (28, 4_000), // max health
-            (29, 2_000), // max mana
-            (30, 800),   // max rage
-            (31, 80),    // max focus
-            (32, 120),   // max energy
-            (33, 500),   // max happiness
-            (162, 1_500),
-            (163, 1_689),
+            (at(Field::UnitMaxHealth), 4_000),  // max health
+            (at(Field::UnitMaxPower), 2_000),   // max mana
+            (at(Field::UnitMaxPower) + 1, 800), // max rage
+            (at(Field::UnitMaxPower) + 2, 80),  // max focus
+            (at(Field::UnitMaxPower) + 3, 120), // max energy
+            (at(Field::UnitMaxPower) + 4, 500), // max happiness
+            (at(Field::UnitBaseMana), 1_500),
+            (at(Field::UnitBaseHealth), 1_689),
         ]);
         let mods = SpellModifiers::default();
         let cases = [
@@ -869,7 +900,7 @@ mod tests {
             ..Default::default()
         };
         let store = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[(Field::UnitPower, 80)],
         ));
 
@@ -908,9 +939,13 @@ mod tests {
         assert_eq!(walk(&d, &alive), (true, false));
 
         // Leg 1: dead, or a ghost at health 1 (field 190 bit `0x10`); the attribute waives it.
-        let dead = player(&[(22, 0), (28, 100)]);
+        let dead = player(&[(at(Field::UnitHealth), 0), (at(Field::UnitMaxHealth), 100)]);
         assert_eq!(walk(&d, &dead), (false, false));
-        let ghost = player(&[(22, 1), (28, 100), (190, 0x10)]);
+        let ghost = player(&[
+            (at(Field::UnitHealth), 1),
+            (at(Field::UnitMaxHealth), 100),
+            (at(Field::PlayerFlags), 0x10),
+        ]);
         assert_eq!(walk(&d, &ghost), (false, false));
         let while_dead = SpellDisplay {
             attributes: ATTR_CASTABLE_WHILE_DEAD,
@@ -935,18 +970,13 @@ mod tests {
         };
         assert_eq!(walk(&reagent, &alive), (false, false));
 
-        // Leg 5: Overpower's shape with no combo points (field 1222 byte 1).
+        // Leg 5: Overpower's shape with no combo points (`SMSG_UPDATE_COMBO_POINTS` holds none).
         let overpower = SpellDisplay {
             attributes_ex: 0x4810_0200,
             ..Default::default()
         };
         assert!(overpower.needs_combo_points());
         assert_eq!(walk(&overpower, &alive), (false, false));
-        let dodged = player(&[(1222, 0x05_03_01_01)]);
-        assert_eq!(walk(&overpower, &dodged), (true, false));
-        // The neighbouring bytes are not combo points.
-        let ranked = player(&[(1222, 0x05_03_00_01)]);
-        assert_eq!(walk(&overpower, &ranked), (false, false));
 
         // Leg 6: a cat-form spell out of form.
         let claw = SpellDisplay {
@@ -954,7 +984,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(walk(&claw, &alive), (false, false));
-        let in_cat = player(&[(138, 1 << 16)]);
+        let in_cat = player(&[(at(Field::UnitBytes2), 1 << 24)]);
         assert_eq!(walk(&claw, &in_cat), (true, false));
 
         // Leg 7: only-stealthed vs the CREEP byte.
@@ -963,7 +993,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(walk(&ambush, &alive), (false, false));
-        let sneaking = player(&[(138, 0x2 << 24)]);
+        let sneaking = player(&[(at(Field::UnitBytes1), 0x2 << 16)]);
         assert_eq!(walk(&ambush, &sneaking), (true, false));
 
         // Leg 8: not-in-combat vs UNIT_FLAG_IN_COMBAT.
@@ -972,7 +1002,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(walk(&mount, &alive), (true, false));
-        let fighting = player(&[(46, UNIT_FLAG_IN_COMBAT)]);
+        let fighting = player(&[(at(Field::UnitFlags), UNIT_FLAG_IN_COMBAT)]);
         assert_eq!(walk(&mount, &fighting), (false, false));
 
         // Leg 9: CasterAuraState (defense = 1 → bit 0).
@@ -981,7 +1011,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(walk(&revenge, &alive), (false, false));
-        let defended = player(&[(125, 0x1)]);
+        let defended = player(&[(at(Field::UnitAuraState), 0x1)]);
         assert_eq!(walk(&revenge, &defended), (true, false));
 
         // Leg 10: TargetAuraState with no current target.
@@ -1026,11 +1056,11 @@ mod tests {
         };
 
         let healthy = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
         ));
         let low = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
         ));
         let mut objs = crate::ui_items::TestObjects::new();

@@ -437,72 +437,42 @@ pub(crate) fn questgiver_has_quest(quest_status: Option<u32>) -> bool {
     !matches!(quest_status, None | Some(NONE) | Some(UNAVAILABLE))
 }
 
-/// The service ladder (`0x482336..0x4824e3`, unrolled): lowest set bit wins. `None` when no tested
-/// bit is set, repair-only units included: bit 14 is never tested.
+/// The service cursor ladder (`FUN_004f7a50`), independent of the click ladder. `None` when no
+/// tested bit is set.
 fn service_cursor_native(
     flags: benilla_protocol::messages::NpcFlags,
     status: Option<u32>,
 ) -> Option<CursorKind> {
-    use super::click::ServiceArm;
-    use benilla_protocol::messages::{FieldLayout, NpcService as f};
-    if flags.layout() == FieldLayout::Wrath12340 {
-        // FUN_004f7a50: cursor priority is independent of the click ladder.
-        // Quest/custom cursor artwork is not represented here yet; retain Speak for quests.
-        let bit = |service| flags.has(service);
-        return Some(if flags.bits() != 0 && matches!(status, Some(2..=10)) {
-            CursorKind::Speak
-        } else if bit(f::Repair) {
-            CursorKind::Repair
-        } else if bit(f::Innkeeper) {
-            CursorKind::Interact
-        } else if bit(f::FlightMaster) {
-            CursorKind::Taxi
-        } else if flags.has_trainer_base() {
-            CursorKind::Trainer
-        } else if bit(f::SpiritHealer) || bit(f::SpiritGuide) {
-            CursorKind::Speak
-        } else if bit(f::Banker) {
-            CursorKind::Buy
-        } else if bit(f::Petitioner) || bit(f::TabardDesigner) || bit(f::BattleMaster) {
-            CursorKind::Speak
-        } else if bit(f::Auctioneer) {
-            CursorKind::Buy
-        } else if bit(f::StableMaster) {
-            CursorKind::Speak
-        } else if flags.has_vendor_base() {
-            CursorKind::Pickup
-        } else if bit(f::Gossip) {
-            CursorKind::Speak
-        } else {
-            return None;
-        });
-    }
-    Some(match super::click::service_arm_native(flags, status)? {
-        ServiceArm::Gossip
-        | ServiceArm::Questgiver
-        | ServiceArm::SpiritHealer
-        | ServiceArm::SpiritGuide
-        | ServiceArm::Petitioner
-        | ServiceArm::TabardDesigner
-        | ServiceArm::Battlemaster
-        | ServiceArm::StableMaster => CursorKind::Speak,
-        ServiceArm::Vendor => CursorKind::Pickup,
-        ServiceArm::FlightMaster => CursorKind::Taxi,
-        ServiceArm::Trainer => CursorKind::Trainer,
-        ServiceArm::Innkeeper => CursorKind::Interact,
-        ServiceArm::Banker | ServiceArm::Auctioneer => CursorKind::Buy,
+    use benilla_protocol::messages::NpcService as f;
+    // Quest/custom cursor artwork is not represented here yet; retain Speak for quests.
+    let bit = |service| flags.has(service);
+    Some(if flags.bits() != 0 && matches!(status, Some(2..=10)) {
+        CursorKind::Speak
+    } else if bit(f::Repair) {
+        CursorKind::Repair
+    } else if bit(f::Innkeeper) {
+        CursorKind::Interact
+    } else if bit(f::FlightMaster) {
+        CursorKind::Taxi
+    } else if flags.has_trainer_base() {
+        CursorKind::Trainer
+    } else if bit(f::SpiritHealer) || bit(f::SpiritGuide) {
+        CursorKind::Speak
+    } else if bit(f::Banker) {
+        CursorKind::Buy
+    } else if bit(f::Petitioner) || bit(f::TabardDesigner) || bit(f::BattleMaster) {
+        CursorKind::Speak
+    } else if bit(f::Auctioneer) {
+        CursorKind::Buy
+    } else if bit(f::StableMaster) {
+        CursorKind::Speak
+    } else if flags.has_vendor_base() {
+        CursorKind::Pickup
+    } else if bit(f::Gossip) {
+        CursorKind::Speak
+    } else {
+        return None;
     })
-}
-
-#[cfg(test)]
-fn service_cursor(bits: u32, status: Option<u32>) -> Option<CursorKind> {
-    service_cursor_native(
-        benilla_protocol::messages::NpcFlags::from_bits(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
-            bits,
-        ),
-        status,
-    )
 }
 
 /// The loot leg's mode, `8 + (keyDown(0) ? 8 : 0)` in the reference (`0x48252c`): LootAll while
@@ -735,7 +705,6 @@ pub(super) fn classify(
                 benilla_protocol::messages::FieldLayout::Wrath12340 => {
                     quest.wrath_statuses().get(&g).copied()
                 }
-                benilla_protocol::messages::FieldLayout::Vanilla5875 => quest.status(g),
             });
             // No matching bit clears the cursor (`je 0x4826cb`) without reaching the attack leg:
             // Point, never the sword.
@@ -788,7 +757,12 @@ pub(super) fn classify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::dialog_status;
+    use benilla_protocol::messages::Field;
+
+    /// `field`'s native descriptor index.
+    const fn at(field: Field) -> u16 {
+        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    }
 
     /// `CanLootNow 0x5ec110` skips its range under `CanAutoInteract` (`0x5ec11b`), so the click
     /// that walks there finds a lit pouch.
@@ -1409,117 +1383,40 @@ mod tests {
         assert!(((3.0_f32 + 3.0 + MELEE_OFFSET).max(MELEE_FLOOR) - 7.333_33).abs() < 1e-4);
     }
 
-    #[test]
-    fn service_ladder_matches_the_unrolled_binary() {
-        use npc_flags::*;
-        // A quest on offer, so the QUESTGIVER row passes its gate.
-        let has = Some(dialog_status::AVAILABLE);
-        assert_eq!(service_cursor(GOSSIP, None), Some(CursorKind::Speak));
-        assert_eq!(service_cursor(QUESTGIVER, has), Some(CursorKind::Speak));
-        assert_eq!(service_cursor(VENDOR, None), Some(CursorKind::Pickup));
-        assert_eq!(service_cursor(FLIGHTMASTER, None), Some(CursorKind::Taxi));
-        assert_eq!(service_cursor(TRAINER, None), Some(CursorKind::Trainer));
-        assert_eq!(service_cursor(SPIRITHEALER, None), Some(CursorKind::Speak));
-        assert_eq!(service_cursor(INNKEEPER, None), Some(CursorKind::Interact));
-        assert_eq!(service_cursor(BANKER, None), Some(CursorKind::Buy));
-        assert_eq!(service_cursor(BATTLEMASTER, None), Some(CursorKind::Speak));
-        assert_eq!(service_cursor(AUCTIONEER, None), Some(CursorKind::Buy));
-        assert_eq!(service_cursor(STABLEMASTER, None), Some(CursorKind::Speak));
-        assert_eq!(
-            service_cursor(GOSSIP | VENDOR, None),
-            Some(CursorKind::Speak)
-        );
-        assert_eq!(
-            service_cursor(INNKEEPER | BANKER, None),
-            Some(CursorKind::Interact)
-        );
-        // REPAIR (`0x4000`) is never tested.
-        assert_eq!(service_cursor(0x4000, None), None);
-        assert_eq!(service_cursor(0, None), None);
-    }
-
-    #[test]
-    fn the_ladder_falls_out_to_point_not_to_the_sword() {
-        use npc_flags::*;
-        assert_eq!(service_cursor(REPAIR_ONLY, None), None);
-        assert_eq!(service_cursor(QUESTGIVER, Some(dialog_status::NONE)), None);
-        // `resolve_unit`'s own expression for the branch: a `None` stays `None`, which reads Point.
-        let unable = 20.0 > SERVICE_RANGE_SQ;
-        assert_eq!(
-            service_cursor(REPAIR_ONLY, None).map(|kind| (kind, unable)),
-            None,
-            "repair-only reads Point, not UnableAttack"
-        );
-        assert_eq!(
-            service_cursor(GOSSIP, None).map(|kind| (kind, unable)),
-            Some((CursorKind::Speak, false)),
-            "…while a bit that IS consulted still reaches its cursor"
-        );
-    }
-
     /// The sword's player legs (`0x48264a`–`0x4826a2`): a corpse, a ghost at health 1, a rider, a
     /// pacified player and one without control each see the pointer.
     #[test]
     fn the_sword_needs_a_live_unmounted_unpacified_player_in_control() {
         // Health 22, max health 28, unit flags 46, mount display 133, player flags 190.
         let own = |pairs: &[(u16, u32)]| {
-            let mut all = vec![(22, 100), (28, 100)];
+            let mut all = vec![
+                (at(Field::UnitHealth), 100),
+                (at(Field::UnitMaxHealth), 100),
+            ];
             all.extend_from_slice(pairs);
             ObjectStore(benilla_protocol::ObjectFields::from_pairs(&all))
         };
         assert!(player_attack_legs(&own(&[]), false));
-        assert!(!player_attack_legs(&own(&[(22, 0)]), false), "dead");
         assert!(
-            !player_attack_legs(&own(&[(22, 1), (190, 0x10)]), false),
+            !player_attack_legs(&own(&[(at(Field::UnitHealth), 0)]), false),
+            "dead"
+        );
+        assert!(
+            !player_attack_legs(
+                &own(&[(at(Field::UnitHealth), 1), (at(Field::PlayerFlags), 0x10)]),
+                false
+            ),
             "a ghost"
         );
-        assert!(!player_attack_legs(&own(&[(133, 1147)]), false), "mounted");
         assert!(
-            !player_attack_legs(&own(&[(46, UNIT_FLAG_PACIFIED)]), false),
+            !player_attack_legs(&own(&[(at(Field::UnitMountDisplayId), 1147)]), false),
+            "mounted"
+        );
+        assert!(
+            !player_attack_legs(&own(&[(at(Field::UnitFlags), UNIT_FLAG_PACIFIED)]), false),
             "pacified"
         );
         assert!(!player_attack_legs(&own(&[]), true), "no control");
-    }
-
-    /// `UNIT_NPC_FLAGS` REPAIR, the service bit the ladder never tests.
-    const REPAIR_ONLY: u32 = 0x4000;
-
-    #[test]
-    fn questgiver_flag_alone_is_not_talkable() {
-        use npc_flags::*;
-        for status in [
-            None,
-            Some(dialog_status::NONE),
-            Some(dialog_status::UNAVAILABLE),
-        ] {
-            assert_eq!(
-                service_cursor(QUESTGIVER, status),
-                None,
-                "status {status:?} must not classify Speak"
-            );
-        }
-        for status in [
-            dialog_status::CHAT,
-            dialog_status::INCOMPLETE,
-            dialog_status::REWARD_REP,
-            dialog_status::AVAILABLE,
-            dialog_status::REWARD_OLD,
-            dialog_status::REWARD2,
-        ] {
-            assert_eq!(
-                service_cursor(QUESTGIVER, Some(status)),
-                Some(CursorKind::Speak),
-                "status {status} must classify Speak"
-            );
-        }
-        assert_eq!(
-            service_cursor(GOSSIP | QUESTGIVER, None),
-            Some(CursorKind::Speak)
-        );
-        assert_eq!(
-            service_cursor(QUESTGIVER | VENDOR, None),
-            Some(CursorKind::Pickup)
-        );
     }
 
     #[test]

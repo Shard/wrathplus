@@ -93,14 +93,8 @@ pub(crate) fn parse_set_point(
         return Err(usage(who));
     };
 
-    // Wrath takes `SetPoint(point)` alone, against the default parent; 1.12 raises Usage.
-    let wrath = lua.app_data_ref::<Model>().expect("model").dialect
-        == crate::script::ScriptDialect::Wrath12340;
-    let rel_arg = match args.get(1) {
-        Some(rel_arg) => rel_arg,
-        None if wrath => &Value::Integer(0),
-        None => return Err(usage(who)),
-    };
+    // `SetPoint(point)` alone anchors against the default parent.
+    let rel_arg = args.get(1).unwrap_or(&Value::Integer(0));
     let target = match rel_arg {
         Value::String(s) => RelTarget::Named(match s.to_str() {
             Ok(n) => prefetch_named_target(lua, n.as_ref(), Some(parent_base)),

@@ -2,7 +2,7 @@
 //! Stock MultiCastActionBarFrame.lua reads all nine GetSpellInfo returns; SpellBookFrame.lua
 //! passes a slot and book type, while PetPaperDollFrame.lua passes an unlearned spell ID.
 
-use super::{Model, ScriptDialect};
+use super::Model;
 use mlua::{Lua, MultiValue, Value};
 
 /// Resolved Spell.dbc metadata. The app supplies the full catalog, not just learned spells.
@@ -115,9 +115,6 @@ fn split_name(name: &str) -> (&str, Option<&str>) {
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
-    if lua.app_data_ref::<Model>().expect("model").dialect != ScriptDialect::Wrath12340 {
-        return Ok(());
-    }
     lua.globals().set(
         "GetSpellInfo",
         lua.create_function(|lua, (query, book): (Value, Value)| {
@@ -189,7 +186,7 @@ mod tests {
 
     #[test]
     fn wrath_catalog_id_book_name_and_nine_returns() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_spell_catalog([
             SpellInfoView {
                 spell_id: 133,
@@ -239,7 +236,7 @@ mod tests {
 
     #[test]
     fn pet_book_and_replacement_catalog() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_pet_book(super::super::PetBookState {
             slots: vec![SpellSlotView {
                 spell_id: 42,

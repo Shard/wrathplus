@@ -126,7 +126,7 @@ pub(crate) fn wire_pos_for(
 #[cfg(test)]
 fn wire_pos(bag: i64, slot1: u32) -> Option<(u8, u8)> {
     wire_pos_for(
-        benilla_protocol::messages::FieldLayout::Vanilla5875,
+        benilla_protocol::messages::FieldLayout::Wrath12340,
         bag,
         slot1,
     )
@@ -384,7 +384,6 @@ pub(crate) fn send_item_use(
                     slot: it.slot,
                     entry: it.entry,
                     item_guid: it.guid.unwrap_or(0),
-                    spell_index: it.spell_index,
                     on_object: it.on_object,
                 },
             );
@@ -650,15 +649,15 @@ mod tests {
         assert_eq!(keyring_size(61), 16, "> 60, unreachable in 1.12");
     }
 
-    /// The wire's 16 positions (vmangos `KEYRING_SLOT_END` 97), not the level-gated count.
+    /// The wire's 32 positions (AzerothCore `KEYRING_SLOT_START` 86 to `KEYRING_SLOT_END` 118).
     #[test]
     fn wire_pos_maps_the_keyring_onto_the_player_grid() {
-        assert_eq!(wire_pos(KEYRING_CONTAINER, 1), Some((255, 81)));
-        assert_eq!(wire_pos(KEYRING_CONTAINER, 16), Some((255, 96)));
+        assert_eq!(wire_pos(KEYRING_CONTAINER, 1), Some((255, 86)));
+        assert_eq!(wire_pos(KEYRING_CONTAINER, 32), Some((255, 117)));
         assert_eq!(
-            wire_pos(KEYRING_CONTAINER, 17),
+            wire_pos(KEYRING_CONTAINER, 33),
             None,
-            "97 is past KEYRING_SLOT_END — not a position on this wire"
+            "118 is past KEYRING_SLOT_END — not a position on this wire"
         );
         assert_eq!(wire_pos(KEYRING_CONTAINER, 0), None);
     }
@@ -962,20 +961,20 @@ mod tests {
     #[test]
     fn wire_pos_maps_the_bank_spaces() {
         use super::BANK_CONTAINER;
-        // The 24 generic slots: live 1..24 → (255, 39..62).
+        // The 28 generic slots: live 1..28 → (255, 39..66).
         assert_eq!(wire_pos(BANK_CONTAINER, 1), Some((255, 39)));
-        assert_eq!(wire_pos(BANK_CONTAINER, 24), Some((255, 62)));
-        assert_eq!(wire_pos(BANK_CONTAINER, 25), None, "past the vault");
+        assert_eq!(wire_pos(BANK_CONTAINER, 28), Some((255, 66)));
+        assert_eq!(wire_pos(BANK_CONTAINER, 29), None, "past the vault");
         assert_eq!(wire_pos(BANK_CONTAINER, 0), None);
-        // Bank bags: container 5 is the bag in player-array slot 63, container 10 in 68.
-        assert_eq!(wire_pos(5, 1), Some((63, 0)));
-        assert_eq!(wire_pos(10, 36), Some((68, 35)));
-        assert_eq!(wire_pos(11, 1), None, "past the bank bags");
-        // The bank-bag buttons in doll space: live 64..69 → wire 63..68; the gap 24..63 refuses.
-        assert_eq!(wire_pos(EQUIPMENT_BAG, 64), Some((255, 63)), "BankBag1");
-        assert_eq!(wire_pos(EQUIPMENT_BAG, 69), Some((255, 68)), "BankBag6");
-        assert_eq!(wire_pos(EQUIPMENT_BAG, 63), None, "the doll-space gap");
-        assert_eq!(wire_pos(EQUIPMENT_BAG, 70), None, "past the bank bags");
+        // Bank bags: container 5 is the bag in player-array slot 67, container 11 in 73.
+        assert_eq!(wire_pos(5, 1), Some((67, 0)));
+        assert_eq!(wire_pos(11, 36), Some((73, 35)));
+        assert_eq!(wire_pos(12, 1), None, "past the bank bags");
+        // The bank-bag buttons in doll space: live 68..74 → wire 67..73; the gap 24..67 refuses.
+        assert_eq!(wire_pos(EQUIPMENT_BAG, 68), Some((255, 67)), "BankBag1");
+        assert_eq!(wire_pos(EQUIPMENT_BAG, 74), Some((255, 73)), "BankBag7");
+        assert_eq!(wire_pos(EQUIPMENT_BAG, 67), None, "the doll-space gap");
+        assert_eq!(wire_pos(EQUIPMENT_BAG, 75), None, "past the bank bags");
     }
 }
 
@@ -995,19 +994,19 @@ mod find_item_tests {
     use benilla_protocol::ObjectFields;
 
     // Descriptor field indices, raw.
-    const ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ObjectEntry); // OBJECT_FIELD_ENTRY
-    const CHARGES: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const CHARGES: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ItemSpellCharges); // ITEM_FIELD_SPELL_CHARGES[0]
-    const NUM_SLOTS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const NUM_SLOTS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ContainerNumSlots); // CONTAINER_FIELD_NUM_SLOTS
-    const SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ContainerSlot1); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
-    const INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead); // PLAYER_FIELD_INV_SLOT_HEAD (2 per guid, 23 slots)
-    const PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerPackSlot1); // PLAYER_FIELD_PACK_SLOT_1 (2 per guid, 16 slots)
-    const KEYRING_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const KEYRING_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerKeyringSlot1); // PLAYER_FIELD_KEYRING_SLOT_1 (2 per guid, player slots 81..)
 
     const TRINKET: u32 = 12_930;
@@ -1020,10 +1019,10 @@ mod find_item_tests {
         for &(idx, guid) in slots {
             let base = if idx < 23 {
                 INV_SLOT_HEAD + 2 * idx
-            } else if idx < 81 {
+            } else if idx < 86 {
                 PACK_SLOT_1 + 2 * (idx - 23)
             } else {
-                KEYRING_SLOT_1 + 2 * (idx - 81)
+                KEYRING_SLOT_1 + 2 * (idx - 86)
             };
             pairs.push((base, guid as u32));
             pairs.push((base + 1, (guid >> 32) as u32));
@@ -1140,15 +1139,15 @@ mod find_item_tests {
         const KEY: u32 = 7_146; // The Scarlet Key
         let mut objs = TestObjects::new();
         item(&mut objs, 0xE1, KEY, None);
-        let store = player(&[(81, 0xE1)]);
+        let store = player(&[(86, 0xE1)]);
         assert_eq!(
             find_item(&store, &objs.get(), KEY, ALL),
-            Some((255, 81, 0xE1))
+            Some((255, 86, 0xE1))
         );
 
         // A copy anywhere earlier still wins.
         item(&mut objs, 0xE2, KEY, None);
-        let store = player(&[(81, 0xE1), (23, 0xE2)]);
+        let store = player(&[(86, 0xE1), (23, 0xE2)]);
         assert_eq!(
             find_item(&store, &objs.get(), KEY, ALL),
             Some((255, 23, 0xE2)),
@@ -1187,7 +1186,7 @@ mod find_item_tests {
         ));
         // A key in keyring slot 1.
         assert!(has_key(
-            &player(&[(81, 0xF1)]),
+            &player(&[(86, 0xF1)]),
             &objs.get(),
             &items,
             &commands
@@ -1217,7 +1216,7 @@ mod find_item_tests {
 
     /// A player with items in the bank band (`PLAYER_FIELD_BANK_SLOT_1`).
     fn bank_player(slots: &std::collections::HashMap<u16, u64>) -> ObjectFields {
-        const BANK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const BANK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::PlayerBankSlot1); // PLAYER_FIELD_BANK_SLOT_1 (2 per guid, player slots 39..62)
         let mut pairs = Vec::new();
         for (&idx, &guid) in slots {
@@ -1237,23 +1236,23 @@ mod count_of_tests {
     use benilla_protocol::ObjectFields;
 
     // Descriptor field indices, raw.
-    const ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ObjectEntry); // OBJECT_FIELD_ENTRY
-    const STACK: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const STACK: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ItemStackCount); // ITEM_FIELD_STACK_COUNT
-    const NUM_SLOTS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const NUM_SLOTS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ContainerNumSlots); // CONTAINER_FIELD_NUM_SLOTS
-    const SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ContainerSlot1); // CONTAINER_FIELD_SLOT_1 (2 fields per guid)
-    const INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead); // player slots 0..22
-    const PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerPackSlot1); // player slots 23..38
-    const BANK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const BANK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerBankSlot1); // player slots 39..62
-    const BANK_BAG_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const BANK_BAG_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerBankbagSlot1); // player slots 63..68
-    const KEYRING_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const KEYRING_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerKeyringSlot1); // player slots 81..112
 
     const AMMO: u32 = 3_030; // the collect-quest item under test
@@ -1386,71 +1385,62 @@ mod count_of_tests {
 #[cfg(test)]
 mod storage_tests {
     use super::*;
-    use crate::inventory::keyring_size;
     use benilla_protocol::messages::FieldLayout;
 
     #[test]
     fn storage_boundaries_and_native_positions_preserve_vanilla() {
-        for (layout, bank, bags, first, key, keys) in [
-            (FieldLayout::Vanilla5875, 24, 6, 63, 81, 16),
-            (FieldLayout::Wrath12340, 28, 7, 67, 86, 32),
+        let (layout, bank, bags, first, key, keys) = (FieldLayout::Wrath12340, 28, 7, 67, 86, 32);
+        let geometry = StorageSlots::for_layout(layout);
+        assert_eq!(
+            (
+                geometry.bank_slots,
+                geometry.bank_bags,
+                geometry.bank_bag_first,
+                geometry.keyring_first,
+                geometry.keyring_slots
+            ),
+            (bank, bags, first, key, keys)
+        );
+        for (bag, count, wire_bag, wire_first) in [
+            (0, 16, 255, 23),
+            (1, 36, 19, 0),
+            (4, 36, 22, 0),
+            (BANK_CONTAINER, bank, 255, 39),
+            (KEYRING_CONTAINER, keys, 255, key),
+            (5, 36, first, 0),
+            (4 + i64::from(bags), 36, first + bags - 1, 0),
         ] {
-            let geometry = StorageSlots::for_layout(layout);
-            assert_eq!(
-                (
-                    geometry.bank_slots,
-                    geometry.bank_bags,
-                    geometry.bank_bag_first,
-                    geometry.keyring_first,
-                    geometry.keyring_slots
-                ),
-                (bank, bags, first, key, keys)
-            );
-            for (bag, count, wire_bag, wire_first) in [
-                (0, 16, 255, 23),
-                (1, 36, 19, 0),
-                (4, 36, 22, 0),
-                (BANK_CONTAINER, bank, 255, 39),
-                (KEYRING_CONTAINER, keys, 255, key),
-                (5, 36, first, 0),
-                (4 + i64::from(bags), 36, first + bags - 1, 0),
-            ] {
-                for slot in [1, u32::from(count)] {
-                    let position = wire_pos_for(layout, bag, slot).unwrap();
-                    assert_eq!(position, (wire_bag, wire_first + slot as u8 - 1));
-                    // Independently decode the server position into the snapshot container.
-                    let snapshot_bag = if position.0 == 255 {
-                        match position.1 {
-                            23..=38 => 0,
-                            39..=66 => BANK_CONTAINER,
-                            _ => KEYRING_CONTAINER,
-                        }
-                    } else if (19..=22).contains(&position.0) {
-                        i64::from(position.0 - 19) + 1
-                    } else {
-                        i64::from(position.0 - first) + 5
-                    };
-                    assert_eq!(snapshot_bag, bag);
-                    // Independently invert this container's byte position into its Lua slot.
-                    assert_eq!(u32::from(position.1 - wire_first) + 1, slot);
-                    assert_eq!(
-                        wire_pos_for(layout, bag, u32::from(position.1 - wire_first) + 1),
-                        Some(position)
-                    );
-                }
-                assert_eq!(wire_pos_for(layout, bag, 0), None);
-                assert_eq!(wire_pos_for(layout, bag, u32::from(count) + 1), None);
+            for slot in [1, u32::from(count)] {
+                let position = wire_pos_for(layout, bag, slot).unwrap();
+                assert_eq!(position, (wire_bag, wire_first + slot as u8 - 1));
+                // Independently decode the server position into the snapshot container.
+                let snapshot_bag = if position.0 == 255 {
+                    match position.1 {
+                        23..=38 => 0,
+                        39..=66 => BANK_CONTAINER,
+                        _ => KEYRING_CONTAINER,
+                    }
+                } else if (19..=22).contains(&position.0) {
+                    i64::from(position.0 - 19) + 1
+                } else {
+                    i64::from(position.0 - first) + 5
+                };
+                assert_eq!(snapshot_bag, bag);
+                // Independently invert this container's byte position into its Lua slot.
+                assert_eq!(u32::from(position.1 - wire_first) + 1, slot);
+                assert_eq!(
+                    wire_pos_for(layout, bag, u32::from(position.1 - wire_first) + 1),
+                    Some(position)
+                );
             }
-            assert_eq!(wire_pos_for(layout, geometry.last_bag() + 1, 1), None);
+            assert_eq!(wire_pos_for(layout, bag, 0), None);
+            assert_eq!(wire_pos_for(layout, bag, u32::from(count) + 1), None);
         }
+        assert_eq!(wire_pos_for(layout, geometry.last_bag() + 1, 1), None);
         for level in [1, 39, 40, 49, 50, 60, 61, 80] {
             assert_eq!(
                 StorageSlots::for_layout(FieldLayout::Wrath12340).keyring_size(level),
                 32
-            );
-            assert_eq!(
-                StorageSlots::for_layout(FieldLayout::Vanilla5875).keyring_size(level),
-                keyring_size(level)
             );
         }
     }

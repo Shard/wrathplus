@@ -277,16 +277,17 @@ mod tests {
     use crate::items::test_template;
     use crate::net::ClientCommand;
 
-    /// A human male self-player wearing `entries` (slot, item entry). Field indices:
-    /// `UNIT_FIELD_BYTES_0` 36, `PLAYER_BYTES` 193, `PLAYER_VISIBLE_ITEM_1_CREATOR` 258 + 12 per
-    /// slot, entry at +2.
+    /// A human male self-player wearing `entries` (slot, item entry), two visible-item dwords per
+    /// slot, the entry first.
     fn player(entries: &[(u8, u32)]) -> ObjectStore {
+        use benilla_protocol::messages::{Field, FieldLayout};
+        let at = |field| FieldLayout::Wrath12340.index_of(field);
         let mut pairs = vec![
-            (36u16, 1 | 1 << 8),  // race 1 (human), class 1, gender 0 (male)
-            (193u16, 3 | 4 << 8), // skin 3, face 4, hair 0, hair colour 0
+            (at(Field::UnitBytes0), 1 | 1 << 8), // race 1 (human), class 1, gender 0 (male)
+            (at(Field::PlayerBytes), 3 | 4 << 8), // skin 3, face 4, hair 0, hair colour 0
         ];
         for (slot, entry) in entries {
-            pairs.push((258 + 2 + 12 * u16::from(*slot), *entry));
+            pairs.push((at(Field::PlayerVisibleItems) + 2 * u16::from(*slot), *entry));
         }
         ObjectStore(ObjectFields::from_pairs(&pairs))
     }
@@ -612,9 +613,11 @@ mod tests {
         items.insert_template(2000, Some(worn("Shiny Helm", 7000, 1)));
         // `PLAYER_FLAGS` (field 190) carrying HIDE_HELM 0x400 | HIDE_CLOAK 0x800.
         let mut store = player(&[(0, 1000), (14, 1100), (4, 1200)]);
-        store
-            .0
-            .merge(ObjectFields::from_pairs(&[(190u16, 0x400 | 0x800)]));
+        store.0.merge(ObjectFields::from_pairs(&[(
+            benilla_protocol::messages::FieldLayout::Wrath12340
+                .index_of(benilla_protocol::messages::Field::PlayerFlags),
+            0x400 | 0x800,
+        )]));
 
         let mut room = DressUpRoom::default();
         room.apply(DressUpIntent::Dress);

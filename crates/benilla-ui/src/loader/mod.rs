@@ -581,8 +581,7 @@ impl Loader<'_> {
         let font_names: std::collections::HashSet<&str> =
             fonts.keys().map(|k| k.as_str()).collect();
         let mut warns = Vec::new();
-        let list = model.dialect == crate::script::ScriptDialect::Wrath12340;
-        let out = framexml::expand_known(el, &view, &font_names, list, &mut warns);
+        let out = framexml::expand_known(el, &view, &font_names, true, &mut warns);
         drop(font_names);
         drop(fonts);
         drop(view);
@@ -599,12 +598,7 @@ impl Loader<'_> {
         let hit = el.attr("inherits").is_some_and(|inherits| {
             let model = self.model();
             let templates = model.framexml_templates.borrow();
-            let names: Vec<&str> = if model.dialect == crate::script::ScriptDialect::Wrath12340 {
-                inherits.split(',').map(str::trim).collect()
-            } else {
-                vec![inherits]
-            };
-            names.into_iter().any(|name| {
+            inherits.split(',').map(str::trim).any(|name| {
                 !name.is_empty()
                     && (templates.contains_key(name)
                         || templates.keys().any(|k| k.eq_ignore_ascii_case(name)))
@@ -776,13 +770,7 @@ impl Loader<'_> {
 
     /// Wrath's `parentKey="key"`: the new frame or region is stored as `parent.key`.
     pub(super) fn apply_parent_key(&self, el: &Element, parent: &Table, child: &Table) {
-        let wrath = self
-            .lua()
-            .app_data_ref::<crate::script::Model>()
-            .expect("model")
-            .dialect
-            == crate::script::ScriptDialect::Wrath12340;
-        if let Some(key) = el.attr("parentKey").filter(|key| wrath && !key.is_empty()) {
+        if let Some(key) = el.attr("parentKey").filter(|key| !key.is_empty()) {
             let _ = parent.raw_set(key, child.clone());
         }
     }

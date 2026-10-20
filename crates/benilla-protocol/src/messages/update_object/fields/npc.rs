@@ -50,45 +50,35 @@ impl NpcFlags {
     /// vmangos UnitDefines.h and AzerothCore SharedDefines.h (`enum NPCFlags`).
     pub fn has(self, service: NpcService) -> bool {
         use NpcService::*;
-        let (vanilla, wrath) = match service {
-            Gossip => (0x1, 0x1),
-            QuestGiver => (0x2, 0x2),
-            Vendor => (0x4, 0xf80),
-            FlightMaster => (0x8, 0x2000),
-            Trainer => (0x10, 0x70),
-            SpiritHealer => (0x20, 0x4000),
-            SpiritGuide => (0x40, 0x8000),
-            Innkeeper => (0x80, 0x10000),
-            Banker => (0x100, 0x20000),
-            Petitioner => (0x200, 0x40000),
-            TabardDesigner => (0x400, 0x80000),
-            BattleMaster => (0x800, 0x100000),
-            Auctioneer => (0x1000, 0x200000),
-            StableMaster => (0x2000, 0x400000),
-            Repair => (0x4000, 0x1000),
+        let mask = match service {
+            Gossip => 0x1,
+            QuestGiver => 0x2,
+            Vendor => 0xf80,
+            FlightMaster => 0x2000,
+            Trainer => 0x70,
+            SpiritHealer => 0x4000,
+            SpiritGuide => 0x8000,
+            Innkeeper => 0x10000,
+            Banker => 0x20000,
+            Petitioner => 0x40000,
+            TabardDesigner => 0x80000,
+            BattleMaster => 0x100000,
+            Auctioneer => 0x200000,
+            StableMaster => 0x400000,
+            Repair => 0x1000,
             // Build 12340 click FUN_006ddbb0 and cursor FUN_004f7a50 test bit 23.
-            GuildBanker => (0, 0x800000),
+            GuildBanker => 0x800000,
             // Build 12340 FUN_0071c570 and cursor FUN_004f7a50 test bit 24.
-            SpellClick => (0, 0x1000000),
+            SpellClick => 0x1000000,
             // Build 12340 click FUN_006ddbb0 tests distinct bit 26.
-            Mailbox => (0, 0x4000000),
+            Mailbox => 0x4000000,
         };
-        self.bits
-            & match self.layout {
-                FieldLayout::Vanilla5875 => vanilla,
-                FieldLayout::Wrath12340 => wrath,
-            }
-            != 0
+        self.bits & mask != 0
     }
     /// Exact base vendor flag, excluding vendor-specialization flags. Use for
     /// client branches that test the base bit, not the broader service union.
     pub fn has_vendor_base(self) -> bool {
-        self.bits
-            & match self.layout {
-                FieldLayout::Vanilla5875 => 0x4,
-                FieldLayout::Wrath12340 => 0x80,
-            }
-            != 0
+        self.bits & 0x80 != 0
     }
     /// Exact base trainer flag, excluding class/profession trainer flags.
     pub fn has_trainer_base(self) -> bool {
@@ -122,22 +112,21 @@ mod tests {
 
     #[test]
     fn guild_banker_is_exact_wrath_bit_and_absent_in_vanilla() {
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            for bit in 0..32 {
-                let bits = 1u32 << bit;
-                let flags = NpcFlags::from_bits(layout, bits);
-                assert_eq!(
-                    flags.has(NpcService::GuildBanker),
-                    layout == FieldLayout::Wrath12340 && bits == 0x800000
-                );
-                assert_eq!(flags.bits(), bits);
-            }
-            assert!(!NpcFlags::from_bits(layout, 0).has(NpcService::GuildBanker));
+        let layout = FieldLayout::Wrath12340;
+        for bit in 0..32 {
+            let bits = 1u32 << bit;
+            let flags = NpcFlags::from_bits(layout, bits);
             assert_eq!(
-                NpcFlags::from_bits(layout, u32::MAX).has(NpcService::GuildBanker),
-                layout == FieldLayout::Wrath12340
+                flags.has(NpcService::GuildBanker),
+                layout == FieldLayout::Wrath12340 && bits == 0x800000
             );
+            assert_eq!(flags.bits(), bits);
         }
+        assert!(!NpcFlags::from_bits(layout, 0).has(NpcService::GuildBanker));
+        assert_eq!(
+            NpcFlags::from_bits(layout, u32::MAX).has(NpcService::GuildBanker),
+            layout == FieldLayout::Wrath12340
+        );
     }
 
     #[test]
@@ -146,22 +135,21 @@ mod tests {
             (NpcService::SpellClick, 0x1000000),
             (NpcService::Mailbox, 0x4000000),
         ] {
-            for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-                for bit in 0..32 {
-                    let bits = 1u32 << bit;
-                    let flags = NpcFlags::from_bits(layout, bits);
-                    assert_eq!(
-                        flags.has(service),
-                        layout == FieldLayout::Wrath12340 && bits == mask
-                    );
-                    assert_eq!(flags.bits(), bits);
-                }
-                assert!(!NpcFlags::from_bits(layout, 0).has(service));
+            let layout = FieldLayout::Wrath12340;
+            for bit in 0..32 {
+                let bits = 1u32 << bit;
+                let flags = NpcFlags::from_bits(layout, bits);
                 assert_eq!(
-                    NpcFlags::from_bits(layout, u32::MAX).has(service),
-                    layout == FieldLayout::Wrath12340
+                    flags.has(service),
+                    layout == FieldLayout::Wrath12340 && bits == mask
                 );
+                assert_eq!(flags.bits(), bits);
             }
+            assert!(!NpcFlags::from_bits(layout, 0).has(service));
+            assert_eq!(
+                NpcFlags::from_bits(layout, u32::MAX).has(service),
+                layout == FieldLayout::Wrath12340
+            );
         }
     }
 
@@ -183,62 +171,53 @@ mod tests {
 
     #[test]
     fn exact_base_predicates_respect_native_dialect_and_preserve_all_bits() {
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            let vendor_bit = if layout == FieldLayout::Vanilla5875 {
-                0x4
-            } else {
-                0x80
-            };
-            for bit in 0..32 {
-                let bits = 1u32 << bit;
-                let flags = NpcFlags::from_bits(layout, bits);
-                assert_eq!(flags.has_vendor_base(), bits == vendor_bit);
-                assert_eq!(flags.has_trainer_base(), bits == 0x10);
-                assert_eq!(flags.bits(), bits);
-                assert_eq!(flags.layout(), layout);
-            }
-            let empty = NpcFlags::from_bits(layout, 0);
-            assert!(!empty.has_vendor_base());
-            assert!(!empty.has_trainer_base());
-            let all = NpcFlags::from_bits(layout, u32::MAX);
-            assert!(all.has_vendor_base());
-            assert!(all.has_trainer_base());
+        let layout = FieldLayout::Wrath12340;
+        let vendor_bit = 0x80;
+        for bit in 0..32 {
+            let bits = 1u32 << bit;
+            let flags = NpcFlags::from_bits(layout, bits);
+            assert_eq!(flags.has_vendor_base(), bits == vendor_bit);
+            assert_eq!(flags.has_trainer_base(), bits == 0x10);
+            assert_eq!(flags.bits(), bits);
+            assert_eq!(flags.layout(), layout);
         }
+        let empty = NpcFlags::from_bits(layout, 0);
+        assert!(!empty.has_vendor_base());
+        assert!(!empty.has_trainer_base());
+        let all = NpcFlags::from_bits(layout, u32::MAX);
+        assert!(all.has_vendor_base());
+        assert!(all.has_trainer_base());
     }
 
     #[test]
-    fn services_match_both_native_dialects_without_renumbering() {
+    fn services_match_their_native_bits() {
         use NpcService::*;
-        for (service, vanilla, wrath) in [
-            (Gossip, 1, 1),
-            (QuestGiver, 2, 2),
-            (Vendor, 4, 0x80),
-            (FlightMaster, 8, 0x2000),
-            (Trainer, 0x10, 0x10),
-            (SpiritHealer, 0x20, 0x4000),
-            (SpiritGuide, 0x40, 0x8000),
-            (Innkeeper, 0x80, 0x10000),
-            (Banker, 0x100, 0x20000),
-            (Petitioner, 0x200, 0x40000),
-            (TabardDesigner, 0x400, 0x80000),
-            (BattleMaster, 0x800, 0x100000),
-            (Auctioneer, 0x1000, 0x200000),
-            (StableMaster, 0x2000, 0x400000),
-            (Repair, 0x4000, 0x1000),
+        for (service, wrath) in [
+            (Gossip, 1),
+            (QuestGiver, 2),
+            (Vendor, 0x80),
+            (FlightMaster, 0x2000),
+            (Trainer, 0x10),
+            (SpiritHealer, 0x4000),
+            (SpiritGuide, 0x8000),
+            (Innkeeper, 0x10000),
+            (Banker, 0x20000),
+            (Petitioner, 0x40000),
+            (TabardDesigner, 0x80000),
+            (BattleMaster, 0x100000),
+            (Auctioneer, 0x200000),
+            (StableMaster, 0x400000),
+            (Repair, 0x1000),
         ] {
-            for (layout, bits) in [
-                (FieldLayout::Vanilla5875, vanilla),
-                (FieldLayout::Wrath12340, wrath),
-            ] {
-                let span = layout.resolve(Field::UnitNpcFlags).unwrap();
-                let fields =
-                    ObjectFields::from_native_pairs(layout, &[(span.index, bits | 0x80000000)]);
-                let flags = fields.unit_npc_services();
-                assert_eq!(flags.bits(), bits | 0x80000000);
-                assert_eq!(flags.layout(), layout);
-                assert!(flags.has(service));
-                assert!(!NpcFlags::from_bits(layout, 0).has(service));
-            }
+            let (layout, bits) = (FieldLayout::Wrath12340, wrath);
+            let span = layout.resolve(Field::UnitNpcFlags).unwrap();
+            let fields =
+                ObjectFields::from_native_pairs(layout, &[(span.index, bits | 0x80000000)]);
+            let flags = fields.unit_npc_services();
+            assert_eq!(flags.bits(), bits | 0x80000000);
+            assert_eq!(flags.layout(), layout);
+            assert!(flags.has(service));
+            assert!(!NpcFlags::from_bits(layout, 0).has(service));
         }
         for bit in [0x80, 0x100, 0x200, 0x400, 0x800] {
             assert!(NpcFlags::from_bits(FieldLayout::Wrath12340, bit).is_vendor());
@@ -249,8 +228,5 @@ mod tests {
         let wrath = NpcFlags::from_bits(FieldLayout::Wrath12340, 0x1000);
         assert!(wrath.can_repair());
         assert!(!wrath.has(Auctioneer));
-        let vanilla = NpcFlags::from_bits(FieldLayout::Vanilla5875, 0x1000);
-        assert!(!vanilla.can_repair());
-        assert!(vanilla.has(Auctioneer));
     }
 }

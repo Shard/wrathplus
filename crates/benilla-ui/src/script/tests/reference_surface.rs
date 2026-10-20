@@ -1,139 +1,6 @@
-//! The 1.12 surface as a gate: every global the engine puts in a bare VM is one the 1.12.1 client
-//! has (`reference/1.12-globals.tsv`) or a commented entry on [`BEYOND_1_12`], since addons branch
-//! on a global's presence; no prefix excuses an engine name, as a host seam belongs in Rust. The
-//! production load, core and layer, is `benilla-app`'s `ui_script::surface_gate`; what 1.12 has
-//! and benilla lacks is `scripts/api-coverage.sh`'s count.
+//! Widget and region surface checks pinned to the client's own answers.
 
-use std::collections::HashSet;
-
-use super::common::{script, vanilla_script};
-
-/// Globals the engine exposes that 1.12 does not, each with its reason. The list is exact.
-const BEYOND_1_12: &[&str] = &[
-    // Our Lua runtime is 5.1 where 1.12's is 5.0: 1.12's base library does not export `_G` (an
-    // addon reaches the globals with `getfenv(0)`); ours does, as our `getglobal`/`setglobal` are
-    // written over it.
-    "_G",
-];
-
-/// `reference/1.12-globals.tsv`'s names.
-fn reference() -> HashSet<String> {
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../reference/1.12-globals.tsv"
-    );
-    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
-        panic!("reading {path}: {e} — regenerate with scripts/gen-reference-globals.py")
-    });
-    let names: HashSet<String> = text
-        .lines()
-        .filter(|l| !l.starts_with('#'))
-        .filter_map(|l| l.split('\t').next().map(str::to_string))
-        .collect();
-    assert!(
-        names.len() > 19_000,
-        "the reference table looks truncated ({} names) — regenerate it",
-        names.len()
-    );
-    names
-}
-
-/// The string keys of a bare VM's `_G`.
-fn engine_globals() -> HashSet<String> {
-    vanilla_script()
-        .eval::<Vec<String>>(
-            "local out = {} \
-             for k in pairs(getfenv(0)) do if type(k) == 'string' then table.insert(out, k) end end \
-             return out",
-        )
-        .expect("dump _G")
-        .into_iter()
-        .collect()
-}
-
-/// Every global the engine exposes is one 1.12 has, or a listed exception.
-#[test]
-fn the_engine_adds_no_global_past_1_12() {
-    let known = reference();
-    let mut beyond: Vec<String> = engine_globals()
-        .into_iter()
-        .filter(|n| !known.contains(n) && !BEYOND_1_12.contains(&n.as_str()))
-        .collect();
-    beyond.sort_unstable();
-    assert!(
-        beyond.is_empty(),
-        "the engine exposes {} global(s) the 1.12.1 client does not:\n    {}\n\n\
-         1.12 is the target. Give it its 1.12 spelling, move a host seam into Rust, or add it to \
-         `BEYOND_1_12` in this file WITH the reason it has to stay — an addon that \
-         feature-detects an unexplained superset takes a path we cannot honour.",
-        beyond.len(),
-        beyond.join(" ")
-    );
-}
-
-/// The exception list is exact: no entry outlives its global, and none excuses a 1.12 name.
-#[test]
-fn the_exception_list_is_exact() {
-    let known = reference();
-    let ours = engine_globals();
-    let wrong: Vec<&str> = BEYOND_1_12
-        .iter()
-        .copied()
-        .filter(|n| known.contains(*n) || !ours.contains(*n))
-        .collect();
-    assert!(
-        wrong.is_empty(),
-        "excused as beyond 1.12, but 1.12 has them or the engine no longer exposes them: {wrong:?}"
-    );
-}
-
-/// The globals 1.12.1 does not have, each once benilla's: the Era verbs (the 1.12 way in each
-/// comment) and the host hooks with no caller. An addon that tests for one takes a path 1.12 never
-/// does.
-#[test]
-fn the_era_globals_and_the_uncalled_hooks_are_absent() {
-    let s = vanilla_script();
-    for (name, instead) in [
-        (
-            "UnitAura",
-            "UnitBuff/UnitDebuff (0x519500, 0x5198f0), GetPlayerBuff (0x4e45d0)",
-        ),
-        ("CancelUnitBuff", "CancelPlayerBuff (0x4e49a0)"),
-        (
-            "GetCursorInfo",
-            "CursorHasItem/CursorHasSpell/CursorHasMoney (0x4895d0..0x489630)",
-        ),
-        (
-            "GetInventoryItemID",
-            "the id inside GetInventoryItemLink (0x4c8c10)",
-        ),
-        ("GetPlayerFacing", "the minimap arrow model's GetFacing"),
-        (
-            "GetTradePartnerName",
-            r#"UnitName("NPC") (TradeFrame.lua:43)"#,
-        ),
-        (
-            "IsGossipOptionCoded",
-            "GOSSIP_ENTER_CODE, then SelectGossipOption(index, code)",
-        ),
-        ("UnitIsAFK", "no unit AFK predicate"),
-        ("UnitIsDND", "no unit DND predicate"),
-        (
-            "BenillaGetContainerItemID",
-            "the id inside GetContainerItemLink",
-        ),
-        ("BenillaGetItemStats", "no caller"),
-        ("BenillaGetMerchantItemStats", "no caller"),
-        ("BenillaGetBuybackItemStats", "no caller"),
-        ("BenillaSetBoothTexture", "no caller; SetPortraitTexture"),
-        ("BenillaTakeLootSlot", "a LootButton's own click (0x4c1820)"),
-    ] {
-        assert!(
-            s.eval::<bool>(&format!("return {name} == nil")).unwrap(),
-            "{name} is a global; 1.12 has {instead}"
-        );
-    }
-}
+use super::common::script;
 
 /// The strata table (`0x8119f8`) has eight rows, `BACKGROUND` to `TOOLTIP`, walked by `0x6f17d0`:
 /// `SetFrameStrata("BLIZZARD")` raises `%s:SetFrameStrata(): Unknown frame strata: %s` naming the
@@ -952,7 +819,7 @@ fn unit_creature_type_answers_the_snapshots_resolved_type() {
 /// raises the reference's message, with no `Usage:` and no name.
 #[test]
 fn get_inventory_slot_info_folds_case_and_flags_only_the_ranged_slot() {
-    let s = vanilla_script();
+    let s = script();
 
     for name in ["AmmoSlot", "ammoSlot", "AMMOSLOT"] {
         assert_eq!(
@@ -983,17 +850,17 @@ fn get_inventory_slot_info_folds_case_and_flags_only_the_ranged_slot() {
         .eval::<bool>("local _,_,r = GetInventorySlotInfo('HeadSlot') return r == nil")
         .unwrap());
 
-    // `Bag1`..`Bag12` are SlotNumbers 64..75 (64..69 the bank bags) and share one string offset
-    // with `Bag0Slot`..`Bag3Slot`, so all sixteen answer the same art.
+    // `Bag1`..`Bag12` answer 68..79 on build 12340 (68..74 the bank bags) and share one string
+    // offset with `Bag0Slot`..`Bag3Slot`, so all sixteen answer the same art.
     assert_eq!(
         s.eval::<i64>("return GetInventorySlotInfo('Bag1')")
             .unwrap(),
-        64
+        68
     );
     assert_eq!(
         s.eval::<i64>("return GetInventorySlotInfo('bag12')")
             .unwrap(),
-        75,
+        79,
         "the new rows fold case like every other"
     );
     assert_eq!(
@@ -1003,7 +870,7 @@ fn get_inventory_slot_info_folds_case_and_flags_only_the_ranged_slot() {
             .unwrap(),
         "all sixteen bag rows share one string-block offset"
     );
-    // `Bag1` (64) and `Bag1Slot` (21) are different rows.
+    // `Bag1` (68) and `Bag1Slot` (21) are different rows.
     assert_eq!(
         s.eval::<i64>("return GetInventorySlotInfo('Bag1Slot')")
             .unwrap(),
@@ -1426,29 +1293,25 @@ fn a_frames_type_chain_matches_the_roster() {
     );
 }
 
-/// Every name on the full region table the VM holds is in a leaf list: `script::region` copies
-/// names out of it into the Texture and FontString leaves, and one in neither is unreachable.
+/// Every name on the full region table the VM holds reaches a Texture or a FontString:
+/// `script::region` copies names out of it into the leaves, and one in neither is unreachable.
 #[test]
 fn every_installed_region_method_lands_in_a_leaf() {
-    use crate::script::{
-        FONTSTRING_ONLY_METHODS, REGION_LEAF_SHARED, REGION_MAP_METHODS, TEXTURE_ONLY_METHODS,
-    };
-    let s = crate::script::UiScript::new_vanilla().unwrap();
+    let s = crate::script::UiScript::new().unwrap();
     let full: mlua::Table = s
         .lua()
         .named_registry_value(crate::script::REG_REGION_METHODS_FOR_TEST)
         .expect("the full region method table");
-
-    let mut known: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    known.extend(REGION_MAP_METHODS);
-    known.extend(REGION_LEAF_SHARED);
-    known.extend(TEXTURE_ONLY_METHODS);
-    known.extend(FONTSTRING_ONLY_METHODS);
+    s.run("local f = CreateFrame('Frame') LeafProbeT = f:CreateTexture() LeafProbeF = f:CreateFontString()")
+        .unwrap();
 
     let mut orphans: Vec<String> = Vec::new();
     for pair in full.pairs::<String, mlua::Value>() {
         let (name, _) = pair.expect("region method entry");
-        if !known.contains(name.as_str()) {
+        let reached: bool = s
+            .eval(&format!("return LeafProbeT[{name:?}] ~= nil or LeafProbeF[{name:?}] ~= nil"))
+            .unwrap();
+        if !reached {
             orphans.push(name);
         }
     }
@@ -1603,11 +1466,12 @@ fn the_pfui_hdgraphic_extended_arm_runs() {
 /// `ShowNameplates 0x489450`, `HideNameplates 0x489460`, `ShowFriendNameplates 0x489470` and
 /// `HideFriendNameplates 0x489480` read no argument and return nothing: four 10-byte bodies over
 /// two setters, differing only in an `or`/`and` mask. They write bits `0x1` and `0x8` of the
-/// runtime dword `[0xc4da34]` and no CVar: 1.12 registers none (no `0x63db90` site names a plate).
+/// runtime dword `[0xc4da34]` and no CVar, though 12340 registers the plate CVars for the options
+/// panel.
 #[test]
 fn the_nameplate_verbs_write_two_runtime_bits_and_no_cvar() {
     use crate::script::{PLATE_BIT_ENEMY as ENEMY, PLATE_BIT_FRIEND as FRIEND};
-    let mut s = vanilla_script();
+    let mut s = script();
 
     s.run("ShowNameplates()").unwrap();
     assert_eq!(s.take_nameplate_bit_writes().apply(0), ENEMY);
@@ -1660,9 +1524,6 @@ fn the_nameplate_verbs_write_two_runtime_bits_and_no_cvar() {
         s.take_cvar_changes().is_empty(),
         "no CVar written: the dword is not a setting"
     );
-    for name in ["nameplateShowEnemies", "nameplateShowFriends"] {
-        assert_eq!(s.cvar(name), None, "{name}: no plate CVar is registered");
-    }
 }
 
 /// The host seams benilla's own interface used are gone, now that it speaks 1.12 alone: the key

@@ -363,24 +363,16 @@ pub(super) fn drain_guild(
                 let Some(name) = capped_rank_name(name) else {
                     continue;
                 };
-                if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-                    let bank = rank_bank(&script, &native, rank_index);
-                    let _ = commands.0.send(ClientCommand::NativeGuildRank(SaveRank {
-                        rank: rank_index,
-                        flags: rights,
-                        name: name.into_bytes(),
-                        money_limit: bank.money_per_day,
-                        tabs: bank
-                            .tabs
-                            .map(|(rights, item_limit)| TabPermission { rights, item_limit }),
-                    }));
-                } else {
-                    let _ = commands.0.send(ClientCommand::GuildRank {
-                        rank_id: rank_index,
-                        rights,
-                        name,
-                    });
-                }
+                let bank = rank_bank(&script, &native, rank_index);
+                let _ = commands.0.send(ClientCommand::NativeGuildRank(SaveRank {
+                    rank: rank_index,
+                    flags: rights,
+                    name: name.into_bytes(),
+                    money_limit: bank.money_per_day,
+                    tabs: bank
+                        .tabs
+                        .map(|(rights, item_limit)| TabPermission { rights, item_limit }),
+                }));
             }
             GuildRequest::QueryEventLog => {
                 let _ = commands.0.send(ClientCommand::GuildEventLogQuery);

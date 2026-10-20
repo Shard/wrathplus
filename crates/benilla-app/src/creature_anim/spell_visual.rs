@@ -237,7 +237,8 @@ impl WeaponVisualSrc<'_, '_> {
         let (net_entity, store) = self.units.get(caster).ok()?;
         let s = &store.0;
         let display_id = match net_entity?.kind {
-            EntityKind::Unit => s.unit_virtual_item_display(2),
+            // 12340 has no creature virtual-item display field.
+            EntityKind::Unit => None,
             // 17: vmangos `EQUIPMENT_SLOT_RANGED`.
             EntityKind::Player => s
                 .player_visible_item_entry(17)
@@ -952,23 +953,13 @@ pub(super) fn route_cast_visuals(
     channel_cache.retain(|e, _| units.contains(*e));
 }
 
-/// Vanilla's aura ids and packed flag words; Wrath auras arrive as packet snapshots.
-fn is_descriptor_aura_state_edge(edge: &FieldChanged) -> bool {
-    edge.layout == benilla_protocol::messages::FieldLayout::Vanilla5875
-        && (edge.unit_slot(Field::UnitAura, 48).is_some()
-            || edge.unit_slot(Field::UnitAuraFlags, 6).is_some())
-}
-
 fn state_aura_ids(
-    store: &ObjectStore,
     guid: Option<&crate::net::Guid>,
     packets: Option<&crate::net::wrath_auras::PacketAuras>,
 ) -> Vec<u32> {
-    if let Some(snapshot) = guid.and_then(|g| packets?.by_guid.get(&g.0)) {
-        snapshot.iter().map(|a| a.aura.spell_id).collect()
-    } else {
-        store.0.unit_auras().map(|a| a.spell_id).collect()
-    }
+    guid.and_then(|g| packets?.by_guid.get(&g.0))
+        .map(|snapshot| snapshot.iter().map(|a| a.aura.spell_id).collect())
+        .unwrap_or_default()
 }
 
 /// Arm and reap each aura's state kit (stage 2) off the unit's `UNIT_AURA` slots: a spell entering
@@ -979,12 +970,11 @@ fn state_aura_ids(
 /// out as [`AuraProc`] edges, and a kit arms for any leg (Stealth's kit 312 is one `CharProc`).
 /// `armed` holds only the pairs this watcher began.
 pub(crate) fn arm_aura_state_fx(
-    // Re-run on an edge inside the aura watch span and on first sight (a standing aura is a
-    // state); the full sweep runs once per DBC-resource arrival.
+    // Re-run on a packet snapshot and on first sight (a standing aura is a state); the full sweep
+    // runs once per DBC-resource arrival.
     units: Query<(Entity, &ObjectStore, Option<&crate::net::Guid>), Without<ItemObject>>,
     packets: Option<Res<crate::net::wrath_auras::PacketAuras>>,
     arrived: Query<Entity, (Added<ObjectStore>, Without<ItemObject>)>,
-    mut edges: MessageReader<FieldChanged>,
     visuals: Option<Res<SpellVisuals>>,
     spells: Option<Res<crate::ui_action::Spells>>,
     mut fx: MessageWriter<SpellKitFx>,
@@ -1001,19 +991,13 @@ pub(crate) fn arm_aura_state_fx(
     let scan = if full_sweep || packets.as_ref().is_some_and(|p| p.is_changed()) {
         units.iter().collect::<Vec<_>>()
     } else {
-        let mut due: EntityHashSet = arrived.iter().collect();
-        due.extend(
-            edges
-                .read()
-                .filter(|e| is_descriptor_aura_state_edge(e))
-                .map(|e| e.entity),
-        );
+        let due: EntityHashSet = arrived.iter().collect();
         due.into_iter().filter_map(|e| units.get(e).ok()).collect()
     };
-    for (entity, store, guid) in scan {
+    for (entity, _, guid) in scan {
         let prev = armed.entry(entity).or_default();
         // Occupied slots, deduped: one state instance per spell however many casters hold it.
-        let mut cur = state_aura_ids(store, guid, packets.as_deref());
+        let mut cur = state_aura_ids(guid, packets.as_deref());
         cur.sort_unstable();
         cur.dedup();
         for &spell_id in prev.iter() {
@@ -1282,11 +1266,6 @@ fn is_morph_spell(spells: &crate::ui_action::Spells, spell_id: u32) -> bool {
     })
 }
 
-fn is_descriptor_morph_edge(edge: &FieldChanged) -> bool {
-    edge.layout == benilla_protocol::messages::FieldLayout::Vanilla5875
-        && edge.unit_slot(Field::UnitAura, 48).is_some()
-}
-
 /// Removed spells first, entered spells last: a swap latches the form entered, even when its
 /// native packet slot precedes the removed slot. Stack, flag and clock updates are not edges.
 fn packet_morph_edges(previous: &[(u8, u32)], current: &[(u8, u32)]) -> Vec<u32> {
@@ -1303,11 +1282,10 @@ fn packet_morph_edges(previous: &[(u8, u32)], current: &[(u8, u32)]) -> Vec<u32>
         .collect()
 }
 
-/// Arm from Vanilla aura-id edges or native packet-slot diffs. First sight only seeds the
-/// packet shadow, matching descriptor creation (no edge); old spell precedes new on swaps.
+/// Arm from native packet-slot diffs. First sight only seeds the packet shadow (no edge); old
+/// spell precedes new on swaps.
 pub(super) fn arm_morph_latch(
     units: Query<(Entity, &ObjectStore, Option<&crate::net::Guid>)>,
-    mut edges: MessageReader<FieldChanged>,
     packets: Option<Res<crate::net::wrath_auras::PacketAuras>>,
     mut shadow: Local<EntityHashMap<Vec<(u8, u32)>>>,
     spells: Option<Res<crate::ui_action::Spells>>,
@@ -1320,11 +1298,6 @@ pub(super) fn arm_morph_latch(
                 latch.0.insert(entity, spell_id);
             }
         };
-        for e in edges.read().filter(|e| is_descriptor_morph_edge(e)) {
-            for spell_id in [e.old, e.new] {
-                arm(e.entity, spell_id);
-            }
-        }
         if let Some(packets) = packets.as_deref() {
             for (entity, store, guid) in &units {
                 if !store.is_unit() {

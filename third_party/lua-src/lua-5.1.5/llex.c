@@ -14,7 +14,6 @@
 
 #include "lua.h"
 
-#include "ldialect.h"
 #include "ldo.h"
 #include "llex.h"
 #include "lobject.h"
@@ -238,8 +237,8 @@ static void read_long_string (LexState *ls, SemInfo *seminfo, int sep) {
         if (skip_sep(ls) == sep) {
           save_and_next(ls);  /* skip 2nd `[' */
           cont++;
-#if LUA_COMPAT_LSTR == 2
-          if (sep == 0 && benilla_iswrath51(ls->L))
+#if LUA_COMPAT_LSTR == 1
+          if (sep == 0)
             luaX_lexerror(ls, "nesting of [[...]] is deprecated", '[');
 #endif
         }
@@ -250,10 +249,8 @@ static void read_long_string (LexState *ls, SemInfo *seminfo, int sep) {
         if (skip_sep(ls) == sep) {
           save_and_next(ls);  /* skip 2nd `]' */
 #if defined(LUA_COMPAT_LSTR) && LUA_COMPAT_LSTR == 2
-          if (!benilla_iswrath51(ls->L)) {
-            cont--;
-            if (sep == 0 && cont >= 0) break;
-          }
+          cont--;
+          if (sep == 0 && cont >= 0) break;
 #endif
           goto endloop;
         }

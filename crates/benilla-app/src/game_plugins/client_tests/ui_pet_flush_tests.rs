@@ -74,7 +74,7 @@ const FLUSH: [&str; 3] = [
 ];
 
 /// `UNIT_FIELD_SUMMONEDBY`, low word, the owner test the GO's pet leg reads (`0x6e859a`).
-const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
+const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
 
 /// Our own pet by the field the GO's pet leg reads: `SUMMONEDBY` us.
 fn summoned_pet() -> ObjectStore {
@@ -372,7 +372,7 @@ fn a_pet_gcd_sweeps_the_spellbooks_pet_tab_button() {
         world.spawn((
             crate::net::SelfPlayer,
             ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitBytes0, 3 << 8)],
             )),
         ));

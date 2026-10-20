@@ -1,7 +1,7 @@
 //! Build 12340's combo points: no update field carries them, so `SMSG_UPDATE_COMBO_POINTS`
 //! (AC `Unit::SendComboPoints`, sent on every change) is the only source. [`banked`] is the one
 //! read for `GetComboPoints`, the finisher gate and the cast ladder.
-use super::{NetHandlerApp, ObjectStore};
+use super::NetHandlerApp;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -12,13 +12,9 @@ pub(crate) struct NativeComboPoints {
     pub(crate) target: u64,
 }
 
-/// The combo count and its target: the 1.12 descriptor where it carries them, else the native
-/// packet's.
-pub(crate) fn banked(store: &ObjectStore, native: &NativeComboPoints) -> (u8, u64) {
-    match store.0.player_combo_points() {
-        Some(points) => (points, store.0.player_combo_target()),
-        None => (native.points, native.target),
-    }
+/// The combo count and its target, from `SMSG_UPDATE_COMBO_POINTS`.
+pub(crate) fn banked(native: &NativeComboPoints) -> (u8, u64) {
+    (native.points, native.target)
 }
 
 pub(super) fn register(app: &mut App) {
