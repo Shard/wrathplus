@@ -177,10 +177,7 @@ struct BindingFiles {
     character: Option<std::path::PathBuf>,
 }
 
-/// This module's systems inside [`crate::ui_script::UiInput`]. The UI key feed runs before it, so
-/// a key a focused box consumed is already in the capture gate when dispatch runs.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct BindingSet;
+pub(crate) use crate::app_core::schedule::BindingSet;
 
 pub(crate) struct BindingsPlugin;
 
