@@ -879,11 +879,7 @@ mod opening_cinematic {
         assert_eq!(rx.try_iter().count(), 0, "drained once");
         // The opcode the reference puts at `0x48c8c9`.
         assert_eq!(
-            benilla_protocol::messages::opcode::CMSG_OPENING_CINEMATIC,
-            0xf9
-        );
-        assert_eq!(
-            benilla_protocol::messages::opcode_name(0xf9),
+            benilla_protocol::wrath_opcode_names::opcode_name(0xf9),
             Some("CMSG_OPENING_CINEMATIC")
         );
     }

@@ -64,7 +64,7 @@ pub(crate) fn select_gesture(
     text: &str,
     mut laugh_word: impl FnMut(u32) -> Option<String>,
 ) -> Option<Gesture> {
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
     if !matches!(
         chat_type,
         m::CHAT_MSG_SAY | m::CHAT_MSG_YELL | m::CHAT_MSG_PARTY
@@ -130,7 +130,7 @@ pub(super) fn drive_gestures(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
 
     /// Invented words: the shipped `LAUGH_WORDn` are install content, which never enters the repo.
     fn words(n: u32) -> Option<String> {
@@ -260,8 +260,8 @@ mod tests {
         let fighter = app
             .world_mut()
             .spawn(ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitFlags, 0x800)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitFlags, 0x800)],
             )))
             .id();
         {

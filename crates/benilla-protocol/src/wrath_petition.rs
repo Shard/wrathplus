@@ -4,7 +4,7 @@
 //! signature count, `SMSG_PETITION_QUERY_RESPONSE` has one word fewer before the gender and ends with
 //! the charter type (0 guild, 1 arena team), `CMSG_PETITION_BUY` carries ten empty strings and the
 //! charter index, and `CMSG_OFFER_PETITION` leads with a word the server skips. Strict framing.
-use crate::messages::{
+use crate::types::{
     PetitionQueryResponse, PetitionRename, PetitionShowList, PetitionShowListEntry,
     PetitionShowSignatures, PetitionSignResults, PetitionSignature,
 };

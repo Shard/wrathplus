@@ -802,8 +802,8 @@ mod tests {
             // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
             let live = || {
                 crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::UnitHealth, 100)],
                 ))
             };
             world.spawn((
@@ -910,8 +910,8 @@ mod tests {
             });
             let live = || {
                 crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::UnitHealth, 100)],
                 ))
             };
             world.spawn((

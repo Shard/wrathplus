@@ -19,7 +19,7 @@
 use bevy::prelude::*;
 
 use benilla_formats::SUMMON_FLAG_UNDISMISSABLE;
-use benilla_protocol::messages::Field;
+use benilla_protocol::types::Field;
 use benilla_ui::script::{UiScript, WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 
 use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};

@@ -10,7 +10,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     power_display_scale, DamageShield, ExplorationXp, LevelUpInfo, PeriodicAuraLog, PeriodicTick,
     SpellDamageLog, SpellEnergizeLog, SpellHealLog, SpellLogMiss, XpGain,
 };

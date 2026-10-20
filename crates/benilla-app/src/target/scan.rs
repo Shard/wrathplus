@@ -248,7 +248,7 @@ impl TargetScan<'_, '_> {
         self_store: Option<&ObjectStore>,
     ) -> bool {
         let player = store.is_some_and(|s| {
-            s.0.object_type() == Some(benilla_protocol::messages::ObjectType::Player)
+            s.0.object_type() == Some(benilla_protocol::types::ObjectType::Player)
         });
         match side {
             ScanSide::EnemyPlayer => {
@@ -857,7 +857,7 @@ pub(super) fn auto_acquire_attacker(
 mod tests {
     use super::*;
     use crate::net::NetCommands;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// One `commit` through a one-shot system, returning its outcome.
     fn go(
@@ -1457,7 +1457,7 @@ mod tests {
     /// health or reaction leg, so a dead party member counts and a stranger never does.
     #[test]
     fn the_party_and_raid_modes_take_only_the_roster() {
-        use benilla_protocol::messages::GroupMemberEntry;
+        use benilla_protocol::types::GroupMemberEntry;
         use bevy::ecs::system::RunSystemOnce;
 
         const PARTY: u64 = 0x11;

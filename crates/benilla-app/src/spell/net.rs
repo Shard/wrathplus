@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use benilla_formats::LearnAnnouncement;
-use benilla_protocol::messages::{ActionButton, SpellCooldown};
+use benilla_protocol::types::{ActionButton, SpellCooldown};
 use bevy::prelude::*;
 
 use super::cast_target::CastTargeting;
@@ -1429,8 +1429,8 @@ fn spell_chain_targets(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::ACTION_KIND_SPELL;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::ACTION_KIND_SPELL;
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// A catalog holding one row, so the announce tests can name a real `Attributes` value.
     fn catalog_with(id: u32, display: benilla_formats::SpellDisplay) -> Spells {

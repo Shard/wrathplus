@@ -2,7 +2,7 @@
 //! `SMSG_TRADE_STATUS_EXTENDED` replaces one side's offer, both into [`TradeSession`]. The Lua
 //! events they cause are fired by [`super::feed_trade`], which owns the VM.
 
-use benilla_protocol::messages::{TradeStatus, TradeStatusExtended};
+use benilla_protocol::types::{TradeStatus, TradeStatusExtended};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -207,8 +207,8 @@ mod tests {
         ]
     }
 
-    fn item() -> benilla_protocol::messages::TradeItem {
-        benilla_protocol::messages::TradeItem {
+    fn item() -> benilla_protocol::types::TradeItem {
+        benilla_protocol::types::TradeItem {
             entry: 1234,
             display_id: 1,
             count: 1,

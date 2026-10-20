@@ -1,7 +1,7 @@
 //! The `fxview` fixture's driver: stands the effect-viewer's subject up in the world; the
 //! request, its knobs and the camera are [`super`]'s.
 
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use bevy::prelude::*;
 
 use benilla_assets::m2_url;
@@ -73,7 +73,7 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                    crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
                         FieldLayout::Wrath12340,
                         &[
                             (Field::UnitHealth, 100),
@@ -110,7 +110,7 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
+                    crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
                         FieldLayout::Wrath12340,
                         // `GAMEOBJECT_BYTES_1`: state byte 0, type byte 1.
                         &[(Field::GameobjectBytes1, req.go_state | (req.go_type << 8))],

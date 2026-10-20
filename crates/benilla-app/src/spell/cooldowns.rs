@@ -20,7 +20,7 @@ use bevy::prelude::*;
 
 use super::{SpellModifiers, OP_GCD};
 use benilla_formats::SpellDisplay;
-use benilla_protocol::messages::ItemUseSpell;
+use benilla_protocol::types::ItemUseSpell;
 
 pub(crate) use crate::app_core::cooldowns::{Cooldowns, Record, Timer};
 impl Timer {
@@ -466,7 +466,7 @@ impl Cooldowns {
     /// now. A permanent cooldown (the category word's top bit) arrives as 1 ms and is kept.
     pub(crate) fn seed_initial(
         &mut self,
-        cd: &benilla_protocol::messages::SpellCooldown,
+        cd: &benilla_protocol::types::SpellCooldown,
         now: Instant,
     ) {
         self.add(
@@ -497,11 +497,11 @@ impl Cooldowns {
     /// the insert leaves [`Self::generation`] where it was.
     pub(crate) fn seed_pet(
         &mut self,
-        cd: &benilla_protocol::messages::PetSpellCooldown,
+        cd: &benilla_protocol::types::PetSpellCooldown,
         spell: Option<&SpellDisplay>,
         now: Instant,
     ) {
-        use benilla_protocol::messages::PET_COOLDOWN_PERMANENT;
+        use benilla_protocol::types::PET_COOLDOWN_PERMANENT;
         let category_ms = cd.category_cd_ms & !PET_COOLDOWN_PERMANENT;
         let generation = self.generation;
         self.add(
@@ -892,7 +892,7 @@ mod tests {
 
     #[test]
     fn a_session_end_empties_the_list_so_the_next_logins_wire_is_the_whole_truth() {
-        use benilla_protocol::messages::SpellCooldown;
+        use benilla_protocol::types::SpellCooldown;
         let wire = |ms| SpellCooldown {
             spell_id: 12975, // Last Stand: 10 minutes, no category
             item_id: 0,

@@ -631,7 +631,7 @@ mod self_res_tests {
     use std::collections::HashMap;
 
     use benilla_formats::{SpellCatalog, SpellDisplay};
-    use benilla_protocol::messages::{ItemInfo, ItemSpellEntry};
+    use benilla_protocol::types::{ItemInfo, ItemSpellEntry};
     use benilla_protocol::ObjectFields;
 
     use super::{resolve_self_res, SelfRes, SPELL_EFFECT_SELF_RESURRECT};
@@ -642,16 +642,16 @@ mod self_res_tests {
     /// Reincarnation's effect spell, what the server writes into the field.
     const REINCARNATION: u32 = 21169;
     /// `PLAYER_SELF_RES_SPELL`.
-    const F_SELF_RES: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerSelfResSpell);
+    const F_SELF_RES: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerSelfResSpell);
     /// `UNIT_FIELD_HEALTH` and `UNIT_FIELD_MAXHEALTH`: `unit_is_dead()` also needs a non-zero max.
-    const F_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitHealth);
-    const F_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
+    const F_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitHealth);
+    const F_MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::UnitMaxHealth);
     /// `PLAYER_FIELD_PACK_SLOT_1`: the backpack's 16 slots, two dwords per guid.
-    const F_PACK_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerPackSlot1);
+    const F_PACK_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerPackSlot1);
 
     fn commands() -> (NetCommands, crossbeam_channel::Receiver<ClientCommand>) {
         let (tx, rx) = crossbeam_channel::unbounded();
@@ -773,8 +773,8 @@ mod self_res_tests {
             objs.spawn(
                 guid,
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
-                    &[(benilla_protocol::messages::Field::ObjectEntry, entry)],
+                    benilla_protocol::types::FieldLayout::Wrath12340,
+                    &[(benilla_protocol::types::Field::ObjectEntry, entry)],
                 ),
             );
         }

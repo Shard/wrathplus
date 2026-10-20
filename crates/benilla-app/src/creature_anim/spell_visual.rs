@@ -10,7 +10,7 @@ use bevy::ecs::entity::{EntityHashMap, EntityHashSet};
 use bevy::prelude::*;
 
 use benilla_formats::{SpellVisualCatalog, VisualKit, VisualStages, MISSILE_ATTACH_TABLE};
-use benilla_protocol::messages::{Field, ObjectType};
+use benilla_protocol::types::{Field, ObjectType};
 use benilla_protocol::EntityKind;
 
 use crate::aura_visual::AuraProc;

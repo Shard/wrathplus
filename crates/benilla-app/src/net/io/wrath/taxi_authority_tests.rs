@@ -7,7 +7,7 @@ fn spline(guid: u64, spline_id: u32) -> SessionEvent {
         transport: None,
         start: [0.0; 3],
         path: vec![[1.0; 3]],
-        facing: benilla_protocol::messages::MonsterMoveFacing::None,
+        facing: benilla_protocol::types::MonsterMoveFacing::None,
         stop: false,
         duration_ms: 1000,
         flying: true,

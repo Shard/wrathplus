@@ -586,8 +586,8 @@ impl Dispatch<'_, '_> {
             .get(entity)
             .map(|(s, _)| s.0.unit_npc_services())
             .unwrap_or_else(|_| {
-                benilla_protocol::messages::NpcFlags::from_bits(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::NpcFlags::from_bits(
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     0,
                 )
             });
@@ -609,7 +609,7 @@ impl Dispatch<'_, '_> {
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
         let status = match npc_flags.layout() {
-            benilla_protocol::messages::FieldLayout::Wrath12340 => {
+            benilla_protocol::types::FieldLayout::Wrath12340 => {
                 self.service.quest.wrath_statuses().get(&guid).copied()
             }
         };
@@ -1192,7 +1192,7 @@ pub(crate) fn resolve_go_action(
         spell_index,
         use_spell: tmpl.use_spell.as_ref().map(|u| u.spell_id),
         on_object: Some(guid),
-        is_charter: tmpl.flags & benilla_protocol::messages::ITEM_FLAG_CHARTER != 0,
+        is_charter: tmpl.flags & benilla_protocol::types::ITEM_FLAG_CHARTER != 0,
     })
 }
 
@@ -1349,10 +1349,10 @@ pub(crate) enum ServiceArm {
 /// The ladder; `None` when no consulted bit is set (`0x5f05ca`). REPAIR (bit 14) has no arm, and
 /// the reference's redundant `bits 9 AND 10` test reaches bit 9's handler, so it is omitted.
 pub(crate) fn service_arm_native(
-    npc_flags: benilla_protocol::messages::NpcFlags,
+    npc_flags: benilla_protocol::types::NpcFlags,
     quest_status: Option<u32>,
 ) -> Option<ServiceArm> {
-    use benilla_protocol::messages::NpcService as f;
+    use benilla_protocol::types::NpcService as f;
     let bit = |service| npc_flags.has(service);
     // FUN_006d1de0 tests raw status != 0 && != 1, including unknown values.
     let has_quest = !matches!(quest_status, None | Some(0 | 1));
@@ -1417,8 +1417,8 @@ pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> 
     .filter(|&(legacy, _)| bits & legacy != 0)
     .fold(0, |word, (_, bit)| word | bit);
     service_arm_native(
-        benilla_protocol::messages::NpcFlags::from_bits(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+        benilla_protocol::types::NpcFlags::from_bits(
+            benilla_protocol::types::FieldLayout::Wrath12340,
             native,
         ),
         status,
@@ -1550,7 +1550,7 @@ pub(super) fn clear(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// The `0x5f3427..` toast routing on real data: Peacebloom (lock 29: skill slot, LockType 2,
     /// Skill 0), a rank-155 vein (lock 42: LockType 3), a keyed door, a padlocked chest.
@@ -1761,7 +1761,7 @@ mod tests {
     #[test]
     fn the_service_ladder_walks_the_reference_bit_order() {
         use cursor_mode::npc_flags as f;
-        let has = Some(benilla_protocol::messages::dialog_status::AVAILABLE);
+        let has = Some(benilla_protocol::types::dialog_status::AVAILABLE);
         for (flags, arm) in [
             (f::GOSSIP, ServiceArm::Gossip),
             (f::VENDOR, ServiceArm::Vendor),

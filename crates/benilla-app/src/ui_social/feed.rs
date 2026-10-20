@@ -3,7 +3,7 @@
 //! races, classes and zones engine-side too, before Lua sees a row (`0x5ae160`).
 
 use benilla_formats::AreaTableCatalog;
-use benilla_protocol::messages::WhoEntry;
+use benilla_protocol::types::WhoEntry;
 use benilla_ui::script::{FriendInfo, SocialRequest, SocialState as VmSocial, UiScript, WhoInfo};
 use bevy::prelude::*;
 
@@ -474,7 +474,7 @@ fn guid_named(order: &[u64], name: &str, names: &NameCache) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{friend_status, WhoResults};
+    use benilla_protocol::types::{friend_status, WhoResults};
 
     fn entry(name: &str, level: u32, guild: &str) -> WhoEntry {
         WhoEntry {
@@ -668,7 +668,7 @@ mod tests {
 
     #[test]
     fn an_offline_row_carries_no_class_or_zone() {
-        let entry = benilla_protocol::messages::FriendEntry {
+        let entry = benilla_protocol::types::FriendEntry {
             guid: 7,
             status: friend_status::OFFLINE,
             area: 12,

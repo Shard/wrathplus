@@ -1,6 +1,6 @@
 //! The pet system's tests, in one module because they share their fixtures.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     PetActionEntry, PetSpells, PET_ACT_COMMAND, PET_ACT_DISABLED, PET_ACT_ENABLED, PET_ACT_PASSIVE,
     PET_ACT_REACTION, PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW,
     PET_COMMAND_STAY, PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE,
@@ -16,7 +16,7 @@ use super::drain::*;
 use super::menu::*;
 use super::unit::*;
 use super::*;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 fn packed(action: u32, kind: u8) -> PetActionEntry {
     PetActionEntry::from(action | (u32::from(kind) << 24))
@@ -628,7 +628,7 @@ fn toggle_spell() -> benilla_formats::SpellDisplay {
 
 #[test]
 fn an_active_pet_spell_draws_its_active_icon() {
-    let slot = packed(2645, benilla_protocol::messages::PET_TYPE_SPELL_FIRST);
+    let slot = packed(2645, benilla_protocol::types::PET_TYPE_SPELL_FIRST);
     let bar = state(PET_COMMAND_FOLLOW, PET_REACT_DEFENSIVE);
     let d = toggle_spell();
 
@@ -649,7 +649,7 @@ fn an_active_pet_spell_draws_its_active_icon() {
 /// The reference pushes nil when the chosen icon is not in `SpellIcon.dbc` (`0x4bdd50`).
 #[test]
 fn an_unresolvable_active_icon_hides_rather_than_falling_back() {
-    let slot = packed(2645, benilla_protocol::messages::PET_TYPE_SPELL_FIRST);
+    let slot = packed(2645, benilla_protocol::types::PET_TYPE_SPELL_FIRST);
     let bar = state(PET_COMMAND_FOLLOW, PET_REACT_DEFENSIVE);
     let d = benilla_formats::SpellDisplay {
         active_icon_id: 9999,
@@ -664,7 +664,7 @@ fn an_unresolvable_active_icon_hides_rather_than_falling_back() {
 #[test]
 fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
     use benilla_protocol::{
-        messages::{Field, FieldLayout},
+        types::{Field, FieldLayout},
         ObjectFields,
     };
     let layout = FieldLayout::Wrath12340;

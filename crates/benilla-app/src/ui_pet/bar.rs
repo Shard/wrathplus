@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     PetActionEntry, PetSpells, PET_COMMAND_ATTACK, PET_COMMAND_DISMISS, PET_COMMAND_FOLLOW,
     PET_COMMAND_STAY, PET_REACT_AGGRESSIVE, PET_REACT_DEFENSIVE, PET_REACT_PASSIVE,
 };
@@ -82,7 +82,7 @@ pub(super) fn slot_paint(
     let kind = entry.kind();
     let action = entry.action();
 
-    if let Some((name, texture)) = (kind == benilla_protocol::messages::PET_ACT_COMMAND)
+    if let Some((name, texture)) = (kind == benilla_protocol::types::PET_ACT_COMMAND)
         .then(|| command_token(action))
         .flatten()
     {
@@ -100,13 +100,13 @@ pub(super) fn slot_paint(
         };
     }
 
-    if let Some((name, texture)) = (kind == benilla_protocol::messages::PET_ACT_REACTION)
+    if let Some((name, texture)) = (kind == benilla_protocol::types::PET_ACT_REACTION)
         .then(|| reaction_token(action))
         .flatten()
     {
         // A disabled bar reads as Passive (`0x4bde3c`).
         let showing = if bar.bar_disabled() {
-            benilla_protocol::messages::PET_REACT_PASSIVE
+            benilla_protocol::types::PET_REACT_PASSIVE
         } else {
             bar.react_state()
         };

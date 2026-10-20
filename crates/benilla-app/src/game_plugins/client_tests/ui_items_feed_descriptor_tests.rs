@@ -8,7 +8,7 @@ use crate::net::SelfPlayer;
 use crate::ui_items::feed::*;
 use crate::inventory::BANK_CONTAINER;
 use crate::inventory::KEYRING_CONTAINER;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 

@@ -10,7 +10,7 @@
 use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{MirrorTimerKind, MirrorTimerStart};
+use benilla_protocol::types::{MirrorTimerKind, MirrorTimerStart};
 
 use crate::ui_action::Spells;
 use crate::ui_unit::UnitFeed;

@@ -10,7 +10,7 @@
 //! enchants on trade rows, the six non-permanent auction enchant triples, the auction search delay,
 //! hello's enabled byte, the owner notice's trailing float) are framed and dropped. The pending-
 //! sales reply has no shared event and is capture-only.
-use crate::messages::{
+use crate::types::{
     AuctionBidderNotification, AuctionCommandTail, AuctionListEntry, AuctionOwnerNotification,
     TradeItem, TradeStatus, TradeStatusExtended, TRADE_SLOT_COUNT,
 };

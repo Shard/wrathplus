@@ -253,7 +253,7 @@ fn command(
             count,
         } => {
             let (container, container_slot) = crate::ui_items::wire_pos_for(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 bag,
                 bag_slot,
             )?;
@@ -330,7 +330,7 @@ pub(crate) fn feed_guild_bank(
         let held = match request {
             WrathGuildBankRequest::PickupItem { .. } => script.cursor_item().and_then(|item| {
                 let (container, slot) = crate::ui_items::wire_pos_for(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     item.bag,
                     item.slot,
                 )?;

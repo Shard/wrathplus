@@ -318,10 +318,10 @@ pub(crate) fn current_speed(s: &MoveSpeeds, flags: u32) -> f32 {
 pub(crate) struct FieldChanged {
     pub entity: Entity,
     pub guid: u64,
-    pub kind: benilla_protocol::messages::ObjectType,
-    pub field: benilla_protocol::messages::Field,
+    pub kind: benilla_protocol::types::ObjectType,
+    pub field: benilla_protocol::types::Field,
     pub offset: u16,
-    pub layout: benilla_protocol::messages::FieldLayout,
+    pub layout: benilla_protocol::types::FieldLayout,
     pub old: u32,
     pub new: u32,
 }
@@ -329,15 +329,15 @@ pub(crate) struct FieldChanged {
 impl FieldChanged {
     /// A unit-block edge: units and players share the UNIT block.
     pub fn is_unit(&self) -> bool {
-        use benilla_protocol::messages::ObjectType;
+        use benilla_protocol::types::ObjectType;
         matches!(self.kind, ObjectType::Unit | ObjectType::Player)
     }
     /// Match a semantic scalar (the first dword of a field).
-    pub fn named_field(&self, field: benilla_protocol::messages::Field) -> bool {
+    pub fn named_field(&self, field: benilla_protocol::types::Field) -> bool {
         self.field == field && self.offset == 0
     }
     /// The dword offset in a semantic unit array, bounded by the caller's watch length.
-    pub fn unit_slot(&self, field: benilla_protocol::messages::Field, len: u16) -> Option<u16> {
+    pub fn unit_slot(&self, field: benilla_protocol::types::Field, len: u16) -> Option<u16> {
         (self.is_unit() && self.field == field && self.offset < len).then_some(self.offset)
     }
 }
@@ -345,7 +345,7 @@ impl FieldChanged {
 /// The field edges one feed saw this run, by guid and semantic array member: the reference fans
 /// a moved field out to every unit token naming the unit (`0x515e50`).
 #[derive(Default)]
-pub(crate) struct FieldEdges(HashSet<(u64, benilla_protocol::messages::Field, u16)>);
+pub(crate) struct FieldEdges(HashSet<(u64, benilla_protocol::types::Field, u16)>);
 
 impl FieldEdges {
     pub fn collect(reader: &mut MessageReader<FieldChanged>) -> Self {
@@ -354,13 +354,13 @@ impl FieldEdges {
     pub fn moved_field(
         &self,
         guid: u64,
-        field: benilla_protocol::messages::Field,
+        field: benilla_protocol::types::Field,
         offset: u16,
     ) -> bool {
         self.0.contains(&(guid, field, offset))
     }
     #[cfg(test)]
-    pub fn semantic_of(edges: &[(u64, benilla_protocol::messages::Field, u16)]) -> Self {
+    pub fn semantic_of(edges: &[(u64, benilla_protocol::types::Field, u16)]) -> Self {
         Self(edges.iter().copied().collect())
     }
 }
@@ -919,33 +919,32 @@ pub(crate) enum MoveKind {
 
 impl MoveKind {
     pub(crate) fn opcode(self) -> u16 {
-        use benilla_protocol::messages::opcode as op;
-        use benilla_protocol::wrath_ground;
+        use benilla_protocol::wrath_ground as g;
         match self {
-            MoveKind::StartForward => op::MSG_MOVE_START_FORWARD,
-            MoveKind::StartBackward => op::MSG_MOVE_START_BACKWARD,
-            MoveKind::Stop => op::MSG_MOVE_STOP,
-            MoveKind::StartStrafeLeft => op::MSG_MOVE_START_STRAFE_LEFT,
-            MoveKind::StartStrafeRight => op::MSG_MOVE_START_STRAFE_RIGHT,
-            MoveKind::StopStrafe => op::MSG_MOVE_STOP_STRAFE,
-            MoveKind::StartTurnLeft => op::MSG_MOVE_START_TURN_LEFT,
-            MoveKind::StartTurnRight => op::MSG_MOVE_START_TURN_RIGHT,
-            MoveKind::StopTurn => op::MSG_MOVE_STOP_TURN,
-            MoveKind::Jump => op::MSG_MOVE_JUMP,
-            MoveKind::FallLand => op::MSG_MOVE_FALL_LAND,
-            MoveKind::StartSwim => op::MSG_MOVE_START_SWIM,
-            MoveKind::StopSwim => op::MSG_MOVE_STOP_SWIM,
-            MoveKind::StartAscend => wrath_ground::MSG_MOVE_START_ASCEND as u16,
-            MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
-            MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
-            MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
-            MoveKind::StartPitchUp => wrath_ground::MSG_MOVE_START_PITCH_UP as u16,
-            MoveKind::StartPitchDown => wrath_ground::MSG_MOVE_START_PITCH_DOWN as u16,
-            MoveKind::StopPitch => wrath_ground::MSG_MOVE_STOP_PITCH as u16,
-            MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
-            MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
-            MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
-            MoveKind::Heartbeat => op::MSG_MOVE_HEARTBEAT,
+            MoveKind::StartForward => g::MSG_MOVE_START_FORWARD as u16,
+            MoveKind::StartBackward => g::MSG_MOVE_START_BACKWARD as u16,
+            MoveKind::Stop => g::MSG_MOVE_STOP as u16,
+            MoveKind::StartStrafeLeft => g::MSG_MOVE_START_STRAFE_LEFT as u16,
+            MoveKind::StartStrafeRight => g::MSG_MOVE_START_STRAFE_RIGHT as u16,
+            MoveKind::StopStrafe => g::MSG_MOVE_STOP_STRAFE as u16,
+            MoveKind::StartTurnLeft => g::MSG_MOVE_START_TURN_LEFT as u16,
+            MoveKind::StartTurnRight => g::MSG_MOVE_START_TURN_RIGHT as u16,
+            MoveKind::StopTurn => g::MSG_MOVE_STOP_TURN as u16,
+            MoveKind::Jump => g::MSG_MOVE_JUMP as u16,
+            MoveKind::FallLand => g::MSG_MOVE_FALL_LAND as u16,
+            MoveKind::StartSwim => g::MSG_MOVE_START_SWIM as u16,
+            MoveKind::StopSwim => g::MSG_MOVE_STOP_SWIM as u16,
+            MoveKind::StartAscend => g::MSG_MOVE_START_ASCEND as u16,
+            MoveKind::StopAscend => g::MSG_MOVE_STOP_ASCEND as u16,
+            MoveKind::StartDescend => g::MSG_MOVE_START_DESCEND as u16,
+            MoveKind::SetFly => g::CMSG_MOVE_SET_FLY as u16,
+            MoveKind::StartPitchUp => g::MSG_MOVE_START_PITCH_UP as u16,
+            MoveKind::StartPitchDown => g::MSG_MOVE_START_PITCH_DOWN as u16,
+            MoveKind::StopPitch => g::MSG_MOVE_STOP_PITCH as u16,
+            MoveKind::SetWalkMode => g::MSG_MOVE_SET_WALK_MODE as u16,
+            MoveKind::SetRunMode => g::MSG_MOVE_SET_RUN_MODE as u16,
+            MoveKind::SetFacing => g::MSG_MOVE_SET_FACING as u16,
+            MoveKind::Heartbeat => g::MSG_MOVE_HEARTBEAT as u16,
         }
     }
 }
@@ -1140,7 +1139,7 @@ pub(crate) enum ClientCommand {
         /// Build 12340's glyph socket, 0-based (`PlaceGlyphInSocket` `0x80c3e0` writes it to the
         /// pending cast's `+0x12c`); 0 for every other use.
         glyph_index: u32,
-        target: benilla_protocol::messages::UseItemTarget,
+        target: benilla_protocol::types::UseItemTarget,
     },
     /// `CMSG_OPEN_ITEM`: the server answers `SMSG_LOOT_RESPONSE` on the item's own guid; a wrapped
     /// gift instead changes entry in place with no window.
@@ -1212,7 +1211,7 @@ pub(crate) enum ClientCommand {
     /// `CMSG_CAST_SPELL` at a corpse: its bit and packed guid, a resurrection on a released player.
     CastSpellCorpse {
         spell_id: u32,
-        target: benilla_protocol::messages::CorpseTarget,
+        target: benilla_protocol::types::CorpseTarget,
         corpse_guid: u64,
     },
     /// Build 12340's `CMSG_PET_CAST_SPELL`: a cast whose caster is our pet, charm or possessed
@@ -1630,7 +1629,7 @@ pub(crate) enum ClientCommand {
         sharer: u64,
         /// The shared quest; build 12340 sends it and AC ignores it. 0 when no panel shows one.
         quest: u32,
-        msg: benilla_protocol::messages::QuestShareMsg,
+        msg: benilla_protocol::types::QuestShareMsg,
     },
     // ── Mail ──
     /// `CMSG_GET_MAIL_LIST`: the window's open and refresh.
@@ -2495,11 +2494,11 @@ mod tests {
     /// A re-create of a live object notifies like a delta.
     #[test]
     fn the_merge_emits_one_edge_per_moved_dword_and_none_for_a_first_create() {
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitHealth);
-        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitLevel);
-        use benilla_protocol::messages::ObjectType;
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitHealth);
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitLevel);
+        use benilla_protocol::types::ObjectType;
 
         let mut world = World::new();
         world.init_resource::<Messages<FieldChanged>>();
@@ -2515,7 +2514,7 @@ mod tests {
             &mut world,
             unit,
             ObjectFields::from_native_pairs(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)],
             )
             .into_created(ObjectType::Unit),
@@ -2527,7 +2526,7 @@ mod tests {
             &mut world,
             unit,
             ObjectFields::from_native_pairs(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)],
             ),
         );
@@ -2537,9 +2536,9 @@ mod tests {
                 entity: unit,
                 guid: 0xF130_0000_0000_0042,
                 kind: ObjectType::Unit,
-                field: benilla_protocol::messages::Field::UnitHealth,
+                field: benilla_protocol::types::Field::UnitHealth,
                 offset: 0,
-                layout: benilla_protocol::messages::FieldLayout::Wrath12340,
+                layout: benilla_protocol::types::FieldLayout::Wrath12340,
                 old: 100,
                 new: 0,
             }],
@@ -2551,7 +2550,7 @@ mod tests {
             &mut world,
             unit,
             ObjectFields::from_native_pairs(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[(FIELD_UNIT_LEVEL, 10)],
             )
             .into_created(ObjectType::Unit),
@@ -2559,7 +2558,7 @@ mod tests {
         let edges = drain(&mut world);
         assert_eq!(edges.len(), 1);
         assert!(
-            edges[0].named_field(benilla_protocol::messages::Field::UnitLevel)
+            edges[0].named_field(benilla_protocol::types::Field::UnitLevel)
                 && edges[0].old == 9
                 && edges[0].new == 10
         );
@@ -2572,7 +2571,7 @@ mod tests {
     /// All existing watcher roots retain their class and member after native reverse lookup.
     #[test]
     fn semantic_edges_preserve_existing_scalar_and_array_watchers() {
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
         let unit_fields = [
             Field::UnitHealth,
             Field::UnitMaxHealth,
@@ -2616,7 +2615,7 @@ mod tests {
 
     #[test]
     fn semantic_edge_keys_disambiguate_overlapping_classes_and_array_members() {
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
         // Corpse flags overlap a unit word: semantic keys must not alias them.
         let layout = FieldLayout::Wrath12340;
         let index = layout.resolve(Field::CorpseDynamicFlags).unwrap().index;

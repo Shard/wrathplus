@@ -54,11 +54,7 @@ pub(in crate::entities) fn placement(
 }
 
 /// One held slot's enchant ids folded for [`DressKey`], over the seven `CGItem` slots (`0x62ec70`).
-fn enchant_fold(
-    s: &benilla_protocol::messages::ObjectFields,
-    kind: EntityKind,
-    slot: usize,
-) -> i32 {
+fn enchant_fold(s: &benilla_protocol::types::ObjectFields, kind: EntityKind, slot: usize) -> i32 {
     if kind != EntityKind::Player {
         return 0;
     }
@@ -662,7 +658,7 @@ pub(in crate::entities) fn resolve_corpse_equipment(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use bevy::prelude::*;
 
     use super::super::HELD_SLOTS;
@@ -670,12 +666,12 @@ mod tests {
     use super::{ammo_attach, attach_id, placement, resolve_corpse_equipment, resolve_equipment};
     use crate::items::Items;
     use crate::net::{ClientCommand, NetCommands, NetEntity, ObjectStore};
-    use benilla_protocol::messages::{ItemInfo, ObjectFields};
+    use benilla_protocol::types::{ItemInfo, ObjectFields};
     use benilla_protocol::EntityKind;
 
     #[test]
     fn corpse_dresses_from_its_own_snapshot() {
-        use benilla_protocol::messages::ObjectType;
+        use benilla_protocol::types::ObjectType;
 
         let at = |field| FieldLayout::Wrath12340.index_of(field);
         /// `CORPSE_FIELD_ITEM`, each slot `DisplayInfoID | InventoryType << 24`.

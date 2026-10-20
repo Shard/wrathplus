@@ -206,7 +206,7 @@ pub(super) fn route_swing_impacts(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use bevy::ecs::message::MessageCursor;
 
     use super::*;
@@ -296,10 +296,7 @@ mod tests {
         app.world_mut()
             .entity_mut(entity)
             .insert(crate::net::ObjectStore(
-                benilla_protocol::messages::ObjectFields::from_pairs(&[(
-                    FIELD_DYNAMIC_FLAGS,
-                    flags,
-                )]),
+                benilla_protocol::types::ObjectFields::from_pairs(&[(FIELD_DYNAMIC_FLAGS, flags)]),
             ));
     }
 

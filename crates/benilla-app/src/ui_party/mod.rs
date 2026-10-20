@@ -4,7 +4,7 @@
 //! finds held: the party slots (`0x5e6a40`) and the raid roster (`0x4ba5f0`, `0x4ba550`).
 
 use crate::ui_action::UiError;
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     party_operation, party_result, patch_auras, GroupLootInfo, GroupMemberEntry,
     PartyMemberStatsInfo,
 };
@@ -515,7 +515,7 @@ mod tests {
     /// nothing, counts.
     #[test]
     fn every_raid_list_counts_a_roster_update_whatever_it_changes() {
-        use benilla_protocol::messages::member_status;
+        use benilla_protocol::types::member_status;
         let mut g = GroupState::default();
         let raid = |g: &mut GroupState, members: Vec<GroupMemberEntry>| {
             g.apply_list(1, 0, members, 1, None, Some(ME));

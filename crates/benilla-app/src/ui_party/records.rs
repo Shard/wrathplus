@@ -2,7 +2,7 @@
 //! (`0x496400`), the pet record (`0x496420`) and the party and raid pets' guids (`0x4e81d0`,
 //! `0x491960`).
 
-use benilla_protocol::messages::{ObjectFields, PartyMemberStatsInfo};
+use benilla_protocol::types::{ObjectFields, PartyMemberStatsInfo};
 
 use super::GroupState;
 
@@ -102,7 +102,7 @@ impl GroupState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{member_status, GroupMemberEntry};
+    use benilla_protocol::types::{member_status, GroupMemberEntry};
 
     const MEMBER: u64 = 0x1234;
     const PET: u64 = 0xF140_0000_0000_0077;
@@ -220,20 +220,20 @@ mod tests {
         assert_eq!(g.party_pet_guid(MEMBER, None), Some(PET));
 
         let summon = ObjectFields::from_field_slots(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
-                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+                (benilla_protocol::types::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::types::Field::UnitSummon, 1, 0),
             ],
         );
         assert_eq!(g.party_pet_guid(MEMBER, Some(&summon)), Some(0x55));
         let both = ObjectFields::from_field_slots(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitCharm, 0, 0x66),
-                (benilla_protocol::messages::Field::UnitCharm, 1, 0),
-                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
-                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+                (benilla_protocol::types::Field::UnitCharm, 0, 0x66),
+                (benilla_protocol::types::Field::UnitCharm, 1, 0),
+                (benilla_protocol::types::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::types::Field::UnitSummon, 1, 0),
             ],
         );
         assert_eq!(
@@ -258,10 +258,10 @@ mod tests {
         let g = group_with(record(member_status::ONLINE));
         assert_eq!(g.raid_pet_guid(MEMBER, None), Some(PET));
         let summon = ObjectFields::from_field_slots(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitSummon, 0, 0x55),
-                (benilla_protocol::messages::Field::UnitSummon, 1, 0),
+                (benilla_protocol::types::Field::UnitSummon, 0, 0x55),
+                (benilla_protocol::types::Field::UnitSummon, 1, 0),
             ],
         );
         assert_eq!(g.raid_pet_guid(MEMBER, Some(&summon)), Some(0x55));

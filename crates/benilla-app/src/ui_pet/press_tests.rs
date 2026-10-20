@@ -3,7 +3,7 @@
 //! the pet's global cooldown) lives in the root layer, `game_plugins::client_tests`.
 
 use benilla_formats::SpellDisplay;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 use crate::net::{ClientCommand, ObjectStore};
 

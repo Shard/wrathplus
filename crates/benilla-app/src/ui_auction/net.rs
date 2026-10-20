@@ -1,7 +1,7 @@
 //! The auction house's packet handlers: every `SMSG_AUCTION_*` becomes state on [`AuctionOpen`],
 //! which [`super::feed_auction`] turns into the window's events; nothing here touches the VM.
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     auction_action, auction_error, AuctionBidderNotification, AuctionCommandTail, AuctionListEntry,
     AuctionOwnerNotification,
 };

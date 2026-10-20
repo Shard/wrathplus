@@ -2,7 +2,7 @@
 //! (`ChatEvent`, `ChatEventKind`), the combat-log fills waiting on names, pending broadcasts and
 //! the drain's log. `ui_chat` keeps the systems and re-exports these from their old paths.
 
-use benilla_protocol::messages::{ChatMessage, LevelUpInfo};
+use benilla_protocol::types::{ChatMessage, LevelUpInfo};
 use bevy::prelude::*;
 
 /// Which of a family's four templates applies: the variant code the reference's 45 selectors

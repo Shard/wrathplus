@@ -170,9 +170,8 @@ fn drain_reputation_sends(script: Option<NonSendMut<UiScript>>, commands: Res<Ne
             },
             // No watch is -1 on the wire: slot 0 is the Bloodsail Buccaneers.
             ReputationSend::Watch(slot) => ClientCommand::SetWatchedFaction {
-                rep_list_id: slot.map_or(benilla_protocol::messages::WATCHED_FACTION_NONE, |s| {
-                    s as i32
-                }),
+                rep_list_id: slot
+                    .map_or(benilla_protocol::types::WATCHED_FACTION_NONE, |s| s as i32),
             },
         };
         let _ = commands.0.send(cmd);

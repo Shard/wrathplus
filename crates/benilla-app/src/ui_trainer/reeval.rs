@@ -7,8 +7,8 @@
 use std::collections::BTreeSet;
 
 use benilla_formats::{LearnEffect, SkillLineCatalog, SpellCatalog};
-use benilla_protocol::messages::trainer_spell_state::{GRAY, GREEN, RED};
-use benilla_protocol::messages::TrainerSpell;
+use benilla_protocol::types::trainer_spell_state::{GRAY, GREEN, RED};
+use benilla_protocol::types::TrainerSpell;
 
 /// The `trainerType` the reference gates its state-3 writes on (`ds:0xb73a08 == 1`).
 const TRAINER_TYPE_STATE_THREE: u32 = 1;

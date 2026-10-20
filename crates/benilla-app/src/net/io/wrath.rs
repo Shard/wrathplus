@@ -360,8 +360,8 @@ fn run(
         let chat_language = characters
             .iter()
             .find(|character| character.guid == guid)
-            .map_or(benilla_protocol::messages::LANGUAGE_COMMON, |character| {
-                benilla_protocol::messages::faction_language(character.race)
+            .map_or(benilla_protocol::types::LANGUAGE_COMMON, |character| {
+                benilla_protocol::types::faction_language(character.race)
             });
 
         // Lossless handoff: send login, split immediately, announce the session, then consume every
@@ -528,7 +528,7 @@ fn run(
                         SessionEvent::MoveMode {
                             guid: order.mover_guid,
                             counter: order.counter,
-                            mode: benilla_protocol::messages::MoveMode::CanFly,
+                            mode: benilla_protocol::types::MoveMode::CanFly,
                             apply: false,
                         },
                     )?;
@@ -559,7 +559,7 @@ fn run(
                         SessionEvent::MoveMode {
                             guid: order.mover_guid,
                             counter: order.counter,
-                            mode: benilla_protocol::messages::MoveMode::Root,
+                            mode: benilla_protocol::types::MoveMode::Root,
                             apply: rooted,
                         },
                     )?;
@@ -2894,10 +2894,10 @@ fn session_packet(command: ClientCommand) -> (u32, Vec<u8>) {
         } => cast(
             spell_id,
             match target {
-                benilla_protocol::messages::CorpseTarget::Ally => {
+                benilla_protocol::types::CorpseTarget::Ally => {
                     CastTarget::CorpseAlly(corpse_guid)
                 }
-                benilla_protocol::messages::CorpseTarget::Enemy => {
+                benilla_protocol::types::CorpseTarget::Enemy => {
                     CastTarget::CorpseEnemy(corpse_guid)
                 }
             },
@@ -3402,7 +3402,7 @@ fn send_force_root(
 /// speed, water walk, feather fall, hover, can-fly, knockback and the near-teleport snap. Gravity
 /// and collision height are acknowledged without one.
 fn mover_order_event(order: &MoverOrder) -> Option<SessionEvent> {
-    use benilla_protocol::messages::{JumpInfo, MoveMode, SpeedKind};
+    use benilla_protocol::types::{JumpInfo, MoveMode, SpeedKind};
     use wrath_authority::{ModeOrderKind, SpeedOrderKind};
     Some(match *order {
         MoverOrder::Speed { kind, mover_guid, counter, speed } => SessionEvent::ForceSpeedChange {
@@ -3878,7 +3878,7 @@ mod tests {
             spell_id: 8690,
             item_guid: 0x4000_0000_0000_0001,
             glyph_index: 0,
-            target: benilla_protocol::messages::UseItemTarget::SelfImplicit,
+            target: benilla_protocol::types::UseItemTarget::SelfImplicit,
         };
         assert_eq!(route(&use_item()), WrathRoute::NativeSession);
         // The cast count (byte 2) comes from the shared counter, which parallel tests also advance.
@@ -5349,7 +5349,7 @@ fn ui_timer_query_is_native_and_empty() {
 mod mover_order_tests {
     use super::tests::test_self_position;
     use super::*;
-    use benilla_protocol::messages::{MoveMode, SpeedKind};
+    use benilla_protocol::types::{MoveMode, SpeedKind};
     use benilla_protocol::wrath_authority::{ModeOrderKind, SpeedOrderKind};
 
     fn installed(guid: u64) -> MovementAuthorityHandle {
@@ -5698,7 +5698,7 @@ mod observer_teleport_tests {
                     event,
                     SessionEvent::UnitMove {
                         guid: 0x0777,
-                        verb: benilla_protocol::messages::RelayVerb::Teleport,
+                        verb: benilla_protocol::types::RelayVerb::Teleport,
                         ..
                     }
                 ));

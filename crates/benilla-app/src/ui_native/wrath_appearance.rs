@@ -299,7 +299,7 @@ fn feed_titles(
     mut catalog_sent: Local<crate::ui_script::VmMemo<bool>>,
     mut last: Local<crate::ui_script::VmMemo<Option<(Vec<u64>, u32)>>>,
 ) {
-    use benilla_protocol::messages::Field;
+    use benilla_protocol::types::Field;
     let Some(mut script) = script else {
         return;
     };

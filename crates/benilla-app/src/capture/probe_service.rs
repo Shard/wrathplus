@@ -25,7 +25,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{FieldLayout, NpcFlags, NpcService};
+use benilla_protocol::types::{FieldLayout, NpcFlags, NpcService};
 use benilla_protocol::EntityKind;
 
 use super::probes::ProbeClock;

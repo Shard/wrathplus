@@ -1,6 +1,6 @@
 use super::*;
 use benilla_formats::glyphs::{GlyphProperty, GlyphSlot};
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 const MAJOR: u32 = 0;
 const MINOR: u32 = 1;

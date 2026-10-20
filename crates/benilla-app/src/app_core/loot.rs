@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-use benilla_protocol::messages::LootItem;
+use benilla_protocol::types::LootItem;
 use bevy::prelude::*;
 
 #[derive(Default)]

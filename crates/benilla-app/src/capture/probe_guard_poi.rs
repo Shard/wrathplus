@@ -95,7 +95,7 @@ fn guard_poi_probe(
                     && store
                         .0
                         .unit_npc_services()
-                        .has(benilla_protocol::messages::NpcService::Gossip)
+                        .has(benilla_protocol::types::NpcService::Gossip)
                     && tf.translation.distance(me) < 15.0
             });
             if let Some((guid, ..)) = guard {

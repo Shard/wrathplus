@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn a_click_on_a_released_corpse_binds_the_corpse_arm() {
         use super::super::corpse_fixture as fx;
-        use benilla_protocol::messages::{CorpseTarget, UseItemTarget};
+        use benilla_protocol::types::{CorpseTarget, UseItemTarget};
         let commit = crate::spell::cast_send::CastCommit::Spell;
 
         let clicked = |word: u16,

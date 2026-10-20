@@ -9,7 +9,7 @@
 //! the word, and sends zone 0 or an empty mask for one that matches nothing.
 
 use benilla_formats::AreaTableCatalog;
-use benilla_protocol::messages::WhoRequest;
+use benilla_protocol::types::WhoRequest;
 
 use crate::ui_unit::{class_names, race_names};
 

@@ -219,7 +219,7 @@ fn a_real_hunters_block_lists_exactly_what_the_reference_client_lists() {
     let entries: Vec<SkillEntry> = BLOCK
         .iter()
         .filter_map(|&(skill_id, value, max)| {
-            let slot = benilla_protocol::messages::PlayerSkillSlot {
+            let slot = benilla_protocol::types::PlayerSkillSlot {
                 skill_id,
                 step: 0,
                 value,

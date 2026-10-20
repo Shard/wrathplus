@@ -42,7 +42,7 @@ impl Replay {
                 | SessionEvent::ObjectValues { fields, .. } => {
                     assert_eq!(
                         fields.layout(),
-                        benilla_protocol::messages::FieldLayout::Wrath12340
+                        benilla_protocol::types::FieldLayout::Wrath12340
                     );
                 }
                 _ => {}
@@ -70,7 +70,7 @@ impl Replay {
             .clone();
         assert_eq!(
             fields.layout(),
-            benilla_protocol::messages::FieldLayout::Wrath12340
+            benilla_protocol::types::FieldLayout::Wrath12340
         );
         fields
     }

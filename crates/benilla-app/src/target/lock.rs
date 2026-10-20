@@ -203,7 +203,7 @@ pub(crate) fn required_skill(slot: &LockSlot, go_level: u32) -> i32 {
 /// Whether we carry item `entry`, by the reference's own walker, [`crate::inventory::find_item`]
 /// (`0x622270 → 0x622420`, mode 0: equipment, bags, backpack and keyring).
 fn holds_item(
-    store: &benilla_protocol::messages::ObjectFields,
+    store: &benilla_protocol::types::ObjectFields,
     objects: &crate::net::Objects,
     entry: u32,
 ) -> bool {
@@ -319,10 +319,9 @@ mod tests {
     #[test]
     fn the_lock_value_tracks_the_players_skill_not_their_level() {
         use benilla_formats::{OpenLock, SkillLineCatalog, SpellCatalog, SpellDisplay};
-        use benilla_protocol::messages::ObjectFields;
-        const FIELD_PLAYER_SKILL_INFO_1_1: u16 =
-            benilla_protocol::messages::FieldLayout::Wrath12340
-                .index_of(benilla_protocol::messages::Field::PlayerSkillInfo11);
+        use benilla_protocol::types::ObjectFields;
+        const FIELD_PLAYER_SKILL_INFO_1_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerSkillInfo11);
 
         // Mining 2575, real shape: `−1 + 1 + 5.0·Δ`, baseLevel 0, LockType 3.
         let mining = SpellDisplay {
