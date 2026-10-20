@@ -7,7 +7,7 @@
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{channel_notice as n, ChannelNoticeTail};
+use benilla_protocol::types::{channel_notice as n, ChannelNoticeTail};
 use benilla_ui::script::UiScript;
 
 use super::tests::{chat_vm, lines_in_window, SPY};

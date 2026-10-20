@@ -17,7 +17,7 @@
 use std::io::{self, Cursor};
 
 use crate::events::SessionEvent;
-use crate::messages::{
+use crate::types::{
     DamageShield, DispelFailed, DispelledAura, ExecuteLog, PeriodicAuraLog, PeriodicTick,
     SpellDamageLog, SpellDispelLog, SpellEnergizeLog, SpellHealLog, SpellInstaKillLog,
     SpellLogExecute, SpellLogMiss, SpellOutcomeLog,

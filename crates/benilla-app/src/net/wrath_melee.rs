@@ -4,7 +4,7 @@
 //! Vanilla-shaped view consumed by the existing animation and combat-text renderers; it never
 //! predicts health or feeds a Wrath report back through `SessionEvent::AttackerState`.
 
-use benilla_protocol::messages::AttackerState as PresentationState;
+use benilla_protocol::types::AttackerState as PresentationState;
 use benilla_protocol::wrath_combat::{self, AttackerState};
 
 /// Project the semantics shared by the native Wrath record and the existing presentation model.

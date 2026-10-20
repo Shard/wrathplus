@@ -92,7 +92,7 @@ fn placed_gems_move_accept_names_them_and_the_result_clears_them() {
 
 #[test]
 fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
     let wrath = FieldLayout::Wrath12340;
     let chest = 0x4000_0000_0000_0011u64;

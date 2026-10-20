@@ -1,7 +1,7 @@
 //! The taxi map's packet handlers: they fill [`TaxiState`] and the flight masters' overhead
 //! status.
 
-use benilla_protocol::messages::TaxiMask;
+use benilla_protocol::types::TaxiMask;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 

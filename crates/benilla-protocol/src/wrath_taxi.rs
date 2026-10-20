@@ -2,7 +2,7 @@
 //! PlayerTaxi::AppendTaximaskTo (fourteen words, DBCStructure.h TaxiMaskSize).
 
 use crate::events::SessionEvent;
-use crate::messages::TaxiMask;
+use crate::types::TaxiMask;
 use crate::wrath_session::{u32_le, u64_le, u8_le};
 use std::io::{self, Cursor};
 

@@ -2,7 +2,7 @@
 //! chat. `SMSG_NOTIFICATION` and `SMSG_AREA_TRIGGER_MESSAGE` are `UIErrorsFrame` toasts instead,
 //! queued on [`UiErrorTexts`].
 
-use benilla_protocol::messages::{ChatMessage, CHAT_MSG_WHISPER};
+use benilla_protocol::types::{ChatMessage, CHAT_MSG_WHISPER};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -255,7 +255,7 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
 
     use super::*;
-    use benilla_protocol::messages::{CHAT_MSG_PARTY, CHAT_MSG_SYSTEM, LANGUAGE_ADDON};
+    use benilla_protocol::types::{CHAT_MSG_PARTY, CHAT_MSG_SYSTEM, LANGUAGE_ADDON};
 
     fn a_party_line(language: u32, text: &str) -> ChatMessage {
         ChatMessage {

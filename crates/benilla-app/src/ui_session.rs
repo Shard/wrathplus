@@ -209,7 +209,7 @@ mod tests {
         use crate::ui_quest::{QuestGiver, QuestView};
 
         fn detail(npc: u64) -> QuestView {
-            QuestView::Detail(benilla_protocol::messages::QuestDetails {
+            QuestView::Detail(benilla_protocol::types::QuestDetails {
                 wrath: None,
                 npc,
                 quest_id: 1,
@@ -268,7 +268,7 @@ mod tests {
                 sent.as_slice(),
                 [ClientCommand::QuestPushResult {
                     sharer: SHARER,
-                    msg: benilla_protocol::messages::QuestShareMsg::DECLINE_QUEST,
+                    msg: benilla_protocol::types::QuestShareMsg::DECLINE_QUEST,
                     ..
                 }]
             ),

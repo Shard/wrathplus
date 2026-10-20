@@ -13,7 +13,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use benilla_formats::RangeTargets;
-use benilla_protocol::messages::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
+use benilla_protocol::types::{ACTION_KIND_ITEM, ACTION_KIND_MACRO, ACTION_KIND_SPELL};
 use benilla_ui::script::{ActionState, UiScript};
 
 use crate::creature_anim::{Casting, Engaged};
@@ -192,7 +192,7 @@ pub(super) fn feed_action_state(
                 continue;
             }
         };
-        let button = &benilla_protocol::messages::ActionButton {
+        let button = &benilla_protocol::types::ActionButton {
             slot,
             action: id,
             kind,
@@ -420,13 +420,13 @@ pub(super) fn feed_action_state(
 mod tests {
     use super::*;
     use benilla_formats::SpellDisplay;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// `[rec+0x564]`'s three values (`0x4e5a50`): a live spell, a bare macro, and grey.
     #[test]
     fn a_macro_slot_resolves_through_its_bound_spell() {
         use crate::ui_macro::BoundSpell;
-        use benilla_protocol::messages::ACTION_KIND_MACRO;
+        use benilla_protocol::types::ACTION_KIND_MACRO;
 
         let mut bound = crate::ui_macro::MacroBoundSpells::default();
         bound.0.insert(3, BoundSpell::Spell(133)); // macro 3 casts Fireball
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn the_feed_pushes_a_bare_macro_as_usable() {
         use crate::ui_macro::{BoundSpell, MacroBoundSpells};
-        use benilla_protocol::messages::{ActionButton, ACTION_KIND_MACRO};
+        use benilla_protocol::types::{ActionButton, ACTION_KIND_MACRO};
 
         let (tx, _rx) = crossbeam_channel::unbounded();
         let mut app = App::new();
@@ -534,7 +534,7 @@ mod tests {
     /// (`0x4e5810`, a null target) says the button has a range.
     #[test]
     fn a_ranged_button_pads_its_range_by_the_selected_target_alone() {
-        use benilla_protocol::messages::ActionButton;
+        use benilla_protocol::types::ActionButton;
         use benilla_protocol::ObjectFields;
 
         const FIREBALL: u32 = 133;
@@ -657,7 +657,7 @@ mod tests {
     /// floor otherwise (`0x6e3648`-`0x6e36a2`).
     #[test]
     fn a_melee_button_reaches_the_moving_bonus_while_both_units_run() {
-        use benilla_protocol::messages::ActionButton;
+        use benilla_protocol::types::ActionButton;
         use benilla_protocol::ObjectFields;
 
         const HAMSTRING: u32 = 1715;
@@ -798,7 +798,7 @@ mod tests {
     /// Food/Drink spell has `Attributes` bit 28, `ATTR_NOT_IN_COMBAT` (the walk's leg 8).
     #[test]
     fn food_on_the_bar_greys_while_the_player_is_in_combat() {
-        use benilla_protocol::messages::{ActionButton, ItemUseSpell};
+        use benilla_protocol::types::{ActionButton, ItemUseSpell};
         use benilla_protocol::ObjectFields;
 
         // One ON_USE block casting 433 "Food", whose shipped `Attributes` are `0x18000100`.
@@ -823,7 +823,7 @@ mod tests {
             let mut items = Items::default();
             items.insert_template(
                 FOOD_ITEM,
-                Some(benilla_protocol::messages::ItemInfo {
+                Some(benilla_protocol::types::ItemInfo {
                     use_spell: Some(ItemUseSpell {
                         spell_id: FOOD_SPELL,
                         cooldown_ms: -1,

@@ -1567,8 +1567,8 @@ mod tests {
         }
         assert!(parse_single_result(&[], "result").is_err());
         assert!(parse_single_result(&[0x47, 0], "result").is_err());
-        assert_ne!(CHAR_CREATE_SUCCESS, crate::messages::CHAR_CREATE_SUCCESS);
-        assert_ne!(CHAR_DELETE_SUCCESS, crate::messages::CHAR_DELETE_SUCCESS);
+        assert_ne!(CHAR_CREATE_SUCCESS, crate::types::CHAR_CREATE_SUCCESS);
+        assert_ne!(CHAR_DELETE_SUCCESS, crate::types::CHAR_DELETE_SUCCESS);
     }
 
     #[test]

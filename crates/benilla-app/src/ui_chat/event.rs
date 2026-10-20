@@ -327,7 +327,7 @@ pub(crate) fn notice_token(
     state: Option<super::edit::SlotState>,
 ) -> Option<&'static str> {
     use super::edit::SlotState;
-    use benilla_protocol::messages::channel_notice as n;
+    use benilla_protocol::types::channel_notice as n;
     Some(match byte {
         // A border crossing prints "Changed Channel: [1. General - Westfall]".
         n::YOU_JOINED if state == Some(SlotState::Renamed) => "YOU_CHANGED",
@@ -463,7 +463,7 @@ pub(crate) fn default_color(kind: ChatEventKind) -> [u8; 3] {
 /// Map a wire `ChatMsg` byte to its kind; `None` for a type vmangos never sends as wire chat (the
 /// combat log) or one not modelled, which the router drops loudly.
 pub(crate) fn kind_of_wire(chat_type: u8) -> Option<ChatEventKind> {
-    use benilla_protocol::messages as m;
+    use benilla_protocol::types as m;
     use ChatEventKind as K;
     Some(match chat_type {
         m::CHAT_MSG_SAY => K::Say,
@@ -500,7 +500,7 @@ pub(crate) fn kind_of_wire(chat_type: u8) -> Option<ChatEventKind> {
 /// The arg6 flag token for a wire chat-tag byte (vmangos `Player::GetChatTag`), read as
 /// `CHAT_FLAG_<flag>`.
 pub(crate) fn flag_of_tag(chat_tag: u8) -> &'static str {
-    use benilla_protocol::messages::chat_tag as t;
+    use benilla_protocol::types::chat_tag as t;
     match chat_tag {
         t::AFK => "AFK",
         t::DND => "DND",

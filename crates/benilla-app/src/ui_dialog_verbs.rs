@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use benilla_protocol::messages::MeetingStoneNotice;
+use benilla_protocol::types::MeetingStoneNotice;
 use benilla_ui::script::{ScriptValue, UiScript};
 use bevy::ecs::system::NonSendMut;
 use bevy::prelude::*;
@@ -794,7 +794,7 @@ fn poll_area_spirit_healer(
         if !store
             .0
             .unit_npc_services()
-            .has(benilla_protocol::messages::NpcService::SpiritGuide)
+            .has(benilla_protocol::types::NpcService::SpiritGuide)
         {
             continue;
         }
@@ -946,7 +946,7 @@ fn cancel_gate_could_apply(attributes_ex: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     /// `UNIT_FIELD_LEVEL`, absolute field 34.
     const LEVEL_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);

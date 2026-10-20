@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 
 #[cfg(test)]
-use benilla_protocol::messages::{QuestDetails, QuestGiverList, QuestRequestItems};
-use benilla_protocol::messages::{QuestRewardItem, QuestShareMsg};
+use benilla_protocol::types::{QuestDetails, QuestGiverList, QuestRequestItems};
+use benilla_protocol::types::{QuestRewardItem, QuestShareMsg};
 use bevy::prelude::*;
 
 use benilla_ui::script::{
@@ -564,7 +564,7 @@ fn decline_leg_native(
     npc: u64,
     acted: bool,
     close_on_cancel: u32,
-    npc_flags: Option<benilla_protocol::messages::NpcFlags>,
+    npc_flags: Option<benilla_protocol::types::NpcFlags>,
 ) -> DeclineLeg {
     use benilla_protocol::guid;
     if acted {
@@ -577,7 +577,7 @@ fn decline_leg_native(
         return DeclineLeg::Nothing;
     };
     let unit = guid::is_creature_or_pet(npc);
-    if unit && flags.has(benilla_protocol::messages::NpcService::Gossip) {
+    if unit && flags.has(benilla_protocol::types::NpcService::Gossip) {
         return DeclineLeg::GossipHello;
     }
     if close_on_cancel != 0 || !unit {
@@ -716,7 +716,7 @@ fn drain_quest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::dialog_status;
+    use benilla_protocol::types::dialog_status;
 
     fn triple(id: u32) -> QuestRewardItem {
         QuestRewardItem {
@@ -841,7 +841,7 @@ mod tests {
             (0, 0, 0)
         );
         if let Some(QuestView::Detail(d)) = giver.view.as_mut() {
-            d.wrath = Some(benilla_protocol::messages::WrathQuestInfo {
+            d.wrath = Some(benilla_protocol::types::WrathQuestInfo {
                 auto_accept: true,
                 reward_xp: 900,
                 reward_honor: 250,
@@ -1062,8 +1062,8 @@ mod tests {
         if let Some(flags) = npc_flags {
             // 147 = `UNIT_NPC_FLAGS` (the descriptor index `unit_npc_flags()` reads).
             let fields = benilla_protocol::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitNpcFlags, flags)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitNpcFlags, flags)],
             );
             let e = app.world_mut().spawn(ObjectStore(fields)).id();
             app.world_mut()

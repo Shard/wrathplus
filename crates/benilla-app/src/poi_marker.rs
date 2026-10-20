@@ -48,7 +48,7 @@ impl PoiMarker {
     /// Replaces the live marker and starts its 8-minute clock; `map_id` is the player's map.
     pub(crate) fn set(
         &mut self,
-        wire: &benilla_protocol::messages::GossipPoi,
+        wire: &benilla_protocol::types::GossipPoi,
         map_id: u32,
         now_secs: f64,
     ) {
@@ -124,7 +124,7 @@ fn on_gossip_poi(
 /// `SMSG_GOSSIP_POI`: drops the marker. It does not end the gossip session: vmangos
 /// `Player::OnGossipSelect` sends it before deciding what the menu does next.
 fn gossip_poi(
-    poi: &benilla_protocol::messages::GossipPoi,
+    poi: &benilla_protocol::types::GossipPoi,
     marker: &mut PoiMarker,
     map_id: u32,
     now_secs: f64,
@@ -153,7 +153,7 @@ impl Plugin for PoiMarkerPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::GossipPoi;
+    use benilla_protocol::types::GossipPoi;
 
     /// The `POIIcons.blp` cell every 5875-era row ships, the red flag (`GossipDef.h:113`).
     const ICON_POI_REDFLAG: u32 = 6;

@@ -93,7 +93,7 @@ fn an_inspected_item_keeps_its_gems_and_links_with_them() {
     let mut items = Items::default();
     items.insert_template(
         40,
-        Some(benilla_protocol::messages::ItemInfo {
+        Some(benilla_protocol::types::ItemInfo {
             quality: 4,
             ..crate::items::test_template("Helm")
         }),

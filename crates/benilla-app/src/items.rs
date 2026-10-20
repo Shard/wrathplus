@@ -734,7 +734,7 @@ mod tests {
     use super::*;
 
     use super::test_template as info;
-    use benilla_protocol::messages::{
+    use benilla_protocol::types::{
         ITEM_DYNFLAG_UNLOCKED, ITEM_DYNFLAG_WRAPPED, ITEM_FLAG_LOOTABLE, ITEM_FLAG_WRAPPER,
     };
     use crossbeam_channel::TryRecvError;
@@ -968,10 +968,10 @@ mod tests {
                     &mut index,
                     GUID,
                     ObjectFields::from_fields(
-                        benilla_protocol::messages::FieldLayout::Wrath12340,
+                        benilla_protocol::types::FieldLayout::Wrath12340,
                         &[
-                            (benilla_protocol::messages::Field::ObjectEntry, 117),
-                            (benilla_protocol::messages::Field::ItemStackCount, 5),
+                            (benilla_protocol::types::Field::ObjectEntry, 117),
+                            (benilla_protocol::types::Field::ItemStackCount, 5),
                         ],
                     ),
                     false,
@@ -1007,8 +1007,8 @@ mod tests {
             .unwrap()
             .0
             .merge(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::ItemStackCount, 4)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::ItemStackCount, 4)],
             ));
         assert_eq!(world.run_system(read).unwrap(), (Some(117), Some(4), true));
         assert!(!world.run_system(read).unwrap().2);
@@ -1114,10 +1114,10 @@ mod tests {
     /// One item object with the given `ITEM_FIELD_FLAGS` and enchant slot 0.
     fn item(flags: u32, slot0: u32) -> ObjectFields {
         ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::ItemFlags, flags),
-                (benilla_protocol::messages::Field::ItemEnchantment, slot0),
+                (benilla_protocol::types::Field::ItemFlags, flags),
+                (benilla_protocol::types::Field::ItemEnchantment, slot0),
             ],
         )
     }

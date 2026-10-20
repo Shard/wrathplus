@@ -10,7 +10,7 @@
 //! The time response and the mirror timers mean what 1.12's do and feed the shared events; the
 //! time response's seconds until the daily quest reset (new in this build) is also captured. The
 //! play-time warning, inebriation and feature-system status have no 1.12 counterpart.
-use crate::messages::MirrorTimerStart;
+use crate::types::MirrorTimerStart;
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
 

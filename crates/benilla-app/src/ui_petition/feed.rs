@@ -208,7 +208,7 @@ pub(super) fn drain_petition(
                     find_item(
                         &store.0,
                         &objects,
-                        benilla_protocol::messages::CHARTER_ITEM_ENTRY,
+                        benilla_protocol::types::CHARTER_ITEM_ENTRY,
                         ItemSearch::default(),
                     )
                 });
@@ -319,11 +319,11 @@ mod tests {
     /// The player's display ids, `UNIT_FIELD_DISPLAYID` (131) and `UNIT_FIELD_NATIVEDISPLAYID`.
     fn player(display: u32, native: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::UnitDisplayId, display),
+                (benilla_protocol::types::Field::UnitDisplayId, display),
                 (
-                    benilla_protocol::messages::Field::UnitNativeDisplayId,
+                    benilla_protocol::types::Field::UnitNativeDisplayId,
                     native,
                 ),
             ],

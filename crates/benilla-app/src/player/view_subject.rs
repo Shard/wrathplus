@@ -84,7 +84,7 @@ pub(super) fn publish_view_subject(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     #[test]
     fn an_unset_or_unstreamed_far_sight_both_resolve_to_the_body() {

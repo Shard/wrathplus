@@ -152,10 +152,10 @@ fn arrive(app: &mut App, look: Look) -> Entity {
             },
             // UNIT_FIELD_BYTES_0 (36): race, gender; PLAYER_BYTES (193): face, hair style.
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[
-                    (benilla_protocol::messages::Field::UnitBytes0, bytes_0),
-                    (benilla_protocol::messages::Field::PlayerBytes, bytes),
+                    (benilla_protocol::types::Field::UnitBytes0, bytes_0),
+                    (benilla_protocol::types::Field::PlayerBytes, bytes),
                 ],
             )),
             Transform::default(),

@@ -816,11 +816,11 @@ fn the_login_one_shots_wait_for_the_in_game_ui() {
         crate::net::SelfPlayer,
         crate::net::Guid(1),
         crate::net::ObjectStore(
-            benilla_protocol::messages::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::ObjectFields::from_fields(
+                benilla_protocol::types::FieldLayout::Wrath12340,
                 &[],
             )
-            .into_created(benilla_protocol::messages::ObjectType::Player),
+            .into_created(benilla_protocol::types::ObjectType::Player),
         ),
     ));
 

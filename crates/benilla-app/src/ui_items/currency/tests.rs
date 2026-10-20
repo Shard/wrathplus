@@ -1,5 +1,5 @@
 use super::*;
-use benilla_protocol::messages::FieldLayout;
+use benilla_protocol::types::FieldLayout;
 
 pub(crate) fn fields(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
     ObjectFields::from_native_pairs(

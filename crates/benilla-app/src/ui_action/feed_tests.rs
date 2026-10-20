@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use benilla_formats::{ItemDisplay, ItemDisplayCatalog};
-use benilla_protocol::messages::{ActionButton, ItemSpellEntry, ACTION_KIND_ITEM};
+use benilla_protocol::types::{ActionButton, ItemSpellEntry, ACTION_KIND_ITEM};
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
@@ -255,7 +255,7 @@ fn an_unknown_entry_answers_once_and_settles() {
 /// spell's; the macro-table generation, beside `dirty` and the template epoch, re-resolves it.
 #[test]
 fn a_macro_slot_shows_the_macros_own_icon_and_follows_an_edit() {
-    use benilla_protocol::messages::ACTION_KIND_MACRO;
+    use benilla_protocol::types::ACTION_KIND_MACRO;
     use benilla_ui::script::{MacroState, MacroView};
 
     const SLOT: u8 = 0;

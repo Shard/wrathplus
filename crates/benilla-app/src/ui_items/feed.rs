@@ -118,7 +118,7 @@ fn bonuses_have_mod_tokens(
 /// `-1` (`0x52da01`), prints nothing for `-1` (`0x52db51`) and otherwise the absolute value
 /// (`0x52db56`): food's `-1` shows no line, a `-5` pool "5 Charges". It prints per spell slot; one
 /// line here, as no vmangos `item_template` row has two pools.
-fn charges_count(spells: &[benilla_protocol::messages::ItemSpellEntry]) -> i32 {
+fn charges_count(spells: &[benilla_protocol::types::ItemSpellEntry]) -> i32 {
     spells
         .iter()
         .find(|s| s.spell_id != 0 && s.charges != 0 && s.charges != -1)
@@ -549,7 +549,7 @@ pub(super) fn feed_player_req(
         return;
     };
     let mut skills = std::collections::HashMap::new();
-    for slot in 0..benilla_protocol::messages::PLAYER_SKILL_SLOTS {
+    for slot in 0..benilla_protocol::types::PLAYER_SKILL_SLOTS {
         let Some(s) = store.0.player_skill(slot) else {
             continue;
         };
@@ -709,7 +709,7 @@ fn resolve_slot(
         // A charter's guild name and master, keyed by the petition id the server puts in
         // enchantment slot 0 (`PetitionsHandler.cpp:126`), where the reference reads it
         // (`0x5ef337`) and its enchant lines skip it (`0x52c9e0`). The first hover sends the query.
-        petition: (t.flags & benilla_protocol::messages::ITEM_FLAG_CHARTER != 0)
+        petition: (t.flags & benilla_protocol::types::ITEM_FLAG_CHARTER != 0)
             .then(|| {
                 let id = objects
                     .object(guid)
@@ -1746,7 +1746,7 @@ mod tests {
              this return"
         );
     }
-    use benilla_protocol::messages::ItemSpellEntry;
+    use benilla_protocol::types::ItemSpellEntry;
     use benilla_ui::script::{ContainerState, UiScript};
     use std::collections::HashMap;
 

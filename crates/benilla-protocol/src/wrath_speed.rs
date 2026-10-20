@@ -8,7 +8,7 @@
 use std::io;
 
 use crate::events::SessionEvent;
-use crate::messages::SpeedKind;
+use crate::types::SpeedKind;
 use crate::wire::read_packed_guid;
 use crate::wrath_gameplay::OutboundMovement;
 

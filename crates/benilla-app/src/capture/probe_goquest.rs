@@ -228,7 +228,7 @@ fn goquest_probe(
                     && store
                         .0
                         .unit_npc_services()
-                        .has(benilla_protocol::messages::NpcService::QuestGiver)
+                        .has(benilla_protocol::types::NpcService::QuestGiver)
                     && in_range(tf)
             });
             let Some((guid, _, store, _)) = poster else {

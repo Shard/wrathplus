@@ -10,7 +10,7 @@
 //! arena charter carried in the bags, and the turn-in takes the bracket's charter
 //! (AC `PetitionMgr.h:32-34`); the update fires on those edges.
 
-use benilla_protocol::messages::{PetitionShowList, PetitionShowListEntry};
+use benilla_protocol::types::{PetitionShowList, PetitionShowListEntry};
 use benilla_ui::script::{ScriptDialect, UiScript, WrathPetitionItem, WrathPetitionVendorRequest};
 use bevy::prelude::*;
 

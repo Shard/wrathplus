@@ -1,6 +1,6 @@
 //! The vendor window's packet handlers: they fill [`MerchantOpen`] and [`MerchantErrors`].
 
-use benilla_protocol::messages::VendorItem;
+use benilla_protocol::types::VendorItem;
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
@@ -88,7 +88,7 @@ fn vendor_buy_failed(
     errors: &mut MerchantErrors,
 ) {
     debug!("net: buy failed (entry {item_entry}, reason {reason})");
-    if reason == benilla_protocol::messages::buy_result::ITEM_ALREADY_SOLD
+    if reason == benilla_protocol::types::buy_result::ITEM_ALREADY_SOLD
         && merchant.vendor == Some(vendor)
     {
         merchant.sold_out(item_entry);

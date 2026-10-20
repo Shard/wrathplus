@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 use bevy::prelude::*;
 
 use benilla_formats::{SpellDisplay, SummonProperties, SUMMON_SLOT_MINIPET};
-use benilla_protocol::messages::Field;
+use benilla_protocol::types::Field;
 use benilla_ui::script::{CompanionView, ScriptValue, UiScript, WrathCompanions, COMPANION_TYPES};
 
 use crate::names::NameCache;

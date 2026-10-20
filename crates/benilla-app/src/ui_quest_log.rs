@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{
+use benilla_protocol::types::{
     quest_flags, quest_slot_state, QuestLogSlot, QuestObjective, QuestTemplate,
     QUEST_PVP_KILL_COUNTER,
 };
@@ -94,7 +94,7 @@ impl QuestLog {
 
 /// The quest log's packet handlers.
 mod net {
-    use benilla_protocol::messages::QuestTemplate;
+    use benilla_protocol::types::QuestTemplate;
     use benilla_protocol::{SessionEvent, SessionEventKind};
     use bevy::prelude::*;
 
@@ -1057,7 +1057,7 @@ fn drain_quest_log_abandons(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout, PLAYER_QUEST_LOG_SLOTS};
+    use benilla_protocol::types::{Field, FieldLayout, PLAYER_QUEST_LOG_SLOTS};
 
     /// Quest-id dword in a Vanilla fixture; production reads packed slots through ObjectFields.
     fn quest_id_field(slot: u8) -> u16 {
@@ -1442,7 +1442,7 @@ mod tests {
             obj(0, 0, 0, 0, ""),
             obj(0, 0, 0, 0, ""),
         ]);
-        template.wrath = Some(benilla_protocol::messages::WrathQuestInfo {
+        template.wrath = Some(benilla_protocol::types::WrathQuestInfo {
             players_slain: 10,
             ..Default::default()
         });

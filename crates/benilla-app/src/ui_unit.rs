@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 use benilla_formats::ChrClasses;
-use benilla_protocol::messages::ObjectType;
+use benilla_protocol::types::ObjectType;
 use benilla_ui::script::{
     parse_unit_token, power_token, ScriptValue, UiScript, UnitBase, UnitState, UnitTokenParse,
     WornDisplay,
@@ -278,7 +278,7 @@ fn feed_known_languages(
     let store: Option<&ObjectStore> = store.as_deref();
     let has_skill_line = |line: u32| {
         store.is_some_and(|s| {
-            (0..benilla_protocol::messages::PLAYER_SKILL_SLOTS)
+            (0..benilla_protocol::types::PLAYER_SKILL_SLOTS)
                 .filter_map(|i| s.0.player_skill(i))
                 .any(|slot| u32::from(slot.skill_id) == line)
         })
@@ -1243,21 +1243,21 @@ pub(crate) fn fire_transitions(
     // `UNIT_FLAGS` (id 40), the per-field watch bridge: `0x51bbb0` registers one watch per named
     // unit field, and on any change of the dword the notifier `0x465570` fires `0x51bd50` →
     // `0x515e50`, once per token naming the unit, `arg1` the token. The stock pet bar reads it.
-    if edges.moved_field(cur.guid, benilla_protocol::messages::Field::UnitFlags, 0) {
+    if edges.moved_field(cur.guid, benilla_protocol::types::Field::UnitFlags, 0) {
         script.fire_event("UNIT_FLAGS", vec![tok()]);
     }
     // `PLAYER_FLAGS_CHANGED` (id 407, `0x5eea35` into `0x515e50`): no bit test after the XOR diff
     // (`0x5ee9b8`) and above the local-GUID gate (`0x5eea93`), so any bit of any player fires it,
     // once per token naming it (none, nothing: `0x515e63`). The sole 1.12 consumer is the target
     // frame's leader icon (`TargetFrame.lua:88-95`); 1.12 has no AFK/DND unit-frame badge.
-    if edges.moved_field(cur.guid, benilla_protocol::messages::Field::PlayerFlags, 0) {
+    if edges.moved_field(cur.guid, benilla_protocol::types::Field::PlayerFlags, 0) {
         script.fire_event("PLAYER_FLAGS_CHANGED", vec![tok()]);
     }
     // `UNIT_DYNAMIC_FLAGS` (id 137), the bridge's third arm: the watch is one dword, so any bit
     // fires it. No stock file registers it; addons do, to repaint the tapped state.
     if edges.moved_field(
         cur.guid,
-        benilla_protocol::messages::Field::UnitDynamicFlags,
+        benilla_protocol::types::Field::UnitDynamicFlags,
         0,
     ) {
         script.fire_event("UNIT_DYNAMIC_FLAGS", vec![tok()]);
@@ -1594,7 +1594,7 @@ fn feed_units(
                 // `ChatFrame.lua:1283-1320` reads them; missing gains are zeros, since stock's
                 // `if ( argN > 0 )` raises on nil.
                 let (info, talent_points) = sink.chat.take_level_up_gains(level).unzip();
-                let gain = |f: fn(&benilla_protocol::messages::LevelUpInfo) -> u32| {
+                let gain = |f: fn(&benilla_protocol::types::LevelUpInfo) -> u32| {
                     ScriptValue::Int(i64::from(info.as_ref().map_or(0, f)))
                 };
                 script.fire_event(
@@ -1787,8 +1787,8 @@ mod tests {
     use super::*;
 
     /// Derive the watcher key from the field's native descriptor position.
-    fn native_test_edges(guid: u64, field: benilla_protocol::messages::Field) -> FieldEdges {
-        use benilla_protocol::messages::{FieldLayout, ObjectType};
+    fn native_test_edges(guid: u64, field: benilla_protocol::types::Field) -> FieldEdges {
+        use benilla_protocol::types::{FieldLayout, ObjectType};
         let layout = FieldLayout::Wrath12340;
         let span = layout.resolve(field).expect("native watched field");
         let (resolved, offset) = layout.field_at(ObjectType::Player, span.index).unwrap();
@@ -1798,7 +1798,7 @@ mod tests {
 
     #[test]
     fn snapshot_pvp_booleans_use_only_their_dialects_replicated_bits() {
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
         let layout = FieldLayout::Wrath12340;
         for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
             for bit in 0..32 {
@@ -1828,8 +1828,8 @@ mod tests {
 
     #[test]
     fn wrath_power_snapshot_and_events_keep_inactive_and_runic_values() {
-        use benilla_protocol::messages::ObjectFields;
-        use benilla_protocol::messages::{Field, FieldLayout};
+        use benilla_protocol::types::ObjectFields;
+        use benilla_protocol::types::{Field, FieldLayout};
         use benilla_ui::script::ScriptDialect;
         let layout = FieldLayout::Wrath12340;
         let power = layout.resolve(Field::UnitPower).unwrap();
@@ -1928,17 +1928,17 @@ mod tests {
         use super::*;
         use crate::net::GuidIndex;
         use crate::ui_party::{GroupState, GROUPTYPE_RAID};
-        use benilla_protocol::messages::{member_status, GroupMemberEntry, PartyMemberStatsInfo};
+        use benilla_protocol::types::{member_status, GroupMemberEntry, PartyMemberStatsInfo};
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
         const ME: u64 = 0x10;
         const MY_PET: u64 = 0xF140_0000_0000_0010;
         /// `UNIT_FIELD_CHARM` and `UNIT_FIELD_SUMMON`, each a two-field guid.
-        const CHARM: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitCharm);
-        const SUMMON: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitSummon);
+        const CHARM: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitCharm);
+        const SUMMON: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitSummon);
 
         /// The `i`-th party member (1-based), `0x1000 + i`, and its pet.
         fn member(i: u64) -> u64 {
@@ -2253,7 +2253,7 @@ mod tests {
         use crate::net::GuidIndex;
         use crate::target::{Hovered, HoveredObject};
         use crate::ui_party::{GroupState, GROUPTYPE_RAID};
-        use benilla_protocol::messages::{member_status, GroupMemberEntry};
+        use benilla_protocol::types::{member_status, GroupMemberEntry};
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
@@ -2273,16 +2273,16 @@ mod tests {
         const GONE: u64 = 0xF130_0000_0000_0099;
 
         /// `OBJECT_FIELD_TYPE`, and the masks the object manager's typemask test reads.
-        const OBJECT_TYPE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::ObjectType);
+        const OBJECT_TYPE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::ObjectType);
         const PLAYER: u32 = 0x19;
         const UNIT: u32 = 0x09;
         const GAME_OBJECT: u32 = 0x21;
         /// `UNIT_FIELD_SUMMON` and `UNIT_FIELD_TARGET`, each a two-field guid.
-        const SUMMON: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitSummon);
-        const TARGET: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitTarget);
+        const SUMMON: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitSummon);
+        const TARGET: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitTarget);
 
         fn fields(kind: u32, summon: u64, target: u64) -> ObjectStore {
             let mut pairs = vec![(OBJECT_TYPE, kind)];
@@ -2518,7 +2518,7 @@ mod tests {
     /// `0x515970`), on the unit the chain names and not on the base.
     #[test]
     fn the_range_verbs_answer_for_a_target_chain() {
-        use benilla_protocol::messages::{member_status, GroupMemberEntry, ObjectFields};
+        use benilla_protocol::types::{member_status, GroupMemberEntry, ObjectFields};
 
         const ME: u64 = 0x10;
         const A: u64 = 0x1001;
@@ -2526,14 +2526,14 @@ mod tests {
         const MOB: u64 = 0xF130_0000_0000_0001;
         const A_PET: u64 = 0xF140_0000_0000_1001;
         /// `OBJECT_FIELD_TYPE`, `UNIT_FIELD_SUMMON`, `UNIT_FIELD_TARGET` and `UNIT_FIELD_FLAGS`.
-        const OBJECT_TYPE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::ObjectType);
-        const SUMMON: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitSummon);
-        const TARGET: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitTarget);
-        const FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFlags);
+        const OBJECT_TYPE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::ObjectType);
+        const SUMMON: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitSummon);
+        const TARGET: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitTarget);
+        const FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFlags);
         /// `UNIT_FIELD_FLAGS` bit 1 (NON_ATTACKABLE), which `can_attack` refuses.
         const NON_ATTACKABLE: u32 = 1 << 1;
 
@@ -2661,10 +2661,10 @@ mod tests {
     fn the_team_digit_comes_off_the_race_byte_not_the_faction_template() {
         use benilla_protocol::ObjectFields;
         /// `UNIT_FIELD_FACTIONTEMPLATE` and `UNIT_FIELD_BYTES_0` (`[obj+0x110]+0x74`, `+0x78`).
-        const FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-        const BYTES_0: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitBytes0);
+        const FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+        const BYTES_0: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitBytes0);
         /// vmangos's GM template: `FactionTemplate.dbc` group mask 0.
         const GM_TEMPLATE: u32 = 35;
 
@@ -2785,7 +2785,7 @@ mod tests {
             flags: 0x8,
             ..Default::default()
         };
-        let moved = native_test_edges(PET, benilla_protocol::messages::Field::UnitFlags);
+        let moved = native_test_edges(PET, benilla_protocol::types::Field::UnitFlags);
         assert_eq!(
             fired(
                 Some(base.clone()),
@@ -2815,7 +2815,7 @@ mod tests {
             fired(
                 Some(base.clone()),
                 base.clone(),
-                &native_test_edges(PET + 1, benilla_protocol::messages::Field::UnitFlags),
+                &native_test_edges(PET + 1, benilla_protocol::types::Field::UnitFlags),
             ),
             Vec::<String>::new()
         );
@@ -2825,8 +2825,8 @@ mod tests {
     #[test]
     fn the_control_and_far_sight_edges_fire_once_each_way() {
         use bevy::prelude::*;
-        const FIELD_PLAYER_FARSIGHT: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerFarsight);
+        const FIELD_PLAYER_FARSIGHT: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerFarsight);
         let mut app = App::new();
         app.init_resource::<crate::player::Player>()
             .add_systems(Update, (feed_player_control, feed_farsight_focus));
@@ -2992,7 +2992,7 @@ mod tests {
             ghost: flags & 0x10 != 0,
             ..base.clone()
         };
-        let moved = native_test_edges(THEM, benilla_protocol::messages::Field::PlayerFlags);
+        let moved = native_test_edges(THEM, benilla_protocol::types::Field::PlayerFlags);
         let still = FieldEdges::default();
 
         // `PLAYER_FLAGS_GROUP_LEADER`, the bit the 1.12 target frame reads.
@@ -3041,7 +3041,7 @@ mod tests {
             s.eval::<Vec<String>>("return SEEN").unwrap()
         };
         const MOB: u64 = 0xF130_0000_0000_0007;
-        let moved = native_test_edges(MOB, benilla_protocol::messages::Field::UnitDynamicFlags);
+        let moved = native_test_edges(MOB, benilla_protocol::types::Field::UnitDynamicFlags);
         let still = FieldEdges::default();
         let with = |dyn_flags: u32| UnitState {
             exists: true,
@@ -3075,8 +3075,8 @@ mod tests {
     #[test]
     fn the_self_flag_events_each_fire_on_their_own_bits() {
         use bevy::ecs::system::RunSystemOnce;
-        const FIELD_PLAYER_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerFlags);
+        const FIELD_PLAYER_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerFlags);
 
         let mut app = App::new();
         app.add_message::<FieldChanged>();
@@ -3112,10 +3112,10 @@ mod tests {
                 Guid(0x77),
                 ObjectStore(
                     benilla_protocol::ObjectFields::from_fields(
-                        benilla_protocol::messages::FieldLayout::Wrath12340,
+                        benilla_protocol::types::FieldLayout::Wrath12340,
                         &[],
                     )
-                    .into_created(benilla_protocol::messages::ObjectType::Player),
+                    .into_created(benilla_protocol::types::ObjectType::Player),
                 ),
             ))
             .id();
@@ -3192,13 +3192,13 @@ mod tests {
     /// The player-only refusal rides in the entry, so a boar in interact range is not inspectable.
     #[test]
     fn a_creature_target_enters_the_reach_map_at_its_real_distance() {
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
         /// `UNIT_FIELD_FLAGS` bit 1 (NON_ATTACKABLE), which `can_attack` refuses.
         const NON_ATTACKABLE: u32 = 1 << 1;
-        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFlags);
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFlags);
         const ME: u64 = 0x0000_0000_0000_0001;
         const BOAR: u64 = 0xF130_0000_0000_0002;
         const FRIEND: u64 = 0x0000_0000_0000_0003;
@@ -3338,19 +3338,19 @@ mod tests {
     /// `UNIT_DYNFLAG_DEAD` alone makes empty bars over real maxima, through `snapshot`'s wiring.
     #[test]
     fn a_feigning_unit_snapshots_empty_bars_over_a_real_maximum() {
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
 
         /// `UNIT_FIELD_HEALTH` / `MAXHEALTH` / `POWER1` / `MAXPOWER1` / `DYNAMIC_FLAGS`.
-        const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitHealth);
-        const POWER1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitPower);
-        const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
-        const MAXPOWER1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitMaxPower);
-        const DYNFLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitDynamicFlags);
+        const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitHealth);
+        const POWER1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitPower);
+        const MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitMaxHealth);
+        const MAXPOWER1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitMaxPower);
+        const DYNFLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitDynamicFlags);
 
         let vitals = [
             (HEALTH, 1200),
@@ -3409,13 +3409,13 @@ mod tests {
     /// The rank getter's two gates (`0x605620`), through `enrich_unit`'s wiring.
     #[test]
     fn the_rank_gate_zeroes_a_pet_or_charm() {
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
 
         const ENTRY: u32 = 12397; // Ol' Sooty, a rank-1 elite
         const GUID: u64 = (0xF130u64 << 48) | ((ENTRY as u64) << 24) | 0x42;
         /// `UNIT_FIELD_PETNUMBER`, absolute descriptor index (`OBJECT_END(6) + 0x85`).
-        const PETNUMBER: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitPetnumber);
+        const PETNUMBER: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitPetnumber);
 
         let mut names = NameCache::default();
         names.insert_creature(
@@ -3455,7 +3455,7 @@ mod tests {
 
         // The record gate: rank 0 until the creature query answers.
         let store = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[],
         ));
         let mut s = UnitState::default();
@@ -3467,7 +3467,7 @@ mod tests {
     /// (`0x10`) can then take the line away, as in the reference.
     #[test]
     fn the_faction_line_does_not_wait_for_the_creature_query() {
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
 
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
@@ -3475,10 +3475,10 @@ mod tests {
         let factions = crate::target::Factions::from_catalog(catalog);
 
         /// `UNIT_FIELD_FACTIONTEMPLATE` and `UNIT_FIELD_BYTES_0`, absolute descriptor indices.
-        const FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-        const BYTES_0: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitBytes0);
+        const FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
+        const BYTES_0: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitBytes0);
         /// Race 1 and class 1 in `UNIT_FIELD_BYTES_0` bytes 0 and 1, for the slot walk.
         const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
         /// A creature entry the cache is never told about.
@@ -3628,10 +3628,10 @@ mod tests {
     #[test]
     fn the_npc_token_follows_the_interaction_npc_and_clears_with_it() {
         use crate::ui_session::InteractNpc;
-        use benilla_protocol::messages::ObjectFields;
+        use benilla_protocol::types::ObjectFields;
 
-        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitLevel);
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitLevel);
         // Two `HIGHGUID_UNIT` guids: the high word decides the family.
         const BROG: u64 = 0xF130_0000_9700_0001;
         const DOBBINS: u64 = 0xF130_0001_D100_0002;
@@ -3704,7 +3704,7 @@ mod tests {
     /// while a different observed GUID and an unavailable target both answer nil.
     #[test]
     fn wrath_unit_is_unit_tracks_actual_player_and_target_snapshots() {
-        use benilla_protocol::messages::{ObjectFields, ObjectType};
+        use benilla_protocol::types::{ObjectFields, ObjectType};
         use benilla_ui::script::ScriptDialect;
 
         const PLAYER: u64 = 0x77;
@@ -3734,7 +3734,7 @@ mod tests {
                 Guid(PLAYER),
                 ObjectStore(
                     ObjectFields::from_fields(
-                        benilla_protocol::messages::FieldLayout::Wrath12340,
+                        benilla_protocol::types::FieldLayout::Wrath12340,
                         &[],
                     )
                     .into_created(ObjectType::Player),
@@ -3744,7 +3744,7 @@ mod tests {
         let other = app
             .world_mut()
             .spawn(ObjectStore(
-                ObjectFields::from_fields(benilla_protocol::messages::FieldLayout::Wrath12340, &[])
+                ObjectFields::from_fields(benilla_protocol::types::FieldLayout::Wrath12340, &[])
                     .into_created(ObjectType::Unit),
             ))
             .id();
@@ -3797,17 +3797,17 @@ mod tests {
     fn unit_creature_type_names_the_form_before_the_race_and_a_creature_its_template() {
         use crate::names::CreatureRecord;
         use benilla_formats::ShapeshiftForm;
-        use benilla_protocol::messages::ObjectType;
+        use benilla_protocol::types::ObjectType;
         use benilla_protocol::ObjectFields;
 
         /// `UNIT_FIELD_BYTES_0` and `UNIT_FIELD_BYTES_2` (byte 3 the form), absolute descriptor
         /// indices, and `OBJECT_FIELD_ENTRY`.
-        const BYTES_0: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitBytes0);
-        const BYTES_2: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::UnitBytes2);
-        const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::ObjectEntry);
+        const BYTES_0: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitBytes0);
+        const BYTES_2: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::UnitBytes2);
+        const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::ObjectEntry);
         const NIGHT_ELF: u32 = 4;
         const CAT_FORM: u32 = 1;
         /// A row whose type is -1 in the shipped table.
@@ -4045,11 +4045,11 @@ mod tests {
             .world_mut()
             .spawn((
                 Guid(MOB),
-                ObjectStore(benilla_protocol::messages::ObjectFields::from_native_pairs(
-                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                ObjectStore(benilla_protocol::types::ObjectFields::from_native_pairs(
+                    benilla_protocol::types::FieldLayout::Wrath12340,
                     &[(
-                        benilla_protocol::messages::FieldLayout::Wrath12340
-                            .index_of(benilla_protocol::messages::Field::UnitLevel),
+                        benilla_protocol::types::FieldLayout::Wrath12340
+                            .index_of(benilla_protocol::types::Field::UnitLevel),
                         12,
                     )],
                 )),

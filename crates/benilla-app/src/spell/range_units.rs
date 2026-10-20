@@ -3,7 +3,7 @@
 //! ([`benilla_formats::RangeUnit`]).
 
 use benilla_formats::{RangeUnit, UnitMotion};
-use benilla_protocol::messages::ObjectType;
+use benilla_protocol::types::ObjectType;
 use benilla_protocol::MoveSpeeds;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -201,12 +201,12 @@ mod tests {
 
     fn store(typemask: u32, reach: f32) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Wrath12340,
+            benilla_protocol::types::FieldLayout::Wrath12340,
             &[
-                (benilla_protocol::messages::Field::ObjectType, typemask),
-                (benilla_protocol::messages::Field::UnitHealth, 100),
+                (benilla_protocol::types::Field::ObjectType, typemask),
+                (benilla_protocol::types::Field::UnitHealth, 100),
                 (
-                    benilla_protocol::messages::Field::UnitCombatreach,
+                    benilla_protocol::types::Field::UnitCombatreach,
                     reach.to_bits(),
                 ),
             ],

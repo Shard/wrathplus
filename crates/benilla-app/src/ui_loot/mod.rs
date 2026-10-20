@@ -2,7 +2,7 @@
 //! resolved rows to the VM and fires `LOOT_OPENED`, `LOOT_SLOT_CLEARED`, `UPDATE_MASTER_LOOT_LIST`
 //! and `LOOT_CLOSED`, and [`drain_loot`] sends what the Lua asked for.
 
-use benilla_protocol::messages::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
+use benilla_protocol::types::{slot_type, ItemPushResult, LootItem, BAG_PLAYER_INVENTORY};
 use bevy::prelude::*;
 
 use benilla_ui::script::{LootRow, LootState as LootSnapshot, ScriptValue, UiScript};
@@ -88,7 +88,7 @@ impl LootState {
         self.auto_release = false; // an empty window at open stays open
         self.pending_bind_confirm = None; // `0x4c1df5`: the copier resets the stash
         self.loot_type = loot_type;
-        self.fishing = loot_type == benilla_protocol::messages::loot_type::FISHING;
+        self.fishing = loot_type == benilla_protocol::types::loot_type::FISHING;
         self.master_candidates = std::mem::take(&mut self.pending_master_candidates);
     }
 
@@ -892,7 +892,7 @@ fn close_on_move_start(
     commands: &NetCommands,
 ) -> Option<u64> {
     use benilla_protocol::guid;
-    use benilla_protocol::messages::loot_type;
+    use benilla_protocol::types::loot_type;
     let source = loot.source()?;
     if loot.loot_type == loot_type::DISENCHANTING && !loot.is_empty() {
         return None;
@@ -1064,11 +1064,11 @@ fn drain_loot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::loot_type;
-    use benilla_protocol::messages::GroupMemberEntry;
-    use benilla_protocol::messages::ItemInfo;
-    use benilla_protocol::messages::ObjectFields;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::loot_type;
+    use benilla_protocol::types::GroupMemberEntry;
+    use benilla_protocol::types::ItemInfo;
+    use benilla_protocol::types::ObjectFields;
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::EntityKind;
     use bevy::ecs::system::RunSystemOnce;
 

@@ -200,7 +200,7 @@ pub(crate) fn idle_handler(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 

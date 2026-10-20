@@ -2,13 +2,13 @@
 //! its exits alone must grey `GetPetActionsUsable`, and must stop a press, an order, both autocast
 //! toggles and the drag's writes, while a pet that trips none of them takes all of it as before.
 
-use benilla_protocol::messages::PET_STATE_BAR_DISABLED;
+use benilla_protocol::types::PET_STATE_BAR_DISABLED;
 
 use crate::target::UNIT_FLAG_POSSESSED;
 
 use super::press_tests::{owned_pet, owned_pet_with, FLAGS, ME, PET};
 use super::PetBar;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 /// `PLAYER_FARSIGHT`, low word: the view's anchor, the guid `0x4bcfbf`-`0x4bd012` holds against the
 /// pet's.
@@ -25,7 +25,7 @@ fn the_predicate_reads_exactly_the_reference_fields() {
         crate::net::ObjectStore(benilla_protocol::ObjectFields::from_pairs(fields))
     };
     let bar = PetBar {
-        spells: benilla_protocol::messages::PetSpells {
+        spells: benilla_protocol::types::PetSpells {
             pet_guid: PET,
             ..Default::default()
         },

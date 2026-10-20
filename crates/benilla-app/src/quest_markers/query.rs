@@ -84,7 +84,7 @@ pub(super) fn query_statuses(
     if store.is_changed() {
         state.fields = self_generation(&store.0);
     }
-    let wrath = store.0.layout() == benilla_protocol::messages::FieldLayout::Wrath12340;
+    let wrath = store.0.layout() == benilla_protocol::types::FieldLayout::Wrath12340;
     // Deliberate conservative superset, authorised for Wrath: the native refresh body
     // 00729f40 is proven, but its descriptor-watch chain is not. TODO trace the native
     // BYTES_2 watch registration. Coalesce own PvP/FFA edges at most once per second;
@@ -168,14 +168,14 @@ pub(super) fn query_statuses(
                 // `0x1aa` has one sender, `0x607380` (`0x6073e8`), so never on a light sweep.
                 let flags = obj.0.unit_npc_services();
                 if (per_unit || swept || pvp_refresh)
-                    && flags.has(benilla_protocol::messages::NpcService::QuestGiver)
+                    && flags.has(benilla_protocol::types::NpcService::QuestGiver)
                 {
                     let _ = commands
                         .0
                         .send(ClientCommand::QuestgiverStatusQuery { npc: guid.0 });
                 }
                 if (per_unit || pvp_refresh)
-                    && flags.has(benilla_protocol::messages::NpcService::FlightMaster)
+                    && flags.has(benilla_protocol::types::NpcService::FlightMaster)
                 {
                     let _ = commands
                         .0
@@ -231,7 +231,7 @@ fn self_generation(fields: &benilla_protocol::ObjectFields) -> u64 {
     fold(u64::from(fields.unit_health().unwrap_or(1) == 0));
     fold(u64::from(fields.player_flags()));
     fold(u64::from(fields.player_money().unwrap_or(0)));
-    for slot in 0..benilla_protocol::messages::PLAYER_QUEST_LOG_SLOTS {
+    for slot in 0..benilla_protocol::types::PLAYER_QUEST_LOG_SLOTS {
         if let Some(s) = fields.player_quest_log(slot) {
             if s.quest_id != 0 {
                 fold(u64::from(s.quest_id) ^ (u64::from(s.state) << 32));
@@ -239,7 +239,7 @@ fn self_generation(fields: &benilla_protocol::ObjectFields) -> u64 {
         }
     }
     // The reference watches the skill value word (`edx=0x84c`): a rank-up, not a bonus ticking.
-    for slot in 0..benilla_protocol::messages::PLAYER_SKILL_SLOTS {
+    for slot in 0..benilla_protocol::types::PLAYER_SKILL_SLOTS {
         if let Some(s) = fields.player_skill(slot) {
             if s.skill_id != 0 {
                 fold(u64::from(s.skill_id) ^ (u64::from(s.value) << 32));
@@ -304,7 +304,7 @@ pub(super) struct QueryState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
+    use benilla_protocol::types::{Field, FieldLayout};
 
     #[test]
     fn pvp_refresh_coalesces_edges_and_retains_pending_work() {
@@ -326,7 +326,7 @@ mod tests {
     fn wrath_own_pvp_edges_refresh_unchanged_markers_with_native_taxi_gate() {
         use crate::net::Guid;
         use crate::ui_taxi::FlightMasterStatus;
-        use benilla_protocol::messages::{Field, FieldLayout, ObjectFields};
+        use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
         // Separate worlds avoid coupling the fixture to wall-clock throttle timing.
         for own_bit in [0x100, 0x400, 0x200, 0x10000] {
             for target_ffa in [false, true] {

@@ -1,7 +1,7 @@
 //! The mailbox's packet handlers: they fill [`MailOpen`] and [`MailPending`] and send the wire
 //! re-syncs; the events fire from [`super::feed_mail`].
 
-use benilla_protocol::messages::{mail_action, mail_error, mail_message_type, MailListEntry};
+use benilla_protocol::types::{mail_action, mail_error, mail_message_type, MailListEntry};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 

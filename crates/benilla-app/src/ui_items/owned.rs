@@ -5,7 +5,7 @@
 //! bank (even while closed), and keyring. Buyback and currency are excluded. Its root
 //! starts at 23 and wraps via 0xa37b14; summation does not depend on that visit order.
 use crate::net::Objects;
-use benilla_protocol::{messages::Field, ObjectFields};
+use benilla_protocol::{types::Field, ObjectFields};
 
 /// Entry queries never need templates or category metadata.
 pub(crate) fn owned_entry_count(
@@ -51,7 +51,7 @@ fn count(
     objects: &Objects,
     matches: &mut impl FnMut(&ObjectFields) -> Option<bool>,
 ) -> Option<u64> {
-    if store.layout() != benilla_protocol::messages::FieldLayout::Wrath12340 {
+    if store.layout() != benilla_protocol::types::FieldLayout::Wrath12340 {
         return None;
     }
     let mut total = 0u64;
@@ -120,7 +120,7 @@ fn visit_item(
 mod tests {
     use super::*;
     use crate::net::{GuidIndex, ObjectStore};
-    use benilla_protocol::messages::FieldLayout;
+    use benilla_protocol::types::FieldLayout;
     use bevy::{ecs::system::SystemState, prelude::*};
     use std::collections::HashMap;
 

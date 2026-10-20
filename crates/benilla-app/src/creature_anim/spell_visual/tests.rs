@@ -15,7 +15,7 @@ use super::{
     SpellVisuals,
 };
 use crate::creature_anim::SpellGoTargets;
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 
 /// Demon Armor's shipped chain: visual 130 → precast kit 217 with anim 52, an instant self-buff.
 const SPELL: u32 = 706;
@@ -32,8 +32,8 @@ const FIRE_ANIM: u16 = 46;
 /// A streamed unit's descriptor; its auras come by packet ([`set_auras`]).
 fn aura_store() -> crate::net::ObjectStore {
     crate::net::ObjectStore(
-        benilla_protocol::messages::ObjectFields::default()
-            .into_created(benilla_protocol::messages::ObjectType::Unit),
+        benilla_protocol::types::ObjectFields::default()
+            .into_created(benilla_protocol::types::ObjectType::Unit),
     )
 }
 
@@ -1032,7 +1032,7 @@ fn the_mount_poof_puffs_on_the_build_leg_only() {
     let unit = app
         .world_mut()
         .spawn(crate::net::ObjectStore(
-            fields(2404).into_created(benilla_protocol::messages::ObjectType::Unit),
+            fields(2404).into_created(benilla_protocol::types::ObjectType::Unit),
         ))
         .id();
     app.update();
@@ -1197,7 +1197,7 @@ fn a_kit_with_a_chain_char_proc_asks_for_a_beam_from_both_dispatcher_sites() {
                 FieldLayout::Wrath12340,
                 &[(Field::UnitChannelSpell, BEAM_SPELL)],
             )
-            .into_created(benilla_protocol::messages::ObjectType::Unit),
+            .into_created(benilla_protocol::types::ObjectType::Unit),
         ))
         .id();
     app.update();
@@ -1270,8 +1270,8 @@ const BLACKCROW: RealRanged = RealRanged {
 
 /// `PLAYER_VISIBLE_ITEM_18_ENTRYID`, the item entry in equipment slot 17 (`EQUIPMENT_SLOT_RANGED`):
 /// two dwords per slot, the entry first.
-const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::messages::Field::PlayerVisibleItems)
+const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::types::Field::PlayerVisibleItems)
     + 2 * 17;
 
 /// Keeps the item layer's ask-once channel alive, so an unexpected `ItemQuery` (a template not
@@ -1465,7 +1465,7 @@ fn a_shooter_with_no_ranged_weapon_resolves_no_clip_at_all() {
         app.world_mut(),
         unit,
         benilla_protocol::ObjectFields::from_pairs(&[(VISIBLE_RANGED_ENTRY_FIELD, 0)])
-            .into_created(benilla_protocol::messages::ObjectType::Unit),
+            .into_created(benilla_protocol::types::ObjectType::Unit),
     );
     app.world_mut()
         .write_message(cast_event(unit, AUTO_SHOT, CastEventKind::Start));
@@ -1656,7 +1656,7 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
 
 #[test]
 fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
     let layout = FieldLayout::Wrath12340;
     for (kind, field, loot, level, mount) in [
         (
@@ -1753,7 +1753,7 @@ fn state_aura_ids_read_packet_snapshots_including_authoritative_empty() {
 #[test]
 fn packet_morph_latch_seeds_first_sight_then_arms_swaps_and_removals_only() {
     use benilla_protocol::{
-        messages::{Field, FieldLayout, ObjectFields, ObjectType},
+        types::{Field, FieldLayout, ObjectFields, ObjectType},
         wrath_auras::NativeAura,
     };
     let mut app = App::new();

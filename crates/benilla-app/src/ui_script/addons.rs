@@ -1879,7 +1879,7 @@ mod tests {
     /// Seat the `SMSG_ADDON_INFO` reply hiding the secure addons, as world entry does: the Lua
     /// index space does not exist until the server answers, as in the reference.
     fn seat_stock_addon_reply(script: &mut UiScript) {
-        let hidden: Vec<String> = benilla_protocol::messages::STOCK_SECURE_ADDONS
+        let hidden: Vec<String> = benilla_protocol::types::STOCK_SECURE_ADDONS
             .iter()
             .map(|a| a.name.to_string())
             .collect();

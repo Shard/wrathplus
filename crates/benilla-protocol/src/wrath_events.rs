@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::events::{EntityKind, MoveSpeeds, SessionEvent};
-use crate::messages::FieldLayout;
-use crate::messages::{
+use crate::types::FieldLayout;
+use crate::types::{
     AttackSwingError, CreateSpline, MoverState, ObjectFields, ObjectType as VanillaObjectType,
     TransportPose,
 };
@@ -73,7 +73,7 @@ pub enum WrathEvent {
     /// The native refusal distinguishes dead targets from otherwise unattackable targets.
     AttackSwingRefusal(AttackSwingRefusal),
     /// Wrath's overkill, school-mask blocks, conditional arrays, `u8` target state, and hit-bit
-    /// meanings are incompatible with the Vanilla [`crate::messages::AttackerState`].
+    /// meanings are incompatible with the Vanilla [`crate::types::AttackerState`].
     AttackerState(Box<AttackerState>),
     /// Retained alongside the equivalent neutral event for native consumers.
     AiReaction(AiReaction),

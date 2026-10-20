@@ -5,7 +5,7 @@ use super::*;
 use crate::net::ClientCommand;
 use crate::ui_native_who::NativeWhoPackets;
 use benilla_protocol::{
-    messages::{WhoEntry, WhoResults},
+    types::{WhoEntry, WhoResults},
     wrath_who::Packet,
 };
 

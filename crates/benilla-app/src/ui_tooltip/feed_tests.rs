@@ -1,6 +1,6 @@
 //! The feed re-pushing only the views a change reaches, through [`feed_spell_tooltips`] itself.
 
-use benilla_protocol::messages::{Field, FieldLayout};
+use benilla_protocol::types::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 
@@ -311,8 +311,8 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
         .spawn((
             speeds,
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Wrath12340,
-                &[(benilla_protocol::messages::Field::UnitHealth, 100)],
+                benilla_protocol::types::FieldLayout::Wrath12340,
+                &[(benilla_protocol::types::Field::UnitHealth, 100)],
             )),
         ))
         .id();

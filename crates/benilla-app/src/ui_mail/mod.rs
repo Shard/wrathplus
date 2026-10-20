@@ -10,7 +10,7 @@
 //! the icon because opening a letter arms a deferred refresh (`[0xb6efcc]`) and the mailbox close
 //! re-asks the server.
 
-use benilla_protocol::messages::{mail_error, MailListEntry};
+use benilla_protocol::types::{mail_error, MailListEntry};
 use bevy::prelude::*;
 
 use benilla_ui::script::{MailInboxRow, ScriptValue, StationeryView, UiScript};
@@ -701,7 +701,7 @@ fn drain_mail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::mail_message_type;
+    use benilla_protocol::types::mail_message_type;
 
     #[test]
     fn next_mail_query_uses_the_native_writer_and_updates_pending() {

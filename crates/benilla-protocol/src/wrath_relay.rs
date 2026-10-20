@@ -9,7 +9,7 @@
 //! and dropped. Spline elevation and the pending-* bits stay fenced.
 
 use crate::events::SessionEvent;
-use crate::messages::{JumpInfo, RelayVerb};
+use crate::types::{JumpInfo, RelayVerb};
 use crate::wrath_gameplay::{CodecError, OutboundMovement};
 
 const MSG_MOVE_START_FORWARD: u16 = 0x00b5;
@@ -225,7 +225,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> Result<SessionEvent, CodecError> {
         verb: RelayVerb::of(opcode),
         fall_time: movement.fall_time,
         jump,
-        transport: movement.transport.map(|t| crate::messages::TransportPose {
+        transport: movement.transport.map(|t| crate::types::TransportPose {
             guid: t.guid,
             pos: crate::wire::Vector3d {
                 x: t.position.x,

@@ -30,7 +30,7 @@ const SPELL_STUCK: u32 = 7355;
 #[derive(Resource, Default)]
 pub(crate) struct GmTicketState {
     /// The open ticket; `None` is the ordinary "no ticket" answer.
-    ticket: Option<Box<benilla_protocol::messages::GmTicket>>,
+    ticket: Option<Box<benilla_protocol::types::GmTicket>>,
     /// One per `SMSG_GMTICKET_GETTICKET`, wrapping.
     answers: u32,
     /// Re-asks the engine owes ([`Self::note_write_landed`]), sent by [`drain_gm_ticket`].
@@ -95,7 +95,7 @@ fn locale_id(locale: &str) -> u32 {
 
 impl GmTicketState {
     /// `SMSG_GMTICKET_GETTICKET`: replace the ticket and count the answer, an empty one too.
-    pub(crate) fn answer(&mut self, ticket: Option<Box<benilla_protocol::messages::GmTicket>>) {
+    pub(crate) fn answer(&mut self, ticket: Option<Box<benilla_protocol::types::GmTicket>>) {
         self.ticket = ticket;
         self.answers = self.answers.wrapping_add(1);
     }
@@ -186,7 +186,7 @@ fn feed_gm_ticket(
 /// has the text first and the reference's handler reorders as it fires, so the decoder keeps wire
 /// order. No ticket is a single `0`: `HelpFrameOpenTicket_OnEvent` tests `arg1 and arg1 ~= 0`
 /// (`HelpFrame.lua:403`), and its else branch resets the form (`:468-475`).
-fn update_ticket_args(ticket: Option<&benilla_protocol::messages::GmTicket>) -> Vec<ScriptValue> {
+fn update_ticket_args(ticket: Option<&benilla_protocol::types::GmTicket>) -> Vec<ScriptValue> {
     let Some(t) = ticket else {
         return vec![ScriptValue::Int(0)];
     };
@@ -471,7 +471,7 @@ impl Plugin for UiGmTicketPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::GmTicket;
+    use benilla_protocol::types::GmTicket;
 
     fn ticket() -> Box<GmTicket> {
         Box::new(GmTicket {

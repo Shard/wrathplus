@@ -12,7 +12,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::{BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST};
+use benilla_protocol::types::{BAG_PLAYER_INVENTORY, SLOT_PACK_FIRST};
 use benilla_protocol::EntityKind;
 use benilla_ui::script::UiScript;
 
@@ -215,7 +215,7 @@ fn bank_probe(
                         || u_store
                             .0
                             .unit_npc_services()
-                            .has(benilla_protocol::messages::NpcService::Banker))
+                            .has(benilla_protocol::types::NpcService::Banker))
                     && tf.translation.distance(me) < SCAN_RANGE
             });
             if let Some((guid, ..)) = banker {

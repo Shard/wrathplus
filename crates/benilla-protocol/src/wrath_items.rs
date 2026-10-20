@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use crate::messages::{ItemDamage, ItemInfo, ItemSpellEntry, ItemUseSpell};
+use crate::types::{ItemDamage, ItemInfo, ItemSpellEntry, ItemUseSpell};
 
 pub const MAX_ITEM_STATS: u32 = 10;
 const ITEM_DAMAGE_BLOCKS: usize = 2;

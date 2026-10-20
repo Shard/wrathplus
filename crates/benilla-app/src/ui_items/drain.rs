@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 
-use benilla_protocol::messages::BAG_PLAYER_INVENTORY;
+use benilla_protocol::types::BAG_PLAYER_INVENTORY;
 use benilla_ui::script::{UiScript, EQUIPMENT_BAG};
 
 use crate::items::Items;
@@ -76,7 +76,7 @@ pub(super) fn drain_container_autoequips(
         .iter()
         .next()
         .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for (bag, slot) in script.take_container_autoequips() {
         let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
             debug!("ui_items: autoequip ({bag}, {slot}) out of range — ignored");
@@ -117,7 +117,7 @@ pub(super) fn drain_bag_autostores(
         .iter()
         .next()
         .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for a in script.take_bag_autostores() {
         let (Some((src_bag, src_slot)), Some((dst_bag, _))) = (
             wire_pos_for(layout, a.src_bag, a.src_slot),
@@ -205,7 +205,7 @@ impl ScriptItemUse<'_, '_> {
                     t.use_spell_index().unwrap_or(0),
                     t.use_spell.map(|u| u.spell_id),
                     Some(entry),
-                    t.flags & benilla_protocol::messages::ITEM_FLAG_CHARTER != 0,
+                    t.flags & benilla_protocol::types::ITEM_FLAG_CHARTER != 0,
                 ))
             })
             .unwrap_or((None, 0, 0, None, None, false));
@@ -271,7 +271,7 @@ impl ScriptItemUse<'_, '_> {
             .iter()
             .next()
             .map(|s| s.0.layout())
-            .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+            .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
         let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
             debug!("ui_items: UseContainerItem({bag}, {slot}) out of range — ignored");
             return;
@@ -323,7 +323,7 @@ impl ScriptItemUse<'_, '_> {
                     begins_gift_wrap: t.begins_gift_wrap(inst_flags),
                     opens_loot: t.opens_loot(),
                     page_text: t.page_text,
-                    is_charter: t.flags & benilla_protocol::messages::ITEM_FLAG_CHARTER != 0,
+                    is_charter: t.flags & benilla_protocol::types::ITEM_FLAG_CHARTER != 0,
                 })
             });
 
@@ -579,7 +579,7 @@ pub(super) fn drain_container_moves(
     let store = self_q.iter().next();
     let layout = store
         .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     // A left-click that spent an armed paper: paper first, then the target. Eligibility is the
     // server's, refused with an `ERR_CANT_WRAP_*` reason.
     for (gift_bag, gift_slot, item_bag, item_slot) in script.take_container_wraps() {
@@ -623,7 +623,7 @@ pub(super) fn drain_container_moves(
 /// bank bags (Vanilla 63..=68, Wrath 67..=73) of the player's own array;
 /// the backpack and keyring are not.
 fn is_equip_position_for(
-    layout: benilla_protocol::messages::FieldLayout,
+    layout: benilla_protocol::types::FieldLayout,
     bag_index: u8,
     slot: u8,
 ) -> bool {
@@ -650,7 +650,7 @@ pub(crate) fn send_container_move(
 ) -> bool {
     let layout = store
         .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     {
         let (Some(src), Some(dst)) = (
             wire_pos_for(layout, mv.src_bag, mv.src_slot),
@@ -760,7 +760,7 @@ pub(super) fn drain_container_destroys(
     let store = self_q.iter().next();
     let layout = store
         .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340);
+        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for (bag, slot, count) in script.take_container_destroys() {
         let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
             debug!("ui_items: destroy ({bag}, {slot}) out of range — ignored");
@@ -802,8 +802,8 @@ fn run_container_clicks(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout};
-    use benilla_protocol::messages::{ItemInfo, ObjectFields, ITEM_FLAG_LOOTABLE};
+    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::{ItemInfo, ObjectFields, ITEM_FLAG_LOOTABLE};
 
     /// Small Barnacled Clam.
     const CLAM_ENTRY: u32 = 7973;
@@ -1030,8 +1030,8 @@ mod tests {
     /// through `PickupInventoryItem`.
     fn click_to_repair_the_sword(money: u32, worn: bool) -> RepairClick {
         use crate::ui_merchant::purse_fixture::{player, record_errors, seat, SWORD_ENTRY};
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
         let (mut app, rx) = open_the_clam();
         while rx.try_recv().is_ok() {} // drain the clam's own send
         seat(app.world_mut());
@@ -1156,7 +1156,7 @@ mod tests {
         items.insert_template(
             CLAM_ENTRY,
             Some(ItemInfo {
-                flags: benilla_protocol::messages::ITEM_FLAG_WRAPPER,
+                flags: benilla_protocol::types::ITEM_FLAG_WRAPPER,
                 ..crate::items::test_template("Red Ribboned Wrapping Paper")
             }),
         );
@@ -1295,7 +1295,7 @@ pub(super) fn drain_bind_on_use_confirms(
 #[cfg(test)]
 mod bind_confirm_tests {
     use super::*;
-    use benilla_protocol::messages::{ItemInfo, ObjectFields};
+    use benilla_protocol::types::{ItemInfo, ObjectFields};
     use benilla_ui::script::{ContainerSlot, ContainerState};
     use bevy::ecs::system::RunSystemOnce;
 
@@ -1303,13 +1303,13 @@ mod bind_confirm_tests {
     const FLURRY_AXE: u32 = 871;
     const AXE_GUID: u64 = 0x4000_0000_0000_0871;
     /// `ITEM_FIELD_FLAGS` (field 21); bit 0 is soulbound (`0x5da2c0`).
-    const F_ITEM_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ItemFlags);
+    const F_ITEM_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ItemFlags);
     /// `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1's guid pair.
-    const F_PACK_SLOT_1: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::PlayerPackSlot1);
-    const F_OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::messages::Field::ObjectEntry);
+    const F_PACK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::PlayerPackSlot1);
+    const F_OBJECT_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::types::Field::ObjectEntry);
 
     fn load_ui(s: &UiScript) {
         // Chain files, so through the chain-aware reader.
@@ -1815,7 +1815,7 @@ mod bind_confirm_tests {
         template.quality = 3;
         template.inventory_type = 0; // not equippable, so the equip fork above cannot claim it
         if !no_use_spell {
-            template.spells = vec![benilla_protocol::messages::ItemSpellEntry {
+            template.spells = vec![benilla_protocol::types::ItemSpellEntry {
                 index: 0,
                 spell_id: 4321,
                 trigger: 0, // ON_USE
@@ -1824,7 +1824,7 @@ mod bind_confirm_tests {
                 category: 0,
                 category_cooldown_ms: -1,
             }];
-            template.use_spell = Some(benilla_protocol::messages::ItemUseSpell {
+            template.use_spell = Some(benilla_protocol::types::ItemUseSpell {
                 spell_id: 4321,
                 cooldown_ms: -1,
                 category: 0,

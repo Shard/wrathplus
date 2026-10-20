@@ -7,7 +7,7 @@ use benilla_formats::{
     SkillLineCatalog, SpellCatalog, SPELL_ATTR_IS_TRADESKILL, SPELL_EFFECT_CREATE_ITEM,
     SPELL_EFFECT_LEARN_PET_SPELL, SPELL_EFFECT_LEARN_SPELL, SPELL_EFFECT_SKILL_STEP,
 };
-use benilla_protocol::messages::trainer_spell_state;
+use benilla_protocol::types::trainer_spell_state;
 use benilla_ui::script::{TrainerServiceCategory, TrainerTooltip, TRAINER_GROUP_KNOWN};
 
 use crate::entities::ItemDisplays;
