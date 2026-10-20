@@ -154,21 +154,13 @@ pub(crate) struct UiPassState {
 #[derive(Resource, Default)]
 pub(crate) struct PointerOverUiPanel(pub(crate) bool);
 
-/// The player-UI feed phase, after [`WorldStage::Net`] and ungated (`UnitFeed` is the gated
-/// sub-phase): every push this frame's tick must see, as in the reference's frame, where packet
-/// dispatch precedes every `FrameScript_SignalEvent` and both precede `OnUpdate`. Every VM holder
-/// in `Update` is in this set or `.after(UiInput)`, as `game_plugins::schedule_tests` checks.
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct UiFeed;
+pub(crate) use crate::app_core::schedule::UiFeed;
 
 /// The player-UI paint pass, after the camera so world-anchored widgets use this frame's view.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct UiPaint;
 
-/// The player-UI input pass (tick, hit-test, handlers), before [`WorldStage::Input`] so its
-/// [`PlayerUiHover`] reaches `PointerOverUi` before `player::control` reads it.
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct UiInput;
+pub(crate) use crate::app_core::schedule::UiInput;
 
 /// The frame's atomic (`Instant`, `GetTime`) pair, the one base for mapping a store `Instant` onto
 /// `GetTime`: `anchor`'s steps are the VM clock's deltas, so a mapped start is stable frame to

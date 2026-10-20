@@ -6,7 +6,7 @@ use benilla_formats::{load_m2_mesh, open_chain};
 #[test]
 fn bonfire_glow_carries_warm_m2color_tint() {
     let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = open_chain(&data).expect("open vanilla patch chain");
+    let mut chain = open_chain(&data).expect("open patch chain");
     let subs = load_m2_mesh(
         &mut chain,
         "World\\Kalimdor\\Orgrimmar\\PassiveDoodads\\OrgrimmarBonfire\\OrgrimmarBonfire01.m2",
@@ -15,7 +15,7 @@ fn bonfire_glow_carries_warm_m2color_tint() {
 
     let glow = subs
         .iter()
-        .find(|s| s.additive && s.billboard.is_some())
+        .find(|s| s.additive && s.welded_billboard)
         .expect("bonfire has an additive billboard glow card");
     assert_eq!(
         glow.vertex_colors.len(),

@@ -36,11 +36,7 @@ pub(crate) enum ClientState {
     InWorld,
 }
 
-/// The one "only while in the world" gate; a member's own `run_if` ANDs with it. Configured for
-/// `Update` only: a set's conditions are per schedule, so a member elsewhere needs the set
-/// configured there too.
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct InWorldGated;
+pub(crate) use crate::app_core::schedule::InWorldGated;
 
 /// The character-select subsystem: the state machine + the select screen.
 pub(crate) struct CharSelectPlugin {

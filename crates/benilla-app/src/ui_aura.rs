@@ -80,10 +80,7 @@ pub(crate) struct PlayerAuraCache {
     auras: Vec<CachedAura>,
 }
 
-/// [`feed_auras`] fires `PLAYER_AURAS_CHANGED` and `UNIT_AURA` inline, so a feed whose state their
-/// handlers re-read (the stance feed) runs `.before(AuraEvents)` or they read last frame's.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct AuraEvents;
+pub(crate) use crate::app_core::schedule::AuraEvents;
 
 /// Adds the aura feed and the `CancelPlayerBuff`/`CancelTrackingBuff` drain.
 pub(crate) struct UiAuraPlugin;

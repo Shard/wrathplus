@@ -12,7 +12,7 @@
 //!
 //! Labelled: the day list's order (`0x5b9260`) is App's (holidays, then by time); a holiday's
 //! sequence split, the raid-reset projection and the status-option filter (`0x5f26f0`) are not
-//! traced; `CalendarGetMaxCreateDate` (`0x5b7a80`) answers a year from today.
+//! traced; `CalendarGetMaxCreateDate` (`0x5b7a80`) answers the first of the month thirteen months on.
 
 mod bindings;
 mod date;

@@ -59,40 +59,53 @@ const ANNOUNCEMENT: u32 = 0x40;
 const SEND_ADD: u8 = 1;
 const SEND_COPY: u8 = 2;
 
-/// AzerothCore's `CalendarError` to its GlobalStrings key; the `_S` keys take the result's name.
-fn error_key(error: u32) -> Option<&'static str> {
+/// What `SMSG_CALENDAR_COMMAND_RESULT`'s line formats its key with (`0x5b9960`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ErrorArg {
+    /// The bare template.
+    None,
+    /// A constant the client passes for its `%d` (the limits it knows).
+    Count(u32),
+    /// The result's name, for its `%s`.
+    Name,
+}
+
+/// Build 12340's error switch (`0x6cd380`): AzerothCore's `CalendarError` to the GlobalStrings key
+/// and the argument `0x5b9960` formats it with; codes it has no arm for raise nothing.
+fn error_key(error: u32) -> Option<(&'static str, ErrorArg)> {
+    use ErrorArg::{Count, Name, None as Bare};
     Some(match error {
-        1 => "CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED",
-        2 => "CALENDAR_ERROR_EVENTS_EXCEEDED",
-        3 => "CALENDAR_ERROR_SELF_INVITES_EXCEEDED",
-        4 => "CALENDAR_ERROR_OTHER_INVITES_EXCEEDED",
-        5 => "CALENDAR_ERROR_PERMISSIONS",
-        6 => "CALENDAR_ERROR_EVENT_INVALID",
-        7 => "CALENDAR_ERROR_NOT_INVITED",
-        8 => "CALENDAR_ERROR_INTERNAL",
-        9 => "ERR_GUILD_PLAYER_NOT_IN_GUILD_S",
-        10 => "CALENDAR_ERROR_ALREADY_INVITED_TO_EVENT_S",
-        11 => "ERR_BAD_PLAYER_NAME_S",
-        12 => "CALENDAR_ERROR_NOT_ALLIED",
-        13 => "CALENDAR_ERROR_IGNORED",
-        14 => "CALENDAR_ERROR_INVITES_EXCEEDED",
-        16 => "CALENDAR_ERROR_INVALID_DATE",
-        17 => "CALENDAR_ERROR_INVALID_TIME",
-        19 => "CALENDAR_ERROR_NEEDS_TITLE",
-        20 => "CALENDAR_ERROR_EVENT_PASSED",
-        21 => "CALENDAR_ERROR_EVENT_LOCKED",
-        22 => "CALENDAR_ERROR_DELETE_CREATOR_FAILED",
-        24 => "ERR_SYSTEM_DISABLED",
-        25 => "ERR_RESTRICTED_ACCOUNT",
-        26 => "CALENDAR_ERROR_ARENA_EVENTS_EXCEEDED",
-        27 => "CALENDAR_ERROR_RESTRICTED_LEVEL",
-        28 => "ERR_USER_SQUELCHED",
-        29 => "CALENDAR_ERROR_NO_INVITE",
-        36 => "CALENDAR_ERROR_EVENT_WRONG_SERVER",
-        37 => "CALENDAR_ERROR_INVITE_WRONG_SERVER",
-        38 => "CALENDAR_ERROR_NO_GUILD_INVITES",
-        39 => "CALENDAR_ERROR_INVALID_SIGNUP",
-        40 => "CALENDAR_ERROR_NO_MODERATOR",
+        1 => ("CALENDAR_ERROR_GUILD_EVENTS_EXCEEDED", Count(100)),
+        2 => ("CALENDAR_ERROR_EVENTS_EXCEEDED", Count(30)),
+        3 => ("CALENDAR_ERROR_SELF_INVITES_EXCEEDED", Bare),
+        4 => ("CALENDAR_ERROR_OTHER_INVITES_EXCEEDED", Name),
+        5 => ("CALENDAR_ERROR_PERMISSIONS", Bare),
+        6 => ("CALENDAR_ERROR_EVENT_INVALID", Bare),
+        7 => ("CALENDAR_ERROR_NOT_INVITED", Bare),
+        8 => ("CALENDAR_ERROR_INTERNAL", Bare),
+        9 => ("ERR_GUILD_PLAYER_NOT_IN_GUILD", Bare),
+        10 => ("CALENDAR_ERROR_ALREADY_INVITED_TO_EVENT_S", Name),
+        11 => ("PLAYER_NOT_FOUND", Bare),
+        12 => ("CALENDAR_ERROR_NOT_ALLIED", Bare),
+        13 => ("ERR_IGNORING_YOU_S", Name),
+        14 => ("CALENDAR_ERROR_INVITES_EXCEEDED", Count(100)),
+        16 => ("CALENDAR_ERROR_INVALID_DATE", Bare),
+        17 => ("CALENDAR_ERROR_INVALID_TIME", Bare),
+        19 => ("CALENDAR_ERROR_NEEDS_TITLE", Bare),
+        20 => ("CALENDAR_ERROR_EVENT_PASSED", Bare),
+        21 => ("CALENDAR_ERROR_EVENT_LOCKED", Bare),
+        22 => ("CALENDAR_ERROR_DELETE_CREATOR_FAILED", Bare),
+        24 => ("ERR_SYSTEM_DISABLED", Bare),
+        25 => ("ERR_RESTRICTED_ACCOUNT", Bare),
+        26 => ("CALENDAR_ERROR_ARENA_EVENTS_EXCEEDED", Bare),
+        27 => ("CALENDAR_ERROR_RESTRICTED_LEVEL", Bare),
+        28 => ("ERR_USER_SQUELCHED", Bare),
+        29 => ("CALENDAR_ERROR_NO_INVITE", Bare),
+        36 => ("CALENDAR_ERROR_EVENT_WRONG_SERVER", Bare),
+        37 => ("CALENDAR_ERROR_INVITE_WRONG_SERVER", Bare),
+        38 => ("CALENDAR_ERROR_NO_GUILD_INVITES", Bare),
+        39 => ("CALENDAR_ERROR_INVALID_SIGNUP", Bare),
+        40 => ("CALENDAR_ERROR_NO_MODERATOR", Bare),
         _ => return None,
     })
 }
@@ -295,9 +308,14 @@ fn feed_calendar(
     }
 }
 
-/// `key` with its `%s` argument after a NUL, as the line Lua sees.
+/// `key`'s template, its `%s` or `%d` filled with the argument after a NUL when there is one (a
+/// bare key is the template as is, `0x5b9960`'s no-argument leg). Labelled: the `|4one:many;`
+/// plural escapes are left to the text renderer.
 fn error_line(script: &UiScript, packed: &str) -> String {
-    let (key, arg) = packed.split_once('\0').unwrap_or((packed, ""));
+    let (key, arg) = match packed.split_once('\0') {
+        Some((key, arg)) => (key, Some(arg)),
+        None => (packed, None),
+    };
     let template = script
         .lua()
         .globals()
@@ -305,7 +323,11 @@ fn error_line(script: &UiScript, packed: &str) -> String {
         .ok()
         .flatten()
         .unwrap_or_else(|| key.to_string());
-    template.replacen("%s", arg, 1)
+    match arg {
+        Some(arg) if template.contains("%d") => template.replacen("%d", arg, 1),
+        Some(arg) => template.replacen("%s", arg, 1),
+        None => template,
+    }
 }
 
 fn invitee(i: &EventInvitee) -> WrathCalendarInvitee {
@@ -481,11 +503,13 @@ fn reduce(
             }
         }
         Packet::CommandResult { param, error, .. } => {
-            if let Some(key) = error_key(error) {
-                fired.push((
-                    "CALENDAR_UPDATE_ERROR",
-                    vec![V::Str(format!("{key}\0{param}"))],
-                ));
+            if let Some((key, arg)) = error_key(error) {
+                let packed = match arg {
+                    ErrorArg::None => key.to_string(),
+                    ErrorArg::Count(n) => format!("{key}\0{n}"),
+                    ErrorArg::Name => format!("{key}\0{param}"),
+                };
+                fired.push(("CALENDAR_UPDATE_ERROR", vec![V::Str(packed)]));
             }
             return true;
         }

@@ -52,6 +52,30 @@ fn parse_chain_m2(
     Ok(super::wrath::parse_wrath_render_model(bytes, &skin, dir, skins)?.submeshes)
 }
 
+/// The whole v264 render model off the chain, with its sibling `.anim` files and `00.skin`: rig,
+/// animations, effects and cameras beside the submeshes.
+pub fn load_wrath_render_model(
+    chain: &mut Chain,
+    raw_path: &str,
+) -> Result<super::wrath::WrathRenderModel> {
+    let path = model_path(raw_path);
+    let dir = parent_dir(&path).to_string();
+    let bytes = chain
+        .read_file(&path)
+        .with_context(|| format!("reading M2 {path}"))?;
+    let external = chain_wrath_animations(chain, &path, &bytes)?;
+    let external: Vec<Option<&[u8]>> = external.iter().map(|e| e.as_deref()).collect();
+    let stem = path
+        .strip_suffix(".m2")
+        .with_context(|| format!("Wrath M2 path has no .m2 suffix: {path}"))?;
+    let skin_path = format!("{stem}00.skin");
+    let skin = chain
+        .read_file(&skin_path)
+        .with_context(|| format!("reading Wrath skin {skin_path}"))?;
+    super::wrath::parse_wrath_render_model_with_animations(&bytes, &skin, &external, &dir, &[])
+        .with_context(|| format!("parsing M2 {path}"))
+}
+
 /// [`crate::m2_bone_spins`] for a model read from the chain, with its sibling `.anim` files.
 pub fn load_m2_bone_spins(
     chain: &mut Chain,
@@ -245,35 +269,37 @@ mod tests {
     fn questionmark_marker_batch_carries_both_bob_loops() {
         let data = crate::wow_data_or_skip!();
         let mut chain = crate::open_chain(&data).expect("open chain");
-        let subs = load_m2_mesh(&mut chain, "Interface\\Buttons\\TalkToMeQuestionMark.mdx")
-            .expect("parse TalkToMeQuestionMark");
-        let bb = subs
-            .iter()
-            .find_map(|s| s.billboard.as_ref())
-            .expect("the ? marker rides a billboard bone");
-        assert!(matches!(bb.kind, BillboardKind::LockZ));
-        let bob = |id: u16| {
-            bb.seq_translations
-                .iter()
-                .find(|(a, _)| *a == id)
-                .map(|(_, l)| l)
-        };
-        let low = bob(0).expect("the load-arm loop bakes");
-        assert_eq!(low.duration_ms, 1533, "the first sequence's band");
-        assert!(low.keys.len() >= 2, "a moving track: {:?}", low.keys);
-        let (a, b) = (low.sample(0), low.sample(low.duration_ms / 2));
-        assert_ne!(a, b, "the sampled offset varies across the loop");
-        assert!(
-            low.keys.iter().all(|(_, v)| v[2] <= 0.0),
-            "anim 0 bobs at/below the attach point: {:?}",
-            low.keys
+        let model =
+            load_wrath_render_model(&mut chain, "Interface\\Buttons\\TalkToMeQuestionMark.mdx")
+                .expect("parse TalkToMeQuestionMark");
+        // Build 12340 bobs the marker through its billboard bone's own translation keys.
+        let bone = model.submeshes[0].joints[0][0];
+        assert_eq!(
+            model.skeleton.bones[usize::from(bone)].billboard,
+            Some(BillboardKind::LockZ)
         );
-        let raised = bob(190).expect("the raised loop bakes");
-        assert_eq!(raised.duration_ms, 1533, "same period as the low bob");
+        let bob = |id: u16| {
+            model
+                .animations
+                .iter()
+                .find(|a| a.anim_id == id)
+                .and_then(|a| a.bones.iter().find(|k| k.bone == bone))
+                .map(|k| k.translation.clone())
+        };
+        let low = bob(0).expect("the stand loop keys the bob");
+        assert!(low.len() >= 2, "a moving track: {low:?}");
         assert!(
-            raised.keys.iter().all(|(_, v)| v[2] > 0.4),
-            "anim 190 is the authored raised bob: {:?}",
-            raised.keys
+            low.iter().any(|k| k.1 != low[0].1),
+            "the offset varies across the loop"
+        );
+        assert!(
+            low.iter().all(|(_, v)| v[2] <= 0.0),
+            "anim 0 bobs at/below the attach point: {low:?}"
+        );
+        let raised = bob(190).expect("the raised loop keys the bob");
+        assert!(
+            raised.iter().all(|(_, v)| v[2] > 0.4),
+            "anim 190 is the authored raised bob: {raised:?}"
         );
     }
 }
