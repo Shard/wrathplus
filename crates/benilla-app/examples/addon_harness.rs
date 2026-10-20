@@ -59,154 +59,15 @@ fn render_frames(frames: &[String]) -> String {
     format!("{},+{} more", frames[..cap].join(","), frames.len() - cap)
 }
 
-/// Our `_G` against the captured 1.12 `_G` (`reference/1.12-globals.tsv`). Both directions
-/// matter: 1.12 addons feature-test with `if SomeName then`, so a name we publish that the
-/// reference lacks can send an addon down a path the real client never takes. `lod` rows are the
-/// twelve LoadOnDemand `Blizzard_*` addons' names, counted apart as a live capture misses them.
-fn surface_report(deep: bool, dump_path: Option<String>) {
-    let tsv = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../reference/1.12-globals.tsv"
-    );
-    let Ok(text) = std::fs::read_to_string(tsv) else {
-        eprintln!("cannot read the reference surface at {tsv}");
-        std::process::exit(1);
-    };
-
-    let mut reference: std::collections::BTreeMap<String, String> = Default::default();
-    for line in text.lines().filter(|l| !l.starts_with('#')) {
-        let mut f = line.split('\t');
-        if let (Some(name), Some(kind)) = (f.next(), f.next()) {
-            if !name.is_empty() {
-                reference.insert(name.to_string(), kind.to_string());
-            }
-        }
-    }
-
-    let ours: std::collections::BTreeMap<String, String> =
-        addon_harness::surface().into_iter().collect();
-
-    // `--surface-dump <file>` writes our raw `_G` as `name<TAB>type`, the reference TSV's shape.
-    if let Some(path) = dump_path {
-        let body: String = ours
-            .iter()
-            .map(|(n, k)| format!("{n}\t{k}\n"))
-            .collect::<Vec<_>>()
-            .concat();
-        match std::fs::write(&path, format!("# our _G — {} names\n{body}", ours.len())) {
-            Ok(()) => println!("  wrote {} names to {path}", ours.len()),
-            Err(e) => eprintln!("  could not write {path}: {e}"),
-        }
-    }
-
-    println!("\n  SURFACE DIFF — our _G vs the captured 1.12 _G");
-    println!("  FrameXML digest : {}", addon_harness::framexml_digest());
-    println!("  reference names : {}", reference.len());
-    println!("  ours            : {}", ours.len());
-
-    // Absent from us, by the reference's own type.
-    let mut missing_by_kind: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
-    for (name, kind) in &reference {
-        if !ours.contains_key(name) {
-            missing_by_kind
-                .entry(kind.as_str())
-                .or_default()
-                .push(name.as_str());
-        }
-    }
-    println!("\n  ABSENT FROM US, by the reference's type:");
-    for (kind, names) in &missing_by_kind {
-        println!("    {:<10} {}", kind, names.len());
-    }
-
-    // Published by us and absent from 1.12, split by our type: most are `table`, our FrameXML's
-    // own frame names; a `function` is the hazard, since addons feature-test on it.
-    let extra: Vec<(&str, &str)> = ours
-        .iter()
-        .filter(|(n, _)| !reference.contains_key(n.as_str()))
-        .map(|(n, k)| (n.as_str(), k.as_str()))
-        .collect();
-    let mut extra_by_kind: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
-    for (name, kind) in &extra {
-        extra_by_kind.entry(kind).or_default().push(name);
-    }
-    println!(
-        "\n  PUBLISHED BY US, ABSENT FROM 1.12 ({}) — a superset is not free:",
-        extra.len()
-    );
-    for (kind, names) in &extra_by_kind {
-        let note = match *kind {
-            "function" => "  <- the ones an addon feature-tests; read these first",
-            "table" => "  <- mostly our own FrameXML's frame/region names",
-            _ => "",
-        };
-        println!("    {:<10} {}{}", kind, names.len(), note);
-    }
-    // Functions in full even without --deep, split on the `Benilla` prefix: no 1.12 addon
-    // feature-tests our own namespace.
-    if let Some(fns) = extra_by_kind.get("function") {
-        let (ours_ns, unprefixed): (Vec<&&str>, Vec<&&str>) = fns
-            .iter()
-            .partition(|n| n.starts_with("Benilla") || n.starts_with("BENILLA"));
-        println!(
-            "\n  ...of those functions: {} are Benilla*-namespaced (cannot collide), {} are NOT:",
-            ours_ns.len(),
-            unprefixed.len()
-        );
-        for chunk in unprefixed.chunks(4) {
-            let row: Vec<&str> = chunk.iter().map(|s| **s).collect();
-            println!("      {}", row.join("  "));
-        }
-        println!(
-            "    ^ read these: an unprefixed verb 1.12 lacks is what `if SomeName then` finds.\n      \
-             Most are our own UI's helpers (KeyBindings_*, Options*), which are only\n      \
-             a naming question — but a POST-1.12 API name here is the hazard, because an\n      \
-             addon that feature-tests it takes a branch written for a client we are not."
-        );
-    }
-    if deep {
-        for (kind, names) in &extra_by_kind {
-            if *kind == "function" {
-                continue;
-            }
-            println!("\n  ...EXTRA {} ({}):", kind, names.len());
-            for chunk in names.chunks(4) {
-                println!("      {}", chunk.join("  "));
-            }
-        }
-    }
-
-    if deep {
-        for (kind, names) in &missing_by_kind {
-            println!("\n  ABSENT FROM US — {} ({}):", kind, names.len());
-            for chunk in names.chunks(4) {
-                println!("      {}", chunk.join("  "));
-            }
-        }
-    }
-}
-
 fn main() {
     let mut args = std::env::args().skip(1);
     let Some(root) = args.next() else {
         eprintln!(
-            "usage: addon_harness <folder of addons> [--verbose] [--why <blocker substring>]\n   \
-             or: addon_harness --surface   (our _G vs the captured 1.12 surface; takes no corpus)"
+            "usage: addon_harness <folder of addons> [--verbose] [--why <blocker substring>]"
         );
         std::process::exit(2);
     };
     let rest: Vec<String> = args.collect();
-
-    // `--surface` needs no corpus, so it is handled before the root is used.
-    if root == "--surface" || rest.iter().any(|a| a == "--surface") {
-        let dump_path = rest
-            .iter()
-            .position(|a| a == "--surface-dump")
-            .and_then(|i| rest.get(i + 1))
-            .cloned();
-        surface_report(rest.iter().any(|a| a == "--deep"), dump_path);
-        return;
-    }
 
     let verbose = rest.iter().any(|a| a == "--verbose");
     // `--why <substring>`: the addons behind one row, with their verbatim errors. Matches the

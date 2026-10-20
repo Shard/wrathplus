@@ -6,7 +6,7 @@
 use mlua::{Lua, MultiValue, Table, Value};
 
 use super::object::frame_handle_of;
-use super::tooltip::{append_line, clear_content, fire_cleared, show_or_hide_empty};
+use super::tooltip::{append_line, clear_content, finish_content, fire_cleared};
 use super::Model;
 
 /// One live totem.
@@ -125,7 +125,7 @@ pub(super) fn install_tooltip_method(lua: &Lua, m: &Table) -> mlua::Result<()> {
             {
                 append_line(lua, &this, (line, WHITE), None, false)?;
             }
-            show_or_hide_empty(lua, h);
+            finish_content(lua, h, "OnTooltipSetSpell");
             Ok(())
         })?,
     )
