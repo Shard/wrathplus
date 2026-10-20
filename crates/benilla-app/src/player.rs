@@ -92,13 +92,13 @@ use state::{
     WEDGE_STALL_RATIO, WEDGE_STILL_FRAMES,
 };
 pub(crate) use state::{
-    Player, PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS, CREATURE_STEP_UP_HEIGHT,
-    DEFAULT_COLLISION_HEIGHT, FEATHER_TERMINAL_VELOCITY, GRAVITY, HOVER_CLIMB_RATE, HOVER_HEIGHT,
-    SETTLE_TIMEOUT, STEP_UP_HEIGHT, TERMINAL_VELOCITY,
+    Player, PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS, DEFAULT_COLLISION_HEIGHT,
+    FEATHER_TERMINAL_VELOCITY, GRAVITY, HOVER_CLIMB_RATE, HOVER_HEIGHT, SETTLE_TIMEOUT,
+    STEP_UP_HEIGHT, TERMINAL_VELOCITY,
 };
 /// The swim boundary `0.75·h`, also the wade ceiling, for the creature swim marker and the
 /// footstep splash, which have no `Player`.
-pub(crate) use swim::{may_swim, swim_enter_depth};
+pub(crate) use swim::swim_enter_depth;
 /// The camera's followed unit when not our body; [`crate::camera_shake`] takes its body frame and
 /// two suspend gates from it, as the reference does from `[cam+0x88]`.
 pub(crate) use view_subject::ViewSubject;

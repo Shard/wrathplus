@@ -120,7 +120,7 @@ fn filter_step(cur: f32, goal: f32, hist: &mut [f32; 4]) -> f32 {
         *hist = [0.0; 4];
         return goal.rem_euclid(TAU);
     }
-    let delta = crate::creature_anim::wrap_pi(raw_delta);
+    let delta = crate::app_core::movement::wrap_pi(raw_delta);
     // A reversal empties the ring (`600f12`-`600f3b`).
     if delta * hist[0] < 0.0 {
         hist[0] = 0.0;
@@ -254,7 +254,7 @@ pub(crate) fn drive_display_facing(
         }
         // The latch tests the yaw this pump applied (`0x607ed0`'s `param_2`, the increment
         // written to `+0xc94`), not the gap left; folded because a pump may cross the wrap.
-        let step = crate::creature_anim::wrap_pi(new - cur);
+        let step = crate::app_core::movement::wrap_pi(new - cur);
         if step.abs() > TURN_LATCH_BAND {
             commands.entity(e).insert(FacingStep(step));
             stepping.insert(e);
@@ -314,10 +314,10 @@ mod tests {
         let mut hist = [0.0; 4];
         let (goal, mut cur) = (PI, 0.0);
         let mut pumps = 0;
-        while crate::creature_anim::wrap_pi(goal - cur).abs() > DEAD_BAND && pumps < 64 {
-            let prev = crate::creature_anim::wrap_pi(goal - cur).abs();
+        while crate::app_core::movement::wrap_pi(goal - cur).abs() > DEAD_BAND && pumps < 64 {
+            let prev = crate::app_core::movement::wrap_pi(goal - cur).abs();
             cur = filter_step(cur, goal, &mut hist);
-            let now = crate::creature_anim::wrap_pi(goal - cur).abs();
+            let now = crate::app_core::movement::wrap_pi(goal - cur).abs();
             assert!(now < prev, "each pump closes the gap: {prev} -> {now}");
             pumps += 1;
         }
@@ -346,7 +346,7 @@ mod tests {
         let mut hist = [0.0; 4];
         // The goal is 0.2 rad counterclockwise of `cur`, across the wrap.
         let out = filter_step(TAU - 0.1, 0.1, &mut hist);
-        let moved = crate::creature_anim::wrap_pi(out - (TAU - 0.1));
+        let moved = crate::app_core::movement::wrap_pi(out - (TAU - 0.1));
         assert!(moved > 0.0 && moved < 0.2, "short way, part way: {moved}");
     }
 
@@ -422,7 +422,7 @@ mod tests {
         }
         let facing_us = yaw(&app);
         assert!(
-            crate::creature_anim::wrap_pi(facing_us - PI).abs() <= DEAD_BAND,
+            crate::app_core::movement::wrap_pi(facing_us - PI).abs() <= DEAD_BAND,
             "the vendor faces us within the dead-band, got {facing_us}"
         );
 
@@ -434,7 +434,7 @@ mod tests {
         }
         let back = yaw(&app);
         assert!(
-            crate::creature_anim::wrap_pi(back - 0.0).abs() <= DEAD_BAND,
+            crate::app_core::movement::wrap_pi(back - 0.0).abs() <= DEAD_BAND,
             "the vendor swings back to its authored heading, got {back}"
         );
     }
@@ -483,7 +483,7 @@ mod tests {
             let before = yaw(&app);
             app.update();
             let after = yaw(&app);
-            let applied = crate::creature_anim::wrap_pi(after - before);
+            let applied = crate::app_core::movement::wrap_pi(after - before);
             match step(&app) {
                 Some(s) => {
                     pumps += 1;
@@ -492,7 +492,7 @@ mod tests {
                         "the latch carries the applied step: {s} vs {applied}"
                     );
                     assert!(s > 0.0, "a counterclockwise turn latches LEFT: {s}");
-                    if crate::creature_anim::wrap_pi(goal - after).abs() < 0.05 {
+                    if crate::app_core::movement::wrap_pi(goal - after).abs() < 0.05 {
                         latched_inside_the_old_band = true;
                     }
                 }
@@ -570,7 +570,7 @@ mod tests {
         }
         let yaw = yaw_of(app.world().entity(npc).get::<Transform>().unwrap().rotation);
         assert!(
-            crate::creature_anim::wrap_pi(yaw - FRAC_PI_2).abs() <= DEAD_BAND,
+            crate::app_core::movement::wrap_pi(yaw - FRAC_PI_2).abs() <= DEAD_BAND,
             "the vendor squares up on its victim (+pi/2), not on us (pi): {yaw}"
         );
     }

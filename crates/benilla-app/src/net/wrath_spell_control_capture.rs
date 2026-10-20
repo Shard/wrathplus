@@ -29,7 +29,7 @@ pub(super) fn register(app: &mut App) {
 struct Consumers<'w> {
     index: Option<Res<'w, super::GuidIndex>>,
     play_seq: Option<ResMut<'w, crate::creature_anim::PlaySeq>>,
-    kits: MessageWriter<'w, crate::creature_anim::KitPush>,
+    kits: MessageWriter<'w, crate::app_core::movement::KitPush>,
     spells: Option<Res<'w, crate::ui_action::Spells>>,
     errors: Option<ResMut<'w, crate::ui_action::UiErrorKeys>>,
     vehicles: Option<Res<'w, super::wrath_vehicle::VehicleWorld>>,
@@ -50,7 +50,7 @@ fn receive(
             // `0x8006c0`: a kit row and a streamed target, then the kit plays (`0x745230`).
             if let (Some(index), Some(seq)) = (out.index.as_ref(), out.play_seq.as_mut()) {
                 if let Some(&entity) = index.0.get(&target) {
-                    out.kits.write(crate::creature_anim::KitPush {
+                    out.kits.write(crate::app_core::movement::KitPush {
                         entity,
                         kit_id,
                         seq: seq.next(),

@@ -6,8 +6,8 @@ use benilla_protocol::{JumpInfo, MoveSpeeds};
 use bevy::prelude::*;
 use bevy::time::Real;
 
-use crate::creature_anim::move_flags;
-use crate::player::{GRAVITY, TERMINAL_VELOCITY};
+use crate::app_core::movement::move_flags;
+use crate::app_core::movement::{GRAVITY, TERMINAL_VELOCITY};
 
 use super::super::{ActiveMover, UnitSpeeds};
 use super::relay::{PendingMove, RelayChain, RelayMove};
@@ -137,7 +137,7 @@ const REMOTE_TRACE_MS: f64 = 500.0;
 /// The body tilt the swim-pitch render law presents for this mover, traced beside the reported
 /// pitch.
 fn rendered_pitch(rm: &RemoteMotion) -> f32 {
-    let (_, x, _) = crate::creature_anim::swim_body_rotation(0.0, rm.flags, rm.pitch)
+    let (_, x, _) = crate::app_core::movement::swim_body_rotation(0.0, rm.flags, rm.pitch)
         .to_euler(bevy::math::EulerRot::YXZ);
     x
 }
@@ -248,22 +248,24 @@ pub(in crate::net) fn apply_move(
     rm: &mut RemoteMotion,
     now_ms: f64,
     commands: &mut Commands,
-    landings: &mut MessageWriter<crate::creature_anim::HardLanding>,
+    landings: &mut MessageWriter<crate::app_core::movement::HardLanding>,
 ) {
-    use crate::creature_anim::move_flags::FALLING;
+    use crate::app_core::movement::move_flags::FALLING;
     // A transport-local pose, re-anchored each frame by `compose_riders`; no tail means off.
     match &ev.transport {
         Some(t) => {
-            commands.entity(e).insert(crate::transport::TransportRider {
-                transport_guid: t.guid,
-                local_pos: [t.pos.x, t.pos.y, t.pos.z],
-                local_orientation: t.orientation,
-            });
+            commands
+                .entity(e)
+                .insert(crate::app_core::movement::TransportRider {
+                    transport_guid: t.guid,
+                    local_pos: [t.pos.x, t.pos.y, t.pos.z],
+                    local_orientation: t.orientation,
+                });
         }
         None => {
             commands
                 .entity(e)
-                .remove::<crate::transport::TransportRider>();
+                .remove::<crate::app_core::movement::TransportRider>();
         }
     }
     let (vertical_velocity, jump_xy_vel) =
@@ -275,7 +277,7 @@ pub(in crate::net) fn apply_move(
         fall_arc_step(was_falling, now_falling, rm.fall_start_z, ev.position[2]);
     rm.fall_start_z = new_start;
     if let Some(descent) = descent {
-        landings.write(crate::creature_anim::HardLanding { entity: e, descent });
+        landings.write(crate::app_core::movement::HardLanding { entity: e, descent });
     }
     rm.wow_pos = ev.position;
     rm.orientation = ev.orientation;
@@ -305,7 +307,7 @@ pub(in crate::net) fn apply_move(
 pub(in crate::net) fn drain_pending_moves(
     time: Res<Time<Real>>,
     mut commands: Commands,
-    mut landings: MessageWriter<crate::creature_anim::HardLanding>,
+    mut landings: MessageWriter<crate::app_core::movement::HardLanding>,
     mut q: Query<(Entity, &mut RemoteMotion), (Without<Spline>, Without<ActiveMover>)>,
 ) {
     let now_ms = time.elapsed_secs_f64() * 1000.0;
@@ -330,7 +332,7 @@ pub(in crate::net) fn extrapolate_remote_units(
     world: benilla_world::collision::WorldCollision,
     // Liquid is queried, not swept, so a water-walker's plane is handed to the step.
     points: benilla_world::world_point::WorldPoint,
-    capsule: Res<crate::player::PlayerCapsule>,
+    capsule: Res<crate::app_core::movement::PlayerCapsule>,
     // The runaway watch's last reported silent second per mover.
     mut warned: Local<bevy::platform::collections::HashMap<Entity, u32>>,
     // When each mover last wrote a `rem` line.
@@ -343,7 +345,7 @@ pub(in crate::net) fn extrapolate_remote_units(
             Option<&UnitSpeeds>,
             Option<&mut crate::creature_anim::BodyTwist>,
             Has<super::FacingStep>,
-            Has<crate::transport::TransportRider>,
+            Has<crate::app_core::movement::TransportRider>,
             // Trace-only: joins a `rem` line to its `rly` lines.
             Option<&crate::net::Guid>,
             // Modes from `SMSG_SPLINE_MOVE_*`, which vmangos sends only for a unit it drives; a
@@ -353,7 +355,7 @@ pub(in crate::net) fn extrapolate_remote_units(
         (Without<Spline>, Without<ActiveMover>),
     >,
 ) {
-    use crate::creature_anim::{ease_strafe_yaw, strafe_body_offset, wrap_pi};
+    use crate::app_core::movement::{ease_strafe_yaw, strafe_body_offset, wrap_pi};
     let dt = time.delta_secs();
     let now_ms = time.elapsed_secs_f64() * 1000.0;
     for (e, mut t, mut rm, speeds, twist, latched, riding, guid, granted) in &mut q {
@@ -388,7 +390,7 @@ pub(in crate::net) fn extrapolate_remote_units(
         let modes = rm.flags | granted.map_or(0, |m| m.0);
         let integrating = rm.flags & move_flags::INTEGRATED != 0 || idle_gate_disabled();
         if integrating && !afloat && !riding && !flat_extrapolation() {
-            let half_h = Vec3::Y * (crate::player::CAPSULE_HEIGHT * 0.5);
+            let half_h = Vec3::Y * (crate::app_core::movement::CAPSULE_HEIGHT * 0.5);
             let from = wow_to_bevy(rm.wow_pos) + half_h;
             // Grounded this is horizontal; airborne it carries the arc's vertical.
             let vel = if dt > 1.0e-6 {
@@ -419,9 +421,9 @@ pub(in crate::net) fn extrapolate_remote_units(
                     time.delta(),
                     crate::player::mover::Support {
                         // `0x5fa550` is true for an uncharmed player, so the step height is 1.0.
-                        rise: crate::player::STEP_UP_HEIGHT,
+                        rise: crate::app_core::movement::STEP_UP_HEIGHT,
                         offset: if modes & move_flags::HOVER != 0 {
-                            crate::player::HOVER_HEIGHT
+                            crate::app_core::movement::HOVER_HEIGHT
                         } else {
                             0.0
                         },
@@ -510,7 +512,7 @@ pub(in crate::net) fn extrapolate_remote_units(
             orientation
         };
         // The swim body pitch from the reported pitch, as for our own avatar (`0x60a110`).
-        let rotation = crate::creature_anim::swim_body_rotation(yaw, rm.flags, rm.pitch);
+        let rotation = crate::app_core::movement::swim_body_rotation(yaw, rm.flags, rm.pitch);
         if t.rotation != rotation {
             t.rotation = rotation;
         }
@@ -529,7 +531,7 @@ pub(in crate::net) fn extrapolate_remote_units(
 /// `[0x87d898]` = 7.0 over `[0x87d894]` = 60.148 (`0x7c5d20`, on the mover's `SAFE_FALL`).
 pub(crate) fn jump_seed(jump: Option<JumpInfo>, fall_time: u32, feather: bool) -> (f32, [f32; 2]) {
     let terminal = if feather {
-        crate::player::FEATHER_TERMINAL_VELOCITY
+        crate::app_core::movement::FEATHER_TERMINAL_VELOCITY
     } else {
         TERMINAL_VELOCITY
     };
@@ -581,7 +583,7 @@ impl RemoteMotion {
             // The local mover's own fall step. `SAFE_FALL` is inside the server-authored merge
             // mask, so this word is the one `0x7c5d23` tests.
             let terminal = if self.flags & move_flags::SAFE_FALL != 0 {
-                crate::player::FEATHER_TERMINAL_VELOCITY
+                crate::app_core::movement::FEATHER_TERMINAL_VELOCITY
             } else {
                 TERMINAL_VELOCITY
             };
@@ -672,8 +674,8 @@ mod under_floor {
     use std::time::Duration;
 
     use super::{extrapolate_remote_units, RelayChain, RemoteMotion};
-    use crate::creature_anim::move_flags;
-    use crate::player::{PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS};
+    use crate::app_core::movement::move_flags;
+    use crate::app_core::movement::{PlayerCapsule, CAPSULE_HEIGHT, CAPSULE_RADIUS};
     use benilla_world::collision::ColliderEpoch;
 
     /// A building in Auberdine: terrain, the floor above it, and a wire Z a hair over the floor.

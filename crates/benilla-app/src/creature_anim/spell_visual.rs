@@ -357,15 +357,7 @@ fn resolve_kit_effects(visuals: &SpellVisualCatalog, kit: &VisualKit) -> Vec<FxS
         .collect()
 }
 
-/// A server-pushed kit (`SMSG_PLAY_SPELL_VISUAL`), played at stage 0 with spell id 0: its effects
-/// end only on their own (`0x6e98d0` → `0x60edf0`).
-#[derive(Message, Clone, Copy)]
-pub(crate) struct KitPush {
-    pub(crate) entity: Entity,
-    pub(crate) kit_id: u32,
-    /// [`super::PlaySeq`] stamp at the wire drain, in packet order.
-    pub(crate) seq: u64,
-}
+pub(crate) use crate::app_core::movement::KitPush;
 
 /// The kit lanes [`route_cast_visuals`] writes but does not own, bundled into one param because
 /// the system is at Bevy's 16-`SystemParam` limit.

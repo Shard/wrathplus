@@ -1,6 +1,5 @@
 //! The avatar's state, [`Player`] and its resources, and the movement constants; no systems.
 
-use avian3d::prelude::*;
 use benilla_protocol::{JumpInfo, MoveMode};
 use bevy::prelude::*;
 
@@ -32,32 +31,16 @@ pub(super) const STATIONARY_CHASE_RATE: f32 = 8.0;
 
 // ── Character controller ─────────────────────────────────────────────────────────
 
-/// Capsule radius (yd), the `CMovement` ctor's placeholder 1/3. The reference overwrites it per
-/// model from `CreatureModelData` (`0x6174b0`: human male 0.30555, female 0.20835); not built here.
-pub(crate) const CAPSULE_RADIUS: f32 = 1.0 / 3.0;
-/// Capsule total height (yd), one for every body: the swept shape and the head and feet offsets.
-/// Numerically [`DEFAULT_COLLISION_HEIGHT`], but a unit's depth lines use its per-model
-/// [`crate::entities::CollisionHeight`] instead.
-pub(crate) const CAPSULE_HEIGHT: f32 = 2.027_777_7;
+pub(crate) use crate::app_core::movement::CAPSULE_HEIGHT;
+pub(crate) use crate::app_core::movement::CAPSULE_RADIUS;
 
-/// The `CMovement` ctor's collision height (`0x616fd8`), before `0x6174b0` sets the model's: the
-/// depth lines' fallback for a unit whose display id has no `CreatureModelData` row.
-pub(crate) const DEFAULT_COLLISION_HEIGHT: f32 = 2.027_777_7;
-/// Gravity (yd/s²), the reference's and vmangos's `Movement::gravity`; also avian's `Gravity`, and
-/// [`crate::net`] replays relayed jump arcs under it so an observer's arc matches the mover's.
-pub(crate) const GRAVITY: f32 = 19.291_105;
+pub(crate) use crate::app_core::movement::DEFAULT_COLLISION_HEIGHT;
+pub(crate) use crate::app_core::movement::GRAVITY;
 /// Jump take-off speed (yd/s), the reference's.
 pub(super) const JUMP_SPEED: f32 = 7.955_547;
-/// Terminal fall speed (yd/s), `[0x87d894]` and vmangos's `terminalVelocity`; [`crate::net`]'s arc
-/// replay caps at it too.
-pub(crate) const TERMINAL_VELOCITY: f32 = 60.148_003;
-/// Terminal fall speed under feather fall (yd/s), the whole of Slow Fall: `0x7c5d20` and
-/// `0x7c5f50` pick `[0x87d898]` over `[0x87d894]` while `MOVEFLAG_SAFE_FALL` is set (vmangos's
-/// `terminalSavefallVelocity`).
-pub(crate) const FEATHER_TERMINAL_VELOCITY: f32 = 7.0;
-/// Hover's clearance (yd), the whole of Hover: the walk resolver probes `[0x7ff9d8]` further down
-/// (`0x636dd2`) and writes the body's z a yard clear of the floor (`0x636e81`-`0x636ea9`).
-pub(crate) const HOVER_HEIGHT: f32 = 1.0;
+pub(crate) use crate::app_core::movement::FEATHER_TERMINAL_VELOCITY;
+pub(crate) use crate::app_core::movement::HOVER_HEIGHT;
+pub(crate) use crate::app_core::movement::TERMINAL_VELOCITY;
 /// Hover's rise rate (yd/s): the snap only lowers the body (`0x636e52`), so the rise is a separate
 /// rate-limited pass (`0x636fa1`-`0x6370f1`) at `0x7c61b0`'s `[0x87d898]`, the feather-fall 7.0.
 pub(crate) const HOVER_CLIMB_RATE: f32 = 7.0;
@@ -71,13 +54,7 @@ pub(super) const GROUND_PROBE: f32 = 0.2;
 pub(super) const STEP_SLOPE_RATIO: f32 = 1.849_399;
 /// The snap reach's fixed slack (yd), `[0x7ff9d0]` = 1/36.
 pub(super) const STEP_SNAP_SLACK: f32 = 0.027_777_8;
-/// The step-up rise ceiling (yd), the reference's `H`: `0x617430` returns `CMovement+0xb8`, the
-/// ratio `max(SCALE_X / CreatureModelScale, 1)`, which is 1.0 for the local player.
-pub(crate) const STEP_UP_HEIGHT: f32 = 1.0;
-/// The rise ceiling of a body the reference does not treat as player-controlled, `[0x801628]` on
-/// `0x5fa550`'s false leg of `0x617430`: a creature, a pet, or a charmed, possessed, feared,
-/// confused or rooted player.
-pub(crate) const CREATURE_STEP_UP_HEIGHT: f32 = 2.0;
+pub(crate) use crate::app_core::movement::STEP_UP_HEIGHT;
 /// The step-up certify advance (yd), a floor under the frame's travel: the reference steps
 /// `max(H·tan50°, radius + 1/720)` into the face, 1.1918 yd at `H` = 1.0. The raised forward sweep
 /// is clipped by anything in the way, so the advance reaches only clear air.
@@ -118,11 +95,7 @@ pub(super) const SKIN_WIDTH: f32 = 0.02;
 /// deadline on while the world is stale or any load counter moves, so only a dead stream hits it.
 pub(crate) const SETTLE_TIMEOUT: f32 = 6.0;
 
-/// The player body's collision capsule, swept by avian's `MoveAndSlide`: origin at its centre, the
-/// player's `pos` at its feet. Every player body sweeps it, remote ones too, as the reference runs
-/// every mover through one controller (`0x616620`); the reference sizes each from its model.
-#[derive(Resource)]
-pub(crate) struct PlayerCapsule(pub(crate) Collider);
+pub(crate) use crate::app_core::movement::PlayerCapsule;
 
 /// The run-speed fallback, the stock 7.0 until the server's speeds stream in, or the
 /// `$WOW_MOVE_SPEED` dev override (`env_override`), which replaces the server's speeds outright.
