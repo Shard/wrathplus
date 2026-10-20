@@ -1,74 +1,27 @@
-//! Ordered native UI timer replies (`SMSG 0x4F7`) and the server clock they set. The reference's
-//! world ticker `0x5488f0` sends `CMSG 0x4F6` every 20 s, the first at once after the world reset
-//! `0x548570`, and each reply stores `offset = server_time - time()` (`0x5486e0`); the UI reads
-//! the offset through `UiScript::wrath_server_now`. Evidence: `/tmp/azb-app-mig/ghidra/
-//! ui-timer{,2,3}.log`.
+//! The server clock's ticker and feed: `0x5488f0` sends `CMSG 0x4F6` every 20 s, the first at once
+//! after the world reset `0x548570`; each reply the wire layer captured
+//! (`crate::net::wrath_ui_timer_capture`) sets the offset the UI reads through
+//! `UiScript::wrath_server_now`.
 //!
 //! Not built (labelled): the same ticker fires `WORLD_STATE_UI_TIMER_UPDATE` (`0x28b`) each second
 //! while a type-3 world-state UI entry is active; that waits on Native UI's Wrath world-state UI
 //! projection.
-use crate::net::{ClientCommand, NetCommands, NetHandlerApp};
-use benilla_protocol::{wrath_ui_timer::Packet, SessionEvent, SessionEventKind};
+pub(crate) use crate::net::wrath_ui_timer_capture::{NativeUiTimerPackets, ServerClock};
+use crate::net::{ClientCommand, NetCommands};
 use benilla_ui::script::{ScriptDialect, UiScript};
 use bevy::prelude::*;
-use std::collections::VecDeque;
 
 /// `0x5488f0`'s query period (`iVar1 + 20000` ms).
 const QUERY_PERIOD_SECS: f64 = 20.0;
 
-/// The server clock: the last reply's offset and the ticker's next query time.
-#[derive(Resource, Default)]
-pub(crate) struct ServerClock {
-    /// `server - time()` in seconds; `None` until the session's first reply.
-    pub(crate) offset: Option<i32>,
-    /// The next query on [`Time`]'s clock; `None` outside the world.
-    due: Option<f64>,
-    /// The offset moved since the VM last heard it.
-    dirty: bool,
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct NativeUiTimerPackets(pub(crate) VecDeque<Packet>);
-
 pub(crate) fn register(app: &mut App) {
-    app.init_resource::<NativeUiTimerPackets>()
-        .init_resource::<ServerClock>()
-        // In the feed phase, once the in-game UI exists: replies wait in the FIFO until then.
-        .add_systems(
-            Update,
-            tick_server_clock
-                .in_set(crate::ui_script::UiFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
-        )
-        .net_handler(SessionEventKind::WrathUiTimer, receive)
-        .net_handler(SessionEventKind::Connected, clear)
-        .net_handler(SessionEventKind::Disconnected, clear);
-}
-
-fn receive(In(event): In<SessionEvent>, mut packets: ResMut<NativeUiTimerPackets>) {
-    if let SessionEvent::WrathUiTimer { packet } = event {
-        packets.0.push_back(packet);
-    }
-}
-
-/// Entering the world is the reset `0x548570` (offset unknown, a query due at once); leaving it
-/// stops the ticker.
-fn clear(
-    In(event): In<SessionEvent>,
-    mut packets: ResMut<NativeUiTimerPackets>,
-    mut clock: ResMut<ServerClock>,
-) {
-    let due = match event {
-        SessionEvent::Connected { .. } => Some(f64::NEG_INFINITY),
-        SessionEvent::Disconnected { .. } => None,
-        _ => return,
-    };
-    packets.0.clear();
-    *clock = ServerClock {
-        offset: None,
-        due,
-        dirty: true,
-    };
+    // In the feed phase, once the in-game UI exists: replies wait in the FIFO until then.
+    app.add_systems(
+        Update,
+        tick_server_clock
+            .in_set(crate::ui_script::UiFeed)
+            .run_if(crate::ui_script::ingame_ui_up),
+    );
 }
 
 /// The local `time()` the offset is taken against (`_time32`).
@@ -114,4 +67,4 @@ fn tick_server_clock(
 
 #[cfg(test)]
 #[path = "wrath_ui_timer_capture_tests.rs"]
-pub(crate) mod tests;
+mod tests;

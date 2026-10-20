@@ -1,23 +1,78 @@
-//! Ordered native item/inventory receipts. Refund replies feed `wrath_item_refunds`,
-//! equipment-set traffic `wrath_equipment_sets` and socket results `wrath_sockets`; a letter's
+//! Ordered native item/inventory receipts and the state their feeds reduce them into
+//! (`crate::ui_native::{wrath_item_refunds, wrath_equipment_sets, wrath_sockets}`): refund
+//! replies, equipment-set traffic and socket results stay in the FIFO for those feeds; a letter's
 //! text goes to the item-text reader (`ui_item_text::LetterTexts`); read receipts stay here.
 use super::NetHandlerApp;
-use benilla_protocol::{wrath_inventory::Packet, SessionEvent, SessionEventKind};
+use benilla_protocol::wrath_inventory::{EquipmentSet, Packet, RefundCost};
+use benilla_protocol::wrath_items::{SocketMetadata, ITEM_SOCKET_BLOCKS};
+use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeInventoryPackets(pub(crate) VecDeque<Packet>);
 
+/// The refund window's replies, for `GetContainerItemPurchaseInfo` and its kin.
+#[derive(Resource, Default)]
+pub(crate) struct ItemRefunds {
+    /// By item GUID: the reply's cost and the refund window left, as of `at` (elapsed seconds).
+    pub(crate) infos: HashMap<u64, (RefundCost, f64, f64)>,
+    /// Items asked this session, so each is asked once.
+    pub(crate) asked: HashSet<u64>,
+}
+
+/// The equipment manager's sets.
+#[derive(Resource, Default)]
+pub(crate) struct EquipmentSets {
+    /// By server index; a new set's GUID is 0 until `SMSG_EQUIPMENT_SET_SAVED`.
+    pub(crate) sets: BTreeMap<u32, EquipmentSet>,
+    /// The set a use is waiting on, for `EQUIPMENT_SWAP_FINISHED`.
+    pub(crate) pending_use: Option<String>,
+    /// Indexes deleted before `SMSG_EQUIPMENT_SET_SAVED` numbered them: the delete goes out with
+    /// the GUID.
+    pub(crate) pending_delete: Vec<u32>,
+}
+
+/// The sockets an item template carries.
+pub(crate) const SOCKETS: usize = ITEM_SOCKET_BLOCKS;
+
+/// Each template's socket blocks, by entry, as the item query answers them.
+#[derive(Resource, Default)]
+pub(crate) struct SocketTemplates(pub(crate) HashMap<u32, SocketMetadata>);
+
+/// The socketing window's session.
+#[derive(Resource, Default)]
+pub(crate) struct SocketSession {
+    /// The item being socketed, while the window is open.
+    pub(crate) item: Option<u64>,
+    /// Gems placed this session, by socket, not yet accepted.
+    pub(crate) new: [Option<u64>; SOCKETS],
+}
+
 pub(super) fn register(app: &mut App) {
-    super::wrath_item_refunds::register(app);
-    super::wrath_equipment_sets::register(app);
-    super::wrath_sockets::register(app);
     app.init_resource::<NativeInventoryPackets>()
+        .init_resource::<ItemRefunds>()
+        .init_resource::<EquipmentSets>()
+        .init_resource::<SocketTemplates>()
+        .init_resource::<SocketSession>()
         .init_resource::<crate::ui_item_text::LetterTexts>()
+        .net_handler(
+            SessionEventKind::WrathItemSocketMetadata,
+            on_socket_template,
+        )
         .net_handler(SessionEventKind::WrathInventory, receive)
         .net_handler(SessionEventKind::Connected, clear)
         .net_handler(SessionEventKind::Disconnected, clear);
+}
+
+fn on_socket_template(In(event): In<SessionEvent>, mut templates: ResMut<SocketTemplates>) {
+    if let SessionEvent::WrathItemSocketMetadata {
+        entry,
+        metadata: Some(metadata),
+    } = event
+    {
+        templates.0.insert(entry, metadata);
+    }
 }
 
 fn receive(
@@ -48,18 +103,20 @@ fn receive(
 fn clear(
     In(event): In<SessionEvent>,
     mut packets: ResMut<NativeInventoryPackets>,
-    mut refunds: ResMut<super::wrath_item_refunds::ItemRefunds>,
-    mut sets: ResMut<super::wrath_equipment_sets::EquipmentSets>,
-    mut sockets: ResMut<super::wrath_sockets::SocketSession>,
+    mut refunds: ResMut<ItemRefunds>,
+    mut sets: ResMut<EquipmentSets>,
+    mut sockets: ResMut<SocketSession>,
 ) {
     if matches!(
         event,
         SessionEvent::Connected { .. } | SessionEvent::Disconnected { .. }
     ) {
         packets.0.clear();
-        super::wrath_item_refunds::clear(&mut refunds);
-        super::wrath_equipment_sets::clear(&mut sets);
-        super::wrath_sockets::clear(&mut sockets);
+        // Every reply and ask, the sets (the next login's list brings them back) and the socketing
+        // session; templates and gem tables stay.
+        *refunds = ItemRefunds::default();
+        *sets = EquipmentSets::default();
+        *sockets = SocketSession::default();
     }
 }
 

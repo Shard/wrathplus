@@ -4,9 +4,10 @@
 //! `ui_chat`'s roster feed and `wrath_raid_browser_feed` drain them; both clear on Connected and
 //! Disconnected.
 use super::NetHandlerApp;
+use benilla_protocol::wrath_raid_browser::{Group, Player};
 use benilla_protocol::{wrath_channel_members, wrath_raid_browser, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Resource, Default)]
 pub(crate) struct NativeChannelMembers(pub(crate) VecDeque<wrath_channel_members::Packet>);
@@ -14,10 +15,22 @@ pub(crate) struct NativeChannelMembers(pub(crate) VecDeque<wrath_channel_members
 #[derive(Resource, Default)]
 pub(crate) struct NativeRaidBrowser(pub(crate) VecDeque<wrath_raid_browser::Packet>);
 
+/// The browsed raid list the feed (`crate::ui_native::wrath_raid_browser_feed`) merges the
+/// receipts into.
+#[derive(Resource, Default)]
+pub(crate) struct RaidBrowser {
+    pub(crate) dungeon: u32,
+    pub(crate) groups: BTreeMap<u64, Group>,
+    pub(crate) players: BTreeMap<u64, Player>,
+    pub(crate) dirty: bool,
+    /// The name cache's generation at the last publish, for names that land later.
+    pub(crate) names_seen: u64,
+}
+
 pub(super) fn register(app: &mut App) {
     app.init_resource::<NativeChannelMembers>()
         .init_resource::<NativeRaidBrowser>()
-        .init_resource::<super::wrath_raid_browser_feed::RaidBrowser>()
+        .init_resource::<RaidBrowser>()
         .net_handler(SessionEventKind::WrathChannelMembers, receive_members)
         .net_handler(SessionEventKind::WrathRaidBrowser, receive_raid_browser)
         .net_handler(SessionEventKind::Connected, clear)
@@ -40,7 +53,7 @@ fn clear(
     In(event): In<SessionEvent>,
     mut members: ResMut<NativeChannelMembers>,
     mut raid: ResMut<NativeRaidBrowser>,
-    mut browser: ResMut<super::wrath_raid_browser_feed::RaidBrowser>,
+    mut browser: ResMut<RaidBrowser>,
 ) {
     if matches!(
         event,
@@ -48,7 +61,8 @@ fn clear(
     ) {
         members.0.clear();
         raid.0.clear();
-        super::wrath_raid_browser_feed::clear(&mut browser);
+        // A session boundary forgets the list.
+        *browser = RaidBrowser::default();
     }
 }
 
