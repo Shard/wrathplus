@@ -1108,7 +1108,7 @@ fn census(
             drops
                 .iter()
                 .map(|(op, unk, bad)| {
-                    let name = benilla_protocol::messages::opcode_name(*op)
+                    let name = benilla_protocol::wrath_opcode_names::opcode_name(*op)
                         .map_or_else(|| format!("{op:#06x}"), str::to_string);
                     format!("{name}:unknown={unk},unparseable={bad}")
                 })

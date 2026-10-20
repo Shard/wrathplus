@@ -131,71 +131,7 @@ pub struct TradeStatusExtended {
 
 // ── Client → server bodies ──
 
-/// `CMSG_INITIATE_TRADE`: a refusal is a status back to us; success sends the target `BeginTrade`.
-pub fn initiate_trade(target: u64) -> Vec<u8> {
-    target.to_le_bytes().to_vec()
-}
-
-/// `CMSG_ACCEPT_TRADE`: a `u32` the server skips; the 1.12 client sends 1.
-pub fn accept_trade() -> Vec<u8> {
-    1u32.to_le_bytes().to_vec()
-}
-
-/// `CMSG_SET_TRADE_ITEM`: puts the item at (`bag`, `slot`) into `trade_slot`.
-pub fn set_trade_item(trade_slot: u8, bag: u8, slot: u8) -> Vec<u8> {
-    vec![trade_slot, bag, slot]
-}
-
-/// `CMSG_CLEAR_TRADE_ITEM` body.
-pub fn clear_trade_item(trade_slot: u8) -> Vec<u8> {
-    vec![trade_slot]
-}
-
-/// `CMSG_SET_TRADE_GOLD` body, in copper.
-pub fn set_trade_gold(copper: u32) -> Vec<u8> {
-    copper.to_le_bytes().to_vec()
-}
-
 // `CMSG_BEGIN_TRADE`, `CMSG_BUSY_TRADE`, `CMSG_IGNORE_TRADE`, `CMSG_UNACCEPT_TRADE` and
 // `CMSG_CANCEL_TRADE` have empty bodies (vmangos `NullClientPacket`), so they need no builder.
 
 // ── Server → client parses ──
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── CMSG body goldens ──
-
-    #[test]
-    fn initiate_trade_is_the_target_guid_le() {
-        assert_eq!(
-            initiate_trade(0x1122_3344_5566_7788),
-            vec![0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]
-        );
-    }
-
-    #[test]
-    fn accept_trade_is_u32_one() {
-        assert_eq!(accept_trade(), vec![1, 0, 0, 0]);
-    }
-
-    #[test]
-    fn set_trade_item_is_three_u8s() {
-        assert_eq!(set_trade_item(2, 0, 23), vec![2, 0, 23]);
-    }
-
-    #[test]
-    fn clear_trade_item_is_one_u8() {
-        assert_eq!(clear_trade_item(5), vec![5]);
-    }
-
-    #[test]
-    fn set_trade_gold_is_u32_le() {
-        assert_eq!(set_trade_gold(0x0001_E240), vec![0x40, 0xE2, 0x01, 0x00]);
-    }
-
-    // ── SMSG_TRADE_STATUS parse goldens ──
-
-    // ── SMSG_TRADE_STATUS_EXTENDED parse golden ──
-}

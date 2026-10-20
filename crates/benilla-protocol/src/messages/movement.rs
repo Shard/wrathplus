@@ -27,17 +27,16 @@ pub enum SpeedKind {
 }
 
 impl SpeedKind {
-    /// The `CMSG_FORCE_*_SPEED_CHANGE_ACK` opcode answering this kind's SMSG.
+    /// The `CMSG_FORCE_*_SPEED_CHANGE_ACK` opcode answering this kind's SMSG (AzerothCore
+    /// `Opcodes.h`; [`crate::wrath_opcode_names`] names them).
     pub fn ack_opcode(self) -> u16 {
-        use super::opcode;
         match self {
-            SpeedKind::Walk => opcode::CMSG_FORCE_WALK_SPEED_CHANGE_ACK,
-            SpeedKind::Run => opcode::CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
-            SpeedKind::RunBack => opcode::CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK,
-            SpeedKind::Swim => opcode::CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
-            SpeedKind::SwimBack => opcode::CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,
-            SpeedKind::TurnRate => opcode::CMSG_FORCE_TURN_RATE_CHANGE_ACK,
-            // Build 12340 (AzerothCore `Opcodes.h`); never reached on 1.12.
+            SpeedKind::Walk => 0x02DB,
+            SpeedKind::Run => 0x00E3,
+            SpeedKind::RunBack => 0x00E5,
+            SpeedKind::Swim => 0x00E7,
+            SpeedKind::SwimBack => 0x02DD,
+            SpeedKind::TurnRate => 0x02DF,
             SpeedKind::Flight => 0x0382,
             SpeedKind::FlightBack => 0x0384,
             SpeedKind::PitchRate => 0x045D,
@@ -75,14 +74,12 @@ impl MoveMode {
     /// The `CMSG_*_ACK` answering this mode's SMSG. Only root acks apply and remove on different
     /// opcodes (vmangos routes both to `HandleMoveRootAck`).
     pub fn ack_opcode(self, apply: bool) -> u16 {
-        use super::opcode;
         match (self, apply) {
-            (MoveMode::Root, true) => opcode::CMSG_FORCE_MOVE_ROOT_ACK,
-            (MoveMode::Root, false) => opcode::CMSG_FORCE_MOVE_UNROOT_ACK,
-            (MoveMode::WaterWalk, _) => opcode::CMSG_MOVE_WATER_WALK_ACK,
-            (MoveMode::FeatherFall, _) => opcode::CMSG_MOVE_FEATHER_FALL_ACK,
-            (MoveMode::Hover, _) => opcode::CMSG_MOVE_HOVER_ACK,
-            // `CMSG_MOVE_SET_CAN_FLY_ACK`, build 12340 only.
+            (MoveMode::Root, true) => 0x00E9,
+            (MoveMode::Root, false) => 0x00EB,
+            (MoveMode::WaterWalk, _) => 0x02D0,
+            (MoveMode::FeatherFall, _) => 0x02CF,
+            (MoveMode::Hover, _) => 0x00F6,
             (MoveMode::CanFly, _) => 0x0345,
         }
     }
@@ -149,12 +146,12 @@ pub enum RelayVerb {
 impl RelayVerb {
     /// The verb a relay opcode carries.
     pub fn of(opcode: u16) -> Self {
-        use super::opcode as op;
+        // `MSG_MOVE_HEARTBEAT`, `MSG_MOVE_TELEPORT`, `MSG_MOVE_ROOT`, `MSG_MOVE_UNROOT`.
         match opcode {
-            op::MSG_MOVE_HEARTBEAT => Self::Heartbeat,
-            op::MSG_MOVE_TELEPORT => Self::Teleport,
-            op::MSG_MOVE_ROOT => Self::Root(true),
-            op::MSG_MOVE_UNROOT => Self::Root(false),
+            0x00EE => Self::Heartbeat,
+            0x00C5 => Self::Teleport,
+            0x00EC => Self::Root(true),
+            0x00ED => Self::Root(false),
             _ => Self::Pose,
         }
     }

@@ -331,49 +331,6 @@ pub fn wrap_item(gift_bag: u8, gift_slot: u8, item_bag: u8, item_slot: u8) -> Ve
     vec![gift_bag, gift_slot, item_bag, item_slot]
 }
 
-/// Body of `CMSG_AUTOEQUIP_ITEM` (opcode 266, `Server/Packets/Item.cpp:17-21`): source bag and
-/// slot. The reference sends it instead of `CMSG_USE_ITEM` for an equippable item; the server
-/// picks the slot.
-pub fn auto_equip_item(bag_index: u8, slot: u8) -> Vec<u8> {
-    vec![bag_index, slot]
-}
-
-/// Body of `CMSG_AUTOSTORE_BAG_ITEM` (opcode 267, `Server/Packets/Item.cpp:23-28`): source bag
-/// and slot, then the bag to store into; the server picks the slot.
-pub fn auto_store_bag_item(src_bag: u8, src_slot: u8, dst_bag: u8) -> Vec<u8> {
-    vec![src_bag, src_slot, dst_bag]
-}
-
-/// Body of `CMSG_SWAP_ITEM` (opcode 268, `Server/Packets/Item.cpp:30-36`): destination bag and
-/// slot first, then the source; a move with an equipped bag at either end.
-pub fn swap_item(dst_bag: u8, dst_slot: u8, src_bag: u8, src_slot: u8) -> Vec<u8> {
-    vec![dst_bag, dst_slot, src_bag, src_slot]
-}
-
-/// Body of `CMSG_SWAP_INV_ITEM` (opcode 269, `Server/Packets/Item.cpp:38-42`): source then
-/// destination slot in the player's own array; an empty destination makes it a move.
-pub fn swap_inv_item(src_slot: u8, dst_slot: u8) -> Vec<u8> {
-    vec![src_slot, dst_slot]
-}
-
-/// Body of `CMSG_SPLIT_ITEM` (opcode 270, `Server/Packets/Item.cpp:44-51`): source bag and slot,
-/// destination bag and slot, count.
-pub fn split_item(src_bag: u8, src_slot: u8, dst_bag: u8, dst_slot: u8, count: u8) -> Vec<u8> {
-    vec![src_bag, src_slot, dst_bag, dst_slot, count]
-}
-
-/// Body of `CMSG_DESTROYITEM` (opcode 273, `Packets/Item.cpp:59-68`): bag, slot, count (0 for the
-/// whole stack), then three bytes the reference sends and the server discards.
-pub fn destroy_item(bag: u8, slot: u8, count: u8) -> Vec<u8> {
-    vec![bag, slot, count, 0, 0, 0]
-}
-
-/// Body of `CMSG_SET_AMMO` (opcode `0x268`): the ammo's item entry, not a bag and slot; the
-/// reference's auto-equip sender (`0x5e1480`) sends it for ammo, and the stack stays in its bag.
-pub fn set_ammo(entry: u32) -> Vec<u8> {
-    entry.to_le_bytes().to_vec()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,53 +340,11 @@ mod tests {
     // Item-move body goldens follow vmangos `Server/Packets/Item.cpp`; every field is a `u8`.
 
     #[test]
-    fn auto_equip_item_body() {
-        // 266: srcbag, srcslot (Item.cpp:17-21).
-        assert_eq!(auto_equip_item(255, 30), vec![255, 30]);
-    }
-
-    #[test]
     fn wrap_item_body_paper_first() {
         // 467: giftbag, giftslot, itembag, itemslot (Item.cpp:121-127).
         assert_eq!(wrap_item(255, 23, 255, 24), vec![255, 23, 255, 24]);
         // Paper in the first bag's slot 3, the target in backpack slot 24: four distinct bytes.
         assert_eq!(wrap_item(19, 3, 255, 24), vec![19, 3, 255, 24]);
-    }
-
-    #[test]
-    fn auto_store_bag_item_body() {
-        // 267: srcbag, srcslot, dstbag (Item.cpp:23-28).
-        assert_eq!(auto_store_bag_item(255, 30, 19), vec![255, 30, 19]);
-    }
-
-    #[test]
-    fn swap_item_body_destination_first() {
-        // 268: dstbag, dstslot, srcbag, srcslot (Item.cpp:30-36).
-        assert_eq!(swap_item(19, 3, 255, 30), vec![19, 3, 255, 30]);
-    }
-
-    #[test]
-    fn swap_inv_item_body() {
-        // 269: srcslot, dstslot (Item.cpp:38-42); backpack slots 1 and 2 are 23 and 24.
-        assert_eq!(swap_inv_item(23, 24), vec![23, 24]);
-    }
-
-    #[test]
-    fn set_ammo_body() {
-        // 616 (0x268): a lone little-endian u32 item entry.
-        assert_eq!(set_ammo(0x0001_6b74), vec![0x74, 0x6b, 0x01, 0x00]);
-    }
-
-    #[test]
-    fn split_item_body() {
-        // 270: srcbag, srcslot, dstbag, dstslot, count (Item.cpp:44-51).
-        assert_eq!(split_item(255, 23, 255, 24, 5), vec![255, 23, 255, 24, 5]);
-    }
-
-    #[test]
-    fn destroy_item_body() {
-        // 273: bag, slot, count, then three ignored trailing bytes (Item.cpp:59-68).
-        assert_eq!(destroy_item(255, 23, 0), vec![255, 23, 0, 0, 0, 0]);
     }
 
     // Reason 1 is `EQUIP_ERR_CANT_EQUIP_LEVEL_I` (`Objects/ItemDefines.h`, `Item.cpp:198-209`).

@@ -2,10 +2,6 @@
 //! friends and 25 ignores (the `FriendList` slot arrays at `+0x008` and `+0x650`), the vmangos
 //! limits too; FrameXML's `MAX_IGNORE = 50` is dead data.
 
-use std::io::{self, Read};
-
-use crate::wire::{capacity_hint, read_cstring, read_u32_le, read_u64_le, read_u8};
-
 /// `SMSG_FRIEND_STATUS`'s result byte, vmangos `FriendsResult` (`SocialMgr.h:81-110`). The client
 /// (`0x5acab0`) prints each result's `ERR_*` string to the chat frame, not the red error line.
 pub mod friend_result {
@@ -82,34 +78,6 @@ impl FriendEntry {
     }
 }
 
-/// Read `SMSG_FRIEND_LIST` (vmangos `Social.cpp`, client `0x5ae350`): a `u8` count, then per
-/// friend a `u64` guid, a `u8` status and, only if the status is non-zero, `u32` area/level/class.
-pub fn read_friend_list(r: &mut impl Read) -> io::Result<Vec<FriendEntry>> {
-    let count = read_u8(r)?;
-    // vmangos `SOCIALMGR_FRIEND_LIMIT` 50 (`SocialMgr.h:114`).
-    let mut friends = Vec::with_capacity(capacity_hint(count, 50));
-    for _ in 0..count {
-        let mut entry = FriendEntry {
-            guid: read_u64_le(r)?,
-            status: read_u8(r)?,
-            ..Default::default()
-        };
-        if entry.is_online() {
-            entry.area = read_u32_le(r)?;
-            entry.level = read_u32_le(r)?;
-            entry.class = read_u32_le(r)?;
-        }
-        friends.push(entry);
-    }
-    Ok(friends)
-}
-
-/// Read `SMSG_IGNORE_LIST` (vmangos `Social.cpp`): a `u8` count, then that many guids.
-pub fn read_ignore_list(r: &mut impl Read) -> io::Result<Vec<u64>> {
-    let count = read_u8(r)?;
-    (0..count).map(|_| read_u64_le(r)).collect()
-}
-
 /// `SMSG_FRIEND_STATUS`: one result about one player, with their whereabouts when online.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FriendStatusUpdate {
@@ -130,28 +98,6 @@ pub struct FriendOnline {
     pub area: u32,
     pub level: u32,
     pub class: u32,
-}
-
-/// Read `SMSG_FRIEND_STATUS` (vmangos `SocialMgr::SendFriendStatus`, client `0x5add30`): `u8`
-/// result, `u64` guid, then the online tail when the result code says so, whatever the length.
-pub fn read_friend_status(r: &mut impl Read) -> io::Result<FriendStatusUpdate> {
-    let result = read_u8(r)?;
-    let guid = read_u64_le(r)?;
-    let online = matches!(result, friend_result::ONLINE | friend_result::ADDED_ONLINE)
-        .then(|| -> io::Result<FriendOnline> {
-            Ok(FriendOnline {
-                status: read_u8(r)?,
-                area: read_u32_le(r)?,
-                level: read_u32_le(r)?,
-                class: read_u32_le(r)?,
-            })
-        })
-        .transpose()?;
-    Ok(FriendStatusUpdate {
-        result,
-        guid,
-        online,
-    })
 }
 
 /// One `/who` hit; unlike a friend row, every field is on the wire.
@@ -176,29 +122,6 @@ pub struct WhoResults {
     pub total: u32,
     /// In server order.
     pub entries: Vec<WhoEntry>,
-}
-
-/// Read `SMSG_WHO` (vmangos `WhoListClientQueryTask`, client `0x5adde0`): two `u32` counts, then
-/// `{name, guild, level, class, race, zone}` per entry. 1.12 has no trailing party-status `u32`.
-pub fn read_who(r: &mut impl Read) -> io::Result<WhoResults> {
-    let displayed = read_u32_le(r)?;
-    let total = read_u32_le(r)?;
-    let mut entries = Vec::with_capacity(capacity_hint(displayed, 64));
-    for _ in 0..displayed {
-        entries.push(WhoEntry {
-            name: read_cstring(r)?,
-            guild: read_cstring(r)?,
-            level: read_u32_le(r)?,
-            class: read_u32_le(r)?,
-            race: read_u32_le(r)?,
-            zone: read_u32_le(r)?,
-        });
-    }
-    Ok(WhoResults {
-        displayed,
-        total,
-        entries,
-    })
 }
 
 /// A `/who` query parsed from the typed filter, e.g. `z-"Elwynn Forest" 1-10`, which the 1.12
@@ -273,43 +196,6 @@ pub fn friend_list() -> Vec<u8> {
     Vec::new()
 }
 
-/// Body of `CMSG_ADD_FRIEND`: the name; the server normalises its case (`normalizePlayerName`).
-pub fn add_friend(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_DEL_FRIEND`: removal is by guid, not name.
-pub fn del_friend(guid: u64) -> Vec<u8> {
-    guid.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_ADD_IGNORE`: the name to ignore.
-pub fn add_ignore(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_DEL_IGNORE`: removal is by guid.
-pub fn del_ignore(guid: u64) -> Vec<u8> {
-    guid.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_SET_LOOKING_FOR_GROUP` (`0x4e88c0`): the three slot words as stored, then the
-/// comment cstring, always. The 1.12 client sends it only when a commit changed something.
-pub fn set_looking_for_group(slots: [u32; 3], comment: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(12 + comment.len() + 1);
-    for slot in slots {
-        body.extend_from_slice(&slot.to_le_bytes());
-    }
-    push_cstring(&mut body, comment);
-    body
-}
-
-fn cstring_body(s: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(s.len() + 1);
-    push_cstring(&mut body, s);
-    body
-}
-
 fn push_cstring(body: &mut Vec<u8>, s: &str) {
     body.extend_from_slice(s.as_bytes());
     body.push(0);
@@ -318,136 +204,6 @@ fn push_cstring(body: &mut Vec<u8>, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn set_looking_for_group_is_three_words_and_a_cstring() {
-        let body = set_looking_for_group([0, 0, 0], "LF2M UBRS");
-        assert_eq!(&body[..12], &[0u8; 12]);
-        assert_eq!(&body[12..], b"LF2M UBRS\0");
-        assert_eq!(set_looking_for_group([1, 2, 3], ""), {
-            let mut v = vec![1u8, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0];
-            v.push(0);
-            v
-        });
-    }
-
-    #[test]
-    fn friend_list_tail_is_conditional_on_the_status_byte() {
-        let mut body = vec![2u8]; // count
-        body.extend_from_slice(&7u64.to_le_bytes()); // offline friend
-        body.push(friend_status::OFFLINE);
-        body.extend_from_slice(&9u64.to_le_bytes()); // online friend
-        body.push(friend_status::AFK);
-        body.extend_from_slice(&12u32.to_le_bytes()); // area
-        body.extend_from_slice(&60u32.to_le_bytes()); // level
-        body.extend_from_slice(&11u32.to_le_bytes()); // class
-
-        let friends = read_friend_list(&mut &body[..]).unwrap();
-        assert_eq!(
-            friends,
-            vec![
-                FriendEntry {
-                    guid: 7,
-                    status: friend_status::OFFLINE,
-                    ..Default::default()
-                },
-                FriendEntry {
-                    guid: 9,
-                    status: friend_status::AFK,
-                    area: 12,
-                    level: 60,
-                    class: 11,
-                },
-            ]
-        );
-        assert!(!friends[0].is_online() && friends[1].is_online());
-    }
-
-    #[test]
-    fn ignore_list_is_a_counted_guid_array() {
-        let mut body = vec![2u8];
-        body.extend_from_slice(&0x1122u64.to_le_bytes());
-        body.extend_from_slice(&0x3344u64.to_le_bytes());
-        assert_eq!(
-            read_ignore_list(&mut &body[..]).unwrap(),
-            vec![0x1122, 0x3344]
-        );
-    }
-
-    #[test]
-    fn friend_status_tail_is_keyed_on_the_result_code() {
-        let mut online = vec![friend_result::ONLINE];
-        online.extend_from_slice(&9u64.to_le_bytes());
-        online.push(friend_status::DND);
-        online.extend_from_slice(&1519u32.to_le_bytes());
-        online.extend_from_slice(&60u32.to_le_bytes());
-        online.extend_from_slice(&8u32.to_le_bytes());
-        assert_eq!(
-            read_friend_status(&mut &online[..]).unwrap(),
-            FriendStatusUpdate {
-                result: friend_result::ONLINE,
-                guid: 9,
-                online: Some(FriendOnline {
-                    status: friend_status::DND,
-                    area: 1519,
-                    level: 60,
-                    class: 8,
-                }),
-            }
-        );
-
-        let mut removed = vec![friend_result::REMOVED];
-        removed.extend_from_slice(&9u64.to_le_bytes());
-        removed.extend_from_slice(&[0xFF; 13]); // must be ignored, not parsed
-        let status = read_friend_status(&mut &removed[..]).unwrap();
-        assert_eq!(status.result, friend_result::REMOVED);
-        assert_eq!(status.online, None);
-    }
-
-    #[test]
-    fn who_results_carry_both_counts() {
-        let mut body = Vec::new();
-        body.extend_from_slice(&1u32.to_le_bytes()); // displayed
-        body.extend_from_slice(&57u32.to_le_bytes()); // total
-        body.extend_from_slice(b"Tigole\0");
-        body.extend_from_slice(b"Legacy of Steel\0");
-        body.extend_from_slice(&40u32.to_le_bytes()); // level
-        body.extend_from_slice(&4u32.to_le_bytes()); // class
-        body.extend_from_slice(&1u32.to_le_bytes()); // race
-        body.extend_from_slice(&40u32.to_le_bytes()); // zone
-
-        assert_eq!(
-            read_who(&mut &body[..]).unwrap(),
-            WhoResults {
-                displayed: 1,
-                total: 57,
-                entries: vec![WhoEntry {
-                    name: "Tigole".into(),
-                    guild: "Legacy of Steel".into(),
-                    level: 40,
-                    class: 4,
-                    race: 1,
-                    zone: 40,
-                }],
-            }
-        );
-    }
-
-    #[test]
-    fn who_reads_the_empty_guild_string() {
-        let mut body = Vec::new();
-        body.extend_from_slice(&1u32.to_le_bytes());
-        body.extend_from_slice(&1u32.to_le_bytes());
-        body.extend_from_slice(b"Solo\0");
-        body.extend_from_slice(b"\0");
-        body.extend_from_slice(&5u32.to_le_bytes());
-        body.extend_from_slice(&1u32.to_le_bytes());
-        body.extend_from_slice(&3u32.to_le_bytes());
-        body.extend_from_slice(&1u32.to_le_bytes());
-        let who = read_who(&mut &body[..]).unwrap();
-        assert_eq!(who.entries[0].guild, "");
-        assert_eq!(who.entries[0].level, 5);
-    }
 
     #[test]
     fn who_request_body_is_byte_exact() {
@@ -502,14 +258,5 @@ mod tests {
         let after_zones = 22 + WHO_MAX_ZONES * 4;
         let term_count = u32::from_le_bytes(body[after_zones..after_zones + 4].try_into().unwrap());
         assert_eq!(term_count as usize, WHO_MAX_SEARCH_TERMS);
-    }
-
-    #[test]
-    fn the_add_and_del_bodies() {
-        assert_eq!(add_friend("Bob"), b"Bob\0");
-        assert_eq!(add_ignore("Bob"), b"Bob\0");
-        assert_eq!(del_friend(0xDEAD_BEEF), 0xDEAD_BEEFu64.to_le_bytes());
-        assert_eq!(del_ignore(0xDEAD_BEEF), 0xDEAD_BEEFu64.to_le_bytes());
-        assert!(friend_list().is_empty());
     }
 }

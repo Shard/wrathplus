@@ -76,6 +76,7 @@ pub mod wrath_taxi_ack;
 pub mod wrath_trainer;
 pub mod wrath_world;
 pub mod wrath_misc;
+pub mod wrath_opcode_names;
 pub mod wrath_progress;
 pub use events::{
     CharAction, EntityKind, LoginRefusal, LoginStage, MoveSpeeds, Poll, SessionEnd,

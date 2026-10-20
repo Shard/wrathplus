@@ -32,12 +32,6 @@ pub struct TalentWipeConfirm {
     pub cost: u32,
 }
 
-/// Body of the outbound `MSG_TALENT_WIPE_CONFIRM`, the `CONFIRM_TALENT_WIPE` Accept: the trainer
-/// guid alone (vmangos `Skill.cpp:14-17`), as the reference latches it at `0xc4d7a0`.
-pub fn talent_wipe_confirm(trainer_guid: u64) -> Vec<u8> {
-    trainer_guid.to_le_bytes().to_vec()
-}
-
 /// `SMSG_LEVELUP_INFO`: our own level-up, sent only to us with no guid (`Player.cpp:3210-3218`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LevelUpInfo {

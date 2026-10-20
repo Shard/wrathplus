@@ -748,7 +748,7 @@ fn packet_dropped(opcode: u16, unparseable: bool, dropped: &mut DroppedOpcodes) 
     if tally.unknown + tally.unparseable == 0 {
         info!(
             "net: dropped packet {opcode:#06x} ({}) — {} (first occurrence; tallying)",
-            benilla_protocol::messages::opcode_name(opcode).unwrap_or("?"),
+            benilla_protocol::wrath_opcode_names::opcode_name(opcode).unwrap_or("?"),
             if unparseable {
                 "parser errored"
             } else {

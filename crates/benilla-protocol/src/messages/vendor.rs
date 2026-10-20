@@ -40,12 +40,3 @@ pub mod sell_result {
     pub const UNK: u8 = 5;
     pub const ONLY_EMPTY_BAG: u8 = 6;
 }
-
-/// Body of `CMSG_BUYBACK_ITEM` (`0x4fb950`): `u64 vendorGuid, u32 slot`, the absolute buyback
-/// slot 69-80 (`BUYBACK_SLOT_START` + index), not re-based.
-pub fn buyback_item(vendor_guid: u64, slot: u32) -> Vec<u8> {
-    let mut body = Vec::with_capacity(12);
-    body.extend_from_slice(&vendor_guid.to_le_bytes());
-    body.extend_from_slice(&slot.to_le_bytes());
-    body
-}

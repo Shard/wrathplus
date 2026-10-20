@@ -10,22 +10,3 @@ pub struct PlayerBound {
     /// The `AreaTable` id now bound, the same one `SMSG_BINDPOINTUPDATE` carries beside it.
     pub area: u32,
 }
-
-/// `CMSG_BINDER_ACTIVATE`: the guid from [`read_binder_confirm`]. The server binds only if it is
-/// an innkeeper in interact range, and says nothing otherwise.
-pub fn binder_activate(binder_guid: u64) -> Vec<u8> {
-    binder_guid.to_le_bytes().to_vec()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_activate_body_is_one_little_endian_guid() {
-        assert_eq!(
-            binder_activate(0x0000_0000_0000_2a01),
-            vec![0x01, 0x2a, 0, 0, 0, 0, 0, 0]
-        );
-    }
-}

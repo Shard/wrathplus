@@ -150,45 +150,9 @@ pub struct PetitionRename {
     pub name: String,
 }
 
-/// Body of `CMSG_PETITION_BUY` (vmangos `Packets/Petition.cpp:47-67`): `u64 npc, u32 0, u64 0`,
-/// the name, `u32 0` x10, `u16 0, u8 0, u32 index, u32 0`. The server reads only NPC and name.
-/// A bad name gets `SMSG_GUILD_COMMAND_RESULT`, no money `SMSG_BUY_FAILED`, a full bag
-/// `SMSG_INVENTORY_CHANGE_FAILURE`; success is only the item push (`PetitionsHandler.cpp:78-130`).
-pub fn petition_buy(npc: u64, name: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(72 + name.len());
-    body.extend_from_slice(&npc.to_le_bytes());
-    body.extend_from_slice(&0u32.to_le_bytes());
-    body.extend_from_slice(&0u64.to_le_bytes());
-    push_cstring(&mut body, name);
-    body.extend_from_slice(&[0u8; 40]); // 10 × u32
-    body.extend_from_slice(&0u16.to_le_bytes());
-    body.push(0);
-    body.extend_from_slice(&0u32.to_le_bytes()); // index, "unused" per the server
-    body.extend_from_slice(&0u32.to_le_bytes());
-    body
-}
-
-fn push_cstring(body: &mut Vec<u8>, s: &str) {
-    body.extend_from_slice(s.as_bytes());
-    body.push(0);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A body one byte short leaves vmangos's reader mid-field and the buy is silently dropped.
-    #[test]
-    fn petition_buy_body_is_seventy_two_bytes_plus_the_name() {
-        let body = petition_buy(0x1234_5678_9abc_def0, "Test");
-        // 8 npc + 4 + 8 + (4+1) name + 40 + 2 + 1 + 4 + 4
-        assert_eq!(body.len(), 72 + 4, "72 fixed bytes + a 4-char name");
-        assert_eq!(
-            petition_buy(0, "").len(),
-            72,
-            "the empty name still costs its NUL"
-        );
-    }
 
     #[test]
     fn charter_constants_match_the_world_data() {

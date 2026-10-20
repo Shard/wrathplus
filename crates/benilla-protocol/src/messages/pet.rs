@@ -189,54 +189,6 @@ pub fn pet_action(pet_guid: u64, packed: u32, target_guid: u64) -> Vec<u8> {
     body
 }
 
-/// Body of `CMSG_PET_STOP_ATTACK` (opcode 746, vmangos `Packets/Pet.cpp:33-36`): the pet guid,
-/// sent by the Attack button's second press (`PetActionBarFrame.lua:258-262`).
-pub fn pet_stop_attack(pet_guid: u64) -> Vec<u8> {
-    pet_guid.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_PET_CANCEL_AURA` (opcode 619, sender `0x4bd25f`): `u64` pet guid, `u32` spell.
-/// The server drops it unless the guid is our pet or charm and answers a dead pet with
-/// `FEEDBACK_PET_DEAD` (vmangos `SpellHandler.cpp:407-432`).
-pub fn pet_cancel_aura(pet_guid: u64, spell_id: u32) -> Vec<u8> {
-    let mut body = Vec::with_capacity(12);
-    body.extend_from_slice(&pet_guid.to_le_bytes());
-    body.extend_from_slice(&spell_id.to_le_bytes());
-    body
-}
-
-/// Body of `CMSG_PET_SET_ACTION` (opcode 372): `u64` pet guid, then one or two
-/// `(u32 position, u32 packed)` pairs, counted by body size alone (24 bytes is two, vmangos
-/// `Packets/Pet.cpp:52-62`), so one pair must not be padded. It carries the bar's autocast toggle
-/// (one pair, bit 30 flipped, `0x4bcc1e`) and its drag (`0x4bc9a0`), whose optional first pair
-/// relocates the target slot's occupant; vmangos requires it when a command or reaction moves.
-pub fn pet_set_action(pet_guid: u64, entries: &[(u32, u32)]) -> Vec<u8> {
-    let mut body = Vec::with_capacity(8 + 8 * entries.len());
-    body.extend_from_slice(&pet_guid.to_le_bytes());
-    for &(position, packed) in entries {
-        body.extend_from_slice(&position.to_le_bytes());
-        body.extend_from_slice(&packed.to_le_bytes());
-    }
-    body
-}
-
-/// Body of `CMSG_PET_ABANDON` (opcode 374, vmangos `Packets/Pet.cpp:16-19`): the pet guid. The
-/// menu's Abandon and Dismiss both send it; the server deletes a hunter pet and unsummons others.
-pub fn pet_abandon(pet_guid: u64) -> Vec<u8> {
-    pet_guid.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_PET_RENAME` (opcode 375, vmangos `Packets/Pet.cpp:21-25`): the pet guid, then
-/// the name NUL-terminated. The 12-letter cap is the popup's; the server refuses a bad name with
-/// `SMSG_PET_NAME_INVALID` rather than truncating.
-pub fn pet_rename(pet_guid: u64, name: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(9 + name.len());
-    body.extend_from_slice(&pet_guid.to_le_bytes());
-    body.extend_from_slice(name.as_bytes());
-    body.push(0);
-    body
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

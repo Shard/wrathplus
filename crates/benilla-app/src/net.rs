@@ -947,33 +947,32 @@ pub(crate) enum MoveKind {
 
 impl MoveKind {
     pub(crate) fn opcode(self) -> u16 {
-        use benilla_protocol::messages::opcode as op;
-        use benilla_protocol::wrath_ground;
+        use benilla_protocol::wrath_ground as g;
         match self {
-            MoveKind::StartForward => op::MSG_MOVE_START_FORWARD,
-            MoveKind::StartBackward => op::MSG_MOVE_START_BACKWARD,
-            MoveKind::Stop => op::MSG_MOVE_STOP,
-            MoveKind::StartStrafeLeft => op::MSG_MOVE_START_STRAFE_LEFT,
-            MoveKind::StartStrafeRight => op::MSG_MOVE_START_STRAFE_RIGHT,
-            MoveKind::StopStrafe => op::MSG_MOVE_STOP_STRAFE,
-            MoveKind::StartTurnLeft => op::MSG_MOVE_START_TURN_LEFT,
-            MoveKind::StartTurnRight => op::MSG_MOVE_START_TURN_RIGHT,
-            MoveKind::StopTurn => op::MSG_MOVE_STOP_TURN,
-            MoveKind::Jump => op::MSG_MOVE_JUMP,
-            MoveKind::FallLand => op::MSG_MOVE_FALL_LAND,
-            MoveKind::StartSwim => op::MSG_MOVE_START_SWIM,
-            MoveKind::StopSwim => op::MSG_MOVE_STOP_SWIM,
-            MoveKind::StartAscend => wrath_ground::MSG_MOVE_START_ASCEND as u16,
-            MoveKind::StopAscend => wrath_ground::MSG_MOVE_STOP_ASCEND as u16,
-            MoveKind::StartDescend => wrath_ground::MSG_MOVE_START_DESCEND as u16,
-            MoveKind::SetFly => wrath_ground::CMSG_MOVE_SET_FLY as u16,
-            MoveKind::StartPitchUp => wrath_ground::MSG_MOVE_START_PITCH_UP as u16,
-            MoveKind::StartPitchDown => wrath_ground::MSG_MOVE_START_PITCH_DOWN as u16,
-            MoveKind::StopPitch => wrath_ground::MSG_MOVE_STOP_PITCH as u16,
-            MoveKind::SetWalkMode => op::MSG_MOVE_SET_WALK_MODE,
-            MoveKind::SetRunMode => op::MSG_MOVE_SET_RUN_MODE,
-            MoveKind::SetFacing => op::MSG_MOVE_SET_FACING,
-            MoveKind::Heartbeat => op::MSG_MOVE_HEARTBEAT,
+            MoveKind::StartForward => g::MSG_MOVE_START_FORWARD as u16,
+            MoveKind::StartBackward => g::MSG_MOVE_START_BACKWARD as u16,
+            MoveKind::Stop => g::MSG_MOVE_STOP as u16,
+            MoveKind::StartStrafeLeft => g::MSG_MOVE_START_STRAFE_LEFT as u16,
+            MoveKind::StartStrafeRight => g::MSG_MOVE_START_STRAFE_RIGHT as u16,
+            MoveKind::StopStrafe => g::MSG_MOVE_STOP_STRAFE as u16,
+            MoveKind::StartTurnLeft => g::MSG_MOVE_START_TURN_LEFT as u16,
+            MoveKind::StartTurnRight => g::MSG_MOVE_START_TURN_RIGHT as u16,
+            MoveKind::StopTurn => g::MSG_MOVE_STOP_TURN as u16,
+            MoveKind::Jump => g::MSG_MOVE_JUMP as u16,
+            MoveKind::FallLand => g::MSG_MOVE_FALL_LAND as u16,
+            MoveKind::StartSwim => g::MSG_MOVE_START_SWIM as u16,
+            MoveKind::StopSwim => g::MSG_MOVE_STOP_SWIM as u16,
+            MoveKind::StartAscend => g::MSG_MOVE_START_ASCEND as u16,
+            MoveKind::StopAscend => g::MSG_MOVE_STOP_ASCEND as u16,
+            MoveKind::StartDescend => g::MSG_MOVE_START_DESCEND as u16,
+            MoveKind::SetFly => g::CMSG_MOVE_SET_FLY as u16,
+            MoveKind::StartPitchUp => g::MSG_MOVE_START_PITCH_UP as u16,
+            MoveKind::StartPitchDown => g::MSG_MOVE_START_PITCH_DOWN as u16,
+            MoveKind::StopPitch => g::MSG_MOVE_STOP_PITCH as u16,
+            MoveKind::SetWalkMode => g::MSG_MOVE_SET_WALK_MODE as u16,
+            MoveKind::SetRunMode => g::MSG_MOVE_SET_RUN_MODE as u16,
+            MoveKind::SetFacing => g::MSG_MOVE_SET_FACING as u16,
+            MoveKind::Heartbeat => g::MSG_MOVE_HEARTBEAT as u16,
         }
     }
 }

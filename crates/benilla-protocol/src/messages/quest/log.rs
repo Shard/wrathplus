@@ -74,46 +74,4 @@ pub struct QuestTemplate {
 
 // ── CMSG encoders ────────────────────────────────────────────────────────────────────────────────
 
-/// Body of `CMSG_QUEST_QUERY` (`Quest.cpp:6`): the quest id. Unlike the giver query, no NPC guid.
-pub fn quest_query(quest_id: u32) -> Vec<u8> {
-    quest_id.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_QUESTLOG_REMOVE_QUEST` (`Quest.cpp:58`): abandons a log slot. There is no reply;
-/// the cleared `PLAYER_QUEST_LOG` fields are the confirmation.
-pub fn questlog_remove_quest(slot: u8) -> Vec<u8> {
-    vec![slot]
-}
-
-/// Body of `CMSG_QUESTLOG_SWAP_QUEST` (`Quest.cpp:52`).
-pub fn questlog_swap_quest(slot1: u8, slot2: u8) -> Vec<u8> {
-    vec![slot1, slot2]
-}
-
 // ── SMSG parsers ─────────────────────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── Fixture builders ─────────────────────────────────────────────────────────────────────────
-
-    // ── CMSG encode goldens ──────────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn cmsg_quest_query_body() {
-        assert_eq!(quest_query(1234), vec![0xD2, 0x04, 0x00, 0x00]);
-    }
-
-    #[test]
-    fn cmsg_questlog_remove_quest_body() {
-        assert_eq!(questlog_remove_quest(5), vec![5]);
-    }
-
-    #[test]
-    fn cmsg_questlog_swap_quest_body() {
-        assert_eq!(questlog_swap_quest(3, 7), vec![3, 7]);
-    }
-
-    // ── SMSG parse fixtures ──────────────────────────────────────────────────────────────────────
-}

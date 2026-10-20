@@ -46,11 +46,6 @@ pub struct PvpLogData {
     pub rows: Vec<PvpLogRow>,
 }
 
-/// `CMSG_LEAVE_BATTLEFIELD` (`0x4abe60`): the active slot's map id, or 0 with none active.
-pub fn leave_battlefield(map_id: u32) -> Vec<u8> {
-    map_id.to_le_bytes().to_vec()
-}
-
 /// `SMSG_BATTLEFIELD_LIST` (handler `0x4aa6c0`): the instance list a battlemaster opens.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct BattlefieldList {
@@ -83,66 +78,3 @@ pub struct BattlefieldPositions {
 /// The client's 40-entry store. Deviation: a larger count keeps the first 40, where the
 /// reference's handler writes past the store.
 pub const BATTLEFIELD_POSITIONS_MAX: usize = 40;
-
-/// `CMSG_BATTLEFIELD_LIST` (`0x4ab8c0`): the queued slot's map id.
-pub fn battlefield_list(map_id: u32) -> Vec<u8> {
-    map_id.to_le_bytes().to_vec()
-}
-
-/// `CMSG_BATTLEMASTER_JOIN` (`0x4a9f60`, with a battlemaster); instance 0 means first available.
-pub fn battlemaster_join(
-    battlemaster: u64,
-    map_id: u32,
-    instance_id: u32,
-    as_group: bool,
-) -> Vec<u8> {
-    let mut body = battlemaster.to_le_bytes().to_vec();
-    body.extend_from_slice(&map_id.to_le_bytes());
-    body.extend_from_slice(&instance_id.to_le_bytes());
-    body.push(u8::from(as_group));
-    body
-}
-
-/// `CMSG_BATTLEFIELD_JOIN` (`0x4a9f60`, no battlemaster); instance 0 means first available.
-pub fn battlefield_join(map_id: u32, instance_id: u32, as_group: bool) -> Vec<u8> {
-    let mut body = map_id.to_le_bytes().to_vec();
-    body.extend_from_slice(&instance_id.to_le_bytes());
-    body.push(u8::from(as_group));
-    body
-}
-
-/// `CMSG_BATTLEFIELD_PORT` (`0x4ab3b0`): the map id, then a one-byte accept, 0 or 1.
-pub fn battlefield_port(map_id: u32, accept: bool) -> Vec<u8> {
-    let mut body = map_id.to_le_bytes().to_vec();
-    body.push(u8::from(accept));
-    body
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn port_is_a_map_id_and_one_byte() {
-        assert_eq!(battlefield_port(489, true), vec![0xE9, 1, 0, 0, 1]);
-        assert_eq!(battlefield_port(489, false), vec![0xE9, 1, 0, 0, 0]);
-    }
-}
-
-#[cfg(test)]
-mod pvp_log_tests {
-    use super::*;
-
-    #[test]
-    fn the_join_bodies_and_the_list_request() {
-        assert_eq!(
-            battlefield_join(489, 0, true),
-            vec![0xE9, 1, 0, 0, 0, 0, 0, 0, 1],
-            "first available, as a group"
-        );
-        let mut want = 0x42u64.to_le_bytes().to_vec();
-        want.extend_from_slice(&[0xE9, 1, 0, 0, 5, 0, 0, 0, 0]);
-        assert_eq!(battlemaster_join(0x42, 489, 5, false), want);
-        assert_eq!(battlefield_list(529), vec![0x11, 2, 0, 0]);
-    }
-}

@@ -51,13 +51,6 @@ impl InspectHonorStats {
     }
 }
 
-/// Body of the `MSG_INSPECT_HONOR_STATS` request: the raw, unpacked `u64` guid (vmangos
-/// `Misc.cpp:93-96`). A refused request gets no answer, and unlike `CMSG_INSPECT` it does not
-/// set our selection (`MiscHandler.cpp:962-972`).
-pub fn inspect_honor_stats(guid: u64) -> Vec<u8> {
-    guid.to_le_bytes().to_vec()
-}
-
 /// `SMSG_PVP_CREDIT` (opcode 652): one honor payout, dishonorable ones included (vmangos
 /// `HonorMgr.cpp:1061-1093`). The descriptor holds only totals; this is the only per-payout notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,19 +65,4 @@ pub struct PvpCredit {
     /// A creature sends 19 if a racial leader, else 0; vmangos floors a player victim at 5
     /// (`HonorMgr.cpp:1078-1089`), a server fallback rather than a rule to re-implement.
     pub victim_rank: i32,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inspect_honor_stats_request_golden() {
-        assert_eq!(
-            inspect_honor_stats(0x0000_0001_0000_2AB3),
-            vec![0xB3, 0x2A, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00],
-        );
-        // A zero guid is encoded as-is.
-        assert_eq!(inspect_honor_stats(0), vec![0u8; 8]);
-    }
 }

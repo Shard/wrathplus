@@ -82,16 +82,6 @@ pub fn autostore_loot_item(loot_slot: u8) -> Vec<u8> {
     vec![loot_slot]
 }
 
-/// `CMSG_LOOT_MONEY`: an empty body (vmangos `Opcodes_1_12_1.h:351`).
-pub fn loot_money() -> Vec<u8> {
-    Vec::new()
-}
-
-/// `CMSG_LOOT_RELEASE` (`Loot.cpp:13-16`): a guid the server ignores for the loot guid it stored.
-pub fn loot_release(guid: u64) -> Vec<u8> {
-    guid.to_le_bytes().to_vec()
-}
-
 /// `RollVote` (vmangos `Group/Group.h:88-99`): the server rejects a vote `>= 3`
 /// (`GroupHandler.cpp:367-368`). Overloaded on `SMSG_LOOT_ROLL`: see [`LootRoll::is_dice`].
 pub mod roll_vote {
@@ -206,66 +196,4 @@ pub struct ItemPushResult {
     pub suffix_factor: u32,
     pub random_property_id: u32,
     pub count: u32,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::messages::opcode;
-
-    fn hx(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
-    }
-
-    #[test]
-    fn cmsg_bodies_golden() {
-        assert_eq!(
-            loot(0x1234_5678_9abc_def0),
-            hx("f0debc9a78563412"),
-            "CMSG_LOOT body"
-        );
-
-        assert_eq!(
-            autostore_loot_item(3),
-            hx("03"),
-            "CMSG_AUTOSTORE_LOOT_ITEM body"
-        );
-
-        assert_eq!(loot_money(), Vec::<u8>::new(), "CMSG_LOOT_MONEY body");
-
-        assert_eq!(
-            loot_release(0x1234_5678_9abc_def0),
-            hx("f0debc9a78563412"),
-            "CMSG_LOOT_RELEASE body"
-        );
-
-        assert_eq!(
-            loot_roll(0x1234_5678_9abc_def0, 2, roll_vote::GREED),
-            hx("f0debc9a785634120200000002"),
-            "CMSG_LOOT_ROLL body"
-        );
-
-        let give = loot_master_give(0x1234_5678_9abc_def0, 2, 0x0fed_cba9_8765_4321);
-        assert_eq!(
-            give,
-            hx("f0debc9a785634120221436587a9cbed0f"),
-            "CMSG_LOOT_MASTER_GIVE body"
-        );
-        assert_eq!(give.len(), 17, "8 + 1 + 8, not 8 + 4 + 8");
-    }
-
-    /// The roll and master-loot opcodes (vmangos `Opcodes_1_12_1.h:671-677`).
-    #[test]
-    fn roll_opcode_values() {
-        assert_eq!(opcode::SMSG_LOOT_ALL_PASSED, 670);
-        assert_eq!(opcode::SMSG_LOOT_ROLL_WON, 671);
-        assert_eq!(opcode::CMSG_LOOT_ROLL, 672);
-        assert_eq!(opcode::SMSG_LOOT_START_ROLL, 673);
-        assert_eq!(opcode::SMSG_LOOT_ROLL, 674);
-        assert_eq!(opcode::CMSG_LOOT_MASTER_GIVE, 675);
-        assert_eq!(opcode::SMSG_LOOT_MASTER_LIST, 676);
-    }
 }

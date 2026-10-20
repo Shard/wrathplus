@@ -69,20 +69,6 @@ pub fn addon_block(addons: &[SecureAddon]) -> Vec<u8> {
     out
 }
 
-/// The block on the wire: `u32` size and the zlib stream, or nothing when there are no addons.
-pub fn addon_tail(addons: &[SecureAddon]) -> Vec<u8> {
-    if addons.is_empty() {
-        return Vec::new();
-    }
-    let plain = addon_block(addons);
-    let mut out = Vec::with_capacity(plain.len() / 2 + 8);
-    out.extend_from_slice(&(plain.len() as u32).to_le_bytes());
-    let mut encoder =
-        flate2::write::ZlibEncoder::new(out, flate2::Compression::default() /* level 6 */);
-    std::io::Write::write_all(&mut encoder, &plain).expect("zlib write to a Vec cannot fail");
-    encoder.finish().expect("zlib finish on a Vec cannot fail")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,23 +106,5 @@ mod tests {
             seen, sorted,
             "the client sends them in ascending ASCII order"
         );
-    }
-
-    /// `flate2`'s default is the reference's `Z_DEFAULT_COMPRESSION`, hence the retail 130 bytes.
-    #[test]
-    fn stock_tail_is_size_plus_zlib() {
-        let tail = addon_tail(&STOCK_SECURE_ADDONS);
-        assert_eq!(
-            u32::from_le_bytes(tail[0..4].try_into().unwrap()),
-            342,
-            "size prefix is the uncompressed length"
-        );
-        assert_eq!(tail[4], 0x78, "RFC1950 zlib framing, not raw deflate");
-        assert_eq!(tail.len(), 4 + 130, "retail compressed to 130 bytes");
-    }
-
-    #[test]
-    fn no_secure_addons_appends_nothing() {
-        assert!(addon_tail(&[]).is_empty());
     }
 }

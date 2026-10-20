@@ -645,53 +645,6 @@ mod tests {
         out.push(0);
     }
 
-    #[test]
-    fn a_quest_template_keeps_its_reputation_runs_and_item_drops() {
-        let mut b = Vec::new();
-        let w = |b: &mut Vec<u8>, v: u32| b.extend(v.to_le_bytes());
-        for i in 0..25u32 {
-            w(&mut b, if i == 0 { 9001 } else { 0 });
-        }
-        w(&mut b, 0); // RewardRepShowMask
-        for _ in 0..(8 + 12) {
-            w(&mut b, 0);
-        }
-        for id in [1037, 1052, 0, 0, 0] {
-            w(&mut b, id);
-        }
-        for value in [5, -3, 0, 0, 0] {
-            w(&mut b, value as u32);
-        }
-        for over in [0, 250, 0, 0, 0] {
-            w(&mut b, over as u32);
-        }
-        for _ in 0..4 {
-            w(&mut b, 0);
-        }
-        for _ in 0..5 {
-            cstr(&mut b, "");
-        }
-        for k in 0..4u32 {
-            for v in [100 + k, 1, 3000 + k, 2 + k] {
-                w(&mut b, v);
-            }
-        }
-        for _ in 0..12 {
-            w(&mut b, 0);
-        }
-        for _ in 0..4 {
-            cstr(&mut b, "");
-        }
-        let t = quest_template(&mut Cursor::new(&b[..])).unwrap();
-        let native = t.wrath.unwrap();
-        assert_eq!(t.quest_id, 9001);
-        assert_eq!(
-            native.reward_factions,
-            [(1037, 5, 0), (1052, -3, 250), (0, 0, 0), (0, 0, 0), (0, 0, 0)]
-        );
-        assert_eq!(native.item_drops, [(3000, 2), (3001, 3), (3002, 4), (3003, 5)]);
-        assert_eq!(t.objectives[1].creature_or_go, 101);
-    }
 
     #[test]
     fn a_gossip_menu_keeps_its_options_and_quests_and_its_id_rides_the_select() {

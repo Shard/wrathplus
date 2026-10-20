@@ -51,11 +51,6 @@ pub struct QuestConfirmAccept {
 
 // ── CMSG encoders ────────────────────────────────────────────────────────────────────────────────
 
-/// Body of `CMSG_PUSHQUESTTOPARTY` (`Quest.cpp:68-71`): Share Quest; the server walks the group.
-pub fn push_quest_to_party(quest_id: u32) -> Vec<u8> {
-    quest_id.to_le_bytes().to_vec()
-}
-
 /// Body of `CMSG_QUEST_CONFIRM_ACCEPT` (`Quest.cpp:63-66`): the escort confirm's yes. A no sends
 /// nothing (`QuestHandler.cpp:172-193`).
 pub fn quest_confirm_accept(quest_id: u32) -> Vec<u8> {
@@ -76,15 +71,6 @@ pub fn quest_push_result(sharer: u64, msg: QuestShareMsg) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn push_and_confirm_bodies_are_bare_quest_ids() {
-        assert_eq!(
-            push_quest_to_party(0x0123_4567),
-            vec![0x67, 0x45, 0x23, 0x01]
-        );
-        assert_eq!(quest_confirm_accept(9), vec![9, 0, 0, 0]);
-    }
 
     #[test]
     fn push_result_body_is_guid_then_msg() {

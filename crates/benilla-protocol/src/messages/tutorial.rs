@@ -6,8 +6,3 @@
 pub struct TutorialFlags {
     pub bytes: Vec<u8>,
 }
-
-/// `CMSG_TUTORIAL_FLAG` (`0x4b54c0`): the 0-based id as a `u32`.
-pub fn tutorial_flag(id: u32) -> Vec<u8> {
-    id.to_le_bytes().to_vec()
-}
