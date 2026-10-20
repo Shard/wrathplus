@@ -479,4 +479,96 @@ mod tests {
             )
             .unwrap());
     }
+
+    /// Every global function the Wrath compat chunk still serves, the shim burn-down list
+    /// (`docs/WRATH-COMPAT-SHIM-AUDIT.md`): a native binding installed after it drops its name here,
+    /// and a shim line a native binding already replaces is dead and goes.
+    const COMPAT_SERVED: &[&str] = &[
+        "BNConnected",
+        "BNFeaturesEnabled",
+        "BNFeaturesEnabledAndConnected",
+        "BNGetConversationInfo",
+        "BNGetCustomMessageTable",
+        "BNGetFriendInfo",
+        "BNGetFriendInfoByID",
+        "BNGetFriendInviteInfo",
+        "BNGetInfo",
+        "BNGetMaxPlayersInConversation",
+        "BNGetNumBlocked",
+        "BNGetNumBlockedToons",
+        "BNGetNumConversationMembers",
+        "BNGetNumFriendInvites",
+        "BNGetNumFriends",
+        "BNGetToonInfo",
+        "ChangeActionBarPage",
+        "ClearFocus",
+        "ClearOverrideBindings",
+        "CombatTextSetActiveUnit",
+        "EquipItemByName",
+        "FillLocalizedClassList",
+        "FocusUnit",
+        "GetAccountExpansionLevel",
+        "GetActionBarPage",
+        "GetActiveVoiceChannel",
+        "GetCVarAbsoluteMax",
+        "GetCVarAbsoluteMin",
+        "GetCVarBool",
+        "GetCVarMax",
+        "GetCVarMin",
+        "GetExistingLocales",
+        "GetExpansionLevel",
+        "GetLFGDeserterExpiration",
+        "GetLFGRandomCooldownExpiration",
+        "GetNumFriends",
+        "GetNumVoiceSessionMembersBySessionID",
+        "GetNumVoiceSessions",
+        "GetVoiceCurrentSessionID",
+        "GetVoiceSessionInfo",
+        "GetVoiceStatus",
+        "IsPetAttackAction",
+        "IsPlayerResolutionAvailable",
+        "IsPossessBarVisible",
+        "IsStereoVideoAvailable",
+        "IsVoiceChatAllowed",
+        "IsVoiceChatAllowedByServer",
+        "IsVoiceChatEnabled",
+        "PickupEquipmentSet",
+        "PickupItem",
+        "RegisterStaticConstants",
+        "SetMultiCastSpell",
+        "SetOverrideBinding",
+        "SetOverrideBindingClick",
+        "SetOverrideBindingItem",
+        "SetOverrideBindingMacro",
+        "SetOverrideBindingSpell",
+        "Sound_ChatSystem_GetInputDriverNameByIndex",
+        "Sound_ChatSystem_GetNumInputDrivers",
+        "Sound_ChatSystem_GetNumOutputDrivers",
+        "Sound_ChatSystem_GetOutputDriverNameByIndex",
+        "Sound_GameSystem_GetNumOutputDrivers",
+        "Sound_GameSystem_GetOutputDriverNameByIndex",
+        "SpellCanTargetItem",
+        "SpellTargetItem",
+        "TriggerTutorial",
+        "UnitIsPossessed",
+        "UnitIsTalking",
+        "UnitSelectionColor",
+        "VoiceIsDisabledByClient",
+    ];
+
+    #[test]
+    fn the_compat_chunk_serves_exactly_the_listed_globals() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut served = Vec::new();
+        for pair in s.lua.globals().pairs::<String, mlua::Value>() {
+            let (name, value) = pair.unwrap();
+            if let mlua::Value::Function(f) = value {
+                if f.info().source.as_deref() == Some("=[AzerothBench Wrath compat]") {
+                    served.push(name);
+                }
+            }
+        }
+        served.sort();
+        assert_eq!(served, COMPAT_SERVED);
+    }
 }
