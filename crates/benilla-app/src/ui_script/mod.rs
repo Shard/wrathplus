@@ -43,6 +43,8 @@ pub(crate) use manifest::load_default_ui;
 pub(crate) use manifest::load_ingame_ui;
 #[cfg(test)]
 pub(crate) use manifest::{load_stock_bindings, stock_bindings_file};
+#[cfg(test)]
+pub(crate) use manifest::load_wrath_ui;
 
 pub(crate) use crate::app_core::state::{CursorPayloadHeld, PointerOverUi};
 /// A synthetic pointer owns the mouse this frame (the drag probe's gesture), so

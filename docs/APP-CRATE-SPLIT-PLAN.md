@@ -312,6 +312,38 @@ config resource and `on_cvar` hook (`video::VideoConfig`, `realmlist::Realmlist`
 `addon_harness`). Finishing item 4 means each feature registering its hook as well as its rows,
 and the static table being passed in by the root instead of named.
 
+**Design note (item 4 follow-up).** The registry ends up owning only the store, the parser, the
+file and the VM mirror. A feature contributes three things through the same registration
+trait (`cvars::RegisterCvars`), all from its own plugin:
+
+1. *Rows*: done, `register_cvars(app, CVARS)`.
+2. *Hooks*: production code already registers these, since each feature's plugin adds its own
+   `on_cvar` observer. The 26 names left are the whole-table tests in `cvars::tests`: their
+   `ALL_OBSERVERS` list, the feature resources the rig inserts by hand, and the
+   `FEATURE_ROWS` loop. Those tests need every feature, so they move to
+   `game_plugins::client_tests::cvars` (the root layer), unchanged, with the 138-row, latched-order
+   and hook-order pins. `cvars` keeps only the tests that use its own rows (`Cvars::with_rows`).
+3. *Session levers*: new. `session_values` reads `$WOW_*` levers off feature resources
+   (`video::VideoConfig`, `realmlist::Realmlist`, `world_backdrop::RenderScale`,
+   `ui_script::UiScaleCvar`, …). Each becomes a `SessionLever { env, rows, read: fn(&World) ->
+   Vec<(&str, Option<String>)> }` that the feature registers with `register_session_lever`, and
+   `cvars` iterates the pending list in registration order. Benilla-world and benilla-assets
+   levers (farclip, clutter, MSAA, texture filter) stay in `cvars`, since those crates sit below
+   it.
+
+The static table is passed in, not named. `shipped_cvars` stays in the root. A VM's rows come
+from the world's `Cvars` registry, which holds all 138 rows once the plugins have built. That is
+already the live path in `ui_script::lifecycle`. Its "no registry" fallback drops to core rows,
+which only a stripped test world reaches. The tools and rigs that build a VM without an
+app (`load_default_ui`, `addon_harness`, `capture::fixtures`, the census) take
+`&[(&str, &str)]` from their caller. Root-layer callers pass `shipped_cvars::pairs()`. A UI-layer
+test that needs the feature rows takes them from its root-layer caller, or moves up into
+`client_tests` when the crates split. Remaining `cvars` → feature references:
+the `ui_script` VM-mirror seam (`VmMemo`, `UiInput`, `end_ui_session`), which goes with
+`app_core::state` as a pure move. Pins: `client_tests::shipped_cvars` (138 rows, `LATCHED_ORDER`,
+`HOOK_ORDER`) plus a new one: the lever list equals today's `session_values` rows in
+order.
+
 **Pure moves (~150 references, definitions only):**
 
 | Kind | Symbols (from) | Home |
