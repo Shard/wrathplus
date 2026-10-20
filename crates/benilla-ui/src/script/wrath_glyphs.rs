@@ -16,7 +16,7 @@
 use mlua::{Lua, MultiValue, Table, Value};
 
 use super::object::frame_handle_of;
-use super::tooltip::{append_line, clear_content, finish_content, fire_cleared};
+use super::tooltip::{append_line, clear_content, fire_cleared, show_or_hide_empty};
 use super::Model;
 
 /// One glyph socket as the app resolves it.
@@ -173,7 +173,7 @@ const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const GRAY: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
 const GOLD: [f32; 4] = [1.0, 0.82, 0.0, 1.0];
 /// `0xad2da4`, the glyph type line.
-const GLYPH_BLUE: [f32; 4] = [0.4, 0.733, 1.0, 1.0];
+pub(super) const GLYPH_BLUE: [f32; 4] = [0.4, 0.733, 1.0, 1.0];
 
 /// `GameTooltip:SetGlyph(socket [, group])` (`0x622ba0`):
 /// - an empty socket: `GLYPH_INACTIVE` in gray, or `GLYPH_LOCKED` in red when locked;
@@ -251,7 +251,8 @@ pub(super) fn install_tooltip_method(lua: &Lua, m: &Table) -> mlua::Result<()> {
                 )?,
                 (None, false, None) => {}
             }
-            finish_content(lua, h, "OnTooltipSetSpell");
+            // `0x622ba0` runs no content script: it ends in the show (`0x48f660`).
+            show_or_hide_empty(lua, h);
             Ok(())
         })?,
     )
