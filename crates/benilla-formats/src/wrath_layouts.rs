@@ -40,7 +40,7 @@ pub(crate) fn columns(
         "SpellShapeshiftForm" => (14, 35, spell_shapeshift_form),
         "Faction" => (41, 57, faction),
         "ChrRaces" => (29, 69, chr_races),
-        "ChrClasses" => (17, 60, chr_classes),
+        "ChrClasses" => (35, 60, chr_classes),
         "CreatureDisplayInfo" => (12, 16, creature_display_info),
         "CreatureFamily" => (19, 28, creature_family),
         "SpellItemEnchantment" => (24, 38, spell_item_enchantment),
@@ -212,10 +212,15 @@ fn chr_races(m: &mut Map) {
         .run(26, 65, 3); // FacialHairCustomization[2], HairCustomization
 }
 
-/// `ChrClasses.dbc` 17 → 60: damage bonus stat, display power, pet name token, name, file name,
-/// spell family, flags (whose relic bit 1.12 reads).
+/// `ChrClasses.dbc` 35 → 60: damage bonus stat, display power, pet name token, name, file name,
+/// spell family, flags (whose relic bit 1.12 reads), and the female and male name blocks.
 fn chr_classes(m: &mut Map) {
-    m.run(0, 0, 1).run(2, 1, 3).loc(5, 4).run(14, 55, 3);
+    m.run(0, 0, 1)
+        .run(2, 1, 3)
+        .loc(5, 4)
+        .run(14, 55, 3)
+        .loc(17, 21)
+        .loc(26, 38);
 }
 
 /// `CreatureDisplayInfo.dbc` 12 → 16: a portrait texture column precedes size class.
@@ -297,7 +302,7 @@ mod tests {
         ("SpellShapeshiftForm", 14, 35),
         ("Faction", 41, 57),
         ("ChrRaces", 29, 69),
-        ("ChrClasses", 17, 60),
+        ("ChrClasses", 35, 60),
         ("CreatureDisplayInfo", 12, 16),
         ("CreatureFamily", 19, 28),
         ("SpellItemEnchantment", 24, 38),

@@ -55,9 +55,7 @@ pub(crate) struct Wielded {
     pub(crate) disarmed: bool,
 }
 
-/// `UNIT_FIELD_FLAGS` bit 21 (vmangos `UnitDefines.h:566`), tested inside `GetWeapon` at
-/// `0x5ec2b8` (CGPlayer) and `0x605e58`/`0x605e98` (CGUnit).
-pub(crate) const UNIT_FLAG_DISARMED: u32 = 0x0020_0000;
+pub(crate) use crate::app_core::state::UNIT_FLAG_DISARMED;
 
 /// `ItemClass` 2, weapon: the disarm ladder's whole test, so a shield is never the hand it hides.
 pub(crate) const ITEM_CLASS_WEAPON: u8 = 2;

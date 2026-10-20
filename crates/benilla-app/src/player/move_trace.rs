@@ -10,7 +10,7 @@
 //! - `gait`: a walk/run toggle decision ([`gait`]), committed or refused.
 //! - `knb`: a knockback ([`knockback`]), flown or refused.
 //! - `snd`: an outbound `MSG_MOVE_*` ([`sent`]), diffable against a 1.12.1 capture's client
-//!   stream; `net::motion`'s `rly` is the receive side.
+//!   stream; `motion`'s `rly` is the receive side.
 //! - `sett`: how the settle hold ended ([`settle`]).
 //! - `rid`: a frame of a self-spline ride ([`ride`]).
 //!

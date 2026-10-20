@@ -11,11 +11,7 @@ use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfPlayer};
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, npc_switched, NpcSession};
 
-/// `BankBagSlotPrices.dbc`, the client's own slot prices; absent, the purchase row shows 0 and
-/// the server still charges its own price.
-#[derive(Resource)]
-pub(crate) struct BankPrices(pub(crate) benilla_formats::BankBagSlotPrices);
-
+pub(crate) use crate::app_core::catalogs::BankPrices;
 /// The open bank: the banker from `SMSG_SHOW_BANK`, until a close or a disconnect.
 #[derive(Resource, Default)]
 pub(crate) struct BankOpen {

@@ -624,10 +624,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "benilla-srp",
- "clap",
  "flate2",
- "num-bigint",
- "rand 0.8.6",
  "sha1",
  "strum",
 ]

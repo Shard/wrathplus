@@ -66,11 +66,13 @@ mod go_anim;
 mod go_templates;
 #[cfg(feature = "dev")]
 mod hover_log;
+mod inventory;
 mod items;
 mod loading_screen;
 mod local_state;
 mod login;
 mod minimap;
+mod motion;
 mod nameplates;
 mod names;
 mod net;

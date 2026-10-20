@@ -438,7 +438,7 @@ pub(super) fn merge_server_flags(local: u32, wire: u32) -> u32 {
 ///
 /// Deviation: applied at arrival, because our own avatar has no motion to de-jitter; the reference
 /// routes it through the replay chain remotes use, which paces to the sender's cadence and can hold
-/// an early packet (up to 1000 ms in `net::motion`). A self-addressed stream, such as bursting
+/// an early packet (up to 1000 ms in `motion`). A self-addressed stream, such as bursting
 /// anticheat snap-backs, would need that pacing.
 // `control`'s own transports query, passed through.
 #[allow(clippy::type_complexity)]

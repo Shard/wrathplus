@@ -614,7 +614,7 @@ pub(crate) fn fall_step(v0: f32, dt: f32, terminal: f32) -> (f32, f32) {
 
 /// One airborne step against the world: the arc's slide alone, with steep faces sheared
 /// ([`steep_contact_shear`]); gravity owns the height and the next ground probe the landing.
-/// Shared with the remote dead-reckon's arcs ([`crate::net::motion::remote`]).
+/// Shared with the remote dead-reckon's arcs ([`crate::motion::remote`]).
 pub(crate) fn airborne_step(
     world: &benilla_world::collision::WorldCollision<'_, '_>,
     capsule: &Collider,

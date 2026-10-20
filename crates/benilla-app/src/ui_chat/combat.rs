@@ -468,21 +468,9 @@ fn buff_twin(damage: ChatEventKind) -> ChatEventKind {
 
 // ──────────────────────────── the format-string selectors ─────────────────────────────
 
-/// Which of a family's four templates applies: the variant code the reference's 45 selectors
-/// (`0x629f90`, `0x62a290`, …) return. `SelfSelf` prints nothing unless the family has the key,
-/// as `SPELLLOGSELFSELF` and `HEALEDSELFSELF` do.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Variant {
-    /// I did it to someone else: `…SELFOTHER`, variant code 2.
-    SelfOther,
-    /// Someone else did it to me: `…OTHERSELF`, code 1.
-    OtherSelf,
-    /// Someone else, to someone else: `…OTHEROTHER`, code 3.
-    OtherOther,
-    /// Me, to me: `…SELFSELF`, code 0 where the family has no such key.
-    SelfSelf,
-}
-
+pub(crate) use crate::app_core::chat::{
+    Family, Fills, Keying, Named, PendingCombat, Slot, Trailers, Variant,
+};
 impl Variant {
     fn of(subject: UnitClass, object: UnitClass) -> Self {
         match (subject.is_me(), object.is_me()) {
@@ -515,59 +503,6 @@ impl Variant {
     fn subject_is_me(self) -> bool {
         matches!(self, Self::SelfSelf | Self::SelfOther)
     }
-}
-
-/// How a family builds its GlobalString key from the stem and the variant: the four-way selectors
-/// (`0x62a290` and 44 more), a two-way off a sentence's single participant (`0x62c160`,
-/// `0x62b480`, `0x629610`), or one fixed key (`DURABILITYDAMAGE_DEATH`, `SELFKILLOTHER`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Keying {
-    /// `…SELFSELF` / `…SELFOTHER` / `…OTHERSELF` / `…OTHEROTHER`, off both endpoints.
-    Quad,
-    /// Two keys off the subject alone, in the family's words: `SELF`/`OTHER`, or
-    /// `_FIRSTPERSON`/`_THIRDPERSON` for `TRADESKILL_LOG` and `FEEDPET_LOG`.
-    Duo {
-        me: &'static str,
-        other: &'static str,
-    },
-    /// One key: the stem and tail are the whole name.
-    Single,
-}
-
-/// One value slot of a family's format string, in the order the shipped template consumes it.
-/// `Attacker` and `Victim` appear only in the variants that spell that endpoint by name.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Slot {
-    /// `%s`: the subject's name, when the variant spells it.
-    Attacker,
-    /// `%s`: the object's name, when the variant spells it.
-    Victim,
-    /// `%s`: the spell's name.
-    Spell,
-    /// `%s`: the damage school's word (`SPELL_SCHOOL<n>_CAP`).
-    School,
-    /// `%s`: a power's word (`MANA_POINTS` and kin).
-    Power,
-    /// `%d`: the primary amount.
-    Amount,
-    /// `%d`: a second amount, the leech family's gain.
-    Amount2,
-    /// `%s`: the leech family's gained power word.
-    Power2,
-    /// `%s`: a name that is never "you" (an item, gameobject, pet, faction or failure reason),
-    /// spelled in every variant.
-    Named,
-}
-
-/// A combat-log message family: the stem its keys are built from, and the ordered slots its
-/// templates consume.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Family {
-    pub stem: &'static str,
-    pub keying: Keying,
-    /// Appended after the variant word, as `AURAADDED` + `SELF` + `HARMFUL`; empty for most.
-    pub tail: &'static str,
-    pub slots: &'static [Slot],
 }
 
 impl Family {
@@ -607,18 +542,6 @@ impl Family {
     }
 }
 
-/// The six suffixes `0x628410` appends to a finished sentence, in its order, before `0x626850`
-/// emits the whole line as one `%s`; a suffix whose GlobalString is empty is skipped.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Trailers {
-    pub absorbed: u32,
-    /// Negative is a vulnerability bonus, worded by `VULNERABLE_TRAILER`.
-    pub resisted: i64,
-    pub blocked: u32,
-    /// The swing's `HitInfo`, for `0x4000` GLANCING and `0x8000` CRUSHING; melee only.
-    pub hit_info: u32,
-}
-
 fn append_trailers(lua: &benilla_ui::script::UiScript, line: &mut String, t: Trailers) {
     const GLANCING: u32 = 0x4000;
     const CRUSHING: u32 = 0x8000;
@@ -652,27 +575,6 @@ fn append_trailers(lua: &benilla_ui::script::UiScript, line: &mut String, t: Tra
     if t.absorbed != 0 {
         push("ABSORB_TRAILER", Some(i64::from(t.absorbed)));
     }
-}
-
-/// The value bound to each [`Slot`] for one line. School and power are indices, resolved to words
-/// in [`compose_line`]; `None` where the family needs one drops the line.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Fills {
-    pub attacker: String,
-    pub victim: String,
-    pub spell: String,
-    /// The damage school index, 0 physical to 6 arcane.
-    pub school: Option<u8>,
-    /// The vmangos `Powers` index, 0 mana to 4 happiness.
-    pub power: Option<u32>,
-    pub amount: i64,
-    pub amount2: i64,
-    /// The leech family's gained power index.
-    pub power2: Option<u32>,
-    /// The [`Slot::Named`] text, already localized.
-    pub named: String,
-    /// The `0x628410` suffixes, for the families that can grow one.
-    pub trailers: Option<Trailers>,
 }
 
 /// Resolve a family and variant to a finished line; `None`, silently, when the key is absent,
@@ -1572,36 +1474,6 @@ pub(crate) fn melee_family(
 }
 
 // ────────────────────────── the queued line, awaiting its names ───────────────────────
-
-/// A combat-log line classified at the packet while both units are streamed, so a despawned
-/// creature still logs, with only its names outstanding. The reference's deferred queue
-/// (`0xc4e208`, replayed by `0x6294b0`) holds only a line waiting on an item name (`0x55ba30`).
-#[derive(Clone, Debug)]
-pub(crate) struct PendingCombat {
-    pub kind: ChatEventKind,
-    pub family: Family,
-    pub variant: Variant,
-    /// The sentence's subject, naming the `Attacker` slots; for [`DAMAGESHIELD`], the bearer.
-    pub subject: u64,
-    /// The guid naming the `Victim` slots.
-    pub object: u64,
-    /// Everything the template needs but the names, which are filled at drain.
-    pub fills: Fills,
-    pub named: Named,
-    pub tries: u16,
-}
-
-/// What still has to be looked up before a line's [`Slot::Named`] can be filled: an item through
-/// the item cache (`0x55ba30`), a unit through `GetObjectName` (`0x6264e0`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Named {
-    /// The text is already in [`Fills::named`], or the family has no `Named` slot.
-    Ready,
-    /// An item entry, through the ask-once item cache.
-    Item(u32),
-    /// A unit or object guid, through the name cache.
-    Unit(u64),
-}
 
 /// Build a queued line from an already-classified pair; `None` when neither endpoint resolves.
 pub(crate) fn queue(

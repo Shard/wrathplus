@@ -3,36 +3,14 @@
 -- teams, achievements, the calendar, vehicles, companions) answer as a client with nothing in
 -- them would: no entries, not available. `__azb_fire_event` is the host's event dispatch.
 
-local fire = __azb_fire_event
 __azb_fire_event = nil
 
 local function none() end
 local function zero() return 0 end
 
 -- ── CVars ──────────────────────────────────────────────────────────────────────────────────────
-function GetCVarBool(name)
-    local value = GetCVar(name)
-    if value and value ~= "0" and value ~= "" then return 1 end
-    return nil
-end
-GetCVarMin, GetCVarMax = none, none
-GetCVarAbsoluteMin, GetCVarAbsoluteMax = none, none
-
--- ── action bars ────────────────────────────────────────────────────────────────────────────────
-local actionBarPage = 1
-function GetActionBarPage() return actionBarPage end
-function ChangeActionBarPage(page)
-    page = tonumber(page)
-    if page and page ~= actionBarPage then
-        actionBarPage = page
-        fire("ACTIONBAR_PAGE_CHANGED")
-    end
-end
 
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-GetAccountExpansionLevel = GetAccountExpansionLevel or function() return 2 end
-GetExpansionLevel = GetExpansionLevel or function() return 2 end
-GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -275,7 +253,7 @@ do
     trackerFilter = "0",
     trackerSorting = "proximity",
     UberTooltips = "1",
-    uiscale = "1",
+    uiScale = "1",
     UnitNameEnemyGuardianName = "0",
     UnitNameEnemyPetName = "0",
     UnitNameEnemyPlayerName = "1",
@@ -307,37 +285,11 @@ do
 end
 
 -- ── class names, action and pet-bar predicates, group queries, chat window geometry ───────────
-do
-    local male = {
-        WARRIOR = "Warrior", PALADIN = "Paladin", HUNTER = "Hunter", ROGUE = "Rogue",
-        PRIEST = "Priest", DEATHKNIGHT = "Death Knight", SHAMAN = "Shaman", MAGE = "Mage",
-        WARLOCK = "Warlock", DRUID = "Druid",
-    }
-    function FillLocalizedClassList(t, female)
-        for token, name in pairs(male) do t[token] = name end
-        return t
-    end
-end
-IsPetAttackAction = IsPetAttackAction or none
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
-RegisterStaticConstants = RegisterStaticConstants or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
-TriggerTutorial = TriggerTutorial or none
-do
-    -- Wrath's GetNumFriends answers the online count too.
-    local numFriends = GetNumFriends
-    function GetNumFriends()
-        local total, online = numFriends() or 0, 0
-        for i = 1, total do
-            local _, _, _, _, connected = GetFriendInfo(i)
-            if connected then online = online + 1 end
-        end
-        return total, online
-    end
-end
 UnitIsTalking = UnitIsTalking or none
 
 -- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
@@ -356,18 +308,5 @@ COMBATLOG_OBJECT_MAINTANK, COMBATLOG_OBJECT_MAINASSIST = 0x40000, 0x80000
 for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
-CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
 
--- ── unit selection colour (the target frame's name background) ─────────────────────────────────
-do
-    local colors = {
-        [1] = { 1, 0, 0 }, [2] = { 1, 0, 0 }, [3] = { 1, 0.5, 0 }, [4] = { 1, 1, 0 },
-        [5] = { 0, 1, 0 }, [6] = { 0, 1, 0 }, [7] = { 0, 1, 0 }, [8] = { 0, 1, 0 },
-    }
-    function UnitSelectionColor(unit)
-        if UnitIsPlayer(unit) and UnitIsFriend("player", unit) then return 0, 0, 1, 1 end
-        local c = colors[UnitReaction(unit, "player") or 4] or colors[4]
-        return c[1], c[2], c[3], 1
-    end
-end
 
