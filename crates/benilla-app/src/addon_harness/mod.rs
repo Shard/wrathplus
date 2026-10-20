@@ -1030,7 +1030,7 @@ fn seat_a_session(script: &mut UiScript) {
         let _ = script.run(src);
     }
     // The shipped CVar table, before the realm below writes into it.
-    script.register_cvars(crate::cvars::registered_pairs());
+    script.register_cvars(crate::shipped_cvars::pairs());
     // A display: `GetScreenResolutions()` empty and `GetCurrentResolution()` 0 is no state the 1.12
     // client can be in (`CT_Viewport` indexes its screen size by it at load). One mode, the
     // `set_screen_size(1024, 768)` the interface is already told.

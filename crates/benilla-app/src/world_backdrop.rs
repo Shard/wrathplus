@@ -259,8 +259,26 @@ pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut scale: ResMut<Rende
     }
 }
 
+/// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
+/// reference's register site and its default's standing ([`crate::cvars::Registered`]).
+pub(crate) const CVARS: &[crate::cvars::Registered] = {
+    use crate::cvars::ours;
+    &[
+        // benilla's own: the world renders at `window × this` while the UI stays native. The knob is
+        // [`RenderScale`], clamped to `RENDER_SCALE_RANGE`; at "1" nothing is
+        // resampled. `$WOW_RENDER_SCALE` overrides it for the session.
+        ours(
+            "renderScale",
+            "1",
+            "benilla's own — the reference has no off-screen buffer to hang a resolution dial \
+             on; its nearest equivalent, `gxResolution`, drops the interface with the world",
+        ),
+    ]
+};
+
 impl Plugin for WorldBackdropPlugin {
     fn build(&self, app: &mut App) {
+        crate::cvars::RegisterCvars::register_cvars(app, CVARS);
         app.add_observer(on_cvar);
         app.init_resource::<RenderScale>()
             .add_systems(Startup, setup_backdrop)
