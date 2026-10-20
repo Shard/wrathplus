@@ -566,7 +566,7 @@ fn worldmap_update_event_fires_on_next_tick() {
         heard = 0
         f = CreateFrame("Frame", "MapListener")
         f:RegisterEvent("WORLD_MAP_UPDATE")
-        f:SetScript("OnEvent", function() heard = heard + 1 end)
+        f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) heard = heard + 1 end)
         SetMapZoom(1)
     "#,
     )

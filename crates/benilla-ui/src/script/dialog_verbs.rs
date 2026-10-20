@@ -197,10 +197,10 @@ mod tests {
 
     #[test]
     fn cancel_area_spirit_heal_cancels_the_aura_and_fires_out_of_range() {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             r#"F = CreateFrame("Frame") F:RegisterEvent("AREA_SPIRIT_HEALER_OUT_OF_RANGE")
-               F:SetScript("OnEvent", function() GOT = event end) CancelAreaSpiritHeal()"#,
+               F:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4) GOT = event end) CancelAreaSpiritHeal()"#,
         )
         .unwrap();
         s.tick(0.0);

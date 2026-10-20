@@ -835,16 +835,6 @@ mod tests {
     }
 
     #[test]
-    fn vanilla_has_none_of_these() {
-        let s = UiScript::new_vanilla().unwrap();
-        assert!(s
-            .eval::<bool>(
-                "return InviteUnit == nil and GuildInvite == nil and StartAttack == nil \
-                 and GetAutoCompleteResults == nil and CancelUnitBuff == nil"
-            )
-            .unwrap());
-    }
-    #[test]
     fn temp_enchant_cancel_dressable_and_sound_restart() {
         use crate::script::{InvSlotView, ItemTemplateView};
         let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();

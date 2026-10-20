@@ -127,6 +127,8 @@ fn script() -> UiScript {
     s
 }
 
+
+/// A 1.12 host for the tests a later step 9 batch converts.
 fn vanilla_script() -> UiScript {
     let mut s = bare_vanilla_script();
     seed_item_strings(&mut s);

@@ -700,13 +700,9 @@ mod tests {
     }
 
     #[test]
-    fn confirm_loot_slot_confirms_and_vanilla_lacks_these() {
+    fn confirm_loot_slot_confirms() {
         let mut s = vm();
         s.run("ConfirmLootSlot(2)").unwrap();
         assert_eq!(s.take_loot_confirms(), vec![2]);
-        let v = UiScript::new_vanilla().unwrap();
-        assert!(v
-            .eval::<bool>("return CancelSummon == nil and GetText == nil and IsFalling == nil")
-            .unwrap());
     }
 }

@@ -353,7 +353,7 @@ mod tests {
     }
 
     fn bar_script() -> UiScript {
-        let mut s = UiScript::new_vanilla().unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_pet_actions(true, true, true, hunter_bar());
         s
     }
@@ -562,7 +562,7 @@ mod tests {
             local f = CreateFrame("Frame", "PetGridListener")
             f:RegisterEvent("PET_BAR_SHOWGRID")
             f:RegisterEvent("ACTIONBAR_SHOWGRID")
-            f:SetScript("OnEvent", function()
+            f:SetScript("OnEvent", function(this, event, arg1, arg2, arg3, arg4)
                 if event == "PET_BAR_SHOWGRID" then petshows = petshows + 1 end
                 if event == "ACTIONBAR_SHOWGRID" then barshows = barshows + 1 end
             end)

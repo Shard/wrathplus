@@ -4,7 +4,7 @@
 use crate::script::UiScript;
 
 fn script_with(rows: &[(&str, &str)]) -> UiScript {
-    let s = UiScript::new_vanilla().unwrap();
+    let s = UiScript::new().unwrap();
     s.register_cvars(rows.iter().copied());
     s
 }
@@ -168,7 +168,7 @@ fn set_cvar_fires_cvar_update_inside_the_call_for_every_token() {
         "SEEN = {} \
          f = CreateFrame(\"Frame\") \
          f:RegisterEvent(\"CVAR_UPDATE\") \
-         f:SetScript(\"OnEvent\", function() table.insert(SEEN, arg1 .. \"=\" .. arg2) end)",
+         f:SetScript(\"OnEvent\", function(self, event, arg1, arg2) table.insert(SEEN, arg1 .. \"=\" .. arg2) end)",
     )
     .unwrap();
     let seen = |s: &UiScript| -> Vec<String> { s.eval("return SEEN").unwrap() };

@@ -131,7 +131,7 @@ fn wrath_power_readers_use_all_resources_and_native_integer_scaling() {
 }
 
 #[test]
-fn wrath_power_reads_zero_before_the_snapshot_and_keeps_vanilla_surface() {
+fn wrath_power_reads_zero_before_the_snapshot() {
     let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
     wrath.set_unit(
         "player",
@@ -142,8 +142,4 @@ fn wrath_power_reads_zero_before_the_snapshot_and_keeps_vanilla_surface() {
         }),
     );
     assert_eq!(wrath.eval::<u32>("return UnitPower('player')").unwrap(), 0);
-    let vanilla = UiScript::new_vanilla().unwrap();
-    assert!(vanilla
-        .eval::<bool>("return UnitPower==nil and UnitPowerMax==nil")
-        .unwrap());
 }

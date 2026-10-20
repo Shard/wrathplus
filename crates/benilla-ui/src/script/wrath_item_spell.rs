@@ -120,9 +120,4 @@ mod tests {
         );
         s.run("local a,b=GetItemSpell(101); assert(a==nil and b==nil); assert(select('#',GetItemSpell(101))==2); local c,d=GetItemSpell(102); assert(c=='Later Use' and d==''); assert(GetItemSpell(999)==nil)").unwrap();
     }
-    #[test]
-    fn no_vanilla_surface() {
-        let s = UiScript::new_vanilla().unwrap();
-        assert!(s.eval::<bool>("return GetItemSpell==nil").unwrap());
-    }
 }

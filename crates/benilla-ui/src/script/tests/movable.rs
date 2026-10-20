@@ -2,12 +2,12 @@
 //! `SetResizable`), title regions and the user-placed layout cache, driven through the Lua
 //! bindings and the real mouse entry points.
 
-use super::common::{script, vanilla_script};
+use super::common::script;
 use crate::script::UiScript;
 
 /// A frame wired the canonical way, laid out at (100, 100) 200×80 on an 800×600 screen.
 fn movable_panel() -> UiScript {
-    let mut s = vanilla_script();
+    let mut s = script();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -18,8 +18,8 @@ fn movable_panel() -> UiScript {
         Panel:EnableMouse(true)
         Panel:SetMovable(true)
         Panel:RegisterForDrag("LeftButton")
-        Panel:SetScript("OnDragStart", function() starts = starts + 1; this:StartMoving() end)
-        Panel:SetScript("OnDragStop",  function() stops = stops + 1; this:StopMovingOrSizing() end)
+        Panel:SetScript("OnDragStart", function(this, arg1, arg2, arg3, arg4) starts = starts + 1; this:StartMoving() end)
+        Panel:SetScript("OnDragStop",  function(this, arg1, arg2, arg3, arg4) stops = stops + 1; this:StopMovingOrSizing() end)
         "#,
     )
     .unwrap();
@@ -500,7 +500,7 @@ fn a_title_region_drag_swallows_the_press_and_ends_on_release() {
         TP:SetPoint("BOTTOMLEFT", 100, 100)
         TP:SetWidth(200); TP:SetHeight(80)
         TP:EnableMouse(true)
-        TP:SetScript("OnMouseDown", function() downs = downs + 1 end)
+        TP:SetScript("OnMouseDown", function(this, arg1, arg2, arg3, arg4) downs = downs + 1 end)
         TP:CreateTitleRegion():SetAllPoints(TP)
         "#,
     )

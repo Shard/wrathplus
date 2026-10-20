@@ -446,20 +446,4 @@ mod tests {
         assert_eq!(n, Some(0));
     }
 
-    #[test]
-    fn vanilla_has_none_of_these() {
-        let s = UiScript::new_vanilla().unwrap();
-        for name in [
-            "SetChatWindowUninteractable",
-            "ResetChatWindows",
-            "SetChatColorNameByClass",
-            "JoinPermanentChannel",
-            "BNLeaveConversation",
-        ] {
-            assert!(
-                s.eval::<bool>(&format!("return {name} == nil")).unwrap(),
-                "{name}"
-            );
-        }
-    }
 }
