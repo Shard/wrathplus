@@ -358,6 +358,44 @@ event, a message the higher layer drains, or the caller moving up:
   (loading_screen), `entities::item_glow` and `creature_anim::disarmed_hand` (items),
   `combat_log::text::{melee_center_text, classify_source}`.
 
+**Proposed mechanism per group (draft, for batching).** Four kinds: *move down* (a pure function
+or catalog lookup that only looks like UI; a pure move), *drained message* (the lower layer writes
+a Bevy `Message` and the UI system drains it, as `UiError` already works), *event* (a core
+resource or run condition the higher layer sets and the lower one reads), and *move the caller up*
+(the system is a UI feed that lives in a world module). App Migration owns the world calls into
+`ui_items`, `ui_loot` and `ui_action` and the `net` calls into UI (`member_deactivated`,
+`roster_deactivated`, `answer_trade_request`, `ui_battlefield::drain_native`,
+`char_login_refusal_text`, `faction_standing`) and `end_repair_mode_on_right_press`, and writes those
+mechanisms itself ("App Migration's groups").
+
+| Group | Mechanism | One line |
+|---|---|---|
+| `VmMemo` (17) | move the caller up | Every world user is a Lua feed that already takes `UiScript`; move those systems into a UI-side feed module beside their world state, and `VmMemo` stays in `ui`. |
+| lookups: `race_names`, `class_names`, `player_token_guid`, `unit_guild_name`, `unit_guild_emblem`, `corpse_guild_emblem`, `buffs_visible_on`, `ui_macro::identity` | move down | Pure tables or reads over core state; move beside their data in `app_core`. |
+| other action requests: `feed_interact_npc`, `pet_stop_on_old_target_clear`, `world_enter_selection`, `apply_script_calls` / `in_call_order` | drained message | World writes a request message and the UI system that owns the session drains it in its existing set; check the frame order per row. |
+| UI feedback from world: `feed_cast_bar`, `ui_unit::snapshot` | drained message | A cast-bar message the UI drains; `snapshot` reads move down with the lookups. |
+| run conditions: `ingame_ui_up`, `seam_scale`, `load_stock_bindings` | event | `ui_script` sets a core `InGameUi` resource (up flag) that world reads; `seam_scale` is a pure fn and moves down; `load_stock_bindings` moves its caller (vplates) up. |
+| drawing helpers: `project_overlay`, `tile_quad_mesh`, `overlay_z`, `ui_render_layers`, `spawn_warm_tile_cam` | move down | Go with the world-layer overlay module (the pure-moves row). |
+| core up, pure: `creature_anim::disarmed_hand`, `entities::item_glow`, `combat_log::text::{melee_center_text, classify_source}`, `spell::mods` (chr_classes) | move down | Pure functions or catalogs; move into `app_core` with their tables. |
+| core up, wiring: `net::apply_net_updates` (query_cache), `perf::stall` (local_state), `capture::{ui_opted_in, start_state, probe_rig, probe_uncap_mode}`, `game_tip::{drive_game_tip, tip_bundle}` | event / move the caller up | `query_cache` and `local_state` read a core resource the owner fills; the capture and game-tip calls are tool or world wiring and move up into the plugin that registers them. |
+
+#### App Migration's groups: proposed mechanisms (2026-10-20)
+
+Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world code calls, and
+`net` calling UI drains. Each lands as a behaviour-neutral unit with the usual gates.
+
+| Group | References | Mechanism |
+|---|---|---|
+| Inventory walkers | `ui_items::{find_item, carried_counts, slot_guid, collect_inventory}` (+ `ItemSearch`, `InventoryScope`) from `death`, `spell::usable`, `spell::targeting::item`, `target::{lock, click}` | **Move down.** They are pure over the descriptor and `net::Objects`, so they can't go to core: a world-layer `inventory` module holds them and their two types; `ui_items` calls down to it. |
+| Item use from the death drain | `ui_items::send_item_use` from `death::drain_death` | **Move the caller up.** `drain_death` takes the `UiScript` and drains Lua requests (the soulstone use), so it is UI-layer code: it moves to a `ui_*` module, which also takes `death`'s `UiScript` edges. |
+| Loot state machine | `ui_loot::{close_interaction, begin_wrath_corpse_loot, resolve_loot_kneel}` from `creature_anim` and `target::click` | **Move down.** They touch only `LootState`, `LootLatch` and `NetCommands`: the loot state machine and its transitions move to a world-layer `loot` module; `ui_loot` keeps the Lua feed and drain. The `.after(resolve_loot_kneel)` ordering then names a world system. |
+| Attack predicate, cast-fail map | `ui_action::attack_actor_blocked` from `target::click`; `ui_action::cast_fail::from_wrath` (+ its key tables) from `spell::net` | **Move down.** A predicate over the player's store, to `target`; a pure wire map, to `spell`. `from_wrath` maps 12340 reasons onto 1.12 codes and goes away when the cast-fail codes are native. |
+| UI systems in the target chain | `script_calls::apply_script_calls`, `ui_action::drop_item::drop_item_on_unit`, `ui_action::attack_nearest_probe`, scheduled inside `target`'s plugin chain | **Move the caller up.** `target` exposes a `SystemSet` at each slot; the UI modules register their own systems into it, with the same chain order. |
+| Arena lines | `net::wrath_arena_lines` runs in `ui_script::UiFeed` `.after(ui_battlefield::drain_native)` | **Move the caller up.** It is a UI feed: its registration (or the file) moves to the UI layer beside `ui_battlefield`. Lands with the step-4 batch, which also edits `net.rs` (its clippy baseline entry is keyed on the file hash). |
+| Group presence | `ui_party::net::{member_deactivated, roster_deactivated}` from `net::{objects, session}` | **A drained message.** `net` writes the deactivated guid or roster; `ui_party` drains it the same frame, before anything reads `GroupState`, in `net`'s order. |
+| Reputation lines | `combat_log::chat::faction_standing` from `net::session` | **A drained message carrying the old and new standing.** Today it runs before the store is overwritten; the message keeps that, and `combat_log` composes the lines. |
+| Doc links | `ui_trade::answer_trade_request`, `char_select::char_login_refusal_text`, `ui_action::show_messages`, `ui_loot::drain_loot` named from `net`, `sound` | **Plain text.** Intra-doc links count as references; they become prose. The `sound` one is done; the two in `net.rs` land with the step-4 batch. |
+
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
 

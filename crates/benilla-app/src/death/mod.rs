@@ -316,10 +316,10 @@ fn resolve_self_res(
             .map_or_else(|| "UNKNOWN".to_owned(), |d| d.name.clone());
         return Some(SelfRes::Spell { spell, label });
     }
-    let slots = crate::ui_items::collect_inventory(
+    let slots = crate::inventory::collect_inventory(
         store,
         objects,
-        crate::ui_items::InventoryScope::DEFAULT,
+        crate::inventory::InventoryScope::DEFAULT,
     );
     slots.into_iter().find_map(|(bag_index, slot, guid)| {
         let entry = objects.object(guid)?.object_entry()?;

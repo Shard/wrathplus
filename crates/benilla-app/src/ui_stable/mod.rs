@@ -347,10 +347,7 @@ fn stable_subject(
 #[derive(Resource, Default)]
 pub(crate) struct StableErrors(pub(crate) Vec<&'static str>);
 
-/// `StableSlotPrices.dbc`, the purchase row's prices; absent, the row quotes 0.
-#[derive(Resource)]
-pub(crate) struct StableSlotPrices(pub(crate) benilla_formats::StableSlotPrices);
-
+pub(crate) use crate::app_core::catalogs::StableSlotPrices;
 #[cfg(test)]
 mod tests {
     use super::*;

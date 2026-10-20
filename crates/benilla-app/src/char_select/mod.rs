@@ -19,8 +19,8 @@ use crate::net::{
     EnteredWorldMessage, LoggedOutMessage,
 };
 
-pub(crate) use crate::app_core::state::{ClientState, Roster};
 pub(crate) use crate::app_core::schedule::InWorldGated;
+pub(crate) use crate::app_core::state::{ClientState, Roster};
 
 /// The character-select subsystem: the state machine + the select screen.
 pub(crate) struct CharSelectPlugin {

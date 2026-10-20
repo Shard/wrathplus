@@ -167,7 +167,7 @@ pub(crate) fn commit_item_cast_on_pick(
         match self_q
             .iter()
             .next()
-            .and_then(|store| crate::ui_items::slot_guid(&store.0, bag, slot0, &ladder.objects))
+            .and_then(|store| crate::inventory::slot_guid(&store.0, bag, slot0, &ladder.objects))
         {
             Some(guid) => asks.push((guid, false)),
             None => {
