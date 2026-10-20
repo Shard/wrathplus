@@ -40,7 +40,6 @@ fn setup() -> UiScript {
         "Interface\\FrameXML\\BuffFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         "Interface\\FrameXML\\HelpFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, file);
     }

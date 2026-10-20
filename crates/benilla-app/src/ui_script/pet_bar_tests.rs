@@ -34,9 +34,6 @@ pub(super) fn load_pet_bar(s: &UiScript) {
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\PetActionBarFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
     ] {
         load_xml(s, file);
     }

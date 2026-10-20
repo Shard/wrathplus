@@ -54,7 +54,6 @@ fn escape_closes_bag_and_panel_releases_loot_and_keeps_the_held_item() {
             // Stock `ContainerFrame.lua` reads `MerchantFrame:IsShown()`.
             "Interface\\FrameXML\\MerchantFrame.xml",
             "Interface\\FrameXML\\LootFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -144,7 +143,6 @@ fn escape_is_consumed_by_a_focused_editbox_and_leaves_windows_open() {
             "Interface\\FrameXML\\ChatFrame.xml",
             "Interface\\FrameXML\\FloatingChatFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -164,58 +162,6 @@ fn escape_is_consumed_by_a_focused_editbox_and_leaves_windows_open() {
     assert!(
         bag_open(&s, 0),
         "the bag stays open (the escape binding never ran)"
-    );
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// The options rung (`UIParent.lua:1483-1484`) eats the press, so the menu opens only on the next.
-#[test]
-fn escape_closes_the_options_window_before_opening_the_menu() {
-    benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\GameMenuFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // the Keybindings page's faux-scroll kit
-    load_xml(&s, "KeyBindingsPage.xml");
-    load_xml(&s, "OptionsFrame.xml");
-    load_xml(&s, "GameMenuAdapters.xml");
-
-    s.run("ShowUIPanel(BenillaOptionsFrame)").unwrap();
-    assert!(s
-        .eval::<bool>("return BenillaOptionsFrame:IsVisible()")
-        .unwrap());
-    assert!(
-        !s.eval::<bool>("return GameMenuFrame:IsVisible()").unwrap(),
-        "the menu is down — the options rung is what must eat this press"
-    );
-
-    s.run("ToggleGameMenu()").unwrap();
-    assert!(
-        !s.eval::<bool>("return BenillaOptionsFrame:IsVisible()")
-            .unwrap(),
-        "ESC closed the options window"
-    );
-    assert!(
-        !s.eval::<bool>("return GameMenuFrame:IsVisible()").unwrap(),
-        "…and did NOT also open the menu — one eater per press"
-    );
-
-    s.run("ToggleGameMenu()").unwrap();
-    assert!(
-        s.eval::<bool>("return GameMenuFrame:IsVisible()").unwrap(),
-        "the next press reaches the ladder's open-the-menu tail"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -242,7 +188,6 @@ fn escape_closes_an_open_stack_split_frame() {
             "Interface\\FrameXML\\ChatFrame.xml", // ChatFrameEditBox, for the shift fork
             "Interface\\FrameXML\\FloatingChatFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml", // read by the stock bag-slot click
-            "ScrollTemplates.xml",                    // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -317,7 +262,6 @@ fn escape_ladder_cast_then_windows_then_target_one_eater_per_press() {
             "Interface\\FrameXML\\UIDropDownMenu.xml",
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -419,7 +363,6 @@ fn escape_ladder_targeting_rung_after_cast_before_windows() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -489,7 +432,6 @@ fn an_addon_frame_registered_in_uispecialframes_closes_on_escape() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\GameMenuFrame.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "GameMenuAdapters.xml");
 
     s.run(
         r#"

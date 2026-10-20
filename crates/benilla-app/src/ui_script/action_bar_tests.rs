@@ -196,8 +196,6 @@ fn load_action_bar(s: &UiScript) {
     // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
     super::test_ui::load_ui(s, r"Interface\FrameXML\ReputationFrame.xml");
     super::test_ui::load_ui(s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
-    super::test_ui::load_ui(s, "ScrollTemplates.xml");
-    super::test_ui::load_ui(s, "KeyBindingsPage.xml");
     super::test_ui::load_ui(s, "OptionsFrame.xml");
 }
 
@@ -1495,9 +1493,6 @@ fn the_main_bar_pages_and_a_bonus_page_still_outranks_it() {
         // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
     ] {
         super::test_ui::load_ui(&s, file);
     }

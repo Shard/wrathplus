@@ -84,7 +84,6 @@ fn setup() -> UiScript {
     load_xml(&s, "Interface\\FrameXML\\QuestLogFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\GuildRegistrarFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\PetitionFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
     s
 }
 

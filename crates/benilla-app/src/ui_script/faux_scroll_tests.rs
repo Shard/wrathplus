@@ -24,7 +24,6 @@ fn harness() -> UiScript {
     load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "ScrollTemplates.xml");
     load_inline(
         &s,
         r#"<Ui>
@@ -369,7 +368,6 @@ fn scrolling_edit_helpers_answer_bare_calls_from_a_handler() {
     load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "ScrollTemplates.xml");
     load_inline(
         &s,
         r#"<Ui>

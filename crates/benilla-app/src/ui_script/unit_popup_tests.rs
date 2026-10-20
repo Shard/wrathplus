@@ -41,7 +41,6 @@ fn load_popup_frames(s: &UiScript) {
         "Interface\\FrameXML\\FloatingChatFrame.xml",
         "Interface\\FrameXML\\FriendsFrame.xml",
         "Interface\\FrameXML\\ItemRef.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(s, file);
     }

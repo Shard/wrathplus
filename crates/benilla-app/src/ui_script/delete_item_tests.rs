@@ -83,7 +83,6 @@ fn bag_setup() -> UiScript {
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             // `ContainerFrame_Update` reads `MerchantFrame:IsShown()` on any slot the tooltip owns.
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
         WORLD_FRAME_UI, // the drop target
     ]) {
