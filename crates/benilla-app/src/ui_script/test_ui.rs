@@ -449,7 +449,6 @@ pub(super) const MERCHANT_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // TEXT()
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -468,7 +467,6 @@ pub(super) const MERCHANT_UI: &[&str] = &[
 pub(crate) const GOSSIP_UI: &[&str] = &[
     r"Interface\FrameXML\GlobalStrings.lua",
     r"Interface\FrameXML\BasicControls.xml",
-    r"Interface\FrameXML\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -485,8 +483,7 @@ pub(super) const LOOT_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // `TEXT`, which UnitPopup.lua reads at file scope
-    "Interface\\FrameXML\\LocaleProperties.lua",
-    r"Interface\FrameXML\UIParent.xml", // UIParent.lua: the panel slot manager and the fades
+    r"Interface\FrameXML\UIParent.xml",       // UIParent.lua: the panel slot manager and the fades
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
     "Interface\\FrameXML\\GameTooltip.xml", // TOOLTIP_DEFAULT_COLOR, read by the dropdown backdrop
@@ -520,7 +517,6 @@ pub(super) const CHARACTER_UI: &[&str] = &[
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // TEXT(), which those labels go through
     // `GetText`, the gendered-string helper `ReputationFrame.lua:65` calls for each standing.
-    r"Interface\FrameXML\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml", // Model_OnLoad/_Rotate*/_OnUpdate: the model turntable
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -573,7 +569,6 @@ pub(super) const SOCIAL_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -625,7 +620,6 @@ pub(super) const BAG_UI: &[&str] = &[
     "Interface\\FrameXML\\Fonts.xml",
     // `TEXT()`, which the backpack button's OnEnter and `BagSlotButton_OnEnter` call.
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     // `UIParent`: the twelve `ContainerFrame`s are its children, `updateContainerFrameAnchors`
     // anchors each open bag to its parent, and `OpenAllBags` returns unless `UIParent` is visible.
     r"Interface\FrameXML\UIParent.xml",
