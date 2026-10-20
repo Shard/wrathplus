@@ -96,6 +96,143 @@ the later moves are pure file moves. Each item names the symbols that point the 
 
 Done when the module graph, rerun with the script below, shows no back edge between layers.
 
+### Item 3, part 2: `Player`, the mover and the rest of net → world (design note)
+
+Measured on wrath-hud after part 1 (`e7a0fd7c`, movement model in `app_core::movement`), counting
+`crate::<module>` paths with this plan's layer table (`/tmp/azb-split/layers.py`, Wire B):
+
+| Direction | References | Distinct symbols | Largest |
+|---|---|---|---|
+| net → world | 57 | 33 | `player::Player` 10, `creature_anim::move_flags` 6 (in `net.rs`, kept for the clippy baseline), `go_anim` 7, the mover steps 6, `player::server_ride` 3 (doc links) |
+| world → net | 622 (513 outside test files) | 75 | bare `crate::net::{…}` imports 109, `ObjectStore` 95, `GuidIndex` 38, `NetCommands` 29, `NetEntity` 28, `Reputations` 28, `SessionDialect` 31, `SelfPlayer` 29 |
+
+**Inverting the order (core < world < net < ui) is not cheaper.** It would need the 75 world → net
+symbols cut, which are net's object model (`ObjectStore`, `GuidIndex`, `NetEntity`, `Guid`,
+`SelfPlayer`, `Embodied`), its command channel (`NetCommands`, `ClientCommand`) and its handler
+table (`NetHandlerApp`, `handlers::dispatch`): moving those into core is a larger redesign than the
+33 symbols the planned order leaves. The plan's order (core < net < world < ui) stays.
+
+**What the 33 are, and the cut for each** (behaviour-neutral unless marked):
+
+1. **`net::motion` is world simulation that lives under `net/`** (5.1k lines: remote
+   dead-reckoning, spline sampling, ground clamping, display facing, swim marking). It is where
+   every mover call comes from (`grounded_step`, `Support`, `airborne_step`, `fall_step`), and
+   `player::mover`'s one net reference (`net::motion::remote`) points back into it. Cut: move its
+   component and message types (`RemoteMotion`, `Spline`, `SplineStopped`, `UnitMoveModes`,
+   `CreatureSwimming`, `FacingStep`, `DisplayFacing`, `GroundClamped`, `RelayMove`, the
+   pending-move queue) to `app_core::movement`, since `net/objects.rs` writes them on create and
+   update (47 uses); move the systems and helpers to a world-layer module (`crate::motion`),
+   registered by a world plugin in the same sets with the same `.before/.after` edges. The mover
+   stays in `player`: with its callers in world, `player::mover` needs no change.
+2. **`Player` is a resource `net` resets once**: `activate_connected` clears it synchronously at a
+   Wrath `Connected`, before publishing the new endpoint, so the session-end reader cannot stream
+   the old pose to the new socket (`net.rs:589-623`). Cut: move the `activate_command_endpoint`
+   handler (one `Connected` system) from `net` into `player`, which then calls
+   `NetCommands::activate_connected(&endpoints, || *player = Player::default())`; world → net is
+   the allowed direction. Kept order: the handler stays where it is in the `Connected` dispatch
+   order, so it registers through a named hook that `net`'s plugin places (or `net` keeps the
+   registration and takes the reset as a resource-held `fn` that `player` installs). `Player` and
+   its impls do not move. The tests that seed `Player` in `net.rs` move with the handler.
+3. **`transport::Transport` in the worldport sweep**: `session.rs` asks only `touches_map(map_id)`
+   to spare a transport whose path crosses the new map (`session.rs:620-640`). Cut: a core
+   component (`TransportMaps`, the maps the path touches) inserted next to `Transport` by
+   `arm_transports`, queried by the sweep instead. Behaviour-neutral as long as it is inserted in
+   the same frame as `Transport`; pinned by the existing worldport sparing test.
+4. **State `net` writes**: `go_anim::{GoCustomAnim, DespawnAnimAnnounced, PendingDestroy}`,
+   `world_state::WorldStates`, `spell::Cooldowns`, `target::ring::Factions`,
+   `sound::EmoteSounds`, `entities::CollisionHeight` and the four animation components
+   (`RangedHold`, `PlaySeq`, `NockLatch`, `BodyTwist`): types to `app_core::state` with item 2.
+5. **Callbacks `net` calls**: `death::net::{note_corpse, recheck_corpse, forget_corpse}` and
+   `death::DeathNet`, `go_anim::release_despawn_pin`, `cinematic`: turn into messages `net` writes
+   and the feature reads, or move the function into the net layer when it only mutates core
+   state. Each needs a one-frame-order check; done one at a time with the module's tests.
+
+**Proposed unit (item 3, part 2a): relocate `net::motion`.** Cut 1 alone: types to
+`app_core::movement`, systems to `crate::motion` (world), plugin registration moved with identical
+sets and edges, `net` re-exports kept so callers compile. Moves only; gated by app `--lib --tests`,
+the census and the clippy ratchet, plus a schedule check that the ambiguity counts
+(`UPDATE_ACTIONABLE_CEILING`) and system order are unchanged. Cuts 2 and 3 follow as part 2b, one
+small design change each, with their tests; 4 joins Assets' item 2; 5 is part 2c.
+### Item 3, part A: the movement apply out of `net` (ordering argument, for review)
+
+Status after parts 1, 2b and 2c: net → world is 40 references in 25 symbols. The rest of the
+movement cluster is the apply: `net/objects.rs` writes `Transform`, `RemoteMotion`, `Spline`,
+`UnitMoveModes` and `TransportRider` inside its handlers, through `net::motion`'s helpers, which
+call `player::mover`. A must move that apply to the world layer **without changing what any reader
+sees at any point of a frame**.
+
+**The drain today.** `apply_net_updates` (`WorldStage::Net`) calls `handlers::dispatch`, which runs
+each event's handlers in registration order. Every handler is `World::run_system_with`, which
+applies the handler's deferred commands before it returns, so the next handler, of this event or
+the next, sees them. The drain is the head of one `.chain()`: `apply_net_updates`,
+`tag_self_player`, `sample_splines`, `mark_swimming_creatures`, `ground_clamp_creatures`,
+`drain_pending_moves`, `extrapolate_remote_units`, `drive_display_facing`, with
+`ui_session::feed_interact_npc` seated after `apply_net_updates` and before `drive_display_facing`.
+
+**Who reads movement state during the drain** (every `net_handler`, its parameters expanded
+through their `SystemParam` bundles; `/tmp/azb-split/handlers.py`): `net/objects.rs`'s object
+handlers themselves; the spell handlers (`on_spell_start`, `on_spell_go`, `on_spell_chain_targets`,
+`on_spell_failed_other`, `on_cancel_auto_repeat`, `on_item_cooldown`, `on_cast_result`), which read
+caster and target `Transform`s; and the combat-log lines, which read `Transform`. So a move applied
+earlier in a drain is visible to a `SpellGo` later in the same drain. **A post-drain apply system
+would break that** (the `SpellGo` would read the pre-move pose), so A must not defer the apply.
+
+**The design: split each movement handler at the event, not at the frame.** For each event kind
+whose handler applies movement (`ObjectCreate`, `ObjectMove`, `MoveTimeSkipped`, `UnitMove`,
+`MonsterMove`, `SplineMoveMode`, `ForceSpeedChange`, `SpeedChanged`), `net/objects.rs` keeps the
+decode and the bookkeeping (index, store, field messages, self-move routing, despawn), and a world
+module (`crate::motion`) registers its own `net_handler` on the same kind with the movement apply,
+moved verbatim with `net::motion`'s helpers. Both run in the same event's slot, `net`'s first, its
+commands applied before the world handler runs; the event value is the same (each handler gets a
+clone). So **after every event the world is exactly what it is today**, and every later event's
+handlers and every chain system see identical state. No queue, no deferral.
+
+What has to hold, and how each is checked:
+
+1. *No handler between the two halves reads movement.* A kind's handlers run in registration order,
+   and `crate::motion` registers after `NetPlugin`. Handlers on those kinds other than
+   `net/objects.rs`: `net/wrath_auras` (`ObjectCreate`, `ObjectsRemoved`, `ObjectDestroyed`),
+   `combat_log::on_native_only` and `ui_native::wrath_threat` (`ObjectDestroyed`,
+   `ObjectsRemoved`). None reads a movement component: they key aura, threat and log state by guid.
+   The two destroy kinds keep their whole handler in `net` (despawning is bookkeeping), so only
+   `ObjectCreate` has a third-party handler between the halves, and it does not read movement. A
+   schedule test pins the list: a kind's handler table, by name, before and after.
+2. *The world half needs nothing the net half kept local.* Each split is a cut at a point where the
+   net half's decision (create or update, self or remote, entity found) is either recomputable from
+   world state (`GuidIndex`, `SelfGuid`, the entity's components) or carried by the event. Where a
+   handler branches on an intermediate it did not store, the split stores it on the entity first
+   (one marker, removed by the world half), so both halves take the same branch.
+3. *Two command batches instead of one are unobservable.* An `ObjectCreate` now inserts the movement
+   components in a second batch. Nothing observes the difference: there is no `On<Add>`/`On<Insert>`
+   observer, component hook, or `Added<>`/`Changed<>` filter on `RemoteMotion`, `Spline`,
+   `UnitMoveModes` or `TransportRider` (checked by search), and no system runs between two handlers.
+4. *The chain keeps its order.* The motion systems move to `crate::motion`'s plugin as the same
+   chain, `.after` a `NetApply` set holding `apply_net_updates` and `tag_self_player`, still in
+   `WorldStage::Net`; `feed_interact_npc` keeps its two edges against the moved functions. Pinned by
+   the schedule tests: `UPDATE_ACTIONABLE_CEILING` and the ambiguity counts unchanged, plus a new
+   assert of the chain's system order by name.
+
+**Same-frame create, move and destroy.** In one drain these are three events in wire order, each
+fully applied, both halves, before the next: the move finds the entity the create made, and the
+destroy despawns it with everything inserted. That is today's behaviour exactly, since today the
+same three handlers run in the same order. A new characterization test drives one drain of
+create → move → destroy, and one of move → `SpellGo` that reads the caster's pose, through
+`handlers::dispatch` with the real plugins. It is written and passing **before** the move, then
+kept unchanged across it.
+
+**Tests that pin the rest:** `net/motion/tests.rs` (1.3k lines: relays, extrapolation, splines,
+facing), `net/apply/seam_tests.rs`, `net/objects.rs`'s tests (create, spline, stop, remote walk),
+the transport tests, and the census and app gates. Every one runs unchanged on the moved code; a
+test that needs editing beyond a path is a sign the move changed behaviour, and stops the unit.
+
+**Unit A, as proposed:** (1) land the two characterization tests and the handler-table and chain
+asserts on the current tree; (2) in one commit, move `net::motion` to `crate::motion` and split the
+eight handlers as above, with the types it shares with `net` (`RemoteMotion`, `Spline`,
+`SplineStopped`, `UnitMoveModes`, `RelayMove`, `PendingMove`, `DisplayFacing`, `GroundClamped`,
+`CreatureSwimming`, `FacingStep`) in `app_core::movement`, since `net` still writes the bookkeeping
+parts. Gates: app `--lib --tests`, the census, the clippy ratchet, and the asserts from (1)
+unchanged.
+
 ### Progress and the unit 2c clusters
 
 Units 1 (schedule sets), 2a (UI error queues; spell, client, roster, NPC, loot-gate and pointer

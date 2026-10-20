@@ -215,6 +215,15 @@ pub(crate) struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
+        // A Wrath reconnect clears the old mover before the new endpoint opens.
+        app.world_mut()
+            .get_resource_or_init::<crate::app_core::movement::ConnectResets>()
+            .0
+            .push(|world| {
+                if let Some(mut player) = world.get_resource_mut::<Player>() {
+                    *player = Player::default();
+                }
+            });
         net::register(app);
         follow::plugin(app);
         approach::plugin(app);

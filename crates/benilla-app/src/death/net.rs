@@ -1,7 +1,8 @@
-//! The death packet handlers filling [`DeathNet`], the movement-mode forward for our own mover,
-//! and the corpse-guid latch's hooks on the object lifecycle, called from the drain's object arms.
+//! The death packet handlers filling [`DeathNet`] and the movement-mode forward for our own mover.
+//! The corpse-guid latch's hooks on the object lifecycle live with their caller, the wire layer's
+//! object arms (`net::objects`).
 
-use benilla_protocol::{EntityKind, MoveMode, ObjectFields, SessionEvent, SessionEventKind};
+use benilla_protocol::{MoveMode, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
 use super::{CorpsePoint, DeathNet, ResurrectOffer};
@@ -95,57 +96,6 @@ fn on_move_mode(
 /// The death stores are session-scoped; a reconnect while dead re-sends the reclaim delay.
 fn on_session_end(In(_): In<SessionEvent>, mut death_net: ResMut<DeathNet>) {
     *death_net = DeathNet::default();
-}
-
-/// Our corpse streaming in: latch its guid for the reclaim send. The reference's latch
-/// `[0xb4e328]` has one writer, `0x4920d0`, gated on `CORPSE_FIELD_OWNER == me` and
-/// `CORPSE_FIELD_FLAGS` bit 0 clear, so bones never arm it; `RetrieveCorpse` sends whatever is in
-/// the latch.
-pub(crate) fn note_corpse(
-    guid: u64,
-    kind: EntityKind,
-    fields: &ObjectFields,
-    self_guid: &SelfGuid,
-    death_net: &mut DeathNet,
-) {
-    if kind == EntityKind::Corpse
-        && fields.corpse_owner() == self_guid.0
-        && !fields.corpse_is_bones()
-    {
-        death_net.corpse_guid = Some(guid);
-    }
-}
-
-/// The same latch, re-asked when `CORPSE_FIELD_FLAGS` changes under a live guid, as the
-/// reference's `FLAGS` mirror handler `0x5d6d60` does, so an in-place flip to bones drops it.
-pub(crate) fn recheck_corpse(
-    guid: u64,
-    fields: &ObjectFields,
-    self_guid: &SelfGuid,
-    death_net: &mut DeathNet,
-) {
-    // A delta carries only what changed: an absent FLAGS field is not a clear bit.
-    let Some(flags) = fields.corpse_flags_present() else {
-        return;
-    };
-    let mine = fields.corpse_owner() == self_guid.0 || death_net.corpse_guid == Some(guid);
-    if !mine {
-        return;
-    }
-    if flags & 0x01 != 0 {
-        if death_net.corpse_guid == Some(guid) {
-            death_net.corpse_guid = None;
-        }
-    } else if fields.corpse_owner() == self_guid.0 {
-        death_net.corpse_guid = Some(guid);
-    }
-}
-
-/// The corpse-to-bones swap destroys the corpse object; a stale guid must not ride a reclaim.
-pub(crate) fn forget_corpse(guid: u64, death_net: &mut DeathNet) {
-    if death_net.corpse_guid == Some(guid) {
-        death_net.corpse_guid = None;
-    }
 }
 
 /// `MSG_CORPSE_QUERY`'s answer; a not-found, asked or pushed at bones conversion, drops the marker.
