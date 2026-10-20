@@ -1034,7 +1034,7 @@ fn a_glass_windows_plate_fades_in_on_every_hover_under_the_full_manifest() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1600.0, 900.0);
     super::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "{failures:?}");
     s.resolve();
     s.mouse_move(1500.0, 850.0);
@@ -1186,7 +1186,7 @@ fn a_quick_exit_and_reentry_keeps_the_plates_hover_fade() {
     let mut shipped = UiScript::new().unwrap();
     shipped.set_screen_size(1600.0, 900.0);
     super::test_ui::load_ui(&shipped, "Interface\\FrameXML\\GlobalStrings.lua");
-    let failures = super::load_default_ui(&shipped);
+    let failures = super::load_default_ui(&mut shipped);
     assert!(failures.is_empty(), "{failures:?}");
     shipped.resolve();
     super::fire_chat_login(&mut shipped);

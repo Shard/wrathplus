@@ -1,4 +1,4 @@
-//! Lossless native roll inbox. Presentation drains updates separately from the 1.12 roll model.
+//! Lossless native roll inbox; presentation drains its updates separately.
 #[path = "wrath_lifecycle.rs"]
 mod lifecycle;
 pub(super) mod feed;

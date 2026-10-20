@@ -104,82 +104,26 @@ impl<T, V> IconCatalogCache<T, V> {
 type CatalogSource = std::sync::Mutex<benilla_formats::Chain>;
 type IconSource = Option<std::sync::Weak<CatalogSource>>;
 
-fn macro_catalog_enabled(script: &UiScript) -> bool {
-    script.dialect() == benilla_ui::script::ScriptDialect::Vanilla
-}
-
 /// Seed each VM from a source-owned immutable catalog. A failed load leaves the chooser empty
-/// (`MacroPopupOkayButton_Update` keeps OKAY disabled). A Wrath VM takes build 12340's two lists,
-/// the spell icons and the item icons the guild-bank tab chooser also reads.
+/// (`MacroPopupOkayButton_Update` keeps OKAY disabled). Build 12340's two lists: the spell icons and
+/// the item icons the guild-bank tab chooser also reads.
 fn load_icon_catalog(
     script: Option<NonSendMut<UiScript>>,
     assets: Option<Res<WorldAssets>>,
     mut seeded: Local<crate::ui_script::VmMemo<IconSource>>,
-    mut catalog: Local<IconCatalogCache<CatalogSource>>,
     mut wrath: Local<IconCatalogCache<CatalogSource, benilla_formats::WrathMacroIcons>>,
 ) {
     let (Some(mut script), Some(assets)) = (script, assets) else {
         return;
     };
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 {
-        seed_wrath_icon_catalog(&mut script, &assets.chain, &mut seeded, &mut wrath, || {
-            let mut chain = assets.chain.lock_recover();
-            benilla_formats::load_wrath_macro_icons(&mut chain).map_err(|e| format!("{e:#}"))
-        });
-        return;
-    }
-    seed_icon_catalog(
-        &mut script,
-        &assets.chain,
-        &mut seeded,
-        &mut catalog,
-        || {
-            let mut chain = assets.chain.lock_recover();
-            benilla_formats::load_macro_icons(&mut chain).map_err(|e| format!("{e:#}"))
-        },
-    );
+    seed_wrath_icon_catalog(&mut script, &assets.chain, &mut seeded, &mut wrath, || {
+        let mut chain = assets.chain.lock_recover();
+        benilla_formats::load_wrath_macro_icons(&mut chain).map_err(|e| format!("{e:#}"))
+    });
 }
 
-/// The actual feed policy, isolated from GPU resources so replacement/gating tests exercise it.
-fn seed_icon_catalog<T>(
-    script: &mut UiScript,
-    chain: &std::sync::Arc<T>,
-    seeded: &mut crate::ui_script::VmMemo<Option<std::sync::Weak<T>>>,
-    catalog: &mut IconCatalogCache<T>,
-    load: impl FnOnce() -> Result<Vec<String>, String>,
-) {
-    // The 1.12 catalog: a Wrath VM takes `seed_wrath_icon_catalog` instead.
-    if !macro_catalog_enabled(script) {
-        return;
-    }
-    let source = seeded.get(script);
-    if source
-        .as_ref()
-        .and_then(std::sync::Weak::upgrade)
-        .is_some_and(|old| std::sync::Arc::ptr_eq(&old, chain))
-    {
-        return;
-    }
-    *source = Some(std::sync::Arc::downgrade(chain));
-    let started = std::time::Instant::now();
-    let (loaded, hit) = catalog.get_or_load(chain, load);
-    match loaded {
-        Ok(icons) => {
-            script.set_macro_icons(icons.clone());
-            info!(
-                "ui_macro: {} macro icons in the chooser (cached={hit}, elapsed_ms={:.3})",
-                icons.len(),
-                started.elapsed().as_secs_f64() * 1000.0
-            );
-        }
-        Err(e) if !hit => {
-            error!("ui_macro: no Interface\\Icons\\ listing — the chooser is empty: {e}")
-        }
-        Err(_) => {}
-    }
-}
-
-/// [`seed_icon_catalog`]'s policy for a Wrath VM: once per VM and source, both lists.
+/// The feed policy, isolated from GPU resources so the replacement tests exercise it: once per
+/// VM and source, both lists.
 fn seed_wrath_icon_catalog<T>(
     script: &mut UiScript,
     chain: &std::sync::Arc<T>,

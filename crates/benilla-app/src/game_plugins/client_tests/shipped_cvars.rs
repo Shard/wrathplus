@@ -108,3 +108,56 @@ const HOOK_ORDER: &[&str] = &[
     "ui_loot::on_cvar",
     "ui_chat::combat::on_cvar",
 ];
+
+/// The `$WOW_*` levers a built client marks session-owned, in the order [`load_config`] reads
+/// them: the registry's own (`CORE_LEVERS`), then each feature's in plugin order. Every row is
+/// owned on its own, so the order fixes only the log's; the rows are what `session_values` read
+/// before the features registered their levers.
+///
+/// [`load_config`]: crate::cvars
+const LEVERS: [(&str, &[&str]); 10] = [
+    ("WOW_FARCLIP", &["farclip"]),
+    ("WOW_CLUTTER_DENSITY", &["WorldDetail", "frillDensity"]),
+    ("WOW_TRILINEAR", &["trilinear"]),
+    ("WOW_ANISO", &["anisotropic"]),
+    ("WOW_MSAA", &["gxMultisample"]),
+    ("WOW_RENDER_SCALE", &["renderScale"]),
+    ("WOW_UI_SCALE", &["uiScale"]),
+    ("novsync_env", &["gxVSync"]),
+    ("windowed_env", &["gxWindow", "gxMaximize", "gxResolution"]),
+    ("WOW_HOST", &["realmList"]),
+];
+
+#[test]
+fn a_built_client_marks_the_same_session_levers() {
+    let app = crate::game_plugins::schedule_tests::headless_client();
+    // A lever's rows, read off a world without its knob: names only.
+    let bare = bevy::ecs::world::World::new();
+    let registered = &app.world().resource::<crate::cvars::SessionLevers>().0;
+    let built: Vec<(&str, Vec<&str>)> = crate::cvars::CORE_LEVERS
+        .iter()
+        .chain(registered)
+        .map(|l| {
+            (
+                l.name,
+                (l.read)(&bare)
+                    .into_iter()
+                    .map(|(n, v)| {
+                        assert!(v.is_none(), "{n}: no knob, no value");
+                        n
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+    let expected: Vec<(&str, Vec<&str>)> =
+        LEVERS.iter().map(|(n, rows)| (*n, rows.to_vec())).collect();
+    assert_eq!(built, expected, "the levers and their order");
+    // Every lever row is a shipped row.
+    let cvars = app.world().resource::<Cvars>();
+    for (_, rows) in &built {
+        for row in rows {
+            assert!(cvars.get(row).is_some(), "{row} is registered");
+        }
+    }
+}

@@ -48,7 +48,7 @@ fn settled_default_ui() -> UiScript {
             ..Default::default()
         }),
     );
-    super::load_default_ui(&s);
+    super::load_default_ui(&mut s);
     s.set_screen_size(1600.0, 900.0);
     for _ in 0..12 {
         s.resolve();

@@ -6,15 +6,15 @@ use crate::messages::{
     DamageShield, DispelFailed, EnchantmentLog, EnvironmentalDamageLog, ExplorationXp, FriendEntry,
     FriendStatusUpdate, GmTicket, GossipOption, GroupLootInfo, GroupMemberEntry,
     GuildCommandResult, GuildEventNotice, GuildInfo, GuildQueryResponse, GuildRoster,
-    InspectHonorStats, ItemInfo, ItemPushResult, JumpInfo, LevelUpInfo, LootAllPassed, LootItem,
-    LootRoll, LootRollWon, LootStartRoll, MailListEntry, MirrorTimerStart, MonsterMoveFacing,
-    MoverState, ObjectFields, PartyKillLog, PartyMemberStatsInfo, PeriodicAuraLog, PetMode,
-    PetSpells, PetitionQueryResponse, PetitionRename, PetitionShowList, PetitionShowSignatures,
-    PetitionSignResults, PvpCredit, QuestComplete, QuestConfirmAccept, QuestDetails,
-    QuestGiverList, QuestOfferReward, QuestRequestItems, QuestShareMsg, QuestTemplate,
-    SpellDamageLog, SpellDispelLog, SpellEnergizeLog, SpellHealLog, SpellInstaKillLog,
-    SpellLogExecute, SpellLogMiss, SpellOutcomeLog, StabledPet, TaxiMask, TradeStatus,
-    TradeStatusExtended, TrainerSpell, TransportPose, VendorItem, WhoResults, XpGain,
+    InspectHonorStats, ItemInfo, ItemPushResult, JumpInfo, LevelUpInfo, LootItem, MailListEntry,
+    MirrorTimerStart, MonsterMoveFacing, MoverState, ObjectFields, PartyKillLog,
+    PartyMemberStatsInfo, PeriodicAuraLog, PetMode, PetSpells, PetitionQueryResponse,
+    PetitionRename, PetitionShowList, PetitionShowSignatures, PetitionSignResults, PvpCredit,
+    QuestComplete, QuestConfirmAccept, QuestDetails, QuestGiverList, QuestOfferReward,
+    QuestRequestItems, QuestShareMsg, QuestTemplate, SpellDamageLog, SpellDispelLog,
+    SpellEnergizeLog, SpellHealLog, SpellInstaKillLog, SpellLogExecute, SpellLogMiss,
+    SpellOutcomeLog, StabledPet, TaxiMask, TradeStatus, TradeStatusExtended, TrainerSpell,
+    TransportPose, VendorItem, WhoResults, XpGain,
 };
 
 /// One native talent spec; talent ranks are zero-based, glyphs are GlyphProperties.dbc IDs.
@@ -946,14 +946,6 @@ pub enum SessionEvent {
     LootReleaseResponse { guid: u64 },
     /// Native build-12340 rolls, including count, mask, suffix and automatic-pass metadata.
     WrathLootRoll(crate::wrath_roll::Roll),
-    /// A group roll opened on one drop (`SMSG_LOOT_START_ROLL`); its `rollID` is client-allocated.
-    LootStartRoll(LootStartRoll),
-    /// A vote or dice (`SMSG_LOOT_ROLL`); `LootRoll::is_dice`/`vote` split the overloaded pair.
-    LootRoll(LootRoll),
-    /// A group roll resolved (`SMSG_LOOT_ROLL_WON`), closing its frame.
-    LootRollWon(LootRollWon),
-    /// Everyone passed (`SMSG_LOOT_ALL_PASSED`); the item returns to ordinary looting.
-    LootAllPassed(LootAllPassed),
     /// Master-loot candidates (`SMSG_LOOT_MASTER_LIST`), sent by `SendLoot` before its response.
     LootMasterList { candidates: Vec<u64> },
     /// An item landed in our bags (`SMSG_ITEM_PUSH_RESULT`): the "You receive loot" line.

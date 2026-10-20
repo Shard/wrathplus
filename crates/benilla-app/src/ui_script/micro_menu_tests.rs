@@ -333,7 +333,7 @@ fn a_micro_button_pushes_while_its_panel_is_open_and_the_talent_button_pulses_on
     );
     // The app runs GlobalStrings ahead of the manifest; the ding's chat lines format through it.
     super::test_ui::load_ui(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
     s.resolve();
 
     let state = |s: &UiScript, button: &str| {

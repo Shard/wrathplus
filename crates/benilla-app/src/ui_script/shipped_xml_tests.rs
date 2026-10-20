@@ -39,7 +39,7 @@ fn the_whole_shipped_manifest_loads_without_errors() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
@@ -64,7 +64,7 @@ fn loading_the_shipped_ui_queues_no_sounds() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
     assert_eq!(
@@ -629,7 +629,7 @@ fn every_texture_frame_outranks_its_status_bars() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     // Every unit frame shown: a hidden frame emits no quads to read a level from.
     for unit in [
@@ -724,7 +724,7 @@ fn the_shipped_ui_takes_variables_loaded_without_a_script_error() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "loader errors: {failures:?}");
     let _ = s.errors(); // drain the load's own errors
     s.fire_event("VARIABLES_LOADED", vec![]);
@@ -753,7 +753,7 @@ fn every_shipped_font_object_is_published_as_a_lua_global() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "loader errors: {failures:?}");
 
     // The names come from the manifest's own entries, chain files included.
@@ -830,7 +830,7 @@ fn the_inheritable_reference_templates_confer_their_shape() {
             ..Default::default()
         }),
     );
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
 
     s.run(
         r#"
@@ -885,7 +885,7 @@ fn the_inspect_cursor_pair_takes_both_arms() {
             ..Default::default()
         }),
     );
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
 
     // Both exist as functions, the shape a caller checks before hooking.
     assert_eq!(
@@ -938,7 +938,7 @@ fn a_cinematic_leaves_nothing_of_the_interface_on_screen() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
 
@@ -1024,7 +1024,7 @@ fn every_declared_parent_really_attaches() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
 
@@ -1156,7 +1156,7 @@ fn the_shipped_manifest_opens_the_macro_icon_picker() {
         r"Interface\Icons\Ability_Ambush".into(),
         r"Interface\Icons\Ability_Backstab".into(),
     ]);
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.resolve();
     let _ = s.errors();
@@ -1195,7 +1195,7 @@ fn the_stock_interface_options_window_loads_hidden_and_ours_is_still_the_players
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     // The stock frame, by the children only it declares.
@@ -1303,7 +1303,7 @@ fn the_stock_sound_options_window_loads_hidden_and_the_alias_is_gone() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     // The stock frame, by the children only it declares; the stock file has no CheckButton3.
@@ -1405,7 +1405,7 @@ fn the_stock_sound_window_turns_a_box_off_and_stores_a_slider_as_lua_text() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
     s.set_cvar_host("EnableMusic", "1");
     s.run("this = SoundOptionsFrameOkay SoundOptionsFrame_Load()")
@@ -1482,7 +1482,7 @@ fn the_stock_video_options_window_loads_hidden_and_owns_its_own_name() {
             ..Default::default()
         }),
     );
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     // The stock frame, by the children only it declares.
@@ -1708,7 +1708,7 @@ fn the_display_brightness_pair_speaks_the_reference_slider_unit() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = benilla_ui::script::UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     // The registered `gamma = "1.0"` reads as 0.0, the centre of the stock slider.
@@ -1804,7 +1804,7 @@ fn the_video_windows_ten_composed_names_stay_nil() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = benilla_ui::script::UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    let failures = super::load_default_ui(&s);
+    let failures = super::load_default_ui(&mut s);
     assert!(failures.is_empty(), "manifest load errors: {failures:#?}");
 
     for name in [
@@ -1861,7 +1861,7 @@ fn the_stock_options_windows_load_and_save_are_reachable_for_addons() {
             ..Default::default()
         }),
     );
-    assert!(super::load_default_ui(&s).is_empty());
+    assert!(super::load_default_ui(&mut s).is_empty());
 
     // `_Load` first, the window's own order: the reference loads on show and saves on Okay.
     s.run("this = UIOptionsFrameOkay UIOptionsFrame_Load()")

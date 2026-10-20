@@ -7,8 +7,6 @@
 use bevy::prelude::*;
 
 mod parse;
-#[cfg(test)]
-pub(super) use parse::lua_quoted_string;
 pub(super) use parse::{parse_line, ParsedChat};
 
 use crate::creature_anim::{move_flags, MovementState};

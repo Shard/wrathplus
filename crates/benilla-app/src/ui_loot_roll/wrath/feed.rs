@@ -240,10 +240,7 @@ pub(super) fn feed(
     }
 }
 
-#[cfg(test)]
-mod tests;
-
-/// Resolve client-only IDs against the current native lifecycle, never against the 1.12 model.
+/// Resolve client-only IDs against the current native lifecycle.
 pub(crate) fn drain(
     script: &mut UiScript,
     presentation: &mut Presentation,
@@ -303,3 +300,6 @@ pub(crate) fn drain(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

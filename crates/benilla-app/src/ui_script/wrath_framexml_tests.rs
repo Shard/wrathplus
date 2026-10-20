@@ -173,6 +173,9 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
     // As the game loads it: the server's addon reply (nothing hidden), the load budget armed and
     // the archive's Blizzard addons registered.
     script.note_addon_info_reply(&[]);
+    // The client's CVar table, as `lifecycle::new_vm` seeds it from the registry: stock
+    // `VideoOptionsPanels.xml` reads `gamma` at load, a `ui_gamma` row.
+    script.seed_cvars(crate::cvars::Cvars::with_rows(crate::shipped_cvars::FEATURE_ROWS).vm_seed());
     let failures = super::manifest::load_wrath_ui(&mut script, None, &[], true);
     let labels = script.eval::<String>("local bad = {} for _, name in ipairs({'CHAT_CONFIG_CHAT_LEFT','CHAT_CONFIG_OTHER_COMBAT','CHAT_CONFIG_OTHER_PVP','CHAT_CONFIG_OTHER_SYSTEM','CHAT_CONFIG_CHAT_CREATURE_LEFT'}) do for _, v in ipairs(_G[name] or {}) do local label = v.text or _G[v.type] if type(label) ~= 'string' then table.insert(bad, tostring(v.type)..'='..type(label)) end end end return table.concat(bad, ', ')").unwrap();
     eprintln!("non-string chat config labels: {labels}");

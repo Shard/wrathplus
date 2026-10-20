@@ -1,8 +1,8 @@
 //! Where interfaces come from: addon discovery under [`root`] and the load walk ([`Walk::load`]).
 //! An [`Addon`] is a name, a parsed `.toc` and the [`Source`] its files come from. The core
-//! interface (the chain's own FrameXML) and benilla's layer (the compiled-in tree) are two more,
-//! but not for the lifecycle: they load outside `AddOn_Load`
-//! ([`super::manifest::load_ingame_ui`]), get no `ADDON_LOADED` and have no registry row.
+//! interface (the chain's own FrameXML) and the AzerothBench root (the compiled-in tree) are two
+//! more, but not for the lifecycle: they load outside `AddOn_Load`
+//! ([`super::manifest::load_wrath_ui`]), get no `ADDON_LOADED` and have no registry row.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -118,13 +118,6 @@ impl Addon {
             Source::Builtin => benilla_ui::script::addon_chunk_name(&self.name, file),
             Source::Dir(_) | Source::Chain => format!("@{}", path.replace('/', "\\")),
         }
-    }
-
-    /// Load this addon's `.toc`-listed files, in listed order, reporting into `toc`, the `.toc`'s
-    /// load record. Each error is logged as it happens and also returned, tagged
-    /// `"<Addon>/<file>: <error>"`, for the tests to assert empty.
-    fn load(&self, script: &UiScript, toc: &mut Status) -> Vec<String> {
-        self.load_files_into(script, &self.toc.files, toc)
     }
 
     /// Wrath's Lua file ABI passes `(addonName, privateTable)` and reuses the private table for
@@ -348,23 +341,6 @@ fn root_from(home: Option<PathBuf>) -> Option<PathBuf> {
     home.map(|h| h.join(ADDONS_DIR))
 }
 
-/// The reference's twelve `Blizzard_*` LoadOnDemand addons: on a 1.12 install each folder holds
-/// only a `.pub`, with the files in the archive. Probed against the chain.
-const BLIZZARD_ADDONS: [&str; 12] = [
-    "Blizzard_AuctionUI",
-    "Blizzard_BattlefieldMinimap",
-    "Blizzard_BindingUI",
-    "Blizzard_CombatText",
-    "Blizzard_CraftUI",
-    "Blizzard_GMSurveyUI",
-    "Blizzard_InspectUI",
-    "Blizzard_MacroUI",
-    "Blizzard_RaidUI",
-    "Blizzard_TalentUI",
-    "Blizzard_TradeSkillUI",
-    "Blizzard_TrainerUI",
-];
-
 /// Build 12340's `Blizzard_*` addons, carried in its archives the same way.
 pub(super) const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
     "Blizzard_AchievementUI",
@@ -408,25 +384,6 @@ fn chain_addons(names: &[&str]) -> Vec<Addon> {
             })
         })
         .collect()
-}
-
-/// Every registered addon in registration order, the archive pass before the loose folders and a
-/// name's first registration winning: `AddOn_ScanAddOnDir 0x51c760` walks each archive's
-/// `(listfile)` in line order (`0x401470`, `0x648fb0`) before the `FindFirstFileW` walk
-/// (`0x42ad10`), and `0x51c9b0` returns on a name-hash hit (`0x51ca10`) and tail-inserts
-/// (`0x521ad0`). That order is the Lua index space, and in the one shared Lua state (`0x7040d0`)
-/// it decides whose copy of a global wins.
-fn discover() -> Vec<Addon> {
-    // The archive pass, in `BLIZZARD_ADDONS` order: the shipped `patch.MPQ` listfile's too.
-    let mut found = chain_addons(&BLIZZARD_ADDONS);
-    // The loose pass, minus the names the archive registered.
-    let seen: HashSet<String> = found.iter().map(|a| a.name.to_ascii_lowercase()).collect();
-    found.extend(
-        discover_folder()
-            .into_iter()
-            .filter(|a| !seen.contains(&a.name.to_ascii_lowercase())),
-    );
-    found
 }
 
 /// Sort folder names into NTFS directory order. The reference's loose pass (`0x42ad10`,
@@ -832,95 +789,6 @@ const SAVED_HEADER: &str = "\
 -- Written at logout/exit from the live globals; executed as a Lua chunk at addon load.
 ";
 
-/// Load every discovered third-party addon at world entry (`UI_Init 0x48fbf0` → `0x51f600`),
-/// returning every load error tagged by addon. `&mut` because each `ADDON_LOADED` fires
-/// ([`UiScript::fire_event`]) before the next addon's files run, as in the reference.
-pub(super) fn load_third_party(
-    script: &mut UiScript,
-    identity: Option<&(String, String)>,
-    roster: &[String],
-    version_check: bool,
-) -> Vec<String> {
-    let addons = discover();
-    // Registered even when empty: `GetNumAddOns()` must answer 0, not a previous session's list.
-    let mut infos: Vec<_> = addons.iter().map(info_for).collect();
-    // Chain rows read their files off the player's patch chain.
-    script.set_addon_chain_reader(Box::new(super::reference_ui::read));
-    // Each enable bit through the reference's query: the character's explicit row, else what the
-    // realm's other characters agree on, else the manifest's `## DefaultState`.
-    let store = EnableStore::load(
-        identity
-            .map(|(realm, _)| realm.as_str())
-            .unwrap_or_default(),
-        &store_nodes(identity, roster),
-    );
-    let character = identity.map(|(_, c)| c.as_str());
-    for (info, addon) in infos.iter_mut().zip(addons.iter()) {
-        info.enabled = store.enabled_for(&info.name, addon.toc.default_state(), character);
-    }
-    let disabled_names: HashSet<String> = infos
-        .iter()
-        .filter(|i| !i.enabled)
-        .map(|i| i.name.to_ascii_lowercase())
-        .collect();
-    script.register_addons(
-        infos,
-        root(),
-        crate::local_state::addon_saved_account_dir(),
-        identity.and_then(|(r, c)| crate::local_state::addon_saved_character_dir(r, c)),
-    );
-    // The verbs write through the character's own hash, so logout saves only what they changed.
-    script.set_addon_enable_hash(
-        character
-            .and_then(|c| store.node(c))
-            .cloned()
-            .unwrap_or_default(),
-    );
-    if addons.is_empty() {
-        return Vec::new();
-    }
-    info!(
-        "ui_script: {} addon(s) found: {}",
-        addons.len(),
-        addons
-            .iter()
-            .map(|a| a.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    let mut state = Walk {
-        disabled: disabled_names,
-        version_check,
-        client_interface: benilla_ui::script::addon_gate::CLIENT_INTERFACE,
-        wrath: false,
-        ..Walk::default()
-    };
-    for addon in &addons {
-        // `## LoadOnDemand: 1` waits for `LoadAddOn`: `0x51f600` loads only records whose
-        // LoadOnDemand byte is 0.
-        if addon.toc.load_on_demand() {
-            info!(
-                "ui_script: {} is LoadOnDemand — not loaded (no LoadAddOn() yet)",
-                addon.name
-            );
-            continue;
-        }
-        // Re-armed per addon, so one runaway cannot fail every addon after it; a dependency
-        // chain loads under its dependent's arming, as in the harness's survey.
-        script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
-        let _ = state.load(script, &addons, &addon.name);
-        let spent = script.instructions_used();
-        if spent > 1_000_000 {
-            // A heavy load gets a line: this counter is what the budget was chosen from.
-            info!(
-                "ui_script: {} spent {spent} VM instructions loading",
-                addon.name
-            );
-        }
-    }
-    state.failures
-}
-
 /// Discover and load only player addons from `benilla-config/AddOns` under the 30300 gate. No
 /// archive Blizzard rows or binding files are admitted on this route.
 pub(super) fn load_wrath_third_party(
@@ -974,7 +842,6 @@ pub(super) fn load_wrath_third_party(
         disabled,
         version_check,
         client_interface: 30300,
-        wrath: true,
         ..Walk::default()
     };
     for addon in &addons {
@@ -1001,10 +868,8 @@ struct Walk {
     /// `checkAddonVersion`: when on, an addon whose `## Interface` is not exactly the client's is
     /// skipped like a disabled one, and a dependent gets `Err` (`DEP_INTERFACE_VERSION`).
     version_check: bool,
-    /// Dialect-scoped exact `## Interface` gate.
+    /// The exact `## Interface` the gate compares against, 30300.
     client_interface: u32,
-    /// Use Wrath addon chunk arguments and omit the unsupported addon Bindings.xml surface.
-    wrath: bool,
 }
 
 impl Walk {
@@ -1089,21 +954,18 @@ impl Walk {
         // (`0x51f464`), merged into the UI load's.
         let debug = script.framexml_debug();
         let mut toc = Status::default();
-        self.failures.extend(if self.wrath {
-            addon.load_wrath(script, &mut toc)
-        } else {
-            addon.load(script, &mut toc)
-        });
+        self.failures.extend(addon.load_wrath(script, &mut toc));
         let mut own = Status::default();
         let toc_path = status::addon_toc_path(&addon.name);
         toc.close_into(&mut own, debug, status::toc_banner(&toc_path));
         let mut block = Status::default();
         own.close_into(&mut block, debug, status::addon_banner(&addon.name));
         script.report_load_status(block);
-        // `Bindings.xml` (`0x51f400`), after the files whose functions a binding calls, through
-        // the addon's own sandboxed reader; absent is normal.
+        // `Bindings.xml` (1.12 `0x51f400`; 12340's step is assumed at the same place, untraced),
+        // after the files whose functions a binding calls, through the addon's own sandboxed
+        // reader; absent is normal.
         let bindings_xml = benilla_ui::loader::join_ref(&addon.prefix(), "Bindings.xml");
-        if let Some(bytes) = (!self.wrath).then(|| addon.read(&bindings_xml)).flatten() {
+        if let Some(bytes) = addon.read(&bindings_xml) {
             match benilla_ui::bindings_xml::parse(&benilla_ui::source::decode(&bytes)) {
                 Ok(bindings) => script.register_addon_bindings(&addon.name, &bindings),
                 Err(e) => {
@@ -1234,112 +1096,6 @@ mod tests {
         );
     }
 
-    /// `AddOn_ScanAddOnDir 0x51c760` scans the archives (`0x51c777`) before the loose folders
-    /// (`0x51c78f`), and `0x51c9b0` returns on a name already registered (`0x51ca10`).
-    #[test]
-    fn the_archive_pass_registers_first_and_wins_a_duplicate() {
-        let _data = benilla_formats::wow_data_or_skip!();
-        let _l = crate::local_state::test_env::ENV_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let _c = crate::local_state::test_env::EnvGuard::unset("WOW_CAPTURE");
-        let (home, _h) = hermetic_root("scanorder");
-        let chain = chain_addons(&BLIZZARD_ADDONS);
-        if chain.is_empty() {
-            eprintln!("skipping: the chain carries no Blizzard addon rows");
-            return;
-        }
-        let collide = chain[0].name.clone();
-        write_addon(
-            &home,
-            &collide,
-            "## Interface: 30300\n## Title: Impostor\n",
-            &[],
-        );
-        write_addon(&home, "Loose", "## Interface: 30300\n", &[]);
-
-        let found = discover();
-        let names: Vec<&str> = found.iter().map(|a| a.name.as_str()).collect();
-
-        let first_loose = names.iter().position(|n| *n == "Loose").expect("Loose");
-        assert_eq!(
-            first_loose,
-            chain.len(),
-            "the loose folder follows all {} archive rows: {names:?}",
-            chain.len()
-        );
-
-        assert_eq!(
-            names.iter().filter(|n| **n == collide).count(),
-            1,
-            "{collide} is registered once: {names:?}"
-        );
-        let row = found.iter().find(|a| a.name == collide).unwrap();
-        assert!(
-            matches!(row.source, Source::Chain),
-            "the archive's copy won"
-        );
-        assert_ne!(
-            row.toc.directive("Title"),
-            Some("Impostor"),
-            "the loose manifest did not overwrite the archive's"
-        );
-    }
-
-    /// Every chain row is LoadOnDemand and chain-sourced, the eight windows the interface opens
-    /// through them are rows, and the core, the chain's `FrameXML.toc`, lists none.
-    #[test]
-    fn the_chain_carries_blizzards_load_on_demand_addons_as_registry_rows() {
-        let _data = benilla_formats::wow_data_or_skip!();
-        let rows = chain_addons(&BLIZZARD_ADDONS);
-        assert!(
-            rows.iter().any(|a| a.name == "Blizzard_TrainerUI"),
-            "the trainer addon is a row: {:?}",
-            rows.iter().map(|a| &a.name).collect::<Vec<_>>()
-        );
-        for a in &rows {
-            assert!(a.toc.load_on_demand(), "{} is LoadOnDemand", a.name);
-            assert!(
-                matches!(a.source, Source::Chain),
-                "{} comes off the chain",
-                a.name
-            );
-            assert!(
-                info_for(a).chain,
-                "{}'s registry row is marked chain-sourced",
-                a.name
-            );
-        }
-        for name in [
-            "Blizzard_AuctionUI",
-            "Blizzard_CraftUI",
-            "Blizzard_InspectUI",
-            "Blizzard_MacroUI",
-            "Blizzard_RaidUI",
-            "Blizzard_TalentUI",
-            "Blizzard_TradeSkillUI",
-            "Blizzard_TrainerUI",
-        ] {
-            assert!(
-                rows.iter().any(|a| a.name == name),
-                "{name} is a row the interface opens on demand"
-            );
-        }
-        assert!(
-            !super::super::reference_ui::core()
-                .expect("the player's FrameXML.toc")
-                .toc
-                .files
-                .iter()
-                .any(|f| f.replace('/', "\\").starts_with("Interface\\AddOns\\")),
-            "the core lists a Blizzard addon eagerly; the reference loads every one on demand"
-        );
-        // The glue's list is the player's folder alone.
-        assert!(installed_rows()
-            .iter()
-            .all(|a| !a.name.starts_with("Blizzard_")));
-    }
-
     use super::*;
 
     /// Build an addon over a temp AddOns root, so the walk can be tested without an install.
@@ -1433,7 +1189,7 @@ mod tests {
         };
 
         let script = UiScript::new().unwrap();
-        let failures = addon.load(&script, &mut Status::default());
+        let failures = addon.load_wrath(&script, &mut Status::default());
         assert!(
             failures.is_empty(),
             "a listed Bindings.xml costs log lines, not script errors: {failures:?}"
@@ -1441,6 +1197,48 @@ mod tests {
         assert!(
             script.eval::<bool>("return PROBE_RAN == 1").unwrap(),
             "and the manifest carries on to the next line"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// An addon's own `Bindings.xml` registers its commands on a Wrath VM, between its files and
+    /// `ADDON_LOADED`, so the stock key-binding list (`GetBinding`) carries them.
+    #[test]
+    fn an_addons_bindings_xml_registers_its_commands() {
+        let tmp =
+            std::env::temp_dir().join(format!("benilla-addon-bindings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let root = tmp.join("AddOns");
+        std::fs::create_dir_all(root.join("Probe")).unwrap();
+        std::fs::write(
+            root.join("Probe/Bindings.xml"),
+            r#"<Bindings>
+  <Binding name="PROBE_STEPUP" header="PROBE">ProbeStep_Inc()</Binding>
+</Bindings>"#,
+        )
+        .unwrap();
+        std::fs::write(root.join("Probe/Probe.lua"), "PROBE_RAN = 1").unwrap();
+        let addon = Addon {
+            name: "Probe".into(),
+            toc: Toc::parse("## Interface: 30300\nProbe.lua\n"),
+            source: Source::Dir(root),
+        };
+
+        let mut script = UiScript::new().unwrap();
+        let mut walk = Walk {
+            client_interface: 30300,
+            ..Walk::default()
+        };
+        assert!(walk.load(&mut script, &[addon], "Probe").is_ok());
+        assert!(walk.failures.is_empty(), "{:?}", walk.failures);
+        assert!(
+            script
+                .eval::<bool>(
+                    "for i = 1, GetNumBindings() do \
+                     if GetBinding(i) == 'PROBE_STEPUP' then return true end end return false"
+                )
+                .unwrap(),
+            "the addon's command is in the binding list"
         );
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -1477,7 +1275,7 @@ mod tests {
         };
 
         let script = UiScript::new().unwrap();
-        assert!(addon.load(&script, &mut Status::default()).is_empty());
+        assert!(addon.load_wrath(&script, &mut Status::default()).is_empty());
 
         // The exact pattern the libraries run, on each file's own traceback.
         let folder = |global: &str| -> Option<String> {
@@ -1598,7 +1396,7 @@ mod tests {
         };
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
-        let failures = addon.load(&script, &mut Status::default());
+        let failures = addon.load_wrath(&script, &mut Status::default());
         assert!(failures.is_empty(), "addon load errors: {failures:#?}");
 
         assert_eq!(
@@ -2851,7 +2649,7 @@ mod tests {
         let fresh = ("Realm".to_string(), "Fresh".to_string());
         let mut script = UiScript::new().unwrap();
         let _ = load_wrath_third_party(&mut script, Some(&fresh), &[], true);
-        crate::ui_script::shutdown_ui_state(&mut script, Some(&fresh), true);
+        crate::ui_script::wrath_addons::shutdown(&mut script, Some(&fresh), true);
         assert!(
             !enable_state_path(Some(&fresh)).unwrap().exists(),
             "a login and logout with no toggle creates no AddOns file"
@@ -2872,7 +2670,7 @@ mod tests {
             let mut script = UiScript::new().unwrap();
             let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
             script.run(lua).unwrap();
-            crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
+            crate::ui_script::wrath_addons::shutdown(&mut script, Some(&id), true);
             assert_eq!(
                 std::fs::read_to_string(&path).unwrap(),
                 before,
@@ -2906,7 +2704,7 @@ mod tests {
             let _ = load_wrath_third_party(&mut script, Some(&id), roster, true);
             let ran = script.eval::<bool>("return SharedRan == true").unwrap();
             script.run(lua).unwrap();
-            crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
+            crate::ui_script::wrath_addons::shutdown(&mut script, Some(&id), true);
             ran
         };
         assert!(session("Alice", &roster, ""), "enabled by default");
@@ -2967,7 +2765,7 @@ mod tests {
         script
             .run("KeeperDB.count = 7 KeeperDB.note = 'hi' KeeperChar = 'mine'")
             .unwrap();
-        crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
+        crate::ui_script::wrath_addons::shutdown(&mut script, Some(&id), true);
 
         // ── session two: a fresh VM reads them back ──
         let mut next = UiScript::new().unwrap();
@@ -3020,7 +2818,7 @@ mod tests {
         script
             .run("GramDB = { ['on'] = true, ['n'] = 2, ['s'] = 'a\\\"b', ['t'] = { 1 } } GramChar = 5")
             .unwrap();
-        crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
+        crate::ui_script::wrath_addons::shutdown(&mut script, Some(&id), true);
 
         let account = std::fs::read_to_string(home.join("saved/Gram.lua")).unwrap();
         let body = account.lines().skip(2).collect::<Vec<_>>().join("\n");
@@ -3074,7 +2872,7 @@ mod tests {
         let mut script = UiScript::new().unwrap();
         script.set_screen_size(1024.0, 768.0);
         let _ = load_wrath_third_party(&mut script, Some(&id), &[], true);
-        crate::ui_script::shutdown_ui_state(&mut script, Some(&id), true);
+        crate::ui_script::wrath_addons::shutdown(&mut script, Some(&id), true);
 
         let written = std::fs::read_to_string(home.join("saved/Last.lua")).unwrap();
         assert!(

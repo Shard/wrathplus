@@ -1084,10 +1084,10 @@ mod loader_tests {
         );
     }
 
-    /// `0x7025fd` names a handler chunk `"%s:%s"` (`0x872a28`) from the object's `GetName`, or
-    /// `<unnamed>` (`0x84c7f0`), and `0x704c70` loads the raw body, so body line n is chunk line n.
+    /// Build 12340 names every handler chunk `*:<script>` (`0x48fef0`, `"*:%s"`) and wraps the body
+    /// on one line, `return function(<formals>) %s end`, so body line n is chunk line n.
     #[test]
-    fn an_xml_handler_chunk_is_named_by_its_frame_and_handler() {
+    fn an_xml_handler_chunk_is_named_star_script_and_keeps_its_body_lines() {
         let s = UiScript::new().unwrap();
         let doc = parse(
             "<Ui>\n\
@@ -1119,23 +1119,59 @@ mod loader_tests {
                 .unwrap()
         };
 
-        // Named by frame and handler. Labelled: the line the 12340 wrapper reports for a body
-        // that opens with a newline is unverified, so only the name and message are pinned.
-        let named = raised(r#"NamedBtn:GetScript("OnClick")"#);
-        assert!(
-            named.starts_with(r#"[string "NamedBtn:OnClick"]:"#) && named.ends_with(": boom"),
-            "{named}"
+        // The body opens with a newline, so its `error` is on line 2.
+        assert_eq!(
+            raised(r#"NamedBtn:GetScript("OnClick")"#),
+            r#"[string "*:OnClick"]:2: boom"#
         );
-        // A `CreateFrame` instance is named by its own `GetName()`, not by its template.
-        let made = raised(r#"Made:GetScript("OnClick")"#);
-        assert!(
-            made.starts_with(r#"[string "Made:OnClick"]:"#) && made.ends_with(": tmpl"),
-            "{made}"
+        // A template's instance and an anonymous frame read the same name.
+        assert_eq!(
+            raised(r#"Made:GetScript("OnClick")"#),
+            r#"[string "*:OnClick"]:1: tmpl"#
         );
-        let anon = raised(r#"BenillaAnon:GetScript("OnClick")"#);
+        assert_eq!(
+            raised(r#"BenillaAnon:GetScript("OnClick")"#),
+            r#"[string "*:OnClick"]:1: anon"#
+        );
+    }
+
+    /// Each script compiles under its native formals (`0x48e680` and the per-type lookups), and a
+    /// script with none takes `self` alone, so `...` there does not compile.
+    #[test]
+    fn xml_handlers_take_the_native_formals() {
+        let s = UiScript::new().unwrap();
+        let doc = parse(
+            "<Ui><Frame name=\"FormalsProbe\"><Scripts>\
+             <OnSizeChanged>SizeSeen = w .. 'x' .. h</OnSizeChanged>\
+             <OnShow>return ...</OnShow>\
+             <OnClick>ClickBody = true</OnClick>\
+             </Scripts></Frame>\
+             <Slider name=\"FormalsSlider\"><Scripts>\
+             <OnMinMaxChanged>MinMaxSeen = min .. '-' .. max</OnMinMaxChanged>\
+             </Scripts></Slider></Ui>",
+        );
+        let report = load(&s, &doc, &no_files);
         assert!(
-            anon.starts_with(r#"[string "<unnamed>:OnClick"]:"#) && anon.ends_with(": anon"),
-            "{anon}"
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("<OnShow>") && e.contains("outside a vararg function")),
+            "{:?}",
+            report.errors
+        );
+        s.run("FormalsProbe:GetScript('OnSizeChanged')(FormalsProbe, 3, 4) \
+               FormalsSlider:GetScript('OnMinMaxChanged')(FormalsSlider, 0, 9)")
+            .unwrap();
+        assert_eq!(s.eval::<String>("return SizeSeen").unwrap(), "3x4");
+        assert_eq!(s.eval::<String>("return MinMaxSeen").unwrap(), "0-9");
+        // A script the type lacks is logged as `0x48fef0` does and skipped, its body never run.
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| w == "Frame FormalsProbe: Unknown script element OnClick"),
+            "{:?}",
+            report.warnings
         );
     }
 
@@ -1701,10 +1737,14 @@ mod loader_tests {
         let doc = parse(
             r#"<Ui>
                 <Frame name="Hoverable">
-                    <Scripts><OnEnter>-- hover</OnEnter></Scripts>
+                    <Scripts><OnEnter>
+                        -- hover
+                    </OnEnter></Scripts>
                 </Frame>
                 <Frame name="DropTarget">
-                    <Scripts><OnDragStop>-- outside the kind-2 set</OnDragStop></Scripts>
+                    <Scripts><OnDragStop>
+                        -- outside the kind-2 set
+                    </OnDragStop></Scripts>
                 </Frame>
             </Ui>"#,
         );
@@ -2558,8 +2598,7 @@ mod chunk_name_tests {
               <OnMouseDown>FORMALS = {self, button}</OnMouseDown>
               <OnMouseWheel>FORMALS = {self, delta}</OnMouseWheel>
               <OnKeyDown>FORMALS = {self, key}</OnKeyDown>
-              <OnValueChanged>FORMALS = {self, value}</OnValueChanged>
-              <OnSizeChanged>FORMALS = {self, width, height}</OnSizeChanged>
+              <OnSizeChanged>FORMALS = {self, w, h}</OnSizeChanged>
               <OnDragStart>FORMALS = {self, button}</OnDragStart>
             </Scripts></Frame></Ui>"#,
         );
@@ -2574,7 +2613,6 @@ mod chunk_name_tests {
             ("OnMouseDown", "WrathHandlers, 'LeftButton'", "LeftButton"),
             ("OnMouseWheel", "WrathHandlers, -1", "-1"),
             ("OnKeyDown", "WrathHandlers, 'SPACE'", "SPACE"),
-            ("OnValueChanged", "WrathHandlers, 7", "7"),
             ("OnSizeChanged", "WrathHandlers, 12, 34", "12:34"),
             ("OnDragStart", "WrathHandlers, 'RightButton'", "RightButton"),
         ] {
