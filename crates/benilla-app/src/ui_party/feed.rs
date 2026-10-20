@@ -1017,6 +1017,11 @@ pub(super) fn drain_party(
                     });
                 }
             }
+            PartyRequest::UninviteGuid { guid, reason } => {
+                let _ = commands.0.send(ClientCommand::NativeParty(
+                    benilla_protocol::wrath_party::Command::UninviteGuid { guid, reason },
+                ));
+            }
             PartyRequest::PromoteUnit(token) => {
                 if let Some(m) = member_for_token(&group, &token) {
                     let _ = commands
@@ -1211,6 +1216,7 @@ fn test_apply_local(
         req,
         PartyRequest::Leave
             | PartyRequest::UninviteUnit(_)
+            | PartyRequest::UninviteGuid { .. }
             | PartyRequest::PromoteUnit(_)
             | PartyRequest::LootMethod { .. }
             | PartyRequest::LootThreshold(_)
@@ -1247,6 +1253,11 @@ fn apply_test_intent(
                 group.members.retain(|m| m.guid != guid);
                 group.stats.remove(&guid);
             }
+            true
+        }
+        PartyRequest::UninviteGuid { guid, .. } => {
+            group.members.retain(|m| m.guid != *guid);
+            group.stats.remove(guid);
             true
         }
         PartyRequest::PromoteUnit(token) => {

@@ -37,8 +37,10 @@ pub enum WrathPopupRequest {
         name: Option<String>,
         text: Option<String>,
     },
-    /// `DeclineInvite()` (`0x4ffcc0` → `0x4fe460(0x410)`).
-    DeclineInvite,
+    /// `DeclineInvite("channel")` (`0x4ffcc0` → `0x4fe460(0x410)`): the channel invite's answer,
+    /// `CMSG_DECLINE_CHANNEL_INVITE` with the name. Labelled: the name resolver (`0x4fe160`) is
+    /// not read, so the argument goes out as given and an empty one sends nothing.
+    DeclineInvite { channel: String },
     /// `DepositGuildBankMoney(copper)` (`0x5a5e20`), already capped at the player's money.
     DepositGuildBankMoney { copper: u32 },
     /// `EndBoundTradeable(type)` (`0x5233d0`): "itemenchant", "item" or "spellenchant".
@@ -221,7 +223,15 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     verb(lua, "CancelSummon", R::CancelSummon)?;
     verb(lua, "GMResponseResolve", R::GmResponseResolve)?;
     verb(lua, "ReplaceTradeEnchant", R::ReplaceTradeEnchant)?;
-    verb(lua, "DeclineInvite", R::DeclineInvite)?;
+    set(lua, "DeclineInvite", |lua, args| {
+        let Some(channel) = text(lua, &arg(&args, 0))? else {
+            return Err(mlua::Error::runtime("Usage: DeclineInvite(\"channel\")"));
+        };
+        if !channel.is_empty() {
+            push(lua, R::DeclineInvite { channel });
+        }
+        none()
+    })?;
     // PartyLFGStartBackfill() (`0x55a0c0`): the group's dungeon becomes the whole selection and
     // the ordinary join goes out (`wrath_lfg`'s queue).
     set(lua, "PartyLFGStartBackfill", |lua, _| {
@@ -573,7 +583,8 @@ mod tests {
              RespondInstanceLock(1) SetLFGBootVote() BattlefieldMgrQueueInviteResponse(7, true) \
              ComplainChat(42) ComplainChat('Bob', 'spam') SetFriendNotes(3, 'n') \
              SetFriendNotes(200, 'x') ContainerRefundItemPurchase(0, 4) EndRefund(2) EndRefund(5) \
-             PlaceGlyphInSocket(1) RemoveGlyphFromSocket(2) AddMute('x') BNRemoveFriend(1)",
+             PlaceGlyphInSocket(1) RemoveGlyphFromSocket(2) AddMute('x') BNRemoveFriend(1) \
+             DeclineInvite('Trade') DeclineInvite('')",
         )
         .unwrap();
         assert_eq!(
@@ -610,6 +621,9 @@ mod tests {
                 },
                 R::EndRefund { kind: 2 },
                 R::PlaceGlyphInSocket { socket: 1 },
+                R::DeclineInvite {
+                    channel: "Trade".into()
+                },
             ],
             "an unfilled socket removes nothing; voice and Battle.net are inert"
         );

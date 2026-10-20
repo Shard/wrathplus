@@ -133,16 +133,27 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         }
         none()
     })?;
-    // UninviteUnit(unitOrName [, reason]) (`0x51a7a0`). Labelled: the reason is not carried.
+    // UninviteUnit(unitOrName [, reason]) (`0x51a7a0`): a unit token or a member's name resolves
+    // to a guid (`0x60abf0`, ported as `wrath_unit_popup::guid_of`), and one that does sends
+    // `CMSG_GROUP_UNINVITE_GUID` with the reason cut to 64 characters (`0x7e1830(.., 0x40, ..)`).
     set(lua, "UninviteUnit", |lua, args| {
         if !has_player(lua) {
             return none();
         }
-        if let Some(name) = text(lua, &arg(&args, 0))?.filter(|n| !n.trim().is_empty()) {
-            lua.app_data_mut::<Model>()
-                .expect("model app_data")
-                .uninvite_requests
-                .push(name);
+        let Some(who) = text(lua, &arg(&args, 0))? else {
+            return none();
+        };
+        let reason: String = text(lua, &arg(&args, 1))?
+            .unwrap_or_default()
+            .chars()
+            .take(64)
+            .collect();
+        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
+        let guid = super::wrath_unit_popup::guid_of(&model, &who);
+        if guid != 0 {
+            model
+                .party_requests
+                .push(PartyRequest::UninviteGuid { guid, reason });
         }
         none()
     })?;
@@ -618,18 +629,41 @@ mod tests {
     #[test]
     fn party_guild_and_friend_verbs_feed_the_existing_requests() {
         let s = vm();
-        s.run(
-            "InviteUnit('Bob') UninviteUnit('Ann', 'afk') PromoteToLeader('Cid') \
-               GuildInvite('Dee') GuildSetLeader('Eve') GuildPromote()",
-        )
+        s.model_mut()
+            .party
+            .members
+            .push(crate::script::party::PartyMemberInfo {
+                name: "Ann".into(),
+                guid: 0x20,
+            });
+        s.run(&format!(
+            "InviteUnit('Bob') UninviteUnit('ann', 'afk') UninviteUnit('Nobody') \
+               UninviteUnit('Ann', '{}') PromoteToLeader('Cid') GuildInvite('Dee') \
+               GuildSetLeader('Eve') GuildPromote()",
+            "r".repeat(70)
+        ))
         .unwrap();
         assert!(
             s.run(&format!("InviteUnit('{}')", "x".repeat(49))).is_err(),
             "Name too long"
         );
         let model = s.model_mut();
-        assert_eq!(model.party_requests.len(), 2);
-        assert_eq!(model.uninvite_requests, vec!["Ann".to_string()]);
+        assert_eq!(model.party_requests.len(), 4);
+        assert_eq!(
+            model.party_requests[1..3],
+            [
+                crate::script::party::PartyRequest::UninviteGuid {
+                    guid: 0x20,
+                    reason: "afk".into()
+                },
+                crate::script::party::PartyRequest::UninviteGuid {
+                    guid: 0x20,
+                    reason: "r".repeat(64)
+                },
+            ],
+            "an unresolved name sends nothing; the reason stops at 64 characters"
+        );
+        assert!(model.uninvite_requests.is_empty());
         assert_eq!(model.guild_requests.len(), 2);
         drop(model);
         s.model_mut()

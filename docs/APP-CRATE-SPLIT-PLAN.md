@@ -311,13 +311,11 @@ already resolve to `app_core` through the old paths' re-exports: the move steps 
 - Assets, `GuildState` (after App's last step-4 batch): `ui_guild::GuildState` from `entities`
   and `nameplates` (3); `GuildMemberNotify` goes with it.
 
-**Queued for Wire A (Native Wire): producer-less native writers.** Wire B's `ClientCommand` dead-field
-audit (d20aeba3) kept seven admitted Wrath writers that nothing constructs, each under its own
-`#[allow(dead_code)]` in `net.rs`: `MoveTimeSkipped`, `NativeChatCommand`, `NativeMirrorImageQuery`,
-`NativeParty`, `GetChannelMemberCount`, `ClearChannelWatch`, `DeclineChannelInvite`. For each,
-check whether the stock 12340 UI or client sends it (a missing producer is a player-facing gap, as
-`DeclineChannelInvite` or `NativeParty` may be), then wire the producer or delete the variant, and
-drop its allow.
+**Done (Wire A): producer-less native writers.** Of the seven Wrath writers Wire B's dead-field
+audit (d20aeba3) left under `#[allow(dead_code)]`, five now have their 12340 producers
+(`DeclineChannelInvite`, `ClearChannelWatch`, `NativeParty`, `NativeMirrorImageQuery`,
+`MoveTimeSkipped`; see the coverage rows) and two are deleted: `NativeChatCommand` duplicated the
+shared `CMSG_MESSAGECHAT` writer, and Wow.exe never sends `GetChannelMemberCount`.
 
 **The cvar registry (item 4 follow-up, 121): needs a short design note before moving.** After
 Experience's unit the rows register from their features, but `cvars` still names each feature's

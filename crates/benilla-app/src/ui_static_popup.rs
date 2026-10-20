@@ -3,7 +3,7 @@
 //!
 //! Sent: the arena-team invite answers and disband (CMSG `0x351`/`0x352`/`0x355`), the
 //! Wintergrasp entry and queue answers (`0x4DF`/`0x4E2`), `CancelSummon` (`0x51b110`: `0x2AC`
-//! with the summoner and 0, dropping the latch), `DeclineInvite` (`0x73`), a refund purchase
+//! with the summoner and 0, dropping the latch), `DeclineInvite` (`0x410` with the channel), a refund purchase
 //! (`0x4B4` for the slot's item), `RespondInstanceLock` (`0x13F`) and the LFG boot vote (`0x36C`).
 //!
 //! The instance lock: `SMSG_INSTANCE_LOCK_WARNING_QUERY` (`0x147`) sets the lock (time left on
@@ -280,7 +280,9 @@ fn answer(request: &WrathPopupRequest, look: &Lookups) -> Option<ClientCommand> 
                 agree: false,
             })
         }
-        R::DeclineInvite => ClientCommand::GroupDecline,
+        R::DeclineInvite { channel } => ClientCommand::DeclineChannelInvite {
+            name: channel.clone(),
+        },
         R::RefundItemPurchase {
             bag,
             slot,

@@ -42,6 +42,8 @@ count, name), sent to a channel's watchers, and 03D5 member count (name, flags, 
 and captured (`NativeChannelMembers`). The roster feed (`A/ui_chat/native_feed.rs`) applies the
 deltas through Native UI's `apply_wrath_channel_roster_delta` after the full lists, resolving an
 added member's name by revision as for a full list; the UI fires the roster events. No 12340
-binding sends the member-count request, so its answer is dropped. Writers on the channel route, transport-only:
-`GetChannelMemberCount` 03D4, `ClearChannelWatch` 03F3, `DeclineChannelInvite` 0410 (AC reads
-nothing from it); each takes the channel name.
+binding sends the member-count request (Wow.exe has no `0x3D4` sender), so its answer is dropped.
+Writers on the channel route: `ClearChannelWatch` 03F3 from `ClearChannelWatch()` (`0x4ffc50`),
+bodyless as 12340 sends it, and `DeclineChannelInvite` 0410 with the channel name from
+`DeclineInvite("channel")` (`0x4ffcc0`, the invite popup's `OnHide`; AC reads nothing from it).
+`SetChannelWatch("channel")` (`0x4ffc30`) feeds the same watch request as a roster selection.

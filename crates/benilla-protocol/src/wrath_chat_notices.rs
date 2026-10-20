@@ -208,6 +208,9 @@ pub enum Command {
     },
     /// `CMSG_CHAT_IGNORED`: AC reads a trailing byte it does not use.
     ChatIgnored { guid: u64 },
+    /// `CMSG_CLEAR_CHANNEL_WATCH`: build 12340 sends no body (`ClearChannelWatch` `0x4ffc50`),
+    /// though AC's handler reads a channel name and so drops it unread.
+    ClearWatch,
 }
 
 fn cstring(text: &str, body: &mut Vec<u8>) {
@@ -258,6 +261,7 @@ pub fn encode(command: &Command) -> (u32, Vec<u8>) {
             body.push(0);
             0x0225
         }
+        Command::ClearWatch => 0x03f3,
     };
     (opcode, body)
 }

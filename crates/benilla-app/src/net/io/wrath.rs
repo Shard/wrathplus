@@ -1552,7 +1552,6 @@ enum WrathRoute {
     NativeGuild,
     NativePetNameQuery,
     NativeWho,
-    NativeChat,
     NativeMailMutation,
     NativeQuestsCompletedQuery,
     NativeUiTimerQuery,
@@ -1703,8 +1702,7 @@ fn route(command: &ClientCommand) -> WrathRoute {
         | ClientCommand::LeaveBattlefield => WrathRoute::NativeBattleground,
         ClientCommand::NativeRaidBrowser(_) => WrathRoute::NativeRaidBrowser,
         ClientCommand::JoinChannel { .. }
-        | ClientCommand::GetChannelMemberCount { .. }
-        | ClientCommand::ClearChannelWatch { .. }
+        | ClientCommand::ClearChannelWatch
         | ClientCommand::DeclineChannelInvite { .. }
         | ClientCommand::LeaveChannel { .. }
         | ClientCommand::ChannelList { .. }
@@ -1764,7 +1762,6 @@ fn route(command: &ClientCommand) -> WrathRoute {
         ClientCommand::NativeMailMutation(_) => WrathRoute::NativeMailMutation,
         ClientCommand::NativeWhoCommand(_) => WrathRoute::NativeWho,
         ClientCommand::PetNameQuery { .. } => WrathRoute::NativePetNameQuery,
-        ClientCommand::NativeChatCommand(_) => WrathRoute::NativeChat,
         ClientCommand::NativeWorldportAck(_) => WrathRoute::NativeWorldportAck,
         ClientCommand::ArenaTeamCommand(_) => WrathRoute::NativeArenaTeam,
         ClientCommand::LfgCommand(_) => WrathRoute::NativeLfg,
@@ -2291,16 +2288,6 @@ fn writer_loop(
                         let (opcode, body) = benilla_protocol::wrath_pet_name::encode_query(pet_number, guid);
                         active.writer.send_raw(opcode, &body)
                     }
-                    WrathRoute::NativeChat => {
-                        let ClientCommand::NativeChatCommand(command) = command else { unreachable!() };
-                        match benilla_protocol::wrath_chat::encode(&command) {
-                            Ok((opcode, body)) => active.writer.send_raw(opcode, &body),
-                            Err(error) => {
-                                bevy::log::warn!("net(wrath): invalid native chat rejected before send: {error}");
-                                continue;
-                            }
-                        }
-                    }
                     WrathRoute::NativeArenaTeam => {
                         let ClientCommand::ArenaTeamCommand(command) = command else { unreachable!() };
                         match arena_team_packet(&command) {
@@ -2605,8 +2592,7 @@ fn channel_command(command: ClientCommand) -> benilla_protocol::wrath_chat_notic
         ClientCommand::JoinChannel { name, password, channel_id } => C::Join { channel_id, name, password },
         ClientCommand::LeaveChannel { name } => C::Leave { name },
         ClientCommand::ChannelList { name } => C::Named { opcode: 0x009a, name },
-        ClientCommand::GetChannelMemberCount { name } => C::Named { opcode: 0x03d4, name },
-        ClientCommand::ClearChannelWatch { name } => C::Named { opcode: 0x03f3, name },
+        ClientCommand::ClearChannelWatch => C::ClearWatch,
         ClientCommand::DeclineChannelInvite { name } => C::Named { opcode: 0x0410, name },
         ClientCommand::ChannelOwner { name } => C::Named { opcode: 0x009e, name },
         ClientCommand::ChannelAnnouncements { name } => C::Named { opcode: 0x00a7, name },
@@ -5207,10 +5193,6 @@ fn arena_team_packet(
 #[cfg(test)]
 #[path = "wrath/arena_team_tests.rs"]
 mod arena_team_tests;
-
-#[cfg(test)]
-#[path = "wrath/chat_tests.rs"]
-mod chat_tests;
 
 fn native_character_action_succeeded(action: benilla_protocol::CharAction, code: u8) -> bool {
     use benilla_protocol::wrath_world::{CHAR_CREATE_SUCCESS, CHAR_DELETE_SUCCESS};

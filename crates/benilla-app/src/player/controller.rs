@@ -645,6 +645,8 @@ pub(super) fn control(
         let mut swim_pitch = 0.0_f32;
         // Pre-step feet Y, the true take-off height: the step already rises one jump tick.
         let launch_y = player.pos.y;
+        // One step integrates at most 250 ms; a longer frame's rest is skipped and reported below.
+        let (step_time, skipped_ms) = mover::capped_step(&time);
         let mover::Outcome {
             held,
             grounded,
@@ -655,12 +657,12 @@ pub(super) fn control(
         } = if breach {
             // Jump while swimming (`0x7c6230`): falls unconditionally, seeded about 14% over a land
             // jump, and streams as a normal jump.
-            swim::breach_step(&mut player, &time, &collide, capsule)
+            swim::breach_step(&mut player, &step_time, &collide, capsule)
         } else if swimming {
             // One swimming frame; it also picks the presented pitch, levelled at the surface cap.
             let frame = swim::drive_step(
                 &mut player,
-                &time,
+                &step_time,
                 &collide,
                 capsule,
                 world,
@@ -678,7 +680,7 @@ pub(super) fn control(
             // One flying frame: the swim resolver with no waterline, at the flight speeds.
             let frame = flight::drive_step(
                 &mut player,
-                &time,
+                &step_time,
                 &collide,
                 capsule,
                 (move_fwd, move_right),
@@ -701,7 +703,7 @@ pub(super) fn control(
             );
             mover::step(
                 &mut player,
-                &time,
+                &step_time,
                 &collide,
                 capsule,
                 moving,
@@ -896,6 +898,17 @@ pub(super) fn control(
             knockback.filter(|_| knocked),
             wire_transport,
         );
+        // The skipped rest, for the mover we drive (`0x6e9b20`). Labelled: `0x717d90`'s transport
+        // and `[mover+0x7cc] & 0x200` gates, the paused-mover branch (`0x6f13e0`) and the movement
+        // clock offset (`[player+0x13c] += lag`) are not ported.
+        if skipped_ms > 0 {
+            if let Some(guid) = player.foreign_mover.or(self_guid) {
+                let _ = net.0 .0.send(ClientCommand::MoveTimeSkipped {
+                    guid,
+                    lag_ms: skipped_ms,
+                });
+            }
+        }
     } else {
         // Free fly. Park the mover first, so a detach mid-move leaves no stale flags for observers
         // to extrapolate; a no-op once stopped.
