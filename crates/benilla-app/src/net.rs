@@ -1421,21 +1421,6 @@ pub(crate) enum ClientCommand {
         vendor: u64,
         item_guid: u64,
     },
-    /// `CMSG_GMTICKET_CREATE`: `category` is a `GMTicketCategory.dbc` id (1..10), `map`/`pos`
-    /// where we stand. vmangos refuses several cases silently (queue off, under
-    /// `GMTickets.MinLevel`, category >= 11).
-    GmTicketCreate {
-        category: u8,
-        map: u32,
-        pos: [f32; 3],
-        text: String,
-    },
-    /// `CMSG_GMTICKET_UPDATETEXT`, with the category byte vmangos discards. vmangos kicks past 2
-    /// per world tick, so one send per click.
-    GmTicketUpdate {
-        category: u8,
-        text: String,
-    },
     /// `CMSG_GMTICKET_GETTICKET`: `GetGMTicket()`.
     GmTicketGet,
     /// `CMSG_GMTICKET_DELETETICKET`.
@@ -2180,11 +2165,6 @@ pub(crate) enum ClientCommand {
     /// `CMSG_ADD_FRIEND`.
     AddFriend {
         name: String,
-    },
-    /// `CMSG_SET_LOOKING_FOR_GROUP`, only when the commit changed something.
-    SetLookingForGroup {
-        slots: [u32; 3],
-        comment: String,
     },
     /// `CMSG_DEL_FRIEND`.
     DelFriend {

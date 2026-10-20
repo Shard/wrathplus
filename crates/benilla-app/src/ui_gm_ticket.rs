@@ -277,51 +277,28 @@ fn drain_gm_ticket(
                     need_more_help: true,
                 })
             }
-            GmTicketIntent::Write(write) => {
-                let category = write.category;
-                match client_command_for(write, map, pos) {
-                    Some(cmd) => cmd,
-                    None => {
-                        warn!(
-                            "gm ticket: refusing to file under category {category} — not a \
-                             GMTicketCategory.dbc id (1..={GM_TICKET_CATEGORY_MAX})"
-                        );
-                        continue;
-                    }
-                }
-            }
+            GmTicketIntent::Write(write) => client_command_for(write, map, pos),
         });
     }
 }
 
-/// The category a `NewGMTicket`/`UpdateGMTicket` call may put on the wire, 0 to 10. vmangos files
-/// 0 as "Unknown" (`GMTicketMgr.cpp:205-232`) and drops 11 and up with no answer at all
-/// (`GMTicketHandler.cpp:112`), so the test runs on the `u32`, where 256 cannot wrap to 0.
-fn category_for_wire(category: u32) -> Option<u8> {
-    (category <= u32::from(GM_TICKET_CATEGORY_MAX)).then_some(category as u8)
-}
-
-/// One drained write to its packet, or `None` for a refused category. The window's own
-/// `hasTicket` picks create or update, never our belief, which can be 10 minutes stale.
-fn client_command_for(write: GmTicketWrite, map: u32, pos: [f32; 3]) -> Option<ClientCommand> {
-    let category = category_for_wire(write.category)?;
-    Some(if write.is_new {
-        ClientCommand::GmTicketCreate {
-            category,
+/// One drained write to its build 12340 packet: `CMSG_GMTICKET_CREATE` with the window's
+/// `needResponse`, or `CMSG_GMTICKET_UPDATETEXT`. The window's own `hasTicket` picks create or
+/// update, never our belief, which can be 10 minutes stale.
+fn client_command_for(write: GmTicketWrite, map: u32, pos: [f32; 3]) -> ClientCommand {
+    use benilla_protocol::wrath_help::Command;
+    ClientCommand::NativeHelp(if write.is_new {
+        Command::Create {
             map,
             pos,
             text: write.text,
+            need_response: write.need_response,
+            need_more_help: false,
         }
     } else {
-        ClientCommand::GmTicketUpdate {
-            category,
-            text: write.text,
-        }
+        Command::UpdateText { text: write.text }
     })
 }
-
-/// The highest category vmangos files (`GMTICKET_MAX - 1`), also `GMTicketCategory.dbc`'s last row.
-const GM_TICKET_CATEGORY_MAX: u8 = 10;
 
 /// `GMTicketCategory.dbc` as the `(id, name)` pairs `GetGMTicketCategories()` returns.
 #[derive(Resource)]
@@ -593,51 +570,24 @@ mod tests {
 
     #[test]
     fn the_windows_verb_picks_the_opcode() {
-        let write = |category, is_new| GmTicketWrite {
-            category,
+        use benilla_protocol::wrath_help::Command;
+        let write = |is_new| GmTicketWrite {
             text: "gone".into(),
+            need_response: is_new,
             is_new,
         };
         assert!(matches!(
-            client_command_for(write(4, true), 1, [1.0, 2.0, 3.0]),
-            Some(ClientCommand::GmTicketCreate {
-                category: 4,
+            client_command_for(write(true), 1, [1.0, 2.0, 3.0]),
+            ClientCommand::NativeHelp(Command::Create {
                 map: 1,
+                need_response: true,
+                need_more_help: false,
                 ..
             })
         ));
         assert!(matches!(
-            client_command_for(write(4, false), 1, [1.0, 2.0, 3.0]),
-            Some(ClientCommand::GmTicketUpdate { category: 4, .. })
-        ));
-    }
-
-    /// vmangos files 0 as "Unknown" and drops 11 and up unanswered; 256 wraps to 0 in a `u8`, so
-    /// the check must run before the narrowing.
-    #[test]
-    fn zero_is_uncategorised_and_anything_above_ten_is_refused() {
-        assert_eq!(category_for_wire(0), Some(0), "the uncategorised ticket");
-        for good in 1..=10 {
-            assert_eq!(category_for_wire(good), Some(good as u8));
-        }
-        for bad in [11, 255, 256, 99_999] {
-            assert_eq!(
-                category_for_wire(bad),
-                None,
-                "category {bad} must not be sent"
-            );
-        }
-
-        // Through the whole path: a refused category makes no packet.
-        let write = |category| GmTicketWrite {
-            category,
-            text: "x".into(),
-            is_new: true,
-        };
-        assert!(client_command_for(write(256), 1, [0.0; 3]).is_none());
-        assert!(matches!(
-            client_command_for(write(0), 1, [0.0; 3]),
-            Some(ClientCommand::GmTicketCreate { category: 0, .. })
+            client_command_for(write(false), 1, [1.0, 2.0, 3.0]),
+            ClientCommand::NativeHelp(Command::UpdateText { .. })
         ));
     }
 }
