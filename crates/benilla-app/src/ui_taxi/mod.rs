@@ -272,7 +272,6 @@ fn drain_taxi(
             );
             let _ = commands.0.send(ClientCommand::ActivateTaxiExpress {
                 guid: open.flightmaster,
-                total_cost: resolved.cost,
                 nodes: chain.to_vec(),
             });
         }
@@ -452,10 +451,10 @@ mod tests {
         assert!(
             matches!(
                 sent.as_slice(),
-                [ClientCommand::ActivateTaxiExpress { total_cost: 160, nodes, .. }]
+                [ClientCommand::ActivateTaxiExpress { nodes, .. }]
                     if nodes == &[2, 6, 8]
             ),
-            "the express carries the undiscounted sum, got {sent:?}"
+            "the express carries the node chain, got {sent:?}"
         );
 
         app.world_mut()

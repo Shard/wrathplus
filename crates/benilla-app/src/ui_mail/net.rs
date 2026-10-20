@@ -20,9 +20,9 @@ pub(super) fn register(app: &mut App) {
         .net_handler(K::Disconnected, on_session_end);
 }
 
-fn on_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>, commands: Res<NetCommands>) {
+fn on_mail_list(In(ev): In<SessionEvent>, mut mail: ResMut<MailOpen>) {
     if let SessionEvent::MailList { mails } = ev {
-        mail_list(mails, &mut mail, &commands);
+        mail_list(mails, &mut mail);
     }
 }
 
@@ -88,30 +88,12 @@ fn on_session_end(
     *pending = MailPending::default();
 }
 
-/// `SMSG_MAIL_LIST_RESULT` replaces the rows; an expired row (`expire_days <= 0`) is deleted with
-/// `CMSG_MAIL_DELETE` and dropped, as the handler `0x4ad1b0` does. It never touches
+/// `SMSG_MAIL_LIST_RESULT` replaces the rows; an expired row (`expire_days <= 0`) is dropped, as the
+/// handler `0x4ad1b0` does. It never touches
 /// [`MailPending`]: nothing on the inbox path writes the countdown `0x845eac`.
-fn mail_list(mails: Vec<MailListEntry>, mail: &mut MailOpen, commands: &NetCommands) {
-    let mailbox = mail.mailbox;
-    mail.mails = mails
-        .into_iter()
-        .filter(|e| {
-            if e.expire_days <= 0.0 {
-                if let Some(mailbox) = mailbox {
-                    send_supported(
-                        commands,
-                        ClientCommand::MailDelete {
-                            mailbox,
-                            mail_id: e.message_id,
-                        },
-                    );
-                }
-                false
-            } else {
-                true
-            }
-        })
-        .collect();
+fn mail_list(mails: Vec<MailListEntry>, mail: &mut MailOpen) {
+    // 3.3.5 deletes through `NativeMailMutation`; a 1.12 row has no native id to send.
+    mail.mails = mails.into_iter().filter(|e| e.expire_days > 0.0).collect();
 }
 
 /// `MAIL_CHECK_MASK_COD_PAYMENT` (`byte[rec+0x148] & 8`): the money a COD taker paid; taking it
@@ -178,9 +160,6 @@ fn send_mail_result(
                     _ => {}
                 }
                 if take_empties(&mail.mails[pos], action) {
-                    if let Some(mailbox) = mail.mailbox {
-                        send_supported(commands, ClientCommand::MailDelete { mailbox, mail_id });
-                    }
                     mail.close_inbox.push(pos as u32 + 1);
                     mail.mails.remove(pos);
                 }

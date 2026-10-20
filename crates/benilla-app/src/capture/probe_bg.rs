@@ -533,12 +533,14 @@ fn bg_probe(
             // The list's guid is the one the join quotes; its arrival proves the level gate passed.
             if battlefield.battlemaster() == Some(master) {
                 info!("PROBE bg: LISTED — queueing for map {}", arena.map);
-                let _ = net.0.send(ClientCommand::BattlemasterJoin {
-                    battlemaster: master,
-                    map_id: arena.map,
-                    instance_id: 0,
-                    as_group: false,
-                });
+                let _ = net.0.send(ClientCommand::NativeBattleground(
+                    benilla_protocol::wrath_battleground::Command::Join {
+                        battlemaster: master,
+                        bg_type: battlefield.bg_type(),
+                        instance_id: 0,
+                        as_group: 0,
+                    },
+                ));
                 probe.phase = Phase::Joined { sent_at: now };
             } else if now - sent_at > 8.0 {
                 error!(
@@ -717,12 +719,14 @@ fn bg_probe(
                 finish(&mut probe, &net);
                 return;
             };
-            let _ = net.0.send(ClientCommand::BattlemasterJoin {
-                battlemaster: master,
-                map_id: arena.map,
-                instance_id: 0,
-                as_group: false,
-            });
+            let _ = net.0.send(ClientCommand::NativeBattleground(
+                benilla_protocol::wrath_battleground::Command::Join {
+                    battlemaster: master,
+                    bg_type: battlefield.bg_type(),
+                    instance_id: 0,
+                    as_group: 0,
+                },
+            ));
             probe.phase = Phase::Joined { sent_at: now };
         }
         Phase::FlagHop { at } => {

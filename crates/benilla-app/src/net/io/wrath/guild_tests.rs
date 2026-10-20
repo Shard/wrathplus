@@ -82,12 +82,4 @@ fn core_guild_routes_encode_native_bodies_and_fail_closed_on_nuls() {
     ] {
         assert!(guild_packet(command).is_err());
     }
-    assert_eq!(
-        route(&ClientCommand::GuildRank {
-            rank_id: 0,
-            rights: 0,
-            name: "x".into()
-        }),
-        WrathRoute::DisabledGameAction
-    );
 }

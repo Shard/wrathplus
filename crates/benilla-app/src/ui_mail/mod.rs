@@ -117,23 +117,6 @@ impl MailOpen {
         self.show_requested = true;
     }
 
-    fn mail_id_at(&self, index_1based: u32) -> Option<u32> {
-        index_1based
-            .checked_sub(1)
-            .and_then(|i| self.mails.get(i as usize))
-            .map(|e| e.message_id)
-    }
-
-    /// Sets a row's READ bit locally: `CMSG_MAIL_MARK_AS_READ` gets no reply.
-    fn mark_read(&mut self, index_1based: u32) {
-        if let Some(e) = index_1based
-            .checked_sub(1)
-            .and_then(|i| self.mails.get_mut(i as usize))
-        {
-            e.checked |= CHECKED_READ;
-        }
-    }
-
     /// A client-side close, sending nothing as 1.12 does; a re-open re-lists.
     pub(crate) fn clear(&mut self) {
         self.mailbox = None;
@@ -200,24 +183,14 @@ fn send_query_next_mail_time_on_enter(
 }
 
 /// Send only commands backed by the selected dialect's writer; never fabricate a reply.
-/// A row pick as its mail command: by the native inbox in build 12340, else the 1.12 row id.
+/// A row pick as its mail command, by the native inbox; a 1.12 row has no native command.
 fn inbox_action(
     mail: &MailOpen,
     mailbox: u64,
     index: u32,
     action: wrath::Action,
 ) -> Option<ClientCommand> {
-    if let Some(inbox) = mail.wrath_inbox.as_ref() {
-        return wrath::native_action(inbox, mailbox, index, action);
-    }
-    let mail_id = mail.mail_id_at(index)?;
-    Some(match action {
-        wrath::Action::TakeItem(_) => ClientCommand::MailTakeItem { mailbox, mail_id },
-        wrath::Action::TakeMoney => ClientCommand::MailTakeMoney { mailbox, mail_id },
-        wrath::Action::Delete => ClientCommand::MailDelete { mailbox, mail_id },
-        wrath::Action::Return => ClientCommand::MailReturnToSender { mailbox, mail_id },
-        wrath::Action::CreateTextItem => ClientCommand::MailCreateTextItem { mailbox, mail_id },
-    })
+    wrath::native_action(mail.wrath_inbox.as_ref()?, mailbox, index, action)
 }
 
 fn send_supported(commands: &NetCommands, command: ClientCommand) -> bool {
@@ -621,33 +594,8 @@ fn drain_mail(
             }
         }
     }
-    // An opened mail: mark read, then ask for the body, in `0x4af110`'s order.
-    for index in script.take_mail_opens() {
-        let Some((mail_id, text_id, read)) = index
-            .checked_sub(1)
-            .and_then(|i| mail.mails.get(i as usize))
-            .map(|e| (e.message_id, e.item_text_id, e.checked & CHECKED_READ != 0))
-        else {
-            continue;
-        };
-        // Every open arms the refresh, read or not: `GetInboxText` calls the mark-as-read sender
-        // unconditionally, which sets `[0xb6efcc]` (`0x4adda6`).
-        let mark_read = ClientCommand::MailMarkAsRead { mailbox, mail_id };
-        if commands.supports(&mark_read) {
-            pending.arm_refresh();
-            if !read && send_supported(&commands, mark_read) {
-                mail.mark_read(index);
-            }
-        }
-        if text_id != 0 {
-            let command = ClientCommand::ItemTextQuery { text_id, mail_id };
-            if commands.supports(&command) {
-                mail.bodies.get_or_ask(text_id, || {
-                    let _ = commands.0.send(command);
-                });
-            }
-        }
-    }
+    // An open with no native inbox has no row to mark: drained, so it never replays on one.
+    let _ = script.take_mail_opens();
 
     for (index, slot) in script.take_mail_take_items() {
         if let Some(command) = inbox_action(&mail, mailbox, index, wrath::Action::TakeItem(slot)) {
@@ -861,21 +809,6 @@ mod tests {
         m.click(0x200);
         assert!(m.mails.is_empty());
         assert_eq!(m.last_list_query, None);
-    }
-
-    #[test]
-    fn mail_id_and_mark_read() {
-        let mut m = MailOpen::default();
-        m.click(0x1);
-        m.mails.push(entry(42, Some(0xA), 0, 30.0));
-        m.mails.push(entry(43, None, CHECKED_READ, 10.0));
-        assert_eq!(m.mail_id_at(1), Some(42));
-        assert_eq!(m.mail_id_at(2), Some(43));
-        assert_eq!(m.mail_id_at(3), None);
-        assert_eq!(m.mail_id_at(0), None);
-        assert_eq!(m.mails[0].checked & CHECKED_READ, 0);
-        m.mark_read(1);
-        assert_eq!(m.mails[0].checked & CHECKED_READ, CHECKED_READ);
     }
 
     #[test]

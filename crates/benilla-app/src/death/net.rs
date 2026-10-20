@@ -74,15 +74,11 @@ fn on_move_mode(
     mut out: MessageWriter<MoveModeMessage>,
 ) {
     if let SessionEvent::MoveMode {
-        guid,
-        counter,
-        mode,
-        apply,
+        guid, mode, apply, ..
     } = ev
     {
         move_mode(
             guid,
-            counter,
             mode,
             apply,
             &self_guid,
@@ -165,7 +161,6 @@ fn durability_damage_death(log: &mut crate::ui_chat::ChatLog) {
 #[allow(clippy::too_many_arguments)]
 fn move_mode(
     guid: u64,
-    counter: u32,
     mode: MoveMode,
     apply: bool,
     self_guid: &SelfGuid,
@@ -179,10 +174,5 @@ fn move_mode(
     if mode == MoveMode::WaterWalk && self_guid.0 == Some(guid) {
         death_net.water_walk = apply;
     }
-    out.write(MoveModeMessage {
-        guid,
-        counter,
-        mode,
-        apply,
-    });
+    out.write(MoveModeMessage { mode, apply });
 }

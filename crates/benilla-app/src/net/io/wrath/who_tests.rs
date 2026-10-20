@@ -27,9 +27,4 @@ fn native_commands_admitted_but_shared_who_stays_disabled() {
             assert!(!format!("{command:?}").contains("Synthetic"));
         }
     }
-    let shared = ClientCommand::Who {
-        request: Box::new(benilla_protocol::messages::WhoRequest::default()),
-    };
-    assert!(matches!(route(&shared), WrathRoute::DisabledGameAction));
-    assert!(!commands.supports(&shared));
 }
