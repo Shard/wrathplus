@@ -1,7 +1,7 @@
 //! The strafe counter-twist (the `0x607ed0` tail → the `0x711f10` bone channels): a strafe turns
 //! the root toward the slide while the aim holds, and SpineLow (KeyBoneID 4) turns back half the
 //! gap and Head (KeyBoneID 6) the rest, each capped at 45°, so a pure strafe's head lands on the
-//! aim. [`crate::player`] and [`crate::net::motion`] write [`BodyTwist::yaw_gap`].
+//! aim. [`crate::player`] and [`crate::motion`] write [`BodyTwist::yaw_gap`].
 
 use bevy::prelude::*;
 

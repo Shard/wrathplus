@@ -1,6 +1,6 @@
 //! Wrath of the Lich King 3.3.5a (build 12340) login protocol support.
 //!
-//! This is an additive entry point: vanilla [`crate::logon`] and [`crate::auth`] remain unchanged.
+//! The realmd logon: SRP6 over `benilla-srp`, then the realm list.
 
 use std::io::{Cursor, Read, Write};
 use std::net::{Ipv4Addr, TcpStream};

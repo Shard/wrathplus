@@ -208,7 +208,7 @@ fn the_movement_kinds_other_handlers_are_pinned() {
         assert!(
             names
                 .first()
-                .is_some_and(|n| n.contains("::net::objects::")),
+                .is_some_and(|n| n.contains("::net::objects::") || n.contains("::motion::")),
             "{kind:?}: {names:?}"
         );
         let rest: Vec<&str> = names
