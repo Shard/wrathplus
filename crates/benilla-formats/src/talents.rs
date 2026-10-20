@@ -135,6 +135,11 @@ impl TalentCatalog {
             .find(|t| t.id == talent_id)
     }
 
+    /// Every talent, of every tab, in no particular order: what a chat `talent:` link can name.
+    pub fn talents(&self) -> impl Iterator<Item = &Talent> {
+        self.by_tab.values().flatten()
+    }
+
     pub fn len(&self) -> usize {
         self.by_tab.values().map(Vec::len).sum()
     }

@@ -99,14 +99,32 @@ fn level_line(lua: &Lua, u: &UnitState, player_level: u32) -> Option<String> {
 
 /// Render the unit tooltip for `token`'s current snapshot; returns whether the unit existed.
 fn render_unit(lua: &Lua, this: &Table, token: &str) -> mlua::Result<bool> {
-    let h = frame_handle_of(lua, this)?;
-    let (unit, player_level) = {
-        let model = lua.app_data_mut::<Model>().expect("model app_data");
-        (
-            model.unit(token).cloned().filter(|u| u.exists),
-            model.player_req.level,
-        )
+    let unit = {
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        model.unit(token).cloned().filter(|u| u.exists)
     };
+    render_unit_view(lua, this, unit)
+}
+
+/// A `unit:<guid hex>` link (`0x62dae0` → `0x621070` by guid): a unit the VM holds with that guid,
+/// by token or by guid, else nothing.
+pub(super) fn render_unit_guid(lua: &Lua, this: &Table, guid: u64) -> mlua::Result<bool> {
+    let unit = {
+        let model = lua.app_data_ref::<Model>().expect("model app_data");
+        model
+            .units_by_lower
+            .values()
+            .find(|u| u.guid == guid)
+            .or_else(|| model.units_by_guid.get(&guid))
+            .cloned()
+            .filter(|u| u.exists && guid != 0)
+    };
+    render_unit_view(lua, this, unit)
+}
+
+fn render_unit_view(lua: &Lua, this: &Table, unit: Option<UnitState>) -> mlua::Result<bool> {
+    let h = frame_handle_of(lua, this)?;
+    let player_level = lua.app_data_ref::<Model>().expect("model app_data").player_req.level;
     {
         let mut model = lua.app_data_mut::<Model>().expect("model app_data");
         clear_content(&mut model, h);
