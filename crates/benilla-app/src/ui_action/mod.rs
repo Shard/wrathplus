@@ -7,7 +7,6 @@ use std::collections::{BTreeSet, HashMap};
 
 use bevy::prelude::*;
 
-use benilla_formats::SpellCatalog;
 use benilla_protocol::messages::ActionButton;
 
 use crate::ui_script::UiInput;
@@ -88,23 +87,7 @@ pub(crate) enum GoOpener {
     Key(crate::ui_items::ItemUse),
 }
 
-/// The spell DBC catalogs, absent without client data; the cast-visual router shares the catalog.
-#[derive(Resource)]
-pub(crate) struct Spells {
-    pub(crate) catalog: SpellCatalog,
-    /// Form id to its `SpellShapeshiftForm.dbc` row: `BonusActionBar` pages the bar
-    /// (`GetBonusBarOffset 0x4e7620`), `flags1` holds the stance and cancel bits.
-    pub(crate) forms: std::collections::HashMap<u32, benilla_formats::ShapeshiftForm>,
-    /// `SpellRange.dbc`, the `GetMinMaxRange 0x6e3480` inputs; empty on a failed load.
-    pub(crate) ranges: benilla_formats::SpellRangeCatalog,
-    /// `SpellCastTimes.dbc`, read through `CastingTimeIndex` (`GetCastTime 0x6e3340`).
-    pub(crate) cast_times: benilla_formats::SpellCastTimeCatalog,
-    /// `SpellDuration.dbc`: the `$d`/`$o` tokens' source (`GetDuration 0x6ea000`).
-    pub(crate) durations: benilla_formats::SpellDurationCatalog,
-    /// `SpellRadius.dbc`: the `$a` token's yards.
-    pub(crate) radii: benilla_formats::SpellRadiusCatalog,
-}
-
+pub(crate) use crate::app_core::state::{LearnedAbilities, Spells};
 impl Spells {
     /// The cast time in ms as `GetCastTime 0x6e3340` returns it for argument 1, the tooltip's
     /// (`52eb4b`): the level-scaled `CastingTimeIndex` row, then spell-mod op 10 (`0x6e33b7`),
@@ -140,7 +123,7 @@ impl Spells {
 impl Spells {
     pub(crate) fn empty_for_tests() -> Self {
         Spells {
-            catalog: SpellCatalog::from_displays(HashMap::new()),
+            catalog: benilla_formats::SpellCatalog::from_displays(HashMap::new()),
             forms: HashMap::new(),
             ranges: benilla_formats::SpellRangeCatalog::default(),
             cast_times: Default::default(),
@@ -148,20 +131,6 @@ impl Spells {
             radii: Default::default(),
         }
     }
-}
-
-/// The reference's learned-ability latches: at learn time `0x4b25e0` stores a spell's id by its
-/// `Effect[0]`, and the unlearn path `0x4b2c50` clears it. The skin cursor requires the latch
-/// (`0x482589`), so a player who never learned Skinning gets no skin cursor.
-#[derive(Resource, Default)]
-pub(crate) struct LearnedAbilities {
-    /// `[0xb700e4]`: the known `SPELL_EFFECT_SKINNING` spell, which the skin click also casts.
-    pub(crate) skinning: Option<u32>,
-    /// `[0xb700e8]`: the known `SPELL_EFFECT_SKIN_PLAYER_CORPSE` spell; no cursor reads it yet.
-    pub(crate) skin_player_corpse: Option<u32>,
-    /// `[0xcecad8]`: the known `SPELL_EFFECT_FEED_PET` spell, latched by `0x6ea1d0` (from
-    /// `0x5e9e49`); gate 3 of [`drop_item::drop_item_on_unit`] and the spell it casts.
-    pub(crate) feed_pet: Option<u32>,
 }
 
 /// The "Remove Insignia" effect, the second one `0x4b25e0` latches.
