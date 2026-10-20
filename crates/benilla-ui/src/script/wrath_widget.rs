@@ -18,11 +18,20 @@ fn wrath_script_slots_and_button_edges() {
         b:SetScript('PostClick', function() table.insert(calls, 'post') end)
         b:Click()
         assert(table.concat(calls, ',') == 'disable,enable,pre,click,post')
-        for _, kind in ipairs({'OnTooltipSetUnit','OnTooltipSetItem','OnTooltipSetSpell',
-            'OnMovieFinished','OnMovieShowSubtitle','OnMovieHideSubtitle'}) do
-            b:SetScript(kind, function() end)
-            assert(type(b:GetScript(kind)) == 'function')
+        local tip = CreateFrame('GameTooltip', 'SlotProbeTip')
+        local movie = CreateFrame('MovieFrame')
+        for owner, kinds in pairs({[tip] = {'OnTooltipSetUnit','OnTooltipSetItem',
+            'OnTooltipSetSpell','OnTooltipSetQuest','OnTooltipSetAchievement',
+            'OnTooltipSetEquipmentSet','OnTooltipSetFrameStack'},
+            [movie] = {'OnMovieFinished','OnMovieShowSubtitle','OnMovieHideSubtitle'}}) do
+            for _, kind in ipairs(kinds) do
+                owner:SetScript(kind, function() end)
+                assert(type(owner:GetScript(kind)) == 'function')
+                assert(not b:HasScript(kind))
+            end
         end
+        local edit = CreateFrame('EditBox')
+        assert(edit:HasScript('OnCharComposition') and edit:HasScript('OnInputLanguageChanged'))
         local bar = CreateFrame('StatusBar')
         local count = 0
         bar:SetScript('OnMinMaxChanged', function(self, min, max)

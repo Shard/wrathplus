@@ -323,8 +323,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(())
         })?,
     )?;
-    // GameTooltip:SetEquipmentSet(name) (PaperDollFrame.lua:2524): the set's name. The
-    // equipped/bags/missing count lines are not drawn.
+    // GameTooltip:SetEquipmentSet(name) (PaperDollFrame.lua:2524): the set's name, then the
+    // tooltip's `OnTooltipSetEquipmentSet`. The equipped/bags/missing count lines are not drawn.
+    // Labelled: the handler runs before `Show`, an order not read from the client.
     let tooltip: Table = lua.named_registry_value(super::tooltip::REG_TOOLTIP_METHODS)?;
     tooltip.set(
         "SetEquipmentSet",
@@ -333,6 +334,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let name = binding_abi::string_arg(lua, name, usage)?;
             if let Some((_, set)) = find(lua, &name) {
                 this.call_method::<()>("SetText", set.name)?;
+                let id = super::object::decode_id(&this)?;
+                super::event::fire_widget_handler(lua, id, "OnTooltipSetEquipmentSet", vec![])?;
                 this.call_method::<()>("Show", ())?;
             }
             Ok(())
@@ -369,6 +372,24 @@ mod tests {
         "#,
             )
             .unwrap();
+    }
+
+    /// `SetEquipmentSet` names the set and runs the tooltip's `OnTooltipSetEquipmentSet`.
+    #[test]
+    fn set_equipment_set_fires_its_tooltip_script() {
+        let mut ui = script();
+        ui.set_equipment_sets(vec![view("Tank", "INV_Shield_06")]);
+        ui.run(
+            r#"
+            local owner = CreateFrame('Frame')
+            local tip = CreateFrame('GameTooltip', 'EquipSetTip')
+            tip:SetOwner(owner, 'ANCHOR_NONE')
+            tip:SetScript('OnTooltipSetEquipmentSet', function(self) SEEN = self:GetName() end)
+            tip:SetEquipmentSet('Tank')
+            "#,
+        )
+        .unwrap();
+        assert_eq!(ui.eval::<String>("return SEEN").unwrap(), "EquipSetTip");
     }
 
     fn view(name: &str, icon: &str) -> super::EquipmentSetView {

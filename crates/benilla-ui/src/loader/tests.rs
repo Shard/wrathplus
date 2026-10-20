@@ -1144,6 +1144,7 @@ mod loader_tests {
             "<Ui><Frame name=\"FormalsProbe\"><Scripts>\
              <OnSizeChanged>SizeSeen = w .. 'x' .. h</OnSizeChanged>\
              <OnShow>return ...</OnShow>\
+             <OnClick>ClickBody = true</OnClick>\
              </Scripts></Frame>\
              <Slider name=\"FormalsSlider\"><Scripts>\
              <OnMinMaxChanged>MinMaxSeen = min .. '-' .. max</OnMinMaxChanged>\
@@ -1163,6 +1164,15 @@ mod loader_tests {
             .unwrap();
         assert_eq!(s.eval::<String>("return SizeSeen").unwrap(), "3x4");
         assert_eq!(s.eval::<String>("return MinMaxSeen").unwrap(), "0-9");
+        // A script the type lacks is logged as `0x48fef0` does and skipped, its body never run.
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| w == "Frame FormalsProbe: Unknown script element OnClick"),
+            "{:?}",
+            report.warnings
+        );
     }
 
     /// An inline `<Script>` is `"%s:<Scripts>"` (`0x871074`, at `0x6ee0ff`) over the document's
@@ -2588,7 +2598,6 @@ mod chunk_name_tests {
               <OnMouseDown>FORMALS = {self, button}</OnMouseDown>
               <OnMouseWheel>FORMALS = {self, delta}</OnMouseWheel>
               <OnKeyDown>FORMALS = {self, key}</OnKeyDown>
-              <OnValueChanged>FORMALS = {self, value}</OnValueChanged>
               <OnSizeChanged>FORMALS = {self, w, h}</OnSizeChanged>
               <OnDragStart>FORMALS = {self, button}</OnDragStart>
             </Scripts></Frame></Ui>"#,
@@ -2604,7 +2613,6 @@ mod chunk_name_tests {
             ("OnMouseDown", "WrathHandlers, 'LeftButton'", "LeftButton"),
             ("OnMouseWheel", "WrathHandlers, -1", "-1"),
             ("OnKeyDown", "WrathHandlers, 'SPACE'", "SPACE"),
-            ("OnValueChanged", "WrathHandlers, 7", "7"),
             ("OnSizeChanged", "WrathHandlers, 12, 34", "12:34"),
             ("OnDragStart", "WrathHandlers, 'RightButton'", "RightButton"),
         ] {

@@ -25,6 +25,25 @@ impl Loader<'_> {
                 .unwrap_or_else(|| "<unnamed>".to_string());
             for handler in &scripts.children {
                 let name = handler.tag.clone();
+                // The type's script lookup runs first (`0x48fef0`): a name it lacks is logged and
+                // skipped, its body never compiled. Labelled: an animation's line uses the second
+                // format (`"%s %s: Unknown script element %s"`, `0x5ea608`) with its object type.
+                if matches!(
+                    wrapper.call_method::<mlua::Value>("HasScript", name.clone()),
+                    Ok(mlua::Value::Nil | mlua::Value::Boolean(false)) | Err(_)
+                ) {
+                    let what = if el.tag.eq_ignore_ascii_case("AnimationGroup")
+                        || ANIMATION_TAGS.iter().any(|t| el.tag.eq_ignore_ascii_case(t))
+                    {
+                        el.tag.clone()
+                    } else {
+                        "Frame".to_string()
+                    };
+                    self.report
+                        .warnings
+                        .push(format!("{what} {owner}: Unknown script element {name}"));
+                    continue;
+                }
                 // An empty body clears the handler to nil, but a whitespace one is an empty
                 // function: `SetScript` (`0x7025c0`) tests only NULL and the first byte
                 // (`0x7025f8`), and nothing trims the body (`0x6f29d0`). The stock blanks
@@ -56,10 +75,7 @@ impl Loader<'_> {
                 };
                 if let Err(e) = wrapper.call_method::<()>("SetScript", (name.clone(), func.clone()))
                 {
-                    self.warn_once(
-                        &format!("script:{name}"),
-                        format!("{dbg}: SetScript(\"{name}\") unsupported in v1: {e}"),
-                    );
+                    self.report.errors.push(format!("{dbg}: SetScript(\"{name}\"): {e}"));
                     continue;
                 }
                 // After each `SetScript` the XML walker enables the handler's input kind
@@ -191,6 +207,9 @@ impl Loader<'_> {
     }
 }
 
+/// The XML element types that make an `Animation`.
+const ANIMATION_TAGS: [&str; 6] = ["Animation", "Alpha", "Path", "Rotation", "Scale", "Translation"];
+
 /// Build 12340's formals for script `name` on an element of XML type `tag`: each script lookup
 /// hands the compiler its `return function(<formals>) %s end`, else the default `self`
 /// (`0x48fef0`). The lookups: the frame base `0x48e680` and `OnEvent` `0x816830`, Button
@@ -198,10 +217,9 @@ impl Loader<'_> {
 /// `0x61a280`, Slider `0x96bca0` and StatusBar `0x961630`, ScrollFrame `0x96b0b0`, ColorSelect
 /// `0x96dc50`, AnimationGroup `0x497800` and Animation `0x497500`.
 fn native_formals(tag: &str, name: &str) -> &'static str {
-    const ANIMATIONS: [&str; 6] = ["Animation", "Alpha", "Path", "Rotation", "Scale", "Translation"];
     let is = |script: &str| name.eq_ignore_ascii_case(script);
     let group = tag.eq_ignore_ascii_case("AnimationGroup");
-    if group || ANIMATIONS.iter().any(|a| tag.eq_ignore_ascii_case(a)) {
+    if group || ANIMATION_TAGS.iter().any(|a| tag.eq_ignore_ascii_case(a)) {
         return if is("OnEvent") {
             "self,event,..."
         } else if is("OnStop") || (group && is("OnFinished")) {

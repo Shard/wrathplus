@@ -87,14 +87,13 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         "GetScript",
         lua.create_function(|lua, (this, name): (Table, String)| get_script(lua, &this, &name))?,
     )?;
-    // `HasScript(name)`: 1 if the widget can carry that script kind, else nil, whether or not one
-    // is set. Answered from the flat dialect kind list, so another type's kind reads 1 too, where the
-    // reference's tables are per widget type (base `0x76a0d0`; a plain Frame has no `OnClick`).
+    // `HasScript(name)` (`0x49eab0`): 1 if this frame's type has that script, else nil, whether or
+    // not one is set.
     m.set(
         "HasScript",
-        lua.create_function(|lua, (_this, name): (Table, String)| {
+        lua.create_function(|lua, (this, name): (Table, String)| {
             Ok(crate::script::binding_abi::flag(
-                script_kind(lua, &name).is_some(),
+                frame_script_kind(lua, &this, &name)?.is_some(),
             ))
         })?,
     )?;
@@ -212,12 +211,32 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     Ok(())
 }
 
-/// `SetScript(name, func)`: stores the closure under one of the dialect's script kinds, else raises.
-/// Deviation: real 1.12 kinds nothing fires yet raise too (`OnHyperlinkEnter`, `OnHyperlinkLeave`,
-/// `OnMessageScrollChanged`, `OnInputLanguageChanged`, the movie frame's), because an accepted
-/// handler that never runs fails silently. `OnAttributeChanged` is 2.0's: Wrath-only.
+/// The canonical spelling of script `name` on this frame's type ([`script_kind`]), or `None`.
+fn frame_script_kind(lua: &Lua, this: &Table, name: &str) -> mlua::Result<Option<&'static str>> {
+    let h = frame_handle_of(lua, this)?;
+    let model = lua.app_data_ref::<Model>().expect("model");
+    Ok(model.arena.frame(h).and_then(|f| script_kind(f.kind, name)))
+}
+
+/// [`frame_script_kind`], else the raise `SetScript`, `GetScript` and `HookScript` share
+/// (`0x49ec80`): `<name> doesn't have a "<script>" script`, `<unnamed>` for a nameless frame.
+fn required_script_kind(lua: &Lua, this: &Table, name: &str) -> mlua::Result<&'static str> {
+    use mlua::ObjectLike;
+    if let Some(kind) = frame_script_kind(lua, this, name)? {
+        return Ok(kind);
+    }
+    let owner = this
+        .call_method::<Option<String>>("GetName", ())?
+        .unwrap_or_else(|| "<unnamed>".to_string());
+    Err(mlua::Error::RuntimeError(format!(
+        "{owner} doesn't have a \"{name}\" script"
+    )))
+}
+
+/// `SetScript(name, func)` (`0x49ec80`): stores the closure under one of this frame type's script
+/// kinds, else raises.
 fn set_script(lua: &Lua, this: &Table, name: &str, func: Option<Function>) -> mlua::Result<()> {
-    let kind = script_kind(lua, name).ok_or_else(|| mlua::Error::runtime(format!("SetScript: unsupported script '{name}'")))?;
+    let kind = required_script_kind(lua, this, name)?;
     let h = frame_handle_of(lua, this)?;
     let id = lua.app_data_mut::<Model>().expect("model").frame_id(h);
 
@@ -265,11 +284,9 @@ fn set_script(lua: &Lua, this: &Table, name: &str, func: Option<Function>) -> ml
     Ok(())
 }
 
+/// `GetScript(name)` (`0x49eb70`): the handler, nil for none; a script the type lacks raises.
 fn get_script(lua: &Lua, this: &Table, name: &str) -> mlua::Result<Value> {
-    let kind = match script_kind(lua, name) {
-        Some(k) => k,
-        None => return Ok(Value::Nil),
-    };
+    let kind = required_script_kind(lua, this, name)?;
     let id = decode_id(this)?;
     let scripts: Table = lua.named_registry_value(REG_SCRIPTS)?;
     match scripts.get::<Value>(id)? {

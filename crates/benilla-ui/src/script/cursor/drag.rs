@@ -105,13 +105,13 @@ mod tests {
             drag_starts, drag_stops, receives = 0, 0, 0
             click_a, click_b = 0, 0
             drag_button = nil
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
             a:SetScript("OnDragStart", function(self, button) drag_starts = drag_starts + 1; drag_button = button end)
             a:SetScript("OnDragStop", function(self) drag_stops = drag_stops + 1 end)
             a:SetScript("OnClick", function(self) click_a = click_a + 1 end)
-            local b = CreateFrame("Frame", "B")
+            local b = CreateFrame("Button", "B")
             b:SetPoint("BOTTOMLEFT", 400, 0); b:SetWidth(400); b:SetHeight(600); b:EnableMouse(true)
             b:SetScript("OnReceiveDrag", function(self) receives = receives + 1 end)
             b:SetScript("OnClick", function(self) click_b = click_b + 1 end)
@@ -167,7 +167,7 @@ mod tests {
         s.run(
             r#"
             clicks = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
             a:SetScript("OnClick", function(self) clicks = clicks + 1 end)
@@ -189,7 +189,7 @@ mod tests {
         s.run(
             r#"
             clicks = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
             a:SetScript("OnClick", function(self) clicks = clicks + 1 end)
@@ -216,7 +216,7 @@ mod tests {
         s.run(
             r#"
             heard = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
             local f = CreateFrame("Frame", "Listener")
@@ -347,7 +347,7 @@ mod tests {
             r#"
             WorldFrame = CreateFrame("WorldFrame", "WorldFrame") WorldFrame:SetAllPoints()
             heard = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
@@ -445,7 +445,7 @@ mod tests {
         s.run(
             r#"
             heard = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             local f = CreateFrame("Frame", "Listener")
             f:RegisterEvent("DELETE_ITEM_CONFIRM")
@@ -480,7 +480,7 @@ mod tests {
         s.run(
             r#"
             heard = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 0, 0); a:SetWidth(400); a:SetHeight(600); a:EnableMouse(true)
             a:RegisterForDrag("LeftButton")
             local f = CreateFrame("Frame", "Listener")
@@ -520,7 +520,7 @@ mod tests {
         s.run(
             r#"
             stops = 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 100, 100); a:SetWidth(200); a:SetHeight(100)
             a:EnableMouse(true); a:SetMovable(true)
             a:RegisterForDrag("LeftButton")
@@ -565,7 +565,7 @@ mod tests {
         s.run(
             r#"
             stops, starts = 0, 0
-            local a = CreateFrame("Frame", "A")
+            local a = CreateFrame("Button", "A")
             a:SetPoint("BOTTOMLEFT", 100, 100); a:SetWidth(200); a:SetHeight(100)
             a:EnableMouse(true); a:SetMovable(true)
             a:RegisterForDrag("LeftButton")
