@@ -23,7 +23,8 @@ const PROBE_TOC: &str = "\
 SwitchProbe.lua
 ";
 
-/// A roster with a pending pick named `name`, the state [`super::seat_from_roster`] reads.
+/// A roster with a pending pick named `name`, the state
+/// [`super::lifecycle::seat_from_roster`] reads.
 fn roster_named(name: &str, guid: u64) -> Roster {
     let row = benilla_protocol::Character {
         guid,
@@ -816,7 +817,7 @@ fn the_login_one_shots_wait_for_the_in_game_ui() {
         crate::net::Guid(1),
         crate::net::ObjectStore(
             benilla_protocol::messages::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[],
             )
             .into_created(benilla_protocol::messages::ObjectType::Player),
@@ -865,111 +866,6 @@ fn the_login_one_shots_wait_for_the_in_game_ui() {
     assert_eq!(seen(&app), 1, "and exactly once per world entry");
 
     drop(app);
-    let _ = std::fs::remove_dir_all(&tmp);
-}
-
-/// An addon that fails to load without raising (a `.toc` naming a file the package lacks) reaches
-/// no Lua error handler, so the `/errors` log (which collects off the handler) does not hold it:
-/// the engine's record keeps it, and `Logs\FrameXML.log` names it as the reference's does.
-#[test]
-fn an_addon_that_fails_to_load_without_raising_is_readable_in_the_error_log() {
-    benilla_formats::wow_data_or_skip!();
-    let _l = ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let (tmp, _c, _h) = hermetic_probe("addon-missing-file");
-    // First alphabetically, so the probe behind it shows this class drops only itself.
-    let dir = tmp.join("benilla-config/AddOns/AaMissing");
-    std::fs::create_dir_all(&dir).expect("addon dir");
-    std::fs::write(
-        dir.join("AaMissing.toc"),
-        "## Interface: 30300\nBossnames\\BossNames.xml\nDatabase\\hash.lua\n",
-    )
-    .expect("toc");
-    // …and no such file is written.
-    let mut world = booted_world();
-    world.init_resource::<crate::ui_chat::ChatLog>();
-
-    log_in_as(&mut world, "Onehunter", 1);
-
-    assert_eq!(
-        probe_saw(&world).as_deref(),
-        Some("Onehunter"),
-        "the addon after the broken one still loads"
-    );
-
-    let script = world
-        .get_non_send_resource::<benilla_ui::script::UiScript>()
-        .expect("VM");
-
-    // 1. Retained, tagged as a load failure.
-    let rows = script.diagnostics();
-    let row = rows
-        .iter()
-        .find(|d| d.message.contains("AaMissing"))
-        .unwrap_or_else(|| panic!("the missing file is in the log; got {rows:#?}"));
-    assert_eq!(
-        row.kind,
-        benilla_ui::script::diagnostics::DiagnosticKind::Load
-    );
-    assert!(
-        row.message.contains("not found"),
-        "the row says what went wrong, verbatim as the terminal line: {:?}",
-        row.message
-    );
-
-    // 2. Not in the `/errors` log: it never reached the error handler.
-    script
-        .eval::<()>("BenillaScriptLog_Update() return nil")
-        .expect("the window repaints without raising");
-    assert!(
-        !script
-            .eval::<bool>(
-                "for _, row in ipairs(BenillaScriptLog.rows) do \
-                    if strfind(row.message, 'AaMissing', 1, 1) then return true end \
-                 end \
-                 return false"
-            )
-            .expect("eval"),
-        "a failure no handler saw is not in the handler-fed log"
-    );
-
-    // 3. No dialog, since nothing raised: the reference answers an absent or unparseable file
-    // with a log line alone.
-    assert!(
-        !script
-            .eval::<bool>("return ScriptErrors:IsVisible()")
-            .expect("ScriptErrors exists"),
-        "a non-raising load failure must not pop the red dialog — that would put non-errors \
-         through `_ERRORMESSAGE` and through every addon handler that replaces it"
-    );
-
-    // 4. Nothing in chat, and the reference's lines in `benilla-config/Logs/FrameXML.log`, each
-    // stamped `M/D HH:MM:SS.mmm` and ended `\r\n`: the add-on's banner, its toc's, then each
-    // miss by its arm (`0x6edaa0`, `0x704bc0`). The clean core and probe add nothing.
-    let lines = world.resource::<crate::ui_chat::ChatLog>().pending_lines();
-    assert!(
-        !lines.iter().any(|l| l.contains("AaMissing")),
-        "no chat line names the failure: {lines:?}"
-    );
-    let log = std::fs::read_to_string(tmp.join("benilla-config/Logs/FrameXML.log"))
-        .expect("the load wrote FrameXML.log");
-    let texts: Vec<&str> = log
-        .split_terminator("\r\n")
-        .map(|l| l.split_once("  ").expect("a stamp, then two spaces").1)
-        .collect();
-    assert_eq!(
-        texts,
-        [
-            "Loading add-on AaMissing",
-            "** Loading table of contents Interface\\AddOns\\AaMissing\\AaMissing.toc",
-            "Couldn't open Interface\\AddOns\\AaMissing\\Bossnames\\BossNames.xml",
-            "Error loading Interface\\AddOns\\AaMissing\\Database\\hash.lua",
-        ],
-        "{log}"
-    );
-
-    drop(world);
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -1463,9 +1359,9 @@ ScreenProbeHeight = GetScreenHeight()
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// [`super::seat_from_roster`]'s `"player"` push is replaced when the descriptor streams in, but
-/// `UnitName("player")` reads only the record seeded beside it, which neither a nameless snapshot
-/// nor a despawn clears, as the reference never clears `0xc27d88`.
+/// [`super::lifecycle::seat_from_roster`]'s `"player"` push is replaced when the descriptor
+/// streams in, but `UnitName("player")` reads only the record seeded beside it, which neither a
+/// nameless snapshot nor a despawn clears, as the reference never clears `0xc27d88`.
 #[test]
 fn the_entry_load_seeds_a_record_the_feed_cannot_take_away() {
     let _l = ENV_LOCK

@@ -463,7 +463,7 @@ fn send_spell_cast(
     // requires combo points" for a rogue (class byte 4, `6e4e98`), else 0x12. Like the button
     // greying, it reads no target.
     if let (Some(d), Some(store)) = (def, ctx.rel.self_store) {
-        if d.needs_combo_points() && crate::net::wrath_combo_points::banked(store, combo).0 == 0 {
+        if d.needs_combo_points() && crate::net::wrath_combo_points::banked(combo).0 == 0 {
             let reason = if store.0.unit_class() == Some(CLASS_ROGUE) {
                 0x46
             } else {
@@ -615,16 +615,17 @@ fn send_spell_cast(
             .and_then(|f| f.unit_charmed_by())
             .is_some_and(|charmer| Some(charmer) != ctx.self_guid),
         def,
-        // The exemption scan reads the caster's raw aura slot ids, unfiltered, as the reference.
+        // The exemption scan reads the caster's raw aura slot ids, unfiltered, as the reference;
+        // 12340 has no descriptor aura slots, so it sees none.
         &mut |aura_types: &[u32]| {
-            let Some((d, fields)) = def.zip(self_fields) else {
+            let Some((d, _)) = def.zip(self_fields) else {
                 return benilla_formats::CcExemption::default();
             };
             let catalog = spells.as_ref().map(|s| &s.catalog);
             aura_types
                 .iter()
                 .map(|&ty| {
-                    benilla_formats::cc_exemption(d, fields.unit_aura_ids(), ty, |id| {
+                    benilla_formats::cc_exemption(d, std::iter::empty(), ty, |id| {
                         catalog.and_then(|c| c.get(id))
                     })
                 })
@@ -842,8 +843,14 @@ mod tests {
     use super::*;
     use crate::net::Reputations;
     use crate::ui_action::CastFail;
+    use benilla_protocol::messages::Field;
     use bevy::ecs::system::RunSystemOnce;
     use crossbeam_channel::Receiver;
+
+    /// `field`'s native descriptor index.
+    const fn at(field: Field) -> u16 {
+        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    }
 
     const HEARTHSTONE: u32 = 8690;
     const MOUNT: u32 = 470;
@@ -969,8 +976,12 @@ mod tests {
         let leak = |pairs: &[(u16, u32)]| -> &'static ObjectStore {
             Box::leak(Box::new(ObjectStore(ObjectFields::from_pairs(pairs))))
         };
-        let corpse = leak(&[(22, 0), (28, 100)]);
-        let ghost = leak(&[(22, 1), (28, 100), (190, 0x10)]);
+        let corpse = leak(&[(at(Field::UnitHealth), 0), (at(Field::UnitMaxHealth), 100)]);
+        let ghost = leak(&[
+            (at(Field::UnitHealth), 1),
+            (at(Field::UnitMaxHealth), 100),
+            (at(Field::PlayerFlags), 0x10),
+        ]);
         let press = |world: &mut World, spell_id: u32, store: &'static ObjectStore| {
             world
                 .run_system_once(move |mut ladder: CastLadder| {
@@ -1291,7 +1302,7 @@ mod tests {
             let held = world
                 .run_system_once(move |mut ladder: CastLadder| {
                     let me = crate::net::ObjectStore(ObjectFields::from_fields(
-                        benilla_protocol::messages::FieldLayout::Vanilla5875,
+                        benilla_protocol::messages::FieldLayout::Wrath12340,
                         &[(benilla_protocol::messages::Field::UnitBytes0, class << 8)],
                     ));
                     let ctx = cast_target::CastContext {
@@ -1560,11 +1571,11 @@ mod tests {
         let mut spells = crate::ui_action::Spells::empty_for_tests();
         spells.catalog = benilla_formats::SpellCatalog::from_displays(displays);
         world.insert_resource(spells);
-        // 100 mana (field 23 = UNIT_FIELD_POWER1). Leaked: the one-shot closure must be 'static.
+        // 100 mana (`UNIT_FIELD_POWER1`). Leaked: the one-shot closure must be 'static.
         let store: &'static ObjectStore =
             Box::leak(Box::new(ObjectStore(ObjectFields::from_pairs(&[
-                (22u16, 100u32),
-                (23, 100),
+                (at(Field::UnitHealth), 100),
+                (at(Field::UnitPower), 100),
             ]))));
 
         let base = ctx();

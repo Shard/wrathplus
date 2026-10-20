@@ -395,7 +395,7 @@ fn service_probe(
                 true => String::new(),
                 false => format!(
                     " [note: the world DB read {} when this leg was written]",
-                    flag_names(NpcFlags::from_bits(FieldLayout::Vanilla5875, leg.db_flags))
+                    flag_names(NpcFlags::from_bits(FieldLayout::Wrath12340, leg.db_flags))
                 ),
             };
             let Some(arm) = arm else {

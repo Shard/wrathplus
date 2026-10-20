@@ -289,7 +289,7 @@ mod tests {
     }
 
     /// `UNIT_DYNAMIC_FLAGS`'s UpdateField index; bit `0x1` is LOOTABLE.
-    const FIELD_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+    const FIELD_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
 
     /// Give `entity` a store carrying `flags` in `UNIT_DYNAMIC_FLAGS`.
     fn dynamic_flags(app: &mut App, entity: Entity, flags: u32) {

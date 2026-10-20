@@ -227,7 +227,7 @@ mod setter_tests {
             Embodied,
             Transform::default(),
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::UnitHealth, 100),
                     (benilla_protocol::messages::Field::UnitMaxHealth, 100),

@@ -2,7 +2,6 @@
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::wrath_combo_points::*;
-use crate::net::ObjectStore;
 use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
 use benilla_protocol::SessionEvent;
 use benilla_protocol::SessionEventKind;
@@ -39,7 +38,7 @@ fn the_packet_is_the_wrath_source_and_both_boundaries_clear() {
     };
     assert_eq!(combo(&app), banked_now);
     // A store without the 1.12 byte (every build-12340 player) reads the packet's pair.
-    assert_eq!(banked(&ObjectStore::default(), &combo(&app)), (3, 5));
+    assert_eq!(banked(&combo(&app)), (3, 5));
     // Malformed: ignored, the last good pair stands.
     dispatch(&mut app, &mut adapter, &[0x01, 0x05]);
     assert_eq!(combo(&app), banked_now);

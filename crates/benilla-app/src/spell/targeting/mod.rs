@@ -576,7 +576,7 @@ mod tests {
         // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
         let live = || {
             ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitHealth, 100)],
             ))
         };
@@ -733,7 +733,7 @@ mod tests {
         // `OBJECT_FIELD_TYPE` and `UNIT_FIELD_TARGET`, the latter a 2-field guid.
         let unit = |kind: u32, target: u64| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::ObjectType, 0, kind),
                     (Field::UnitTarget, 0, target as u32),
@@ -798,7 +798,7 @@ mod tests {
         // `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH` and `UNIT_FIELD_TARGET`, the last a 2-field guid.
         let unit = |kind: u32, target: u64| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::ObjectType, 0, kind),
                     (Field::UnitHealth, 0, 100),
@@ -870,10 +870,10 @@ mod tests {
         const SPELL: u32 = 3000;
         /// Absolute descriptor indices: `OBJECT_FIELD_ENTRY`, `UNIT_FIELD_HEALTH`,
         /// `UNIT_FIELD_FLAGS` and `UNIT_DYNAMIC_FLAGS`.
-        const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
-        const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-        const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-        const DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+        const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+        const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+        const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+        const DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
         const HUMANOID: u32 = 69;
         const BEAST: u32 = 70;
 

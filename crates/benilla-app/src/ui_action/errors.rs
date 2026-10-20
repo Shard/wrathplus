@@ -643,17 +643,17 @@ mod attack_actor_tests {
     use super::*;
     use benilla_protocol::ObjectFields;
 
-    const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitHealth);
-    const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
-    const FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitFlags);
-    const CHARMEDBY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const CHARMEDBY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitCharmedby);
-    const MOUNT: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const MOUNT: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitMountDisplayId);
-    const PLAYER_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const PLAYER_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerFlags);
 
     fn actor(pairs: &[(u16, u32)]) -> ObjectStore {

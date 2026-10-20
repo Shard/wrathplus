@@ -112,7 +112,6 @@ fn an_error_toast_draws_over_an_open_panel_window() {
     load_xml(&s, "Interface\\FrameXML\\QuestFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\QuestLogFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\MerchantFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // ours: the scroll kits
 
     // A left-slot panel opens, then the toast: stratum, not order, must decide.
     s.eval::<()>("ShowUIPanel(QuestLogFrame)").unwrap();

@@ -175,11 +175,12 @@ fn push_channel_lines(
 
 #[cfg(test)]
 mod tests {
-    /// `ERR_CHAT_RESTRICTED` (451) is a chat row, so the arm above writes a system line.
+    /// `ERR_CHAT_RESTRICTED` (build 12340's `0x1ef`) is a chat row, so the arm above writes a
+    /// system line.
     #[test]
     fn chat_restricted_is_a_chat_row() {
         use benilla_ui::messages::{by_key, kind_of, MsgKind};
-        assert_eq!(by_key("ERR_CHAT_RESTRICTED").expect("a real row").id, 451);
+        assert_eq!(by_key("ERR_CHAT_RESTRICTED").expect("a real row").id, 0x1ef);
         assert_eq!(kind_of("ERR_CHAT_RESTRICTED"), MsgKind::Chat);
     }
 

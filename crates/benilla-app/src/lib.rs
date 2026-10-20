@@ -419,10 +419,6 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
                         Ok("ui-chatedit") => UVec2::new(566, 377),
                         // The map's chrome is a centered 1024×768 block, with margin.
                         Ok("ui-worldmap") => UVec2::new(1100, 800),
-                        // Margin keeps the 920×724 window's edge tile and close X in frame.
-                        Ok("ui-options") | Ok("ui-options-audio") | Ok("ui-options-graphics") => {
-                            UVec2::new(1200, 900)
-                        }
                         _ => UVec2::new(640, 700),
                     }
                 }

@@ -304,10 +304,7 @@ fn merchant_show_hide_plays_open_and_close_kits() {
     s.set_screen_size(1024.0, 768.0);
     for f in crate::ui_script::test_ui::production_order(&[
         super::test_ui::MERCHANT_UI,
-        &[
-            "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
-        ],
+        &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
         load_xml(&s, f);
     }
@@ -348,7 +345,6 @@ fn vendor_open_opens_the_backpack_and_layers_the_sound() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -395,7 +391,6 @@ fn vendor_leaves_an_already_open_backpack_alone() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -440,7 +435,6 @@ fn a_centre_panel_over_a_vendor_keeps_the_backpack_the_player_had_open() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -499,7 +493,6 @@ fn vendor_opens_and_closes_all_equipped_bags() {
         &[
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, file);
@@ -536,10 +529,7 @@ fn merchant_switch_plays_close_then_open_and_queues_the_consumable_close() {
     s.set_screen_size(1024.0, 768.0);
     for f in crate::ui_script::test_ui::production_order(&[
         super::test_ui::MERCHANT_UI,
-        &[
-            "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
-        ],
+        &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
         load_xml(&s, f);
     }
@@ -583,7 +573,6 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
         &[
             "Interface\\FrameXML\\UIDropDownMenu.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, f);
@@ -789,10 +778,7 @@ fn merchant_tabs_drive_buyback_page_and_repair_pair() {
     s.set_screen_size(1024.0, 768.0);
     for f in crate::ui_script::test_ui::production_order(&[
         super::test_ui::MERCHANT_UI,
-        &[
-            "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
-        ],
+        &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
         load_xml(&s, f);
     }
@@ -948,10 +934,7 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
     s.set_screen_size(1024.0, 768.0);
     for f in crate::ui_script::test_ui::production_order(&[
         super::test_ui::MERCHANT_UI,
-        &[
-            "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
-        ],
+        &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
         load_xml(&s, f);
     }
@@ -1046,7 +1029,6 @@ fn trade_recipient_money_renders_the_digit_not_ellipsis() {
             "Interface\\FrameXML\\MoneyInputFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml", // read by the stock bag-slot click
             "Interface\\FrameXML\\TradeFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, f);
@@ -1111,7 +1093,6 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
             "Interface\\FrameXML\\FloatingChatFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
             "Interface\\FrameXML\\DressUpFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     ]) {
         load_xml(&s, f);

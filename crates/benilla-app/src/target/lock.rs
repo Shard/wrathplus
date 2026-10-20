@@ -321,7 +321,7 @@ mod tests {
         use benilla_formats::{OpenLock, SkillLineCatalog, SpellCatalog, SpellDisplay};
         use benilla_protocol::messages::ObjectFields;
         const FIELD_PLAYER_SKILL_INFO_1_1: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
+            benilla_protocol::messages::FieldLayout::Wrath12340
                 .index_of(benilla_protocol::messages::Field::PlayerSkillInfo11);
 
         // Mining 2575, real shape: `−1 + 1 + 5.0·Δ`, baseLevel 0, LockType 3.

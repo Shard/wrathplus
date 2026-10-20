@@ -8,132 +8,34 @@ mod native_death_tests {
 
     #[test]
     fn death_watch_resolves_native_health_and_preserves_alive_to_dead_gate() {
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            for kind in [ObjectType::Unit, ObjectType::Player] {
-                let span = layout.resolve(Field::UnitHealth).unwrap();
-                let (field, offset) = layout.field_at(kind, span.index).unwrap();
-                let mut edge = FieldChanged {
-                    entity: Entity::PLACEHOLDER,
-                    guid: 42,
-                    kind,
-                    layout,
-                    field,
-                    offset,
-                    old: 1,
-                    new: 0,
-                };
-                assert!(is_death_edge(&edge));
-                for (old, new) in [(0, 0), (0, 1), (2, 1)] {
-                    edge.old = old;
-                    edge.new = new;
-                    assert!(!is_death_edge(&edge));
-                }
-                edge.old = 1;
-                edge.new = 0;
-                edge.kind = ObjectType::Corpse;
-                assert!(!is_death_edge(&edge));
-                edge.kind = kind;
-                let span = layout.resolve(Field::UnitMaxHealth).unwrap();
-                (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
-                assert!(!is_death_edge(&edge));
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod loyalty_tests {
-    use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-
-    #[test]
-    fn loyalty_edges_are_vanilla_only_not_wrath_pet_talent_points() {
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            for kind in [ObjectType::Unit, ObjectType::Player] {
-                let span = layout.resolve(Field::UnitBytes1).unwrap();
-                let (field, offset) = layout.field_at(kind, span.index).unwrap();
-                let mut edge = FieldChanged {
-                    entity: Entity::PLACEHOLDER,
-                    guid: 42,
-                    kind,
-                    layout,
-                    field,
-                    offset,
-                    old: 2 << 8,
-                    new: 3 << 8,
-                };
-                let vanilla = layout == FieldLayout::Vanilla5875;
-                assert_eq!(loyalty_levels(&edge), vanilla.then_some((2, 3)));
-                edge.old = 3 << 8;
-                edge.new = 2 << 8;
-                assert_eq!(loyalty_levels(&edge), vanilla.then_some((3, 2)));
-                for (old, new) in [(0, 2 << 8), (2 << 8, 0), (2 << 8, (2 << 8) | 1)] {
-                    edge.old = old;
-                    edge.new = new;
-                    assert_eq!(loyalty_levels(&edge), None);
-                }
-                edge.old = 2 << 8;
-                edge.new = 3 << 8;
-                edge.kind = ObjectType::Corpse;
-                assert_eq!(loyalty_levels(&edge), None);
-                edge.kind = kind;
-                let span = layout.resolve(Field::UnitBytes2).unwrap();
-                (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
-                assert_eq!(loyalty_levels(&edge), None);
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod descriptor_aura_tests {
-    use super::*;
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-
-    #[test]
-    fn aura_watch_uses_real_vanilla_spans_and_class_gates() {
-        let layout = FieldLayout::Vanilla5875;
-        for (field, applications) in [
-            (Field::UnitAura, false),
-            (Field::UnitAuraApplications, true),
-        ] {
-            let span = layout.resolve(field).unwrap();
-            for offset in 0..span.width {
-                for kind in [ObjectType::Unit, ObjectType::Player] {
-                    let (field, offset) = layout.field_at(kind, span.index + offset).unwrap();
-                    let mut edge = FieldChanged {
-                        entity: Entity::PLACEHOLDER,
-                        guid: 42,
-                        kind,
-                        layout,
-                        field,
-                        offset,
-                        old: 0,
-                        new: 1,
-                    };
-                    assert_eq!(descriptor_aura_slot(&edge, applications), Some(offset));
-                    assert_eq!(descriptor_aura_slot(&edge, !applications), None);
-                    edge.kind = ObjectType::Corpse;
-                    assert_eq!(descriptor_aura_slot(&edge, applications), None);
-                }
-            }
-            assert!(FieldLayout::Wrath12340.resolve(field).is_none());
-        }
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
+        let layout = FieldLayout::Wrath12340;
+        for kind in [ObjectType::Unit, ObjectType::Player] {
             let span = layout.resolve(Field::UnitHealth).unwrap();
-            let (field, offset) = layout.field_at(ObjectType::Unit, span.index).unwrap();
-            let edge = FieldChanged {
+            let (field, offset) = layout.field_at(kind, span.index).unwrap();
+            let mut edge = FieldChanged {
                 entity: Entity::PLACEHOLDER,
                 guid: 42,
-                kind: ObjectType::Unit,
+                kind,
                 layout,
                 field,
                 offset,
                 old: 1,
                 new: 0,
             };
-            assert_eq!(descriptor_aura_slot(&edge, false), None);
-            assert_eq!(descriptor_aura_slot(&edge, true), None);
+            assert!(is_death_edge(&edge));
+            for (old, new) in [(0, 0), (0, 1), (2, 1)] {
+                edge.old = old;
+                edge.new = new;
+                assert!(!is_death_edge(&edge));
+            }
+            edge.old = 1;
+            edge.new = 0;
+            edge.kind = ObjectType::Corpse;
+            assert!(!is_death_edge(&edge));
+            edge.kind = kind;
+            let span = layout.resolve(Field::UnitMaxHealth).unwrap();
+            (edge.field, edge.offset) = layout.field_at(kind, span.index).unwrap();
+            assert!(!is_death_edge(&edge));
         }
     }
 }
@@ -200,7 +102,7 @@ mod packet_aura_tests {
 mod packet_aura_system_tests {
     use super::*;
     use crate::net::wrath_auras::{PacketAuras, StampedAura};
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectFields, ObjectType};
+    use benilla_protocol::messages::{FieldLayout, ObjectFields, ObjectType};
     use benilla_protocol::wrath_auras::NativeAura;
 
     fn app() -> (App, Entity) {
@@ -260,34 +162,14 @@ mod packet_aura_system_tests {
     }
 
     #[test]
-    fn authoritative_packets_suppress_projected_duplicates_even_when_empty() {
-        let (mut app, entity) = app();
-        let edge = |old, new| FieldChanged {
-            entity,
-            guid: 42,
-            kind: ObjectType::Player,
-            layout: FieldLayout::Vanilla5875,
-            field: Field::UnitAura,
-            offset: 0,
-            old,
-            new,
-        };
+    fn a_packet_snapshot_adds_once_and_an_authoritative_empty_removes_once() {
+        let (mut app, _) = app();
         set(&mut app, Some(1));
-        app.world_mut()
-            .resource_mut::<Messages<FieldChanged>>()
-            .write(edge(0, 77));
-        assert_eq!(
-            take(&mut app),
-            1,
-            "first packet adds once, not again via synthesis"
-        );
+        assert_eq!(take(&mut app), 1, "first packet adds once");
         assert_eq!(take(&mut app), 0, "held snapshot is quiet");
         set(&mut app, Some(3));
         assert_eq!(take(&mut app), 1, "native stacks rise");
         set(&mut app, None);
-        app.world_mut()
-            .resource_mut::<Messages<FieldChanged>>()
-            .write(edge(77, 0));
         assert_eq!(take(&mut app), 1, "authoritative empty removes once");
         assert_eq!(take(&mut app), 0);
     }

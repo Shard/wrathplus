@@ -135,6 +135,12 @@ impl ScriptSelect<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use benilla_protocol::messages::Field;
+
+    /// `field`'s native descriptor index.
+    const fn at(field: Field) -> u16 {
+        benilla_protocol::messages::FieldLayout::Wrath12340.index_of(field)
+    }
 
     /// A world holding what [`ScriptSelect`] reads, with a bare VM and no units.
     fn script_world() -> World {
@@ -182,16 +188,33 @@ mod tests {
 
         let mut world = script_world();
 
-        world.spawn((SelfPlayer, Guid(ME), store(&[(22, 100), (28, 100)])));
+        world.spawn((
+            SelfPlayer,
+            Guid(ME),
+            store(&[
+                (at(Field::UnitHealth), 100),
+                (at(Field::UnitMaxHealth), 100),
+            ]),
+        ));
         // The basis is pointing at the victim; the victim points at nobody.
         let basis = world
             .spawn((
                 Guid(BASIS),
-                store(&[(22, 100), (28, 100), (16, VICTIM as u32)]),
+                store(&[
+                    (at(Field::UnitHealth), 100),
+                    (at(Field::UnitMaxHealth), 100),
+                    (at(Field::UnitTarget), VICTIM as u32),
+                ]),
             ))
             .id();
         let victim = world
-            .spawn((Guid(VICTIM), store(&[(22, 100), (28, 100)])))
+            .spawn((
+                Guid(VICTIM),
+                store(&[
+                    (at(Field::UnitHealth), 100),
+                    (at(Field::UnitMaxHealth), 100),
+                ]),
+            ))
             .id();
         let index = &mut world.resource_mut::<crate::net::GuidIndex>().0;
         index.insert(BASIS, basis);
@@ -261,9 +284,22 @@ mod tests {
             |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
 
         let mut world = script_world();
-        world.spawn((SelfPlayer, Guid(ME), store(&[(22, 100), (28, 100)])));
+        world.spawn((
+            SelfPlayer,
+            Guid(ME),
+            store(&[
+                (at(Field::UnitHealth), 100),
+                (at(Field::UnitMaxHealth), 100),
+            ]),
+        ));
         let pet = world
-            .spawn((Guid(PET), store(&[(22, 100), (28, 100)])))
+            .spawn((
+                Guid(PET),
+                store(&[
+                    (at(Field::UnitHealth), 100),
+                    (at(Field::UnitMaxHealth), 100),
+                ]),
+            ))
             .id();
         let member = world
             .spawn((
@@ -349,7 +385,7 @@ mod tests {
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::ObjectType, 0, kind),
                     (

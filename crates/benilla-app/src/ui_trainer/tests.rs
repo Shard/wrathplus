@@ -1065,53 +1065,52 @@ fn the_group_header_keys_resolve_in_the_real_global_strings() {
 #[test]
 fn trainer_rederive_edges_preserve_skill_halves_and_class_gates_in_both_layouts() {
     use benilla_protocol::messages::FieldLayout;
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        let native_edge = |field: Field, offset: u16| {
-            let span = layout
-                .resolve(field)
-                .expect("trainer dependency exists in both layouts");
-            assert!(offset < span.width);
-            let (resolved, resolved_offset) = layout
-                .field_at(ObjectType::Player, span.index + offset)
-                .unwrap();
-            assert_eq!((resolved, resolved_offset), (field, offset));
-            FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind: ObjectType::Player,
-                layout,
-                field: resolved,
-                offset: resolved_offset,
-                old: 0,
-                new: 1,
-            }
-        };
-        let mut edge = native_edge(Field::PlayerSkillInfo11, 0);
-        assert!(!rederive_edge(&edge));
-        for slot in [0, u16::from(PLAYER_SKILL_SLOTS) - 1] {
-            edge = native_edge(Field::PlayerSkillInfo11, slot * 3 + 1);
-            assert!(rederive_edge(&edge));
-            edge = native_edge(Field::PlayerSkillInfo11, slot * 3 + 2);
-            assert!(
-                !rederive_edge(&edge),
-                "temporary bonus alone is not watched"
-            );
-            edge.new = 0x10000;
-            assert!(rederive_edge(&edge), "permanent bonus is watched");
+    let layout = FieldLayout::Wrath12340;
+    let native_edge = |field: Field, offset: u16| {
+        let span = layout
+            .resolve(field)
+            .expect("trainer dependency exists in both layouts");
+        assert!(offset < span.width);
+        let (resolved, resolved_offset) = layout
+            .field_at(ObjectType::Player, span.index + offset)
+            .unwrap();
+        assert_eq!((resolved, resolved_offset), (field, offset));
+        FieldChanged {
+            entity: Entity::PLACEHOLDER,
+            guid: 42,
+            kind: ObjectType::Player,
+            layout,
+            field: resolved,
+            offset: resolved_offset,
+            old: 0,
+            new: 1,
         }
-        edge.offset = 3 * u16::from(PLAYER_SKILL_SLOTS);
-        assert!(!rederive_edge(&edge));
-        edge = native_edge(Field::PlayerCoinage, 0);
+    };
+    let mut edge = native_edge(Field::PlayerSkillInfo11, 0);
+    assert!(!rederive_edge(&edge));
+    for slot in [0, u16::from(PLAYER_SKILL_SLOTS) - 1] {
+        edge = native_edge(Field::PlayerSkillInfo11, slot * 3 + 1);
         assert!(rederive_edge(&edge));
-        edge.kind = ObjectType::Unit;
-        assert!(!rederive_edge(&edge));
-        edge = native_edge(Field::UnitLevel, 0);
-        assert!(rederive_edge(&edge));
-        edge.kind = ObjectType::Unit;
-        assert!(rederive_edge(&edge));
-        edge.kind = ObjectType::GameObject;
-        assert!(!rederive_edge(&edge));
+        edge = native_edge(Field::PlayerSkillInfo11, slot * 3 + 2);
+        assert!(
+            !rederive_edge(&edge),
+            "temporary bonus alone is not watched"
+        );
+        edge.new = 0x10000;
+        assert!(rederive_edge(&edge), "permanent bonus is watched");
     }
+    edge.offset = 3 * u16::from(PLAYER_SKILL_SLOTS);
+    assert!(!rederive_edge(&edge));
+    edge = native_edge(Field::PlayerCoinage, 0);
+    assert!(rederive_edge(&edge));
+    edge.kind = ObjectType::Unit;
+    assert!(!rederive_edge(&edge));
+    edge = native_edge(Field::UnitLevel, 0);
+    assert!(rederive_edge(&edge));
+    edge.kind = ObjectType::Unit;
+    assert!(rederive_edge(&edge));
+    edge.kind = ObjectType::GameObject;
+    assert!(!rederive_edge(&edge));
 }
 
 #[test]

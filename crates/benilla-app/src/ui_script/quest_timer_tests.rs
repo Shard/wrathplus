@@ -29,7 +29,6 @@ fn harness() -> UiScript {
     load_xml(&s, "Interface\\FrameXML\\QuestFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\QuestLogFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\QuestTimerFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
     s
 }
 

@@ -22,7 +22,6 @@ fn picker() -> UiScript {
         r"Interface\FrameXML\UIPanelTemplates.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
         "Interface\\FrameXML\\ColorPickerFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, file);
     }

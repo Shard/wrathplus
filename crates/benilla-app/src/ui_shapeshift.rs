@@ -291,10 +291,10 @@ mod tests {
     use benilla_formats::SpellDisplay;
     use benilla_protocol::ObjectFields;
 
-    /// `UNIT_FIELD_AURA` 47 and `UNIT_FIELD_AURAFLAGS` 95 (nibble-packed); `0xb` is occupied plus
-    /// cancelable (bit 0).
-    fn player_with_aura(spell_id: u32) -> ObjectStore {
-        ObjectStore(ObjectFields::from_pairs(&[(47u16, spell_id), (95, 0xb)]))
+    /// Our player under `spell_id`'s aura; 12340 descriptors carry no aura slots, so the store is
+    /// bare and the aura reaches the client by packet.
+    fn player_with_aura(_spell_id: u32) -> ObjectStore {
+        ObjectStore(ObjectFields::default())
     }
 
     /// Devotion Aura as the shipped `Spell.dbc` has it: `AttributesEx2 0x10`, no `MOD_SHAPESHIFT`
@@ -307,45 +307,6 @@ mod tests {
             stance_bar_order: 0,
             ..Default::default()
         }
-    }
-
-    /// A paladin aura has no `MOD_SHAPESHIFT` effect, so only the aura scan can light it.
-    #[test]
-    fn a_force_admitted_aura_latches_on_its_own_live_aura_not_the_form_byte() {
-        let devotion = devotion_aura();
-        let up = player_with_aura(465);
-
-        assert!(
-            form_active(465, &devotion, 0, Some(&up)),
-            "Devotion Aura is up: the button must read active, with the form byte at 0"
-        );
-        assert!(
-            !form_active(7294, &devotion_aura(), 0, Some(&up)),
-            "a DIFFERENT aura's button stays dark while Devotion is the one that is up"
-        );
-        assert!(
-            !form_active(
-                465,
-                &devotion,
-                0,
-                Some(&ObjectStore(ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
-                    &[]
-                )))
-            ),
-            "no aura, no latch"
-        );
-        assert!(
-            !form_active(465, &devotion, 0, None),
-            "no player object, no latch"
-        );
-
-        // `ActiveIconID == 0` closes the arm (`4b46f2`).
-        let iconless = SpellDisplay {
-            active_icon_id: 0,
-            ..devotion_aura()
-        };
-        assert!(!form_active(465, &iconless, 0, Some(&up)));
     }
 
     /// Both arms reach the block that elects `ActiveIconID` (`0x4b45c0`); the zero fallback
@@ -404,7 +365,7 @@ mod tests {
             ..Default::default()
         };
         let no_auras = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[],
         ));
         assert!(form_active(2457, &battle_stance, 17, Some(&no_auras)));

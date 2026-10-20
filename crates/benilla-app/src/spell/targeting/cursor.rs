@@ -802,7 +802,7 @@ mod tests {
             // `UNIT_FIELD_HEALTH` 100: a store with no health reads dead to `BindTarget`'s gates.
             let live = || {
                 crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[(benilla_protocol::messages::Field::UnitHealth, 100)],
                 ))
             };
@@ -910,7 +910,7 @@ mod tests {
             });
             let live = || {
                 crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[(benilla_protocol::messages::Field::UnitHealth, 100)],
                 ))
             };

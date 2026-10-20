@@ -207,7 +207,7 @@ mod tests {
         assert!(!corpse_friendly(&human, None, Some(&me)), "no catalog");
         assert!(!corpse_friendly(&human, Some(&factions), None), "no player");
         let no_template = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[(benilla_protocol::messages::Field::UnitFactionTemplate, 999)],
         ));
         assert!(
@@ -242,7 +242,7 @@ mod tests {
     fn possession_is_the_flag_and_the_charmer_else_the_creator() {
         let store = |flags: u32, charmed_by: u32, created_by: u32| {
             ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::UnitFlags, 0, flags),
                     (

@@ -582,7 +582,6 @@ fn shipped_target_frame_runs_the_level_law() {
             "Interface\\FrameXML\\QuestFrame.xml",
             "Interface\\FrameXML\\QuestLogFrame.xml",
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
     );
     // Level 3 on both feeds, which the app keeps in step: the snapshot `UnitLevel("player")` reads
@@ -908,7 +907,7 @@ fn flagged_friendly_player_plate_is_green() {
 fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     use crate::net::ObjectStore;
     use crate::target::{stormwind_fixture, HUMAN_WARRIOR};
-    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
     use benilla_protocol::ObjectFields;
 
@@ -918,7 +917,7 @@ fn an_exalted_npc_target_reads_revered_and_its_plate_is_green() {
     s.set_screen_size(1024.0, 768.0);
     load_unit_frames(&s);
     let me = ObjectStore(ObjectFields::from_fields(
-        benilla_protocol::messages::FieldLayout::Vanilla5875,
+        benilla_protocol::messages::FieldLayout::Wrath12340,
         &[(benilla_protocol::messages::Field::UnitBytes0, HUMAN_WARRIOR)],
     ));
 

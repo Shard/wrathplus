@@ -12,7 +12,7 @@ use benilla_protocol::messages::{Field, FieldLayout};
 
 /// `PLAYER_FARSIGHT`, low word: the view's anchor, the guid `0x4bcfbf`-`0x4bd012` holds against the
 /// pet's.
-pub(crate) const FARSIGHT: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFarsight);
+pub(crate) const FARSIGHT: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFarsight);
 /// Some other guid than ours or the pet's.
 pub(crate) const OTHER: u64 = 0x99;
 
@@ -41,7 +41,8 @@ fn the_predicate_reads_exactly_the_reference_fields() {
     assert!(!actions_usable(&bar, me, Some(&player), None));
 
     // The owner is `CHARMEDBY` when set, else `SUMMONEDBY`, and never `CREATEDBY`.
-    let created_only = store(&[(14, ME as u32), (15, 0)]);
+    const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+    let created_only = store(&[(CREATEDBY, ME as u32), (CREATEDBY + 1, 0)]);
     assert!(!actions_usable(
         &bar,
         me,

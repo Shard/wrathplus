@@ -7,8 +7,6 @@ use bevy::prelude::*;
 
 use crate::ui_script::{UiFeed, UiInput};
 
-#[cfg(test)]
-mod ace_gate_tests;
 /// `/afk` and `/dnd`: the optimistic AFK mirror `[0xb6e5cc]` and the implicit clear that every
 /// other chat send and every movement press carries.
 mod away;
@@ -124,12 +122,7 @@ impl Plugin for UiChatPlugin {
             // Descriptor-diff combat-log lines, ahead of the drain so none lands a frame late.
             .add_systems(
                 Update,
-                (
-                    combat::watch::death_lines,
-                    combat::watch::aura_lines,
-                    combat::watch::pet_loyalty_lines,
-                )
-                    .before(feed::feed_chat),
+                (combat::watch::death_lines, combat::watch::aura_lines).before(feed::feed_chat),
             )
             // Before the drain, so a broadcast lands on the frame it decodes.
             .add_systems(

@@ -39,11 +39,14 @@ fn set_player(rig: &mut Rig, extra: &[(u16, u32)]) {
     world.entity_mut(me).insert(player_with(&fields));
 }
 
+const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+
 /// The pet, replaced by [`owned_pet_with`] `extra`: alive, so the Attack order's validator passes.
 fn set_pet(rig: &mut Rig, extra: &[(u16, u32)]) {
     let world = rig.app.world_mut();
     let pet = world.resource::<GuidIndex>().0[&PET];
-    let mut fields = vec![(22, 100), (28, 100)];
+    let mut fields = vec![(HEALTH, 100), (MAXHEALTH, 100)];
     fields.extend_from_slice(extra);
     world.entity_mut(pet).insert(owned_pet_with(&fields));
 }
@@ -71,7 +74,7 @@ fn scene() -> Rig {
             Guid(FOE),
             Transform::default(),
             crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
             )),
         ))
@@ -628,7 +631,7 @@ fn the_stock_bar_greys_a_stunned_pet_and_its_click_sends_nothing() {
 #[test]
 fn a_dead_pet_is_still_usable() {
     let mut rig = scene();
-    set_pet(&mut rig, &[(22, 0)]);
+    set_pet(&mut rig, &[(HEALTH, 0)]);
 
     assert!(usable_answer(&mut rig));
     rig.press(1);

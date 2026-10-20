@@ -68,11 +68,11 @@ mod tests {
 
     /// Absolute descriptor indices: `OBJECT_FIELD_ENTRY`, `UNIT_FIELD_BYTES_0` (the race byte),
     /// `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FLAGS` and `UNIT_DYNAMIC_FLAGS`.
-    const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
-    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
-    const HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
-    const DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+    const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
 
     const WORD_UNIT: u16 = 0x0002;
     const WORD_ASSIST: u16 = 0x0100;
@@ -303,7 +303,7 @@ mod tests {
 
         const ME: u64 = 1;
         const THEM: u64 = 42;
-        const TEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const TEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         /// A creature entry whose cached template is a Humanoid (type 7) and one that is a
         /// Beast (type 1).

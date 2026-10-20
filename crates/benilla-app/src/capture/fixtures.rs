@@ -51,8 +51,6 @@ pub(super) fn seed_ui_fixture(
         MessageWriter<AppExit>,
         ResMut<crate::loading_screen::LoadingScreen>,
     ),
-    // The 16th param, at Bevy's cap: the live registry the options fixtures seed from.
-    cvars: Option<Res<crate::cvars::Cvars>>,
 ) {
     let (mut items, mut index) = store;
     // A glue-screen capture has no world scenario, and no glue screen opens a UI fixture.
@@ -294,7 +292,7 @@ pub(super) fn seed_ui_fixture(
             const G_BANKBAG: u64 = 0x2005;
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, entry),
                         (benilla_protocol::messages::Field::ItemStackCount, stack),
@@ -324,7 +322,7 @@ pub(super) fn seed_ui_fixture(
                 &mut index,
                 G_BANKBAG,
                 ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::ObjectEntry, 94_005),
                         (Field::ItemStackCount, 1),
@@ -339,7 +337,7 @@ pub(super) fn seed_ui_fixture(
             // purse, under which the 10g third-slot cost (`BankBagSlotPrices.dbc`) is affordable.
             const PLAYER_GUID: u64 = 0x51;
             let fields = ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::PlayerBytes2, 0, 2 << 16), // bankBagSlots (byte 2) = 2
                     (Field::PlayerBankSlot1, 0, G_SHIELD as u32), // BANK_SLOT_1 (vault slot 0)
@@ -597,7 +595,7 @@ pub(super) fn seed_ui_fixture(
             // Slot 0 is quest 783 (counter 0 at 3), slot 1 quest 7 (counter 0 at 10, state
             // COMPLETE), packed as vmangos's `SetQuestSlotCounter` and `SetQuestSlotState` write.
             let fields = ObjectFields::from_field_slots(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::PlayerQuestLog, 0, 783),
                     (benilla_protocol::messages::Field::PlayerQuestLog, 1, 3),
@@ -829,7 +827,7 @@ pub(super) fn seed_ui_fixture(
             const G_ARROWS: u64 = 0x1004;
 
             let fields = ObjectFields::from_field_slots(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[
                     (Field::UnitLevel, 0, 12),
                     (Field::UnitBytes0, 0, 4 | 1 << 8), // night elf warrior, male, mana
@@ -862,9 +860,9 @@ pub(super) fn seed_ui_fixture(
                     (Field::PlayerSkillInfo11, 7, 55 | 60 << 16),
                     // Stat buffs (INT on the wire): +10 stamina, -5 spirit, +10 fire resistance. The
                     // -5 is the two's-complement word an x86 server sends; an arm64 one sends 0.
-                    (Field::PlayerPosstat2, 0, 10),
-                    (Field::PlayerNegstat4, 0, (-5i32) as u32),
-                    (Field::PlayerResistancebuffmodspositive, 2, 10), // RESISTANCEBUFFMODSPOSITIVE[2] (fire)
+                    (Field::UnitPosstat2, 0, 10),
+                    (Field::UnitNegstat4, 0, (-5i32) as u32),
+                    (Field::UnitResistancebuffmodspositive, 2, 10), // RESISTANCEBUFFMODSPOSITIVE[2] (fire)
                     // Equipment guids (INV_SLOT_HEAD base 486 + 2·slot): chest 4, main hand 15,
                     // ranged 17; the first backpack slot (PACK_SLOT_1, 532) holds the arrows.
                     (Field::PlayerInvSlotHead, 8, G_CHEST as u32),
@@ -879,7 +877,7 @@ pub(super) fn seed_ui_fixture(
             // stand-in.
             let obj = |entry: u32, stack: u32| {
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, entry),
                         (benilla_protocol::messages::Field::ItemStackCount, stack),
@@ -937,7 +935,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
@@ -976,7 +974,7 @@ pub(super) fn seed_ui_fixture(
                         scale: 1.0,
                     },
                     crate::net::ObjectStore(ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[
                             (Field::UnitHealth, 100),
                             (Field::UnitMaxHealth, 100),
@@ -998,59 +996,6 @@ pub(super) fn seed_ui_fixture(
             selection.target = Some(wolf);
             selection.guid = Some(WOLF_GUID);
         }
-        UiFixture::Options => {
-            let Some(script) = script else {
-                return;
-            };
-            // Opened through the live panel path, with Controls selected by its OnShow.
-            if let Err(e) = script.run("ShowUIPanel(BenillaOptionsFrame)") {
-                warn!("capture: ui-options seed failed to open the window: {e}");
-            }
-        }
-        UiFixture::OptionsAudio => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Audio page: the real CVar set first, so the rows read real values, then the
-            // live open and select paths.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowAudio:Click()",
-            ) {
-                warn!("capture: ui-options-audio seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsGraphics => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Graphics page, as the Audio fixture.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) =
-                script.run("ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowGraphics:Click()")
-            {
-                warn!("capture: ui-options-graphics seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsChat => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Chat page, as the Audio fixture. Its Remove Chat Hover Delay row reads a saved
-            // variable `ChatFrame.xml` declares, so it paints unchecked, the shipped "0".
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowChat:Click()",
-            ) {
-                warn!("capture: ui-options-chat seed failed: {e}");
-            }
-        }
         UiFixture::ColorPicker => {
             let Some(script) = script else {
                 return;
@@ -1065,57 +1010,6 @@ pub(super) fn seed_ui_fixture(
                 warn!("capture: ui-color-picker seed failed: {e}");
             }
         }
-        UiFixture::OptionsDropdownList => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Camera Following Style list open. Its width lands inside the opening click:
-            // `UIDropDownMenu_Refresh` sizes buttons from `normalText:GetWidth() + 60`
-            // (`UIDropDownMenu.lua:405`), which the engine answers in the same call.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowControls:Click(); \
-                 BenillaOptionsFrameContainerBodyControlsRowCameraFollowStyleDropdownButton:Click()",
-            ) {
-                warn!("capture: ui-options-dropdown seed failed: {e}");
-            }
-        }
-        UiFixture::KeyBindings => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Keybindings page over the commands the load registered: the real CVar set
-            // first, then the live open path, with Movement expanded to show a header row and the
-            // default bindings.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); \
-                 BenillaOptionsFrameCategoryListRowKeybindings:Click(); \
-                 BenillaKeyBindings_ExpandSection(1, true); BenillaKeyBindingsPage_Update()",
-            ) {
-                warn!("capture: ui-keybindings seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsSearch => {
-            let Some(script) = script else {
-                return;
-            };
-            // Mid-search: "volume" gathers the four volume sliders under the Audio head. The box
-            // is focused, so the caret shows at the text's end.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameSearchBox:SetText(\"volume\"); BenillaOptionsFrameSearchBox:SetFocus()",
-            )
-            {
-                warn!("capture: ui-options-search seed failed: {e}");
-            }
-        }
         UiFixture::SpellBook => {
             // A human warrior who also knows two cross-class spells. The book resolves through
             // the real chain: names, icons and ranks from `Spell.dbc`, tabs from
@@ -1127,7 +1021,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_field_slots(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 0, 12),
                         (Field::UnitBytes0, 0, 1 | 1 << 8), // human (race 1), warrior (class 1)
@@ -1143,7 +1037,7 @@ pub(super) fn seed_ui_fixture(
                 &mut index,
                 G_SWORD,
                 ObjectFields::from_fields(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     &[
                         (benilla_protocol::messages::Field::ObjectEntry, 93_011),
                         (benilla_protocol::messages::Field::ItemStackCount, 1),
@@ -1320,7 +1214,7 @@ pub(super) fn seed_ui_fixture(
             names.insert_player(SELF_GUID, "Benilla".into(), None);
             commands.spawn((
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
@@ -1356,7 +1250,7 @@ pub(super) fn seed_ui_fixture(
                     scale: 1.0,
                 },
                 crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Vanilla5875,
+                    FieldLayout::Wrath12340,
                     &[
                         (Field::UnitHealth, 100),
                         (Field::UnitMaxHealth, 100),
@@ -1393,7 +1287,7 @@ pub(super) fn seed_ui_fixture(
                             scale: 1.0,
                         },
                         crate::net::ObjectStore(ObjectFields::from_fields(
-                            FieldLayout::Vanilla5875,
+                            FieldLayout::Wrath12340,
                             &[
                                 (Field::UnitHealth, 100),
                                 (Field::UnitMaxHealth, 100),

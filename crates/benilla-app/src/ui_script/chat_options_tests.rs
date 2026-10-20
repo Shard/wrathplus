@@ -38,7 +38,6 @@ fn chat_with_menu() -> UiScript {
         "Interface\\FrameXML\\ChatFrame.xml",
         "Interface\\FrameXML\\FloatingChatFrame.xml",
         "Interface\\FrameXML\\ColorPickerFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, file);
     }

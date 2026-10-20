@@ -186,7 +186,7 @@ pub(crate) mod fixture {
     /// A human caster, template 1, with this `UNIT_FIELD_COMBATREACH` (field 130).
     pub(crate) fn caster(reach: f32) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (benilla_protocol::messages::Field::UnitFactionTemplate, 1),
                 (
@@ -201,7 +201,7 @@ pub(crate) mod fixture {
     /// `CORPSE_FLAG_BONES` in `CORPSE_FIELD_FLAGS` (field 35).
     pub(crate) fn corpse(race: u8, bones: bool) -> ObjectStore {
         ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (
                     benilla_protocol::messages::Field::CorpseBytes1,
