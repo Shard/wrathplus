@@ -27,20 +27,9 @@ pub(super) fn load_env_damage_table(mut commands: Commands, assets: Option<Res<W
     }
 }
 
-/// The hard-landing floor, `[0x80c414]` = 13.0 yd of fall height (`0x602d00`); below it only the
-/// land sound plays. Below `[0x80c418]` = 70.0 yd a dead or ghost mover lands soft (`0x605f30`),
-/// which is not built. The server damages only from 14.57 yd (vmangos `Player.cpp:20968`), so a
-/// shorter hard landing grunts and puffs with no damage packet.
-pub(crate) const HARD_LANDING_DESCENT: f32 = 13.0;
+pub(crate) use crate::app_core::movement::HARD_LANDING_DESCENT;
 
-/// A mover's landing, reported on every landing; consumers apply [`HARD_LANDING_DESCENT`].
-#[derive(Message, Clone, Copy)]
-pub(crate) struct HardLanding {
-    pub(crate) entity: Entity,
-    /// Fall height in yd, launch height minus landing height. The reference's `0x7c60c0` measures
-    /// from the apex, which a jump off a ledge puts up to about 1.6 yd above the launch.
-    pub(crate) descent: f32,
-}
+pub(crate) use crate::app_core::movement::HardLanding;
 
 /// The predictor's dust leg: `0x602d00` re-fires `0x624f30(type 2, damage 0)` at the landing frame.
 pub(super) fn hard_landing_dust(

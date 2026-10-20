@@ -45,11 +45,7 @@ impl Channel {
     }
 }
 
-/// Wrap an angle to `(−π, π]`, the shortest arc.
-pub(crate) fn wrap_pi(angle: f32) -> f32 {
-    use std::f32::consts::{PI, TAU};
-    PI - (PI - angle).rem_euclid(TAU)
-}
+pub(crate) use crate::app_core::movement::wrap_pi;
 
 /// The `(spine, head)` twist angles. The reference's full-share branch (`0x6103a0`) fires only for
 /// the local player during a click-to-move action (`[0xc4d888]` holds `0xc`, disabled, in

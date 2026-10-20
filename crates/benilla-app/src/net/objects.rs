@@ -89,12 +89,12 @@ pub(crate) struct Scene<'w, 's> {
     countdowns: Query<'w, 's, &'static mut crate::items::Countdowns>,
     remote: Query<'w, 's, &'static mut RemoteMotion>,
     modes: Query<'w, 's, &'static mut UnitMoveModes>,
-    riders: Query<'w, 's, &'static mut crate::transport::TransportRider>,
+    riders: Query<'w, 's, &'static mut crate::app_core::movement::TransportRider>,
     speeds: Query<'w, 's, &'static mut UnitSpeeds>,
     field_changes: MessageWriter<'w, FieldChanged>,
     speed_changes: MessageWriter<'w, SpeedChangeMessage>,
     self_moves: MessageWriter<'w, super::SelfMoveMessage>,
-    hard_landings: MessageWriter<'w, crate::creature_anim::HardLanding>,
+    hard_landings: MessageWriter<'w, crate::app_core::movement::HardLanding>,
     go_custom_anims: MessageWriter<'w, crate::go_anim::GoCustomAnim>,
     names: Res<'w, NameCache>,
     items: ResMut<'w, Items>,
@@ -486,7 +486,7 @@ fn object_create(
     let transport_anchor = matches!(go_type, Some(11 | 15))
         .then_some(transport_progress)
         .flatten()
-        .map(|progress_ms| crate::transport::TransportAnchor {
+        .map(|progress_ms| crate::app_core::movement::TransportAnchor {
             progress_ms,
             at: std::time::Instant::now(),
         });
@@ -499,7 +499,7 @@ fn object_create(
     let elevator_seed = (matches!(go_type, Some(11)) && transport_anchor.is_some())
         .then(|| fields.object_entry())
         .flatten()
-        .map(|entry| crate::transport::ElevatorSeed {
+        .map(|entry| crate::app_core::movement::ElevatorSeed {
             entry,
             base_pos: position,
             yaw: orientation,
@@ -512,7 +512,7 @@ fn object_create(
         EntityKind::GameObject => gameobject_rotation(go_quat, orientation),
         _ => mover.map_or_else(
             || wire_yaw(orientation),
-            |m| crate::creature_anim::swim_body_rotation(orientation, m.flags, m.pitch),
+            |m| crate::app_core::movement::swim_body_rotation(orientation, m.flags, m.pitch),
         ),
     };
     // A unit created on a transport: the living block's rider tail is its local pose, which
@@ -520,7 +520,7 @@ fn object_create(
     let rider = matches!(kind, EntityKind::Unit | EntityKind::Player)
         .then_some(transport)
         .flatten()
-        .map(|t| crate::transport::TransportRider {
+        .map(|t| crate::app_core::movement::TransportRider {
             transport_guid: t.guid,
             local_pos: [t.pos.x, t.pos.y, t.pos.z],
             local_orientation: t.orientation,
@@ -575,7 +575,7 @@ fn object_create(
             None => {
                 commands
                     .entity(e)
-                    .remove::<crate::transport::TransportRider>();
+                    .remove::<crate::app_core::movement::TransportRider>();
             }
         }
         // A create without a path says the unit stands still, so a stale path goes.
@@ -687,7 +687,7 @@ fn unit_move(
     self_guid: &SelfGuid,
     remote_motion: &mut Query<&mut RemoteMotion>,
     transforms: &mut Query<&mut Transform>,
-    landings: &mut MessageWriter<crate::creature_anim::HardLanding>,
+    landings: &mut MessageWriter<crate::app_core::movement::HardLanding>,
     self_moves: &mut MessageWriter<crate::net::SelfMoveMessage>,
 ) {
     use crate::net::motion::{apply_move, arrival_snap, trace_relay, PendingMove, RelayOutcome};
@@ -875,7 +875,7 @@ fn monster_move(
     commands: &mut Commands,
     index: &GuidIndex,
     transforms: &mut Query<&mut Transform>,
-    riders: &mut Query<&mut crate::transport::TransportRider>,
+    riders: &mut Query<&mut crate::app_core::movement::TransportRider>,
 ) {
     if let Some(&e) = index.0.get(&guid) {
         // The desync readout: the gap between where we draw the unit and where its path begins.
@@ -929,17 +929,19 @@ fn monster_move(
                     }
                 }
                 Err(_) => {
-                    commands.entity(e).insert(crate::transport::TransportRider {
-                        transport_guid: t,
-                        local_pos: start,
-                        local_orientation: local_facing.unwrap_or_default(),
-                    });
+                    commands
+                        .entity(e)
+                        .insert(crate::app_core::movement::TransportRider {
+                            transport_guid: t,
+                            local_pos: start,
+                            local_orientation: local_facing.unwrap_or_default(),
+                        });
                 }
             }
         } else if riders.get(e).is_ok() {
             commands
                 .entity(e)
-                .remove::<crate::transport::TransportRider>();
+                .remove::<crate::app_core::movement::TransportRider>();
         }
         // The final facing (moveType 2/3/4) snaps the raw facing (`0x7c6f30`) and resets the
         // display smoother. A following path overrides it with the tangent each frame (`0x7c5490`),
@@ -1050,7 +1052,7 @@ fn spline_move_mode(
     // A creature has no direction bits; `monster_move` refuses its path instead.
     if mode == SplineMode::Root && apply {
         if let Ok(mut rm) = remote.get_mut(e) {
-            use crate::creature_anim::move_flags;
+            use crate::app_core::movement::move_flags;
             rm.flags &= ROOT_APPLY_WIPE & !(move_flags::FALLING | move_flags::FALLING_FAR);
             rm.speed = 0.0;
             rm.vertical_velocity = 0.0;
@@ -1373,7 +1375,7 @@ mod tests {
                 wow_pos: [0.0; 3],
                 pending: std::collections::VecDeque::new(),
                 orientation: 0.0,
-                flags: crate::creature_anim::move_flags::FORWARD,
+                flags: crate::app_core::movement::move_flags::FORWARD,
                 pitch: 0.0,
                 speed: 7.0,
                 vertical_velocity: 0.0,
@@ -1409,7 +1411,7 @@ mod tests {
         /// Every one of the twelve opcodes sets or clears one bit.
         #[test]
         fn a_grant_sets_the_bit_and_its_pair_clears_it() {
-            use crate::creature_anim::move_flags;
+            use crate::app_core::movement::move_flags;
             let (mut w, e) = world_with_unit(None);
 
             grant(&mut w, SplineMode::Hover, true);
@@ -1437,7 +1439,7 @@ mod tests {
         /// → `SetRunMode` `0x7c71c0`), folded at the parse.
         #[test]
         fn the_walk_bit_round_trips_with_the_run_opcodes_sense() {
-            use crate::creature_anim::move_flags;
+            use crate::app_core::movement::move_flags;
             let (mut w, e) = world_with_unit(None);
             grant(&mut w, SplineMode::WalkMode, true); // SMSG_SPLINE_MOVE_SET_WALK_MODE
             assert_eq!(
@@ -1452,7 +1454,7 @@ mod tests {
         /// (`0x616e20`, `test [esi+0x40], 0x20ff`) and is not stepped.
         #[test]
         fn a_root_wipes_the_direction_bits_the_dead_reckon_runs_on() {
-            use crate::creature_anim::move_flags;
+            use crate::app_core::movement::move_flags;
             let (mut w, e) = world_with_unit(Some(remote_walking_forward()));
 
             grant(&mut w, SplineMode::Root, true);
@@ -1530,7 +1532,7 @@ mod tests {
                     move |mut commands: Commands,
                           index: Res<GuidIndex>,
                           mut transforms: Query<&mut Transform>,
-                          mut riders: Query<&mut crate::transport::TransportRider>| {
+                          mut riders: Query<&mut crate::app_core::movement::TransportRider>| {
                         monster_move(
                             MOB,
                             None,
@@ -1589,7 +1591,7 @@ mod tests {
                 move |mut commands: Commands,
                       index: Res<GuidIndex>,
                       mut transforms: Query<&mut Transform>,
-                      mut riders: Query<&mut crate::transport::TransportRider>| {
+                      mut riders: Query<&mut crate::app_core::movement::TransportRider>| {
                     monster_move(
                         MOB,
                         Some(BOAT),
@@ -1615,7 +1617,7 @@ mod tests {
             .unwrap();
             let rider = w
                 .entity(e)
-                .get::<crate::transport::TransportRider>()
+                .get::<crate::app_core::movement::TransportRider>()
                 .expect("a transport path attaches its rider");
             assert_eq!(rider.transport_guid, BOAT);
             assert_eq!(rider.local_pos, [1.5, -2.5, 0.75], "seeded deck-local");
@@ -1639,7 +1641,7 @@ mod tests {
                 move |mut commands: Commands,
                       index: Res<GuidIndex>,
                       mut transforms: Query<&mut Transform>,
-                      mut riders: Query<&mut crate::transport::TransportRider>| {
+                      mut riders: Query<&mut crate::app_core::movement::TransportRider>| {
                     monster_move(
                         MOB,
                         None,
@@ -1665,7 +1667,7 @@ mod tests {
             .unwrap();
             assert!(
                 w.entity(e)
-                    .get::<crate::transport::TransportRider>()
+                    .get::<crate::app_core::movement::TransportRider>()
                     .is_none(),
                 "a plain path takes the unit off the deck"
             );

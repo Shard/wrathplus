@@ -8,8 +8,8 @@ use bevy::prelude::Quat;
 
 use benilla_protocol::RelayVerb;
 
-use crate::creature_anim::move_flags;
-use crate::player::{GRAVITY, TERMINAL_VELOCITY};
+use crate::app_core::movement::move_flags;
+use crate::app_core::movement::{GRAVITY, TERMINAL_VELOCITY};
 
 use super::facing::resolve_facing;
 use super::relay::RelayChain;
@@ -71,7 +71,7 @@ fn a_relayed_swimmer_renders_pitched_and_the_gates_render_level() {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::math::EulerRot;
 
-    use crate::creature_anim::swim_body_rotation;
+    use crate::app_core::movement::swim_body_rotation;
 
     // (yaw, pitch, roll).
     let decompose = |flags: u32, pitch: f32, yaw: f32| {
@@ -93,12 +93,14 @@ fn a_relayed_swimmer_renders_pitched_and_the_gates_render_level() {
     };
     // Through `apply_move`, the seam the relay and the queue drain share.
     let mut world = bevy::prelude::World::new();
-    world.init_resource::<bevy::ecs::message::Messages<crate::creature_anim::HardLanding>>();
+    world.init_resource::<bevy::ecs::message::Messages<crate::app_core::movement::HardLanding>>();
     let e = world.spawn_empty().id();
     world
         .run_system_once(
             move |mut commands: bevy::prelude::Commands,
-                  mut landings: bevy::prelude::MessageWriter<crate::creature_anim::HardLanding>| {
+                  mut landings: bevy::prelude::MessageWriter<
+                crate::app_core::movement::HardLanding,
+            >| {
                 let mut rm = motion(0, 0.0);
                 super::remote::apply_move(e, &mv, &mut rm, 0.0, &mut commands, &mut landings);
                 rm
@@ -1056,9 +1058,9 @@ fn a_flag_still_remote_is_left_where_the_wire_put_it() {
     benilla_world::world_point::init_world_point_resources(app.world_mut());
     app.finish();
     app.cleanup();
-    app.insert_resource(crate::player::PlayerCapsule(Collider::capsule(
-        crate::player::CAPSULE_RADIUS,
-        crate::player::CAPSULE_HEIGHT - 2.0 * crate::player::CAPSULE_RADIUS,
+    app.insert_resource(crate::app_core::movement::PlayerCapsule(Collider::capsule(
+        crate::app_core::movement::CAPSULE_RADIUS,
+        crate::app_core::movement::CAPSULE_HEIGHT - 2.0 * crate::app_core::movement::CAPSULE_RADIUS,
     )));
     app.add_systems(Update, super::remote::extrapolate_remote_units);
     // A 10x10 up-wound floor at z = 0.
@@ -1148,12 +1150,14 @@ fn apply_observed(before: RemoteMotion, mv: &super::relay::RelayMove) -> RemoteM
     use bevy::ecs::system::RunSystemOnce;
     let mv = mv.clone();
     let mut world = bevy::prelude::World::new();
-    world.init_resource::<bevy::ecs::message::Messages<crate::creature_anim::HardLanding>>();
+    world.init_resource::<bevy::ecs::message::Messages<crate::app_core::movement::HardLanding>>();
     let e = world.spawn_empty().id();
     world
         .run_system_once(
             move |mut commands: bevy::prelude::Commands,
-                  mut landings: bevy::prelude::MessageWriter<crate::creature_anim::HardLanding>| {
+                  mut landings: bevy::prelude::MessageWriter<
+                crate::app_core::movement::HardLanding,
+            >| {
                 let mut rm = before.clone();
                 super::remote::apply_move(e, &mv, &mut rm, 0.0, &mut commands, &mut landings);
                 rm
