@@ -88,7 +88,6 @@ pub(super) fn spellbook_ui_with(w: f32, h: f32, extra: &[&str]) -> UiScript {
             "Interface\\FrameXML\\GlobalStrings.lua",
             "Interface\\FrameXML\\Fonts.xml",
             "Interface\\FrameXML\\BasicControls.xml",
-            "Interface\\FrameXML\\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\MoneyFrame.lua",
             r"Interface\FrameXML\MoneyFrame.xml",
@@ -109,10 +108,6 @@ pub(super) fn spellbook_ui_with(w: f32, h: f32, extra: &[&str]) -> UiScript {
             "Interface\\FrameXML\\SpellBookFrame.xml",
             r"Interface\FrameXML\ReputationFrame.xml",
             "Interface\\FrameXML\\BonusActionBarFrame.xml",
-            "ScrollTemplates.xml",
-            "KeyBindingsPage.xml",
-            "OptionsFrame.xml",
-            "SpellBookAdapters.xml",
         ],
         extra,
     ]) {
@@ -128,7 +123,6 @@ fn shipped_spellbook_loads_clean() {
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -137,8 +131,6 @@ fn shipped_spellbook_loads_clean() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     let frames = load_xml(&s, "Interface\\FrameXML\\SpellBookFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
-    load_xml(&s, "SpellBookAdapters.xml");
     assert!(s.errors().is_empty(), "loader errors: {:?}", s.errors());
     assert_eq!(
         frames, 52,
@@ -633,7 +625,6 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
         r"Interface\FrameXML\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml", // `TEXT`
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -659,10 +650,6 @@ fn the_macro_editor_takes_a_shift_click_and_only_a_shift_click() {
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         // The icon chooser's scroll frame inherits `ClassTrainerListScrollFrameTemplate`.
         r"Interface\FrameXML\ClassTrainerFrameTemplates.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
-        "SpellBookAdapters.xml",
     ] {
         load_xml(&s, file);
     }

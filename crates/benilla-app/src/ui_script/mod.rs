@@ -16,10 +16,12 @@ pub(crate) mod addons;
 mod content;
 pub(crate) mod extract;
 mod input;
-#[cfg(test)]
-mod production_load;
 mod load_log;
 mod manifest;
+#[cfg(test)]
+mod production_load;
+#[cfg(test)]
+mod stock_menus_tests;
 mod wrath_addons;
 #[cfg(test)]
 mod wrath_framexml_tests;
@@ -830,16 +832,11 @@ mod tooltip_template_tests;
 mod escape_tests;
 
 #[cfg(test)]
-mod game_menu_tests;
-
-#[cfg(test)]
 mod macro_tests;
 
 // `pub(crate)` for `harness`, `on_page` and `label`, which the bindings dispatch tests use.
 #[cfg(test)]
 pub(crate) mod keybindings_tests;
-#[cfg(test)]
-mod options_tests;
 
 #[cfg(test)]
 mod delete_item_tests;

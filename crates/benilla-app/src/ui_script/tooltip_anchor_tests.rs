@@ -295,7 +295,6 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         "Interface\\FrameXML\\UIDropDownMenu.xml",
         r"Interface\FrameXML\UIPanelTemplates.lua",
@@ -309,9 +308,6 @@ fn ubertooltips_off_seats_action_bar_plates_beside_the_button() {
         "Interface\\FrameXML\\ActionBarFrame.xml",
         "Interface\\FrameXML\\MultiActionBars.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
     ]);
     s.register_cvars(crate::shipped_cvars::pairs());
     s.set_cvar_engine("UberTooltips", "0");

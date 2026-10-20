@@ -36,7 +36,6 @@ fn harness(rank: u32) -> UiScript {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -45,7 +44,6 @@ fn harness(rank: u32) -> UiScript {
         r"Interface\FrameXML\UIPanelTemplates.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
         r"Interface\FrameXML\TabardFrame.xml",
-        "ScrollTemplates.xml", // ours: the scroll kits
     ] {
         super::test_ui::load_ui(&s, file);
     }

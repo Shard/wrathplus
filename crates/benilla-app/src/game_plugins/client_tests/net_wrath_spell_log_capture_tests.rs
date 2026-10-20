@@ -44,9 +44,15 @@ fn one_owner_keeps_ordered_duplicates_and_both_boundaries_clear() {
         .world()
         .resource::<crate::net::handlers::NetHandlers>()
         .census();
+    // The combat log's own handler (its plugin builds first), then the capture; the two touch
+    // separate state.
     let owners = &census[&SessionEventKind::WrathSpellLog];
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(owners[0].contains("wrath_spell_log_capture::receive"));
+    assert_eq!(owners.len(), 2, "{owners:?}");
+    assert!(
+        owners[0].contains("combat_log::on_native_only"),
+        "{owners:?}"
+    );
+    assert!(owners[1].contains("wrath_spell_log_capture::receive"));
     let mut adapter = WrathEventAdapter::new();
     let stolen = Packet::SpellSteal(SpellDispelLog {
         victim: 5,

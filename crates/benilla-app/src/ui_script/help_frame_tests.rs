@@ -16,7 +16,6 @@ fn setup() -> UiScript {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         // Before StaticPopup.xml, whose coin row inherits `SmallMoneyFrameTemplate`.
@@ -40,7 +39,6 @@ fn setup() -> UiScript {
         "Interface\\FrameXML\\BuffFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
         "Interface\\FrameXML\\HelpFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, file);
     }

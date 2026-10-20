@@ -269,15 +269,6 @@ impl Cvars {
         self.rows.iter()
     }
 
-    /// The client's own rows' names and defaults, as a VM's `register_cvars` takes them: what a
-    /// fixture seeds into a VM it opens a window in.
-    pub(crate) fn defaults(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.rows
-            .iter()
-            .filter(|r| !r.addon)
-            .map(|r| (r.name.as_str(), r.default.as_str()))
-    }
-
     pub(crate) fn get(&self, name: &str) -> Option<&str> {
         self.row(name).map(|r| r.value.as_str())
     }

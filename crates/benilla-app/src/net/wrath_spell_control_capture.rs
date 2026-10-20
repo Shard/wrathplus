@@ -9,6 +9,8 @@
 //! - `SMSG_PET_UPDATE_COMBO_POINTS` for the unit we drive becomes our combo display. The native
 //!   handler compares the unit with a client global (`0xc23500`); that it is the controlled unit
 //!   is inferred.
+//! - `SMSG_TOTEM_CREATED` fills the totem bar from `crate::ui_totems`' own handler on this kind,
+//!   after this one.
 use super::NetHandlerApp;
 use benilla_protocol::{wrath_spell_control::Packet, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
@@ -34,7 +36,6 @@ struct Consumers<'w> {
     errors: Option<ResMut<'w, crate::ui_action::UiErrorKeys>>,
     vehicles: Option<Res<'w, super::wrath_vehicle::VehicleWorld>>,
     combo: Option<ResMut<'w, super::wrath_combo_points::NativeComboPoints>>,
-    totems: Option<ResMut<'w, crate::ui_totems::NativeTotems>>,
 }
 
 fn receive(
@@ -64,16 +65,6 @@ fn receive(
                 if let Some(message) = pet_book_message(learned, spells.catalog.get(spell_id)) {
                     errors.0.push(message);
                 }
-            }
-        }
-        Packet::TotemCreated {
-            slot,
-            totem,
-            duration_ms,
-            spell_id,
-        } => {
-            if let Some(totems) = out.totems.as_mut() {
-                totems.created(slot, totem, duration_ms, spell_id);
             }
         }
         Packet::PetComboPoints {

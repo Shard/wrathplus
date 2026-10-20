@@ -51,8 +51,6 @@ pub(super) fn seed_ui_fixture(
         MessageWriter<AppExit>,
         ResMut<crate::loading_screen::LoadingScreen>,
     ),
-    // The 16th param, at Bevy's cap: the live registry the options fixtures seed from.
-    cvars: Option<Res<crate::cvars::Cvars>>,
 ) {
     let (mut items, mut index) = store;
     // A glue-screen capture has no world scenario, and no glue screen opens a UI fixture.
@@ -998,59 +996,6 @@ pub(super) fn seed_ui_fixture(
             selection.target = Some(wolf);
             selection.guid = Some(WOLF_GUID);
         }
-        UiFixture::Options => {
-            let Some(script) = script else {
-                return;
-            };
-            // Opened through the live panel path, with Controls selected by its OnShow.
-            if let Err(e) = script.run("ShowUIPanel(BenillaOptionsFrame)") {
-                warn!("capture: ui-options seed failed to open the window: {e}");
-            }
-        }
-        UiFixture::OptionsAudio => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Audio page: the real CVar set first, so the rows read real values, then the
-            // live open and select paths.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowAudio:Click()",
-            ) {
-                warn!("capture: ui-options-audio seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsGraphics => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Graphics page, as the Audio fixture.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) =
-                script.run("ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowGraphics:Click()")
-            {
-                warn!("capture: ui-options-graphics seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsChat => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Chat page, as the Audio fixture. Its Remove Chat Hover Delay row reads a saved
-            // variable `ChatFrame.xml` declares, so it paints unchecked, the shipped "0".
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowChat:Click()",
-            ) {
-                warn!("capture: ui-options-chat seed failed: {e}");
-            }
-        }
         UiFixture::ColorPicker => {
             let Some(script) = script else {
                 return;
@@ -1063,57 +1008,6 @@ pub(super) fn seed_ui_fixture(
                  ShowUIPanel(ColorPickerFrame)",
             ) {
                 warn!("capture: ui-color-picker seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsDropdownList => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Camera Following Style list open. Its width lands inside the opening click:
-            // `UIDropDownMenu_Refresh` sizes buttons from `normalText:GetWidth() + 60`
-            // (`UIDropDownMenu.lua:405`), which the engine answers in the same call.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameCategoryListRowControls:Click(); \
-                 BenillaOptionsFrameContainerBodyControlsRowCameraFollowStyleDropdownButton:Click()",
-            ) {
-                warn!("capture: ui-options-dropdown seed failed: {e}");
-            }
-        }
-        UiFixture::KeyBindings => {
-            let Some(script) = script else {
-                return;
-            };
-            // The Keybindings page over the commands the load registered: the real CVar set
-            // first, then the live open path, with Movement expanded to show a header row and the
-            // default bindings.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); \
-                 BenillaOptionsFrameCategoryListRowKeybindings:Click(); \
-                 BenillaKeyBindings_ExpandSection(1, true); BenillaKeyBindingsPage_Update()",
-            ) {
-                warn!("capture: ui-keybindings seed failed: {e}");
-            }
-        }
-        UiFixture::OptionsSearch => {
-            let Some(script) = script else {
-                return;
-            };
-            // Mid-search: "volume" gathers the four volume sliders under the Audio head. The box
-            // is focused, so the caret shows at the text's end.
-            if let Some(cvars) = &cvars {
-                script.register_cvars(cvars.defaults());
-            }
-            if let Err(e) = script.run(
-                "ShowUIPanel(BenillaOptionsFrame); BenillaOptionsFrameSearchBox:SetText(\"volume\"); BenillaOptionsFrameSearchBox:SetFocus()",
-            )
-            {
-                warn!("capture: ui-options-search seed failed: {e}");
             }
         }
         UiFixture::SpellBook => {

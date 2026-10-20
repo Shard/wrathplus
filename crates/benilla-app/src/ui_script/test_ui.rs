@@ -108,19 +108,6 @@ fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bo
         s.run(MULTI_ACTION_BAR_STAND_INS)
             .expect("the multibar stand-ins");
     }
-    // Our options window's Graphics rows read stock `OptionsFrameSliders` (`OptionsFrame.lua`) at
-    // OnLoad; the core loads it before the layer, so a kit seats it before our file.
-    if path
-        .rsplit('/')
-        .next()
-        .is_some_and(|l| l.eq_ignore_ascii_case("OptionsFrame.xml"))
-        && !super::reference_ui::is_chain_entry(&path)
-    {
-        let bytes = read("Interface/FrameXML/OptionsFrame.lua")
-            .expect("the reference's own OptionsFrame.lua");
-        s.run_chunk_named(&bytes, "@Interface\\FrameXML\\OptionsFrame.lua")
-            .expect("the video window's slider table");
-    }
     let report = benilla_ui::loader::load_in(s, &doc, &path, &provider);
     assert!(
         report.errors.is_empty(),
@@ -170,8 +157,7 @@ fn load_entry(s: &UiScript, entry: &str, strict_templates: bool, no_warnings: bo
 
 /// Where `entry` falls in the production load, for [`follow_production_order`]: a `FrameXML.toc`
 /// row at its row, a file a row pulls in (`<Include>` or `<Script file=>`, at any depth) just
-/// above the first row that does, a layer file after every row in `layer.toc`'s order, and `None`
-/// for anything else (a fixture, an on-demand addon's file). Read off the player's own toc.
+/// above the first row that does, and `None` for anything else (a fixture, an on-demand addon's file). Read off the player's own toc.
 pub(super) fn production_rank(entry: &str) -> Option<usize> {
     static RANKS: std::sync::OnceLock<std::collections::HashMap<String, usize>> =
         std::sync::OnceLock::new();
@@ -211,10 +197,6 @@ pub(super) fn production_rank(entry: &str) -> Option<usize> {
                     }
                 }
             }
-        }
-        let after = 2 * rows.len() + 2;
-        for (j, file) in super::addons::Addon::layer().toc.files.iter().enumerate() {
-            ranks.insert(key(file), after + j);
         }
         ranks
     });
@@ -260,7 +242,7 @@ thread_local! {
 }
 
 /// Panics when `entry` loads after a file the production load runs after it: a kit is a
-/// subsequence of the production load, `FrameXML.toc`'s order then `layer.toc`'s, so a test sees
+/// subsequence of the production load, `FrameXML.toc`'s order, so a test sees
 /// the order effects the player does (event dispatch, child and draw order, which definition
 /// wins).
 fn follow_production_order(s: &UiScript, entry: &str) {
@@ -273,7 +255,7 @@ fn follow_production_order(s: &UiScript, entry: &str) {
             assert!(
                 rank >= *furthest,
                 "{entry} loads after {file}, but the production load runs it first: a kit \
-                 follows FrameXML.toc's order, then layer.toc's"
+                 follows FrameXML.toc's order"
             );
             if rank == *furthest {
                 return;
@@ -467,7 +449,6 @@ pub(super) const MERCHANT_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // TEXT()
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -478,7 +459,6 @@ pub(super) const MERCHANT_UI: &[&str] = &[
     r"Interface\FrameXML\CharacterFrameTemplates.xml",
     "Interface\\FrameXML\\StaticPopup.xml",
     "Interface\\FrameXML\\ItemButtonTemplate.xml",
-    "ScrollTemplates.xml",
 ];
 
 /// Stock `GossipFrame.xml`'s dependencies in the production order, shared with `ui_gossip`'s feed
@@ -487,14 +467,12 @@ pub(super) const MERCHANT_UI: &[&str] = &[
 pub(crate) const GOSSIP_UI: &[&str] = &[
     r"Interface\FrameXML\GlobalStrings.lua",
     r"Interface\FrameXML\BasicControls.xml",
-    r"Interface\FrameXML\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
     r"Interface\FrameXML\UIPanelTemplates.lua",
     r"Interface\FrameXML\UIPanelTemplates.xml",
     r"Interface\FrameXML\StaticPopup.xml",
-    "ScrollTemplates.xml",
 ];
 
 /// What stock `LootFrame.xml` needs to load and behave. `GlobalStrings.lua` because a bare VM
@@ -505,8 +483,7 @@ pub(super) const LOOT_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // `TEXT`, which UnitPopup.lua reads at file scope
-    "Interface\\FrameXML\\LocaleProperties.lua",
-    r"Interface\FrameXML\UIParent.xml", // UIParent.lua: the panel slot manager and the fades
+    r"Interface\FrameXML\UIParent.xml",       // UIParent.lua: the panel slot manager and the fades
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
     "Interface\\FrameXML\\GameTooltip.xml", // TOOLTIP_DEFAULT_COLOR, read by the dropdown backdrop
@@ -540,7 +517,6 @@ pub(super) const CHARACTER_UI: &[&str] = &[
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // TEXT(), which those labels go through
     // `GetText`, the gendered-string helper `ReputationFrame.lua:65` calls for each standing.
-    r"Interface\FrameXML\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml", // Model_OnLoad/_Rotate*/_OnUpdate: the model turntable
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -585,7 +561,6 @@ pub(super) const CHARACTER_UI: &[&str] = &[
     // (`ReputationFrame.lua:248`): in the reference the bar's presence reflows the bag row.
     "Interface\\FrameXML\\ContainerFrame.xml",
     "Interface\\FrameXML\\BonusActionBarFrame.xml",
-    "ScrollTemplates.xml", // our scroll kit
 ];
 
 /// The manifest slice stock `FriendsFrame.xml` and `RaidFrame.xml` reach at load or on show, in its
@@ -594,7 +569,6 @@ pub(super) const SOCIAL_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -626,9 +600,6 @@ pub(super) const SOCIAL_UI: &[&str] = &[
     "Interface\\FrameXML\\FriendsFrame.xml",
     "Interface\\FrameXML\\RaidFrame.xml",
     "Interface\\FrameXML\\BonusActionBarFrame.xml",
-    "ScrollTemplates.xml",
-    "KeyBindingsPage.xml",
-    "OptionsFrame.xml",
 ];
 
 /// Load [`SOCIAL_UI`], then the raid tab's LoadOnDemand addon as the app reaches it: seated off the
@@ -649,7 +620,6 @@ pub(super) const BAG_UI: &[&str] = &[
     "Interface\\FrameXML\\Fonts.xml",
     // `TEXT()`, which the backpack button's OnEnter and `BagSlotButton_OnEnter` call.
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     // `UIParent`: the twelve `ContainerFrame`s are its children, `updateContainerFrameAnchors`
     // anchors each open bag to its parent, and `OpenAllBags` returns unless `UIParent` is visible.
     r"Interface\FrameXML\UIParent.xml",
@@ -692,9 +662,7 @@ pub(super) const BAG_UI: &[&str] = &[
     // (`ContainerFrame.lua:505`) on every open and close, so the bank window is a hard dependency.
     "Interface\\FrameXML\\BankFrame.xml",
     "Interface\\FrameXML\\BonusActionBarFrame.xml",
-    "ScrollTemplates.xml", // our scroll kit
     // Our adapters over the stock container files, loaded after them and the bar so they win.
-    "ContainerFrameAdapters.xml",
 ];
 
 /// The name of the `ContainerFrame` showing bag `id`, asked of `IsBagOpen`: the reference recycles
@@ -845,25 +813,21 @@ mod tests {
         );
     }
 
-    /// The merged kit runs toc rows in the toc's order, a file a row includes just above it and a
-    /// layer file after them all, each once.
+    /// The merged kit runs toc rows in the toc's order, each once.
     #[test]
     fn a_merged_kit_takes_the_production_order() {
         let _data = benilla_formats::wow_data_or_skip!();
         assert_eq!(
             super::production_order(&[
-                &["ScrollTemplates.xml", r"Interface\FrameXML\UIParent.xml"],
+                &[r"Interface\FrameXML\UIParent.xml"],
                 &[
-                    r"Interface\FrameXML\LocaleProperties.lua",
                     r"Interface\FrameXML\GlobalStrings.lua",
                     r"Interface\FrameXML\UIParent.xml",
                 ],
             ]),
             [
                 r"Interface\FrameXML\GlobalStrings.lua",
-                r"Interface\FrameXML\LocaleProperties.lua",
                 r"Interface\FrameXML\UIParent.xml",
-                "ScrollTemplates.xml",
             ]
         );
     }

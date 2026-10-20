@@ -96,7 +96,6 @@ fn an_error_toast_draws_over_an_open_panel_window() {
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
     // A missing template only warns at load, so an under-loaded list fails at its first update.
     load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -112,7 +111,6 @@ fn an_error_toast_draws_over_an_open_panel_window() {
     load_xml(&s, "Interface\\FrameXML\\QuestFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\QuestLogFrame.xml");
     load_xml(&s, "Interface\\FrameXML\\MerchantFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // ours: the scroll kits
 
     // A left-slot panel opens, then the toast: stratum, not order, must decide.
     s.eval::<()>("ShowUIPanel(QuestLogFrame)").unwrap();

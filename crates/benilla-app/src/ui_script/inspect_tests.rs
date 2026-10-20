@@ -108,7 +108,6 @@ fn armed() -> UiScript {
     load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
     // `TEXT`, which the stock `InspectPaperDollFrame_SetLevel` formats its level line through.
     load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -123,7 +122,6 @@ fn armed() -> UiScript {
     load_xml(&s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
     load_xml(&s, "Interface\\FrameXML\\HonorFrame.xml");
     // Our scroll kit.
-    load_xml(&s, "ScrollTemplates.xml");
     // A LoadOnDemand addon, seated off the chain as a registry row and loaded by the stock
     // `InspectFrame_LoadUI` (`UIParent.lua:170`), which `InspectUnit` calls (`UIParent.lua:223`).
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_InspectUI");
@@ -145,7 +143,6 @@ fn shipped_inspect_frame_loads_clean() {
     load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
     load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
     load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -156,7 +153,6 @@ fn shipped_inspect_frame_loads_clean() {
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     load_xml(&s, "Interface\\FrameXML\\ItemButtonTemplate.xml");
     load_xml(&s, "Interface\\FrameXML\\HonorFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
     super::test_ui::seat_chain_addon(&mut s, "Blizzard_InspectUI");
     s.run("InspectFrame_LoadUI()").unwrap();
     // Each slot carries its `GetInventorySlotInfo` id (1..=19, no ammo slot) as its frame ID, set

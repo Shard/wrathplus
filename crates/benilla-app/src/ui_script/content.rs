@@ -2,7 +2,7 @@
 //! missing; `load_ui_files` and its `<Include>` provider read them here, never through `std::fs`.
 //! A dev build reads the source tree first, so an edit needs no recompile.
 
-/// The shipped UI tree: `layer.toc` and every file of ours it names.
+/// The shipped UI tree: the Wrath root (`wrath/bootstrap.toc`) and every file of ours it names.
 static UI: include_dir::Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/assets/ui");
 
 /// The text of one shipped UI file, by path relative to `assets/ui`; the basename fallback for a
@@ -20,8 +20,8 @@ fn read_source_tree(req: &str) -> Option<String> {
     std::fs::read_to_string(dir.join(req)).ok()
 }
 
-/// FNV-1a (not cryptographic) over the core's load list, then the layer's manifest and each file
-/// it names when this run loads it, in load order, as eight hex digits: a stamp that tells two runs
+/// FNV-1a (not cryptographic) over the core's load list, then the Wrath root's manifest and each
+/// file it names, in load order, as eight hex digits: a stamp that tells two runs
 /// whether they loaded the same interface. The core counts by its rows' names alone, in the toc's
 /// order: their bytes are the player's install.
 pub(crate) fn digest() -> String {
@@ -39,17 +39,15 @@ pub(crate) fn digest() -> String {
     {
         eat(name.as_bytes());
     }
-    if super::manifest::layer_enabled() {
-        let manifest = super::manifest::LAYER_MANIFEST;
-        eat(manifest.as_bytes());
-        if let Some(toc) = read(manifest) {
-            eat(toc.as_bytes());
-        }
-        for name in super::addons::Addon::layer().toc.files {
-            eat(name.as_bytes());
-            if let Some(text) = read(&name) {
-                eat(text.as_bytes());
-            }
+    let manifest = "wrath/bootstrap.toc";
+    eat(manifest.as_bytes());
+    if let Some(toc) = read(manifest) {
+        eat(toc.as_bytes());
+    }
+    for name in super::addons::Addon::wrath_bootstrap().toc.files {
+        eat(name.as_bytes());
+        if let Some(text) = read(&name) {
+            eat(text.as_bytes());
         }
     }
     format!("{:08x}", h as u32)
@@ -61,11 +59,25 @@ pub(super) fn shipped_files() -> impl Iterator<Item = &'static str> {
     UI.files().filter_map(|f| f.path().to_str())
 }
 
+/// [`shipped_files`] with every subdirectory's, the Wrath root's included.
+#[cfg(test)]
+pub(super) fn shipped_tree_files() -> Vec<&'static str> {
+    fn walk(dir: &'static include_dir::Dir<'static>, out: &mut Vec<&'static str>) {
+        out.extend(dir.files().filter_map(|f| f.path().to_str()));
+        for sub in dir.dirs() {
+            walk(sub, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(&UI, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn every_manifest_entry_is_compiled_in() {
-        for name in crate::ui_script::manifest::shipped_manifest_files() {
+        for name in crate::ui_script::addons::Addon::wrath_bootstrap().toc.files {
             assert!(
                 super::read(&name).is_some(),
                 "a manifest names {name}, which is not in assets/ui"

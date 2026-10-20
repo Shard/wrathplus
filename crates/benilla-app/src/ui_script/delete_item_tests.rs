@@ -50,7 +50,6 @@ fn setup() -> UiScript {
             r"Interface\FrameXML\GlobalStrings.lua",
             "Interface\\FrameXML\\Fonts.xml",
             r"Interface\FrameXML\BasicControls.xml",
-            r"Interface\FrameXML\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\MoneyFrame.lua",
             r"Interface\FrameXML\MoneyFrame.xml",
@@ -83,7 +82,6 @@ fn bag_setup() -> UiScript {
             "Interface\\FrameXML\\CharacterFrameTemplates.xml",
             // `ContainerFrame_Update` reads `MerchantFrame:IsShown()` on any slot the tooltip owns.
             "Interface\\FrameXML\\MerchantFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
         WORLD_FRAME_UI, // the drop target
     ]) {

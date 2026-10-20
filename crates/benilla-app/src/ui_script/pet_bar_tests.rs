@@ -11,7 +11,6 @@ pub(super) fn load_pet_bar(s: &UiScript) {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -34,9 +33,6 @@ pub(super) fn load_pet_bar(s: &UiScript) {
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\PetActionBarFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
     ] {
         load_xml(s, file);
     }

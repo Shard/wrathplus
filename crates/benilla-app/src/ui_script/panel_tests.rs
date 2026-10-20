@@ -33,7 +33,6 @@ fn shipped_gossip_frame_drives_end_to_end() {
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -46,7 +45,6 @@ fn shipped_gossip_frame_drives_end_to_end() {
         43,
         "the stock file's own shape — ours materialized 41"
     );
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
 
     s.resolve();
     let vendor_icon = |quads: &[ExtractedQuad]| {
@@ -199,7 +197,6 @@ fn shipped_gossip_frame_renders_quest_rows_above_options() {
     s.set_screen_size(1024.0, 768.0);
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -207,7 +204,6 @@ fn shipped_gossip_frame_renders_quest_rows_above_options() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
 
     s.set_gossip(Some(GossipMenu {
         greeting: "A word, traveler.".into(),
@@ -322,7 +318,6 @@ fn shipped_gossip_rows_grow_to_their_wrapped_labels() {
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -330,7 +325,6 @@ fn shipped_gossip_rows_grow_to_their_wrapped_labels() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
 
     // Three options that wrap at the label's 275 px (`GossipFrame.xml:114`).
     let long = |t: &str| GossipOptionView {
@@ -422,7 +416,6 @@ fn gossip_show_hide_plays_open_and_close_kits() {
     s.set_screen_size(1024.0, 768.0);
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -430,7 +423,6 @@ fn gossip_show_hide_plays_open_and_close_kits() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
 
     assert!(
         s.take_sounds().is_empty(),
@@ -468,12 +460,10 @@ fn shipped_panel_slot_replaces_gossip_with_merchant() {
         &[
             r"Interface\FrameXML\GlobalStrings.lua",
             r"Interface\FrameXML\BasicControls.xml",
-            r"Interface\FrameXML\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\UIPanelTemplates.lua",
             r"Interface\FrameXML\UIPanelTemplates.xml",
             "Interface\\FrameXML\\GossipFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
@@ -554,12 +544,10 @@ fn displacing_an_npc_window_ends_the_displaced_session() {
         &[
             r"Interface\FrameXML\GlobalStrings.lua",
             r"Interface\FrameXML\BasicControls.xml",
-            r"Interface\FrameXML\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\UIPanelTemplates.lua",
             r"Interface\FrameXML\UIPanelTemplates.xml",
             "Interface\\FrameXML\\GossipFrame.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
@@ -607,11 +595,9 @@ fn shipped_panel_slot_pushable_promotes_to_center() {
         &[
             r"Interface\FrameXML\GlobalStrings.lua",
             r"Interface\FrameXML\BasicControls.xml",
-            r"Interface\FrameXML\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\UIPanelTemplates.lua",
             r"Interface\FrameXML\UIPanelTemplates.xml",
-            "ScrollTemplates.xml", // our scroll kits
         ],
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
@@ -701,7 +687,6 @@ fn gossip_bank_option_hands_the_left_slot_to_the_bank() {
         load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
         load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
         load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-        load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
         load_xml(&s, r"Interface\FrameXML\UIParent.xml");
         load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
         load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -714,7 +699,6 @@ fn gossip_bank_option_hands_the_left_slot_to_the_bank() {
         load_xml(&s, "Interface\\FrameXML\\ItemButtonTemplate.xml"); // the bank slots inherit it
         load_xml(&s, "Interface\\FrameXML\\BankFrame.xml");
         load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-        load_xml(&s, "ScrollTemplates.xml");
 
         s.set_gossip(Some(GossipMenu {
             greeting: "Welcome to the bank of Ironforge!".into(),
@@ -761,141 +745,6 @@ fn gossip_bank_option_hands_the_left_slot_to_the_bank() {
     order_first(false);
 }
 
-/// The rows sit in `GossipGreetingScrollFrame` (`GossipFrame.xml:223-436`): a menu taller than the
-/// frame gets a scroll range and a bar, and every row clips to the frame.
-#[test]
-fn an_overflowing_gossip_menu_scrolls_instead_of_spilling() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    s.set_screen_size(1024.0, 768.0);
-    // `GossipResize` reads `GetTextHeight()` right after `SetText`, so the harness installs the
-    // synchronous measurer the app always has; without one a row sizes from last frame's text.
-    s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
-    load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
-    load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml"); // UIPanelScrollFrameTemplate
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
-
-    // Eight options of about four lines each, far past the 334 px frame (`GossipFrame.xml:225`).
-    let long = |n: usize| GossipOptionView {
-        label: format!(
-            "Option {n}: I slay the man on the spot as my liege would expect me to, as he has \
-             broken the law of the land and it is my sworn duty to enforce it, whatever the cost."
-        ),
-        icon_type: "gossip".into(),
-    };
-    s.set_gossip(Some(GossipMenu {
-        greeting: "Make your choice!".into(),
-        quests: Vec::new(),
-        options: (1..=8).map(long).collect(),
-    }));
-    s.fire_event("GOSSIP_SHOW", vec![]);
-
-    let answer_measures = |s: &mut UiScript| {
-        let answers: Vec<(u32, f32, f32, u64)> = s
-            .fontstrings_needing_measure()
-            .into_iter()
-            .map(|r| {
-                let ink = r.text.chars().count() as f32 * 6.0;
-                match r.wrap_width {
-                    Some(w) => (r.id, ink.min(w), (ink / w).ceil().max(1.0) * 14.0, r.key),
-                    None => (r.id, ink, 14.0, r.key),
-                }
-            })
-            .collect();
-        s.set_measured_text_unwrapped(&answers);
-    };
-    // A few frames for the measures to land, the rows to fit and the bar to re-range.
-    for _ in 0..3 {
-        answer_measures(&mut s);
-        s.resolve();
-        s.tick(0.016);
-    }
-    s.resolve();
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-
-    // The scroll child keeps its declared 300x334 (`GossipFrame.xml:236-238`), so only the range is
-    // checked: the rows' extents make it.
-    let (child_h, range): (f32, f32) = s
-        .eval(
-            "return GossipGreetingScrollChildFrame:GetHeight(), \
-             GossipGreetingScrollFrame:GetVerticalScrollRange()",
-        )
-        .unwrap();
-    assert!(
-        range > 0.0,
-        "the overflowing menu has somewhere to scroll: child {child_h}, range {range}"
-    );
-    assert!(
-        s.eval::<bool>("return GossipGreetingScrollFrameScrollBar:IsVisible()")
-            .unwrap(),
-        "the scrollbar shows once the menu overflows"
-    );
-
-    // A quad carries a clip rect rather than a shrunk rect: each row's clip is the frame's rect.
-    let (frame_top, frame_bottom): (f32, f32) = s
-        .eval("return GossipGreetingScrollFrame:GetTop(), GossipGreetingScrollFrame:GetBottom()")
-        .unwrap();
-    let painted_rows =
-        |s: &mut UiScript| -> Vec<(benilla_ui::layout::Rect, benilla_ui::layout::Rect)> {
-            s.extract()
-                .into_iter()
-                .filter_map(|q| match &q.content {
-                    QuadContent::Text { text: Some(t), .. } if t.starts_with("Option ") => {
-                        Some((q.rect?, q.clip?))
-                    }
-                    _ => None,
-                })
-                .collect()
-        };
-    let rows = painted_rows(&mut s);
-    assert_eq!(rows.len(), 8, "all eight option labels extract");
-    for (rect, clip) in &rows {
-        assert!(
-            (clip.top - frame_top).abs() < 0.5 && (clip.bottom - frame_bottom).abs() < 0.5,
-            "row clipped to the scroll frame [{frame_bottom}, {frame_top}], got {clip:?}"
-        );
-        let _ = rect;
-    }
-    assert!(
-        rows.iter().any(|(rect, _)| rect.top < frame_bottom),
-        "the menu overflows: some row is entirely below the frame"
-    );
-
-    // Our kit's `BenillaScroll_Step` pans 100 px; rects are y-up, so row 1's top grows by 100.
-    let first_top =
-        |s: &mut UiScript| -> f32 { s.eval::<f32>("return GossipTitleButton1:GetTop()").unwrap() };
-    let before = first_top(&mut s);
-    s.run("BenillaScroll_Step(GossipGreetingScrollFrame, 100)")
-        .unwrap();
-    s.resolve();
-    let after = first_top(&mut s);
-    assert!(
-        (after - before - 100.0).abs() < 0.5,
-        "scrolling 100px lifts the content 100px: {before} → {after}"
-    );
-    assert_eq!(
-        s.eval::<f32>("return GossipGreetingScrollFrameScrollBar:GetValue()")
-            .unwrap(),
-        100.0,
-        "the bar seats at the scroll offset"
-    );
-    for (_, clip) in painted_rows(&mut s) {
-        assert!(
-            (clip.top - frame_top).abs() < 0.5 && (clip.bottom - frame_bottom).abs() < 0.5,
-            "a scrolled row still clips to the frame, got {clip:?}"
-        );
-    }
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
 // ── The panel manager as an addon reaches it ──
 
 /// An addon makes its frame a panel with a `UIPanelWindows` row, and it seats where a client
@@ -907,7 +756,6 @@ fn an_addons_own_frame_registered_in_uipanelwindows_takes_the_left_slot() {
     s.set_screen_size(1024.0, 768.0);
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -915,7 +763,6 @@ fn an_addons_own_frame_registered_in_uipanelwindows_takes_the_left_slot() {
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml"); // UIPanelScrollFrameTemplate
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
     load_xml(&s, "Interface\\FrameXML\\GossipFrame.xml");
-    load_xml(&s, "ScrollTemplates.xml");
 
     s.run(
         r#"AddonPanel = CreateFrame("Frame", "AddonPanel", UIParent)
@@ -974,14 +821,12 @@ fn the_panel_registry_rows_match_the_reference_bytes() {
     let s = UiScript::new().unwrap();
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
     load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
     load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
-    load_xml(&s, "ScrollTemplates.xml"); // our scroll kits
     for probe in [
         // UIParent.lua:20
         "UIPanelWindows['ItemTextFrame'].area == 'left'",
@@ -1015,7 +860,6 @@ fn a_dead_player_opens_only_whiledead_windows() {
     s.set_screen_size(1024.0, 768.0);
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -1082,7 +926,6 @@ fn a_frame_arriving_at_center_puts_the_child_windows_away() {
     s.set_screen_size(1024.0, 768.0);
     load_xml(&s, r"Interface\FrameXML\GlobalStrings.lua");
     load_xml(&s, r"Interface\FrameXML\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\LocaleProperties.lua");
     load_xml(&s, r"Interface\FrameXML\UIParent.xml");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
     load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");

@@ -15,7 +15,6 @@ fn harness() -> UiScript {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -29,7 +28,6 @@ fn harness() -> UiScript {
         r"Interface\FrameXML\RaidFrame.lua",
         // The reference's own map, which <Include>s its blip templates itself.
         r"Interface\FrameXML\WorldMapFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         super::test_ui::load_ui(&s, file);
     }

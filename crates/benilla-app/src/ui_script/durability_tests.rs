@@ -12,7 +12,6 @@ fn harness() -> UiScript {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -30,7 +29,6 @@ fn harness() -> UiScript {
     // Deviation: the seat refreshes on every alert recompute, because the stock one goes stale
     // when a side glyph appears while shown and hangs the shield off the screen edge. The layer
     // installs this after every stock file.
-    load_xml(&s, "FrameXMLFixes.xml");
     s
 }
 
@@ -353,7 +351,6 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -369,11 +366,9 @@ fn the_quest_tracker_stacks_below_the_durability_guy() {
         "Interface\\FrameXML\\QuestFrame.xml",
         "Interface\\FrameXML\\QuestLogFrame.xml",
         "Interface\\FrameXML\\DurabilityFrame.xml",
-        "ScrollTemplates.xml",
     ] {
         load_xml(&s, f);
     }
-    load_xml(&s, "FrameXMLFixes.xml");
 
     let mut inv: InventorySlots = Default::default();
     inv[18] = slot(2504, Some((0, 20)));

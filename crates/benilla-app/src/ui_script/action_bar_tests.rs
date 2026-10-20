@@ -172,7 +172,6 @@ fn load_action_bar(s: &UiScript) {
     super::test_ui::load_ui(s, "Interface\\FrameXML\\GlobalStrings.lua");
     super::test_ui::load_ui(s, "Interface\\FrameXML\\Fonts.xml");
     super::test_ui::load_ui(s, r"Interface\FrameXML\BasicControls.xml"); // `TEXT`
-    super::test_ui::load_ui(s, r"Interface\FrameXML\LocaleProperties.lua"); // `GetText`
     super::test_ui::load_ui(s, r"Interface\FrameXML\UIParent.xml");
     super::test_ui::load_ui(s, r"Interface\FrameXML\MoneyFrame.lua");
     super::test_ui::load_ui(s, r"Interface\FrameXML\MoneyFrame.xml");
@@ -196,8 +195,6 @@ fn load_action_bar(s: &UiScript) {
     // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
     super::test_ui::load_ui(s, r"Interface\FrameXML\ReputationFrame.xml");
     super::test_ui::load_ui(s, "Interface\\FrameXML\\BonusActionBarFrame.xml");
-    super::test_ui::load_ui(s, "ScrollTemplates.xml");
-    super::test_ui::load_ui(s, "KeyBindingsPage.xml");
     super::test_ui::load_ui(s, "OptionsFrame.xml");
 }
 
@@ -1471,7 +1468,6 @@ fn the_main_bar_pages_and_a_bonus_page_still_outranks_it() {
         // Fonts first: the reputation pane's check boxes read `RED_FONT_COLOR` in their OnLoad.
         "Interface\\FrameXML\\Fonts.xml",
         "Interface\\FrameXML\\BasicControls.xml",
-        "Interface\\FrameXML\\LocaleProperties.lua",
         r"Interface\FrameXML\UIParent.xml",
         r"Interface\FrameXML\MoneyFrame.lua",
         r"Interface\FrameXML\MoneyFrame.xml",
@@ -1495,9 +1491,6 @@ fn the_main_bar_pages_and_a_bonus_page_still_outranks_it() {
         // `ExhaustionTick_Update` reads `ReputationWatchBar`, which ReputationFrame.xml declares.
         r"Interface\FrameXML\ReputationFrame.xml",
         "Interface\\FrameXML\\BonusActionBarFrame.xml",
-        "ScrollTemplates.xml",
-        "KeyBindingsPage.xml",
-        "OptionsFrame.xml",
     ] {
         super::test_ui::load_ui(&s, file);
     }

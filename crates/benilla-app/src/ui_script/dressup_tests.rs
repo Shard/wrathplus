@@ -16,7 +16,6 @@ const JERKY_LINK: &str = "|cffffffff|Hitem:117|h[Tough Jerky]|h|r";
 const ROOM_UI: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\BasicControls.xml", // `TEXT`, which UnitPopup.lua reads at file scope
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     "Interface\\FrameXML\\UIMenu.xml", // the kit ChatMenu/EmoteMenu/VoiceMacroMenu build from
     "Interface\\FrameXML\\UIDropDownMenu.xml",
@@ -31,7 +30,6 @@ const ROOM_UI: &[&str] = &[
     "Interface\\FrameXML\\ItemRef.xml",
     // After the panel kit: the room's Close and Reset buttons inherit its templates at load.
     "Interface\\FrameXML\\DressUpFrame.xml",
-    "ScrollTemplates.xml", // our scroll kits
 ];
 
 /// The room with no bag window, for the click sites that never touch a container.
@@ -41,7 +39,6 @@ fn load_room(s: &UiScript) {
             "Interface\\FrameXML\\GlobalStrings.lua",
             "Interface\\FrameXML\\Fonts.xml",
             "Interface\\FrameXML\\BasicControls.xml",
-            "Interface\\FrameXML\\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             r"Interface\FrameXML\MoneyFrame.lua",
             r"Interface\FrameXML\MoneyFrame.xml",
@@ -80,7 +77,6 @@ fn shown_paper_doll() -> UiScript {
         &[
             "Interface\\FrameXML\\GlobalStrings.lua",
             "Interface\\FrameXML\\BasicControls.xml",
-            "Interface\\FrameXML\\LocaleProperties.lua",
             r"Interface\FrameXML\UIParent.xml",
             "Interface\\FrameXML\\UIMenu.xml",
             "Interface\\FrameXML\\UIDropDownMenu.xml",
