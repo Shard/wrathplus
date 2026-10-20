@@ -9,13 +9,8 @@ local function none() end
 local function zero() return 0 end
 
 -- ── CVars ──────────────────────────────────────────────────────────────────────────────────────
-GetCVarMin, GetCVarMax = none, none
-GetCVarAbsoluteMin, GetCVarAbsoluteMax = none, none
 
 -- ── talents, titles, flags ─────────────────────────────────────────────────────────────────────
-GetAccountExpansionLevel = GetAccountExpansionLevel or function() return 2 end
-GetExpansionLevel = GetExpansionLevel or function() return 2 end
-GetExistingLocales = GetExistingLocales or function() return "enUS" end
 IsStereoVideoAvailable = IsStereoVideoAvailable or none
 
 -- ── Battle.net, voice chat ─────────────────────────────────────────────────────────────────────
@@ -258,7 +253,7 @@ do
     trackerFilter = "0",
     trackerSorting = "proximity",
     UberTooltips = "1",
-    uiscale = "1",
+    uiScale = "1",
     UnitNameEnemyGuardianName = "0",
     UnitNameEnemyPetName = "0",
     UnitNameEnemyPlayerName = "1",
@@ -292,11 +287,9 @@ end
 -- ── class names, action and pet-bar predicates, group queries, chat window geometry ───────────
 
 -- ── the next batch: static constants, multi-cast bar, bags, world map, achievements ────────────
-RegisterStaticConstants = RegisterStaticConstants or none
 IsPlayerResolutionAvailable = IsPlayerResolutionAvailable or function() return 1 end
 
 -- ── vehicles, tutorials, guild log, friends ────────────────────────────────────────────────────
-TriggerTutorial = TriggerTutorial or none
 UnitIsTalking = UnitIsTalking or none
 
 -- ── the engine's combat-log unit-flag constants (the store is native, wrath_combat_log.rs) ─────
@@ -315,6 +308,5 @@ COMBATLOG_OBJECT_MAINTANK, COMBATLOG_OBJECT_MAINASSIST = 0x40000, 0x80000
 for i = 1, 8 do _G["COMBATLOG_OBJECT_RAIDTARGET" .. i] = 2 ^ (19 + i) end
 COMBATLOG_OBJECT_RAIDTARGET_MASK = 0x0FF00000
 COMBATLOG_OBJECT_NONE, COMBATLOG_OBJECT_SPECIAL_MASK = 0x80000000, 0xFFFF0000
-CombatTextSetActiveUnit = CombatTextSetActiveUnit or none
 
 
