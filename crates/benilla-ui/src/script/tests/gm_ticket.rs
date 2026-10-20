@@ -93,48 +93,55 @@ fn the_queue_preserves_call_order_across_different_verbs() {
         vec![GmTicketIntent::Ask, GmTicketIntent::Delete]
     );
 
-    s.run("NewGMTicket(1, \"a\") GetGMTicket()").unwrap();
+    s.run("NewGMTicket(\"a\", 1) GetGMTicket()").unwrap();
     assert!(matches!(
         s.take_gm_ticket_intents().as_slice(),
         [GmTicketIntent::Write(_), GmTicketIntent::Ask]
     ));
 }
 
-/// Same signature, different opcodes; the stock window picks one from its own `hasTicket` flag.
+/// Build 12340's shapes: `NewGMTicket(text, needResponse)` and `UpdateGMTicket(text)`, two
+/// opcodes the stock window picks from its own `hasTicket` flag; a non-string text raises.
 #[test]
 fn new_and_update_are_distinguishable_and_keep_their_order() {
     let mut s = script();
-    s.run("NewGMTicket(4, \"My sword vanished.\") UpdateGMTicket(4, \"Still gone.\")")
+    s.run("NewGMTicket(\"My sword vanished.\", 1) UpdateGMTicket(\"Still gone.\") NewGMTicket(\"x\")")
         .unwrap();
     assert_eq!(
         s.take_gm_ticket_intents(),
         vec![
             GmTicketIntent::Write(GmTicketWrite {
-                category: 4,
                 text: "My sword vanished.".into(),
+                need_response: true,
                 is_new: true,
             }),
             GmTicketIntent::Write(GmTicketWrite {
-                category: 4,
                 text: "Still gone.".into(),
+                need_response: false,
                 is_new: false,
+            }),
+            GmTicketIntent::Write(GmTicketWrite {
+                text: "x".into(),
+                need_response: false,
+                is_new: true,
             }),
         ]
     );
+    let err = s.run("UpdateGMTicket()").unwrap_err().to_string();
+    assert!(err.contains("Usage: UpdateGMTicket(ticketDescription)"), "{err}");
 }
 
-/// The reference's usage string is `Usage: UpdateGMTicket(type, text)`. The binding queues any
-/// text; the reference refuses an empty one before the send (`ERR_TICKET_NO_TEXT`, `0x5ef808`,
+/// The binding queues any text; the reference refuses an empty one before the send (`ERR_TICKET_NO_TEXT`, `0x5ef808`,
 /// `0x5efae7`).
 #[test]
 fn an_empty_ticket_body_is_queued_not_swallowed() {
     let mut s = script();
-    s.run("NewGMTicket(1, \"\")").unwrap();
+    s.run("NewGMTicket(\"\", 1)").unwrap();
     assert_eq!(
         s.take_gm_ticket_intents(),
         vec![GmTicketIntent::Write(GmTicketWrite {
-            category: 1,
             text: String::new(),
+            need_response: true,
             is_new: true,
         })]
     );

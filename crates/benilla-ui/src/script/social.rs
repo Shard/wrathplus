@@ -77,8 +77,6 @@ pub enum SocialRequest {
     DelIgnore(String),
     /// `AddOrDelIgnore(name)`, `/ignore`'s toggle; the app decides which, as it holds the list.
     ToggleIgnore(String),
-    /// A changed `SetLookingForGroup`: slots and comment for `CMSG_SET_LOOKING_FOR_GROUP`.
-    SetLookingForGroup { slots: [u32; 3], comment: String },
     /// `SetSelectedFriend(index)`, mirrored so the next push agrees.
     SelectFriend(u32),
     /// `SetSelectedIgnore(index)`.
@@ -192,92 +190,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             model
                 .social_requests
                 .push(SocialRequest::SelectFriend(index));
-            Ok(())
-        })?,
-    )?;
-
-    // The LFG pair (`0x4e95d0`, `0x4e96b0`) is for addons: stock FrameXML's only calls sit inside
-    // an XML comment. GetLookingForGroup() → the three slot names, each nil as the pack below
-    // always stores 0, then the comment string.
-    g.set(
-        "GetLookingForGroup",
-        lua.create_function(|lua, ()| {
-            let model = lua.app_data_ref::<Model>().expect("model app_data");
-            Ok(mlua::MultiValue::from_vec(vec![
-                Value::Nil,
-                Value::Nil,
-                Value::Nil,
-                Value::String(lua.create_string(&model.lfg_comment)?),
-            ]))
-        })?,
-    )?;
-    // SetLookingForGroup(type1, entry1, type2, entry2, type3, entry3, comment): the loop over the
-    // pairs ends at a non-number type or one >= 6. The stored word is `(type << 24) & entry`
-    // (`0x4e9713`), an AND every reader decodes as an OR, so an admissible pair stores 0; the
-    // per-type eligible-count check that also ends the reference's loop is not modelled. The
-    // comment is argument 7, read only when argument 4 passes `lua_isstring`, and keeps 127 bytes
-    // (`SStrCopy(…, 0x80)`). `CMSG_SET_LOOKING_FOR_GROUP` goes out only on a change.
-    g.set(
-        "SetLookingForGroup",
-        lua.create_function(|lua, args: mlua::MultiValue| {
-            let args: Vec<Value> = args.into_iter().collect();
-            let arg = |i: usize| args.get(i - 1).cloned().unwrap_or(Value::Nil);
-            let number = |v: &Value| match v {
-                Value::Integer(i) => Some(*i as f64),
-                Value::Number(n) => Some(*n),
-                Value::String(s) => s.to_str().ok().and_then(|s| s.trim().parse::<f64>().ok()),
-                _ => None,
-            };
-            let mut slots = [0u32; 3];
-            for (slot, i) in slots.iter_mut().zip([1usize, 3, 5]) {
-                let Some(ty) = number(&arg(i)) else { break };
-                let ty = ty.trunc();
-                if !(0.0..6.0).contains(&ty) {
-                    break;
-                }
-                let entry = number(&arg(i + 1)).unwrap_or(0.0).trunc();
-                // `&`, not `|`: the reference's own pack.
-                *slot = ((ty as u32) << 24) & (entry as i64 as u32);
-            }
-            let comment = match arg(4) {
-                Value::Integer(_) | Value::Number(_) | Value::String(_) => match arg(7) {
-                    Value::String(s) => Some(s.to_string_lossy()),
-                    Value::Integer(i) => Some(i.to_string()),
-                    Value::Number(n) => Some(n.to_string()),
-                    _ => None,
-                },
-                _ => None,
-            };
-            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-            let mut changed = false;
-            if model.lfg_slots != slots {
-                model.lfg_slots = slots;
-                changed = true;
-            }
-            if let Some(comment) = comment {
-                let mut kept: String = comment
-                    .chars()
-                    .take_while({
-                        let mut n = 0usize;
-                        move |c| {
-                            n += c.len_utf8();
-                            n <= 127
-                        }
-                    })
-                    .collect();
-                kept.shrink_to_fit();
-                if model.lfg_comment != kept {
-                    model.lfg_comment = kept;
-                    changed = true;
-                }
-            }
-            if changed {
-                let slots = model.lfg_slots;
-                let comment = model.lfg_comment.clone();
-                model
-                    .social_requests
-                    .push(SocialRequest::SetLookingForGroup { slots, comment });
-            }
             Ok(())
         })?,
     )?;
@@ -664,60 +576,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_lfg_pair_stores_the_comment_and_sends_only_on_a_change() {
-        let mut s = UiScript::new().unwrap();
-        assert_eq!(s.arity("GetLookingForGroup()").unwrap(), 4);
-        assert!(s
-            .eval::<bool>(
-                "local a, b, c, d = GetLookingForGroup() return a == nil and b == nil and c == nil and d == \"\""
-            )
-            .unwrap());
-        // Three admissible pairs: every word packs to 0, so nothing changes or sends.
-        s.run("SetLookingForGroup(1, 3, 3, 12, 5, 0)").unwrap();
-        assert!(
-            s.take_social_requests().is_empty(),
-            "the AND pack stores zero"
-        );
-        // A comment behind the gate: argument 4 is a number, argument 7 the text.
-        s.run(r#"SetLookingForGroup(1, 3, 3, 12, 5, 0, "LF2M UBRS")"#)
-            .unwrap();
-        assert_eq!(
-            s.take_social_requests(),
-            vec![SocialRequest::SetLookingForGroup {
-                slots: [0; 3],
-                comment: "LF2M UBRS".into()
-            }]
-        );
-        assert_eq!(
-            s.eval::<String>("local _, _, _, comment = GetLookingForGroup() return comment")
-                .unwrap(),
-            "LF2M UBRS"
-        );
-        s.run(r#"SetLookingForGroup(1, 3, 3, 12, 5, 0, "LF2M UBRS")"#)
-            .unwrap();
-        assert!(s.take_social_requests().is_empty());
-        // Argument 4 nil: the comment at 7 is not read.
-        s.run(r#"SetLookingForGroup(1, 3, nil, nil, nil, nil, "ignored")"#)
-            .unwrap();
-        assert!(s.take_social_requests().is_empty());
-        assert_eq!(
-            s.eval::<String>("local _, _, _, comment = GetLookingForGroup() return comment")
-                .unwrap(),
-            "LF2M UBRS"
-        );
-        // 127 bytes kept of a longer comment (`SStrCopy` into the 0x80 buffer).
-        s.run(&format!(
-            r#"SetLookingForGroup(0, 0, 0, 0, 0, 0, "{}")"#,
-            "x".repeat(200)
-        ))
-        .unwrap();
-        assert_eq!(
-            s.eval::<String>("local _, _, _, comment = GetLookingForGroup() return comment")
-                .unwrap()
-                .len(),
-            127
-        );
-        assert!(s.errors().is_empty(), "{:?}", s.errors());
-    }
 }

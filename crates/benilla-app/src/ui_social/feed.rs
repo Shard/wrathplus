@@ -407,9 +407,6 @@ pub(crate) fn drain_social(
                 }
                 let _ = commands.0.send(ClientCommand::AddFriend { name });
             }
-            // 1.12's `CMSG_SET_LOOKING_FOR_GROUP` does not exist in 3.3.5 (AzerothCore has only
-            // `CMSG_SET_LFG_COMMENT`); the reference's slots stay 0, so nothing goes out.
-            SocialRequest::SetLookingForGroup { .. } => {}
             SocialRequest::RemoveFriendIndex(index) => {
                 if let Some(guid) = row_guid(&social.display_order, index) {
                     let _ = commands.0.send(ClientCommand::DelFriend { guid });
