@@ -47,6 +47,7 @@ fn new_vm(world: &mut World) -> Option<UiScript> {
     crate::ui_spellbook::seed_spell_catalog(world, &mut script);
     crate::ui_achievements::seed(world, &mut script);
     seed_class_names(world, &mut script);
+    seed_session(world, &mut script);
     install_addon_asset_resolvers(world, &mut script);
     info!("ui_script: new VM, session {}", script.session());
     Some(script)
@@ -59,6 +60,22 @@ fn seed_class_names(world: &World, script: &mut UiScript) {
     if let Some(table) = world.get_resource::<crate::chr_classes::ChrClassTable>() {
         script.set_localized_class_names(table.0.localized_names());
     }
+}
+
+/// Seed a new VM with the account's expansion (`SMSG_AUTH_RESPONSE`, known before the world VM)
+/// and the installed locale, which `GetExpansionLevel` and `GetExistingLocales` read.
+fn seed_session(world: &World, script: &mut UiScript) {
+    use benilla_assets::LockRecover;
+    let expansion = world
+        .get_resource::<crate::ui_lfg::auth::NativeAccountExpansion>()
+        .and_then(|e| e.0);
+    let locales = world
+        .get_resource::<benilla_assets::WorldAssets>()
+        .map(|a| match a.chain.lock_recover().profile() {
+            benilla_formats::DataProfile::Wrath { locale } => vec![locale.clone()],
+        })
+        .unwrap_or_default();
+    script.set_wrath_session(expansion, locales);
 }
 
 fn wrath_profile(world: &World) -> bool {

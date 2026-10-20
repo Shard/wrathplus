@@ -138,6 +138,8 @@ fn installed_wrath_framexml_builds_the_stock_hud() {
             .expect("ChrClasses.dbc")
             .localized_names(),
     );
+    // A live Wrath account (expansion 2) on the installed locale.
+    script.set_wrath_session(Some(2), vec!["enUS".into()]);
     script.set_screen_resolutions(vec![], Some(benilla_ui::script::ScreenResolution {
         width: 1600, height: 1000,
     }));
