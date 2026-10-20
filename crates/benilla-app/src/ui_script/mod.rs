@@ -16,10 +16,12 @@ pub(crate) mod addons;
 mod content;
 pub(crate) mod extract;
 mod input;
-#[cfg(test)]
-mod production_load;
 mod load_log;
 mod manifest;
+#[cfg(test)]
+mod production_load;
+#[cfg(test)]
+mod stock_menus_tests;
 mod wrath_addons;
 #[cfg(test)]
 mod wrath_framexml_tests;
