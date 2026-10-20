@@ -12,17 +12,6 @@
 /// seeing it does not send the 256-byte modulus back in `SMSG_ADDON_INFO`.
 pub const STANDARD_MODULUS_CRC: u32 = 0x4C1C_776D;
 
-/// The addons `SMSG_ADDON_INFO` hides: record i answers `sent[i]` (the reply carries no names),
-/// and status 2 makes the reference set `[rec+0x29] = 1` (`0x51db84`), dropping it from Lua.
-pub fn hidden_from_reply(statuses: &[u8], sent: &[SecureAddon]) -> Vec<String> {
-    statuses
-        .iter()
-        .zip(sent)
-        .filter(|(status, _)| **status == 2)
-        .map(|(_, addon)| addon.name.to_string())
-        .collect()
-}
-
 /// One record of the addon block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecureAddon<'a> {

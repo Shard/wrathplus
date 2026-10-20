@@ -4,10 +4,6 @@
 //! permanent-bind flag as state. Maps travel as `Map.dbc` ids; the reference looks the name up
 //! itself (`0xc0daa8`) and prints the id when the row is missing.
 
-use std::io;
-
-use crate::wire::read_u32_le;
-
 /// `SMSG_RAID_INSTANCE_MESSAGE`'s `type` (`Objects/Player.h:568-573`). Outside 1-4 the reference
 /// prints nothing (jump table `0x49e45c`), even for 5, later clients' `RAID_INSTANCE_EXPIRED`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,36 +92,6 @@ pub struct InstanceResetFailed {
     pub map: u32,
 }
 
-/// Read `SMSG_RAID_INSTANCE_MESSAGE`: type, map, seconds to reset (reference reads `0x49e1cd`,
-/// `0x49e1d8`, `0x49e1e3`).
-pub(super) fn read_raid_instance_message(r: &mut &[u8]) -> io::Result<RaidInstanceMessage> {
-    Ok(RaidInstanceMessage {
-        message_type: read_u32_le(r)?,
-        map: read_u32_le(r)?,
-        reset: read_u32_le(r)?,
-    })
-}
-
-/// Read `SMSG_INSTANCE_RESET_FAILED`: `u32 reason`, `u32 mapId` (`0x49e54d`/`0x49e558`).
-pub(super) fn read_instance_reset_failed(r: &mut &[u8]) -> io::Result<InstanceResetFailed> {
-    Ok(InstanceResetFailed {
-        reason: read_u32_le(r)?,
-        map: read_u32_le(r)?,
-    })
-}
-
-/// Read a one-`u32` body: `SMSG_INSTANCE_RESET`'s map (`0x49e481`), `SMSG_UPDATE_LAST_INSTANCE`'s
-/// map (`0x49e676`), `SMSG_UPDATE_INSTANCE_OWNERSHIP`'s permanent-bind flag (`0x49e6c6`) and
-/// `SMSG_INSTANCE_SAVE_CREATED`'s flag (`0x4e7e6c`).
-pub(super) fn read_u32_body(r: &mut &[u8]) -> io::Result<u32> {
-    read_u32_le(r)
-}
-
-/// Body of `CMSG_RESET_INSTANCES`: empty (reference `ResetInstances`, `0x48a6b0`).
-pub fn reset_instances() -> Vec<u8> {
-    Vec::new()
-}
-
 /// `SMSG_RAID_GROUP_ONLY` (reference `0x5e48f1`): a nonzero `delay_ms` arms the instance-boot
 /// deadline (`INSTANCE_BOOT_START`); `0` clears it (`INSTANCE_BOOT_STOP`), and then `reason` 1 or
 /// 2 shows `ERR_RAID_GROUP_ONLY` or `ERR_RAID_GROUP_FULL`.
@@ -133,12 +99,4 @@ pub fn reset_instances() -> Vec<u8> {
 pub struct RaidGroupOnly {
     pub delay_ms: u32,
     pub reason: u32,
-}
-
-/// Parse `SMSG_RAID_GROUP_ONLY`: `u32 delayMs`, `u32 reason`.
-pub(super) fn read_raid_group_only(r: &mut impl std::io::Read) -> std::io::Result<RaidGroupOnly> {
-    Ok(RaidGroupOnly {
-        delay_ms: crate::wire::read_u32_le(r)?,
-        reason: crate::wire::read_u32_le(r)?,
-    })
 }

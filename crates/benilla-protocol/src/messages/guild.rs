@@ -7,10 +7,6 @@
 //! cannot poison a packet, and every cap is far above the server's own length limits, so a
 //! legitimate packet reads the same.
 
-use std::io::{self, Read};
-
-use crate::wire::{capacity_hint, read_cstring, read_f32_le, read_u32_le, read_u64_le, read_u8};
-
 /// Minimum rank count: the five defaults in [`guild_default_rank`] (`Guild/Guild.h:31`).
 pub const GUILD_RANKS_MIN_COUNT: usize = 5;
 /// Maximum rank count (`Guild/Guild.h:32`), and the exact number of rank names
@@ -232,27 +228,6 @@ pub struct GuildQueryResponse {
     pub background_color: i32,
 }
 
-/// Read `SMSG_GUILD_QUERY_RESPONSE` (`Server/Packets/Guild.cpp:118-131`, reference `0x62f260`):
-/// `u32` id, name, exactly ten rank-name cstrings with no count, then five `i32` tabard fields.
-pub(super) fn read_guild_query_response(r: &mut impl Read) -> io::Result<GuildQueryResponse> {
-    let guild_id = read_u32_le(r)?;
-    let name = read_cstring(r)?;
-    let mut rank_names: [String; GUILD_RANKS_MAX_COUNT] = Default::default();
-    for rank_name in &mut rank_names {
-        *rank_name = read_cstring(r)?;
-    }
-    Ok(GuildQueryResponse {
-        guild_id,
-        name,
-        rank_names,
-        emblem_style: read_u32_le(r)? as i32,
-        emblem_color: read_u32_le(r)? as i32,
-        border_style: read_u32_le(r)? as i32,
-        border_color: read_u32_le(r)? as i32,
-        background_color: read_u32_le(r)? as i32,
-    })
-}
-
 /// One row of `SMSG_GUILD_ROSTER`; every field the guild pane shows is on the wire.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GuildRosterMember {
@@ -303,53 +278,6 @@ pub struct GuildRoster {
     pub members: Vec<GuildRosterMember>,
 }
 
-/// Allocation cap for the wire member count; a `0x8000`-byte roster fits about 1.4k members.
-const ROSTER_CAPACITY_HINT_CAP: usize = 2048;
-
-/// Read `SMSG_GUILD_ROSTER` (`Server/Packets/Guild.cpp:143-173`, reference `0x4d0ad0`): `u32`
-/// member count, MOTD, info text, `u32` rank count and that many `u32` rights, then per member
-/// `u64` guid, `u8` presence, name, `u32` rank, `u8` level, `u8` class, `u32` zone, an `f32`
-/// last-online time only when presence is `0` (`0x4d0cad`), public note and officer note.
-/// Reading the float unconditionally misparses every later member.
-pub(super) fn read_guild_roster(r: &mut impl Read) -> io::Result<GuildRoster> {
-    let member_count = read_u32_le(r)?;
-    let motd = read_cstring(r)?;
-    let info = read_cstring(r)?;
-
-    let rank_count = read_u32_le(r)?;
-    let mut rank_rights = Vec::with_capacity(capacity_hint(rank_count, GUILD_RANKS_MAX_COUNT));
-    for _ in 0..rank_count {
-        rank_rights.push(read_u32_le(r)?);
-    }
-
-    let mut members = Vec::with_capacity(capacity_hint(member_count, ROSTER_CAPACITY_HINT_CAP));
-    for _ in 0..member_count {
-        let mut member = GuildRosterMember {
-            guid: read_u64_le(r)?,
-            presence: read_u8(r)?,
-            name: read_cstring(r)?,
-            rank_id: read_u32_le(r)?,
-            level: read_u8(r)?,
-            class: read_u8(r)?,
-            zone: read_u32_le(r)?,
-            ..Default::default()
-        };
-        if !member.is_online() {
-            member.last_online_days = read_f32_le(r)?;
-        }
-        member.public_note = read_cstring(r)?;
-        member.officer_note = read_cstring(r)?;
-        members.push(member);
-    }
-
-    Ok(GuildRoster {
-        motd,
-        info,
-        rank_rights,
-        members,
-    })
-}
-
 /// `SMSG_GUILD_EVENT`: a guild event id and its `%s` arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GuildEventNotice {
@@ -363,27 +291,6 @@ pub struct GuildEventNotice {
     pub guid: Option<u64>,
 }
 
-/// Read `SMSG_GUILD_EVENT` (`Server/Packets/Guild.cpp:133-141`, reference `0x5e7180`): `u8`
-/// event, `u8` count, that many cstrings, then a `u64` guid that the reference reads only for
-/// sign-on and sign-off; vmangos also sends it with `GE_JOINED` and `GE_LEFT`, unread there.
-pub(super) fn read_guild_event(r: &mut impl Read) -> io::Result<GuildEventNotice> {
-    let event = read_u8(r)?;
-    let param_count = read_u8(r)?;
-    // Events carry one to three strings; the count is unbounded (`Server/Packets/Guild.h:222`).
-    let mut params = Vec::with_capacity(capacity_hint(param_count, 16));
-    for _ in 0..param_count {
-        params.push(read_cstring(r)?);
-    }
-    let guid = matches!(event, guild_event::SIGNED_ON | guild_event::SIGNED_OFF)
-        .then(|| read_u64_le(r))
-        .transpose()?;
-    Ok(GuildEventNotice {
-        event,
-        params,
-        guid,
-    })
-}
-
 /// `SMSG_GUILD_COMMAND_RESULT`: the server's verdict on a guild verb we sent.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GuildCommandResult {
@@ -393,15 +300,6 @@ pub struct GuildCommandResult {
     pub name: String,
     /// A [`guild_command_error`] code.
     pub result: u32,
-}
-
-/// Read `SMSG_GUILD_COMMAND_RESULT` (`Server/Packets/Guild.cpp:96-101`): `u32`, cstring, `u32`.
-pub(super) fn read_guild_command_result(r: &mut impl Read) -> io::Result<GuildCommandResult> {
-    Ok(GuildCommandResult {
-        command: read_u32_le(r)?,
-        name: read_cstring(r)?,
-        result: read_u32_le(r)?,
-    })
 }
 
 /// `SMSG_GUILD_INFO`, answering `CMSG_GUILD_INFO`: founding date, member and account counts. The
@@ -418,110 +316,6 @@ pub struct GuildInfo {
     pub account_count: u32,
 }
 
-/// Read `SMSG_GUILD_INFO` (`Server/Packets/Guild.cpp:103-111`): the name, then five `u32`s.
-pub(super) fn read_guild_info(r: &mut impl Read) -> io::Result<GuildInfo> {
-    Ok(GuildInfo {
-        name: read_cstring(r)?,
-        created_day: read_u32_le(r)?,
-        created_month: read_u32_le(r)?,
-        created_year: read_u32_le(r)?,
-        member_count: read_u32_le(r)?,
-        account_count: read_u32_le(r)?,
-    })
-}
-
-/// Read `SMSG_GUILD_INVITE` (`Server/Packets/Guild.cpp:85-89`): inviter, then guild name. The
-/// accept and decline replies name neither, so the pending invite is client state.
-pub(super) fn read_guild_invite(r: &mut impl Read) -> io::Result<(String, String)> {
-    let inviter = read_cstring(r)?;
-    let guild = read_cstring(r)?;
-    Ok((inviter, guild))
-}
-
-/// Read `SMSG_GUILD_DECLINE` (`Server/Packets/Guild.cpp:91-94`): who declined our invitation.
-pub(super) fn read_guild_decline(r: &mut impl Read) -> io::Result<String> {
-    read_cstring(r)
-}
-
-/// Body of `CMSG_GUILD_QUERY` (`Server/Packets/Guild.cpp:8-11`): the `u32` guild id. vmangos
-/// answers an unknown id with `SMSG_GUILD_COMMAND_RESULT` `(CREATE, PLAYER_NOT_IN_GUILD)`
-/// (`Handlers/GuildHandler.cpp:44`).
-pub fn guild_query(guild_id: u32) -> Vec<u8> {
-    guild_id.to_le_bytes().to_vec()
-}
-
-/// Body of `CMSG_GUILD_CREATE` (`Server/Packets/Guild.cpp:3-6`): the name. vmangos never handles
-/// it (`STATUS_NEVER`, `Server/Protocol/Opcodes.cpp:210`); a 1.12 guild is founded by charter.
-pub fn guild_create(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_INVITE` (`Server/Packets/Guild.cpp:13-16`): the name, which the server
-/// case-normalises itself.
-pub fn guild_invite(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_ACCEPT`: empty (`Server/Protocol/Opcodes.cpp:213`); the server holds the
-/// pending invite.
-pub fn guild_accept() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_DECLINE`: empty (`Server/Protocol/Opcodes.cpp:214`); the inviter gets an
-/// `SMSG_GUILD_DECLINE` naming us.
-pub fn guild_decline() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_INFO`: empty (`Server/Protocol/Opcodes.cpp:216`); asks about our guild.
-pub fn guild_info() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_ROSTER`: empty (`Server/Protocol/Opcodes.cpp:218`); the server also pushes
-/// the roster unasked after any change.
-pub fn guild_roster() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_PROMOTE` (`Server/Packets/Guild.cpp:23-26`): the name, moved one rank up.
-pub fn guild_promote(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_DEMOTE` (`Server/Packets/Guild.cpp:28-31`): the name, moved one rank down.
-pub fn guild_demote(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_LEAVE`: empty (`Server/Protocol/Opcodes.cpp:222`). A guild master is
-/// refused `(QUIT, LEADER_LEAVE)` while anyone else remains.
-pub fn guild_leave() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_REMOVE` (`Server/Packets/Guild.cpp:18-21`): the member to kick.
-pub fn guild_remove(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_DISBAND`: empty (`Server/Protocol/Opcodes.cpp:224`); guild master only.
-pub fn guild_disband() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_LEADER` (`Server/Packets/Guild.cpp:33-36`): the new guild master's name.
-pub fn guild_leader(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_MOTD` (`Server/Packets/Guild.cpp:38-42`): the new MOTD; `""`, a lone NUL,
-/// clears it.
-pub fn guild_motd(motd: &str) -> Vec<u8> {
-    cstring_body(motd)
-}
-
 /// Body of `CMSG_GUILD_RANK` (`Server/Packets/Guild.cpp:78-83`): rank id, rights, name. Both are
 /// set, so changing one resends the other; rank 0's rights become [`guild_rank_right::ALL`], and
 /// a name over [`GUILD_RANK_MAX_LENGTH`] gets the session kicked.
@@ -530,49 +324,6 @@ pub fn guild_rank(rank_id: u32, rights: u32, name: &str) -> Vec<u8> {
     body.extend_from_slice(&rank_id.to_le_bytes());
     body.extend_from_slice(&rights.to_le_bytes());
     push_cstring(&mut body, name);
-    body
-}
-
-/// Body of `CMSG_GUILD_ADD_RANK` (`Server/Packets/Guild.cpp:73-76`): the name. The rank goes at
-/// the bottom with `GCHAT_LISTEN | GCHAT_SPEAK` (`Handlers/GuildHandler.cpp:623`); the server
-/// ignores the packet once the guild has [`GUILD_RANKS_MAX_COUNT`] ranks.
-pub fn guild_add_rank(name: &str) -> Vec<u8> {
-    cstring_body(name)
-}
-
-/// Body of `CMSG_GUILD_DEL_RANK`: empty (`Server/Protocol/Opcodes.cpp:655`); the server always
-/// deletes the lowest rank.
-pub fn guild_del_rank() -> Vec<u8> {
-    Vec::new()
-}
-
-/// Body of `CMSG_GUILD_SET_PUBLIC_NOTE` (`Server/Packets/Guild.cpp:61-65`): name, then note.
-pub fn guild_set_public_note(name: &str, note: &str) -> Vec<u8> {
-    two_cstring_body(name, note)
-}
-
-/// Body of `CMSG_GUILD_SET_OFFICER_NOTE` (`Server/Packets/Guild.cpp:67-71`): name, then note;
-/// the server requires [`guild_rank_right::EDIT_OFFICER_NOTE`].
-pub fn guild_set_officer_note(name: &str, note: &str) -> Vec<u8> {
-    two_cstring_body(name, note)
-}
-
-/// Body of `CMSG_GUILD_INFO_TEXT` (`Server/Packets/Guild.cpp:44-49`): the guild information text;
-/// vmangos handles it only for builds above `CLIENT_BUILD_1_8_4`.
-pub fn guild_info_text(text: &str) -> Vec<u8> {
-    cstring_body(text)
-}
-
-fn cstring_body(s: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(s.len() + 1);
-    push_cstring(&mut body, s);
-    body
-}
-
-fn two_cstring_body(a: &str, b: &str) -> Vec<u8> {
-    let mut body = Vec::with_capacity(a.len() + b.len() + 2);
-    push_cstring(&mut body, a);
-    push_cstring(&mut body, b);
     body
 }
 
