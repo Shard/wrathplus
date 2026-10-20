@@ -16,7 +16,6 @@ use crate::creature_anim::spell_visual::{meeting_stone_join_fx, SpellKitFx, Spel
 use crate::names::NameCache;
 
 use crate::net::{ClientCommand, NetCommands, ObjectStore, SelfGuid, SelfPlayer};
-use crate::ui_party::GroupState;
 use crate::ui_script::{UiFeed, UiInput};
 use crate::ui_session::{close_npc_session_out_of_range, NpcSession};
 
@@ -352,13 +351,12 @@ impl BattlefieldQueue {
     }
 }
 
-/// The status text (`[0xb7203c]`): none before world enter and after world leave, the bare
-/// `UNKNOWN` until the server's `0x295` lands, then a built line; localized at push time.
+/// The status text (`[0xb7203c]`): none until the server's `0x295` lands and after world leave,
+/// then a built line; localized at push time.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 enum StoneText {
     #[default]
     None,
-    Unknown,
     Built(String),
 }
 
@@ -392,12 +390,6 @@ impl MeetingStone {
     /// One of the four display-only replies.
     pub(crate) fn apply_notice(&mut self, notice: MeetingStoneNotice) {
         self.notices.push(notice);
-    }
-
-    /// The enter-world bring-up (`0x4c9f40`): the text becomes the bare `UNKNOWN`, the area stays.
-    fn enter_world(&mut self) {
-        self.text = StoneText::Unknown;
-        self.dirty = true;
     }
 
     /// The leave-world sweep (`0x4c9f80`): the text goes, the area stays.
@@ -571,34 +563,10 @@ fn feed_meeting_stone(
     if std::mem::take(&mut stone.dirty) {
         let text = match &stone.text {
             StoneText::None => None,
-            StoneText::Unknown => Some(global_text(&script, "UNKNOWN")),
             StoneText::Built(t) => Some(t.clone()),
         };
         script.set_meeting_stone(stone.area, text);
     }
-}
-
-/// The enter-world bring-up's meeting-stone leg: the text reset, then the empty `CMSG 0x296`.
-/// Once per VM, a [`crate::ui_script::VmMemo`] claim: the UI teardown clears the run-once byte
-/// `[0xb4b424]` (`0x490a8d`) and `UI_Init` (`0x48fbf0`) re-runs the bring-up, so a `/reload`
-/// re-asks the server; until the reply fires `MEETINGSTONE_CHANGED` (`0x4ca38f`) the minimap icon
-/// is hidden, as in the reference. The queued area survives the reload.
-fn meeting_stone_enter_world(
-    script: Option<NonSendMut<UiScript>>,
-    mut stone: ResMut<MeetingStone>,
-    commands: Res<NetCommands>,
-    mut asked: Local<crate::ui_script::VmMemo<bool>>,
-) {
-    let Some(script) = script else {
-        return;
-    };
-    // This bring-up opcode belongs to Vanilla. An authored Wrath addon VM is not permission
-    // to enqueue an unported command through the live Wrath transport.
-    if script.dialect() == benilla_ui::script::ScriptDialect::Wrath12340 || !asked.claim(&script) {
-        return;
-    }
-    stone.enter_world();
-    let _ = commands.0.send(ClientCommand::MeetingStoneStatusQuery);
 }
 
 /// A right-click on a `GAMEOBJECT_TYPE_MEETINGSTONE` (23) that passed the shared click gates.
@@ -739,36 +707,11 @@ fn drain_latch_verbs(
     }
 }
 
-/// The meeting-stone leave, the drain over the stone's queue.
-fn drain_queue_verbs(
-    script: Option<NonSendMut<UiScript>>,
-    group: Option<Res<GroupState>>,
-    self_guid: Res<SelfGuid>,
-    commands: Res<NetCommands>,
-    mut sink: crate::ui_action::MessageSink,
-) {
-    let Some(mut script) = script else {
-        return;
-    };
-
-    // CancelMeetingStoneRequest: in a party we do not lead, ERR_MEETING_STONE_NOT_LEADER;
-    // otherwise `0x293`, queued or not.
-    let cancels = script.take_meeting_stone_cancels();
-    if cancels > 0 {
-        let not_leader = group
-            .as_deref()
-            .is_some_and(|g| g.in_group && Some(g.leader) != self_guid.0);
-        if not_leader {
-            if let Some(line) =
-                crate::ui_action::keyed_line(&script, "ERR_MEETING_STONE_NOT_LEADER")
-            {
-                crate::ui_action::show_messages(&mut script, &mut sink, "ui_dialog_verbs", [line]);
-            }
-        } else {
-            for _ in 0..cancels {
-                let _ = commands.0.send(ClientCommand::MeetingStoneLeave);
-            }
-        }
+/// `CancelMeetingStoneRequest`, drained: 3.3.5 has no meeting-stone queue to leave (AzerothCore's 0x293
+/// is `SMSG_LFG_OFFER_CONTINUE`), so nothing goes out.
+fn drain_queue_verbs(script: Option<NonSendMut<UiScript>>) {
+    if let Some(mut script) = script {
+        let _ = script.take_meeting_stone_cancels();
     }
 }
 
@@ -966,11 +909,6 @@ impl Plugin for UiDialogVerbsPlugin {
                     poll_area_spirit_healer
                         .after(crate::target::TargetUpdate)
                         .run_if(crate::ui_script::ingame_ui_up)
-                        .in_set(crate::char_select::InWorldGated),
-                    // In world only: the query is a world packet, and the glue screen has a VM.
-                    meeting_stone_enter_world
-                        .in_set(crate::ui_script::UiFeed)
-                        .before(feed_meeting_stone)
                         .in_set(crate::char_select::InWorldGated),
                     feed_meeting_stone.in_set(UiFeed),
                     // Before the target chain, where the poll and the click can change the
@@ -1295,7 +1233,6 @@ mod tests {
         app.insert_resource(templates)
             .insert_resource(NetCommands(tx))
             .insert_resource(SelfGuid(Some(ME)))
-            .init_resource::<GroupState>()
             .init_resource::<crate::ui_action::UiErrorKeys>()
             .init_resource::<crate::ui_chat::ChatLog>()
             .init_resource::<crate::sound::MessageSounds>()
@@ -1330,26 +1267,6 @@ mod tests {
             .write_message(MeetingStoneUse { go_guid: STONE });
         app.update();
         assert!(joins(&rx).is_empty(), "no player, no packet");
-    }
-
-    /// A registered schedule: `run_system_once` would build a fresh `Local<VmMemo<bool>>` per call,
-    /// an unclaimed memo every frame.
-    #[test]
-    fn a_wrath_addon_vm_never_enqueues_vanilla_meeting_stone_bringup() {
-        let (tx, rx) = crossbeam_channel::unbounded();
-        let mut app = App::new();
-        app.init_resource::<MeetingStone>()
-            .insert_resource(NetCommands(tx))
-            .add_systems(Update, meeting_stone_enter_world);
-        for _ in 0..2 {
-            app.insert_non_send_resource(
-                UiScript::new_with_dialect(benilla_ui::script::ScriptDialect::Wrath12340)
-                    .expect("Wrath VM"),
-            );
-            app.update();
-            app.update();
-            assert!(rx.try_iter().next().is_none());
-        }
     }
 
     #[test]
@@ -1410,13 +1327,11 @@ mod tests {
         stone.apply(12, 9);
         assert_eq!(stone.area, 12);
         assert_eq!(stone.updates, vec![(0, 1), (1519, 1), (1519, 0), (0, 9)]);
-        stone.enter_world();
-        assert_eq!(stone.text, StoneText::Unknown);
+        stone.leave_world();
         assert_eq!(
             stone.area, 12,
-            "the enter-world reset leaves the area alone"
+            "the leave-world sweep leaves the area alone"
         );
-        stone.leave_world();
         assert_eq!(stone.text, StoneText::None);
     }
 

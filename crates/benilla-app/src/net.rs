@@ -1448,10 +1448,6 @@ pub(crate) enum ClientCommand {
     RequestBattlefieldScoreData,
     /// `LeaveBattlefield()`: `CMSG_LEAVE_BATTLEFIELD`.
     LeaveBattlefield,
-    /// `CancelMeetingStoneRequest()`: `CMSG 0x293`.
-    MeetingStoneLeave,
-    /// The enter-world meeting-stone status query: `CMSG 0x296`.
-    MeetingStoneStatusQuery,
     // ── The tutorial system ──
     /// `FlagTutorial` or an auto-acknowledge: `CMSG_TUTORIAL_FLAG`, the 0-based id.
     TutorialFlag {
