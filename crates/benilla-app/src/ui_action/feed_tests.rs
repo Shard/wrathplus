@@ -434,11 +434,11 @@ fn pre_resolved_lines_land_on_the_errors_frame_in_the_arms_colour() {
     );
 }
 
-/// `HandleCastFailed 0x6e1a00` logs through `0x62c360`; `HandlePetCastFailed 0x6e8eb0` calls only
-/// the packet readers and `0x496720`, with no log line and no error sound. Both entries name the
-/// same spell, so only the caster differs.
+/// Neither caster's refusal writes a chat line: build 12340 logs the player's as
+/// `SPELL_CAST_FAILED` through `COMBAT_LOG_EVENT` (`crate::spell::native_failure`), and the pet's
+/// handler `0x6e8eb0` logs nothing. Both entries name the same spell, so only the caster differs.
 #[test]
-fn a_pets_refused_cast_writes_no_combat_log_line() {
+fn a_refused_cast_writes_no_chat_line() {
     use crate::ui_action::{CastFail, Caster, Spells};
     use benilla_formats::{SpellCatalog, SpellDisplay};
 
@@ -491,8 +491,8 @@ fn a_pets_refused_cast_writes_no_combat_log_line() {
         app.world()
             .resource::<crate::ui_chat::ChatLog>()
             .pending_len(),
-        1,
-        "the player's failure logs and the pet's does not"
+        0,
+        "no 1.12 failure sentence for either caster"
     );
 }
 

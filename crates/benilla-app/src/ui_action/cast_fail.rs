@@ -7,8 +7,7 @@
 //! 3. An argument arm (`0x6e1d8e`) fills the template's `%s`: the DBC arms in [`FailArgs::fill`],
 //!    the item and subclass arms (`0x78`, `0x5c`, `0x19`-`0x1b`, `0x31`) in the drain.
 //!
-//! The combat log (`0x62c360`) reads a second buffer the overrides never touch
-//! ([`CastFailLine::arg_text`]). `0x30`'s arm (`0x6e1e3d`) fills nothing in the reference.
+//! `0x30`'s arm (`0x6e1e3d`) fills nothing in the reference.
 //! `0x84` and `0x90` are unreachable in 1.12: the server never sends them, and their only client
 //! raise sites (`0x49614e`, `0x496128`) need the prospecting effect `0x7f`, which no shipped
 //! spell has. `0x0a`'s item-target line (`ERR_INVALID_ITEM_TARGET`) is not built.
@@ -141,39 +140,14 @@ pub(super) const PASSTHROUGH: &str = "ERR_SPELL_FAILED_S";
 pub(super) struct CastFailLine {
     pub key: &'static str,
     pub text: String,
-    /// The argText buffer the combat log (`0x62c360`) reads (`edi` at `0x6e21e2`): the
-    /// first-layer string (`0x6e1d77`), since an override changes only the displayed text. Only a
-    /// filled arm, `0x02` and `0x4d` rewrite it (`0x6e21d2`); empty means the log reads the
-    /// displayed text ([`Self::logged`]).
-    pub arg_text: String,
 }
 
 impl CastFailLine {
-    /// A line on the default errorId, both buffers holding the same text, as after a filled arm.
+    /// A line on the default errorId, as after a filled arm.
     pub(super) fn passthrough(text: String) -> Self {
         Self {
             key: PASSTHROUGH,
-            arg_text: text.clone(),
             text,
-        }
-    }
-
-    /// What the combat log prints (`0x6e21e2`): the argText buffer, or when it is empty the
-    /// last-error cell `0xb4da40`, which holds the displayed text (`0x496802`).
-    pub(super) fn logged(&self) -> &str {
-        if self.arg_text.is_empty() {
-            &self.text
-        } else {
-            &self.arg_text
-        }
-    }
-
-    /// The `0x4d` arm empties the argText buffer (`0x6e20fd`), so the log reads the displayed
-    /// text. The pet's line is never logged; it is blanked only to keep one shape.
-    fn arm_blanked(self) -> Self {
-        Self {
-            arg_text: String::new(),
-            ..self
         }
     }
 
@@ -196,20 +170,7 @@ pub(super) fn cast_fail_text(
     get: &dyn Fn(&str) -> Option<String>,
 ) -> Option<CastFailLine> {
     let get_text = |key: &str| get(key).filter(|s| !s.is_empty());
-    // `[ebp-0x488]`, the first-layer string (`edi` from `0x6e1d9a`): what the log reads for
-    // every reason no arm claims, overrides included. Empty when 1.12 ships no such key.
-    let first_layer = CAST_FAIL_KEYS
-        .get(usize::from(reason))
-        .and_then(|k| get_text(k))
-        .map(|t| strip_tokens(&t))
-        .unwrap_or_default();
-    let get_display = |key: &'static str| {
-        get_text(key).map(|text| CastFailLine {
-            key,
-            text,
-            arg_text: first_layer.clone(),
-        })
-    };
+    let get_display = |key: &'static str| get_text(key).map(|text| CastFailLine { key, text });
     // The errorId overrides, from the caster's own handler; everything after this is shared.
     match caster {
         // `0x6e8eb0`: reasons above `0x8d` take the default arm, the rest the index table
@@ -235,7 +196,7 @@ pub(super) fn cast_fail_text(
             // ids as the player's `0x8118dc`, so [`power_keys`] serves both.
             0x4D => {
                 let power = spell.map_or(0, |d| d.power_type);
-                return get_display(power_keys(power).0).map(CastFailLine::arm_blanked);
+                return get_display(power_keys(power).0);
             }
             // The pet sends `0x01`, `0x02`, `0x09`, `0x18`, `0x28`, `0x41` and `0x8e` to its
             // generic arm, so it never says those lines. `0x17` goes there too and shows nothing
@@ -250,12 +211,7 @@ pub(super) fn cast_fail_text(
                 let t = get_display("ERR_SPELL_FAILED_ALREADY_AT_FULL_POWER_S")?;
                 let power = spell.map_or(0, |d| d.power_type);
                 let name = get_text(power_keys(power).1).unwrap_or_default();
-                // `0x6e211f` puts only the power noun in the argText buffer: the log reads the
-                // bare word.
-                return Some(CastFailLine {
-                    arg_text: name.clone(),
-                    ..t.fill(&name)
-                });
+                return Some(t.fill(&name));
             }
             0x09 => return get_display("ERR_GENERIC_NO_TARGET"),
             0x17 => return None, // DONT_REPORT jumps past DisplayError
@@ -282,7 +238,7 @@ pub(super) fn cast_fail_text(
             0x41 => return get_display("ERR_SPELL_FAILED_NOTUNSHEATHED"),
             0x4D => {
                 let power = spell.map_or(0, |d| d.power_type);
-                return get_display(power_keys(power).0).map(CastFailLine::arm_blanked);
+                return get_display(power_keys(power).0);
             }
             0x59 => return get_display("ERR_SPELL_OUT_OF_RANGE"),
             0x8E => return get_display("ERR_PLAY_TIME_EXCEEDED"),
@@ -640,44 +596,6 @@ mod tests {
     }
 
     #[test]
-    fn the_combat_log_reads_the_argtext_buffer_not_the_displayed_line() {
-        let m = gs();
-        let g = getter(&m);
-        let line = |reason, spell| {
-            cast_fail_text(Caster::Player, reason, spell, FailArgs::default(), &g).expect("a line")
-        };
-
-        // An override with no arm: the screen and the log differ.
-        let plain = spell(0, 0, 0);
-        let cooldown = line(0x3C, Some(&plain));
-        assert_eq!(cooldown.text, "Spell is not ready yet.");
-        assert_eq!(cooldown.logged(), "Not yet recovered");
-
-        let no_target = line(0x09, None);
-        assert_eq!(no_target.text, "You have no target.");
-        assert_eq!(no_target.logged(), "No target");
-
-        let unsheathed = line(0x41, None);
-        assert_eq!(unsheathed.text, "You have to be unsheathed to do that!");
-        assert_eq!(unsheathed.logged(), "You must be unsheathed");
-
-        // No override, no arm: one string.
-        let ammo = line(0x43, None);
-        assert_eq!(ammo.logged(), ammo.text);
-
-        // `0x4d` blanks the buffer, so the log reads the screen's line.
-        let rage = spell(1, 0, 0);
-        let power = line(0x4D, Some(&rage));
-        assert_eq!(power.text, "Not enough rage");
-        assert_eq!(power.logged(), "Not enough rage");
-
-        // A declined arm strips both buffers.
-        let reagents = line(0x5C, None);
-        assert_eq!(reagents.logged(), "Missing reagent");
-        assert!(!reagents.logged().contains('%'));
-    }
-
-    #[test]
     fn already_at_full_power_logs_the_bare_power_noun() {
         let mut m = gs();
         m.insert(
@@ -690,7 +608,6 @@ mod tests {
         let line =
             cast_fail_text(Caster::Player, 0x02, Some(&rage), FailArgs::default(), &g).unwrap();
         assert_eq!(line.text, "You are already at full Rage.");
-        assert_eq!(line.logged(), "Rage");
     }
 
     fn forms<const N: usize>(

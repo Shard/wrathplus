@@ -249,18 +249,6 @@ pub(crate) const REGISTERED: &[Registered] = &[
          stop at all, so every stop diverges; Medium (32) is the nearest one no sparser than a \
          fresh install, and erring sparse is the worse failure for ground cover",
     ),
-    // ── Combat log display ranges, in yards ──────────────────────────────────────────────────────
-    //
-    // Registered by `0x626d00` from the `{name, default}` pairs at `0x8629e0`, read as the record's
-    // float (`+0x24`). Classes 0 and 1, you and your pet, have no CVar there, only the `100000.0`
-    // sentinel.
-    same("CombatLogRangeParty", "50"),
-    same("CombatLogRangePartyPet", "50"),
-    same("CombatLogRangeFriendlyPlayers", "50"),
-    same("CombatLogRangeFriendlyPlayersPets", "50"),
-    same("CombatLogRangeHostilePlayers", "50"),
-    same("CombatLogRangeHostilePlayersPets", "50"),
-    same("CombatLogRangeCreature", "30"),
     // ── Floating combat text ─────────────────────────────────────────────────────────────────────
     //
     // `CombatDamage` (`0x6032df`, record `[0xc4d944]`) is the master: its two readers, the word

@@ -193,6 +193,8 @@ pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String
     script.push_sound_suppression();
     let mut failures = load_core(script);
     failures.extend(super::wrath_addons::load_bootstrap(script));
+    // With `addons`, the whole walk; without, still the archive's startup Blizzard addon, as a
+    // clean install starts with it (`TokenFrame`, which `CharacterFrame_ShowSubFrame` walks).
     if addons {
         failures.extend(super::addons::load_wrath_third_party(
             script,
@@ -200,6 +202,8 @@ pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String
             &[],
             true,
         ));
+    } else {
+        failures.extend(super::addons::load_wrath_startup_blizzard(script));
     }
     script.pop_sound_suppression();
     script.clear_instruction_budget();

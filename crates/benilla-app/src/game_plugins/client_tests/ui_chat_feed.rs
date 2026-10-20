@@ -76,7 +76,7 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
     assert_eq!(
         owners
             .iter()
-            .filter(|s| s.contains("combat_log::on_wrath_environmental_damage"))
+            .filter(|s| s.contains("combat_log::on_native_logged"))
             .count(),
         1
     );
@@ -139,20 +139,8 @@ fn registered_native_environment_and_durability_have_single_feedback_per_sink() 
         panic!()
     };
     crate::net::handlers::dispatch(app.world_mut(), session_events);
-    let log = app.world().resource::<ChatLog>();
-    assert_eq!(log.pending.len(), 1);
-    let Pending::Combat(line) = &log.pending[0] else {
-        panic!()
-    };
-    assert_eq!(
-        (line.subject, line.object, line.fills.amount),
-        (42, 42, 123)
-    );
-    let trailers = line.fills.trailers.unwrap();
-    assert_eq!(
-        (trailers.resisted, trailers.absorbed),
-        (i64::from(u32::MAX), 77)
-    );
+    // No 1.12 environment sentence: build 12340 prints it through `COMBAT_LOG_EVENT`.
+    assert!(app.world().resource::<ChatLog>().pending.is_empty());
     let kits: Vec<_> = cursor
         .read(
             app.world()

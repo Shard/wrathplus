@@ -964,6 +964,10 @@ mod video_options_tests;
 #[cfg(test)]
 mod bottom_hud_tests;
 
+/// The character window (C) on the installed interface.
+#[cfg(test)]
+mod character_window_tests;
+
 /// Teardown at the character screen and a genuine second load at the next login.
 #[cfg(test)]
 mod world_entry_tests;
