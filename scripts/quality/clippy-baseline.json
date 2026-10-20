@@ -1,6 +1,6 @@
 {
   "version": 1,
   "diagnostics": [
-    "[\"crates/benilla-app/src/net.rs\",\"dead_code\",\"variant `Vanilla5875` is never constructed\",\"6a9314bbd243aea087327cdaccf158956cc5d8605bb6eaa0e0fde071fdfbb7ac\"]"
+    "[\"crates/benilla-app/src/net.rs\",\"dead_code\",\"variant `Vanilla5875` is never constructed\",\"a020d84d1864c4d0ca2a11a4a2d6c4bd8ba2c0c633da1d0ef00b01b5288f1e8e\"]"
   ]
 }

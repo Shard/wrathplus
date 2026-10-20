@@ -275,6 +275,7 @@ fn arm_transports(
                 seed.entry, guid.0
             );
             commands.entity(entity).remove::<ElevatorSeed>().insert((
+                crate::app_core::movement::TransportMaps(None),
                 Transport {
                     drive: Drive::Lift(Lift {
                         frames,
@@ -324,6 +325,7 @@ fn arm_transports(
             // Kinematic, not the GO default of Static: it moves every frame, and avian's static
             // tree is tuned for immobile geometry.
             commands.entity(entity).insert((
+                crate::app_core::movement::TransportMaps(Some(timetable.clone())),
                 Transport {
                     drive: Drive::Taxi(timetable),
                     was_moving: false,

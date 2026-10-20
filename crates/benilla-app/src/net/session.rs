@@ -97,7 +97,7 @@ pub(crate) struct Bridge<'w, 's> {
     net: Res<'w, NetCommands>,
     dialect: Res<'w, super::SessionDialect>,
     stores: Query<'w, 's, &'static mut ObjectStore>,
-    transports: Query<'w, 's, &'static crate::transport::Transport>,
+    transports: Query<'w, 's, &'static crate::app_core::movement::TransportMaps>,
 }
 
 fn on_login_edge(In(ev): In<SessionEvent>, mut e: Edges) {
@@ -625,7 +625,7 @@ fn worldport(
     commands: &mut Commands,
     index: &mut GuidIndex,
     pending: &mut PendingTransfer,
-    transports: &Query<&crate::transport::Transport>,
+    transports: &Query<&crate::app_core::movement::TransportMaps>,
     worldports: &mut MessageWriter<WorldportMessage>,
 ) {
     index.0.retain(|guid, e| {
@@ -769,6 +769,65 @@ fn packet_dropped(opcode: u16, unparseable: bool, dropped: &mut DroppedOpcodes) 
 #[cfg(test)]
 mod transfer_tests {
     use super::*;
+
+    /// The worldport sweep keeps a transport whose path touches the destination
+    /// ([`crate::app_core::movement::TransportMaps`]) and despawns everything else, a lift too.
+    #[test]
+    fn the_worldport_sweep_spares_only_a_transport_on_the_destination() {
+        use crate::app_core::movement::TransportMaps;
+        use bevy::ecs::system::RunSystemOnce;
+        let node = |i: u32, x: f32| benilla_formats::TaxiPathNode {
+            id: i,
+            path_id: 1,
+            node_index: i,
+            map_id: 1,
+            pos: [x, 0.0, 0.0],
+            flags: 0,
+            delay: 0,
+        };
+        let path = [node(0, 0.0), node(1, 50.0), node(2, 100.0), node(3, 150.0)];
+        let timetable = benilla_formats::TransportTimetable::build(&path, 30.0, 1.0)
+            .expect("a four-node path builds");
+        let mut world = World::new();
+        world.init_resource::<GuidIndex>();
+        world.init_resource::<PendingTransfer>();
+        world.init_resource::<bevy::ecs::message::Messages<WorldportMessage>>();
+        let boat = world
+            .spawn(TransportMaps(Some(std::sync::Arc::new(timetable))))
+            .id();
+        let lift = world.spawn(TransportMaps(None)).id();
+        let object = world.spawn_empty().id();
+        world
+            .resource_mut::<GuidIndex>()
+            .0
+            .extend([(1, boat), (2, lift), (3, object)]);
+        world
+            .run_system_once(
+                |mut commands: Commands,
+                 mut index: ResMut<GuidIndex>,
+                 mut pending: ResMut<PendingTransfer>,
+                 transports: Query<&TransportMaps>,
+                 mut worldports: MessageWriter<WorldportMessage>| {
+                    worldport(
+                        1,
+                        [0.0; 3],
+                        0.0,
+                        false,
+                        None,
+                        &mut commands,
+                        &mut index,
+                        &mut pending,
+                        &transports,
+                        &mut worldports,
+                    );
+                },
+            )
+            .unwrap();
+        assert!(world.get_entity(boat).is_ok(), "its path touches map 1");
+        assert!(world.get_entity(lift).is_err(), "a lift streams back");
+        assert!(world.get_entity(object).is_err());
+        assert_eq!(world.resource::<GuidIndex>().0.len(), 1);
+    }
     #[test]
     fn native_destination_requires_token_and_finite_pose() {
         let token = benilla_protocol::wrath_transfer::Token {
