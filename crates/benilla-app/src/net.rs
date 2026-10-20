@@ -1373,18 +1373,6 @@ pub(crate) enum ClientCommand {
         vendor: u64,
         item_guid: u64,
     },
-    /// `CMSG_GMTICKET_CREATE`: `map`/`pos` where we stand and the text; 3.3.5 carries no category
-    /// (AzerothCore `HandleGMTicketCreateOpcode`).
-    GmTicketCreate {
-        map: u32,
-        pos: [f32; 3],
-        text: String,
-    },
-    /// `CMSG_GMTICKET_UPDATETEXT`: the text alone (AzerothCore `HandleGMTicketUpdateOpcode`); one
-    /// send per click.
-    GmTicketUpdate {
-        text: String,
-    },
     /// `CMSG_GMTICKET_GETTICKET`: `GetGMTicket()`.
     GmTicketGet,
     /// `CMSG_GMTICKET_DELETETICKET`.

@@ -282,20 +282,22 @@ fn drain_gm_ticket(
     }
 }
 
-/// One drained write to its packet. The window's own `hasTicket` picks create or update, never our
-/// belief, which can be 10 minutes stale. 3.3.5 carries no category (AzerothCore
-/// `HandleGMTicketCreateOpcode` reads map, position, text and the two flags), so the write's is not
-/// sent.
+/// One drained write to its build 12340 packet: `CMSG_GMTICKET_CREATE` with the window's
+/// `needResponse`, or `CMSG_GMTICKET_UPDATETEXT`. The window's own `hasTicket` picks create or
+/// update, never our belief, which can be 10 minutes stale.
 fn client_command_for(write: GmTicketWrite, map: u32, pos: [f32; 3]) -> ClientCommand {
-    if write.is_new {
-        ClientCommand::GmTicketCreate {
+    use benilla_protocol::wrath_help::Command;
+    ClientCommand::NativeHelp(if write.is_new {
+        Command::Create {
             map,
             pos,
             text: write.text,
+            need_response: write.need_response,
+            need_more_help: false,
         }
     } else {
-        ClientCommand::GmTicketUpdate { text: write.text }
-    }
+        Command::UpdateText { text: write.text }
+    })
 }
 
 /// `GMTicketCategory.dbc` as the `(id, name)` pairs `GetGMTicketCategories()` returns.
@@ -568,18 +570,24 @@ mod tests {
 
     #[test]
     fn the_windows_verb_picks_the_opcode() {
-        let write = |category, is_new| GmTicketWrite {
-            category,
+        use benilla_protocol::wrath_help::Command;
+        let write = |is_new| GmTicketWrite {
             text: "gone".into(),
+            need_response: is_new,
             is_new,
         };
         assert!(matches!(
-            client_command_for(write(4, true), 1, [1.0, 2.0, 3.0]),
-            ClientCommand::GmTicketCreate { map: 1, .. }
+            client_command_for(write(true), 1, [1.0, 2.0, 3.0]),
+            ClientCommand::NativeHelp(Command::Create {
+                map: 1,
+                need_response: true,
+                need_more_help: false,
+                ..
+            })
         ));
         assert!(matches!(
-            client_command_for(write(4, false), 1, [1.0, 2.0, 3.0]),
-            ClientCommand::GmTicketUpdate { .. }
+            client_command_for(write(false), 1, [1.0, 2.0, 3.0]),
+            ClientCommand::NativeHelp(Command::UpdateText { .. })
         ));
     }
 }
