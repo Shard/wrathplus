@@ -972,8 +972,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
 
-    // GetMapOverlayInfo(i) → textureName, textureWidth, textureHeight, offsetX, offsetY,
-    // mapPointX, mapPointY; mapPointX and mapPointY are 0 on every 5875 row.
+    // GetMapOverlayInfo(i) (`0x545c80`) → textureName, textureWidth, textureHeight, offsetX,
+    // offsetY, mapPointX, mapPointY; a miss answers nil and six zeros. Labelled: mapPointX and
+    // mapPointY (the row's `+0x18`/`+0x1c`) read 0, as the overlay view does not carry them.
     g.set(
         "GetMapOverlayInfo",
         lua.create_function(|lua, i: i64| {
@@ -985,7 +986,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
                     .and_then(|i| revealed_overlays(&model.worldmap).get(i).cloned().cloned())
             };
             let Some(o) = overlay else {
-                return Ok(MultiValue::from_vec(vec![Value::Nil]));
+                let mut miss = vec![Value::Nil];
+                miss.extend(std::iter::repeat_n(Value::Integer(0), 6));
+                return Ok(MultiValue::from_vec(miss));
             };
             Ok(MultiValue::from_vec(vec![
                 Value::String(lua.create_string(&o.texture)?),

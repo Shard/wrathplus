@@ -44,11 +44,7 @@ pub(crate) use manifest::load_ingame_ui;
 #[cfg(test)]
 pub(crate) use manifest::{load_stock_bindings, stock_bindings_file};
 
-/// Whether the pointer is over any UI (the egui dev overlay or a player-UI frame), combined by
-/// [`arbitrate_pointer_over_ui`]; gameplay reads it, so it is not the dev plugin's.
-#[derive(Resource, Default)]
-pub(crate) struct PointerOverUi(pub(crate) bool);
-
+pub(crate) use crate::app_core::state::{CursorPayloadHeld, PointerOverUi};
 /// A synthetic pointer owns the mouse this frame (the drag probe's gesture), so
 /// [`input::feed_ui_input`] skips its mouse half and never feeds the real cursor.
 #[derive(Resource, Default)]
@@ -125,11 +121,6 @@ pub(crate) struct UiKeyboardCapture {
 /// payload and runs SELECT instead.
 #[derive(Resource, Default)]
 pub(crate) struct PlayerUiClickConsumed(pub(crate) bool);
-
-/// Whether the cursor carries a payload, a `Send` mirror. A click on sky with one held never
-/// deselects: the reference gates its nothing-leg `SetSelection(0,0)` on no payload (`0x492d30`).
-#[derive(Resource, Default)]
-pub(crate) struct CursorPayloadHeld(pub(crate) bool);
 
 /// What [`extract::tick_script`] hands [`extract::paint_script`]; with `live` false (no VM or
 /// window) the paint does nothing.

@@ -303,16 +303,7 @@ impl LootState {
     }
 }
 
-/// The loot CVars. `autoLootDefault` is not a 1.12 CVar: 1.12 auto-loots only on a shift-click.
-/// [`feed_loot`] sweeps the rows engine-side at the open, as the reference does, and a held Shift
-/// inverts the setting. `showLootSpam` is 1.12's Detailed Loot Information checkbox (`0xb4e2bc`,
-/// registered at `0x48fd1c`, default `"1"`), read only by the loot-roll line composers.
-#[derive(Resource)]
-pub(crate) struct LootConfig {
-    pub(crate) auto_loot: bool,
-    pub(crate) show_loot_spam: bool,
-}
-
+pub(crate) use crate::app_core::state::{LootConfig, LootLatch};
 impl Default for LootConfig {
     fn default() -> Self {
         Self {
@@ -323,17 +314,6 @@ impl Default for LootConfig {
         }
     }
 }
-
-/// The loot-target latch, the reference's `[player+0x1d28]` guid: a loot session is open on this
-/// object; kneeling is [`LootKneel`]'s question. Armed at the `CMSG_LOOT` send
-/// (`0x5df253`/`0x5df40d`), at `SMSG_SPELL_GO` for an `OPEN_LOCK` on a chest (`0x6e831b`), by an
-/// admitted response (`0x5eb900`), and at the `CMSG_OPEN_ITEM` send (`0x5edcc0`), which is what
-/// admits vmangos' type-1 answer for the item.
-///
-/// Deviation: our close paths clear it guid-matched, where `CloseInteraction` clears it
-/// unconditionally (`0x48f2c9`), so closing an old window keeps a newer `CMSG_LOOT`'s latch.
-#[derive(Resource, Default)]
-pub(crate) struct LootLatch(pub(crate) Option<u64>);
 
 /// Whether the character kneels at the latched object, the reference's predicate B `0x612710`:
 /// yes for a corpse or any GameObject but a fishing bobber, no for a live unit, an item or an

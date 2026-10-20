@@ -519,7 +519,8 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             let model = lua.app_data_mut::<Model>().expect("model app_data");
             let kb = &model.keybinds;
             let mut out = Vec::new();
-            for k in kb.keys_of(&command).take(2) {
+            // `0x55e9b0`: every key bound to the command, in order.
+            for k in kb.keys_of(&command) {
                 out.push(Value::String(lua.create_string(k)?));
             }
             Ok(MultiValue::from_iter(out))
