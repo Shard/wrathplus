@@ -479,4 +479,118 @@ mod tests {
             )
             .unwrap());
     }
+
+    /// Every global function the Wrath compat chunk still serves, the shim burn-down list
+    /// (`docs/WRATH-COMPAT-SHIM-AUDIT.md`): a native binding installed after it drops its name here,
+    /// and a shim line a native binding already replaces is dead and goes.
+    const COMPAT_SERVED: &[&str] = &[
+        "BNConnected",
+        "BNFeaturesEnabled",
+        "BNFeaturesEnabledAndConnected",
+        "BNGetConversationInfo",
+        "BNGetCustomMessageTable",
+        "BNGetFriendInfo",
+        "BNGetFriendInfoByID",
+        "BNGetFriendInviteInfo",
+        "BNGetInfo",
+        "BNGetMaxPlayersInConversation",
+        "BNGetNumBlocked",
+        "BNGetNumBlockedToons",
+        "BNGetNumConversationMembers",
+        "BNGetNumFriendInvites",
+        "BNGetNumFriends",
+        "BNGetToonInfo",
+        "ChangeActionBarPage",
+        "ClearOverrideBindings",
+        "CombatTextSetActiveUnit",
+        "EquipItemByName",
+        "FillLocalizedClassList",
+        "GetAccountExpansionLevel",
+        "GetActionBarPage",
+        "GetActiveVoiceChannel",
+        "GetCVarAbsoluteMax",
+        "GetCVarAbsoluteMin",
+        "GetCVarBool",
+        "GetCVarMax",
+        "GetCVarMin",
+        "GetExistingLocales",
+        "GetExpansionLevel",
+        "GetNumFriends",
+        "GetNumVoiceSessionMembersBySessionID",
+        "GetNumVoiceSessions",
+        "GetVoiceCurrentSessionID",
+        "GetVoiceSessionInfo",
+        "GetVoiceStatus",
+        "IsPetAttackAction",
+        "IsPlayerResolutionAvailable",
+        "IsStereoVideoAvailable",
+        "IsVoiceChatAllowed",
+        "IsVoiceChatAllowedByServer",
+        "IsVoiceChatEnabled",
+        "PickupEquipmentSet",
+        "PickupItem",
+        "RegisterStaticConstants",
+        "SetMultiCastSpell",
+        "SetOverrideBinding",
+        "SetOverrideBindingClick",
+        "SetOverrideBindingItem",
+        "SetOverrideBindingMacro",
+        "SetOverrideBindingSpell",
+        "Sound_ChatSystem_GetInputDriverNameByIndex",
+        "Sound_ChatSystem_GetNumInputDrivers",
+        "Sound_ChatSystem_GetNumOutputDrivers",
+        "Sound_ChatSystem_GetOutputDriverNameByIndex",
+        "Sound_GameSystem_GetNumOutputDrivers",
+        "Sound_GameSystem_GetOutputDriverNameByIndex",
+        "SpellCanTargetItem",
+        "SpellTargetItem",
+        "TriggerTutorial",
+        "UnitIsTalking",
+        "UnitSelectionColor",
+        "VoiceIsDisabledByClient",
+    ];
+
+    /// A shim line `X = X or Y` may fall back only to the chunk's own `none`/`zero` or a function
+    /// literal: an alias to another native (`IsStackableAction = … or IsConsumableAction`) serves
+    /// the other native's source, so the served-list census reads it as native and its removal
+    /// leaves the name unbound.
+    #[test]
+    fn the_compat_chunk_aliases_no_other_native() {
+        for line in include_str!("wrath_compat.lua").lines() {
+            let Some((lhs, rhs)) = line.split_once(" = ") else {
+                continue;
+            };
+            if lhs.starts_with([' ', '-']) {
+                continue;
+            }
+            for (name, value) in lhs.split(", ").zip(rhs.split(", ")) {
+                let mut alternatives = value.split(" or ").map(str::trim);
+                if alternatives.next() != Some(name) {
+                    continue;
+                }
+                for alt in alternatives {
+                    assert!(
+                        matches!(alt, "none" | "zero") || alt.starts_with("function"),
+                        "{name} falls back to another binding, {alt}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_compat_chunk_serves_exactly_the_listed_globals() {
+        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut served = Vec::new();
+        for pair in s.lua.globals().pairs::<String, mlua::Value>() {
+            let (name, value) = pair.unwrap();
+            if let mlua::Value::Function(f) = value {
+                if f.info().source.as_deref() == Some("=[AzerothBench Wrath compat]") {
+                    served.push(name);
+                }
+            }
+        }
+        served.sort();
+        assert_eq!(served, COMPAT_SERVED);
+    }
 }

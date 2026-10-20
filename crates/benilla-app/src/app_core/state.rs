@@ -2,9 +2,16 @@
 //! client lifecycle and roster, the open NPC, loot gates and UI pointer flags. Each owner keeps
 //! its systems and impls and re-exports the type from its old path.
 
+use std::collections::HashMap;
+
 use benilla_formats::SpellCatalog;
+use benilla_protocol::messages::{
+    QuestDetails, QuestGiverList, QuestOfferReward, QuestRequestItems,
+};
 use benilla_protocol::Character;
 use bevy::prelude::*;
+
+use super::errors::UiError;
 
 /// The spell DBC catalogs, absent without client data; the cast-visual router shares the catalog.
 #[derive(Resource)]
@@ -12,7 +19,7 @@ pub(crate) struct Spells {
     pub(crate) catalog: SpellCatalog,
     /// Form id to its `SpellShapeshiftForm.dbc` row: `BonusActionBar` pages the bar
     /// (`GetBonusBarOffset 0x4e7620`), `flags1` holds the stance and cancel bits.
-    pub(crate) forms: std::collections::HashMap<u32, benilla_formats::ShapeshiftForm>,
+    pub(crate) forms: HashMap<u32, benilla_formats::ShapeshiftForm>,
     /// `SpellRange.dbc`, the `GetMinMaxRange 0x6e3480` inputs; empty on a failed load.
     pub(crate) ranges: benilla_formats::SpellRangeCatalog,
     /// `SpellCastTimes.dbc`, read through `CastingTimeIndex` (`GetCastTime 0x6e3340`).
@@ -114,3 +121,126 @@ pub(crate) struct PointerOverUi(pub(crate) bool);
 /// deselects: the reference gates its nothing-leg `SetSelection(0,0)` on no payload (`0x492d30`).
 #[derive(Resource, Default)]
 pub(crate) struct CursorPayloadHeld(pub(crate) bool);
+
+/// The wire packet that opened the current panel.
+pub(crate) enum QuestView {
+    Greeting(QuestGiverList),
+    Detail(QuestDetails),
+    Progress(QuestRequestItems),
+    Reward(QuestOfferReward),
+}
+
+/// The open questgiver window; the per-guid dialog statuses survive a close.
+#[derive(Resource, Default)]
+pub(crate) struct QuestGiver {
+    pub(crate) completed_fanfare: bool,
+    /// The panel's source: an NPC, a GameObject, a quest-starter item or a sharing player.
+    pub(crate) npc: Option<u64>,
+    pub(crate) view: Option<QuestView>,
+    /// The reference's latch `0xbe0824`, written by DETAILS and OFFER_REWARD (`0x500ef0`) and by
+    /// REQUEST_ITEMS' `closeOnCancel` (`0x501070`), and zeroed only on world enter (`0x500af0`).
+    /// Non-zero turns a plain unit's decline into the silent teardown
+    /// ([`decline_leg_native`]). vmangos sends 1 on every DETAILS and OFFER_REWARD; REQUEST_ITEMS
+    /// carries 1 on a single-quest auto-open and 0 on `COMPLETE_QUEST`
+    /// (`QuestHandler.cpp:390-395`).
+    pub(crate) close_on_cancel: u32,
+    /// The reference's already-acted latch `0xbe0844`, set by `AcceptQuest` and by a re-opening
+    /// `DeclineQuest`, which keeps the panel up; both refuse while it is set (`0x5013a8`,
+    /// `0x5013fe`) until a panel publish clears it ([`Self::open`]).
+    pub(crate) acted: bool,
+    /// The reference's `0xbe0828`: the chosen reward's item id, latched by `GetQuestReward`
+    /// (`0x50161a`) for the turn-in's item line (`0x5dc676`-`0x5dc6c6`), and zeroed by a panel
+    /// publish (`0x500d8c`), world enter (`0x500b15`) and the turn-in.
+    pub(crate) chosen_reward: u32,
+    /// Per-guid dialog status from `SMSG_QUESTGIVER_STATUS`, the `!`/`?` marker's value.
+    pub(crate) statuses: HashMap<u64, u32>,
+    pub(crate) wrath_statuses: HashMap<u64, u32>,
+    /// Messages queued for [`feed_quest`], each a GlobalStrings key and its fills.
+    pub(crate) messages: Vec<UiError>,
+    pub(crate) reask: u32,
+    /// The dialog statuses dropped at the reference's typemask-8 lookup (GameObject answers, which
+    /// vmangos sends), per guid, so a live probe can tell a drop from a query never sent.
+    pub(crate) refused: HashMap<u64, u32>,
+    pub(crate) refused_count: u32,
+}
+
+/// This frame's binding activity, which engine-side consumers read instead of raw keys: the
+/// [`Input`]s the running bodies' Lua calls set.
+#[derive(Resource, Default)]
+pub(crate) struct BindingsState {
+    /// Live latches, (base input, command): a press not yet released, whose release runs the
+    /// command's `runOnUp` half. The reference replays the press-time chord at key-up (`0x483bd0`);
+    /// latching the resolved command is equivalent.
+    pub(crate) latched: Vec<(Held, String)>,
+    /// The held bits a Start set and no Stop has cleared.
+    pub(crate) held: Vec<Input>,
+    /// Inputs whose Start, or whose one-shot, came this frame (the press edge).
+    pub(crate) just: Vec<Input>,
+    /// One-shots fired this frame.
+    pub(crate) fired: Vec<Input>,
+    /// Amount per one-shot this frame: a zoom's yards, else 1.0.
+    pub(crate) amounts: Vec<(Input, f32)>,
+    /// The keys we believe are down: a press of one is a repeat. The reference classifies
+    /// auto-repeat off its own list (`0x4248b3`), never the Win32 `lParam` repeat bit.
+    /// Normalized like [`latched`](Self::latched) and reconciled against `ButtonInput` every
+    /// pass, so a window deactivate empties it and a key held across an alt-tab resumes, as in
+    /// the reference. Keyboard only: mouse edges cannot repeat.
+    pub(crate) down: Vec<KeyCode>,
+}
+
+/// The physical input a latch waits on: a keyboard key by its code, not its name, so its release
+/// ends the latch whatever the layout names it by then.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Held {
+    Key(KeyCode),
+    Mouse(MouseButton),
+    Wheel,
+}
+
+/// One engine input a binding function drives: a held bit of `[InputControl+4]` or a one-shot.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Input {
+    /// `MoveForwardStart`/`Stop`, bit `0x10`.
+    MoveForward,
+    /// `MoveBackwardStart`/`Stop`, bit `0x20`.
+    MoveBackward,
+    /// `TurnLeftStart`/`Stop`, bit `0x100`.
+    TurnLeft,
+    /// `TurnRightStart`/`Stop`, bit `0x200`.
+    TurnRight,
+    /// `StrafeLeftStart`/`Stop`, bit `0x40`.
+    StrafeLeft,
+    /// `StrafeRightStart`/`Stop`, bit `0x80`.
+    StrafeRight,
+    /// `TurnOrActionStart`/`Stop`, bit `0x1`.
+    TurnOrAction,
+    /// `CameraOrSelectOrMoveStart`/`Stop`, bit `0x2`.
+    CameraOrSelectOrMove,
+    /// `PitchUpStart`/`Stop`, bit `0x400`: the swimmer's or flier's pitch keys.
+    PitchUp,
+    /// `PitchDownStart`/`Stop`, bit `0x800`.
+    PitchDown,
+    /// `JumpOrAscendStart`/`AscendStop`: the flier's ascend key.
+    Ascend,
+    /// `SitStandOrDescendStart`/`DescendStop`: the flier's descend key.
+    Descend,
+    /// `Jump()`.
+    Jump,
+    /// `ToggleRun()`, the walk toggle.
+    ToggleRun,
+    /// `ToggleAutoRun()`.
+    ToggleAutoRun,
+    /// `SitOrStand()`.
+    SitOrStand,
+    /// `ToggleSheath()`.
+    ToggleSheath,
+    /// Native ATTACKTARGET binding while the Wrath stock binding VM is not yet qualified.
+    AttackTarget,
+    /// Native TARGETNEARESTENEMY / reverse direction, using the ordinary target cycler.
+    TargetNearestEnemy,
+    TargetPreviousEnemy,
+    /// `CameraZoomIn([yards])`, its yards in [`BindingsState::amount`].
+    CameraZoomIn,
+    /// `CameraZoomOut([yards])`, its yards in [`BindingsState::amount`].
+    CameraZoomOut,
+}

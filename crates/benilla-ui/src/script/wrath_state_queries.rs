@@ -152,6 +152,27 @@ fn number(lua: &Lua, args: &MultiValue, i: usize) -> Option<f64> {
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    // IsStackableAction(slot) (`0x5a8720` → `0x5a8470`): 1 when slot 1-144 holds an item whose
+    // template stacks past one (`ActionButton.lua` then shows its count), else nil. Labelled: the
+    // native compares template `+0x5c`, taken as the stack size (`ItemTemplateView::stackable`).
+    g.set(
+        "IsStackableAction",
+        lua.create_function(|lua, slot: Value| {
+            let slot = lua
+                .coerce_number(slot)?
+                .ok_or_else(|| mlua::Error::runtime("Usage: IsStackableAction(slot)"))?
+                .round_ties_even() as i64;
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let stacks = u32::try_from(slot)
+                .ok()
+                .filter(|s| (1..=144).contains(s))
+                .and_then(|s| model.actions.get(&s))
+                .filter(|a| a.kind == super::action::ACTION_KIND_ITEM)
+                .and_then(|a| model.item_templates.get(&a.action))
+                .is_some_and(|t| t.stackable > 1);
+            Ok(stacks.then_some(1))
+        })?,
+    )?;
     // GetQuestResetTime(): the reset less `time(NULL)`, the local wall clock.
     g.set(
         "GetQuestResetTime",
@@ -433,6 +454,43 @@ mod tests {
 
     fn vm() -> UiScript {
         UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    }
+
+    #[test]
+    fn a_stackable_action_is_an_item_slot_whose_template_stacks() {
+        use crate::script::{ActionSlot, ItemTemplateView};
+        let mut s = vm();
+        let item = |id| ActionSlot {
+            kind: super::super::action::ACTION_KIND_ITEM,
+            action: id,
+            ..Default::default()
+        };
+        s.set_action(1, Some(item(4540)));
+        s.set_action(2, Some(item(2589)));
+        let template = |stackable| ItemTemplateView {
+            stackable,
+            ..Default::default()
+        };
+        s.set_action(
+            3,
+            Some(ActionSlot {
+                action: 133,
+                ..Default::default()
+            }),
+        );
+        s.set_item_template(4540, template(20));
+        s.set_item_template(2589, template(1));
+        for check in [
+            "IsStackableAction(1) == 1",
+            "IsStackableAction(2) == nil and IsStackableAction(3) == nil",
+            "IsStackableAction(145) == nil and IsStackableAction(0) == nil",
+        ] {
+            assert!(
+                s.eval::<bool>(&format!("return {check}")).unwrap(),
+                "{check}"
+            );
+        }
+        assert!(s.run("IsStackableAction('x')").is_err());
     }
 
     #[test]

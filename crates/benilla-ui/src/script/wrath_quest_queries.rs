@@ -87,8 +87,41 @@ fn item_count(lua: &Lua, item: u32) -> i64 {
         .map_or(0, |n| n as i64)
 }
 
+/// A reward spell's link, `GetSpellLink`'s shape (`0x61e4b0`); `None` while the spell's record is
+/// unknown, as the native's `0x4cfd20` miss.
+fn reward_spell_link(spell: Option<&super::quest::QuestRewardSpell>) -> Option<String> {
+    let spell = spell?;
+    let name = spell.name.as_deref()?;
+    Some(format!(
+        "|cff71d5ff|Hspell:{}|h[{name}]|h|r",
+        spell.spell_id
+    ))
+}
+
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
+    // GetQuestLogSpellLink() (`0x5e4840`): the selected quest-log quest's reward spell, nil without.
+    g.set(
+        "GetQuestLogSpellLink",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            let detail = model.selected_quest_detail();
+            Ok(reward_spell_link(
+                detail.and_then(|d| d.reward_spell.as_ref()),
+            ))
+        })?,
+    )?;
+    // GetQuestSpellLink() (`0x58dab0`): the quest giver panel's reward spell (`0xc0d680`, the slot
+    // `GetRewardSpell` reads), nil without.
+    g.set(
+        "GetQuestSpellLink",
+        lua.create_function(|lua, ()| {
+            let model = lua.app_data_ref::<Model>().expect("model app_data");
+            Ok(reward_spell_link(
+                model.quest.as_ref().and_then(|q| q.reward_spell.as_ref()),
+            ))
+        })?,
+    )?;
     g.set(
         "QuestFlagsPVP",
         lua.create_function(|lua, ()| {
@@ -370,6 +403,55 @@ mod tests {
             .eval::<bool>(
                 "local f, a = GetQuestLogRewardFactionInfo(2) local g, b = GetQuestLogRewardFactionInfo(3) \
                  return GetNumQuestLogRewardFactions() == 2 and f == 169 and a == 12500 and g == 0 and b == 0"
+            )
+            .unwrap());
+    }
+
+    #[test]
+    fn the_spell_links_read_the_reward_spell_of_the_selection_and_the_panel() {
+        use crate::script::quest::QuestRewardSpell;
+        use crate::script::quest_log::QuestLogDetail;
+        let mut s = vm();
+        let spell = |name: Option<&str>| QuestRewardSpell {
+            spell_id: 133,
+            name: name.map(String::from),
+            texture: None,
+            tradeskill: false,
+            learned: false,
+        };
+        let log = |reward| QuestLogState {
+            entries: vec![QuestLogEntryView {
+                quest_id: 7,
+                title: "Wolves".into(),
+                detail: Some(QuestLogDetail {
+                    reward_spell: reward,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            num_quests: 1,
+            ..Default::default()
+        };
+        s.set_quest_log(log(Some(spell(Some("Fireball")))));
+        assert!(
+            s.eval::<bool>("return GetQuestLogSpellLink() == nil")
+                .unwrap(),
+            "no selection"
+        );
+        s.run("SelectQuestLogEntry(1)").unwrap();
+        assert_eq!(
+            s.eval::<String>("return GetQuestLogSpellLink()").unwrap(),
+            "|cff71d5ff|Hspell:133|h[Fireball]|h|r"
+        );
+        s.set_quest_log(log(Some(spell(None))));
+        assert!(
+            s.eval::<bool>("return GetQuestLogSpellLink() == nil")
+                .unwrap(),
+            "record unknown"
+        );
+        assert!(s
+            .eval::<bool>(
+                "return select('#', GetQuestSpellLink()) == 1 and GetQuestSpellLink() == nil"
             )
             .unwrap());
     }

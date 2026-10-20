@@ -16,7 +16,8 @@ use benilla_ui::script::{
 use crate::creature_type::CreatureTypeSources;
 use crate::names::NameCache;
 use crate::net::{
-    FieldChanged, FieldEdges, Guid, NetCommands, ObjectStore, Reputations, SelfPlayer,
+    FieldChanged, FieldEdges, Guid, NetCommands, NetHandlerApp, ObjectStore, Reputations,
+    SelfPlayer,
 };
 use crate::target::{ring_reaction, Factions, Selection};
 use crate::ui_script::{gate, UiInput};
@@ -92,6 +93,13 @@ struct UnitFeedState {
     warned_sideless: bool,
 }
 
+/// The focus unit's guid (`0xbd07d0`), 0 for none: `FocusUnit`/`ClearFocus` set it through
+/// `0x51ff20`, and a new session starts without one.
+#[derive(Resource, Default)]
+pub(crate) struct FocusUnit {
+    pub(crate) guid: u64,
+}
+
 /// The per-VM half of [`UnitFeedState`]: the event-trigger diffs.
 #[derive(Default)]
 struct UnitFeedMemo {
@@ -103,6 +111,7 @@ struct UnitFeedMemo {
     /// Per token, the last snapshot pushed.
     last: HashMap<String, UnitState>,
     target_guid: Option<u64>,
+    focus_guid: u64,
     last_xp: Option<(u32, u32)>,
     /// `(rest state, pool, PLAYER_FLAGS)`, pushed as one so no binding reads it half-updated.
     last_rest: Option<(u8, u32, u32)>,
@@ -134,6 +143,12 @@ impl Plugin for UiUnitPlugin {
                 .run_if(crate::ui_script::ingame_ui_up),
         )
         .init_resource::<UnitFeedState>()
+        .init_resource::<FocusUnit>()
+        .net_handler(benilla_protocol::SessionEventKind::Connected, clear_focus)
+        .net_handler(
+            benilla_protocol::SessionEventKind::Disconnected,
+            clear_focus,
+        )
         // A UI-only harness has no sound or net stack, and a missing resource or message is a
         // system-validation panic; declaring twice is idempotent.
         .init_resource::<crate::sound::MessageSounds>()
@@ -163,6 +178,7 @@ impl Plugin for UiUnitPlugin {
                 .in_set(UnitFeed),
         )
         .add_systems(Update, drain_pvp_toggles.after(UiInput))
+        .add_systems(Update, drain_focus.after(UiInput))
         .add_systems(Update, drain_worn_display_toggles.after(UiInput))
         .add_systems(Update, drain_action_bar_toggles.after(UiInput))
         .add_systems(Update, feed_default_language.in_set(UnitFeed))
@@ -998,6 +1014,30 @@ pub(crate) fn enrich_unit(
 }
 
 /// Drain `TogglePVP` into `CMSG_TOGGLE_PVP`; `/pvp` is the reference's only caller.
+/// `FocusUnit`/`ClearFocus` into the focus guid (`0x51ff20`); `feed_units` pushes the `"focus"`
+/// snapshot and `PLAYER_FOCUS_CHANGED`. Labelled: the setter's protected-state refusal
+/// (`0xd4139c`, `0x513530`) and its `0x2000` render flag on the focused unit are not modelled.
+fn drain_focus(script: Option<NonSendMut<UiScript>>, mut focus: ResMut<FocusUnit>) {
+    let Some(mut script) = script else {
+        return;
+    };
+    if let Some(guid) = script.take_focus_request() {
+        if focus.guid != guid {
+            focus.guid = guid;
+        }
+    }
+}
+
+fn clear_focus(In(event): In<benilla_protocol::SessionEvent>, mut focus: ResMut<FocusUnit>) {
+    if matches!(
+        event,
+        benilla_protocol::SessionEvent::Connected { .. }
+            | benilla_protocol::SessionEvent::Disconnected { .. }
+    ) {
+        focus.guid = 0;
+    }
+}
+
 fn drain_pvp_toggles(script: Option<NonSendMut<UiScript>>, commands: Res<NetCommands>) {
     let Some(mut script) = script else {
         return;
@@ -1263,7 +1303,7 @@ fn feed_units(
     tables: SnapshotTables,
 
     self_q: Query<(&ObjectStore, &Guid), With<SelfPlayer>>,
-    selection: Res<Selection>,
+    (selection, focus_unit): (Res<Selection>, Option<Res<FocusUnit>>),
     // `Option`, as `factions`, `interact` and `entered_world`: a UI-only harness lacks their
     // plugins, and a bare `Res` is a system-validation panic.
     index: Option<Res<crate::net::GuidIndex>>,
@@ -1311,6 +1351,8 @@ fn feed_units(
     let interact_changed = interact.as_ref().is_some_and(|r| r.is_changed());
     // Build 12340's combo points arrive outside every descriptor.
     let combo_changed = stores.combo.as_ref().is_some_and(|r| r.is_changed());
+    // `FocusUnit`/`ClearFocus` move only the focus guid.
+    let focus_changed = focus_unit.as_ref().is_some_and(|r| r.is_changed());
     gate::trace(
         "feed_units",
         &[
@@ -1325,6 +1367,7 @@ fn feed_units(
             ("factions", factions_changed),
             ("interact", interact_changed),
             ("combo", combo_changed),
+            ("focus", focus_changed),
         ],
     );
     let gate = gate::Gate::new(
@@ -1338,7 +1381,8 @@ fn feed_units(
             || reps_changed
             || factions_changed
             || interact_changed
-            || combo_changed,
+            || combo_changed
+            || focus_changed,
     );
     stores.removed.clear();
     if gate.skip() {
@@ -1408,6 +1452,13 @@ fn feed_units(
         .and_then(|guid| Some((*index.as_ref()?.0.get(&guid)?, guid)))
         .and_then(|(entity, guid)| Some(held.state(stores.all.get(entity).ok()?, guid)));
 
+    // `"focus"`: the focus guid's unit while held, streamed guids only, as `"targettarget"`.
+    let focus_guid = focus_unit.as_deref().map_or(0, |f| f.guid);
+    let focus = (focus_guid != 0)
+        .then_some(focus_guid)
+        .and_then(|guid| Some((*index.as_ref()?.0.get(&guid)?, guid)))
+        .and_then(|(entity, guid)| Some(held.state(stores.all.get(entity).ok()?, guid)));
+
     // `"player"` is pushed only while its descriptor exists: the roster seat stands in before
     // arrival, and `PLAYER_LOGOUT` handlers still read `UnitName("player")`, as the reference's do.
     // `"target"` pushes its absence too; both diff against the event loop's memo.
@@ -1435,6 +1486,15 @@ fn feed_units(
     if tot_dirty {
         gate.audit("feed_units", "the target-of-target snapshot");
         script.set_unit("targettarget", tot.clone());
+    }
+    let focus_dirty = match (&focus, memo.last.get("focus")) {
+        (Some(cur), Some(prev)) => cur != prev,
+        (None, None) => false,
+        _ => true,
+    };
+    if focus_dirty {
+        gate.audit("feed_units", "the focus snapshot");
+        script.set_unit("focus", focus.clone());
     }
 
     // `"npc"`: the interaction NPC, the reference's `[0xb4e2d0]` that `CGGameUI::SetInteractNPC`
@@ -1594,6 +1654,7 @@ fn feed_units(
         ("player", &player),
         ("target", &target),
         ("targettarget", &tot),
+        ("focus", &focus),
     ] {
         match snap {
             Some(cur) => {
@@ -1619,6 +1680,12 @@ fn feed_units(
         gate.audit("feed_units", "the PLAYER_TARGET_CHANGED edge");
         memo.target_guid = selection.guid;
         script.fire_event("PLAYER_TARGET_CHANGED", vec![]);
+    }
+    // `PLAYER_FOCUS_CHANGED` (`0x51ff20`'s event `0x9e`), argless, when the focus guid moves.
+    if focus_guid != memo.focus_guid {
+        gate.audit("feed_units", "the PLAYER_FOCUS_CHANGED edge");
+        memo.focus_guid = focus_guid;
+        script.fire_event("PLAYER_FOCUS_CHANGED", vec![]);
     }
 
     // `PLAYER_REGEN_DISABLED`/`ENABLED` on our in-combat flag's edge (`UNIT_FLAG_IN_COMBAT`
@@ -3987,5 +4054,69 @@ mod tests {
         app.world_mut().write_message(port(true));
         app.update();
         assert_eq!(left(&mut app), 2, "the next world's departure fires again");
+    }
+
+    /// The focus guid names a held unit: `"focus"` reads it and `PLAYER_FOCUS_CHANGED` fires on each
+    /// move of the guid, a clear included.
+    #[test]
+    fn the_focus_guid_pushes_the_focus_snapshot_and_its_event() {
+        const MOB: u64 = 0xF130_0000_9700_0001;
+        let mut app = App::new();
+        app.init_resource::<UnitFeedState>()
+            .init_resource::<Selection>()
+            .init_resource::<NameCache>()
+            .init_resource::<Reputations>()
+            .init_resource::<crate::ui_party::GroupState>()
+            .init_resource::<crate::ui_chat::ChatLog>()
+            .init_resource::<crate::sound::MessageSounds>()
+            .init_resource::<crate::ui_guild::GuildState>()
+            .init_resource::<crate::ui_session::InteractNpc>()
+            .init_resource::<crate::net::GuidIndex>()
+            .init_resource::<FocusUnit>();
+        app.add_message::<FieldChanged>();
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        app.insert_resource(NetCommands(tx));
+        let script = UiScript::new().unwrap();
+        script
+            .run("SEEN = 0 local f = CreateFrame('Frame') f:RegisterEvent('PLAYER_FOCUS_CHANGED') f:SetScript('OnEvent', function() SEEN = SEEN + 1 end)")
+            .unwrap();
+        app.insert_non_send_resource(script);
+        app.add_systems(Update, feed_units);
+        let mob = app
+            .world_mut()
+            .spawn((
+                Guid(MOB),
+                ObjectStore(benilla_protocol::messages::ObjectFields::from_native_pairs(
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
+                    &[(
+                        benilla_protocol::messages::FieldLayout::Wrath12340
+                            .index_of(benilla_protocol::messages::Field::UnitLevel),
+                        12,
+                    )],
+                )),
+            ))
+            .id();
+        app.world_mut()
+            .resource_mut::<crate::net::GuidIndex>()
+            .0
+            .insert(MOB, mob);
+        let eval = |app: &mut App, expr: &str| -> i64 {
+            app.world_mut()
+                .non_send_resource_mut::<UiScript>()
+                .eval::<i64>(expr)
+                .unwrap()
+        };
+        app.update();
+        assert_eq!(eval(&mut app, "return SEEN"), 0, "no focus, no edge");
+        app.world_mut().resource_mut::<FocusUnit>().guid = MOB;
+        app.update();
+        assert_eq!(eval(&mut app, "return UnitLevel('focus')"), 12);
+        assert_eq!(eval(&mut app, "return SEEN"), 1);
+        app.update();
+        assert_eq!(eval(&mut app, "return SEEN"), 1, "once per move");
+        app.world_mut().resource_mut::<FocusUnit>().guid = 0;
+        app.update();
+        assert_eq!(eval(&mut app, "return UnitExists('focus') and 1 or 0"), 0);
+        assert_eq!(eval(&mut app, "return SEEN"), 2);
     }
 }
