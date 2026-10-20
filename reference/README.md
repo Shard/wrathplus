@@ -1,5 +1,11 @@
 # `reference/`: verified facts about the 1.12.1 client, vendored
 
+These tables describe the 1.12.1 client this fork started from. They back only the 1.12
+reference-surface gates, which Vanilla removal step 9 deletes with them
+([`docs/VANILLA-REMOVAL-PLAN.md`](../docs/VANILLA-REMOVAL-PLAN.md)). The 3.3.5 interface surface is
+measured against the installed client instead, by the FrameXML census (`benilla-app`'s
+`wrath_framexml_tests`, with its `NATIVE_ABSENT` and arity lists).
+
 Generated tables describing the reference client, committed so benilla can measure itself against
 them on any machine without re-deriving them. Data, not documentation: each has a generator beside
 it in `scripts/`.

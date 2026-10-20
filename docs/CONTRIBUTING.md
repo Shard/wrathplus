@@ -1,33 +1,33 @@
 # Contributing
 
-benilla is a faithful 1.12.1 client. It is the foundation people build on, not the place to get
-creative: a change is accepted when it makes benilla more like 1.12.1 or fixes a bug, with
-evidence from the reference, in one small piece, with the gates green. Everything else lives on
-top of benilla, in a crate of its own or a fork, and both are welcome.
+This fork is a faithful 3.3.5a (build 12340) client: in its default **Classic** preset a change
+is accepted when it makes the client more like the stock 3.3.5a client or fixes a bug, with
+evidence from the reference, in one small piece, with the gates green. The optional **Plus**
+preset ([`EXPERIENCE.md`](EXPERIENCE.md)) is the one in-tree exception, and every Plus feature is
+off under Classic. Everything else lives on top, in a crate of its own or a fork. The 1.12 paths
+still in the tree are being removed ([`VANILLA-REMOVAL-PLAN.md`](VANILLA-REMOVAL-PLAN.md)) and are
+not a reference for new work.
 
 ## Where to start
 
-The [issues](https://github.com/samwhosung/benilla/issues) the maintainers file are checked
-against 1.12.1 first: each says what 1.12.1 does, what benilla does instead, and where in the
-code, and any of them is a place to start. One labelled `in progress` is taken: someone is
-working on it or a pull request is open for it, so pick another. Once you start one, open a draft
-pull request that says `Fixes #N` as soon as you have a first commit, so the issue shows it is
-taken.
+Open work is planned in [`WRATH-NATIVE-PLAN.md`](WRATH-NATIVE-PLAN.md), its gaps in
+[`WRATH-OPCODE-COVERAGE.md`](WRATH-OPCODE-COVERAGE.md), and what play-testing found in
+[`WRATH-BUG-BACKLOG.md`](WRATH-BUG-BACKLOG.md). Each entry says what 3.3.5a does, what the client
+does instead, and where. Work happens on a branch and lands by review.
 
 ## What gets in
 
 - A fix for a bug, with how to see it before and after.
-- A step closer to 1.12.1: a missing packet, verb, window, effect or behaviour, done the way
+- A step closer to 3.3.5a: a missing packet, verb, window, effect or behaviour, done the way
   the real client does it.
-- A correction where benilla and the reference disagree, with the reference fact stated.
-- Whatever the stock 1.12.1 client loads from a patch, benilla loads: models, textures or data
-  rows that 1.12.1 shows and benilla does not are a bug.
+- A correction where the client and the reference disagree, with the reference fact stated.
+- Whatever the stock 3.3.5a client loads from its archives, the client loads: models, textures or
+  data rows that 3.3.5a shows and the client does not are a bug.
 
 ## What does not
 
-- Features 1.12.1 does not have, including what 1.12 client mods add (a new key binding, a spell
-  queue, new Lua functions, graphics past 1.12's), and behaviour changed because it seems better.
-  They live on top of benilla ("Building on top"), so that what benilla does is what 1.12.1 does,
+- Features 3.3.5a does not have, and behaviour changed because it seems better, outside the Plus
+  preset. They live on top ("Building on top"), so that what Classic does is what 3.3.5a does,
   for everyone who builds on it. A deviation from the reference is the maintainer's call and is
   recorded where it lives; a pull request is not the place to propose one.
 - Anything from a WoW install: art, models, sounds, maps, data, and interface code (FrameXML and
@@ -36,13 +36,13 @@ taken.
 
 ## Building on top
 
-A feature 1.12.1 does not have lives in a crate of its own that adds its Bevy plugins through
+A feature 3.3.5a does not have lives in a crate of its own that adds its Bevy plugins through
 `benilla_app::run_with`, as `crates/benilla-app/examples/extended_launcher.rs` shows, or in a
 fork. A client started through `run_with` says `extended` in its build line, so its reports read
 apart from stock benilla's. The crate keeps its own settings, never rows in benilla's CVar table,
 which every addon reads.
 
-benilla opens a piece of itself to such a crate only when its own 1.12.1 work creates that piece,
+benilla opens a piece of itself to such a crate only when its own 3.3.5a work creates that piece,
 never for the crate alone, and promises no stable API: a crate pins the benilla revision it
 builds on. What a crate cannot reach stays a fork's.
 
@@ -53,10 +53,12 @@ builds on. What a crate cannot reach stays a fork's.
    doc-link and render-pass lints, the player build with its own tests, and the engine boot
    checks. A pull request from a fork runs the ones that need neither the install nor a display
    in CI, on Linux; the rest run on the maintainer's machine before it lands.
-2. The reference fact is stated: what 1.12.1 does, and where that is known from (the client's
-   behaviour you observed, a DBC field, a FrameXML line, a packet capture). The names and shapes
-   under `reference/` are the surface benilla tracks.
-3. A comment where it matters, one line, saying what the code does and the 1.12 fact behind it.
+2. The reference fact is stated: what 3.3.5a does, and where that is known from (the build-12340
+   `Wow.exe`, a DBC field, a FrameXML line, a packet capture, AzerothCore source for a wire
+   layout). The 3.3.5 interface surface is the installed-FrameXML census
+   (`benilla-app`'s `wrath_framexml_tests`); the 1.12 tables under `reference/` serve only the
+   1.12 gates that removal step 9 deletes.
+3. A comment where it matters, one line, saying what the code does and the 3.3.5a fact behind it.
    No history.
 4. The commit message says what changed, for a player or a developer, in one line.
 
@@ -75,17 +77,19 @@ out of scope is closed with the reason.
   compiler, because the client's Lua is vendored and built from source. On macOS the Xcode
   command line tools, which also supply libclang for the audio bindings; on Linux the ALSA and
   udev development packages and pkg-config. `python3` runs two of the gates.
-- **A 1.12.1 install of your own.** `WOW_DATA=<its Data folder>`, or a `WoW` link at the repo
+- **A 3.3.5a install of your own.** `WOW_DATA=<its Data folder>`, or a `WoW` link at the repo
   root, which only a dev build sees: the player build looks for `Data/` or `WoW/Data/` beside
-  the binary. benilla reads the install and never writes into it. `WOW_DATA=` (set, empty)
+  the binary. The client reads the install and never writes into it. `WOW_DATA=` (set, empty)
   means "no install", which is how the no-install boot is tested on a machine that has one.
+  `WOW_CLIENT_PROFILE=wrath` (the only profile) and `WOW_LOCALE` (default `enUS`) select the
+  archive dialect; the hermetic gates unset both.
 - **Without the install, green is hollow.** Well over a thousand tests read the install and skip
-  when it is absent, and a few dozen more read a corpus of vanilla addons
+  when it is absent, and a few dozen more read a corpus of 1.12 addons for the 1.12 VM tests
   (`BENILLA_ADDON_CORPUS=<a folder of addons>`, or a `wow-addons-vanilla` link at the root),
   third-party content that is not in this repo. `scripts/gates.sh` and `scripts/check.sh` print
   how many tests skipped and why. Where the data is, `BENILLA_REQUIRE_DATA=1` turns a skip into a
   failure, and the gates set it themselves when the install and the corpus both resolve.
-- **A server to test against.** Any 1.12.1 server; `WOW_HOST` names it (default
+- **A server to test against.** An AzerothCore 3.3.5a server; `WOW_HOST` names it (default
   `localhost:3724`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
   `WOW_CHAR` name a test account on your server whose login kicks nobody, all three, either in
   the environment or in a `.probe-identity` file at the repo root (one per line, never
@@ -98,9 +102,10 @@ out of scope is closed with the reason.
   - `WOW_UNATTENDED=1` reconnects instead of waiting at a dialog, and exits non-zero on a login
     it cannot pass. `WOW_NOSOUND=1` runs silent. A capture (`WOW_CAPTURE`) is both, and a rig
     (`WOW_RIG`) is unattended. `WOW_ALLOW_ACCOUNT=1` overrides the account guard.
-  - On vmangos, `WOW_RIG="tauren druid 60 gear:heal-preraid-bis spec:heal-preraid-bis
-    at:ThunderBluff"` finds or creates that character on the account and applies the server's
-    premade sets (`WOW_RIG="gear:?"` lists them). `WOW_PROBE_CHAT="<command>"` sends one GM
+  - `WOW_RIG="tauren druid 60 gear:heal-preraid-bis spec:heal-preraid-bis at:ThunderBluff"`
+    finds or creates that character on the account and applies the server's premade sets
+    (`WOW_RIG="gear:?"` lists them). It was built on vmangos's `.character premade` commands and
+    is not ported to AzerothCore. `WOW_PROBE_CHAT="<command>"` sends one GM
     command and logs the reply as `net: server says`. An account named `probe` and digits is
     shielded: every world entry sends `.cheat god on`, `.die` clears it for a death test, and
     `WOW_GOD=off` leaves it off.
@@ -123,9 +128,9 @@ out of scope is closed with the reason.
 
 ## Reporting a bug
 
-Open an issue: what you did, what you saw and what 1.12.1 does instead, with the `benilla build`
-line from the start of the terminal output, your platform and the server you ran on. Questions
-and ideas are welcome there or on the Discord linked from the README.
+Add it to [`WRATH-BUG-BACKLOG.md`](WRATH-BUG-BACKLOG.md): what you did, what you saw and what
+3.3.5a does instead, with the `benilla build` line from the start of the terminal output, your
+platform and the server you ran on.
 
 Working with an AI agent is expected. The agent reads `AGENTS.md`, and the same rules bind it.
 
@@ -163,6 +168,9 @@ LiquidMaterial render selector. Schema/consumer references: AzerothCore
 (`LiquidTypefmt`), `game/DataStores/DBCStores.cpp::GetLiquidFlags` (`1 << Type`),
 and `game/Grids/GridTerrainData.h` water/ocean/magma/slime masks 1/2/4/8.
 Catalogs load once from the same explicit boot override chain as the asset reader.
-Legacy MLIQ rendering, texture/UV/opacity/scroll/sound policy is unchanged; this
-query-state integration does not certify native liquid visual parity. Camera
+The grid is built with the resolved category (`wmo_group_liquid_mesh_of_kind`): under MOHD
+`0x4` `groupLiquid` is the resolver input, not a nibble, and the nibble reading dropped every
+Stormwind canal and Ironforge pool. The speed bits come from the input (`n − 1`), which reproduce
+the 1.12 nibbles over the shipped cities; texture/UV/opacity/scroll/sound policy is otherwise the
+legacy one, and this does not certify native liquid visual parity. Camera
 submersion's existing treatment of whole-room floods is not broadened here.
