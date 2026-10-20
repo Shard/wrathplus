@@ -2,10 +2,6 @@
 //! The bar is client-authoritative: the server stores the slots, sends them at login, and takes
 //! one `CMSG_SET_ACTION_BUTTON` per local change.
 
-use std::io::{self};
-
-use crate::wire::read_u32_le;
-
 /// The action-button kind, bits 24-31 of a slot word (`ActionButtonType`, vmangos `Player.h`).
 pub const ACTION_KIND_SPELL: u8 = 0x00;
 pub const ACTION_KIND_MACRO: u8 = 0x40;
@@ -23,24 +19,6 @@ pub struct ActionButton {
     pub kind: u8,
 }
 
-/// Reads slot words to the end of the body (the server sends 120), dropping empty ones.
-pub(super) fn read_action_buttons(r: &mut &[u8]) -> io::Result<Vec<ActionButton>> {
-    let mut buttons = Vec::new();
-    let mut slot: u32 = 0;
-    while !r.is_empty() {
-        let packed = read_u32_le(r)?;
-        if packed != 0 {
-            buttons.push(ActionButton {
-                slot: slot.min(u8::MAX as u32) as u8,
-                action: packed & 0x00FF_FFFF,
-                kind: (packed >> 24) as u8,
-            });
-        }
-        slot += 1;
-    }
-    Ok(buttons)
-}
-
 /// `CMSG_SET_ACTION_BUTTON` (296): `button u8`, `packetData u32` packed as in [`ActionButton`]
 /// (`Server/Packets/Misc.cpp:87-90`). Zero clears the slot (no reply); a drag-swap is two sends.
 pub fn set_action_button(button: u8, packed: u32) -> Vec<u8> {
@@ -48,13 +26,4 @@ pub fn set_action_button(button: u8, packed: u32) -> Vec<u8> {
     body.push(button);
     body.extend_from_slice(&packed.to_le_bytes());
     body
-}
-
-/// `CMSG_SET_ACTIONBAR_TOGGLES`: one `u8`, the whole body (`SetActionBarToggles 0x4e76e0`).
-/// The byte is server-owned: the reference never writes its copy (`PLAYER_FIELD_BYTES` byte 2),
-/// which changes only when `SMSG_UPDATE_OBJECT` echoes it, with no change event; read it with
-/// [`super::ObjectFields::player_action_bar_toggles`]. The reference packs only bits 0..3, so a
-/// set clears the high nibble; this encoder does not mask. Bits name bars only in FrameXML.
-pub fn set_actionbar_toggles(toggles: u8) -> Vec<u8> {
-    vec![toggles]
 }

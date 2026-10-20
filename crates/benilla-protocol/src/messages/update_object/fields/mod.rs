@@ -1,6 +1,5 @@
-use std::io::{self, Read};
 
-use crate::wire::{capacity_hint, read_u32_le, read_u8, Vector3d};
+use crate::wire::Vector3d;
 
 use super::movement::ObjectType;
 
@@ -348,31 +347,8 @@ pub struct ObjectFields {
     descriptor_end: u16,
 }
 
-/// Mask words of the widest descriptor, `PLAYER_END`; no 1.12 object needs more.
-const MAX_MASK_WORDS: usize = 1282usize.div_ceil(32);
 
 impl ObjectFields {
-    pub(super) fn read(r: &mut impl Read) -> io::Result<Self> {
-        let amount_of_blocks = read_u8(r)?;
-        let mut present = Vec::with_capacity(capacity_hint(amount_of_blocks, MAX_MASK_WORDS));
-        for _ in 0..amount_of_blocks {
-            present.push(read_u32_le(r)?);
-        }
-        let mut values = vec![0u32; present.len() * 32];
-        for (word, block) in present.iter().enumerate() {
-            for bit in 0..32 {
-                if block & (1u32 << bit) != 0 {
-                    values[word * 32 + bit] = read_u32_le(r)?;
-                }
-            }
-        }
-        Ok(Self {
-            present,
-            values,
-            descriptor_end: 0,
-            layout: FieldLayout::Vanilla5875,
-        })
-    }
 
     /// Marks a CREATE snapshot of `object_type`, so absent fields in its descriptor read 0.
     pub fn into_created(mut self, object_type: ObjectType) -> Self {

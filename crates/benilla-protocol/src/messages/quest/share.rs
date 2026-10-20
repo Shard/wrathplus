@@ -3,10 +3,6 @@
 //! player guid as `npcGuid`, and Accept sends `CMSG_QUESTGIVER_ACCEPT_QUEST` to that guid
 //! (`QuestHandler.cpp:111-114, 403-459`). The push-result guid names a different player each way.
 
-use std::io;
-
-use crate::wire::{read_cstring, read_u32_le, read_u64_le, read_u8};
-
 /// `QuestShareMessages` (vmangos `QuestDef.h:62-70`): the `u8` verdict of `MSG_QUEST_PUSH_RESULT`.
 /// A newtype, not an enum, so an unknown value survives the parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -77,25 +73,6 @@ pub fn quest_push_result(sharer: u64, msg: QuestShareMsg) -> Vec<u8> {
 
 // ── SMSG readers ─────────────────────────────────────────────────────────────────────────────────
 
-/// Read `MSG_QUEST_PUSH_RESULT` from the server.
-pub(in crate::messages) fn read_quest_push_result(r: &mut &[u8]) -> io::Result<QuestPushResult> {
-    Ok(QuestPushResult {
-        member: read_u64_le(r)?,
-        msg: QuestShareMsg(read_u8(r)?),
-    })
-}
-
-/// Read `SMSG_QUEST_CONFIRM_ACCEPT`.
-pub(in crate::messages) fn read_quest_confirm_accept(
-    r: &mut &[u8],
-) -> io::Result<QuestConfirmAccept> {
-    Ok(QuestConfirmAccept {
-        quest_id: read_u32_le(r)?,
-        title: read_cstring(r)?,
-        sender: read_u64_le(r)?,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,38 +90,5 @@ mod tests {
     fn push_result_body_is_guid_then_msg() {
         let b = quest_push_result(0x0000_0000_0000_002A, QuestShareMsg::DECLINE_QUEST);
         assert_eq!(b, vec![0x2A, 0, 0, 0, 0, 0, 0, 0, 3]);
-    }
-
-    #[test]
-    fn push_result_reads_member_then_msg() {
-        let mut b = 0x0000_0000_0000_00AAu64.to_le_bytes().to_vec();
-        b.push(8);
-        let r = read_quest_push_result(&mut b.as_slice()).unwrap();
-        assert_eq!(
-            r,
-            QuestPushResult {
-                member: 0xAA,
-                msg: QuestShareMsg::FINISH_QUEST,
-            }
-        );
-    }
-
-    #[test]
-    fn unknown_verdict_byte_parses() {
-        let mut b = 1u64.to_le_bytes().to_vec();
-        b.push(0x7F);
-        let r = read_quest_push_result(&mut b.as_slice()).unwrap();
-        assert_eq!(r.msg, QuestShareMsg(0x7F));
-    }
-
-    #[test]
-    fn confirm_accept_reads_id_title_sender() {
-        let mut b = 1234u32.to_le_bytes().to_vec();
-        b.extend_from_slice(b"Escort Duty\0");
-        b.extend_from_slice(&0xF130_0000_0000_0001u64.to_le_bytes());
-        let c = read_quest_confirm_accept(&mut b.as_slice()).unwrap();
-        assert_eq!(c.quest_id, 1234);
-        assert_eq!(c.title, "Escort Duty");
-        assert_eq!(c.sender, 0xF130_0000_0000_0001);
     }
 }

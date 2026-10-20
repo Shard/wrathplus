@@ -1,74 +1,12 @@
 //! The `MovementInfo` body every `MSG_MOVE_*` carries, its flag bits, and the movement verbs.
 
-use std::io::{self, Read};
-
-use crate::wire::{read_f32_le, read_u32_le, read_u64_le, Vector3d};
+use crate::wire::Vector3d;
 
 // MovementFlags bits (vmangos `MovementInfo.h`). ON_TRANSPORT is 1.12's 0x0200_0000
 // (`MovementInfo.h:56`), not TBC's 0x200, which 1.12 names `MOVEFLAG_UNUSED10`.
 pub(super) const MOVEMENT_FLAG_ON_TRANSPORT: u32 = 0x0200_0000;
 pub(super) const MOVEMENT_FLAG_JUMPING: u32 = 0x2000;
 pub(super) const MOVEMENT_FLAG_SWIMMING: u32 = 0x20_0000;
-pub(super) const MOVEMENT_FLAG_SPLINE_ENABLED: u32 = 0x40_0000;
-pub(super) const MOVEMENT_FLAG_SPLINE_ELEVATION: u32 = 0x400_0000;
-
-/// `MSG_MOVE_TIME_SKIPPED` inbound: a packed guid and the ms that mover's client skipped
-/// (reference handler `0x603b40`; vmangos `MovementHandler.cpp:1005-1011`). Our own send uses a
-/// plain 8-byte guid ([`super::client::move_time_skipped`]); the asymmetry is the reference's.
-pub(super) fn read_move_time_skipped(r: &mut &[u8]) -> io::Result<(u64, u32)> {
-    let guid = crate::wire::read_packed_guid(r)?;
-    let lag_ms = read_u32_le(r)?;
-    Ok((guid, lag_ms))
-}
-
-/// vmangos `MovementInfo::Read` order: flags, time, position, facing, the transport pose if
-/// `ON_TRANSPORT` (1.12 has no transport time), the swim pitch if `SWIMMING`, `u32` fall time, the
-/// jump tail if `JUMPING`, then a spline-elevation `f32` if `SPLINE_ELEVATION`, read and dropped.
-pub(super) fn read_movement_info(r: &mut impl Read) -> io::Result<MovementInfo> {
-    let flags = read_u32_le(r)?;
-    let timestamp = read_u32_le(r)?;
-    let position = Vector3d::read(r)?;
-    let orientation = read_f32_le(r)?;
-    let transport = if flags & MOVEMENT_FLAG_ON_TRANSPORT != 0 {
-        Some(TransportPose {
-            // A full u64, not packed (vmangos `ObjectGuid.cpp:180`, `buf.read<uint64>()`).
-            guid: read_u64_le(r)?,
-            pos: Vector3d::read(r)?,
-            orientation: read_f32_le(r)?,
-        })
-    } else {
-        None
-    };
-    let pitch = if flags & MOVEMENT_FLAG_SWIMMING != 0 {
-        read_f32_le(r)?
-    } else {
-        0.0
-    };
-    let fall_time = read_u32_le(r)?;
-    let jump = if flags & MOVEMENT_FLAG_JUMPING != 0 {
-        Some(JumpInfo {
-            zspeed: read_f32_le(r)?,
-            cos_angle: read_f32_le(r)?,
-            sin_angle: read_f32_le(r)?,
-            xy_speed: read_f32_le(r)?,
-        })
-    } else {
-        None
-    };
-    if flags & MOVEMENT_FLAG_SPLINE_ELEVATION != 0 {
-        let _ = read_f32_le(r)?;
-    }
-    Ok(MovementInfo {
-        flags,
-        timestamp,
-        position,
-        orientation,
-        transport,
-        pitch,
-        fall_time,
-        jump,
-    })
-}
 
 // --- movement vocabulary ---
 
@@ -147,12 +85,6 @@ impl MoveMode {
             // `CMSG_MOVE_SET_CAN_FLY_ACK`, build 12340 only.
             (MoveMode::CanFly, _) => 0x0345,
         }
-    }
-
-    /// Whether the ack ends in a `u32 apply`: not root's, whose handler infers it from the opcode
-    /// (vmangos `Server/Packets/Movement.cpp:38-59`).
-    pub fn ack_carries_apply(self) -> bool {
-        !matches!(self, MoveMode::Root)
     }
 }
 
@@ -304,87 +236,5 @@ impl MovementInfo {
             w.extend_from_slice(&j.sin_angle.to_le_bytes());
             w.extend_from_slice(&j.xy_speed.to_le_bytes());
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::wire::Vector3d;
-
-    fn info(flags: u32) -> MovementInfo {
-        MovementInfo {
-            flags,
-            timestamp: 12345,
-            position: Vector3d {
-                x: 1.0,
-                y: 2.0,
-                z: 3.0,
-            },
-            orientation: 0.5,
-            transport: None,
-            pitch: -0.7,
-            fall_time: 42,
-            jump: None,
-        }
-    }
-
-    #[test]
-    fn swim_pitch_round_trips_when_swimming() {
-        let mut bytes = Vec::new();
-        info(MOVEMENT_FLAG_SWIMMING).write(&mut bytes);
-        let back = read_movement_info(&mut &bytes[..]).expect("parse");
-        assert_eq!(back.flags, MOVEMENT_FLAG_SWIMMING);
-        assert_eq!(back.pitch, -0.7, "the swim pitch survives the round-trip");
-        assert_eq!(back.orientation, 0.5);
-        assert_eq!(
-            back.fall_time, 42,
-            "fall_time still lands after the pitch tail"
-        );
-    }
-
-    #[test]
-    fn transport_tail_round_trips_when_riding() {
-        let mut riding = info(MOVEMENT_FLAG_ON_TRANSPORT);
-        riding.transport = Some(TransportPose {
-            guid: 0x1FC0_0000_0000_2B10, // a HIGH_MO_TRANSPORT-shaped guid
-            pos: Vector3d {
-                x: -5.5,
-                y: 2.25,
-                z: 8.0,
-            },
-            orientation: 1.5,
-        });
-        let mut bytes = Vec::new();
-        riding.write(&mut bytes);
-        let mut walking = Vec::new();
-        info(0).write(&mut walking);
-        assert_eq!(
-            bytes.len() - walking.len(),
-            24,
-            "the transport tail adds exactly u64 + 4×f32"
-        );
-        let back = read_movement_info(&mut &bytes[..]).expect("parse");
-        let t = back.transport.expect("transport pose survives");
-        assert_eq!(t.guid, 0x1FC0_0000_0000_2B10);
-        assert_eq!((t.pos.x, t.pos.y, t.pos.z), (-5.5, 2.25, 8.0));
-        assert_eq!(t.orientation, 1.5);
-        assert_eq!(back.fall_time, 42, "fall_time lands after the tail");
-    }
-
-    #[test]
-    fn no_pitch_tail_when_not_swimming() {
-        let mut swimming = Vec::new();
-        info(MOVEMENT_FLAG_SWIMMING).write(&mut swimming);
-        let mut dry = Vec::new();
-        info(0).write(&mut dry);
-        assert_eq!(
-            swimming.len() - dry.len(),
-            4,
-            "the swim pitch adds exactly one f32 to the packet, and only when swimming"
-        );
-        let back = read_movement_info(&mut &dry[..]).expect("parse");
-        assert_eq!(back.pitch, 0.0, "a dry packet parses a level (0) pitch");
-        assert_eq!(back.fall_time, 42);
     }
 }
