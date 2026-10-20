@@ -8,6 +8,8 @@ use benilla_ui::script::*;
 
 /// The player's guid in the fixtures.
 const ME: u64 = 0x0100_0000_0000_0001;
+/// The target, a creature on whose threat table the player sits.
+const MOB: u64 = 0xF130_0000_0000_0002;
 
 fn slot(item_id: u32, name: &str) -> ContainerSlot {
     ContainerSlot {
@@ -59,6 +61,7 @@ pub(super) fn seed(s: &mut UiScript) {
     // The player resolves by guid, as the aura readers need.
     s.set_unit_guids(&UnitGuids {
         player: ME,
+        target: MOB,
         wrath: true,
         ..Default::default()
     });
@@ -137,6 +140,19 @@ pub(super) fn seed(s: &mut UiScript) {
                     objectives_text: "Kill".into(),
                     ..Default::default()
                 }),
+                ..Default::default()
+            },
+            // Quest id 1, which the probe ladder passes: a POI icon on the displayed map.
+            QuestLogEntryView {
+                quest_id: 1,
+                title: "Report to Goldshire".into(),
+                level: 5,
+                objectives: vec![QuestLogObjectiveView {
+                    text: "Marshal Dughan: 0/1".into(),
+                    kind: "monster".into(),
+                    finished: false,
+                    ..Default::default()
+                }],
                 ..Default::default()
             },
         ],
@@ -689,4 +705,165 @@ pub(super) fn seed(s: &mut UiScript) {
         name: "Taragaman the Hungerer".into(),
         icon: None,
     }]));
+
+    // Battlefields, vehicles, glyphs, threat, quest POI icons, inspect arena teams and zone PvP.
+    battlefield(s);
+    vehicles(s);
+    glyphs(s);
+    threat(s);
+    quest_poi(s);
+    inspect_arena(s);
+    s.set_zone_texts(ZoneTexts {
+        zone: "Elwynn Forest".into(),
+        real_zone: "Elwynn Forest".into(),
+        minimap: "Elwynn Forest".into(),
+        pvp_type: Some("friendly".into()),
+        pvp_faction: Some("Alliance".into()),
+        ..Default::default()
+    });
+}
+
+/// Alterac Valley, listed, with one instance.
+fn battlefield(s: &mut UiScript) {
+    s.set_battleground_types(vec![BattlegroundTypeView {
+        id: 1,
+        name: "Alterac Valley".into(),
+        instance_type: 3,
+        groups_allowed: true,
+        max_group_size: 40,
+        min_level: 51,
+        can_enter: true,
+        description: Some("Fight".into()),
+        has_map: true,
+        ..Default::default()
+    }]);
+    s.set_battlefield_list(BattlefieldListView {
+        bg_type: 1,
+        instances: vec![7],
+        ..Default::default()
+    });
+}
+
+/// The player drives a two-seat siege engine on a battlefield, possessing it with a spell.
+fn vehicles(s: &mut UiScript) {
+    // The getters key by the player unit's own guid, which the census VM leaves at its default.
+    let me = s
+        .eval::<Option<String>>("return UnitGUID('player')")
+        .ok()
+        .flatten()
+        .and_then(|g| u64::from_str_radix(g.trim_start_matches("0x"), 16).ok())
+        .unwrap_or(0);
+    const ENGINE: u64 = 0xF150_0000_0000_0003;
+    let seat = |slot: u8, occupant: Option<(u64, &str)>| VehicleSeatView {
+        vehicle: ENGINE,
+        slot,
+        flags: 0x0000_0800 | 0x0400_0000,
+        flags_b: 0x0000_0020,
+        root: slot == 0,
+        occupant: occupant.map(|o| o.0),
+        occupant_name: occupant.map(|o| o.1.into()),
+    };
+    s.set_wrath_vehicles(WrathVehicles {
+        units: HashMap::from([(
+            me,
+            UnitVehicleView {
+                seated: true,
+                using: true,
+                controlling: true,
+                seat: Some((0x0000_0800, 1)),
+                seats: vec![seat(0, Some((me, "Benchone"))), seat(1, Some((ME + 1, "Benchtwo")))],
+            },
+        )]),
+        has_mover: true,
+        battlefield: vec![BattlefieldVehicleView {
+            uv: Some((0.5, 0.25)),
+            name: Some("Siege Engine".into()),
+            vehicle_type: Some("Drive".into()),
+            facing: 1.5,
+            alive: true,
+            ..Default::default()
+        }],
+        possess_spell: Some(605),
+        possess: Some(PossessView {
+            texture: Some(r"Interface\Icons\Spell_Shadow_ShadowWordDominate".into()),
+            name: "Mind Control".into(),
+            cancel_texture: Some(r"Interface\Icons\Spell_ChargeNegative".into()),
+            cancelable: true,
+        }),
+        ..Default::default()
+    });
+    s.set_vehicle_indicators(HashMap::from([(
+        1,
+        VehicleIndicatorView {
+            texture: r"Interface\Vehicles\SeatIndicator\SiegeEngine".into(),
+            seats: vec![(1, 0.5, 0.25), (2, 0.5, 0.75)],
+        },
+    )]));
+}
+
+/// Six sockets, the first a major holding a glyph.
+fn glyphs(s: &mut UiScript) {
+    let mut sockets: [GlyphSocketView; 6] = Default::default();
+    for (i, socket) in sockets.iter_mut().enumerate() {
+        socket.enabled = true;
+        socket.slot_id = 21 + i as u32;
+        socket.slot = Some((u32::from(i % 2 == 1), i as u32));
+    }
+    sockets[0].glyph_id = 251;
+    sockets[0].glyph = Some(GlyphView {
+        spell_id: 58388,
+        name: "Glyph of Heroic Strike".into(),
+        icon: Some(r"Interface\Icons\INV_Glyph_MajorWarrior".into()),
+    });
+    s.set_glyph_sockets(Some(sockets));
+}
+
+/// The player tanks the target.
+fn threat(s: &mut UiScript) {
+    s.set_threat(ThreatTable {
+        mobs: HashMap::from([(
+            MOB,
+            MobThreat {
+                highest: Some(ME),
+                members: HashMap::from([(ME, 12_000)]),
+                thresholds: HashMap::new(),
+            },
+        )]),
+    });
+}
+
+/// Quest 1 marks its objective on the displayed map; the map update fills the visible list.
+fn quest_poi(s: &mut UiScript) {
+    s.set_wrath_quest_pois(vec![WrathQuestPoi {
+        quest_id: 1,
+        blobs: vec![WrathQuestPoiBlob {
+            objective_index: 0,
+            map_id: 0,
+            area_id: 12,
+            floor: 0,
+            points: vec![(-9_460, 60), (-9_440, 80)],
+        }],
+    }]);
+    s.set_world_loc_projector(Box::new(|_, _, _, _| Some((0.4, 0.6))));
+    let _ = s.run("QuestMapUpdateAllQuests()");
+}
+
+/// The inspected player's 2v2 team.
+fn inspect_arena(s: &mut UiScript) {
+    s.set_inspect_arena_teams([
+        Some(InspectArenaTeamView {
+            info: ArenaTeamInfoView {
+                name: "Bench Pair".into(),
+                size: 2,
+                emblem: [0xff00_0000, 1, 0xffff_ffff, 1, 0xffff_ffff],
+            },
+            rating: 1500,
+            season_games: 10,
+            season_wins: 6,
+            player_games: 10,
+            player_rating: 1520,
+        }),
+        None,
+        None,
+    ]);
 }
