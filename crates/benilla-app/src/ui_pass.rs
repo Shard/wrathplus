@@ -317,14 +317,7 @@ impl Material2d for UiQuadMaterial {
     }
 }
 
-/// Producers that append to [`UiQuads`] after the script extract. In Update after
-/// [`benilla_world::schedule::WorldStage::Input`], the world-anchored ones (combat numbers,
-/// nameplates) project through this frame's camera `Transform` (`GlobalTransform::from`; the
-/// camera is a root entity), not the propagated one a frame behind. Never PostUpdate:
-/// [`rebuild_ui_mesh`] spawns `Mesh2d` batches, and bevy_sprite_render cannot specialize one
-/// spawned there (the whole UI vanishes).
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct UiQuadAppend;
+pub(crate) use crate::app_core::schedule::UiQuadAppend;
 
 /// Project a world point for a world-anchored overlay, with the reference projector's verdict:
 /// `None` does not draw. `0x483ee0` rejects a point behind the near plane (`0x483f7a`) or outside
