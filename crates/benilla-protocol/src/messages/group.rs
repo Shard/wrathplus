@@ -224,9 +224,9 @@ impl PartyMemberStatsInfo {
         self.cur_power = Some(fields.unit_power(power_type).unwrap_or(0) as u16);
         self.max_power = Some(fields.unit_max_power(power_type).unwrap_or(0) as u16);
         self.level = Some(fields.unit_level().unwrap_or(0) as u16);
-        let (buffs, debuffs) = snapshot_aura_block(fields);
-        self.auras = Some(buffs);
-        self.auras_negative = Some(debuffs);
+        // 12340 descriptors carry no aura block; the record's auras stay empty.
+        self.auras = Some(Vec::new());
+        self.auras_negative = Some(Vec::new());
 
         let pet_guid = fields.unit_pet_guid();
         match pet_guid.zip(pet) {
@@ -242,9 +242,8 @@ impl PartyMemberStatsInfo {
                 self.pet_power_type = Some(power_type);
                 self.pet_cur_power = Some(pet.unit_power(power_type).unwrap_or(0) as u16);
                 self.pet_max_power = Some(pet.unit_max_power(power_type).unwrap_or(0) as u16);
-                let (buffs, debuffs) = snapshot_aura_block(pet);
-                self.pet_auras = Some(buffs);
-                self.pet_auras_negative = Some(debuffs);
+                self.pet_auras = Some(Vec::new());
+                self.pet_auras_negative = Some(Vec::new());
             }
             // No pet object: the block is zero-filled (`0x5f0a0f`), its guid included.
             None => {
@@ -297,25 +296,6 @@ impl PartyMemberStatsInfo {
         u32::from(self.pet_max_power.unwrap_or(0))
             / power_display_scale(u32::from(self.shown_pet_power_type()))
     }
-}
-
-/// `(slot, spell id)` pairs of one aura block, as [`PartyMemberStatsInfo::auras`] holds them.
-type AuraSlots = Vec<(u8, u16)>;
-
-/// A live descriptor's aura block as the snapshot copies it (`0x5f098d`-`0x5f09f2`): a slot is
-/// kept when its id is set and its `AURAFLAGS` nibble has an effect bit (`test al,0xe`), the test
-/// [`ObjectFields::unit_auras`] makes; the record holds each id's low word.
-///
-/// [`ObjectFields::unit_auras`]: crate::messages::update_object::ObjectFields::unit_auras
-fn snapshot_aura_block(
-    fields: &crate::messages::update_object::ObjectFields,
-) -> (AuraSlots, AuraSlots) {
-    use crate::messages::update_object::UNIT_AURA_POSITIVE_SLOTS;
-    fields
-        .unit_auras()
-        .map(|a| (a.slot, a.spell_id as u16))
-        .filter(|&(_, id)| id != 0)
-        .partition(|&(slot, _)| slot < UNIT_AURA_POSITIVE_SLOTS)
 }
 
 /// A server `MSG_RAID_TARGET_UPDATE` (`Group.cpp:132-147`): mode 0 is one changed icon, mode 1

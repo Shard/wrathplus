@@ -29,6 +29,19 @@ const RANGED_VISUAL: u32 = 3180;
 const RANGED_CAST_KIT: u32 = 900;
 const FIRE_ANIM: u16 = 46;
 
+/// A streamed unit's descriptor; its auras come by packet ([`set_auras`]).
+fn aura_store() -> crate::net::ObjectStore {
+    crate::net::ObjectStore(
+        benilla_protocol::messages::ObjectFields::default()
+            .into_created(benilla_protocol::messages::ObjectType::Unit),
+    )
+}
+
+/// `guid`'s native aura snapshot as `(slot, spell)` pairs ([`crate::net::wrath_auras::set_for_test`]).
+fn set_auras(app: &mut App, guid: u64, auras: &[(u8, u32)]) {
+    crate::net::wrath_auras::set_for_test(app.world_mut(), guid, auras);
+}
+
 fn app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
@@ -459,8 +472,6 @@ fn ranged_spells_merge_the_weapon_visual_into_their_empty_slots() {
 /// the spell enters the slots and reaps them as it leaves. Food: spell 433 → visual 51 → kit 409.
 #[test]
 fn aura_state_kit_arms_persistent_and_reaps_on_aura_end() {
-    use benilla_protocol::messages::ObjectFields;
-
     const FOOD: u32 = 433;
     const FOOD_VISUAL: u32 = 51;
     const STATE_KIT: u32 = 409;
@@ -529,20 +540,10 @@ fn aura_state_kit_arms_persistent_and_reaps_on_aura_end() {
             .chain(),
     );
 
-    // Slot 0: UNIT_FIELD_AURA[0] (field 47) holds the spell id; occupancy is an effect-index bit
-    // in the slot's AURAFLAGS nibble (field 95's low nibble).
-    let eating = ObjectFields::from_fields(
-        FieldLayout::Vanilla5875,
-        &[(Field::UnitAura, FOOD), (Field::UnitAuraFlags, 0x0E)],
-    );
-    let fasted = ObjectFields::from_fields(FieldLayout::Vanilla5875, &[(Field::UnitAuraFlags, 0)]);
-
-    let unit = app
-        .world_mut()
-        .spawn(crate::net::ObjectStore(
-            eating.into_created(benilla_protocol::messages::ObjectType::Unit),
-        ))
-        .id();
+    // The food aura in packet slot 0.
+    set_auras(&mut app, 0xa1, &[(0, FOOD)]);
+    app.world_mut()
+        .spawn((aura_store(), crate::net::Guid(0xa1)));
     app.update();
     {
         let log = &app.world().resource::<FxLog>().0;
@@ -578,11 +579,7 @@ fn aura_state_kit_arms_persistent_and_reaps_on_aura_end() {
         "a held aura re-arms nothing"
     );
 
-    crate::net::apply_fields_for_test(
-        app.world_mut(),
-        unit,
-        fasted.into_created(benilla_protocol::messages::ObjectType::Unit),
-    );
+    set_auras(&mut app, 0xa1, &[]);
     app.update();
     {
         let log = &app.world().resource::<FxLog>().0;
@@ -1010,7 +1007,7 @@ fn the_mount_poof_puffs_on_the_build_leg_only() {
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133).
-    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
     /// The shipped path of `SpellVisualEffectName` row 1185, the druid-morph cloud.
     const POOF: &str = "Spells\\DruidMorph_Impact_Base.mdx";
     const POOF_FX: u32 = 1185;
@@ -1197,7 +1194,7 @@ fn a_kit_with_a_chain_char_proc_asks_for_a_beam_from_both_dispatcher_sites() {
         .world_mut()
         .spawn(crate::net::ObjectStore(
             benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
+                FieldLayout::Wrath12340,
                 &[(Field::UnitChannelSpell, BEAM_SPELL)],
             )
             .into_created(benilla_protocol::messages::ObjectType::Unit),
@@ -1271,10 +1268,11 @@ const BLACKCROW: RealRanged = RealRanged {
     fire_anim: 49,
 };
 
-/// `PLAYER_VISIBLE_ITEM_18_0`, the item entry in equipment slot 17 (vmangos
-/// `EQUIPMENT_SLOT_RANGED`): `PLAYER_VISIBLE_ITEM_1_CREATOR` (258) + 2 + 12 × 17, spelled out as
-/// the base is private to `benilla-protocol`.
-const VISIBLE_RANGED_ENTRY_FIELD: u16 = 258 + 2 + 12 * 17;
+/// `PLAYER_VISIBLE_ITEM_18_ENTRYID`, the item entry in equipment slot 17 (`EQUIPMENT_SLOT_RANGED`):
+/// two dwords per slot, the entry first.
+const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+    .index_of(benilla_protocol::messages::Field::PlayerVisibleItems)
+    + 2 * 17;
 
 /// Keeps the item layer's ask-once channel alive, so an unexpected `ItemQuery` (a template not
 /// landed, which starves the weapon lookup) is observable.
@@ -1596,8 +1594,6 @@ fn a_state_kits_anim_is_a_recompute_and_never_a_second_play() {
 /// anim-only (`benilla-extract kitanim`), kit 586's Stun (14) among them.
 #[test]
 fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
-    use benilla_protocol::messages::ObjectFields;
-
     const SPELL: u32 = 6902; // Sneezing Fit
     const VISUAL: u32 = 517;
     const STATE_KIT: u32 = 586; // anim 14, no effect slot, no sound, no CharProc
@@ -1638,15 +1634,10 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
     });
     app.add_systems(Update, super::arm_aura_state_fx);
 
+    set_auras(&mut app, 0xa2, &[(0, SPELL)]);
     let unit = app
         .world_mut()
-        .spawn(crate::net::ObjectStore(
-            ObjectFields::from_fields(
-                FieldLayout::Vanilla5875,
-                &[(Field::UnitAura, SPELL), (Field::UnitAuraFlags, 0x0E)],
-            )
-            .into_created(benilla_protocol::messages::ObjectType::Unit),
-        ))
+        .spawn((aura_store(), crate::net::Guid(0xa2)))
         .id();
     app.update();
 
@@ -1666,87 +1657,75 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
 #[test]
 fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
     use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-    for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-        for (kind, field, loot, level, mount) in [
-            (
-                ObjectType::Unit,
-                Field::UnitDynamicFlags,
-                true,
-                false,
-                false,
-            ),
-            (ObjectType::Player, Field::UnitHealth, true, false, false),
-            (ObjectType::Unit, Field::UnitMaxHealth, true, false, false),
-            (
-                ObjectType::Corpse,
-                Field::CorpseDynamicFlags,
-                true,
-                false,
-                false,
-            ),
-            (ObjectType::Player, Field::UnitLevel, false, true, false),
-            (
-                ObjectType::Unit,
-                Field::UnitMountDisplayId,
-                false,
-                false,
-                true,
-            ),
-            (ObjectType::Unit, Field::UnitFlags, false, false, false),
-        ] {
-            let span = layout
-                .resolve(field)
-                .expect("FX dependency exists in both layouts");
-            let (resolved, offset) = layout.field_at(kind, span.index).unwrap();
-            assert_eq!((resolved, offset), (field, 0));
-            let mut edge = crate::net::FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind,
-                layout,
-                field: resolved,
-                offset,
-                old: 0,
-                new: 1,
-            };
-            assert_eq!(super::is_loot_fx_edge(&edge), loot);
-            assert_eq!(super::is_level_fx_edge(&edge), level);
-            assert_eq!(super::is_mount_fx_edge(&edge), mount);
-            edge.new = 0;
-            assert!(!super::is_mount_fx_edge(&edge), "dismount spawns no poof");
-            assert_eq!(super::is_loot_fx_edge(&edge), loot);
-            assert_eq!(super::is_level_fx_edge(&edge), level);
-            edge.offset = 1;
-            assert!(!super::is_loot_fx_edge(&edge));
-            assert!(!super::is_level_fx_edge(&edge));
-            assert!(!super::is_mount_fx_edge(&edge));
-            edge.offset = 0;
-            edge.new = 1;
-            edge.kind = ObjectType::GameObject;
-            assert!(!super::is_loot_fx_edge(&edge));
-            assert!(!super::is_level_fx_edge(&edge));
-            assert!(!super::is_mount_fx_edge(&edge));
-        }
+    let layout = FieldLayout::Wrath12340;
+    for (kind, field, loot, level, mount) in [
+        (
+            ObjectType::Unit,
+            Field::UnitDynamicFlags,
+            true,
+            false,
+            false,
+        ),
+        (ObjectType::Player, Field::UnitHealth, true, false, false),
+        (ObjectType::Unit, Field::UnitMaxHealth, true, false, false),
+        (
+            ObjectType::Corpse,
+            Field::CorpseDynamicFlags,
+            true,
+            false,
+            false,
+        ),
+        (ObjectType::Player, Field::UnitLevel, false, true, false),
+        (
+            ObjectType::Unit,
+            Field::UnitMountDisplayId,
+            false,
+            false,
+            true,
+        ),
+        (ObjectType::Unit, Field::UnitFlags, false, false, false),
+    ] {
+        let span = layout
+            .resolve(field)
+            .expect("FX dependency exists in both layouts");
+        let (resolved, offset) = layout.field_at(kind, span.index).unwrap();
+        assert_eq!((resolved, offset), (field, 0));
+        let mut edge = crate::net::FieldChanged {
+            entity: Entity::PLACEHOLDER,
+            guid: 42,
+            kind,
+            layout,
+            field: resolved,
+            offset,
+            old: 0,
+            new: 1,
+        };
+        assert_eq!(super::is_loot_fx_edge(&edge), loot);
+        assert_eq!(super::is_level_fx_edge(&edge), level);
+        assert_eq!(super::is_mount_fx_edge(&edge), mount);
+        edge.new = 0;
+        assert!(!super::is_mount_fx_edge(&edge), "dismount spawns no poof");
+        assert_eq!(super::is_loot_fx_edge(&edge), loot);
+        assert_eq!(super::is_level_fx_edge(&edge), level);
+        edge.offset = 1;
+        assert!(!super::is_loot_fx_edge(&edge));
+        assert!(!super::is_level_fx_edge(&edge));
+        assert!(!super::is_mount_fx_edge(&edge));
+        edge.offset = 0;
+        edge.new = 1;
+        edge.kind = ObjectType::GameObject;
+        assert!(!super::is_loot_fx_edge(&edge));
+        assert!(!super::is_level_fx_edge(&edge));
+        assert!(!super::is_mount_fx_edge(&edge));
     }
 }
 
 #[test]
-fn state_aura_ids_prefer_packet_snapshots_including_authoritative_empty() {
-    use benilla_protocol::messages::{Field, FieldLayout};
-    use benilla_protocol::{messages::ObjectFields, wrath_auras::NativeAura};
-    let layout = FieldLayout::Vanilla5875;
-    let aura = layout.resolve(Field::UnitAura).unwrap().index;
-    let flags = layout.resolve(Field::UnitAuraFlags).unwrap().index;
-    let store = crate::net::ObjectStore(ObjectFields::from_native_pairs(
-        layout,
-        &[(aura, 123), (flags, 0x0e)],
-    ));
+fn state_aura_ids_read_packet_snapshots_including_authoritative_empty() {
+    use benilla_protocol::wrath_auras::NativeAura;
     let guid = crate::net::Guid(42);
     let mut packets = crate::net::wrath_auras::PacketAuras::default();
-    assert_eq!(
-        super::state_aura_ids(&store, Some(&guid), Some(&packets)),
-        vec![123]
-    );
+    assert!(super::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
     packets.by_guid.insert(
         42,
         vec![crate::net::wrath_auras::StampedAura {
@@ -1764,80 +1743,11 @@ fn state_aura_ids_prefer_packet_snapshots_including_authoritative_empty() {
         }],
     );
     assert_eq!(
-        super::state_aura_ids(&store, Some(&guid), Some(&packets)),
+        super::state_aura_ids(Some(&guid), Some(&packets)),
         vec![456]
     );
     packets.by_guid.insert(42, vec![]);
-    assert!(super::state_aura_ids(&store, Some(&guid), Some(&packets)).is_empty());
-}
-
-#[test]
-fn vanilla_state_aura_watch_uses_real_id_and_flag_spans_only() {
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-    let layout = FieldLayout::Vanilla5875;
-    for (field, len, watched) in [
-        (Field::UnitAura, 48, true),
-        (Field::UnitAuraFlags, 6, true),
-        (Field::UnitAuraApplications, 12, false),
-        (Field::UnitAuraLevels, 12, false),
-    ] {
-        let span = layout.resolve(field).unwrap();
-        assert_eq!(span.width, len);
-        for offset in [0, len - 1] {
-            let (field, offset) = layout
-                .field_at(ObjectType::Unit, span.index + offset)
-                .unwrap();
-            let mut edge = crate::net::FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind: ObjectType::Unit,
-                layout,
-                field,
-                offset,
-                old: 0,
-                new: 1,
-            };
-            assert_eq!(super::is_descriptor_aura_state_edge(&edge), watched);
-            edge.kind = ObjectType::Player;
-            assert_eq!(super::is_descriptor_aura_state_edge(&edge), watched);
-            edge.kind = ObjectType::GameObject;
-            assert!(!super::is_descriptor_aura_state_edge(&edge));
-        }
-    }
-    assert!(FieldLayout::Wrath12340.resolve(Field::UnitAura).is_none());
-    assert!(FieldLayout::Wrath12340
-        .resolve(Field::UnitAuraFlags)
-        .is_none());
-}
-
-#[test]
-fn morph_descriptor_watch_is_only_the_real_vanilla_aura_id_span() {
-    use benilla_protocol::messages::{Field, FieldLayout, ObjectType};
-    let layout = FieldLayout::Vanilla5875;
-    for (field, expected) in [(Field::UnitAura, true), (Field::UnitAuraFlags, false)] {
-        let span = layout.resolve(field).unwrap();
-        for offset in [0, span.width - 1] {
-            let (field, offset) = layout
-                .field_at(ObjectType::Unit, span.index + offset)
-                .unwrap();
-            let mut edge = crate::net::FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind: ObjectType::Unit,
-                layout,
-                field,
-                offset,
-                old: 123,
-                new: 456,
-            };
-            assert_eq!(super::is_descriptor_morph_edge(&edge), expected);
-            edge.kind = ObjectType::Player;
-            assert_eq!(super::is_descriptor_morph_edge(&edge), expected);
-            edge.kind = ObjectType::Corpse;
-            assert!(!super::is_descriptor_morph_edge(&edge));
-        }
-    }
-    assert!(FieldLayout::Wrath12340.resolve(Field::UnitAura).is_none());
+    assert!(super::state_aura_ids(Some(&guid), Some(&packets)).is_empty());
 }
 
 #[test]

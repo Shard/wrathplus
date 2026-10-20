@@ -168,46 +168,6 @@ impl ObjectFields {
     pub fn unit_level(&self) -> Option<u32> {
         self.get(Field::UnitLevel)
     }
-    /// One aura slot, live only when its `AURAFLAGS` nibble has an effect bit (`& 0x0E`) as the
-    /// client tests it, since a cleared slot can keep a stale spell id.
-    pub fn unit_aura(&self, slot: u8) -> Option<UnitAuraSlot> {
-        if self.layout == FieldLayout::Wrath12340 || slot >= UNIT_AURA_SLOTS {
-            return None;
-        }
-        let flags = self.get_aura_nibble(slot);
-        if flags & AURA_FLAG_EFF_INDEX_MASK == 0 {
-            return None;
-        }
-        let spell_id = self
-            .get_at(Field::UnitAura, u16::from(slot))
-            .filter(|&id| id != 0)?;
-        Some(UnitAuraSlot {
-            slot,
-            spell_id,
-            flags,
-            level: self.get_aura_byte(Field::UnitAuraLevels, slot),
-            // The wire byte is `stack - 1` and saturates at 254, so an occupied slot is always ≥ 1.
-            stacks: self
-                .get_aura_byte(Field::UnitAuraApplications, slot)
-                .saturating_add(1),
-        })
-    }
-    /// Live auras by ascending slot, buffs 0-31 then debuffs 32-47: the order `UnitBuff` and
-    /// `UnitDebuff` read another unit in (`0x519500`, `0x5198f0`). The local player's buff bar
-    /// keeps insertion order in a packed cache (`0xbc6040`) instead, which this cannot recover.
-    pub fn unit_auras(&self) -> impl Iterator<Item = UnitAuraSlot> + '_ {
-        (0..UNIT_AURA_SLOTS).filter_map(|slot| self.unit_aura(slot))
-    }
-    /// Every `UNIT_FIELD_AURA` slot's raw spell id, zeros and stale ids included, as the cast
-    /// validator's crowd-control scan (`0x6e9ca0`) reads them, without `AURAFLAGS`.
-    pub fn unit_aura_ids(&self) -> impl Iterator<Item = u32> + '_ {
-        (0..if self.layout == FieldLayout::Vanilla5875 {
-            UNIT_AURA_SLOTS
-        } else {
-            0
-        })
-            .map(|slot| self.get_at(Field::UnitAura, u16::from(slot)).unwrap_or(0))
-    }
 
     /// `UNIT_FIELD_BYTES_0` byte 3: power type, 0 mana, 1 rage, 2 focus, 3 energy, 4 happiness.
     pub fn unit_power_type(&self) -> u8 {
@@ -218,15 +178,6 @@ impl ObjectFields {
     pub fn unit_stand_state(&self) -> u8 {
         (self.get(Field::UnitBytes1).unwrap_or(0) & 0xff) as u8
     }
-    /// `UNIT_FIELD_BYTES_1` byte 1: a hunter pet's loyalty level, 1-8, which `GetPetLoyalty`
-    /// (`0x4be700`) indexes `PetLoyalty.dbc` with; 0 is none and answers nil.
-    pub fn unit_loyalty_level(&self) -> u8 {
-        // Wrath byte 1 is free pet talent points, not loyalty (UnitDefines.h).
-        if self.layout == FieldLayout::Wrath12340 {
-            return 0;
-        }
-        ((self.get(Field::UnitBytes1).unwrap_or(0) >> 8) & 0xff) as u8
-    }
     /// `UNIT_FIELD_PETEXPERIENCE` and `UNIT_FIELD_PETNEXTLEVELEXP`: `GetPetExperience`'s
     /// `(currXP, nextXP)`; absent reads 0, the binding's own failure value, never nil.
     pub fn unit_pet_experience(&self) -> (u32, u32) {
@@ -235,21 +186,10 @@ impl ObjectFields {
             self.get(Field::UnitPetnextlevelexp).unwrap_or(0),
         )
     }
-    /// `UNIT_TRAINING_POINTS`: `(total, spent)`, total in the high half as the client splits it.
-    pub fn unit_training_points(&self) -> (u16, u16) {
-        let packed = self.get(Field::UnitTrainingPoints).unwrap_or(0);
-        ((packed >> 16) as u16, (packed & 0xffff) as u16)
-    }
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x2`, `UNIT_VIS_FLAGS_CREEP` (`SpellAuras.cpp:3610`):
     /// stealthed; read by the usable check (`[+0x110]+0x213 & 2`) and the tracker (`0x5ed210`).
     pub fn unit_is_stealthed(&self) -> bool {
         self.unit_visual_flags() & 0x2 != 0
-    }
-    /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x1`, `UNIT_VIS_FLAGS_GHOST`, set by the ghost aura: it
-    /// only hides names and plates (`byte3 & 0x03`, `0x607101`, `0x60f62e`); the ghostly body is
-    /// the aura's own visual kit (spell 8326, kit 989).
-    pub fn unit_is_ghost_visual(&self) -> bool {
-        self.layout == FieldLayout::Vanilla5875 && self.unit_visual_flags() & 0x1 != 0
     }
 
     /// `UNIT_FIELD_BYTES_1` byte 3 bit `0x4` (vmangos `UNIT_VIS_FLAGS_UNTRACKABLE`): no minimap
@@ -260,10 +200,7 @@ impl ObjectFields {
 
     // AC UnitDefines.h: visibility flags moved from byte 3 to byte 2; byte 3 is anim tier.
     fn unit_visual_flags(&self) -> u8 {
-        let shift = match self.layout {
-            FieldLayout::Vanilla5875 => 24,
-            FieldLayout::Wrath12340 => 16,
-        };
+        let shift = 16;
         (self.get(Field::UnitBytes1).unwrap_or(0) >> shift) as u8
     }
 
@@ -276,10 +213,7 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_1` byte 2: the shapeshift form, 0 none, 17-19 the warrior stances, the
     /// druid forms low; the creature-type resolver `0x605570` checks it first.
     pub fn unit_shapeshift_form(&self) -> u8 {
-        match self.layout {
-            FieldLayout::Vanilla5875 => (self.get(Field::UnitBytes1).unwrap_or(0) >> 16) as u8,
-            FieldLayout::Wrath12340 => (self.get(Field::UnitBytes2).unwrap_or(0) >> 24) as u8,
-        }
+        (self.get(Field::UnitBytes2).unwrap_or(0) >> 24) as u8
     }
     /// Number of native descriptor resources: five in build 5875, seven in build 12340.
     pub fn unit_power_slots(&self) -> u8 {
@@ -314,10 +248,7 @@ impl ObjectFields {
     /// Vanilla has no equivalent packed state byte: returns None, not a projection
     /// of its separate flags. Missing is None; an explicitly zero byte is Some(0).
     pub fn unit_pvp_state_flags(&self) -> Option<u8> {
-        match self.layout {
-            FieldLayout::Vanilla5875 => None,
-            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).map(|word| (word >> 8) as u8),
-        }
+        self.get(Field::UnitBytes2).map(|word| (word >> 8) as u8)
     }
     /// Direct Wrath sanctuary flag (byte 1 mask 0x08), not combat eligibility.
     /// AzerothCore Unit.h::IsInSanctuary; Vanilla and absent fields return false.
@@ -329,38 +260,26 @@ impl ObjectFields {
     /// Build 5875 uses UNIT_FLAGS 0x1000; build 12340 uses UNIT_FIELD_BYTES_2
     /// byte 1 mask 0x01 (AzerothCore Unit.h::IsPvP). Missing fields are false.
     pub fn unit_is_pvp(&self) -> bool {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.unit_flags() & 0x1000 != 0,
-            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0100 != 0,
-        }
+        self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0100 != 0
     }
     /// Direct replicated free-for-all PvP state, not effective combat eligibility.
     /// Build 5875 uses PLAYER_FLAGS 0x80; build 12340 uses UNIT_FIELD_BYTES_2
     /// byte 1 mask 0x04 (AzerothCore Unit.h::IsFFAPvP). Missing fields are false;
     /// controlled-unit inheritance and reaction policy belong to callers.
     pub fn unit_is_ffa_pvp(&self) -> bool {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.get(Field::PlayerFlags).unwrap_or(0) & 0x80 != 0,
-            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0400 != 0,
-        }
+        self.get(Field::UnitBytes2).unwrap_or(0) & 0x0000_0400 != 0
     }
     /// Pet rename permission flag. Build 5875 uses UNIT_FLAGS 0x10;
     /// build 12340 uses UNIT_FIELD_BYTES_2 byte 2 mask 0x01.
     /// Missing fields are false; ownership and action policy are caller concerns.
     pub fn unit_pet_can_be_renamed(&self) -> bool {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.unit_flags() & 0x10 != 0,
-            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0001_0000 != 0,
-        }
+        self.get(Field::UnitBytes2).unwrap_or(0) & 0x0001_0000 != 0
     }
     /// Pet abandon permission flag. Build 5875 uses UNIT_FLAGS 0x20;
     /// build 12340 uses UNIT_FIELD_BYTES_2 byte 2 mask 0x02.
     /// Missing fields are false; ownership and action policy are caller concerns.
     pub fn unit_pet_can_be_abandoned(&self) -> bool {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.unit_flags() & 0x20 != 0,
-            FieldLayout::Wrath12340 => self.get(Field::UnitBytes2).unwrap_or(0) & 0x0002_0000 != 0,
-        }
+        self.get(Field::UnitBytes2).unwrap_or(0) & 0x0002_0000 != 0
     }
     /// `UNIT_FIELD_COMBATREACH` (`+0x1f0`): melee reach, summed as `rA + rB + 1.333`, floor 5.0,
     /// by the attack range gate (`0x6e3480`); 1.5, the vanilla default, before it streams.
@@ -407,29 +326,6 @@ impl ObjectFields {
     /// `UNIT_FIELD_BYTES_0`: race, class, gender and power type, bytes 0 to 3.
     pub fn unit_bytes_0(&self) -> Option<u32> {
         self.get(Field::UnitBytes0)
-    }
-    /// `UNIT_VIRTUAL_ITEM_SLOT_DISPLAY + slot`: a creature's weapon `DisplayInfoID` for slot 0
-    /// main hand, 1 off hand or 2 ranged, with no item behind it.
-    pub fn unit_virtual_item_display(&self, slot: u8) -> Option<u32> {
-        (slot < 3).then(|| self.get_at(Field::UnitVirtualItemSlotDisplay, u16::from(slot)))?
-    }
-    /// `UNIT_VIRTUAL_ITEM_INFO + 2*slot`: bytes `(class, subclass, material, inventory_type)`.
-    pub fn unit_virtual_item_info(&self, slot: u8) -> Option<(u8, u8, u8, u8)> {
-        let v = (slot < 3).then(|| self.get_at(Field::UnitVirtualItemInfo, 2 * u16::from(slot)))?;
-        v.map(|v| {
-            (
-                (v & 0xff) as u8,
-                ((v >> 8) & 0xff) as u8,
-                ((v >> 16) & 0xff) as u8,
-                ((v >> 24) & 0xff) as u8,
-            )
-        })
-    }
-    /// `UNIT_VIRTUAL_ITEM_INFO + 2*slot + 1` byte 0: the virtual item's sheath type.
-    pub fn unit_virtual_item_sheath(&self, slot: u8) -> Option<u8> {
-        let v =
-            (slot < 3).then(|| self.get_at(Field::UnitVirtualItemInfo, 2 * u16::from(slot) + 1))?;
-        v.map(|v| (v & 0xff) as u8)
     }
     /// `UNIT_FIELD_BYTES_2` byte 0: sheath state, 0 stowed, 1 melee drawn, 2 ranged drawn; for a
     /// player, whatever they last sent in `CMSG_SETSHEATHED`.

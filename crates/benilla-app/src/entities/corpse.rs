@@ -211,7 +211,7 @@ mod tests {
         let bytes_1 = 1u32 << 8;
         let flesh = ObjectStore(
             ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::CorpseBytes1, bytes_1),
                     (benilla_protocol::messages::Field::CorpseBytes2, 0),
@@ -225,7 +225,7 @@ mod tests {
         );
         let bones = ObjectStore(
             ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[
                     (benilla_protocol::messages::Field::CorpseBytes1, bytes_1),
                     (benilla_protocol::messages::Field::CorpseBytes2, 0),

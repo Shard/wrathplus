@@ -127,10 +127,12 @@ fn stats_for(
             loyalty_rate,
             loyalty: tables.and_then(|t| {
                 t.loyalty
-                    .name(u32::from(fields.unit_loyalty_level()))
+                    // 12340 has no loyalty byte: level 0, the binding's nil.
+                    .name(0)
                     .map(str::to_string)
             }),
-            training_points: fields.unit_training_points(),
+            // 12340 has no training points.
+            training_points: (0, 0),
             experience: fields.unit_pet_experience(),
             family,
             icon,
@@ -251,15 +253,14 @@ mod tests {
     use benilla_protocol::messages::{Field, FieldLayout};
     use benilla_protocol::ObjectFields;
 
-    const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
-    const BYTES_1: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes1);
-    const POWER5: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPower) + 4;
-    const PETNUMBER: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnumber);
-    const PETXP: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetexperience);
-    const PETNEXTXP: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitPetnextlevelexp);
-    const TRAINING: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitTrainingPoints);
+    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
+    const POWER5: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower) + 4;
+    const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
+    const PETXP: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetexperience);
+    const PETNEXTXP: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnextlevelexp);
     /// `OBJECT_FIELD_ENTRY`, the pet's creature-template id.
-    const ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
+    const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
     /// vmangos `creature_template` entries: Imp (`pet_family` 23) and Stonetusk Boar (5).
     const IMP_ENTRY: u32 = 416;
     const BOAR_ENTRY: u32 = 113;
@@ -275,14 +276,13 @@ mod tests {
         ObjectStore(ObjectFields::from_pairs(&[(BYTES_0, 9 << 8)]))
     }
 
-    /// A boar with loyalty level 6, full happiness, part-trained and mid-XP.
+    /// A boar with full happiness and mid-XP.
     fn boar() -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[
             (ENTRY, BOAR_ENTRY),
             (PETNUMBER, 42),
-            (BYTES_1, 6 << 8),             // loyalty level in byte 1
-            (POWER5, 1_000_000),           // maximum happiness
-            (TRAINING, (170 << 16) | 130), // total in the high word, spent in the low
+            (BYTES_1, 0),
+            (POWER5, 1_000_000), // maximum happiness
             (PETXP, 4200),
             (PETNEXTXP, 8000),
         ]))
@@ -314,7 +314,7 @@ mod tests {
     /// creator is not us, answers its template's modifiers; no record answers 0.
     #[test]
     fn pet_modifiers_follow_the_creator_and_the_template() {
-        const CREATED_BY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+        const CREATED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
         let me = crate::net::Guid(0x77);
         let imp = ObjectStore(ObjectFields::from_pairs(&[
             (ENTRY, IMP_ENTRY),
@@ -381,8 +381,8 @@ mod tests {
         (NetCommands(tx), rx)
     }
 
-    /// On the real DBC data: the training-point word order, the loyalty byte, and a maxed pet's
-    /// bucket with 125% damage.
+    /// On the real DBC data: a maxed pet's bucket with 125% damage; 12340 has no loyalty or
+    /// training points.
     #[test]
     fn a_hunters_boar_reads_every_field() {
         let Some(t) = tables() else { return };
@@ -391,12 +391,8 @@ mod tests {
         assert_eq!(s.happiness, Some(3));
         assert_eq!(s.damage_percentage, 125.0);
         assert_eq!(s.loyalty_rate, 20.0);
-        assert_eq!(s.loyalty.as_deref(), Some("(Loyalty Level 6) Best Friend"));
-        assert_eq!(
-            s.training_points,
-            (170, 130),
-            "TOTAL first, from the high word"
-        );
+        assert_eq!(s.loyalty, None);
+        assert_eq!(s.training_points, (0, 0));
         assert_eq!(s.experience, (4200, 8000));
     }
 
@@ -463,8 +459,6 @@ mod tests {
         assert!(has_ui && s.hunter_pet);
         assert_eq!(s.happiness, None);
         assert_eq!((s.damage_percentage, s.loyalty_rate), (100.0, 0.0));
-        // The descriptor values need no table.
-        assert_eq!(s.training_points, (170, 130));
     }
 
     /// A missing tooltip key is silent: `getglobal` answers nil and the tooltip loses a line.

@@ -269,13 +269,13 @@ pub(in crate::ui_party) mod tests {
 
     /// Unit descriptor field indices, build 5875: the pair a member's `SUMMON` holds, and a pet's
     /// health, maximum health and pet number.
-    const SUMMON: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const SUMMON: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitSummon);
-    const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitHealth);
-    const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
-    const PETNUMBER: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const PETNUMBER: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitPetnumber);
 
     pub(in crate::ui_party) const ME: u64 = 0x10;
@@ -957,11 +957,11 @@ pub(in crate::ui_party) mod tests {
     }
 
     /// `UNIT_FIELD_BYTES_0` and `_1`, `OBJECT_FIELD_ENTRY`, a Night Elf and Cat Form.
-    const BYTES_0: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const BYTES_0: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitBytes0);
-    const BYTES_1: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-        .index_of(benilla_protocol::messages::Field::UnitBytes1);
-    const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const BYTES_2: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::messages::Field::UnitBytes2);
+    const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ObjectEntry);
     const NIGHT_ELF: u32 = 4;
     const CAT_FORM: u32 = 1;
@@ -977,7 +977,7 @@ pub(in crate::ui_party) mod tests {
         party(&mut app, 2, true);
         let fields = |form: u32| {
             [
-                &[(BYTES_0, NIGHT_ELF), (BYTES_1, form << 16)][..],
+                &[(BYTES_0, NIGHT_ELF), (BYTES_2, form << 24)][..],
                 &summon(pet(1)),
             ]
             .concat()
@@ -1000,7 +1000,7 @@ pub(in crate::ui_party) mod tests {
             "a member the object manager does not hold"
         );
 
-        set_fields(&mut app, druid, &[(BYTES_1, 0)]);
+        set_fields(&mut app, druid, &[(BYTES_2, 0)]);
         frame(&mut app);
         assert_eq!(
             creature_type(&mut app, "party1").as_deref(),
@@ -1033,13 +1033,13 @@ pub(in crate::ui_party) mod tests {
             .spawn((
                 crate::net::SelfPlayer,
                 Guid(ME),
-                store(&[(BYTES_0, NIGHT_ELF), (BYTES_1, CAT_FORM << 16)]),
+                store(&[(BYTES_0, NIGHT_ELF), (BYTES_2, CAT_FORM << 24)]),
             ))
             .id();
         stream(
             &mut app,
             member(1),
-            &[(BYTES_0, NIGHT_ELF), (BYTES_1, CAT_FORM << 16)],
+            &[(BYTES_0, NIGHT_ELF), (BYTES_2, CAT_FORM << 24)],
         );
         frame(&mut app);
 
@@ -1055,7 +1055,7 @@ pub(in crate::ui_party) mod tests {
             Some("Beast"),
             "a held member's row"
         );
-        set_fields(&mut app, me, &[(BYTES_1, 0)]);
+        set_fields(&mut app, me, &[(BYTES_2, 0)]);
         frame(&mut app);
         assert_eq!(
             creature_type(&mut app, "raid1").as_deref(),

@@ -400,16 +400,8 @@ pub(super) fn inspect_ui(
             } else {
                 String::new()
             };
-            // The tilt of the `GAMEOBJECT_ROTATION` quaternion, shown only when there is one: most
-            // spawns are a plain yaw, and a tilt swings off-origin geometry yards from the spawn.
-            let tilt = s
-                .0
-                .gameobject_rotation()
-                // The model's up-axis off world up, `acos(m22)`, i.e. `2·asin(|x, y|)`.
-                .map(|q| (2.0 * q[0].hypot(q[1]).min(1.0).asin()).to_degrees())
-                .filter(|deg| *deg >= 0.5)
-                .map(|deg| format!(" · tilt {deg:.0}°"))
-                .unwrap_or_default();
+            // No tilt: 12340 descriptors carry no `GAMEOBJECT_ROTATION`.
+            let tilt = String::new();
             format!(
                 "go type {} · state {state} {word} · {solidity} · flags {flags:#x}{flag_text} · {interact}{tooltip_line}{page_text}{tilt}",
                 s.0.gameobject_type_id()

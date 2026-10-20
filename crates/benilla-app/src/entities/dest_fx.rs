@@ -124,11 +124,8 @@ pub(super) fn arm_ground_effects(
             debug!("dest_fx: dynobj spell {spell_id} has no visual row — invisible area");
             continue;
         };
-        let facing = store
-            .0
-            .dynamicobject_position()
-            .map(|(_, f)| f)
-            .unwrap_or(0.0);
+        // 12340 descriptors carry no `DYNAMICOBJECT_FACING`.
+        let facing = 0.0;
         // Visual A (`0x5d57c0`): field 12's model when field 11 is set, at the object's position
         // with no terrain projection, turned by `DYNAMICOBJECT_FACING` (`0x613ef0`, `0x7bdd60`);
         // as a child it goes with the anchor.

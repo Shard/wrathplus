@@ -545,7 +545,7 @@ mod tests {
     fn unit(app: &mut App) -> Entity {
         app.world_mut()
             .spawn(ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[],
             )))
             .id()
@@ -777,7 +777,7 @@ mod tests {
         index.0.insert(OBJECT_GUID, victim);
         // Field 20 = UNIT_FIELD_CHANNEL_OBJECT (a guid pair), 144 = UNIT_CHANNEL_SPELL.
         let channelling = ObjectStore(ObjectFields::from_field_slots(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[
                 (
                     benilla_protocol::messages::Field::UnitChannelObject,
@@ -797,7 +797,7 @@ mod tests {
             ],
         ));
         let idle = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
             &[],
         ));
 

@@ -74,7 +74,7 @@ pub(crate) fn drive_fx_view(
                         scale: req.scale,
                     },
                     crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
+                        FieldLayout::Wrath12340,
                         &[
                             (Field::UnitHealth, 100),
                             (Field::UnitMaxHealth, 100),
@@ -111,11 +111,9 @@ pub(crate) fn drive_fx_view(
                         scale: req.scale,
                     },
                     crate::net::ObjectStore(benilla_protocol::messages::ObjectFields::from_fields(
-                        FieldLayout::Vanilla5875,
-                        &[
-                            (Field::GameobjectState, req.go_state),
-                            (Field::GameobjectTypeId, req.go_type),
-                        ],
+                        FieldLayout::Wrath12340,
+                        // `GAMEOBJECT_BYTES_1`: state byte 0, type byte 1.
+                        &[(Field::GameobjectBytes1, req.go_state | (req.go_type << 8))],
                     )),
                     Transform::from_translation(pos)
                         .with_rotation(Quat::from_rotation_y(req.yaw_deg.to_radians())),

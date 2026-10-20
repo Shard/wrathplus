@@ -184,7 +184,7 @@ pub(crate) enum ChatEventKind {
     // ── the combat log ───────────────────────────────────────────────────────────────
     // Every kind below has a producer.
     /// `0x19`, the reference's catch-all combat line: `DURABILITYDAMAGE_DEATH`, `SPELLDISMISSPET*`,
-    /// `PET_LOYALTY_*`, `SPELLHAPPINESSDRAIN*` and the "string not found" warning.
+    /// `SPELLHAPPINESSDRAIN*` and the "string not found" warning.
     CombatMiscInfo,
     CombatSelfHits,
     CombatSelfMisses,

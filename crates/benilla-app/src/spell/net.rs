@@ -2054,9 +2054,9 @@ mod tests {
     }
 
     /// `UNIT_FIELD_CHARMEDBY` / `SUMMONEDBY` / `CREATEDBY`, two dwords each.
-    const CHARMEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCharmedby);
-    const SUMMONEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitSummonedby);
-    const CREATEDBY: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCreatedby);
+    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
+    const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
+    const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
 
     /// A unit store whose `field` pair names `owner`.
     fn owned(field: u16, owner: u64) -> ObjectStore {
@@ -2281,7 +2281,7 @@ mod tests {
         let pet = go_cooldowns(20, owned(SUMMONEDBY, 10), None, display, mods());
         assert_eq!(pet.1, 3000, "the pet leg takes the player's op 11");
         let item = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Vanilla5875,
+            FieldLayout::Wrath12340,
             &[(Field::ObjectEntry, 6948)],
         ));
         let used = go_cooldowns(

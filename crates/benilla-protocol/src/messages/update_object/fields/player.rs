@@ -28,11 +28,6 @@ impl ObjectFields {
         self.get_field_guid(Field::ItemCreator, 0)
             .filter(|&g| g != 0)
     }
-    /// `ITEM_FIELD_ITEM_TEXT_ID` (field 45, owner only): a mailed letter copy's text; nonzero
-    /// makes a right-click read it (`CMSG_ITEM_TEXT_QUERY`) instead of using the item.
-    pub fn item_text_id(&self) -> Option<u32> {
-        self.get(Field::ItemItemTextId)
-    }
     /// `ITEM_FIELD_ENCHANTMENT + 3*slot` (field `22 + 3*slot`): the enchant id in one of 7 slots
     /// (0 permanent, 1 temporary, 2-6 random properties), each an id, duration and charges
     /// (`Item.h:117-119`). Signed: the tooltip looks up `abs(id)` and paints a negative one red.
@@ -105,39 +100,22 @@ impl ObjectFields {
     /// `PLAYER_VISIBLE_ITEM_<slot>_0`: the public entry worn in equipment slot `i`, which other
     /// clients render from; each slot is 12 dwords, the entry after a 2-dword creator.
     pub fn player_visible_item_entry(&self, i: u8) -> Option<u32> {
-        let offset = match self.layout {
-            FieldLayout::Vanilla5875 => 12 * u16::from(i) + 2,
-            FieldLayout::Wrath12340 => 2 * u16::from(i),
-        };
+        let offset = 2 * u16::from(i);
         (i < 19)
             .then(|| self.get_at(Field::PlayerVisibleItems, offset))?
             .filter(|&v| v != 0)
     }
-    /// Broadcast enchants: Vanilla's seven dwords, Wrath's permanent/temporary TWO_SHORT.
+    /// Broadcast enchants: the permanent and temporary halves of a TWO_SHORT word.
     pub fn player_visible_item_enchant(&self, i: u8, j: u8) -> Option<u32> {
         if i >= 19 {
             return None;
         }
-        let value = match self.layout {
-            FieldLayout::Vanilla5875 if j < 7 => self.get_at(
-                Field::PlayerVisibleItems,
-                12 * u16::from(i) + 3 + u16::from(j),
-            ),
-            FieldLayout::Wrath12340 if j < 2 => self
-                .get_at(Field::PlayerVisibleItems, 2 * u16::from(i) + 1)
-                .map(|v| (v >> (16 * j)) & 0xffff),
-            _ => None,
-        };
-        value.filter(|&v| v != 0)
-    }
-    /// Vanilla broadcast suffix roll; absent from Wrath's visible item descriptor.
-    pub fn player_visible_item_properties(&self, i: u8) -> u32 {
-        if self.layout != FieldLayout::Vanilla5875 || i >= 19 {
-            return 0;
+        if j >= 2 {
+            return None;
         }
-        self.get_at(Field::PlayerVisibleItems, 12 * u16::from(i) + 10)
-            .unwrap_or(0)
-            & 0xffff
+        self.get_at(Field::PlayerVisibleItems, 2 * u16::from(i) + 1)
+            .map(|v| (v >> (16 * j)) & 0xffff)
+            .filter(|&v| v != 0)
     }
 
     /// `PLAYER_FIELD_INV_SLOT_HEAD + 2i`: our equipment (0-18) and equipped-bag (19-22) guids.
@@ -222,41 +200,23 @@ impl ObjectFields {
     /// `PLAYER_QUEST_LOG_<slot+1>_*`: one quest-log slot, `quest_id == 0` when the server cleared
     /// it; the count-state and timer are written with the id (`Player.h:1094-1099`).
     pub fn player_quest_log(&self, slot: u8) -> Option<QuestLogSlot> {
-        let stride = match self.layout {
-            FieldLayout::Vanilla5875 => 3,
-            FieldLayout::Wrath12340 => 5,
-        };
+        let stride = 5;
         if slot >= self.player_quest_log_slots() {
             return None;
         }
         let base = stride * u16::from(slot);
         let quest_id = self.get_at(Field::PlayerQuestLog, base)?;
         let state_word = self.get_at(Field::PlayerQuestLog, base + 1).unwrap_or(0);
+        // AzerothCore UpdateFields.h: id, state, two TWO_SHORT words, timer.
         let mut counters = [0u16; 4];
-        let (state, timer) = match self.layout {
-            FieldLayout::Vanilla5875 => {
-                for (i, c) in counters.iter_mut().enumerate() {
-                    *c = ((state_word >> (6 * i)) & 0x3f) as u16;
-                }
-                (
-                    (state_word >> 24) as u8,
-                    self.get_at(Field::PlayerQuestLog, base + 2).unwrap_or(0),
-                )
-            }
-            FieldLayout::Wrath12340 => {
-                // AzerothCore UpdateFields.h: id, state, two TWO_SHORT words, timer.
-                for (i, c) in counters.iter_mut().enumerate() {
-                    let word = self
-                        .get_at(Field::PlayerQuestLog, base + 2 + (i / 2) as u16)
-                        .unwrap_or(0);
-                    *c = (word >> (16 * (i % 2))) as u16;
-                }
-                (
-                    state_word as u8,
-                    self.get_at(Field::PlayerQuestLog, base + 4).unwrap_or(0),
-                )
-            }
-        };
+        for (i, c) in counters.iter_mut().enumerate() {
+            let word = self
+                .get_at(Field::PlayerQuestLog, base + 2 + (i / 2) as u16)
+                .unwrap_or(0);
+            *c = (word >> (16 * (i % 2))) as u16;
+        }
+        let state = state_word as u8;
+        let timer = self.get_at(Field::PlayerQuestLog, base + 4).unwrap_or(0);
         Some(QuestLogSlot {
             quest_id,
             counters,
@@ -267,10 +227,7 @@ impl ObjectFields {
 
     /// Native quest capacity, without truncating Wrath's final five slots.
     pub fn player_quest_log_slots(&self) -> u8 {
-        match self.layout {
-            FieldLayout::Vanilla5875 => 20,
-            FieldLayout::Wrath12340 => 25,
-        }
+        25
     }
     /// `PLAYER_EXPLORED_ZONES_1 + i`: bitset dword `i`; bit `n` is `AreaTable` explore flag `n`.
     pub fn player_explored_zone_slot(&self, i: u16) -> u32 {
@@ -295,59 +252,35 @@ impl ObjectFields {
     /// `PLAYER_FIELD_POSSTAT0 + i`: stat `i`'s positive buff total from gear, enchants and
     /// auras; an int on the wire, narrowed from the server's float (`BuildValuesUpdate`).
     pub fn player_posstat(&self, i: u8) -> Option<i32> {
-        let fields = match self.layout {
-            FieldLayout::Vanilla5875 => [
-                Field::PlayerPosstat0,
-                Field::PlayerPosstat1,
-                Field::PlayerPosstat2,
-                Field::PlayerPosstat3,
-                Field::PlayerPosstat4,
-            ],
-            FieldLayout::Wrath12340 => [
-                Field::UnitPosstat0,
-                Field::UnitPosstat1,
-                Field::UnitPosstat2,
-                Field::UnitPosstat3,
-                Field::UnitPosstat4,
-            ],
-        };
+        let fields = [
+            Field::UnitPosstat0,
+            Field::UnitPosstat1,
+            Field::UnitPosstat2,
+            Field::UnitPosstat3,
+            Field::UnitPosstat4,
+        ];
         self.get(*fields.get(usize::from(i))?).map(|v| v as i32)
     }
     /// `PLAYER_FIELD_NEGSTAT0 + i`: stat `i`'s negative buff total, an int at or below 0. An x86
     /// server sends it in two's complement, an arm64 one saturates it to 0.
     pub fn player_negstat(&self, i: u8) -> Option<i32> {
-        let fields = match self.layout {
-            FieldLayout::Vanilla5875 => [
-                Field::PlayerNegstat0,
-                Field::PlayerNegstat1,
-                Field::PlayerNegstat2,
-                Field::PlayerNegstat3,
-                Field::PlayerNegstat4,
-            ],
-            FieldLayout::Wrath12340 => [
-                Field::UnitNegstat0,
-                Field::UnitNegstat1,
-                Field::UnitNegstat2,
-                Field::UnitNegstat3,
-                Field::UnitNegstat4,
-            ],
-        };
+        let fields = [
+            Field::UnitNegstat0,
+            Field::UnitNegstat1,
+            Field::UnitNegstat2,
+            Field::UnitNegstat3,
+            Field::UnitNegstat4,
+        ];
         self.get(*fields.get(usize::from(i))?).map(|v| v as i32)
     }
     /// `PLAYER_FIELD_RESISTANCEBUFFMODSPOSITIVE + school`: the positive resistance buff, an int.
     pub fn player_resistance_buff_pos(&self, school: u8) -> Option<i32> {
-        let field = match self.layout {
-            FieldLayout::Vanilla5875 => Field::PlayerResistancebuffmodspositive,
-            FieldLayout::Wrath12340 => Field::UnitResistancebuffmodspositive,
-        };
+        let field = Field::UnitResistancebuffmodspositive;
         self.get_at(field, u16::from(school)).map(|v| v as i32)
     }
     /// `PLAYER_FIELD_RESISTANCEBUFFMODSNEGATIVE + school`: the negative resistance buff, at most 0.
     pub fn player_resistance_buff_neg(&self, school: u8) -> Option<i32> {
-        let field = match self.layout {
-            FieldLayout::Vanilla5875 => Field::PlayerResistancebuffmodsnegative,
-            FieldLayout::Wrath12340 => Field::UnitResistancebuffmodsnegative,
-        };
+        let field = Field::UnitResistancebuffmodsnegative;
         self.get_at(field, u16::from(school)).map(|v| v as i32)
     }
     /// `PLAYER_FIELD_MOD_DAMAGE_DONE_POS + school`: the positive damage bonus, school 0 physical.
@@ -487,22 +420,6 @@ impl ObjectFields {
     pub fn player_release_timer_running(&self) -> bool {
         self.get(Field::PlayerFieldBytes).unwrap_or(0) & 0x08 != 0
     }
-    /// `PLAYER_FIELD_BYTES` byte 1 (private): combo points, 0-5, read at `[player+0xe68]+0x1029`.
-    /// vmangos also sets one when a warrior's target dodges (the 4 s Overpower window): the usable
-    /// check reads it for any class, `GetComboPoints` (`0x51a190`) only for rogues and druids.
-    pub fn player_combo_points(&self) -> Option<u8> {
-        // Wrath combo points arrive in SMSG_UPDATE_COMBO_POINTS; byte 1 is RAF levels.
-        if self.layout == FieldLayout::Wrath12340 {
-            return None;
-        }
-        self.get(Field::PlayerFieldBytes).map(|b| (b >> 8) as u8)
-    }
-    /// `PLAYER_FIELD_COMBO_TARGET` (field 714, guid, private): the unit the combo points sit on;
-    /// `GetComboPoints` shows 0 unless it is the current target (`0xb4e2d8`).
-    pub fn player_combo_target(&self) -> u64 {
-        self.get_field_guid(Field::PlayerComboTarget, 0)
-            .unwrap_or(0)
-    }
     /// `PLAYER_FIELD_BYTES` byte 2 (private, field 1222): the four extra action bars' toggles,
     /// bits `0x01..0x08` (`Player.h:360-363`), read by `GetActionBarToggles` (`0x4e7660`) at
     /// `[[player+0xe68]+0x102a]`. The client never writes it and no event fires when it moves.
@@ -522,84 +439,16 @@ impl ObjectFields {
     /// (`HonorMgr.cpp:900`), 0 unranked, 1-4 negative, 5 up positive, indexing `PVP_RANK_*`;
     /// the drawn rank is `rank > 4 ? rank - 4 : -rank` (`HonorMgr.cpp:991`).
     pub fn player_pvp_rank(&self) -> Option<u8> {
-        self.get(Field::PlayerBytes3).map(|b| match self.layout {
-            FieldLayout::Vanilla5875 => (b >> 24) as u8,
-            FieldLayout::Wrath12340 => (b >> 16) as u8,
-        })
-    }
-    /// `PLAYER_BYTES_3` byte 2 (public): the city-protector title, a race id (`Player.h:354`);
-    /// `UnitPVPName` (`0x609370`) appends `PVP_MEDAL<n>` when nonzero. vmangos never writes it.
-    pub fn player_pvp_medal(&self) -> Option<u8> {
-        // Wrath byte 2 is the PvP title, not the removed city-protector medal.
-        if self.layout == FieldLayout::Wrath12340 {
-            return None;
-        }
         self.get(Field::PlayerBytes3).map(|b| (b >> 16) as u8)
-    }
-    /// `PLAYER_FIELD_SESSION_KILLS` (private): today's honorable and dishonorable kills, both
-    /// halves written (`HonorMgr.cpp:913-914`); "session" means today, `GetPVPSessionStats()`.
-    pub fn player_session_kills(&self) -> Option<(u16, u16)> {
-        self.get(Field::PlayerSessionKills)
-            .map(|v| (v as u16, (v >> 16) as u16))
-    }
-    /// `PLAYER_FIELD_YESTERDAY_KILLS` (private): yesterday's kills, two shorts; vmangos writes a
-    /// whole dword (`HonorMgr.cpp:917`), so the dishonorable half is 0, not a decode bug.
-    pub fn player_yesterday_kills(&self) -> Option<(u16, u16)> {
-        self.get(Field::PlayerYesterdayKills)
-            .map(|v| (v as u16, (v >> 16) as u16))
-    }
-    /// `PLAYER_FIELD_LAST_WEEK_KILLS` (private): last week's kills; the dishonorable half is 0
-    /// from vmangos (`HonorMgr.cpp:929` writes a whole dword).
-    pub fn player_last_week_kills(&self) -> Option<(u16, u16)> {
-        self.get(Field::PlayerLastWeekKills)
-            .map(|v| (v as u16, (v >> 16) as u16))
-    }
-    /// `PLAYER_FIELD_THIS_WEEK_KILLS` (private): this week's kills; the dishonorable half is 0
-    /// from vmangos (`HonorMgr.cpp:924` writes a whole dword).
-    pub fn player_this_week_kills(&self) -> Option<(u16, u16)> {
-        self.get(Field::PlayerThisWeekKills)
-            .map(|v| (v as u16, (v >> 16) as u16))
-    }
-    /// `PLAYER_FIELD_THIS_WEEK_CONTRIBUTION` (private): honor earned this week, floored at 0
-    /// (`HonorMgr.cpp:925`).
-    pub fn player_this_week_contribution(&self) -> Option<u32> {
-        self.get(Field::PlayerThisWeekContribution)
     }
     /// `PLAYER_FIELD_YESTERDAY_CONTRIBUTION` (private): yesterday's honor (`HonorMgr.cpp:918`).
     pub fn player_yesterday_contribution(&self) -> Option<u32> {
         self.get(Field::PlayerYesterdayContribution)
     }
-    /// `PLAYER_FIELD_LAST_WEEK_CONTRIBUTION` (private): last week's honor, what the weekly rank
-    /// calculation used (`HonorMgr.cpp:930`).
-    pub fn player_last_week_contribution(&self) -> Option<u32> {
-        self.get(Field::PlayerLastWeekContribution)
-    }
-    /// `PLAYER_FIELD_LAST_WEEK_RANK` (private): last week's standing on the honor ladder, not an
-    /// honor rank; 0 is unranked (`HonorMgr.cpp:931`).
-    pub fn player_last_week_rank(&self) -> Option<u32> {
-        self.get(Field::PlayerLastWeekRank)
-    }
     /// `PLAYER_FIELD_LIFETIME_HONORBALE_KILLS` (private, vmangos's spelling): lifetime honorable
     /// kills (`HonorMgr.cpp:934`).
     pub fn player_lifetime_honorable_kills(&self) -> Option<u32> {
-        self.get(match self.layout {
-            FieldLayout::Vanilla5875 => Field::PlayerLifetimeHonorbaleKills,
-            FieldLayout::Wrath12340 => Field::PlayerLifetimeHonorableKills,
-        })
-    }
-    /// `PLAYER_FIELD_LIFETIME_DISHONORBALE_KILLS` (private, vmangos's spelling): lifetime
-    /// dishonorable kills (`HonorMgr.cpp:935`).
-    pub fn player_lifetime_dishonorable_kills(&self) -> Option<u32> {
-        self.get(Field::PlayerLifetimeDishonorbaleKills)
-    }
-    /// `PLAYER_FIELD_BYTES2` byte 0 (private): progress through the current rank, 0-255
-    /// (`HonorMgr.cpp:905-909`); a negative rank's `-255` scale wraps in the `uint8` cast.
-    pub fn player_honor_rank_bar(&self) -> Option<u8> {
-        // Wrath PlayerFieldBytes2 is stealth/invisibility flags, not rank progress.
-        if self.layout == FieldLayout::Wrath12340 {
-            return None;
-        }
-        self.get(Field::PlayerFieldBytes2).map(|b| (b & 0xff) as u8)
+        self.get(Field::PlayerLifetimeHonorableKills)
     }
     /// `UNIT_FIELD_BYTES_0` byte 0: race.
     pub fn unit_race(&self) -> Option<u8> {
@@ -650,50 +499,11 @@ impl ObjectFields {
     }
     /// `GAMEOBJECT_STATE` (`OBJECT_END + 0x8`): 0 active (open), 1 ready (closed), 2 active-alt.
     pub fn gameobject_state(&self) -> Option<u32> {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.get(Field::GameobjectState),
-            FieldLayout::Wrath12340 => self.get(Field::GameobjectBytes1).map(|v| v & 0xff),
-        }
-    }
-    /// `GAMEOBJECT_ROTATION`: the spawn quaternion `(x, y, z, w)`, unsent components 0; the
-    /// reference places a GameObject by it, never by `GAMEOBJECT_FACING`.
-    pub fn gameobject_rotation(&self) -> Option<[f32; 4]> {
-        let any_sent = (0..4u16).any(|i| self.field_present(Field::GameobjectRotation, i));
-        any_sent.then(|| {
-            [
-                self.get_float(Field::GameobjectRotation, 0).unwrap_or(0.0),
-                self.get_float(Field::GameobjectRotation, 1).unwrap_or(0.0),
-                self.get_float(Field::GameobjectRotation, 2).unwrap_or(0.0),
-                self.get_float(Field::GameobjectRotation, 3).unwrap_or(0.0),
-            ]
-        })
-    }
-    /// `GAMEOBJECT_POS_*` and `GAMEOBJECT_FACING`; a create reads `Some` even with no position
-    /// sent, as for a transport, so check [`Self::gameobject_pos_sent`].
-    pub fn gameobject_position(&self) -> Option<(Vector3d, f32)> {
-        Some((
-            Vector3d {
-                x: self.get_float(Field::GameobjectPosX, 0)?,
-                y: self.get_float(Field::GameobjectPosY, 0)?,
-                z: self.get_float(Field::GameobjectPosZ, 0)?,
-            },
-            self.get_float(Field::GameobjectFacing, 0).unwrap_or(0.0),
-        ))
-    }
-    /// Whether any `GAMEOBJECT_POS_*` was really sent; vmangos sends none for a transport.
-    pub fn gameobject_pos_sent(&self) -> bool {
-        self.field_present(Field::GameobjectPosX, 0)
-            || self.field_present(Field::GameobjectPosY, 0)
-            || self.field_present(Field::GameobjectPosZ, 0)
+        self.get(Field::GameobjectBytes1).map(|v| v & 0xff)
     }
     /// `GAMEOBJECT_TYPE_ID`: absent is 0, `GAMEOBJECT_TYPE_DOOR`: a create omits zero fields.
     pub fn gameobject_type_id(&self) -> i32 {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.get(Field::GameobjectTypeId).unwrap_or(0) as i32,
-            FieldLayout::Wrath12340 => {
-                ((self.get(Field::GameobjectBytes1).unwrap_or(0) >> 8) & 0xff) as i32
-            }
-        }
+        ((self.get(Field::GameobjectBytes1).unwrap_or(0) >> 8) & 0xff) as i32
     }
     /// `GAMEOBJECT_FLAGS`: `0x1` in use, `0x4` needs the quest activate bit, `0x10` no interact.
     pub fn gameobject_flags(&self) -> u32 {
@@ -707,10 +517,7 @@ impl ObjectFields {
     /// `GAMEOBJECT_DYN_FLAGS` (per player): `0x1` `GO_DYNFLAG_LO_ACTIVATE`, the sparkle, set by
     /// `GameObject::ActivateToQuest` and read only under flag `0x4`.
     pub fn gameobject_dynamic_flags(&self) -> u32 {
-        match self.layout {
-            FieldLayout::Vanilla5875 => self.get(Field::GameobjectDynFlags).unwrap_or(0),
-            FieldLayout::Wrath12340 => self.get(Field::GameobjectDynamic).unwrap_or(0) & 0xffff,
-        }
+        self.get(Field::GameobjectDynamic).unwrap_or(0) & 0xffff
     }
     /// `GAMEOBJECT_LEVEL` (field 22): a lock with `Skill[0]` 0 asks for `level * 5` (`0x5f3490`).
     pub fn gameobject_level(&self) -> u32 {

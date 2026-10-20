@@ -1,5 +1,6 @@
 //! The feed re-pushing only the views a change reaches, through [`feed_spell_tooltips`] itself.
 
+use benilla_protocol::messages::{Field, FieldLayout};
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 
@@ -8,6 +9,11 @@ use crate::items::Items;
 use crate::net::{NetCommands, ObjectStore, SelfPlayer};
 use crate::ui_action::{PlayerActions, Spells};
 use bevy::prelude::*;
+
+/// `field`'s native descriptor index.
+const fn at(field: Field) -> u16 {
+    FieldLayout::Wrath12340.index_of(field)
+}
 
 /// `SpellRange.dbc` rows 2, the melee row, and 4, an authored 0 to 35.
 fn melee_and_authored_rows() -> benilla_formats::SpellRangeCatalog {
@@ -168,10 +174,10 @@ fn a_dodge_change_rebuilds_only_the_dodge_chance_view() {
     };
     let player = |dodge: f32, health: u32| {
         [
-            (22, health),
-            (1107, dodge.to_bits()),
-            (1108, 6.0f32.to_bits()),
-            (1109, 7.0f32.to_bits()),
+            (at(Field::UnitHealth), health),
+            (at(Field::PlayerDodgePercentage), dodge.to_bits()),
+            (at(Field::PlayerParryPercentage), 6.0f32.to_bits()),
+            (at(Field::PlayerCritPercentage), 7.0f32.to_bits()),
         ]
     };
     let mut feed = FeedApp::new(spells, &player(5.0, 100));
@@ -194,19 +200,19 @@ fn a_dodge_change_rebuilds_only_the_dodge_chance_view() {
 
     // The other two percentages, one frame each.
     feed.set_player(&[
-        (22, 60),
-        (1107, 9.5f32.to_bits()),
-        (1108, 8.0f32.to_bits()),
-        (1109, 7.0f32.to_bits()),
+        (at(Field::UnitHealth), 60),
+        (at(Field::PlayerDodgePercentage), 9.5f32.to_bits()),
+        (at(Field::PlayerParryPercentage), 8.0f32.to_bits()),
+        (at(Field::PlayerCritPercentage), 7.0f32.to_bits()),
     ]);
     feed.app.update();
     assert_eq!(feed.generations(), [2, 3, 1, 1, 1], "parry");
     feed.catalog(4);
     feed.set_player(&[
-        (22, 60),
-        (1107, 9.5f32.to_bits()),
-        (1108, 8.0f32.to_bits()),
-        (1109, 1.0f32.to_bits()),
+        (at(Field::UnitHealth), 60),
+        (at(Field::PlayerDodgePercentage), 9.5f32.to_bits()),
+        (at(Field::PlayerParryPercentage), 8.0f32.to_bits()),
+        (at(Field::PlayerCritPercentage), 1.0f32.to_bits()),
     ]);
     feed.app.update();
     assert_eq!(feed.generations(), [2, 3, 4, 1, 1], "crit");
@@ -232,7 +238,7 @@ fn a_modifier_change_rebuilds_only_the_matching_familys_views() {
             (14, spell(3, &[5, 6], g)), // a mage spell on both
         ]
     };
-    let mut feed = FeedApp::new(spells, &[(22, 100)]);
+    let mut feed = FeedApp::new(spells, &[(at(Field::UnitHealth), 100)]);
     let mods = |feed: &mut FeedApp, f: &dyn Fn(&mut crate::spell::SpellModifiers)| {
         f(&mut feed
             .app
@@ -297,7 +303,7 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
             (32, spell(0, g)), // no row at all
         ]
     };
-    let mut feed = FeedApp::new(spells, &[(22, 100)]);
+    let mut feed = FeedApp::new(spells, &[(at(Field::UnitHealth), 100)]);
     let speeds = walking_and_running_speeds();
     let mob = feed
         .app
@@ -305,7 +311,7 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
         .spawn((
             speeds,
             ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::messages::FieldLayout::Vanilla5875,
+                benilla_protocol::messages::FieldLayout::Wrath12340,
                 &[(benilla_protocol::messages::Field::UnitHealth, 100)],
             )),
         ))
@@ -387,14 +393,21 @@ fn a_pet_view_reads_the_pets_and_its_targets_run() {
         .world_mut()
         .spawn((
             SelfPlayer,
-            store(&[(8, IMP as u32), (9, (IMP >> 32) as u32), (34, 60)]),
+            store(&[
+                (8, IMP as u32),
+                (9, (IMP >> 32) as u32),
+                (at(Field::UnitLevel), 60),
+            ]),
         ))
         .id();
     let imp = app
         .world_mut()
-        .spawn((speeds, Engaged(MOB), store(&[(34, 14)])))
+        .spawn((speeds, Engaged(MOB), store(&[(at(Field::UnitLevel), 14)])))
         .id();
-    let mob = app.world_mut().spawn((speeds, store(&[(22, 100)]))).id();
+    let mob = app
+        .world_mut()
+        .spawn((speeds, store(&[(at(Field::UnitHealth), 100)])))
+        .id();
     let mut index = app.world_mut().resource_mut::<crate::net::GuidIndex>();
     index.0.insert(ME, me);
     index.0.insert(IMP, imp);

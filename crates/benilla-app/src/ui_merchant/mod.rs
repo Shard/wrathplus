@@ -24,10 +24,10 @@ use benilla_protocol::messages::BAG_PLAYER_INVENTORY;
 const STOCK_UNLIMITED: u32 = 0xFFFF_FFFF;
 
 #[cfg(test)]
-const NPC_FLAG_REPAIR: u32 = 0x4000;
+const NPC_FLAG_REPAIR: u32 = 0x1000;
 
-/// The first absolute buyback slot (`BUYBACK_SLOT_START`, slots 69-80).
-const BUYBACK_SLOT_FIRST: u32 = 69;
+/// The first absolute buyback slot (AzerothCore `BUYBACK_SLOT_START`, slots 74-85).
+const BUYBACK_SLOT_FIRST: u32 = 74;
 
 pub(crate) use crate::app_core::catalogs::RepairTables;
 /// The open vendor and its `SMSG_LIST_INVENTORY` rows, until a close or a disconnect.
@@ -866,7 +866,7 @@ fn drain_merchant(
             wire_pos_for(
                 self_store
                     .map(|s| s.0.layout())
-                    .unwrap_or(benilla_protocol::messages::FieldLayout::Vanilla5875),
+                    .unwrap_or(benilla_protocol::messages::FieldLayout::Wrath12340),
                 bag,
                 slot,
             ),
@@ -930,11 +930,9 @@ pub(crate) fn end_repair_mode_on_right_press(
 #[cfg(test)]
 pub(crate) mod purse_fixture {
     use super::*;
-    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const FIELD_PLAYER_FIELD_COINAGE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::PlayerCoinage);
-    const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-        .index_of(benilla_protocol::messages::Field::UnitFlags);
-    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
     use benilla_protocol::ObjectFields;
 
@@ -942,14 +940,14 @@ pub(crate) mod purse_fixture {
     pub(crate) const SWORD: u64 = 0x4000_0000_0000_0707;
     pub(crate) const SWORD_ENTRY: u32 = 2488;
     /// Absolute descriptor indices.
-    const OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const OBJECT_ENTRY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ObjectEntry);
-    const ITEM_DURABILITY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const ITEM_DURABILITY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ItemDurability);
-    const ITEM_MAXDURABILITY: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+    const ITEM_MAXDURABILITY: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
         .index_of(benilla_protocol::messages::Field::ItemMaxdurability);
-    const PLAYER_BYTES_3: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-        .index_of(benilla_protocol::messages::Field::PlayerBytes3);
+    const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+        .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
     /// The string `ERR_NOT_ENOUGH_MONEY` holds in 1.12's `GlobalStrings.lua`.
     pub(crate) const NOT_ENOUGH_MONEY: &str = "You don't have enough money.";
 
@@ -961,12 +959,11 @@ pub(crate) mod purse_fixture {
         benilla_formats::DurabilityTables::from_rows([(20, row)], [(3, 1.0)])
     }
 
-    /// The sword's repair in full, and after the two honor steps (`0x612bcf`, `0x612bd7`) an honor
-    /// rank byte of 8 earns at this vendor; a test at the discounted price discriminates the
-    /// discount only while the two differ.
+    /// The sword's repair in full, and after the 5% a Friendly vendor gives; a test at the
+    /// discounted price discriminates the discount only while the two differ.
     pub(crate) fn sword_prices() -> (u32, u32) {
         let t = tables();
-        let steps = f64::from(0.05f32) + f64::from(0.05f32);
+        let steps = 0.05;
         let full = t.repair_cost(40, 20, 1, 2, 7, 0.0);
         let discounted = t.repair_cost(40, 20, 1, 2, 7, steps);
         assert!(discounted < full, "{discounted} of {full}");
@@ -977,6 +974,8 @@ pub(crate) mod purse_fixture {
     /// template and object.
     pub(crate) fn seat(world: &mut World) {
         world.insert_resource(RepairTables(tables()));
+        // Vendor and player share template 1, so the vendor is Friendly toward the player.
+        world.insert_resource(factions());
         world
             .resource_mut::<MerchantOpen>()
             .open(VENDOR, Vec::new());
@@ -984,7 +983,7 @@ pub(crate) mod purse_fixture {
             Guid(VENDOR),
             ObjectStore(ObjectFields::from_pairs(&[
                 (FIELD_UNIT_NPC_FLAGS, NPC_FLAG_REPAIR),
-                (FIELD_UNIT_FLAGS, 0x1000),
+                (FIELD_UNIT_FACTIONTEMPLATE, 1),
             ])),
         ));
         let mut sword = crate::items::test_template("Sword");
@@ -1004,15 +1003,33 @@ pub(crate) mod purse_fixture {
         );
     }
 
-    /// The player's fields: the sword in the guid pair at `slot_field`, `money` copper, and the
-    /// honor rank byte at 8.
+    /// The player's fields: the sword in the guid pair at `slot_field`, `money` copper, and
+    /// faction template 1.
     pub(crate) fn player(slot_field: u16, money: u32) -> ObjectStore {
         ObjectStore(ObjectFields::from_pairs(&[
             (slot_field, SWORD as u32),
             (slot_field + 1, (SWORD >> 32) as u32),
             (FIELD_PLAYER_FIELD_COINAGE, money),
-            (PLAYER_BYTES_3, 8 << 24),
+            (FIELD_UNIT_FACTIONTEMPLATE, 1),
         ]))
+    }
+
+    /// Template 1 alone, friend to its own group (masks 3/2/12), so the vendor is Friendly.
+    fn factions() -> crate::target::Factions {
+        crate::target::Factions::from_catalog(benilla_formats::FactionCatalog::from_rows(
+            std::collections::HashMap::from([(
+                1,
+                benilla_formats::FactionTemplate {
+                    faction: 1,
+                    group_mask: 3,
+                    friend_group_mask: 2,
+                    enemy_group_mask: 12,
+                    enemies: [0; 4],
+                    friends: [0; 4],
+                },
+            )]),
+            std::collections::HashMap::new(),
+        ))
     }
 
     /// [`seat`] and the player with the sword at `slot_field`; returns the player's entity too.
@@ -1106,25 +1123,20 @@ mod tests {
     /// its rounding, and the undiscounted total is not what the VM reads.
     #[test]
     fn the_repair_all_total_takes_the_merchants_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
-        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-            .index_of(benilla_protocol::messages::Field::UnitFlags);
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
 
         /// Absolute descriptor indices.
-        const OBJECT_ENTRY: u16 = FieldLayout::Vanilla5875.index_of(Field::ObjectEntry);
-        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
-        const ITEM_MAXDURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemMaxdurability);
-        const BYTES_0: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitBytes0);
-        const PLAYER_BYTES_3: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerBytes3);
+        const OBJECT_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
+        const ITEM_MAXDURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemMaxdurability);
+        const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
         const VENDOR: u64 = 0xF130_0000_0000_0042;
         const SWORD: u64 = 0x4000_0000_0000_0007;
         const SWORD_ENTRY: u32 = 2488;
@@ -1134,7 +1146,8 @@ mod tests {
         let tables = benilla_formats::load_durability_tables(&mut chain).expect("durability");
         let (factions, template, reps) = crate::target::stormwind_fixture(&mut chain, 9000);
         // A level 20 green sword (class 2, subclass 7) 40 points down.
-        let disc = f64::from(0.1f32) + f64::from(0.05f32) + f64::from(0.05f32);
+        // Honored: 10%, the 12340 reputation ladder.
+        let disc = 0.10;
         let want = tables.repair_cost(40, 20, 2, 2, 7, disc);
         let full = tables.repair_cost(40, 20, 2, 2, 7, 0.0);
         assert!(
@@ -1168,13 +1181,12 @@ mod tests {
             ]),
             false,
         );
-        // The sword in the main hand (slot 15); the current honor rank byte 8.
+        // The sword in the main hand (slot 15).
         let main_hand = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 15;
         app.world_mut().spawn((
             SelfPlayer,
             ObjectStore(ObjectFields::from_pairs(&[
                 (BYTES_0, crate::target::HUMAN_WARRIOR),
-                (PLAYER_BYTES_3, 8 << 24),
                 (main_hand, SWORD as u32),
                 (main_hand + 1, (SWORD >> 32) as u32),
             ])),
@@ -1184,7 +1196,6 @@ mod tests {
             ObjectStore(ObjectFields::from_pairs(&[
                 (FIELD_UNIT_NPC_FLAGS, NPC_FLAG_REPAIR),
                 (FIELD_UNIT_FACTIONTEMPLATE, template),
-                (FIELD_UNIT_FLAGS, 0x1000),
             ])),
         ));
         let mut script = UiScript::new().unwrap();
@@ -1208,7 +1219,7 @@ mod tests {
         slot_field: u16,
         money: u32,
     ) -> (Vec<ClientCommand>, Vec<String>, Vec<&'static str>) {
-        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+        const FIELD_UNIT_NPC_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
             .index_of(benilla_protocol::messages::Field::UnitNpcFlags);
         use benilla_protocol::ObjectFields;
         use bevy::ecs::system::RunSystemOnce;
@@ -1255,10 +1266,10 @@ mod tests {
     /// its purse test. The same worn sword at a repairer goes out.
     #[test]
     fn repair_all_does_nothing_at_a_vendor_that_does_not_repair() {
-        use crate::target::cursor_mode::npc_flags::VENDOR as NPC_FLAG_VENDOR;
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        /// `UNIT_NPC_FLAG_VENDOR` in build 12340.
+        const NPC_FLAG_VENDOR: u32 = 0x80;
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1287,9 +1298,8 @@ mod tests {
     /// total of 0 and the repair-all goes out.
     #[test]
     fn repair_all_tests_the_purse_against_the_worn_gear_alone() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use purse_fixture::*;
 
         let (_, discounted) = sword_prices();
@@ -1324,9 +1334,8 @@ mod tests {
     /// An item's cost is discounted at the vendor and full once it closes (`0x4faf30`).
     #[test]
     fn each_items_cost_takes_the_open_vendors_discount() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
         use bevy::ecs::system::RunSystemOnce;
         use purse_fixture::*;
 
@@ -1366,16 +1375,15 @@ mod tests {
     /// item is priced but left out of the total (`0x4fbd60`).
     #[test]
     fn each_input_alone_reopens_the_repair_cost_gate() {
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-            benilla_protocol::messages::FieldLayout::Vanilla5875
-                .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
-        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
-            .index_of(benilla_protocol::messages::Field::UnitFlags);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::PlayerInvSlotHead);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
+            .index_of(benilla_protocol::messages::Field::UnitFactionTemplate);
         use benilla_protocol::ObjectFields;
         use purse_fixture::*;
 
         /// `ITEM_FIELD_DURABILITY`, absolute.
-        const ITEM_DURABILITY: u16 = FieldLayout::Vanilla5875.index_of(Field::ItemDurability);
+        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
         let main_hand = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 15;
         let backpack_1 = FIELD_PLAYER_INV_SLOT_HEAD + 2 * 23;
         // `PLAYER_FIELD_BANK_SLOT_1`, inventory slot 39.
@@ -1422,29 +1430,29 @@ mod tests {
             |from: u16, to: u16| [(from, 0), (from + 1, 0), (to, SWORD as u32), (to + 1, hi)];
 
         assert_eq!(frame(&mut app), (0, 0, 0, 0), "no tables, no prices");
-        // 1 copper a point, less 0.1: 40 points cost 36.
+        // 1 copper a point, less 0.05: 40 points cost 38.
         app.insert_resource(tables);
-        assert_eq!(frame(&mut app), (36, 0, 0, 36), "the tables arrive");
+        assert_eq!(frame(&mut app), (38, 0, 0, 38), "the tables arrive");
         let sword = entity(&app, SWORD);
         write(&mut app, sword, &[(ITEM_DURABILITY, 55)]);
         assert_eq!(
             frame(&mut app),
-            (18, 0, 0, 18),
+            (19, 0, 0, 19),
             "a repair's write: 20 points"
         );
         write(&mut app, me, &moved(main_hand, bank_1));
         assert_eq!(
             frame(&mut app),
-            (0, 0, 18, 0),
+            (0, 0, 19, 0),
             "banked: priced, not in the total"
         );
         write(&mut app, me, &moved(bank_1, backpack_1));
-        assert_eq!(frame(&mut app), (0, 18, 0, 18), "the sword in the backpack");
-        write(&mut app, vendor, &[(FIELD_UNIT_FLAGS, 0)]);
+        assert_eq!(frame(&mut app), (0, 19, 0, 19), "the sword in the backpack");
+        write(&mut app, vendor, &[(FIELD_UNIT_FACTIONTEMPLATE, 0)]);
         assert_eq!(
             frame(&mut app),
             (0, 20, 0, 20),
-            "no PvP flag, no honor discount"
+            "no friendly reaction, no discount"
         );
         app.world_mut().resource_mut::<MerchantOpen>().clear();
         assert_eq!(
@@ -1698,24 +1706,20 @@ mod tests {
 #[test]
 fn repair_service_uses_native_flags_in_each_layout() {
     use benilla_protocol::messages::{Field, FieldLayout};
-    for (layout, repair, unrelated) in [
-        (FieldLayout::Vanilla5875, 0x4000, 0x1000),
-        (FieldLayout::Wrath12340, 0x1000, 0x4000),
+    let (layout, repair, unrelated) = (FieldLayout::Wrath12340, 0x1000, 0x4000);
+    let span = layout
+        .resolve(Field::UnitNpcFlags)
+        .expect("NPC flags exist in both layouts");
+    for (bits, expected) in [
+        (0, false),
+        (repair, true),
+        (unrelated, false),
+        (repair | unrelated, true),
     ] {
-        let span = layout
-            .resolve(Field::UnitNpcFlags)
-            .expect("NPC flags exist in both layouts");
-        for (bits, expected) in [
-            (0, false),
-            (repair, true),
-            (unrelated, false),
-            (repair | unrelated, true),
-        ] {
-            let store = ObjectStore(benilla_protocol::ObjectFields::from_native_pairs(
-                layout,
-                &[(span.index, bits)],
-            ));
-            assert_eq!(can_repair_store(&store), expected);
-        }
+        let store = ObjectStore(benilla_protocol::ObjectFields::from_native_pairs(
+            layout,
+            &[(span.index, bits)],
+        ));
+        assert_eq!(can_repair_store(&store), expected);
     }
 }

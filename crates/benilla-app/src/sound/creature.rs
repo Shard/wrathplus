@@ -691,38 +691,37 @@ mod tests {
             field::UNIT_DYNFLAG_DEAD,
             messages::{Field, FieldLayout, ObjectType},
         };
-        for layout in [FieldLayout::Vanilla5875, FieldLayout::Wrath12340] {
-            let mut edge = FieldChanged {
-                entity: Entity::PLACEHOLDER,
-                guid: 42,
-                kind: ObjectType::Unit,
-                field: Field::UnitHealth,
-                offset: 0,
-                layout,
-                old: 100,
-                new: 0,
-            };
-            assert!(is_death_edge(&edge));
-            edge.old = 0;
-            assert!(!is_death_edge(&edge));
-            edge.old = 100;
-            edge.new = 50;
-            assert!(!is_death_edge(&edge));
-            edge.field = Field::UnitDynamicFlags;
-            edge.old = 0;
-            edge.new = UNIT_DYNFLAG_DEAD;
-            assert!(is_death_edge(&edge));
-            edge.kind = ObjectType::Player;
-            assert!(is_death_edge(&edge));
-            edge.old = UNIT_DYNFLAG_DEAD;
-            assert!(!is_death_edge(&edge), "already dead does not cry again");
-            edge.old = 0;
-            edge.kind = ObjectType::Corpse;
-            assert!(!is_death_edge(&edge));
-            edge.kind = ObjectType::Unit;
-            edge.field = Field::UnitFlags;
-            assert!(!is_death_edge(&edge));
-        }
+        let layout = FieldLayout::Wrath12340;
+        let mut edge = FieldChanged {
+            entity: Entity::PLACEHOLDER,
+            guid: 42,
+            kind: ObjectType::Unit,
+            field: Field::UnitHealth,
+            offset: 0,
+            layout,
+            old: 100,
+            new: 0,
+        };
+        assert!(is_death_edge(&edge));
+        edge.old = 0;
+        assert!(!is_death_edge(&edge));
+        edge.old = 100;
+        edge.new = 50;
+        assert!(!is_death_edge(&edge));
+        edge.field = Field::UnitDynamicFlags;
+        edge.old = 0;
+        edge.new = UNIT_DYNFLAG_DEAD;
+        assert!(is_death_edge(&edge));
+        edge.kind = ObjectType::Player;
+        assert!(is_death_edge(&edge));
+        edge.old = UNIT_DYNFLAG_DEAD;
+        assert!(!is_death_edge(&edge), "already dead does not cry again");
+        edge.old = 0;
+        edge.kind = ObjectType::Corpse;
+        assert!(!is_death_edge(&edge));
+        edge.kind = ObjectType::Unit;
+        edge.field = Field::UnitFlags;
+        assert!(!is_death_edge(&edge));
     }
 
     /// The five-arm jump table, column for column, and its two silences.

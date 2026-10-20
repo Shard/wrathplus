@@ -587,7 +587,7 @@ impl Dispatch<'_, '_> {
             .map(|(s, _)| s.0.unit_npc_services())
             .unwrap_or_else(|_| {
                 benilla_protocol::messages::NpcFlags::from_bits(
-                    benilla_protocol::messages::FieldLayout::Vanilla5875,
+                    benilla_protocol::messages::FieldLayout::Wrath12340,
                     0,
                 )
             });
@@ -612,7 +612,6 @@ impl Dispatch<'_, '_> {
             benilla_protocol::messages::FieldLayout::Wrath12340 => {
                 self.service.quest.wrath_statuses().get(&guid).copied()
             }
-            benilla_protocol::messages::FieldLayout::Vanilla5875 => self.service.quest.status(guid),
         };
         let Some(arm) = service_arm_native(npc_flags, status) else {
             // `0x5f05ca`: no consulted bit does nothing, gesture included.
@@ -1355,25 +1354,18 @@ pub(crate) fn service_arm_native(
 ) -> Option<ServiceArm> {
     use benilla_protocol::messages::NpcService as f;
     let bit = |service| npc_flags.has(service);
-    let wrath = npc_flags.layout() == benilla_protocol::messages::FieldLayout::Wrath12340;
-    // Build 12340 FUN_006ddbb0: taxi precedes the exact vendor base bit.
-    let has_quest = if wrath {
-        // FUN_006d1de0 tests raw status != 0 && != 1, including unknown values.
-        !matches!(quest_status, None | Some(0 | 1))
-    } else {
-        cursor_mode::questgiver_has_quest(quest_status)
-    };
+    // FUN_006d1de0 tests raw status != 0 && != 1, including unknown values.
+    let has_quest = !matches!(quest_status, None | Some(0 | 1));
     Some(if bit(f::Gossip) {
         ServiceArm::Gossip
     } else if bit(f::QuestGiver) && has_quest {
         // The cursor ladder's own predicate (`0x482362`), shared so the two cannot disagree.
         ServiceArm::Questgiver
-    } else if wrath && bit(f::FlightMaster) {
+    } else if bit(f::FlightMaster) {
+        // Build 12340 FUN_006ddbb0: taxi precedes the exact vendor base bit.
         ServiceArm::FlightMaster
     } else if npc_flags.has_vendor_base() {
         ServiceArm::Vendor
-    } else if bit(f::FlightMaster) {
-        ServiceArm::FlightMaster
     } else if npc_flags.has_trainer_base() {
         ServiceArm::Trainer
     } else if bit(f::SpiritHealer) {
@@ -1399,12 +1391,35 @@ pub(crate) fn service_arm_native(
     })
 }
 
+/// [`service_arm_native`] for a [`cursor_mode::npc_flags`] word.
 #[cfg(test)]
 pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> {
+    use cursor_mode::npc_flags as f;
+    // Each [`cursor_mode::npc_flags`] bit at its build-12340 position (AzerothCore `NPCFlags`).
+    let native = [
+        (f::GOSSIP, 0x1),
+        (f::QUESTGIVER, 0x2),
+        (f::VENDOR, 0x80),
+        (f::FLIGHTMASTER, 0x2000),
+        (f::TRAINER, 0x10),
+        (f::SPIRITHEALER, 0x4000),
+        (f::SPIRITGUIDE, 0x8000),
+        (f::INNKEEPER, 0x10000),
+        (f::BANKER, 0x20000),
+        (f::PETITIONER, 0x40000),
+        (f::TABARDDESIGNER, 0x80000),
+        (f::BATTLEMASTER, 0x100000),
+        (f::AUCTIONEER, 0x200000),
+        (f::STABLEMASTER, 0x400000),
+        (0x4000, 0x1000), // REPAIR
+    ]
+    .into_iter()
+    .filter(|&(legacy, _)| bits & legacy != 0)
+    .fold(0, |word, (_, bit)| word | bit);
     service_arm_native(
         benilla_protocol::messages::NpcFlags::from_bits(
-            benilla_protocol::messages::FieldLayout::Vanilla5875,
-            bits,
+            benilla_protocol::messages::FieldLayout::Wrath12340,
+            native,
         ),
         status,
     )
@@ -2064,10 +2079,10 @@ mod tests {
     use crate::net::{ClientCommand, NetCommands, ObjectStore};
     use bevy::ecs::system::RunSystemOnce;
 
-    const F_HEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitHealth);
-    const F_MAXHEALTH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitMaxHealth);
-    /// `GAMEOBJECT_TYPE_ID`, absolute field 21, which the GameObject arms fork on.
-    const GO_TYPE_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::GameobjectTypeId);
+    const F_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+    const F_MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    /// `GAMEOBJECT_BYTES_1`, whose byte 1 is the type the GameObject arms fork on.
+    const GO_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::GameobjectBytes1);
     const BOAR: u64 = 0xB0A2;
     const ME: u64 = 0x5E1F;
 
@@ -2158,8 +2173,8 @@ mod tests {
     /// (`0x60c1a1`), with no swing and no service packet; a live player on the same fork swings.
     #[test]
     fn a_ghost_takes_the_attack_arm_and_is_refused_silently() {
-        const F_PLAYER_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
-        const F_NPC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNpcFlags);
+        const F_PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+        const F_NPC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
         for (label, own, swings) in [
             (
                 "ghost",
@@ -2233,7 +2248,7 @@ mod tests {
         let (mut world, _boar) = right_click_world();
         world.insert_resource(NetCommands(tx));
         let stone = world
-            .spawn((Guid(STONE), store(&[(GO_TYPE_FIELD, 23)])))
+            .spawn((Guid(STONE), store(&[(GO_BYTES_1, 23 << 8)])))
             .id();
         *world.resource_mut::<PressPick>() = PressPick {
             object: HoveredObject {
@@ -2274,7 +2289,7 @@ mod tests {
         const STONE: u64 = 0x5703;
         let (mut world, _boar) = right_click_world();
         let stone = world
-            .spawn((Guid(STONE), store(&[(GO_TYPE_FIELD, 23)])))
+            .spawn((Guid(STONE), store(&[(GO_BYTES_1, 23 << 8)])))
             .id();
         *world.resource_mut::<PressPick>() = PressPick {
             object: HoveredObject {
@@ -2303,7 +2318,7 @@ mod tests {
         at: Vec3,
         walk: bool,
     ) -> (World, Entity, crossbeam_channel::Receiver<ClientCommand>) {
-        const F_NPC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNpcFlags);
+        const F_NPC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
         let (tx, rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let (mut world, _boar) = right_click_world();
         world.insert_resource(NetCommands(tx));
@@ -2319,7 +2334,7 @@ mod tests {
         let vendor = world
             .spawn((
                 Guid(VENDOR),
-                store(&[(F_HEALTH, 100), (F_MAXHEALTH, 100), (F_NPC_FLAGS, 0x4)]),
+                store(&[(F_HEALTH, 100), (F_MAXHEALTH, 100), (F_NPC_FLAGS, 0x80)]),
                 Transform::from_translation(at),
                 crate::net::NetEntity {
                     kind: benilla_protocol::EntityKind::Unit,
@@ -2423,7 +2438,7 @@ mod tests {
         let object = world
             .spawn((
                 Guid(CHEST),
-                store(&[(GO_TYPE_FIELD, go_type)]),
+                store(&[(GO_BYTES_1, go_type << 8)]),
                 Transform::from_translation(at),
                 crate::net::NetEntity {
                     kind: benilla_protocol::EntityKind::GameObject,
@@ -2626,7 +2641,7 @@ mod tests {
     #[test]
     fn a_far_body_to_loot_is_walked_to_before_the_loot() {
         const BODY: u64 = 0xB0D7;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
         let (mut world, _vendor, rx) = walking_world(Vec3::new(14.0, 0.0, 0.0), true);
         let body = world
             .spawn((
@@ -2665,8 +2680,8 @@ mod tests {
     fn a_loot_walk_stops_at_the_square_root_of_the_melee_reach() {
         const BODY: u64 = 0xB0D7;
         const CORPSE: u64 = 0xC0D5;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
-        const F_COMBAT_REACH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCombatreach);
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+        const F_COMBAT_REACH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCombatreach);
         let loot_click = |world: &mut World, hovered: Hovered| {
             *world.resource_mut::<PressPick>() = PressPick {
                 hovered,
@@ -2802,7 +2817,7 @@ mod tests {
         let (mut world, _boar) = right_click_world();
         world.insert_resource(NetCommands(tx));
         let stone = world
-            .spawn((Guid(STONE), store(&[(GO_TYPE_FIELD, 23)])))
+            .spawn((Guid(STONE), store(&[(GO_BYTES_1, 23 << 8)])))
             .id();
         *world.resource_mut::<PressPick>() = PressPick {
             object: HoveredObject {
@@ -2931,7 +2946,7 @@ mod tests {
     }
 
     fn attack_wolf_at(at: Vec3, reach: f32) -> (World, crossbeam_channel::Receiver<ClientCommand>) {
-        const F_COMBAT_REACH: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitCombatreach);
+        const F_COMBAT_REACH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCombatreach);
         let (mut world, _vendor, rx) = walking_world(Vec3::new(14.0, 0.0, 0.0), true);
         let wolf = world
             .spawn((
@@ -3116,7 +3131,7 @@ mod tests {
     fn wrath_corpse_and_dead_unit_clicks_send_loot() {
         const BODY: u64 = 0xB0D7;
         const CORPSE: u64 = 0xC0D5;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
         let click = |world: &mut World, hovered: Hovered| {
             *world.resource_mut::<PressPick>() = PressPick {
                 hovered,
@@ -3186,8 +3201,8 @@ mod tests {
     fn wrath_skin_clicks_and_arrival_verbs_reach_the_wire() {
         const BODY: u64 = 0xB0D7;
         const SKINNING: u32 = 8613;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitDynamicFlags);
-        const F_UNIT_FLAGS: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+        const F_UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
         let skinnable = |world: &mut World| {
             world
                 .spawn((

@@ -10,16 +10,16 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use crossbeam_channel::Receiver;
 
-const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+const FIELD_UNIT_FLAGS: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
     .index_of(benilla_protocol::messages::Field::UnitFlags);
 
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
     .index_of(benilla_protocol::messages::Field::UnitHealth);
 
-const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+const FIELD_UNIT_LEVEL: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
     .index_of(benilla_protocol::messages::Field::UnitLevel);
 
-const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Vanilla5875
+const FIELD_UNIT_MAXHEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340
     .index_of(benilla_protocol::messages::Field::UnitMaxHealth);
 
 const ME: u64 = 0x0000_0000_0000_0007;

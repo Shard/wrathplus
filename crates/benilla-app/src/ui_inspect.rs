@@ -102,10 +102,9 @@ fn inspect_slot_view(
     slot0: u8,
 ) -> Option<InvSlotView> {
     let entry = store.0.player_visible_item_entry(slot0)?;
-    // The roll, the properties field's low word as the reference's inspect leg reads it into
-    // `+0x424`, names the suffix only: its stat lines would sit in enchant slots 2-6, which 1.12
-    // servers leave empty.
-    let roll = store.0.player_visible_item_properties(slot0);
+    // No roll: 12340's visible item descriptor carries no properties word, so the inspect leg
+    // names no suffix.
+    let roll = 0;
     // By entry alone (guid 0), as the reference's item cache asks: there is no item object.
     let (name, quality, display) = match items.template(entry, 0, commands) {
         Some(t) => (

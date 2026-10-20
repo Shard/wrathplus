@@ -949,7 +949,7 @@ mod tests {
     use benilla_protocol::messages::{Field, FieldLayout};
 
     /// `UNIT_FIELD_LEVEL`, absolute field 34.
-    const LEVEL_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitLevel);
+    const LEVEL_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
 
     #[test]
     fn setting_the_same_healer_is_a_complete_no_op() {
@@ -1041,11 +1041,11 @@ mod tests {
     }
 
     /// `UNIT_FIELD_FLAGS`, absolute field 46; `UNIT_FLAG_PVP` (`0x1000`) passes `can_assist`.
-    const UNIT_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitFlags);
+    const UNIT_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
     /// `UNIT_NPC_FLAGS`, absolute field 147.
-    const NPC_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::UnitNpcFlags);
+    const NPC_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
     /// `PLAYER_FLAGS`, absolute field 190; bit `0x10` is GHOST.
-    const PLAYER_FLAGS_FIELD: u16 = FieldLayout::Vanilla5875.index_of(Field::PlayerFlags);
+    const PLAYER_FLAGS_FIELD: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
 
     fn fields(pairs: &[(u16, u32)]) -> ObjectStore {
         ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs))
@@ -1085,7 +1085,7 @@ mod tests {
                 scale: 1.0,
             },
             fields(&[
-                (NPC_FLAGS_FIELD, if guide { 1 << 6 } else { 0 }),
+                (NPC_FLAGS_FIELD, if guide { 0x8000 } else { 0 }),
                 (UNIT_FLAGS_FIELD, 0x1000),
                 (FACTION_TEMPLATE_FIELD, 35),
             ]),
@@ -1096,7 +1096,7 @@ mod tests {
 
     /// `UNIT_FIELD_FACTIONTEMPLATE`, absolute field 35.
     const FACTION_TEMPLATE_FIELD: u16 =
-        FieldLayout::Vanilla5875.index_of(Field::UnitFactionTemplate);
+        FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
 
     macro_rules! catalog_or_skip {
         () => {{
