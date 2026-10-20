@@ -144,7 +144,6 @@ mod tests {
         let (tx, _rx) = crossbeam_channel::unbounded();
         let mut world = World::new();
         world.insert_resource(NetCommands(tx));
-        world.insert_resource(crate::net::SessionDialect::Wrath12340);
         world.init_resource::<crate::spell::QueuedMeleeSpell>();
         world.init_resource::<crate::spell::AutoRepeatActive>();
         world.init_resource::<crate::ui_loot::LootState>();

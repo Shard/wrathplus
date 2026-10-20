@@ -21,7 +21,7 @@ fn native_commands_admitted_but_shared_who_stays_disabled() {
     ] {
         let command = ClientCommand::NativeWhoCommand(native.clone());
         assert!(matches!(route(&command), WrathRoute::NativeWho));
-        assert!(commands.supports(SessionDialect::Wrath12340, &command));
+        assert!(commands.supports(&command));
         assert!(native.encode().is_ok());
         if matches!(native, Command::Whois { .. }) {
             assert!(!format!("{command:?}").contains("Synthetic"));
@@ -31,5 +31,5 @@ fn native_commands_admitted_but_shared_who_stays_disabled() {
         request: Box::new(benilla_protocol::messages::WhoRequest::default()),
     };
     assert!(matches!(route(&shared), WrathRoute::DisabledGameAction));
-    assert!(!commands.supports(SessionDialect::Wrath12340, &shared));
+    assert!(!commands.supports(&shared));
 }

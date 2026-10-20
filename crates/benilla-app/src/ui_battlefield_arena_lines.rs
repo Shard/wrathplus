@@ -14,7 +14,7 @@ use crate::ui_action::{FillArg, UiError};
 use benilla_protocol::wrath_battleground::Packet;
 use bevy::prelude::*;
 
-pub(super) fn register(app: &mut App) {
+pub(crate) fn register(app: &mut App) {
     app.add_systems(
         Update,
         drain_arena_lines
@@ -139,5 +139,5 @@ fn drain_arena_lines(
 }
 
 #[cfg(test)]
-#[path = "wrath_arena_lines_tests.rs"]
+#[path = "ui_battlefield_arena_lines_tests.rs"]
 mod tests;

@@ -1,6 +1,5 @@
 //! The background networking threads, the socket half of the net bridge: [`spawn_net`] starts the
-//! build-12340 backend ([`wrath`]), which refuses a login for any other dialect. The 1.12 session
-//! is gone (Vanilla removal step 3).
+//! build-12340 backend ([`wrath`]). The 1.12 session is gone (Vanilla removal step 3).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -51,8 +50,6 @@ pub(crate) struct LoginRequest {
     /// connection in flight.
     pub(crate) host: String,
     pub(crate) generation: u64,
-    /// The app's startup snapshot dialect. The backend rejects a mismatch rather than falling back.
-    pub(crate) dialect: super::SessionDialect,
 }
 
 /// The park-answer receivers, in the order a cycle blocks on them: credentials, realm, character.

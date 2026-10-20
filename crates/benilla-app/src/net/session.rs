@@ -95,7 +95,6 @@ pub(crate) struct Bridge<'w, 's> {
     proficiencies: ResMut<'w, Proficiencies>,
     dropped: ResMut<'w, DroppedOpcodes>,
     net: Res<'w, NetCommands>,
-    dialect: Res<'w, super::SessionDialect>,
     stores: Query<'w, 's, &'static mut ObjectStore>,
     transports: Query<'w, 's, &'static crate::app_core::movement::TransportMaps>,
 }
@@ -289,9 +288,7 @@ fn on_worldport(
     };
     {
         // Every streamed roster member is about to be purged; the reference deactivates each.
-        crate::ui_party::net::roster_deactivated(
-            &mut group, &b.index, &b.stores, &b.names, &b.net, *b.dialect,
-        );
+        crate::ui_party::net::roster_deactivated(&mut group, &b.index, &b.stores, &b.names, &b.net);
         worldport(
             map_id,
             position,

@@ -3,7 +3,6 @@
 
 use crate::names::native_pet_tests::{drain, packet};
 use crate::names::*;
-use crate::net::SessionDialect;
 use crate::ui_native_pet_name::NativePetNamePackets;
 use benilla_protocol::SessionEvent;
 use bevy::prelude::*;
@@ -59,7 +58,6 @@ fn scheduled_drain_exposes_fresh_post_connected_name_to_ui_feed_same_frame() {
     let mut app = App::new();
     app.insert_resource(names)
         .insert_resource(packets)
-        .insert_resource(SessionDialect::Wrath12340)
         .init_resource::<Seen>();
     net::register(&mut app);
     app.add_systems(Update, observe.in_set(crate::ui_script::UiFeed));

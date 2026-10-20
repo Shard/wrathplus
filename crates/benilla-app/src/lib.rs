@@ -130,6 +130,7 @@ mod ui_auction;
 mod ui_aura;
 mod ui_bank;
 mod ui_battlefield;
+mod ui_battlefield_arena_lines;
 mod ui_battlefield_positions;
 mod ui_battlefield_score;
 mod ui_bind_confirm;
