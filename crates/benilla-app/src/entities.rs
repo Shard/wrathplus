@@ -896,6 +896,13 @@ fn setup_entities(
             warn!("random properties unavailable: no item name suffix, no suffix line: {e:#}")
         }
     }
+    match benilla_formats::load_item_records(&mut chain) {
+        Ok(records) => {
+            info!("item records: {} entries", records.len());
+            commands.insert_resource(crate::app_core::catalogs::ItemRecords(records));
+        }
+        Err(e) => warn!("Item.dbc unavailable, creatures hold no weapons: {e:#}"),
+    }
     match benilla_formats::load_durability_tables(&mut chain) {
         Ok(tables) => commands.insert_resource(crate::ui_merchant::RepairTables(tables)),
         Err(e) => warn!("durability tables unavailable, repair costs show 0: {e:#}"),

@@ -32,3 +32,9 @@ pub(crate) struct BankPrices(pub(crate) benilla_formats::BankBagSlotPrices);
 /// `StableSlotPrices.dbc`, the purchase row's prices; absent, the row quotes 0.
 #[derive(Resource)]
 pub(crate) struct StableSlotPrices(pub(crate) benilla_formats::StableSlotPrices);
+
+/// `Item.dbc`, the client's record of every item entry: a creature's virtual items name only the
+/// entry (`UNIT_VIRTUAL_ITEM_SLOT_ID`), so their display, sheath and class come from here. Absent,
+/// creatures hold nothing.
+#[derive(Resource)]
+pub(crate) struct ItemRecords(pub(crate) benilla_formats::ItemRecordCatalog);

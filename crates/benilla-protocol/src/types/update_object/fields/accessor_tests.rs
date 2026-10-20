@@ -1070,6 +1070,13 @@ fn unit_composites_and_legacy_only_values_keep_native_semantics() {
     assert!(fields.unit_lootable());
     assert_eq!(fields.unit_attack_power_mods(), (54, -2));
     assert_eq!(fields.unit_ranged_attack_power_mods(), (55, -4));
+    assert_eq!(fields.unit_virtual_item_entry(2), Some(999));
+    assert_eq!(
+        fields.unit_virtual_item_entry(0),
+        None,
+        "an unsent hand is empty"
+    );
+    assert_eq!(fields.unit_virtual_item_entry(3), None, "three slots only");
 }
 
 #[test]
