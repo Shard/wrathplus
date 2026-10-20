@@ -3,7 +3,8 @@
 use benilla_assets::AnimClip;
 use bevy::prelude::*;
 
-use crate::net::{RemoteMotion, Spline};
+use crate::motion::RemoteMotion;
+use crate::motion::Spline;
 
 /// Walk speed (yd/s) for a unit whose movement block has none; Run starts above 2× (`0x5fd224`).
 pub(super) const DEFAULT_WALK_SPEED: f32 = 2.5;
@@ -706,7 +707,7 @@ pub(crate) fn unify(
     remote: Option<&RemoteMotion>,
     spline: Option<&Spline>,
     creature_swimming: bool,
-    modes: Option<&crate::net::UnitMoveModes>,
+    modes: Option<&crate::motion::UnitMoveModes>,
 ) -> MovementState {
     // Every leg reads the flying spline live, as the selector does at select time (`0x5fd19c`);
     // build 12340's FLYING mover takes the same Fly 135.

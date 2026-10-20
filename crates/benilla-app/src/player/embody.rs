@@ -19,7 +19,8 @@ use super::approach::Approach;
 use super::follow::FollowState;
 use super::state::Player;
 use crate::creature_anim::MovementState;
-use crate::net::{ActiveMover, Embodied, GuidIndex, RemoteMotion, SelfGuid, SelfPlayer};
+use crate::motion::RemoteMotion;
+use crate::net::{ActiveMover, Embodied, GuidIndex, SelfGuid, SelfPlayer};
 
 /// Keeps [`Embodied`] on the attached body (the possessed unit, else our own, else nobody) and
 /// [`ActiveMover`] on it while it is ours to move; runs before the controller.
@@ -88,7 +89,7 @@ pub(super) fn maintain_embodiment(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::RemoteMotion;
+    use crate::motion::RemoteMotion;
 
     fn harness() -> (App, Entity) {
         let mut app = App::new();

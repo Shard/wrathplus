@@ -1,8 +1,8 @@
-//! The net session's markers and edges that lower layers name: our own entity and the body we are
-//! attached to, the descriptor store every streamed object carries, the offline flag, and the
-//! world-enter and disconnect messages. Moved here for the crate split
-//! (`docs/APP-CRATE-SPLIT-PLAN.md`, step 0 residue); `crate::net` re-exports each from its old path
-//! and keeps the systems that write them.
+//! The net session's markers and edges that lower layers name: our own guid and entity, the body
+//! we are attached to, the descriptor store every streamed object carries, the offline flag, the
+//! world-enter and disconnect messages and the server's system lines. Moved here for the crate
+//! split (`docs/APP-CRATE-SPLIT-PLAN.md`, step 0 residue); `crate::net` re-exports each from its
+//! old path and keeps the systems that write them.
 
 use benilla_protocol::ObjectFields;
 use bevy::prelude::*;
@@ -79,4 +79,15 @@ impl DisconnectedMessage {
             session_over,
         }
     }
+}
+
+/// Our own player's guid, once in the world.
+#[derive(Resource, Default)]
+pub(crate) struct SelfGuid(pub(crate) Option<u64>);
+
+/// One `CHAT_MSG_SYSTEM` line, such as a GM command's answer: the only evidence of server state
+/// with no field, like vmangos god mode (`Unit::m_invincibilityHpThreshold`).
+#[derive(Message, Clone)]
+pub(crate) struct ServerSaidMessage {
+    pub(crate) text: String,
 }

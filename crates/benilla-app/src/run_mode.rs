@@ -73,8 +73,9 @@ pub(crate) fn env_login() -> bool {
 /// player's client fight another for their account. A scripted run declares itself, as
 /// `docs/CONTRIBUTING.md`, "Running it unattended" says.
 ///
-/// Read by what acts instead of a person: [`crate::net::DisconnectedMessage::new`] (the
-/// lost-session verdict, taken once at the wire edge) and the `FATAL` exits.
+/// Read by what acts instead of a person:
+/// [`crate::app_core::session::DisconnectedMessage::new`] (the lost-session verdict, taken once at
+/// the wire edge) and the `FATAL` exits.
 pub(crate) fn unattended() -> bool {
     [
         "WOW_UNATTENDED",

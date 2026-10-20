@@ -10,10 +10,11 @@ use bevy::prelude::*;
 
 use crate::creature_anim::select::unify;
 use crate::creature_anim::{move_flags, Engaged};
-use crate::net::{
-    current_speed, CreatureSwimming, Embodied, GuidIndex, ObjectStore, RemoteMotion, SelfPlayer,
-    Spline, UnitMoveModes, UnitSpeeds,
-};
+use crate::motion::CreatureSwimming;
+use crate::motion::RemoteMotion;
+use crate::motion::Spline;
+use crate::motion::UnitMoveModes;
+use crate::net::{current_speed, Embodied, GuidIndex, ObjectStore, SelfPlayer, UnitSpeeds};
 use crate::player::Player;
 
 /// The descriptor's default combat reach, before a unit's store streams.

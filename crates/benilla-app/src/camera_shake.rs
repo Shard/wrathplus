@@ -32,7 +32,8 @@ use crate::creature_anim::{
     footfall_culls, footfall_side, move_flags, AnimSoundEvent, MovementState, SpellKitShake,
 };
 use crate::entities::Creatures;
-use crate::net::{Embodied, NetEntity, ObjectStore, Spline};
+use crate::motion::Spline;
+use crate::net::{Embodied, NetEntity, ObjectStore};
 use crate::player::ViewSubject;
 use benilla_assets::{AssetSet, LockRecover, WorldAssets};
 use benilla_protocol::EntityKind;

@@ -755,16 +755,18 @@ mod tests {
                 ))
                 .id();
             if mob_runs {
-                app.world_mut().entity_mut(mob).insert(crate::net::Spline {
-                    points: vec![[distance, 0.0, 0.0], [distance + 16.0, 0.0, 0.0]],
-                    start: Instant::now(),
-                    duration: std::time::Duration::from_secs(2),
-                    id: 1,
-                    grounded: true,
-                    interpolation: benilla_protocol::SplineInterpolation::Linear,
-                    run_mode: Some(true),
-                    deck: None,
-                });
+                app.world_mut()
+                    .entity_mut(mob)
+                    .insert(crate::motion::Spline {
+                        points: vec![[distance, 0.0, 0.0], [distance + 16.0, 0.0, 0.0]],
+                        start: Instant::now(),
+                        duration: std::time::Duration::from_secs(2),
+                        id: 1,
+                        grounded: true,
+                        interpolation: benilla_protocol::SplineInterpolation::Linear,
+                        run_mode: Some(true),
+                        deck: None,
+                    });
             }
             app.world_mut()
                 .resource_mut::<crate::net::GuidIndex>()

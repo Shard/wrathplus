@@ -69,22 +69,11 @@ pub(crate) use handlers::NetHandlerApp;
 // The session markers and edges lower layers name live in `app_core::session` (crate split, step 0
 // residue); these paths keep their users compiling.
 pub(crate) use crate::app_core::session::{
-    DisconnectedMessage, Embodied, EnteredWorldMessage, NetOffline, ObjectStore, SelfPlayer,
+    DisconnectedMessage, Embodied, EnteredWorldMessage, NetOffline, ObjectStore, SelfGuid,
+    SelfPlayer, ServerSaidMessage,
 };
 
 pub(crate) use io::LoginRequest;
-// The movement model's apply and its movers live in `crate::motion` (`docs/APP-CRATE-SPLIT-PLAN.md`,
-// item 3 part A); these paths keep their callers compiling.
-// `pub(crate)`: `creature_anim` reads the shuffle latch it produces, and a test runs both.
-pub(crate) use crate::motion::drive_display_facing;
-pub(crate) use crate::motion::{
-    ground_derived, grounded_y, jump_seed, CreatureSwimming, FacingStep, RemoteMotion, Spline,
-    SplineStopped, UnitMoveModes,
-};
-// Only the ground-census probe reads this, so a build without the instruments leaves it unused.
-// Not a `cfg`: seam knowledge lives in three fixed places, and this file is not one of them.
-#[allow(unused_imports)]
-pub(crate) use crate::motion::GroundClamped;
 
 /// The drain and the self-player tag, which every mover in `crate::motion` runs after.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -224,11 +213,7 @@ impl Plugin for NetPlugin {
             )
             // Not part of the movement chain above: one send on the world-enter message.
             .add_systems(Update, send_query_time.in_set(WorldStage::Net))
-            .add_systems(Update, population_pulse.in_set(WorldStage::Net))
-            // Last, so its handlers follow every one above on the same event. Here rather than in
-            // `game_plugins` while net and the movers share a crate: an app built on `NetPlugin` alone
-            // keeps the whole movement chain.
-            .add_plugins(crate::motion::MotionPlugin);
+            .add_systems(Update, population_pulse.in_set(WorldStage::Net));
     }
 }
 
@@ -702,10 +687,6 @@ impl Objects<'_, '_> {
             .and_then(|&e| self.countdowns.get(e).ok())
     }
 }
-
-/// Our own player's guid, once in the world.
-#[derive(Resource, Default)]
-pub(crate) struct SelfGuid(pub(crate) Option<u64>);
 
 /// Connection status; `last_reason` keeps the most recent failure.
 #[derive(Resource, Default)]
@@ -2261,13 +2242,6 @@ pub(crate) struct AddonInfoReply(pub(crate) Option<Vec<String>>);
 #[derive(Message)]
 pub(crate) struct CinematicTriggeredMessage {
     pub(crate) cinematic_id: u32,
-}
-
-/// One `CHAT_MSG_SYSTEM` line, such as a GM command's answer: the only evidence of server state
-/// with no field, like vmangos god mode (`Unit::m_invincibilityHpThreshold`).
-#[derive(Message, Clone)]
-pub(crate) struct ServerSaidMessage {
-    pub(crate) text: String,
 }
 
 /// `SMSG_LOGOUT_COMPLETE`: back to character select. The drain tears down our own entity.

@@ -14,7 +14,10 @@ use benilla_protocol::{
 };
 use bevy::prelude::*;
 
-use crate::net::{GuidIndex, NetEvents, NetHandlerApp, RemoteMotion, Spline, UnitMoveModes};
+use crate::motion::RemoteMotion;
+use crate::motion::Spline;
+use crate::motion::UnitMoveModes;
+use crate::net::{GuidIndex, NetEvents, NetHandlerApp};
 
 const GUID: u64 = 0xF130_0000_4321_0001;
 const FIELD_UNIT_HEALTH: u16 = benilla_protocol::messages::FieldLayout::Wrath12340

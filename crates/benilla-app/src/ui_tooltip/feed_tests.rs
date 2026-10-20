@@ -24,8 +24,8 @@ fn melee_and_authored_rows() -> benilla_formats::SpellRangeCatalog {
 }
 
 /// A creature on a live spline at `speed` yd/s over two seconds: a mover at that speed.
-fn on_spline(speed: f32) -> crate::net::Spline {
-    crate::net::Spline {
+fn on_spline(speed: f32) -> crate::motion::Spline {
+    crate::motion::Spline {
         points: vec![[0.0; 3], [speed * 2.0, 0.0, 0.0]],
         start: std::time::Instant::now(),
         duration: std::time::Duration::from_secs(2),
@@ -463,7 +463,7 @@ fn a_pet_view_reads_the_pets_and_its_targets_run() {
     );
     app.world_mut()
         .entity_mut(mob)
-        .remove::<crate::net::Spline>();
+        .remove::<crate::motion::Spline>();
     assert_eq!(
         range(&mut app).as_deref(),
         Some("5 yd range"),
