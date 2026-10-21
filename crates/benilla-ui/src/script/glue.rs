@@ -25,6 +25,40 @@ pub enum GlueRequest {
     SaveAccountName(String),
     /// `StatusDialogClick()`: the status dialog's button (Cancel while connecting).
     StatusDialogClick,
+    /// `ChangeRealm(category, index)`: enter the `index`-th realm (1-based) of tab `category`.
+    ChangeRealm { category: usize, index: usize },
+    /// `RequestRealmList()`: the list's refresh timer.
+    RequestRealmList,
+    /// `RealmListDialogCancelled()`: the list's Cancel, which on the login screen drops the realm
+    /// connection.
+    RealmListCancelled,
+    /// `BenillaSetRealmlist(text)`, AzerothBench's own login button (not stock 3.3.5): the typed
+    /// realmlist, for App to check and keep.
+    SetRealmlist(String),
+}
+
+/// One realm row as `GetRealmInfo` returns it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GlueRealm {
+    pub name: String,
+    pub num_characters: u32,
+    pub invalid: bool,
+    pub down: bool,
+    pub current: bool,
+    pub pvp: bool,
+    pub rp: bool,
+    /// The load band, `CGlue::RealmLoadClassify`'s value.
+    pub load: f32,
+    pub locked: bool,
+    /// The realm type, the list's last return.
+    pub realm_type: u32,
+}
+
+/// One tab of the realm list: its category name and its rows, in the list's order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GlueRealmTab {
+    pub name: String,
+    pub realms: Vec<GlueRealm>,
 }
 
 impl std::fmt::Debug for GlueRequest {
@@ -38,6 +72,12 @@ impl std::fmt::Debug for GlueRequest {
             GlueRequest::Quit => f.write_str("Quit"),
             GlueRequest::SaveAccountName(n) => write!(f, "SaveAccountName({n:?})"),
             GlueRequest::StatusDialogClick => f.write_str("StatusDialogClick"),
+            GlueRequest::ChangeRealm { category, index } => {
+                write!(f, "ChangeRealm {{ category: {category}, index: {index} }}")
+            }
+            GlueRequest::RequestRealmList => f.write_str("RequestRealmList"),
+            GlueRequest::RealmListCancelled => f.write_str("RealmListCancelled"),
+            GlueRequest::SetRealmlist(text) => write!(f, "SetRealmlist({text:?})"),
         }
     }
 }
@@ -51,6 +91,21 @@ pub(crate) struct GlueState {
     pub(crate) server_name: String,
     pub(crate) current_screen: String,
     pub(crate) num_characters: u32,
+    /// The realm list: every tab, 1-based by ordinal; the first answers an ordinal past the last
+    /// (`0x46edf0` has no sentinel).
+    pub(crate) realm_tabs: Vec<GlueRealmTab>,
+    pub(crate) realm_selected_category: usize,
+    pub(crate) realm_update_rate: f32,
+    /// The realmlist the login dials, and whether `--server`/`$WOW_HOST` pins it this session.
+    pub(crate) realmlist: String,
+    pub(crate) realmlist_pinned: bool,
+}
+
+impl GlueState {
+    fn tab(&self, category: i64) -> Option<&GlueRealmTab> {
+        let i = usize::try_from(category).ok()?.checked_sub(1)?;
+        self.realm_tabs.get(i).or_else(|| self.realm_tabs.first())
+    }
 }
 
 impl super::UiScript {
@@ -79,6 +134,27 @@ impl super::UiScript {
     /// `GetNumCharacters`'s answer.
     pub fn set_glue_num_characters(&mut self, n: u32) {
         self.model_mut().glue.num_characters = n;
+    }
+
+    /// The realm list `GetRealmCategories`/`GetNumRealms`/`GetRealmInfo` read, the tab
+    /// `GetSelectedCategory` names, and the seconds `RealmListUpdateRate` answers.
+    pub fn set_glue_realms(
+        &mut self,
+        tabs: Vec<GlueRealmTab>,
+        selected_category: usize,
+        update_rate: f32,
+    ) {
+        let mut m = self.model_mut();
+        m.glue.realm_tabs = tabs;
+        m.glue.realm_selected_category = selected_category;
+        m.glue.realm_update_rate = update_rate;
+    }
+
+    /// `BenillaGetRealmlist`'s answer.
+    pub fn set_glue_realmlist(&mut self, address: &str, pinned: bool) {
+        let mut m = self.model_mut();
+        m.glue.realmlist = address.to_string();
+        m.glue.realmlist_pinned = pinned;
     }
 
     /// The screen `SetCurrentScreen` last named (`"login"`, `"charselect"`, …).
@@ -194,6 +270,140 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
             .num_characters;
         one(Value::Integer(i64::from(n)))
     })?;
+    // ── The realm list (`RealmList.lua`) ──
+    set(lua, "GetRealmCategories", |lua, _| {
+        let names: Vec<String> = lua
+            .app_data_ref::<Model>()
+            .expect("model")
+            .glue
+            .realm_tabs
+            .iter()
+            .filter(|t| !t.name.is_empty())
+            .map(|t| t.name.clone())
+            .collect();
+        Ok(MultiValue::from_vec(
+            names
+                .iter()
+                .map(|n| lua.create_string(n).map(Value::String))
+                .collect::<mlua::Result<_>>()?,
+        ))
+    })?;
+    set(lua, "GetNumRealms", |lua, args| {
+        let category = lua
+            .coerce_integer(args.front().cloned().unwrap_or(Value::Nil))?
+            .unwrap_or(1);
+        let n = lua
+            .app_data_ref::<Model>()
+            .expect("model")
+            .glue
+            .tab(category)
+            .map_or(0, |t| t.realms.len());
+        one(Value::Integer(n as i64))
+    })?;
+    set(lua, "GetRealmInfo", |lua, args| {
+        let category = lua
+            .coerce_integer(args.front().cloned().unwrap_or(Value::Nil))?
+            .unwrap_or(1);
+        let index = lua
+            .coerce_integer(args.get(1).cloned().unwrap_or(Value::Nil))?
+            .unwrap_or(0);
+        let realm = {
+            let m = lua.app_data_ref::<Model>().expect("model");
+            let i = usize::try_from(index).ok().and_then(|i| i.checked_sub(1));
+            m.glue
+                .tab(category)
+                .zip(i)
+                .and_then(|(t, i)| t.realms.get(i).cloned())
+        };
+        let Some(r) = realm else {
+            return none();
+        };
+        let flag = |b: bool| super::binding_abi::flag(b);
+        // Labelled: the realm's build (major, minor, revision, build) is not on our realm record.
+        Ok(MultiValue::from_vec(vec![
+            Value::String(lua.create_string(&r.name)?),
+            Value::Integer(i64::from(r.num_characters)),
+            flag(r.invalid),
+            flag(r.down),
+            flag(r.current),
+            flag(r.pvp),
+            flag(r.rp),
+            Value::Number(f64::from(r.load)),
+            flag(r.locked),
+            Value::Nil,
+            Value::Nil,
+            Value::Nil,
+            Value::Nil,
+            Value::Integer(i64::from(r.realm_type)),
+        ]))
+    })?;
+    set(lua, "GetSelectedCategory", |lua, _| {
+        let c = lua
+            .app_data_ref::<Model>()
+            .expect("model")
+            .glue
+            .realm_selected_category;
+        one(Value::Integer(c as i64))
+    })?;
+    set(lua, "RealmListUpdateRate", |lua, _| {
+        let s = lua
+            .app_data_ref::<Model>()
+            .expect("model")
+            .glue
+            .realm_update_rate;
+        one(Value::Number(f64::from(s)))
+    })?;
+    set(lua, "ChangeRealm", |lua, args| {
+        let int = |v: Option<&Value>| -> mlua::Result<usize> {
+            Ok(lua
+                .coerce_integer(v.cloned().unwrap_or(Value::Nil))?
+                .and_then(|i| usize::try_from(i).ok())
+                .unwrap_or(0))
+        };
+        let (category, index) = (int(args.front())?, int(args.get(1))?);
+        push(lua, GlueRequest::ChangeRealm { category, index });
+        none()
+    })?;
+    set(lua, "RequestRealmList", |lua, _| {
+        push(lua, GlueRequest::RequestRealmList);
+        none()
+    })?;
+    set(lua, "RealmListDialogCancelled", |lua, _| {
+        push(lua, GlueRequest::RealmListCancelled);
+        none()
+    })?;
+    // `RealmList_OnHide` calls it, on OK too, so it only stops the refresh, which the list's own
+    // timer already owns; the sort is App's (the list's order is the native sort).
+    for name in ["CancelRealmListQuery", "SortRealms"] {
+        set(lua, name, |_, _| none())?;
+    }
+    // No locale-locked or tournament realms on an AzerothCore list.
+    for name in [
+        "IsInvalidLocale",
+        "IsTournamentRealmCategory",
+        "IsInvalidTournamentRealmCategory",
+    ] {
+        constant(lua, name, None)?;
+    }
+
+    // ── AzerothBench's own, not stock 3.3.5: the login screen's Realmlist button
+    // (`assets/ui/glue/RealmlistButton.xml`) reads and sets the address through these. ──
+    set(lua, "BenillaGetRealmlist", |lua, _| {
+        let (address, pinned) = {
+            let m = lua.app_data_ref::<Model>().expect("model");
+            (m.glue.realmlist.clone(), m.glue.realmlist_pinned)
+        };
+        Ok(MultiValue::from_vec(vec![
+            Value::String(lua.create_string(&address)?),
+            super::binding_abi::flag(pinned),
+        ]))
+    })?;
+    set(lua, "BenillaSetRealmlist", |lua, args| {
+        let text = text(lua, args.front())?;
+        push(lua, GlueRequest::SetRealmlist(text));
+        none()
+    })?;
+
     // Wrath of the Lich King: expansion level 2.
     constant(lua, "GetClientExpansionLevel", Some(2))?;
     // The glue state's own `GetBuildInfo`, five values for `VERSION_TEMPLATE`
@@ -329,6 +539,55 @@ mod tests {
         s.run("local a, b, v, i, d = GetBuildInfo(); assert(a == 'Version' and v == '3.3.5' and i == '12340' and d == 'Jun 24 2010'); assert(GetSavedAccountName() == 'Alice'); assert(IsConnectedToServer() == 1); assert(GetServerName() == 'AzerothCore'); assert(GetNumCharacters() == 3); assert(GetClientExpansionLevel() == 2); assert(not IsStreamingTrial()); assert(not ShowTOSNotice()); assert(TOSAccepted() == 1 and EULAAccepted() == 1); SetCurrentScreen('login')")
             .unwrap();
         assert_eq!(s.glue_current_screen(), "login");
+    }
+
+    #[test]
+    fn the_realm_list_reads_the_tabs_app_seeds_and_queues_the_choice() {
+        use super::{GlueRealm, GlueRealmTab};
+        let mut s = vm();
+        let realm = |name: &str, current: bool| GlueRealm {
+            name: name.into(),
+            num_characters: 2,
+            current,
+            pvp: true,
+            load: -1.0,
+            realm_type: 1,
+            ..Default::default()
+        };
+        s.set_glue_realms(
+            vec![
+                GlueRealmTab {
+                    name: "Development".into(),
+                    realms: vec![realm("AzerothCore", true), realm("Other", false)],
+                },
+                GlueRealmTab {
+                    name: "Test".into(),
+                    realms: vec![realm("Third", false)],
+                },
+            ],
+            1,
+            5.0,
+        );
+        s.run(
+            "local a, b = GetRealmCategories() assert(a == 'Development' and b == 'Test') \
+             assert(GetNumRealms(1) == 2 and GetNumRealms(2) == 1 and GetNumRealms(9) == 2) \
+             local name, chars, invalid, down, current, pvp, rp, load = GetRealmInfo(1, 1) \
+             assert(name == 'AzerothCore' and chars == 2 and not invalid and not down and current == 1 and pvp == 1 and not rp and load == -1) \
+             assert(GetRealmInfo(1, 3) == nil) assert(GetSelectedCategory() == 1 and RealmListUpdateRate() == 5) \
+             CancelRealmListQuery() ChangeRealm(1, 2) RequestRealmList() RealmListDialogCancelled()",
+        )
+        .unwrap();
+        assert_eq!(
+            s.take_glue_requests(),
+            vec![
+                R::ChangeRealm {
+                    category: 1,
+                    index: 2
+                },
+                R::RequestRealmList,
+                R::RealmListCancelled,
+            ]
+        );
     }
 
     #[test]

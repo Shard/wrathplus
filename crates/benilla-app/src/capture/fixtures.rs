@@ -608,7 +608,7 @@ pub(super) fn seed_ui_fixture(
 
             // The L binding's path; the feed pushes over the settle window.
             if let Some(s) = script.as_mut() {
-                if let Err(e) = s.run("ToggleQuestLog()") {
+                if let Err(e) = s.run("ToggleFrame(QuestLogFrame)") {
                     warn!("capture: ui-questlog seed failed to open the log: {e}");
                 }
             }

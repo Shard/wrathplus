@@ -81,7 +81,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     //
     // Each class's chain is a fixed list in the reference, so a table here. `ScrollingMessageFrame`
     // derives from `Frame`, not `MessageFrame` (`0x787940`); `SimpleHTML` keeps its capitals,
-    // unlike the `SimpleHtml` variant; there is no `Cooldown` type (the reference's is a `Model`).
+    // unlike the `SimpleHtml` variant; Wrath's `Cooldown` derives from `Frame`.
     fn type_chain(kind: FrameKind) -> &'static [&'static str] {
         match kind {
             FrameKind::Frame => &["Frame", "Region"],
@@ -106,6 +106,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             FrameKind::MovieFrame => &["MovieFrame", "Frame", "Region"],
             FrameKind::GameTooltip => &["GameTooltip", "Frame", "Region"],
             FrameKind::Minimap => &["Minimap", "Frame", "Region"],
+            FrameKind::Cooldown => &["Cooldown", "Frame", "Region"],
         }
     }
     fn chain_of(lua: &Lua, this: &Table) -> mlua::Result<&'static [&'static str]> {
@@ -393,13 +394,25 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         "SetFrameLevel",
         lua.create_function(|lua, (this, level): (Table, i64)| {
             let h = frame_handle_of(lua, &this)?;
-            let lvl = level.clamp(0, i64::from(u16::MAX)) as u16;
-            // A script level change moves no children: `0x774560` calls `set_frame_level 0x76a4f0`
-            // with `propagate = 0`, which stock `BonusActionButtonTemplate` relies on.
+            // `SetFrameLevel` (12340 `0x49e9d0`) raises on a negative level and otherwise calls
+            // `0x4910a0(level, 1)`: same-strata children shift with the frame.
+            if level < 0 {
+                let name = lua
+                    .app_data_ref::<Model>()
+                    .expect("model")
+                    .arena
+                    .frame(h)
+                    .and_then(|f| f.name.clone())
+                    .unwrap_or_else(|| "<unnamed>".to_string());
+                return Err(mlua::Error::runtime(format!(
+                    "{name}:SetFrameLevel(): Passed negative frame level: {level}"
+                )));
+            }
+            let lvl = level.min(i64::from(u16::MAX)) as u16;
             lua.app_data_mut::<Model>()
                 .expect("model")
                 .arena
-                .set_frame_level(h, lvl, false);
+                .set_frame_level(h, lvl, true);
             Ok(())
         })?,
     )?;

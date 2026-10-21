@@ -1,12 +1,12 @@
-//! Runtime `SetParent` (`0x7a1550`): strata and level re-assignment, the hide and show round-trip,
-//! and the binding's errors.
+//! Runtime `SetParent` (12340 `0x49cbd0`, `CSimpleFrame::SetParent` `0x4911b0`): strata and level
+//! re-assignment, the hide and show round-trip, and the binding's errors.
 
 use super::common::script;
 
-/// `strata := parent.strata`, `level := parent.level + 1` (`0x76ab5a`/`0x76ab65`); the subtree's
-/// levels are not re-based (`propagate = 0`), so a child can land below its own parent.
+/// `strata := parent.strata` (`0x491020`), `level := parent.level + 1` through `0x4910a0(level, 1)`,
+/// which shifts the same-strata subtree by the same delta.
 #[test]
-fn reparent_relevels_the_moved_frame_only() {
+fn reparent_relevels_the_moved_frame_and_its_subtree() {
     let s = script();
     s.run(
         r#"
@@ -36,12 +36,12 @@ fn reparent_relevels_the_moved_frame_only() {
     );
     assert_eq!(
         s.eval::<i64>("return Child:GetFrameLevel()").unwrap(),
-        1,
-        "the child keeps its absolute level — BELOW its parent's new 7; the client ships that"
+        8,
+        "the child moves with its parent, still one over it"
     );
 }
 
-/// `SetParent(nil)` resets to strata MEDIUM, level 0 (`0x76aba3`/`0x76abac`).
+/// `SetParent(nil)` resets to strata MEDIUM, level 0 (`0x4911b0`: `0x491020(3)`, `0x4910a0(0, 1)`).
 #[test]
 fn reparent_to_nil_resets_strata_and_level() {
     let s = script();

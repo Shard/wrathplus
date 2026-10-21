@@ -53,6 +53,17 @@ impl Addon {
     }
 
     /// The authored Wrath root. It is not an addon registry row and grants no game actions.
+    /// AzerothBench's own glue additions, loaded after the stock GlueXML (`glue/glue.toc`).
+    pub(super) fn glue_additions() -> Self {
+        Addon {
+            name: "AzerothBench_Glue".to_string(),
+            toc: content::read("glue/glue.toc")
+                .map(|text| Toc::parse(&text))
+                .unwrap_or_default(),
+            source: Source::Builtin,
+        }
+    }
+
     pub(super) fn wrath_bootstrap() -> Self {
         let manifest = "wrath/bootstrap.toc";
         Addon {

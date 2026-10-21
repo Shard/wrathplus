@@ -124,13 +124,18 @@ pub(crate) struct Attempt<'w> {
     pub(super) intent: ResMut<'w, LoginIntent>,
     submit: Res<'w, LoginSubmit>,
     abandon: Res<'w, LoginAbandon>,
-    realmlist: Res<'w, crate::realmlist::Realmlist>,
+    realmlist: ResMut<'w, crate::realmlist::Realmlist>,
 }
 
 impl Attempt<'_> {
     /// A typed submit from another screen (the stock glue's `DefaultServerLogin`).
     pub(crate) fn submit_typed(&mut self, user: &str, pass: &str) {
         self.send(user, pass, true);
+    }
+
+    /// The realmlist the next attempt dials, for the stock glue's Realmlist button.
+    pub(crate) fn realmlist_mut(&mut self) -> &mut crate::realmlist::Realmlist {
+        &mut self.realmlist
     }
 
     /// Cancel the attempt in flight, if any: bump the abandon generation and drop the credentials.
@@ -903,7 +908,7 @@ fn answer_dialog(
 /// Take the realmlist dialog's Okay: normalize, point the session at it, and write the
 /// `realmList` CVar so it persists; `false` keeps the dialog open. A CVar the VM has not
 /// registered yet is not saved, but the session value stands.
-fn accept_realmlist(
+pub(crate) fn accept_realmlist(
     typed: &str,
     realmlist: &mut crate::realmlist::Realmlist,
     script: Option<&mut benilla_ui::script::UiScript>,

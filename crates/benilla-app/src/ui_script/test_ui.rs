@@ -36,40 +36,27 @@ pub(super) fn cooldown_facts(s: &mut UiScript) {
     );
 }
 
-/// The play head `(anim_id, cursor_ms)` of the shown cooldown pane `owner` names, as the tile
-/// renderer samples it.
+/// How far the shown cooldown sweep `owner` names has run, as `(0, elapsed ms of a 1000 ms
+/// sweep)`: the shape the 1.12 model pane's play head had. Build 12340's `Cooldown` is an engine
+/// frame type, painted as a [`QuadContent::CooldownSweep`] off `SetCooldown`'s record.
 pub(super) fn cooldown_play(s: &UiScript, owner: &str) -> Option<(u16, u32)> {
-    let heads = s.visible_model_panes();
-    s.extract().into_iter().find_map(|q| match &q.content {
-        QuadContent::ModelPane {
-            handle,
-            model: Some(m),
-            ..
-        } if m.eq_ignore_ascii_case(COOLDOWN_MODEL)
-            && s.quad_owner_name(q.target).as_deref() == Some(owner) =>
-        {
-            heads
-                .iter()
-                .find(|p| p.handle == *handle)
-                .and_then(|p| p.play.map(|ph| (ph.anim_id, ph.cursor_ms)))
+    s.extract().into_iter().find_map(|q| match q.content {
+        QuadContent::CooldownSweep {
+            remaining_milli, ..
+        } if s.quad_owner_name(q.target).as_deref() == Some(owner) => {
+            Some((0, 1000 - u32::from(remaining_milli)))
         }
         _ => None,
     })
 }
 
-/// [`cooldown_play`] for whichever cooldown pane is shown: `ContainerFrame_GenerateFrame` numbers
-/// a bag's slots from the far end, so a one-item test asks for the sweep, not a name.
+/// [`cooldown_play`] for whichever cooldown is shown: `ContainerFrame_GenerateFrame` numbers a
+/// bag's slots from the far end, so a one-item test asks for the sweep, not a name.
 pub(super) fn cooldown_play_any(s: &UiScript) -> Option<(u16, u32)> {
-    let heads = s.visible_model_panes();
-    s.extract().into_iter().find_map(|q| match &q.content {
-        QuadContent::ModelPane {
-            handle,
-            model: Some(m),
-            ..
-        } if m.eq_ignore_ascii_case(COOLDOWN_MODEL) => heads
-            .iter()
-            .find(|p| p.handle == *handle)
-            .and_then(|p| p.play.map(|ph| (ph.anim_id, ph.cursor_ms))),
+    s.extract().into_iter().find_map(|q| match q.content {
+        QuadContent::CooldownSweep {
+            remaining_milli, ..
+        } => Some((0, 1000 - u32::from(remaining_milli))),
         _ => None,
     })
 }
@@ -88,6 +75,13 @@ fn load_entry(s: &mut UiScript, entry: &str, strict_templates: bool, no_warnings
     // A stock FrameXML file is part of the session's interface, which loads whole.
     if production_rank(entry).is_some() {
         seat_session_ui(s);
+        return 0;
+    }
+    // A FrameXML path the install does not ship is a 1.12 file (`OptionsFrame.lua`,
+    // `UIOptionsFrame.xml`, `LocaleProperties.lua`): 3.3.5 has no such file, so it loads nothing.
+    // A test that needs what it defined fails on its own assertion.
+    let norm = entry.replace('/', "\\").to_ascii_lowercase();
+    if norm.starts_with(r"interface\framexml\") && read(entry).is_none() {
         return 0;
     }
     load_file(s, entry, strict_templates, no_warnings)
