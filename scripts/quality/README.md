@@ -1,8 +1,8 @@
 # Quality ratchets
 
-**Enabled (2026-10-20):** the clippy ratchet is the clippy rung of `scripts/gates.sh`,
-`scripts/check.sh` and CI. LoC, CRAP, machete and typos stay opt-in until the activation plan's
-later steps.
+**Enabled:** the clippy ratchet (2026-10-20) and the LoC ratchet (2026-10-22) are rungs of
+`scripts/gates.sh`, `scripts/check.sh` and CI. CRAP, machete and typos stay opt-in until the
+activation plan's later steps.
 
 Nothing here installs a hook, modifies Rust, or rewrites a baseline automatically. Ratchets join
 the existing `scripts/gates.sh` chain (fmt/clippy/test/doc-links/etc.), not a parallel gate system;

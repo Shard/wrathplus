@@ -660,6 +660,15 @@ The guild session is a world module, `guild` (state, identity cache, sort, chat 
 handlers); `ui_guild` keeps the feed and the plugin. It cannot be core: its identity asks send
 through `NetCommands`.
 
+**Re-measured** on ed8df006 (wrath-hud 83cff406 with de01d1ce and dcff03f2, which also moved
+`player_token_guid` to `target::unit_tokens` and `wow_font` to `ui_text`), canonical-paths
+applied (2740 paths): **world pass 0** (core + net + world build, lib and tests); **ui pass 1**,
+`ui_script::content`'s `include_dir!("$CARGO_MANIFEST_DIR/assets/ui")`. That one is the move
+step's: the asset tree moves with the ui crate, or the path names `benilla-app`'s, as does
+`overlay`'s `embedded://benilla_app/shaders/ui_quad.wgsl`. Every layer below tools now resolves
+downward. Not yet measured: the tools pass, and what only separate crates report (the
+visibility widening and inherent impls on a type from another crate).
+
 ## Moving a layer out (steps 1 to 4)
 
 Order: `core`, then `net`, then `tools`, then `world` and `ui` (world first, so `ui` can depend
