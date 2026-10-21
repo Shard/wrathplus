@@ -87,7 +87,7 @@ fn fixtures() -> Vec<(u16, Vec<u8>, SessionEvent)> {
         (
             0x1d7,
             vec![0x01, 0x05, 0x00, 1, 0, 0, 0, 0xff, 0xff, 0, 0],
-            capture(Packet::EnchantmentLog {
+            SessionEvent::EnchantmentLog(crate::types::EnchantmentLog {
                 target: 5,
                 caster: 0,
                 item_entry: 1,
