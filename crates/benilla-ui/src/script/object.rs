@@ -292,11 +292,10 @@ fn frame_kind_from_str(s: &str) -> Option<FrameKind> {
         "STATUSBAR" => FrameKind::StatusBar,
         "SLIDER" => FrameKind::Slider,
         "SCROLLFRAME" => FrameKind::ScrollFrame,
-        "MODEL" => FrameKind::Model,
+        "MODEL" | "MODELFFX" => FrameKind::Model,
         "PLAYERMODEL" => FrameKind::PlayerModel,
         "DRESSUPMODEL" => FrameKind::DressUpModel,
         "TABARDMODEL" => FrameKind::TabardModel,
-        "MODELFFX" => FrameKind::ModelFFX,
         "MESSAGEFRAME" => FrameKind::MessageFrame,
         "SCROLLINGMESSAGEFRAME" => FrameKind::ScrollingMessageFrame,
         "COLORSELECT" => FrameKind::ColorSelect,
@@ -493,7 +492,7 @@ fn kind_method_registries(kind: Option<FrameKind>) -> &'static [&'static str] {
             super::button::REG_CHECKBUTTON_METHODS,
             super::button::REG_BUTTON_METHODS,
         ],
-        Some(FrameKind::Model | FrameKind::ModelFFX) => &[super::modelframe::REG_MODEL_METHODS],
+        Some(FrameKind::Model) => &[super::modelframe::REG_MODEL_METHODS],
         // Its 3 methods, then `Model`'s 23: `0x506260` misses into `0x76f870`.
         Some(FrameKind::PlayerModel) => &[
             super::modelframe::REG_PLAYERMODEL_METHODS,
