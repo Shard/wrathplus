@@ -22,8 +22,44 @@ use crate::widget::FrameHandle;
 
 use super::frame_handle_of;
 
-/// Populate `m`'s toplevel and raise methods.
+/// Populate `m`'s level, toplevel and raise methods.
 pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
+    m.set(
+        "SetFrameLevel",
+        lua.create_function(|lua, (this, level): (Table, i64)| {
+            let h = frame_handle_of(lua, &this)?;
+            // `SetFrameLevel` (12340 `0x49e9d0`) raises on a negative level and otherwise calls
+            // `0x4910a0(level, 1)`: same-strata children shift with the frame.
+            if level < 0 {
+                let name = lua
+                    .app_data_ref::<Model>()
+                    .expect("model")
+                    .arena
+                    .frame(h)
+                    .and_then(|f| f.name.clone())
+                    .unwrap_or_else(|| "<unnamed>".to_string());
+                return Err(mlua::Error::runtime(format!(
+                    "{name}:SetFrameLevel(): Passed negative frame level: {level}"
+                )));
+            }
+            let lvl = level.min(i64::from(u16::MAX)) as u16;
+            lua.app_data_mut::<Model>()
+                .expect("model")
+                .arena
+                .set_frame_level(h, lvl, true);
+            Ok(())
+        })?,
+    )?;
+    m.set(
+        "GetFrameLevel",
+        lua.create_function(|lua, this: Table| {
+            let h = frame_handle_of(lua, &this)?;
+            let model = lua.app_data_ref::<Model>().expect("model");
+            Ok(i64::from(
+                model.arena.frame(h).map(|f| f.level).unwrap_or(0),
+            ))
+        })?,
+    )?;
     // SetToplevel's argument is optional and defaults to true (`0x775440`), unlike `SetMovable`'s.
     m.set(
         "SetToplevel",

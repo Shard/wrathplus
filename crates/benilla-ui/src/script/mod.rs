@@ -1488,32 +1488,11 @@ impl UiScript {
     pub fn widget_kind(&self, name: &str) -> Option<&'static str> {
         let model = self.model_ref();
         if let Some(h) = model.arena.lookup(name) {
-            return model.arena.frame(h).map(|f| match f.kind {
-                crate::widget::FrameKind::Frame => "Frame",
-                // A `Frame` to Lua: the registered name never becomes a class.
-                crate::widget::FrameKind::WorldFrame => "Frame",
-                crate::widget::FrameKind::Button => "Button",
-                crate::widget::FrameKind::CheckButton => "CheckButton",
-                // `GetObjectType` (`0x495b60`) says "LootButton" (`[0x847ce0]` → `0x843414`).
-                crate::widget::FrameKind::LootButton => "LootButton",
-                crate::widget::FrameKind::EditBox => "EditBox",
-                crate::widget::FrameKind::StatusBar => "StatusBar",
-                crate::widget::FrameKind::Slider => "Slider",
-                crate::widget::FrameKind::ScrollFrame => "ScrollFrame",
-                crate::widget::FrameKind::Model => "Model",
-                crate::widget::FrameKind::PlayerModel => "PlayerModel",
-                crate::widget::FrameKind::DressUpModel => "DressUpModel",
-                crate::widget::FrameKind::TabardModel => "TabardModel",
-                crate::widget::FrameKind::ModelFFX => "ModelFFX",
-                crate::widget::FrameKind::MessageFrame => "MessageFrame",
-                crate::widget::FrameKind::ScrollingMessageFrame => "ScrollingMessageFrame",
-                crate::widget::FrameKind::ColorSelect => "ColorSelect",
-                crate::widget::FrameKind::SimpleHtml => "SimpleHTML",
-                crate::widget::FrameKind::MovieFrame => "MovieFrame",
-                crate::widget::FrameKind::GameTooltip => "GameTooltip",
-                crate::widget::FrameKind::Minimap => "Minimap",
-                crate::widget::FrameKind::Cooldown => "Cooldown",
-            });
+            // A `Frame` to Lua for the WorldFrame: the registered name never becomes a class.
+            return model
+                .arena
+                .frame(h)
+                .map(|f| object::frame_state::type_chain(f.kind)[0]);
         }
         // Region leaves publish into their own name table, not the arena's.
         let id = *model.region_names.get(name)?;
