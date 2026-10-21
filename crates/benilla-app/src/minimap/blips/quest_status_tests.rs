@@ -108,7 +108,7 @@ fn native_status_lifetime_matches_object_and_session_lifetime() {
 
 #[test]
 fn native_status_packets_emit_a_wrath_question_mark_quad() {
-    use benilla_protocol::types::{FieldLayout, ObjectType};
+    use benilla_protocol::types::ObjectType;
     use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
     use benilla_protocol::{wrath_npc as n, ObjectFields};
     use bevy::ecs::system::SystemState;
@@ -156,10 +156,7 @@ fn native_status_packets_emit_a_wrath_question_mark_quad() {
                     scale: 1.0,
                 },
                 GlobalTransform::IDENTITY,
-                ObjectStore(
-                    ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(24, 100)])
-                        .into_created(ObjectType::Unit),
-                ),
+                ObjectStore(ObjectFields::from_pairs(&[(24, 100)]).into_created(ObjectType::Unit)),
             ));
             let ctx = BlipCtx {
                 center: Vec2::splat(100.0),

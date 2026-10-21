@@ -68,18 +68,16 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, ObjectType};
 
     #[test]
     fn dismount_edges_keep_class_field_and_zero_transition_rules_in_both_layouts() {
-        let layout = FieldLayout::Wrath12340;
         let mut edge = FieldChanged {
             entity: Entity::PLACEHOLDER,
             guid: 42,
             kind: ObjectType::Unit,
             field: Field::UnitMountDisplayId,
             offset: 0,
-            layout,
             old: 123,
             new: 0,
         };

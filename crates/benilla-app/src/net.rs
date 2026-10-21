@@ -307,7 +307,6 @@ pub(crate) struct FieldChanged {
     pub kind: benilla_protocol::types::ObjectType,
     pub field: benilla_protocol::types::Field,
     pub offset: u16,
-    pub layout: benilla_protocol::types::FieldLayout,
     pub old: u32,
     pub new: u32,
 }
@@ -365,9 +364,8 @@ pub(crate) fn merge_store_fields(
         store.merge(delta);
         return;
     };
-    let layout = store.layout();
     store.merge_diff(delta, |index, old, new| {
-        let Some((field, offset)) = layout.field_at(kind, index) else {
+        let Some((field, offset)) = benilla_protocol::types::Field::at(kind, index) else {
             return; // Unknown native dwords have no semantic watcher.
         };
         emit(FieldChanged {
@@ -376,7 +374,6 @@ pub(crate) fn merge_store_fields(
             kind,
             field,
             offset,
-            layout,
             old,
             new,
         });
@@ -2444,10 +2441,8 @@ mod tests {
     /// A re-create of a live object notifies like a delta.
     #[test]
     fn the_merge_emits_one_edge_per_moved_dword_and_none_for_a_first_create() {
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitHealth);
-        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitLevel);
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
+        const FIELD_UNIT_LEVEL: u16 = benilla_protocol::types::Field::UnitLevel.index();
         use benilla_protocol::types::ObjectType;
 
         let mut world = World::new();
@@ -2463,11 +2458,8 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_native_pairs(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)],
-            )
-            .into_created(ObjectType::Unit),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_HEALTH, 100), (FIELD_UNIT_LEVEL, 9)])
+                .into_created(ObjectType::Unit),
         );
         assert!(drain(&mut world).is_empty(), "a create is not an edge");
 
@@ -2475,10 +2467,7 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_native_pairs(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)],
-            ),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 9), (FIELD_UNIT_HEALTH, 0)]),
         );
         assert_eq!(
             drain(&mut world),
@@ -2488,7 +2477,6 @@ mod tests {
                 kind: ObjectType::Unit,
                 field: benilla_protocol::types::Field::UnitHealth,
                 offset: 0,
-                layout: benilla_protocol::types::FieldLayout::Wrath12340,
                 old: 100,
                 new: 0,
             }],
@@ -2499,11 +2487,7 @@ mod tests {
         apply_fields_for_test(
             &mut world,
             unit,
-            ObjectFields::from_native_pairs(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(FIELD_UNIT_LEVEL, 10)],
-            )
-            .into_created(ObjectType::Unit),
+            ObjectFields::from_pairs(&[(FIELD_UNIT_LEVEL, 10)]).into_created(ObjectType::Unit),
         );
         let edges = drain(&mut world);
         assert_eq!(edges.len(), 1);
@@ -2521,7 +2505,7 @@ mod tests {
     /// All existing watcher roots retain their class and member after native reverse lookup.
     #[test]
     fn semantic_edges_preserve_existing_scalar_and_array_watchers() {
-        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
+        use benilla_protocol::types::{Field, ObjectType};
         let unit_fields = [
             Field::UnitHealth,
             Field::UnitMaxHealth,
@@ -2537,7 +2521,6 @@ mod tests {
             Field::PlayerSkillInfo11,
         ];
         let entity = Entity::PLACEHOLDER;
-        let layout = FieldLayout::Wrath12340;
         for (kind, fields) in [
             (ObjectType::Unit, unit_fields.as_slice()),
             (ObjectType::Player, player_fields.as_slice()),
@@ -2545,15 +2528,14 @@ mod tests {
             (ObjectType::Corpse, [Field::CorpseDynamicFlags].as_slice()),
         ] {
             for &field in fields {
-                let Some(span) = layout.resolve(field) else {
+                let Some(span) = field.span() else {
                     continue;
                 };
-                let mut store =
-                    ObjectFields::from_native_pairs(layout, &[(span.index, 1)]).into_created(kind);
-                let delta = ObjectFields::from_native_pairs(layout, &[(span.index, 2)]);
+                let mut store = ObjectFields::from_pairs(&[(span.index, 1)]).into_created(kind);
+                let delta = ObjectFields::from_pairs(&[(span.index, 2)]);
                 let mut edges = Vec::new();
                 merge_store_fields(&mut store, delta, entity, 42, |edge| edges.push(edge));
-                assert_eq!(edges.len(), 1, "{layout:?}/{field:?}");
+                assert_eq!(edges.len(), 1, "/{field:?}");
                 let edge = edges[0];
                 assert!(edge.named_field(field));
                 assert_eq!((edge.field, edge.offset), (field, 0));
@@ -2565,11 +2547,10 @@ mod tests {
 
     #[test]
     fn semantic_edge_keys_disambiguate_overlapping_classes_and_array_members() {
-        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
+        use benilla_protocol::types::{Field, ObjectType};
         // Corpse flags overlap a unit word: semantic keys must not alias them.
-        let layout = FieldLayout::Wrath12340;
-        let index = layout.resolve(Field::CorpseDynamicFlags).unwrap().index;
-        let (unit_field, _) = layout.field_at(ObjectType::Unit, index).unwrap();
+        let index = Field::CorpseDynamicFlags.span().unwrap().index;
+        let (unit_field, _) = benilla_protocol::types::Field::at(ObjectType::Unit, index).unwrap();
         assert_ne!(unit_field, Field::CorpseDynamicFlags);
         let edges = FieldEdges::semantic_of(&[
             (42, Field::CorpseDynamicFlags, 0),

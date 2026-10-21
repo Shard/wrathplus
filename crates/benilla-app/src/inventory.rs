@@ -78,16 +78,14 @@ pub(crate) struct StorageSlots {
 }
 
 impl StorageSlots {
-    /// The one geometry left; the layout argument goes when `FieldLayout` collapses.
-    pub fn for_layout(_layout: benilla_protocol::types::FieldLayout) -> Self {
-        Self {
-            bank_slots: 28,
-            bank_bags: 7,
-            bank_bag_first: 67,
-            keyring_first: 86,
-            keyring_slots: 32,
-        }
-    }
+    /// The geometry.
+    pub const GEOMETRY: Self = Self {
+        bank_slots: 28,
+        bank_bags: 7,
+        bank_bag_first: 67,
+        keyring_first: 86,
+        keyring_slots: 32,
+    };
 
     pub fn keyring_size(self, level: u32) -> u32 {
         if self.keyring_slots == 32 {
@@ -123,9 +121,7 @@ pub(crate) fn slot_guid(
         }
         BANK_CONTAINER => store.player_bank_slot(slot0).filter(|g| *g != 0),
         KEYRING_CONTAINER => store.player_keyring_slot(slot0).filter(|g| *g != 0),
-        b if (BANK_BAG_ID_FIRST..=StorageSlots::for_layout(store.layout()).last_bag())
-            .contains(&b) =>
-        {
+        b if (BANK_BAG_ID_FIRST..=StorageSlots::GEOMETRY.last_bag()).contains(&b) => {
             let bag_guid = store
                 .player_bank_bag_slot((bag - BANK_BAG_ID_FIRST) as u8)
                 .filter(|g| *g != 0)?;
@@ -137,15 +133,12 @@ pub(crate) fn slot_guid(
         // The doll: the bank-bag buttons (wire 63..68) read their own array, since the INV
         // array's accessor caps at 23.
         EQUIPMENT_BAG
-            if (StorageSlots::for_layout(store.layout()).bank_bag_first
-                ..StorageSlots::for_layout(store.layout()).bank_bag_first
-                    + StorageSlots::for_layout(store.layout()).bank_bags)
+            if (StorageSlots::GEOMETRY.bank_bag_first
+                ..StorageSlots::GEOMETRY.bank_bag_first + StorageSlots::GEOMETRY.bank_bags)
                 .contains(&slot0) =>
         {
             store
-                .player_bank_bag_slot(
-                    slot0 - StorageSlots::for_layout(store.layout()).bank_bag_first,
-                )
+                .player_bank_bag_slot(slot0 - StorageSlots::GEOMETRY.bank_bag_first)
                 .filter(|g| *g != 0)
         }
         EQUIPMENT_BAG => store.player_inv_slot(slot0).filter(|g| *g != 0),
@@ -290,7 +283,7 @@ fn walk_inventory<T>(
         }
     }
     if scope.bank {
-        for i in 0..StorageSlots::for_layout(store.layout()).bank_slots {
+        for i in 0..StorageSlots::GEOMETRY.bank_slots {
             let guid = store.player_bank_slot(i).unwrap_or(0);
             if guid != 0 {
                 if let Some(hit) = visit(BAG_PLAYER_INVENTORY, BANK_SLOT_FIRST + i, guid) {
@@ -298,8 +291,8 @@ fn walk_inventory<T>(
                 }
             }
         }
-        for bag in 0..StorageSlots::for_layout(store.layout()).bank_bags {
-            let bag_slot = StorageSlots::for_layout(store.layout()).bank_bag_first + bag;
+        for bag in 0..StorageSlots::GEOMETRY.bank_bags {
+            let bag_slot = StorageSlots::GEOMETRY.bank_bag_first + bag;
             let bag_guid = store.player_bank_bag_slot(bag).unwrap_or(0);
             if bag_guid == 0 {
                 continue;
@@ -314,12 +307,12 @@ fn walk_inventory<T>(
     }
     if scope.keyring {
         // The addressable 16; the reference walks all 32, but the rest are always empty.
-        for i in 0..StorageSlots::for_layout(store.layout()).keyring_slots {
+        for i in 0..StorageSlots::GEOMETRY.keyring_slots {
             let guid = store.player_keyring_slot(i).unwrap_or(0);
             if guid != 0 {
                 if let Some(hit) = visit(
                     BAG_PLAYER_INVENTORY,
-                    StorageSlots::for_layout(store.layout()).keyring_first + i,
+                    StorageSlots::GEOMETRY.keyring_first + i,
                     guid,
                 ) {
                     return Some(hit);
@@ -457,15 +450,15 @@ pub(crate) fn has_key(
     for i in 0..PACK_SLOTS {
         guids.push(store.player_pack_slot(i).unwrap_or(0));
     }
-    for i in 0..StorageSlots::for_layout(store.layout()).bank_slots {
+    for i in 0..StorageSlots::GEOMETRY.bank_slots {
         guids.push(store.player_bank_slot(i).unwrap_or(0));
     }
-    for bag in 0..StorageSlots::for_layout(store.layout()).bank_bags {
+    for bag in 0..StorageSlots::GEOMETRY.bank_bags {
         let bag_guid = store.player_bank_bag_slot(bag).unwrap_or(0);
         guids.push(bag_guid);
         contents(bag_guid, objects, &mut guids);
     }
-    for i in 0..StorageSlots::for_layout(store.layout()).keyring_slots {
+    for i in 0..StorageSlots::GEOMETRY.keyring_slots {
         guids.push(store.player_keyring_slot(i).unwrap_or(0));
     }
     guids.into_iter().any(|guid| {

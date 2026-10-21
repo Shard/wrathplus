@@ -66,7 +66,6 @@ type ItemGems = (i64, u32, [Option<u32>; 3]);
 /// Every carried, worn or banked item with a gem in a socket, in the walker's order. A slot without
 /// one is left out; the getters answer three nils for it, as the reference's empty sockets do.
 fn item_gems(store: &ObjectStore, objects: &Objects, gems: &GemCatalog) -> Vec<ItemGems> {
-    let layout = store.0.layout();
     crate::ui_items::collect_inventory(
         &store.0,
         objects,
@@ -80,7 +79,7 @@ fn item_gems(store: &ObjectStore, objects: &Objects, gems: &GemCatalog) -> Vec<I
                 .and_then(|id| gems.gem_of_enchant(id.unsigned_abs()))
         });
         socketed.iter().any(Option::is_some).then_some(())?;
-        let (bag, slot) = crate::ui_items::lua_pos_for(layout, bag, slot)?;
+        let (bag, slot) = crate::ui_items::lua_pos_for(bag, slot)?;
         Some((bag, slot, socketed))
     })
     .collect()

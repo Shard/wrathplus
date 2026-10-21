@@ -192,8 +192,7 @@ fn category_catalog(limit: u32) -> CategoryLimits {
 }
 fn inventory(app: &mut App) {
     use crate::net::{GuidIndex, ObjectStore};
-    use benilla_protocol::types::{Field, FieldLayout};
-    let layout = FieldLayout::Wrath12340;
+    use benilla_protocol::types::Field;
     let mut pairs = Vec::new();
     for (field, n) in [
         (Field::PlayerInvSlotHead, 23),
@@ -202,14 +201,14 @@ fn inventory(app: &mut App) {
         (Field::PlayerBankbagSlot1, 7),
         (Field::PlayerKeyringSlot1, 32),
     ] {
-        let first = layout.resolve(field).unwrap().index;
+        let first = field.span().unwrap().index;
         pairs.extend((0..n).map(|i| (first + 2 * i, 0)));
     }
     let entity = app
         .world_mut()
-        .spawn(ObjectStore(
-            benilla_protocol::ObjectFields::from_native_pairs(layout, &pairs),
-        ))
+        .spawn(ObjectStore(benilla_protocol::ObjectFields::from_pairs(
+            &pairs,
+        )))
         .id();
     app.world_mut()
         .resource_mut::<GuidIndex>()

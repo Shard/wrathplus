@@ -280,8 +280,8 @@ mod tests {
     /// A human male self-player wearing `entries` (slot, item entry), two visible-item dwords per
     /// slot, the entry first.
     fn player(entries: &[(u8, u32)]) -> ObjectStore {
-        use benilla_protocol::types::{Field, FieldLayout};
-        let at = |field| FieldLayout::Wrath12340.index_of(field);
+        use benilla_protocol::types::Field;
+        let at = |field: Field| field.index();
         let mut pairs = vec![
             (at(Field::UnitBytes0), 1 | 1 << 8), // race 1 (human), class 1, gender 0 (male)
             (at(Field::PlayerBytes), 3 | 4 << 8), // skin 3, face 4, hair 0, hair colour 0
@@ -614,8 +614,7 @@ mod tests {
         // `PLAYER_FLAGS` (field 190) carrying HIDE_HELM 0x400 | HIDE_CLOAK 0x800.
         let mut store = player(&[(0, 1000), (14, 1100), (4, 1200)]);
         store.0.merge(ObjectFields::from_pairs(&[(
-            benilla_protocol::types::FieldLayout::Wrath12340
-                .index_of(benilla_protocol::types::Field::PlayerFlags),
+            benilla_protocol::types::Field::PlayerFlags.index(),
             0x400 | 0x800,
         )]));
 

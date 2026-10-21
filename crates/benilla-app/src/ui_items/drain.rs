@@ -72,13 +72,8 @@ pub(super) fn drain_container_autoequips(
     let Some(mut script) = script else {
         return;
     };
-    let layout = self_q
-        .iter()
-        .next()
-        .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for (bag, slot) in script.take_container_autoequips() {
-        let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
+        let Some((bag_index, wire_slot)) = wire_pos_for(bag, slot) else {
             debug!("ui_items: autoequip ({bag}, {slot}) out of range — ignored");
             continue;
         };
@@ -106,22 +101,16 @@ pub(super) fn drain_container_autoequips(
 /// and the server picks the slot. A split carry sends `CMSG_SPLIT_ITEM` instead (the reference's
 /// fork on `[0xb4b40c]`). Takes no pending lock.
 pub(super) fn drain_bag_autostores(
-    self_q: Query<&ObjectStore, With<SelfPlayer>>,
     script: Option<NonSendMut<UiScript>>,
     commands: Res<NetCommands>,
 ) {
     let Some(mut script) = script else {
         return;
     };
-    let layout = self_q
-        .iter()
-        .next()
-        .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for a in script.take_bag_autostores() {
         let (Some((src_bag, src_slot)), Some((dst_bag, _))) = (
-            wire_pos_for(layout, a.src_bag, a.src_slot),
-            wire_pos_for(layout, a.dst_bag, 1),
+            wire_pos_for(a.src_bag, a.src_slot),
+            wire_pos_for(a.dst_bag, 1),
         ) else {
             debug!("ui_items: bag autostore {a:?} out of range — ignored");
             continue;
@@ -267,12 +256,7 @@ impl ScriptItemUse<'_, '_> {
             }
             return;
         }
-        let layout = self_q
-            .iter()
-            .next()
-            .map(|s| s.0.layout())
-            .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
-        let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
+        let Some((bag_index, wire_slot)) = wire_pos_for(bag, slot) else {
             debug!("ui_items: UseContainerItem({bag}, {slot}) out of range — ignored");
             return;
         };
@@ -282,7 +266,7 @@ impl ScriptItemUse<'_, '_> {
         // `use_inventory_item`, so worn gear keeps its plain use.
         if bank.is_open() {
             let withdrawing = bag == super::BANK_CONTAINER
-                || (5..=super::StorageSlots::for_layout(layout).last_bag()).contains(&bag);
+                || (5..=super::StorageSlots::GEOMETRY.last_bag()).contains(&bag);
             if withdrawing {
                 debug!("ui_items: withdraw (lua bag {bag} → wire {bag_index}/{wire_slot})");
                 let _ = ladder.commands.0.send(ClientCommand::AutoStoreBankItem {
@@ -577,15 +561,12 @@ pub(super) fn drain_container_moves(
         return;
     };
     let store = self_q.iter().next();
-    let layout = store
-        .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     // A left-click that spent an armed paper: paper first, then the target. Eligibility is the
     // server's, refused with an `ERR_CANT_WRAP_*` reason.
     for (gift_bag, gift_slot, item_bag, item_slot) in script.take_container_wraps() {
         let (Some((gift_bag_index, gift_wire_slot)), Some((item_bag_index, item_wire_slot))) = (
-            wire_pos_for(layout, gift_bag, gift_slot),
-            wire_pos_for(layout, item_bag, item_slot),
+            wire_pos_for(gift_bag, gift_slot),
+            wire_pos_for(item_bag, item_slot),
         ) else {
             debug!(
                 "ui_items: WrapItem({gift_bag}/{gift_slot} → {item_bag}/{item_slot}) out of \
@@ -622,12 +603,8 @@ pub(super) fn drain_container_moves(
 /// The equip deferral's positions (`0x5e0c40`): slots 0..=22 (equipment and equipped bags) and
 /// bank bags (Vanilla 63..=68, Wrath 67..=73) of the player's own array;
 /// the backpack and keyring are not.
-fn is_equip_position_for(
-    layout: benilla_protocol::types::FieldLayout,
-    bag_index: u8,
-    slot: u8,
-) -> bool {
-    let storage = super::StorageSlots::for_layout(layout);
+fn is_equip_position_for(bag_index: u8, slot: u8) -> bool {
+    let storage = super::StorageSlots::GEOMETRY;
     bag_index == BAG_PLAYER_INVENTORY
         && (slot <= 22
             || (storage.bank_bag_first..storage.bank_bag_first + storage.bank_bags).contains(&slot))
@@ -648,13 +625,10 @@ pub(crate) fn send_container_move(
     mv: benilla_ui::script::ContainerMove,
     suppress: bool,
 ) -> bool {
-    let layout = store
-        .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     {
         let (Some(src), Some(dst)) = (
-            wire_pos_for(layout, mv.src_bag, mv.src_slot),
-            wire_pos_for(layout, mv.dst_bag, mv.dst_slot),
+            wire_pos_for(mv.src_bag, mv.src_slot),
+            wire_pos_for(mv.dst_bag, mv.dst_slot),
         ) else {
             debug!("ui_items: container move {mv:?} out of range — ignored");
             return false;
@@ -663,10 +637,9 @@ pub(crate) fn send_container_move(
         // at the other end, which the swap equips; an unequip to an empty slot asks nothing.
         if !suppress
             && mv.count.is_none()
-            && is_equip_position_for(layout, dst.0, dst.1)
-                != is_equip_position_for(layout, src.0, src.1)
+            && is_equip_position_for(dst.0, dst.1) != is_equip_position_for(src.0, src.1)
         {
-            let (item_bag, item_slot) = if is_equip_position_for(layout, dst.0, dst.1) {
+            let (item_bag, item_slot) = if is_equip_position_for(dst.0, dst.1) {
                 (mv.src_bag, mv.src_slot)
             } else {
                 (mv.dst_bag, mv.dst_slot)
@@ -758,11 +731,8 @@ pub(super) fn drain_container_destroys(
         return;
     };
     let store = self_q.iter().next();
-    let layout = store
-        .map(|s| s.0.layout())
-        .unwrap_or(benilla_protocol::types::FieldLayout::Wrath12340);
     for (bag, slot, count) in script.take_container_destroys() {
-        let Some((bag_index, wire_slot)) = wire_pos_for(layout, bag, slot) else {
+        let Some((bag_index, wire_slot)) = wire_pos_for(bag, slot) else {
             debug!("ui_items: destroy ({bag}, {slot}) out of range — ignored");
             continue;
         };
@@ -802,16 +772,16 @@ fn run_container_clicks(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::{ItemInfo, ObjectFields, ITEM_FLAG_LOOTABLE};
 
     /// Small Barnacled Clam.
     const CLAM_ENTRY: u32 = 7973;
     const CLAM: u64 = 0x4000_0000_0000_1939;
     /// `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1's guid pair.
-    const F_PACK_SLOT_1: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerPackSlot1);
+    const F_PACK_SLOT_1: u16 = Field::PlayerPackSlot1.index();
     /// `OBJECT_FIELD_ENTRY` on the item object.
-    const F_OBJECT_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const F_OBJECT_ENTRY: u16 = Field::ObjectEntry.index();
 
     /// Right-clicks backpack slot 1, holding a lootable template, and runs the click dispatcher.
     fn open_the_clam() -> (App, crossbeam_channel::Receiver<ClientCommand>) {
@@ -1030,8 +1000,8 @@ mod tests {
     /// through `PickupInventoryItem`.
     fn click_to_repair_the_sword(money: u32, worn: bool) -> RepairClick {
         use crate::ui_merchant::purse_fixture::{player, record_errors, seat, SWORD_ENTRY};
-        const FIELD_PLAYER_INV_SLOT_HEAD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerInvSlotHead);
+        const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
+            benilla_protocol::types::Field::PlayerInvSlotHead.index();
         let (mut app, rx) = open_the_clam();
         while rx.try_recv().is_ok() {} // drain the clam's own send
         seat(app.world_mut());
@@ -1303,13 +1273,10 @@ mod bind_confirm_tests {
     const FLURRY_AXE: u32 = 871;
     const AXE_GUID: u64 = 0x4000_0000_0000_0871;
     /// `ITEM_FIELD_FLAGS` (field 21); bit 0 is soulbound (`0x5da2c0`).
-    const F_ITEM_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ItemFlags);
+    const F_ITEM_FLAGS: u16 = benilla_protocol::types::Field::ItemFlags.index();
     /// `PLAYER_FIELD_PACK_SLOT_1`, backpack slot 1's guid pair.
-    const F_PACK_SLOT_1: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerPackSlot1);
-    const F_OBJECT_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectEntry);
+    const F_PACK_SLOT_1: u16 = benilla_protocol::types::Field::PlayerPackSlot1.index();
+    const F_OBJECT_ENTRY: u16 = benilla_protocol::types::Field::ObjectEntry.index();
 
     fn load_ui(s: &UiScript) {
         // Chain files, so through the chain-aware reader.

@@ -513,7 +513,7 @@ mod tests {
     use crate::net::ClientCommand;
     use benilla_protocol::guid;
     use benilla_protocol::types::member_status;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     fn member(g: u64, name: &str) -> GroupMemberEntry {
         GroupMemberEntry {
@@ -704,13 +704,13 @@ mod tests {
     // ── The out-of-range record ──────────────────────────────────────────────
 
     /// Unit descriptor field indices, build 5875.
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
     /// `UNIT_FIELD_POWER2`/`MAXPOWER2`, the rage slot (`POWER1 + POWER_RAGE`).
-    const POWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower) + 1;
-    const MAXPOWER2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower) + 1;
-    const LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const POWER2: u16 = Field::UnitPower.index() + 1;
+    const MAXPOWER2: u16 = Field::UnitMaxPower.index() + 1;
+    const LEVEL: u16 = Field::UnitLevel.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
 
     fn asked(rx: &crossbeam_channel::Receiver<ClientCommand>) -> Vec<u64> {
         rx.try_iter()
@@ -817,7 +817,7 @@ mod tests {
     /// carry no aura slots, so both aura blocks are empty.
     #[test]
     fn a_members_despawn_snapshots_their_auras_and_their_pets() {
-        const SUMMON: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummon);
+        const SUMMON: u16 = Field::UnitSummon.index();
         let (tx, _rx) = crossbeam_channel::unbounded();
         let net = NetCommands(tx);
         let guid = 0x1234;
@@ -829,7 +829,7 @@ mod tests {
             (SUMMON + 1, (pet_guid >> 32) as u32),
         ]));
         // `UNIT_FIELD_PETNUMBER`, the key the pet-name cache files a pet's name under.
-        const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
+        const PETNUMBER: u16 = Field::UnitPetnumber.index();
         let pet = ObjectStore(benilla_protocol::types::ObjectFields::from_pairs(&[
             (HEALTH, 900),
             (PETNUMBER, 4),

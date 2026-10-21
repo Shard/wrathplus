@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::events::{EntityKind, MoveSpeeds, SessionEvent};
-use crate::types::FieldLayout;
 use crate::types::{
     AttackSwingError, CreateSpline, MoverState, ObjectFields, ObjectType as VanillaObjectType,
     TransportPose,
@@ -968,7 +967,7 @@ fn native_fields(state: &TrackedObject, created: bool) -> ObjectFields {
         .filter(|(_, value)| **value != 0)
         .map(|(index, value)| (index as u16, *value))
         .collect();
-    let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs);
+    let fields = ObjectFields::from_pairs(&pairs);
     if created {
         fields.into_created(vanilla_type(state.object_type))
     } else {
@@ -984,7 +983,7 @@ fn native_delta(state: &TrackedObject, fields: &UpdateFields) -> ObjectFields {
         .filter(|field| state.get(field.index) != field.value)
         .map(|field| (field.index as u16, field.value))
         .collect();
-    ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &pairs)
+    ObjectFields::from_pairs(&pairs)
 }
 
 fn entity_kind(object_type: ObjectType) -> EntityKind {
@@ -1562,7 +1561,7 @@ mod tests {
                 assert!(session_events.is_empty());
             }
         }
-        assert!(ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[]).is_empty());
+        assert!(ObjectFields::from_pairs(&[]).is_empty());
     }
 
     #[test]
@@ -1847,22 +1846,19 @@ mod native_descriptor_tests {
 
     #[test]
     fn npc_flags_retain_services_absent_from_vanilla() {
-        let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(82, 0x1100_1081)]);
+        let fields = ObjectFields::from_pairs(&[(82, 0x1100_1081)]);
         assert_eq!(fields.unit_npc_flags(), 0x1100_1081);
     }
 
     #[test]
     fn final_quest_slot_preserves_unclamped_counters_and_timer() {
-        let fields = ObjectFields::from_native_pairs(
-            FieldLayout::Wrath12340,
-            &[
-                (278, 783),
-                (279, 1),
-                (280, 3 | (65535 << 16)),
-                (281, 70 << 16),
-                (282, 12345),
-            ],
-        );
+        let fields = ObjectFields::from_pairs(&[
+            (278, 783),
+            (279, 1),
+            (280, 3 | (65535 << 16)),
+            (281, 70 << 16),
+            (282, 12345),
+        ]);
         let quest = fields.player_quest_log(24).unwrap();
         assert_eq!(quest.quest_id, 783);
         assert_eq!(quest.counters, [3, 65535, 0, 70]);

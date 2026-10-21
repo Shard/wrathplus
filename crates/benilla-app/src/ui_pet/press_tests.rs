@@ -3,7 +3,7 @@
 //! the pet's global cooldown) lives in the root layer, `game_plugins::client_tests`.
 
 use benilla_formats::SpellDisplay;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 use crate::net::{ClientCommand, ObjectStore};
 
@@ -11,10 +11,10 @@ pub(crate) const ME: u64 = 0x10;
 pub(crate) const PET: u64 = 0x2A;
 /// `UNIT_FIELD_CHARMEDBY`, `UNIT_FIELD_SUMMONEDBY` and `UNIT_FIELD_CREATEDBY`, low words; the high
 /// words stay 0.
-pub(crate) const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
-pub(crate) const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
-pub(crate) const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
-pub(crate) const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+pub(crate) const CHARMEDBY: u16 = Field::UnitCharmedby.index();
+pub(crate) const SUMMONEDBY: u16 = Field::UnitSummonedby.index();
+pub(crate) const CREATEDBY: u16 = Field::UnitCreatedby.index();
+pub(crate) const FLAGS: u16 = Field::UnitFlags.index();
 
 pub(crate) const CLAW: u32 = 16829;
 pub(crate) const BITE: u32 = 17258;

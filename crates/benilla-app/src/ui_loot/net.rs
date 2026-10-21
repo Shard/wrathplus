@@ -351,7 +351,7 @@ fn item_push_result(
 mod tests {
     use super::*;
     use crate::net::{ClientCommand, NetCommands};
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use bevy::ecs::system::RunSystemOnce;
 
     use crate::pending_item_ops::{LockTransitions, PendingItemOps};
@@ -428,10 +428,10 @@ mod tests {
                     scale: 1.0,
                 },
                 // `UNIT_FIELD_HEALTH` (22) at 0.
-                crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[(Field::UnitHealth, 0)],
-                )),
+                crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(&[(
+                    Field::UnitHealth,
+                    0,
+                )])),
             ))
             .id();
         world
@@ -713,8 +713,8 @@ mod tests {
     /// A creature flagged `UNIT_FLAG_NOT_SELECTABLE`.
     const UNSELECTABLE: u64 = 0xF130_0000_0700_00EF;
 
-    const OBJECT_FIELD_TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const OBJECT_FIELD_TYPE: u16 = Field::ObjectType.index();
+    const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
     /// `OBJECT_FIELD_TYPE` masks: `TYPEMASK_OBJECT` with `UNIT`, `PLAYER` or `GAMEOBJECT`.
     const TYPE_UNIT: u32 = 0x09;
     const TYPE_PLAYER: u32 = 0x19;
@@ -735,10 +735,8 @@ mod tests {
     /// [`tabbed_world`]'s seating, into any world.
     fn seat_tabbed(world: &mut World) -> crossbeam_channel::Receiver<ClientCommand> {
         use crate::net::{Guid, GuidIndex, NetEntity, ObjectStore, SelfPlayer};
-        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitFlags);
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitHealth);
+        const FIELD_UNIT_FLAGS: u16 = benilla_protocol::types::Field::UnitFlags.index();
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
         use benilla_protocol::EntityKind::{GameObject, Unit};
         use benilla_protocol::types::{ObjectFields, ObjectType};
         let unit = |kind, type_mask, pairs: &[(u16, u32)]| {
@@ -968,12 +966,11 @@ mod tests {
     #[test]
     fn looting_a_hostile_body_while_swinging_never_swings_at_it() {
         use crate::net::{ObjectStore, SelfPlayer};
-        const FIELD_UNIT_FACTIONTEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
-        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::UnitHealth);
+        const FIELD_UNIT_FACTIONTEMPLATE: u16 =
+            benilla_protocol::types::Field::UnitFactionTemplate.index();
+        const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
         use benilla_protocol::types::{ObjectFields, ObjectType};
-        const UNIT_FIELD_BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+        const UNIT_FIELD_BYTES_0: u16 = Field::UnitBytes0.index();
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let (factions, stormwind, reps) = crate::target::stormwind_fixture(&mut chain, 0);

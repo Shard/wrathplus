@@ -250,17 +250,17 @@ fn feed_pet_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
-    const BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
-    const POWER5: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower) + 4;
-    const PETNUMBER: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnumber);
-    const PETXP: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetexperience);
-    const PETNEXTXP: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPetnextlevelexp);
+    const BYTES_0: u16 = Field::UnitBytes0.index();
+    const BYTES_1: u16 = Field::UnitBytes1.index();
+    const POWER5: u16 = Field::UnitPower.index() + 4;
+    const PETNUMBER: u16 = Field::UnitPetnumber.index();
+    const PETXP: u16 = Field::UnitPetexperience.index();
+    const PETNEXTXP: u16 = Field::UnitPetnextlevelexp.index();
     /// `OBJECT_FIELD_ENTRY`, the pet's creature-template id.
-    const ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const ENTRY: u16 = Field::ObjectEntry.index();
     /// vmangos `creature_template` entries: Imp (`pet_family` 23) and Stonetusk Boar (5).
     const IMP_ENTRY: u32 = 416;
     const BOAR_ENTRY: u32 = 113;
@@ -314,7 +314,7 @@ mod tests {
     /// creator is not us, answers its template's modifiers; no record answers 0.
     #[test]
     fn pet_modifiers_follow_the_creator_and_the_template() {
-        const CREATED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+        const CREATED_BY: u16 = Field::UnitCreatedby.index();
         let me = crate::net::Guid(0x77);
         let imp = ObjectStore(ObjectFields::from_pairs(&[
             (ENTRY, IMP_ENTRY),
