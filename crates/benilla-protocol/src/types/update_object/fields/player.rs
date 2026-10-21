@@ -33,9 +33,8 @@ impl ObjectFields {
     /// (`Item.h:117-119`). Signed: the tooltip looks up `abs(id)` and paints a negative one red.
     pub fn item_enchant(&self, slot: u8) -> Option<i32> {
         (u16::from(slot)
-            < self
-                .layout
-                .resolve(Field::ItemEnchantment)
+            < 
+                Field::ItemEnchantment.span()
                 .map_or(0, |s| s.width / 3))
         .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot)))?
         .map(|id| id as i32)
@@ -45,9 +44,8 @@ impl ObjectFields {
     /// The tooltip skips the duration; a countdown comes from `SMSG_ITEM_ENCHANT_TIME_UPDATE`.
     pub fn item_enchant_charges(&self, slot: u8) -> u32 {
         (u16::from(slot)
-            < self
-                .layout
-                .resolve(Field::ItemEnchantment)
+            < 
+                Field::ItemEnchantment.span()
                 .map_or(0, |s| s.width / 3))
         .then(|| self.get_at(Field::ItemEnchantment, 3 * u16::from(slot) + 2))
         .flatten()
@@ -305,7 +303,7 @@ impl ObjectFields {
     /// `PLAYER_SKILL_INFO_<slot+1>_*`: one skill slot; vmangos writes the id and value together
     /// (`SetSkill`), so an absent value or bonus reads 0.
     pub fn player_skill(&self, slot: u8) -> Option<PlayerSkillSlot> {
-        if u16::from(slot) >= self.layout.resolve(Field::PlayerSkillInfo11)?.width / 3 {
+        if u16::from(slot) >= Field::PlayerSkillInfo11.span()?.width / 3 {
             return None;
         }
         let base = 3 * u16::from(slot);

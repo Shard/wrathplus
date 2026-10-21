@@ -123,7 +123,7 @@ pub(super) fn auto_attack_icon(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use std::collections::HashMap;
 
     use benilla_formats::{ItemDisplay, ItemDisplayCatalog, ShapeshiftForm};
@@ -134,10 +134,10 @@ mod tests {
 
     /// Raw indices: `PLAYER_FIELD_INV_SLOT_HEAD + 2×15` (the main hand), `UNIT_FIELD_FLAGS`, and
     const INV_SLOT_MAINHAND: u16 =
-        FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
-    const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+        Field::PlayerInvSlotHead.index() + 2 * 15;
+    const UNIT_FLAGS: u16 = Field::UnitFlags.index();
     /// `UNIT_FIELD_BYTES_2`, whose fourth byte is the form.
-    const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
+    const UNIT_BYTES_2: u16 = Field::UnitBytes2.index();
     /// `UNIT_FLAG_DISARMED`.
     const DISARMED: u32 = 0x0020_0000;
     const SWORD_ICON: &str = "Interface\\Icons\\INV_Sword_04";
@@ -152,7 +152,7 @@ mod tests {
             pairs.push((INV_SLOT_MAINHAND, 0x2a));
             deps.spawn_item(
                 0x2a,
-                ObjectFields::from_fields(FieldLayout::Wrath12340, &[(Field::ObjectEntry, 500)]),
+                ObjectFields::from_fields(&[(Field::ObjectEntry, 500)]),
             );
             deps.items.insert_template(
                 500,

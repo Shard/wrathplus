@@ -1142,12 +1142,11 @@ fn drain_quest_log_abandons(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout, PLAYER_QUEST_LOG_SLOTS};
+    use benilla_protocol::types::{Field, PLAYER_QUEST_LOG_SLOTS};
 
     /// Quest-id dword in a Vanilla fixture; production reads packed slots through ObjectFields.
     fn quest_id_field(slot: u8) -> u16 {
-        let span = FieldLayout::Wrath12340
-            .resolve(Field::PlayerQuestLog)
+        let span = Field::PlayerQuestLog.span()
             .unwrap();
         let stride = span.width / u16::from(PLAYER_QUEST_LOG_SLOTS);
         assert!(slot < PLAYER_QUEST_LOG_SLOTS);

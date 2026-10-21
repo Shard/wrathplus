@@ -1,9 +1,9 @@
 //! Instance data remains available while the item-template query is pending.
 use super::*;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use bevy::ecs::system::SystemState;
 
-fn pending_slot(layout: FieldLayout, current: Option<u32>, max: Option<u32>) -> ContainerSlot {
+fn pending_slot(current: Option<u32>, max: Option<u32>) -> ContainerSlot {
     let mut pairs = vec![(Field::ObjectEntry, 117), (Field::ItemStackCount, 3)];
     if let Some(value) = current {
         pairs.push((Field::ItemDurability, value));
@@ -13,12 +13,12 @@ fn pending_slot(layout: FieldLayout, current: Option<u32>, max: Option<u32>) -> 
     }
     let native: Vec<_> = pairs
         .into_iter()
-        .map(|(field, value)| (layout.resolve(field).unwrap().index, value))
+        .map(|(field, value)| (field.span().unwrap().index, value))
         .collect();
     let mut world = World::new();
     let entity = world
         .spawn(ObjectStore(
-            benilla_protocol::ObjectFields::from_native_pairs(layout, &native),
+            benilla_protocol::ObjectFields::from_pairs(&native),
         ))
         .id();
     world.insert_resource(crate::net::GuidIndex(HashMap::from([(42, entity)])));
@@ -46,9 +46,8 @@ fn pending_slot(layout: FieldLayout, current: Option<u32>, max: Option<u32>) -> 
 
 #[test]
 fn pending_template_keeps_native_item_id_count_and_durability() {
-    let layout = FieldLayout::Wrath12340;
     for current in [0, 17] {
-        let slot = pending_slot(layout, Some(current), Some(80));
+        let slot = pending_slot(Some(current), Some(80));
         assert_eq!((slot.item_id, slot.count), (117, 3));
         assert_eq!(slot.durability, Some((current, 80)));
         assert!(slot.texture.is_none());
@@ -59,8 +58,7 @@ fn pending_template_keeps_native_item_id_count_and_durability() {
 
 #[test]
 fn pending_template_does_not_invent_missing_or_indestructible_durability() {
-    let layout = FieldLayout::Wrath12340;
     for (current, max) in [(Some(0), Some(0)), (None, Some(80)), (Some(17), None)] {
-        assert_eq!(pending_slot(layout, current, max).durability, None);
+        assert_eq!(pending_slot(current, max).durability, None);
     }
 }

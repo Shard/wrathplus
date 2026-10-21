@@ -770,13 +770,13 @@ fn bag_family_name(
     let families = families?;
     let guid = match bag_slot {
         s if (BAG_SLOT_FIRST..BAG_SLOT_FIRST + BAGS).contains(&s) => store.0.player_inv_slot(s),
-        s if (super::StorageSlots::for_layout(store.0.layout()).bank_bag_first
-            ..super::StorageSlots::for_layout(store.0.layout()).bank_bag_first
-                + super::StorageSlots::for_layout(store.0.layout()).bank_bags)
+        s if (super::StorageSlots::GEOMETRY.bank_bag_first
+            ..super::StorageSlots::GEOMETRY.bank_bag_first
+                + super::StorageSlots::GEOMETRY.bank_bags)
             .contains(&s) =>
         {
             store.0.player_bank_bag_slot(
-                s - super::StorageSlots::for_layout(store.0.layout()).bank_bag_first,
+                s - super::StorageSlots::GEOMETRY.bank_bag_first,
             )
         }
         // 255, the player's own array, names no bag.
@@ -1077,7 +1077,7 @@ pub(crate) fn feed_containers(
         // The bank, container -1 (the vault) and 5..=10 (its bags), fed whether or not the window
         // is open: the descriptor streams at login.
         let mut slots = HashMap::new();
-        for i in 0..super::StorageSlots::for_layout(store.0.layout()).bank_slots {
+        for i in 0..super::StorageSlots::GEOMETRY.bank_slots {
             let guid = store.0.player_bank_slot(i).unwrap_or(0);
             if let Some(mut slot) = resolve_slot(
                 guid,
@@ -1102,11 +1102,11 @@ pub(crate) fn feed_containers(
             BANK_CONTAINER,
             ContainerState {
                 name: Some("Bank".into()),
-                num_slots: u32::from(super::StorageSlots::for_layout(store.0.layout()).bank_slots),
+                num_slots: u32::from(super::StorageSlots::GEOMETRY.bank_slots),
                 slots,
             },
         );
-        for bank_bag in 0..super::StorageSlots::for_layout(store.0.layout()).bank_bags {
+        for bank_bag in 0..super::StorageSlots::GEOMETRY.bank_bags {
             let bag_id = BANK_BAG_ID_FIRST + i64::from(bank_bag);
             let bag_guid = store.0.player_bank_bag_slot(bank_bag).unwrap_or(0);
             if bag_guid == 0 {
@@ -1164,7 +1164,7 @@ pub(crate) fn feed_containers(
         // The keyring, container -2: player slots 81.., sized by the level ladder that stock
         // `GetKeyRingSize` (`ContainerFrame.lua:773`) reads off `UnitLevel` and the server shares.
         // Slots past the size, which the server refuses, are not fed.
-        let storage = super::StorageSlots::for_layout(store.0.layout());
+        let storage = super::StorageSlots::GEOMETRY;
         let size = storage.keyring_size(store.0.unit_level().unwrap_or(1));
         let mut slots = HashMap::new();
         for i in 0..size.min(u32::from(storage.keyring_slots)) as u8 {
@@ -1302,7 +1302,7 @@ fn vault_slot_guid(store: &ObjectStore, i: u8) -> u64 {
 fn bag_slot_guid(store: &ObjectStore, id: i64) -> u64 {
     match id {
         1..=4 => store.0.player_inv_slot(BAG_SLOT_FIRST + (id as u8 - 1)),
-        b if (5..=super::StorageSlots::for_layout(store.0.layout()).last_bag()).contains(&b) => {
+        b if (5..=super::StorageSlots::GEOMETRY.last_bag()).contains(&b) => {
             store.0.player_bank_bag_slot(id as u8 - 5)
         }
         _ => None,

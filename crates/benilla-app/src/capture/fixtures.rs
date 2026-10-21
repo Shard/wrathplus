@@ -1,7 +1,7 @@
 //! The capture UI fixtures: each arm seeds one window's synthetic but realistic state.
 
 use super::*;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 /// The `vplates` fixture's wolf, the reference screenshot's subject (vmangos `creature_template`
 /// 69 "Timber Wolf": level 2, faction template 32, display 604), at the scenario's look point.
@@ -291,9 +291,7 @@ pub(super) fn seed_ui_fixture(
             const G_STONE: u64 = 0x2004;
             const G_BANKBAG: u64 = 0x2005;
             let obj = |entry: u32, stack: u32| {
-                ObjectFields::from_fields(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    &[
+                ObjectFields::from_fields(&[
                         (benilla_protocol::types::Field::ObjectEntry, entry),
                         (benilla_protocol::types::Field::ItemStackCount, stack),
                     ],
@@ -321,9 +319,7 @@ pub(super) fn seed_ui_fixture(
                 &mut commands,
                 &mut index,
                 G_BANKBAG,
-                ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[
+                ObjectFields::from_fields(&[
                         (Field::ObjectEntry, 94_005),
                         (Field::ItemStackCount, 1),
                         (Field::ContainerNumSlots, 6),
@@ -336,9 +332,7 @@ pub(super) fn seed_ui_fixture(
             // byte 2: button 1 owned, 2 bought and empty, 3-6 unpurchased red) and a 12g 34s 56c
             // purse, under which the 10g third-slot cost (`BankBagSlotPrices.dbc`) is affordable.
             const PLAYER_GUID: u64 = 0x51;
-            let fields = ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &[
+            let fields = ObjectFields::from_field_slots(&[
                     (Field::PlayerBytes2, 0, 2 << 16), // bankBagSlots (byte 2) = 2
                     (Field::PlayerBankSlot1, 0, G_SHIELD as u32), // BANK_SLOT_1 (vault slot 0)
                     (Field::PlayerBankSlot1, 2, G_JERKY as u32), // vault slot 1
@@ -594,9 +588,7 @@ pub(super) fn seed_ui_fixture(
 
             // Slot 0 is quest 783 (counter 0 at 3), slot 1 quest 7 (counter 0 at 10, state
             // COMPLETE), packed as vmangos's `SetQuestSlotCounter` and `SetQuestSlotState` write.
-            let fields = ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            let fields = ObjectFields::from_field_slots(&[
                     (benilla_protocol::types::Field::PlayerQuestLog, 0, 783),
                     (benilla_protocol::types::Field::PlayerQuestLog, 1, 3),
                     (benilla_protocol::types::Field::PlayerQuestLog, 2, 0),
@@ -826,9 +818,7 @@ pub(super) fn seed_ui_fixture(
             const G_BOW: u64 = 0x1003;
             const G_ARROWS: u64 = 0x1004;
 
-            let fields = ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &[
+            let fields = ObjectFields::from_field_slots(&[
                     (Field::UnitLevel, 0, 12),
                     (Field::UnitBytes0, 0, 4 | 1 << 8), // night elf warrior, male, mana
                     (Field::UnitBaseattacktime, 0, 2400), // BASEATTACKTIME[0] ms
@@ -876,9 +866,7 @@ pub(super) fn seed_ui_fixture(
             // The item objects and their templates; the bow borrows the hearthstone display as a
             // stand-in.
             let obj = |entry: u32, stack: u32| {
-                ObjectFields::from_fields(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    &[
+                ObjectFields::from_fields(&[
                         (benilla_protocol::types::Field::ObjectEntry, entry),
                         (benilla_protocol::types::Field::ItemStackCount, stack),
                     ],
@@ -934,9 +922,7 @@ pub(super) fn seed_ui_fixture(
             const PLAYER_GUID: u64 = 0x51;
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
-                crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[
+                crate::net::ObjectStore(ObjectFields::from_fields(&[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
                         (Field::UnitBytes0, 0x0101),     // race human, class warrior
@@ -973,9 +959,7 @@ pub(super) fn seed_ui_fixture(
                         display_id: Some(WOLF_DISPLAY),
                         scale: 1.0,
                     },
-                    crate::net::ObjectStore(ObjectFields::from_fields(
-                        FieldLayout::Wrath12340,
-                        &[
+                    crate::net::ObjectStore(ObjectFields::from_fields(&[
                             (Field::UnitHealth, 100),
                             (Field::UnitMaxHealth, 100),
                             (Field::UnitLevel, 2),
@@ -1020,9 +1004,7 @@ pub(super) fn seed_ui_fixture(
             const G_SWORD: u64 = 0x1002;
             names.insert_player(PLAYER_GUID, "Benilla".into(), None);
             commands.spawn((
-                crate::net::ObjectStore(ObjectFields::from_field_slots(
-                    FieldLayout::Wrath12340,
-                    &[
+                crate::net::ObjectStore(ObjectFields::from_field_slots(&[
                         (Field::UnitLevel, 0, 12),
                         (Field::UnitBytes0, 0, 1 | 1 << 8), // human (race 1), warrior (class 1)
                         (Field::PlayerInvSlotHead, 30, G_SWORD as u32), // main-hand item guid (INV_SLOT_HEAD 486 + 15·2)
@@ -1036,9 +1018,7 @@ pub(super) fn seed_ui_fixture(
                 &mut commands,
                 &mut index,
                 G_SWORD,
-                ObjectFields::from_fields(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    &[
+                ObjectFields::from_fields(&[
                         (benilla_protocol::types::Field::ObjectEntry, 93_011),
                         (benilla_protocol::types::Field::ItemStackCount, 1),
                     ],
@@ -1213,9 +1193,7 @@ pub(super) fn seed_ui_fixture(
             const SELF_GUID: u64 = 0x51;
             names.insert_player(SELF_GUID, "Benilla".into(), None);
             commands.spawn((
-                crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[
+                crate::net::ObjectStore(ObjectFields::from_fields(&[
                         (Field::UnitLevel, 2),
                         (Field::UnitFactionTemplate, 1), // human
                         (Field::UnitBytes0, 0x0101),     // race human, class warrior
@@ -1249,9 +1227,7 @@ pub(super) fn seed_ui_fixture(
                     display_id: Some(WOLF_DISPLAY),
                     scale: 1.0,
                 },
-                crate::net::ObjectStore(ObjectFields::from_fields(
-                    FieldLayout::Wrath12340,
-                    &[
+                crate::net::ObjectStore(ObjectFields::from_fields(&[
                         (Field::UnitHealth, 100),
                         (Field::UnitMaxHealth, 100),
                         (Field::UnitLevel, 2),
@@ -1286,9 +1262,7 @@ pub(super) fn seed_ui_fixture(
                             display_id: Some(WOLF_DISPLAY),
                             scale: 1.0,
                         },
-                        crate::net::ObjectStore(ObjectFields::from_fields(
-                            FieldLayout::Wrath12340,
-                            &[
+                        crate::net::ObjectStore(ObjectFields::from_fields(&[
                                 (Field::UnitHealth, 100),
                                 (Field::UnitMaxHealth, 100),
                                 (Field::UnitLevel, 2),

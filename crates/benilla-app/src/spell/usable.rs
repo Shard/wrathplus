@@ -549,12 +549,12 @@ pub(crate) fn can_afford(d: &SpellDisplay, store: &ObjectStore, mods: &SpellModi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
     /// `field`'s native descriptor index.
     const fn at(field: benilla_protocol::types::Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     // Field indices, private in the protocol crate: health 22, power1 23, max health 28, flags
@@ -578,9 +578,9 @@ mod tests {
 
         // `PLAYER_FIELD_INV_SLOT_HEAD + 2 * slot` for equipment slots 15 and 16.
         const INV_MAINHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+            Field::PlayerInvSlotHead.index() + 2 * 15;
         const INV_OFFHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
+            Field::PlayerInvSlotHead.index() + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         // A class-2 weapon requirement.
@@ -601,9 +601,7 @@ mod tests {
                 let entry = 500 + i as u32;
                 deps.spawn_item(
                     *guid,
-                    ObjectFields::from_fields(
-                        FieldLayout::Wrath12340,
-                        &[(Field::ObjectEntry, entry)],
+                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)],
                     ),
                 );
                 deps.items.insert_template(
@@ -636,12 +634,12 @@ mod tests {
         use crate::items::TestDeps;
 
         const INV_MAINHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+            Field::PlayerInvSlotHead.index() + 2 * 15;
         const INV_OFFHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
+            Field::PlayerInvSlotHead.index() + 2 * 16;
         // `ITEM_FIELD_DURABILITY` / `_MAXDURABILITY`, instance fields.
-        const ITEM_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemDurability);
-        const ITEM_MAX_DURABILITY: u16 = FieldLayout::Wrath12340.index_of(Field::ItemMaxdurability);
+        const ITEM_DURABILITY: u16 = Field::ItemDurability.index();
+        const ITEM_MAX_DURABILITY: u16 = Field::ItemMaxdurability.index();
 
         let spell = |ex3: u32| SpellDisplay {
             equipped_item_class: 2,
@@ -718,9 +716,9 @@ mod tests {
         use crate::items::TestDeps;
 
         const INV_MAINHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 15;
+            Field::PlayerInvSlotHead.index() + 2 * 15;
         const INV_OFFHAND: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead) + 2 * 16;
+            Field::PlayerInvSlotHead.index() + 2 * 16;
         const DISARMED: u32 = 0x0020_0000;
 
         let fits = |ex3: u32, disarmed: bool| {
@@ -735,9 +733,7 @@ mod tests {
                 let entry = 500 + i as u32;
                 deps.spawn_item(
                     guid,
-                    ObjectFields::from_fields(
-                        FieldLayout::Wrath12340,
-                        &[(Field::ObjectEntry, entry)],
+                    ObjectFields::from_fields(&[(Field::ObjectEntry, entry)],
                     ),
                 );
                 deps.items.insert_template(
@@ -899,9 +895,7 @@ mod tests {
             mana_cost: 100,
             ..Default::default()
         };
-        let store = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitPower, 80)],
+        let store = ObjectStore(ObjectFields::from_fields(&[(Field::UnitPower, 80)],
         ));
 
         let mut mods = SpellModifiers::default();
@@ -1055,13 +1049,9 @@ mod tests {
             ..Default::default()
         };
 
-        let healthy = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
+        let healthy = ObjectStore(ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitAuraState, 0)],
         ));
-        let low = ObjectStore(ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
+        let low = ObjectStore(ObjectFields::from_fields(&[(Field::UnitHealth, 10), (Field::UnitAuraState, 0x2)],
         ));
         let mut objs = crate::ui_items::TestObjects::new();
         let objects = objs.get();

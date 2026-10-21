@@ -2,17 +2,14 @@ use super::*;
 
 #[test]
 fn wrath_resources_preserve_sparse_updates_zero_and_recreate_without_vanilla_aliases() {
-    let layout = FieldLayout::Wrath12340;
     let mut pairs = vec![(24, 123)];
     for slot in 0..7 {
         pairs.push((25 + slot, 100 + u32::from(slot)));
         pairs.push((33 + slot, 1000 + u32::from(slot)));
     }
     let mut created =
-        ObjectFields::from_native_pairs(layout, &pairs).into_created(ObjectType::Unit);
-    created.merge(ObjectFields::from_native_pairs(
-        layout,
-        &[(26, 437), (31, 0), (39, 1250)],
+        ObjectFields::from_pairs(&pairs).into_created(ObjectType::Unit);
+    created.merge(ObjectFields::from_pairs(&[(26, 437), (31, 0), (39, 1250)],
     ));
     let result = created.wrath_powers().unwrap();
     assert_eq!(result[0], (100, 1000));
@@ -20,7 +17,7 @@ fn wrath_resources_preserve_sparse_updates_zero_and_recreate_without_vanilla_ali
     assert_eq!(result[6], (0, 1250));
     assert_eq!(created.unit_health(), Some(123));
     assert_eq!(created.unit_power(1), Some(437));
-    created.merge(ObjectFields::from_native_pairs(layout, &[]).into_created(ObjectType::Unit));
+    created.merge(ObjectFields::from_pairs(&[]).into_created(ObjectType::Unit));
     assert_eq!(created.wrath_powers(), Some([(0, 0); 7]));
     assert!(ObjectFields::default().wrath_powers().is_none());
 }
@@ -95,7 +92,7 @@ fn damage_and_attack_time_fields_read_their_slots() {
 /// `BuildValuesUpdate`; `-4` is an x86 server's word, where arm64 would send 0.
 #[test]
 fn player_stat_buff_arrays_read_signed_ints() {
-    let at = |field| FieldLayout::Wrath12340.index_of(field);
+    let at = |field: Field| field.index();
     let f = ObjectFields::from_pairs(&[
         (at(Field::UnitPosstat0), 10),
         (at(Field::UnitNegstat0), (-4i32) as u32),
@@ -230,7 +227,7 @@ fn player_bytes_3_byte_2_is_the_current_pvp_rank_not_the_highest() {
 
 #[test]
 fn honor_contributions_standing_and_lifetime_read_their_own_fields() {
-    let at = |field| FieldLayout::Wrath12340.index_of(field);
+    let at = |field: Field| field.index();
     let f = ObjectFields::from_pairs(&[
         (at(Field::PlayerLifetimeHonorableKills), 3_907),
         (at(Field::PlayerYesterdayContribution), 640),
@@ -328,9 +325,9 @@ fn corpse_descriptor_indices_and_packing() {
 fn a_creature_has_no_player_block_to_be_absent_from() {
     // PLAYER_FIELD_MOD_DAMAGE_DONE_PCT[0], past a unit's descriptor.
     const MOD_DAMAGE_DONE_PCT: u16 =
-        FieldLayout::Wrath12340.index_of(Field::PlayerModDamageDonePct);
+        Field::PlayerModDamageDonePct.index();
     // UNIT_FIELD_BASEATTACKTIME, well inside it.
-    const BASEATTACKTIME: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBaseattacktime);
+    const BASEATTACKTIME: u16 = Field::UnitBaseattacktime.index();
 
     let pet = ObjectFields::from_pairs(&[(2, 0x09), (84, 33)]).into_created(ObjectType::Unit);
     assert_eq!(
@@ -614,27 +611,24 @@ fn base_mana_and_base_health_read_fields_162_and_163() {
 
 #[test]
 fn native_semantic_reads_keep_sparse_and_create_zero_fill() {
-    let (layout, health) = (FieldLayout::Wrath12340, 24);
-    let mut fields = ObjectFields::from_native_pairs(layout, &[(health, 73)]);
+    let health = 24;
+    let mut fields = ObjectFields::from_pairs(&[(health, 73)]);
     assert_eq!(fields.get(Field::UnitHealth), Some(73));
     assert_eq!(fields.get(Field::UnitMaxHealth), None);
     assert!(!fields.field_present(Field::UnitMaxHealth, 0));
     fields = fields.into_created(ObjectType::Unit);
     assert_eq!(fields.get(Field::UnitMaxHealth), Some(0));
-    fields.merge(ObjectFields::from_native_pairs(layout, &[(health, 0)]));
+    fields.merge(ObjectFields::from_pairs(&[(health, 0)]));
     assert_eq!(fields.get(Field::UnitHealth), Some(0));
-    assert_eq!(fields.layout(), layout);
     assert_eq!(fields.created_as(), Some(ObjectType::Unit));
-    let fields = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[])
+    let fields = ObjectFields::from_pairs(&[])
         .into_created(ObjectType::Unit);
     assert_eq!(fields.get_at(Field::UnitPower, 7), None);
 }
 
 #[test]
 fn semantic_guid_and_float_reads_obey_span_boundaries() {
-    let fields = ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[(0, 7), (1, 3), (4, 1.5f32.to_bits())],
+    let fields = ObjectFields::from_pairs(&[(0, 7), (1, 3), (4, 1.5f32.to_bits())],
     );
     assert_eq!(
         fields.get_field_guid(Field::ObjectGuid, 0),
@@ -647,9 +641,7 @@ fn semantic_guid_and_float_reads_obey_span_boundaries() {
 
 #[test]
 fn unit_accessors_read_native_wrath_without_vanilla_aliases() {
-    let fields = ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[
+    let fields = ObjectFields::from_pairs(&[
             (22, 999), // Wrath channel object: not vanilla health.
             (24, 81),
             (25, 14),
@@ -673,13 +665,12 @@ fn unit_accessors_read_native_wrath_without_vanilla_aliases() {
 
 #[test]
 fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
-    let layout = FieldLayout::Wrath12340;
-    let owner = layout.resolve(Field::UnitSummonedby).unwrap().index;
-    let fields = ObjectFields::from_native_pairs(layout, &[(owner, 42)]);
+    let owner = Field::UnitSummonedby.span().unwrap().index;
+    let fields = ObjectFields::from_pairs(&[(owner, 42)]);
     assert_eq!(fields.unit_summoned_by(), Some(42));
     assert_eq!(fields.get_field_guid(Field::UnitSummonedby, 1), None);
     let high_only =
-        ObjectFields::from_native_pairs(layout, &[(owner + 1, 3)]).into_created(ObjectType::Unit);
+        ObjectFields::from_pairs(&[(owner + 1, 3)]).into_created(ObjectType::Unit);
     assert_eq!(high_only.unit_summoned_by(), None);
     assert_eq!(high_only.get_field_guid(Field::UnitSummonedby, 0), None);
     let fields = fields.into_created(ObjectType::Unit);
@@ -689,9 +680,7 @@ fn semantic_guids_preserve_low_half_presence_and_optional_high_half() {
 
 #[test]
 fn native_item_container_and_corpse_readers_use_their_layout() {
-    let item = ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[
+    let item = ObjectFields::from_pairs(&[
             (14, 3),
             (16, (-2i32) as u32),
             (55, 789),
@@ -707,12 +696,10 @@ fn native_item_container_and_corpse_readers_use_their_layout() {
     assert_eq!(item.item_enchant(12), None);
     assert_eq!(item.item_durability(), Some(17));
     assert_eq!(item.item_max_durability(), Some(20));
-    let bag = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(64, 36), (66, 123)]);
+    let bag = ObjectFields::from_pairs(&[(64, 36), (66, 123)]);
     assert_eq!(bag.container_num_slots(), Some(36));
     assert_eq!(bag.container_slot(0), Some(123));
-    let corpse = ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[
+    let corpse = ObjectFields::from_pairs(&[
             (6, 123),
             (10, 456),
             (11, 99 | (4 << 24)),
@@ -731,9 +718,7 @@ fn native_item_container_and_corpse_readers_use_their_layout() {
 #[test]
 fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
     // AzerothCore UpdateFields.h: PLAYER_QUEST_LOG_1 starts at158, five dwords per slot.
-    let fields = ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[
+    let fields = ObjectFields::from_pairs(&[
             (278, 987),
             (279, 1),
             (280, 300 | (65535 << 16)),
@@ -749,50 +734,48 @@ fn native_wrath_quest_log_preserves_last_slot_and_u16_counters() {
     assert_eq!(quest.timer, 12345);
     assert_eq!(fields.player_quest_log(25), None);
     assert_eq!(fields.player_quest_log(0), None);
-    let sparse = ObjectFields::from_native_pairs(FieldLayout::Wrath12340, &[(158, 42)]);
+    let sparse = ObjectFields::from_pairs(&[(158, 42)]);
     assert_eq!(sparse.player_quest_log(0).unwrap().counters, [0; 4]);
 }
 
 #[test]
 fn player_public_and_private_bytes_do_not_collide() {
-    let (layout, public, private, private2) = (FieldLayout::Wrath12340, 153, 1197, 1229);
-    assert_eq!(layout.resolve(Field::PlayerBytes).unwrap().index, public);
+    let (public, private, private2) = (153, 1197, 1229);
+    assert_eq!(Field::PlayerBytes.span().unwrap().index, public);
     assert_eq!(
-        layout.resolve(Field::PlayerFieldBytes).unwrap().index,
+        Field::PlayerFieldBytes.span().unwrap().index,
         private
     );
     assert_eq!(
-        layout.resolve(Field::PlayerFieldBytes2).unwrap().index,
+        Field::PlayerFieldBytes2.span().unwrap().index,
         private2
     );
-    let fields = ObjectFields::from_native_pairs(
-        layout,
-        &[(public, 0x04030201), (private, 0x09080706), (private2, 42)],
+    let fields = ObjectFields::from_pairs(&[(public, 0x04030201), (private, 0x09080706), (private2, 42)],
     );
     assert_eq!(fields.player_bytes(), Some(0x04030201));
     assert_eq!(fields.get(Field::PlayerFieldBytes), Some(0x09080706));
     assert_eq!(fields.get(Field::PlayerFieldBytes2), Some(42));
     assert_eq!(
-        layout.field_at(ObjectType::Player, public),
+        Field::at(ObjectType::Player, public),
         Some((Field::PlayerBytes, 0))
     );
     assert_eq!(
-        layout.field_at(ObjectType::Player, private),
+        Field::at(ObjectType::Player, private),
         Some((Field::PlayerFieldBytes, 0))
     );
 }
 
 #[test]
 fn native_power_arrays_preserve_all_slots() {
-    let (layout, slots) = (FieldLayout::Wrath12340, 7);
-    let current = layout.resolve(Field::UnitPower).unwrap();
-    let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
+    let slots = 7;
+    let current = Field::UnitPower.span().unwrap();
+    let maximum = Field::UnitMaxPower.span().unwrap();
     let mut pairs = Vec::new();
     for slot in 0..slots {
         pairs.push((current.index + slot, 100 + u32::from(slot)));
         pairs.push((maximum.index + slot, 1000 + u32::from(slot)));
     }
-    let mut fields = ObjectFields::from_native_pairs(layout, &pairs);
+    let mut fields = ObjectFields::from_pairs(&pairs);
     assert_eq!(fields.unit_power_slots(), slots as u8);
     for slot in 0..slots as u8 {
         assert_eq!(fields.unit_power(slot), Some(100 + u32::from(slot)));
@@ -800,27 +783,20 @@ fn native_power_arrays_preserve_all_slots() {
     }
     assert_eq!(fields.unit_power(slots as u8), None);
     assert_eq!(fields.unit_max_power(slots as u8), None);
-    if layout == FieldLayout::Wrath12340 {
+    if true {
         assert_eq!(fields.wrath_powers().unwrap()[6], (106, 1006));
-        fields.merge(ObjectFields::from_native_pairs(
-            layout,
-            &[(current.index + 6, 0)],
+        fields.merge(ObjectFields::from_pairs(&[(current.index + 6, 0)],
         ));
         assert_eq!(fields.wrath_powers().unwrap()[6], (0, 1006));
         assert_eq!(fields.wrath_powers().unwrap()[0], (100, 1000));
     }
-    let flags = layout.resolve(Field::UnitDynamicFlags).unwrap();
-    fields.merge(ObjectFields::from_native_pairs(
-        layout,
-        &[(flags.index, unit::UNIT_DYNFLAG_DEAD)],
+    let flags = Field::UnitDynamicFlags.span().unwrap();
+    fields.merge(ObjectFields::from_pairs(&[(flags.index, unit::UNIT_DYNFLAG_DEAD)],
     ));
     assert_eq!(fields.unit_shown_power((slots - 1) as u8), Some(0));
     assert_eq!(fields.unit_shown_power(slots as u8), None);
-    assert!(ObjectFields::from_native_pairs(
-        FieldLayout::Wrath12340,
-        &[(
-            FieldLayout::Wrath12340
-                .resolve(Field::UnitPower)
+    assert!(ObjectFields::from_pairs(&[(
+            Field::UnitPower.span()
                 .unwrap()
                 .index,
             1

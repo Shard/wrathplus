@@ -2327,9 +2327,7 @@ mod tests {
         let mut world = World::new();
         let held = world.spawn_empty().id();
         let summon = |guid: u64| {
-            crate::net::ObjectStore(ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            crate::net::ObjectStore(ObjectFields::from_field_slots(&[
                     (
                         benilla_protocol::types::Field::UnitSummon,
                         0,

@@ -1085,9 +1085,7 @@ mod tests {
     /// A store of `UNIT_FIELD_FACTIONTEMPLATE` (35), `UNIT_FIELD_FLAGS` (46) and
     /// `UNIT_FIELD_HEALTH` (22), on [`fx::factions`]' rows: template 1 the caster's Human, 2 an Orc.
     fn unit_store(template: u32, flags: u32, health: u32) -> ObjectStore {
-        ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        ObjectStore(benilla_protocol::ObjectFields::from_fields(&[
                 (
                     benilla_protocol::types::Field::UnitFactionTemplate,
                     template,
@@ -1251,9 +1249,7 @@ mod tests {
     /// A living Orc creature whose `UNIT_FIELD_FLAGS` are `flags`, with its `UNIT_FIELD_CHARMEDBY`
     /// (10) and `UNIT_FIELD_CREATEDBY` (14) the guids `charmed_by` and `created_by`, 0 for none.
     fn owned(flags: u32, charmed_by: u32, created_by: u32) -> ObjectStore {
-        ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
                 (benilla_protocol::types::Field::UnitFactionTemplate, 0, 2),
                 (benilla_protocol::types::Field::UnitFlags, 0, flags),
                 (benilla_protocol::types::Field::UnitHealth, 0, 100),

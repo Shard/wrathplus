@@ -1,57 +1,44 @@
 use super::*;
-use benilla_protocol::types::FieldLayout;
 
-pub(crate) fn fields(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
-    ObjectFields::from_native_pairs(
-        layout,
-        &values
+pub(crate) fn fields(values: &[(Field, u16, u32)]) -> ObjectFields {
+    ObjectFields::from_pairs(&values
             .iter()
-            .map(|&(field, offset, value)| (layout.resolve(field).unwrap().index + offset, value))
+            .map(|&(field, offset, value)| (field.span().unwrap().index + offset, value))
             .collect::<Vec<_>>(),
     )
 }
 
 #[test]
 fn native_mask_requires_both_words_and_keeps_high_bits() {
-    let layout = FieldLayout::Wrath12340;
-    let partial = fields(layout, &[(Field::PlayerKnownCurrencies, 0, 0)]);
+    let partial = fields(&[(Field::PlayerKnownCurrencies, 0, 0)]);
     assert_eq!(known_currencies(&partial), None);
-    let complete = fields(
-        layout,
-        &[
+    let complete = fields(&[
             (Field::PlayerKnownCurrencies, 0, 1),
             (Field::PlayerKnownCurrencies, 1, 0x80000000),
         ],
     );
     assert_eq!(known_currencies(&complete), Some((1 << 63) | 1));
     assert_eq!(
-        known_currencies(&fields(FieldLayout::Wrath12340, &[])),
+        known_currencies(&fields(&[])),
         None
     );
 }
 
 #[test]
 fn hidden_bag_last_slot_and_streamed_stack_counts_without_templates() {
-    let layout = FieldLayout::Wrath12340;
-    let player = fields(
-        layout,
-        &[
+    let player = fields(&[
             (Field::PlayerCurrencytokenSlot1, 0, 7),
             (Field::PlayerCurrencytokenSlot1, 1, 0),
             (Field::PlayerCurrencytokenSlot1, 62, 8),
             (Field::PlayerCurrencytokenSlot1, 63, 0),
         ],
     );
-    let a = fields(
-        layout,
-        &[
+    let a = fields(&[
             (Field::ObjectEntry, 0, 49426),
             (Field::ItemStackCount, 0, 12),
         ],
     );
-    let b = fields(
-        layout,
-        &[
+    let b = fields(&[
             (Field::ObjectEntry, 0, 49426),
             (Field::ItemStackCount, 0, 4),
         ],

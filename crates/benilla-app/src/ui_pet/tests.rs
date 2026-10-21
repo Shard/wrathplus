@@ -16,7 +16,7 @@ use super::drain::*;
 use super::menu::*;
 use super::unit::*;
 use super::*;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 fn packed(action: u32, kind: u8) -> PetActionEntry {
     PetActionEntry::from(action | (u32::from(kind) << 24))
@@ -386,9 +386,9 @@ fn only_a_possessed_units_attack_press_raises_the_latch() {
 /// `0x5ee5a0` asks for the unit we possess, not the one we own.
 #[test]
 fn the_latch_gate_is_possession_not_ownership() {
-    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
-    const CREATEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+    const FLAGS: u16 = Field::UnitFlags.index();
+    const CHARMEDBY: u16 = Field::UnitCharmedby.index();
+    const CREATEDBY: u16 = Field::UnitCreatedby.index();
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -553,9 +553,9 @@ fn touching_your_target_calls_the_pet_off() {
 /// The owner test falls back to SUMMONEDBY, not `0x5ee5a0`'s CREATEDBY.
 #[test]
 fn the_attack_events_read_the_pets_combat_flag_not_the_click_latch() {
-    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-    const CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
-    const SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby);
+    const FLAGS: u16 = Field::UnitFlags.index();
+    const CHARMEDBY: u16 = Field::UnitCharmedby.index();
+    const SUMMONEDBY: u16 = Field::UnitSummonedby.index();
     let unit =
         |pairs: &[(u16, u32)]| ObjectStore(benilla_protocol::ObjectFields::from_pairs(pairs));
     let me = Some(0x77u64);
@@ -664,10 +664,9 @@ fn an_unresolvable_active_icon_hides_rather_than_falling_back() {
 #[test]
 fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
     use benilla_protocol::{
-        types::{Field, FieldLayout},
+        types::{Field},
         ObjectFields,
     };
-    let layout = FieldLayout::Wrath12340;
     let make = |flags, bytes, owner| {
         let pairs = [
             (Field::UnitFlags, flags),
@@ -675,8 +674,8 @@ fn the_menu_fork_reads_dialect_permissions_and_preserves_ownership() {
             (Field::UnitSummonedby, owner),
             (Field::UnitCharmedby, 7),
         ]
-        .map(|(field, value)| (layout.resolve(field).unwrap().index, value));
-        ObjectFields::from_native_pairs(layout, &pairs)
+        .map(|(field, value)| (field.span().unwrap().index, value));
+        ObjectFields::from_pairs(&pairs)
     };
     for (rename, abandon) in [(false, false), (true, false), (false, true), (true, true)] {
         let permissions = u32::from(rename) | (u32::from(abandon) << 1);
@@ -956,7 +955,7 @@ fn a_held_pet_names_its_templates_creature_type() {
     use bevy::prelude::*;
     const PET: u64 = 0xF140_0000_0000_002A;
     /// `OBJECT_FIELD_ENTRY`, and the Imp's template entry.
-    const OBJECT_FIELD_ENTRY: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectEntry);
+    const OBJECT_FIELD_ENTRY: u16 = Field::ObjectEntry.index();
     const IMP: u32 = 416;
 
     let mut names = crate::names::NameCache::default();

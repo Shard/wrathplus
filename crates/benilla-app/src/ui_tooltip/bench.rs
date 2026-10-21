@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
@@ -111,9 +111,7 @@ fn feed_cost_per_invalidation() {
                 if slot == 0 { skill } else { 300 } | 300 << 16,
             ));
         }
-        ObjectStore(ObjectFields::from_field_slots(
-            FieldLayout::Wrath12340,
-            &slots,
+        ObjectStore(ObjectFields::from_field_slots(&slots,
         ))
     };
     let player = app
@@ -123,9 +121,7 @@ fn feed_cost_per_invalidation() {
     // An auto-attack target, whose reach a swap moves.
     const TARGET: u64 = 0xF130_0000_0000_0042;
     let target_fields = |reach: f32| {
-        ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[(
+        ObjectStore(ObjectFields::from_fields(&[(
                 benilla_protocol::types::Field::UnitCombatreach,
                 reach.to_bits(),
             )],

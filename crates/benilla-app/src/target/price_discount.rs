@@ -61,13 +61,13 @@ pub(crate) const HUMAN_WARRIOR: u32 = 1 | (1 << 8);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
 
     const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-        FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
+        Field::UnitFactionTemplate.index();
     /// `UNIT_FIELD_BYTES_0`, absolute descriptor index.
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const BYTES_0: u16 = Field::UnitBytes0.index();
 
     /// Wrath: 5% per rank above Neutral, never the 1.12 honor steps.
     #[test]

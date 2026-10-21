@@ -139,7 +139,7 @@ mod tests {
 
     /// `field`'s native descriptor index.
     const fn at(field: Field) -> u16 {
-        benilla_protocol::types::FieldLayout::Wrath12340.index_of(field)
+        field.index()
     }
 
     /// A world holding what [`ScriptSelect`] reads, with a bare VM and no units.
@@ -384,9 +384,7 @@ mod tests {
         // `OBJECT_FIELD_TYPE` 2 (a hop is off a unit, typemask 8), `UNIT_FIELD_SUMMON` 8 and
         // `UNIT_FIELD_TARGET` 16, the latter two each a 2-field guid.
         let unit = |kind: u32, summon: u64, target: u64| {
-            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            ObjectStore(benilla_protocol::ObjectFields::from_field_slots(&[
                     (benilla_protocol::types::Field::ObjectType, 0, kind),
                     (benilla_protocol::types::Field::UnitSummon, 0, summon as u32),
                     (

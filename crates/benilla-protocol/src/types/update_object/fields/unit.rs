@@ -225,7 +225,7 @@ impl ObjectFields {
     }
     /// Number of native descriptor resources: five in build 5875, seven in build 12340.
     pub fn unit_power_slots(&self) -> u8 {
-        self.layout.resolve(Field::UnitPower).unwrap().width as u8
+        Field::UnitPower.span().unwrap().width as u8
     }
     /// `UNIT_FIELD_POWER1..5`: current power of type `ty`, on the wire's raw scale.
     pub fn unit_power(&self, ty: u8) -> Option<u32> {

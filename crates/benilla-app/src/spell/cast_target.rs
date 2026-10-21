@@ -589,16 +589,12 @@ mod tests {
         // `UNIT_FIELD_FLAGS` bit 3 (player-controlled) on us alone selects `CanAttack`'s mixed
         // arm; with no catalog the reaction resolves neutral, so the enemy bit clears. Both carry
         // `UNIT_FIELD_HEALTH` (22): a store with none reads dead to the gates.
-        let me = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        let me = crate::net::ObjectStore(ObjectFields::from_fields(&[
                 (benilla_protocol::types::Field::UnitHealth, 100),
                 (benilla_protocol::types::Field::UnitFlags, 1 << 3),
             ],
         ));
-        let it = crate::net::ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        let it = crate::net::ObjectStore(ObjectFields::from_fields(&[
                 (benilla_protocol::types::Field::UnitHealth, 100),
                 (benilla_protocol::types::Field::UnitFactionTemplate, 0),
             ],
@@ -672,23 +668,17 @@ mod tests {
             benilla_formats::load_faction_catalog(&mut chain).expect("FactionTemplate.dbc"),
         );
         // Faction templates 35 and 1 are a real friendly pair.
-        let me = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        let me = ObjectStore(ObjectFields::from_fields(&[
                 (benilla_protocol::types::Field::UnitFactionTemplate, 1),
                 (benilla_protocol::types::Field::UnitFlags, 0x8),
             ],
         ));
-        let quiet = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        let quiet = ObjectStore(ObjectFields::from_fields(&[
                 (benilla_protocol::types::Field::UnitFactionTemplate, 35),
                 (benilla_protocol::types::Field::UnitFlags, 0),
             ],
         ));
-        let pvp = ObjectStore(ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[
+        let pvp = ObjectStore(ObjectFields::from_fields(&[
                 (benilla_protocol::types::Field::UnitFactionTemplate, 35),
                 // `UNIT_FIELD_BYTES_2` byte 1 bit `0x01`, 12340's `UNIT_BYTE2_FLAG_PVP`.
                 (benilla_protocol::types::Field::UnitBytes2, 0x0000_0100),
@@ -904,9 +894,7 @@ mod tests {
         use benilla_protocol::ObjectFields;
 
         let health = |hp| {
-            ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(benilla_protocol::types::Field::UnitHealth, hp)],
+            ObjectStore(ObjectFields::from_fields(&[(benilla_protocol::types::Field::UnitHealth, hp)],
             ))
         };
         let (corpse, live) = (health(0), health(100));

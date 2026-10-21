@@ -13,69 +13,51 @@ pub struct FieldSpan {
     pub object_type: ObjectType,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FieldLayout {
-    #[default]
-    Wrath12340,
-}
-
-impl FieldLayout {
+/// Build 12340's descriptor table, the one layout: a semantic field's span, its first dword, a
+/// class's descriptor length and the reverse map change watchers read.
+impl Field {
+    /// The field's dword span.
     #[inline]
-    pub fn resolve(self, field: Field) -> Option<FieldSpan> {
-        match self {
-            Self::Wrath12340 => generated::WRATH[field as usize],
-        }
+    pub fn span(self) -> Option<FieldSpan> {
+        generated::WRATH[self as usize]
     }
 
-    /// The first dword index of `field` on this layout, for fixtures and watch constants that
-    /// still key on an index. A field the layout lacks is a compile-time error in a `const`.
-    pub const fn index_of(self, field: Field) -> u16 {
-        let span = match self {
-            Self::Wrath12340 => generated::WRATH[field as usize],
-        };
-        match span {
+    /// The field's first dword index, for fixtures and watch constants that still key on an
+    /// index. A field the table lacks is a compile-time error in a `const`.
+    pub const fn index(self) -> u16 {
+        match generated::WRATH[self as usize] {
             Some(span) => span.index,
-            None => panic!("the field is not in this layout"),
+            None => panic!("the field is not in the 12340 layout"),
         }
     }
 
-    pub fn descriptor_len(self, object_type: ObjectType) -> u16 {
-        let slot = Self::class_slot(object_type);
-        match self {
-            Self::Wrath12340 => generated::WRATH_ENDS[slot],
-        }
-    }
-
-    #[inline]
-    fn class_slot(object_type: ObjectType) -> usize {
-        match object_type {
-            ObjectType::Object => 0,
-            ObjectType::Item => 1,
-            ObjectType::Container => 2,
-            ObjectType::Unit => 3,
-            ObjectType::Player => 4,
-            ObjectType::GameObject => 5,
-            ObjectType::DynamicObject => 6,
-            ObjectType::Corpse => 7,
-        }
+    /// The descriptor length of `object_type`, below which a CREATE's absent field reads 0.
+    pub fn descriptor_len(object_type: ObjectType) -> u16 {
+        generated::WRATH_ENDS[class_slot(object_type)]
     }
 
     /// Constant-time reverse mapping for change watchers, including inherited blocks.
     /// Object class disambiguates overlapping blocks; the offset is a native dword offset.
     #[inline]
-    pub fn field_at(self, object_type: ObjectType, index: u16) -> Option<(Field, u16)> {
-        self.reverse_table(object_type)
+    pub fn at(object_type: ObjectType, index: u16) -> Option<(Field, u16)> {
+        generated::WRATH_REVERSE[class_slot(object_type)]
             .get(usize::from(index))
             .copied()
             .flatten()
     }
+}
 
-    #[inline]
-    fn reverse_table(self, object_type: ObjectType) -> &'static [Option<(Field, u16)>] {
-        let slot = Self::class_slot(object_type);
-        match self {
-            Self::Wrath12340 => generated::WRATH_REVERSE[slot],
-        }
+#[inline]
+fn class_slot(object_type: ObjectType) -> usize {
+    match object_type {
+        ObjectType::Object => 0,
+        ObjectType::Item => 1,
+        ObjectType::Container => 2,
+        ObjectType::Unit => 3,
+        ObjectType::Player => 4,
+        ObjectType::GameObject => 5,
+        ObjectType::DynamicObject => 6,
+        ObjectType::Corpse => 7,
     }
 }
 
@@ -84,7 +66,6 @@ mod tests {
     use super::*;
     #[test]
     fn reverse_lookup_is_a_direct_table_index_and_matches_forward_spans() {
-        let layout = FieldLayout::Wrath12340;
         for class in [
             ObjectType::Object,
             ObjectType::Item,
@@ -95,11 +76,11 @@ mod tests {
             ObjectType::DynamicObject,
             ObjectType::Corpse,
         ] {
-            let table = layout.reverse_table(class);
-            assert_eq!(table.len(), usize::from(layout.descriptor_len(class)));
-            for index in 0..layout.descriptor_len(class) {
+            let table = generated::WRATH_REVERSE[class_slot(class)];
+            assert_eq!(table.len(), usize::from(Field::descriptor_len(class)));
+            for index in 0..Field::descriptor_len(class) {
                 let expected = Field::ALL.into_iter().find_map(|field| {
-                    let span = layout.resolve(field)?;
+                    let span = field.span()?;
                     let inherited = span.object_type == ObjectType::Object
                         || (class == ObjectType::Player && span.object_type == ObjectType::Unit)
                         || (class == ObjectType::Container && span.object_type == ObjectType::Item);
@@ -109,65 +90,61 @@ mod tests {
                     let offset = index.checked_sub(span.index)?;
                     (offset < span.width).then_some((field, offset))
                 });
-                assert_eq!(layout.field_at(class, index), table[usize::from(index)]);
+                assert_eq!(Field::at(class, index), table[usize::from(index)]);
                 assert_eq!(
-                    layout.field_at(class, index),
+                    Field::at(class, index),
                     expected,
-                    "{layout:?} {class:?} {index}"
+                    "{class:?} {index}"
                 );
             }
-            assert_eq!(layout.field_at(class, layout.descriptor_len(class)), None);
-            assert_eq!(layout.field_at(class, u16::MAX), None);
+            assert_eq!(Field::at(class, Field::descriptor_len(class)), None);
+            assert_eq!(Field::at(class, u16::MAX), None);
         }
     }
 
     #[test]
     fn semantic_fields_resolve_native_indices_and_widths() {
-        let layout = FieldLayout::Wrath12340;
         let (health, quest, quest_width, player_end) = (24, 158, 125, 1326);
-        assert_eq!(layout.resolve(Field::UnitHealth).unwrap().index, health);
-        let span = layout.resolve(Field::PlayerQuestLog).unwrap();
+        assert_eq!(Field::UnitHealth.span().unwrap().index, health);
+        let span = Field::PlayerQuestLog.span().unwrap();
         assert_eq!((span.index, span.width), (quest, quest_width));
-        assert_eq!(layout.descriptor_len(ObjectType::Player), player_end);
+        assert_eq!(Field::descriptor_len(ObjectType::Player), player_end);
         assert_eq!(
-            layout.field_at(ObjectType::Player, quest + quest_width - 1),
+            Field::at(ObjectType::Player, quest + quest_width - 1),
             Some((Field::PlayerQuestLog, quest_width - 1))
         );
     }
     #[test]
     fn reverse_lookup_disambiguates_object_classes() {
-        let layout = FieldLayout::Wrath12340;
         assert_eq!(
-            layout.field_at(ObjectType::Unit, 23),
+            Field::at(ObjectType::Unit, 23),
             Some((Field::UnitBytes0, 0))
         );
         assert_eq!(
-            layout.field_at(ObjectType::Corpse, 23),
+            Field::at(ObjectType::Corpse, 23),
             Some((Field::CorpseItem, 12))
         );
     }
     #[test]
     fn grouped_fields_do_not_swallow_following_wrath_fields() {
-        let layout = FieldLayout::Wrath12340;
-        let visible = layout.resolve(Field::PlayerVisibleItems).unwrap();
+        let visible = Field::PlayerVisibleItems.span().unwrap();
         assert_eq!(visible.width, 38);
-        let title = layout.resolve(Field::PlayerChosenTitle).unwrap();
+        let title = Field::PlayerChosenTitle.span().unwrap();
         assert_eq!(visible.index + visible.width, title.index);
         assert_eq!(
-            layout.field_at(ObjectType::Player, title.index),
+            Field::at(ObjectType::Player, title.index),
             Some((Field::PlayerChosenTitle, 0))
         );
     }
 
     #[test]
     fn every_span_fits_its_native_descriptor() {
-        let layout = FieldLayout::Wrath12340;
         for field in Field::ALL {
-            if let Some(span) = layout.resolve(field) {
-                assert!(span.width > 0, "{layout:?} {field:?}");
+            if let Some(span) = field.span() {
+                assert!(span.width > 0, "{field:?}");
                 assert!(
-                    span.index + span.width <= layout.descriptor_len(span.object_type),
-                    "{layout:?} {field:?} {span:?}"
+                    span.index + span.width <= Field::descriptor_len(span.object_type),
+                    "{field:?} {span:?}"
                 );
             }
         }

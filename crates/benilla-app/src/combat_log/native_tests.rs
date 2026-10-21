@@ -428,11 +428,9 @@ fn execute_rows_and_dispels_take_their_native_events() {
 /// `UNIT_DIED`: health falling to 0 after a living reading; a unit first seen dead logs nothing.
 #[test]
 fn a_unit_dies_when_its_health_falls_to_zero() {
-    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+    use benilla_protocol::types::{Field, ObjectFields};
     let unit = |health: u32| {
-        crate::net::ObjectStore(ObjectFields::from_field_slots(
-            FieldLayout::Wrath12340,
-            &[(Field::ObjectType, 0, 9), (Field::UnitHealth, 0, health)],
+        crate::net::ObjectStore(ObjectFields::from_field_slots(&[(Field::ObjectType, 0, 9), (Field::UnitHealth, 0, health)],
         ))
     };
     let (alive, dead) = (unit(40), unit(0));

@@ -391,8 +391,7 @@ mod tests {
 
     #[test]
     fn greeting_completion_uses_log_state_not_the_shared_icon() {
-        const BASE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-            .index_of(benilla_protocol::types::Field::PlayerQuestLog);
+        const BASE: u16 = benilla_protocol::types::Field::PlayerQuestLog.index();
         let incomplete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7)]);
         assert!(!quest_complete(&incomplete, 7));
         let complete = benilla_protocol::ObjectFields::from_pairs(&[(BASE, 7), (BASE + 1, 1)]);

@@ -214,9 +214,7 @@ fn our_own_row_arriving_fires_raid_roster_update_once() {
 
     app.world_mut().spawn((
         Guid(ME),
-        ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            &[],
+        ObjectStore(benilla_protocol::types::ObjectFields::from_fields(&[],
         )),
         SelfPlayer,
     ));

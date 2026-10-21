@@ -244,9 +244,7 @@ fn command(
             bag_slot,
             count,
         } => {
-            let (container, container_slot) = crate::ui_items::wire_pos_for(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                bag,
+            let (container, container_slot) = crate::ui_items::wire_pos_for(bag,
                 bag_slot,
             )?;
             ClientCommand::NativeGuildBankSwap(Swap {
@@ -318,9 +316,7 @@ pub(crate) fn feed_guild_bank(
     for request in script.take_wrath_guild_bank_requests() {
         let held = match request {
             WrathGuildBankRequest::PickupItem { .. } => script.cursor_item().and_then(|item| {
-                let (container, slot) = crate::ui_items::wire_pos_for(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    item.bag,
+                let (container, slot) = crate::ui_items::wire_pos_for(item.bag,
                     item.slot,
                 )?;
                 Some((container, slot, item.count.map_or(0, |n| n as i32)))

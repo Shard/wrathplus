@@ -229,15 +229,13 @@ fn resolve(prev: Option<u32>, cur: u32) -> Option<Play> {
 
 /// Wrath folds state into BYTES_1; the other bytes must not drive lids or collision.
 fn go_state_edge(edge: &crate::net::FieldChanged) -> Option<u32> {
-    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
+    use benilla_protocol::types::{Field, ObjectType};
     if edge.kind != ObjectType::GameObject {
         return None;
     }
-    match edge.layout {
-        FieldLayout::Wrath12340 => (edge.named_field(Field::GameobjectBytes1)
+    (edge.named_field(Field::GameobjectBytes1)
             && (edge.old & 0xff) != (edge.new & 0xff))
-            .then_some(edge.new & 0xff),
-    }
+            .then_some(edge.new & 0xff)
 }
 
 /// Caller 1, the wire (`0x5f89e0`): seeds the state at first sight, then follows the
@@ -695,13 +693,11 @@ pub(crate) fn plugin(app: &mut App) {
 mod tests {
     #[test]
     fn state_edges_use_real_layout_fields_and_normalize_wrath_bytes() {
-        use benilla_protocol::types::{Field, FieldLayout, ObjectType};
-        let layout = FieldLayout::Wrath12340;
+        use benilla_protocol::types::{Field, ObjectType};
         let native_field = Field::GameobjectBytes1;
-        let span = layout
-            .resolve(native_field)
+        let span = native_field.span()
             .expect("native state dependency exists");
-        let (field, offset) = layout.field_at(ObjectType::GameObject, span.index).unwrap();
+        let (field, offset) = benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
         assert_eq!((field, offset), (native_field, 0));
         let packed = 0x87654300;
         let mut edge = crate::net::FieldChanged {
@@ -710,7 +706,6 @@ mod tests {
             kind: ObjectType::GameObject,
             field,
             offset,
-            layout,
             old: packed | 1,
             new: packed,
         };
@@ -732,8 +727,8 @@ mod tests {
         edge.kind = ObjectType::GameObject;
         edge.offset = 1;
         assert_eq!(super::go_state_edge(&edge), None);
-        let span = layout.resolve(Field::GameobjectFlags).unwrap();
-        (edge.field, edge.offset) = layout.field_at(ObjectType::GameObject, span.index).unwrap();
+        let span = Field::GameobjectFlags.span().unwrap();
+        (edge.field, edge.offset) = benilla_protocol::types::Field::at(ObjectType::GameObject, span.index).unwrap();
         assert_eq!(
             super::go_state_edge(&edge),
             None,

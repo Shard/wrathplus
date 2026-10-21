@@ -4,13 +4,13 @@ mod npc;
 pub use npc::{NpcFlags, NpcService};
 
 mod layout;
-pub use layout::{Field, FieldLayout, FieldSpan};
+pub use layout::{Field, FieldSpan};
 
 // Native index anchors for watchers and fixtures, derived from the 12340 layout.
 /// `CORPSE_FIELD_DYNAMIC_FLAGS`; bit 0 is lootable insignia. On a unit, index 36 is
 /// `UNIT_FIELD_BYTES_0`, so a field edge carries its object class.
 pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 =
-    FieldLayout::Wrath12340.index_of(Field::CorpseDynamicFlags);
+    Field::CorpseDynamicFlags.index();
 // UNIT fields. The client reads FLAGS, COMBATREACH, DYNAMIC_FLAGS and NPC_FLAGS at unit block
 // bytes 0xa0, 0x1f0, 0x224 and 0x234.
 /// The unit's target; the client turns an idle unit to face it, and no packet carries that facing.
@@ -22,18 +22,18 @@ pub const FIELD_CORPSE_DYNAMIC_FLAGS: u16 =
 /// The summoner of a pet, guardian or totem; with CREATEDBY, the "owned by me" test of `0x5efea0`.
 /// The channel's target, possibly the caster (`UpdateFields_1_12_1.h:48`). Public, so another
 /// unit's channel renders from it; `MSG_CHANNEL_START`/`UPDATE` reach only the caster.
-pub const FIELD_UNIT_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
+pub const FIELD_UNIT_HEALTH: u16 = Field::UnitHealth.index();
 /// Five power slots: mana, rage, focus, energy, happiness; `MAXPOWER1..5` follow `MAXHEALTH`.
 #[cfg(test)]
-const FIELD_UNIT_POWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitPower);
-pub const FIELD_UNIT_MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+const FIELD_UNIT_POWER1: u16 = Field::UnitPower.index();
+pub const FIELD_UNIT_MAXHEALTH: u16 = Field::UnitMaxHealth.index();
 #[cfg(test)]
-const FIELD_UNIT_MAXPOWER1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxPower);
-pub const FIELD_UNIT_LEVEL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitLevel);
+const FIELD_UNIT_MAXPOWER1: u16 = Field::UnitMaxPower.index();
+pub const FIELD_UNIT_LEVEL: u16 = Field::UnitLevel.index();
 pub const FIELD_UNIT_FACTIONTEMPLATE: u16 =
-    FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
-pub const FIELD_UNIT_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
-pub const FIELD_UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    Field::UnitFactionTemplate.index();
+pub const FIELD_UNIT_BYTES_1: u16 = Field::UnitBytes1.index();
+pub const FIELD_UNIT_FLAGS: u16 = Field::UnitFlags.index();
 /// Aura-state bits, tested as `1 << (state - 1)` by the usable check (client `[unit+0x110]+0x1dc`).
 /// Horizontal bounding radius, in yards.
 /// The unshifted appearance, untouched by forms, morphs and polymorph (`UpdateFields_1_12_1.h:77`).
@@ -41,7 +41,7 @@ pub const FIELD_UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFl
 /// The ridden mount's `CreatureDisplayInfo` id, 0 when unmounted; this field, not the aura, is the
 /// mounted state (`Unit::IsMounted`; client `[unit+0x110]+0x1fc`).
 pub const FIELD_UNIT_MOUNTDISPLAYID: u16 =
-    FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+    Field::UnitMountDisplayId.index();
 /// Nonzero on a pet or charm; the rank getter `0x605620` then forces rank 0, so an enslaved mob
 /// shows no elite dragon, tooltip rank word or boss skull.
 /// Unix time of the pet's last rename (`Pet.cpp:285`). The name itself comes from
@@ -50,11 +50,11 @@ pub const FIELD_UNIT_MOUNTDISPLAYID: u16 =
 /// client reads both unsigned.
 /// Two `u16`s: `GetPetTrainingPoints` (`0x4be790`) returns the high word first, which
 /// `PetPaperDollFrame.lua` names `totalPoints`, then the low word as `spent`.
-pub const FIELD_UNIT_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+pub const FIELD_UNIT_DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
 /// The spell being channeled, 0 for none (`UpdateFields_1_12_1.h:89`).
-pub const FIELD_UNIT_CHANNEL_SPELL: u16 = FieldLayout::Wrath12340.index_of(Field::UnitChannelSpell);
+pub const FIELD_UNIT_CHANNEL_SPELL: u16 = Field::UnitChannelSpell.index();
 /// The summoning spell, 0 for none; the first gate of the client's feed-pet path `0x6ea1e0`.
-pub const FIELD_UNIT_NPC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
+pub const FIELD_UNIT_NPC_FLAGS: u16 = Field::UnitNpcFlags.index();
 
 /// Aura slots per unit (vmangos `MAX_AURAS`, `SpellAuraDefines.h:25`).
 pub const UNIT_AURA_SLOTS: u8 = 48;
@@ -95,7 +95,7 @@ impl UnitAuraSlot {
     }
 }
 
-pub const FIELD_PLAYER_QUEST_LOG_1_1: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerQuestLog);
+pub const FIELD_PLAYER_QUEST_LOG_1_1: u16 = Field::PlayerQuestLog.index();
 
 /// The indices a field watch names: the same constants the accessors read, so the two agree.
 pub mod field {
@@ -135,8 +135,8 @@ pub mod quest_slot_state {
 // Inventory fields. The PLAYER slot arrays are private, and each slot is a 2-field guid.
 
 pub const FIELD_PLAYER_INV_SLOT_HEAD: u16 =
-    FieldLayout::Wrath12340.index_of(Field::PlayerInvSlotHead); // 23 slots × 2 (equipment 0–18, bags 19–22)
-pub const FIELD_PLAYER_FIELD_COINAGE: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerCoinage); // copper
+    Field::PlayerInvSlotHead.index(); // 23 slots × 2 (equipment 0–18, bags 19–22)
+pub const FIELD_PLAYER_FIELD_COINAGE: u16 = Field::PlayerCoinage.index(); // copper
                                                                                                     // The watched reputation slot, signed: slot 0 is a real faction, so only -1 means none.
                                                                                                     // The rested pool in base kill-XP units: a kill drains it 1:1 while granting +100%
                                                                                                     // (`Player::GetXPRestBonus`), so the doubled span on the XP bar is twice this value.
@@ -149,13 +149,13 @@ pub const PLAYER_EXPLORED_ZONES_SLOTS: u16 = 128;
 // negative float wraps on x86 and saturates to 0 on aarch64.
 // (`Player.cpp:3336`, `Player.cpp:7274`)
 pub const FIELD_PLAYER_SKILL_INFO_1_1: u16 =
-    FieldLayout::Wrath12340.index_of(Field::PlayerSkillInfo11); // ×384: 128 skills × 3 dwords
+    Field::PlayerSkillInfo11.index(); // ×384: 128 skills × 3 dwords
 
 // Unspent talent points and free primary professions, `UnitCharacterPoints("player")`.
 // Tracking masks the minimap tests: bit `1 << (n - 1)` for creature type or `LockType.dbc` id `n`,
 // one bit per active tracking aura.
 // Bit 0x10 is PLAYER_FLAGS_GHOST (`Player.h:319`), held by the ghost aura 8326 until resurrection.
-pub const FIELD_PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
+pub const FIELD_PLAYER_FLAGS: u16 = Field::PlayerFlags.index();
 // The client's player block base `[player+0xe68]` is field 188: the arbiter at +0x0, PLAYER_FLAGS
 // at +0x8 and the duel team at +0x20, the three reads of `UnitReaction`'s duel leg (`0x6061e0`).
 // Public, so `GetGuildInfo(unit)` (`0x4c9330`, reading block +0xc and +0x10) answers for any
@@ -203,10 +203,9 @@ pub struct CorpseLook {
 pub struct ObjectFields {
     /// The wire's block mask, verbatim (`index = word * 32 + bit`).
     present: Vec<u32>,
-    layout: FieldLayout,
     /// Always `present.len() * 32` long; an unset slot holds 0 but must be read through the mask.
     values: Vec<u32>,
-    /// The created type's [`FieldLayout::descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
+    /// The created type's [`Field::descriptor_len`], below which absent reads 0; 0 for a delta or fixture.
     descriptor_end: u16,
 }
 
@@ -215,7 +214,7 @@ impl ObjectFields {
 
     /// Marks a CREATE snapshot of `object_type`, so absent fields in its descriptor read 0.
     pub fn into_created(mut self, object_type: ObjectType) -> Self {
-        self.descriptor_end = self.layout.descriptor_len(object_type);
+        self.descriptor_end = Field::descriptor_len(object_type);
         self
     }
 
@@ -228,42 +227,29 @@ impl ObjectFields {
         this
     }
 
-    /// A fixture/decoded native descriptor. The layout is set before CREATE zero-fill.
-    pub fn from_native_pairs(layout: FieldLayout, pairs: &[(u16, u32)]) -> Self {
-        Self {
-            layout,
-            ..Self::from_pairs(pairs)
-        }
-    }
-
-    /// A fixture from semantic `(field, value)` pairs, each the field's first dword on `layout`.
-    /// A field the layout lacks panics: a fixture naming it is wrong for that dialect.
-    pub fn from_fields(layout: FieldLayout, pairs: &[(Field, u32)]) -> Self {
+    /// A fixture from semantic `(field, value)` pairs, each the field's first dword. A field the
+    /// layout lacks panics.
+    pub fn from_fields(pairs: &[(Field, u32)]) -> Self {
         let slots: Vec<_> = pairs
             .iter()
             .map(|&(field, value)| (field, 0, value))
             .collect();
-        Self::from_field_slots(layout, &slots)
+        Self::from_field_slots(&slots)
     }
 
-    /// A fixture from semantic `(field, dword offset, value)` triples on `layout`: a GUID's high
+    /// A fixture from semantic `(field, dword offset, value)` triples: a GUID's high
     /// half, an array member. An offset past the field's width panics.
-    pub fn from_field_slots(layout: FieldLayout, slots: &[(Field, u16, u32)]) -> Self {
+    pub fn from_field_slots(slots: &[(Field, u16, u32)]) -> Self {
         let pairs: Vec<_> = slots
             .iter()
             .map(|&(field, offset, value)| {
-                let span = layout
-                    .resolve(field)
-                    .unwrap_or_else(|| panic!("{field:?} is not in {layout:?}"));
+                let span = field.span()
+                    .unwrap_or_else(|| panic!("{field:?} is not in the 12340 layout"));
                 assert!(offset < span.width, "{field:?}+{offset} is past its width");
                 (span.index + offset, value)
             })
             .collect();
-        Self::from_native_pairs(layout, &pairs)
-    }
-
-    pub fn layout(&self) -> FieldLayout {
-        self.layout
+        Self::from_pairs(&pairs)
     }
 
     #[inline]
@@ -273,7 +259,7 @@ impl ObjectFields {
 
     #[inline]
     pub fn get_at(&self, field: Field, offset: u16) -> Option<u32> {
-        let span = self.layout.resolve(field)?;
+        let span = field.span()?;
         (offset < span.width).then(|| self.get_u32(span.index + offset))?
     }
 
@@ -282,7 +268,7 @@ impl ObjectFields {
     }
 
     pub fn get_field_guid(&self, field: Field, offset: u16) -> Option<u64> {
-        let span = self.layout.resolve(field)?;
+        let span = field.span()?;
         let hi = offset.checked_add(1)?;
         if hi >= span.width {
             return None;
@@ -292,8 +278,7 @@ impl ObjectFields {
     }
 
     pub fn field_present(&self, field: Field, offset: u16) -> bool {
-        self.layout
-            .resolve(field)
+        field.span()
             .is_some_and(|span| offset < span.width && self.contains(span.index + offset))
     }
 
@@ -461,10 +446,6 @@ impl ObjectFields {
     /// order, as the client's `CMirrorHandler` pass does (`0x465330`): a resend of the same value
     /// reports nothing, and an absent old value reads 0. A first create is seeded, never merged.
     pub fn merge_diff(&mut self, delta: ObjectFields, mut changed: impl FnMut(u16, u32, u32)) {
-        assert_eq!(
-            self.layout, delta.layout,
-            "cannot merge different descriptor layouts"
-        );
         if delta.descriptor_end != 0 {
             let words = self.present.len().max(delta.present.len());
             for word in 0..words {
@@ -515,7 +496,7 @@ impl ObjectFields {
         (self.descriptor_end != 0)
             .then(|| {
                 ALL.into_iter()
-                    .find(|&t| self.layout.descriptor_len(t) == self.descriptor_end)
+                    .find(|&t| Field::descriptor_len(t) == self.descriptor_end)
             })
             .flatten()
     }

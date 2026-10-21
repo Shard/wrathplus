@@ -200,11 +200,9 @@ fn answers_map_to_their_sends() {
 /// `UnitIsControlling`: a unit with a charm, else a summon.
 #[test]
 fn controlling_units_hold_a_charm_or_a_summon() {
-    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+    use benilla_protocol::types::{Field, ObjectFields};
     let unit = |slots: &[(Field, u16, u32)]| {
-        ObjectStore(ObjectFields::from_field_slots(
-            FieldLayout::Wrath12340,
-            slots,
+        ObjectStore(ObjectFields::from_field_slots(slots,
         ))
     };
     let charmer = unit(&[(Field::UnitCharm, 0, 5)]);

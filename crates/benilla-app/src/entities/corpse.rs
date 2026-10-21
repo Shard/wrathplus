@@ -210,9 +210,7 @@ mod tests {
         // race 1 (Human), sex 0, in CORPSE_FIELD_BYTES_1 bytes 1/2.
         let bytes_1 = 1u32 << 8;
         let flesh = ObjectStore(
-            ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            ObjectFields::from_fields(&[
                     (benilla_protocol::types::Field::CorpseBytes1, bytes_1),
                     (benilla_protocol::types::Field::CorpseBytes2, 0),
                 ],
@@ -224,9 +222,7 @@ mod tests {
             Some(CorpseModel::Flesh(49))
         );
         let bones = ObjectStore(
-            ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            ObjectFields::from_fields(&[
                     (benilla_protocol::types::Field::CorpseBytes1, bytes_1),
                     (benilla_protocol::types::Field::CorpseBytes2, 0),
                     (benilla_protocol::types::Field::CorpseFlags, 0x01),

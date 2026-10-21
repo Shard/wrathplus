@@ -548,9 +548,7 @@ mod tests {
                     display_id: None,
                     scale: 1.0,
                 },
-                ObjectStore(ObjectFields::from_field_slots(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    &[
+                ObjectStore(ObjectFields::from_field_slots(&[
                         (benilla_protocol::types::Field::UnitTarget, 0, 7),
                         (benilla_protocol::types::Field::UnitTarget, 1, 0),
                     ],

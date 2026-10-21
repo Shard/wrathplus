@@ -203,19 +203,19 @@ mod tests {
     use crate::spell::group_relation::publish_group_roster;
     use crate::spell::targeting::corpse_fixture as fx;
     use benilla_protocol::types::GroupMemberEntry;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
     use bevy::ecs::system::RunSystemOnce;
 
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_HEALTH`,
     /// `UNIT_FIELD_FLAGS`, `UNIT_FIELD_CHARMEDBY` and `UNIT_FIELD_CREATEDBY`.
-    const TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
-    const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-    const CHARMED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby);
-    const CREATED_BY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCreatedby);
+    const TYPE: u16 = Field::ObjectType.index();
+    const HEALTH: u16 = Field::UnitHealth.index();
+    const FLAGS: u16 = Field::UnitFlags.index();
+    const CHARMED_BY: u16 = Field::UnitCharmedby.index();
+    const CREATED_BY: u16 = Field::UnitCreatedby.index();
     /// `UNIT_FIELD_FACTIONTEMPLATE`, on [`fx::factions`]' rows 1 (Human) and 2 (Orc).
-    const TEMPLATE: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFactionTemplate);
+    const TEMPLATE: u16 = Field::UnitFactionTemplate.index();
     const PLAYER_TYPE: u32 = 0x19;
 
     // The words: `TARGET_FLAG_*`.

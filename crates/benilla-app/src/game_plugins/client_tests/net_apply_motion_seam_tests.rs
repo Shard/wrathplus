@@ -20,8 +20,7 @@ use crate::motion::UnitMoveModes;
 use crate::net::{GuidIndex, NetEvents, NetHandlerApp};
 
 const GUID: u64 = 0xF130_0000_4321_0001;
-const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::UnitHealth);
+const FIELD_UNIT_HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
 
 fn create() -> SessionEvent {
     SessionEvent::ObjectCreate {

@@ -265,13 +265,12 @@ pub(super) fn assist(actor: &ObjectStore, target: &ObjectStore, toward: u8, ctx:
 mod tests {
     use super::*;
     use crate::names::{CreatureRecord, NameCache};
-    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+    use benilla_protocol::types::{Field, ObjectFields};
     use std::collections::HashMap;
 
     const ENTRY: u32 = 1423;
 
     fn unit(player: bool, flags: u32, pvp: u8, owner: u64) -> ObjectStore {
-        let layout = FieldLayout::Wrath12340;
         let mut pairs = vec![];
         for (field, value) in [
             (Field::ObjectType, if player { 0x19 } else { 9 }),
@@ -279,11 +278,11 @@ mod tests {
             (Field::UnitFlags, flags),
             (Field::UnitBytes2, u32::from(pvp) << 8),
         ] {
-            pairs.push((layout.resolve(field).unwrap().index, value));
+            pairs.push((field.span().unwrap().index, value));
         }
-        let index = layout.resolve(Field::UnitCreatedby).unwrap().index;
+        let index = Field::UnitCreatedby.span().unwrap().index;
         pairs.extend([(index, owner as u32), (index + 1, (owner >> 32) as u32)]);
-        ObjectStore(ObjectFields::from_native_pairs(layout, &pairs))
+        ObjectStore(ObjectFields::from_pairs(&pairs))
     }
 
     fn names(type_flags: u32) -> NameCache {
@@ -376,11 +375,8 @@ mod tests {
     #[test]
     fn assist_refuses_a_target_whose_controller_duels_someone_else() {
         let actor = unit(true, PC, 0, 0);
-        let layout = FieldLayout::Wrath12340;
-        let at = |field| layout.resolve(field).unwrap().index;
-        let duellist = ObjectStore(ObjectFields::from_native_pairs(
-            layout,
-            &[
+        let at = |field: Field| field.span().unwrap().index;
+        let duellist = ObjectStore(ObjectFields::from_pairs(&[
                 (at(Field::ObjectType), 0x19),
                 (at(Field::UnitFlags), PC),
                 (at(Field::PlayerDuelTeam), 1),

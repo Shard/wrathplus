@@ -8,25 +8,24 @@ use crate::net::SelfPlayer;
 use crate::ui_items::feed::*;
 use crate::inventory::BANK_CONTAINER;
 use crate::inventory::KEYRING_CONTAINER;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_ui::script::UiScript;
 use bevy::prelude::*;
 
 fn native_fields(
-    layout: FieldLayout,
     values: &[(Field, u16, u32)],
 ) -> benilla_protocol::ObjectFields {
     let pairs: Vec<_> = values
         .iter()
-        .map(|&(field, offset, value)| (layout.resolve(field).unwrap().index + offset, value))
+        .map(|&(field, offset, value)| (field.span().unwrap().index + offset, value))
         .collect();
-    benilla_protocol::ObjectFields::from_native_pairs(layout, &pairs)
+    benilla_protocol::ObjectFields::from_pairs(&pairs)
 }
 
 #[test]
 fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
     // Real feed + native descriptors, including a low-level Wrath player's entire keyring.
-    let (layout, bank_count, bag_count, key_count) = (FieldLayout::Wrath12340, 28u8, 7u8, 32u8);
+    let (bank_count, bag_count, key_count) = (28u8, 7u8, 32u8);
     let mut app = crate::game_plugins::schedule_tests::headless_client();
     let script = UiScript::new().unwrap();
     script.run("SEEN = {}; local f=CreateFrame('Frame'); f:RegisterEvent('BAG_OPEN'); f:RegisterEvent('BAG_CLOSED'); f:RegisterEvent('BAG_UPDATE'); f:RegisterEvent('PLAYERBANKSLOTS_CHANGED'); f:SetScript('OnEvent', function(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) table.insert(SEEN,event..' '..tostring(arg1)) end)").unwrap();
@@ -35,9 +34,7 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
         .world_mut()
         .spawn((
             SelfPlayer,
-            ObjectStore(native_fields(
-                layout,
-                &[
+            ObjectStore(native_fields(&[
                     (Field::UnitLevel, 0, 1),
                     (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 101),
                     (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),
@@ -78,7 +75,7 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
             .world_mut()
             .spawn((
                 crate::net::Guid(guid),
-                ObjectStore(native_fields(layout, &values)),
+                ObjectStore(native_fields(&values)),
                 crate::items::ItemObject { container },
                 crate::items::Countdowns::default(),
             ))
@@ -140,9 +137,7 @@ fn real_container_feed_includes_last_storage_slots_and_bag_lifecycle() {
         .non_send_resource_mut::<UiScript>()
         .run("SEEN={}")
         .unwrap();
-    app.world_mut().get_mut::<ObjectStore>(player).unwrap().0 = native_fields(
-        layout,
-        &[
+    app.world_mut().get_mut::<ObjectStore>(player).unwrap().0 = native_fields(&[
             (Field::UnitLevel, 0, 1),
             (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1), 0),
             (Field::PlayerBankSlot1, 2 * u16::from(bank_count - 1) + 1, 0),

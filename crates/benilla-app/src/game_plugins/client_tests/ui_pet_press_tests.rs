@@ -13,7 +13,7 @@ use crate::ui_pet::drain::PetPress;
 use crate::ui_pet::press_tests::*;
 use crate::ui_pet::PetBar;
 use benilla_formats::{SpellCatalog, SpellDisplay};
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::types::{
     PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
     PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE,
@@ -383,9 +383,7 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+            ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
             )),
         ))
         .id();
@@ -412,13 +410,11 @@ fn an_attack_press_with_no_pet_object_sends_nothing() {
             Guid(PET),
             owned_pet_with(&[
                 (
-                    benilla_protocol::types::FieldLayout::Wrath12340
-                        .index_of(benilla_protocol::types::Field::UnitHealth),
+                    benilla_protocol::types::Field::UnitHealth.index(),
                     100,
                 ),
                 (
-                    benilla_protocol::types::FieldLayout::Wrath12340
-                        .index_of(benilla_protocol::types::Field::UnitMaxHealth),
+                    benilla_protocol::types::Field::UnitMaxHealth.index(),
                     100,
                 ),
             ]),

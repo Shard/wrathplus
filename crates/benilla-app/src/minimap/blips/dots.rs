@@ -404,7 +404,7 @@ pub(in crate::minimap) fn emit_party_dots(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     /// Creature type 7, Humanoid: a player's, by race (`ChrRaces.dbc` column 9).
     const CREATURE_TYPE_HUMANOID: u32 = 7;
@@ -415,10 +415,10 @@ mod tests {
         use crate::net::ObjectStore;
         use benilla_protocol::ObjectFields;
 
-        const FIELD_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth); // UNIT_FIELD_HEALTH
-        const FIELD_SUMMONEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummonedby); // UNIT_FIELD_SUMMONEDBY (2 dwords)
-        const FIELD_CHARMEDBY: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCharmedby); // UNIT_FIELD_CHARMEDBY (2 dwords)
-        const FIELD_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes1);
+        const FIELD_HEALTH: u16 = Field::UnitHealth.index(); // UNIT_FIELD_HEALTH
+        const FIELD_SUMMONEDBY: u16 = Field::UnitSummonedby.index(); // UNIT_FIELD_SUMMONEDBY (2 dwords)
+        const FIELD_CHARMEDBY: u16 = Field::UnitCharmedby.index(); // UNIT_FIELD_CHARMEDBY (2 dwords)
+        const FIELD_BYTES_1: u16 = Field::UnitBytes1.index();
         /// `UNIT_FIELD_BYTES_1` byte 2 bit 2, the `& 4` the classifier tests.
         const UNTRACKABLE: u32 = 0x4 << 16;
         const ME: u64 = 0x0000_0000_0000_0007;
@@ -666,9 +666,7 @@ mod tests {
             false
         ));
         // A cat-form player (`UNIT_FIELD_BYTES_2` byte 3 is form 1).
-        let cat_druid = ObjectStore(benilla_protocol::ObjectFields::from_fields(
-            FieldLayout::Wrath12340,
-            &[(Field::UnitBytes2, 1 << 24)],
+        let cat_druid = ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitBytes2, 1 << 24)],
         ));
         let cat = Some(
             CreatureTypeSources {

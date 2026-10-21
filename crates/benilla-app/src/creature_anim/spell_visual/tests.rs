@@ -15,7 +15,7 @@ use super::{
     SpellVisuals,
 };
 use crate::creature_anim::SpellGoTargets;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 
 /// Demon Armor's shipped chain: visual 130 → precast kit 217 with anim 52, an instant self-buff.
 const SPELL: u32 = 706;
@@ -1007,7 +1007,7 @@ fn the_mount_poof_puffs_on_the_build_leg_only() {
     use benilla_protocol::ObjectFields;
 
     /// `UNIT_FIELD_MOUNTDISPLAYID` (index 133).
-    const FIELD_MOUNTDISPLAYID: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMountDisplayId);
+    const FIELD_MOUNTDISPLAYID: u16 = Field::UnitMountDisplayId.index();
     /// The shipped path of `SpellVisualEffectName` row 1185, the druid-morph cloud.
     const POOF: &str = "Spells\\DruidMorph_Impact_Base.mdx";
     const POOF_FX: u32 = 1185;
@@ -1193,9 +1193,7 @@ fn a_kit_with_a_chain_char_proc_asks_for_a_beam_from_both_dispatcher_sites() {
     let channeller = app
         .world_mut()
         .spawn(crate::net::ObjectStore(
-            benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitChannelSpell, BEAM_SPELL)],
+            benilla_protocol::ObjectFields::from_fields(&[(Field::UnitChannelSpell, BEAM_SPELL)],
             )
             .into_created(benilla_protocol::types::ObjectType::Unit),
         ))
@@ -1270,8 +1268,7 @@ const BLACKCROW: RealRanged = RealRanged {
 
 /// `PLAYER_VISIBLE_ITEM_18_ENTRYID`, the item entry in equipment slot 17 (`EQUIPMENT_SLOT_RANGED`):
 /// two dwords per slot, the entry first.
-const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-    .index_of(benilla_protocol::types::Field::PlayerVisibleItems)
+const VISIBLE_RANGED_ENTRY_FIELD: u16 = benilla_protocol::types::Field::PlayerVisibleItems.index()
     + 2 * 17;
 
 /// Keeps the item layer's ask-once channel alive, so an unexpected `ItemQuery` (a template not
@@ -1656,8 +1653,7 @@ fn an_anim_only_state_kit_still_arms_on_the_aura_add_edge() {
 
 #[test]
 fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
-    use benilla_protocol::types::{Field, FieldLayout, ObjectType};
-    let layout = FieldLayout::Wrath12340;
+    use benilla_protocol::types::{Field, ObjectType};
     for (kind, field, loot, level, mount) in [
         (
             ObjectType::Unit,
@@ -1685,16 +1681,14 @@ fn native_scalar_fx_edges_preserve_class_and_mount_gates() {
         ),
         (ObjectType::Unit, Field::UnitFlags, false, false, false),
     ] {
-        let span = layout
-            .resolve(field)
+        let span = field.span()
             .expect("FX dependency exists in both layouts");
-        let (resolved, offset) = layout.field_at(kind, span.index).unwrap();
+        let (resolved, offset) = benilla_protocol::types::Field::at(kind, span.index).unwrap();
         assert_eq!((resolved, offset), (field, 0));
         let mut edge = crate::net::FieldChanged {
             entity: Entity::PLACEHOLDER,
             guid: 42,
             kind,
-            layout,
             field: resolved,
             offset,
             old: 0,
@@ -1753,7 +1747,7 @@ fn state_aura_ids_read_packet_snapshots_including_authoritative_empty() {
 #[test]
 fn packet_morph_latch_seeds_first_sight_then_arms_swaps_and_removals_only() {
     use benilla_protocol::{
-        types::{Field, FieldLayout, ObjectFields, ObjectType},
+        types::{Field, ObjectFields, ObjectType},
         wrath_auras::NativeAura,
     };
     let mut app = App::new();
@@ -1783,15 +1777,14 @@ fn packet_morph_latch_seeds_first_sight_then_arms_swaps_and_removals_only() {
         ..crate::ui_action::Spells::empty_for_tests()
     });
     app.add_systems(Update, super::arm_morph_latch);
-    let layout = FieldLayout::Wrath12340;
-    let health = layout.resolve(Field::UnitHealth).unwrap().index;
-    let object_type = layout.resolve(Field::ObjectType).unwrap().index;
+    let health = Field::UnitHealth.span().unwrap().index;
+    let object_type = Field::ObjectType.span().unwrap().index;
     let unit = app
         .world_mut()
         .spawn((
             crate::net::Guid(42),
             crate::net::ObjectStore(
-                ObjectFields::from_native_pairs(layout, &[(object_type, 0x09), (health, 1)])
+                ObjectFields::from_pairs(&[(object_type, 0x09), (health, 1)])
                     .into_created(ObjectType::Unit),
             ),
         ))

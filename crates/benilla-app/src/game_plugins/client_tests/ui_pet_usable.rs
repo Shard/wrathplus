@@ -14,7 +14,7 @@ use crate::ui_pet::press_tests::{
 };
 use crate::ui_pet::usable_tests::{FARSIGHT, OTHER};
 use crate::ui_pet::PetBar;
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::types::{
     PetActionEntry, PET_ACT_COMMAND, PET_ACT_ENABLED, PET_ACT_REACTION, PET_COMMAND_ATTACK,
     PET_COMMAND_FOLLOW, PET_COMMAND_STAY, PET_REACT_AGGRESSIVE, PET_STATE_BAR_DISABLED,
@@ -39,8 +39,8 @@ fn set_player(rig: &mut Rig, extra: &[(u16, u32)]) {
     world.entity_mut(me).insert(player_with(&fields));
 }
 
-const HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-const MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+const HEALTH: u16 = Field::UnitHealth.index();
+const MAXHEALTH: u16 = Field::UnitMaxHealth.index();
 
 /// The pet, replaced by [`owned_pet_with`] `extra`: alive, so the Attack order's validator passes.
 fn set_pet(rig: &mut Rig, extra: &[(u16, u32)]) {
@@ -73,9 +73,7 @@ fn scene() -> Rig {
         .spawn((
             Guid(FOE),
             Transform::default(),
-            crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(
-                FieldLayout::Wrath12340,
-                &[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
+            crate::net::ObjectStore(benilla_protocol::ObjectFields::from_fields(&[(Field::UnitHealth, 100), (Field::UnitMaxHealth, 100)],
             )),
         ))
         .id();

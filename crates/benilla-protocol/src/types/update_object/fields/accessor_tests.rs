@@ -5,12 +5,11 @@ use super::*;
 fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
     macro_rules! check {
         ($name:literal, $field:expr, $read:expr, $expected:expr) => {
-            let layout = FieldLayout::Wrath12340;
-            let span = layout.resolve($field);
-            let pairs: Vec<_> = (0..layout.descriptor_len(ObjectType::Player))
+            let span = ($field).span();
+            let pairs: Vec<_> = (0..Field::descriptor_len(ObjectType::Player))
                 .map(|index| (index, 0x3f00_0000 + u32::from(index) * 257))
                 .collect();
-            let fields = ObjectFields::from_native_pairs(layout, &pairs);
+            let fields = ObjectFields::from_pairs(&pairs);
             let raw = span.map(|s| 0x3f00_0000 + u32::from(s.index) * 257);
             let guid = span.filter(|s| s.width >= 2).map(|s| {
                 u64::from(0x3f00_0000 + u32::from(s.index) * 257)
@@ -19,9 +18,8 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
             assert_eq!(
                 $read(&fields),
                 $expected(raw, guid),
-                "{} {:?}",
-                $name,
-                layout
+                "{}",
+                $name
             );
         };
     }
@@ -891,23 +889,20 @@ fn scalar_accessors_read_distinct_native_fields_in_both_dialects() {
     );
 }
 
-fn fixture(layout: FieldLayout, values: &[(Field, u16, u32)]) -> ObjectFields {
+fn fixture(values: &[(Field, u16, u32)]) -> ObjectFields {
     let pairs: Vec<_> = values
         .iter()
         .filter_map(|&(field, offset, value)| {
-            let span = layout.resolve(field)?;
+            let span = field.span()?;
             (offset < span.width).then_some((span.index + offset, value))
         })
         .collect();
-    ObjectFields::from_native_pairs(layout, &pairs)
+    ObjectFields::from_pairs(&pairs)
 }
 
 #[test]
 fn dialect_packed_bytes_never_borrow_neighbor_meanings() {
-    let layout = FieldLayout::Wrath12340;
-    let fields = fixture(
-        layout,
-        &[
+    let fields = fixture(&[
             (Field::UnitBytes0, 0, 0x0403_0201),
             (Field::UnitBytes1, 0, 0xa107_9908),
             (Field::UnitBytes2, 0, 0x1200_0002),
@@ -951,10 +946,7 @@ fn dialect_packed_bytes_never_borrow_neighbor_meanings() {
 
 #[test]
 fn native_go_and_dynamicobject_fields_do_not_alias_movement_or_parent_rotation() {
-    let layout = FieldLayout::Wrath12340;
-    let fields = fixture(
-        layout,
-        &[
+    let fields = fixture(&[
             (Field::GameobjectBytes1, 0, 0xabcd_0b02),
             (Field::GameobjectDynamic, 0, 0xbeef_0035),
             (Field::GameobjectParentrotation, 0, 8f32.to_bits()),
@@ -963,17 +955,16 @@ fn native_go_and_dynamicobject_fields_do_not_alias_movement_or_parent_rotation()
     assert_eq!(fields.gameobject_state(), Some(2));
     assert_eq!(fields.gameobject_type_id(), 11);
     assert_eq!(fields.gameobject_dynamic_flags(), 0x35);
-    let created = ObjectFields::from_native_pairs(layout, &[]).into_created(ObjectType::GameObject);
+    let created = ObjectFields::from_pairs(&[]).into_created(ObjectType::GameObject);
     assert_eq!(created.gameobject_state(), Some(0));
     assert_eq!(
-        ObjectFields::from_native_pairs(layout, &[]).gameobject_state(),
+        ObjectFields::from_pairs(&[]).gameobject_state(),
         None
     );
 }
 
 #[test]
 fn native_array_accessors_obey_spans_and_distinct_elements() {
-    let layout = FieldLayout::Wrath12340;
     let roots = [
         Field::PlayerInvSlotHead,
         Field::PlayerPackSlot1,
@@ -993,11 +984,11 @@ fn native_array_accessors_obey_spans_and_distinct_elements() {
         ObjectFields::container_slot,
     ];
     for (root, read) in roots.into_iter().zip(readers) {
-        let span = layout.resolve(root).unwrap();
+        let span = root.span().unwrap();
         let pairs: Vec<_> = (0..span.width)
             .map(|i| (span.index + i, 700 + u32::from(i)))
             .collect();
-        let fields = ObjectFields::from_native_pairs(layout, &pairs);
+        let fields = ObjectFields::from_pairs(&pairs);
         for i in 0..span.width / 2 {
             assert_eq!(
                 read(&fields, i as u8),
@@ -1006,9 +997,7 @@ fn native_array_accessors_obey_spans_and_distinct_elements() {
         }
         assert_eq!(read(&fields, (span.width / 2) as u8), None);
     }
-    let fields = fixture(
-        layout,
-        &[
+    let fields = fixture(&[
             (Field::PlayerVisibleItems, 36, 765),
             (Field::PlayerVisibleItems, 37, 0x0016_0015),
             (Field::PlayerVisibleItems, 220, 22),
@@ -1056,10 +1045,7 @@ fn native_array_accessors_obey_spans_and_distinct_elements() {
 
 #[test]
 fn unit_composites_and_legacy_only_values_keep_native_semantics() {
-    let layout = FieldLayout::Wrath12340;
-    let fields = fixture(
-        layout,
-        &[
+    let fields = fixture(&[
             (Field::UnitCharm, 0, 41),
             (Field::UnitSummon, 0, 42),
             (Field::UnitSummonedby, 0, 43),
@@ -1099,7 +1085,6 @@ fn unit_composites_and_legacy_only_values_keep_native_semantics() {
 
 #[test]
 fn moved_stats_resistances_and_native_honor_aliases_read_distinct_values() {
-    let layout = FieldLayout::Wrath12340;
     let positives = [
         Field::UnitPosstat0,
         Field::UnitPosstat1,
@@ -1146,7 +1131,7 @@ fn moved_stats_resistances_and_native_honor_aliases_read_distinct_values() {
         ]);
     }
     values.extend([(Field::PlayerLifetimeHonorableKills, 0, 142)]);
-    let fields = fixture(layout, &values);
+    let fields = fixture(&values);
     for i in 0..5 {
         assert_eq!(fields.player_posstat(i), Some(61 + i as i32));
         assert_eq!(fields.player_negstat(i), Some(-71 - i as i32));
@@ -1174,7 +1159,6 @@ fn moved_stats_resistances_and_native_honor_aliases_read_distinct_values() {
 
 #[test]
 fn corpse_quest_resource_and_object_accessors_preserve_both_native_shapes() {
-    let layout = FieldLayout::Wrath12340;
     let mut values = vec![
         (Field::CorpseBytes1, 0, 0x0403_0200),
         (Field::CorpseBytes2, 0, 0x0807_0605),
@@ -1203,10 +1187,8 @@ fn corpse_quest_resource_and_object_accessors_preserve_both_native_shapes() {
             (Field::UnitMaxPower, i, 501 + u32::from(i)),
         ]);
     }
-    let fields = fixture(layout, &values);
-    let corpse = fixture(
-        layout,
-        &[
+    let fields = fixture(&values);
+    let corpse = fixture(&[
             (Field::CorpseBytes1, 0, 0x0403_0200),
             (Field::CorpseBytes2, 0, 0x0807_0605),
             (Field::CorpseFlags, 0, 0x3d),
@@ -1260,19 +1242,18 @@ fn corpse_quest_resource_and_object_accessors_preserve_both_native_shapes() {
     assert_eq!(fields.created_as(), None);
     let created = fields.clone().into_created(ObjectType::Player);
     assert_eq!(created.created_as(), Some(ObjectType::Player));
-    assert_eq!(created.layout(), layout);
     assert!(created.field_present(Field::ObjectType, 0));
     assert_eq!(created.get_field_guid(Field::UnitSummon, 0), None);
     assert_eq!(created.get(Field::ObjectType), Some(0x17));
     assert_eq!(created.get_at(Field::ObjectType, 1), None);
     assert_eq!(created.get_float(Field::ObjectScaleX, 0), Some(0.));
     let mut merged = created.clone();
-    let delta = fixture(layout, &[(Field::UnitHealth, 0, 222)]);
+    let delta = fixture(&[(Field::UnitHealth, 0, 222)]);
     let mut edges = Vec::new();
     merged.merge_diff(delta, |index, old, new| edges.push((index, old, new)));
     assert_eq!(merged.unit_health(), Some(222));
     assert_eq!(edges.len(), 1);
-    merged.merge(fixture(layout, &[(Field::UnitHealth, 0, 333)]));
+    merged.merge(fixture(&[(Field::UnitHealth, 0, 333)]));
     assert_eq!(merged.unit_health(), Some(333));
 }
 
@@ -1305,38 +1286,33 @@ fn public_accessor_fixture_census_has_no_unreviewed_reader() {
 
 #[test]
 fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
-    let layout = FieldLayout::Wrath12340;
-    let absent = fixture(layout, &[]);
+    let absent = fixture(&[]);
     assert!(!absent.unit_pet_can_be_renamed());
     assert!(!absent.unit_pet_can_be_abandoned());
     for field in [Field::UnitFlags, Field::UnitBytes2] {
         for bit in 0..32 {
-            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+            let fields = fixture(&[(field, 0, 1u32 << bit)]);
             let (source, rename_bit, abandon_bit) = (Field::UnitBytes2, 16, 17);
             assert_eq!(
                 fields.unit_pet_can_be_renamed(),
                 field == source && bit == rename_bit,
-                "rename {layout:?} {field:?} bit {bit}"
+                "rename {field:?} bit {bit}"
             );
             assert_eq!(
                 fields.unit_pet_can_be_abandoned(),
                 field == source && bit == abandon_bit,
-                "abandon {layout:?} {field:?} bit {bit}"
+                "abandon {field:?} bit {bit}"
             );
         }
     }
-    let both = fixture(
-        layout,
-        &[
+    let both = fixture(&[
             (Field::UnitFlags, 0, u32::MAX),
             (Field::UnitBytes2, 0, u32::MAX),
         ],
     );
     assert!(both.unit_pet_can_be_renamed());
     assert!(both.unit_pet_can_be_abandoned());
-    let zero = fixture(
-        layout,
-        &[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
+    let zero = fixture(&[(Field::UnitFlags, 0, 0), (Field::UnitBytes2, 0, 0)],
     );
     assert!(!zero.unit_pet_can_be_renamed());
     assert!(!zero.unit_pet_can_be_abandoned());
@@ -1344,31 +1320,28 @@ fn pet_permissions_use_only_their_native_dialect_field_and_bit() {
 
 #[test]
 fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
-    let layout = FieldLayout::Wrath12340;
-    let absent = fixture(layout, &[]);
+    let absent = fixture(&[]);
     assert!(!absent.unit_is_pvp());
     assert!(!absent.unit_is_ffa_pvp());
     for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
         for bit in 0..32 {
-            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+            let fields = fixture(&[(field, 0, 1u32 << bit)]);
             let (pvp_source, pvp_bit, ffa_source, ffa_bit) =
                 (Field::UnitBytes2, 8, Field::UnitBytes2, 10);
             assert_eq!(
                 fields.unit_is_pvp(),
                 field == pvp_source && bit == pvp_bit,
-                "PvP {layout:?} {field:?} bit {bit}"
+                "PvP {field:?} bit {bit}"
             );
             assert_eq!(
                 fields.unit_is_ffa_pvp(),
                 field == ffa_source && bit == ffa_bit,
-                "FFA {layout:?} {field:?} bit {bit}"
+                "FFA {field:?} bit {bit}"
             );
         }
     }
     for (word, expected) in [(0, false), (u32::MAX, true)] {
-        let fields = fixture(
-            layout,
-            &[
+        let fields = fixture(&[
                 (Field::UnitFlags, 0, word),
                 (Field::PlayerFlags, 0, word),
                 (Field::UnitBytes2, 0, word),
@@ -1381,14 +1354,13 @@ fn replicated_pvp_states_do_not_borrow_old_flags_or_neighbor_bytes() {
 
 #[test]
 fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
-    let layout = FieldLayout::Wrath12340;
-    let absent = fixture(layout, &[]);
+    let absent = fixture(&[]);
     assert_eq!(absent.unit_pvp_state_flags(), None);
     assert!(!absent.unit_is_in_sanctuary());
     for byte in 0..=255u32 {
         // Nonzero neighboring bytes must not leak into the returned byte.
-        let fields = fixture(layout, &[(Field::UnitBytes2, 0, 0xffff_00ff | (byte << 8))]);
-        let expected = (layout == FieldLayout::Wrath12340).then_some(byte as u8);
+        let fields = fixture(&[(Field::UnitBytes2, 0, 0xffff_00ff | (byte << 8))]);
+        let expected = Some(byte as u8);
         assert_eq!(fields.unit_pvp_state_flags(), expected);
         assert_eq!(
             fields.unit_is_in_sanctuary(),
@@ -1397,27 +1369,25 @@ fn pvp_state_byte_is_lossless_wrath_only_and_sanctuary_is_not_a_neighbor_bit() {
     }
     for field in [Field::UnitFlags, Field::PlayerFlags, Field::UnitBytes2] {
         for bit in 0..32 {
-            let fields = fixture(layout, &[(field, 0, 1u32 << bit)]);
+            let fields = fixture(&[(field, 0, 1u32 << bit)]);
             assert_eq!(
                 fields.unit_is_in_sanctuary(),
-                layout == FieldLayout::Wrath12340 && field == Field::UnitBytes2 && bit == 11,
-                "sanctuary {layout:?} {field:?} bit {bit}"
+                field == Field::UnitBytes2 && bit == 11,
+                "sanctuary {field:?} bit {bit}"
             );
         }
     }
-    let zero = fixture(layout, &[(Field::UnitBytes2, 0, 0)]);
+    let zero = fixture(&[(Field::UnitBytes2, 0, 0)]);
     assert_eq!(
         zero.unit_pvp_state_flags(),
-        (layout == FieldLayout::Wrath12340).then_some(0)
+        Some(0)
     );
     assert!(!zero.unit_is_in_sanctuary());
 }
 
 #[test]
 fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
-    let wrath = ObjectFields::from_field_slots(
-        FieldLayout::Wrath12340,
-        &[
+    let wrath = ObjectFields::from_field_slots(&[
             (Field::PlayerArenaTeamInfo11, 0, 11),
             (Field::PlayerArenaTeamInfo11, 1, 99),
             (Field::PlayerArenaTeamInfo11, 7, 0),
@@ -1434,9 +1404,7 @@ fn arena_team_ids_read_each_slots_first_word_on_wrath_only() {
 
 #[test]
 fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
-    let wrath = ObjectFields::from_field_slots(
-        FieldLayout::Wrath12340,
-        &[
+    let wrath = ObjectFields::from_field_slots(&[
             (Field::PlayerGlyphSlots1, 0, 21),
             (Field::PlayerGlyphSlots1, 5, 26),
             (Field::PlayerGlyphs1, 1, 251),
@@ -1460,9 +1428,7 @@ fn glyph_sockets_read_their_slot_glyph_and_unlock_bits_on_wrath_only() {
 
 #[test]
 fn daily_quest_slots_are_native_only() {
-    let wrath = ObjectFields::from_field_slots(
-        FieldLayout::Wrath12340,
-        &[
+    let wrath = ObjectFields::from_field_slots(&[
             (Field::PlayerDailyQuests1, 0, 11389),
             (Field::PlayerDailyQuests1, 24, 13240),
         ],

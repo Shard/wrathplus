@@ -586,9 +586,7 @@ impl Dispatch<'_, '_> {
             .get(entity)
             .map(|(s, _)| s.0.unit_npc_services())
             .unwrap_or_else(|_| {
-                benilla_protocol::types::NpcFlags::from_bits(
-                    benilla_protocol::types::FieldLayout::Wrath12340,
-                    0,
+                benilla_protocol::types::NpcFlags::from_bits(0,
                 )
             });
         let me = self.me();
@@ -608,11 +606,9 @@ impl Dispatch<'_, '_> {
                 })
             });
         let ghost = self_store.is_some_and(|s| s.0.player_is_ghost());
-        let status = match npc_flags.layout() {
-            benilla_protocol::types::FieldLayout::Wrath12340 => {
+        let status = {
                 self.service.quest.wrath_statuses().get(&guid).copied()
-            }
-        };
+            };
         let Some(arm) = service_arm_native(npc_flags, status) else {
             // `0x5f05ca`: no consulted bit does nothing, gesture included.
             debug!("right-click interact: {guid:#x} matches no service bit — nothing sent");
@@ -1417,9 +1413,7 @@ pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> 
     .filter(|&(legacy, _)| bits & legacy != 0)
     .fold(0, |word, (_, bit)| word | bit);
     service_arm_native(
-        benilla_protocol::types::NpcFlags::from_bits(
-            benilla_protocol::types::FieldLayout::Wrath12340,
-            native,
+        benilla_protocol::types::NpcFlags::from_bits(native,
         ),
         status,
     )
@@ -1550,7 +1544,7 @@ pub(super) fn clear(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
 
     /// The `0x5f3427..` toast routing on real data: Peacebloom (lock 29: skill slot, LockType 2,
     /// Skill 0), a rank-155 vein (lock 42: LockType 3), a keyed door, a padlocked chest.
@@ -2080,10 +2074,10 @@ mod tests {
     use crate::net::{ClientCommand, NetCommands, ObjectStore};
     use bevy::ecs::system::RunSystemOnce;
 
-    const F_HEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitHealth);
-    const F_MAXHEALTH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitMaxHealth);
+    const F_HEALTH: u16 = Field::UnitHealth.index();
+    const F_MAXHEALTH: u16 = Field::UnitMaxHealth.index();
     /// `GAMEOBJECT_BYTES_1`, whose byte 1 is the type the GameObject arms fork on.
-    const GO_BYTES_1: u16 = FieldLayout::Wrath12340.index_of(Field::GameobjectBytes1);
+    const GO_BYTES_1: u16 = Field::GameobjectBytes1.index();
     const BOAR: u64 = 0xB0A2;
     const ME: u64 = 0x5E1F;
 
@@ -2174,8 +2168,8 @@ mod tests {
     /// (`0x60c1a1`), with no swing and no service packet; a live player on the same fork swings.
     #[test]
     fn a_ghost_takes_the_attack_arm_and_is_refused_silently() {
-        const F_PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
-        const F_NPC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
+        const F_PLAYER_FLAGS: u16 = Field::PlayerFlags.index();
+        const F_NPC_FLAGS: u16 = Field::UnitNpcFlags.index();
         for (label, own, swings) in [
             (
                 "ghost",
@@ -2319,7 +2313,7 @@ mod tests {
         at: Vec3,
         walk: bool,
     ) -> (World, Entity, crossbeam_channel::Receiver<ClientCommand>) {
-        const F_NPC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitNpcFlags);
+        const F_NPC_FLAGS: u16 = Field::UnitNpcFlags.index();
         let (tx, rx) = crossbeam_channel::unbounded::<ClientCommand>();
         let (mut world, _boar) = right_click_world();
         world.insert_resource(NetCommands(tx));
@@ -2642,7 +2636,7 @@ mod tests {
     #[test]
     fn a_far_body_to_loot_is_walked_to_before_the_loot() {
         const BODY: u64 = 0xB0D7;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+        const F_DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
         let (mut world, _vendor, rx) = walking_world(Vec3::new(14.0, 0.0, 0.0), true);
         let body = world
             .spawn((
@@ -2681,8 +2675,8 @@ mod tests {
     fn a_loot_walk_stops_at_the_square_root_of_the_melee_reach() {
         const BODY: u64 = 0xB0D7;
         const CORPSE: u64 = 0xC0D5;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
-        const F_COMBAT_REACH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCombatreach);
+        const F_DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
+        const F_COMBAT_REACH: u16 = Field::UnitCombatreach.index();
         let loot_click = |world: &mut World, hovered: Hovered| {
             *world.resource_mut::<PressPick>() = PressPick {
                 hovered,
@@ -2947,7 +2941,7 @@ mod tests {
     }
 
     fn attack_wolf_at(at: Vec3, reach: f32) -> (World, crossbeam_channel::Receiver<ClientCommand>) {
-        const F_COMBAT_REACH: u16 = FieldLayout::Wrath12340.index_of(Field::UnitCombatreach);
+        const F_COMBAT_REACH: u16 = Field::UnitCombatreach.index();
         let (mut world, _vendor, rx) = walking_world(Vec3::new(14.0, 0.0, 0.0), true);
         let wolf = world
             .spawn((
@@ -3132,7 +3126,7 @@ mod tests {
     fn wrath_corpse_and_dead_unit_clicks_send_loot() {
         const BODY: u64 = 0xB0D7;
         const CORPSE: u64 = 0xC0D5;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
+        const F_DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
         let click = |world: &mut World, hovered: Hovered| {
             *world.resource_mut::<PressPick>() = PressPick {
                 hovered,
@@ -3202,8 +3196,8 @@ mod tests {
     fn wrath_skin_clicks_and_arrival_verbs_reach_the_wire() {
         const BODY: u64 = 0xB0D7;
         const SKINNING: u32 = 8613;
-        const F_DYNAMIC_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitDynamicFlags);
-        const F_UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+        const F_DYNAMIC_FLAGS: u16 = Field::UnitDynamicFlags.index();
+        const F_UNIT_FLAGS: u16 = Field::UnitFlags.index();
         let skinnable = |world: &mut World| {
             world
                 .spawn((

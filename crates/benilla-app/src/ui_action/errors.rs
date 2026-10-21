@@ -639,18 +639,12 @@ mod attack_actor_tests {
     use super::*;
     use benilla_protocol::ObjectFields;
 
-    const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitHealth);
-    const MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMaxHealth);
-    const FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitFlags);
-    const CHARMEDBY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitCharmedby);
-    const MOUNT: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMountDisplayId);
-    const PLAYER_FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::PlayerFlags);
+    const HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
+    const MAXHEALTH: u16 = benilla_protocol::types::Field::UnitMaxHealth.index();
+    const FLAGS: u16 = benilla_protocol::types::Field::UnitFlags.index();
+    const CHARMEDBY: u16 = benilla_protocol::types::Field::UnitCharmedby.index();
+    const MOUNT: u16 = benilla_protocol::types::Field::UnitMountDisplayId.index();
+    const PLAYER_FLAGS: u16 = benilla_protocol::types::Field::PlayerFlags.index();
 
     fn actor(pairs: &[(u16, u32)]) -> ObjectStore {
         // A live, unowned, unmounted, unimpaired unit unless a case says otherwise.

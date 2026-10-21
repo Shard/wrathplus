@@ -160,18 +160,12 @@ pub(crate) mod fixture {
     /// Absolute descriptor indices: `OBJECT_FIELD_TYPE`, `UNIT_FIELD_CHARMEDBY`,
     /// `UNIT_FIELD_CREATEDBY`, `UNIT_FIELD_HEALTH`, `UNIT_FIELD_FACTIONTEMPLATE` and
     /// `UNIT_FIELD_FLAGS`.
-    pub(crate) const TYPE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectType);
-    pub(crate) const CHARMED_BY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitCharmedby);
-    pub(crate) const CREATED_BY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitCreatedby);
-    pub(crate) const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitHealth);
-    pub(crate) const TEMPLATE: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitFactionTemplate);
-    pub(crate) const FLAGS: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitFlags);
+    pub(crate) const TYPE: u16 = benilla_protocol::types::Field::ObjectType.index();
+    pub(crate) const CHARMED_BY: u16 = benilla_protocol::types::Field::UnitCharmedby.index();
+    pub(crate) const CREATED_BY: u16 = benilla_protocol::types::Field::UnitCreatedby.index();
+    pub(crate) const HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
+    pub(crate) const TEMPLATE: u16 = benilla_protocol::types::Field::UnitFactionTemplate.index();
+    pub(crate) const FLAGS: u16 = benilla_protocol::types::Field::UnitFlags.index();
     /// `TYPEMASK_OBJECT | UNIT | PLAYER`, and `TYPEMASK_OBJECT | UNIT`.
     pub(crate) const PLAYER_TYPE: u32 = 0x19;
     pub(crate) const CREATURE_TYPE: u32 = 0x09;

@@ -625,9 +625,7 @@ mod tests {
         app.world_mut().spawn((
             SelfPlayer,
             Guid(ME),
-            ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[
+            ObjectStore(ObjectFields::from_fields(&[
                     (benilla_protocol::types::Field::UnitHealth, 100),
                     (benilla_protocol::types::Field::UnitMaxHealth, 100),
                     (benilla_protocol::types::Field::UnitBytes1, stand_state),
