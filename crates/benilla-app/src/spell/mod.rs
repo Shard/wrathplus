@@ -51,7 +51,7 @@ pub(crate) use targeting::{
 };
 
 /// A script cast's inputs, the cast tail the action bar uses, for the spellbook's and the stance
-/// bar's calls ([`crate::script_calls`]).
+/// bar's calls (the UI's `script_calls` pass).
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct ScriptCast<'w, 's> {
     pub(crate) targeting: cast_target::CastTargeting<'w, 's>,

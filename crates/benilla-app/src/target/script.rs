@@ -1,5 +1,6 @@
-//! The selection calls of the script call stream ([`crate::script_calls`]), each committed through
-//! the one SetSelection path when its turn comes, so a later call in the same pass reads it.
+//! The selection calls of the script call stream (the UI's `script_calls` pass), each committed
+//! through the one SetSelection path when its turn comes, so a later call in the same pass reads
+//! it.
 
 use bevy::prelude::*;
 

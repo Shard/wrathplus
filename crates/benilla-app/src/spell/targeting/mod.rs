@@ -472,7 +472,7 @@ fn merge(
     ladder.commit_targeted(spell_id, commit, bound);
 }
 
-/// The targeting cursor's script calls, applied in call order by [`crate::script_calls`].
+/// The targeting cursor's script calls, applied in call order by the UI's `script_calls` pass.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct ScriptCursor<'w, 's> {
     tokens: crate::ui_unit::UnitTokens<'w, 's>,
