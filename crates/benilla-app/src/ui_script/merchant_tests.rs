@@ -45,7 +45,7 @@ fn shipped_merchant_frame_drives_end_to_end() {
     const MERCHANT: &str = "Interface\\FrameXML\\MerchantFrame.xml";
     assert_eq!(
         super::test_ui::load_kit_counting(
-            &s,
+            &mut s,
             &[super::test_ui::MERCHANT_UI, &[MERCHANT]],
             MERCHANT
         ),
@@ -306,7 +306,7 @@ fn merchant_show_hide_plays_open_and_close_kits() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     assert!(
@@ -347,7 +347,7 @@ fn vendor_open_opens_the_backpack_and_layers_the_sound() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     equip_bag(&mut s, 0, "Backpack", 16);
@@ -393,7 +393,7 @@ fn vendor_leaves_an_already_open_backpack_alone() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     equip_bag(&mut s, 0, "Backpack", 16);
@@ -437,7 +437,7 @@ fn a_centre_panel_over_a_vendor_keeps_the_backpack_the_player_had_open() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     equip_bag(&mut s, 0, "Backpack", 16);
@@ -495,7 +495,7 @@ fn vendor_opens_and_closes_all_equipped_bags() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     s.set_money(0);
     equip_bag(&mut s, 0, "Backpack", 16);
@@ -531,7 +531,7 @@ fn merchant_switch_plays_close_then_open_and_queues_the_consumable_close() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_money(0);
@@ -575,7 +575,7 @@ fn shipped_merchant_hover_scopes_highlight_and_anchors_item_tooltip() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_merchant(Some(MerchantState {
@@ -780,7 +780,7 @@ fn merchant_tabs_drive_buyback_page_and_repair_pair() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_money(500);
 
@@ -899,7 +899,7 @@ fn merchant_tabs_fit_their_labels() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_money(0);
     s.set_merchant(Some(MerchantState::default()));
@@ -936,7 +936,7 @@ fn shipped_merchant_frame_arms_the_buy_cursor_on_hover() {
         super::test_ui::MERCHANT_UI,
         &["Interface\\FrameXML\\MerchantFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     // A purse of 50c: row 1 (25c) is affordable, row 2 (100c) is not.
@@ -1031,7 +1031,7 @@ fn trade_recipient_money_renders_the_digit_not_ellipsis() {
             "Interface\\FrameXML\\TradeFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_text_measurer(Box::new(super::FixedWidthFont(6.0)));
 
@@ -1095,7 +1095,7 @@ fn ctrl_and_shift_on_a_vendor_row_preview_and_post_without_buying() {
             "Interface\\FrameXML\\DressUpFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
 
     s.set_money(12_345);
@@ -1198,7 +1198,7 @@ fn shift_click_takes_one_bundle_and_splits_a_single() {
             "Interface\\FrameXML\\MerchantFrame.xml",
         ],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_money(10_000);
     s.set_merchant(Some(MerchantState {

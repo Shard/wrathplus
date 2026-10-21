@@ -310,7 +310,7 @@ pub(super) fn drive_animations(
         Query<(&ObjectStore, &crate::entities::mount::MountChild)>,
         // The open NPC session's unit (`[0xb4e2d0]`): its state emote is passed over when the
         // row's `EmoteFlags` carry `0x2000` (`0x5fd7e2`-`0x5fd7fd`).
-        Option<Res<crate::ui_session::InteractNpc>>,
+        Option<Res<crate::app_core::state::InteractNpc>>,
     ),
     // The variation roll's LCG, the reference's single CRT `_rand` stream shared by every play.
     mut rng: ResMut<benilla_assets::AnimRng>,

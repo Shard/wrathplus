@@ -40,19 +40,19 @@ fn harness() -> UiScript {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     // The splash formats its territory and autofollow lines straight out of GlobalStrings.
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
     // `TEXT()`, which AutoFollowStatus_OnEvent puts its message through.
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\UIParent.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, r"Interface\FrameXML\StaticPopup.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIParent.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, r"Interface\FrameXML\StaticPopup.xml");
     // The fading kit, its own `FrameXML.toc` entry.
-    load_xml(&s, "Interface\\FrameXML\\FadingFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\ZoneText.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\FadingFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\ZoneText.xml");
     s
 }
 

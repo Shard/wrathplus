@@ -86,12 +86,15 @@ pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String
         script.set_localized_class_names(names.localized_names());
     }
     script.set_wrath_session(Some(2), vec!["enUS".into()]);
-    script.set_screen_size(1024.0, 768.0);
+    // The caller's screen stands (a VM starts at 1024x768), and is its one display mode.
+    let (width, height) = script
+        .eval::<(f64, f64)>("return GetScreenWidth(), GetScreenHeight()")
+        .unwrap_or((1024.0, 768.0));
     script.set_screen_resolutions(
         vec![],
         Some(ScreenResolution {
-            width: 1024,
-            height: 768,
+            width: width.round() as u32,
+            height: height.round() as u32,
         }),
     );
     let seated = script

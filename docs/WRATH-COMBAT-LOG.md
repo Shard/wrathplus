@@ -87,7 +87,7 @@ the units and pushes into Native UI's store. Every spell entry needs a named spe
 the log (`Attributes & 0x180`, the gate each builder applies). Built:
 
 - Part 1: SWING_DAMAGE/MISSED, SPELL_DAMAGE, SPELL_PERIODIC_DAMAGE/HEAL/ENERGIZE/LEECH, SPELL_HEAL,
-  SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_MISSED, SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED,
+  SPELL_ENERGIZE, DAMAGE_SHIELD, SPELL_INSTAKILL, SPELL_DISPEL, SPELL_DISPEL_FAILED,
   PARTY_KILL, ENVIRONMENTAL_DAMAGE.
 - Casts: SPELL_CAST_START (`0x751920`, no destination), SPELL_CAST_SUCCESS (`0x7519e0`, the unit
   target), SPELL_CAST_FAILED (`0x751ad0`, our own result; group `0x2` the reason's text).
@@ -113,6 +113,8 @@ the log (`Attributes & 0x180`, the gate each builder applies). Built:
 - DAMAGE_SPLIT (`0x752de0`, `MOV EDI,0x2a` into the damage template `0x750660`): an
   `SMSG_SPELLNONMELEEDAMAGELOG` with hit flag `0x8` (AzerothCore `SPELL_HIT_TYPE_SPLIT`), ahead of
   the periodic test; the damage group as SPELL_DAMAGE's.
+- DAMAGE_SHIELD_MISSED and SPELL_PERIODIC_MISSED from `SMSG_SPELLLOGMISS` and
+  `SMSG_SPELLORDAMAGE_IMMUNE`: see "Damage-shield misses" below.
 
 Labelled:
 - the swing miss type by AC victim state, and the school as `1 << index`;
@@ -128,13 +130,22 @@ Labelled:
 - a resisted proc raises no floating text (`0x750d40` calls `0x74d550(0x16)` for the local victim).
 
 Not built: SPELL_AURA_BROKEN(_SPELL) (`0x752a40`, opcode `0x14F`, which AzerothCore never sends),
-SPELL_BUILDING_DAMAGE/HEAL, SPELL_PERIODIC_MISSED/DRAIN, SPELL_LEECH, SPELL_CREATE for items, and:
+SPELL_BUILDING_DAMAGE/HEAL, SPELL_PERIODIC_DRAIN, SPELL_LEECH, SPELL_CREATE for items, and the
+cast's own miss list (`0x751b80`'s other callers `0x700e20`/`0x702fc0`, not decompiled).
 
-- DAMAGE_SHIELD_MISSED (`0x29`): no traced builder allocates it. AzerothCore sends a damage-shield
-  miss as `SMSG_SPELLLOGMISS` (`Unit::DealDamageShieldDamage`), whose builder `0x751b80` picks the
-  event for the miss template `0x750500` in `EDI` (not decompiled); we log it as SPELL_MISSED.
-- `SMSG_SPELLORDAMAGE_IMMUNE` (`0x263`, AzerothCore's damage-shield and proc immunity): table
-  `0x7538a0` registers `0x24E`, `0x1D7`, `0x1F5`, `0x260`, `0x262` and `0x32`, not `0x263`, and no
-  other registration was found. It stays a debug line (`combat_log::on_unlogged`).
+## Damage-shield misses (`0x751b80`)
 
-The next Ghidra round for both: `0x751b80`'s `EDI` and the scalar refs to `0x263`.
+`0x751b80(source, dest, spell, missType, shield, periodic, age)` gates on the spell (named,
+`Attributes & 0x180` clear) and a non-zero miss type, then picks the event in `EDI` for the miss
+template `0x750500`: `periodic` gives SPELL_PERIODIC_MISSED (`0x21`), else `shield` gives
+DAMAGE_SHIELD_MISSED (`0x29`), else RANGE_MISSED or SPELL_MISSED by `AttributesEx3 & 0x8000`.
+
+- `SMSG_SPELLLOGMISS` (`0x24B`, `0x6d3090`): each row passes `shield` as a constant 1, so every
+  row is DAMAGE_SHIELD_MISSED with its miss type; a debug-format packet logs nothing. AzerothCore
+  sends it for damage-shield misses (`Unit::DealDamageShieldDamage`) and for a spell's delayed hit
+  result (`Spell.cpp:2752`); the client logs both as the shield miss, and so do we.
+- `SMSG_SPELLORDAMAGE_IMMUNE` (`0x263`, handler `0x6ce3d0`, registered by `0x6e83b0`, not the
+  combat-log table `0x7538a0`): miss type IMMUNE; `shield` is a zero log-format byte (always, from
+  AzerothCore), `periodic` a non-zero one.
+
+Labelled: the miss carries its type only; `0x750500`'s amount groups (`0x74d980`) are not traced.

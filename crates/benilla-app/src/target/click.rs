@@ -149,7 +149,7 @@ pub(crate) struct ServiceArms<'w> {
     /// Bit 6 sends through the cache the proximity poll writes, so the two agree on the healer.
     pub(crate) spirit: ResMut<'w, crate::ui_dialog_verbs::AreaSpiritHealer>,
     /// The NPC whose window is open (`[0xb4e2d0]`), checked before the ladder.
-    pub(crate) interact: Res<'w, crate::ui_session::InteractNpc>,
+    pub(crate) interact: Res<'w, crate::app_core::state::InteractNpc>,
     /// The cursor, for the vendor arm's sell fork (`0x5df5d7`); `None` when no VM is mounted.
     pub(crate) script: Option<NonSendMut<'w, benilla_ui::script::UiScript>>,
 }
@@ -157,8 +157,11 @@ pub(crate) struct ServiceArms<'w> {
 /// The re-click gate (`0x5f0251`), before the ladder: a right-click on the NPC whose window is
 /// open (`[0xb4e2d0]`) does nothing, no packet, no error, no gesture. The reference arms that NPC
 /// only from window openers (`0x4930d0`, cleared at `0x493310`), never on the click, the set
-/// [`crate::ui_session::feed_interact_npc`] collapses (less the mailbox and text reader).
-fn interaction_already_open_on(target: u64, interact: &crate::ui_session::InteractNpc) -> bool {
+/// `ui_session::feed_interact_npc` collapses (less the mailbox and text reader).
+pub(crate) fn interaction_already_open_on(
+    target: u64,
+    interact: &crate::app_core::state::InteractNpc,
+) -> bool {
     interact.1 == Some(target)
 }
 
@@ -1385,32 +1388,10 @@ pub(crate) fn service_arm_native(
     })
 }
 
-/// [`service_arm_native`] for a [`cursor_mode::npc_flags`] word.
+/// [`service_arm_native`] for a raw [`cursor_mode::npc_flags`] word.
 #[cfg(test)]
 pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> {
-    use cursor_mode::npc_flags as f;
-    // Each [`cursor_mode::npc_flags`] bit at its build-12340 position (AzerothCore `NPCFlags`).
-    let native = [
-        (f::GOSSIP, 0x1),
-        (f::QUESTGIVER, 0x2),
-        (f::VENDOR, 0x80),
-        (f::FLIGHTMASTER, 0x2000),
-        (f::TRAINER, 0x10),
-        (f::SPIRITHEALER, 0x4000),
-        (f::SPIRITGUIDE, 0x8000),
-        (f::INNKEEPER, 0x10000),
-        (f::BANKER, 0x20000),
-        (f::PETITIONER, 0x40000),
-        (f::TABARDDESIGNER, 0x80000),
-        (f::BATTLEMASTER, 0x100000),
-        (f::AUCTIONEER, 0x200000),
-        (f::STABLEMASTER, 0x400000),
-        (0x4000, 0x1000), // REPAIR
-    ]
-    .into_iter()
-    .filter(|&(legacy, _)| bits & legacy != 0)
-    .fold(0, |word, (_, bit)| word | bit);
-    service_arm_native(benilla_protocol::types::NpcFlags::from_bits(native), status)
+    service_arm_native(benilla_protocol::types::NpcFlags::from_bits(bits), status)
 }
 
 /// What a taken [`ServiceArm`] does.
@@ -1484,7 +1465,7 @@ pub(crate) fn service_action(
 
 /// Drain the guid-scoped deselects ([`DeselectGuid`]). `ClearTarget()`, the last leg of the Esc
 /// chain (`UIParent.lua:1492`), is a script call and lands in call order
-/// ([`crate::script_calls`]).
+/// (the UI's `script_calls` pass).
 pub(super) fn clear_target_requests(
     mut selection: ResMut<Selection>,
     mut seam: crate::creature_anim::AttackSeam,
@@ -1773,8 +1754,8 @@ mod tests {
             Some(ServiceArm::Questgiver)
         );
         assert_eq!(service_arm(f::QUESTGIVER, None), None);
-        // REPAIR (bit 14) has no arm, and an empty field matches nothing.
-        assert_eq!(service_arm(0x4000, None), None);
+        // REPAIR (`0x1000` on 12340) has no arm, and an empty field matches nothing.
+        assert_eq!(service_arm(0x1000, None), None);
         assert_eq!(service_arm(0, None), None);
     }
 
@@ -1924,76 +1905,6 @@ mod tests {
         }
     }
 
-    /// The re-click gate through the real [`crate::ui_session::feed_interact_npc`]: nothing arms
-    /// it before a window opens, a window arms its own NPC, and a close disarms it.
-    #[test]
-    fn the_reclick_gate_fires_only_while_that_npc_s_window_is_open() {
-        use crate::ui_session::{feed_interact_npc, InteractNpc};
-        use bevy::ecs::system::RunSystemOnce;
-
-        const NPC: u64 = 0xF130_0000_0000_0042;
-        const OTHER: u64 = 0xF130_0000_0000_0043;
-
-        let armed = |seed: &dyn Fn(&mut World)| {
-            let mut world = World::new();
-            world.init_resource::<InteractNpc>();
-            seed(&mut world);
-            world.run_system_once(feed_interact_npc).unwrap();
-            world.remove_resource::<InteractNpc>().unwrap()
-        };
-
-        // Nothing open: a first click on any NPC reaches the ladder.
-        let idle = armed(&|_| {});
-        assert!(!interaction_already_open_on(NPC, &idle));
-        assert!(!interaction_already_open_on(OTHER, &idle));
-
-        // One opener per family (a menu, a quest panel, a specialized window) arms its own NPC.
-        let with_gossip = armed(&|w| {
-            w.insert_resource(crate::ui_gossip::GossipState {
-                npc: Some(NPC),
-                ..Default::default()
-            });
-        });
-        let with_quest = armed(&|w| {
-            w.insert_resource(crate::ui_quest::QuestGiver {
-                npc: Some(NPC),
-                ..Default::default()
-            });
-        });
-        let with_trainer = armed(&|w| {
-            let mut t = crate::ui_trainer::TrainerOpen::default();
-            t.open(NPC, 0, Vec::new(), String::new());
-            w.insert_resource(t);
-        });
-        for (what, armed) in [
-            ("gossip", &with_gossip),
-            ("quest", &with_quest),
-            ("trainer", &with_trainer),
-        ] {
-            assert_eq!(armed.1, Some(NPC), "{what} did not arm the npc token");
-            // A re-click on that NPC is eaten...
-            assert!(
-                interaction_already_open_on(NPC, armed),
-                "{what}: the re-click was not suppressed"
-            );
-            // ...but a click on another NPC is not.
-            assert!(
-                !interaction_already_open_on(OTHER, armed),
-                "{what}: the gate ate a click on a different NPC"
-            );
-        }
-
-        // Closing the window disarms it, as the reference's `0x493310` zeroes the pair.
-        let closed = armed(&|w| {
-            let mut t = crate::ui_trainer::TrainerOpen::default();
-            t.open(NPC, 0, Vec::new(), String::new());
-            t.clear();
-            w.insert_resource(t);
-        });
-        assert_eq!(closed.1, None);
-        assert!(!interaction_already_open_on(NPC, &closed));
-    }
-
     /// A corpse and a refused `NOT_SELECTABLE` unit reach `select_on_click`'s `_` arm with no
     /// `target`, but are object hits, and only the terrain and nothing legs deselect.
     #[test]
@@ -2101,7 +2012,7 @@ mod tests {
         world.init_resource::<crate::ui_binder::BinderState>();
         world.init_resource::<crate::death::DeathNet>();
         world.init_resource::<crate::ui_dialog_verbs::AreaSpiritHealer>();
-        world.init_resource::<crate::ui_session::InteractNpc>();
+        world.init_resource::<crate::app_core::state::InteractNpc>();
         world.init_resource::<crate::ui_action::UiErrorKeys>();
         world.init_resource::<crate::ui_action::CastErrors>();
         world.init_resource::<crate::app_core::loot::LootState>();

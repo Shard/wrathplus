@@ -24,7 +24,7 @@ fn harness() -> UiScript {
         r"Interface\FrameXML\MoneyFrame.xml",
         "Interface\\FrameXML\\GameTooltip.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
     s

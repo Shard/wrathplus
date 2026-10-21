@@ -9,7 +9,10 @@ The crate split (docs/APP-CRATE-SPLIT-PLAN.md) moves items down a layer and leav
 `pub(crate) use crate::<home>::X;` at the old path, so callers keep compiling. A layer that
 moves into its own crate can no longer reach the upper module that re-exports, so its
 references must name the home. This script finds every re-export inside one crate's `src/`,
-follows chains to the defining path, and rewrites references that go through them:
+follows chains to the defining path, and rewrites references that go through them. A chain may
+start with relative re-exports (`pub(crate) use child::X`, `self::`, `super::`) that lead into a
+`crate::` one; past its first `crate::` hop only those are followed, as a relative re-export can
+name a module private to its parent. It rewrites:
 
 - `crate::old::X` in a path or type becomes `crate::home::X`;
 - `use crate::old::{A, B};` becomes one `use` per item that moved, beside the rest.
@@ -39,6 +42,13 @@ IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 USE_RE = re.compile(
     r"^(?P<indent>[ \t]*)pub(?:\(crate\))? use crate::(?P<path>(?:" + IDENT + r"::)*)"
     r"(?:\{(?P<list>[^}]*)\}|(?P<one>" + IDENT + r"(?: as " + IDENT + r")?));[ \t]*\n",
+    re.M,
+)
+# A re-export by a relative path (`self::`, `super::`, or a child module), which only the table
+# reads: the rewrite never touches these lines, but a chain through one must still resolve.
+REL_USE_RE = re.compile(
+    r"^[ \t]*pub(?:\([^)]*\))? use (?P<base>self::|(?:super::)+)?(?P<path>(?:" + IDENT + r"::)+)"
+    r"(?:\{(?P<list>[^}]*)\}|(?P<one>" + IDENT + r"(?: as " + IDENT + r")?));",
     re.M,
 )
 
@@ -75,9 +85,33 @@ def split_items(text):
     return out
 
 
+def relative_home(root, rel, mod, base, path):
+    """The absolute module a relative `use` names, or None when its first segment is no child
+    module of the declaring one (an external crate)."""
+    parts = mod.split("::") if mod else []
+    if base.startswith("super::"):
+        ups = base.count("super::")
+        if ups > len(parts):
+            return None
+        parts = parts[: len(parts) - ups]
+    elif base != "self::":
+        # A bare path: only a child module's, found on disk beside the declaring file.
+        stem = rel[:-3]
+        here = os.path.dirname(stem) if os.path.basename(stem) in ("mod", "lib") else stem
+        first = path.split("::")[0]
+        if not (
+            os.path.isfile(os.path.join(root, here, first + ".rs"))
+            or os.path.isfile(os.path.join(root, here, first, "mod.rs"))
+        ):
+            return None
+    return "::".join(parts + path.split("::"))
+
+
 def reexports(root):
-    """`old::path::Name` -> `home::path::Name` for every `pub(crate) use crate::…` in `src/`."""
-    table = {}
+    """`old::path::Name` -> `home::path::Name` for every `pub(crate) use crate::…` in `src/`, and for a
+    relative re-export only when its target is itself a re-export (a hop in a chain): one of an
+    item the child module defines is left alone, as that module may be private."""
+    table, relative = {}, {}
     for rel, full in rust_files(root):
         mod = module_of(rel)
         src = open(full).read()
@@ -87,12 +121,33 @@ def reexports(root):
             for name, home in items:
                 old = f"{mod}::{name}" if mod else name
                 table[old] = (f"{home_mod}::{home}", rel)
+        for m in REL_USE_RE.finditer(src):
+            home_mod = relative_home(root, rel, mod, m.group("base") or "", m.group("path").rstrip(":"))
+            if home_mod is None:
+                continue  # an external crate (`bevy::…`), not a module of ours
+            items = split_items(m.group("list")) if m.group("list") is not None else split_items(m.group("one"))
+            for name, home in items:
+                old = f"{mod}::{name}" if mod else name
+                relative.setdefault(old, (f"{home_mod}::{home}", rel))
     # Follow chains: a home may itself be a re-export.
-    def resolve(key, seen=()):
-        if key not in table or key in seen:
-            return key
-        return resolve(table[key][0], seen + (key,))
-    return {old: (resolve(old), rel) for old, (_, rel) in table.items()}
+    # Relative hops only lead into a chain: once a `crate::` hop is taken only those follow, as a
+    # relative re-export past it can name a module private to its parent. A chain with no
+    # `crate::` hop resolves to nothing.
+    def resolve(key, absolute=False, seen=()):
+        if key in seen:
+            return key if absolute else None
+        if key in table:
+            return resolve(table[key][0], True, seen + (key,))
+        if not absolute and key in relative:
+            return resolve(relative[key][0], False, seen + (key,))
+        return key if absolute else None
+
+    out = {old: (resolve(old), rel) for old, (_, rel) in table.items()}
+    for old, (_, rel) in relative.items():
+        home = None if old in table else resolve(old)
+        if home is not None:
+            out[old] = (home, rel)
+    return out
 
 
 def strip_noncode(src):

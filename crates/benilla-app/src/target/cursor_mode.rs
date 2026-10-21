@@ -102,23 +102,36 @@ impl WorldCursor {
     }
 }
 
-/// `UNIT_NPC_FLAGS` bits, 1.12 values (vmangos `UnitDefines.h`); REPAIR (`0x4000`) is left out
-/// because the ladder never tests it.
+/// `UNIT_NPC_FLAGS` bits, build 12340's values (AzerothCore `NPCFlags`), the raw word
+/// [`benilla_protocol::types::NpcFlags`] reads; the ladder never tests REPAIR (`0x1000`). The live
+/// code reads services through `NpcFlags`; outside the tests only the registrar's pair is used.
 pub(crate) mod npc_flags {
+    #[cfg(test)]
     pub const GOSSIP: u32 = 0x1;
+    #[cfg(test)]
     pub const QUESTGIVER: u32 = 0x2;
-    pub const VENDOR: u32 = 0x4;
-    pub const FLIGHTMASTER: u32 = 0x8;
+    #[cfg(test)]
     pub const TRAINER: u32 = 0x10;
-    pub const SPIRITHEALER: u32 = 0x20;
-    pub const SPIRITGUIDE: u32 = 0x40;
-    pub const INNKEEPER: u32 = 0x80;
-    pub const BANKER: u32 = 0x100;
-    pub const PETITIONER: u32 = 0x200;
-    pub const TABARDDESIGNER: u32 = 0x400;
-    pub const BATTLEMASTER: u32 = 0x800;
-    pub const AUCTIONEER: u32 = 0x1000;
-    pub const STABLEMASTER: u32 = 0x2000;
+    #[cfg(test)]
+    pub const VENDOR: u32 = 0x80;
+    #[cfg(test)]
+    pub const FLIGHTMASTER: u32 = 0x2000;
+    #[cfg(test)]
+    pub const SPIRITHEALER: u32 = 0x4000;
+    #[cfg(test)]
+    pub const SPIRITGUIDE: u32 = 0x8000;
+    #[cfg(test)]
+    pub const INNKEEPER: u32 = 0x1_0000;
+    #[cfg(test)]
+    pub const BANKER: u32 = 0x2_0000;
+    pub const PETITIONER: u32 = 0x4_0000;
+    pub const TABARDDESIGNER: u32 = 0x8_0000;
+    #[cfg(test)]
+    pub const BATTLEMASTER: u32 = 0x10_0000;
+    #[cfg(test)]
+    pub const AUCTIONEER: u32 = 0x20_0000;
+    #[cfg(test)]
+    pub const STABLEMASTER: u32 = 0x40_0000;
 }
 
 pub(super) const UNIT_FLAG_SKINNABLE: u32 = 0x0400_0000;

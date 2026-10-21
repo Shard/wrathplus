@@ -18,7 +18,7 @@
 //!   (`0x494970`).
 //!
 //! On the first world-enter `0x494780` also sets the world map to the player's zone
-//! (`0x4a6650`); that half lives in `crate::ui_world_map::world_enter_selection`.
+//! (`0x4a6650`); that half lives in the world map feed (`ui_world_map`).
 //!
 //! Host globals are written before the event fires, so a handler's `GetZoneText()` sees the new
 //! state.
