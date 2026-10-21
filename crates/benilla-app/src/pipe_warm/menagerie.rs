@@ -544,7 +544,7 @@ pub(super) fn spawn_menagerie(
     // rig that never prepares warms nothing.
     let tile_tex = lanes.images.add(Image::default());
     commands.spawn((
-        Mesh2d(meshes.add(crate::ui_pass::tile_quad_mesh())),
+        Mesh2d(meshes.add(crate::overlay::tile_quad_mesh())),
         MeshMaterial2d(
             lanes
                 .ui_quads
@@ -555,7 +555,7 @@ pub(super) fn spawn_menagerie(
         ),
         // Visible, unlike the paced model rigs: one pipeline, drawn at a negligible scale.
         Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(0.001)),
-        crate::ui_pass::ui_render_layers(),
+        crate::overlay::ui_render_layers(),
         WarmRig,
     ));
     count += 1;
