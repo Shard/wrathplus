@@ -1,6 +1,5 @@
-//! `benilla-formats`: the schema layer over the 1.12.1 (build 5875) asset formats, the patch chain
-//! ([`Chain`]) and the `benilla-extract` CLI. Data stays in raw WoW coordinates; the Bevy transform
-//! lives in `benilla`.
+//! `benilla-formats`: the schema layer over the build-12340 (3.3.5a) asset formats, the patch chain
+//! ([`Chain`]) and the `benilla-extract` CLI. Data stays in raw WoW coordinates.
 
 use std::io::Cursor;
 use std::path::Path;
@@ -54,6 +53,7 @@ pub use unit_blood::{load_blood_catalog, BloodCatalog};
 pub mod achievements;
 pub mod currencies;
 pub mod glyphs;
+pub mod heirlooms;
 pub mod item_limit_category;
 mod itemsets;
 pub mod gems;

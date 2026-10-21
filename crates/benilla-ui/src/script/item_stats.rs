@@ -11,6 +11,9 @@ use mlua::{Lua, MultiValue, Value};
 
 use super::Model;
 
+#[path = "item_stat_table.rs"]
+mod item_stat_table;
+
 /// An item template's tooltip view: the `SMSG_ITEM_QUERY_SINGLE_RESPONSE` fields the tooltip reads,
 /// plus app-resolved display strings.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -98,6 +101,10 @@ pub struct ItemTemplateView {
     /// `RandomProperty` (template `+0x1b8`): the item can roll a suffix, so a template tooltip
     /// prints `<Random enchantment>` (`0x52cc33`).
     pub random_property: u32,
+    /// Socket colour masks (1 meta, 2 red, 4 yellow, 8 blue): `GetItemStats` `EMPTY_SOCKET_*`.
+    pub socket_colors: [u32; 3],
+    /// An heirloom's per-level numbers (`ScalingStatDistribution`); `None` for any other item.
+    pub heirloom: Option<crate::heirloom::HeirloomView>,
 }
 
 /// The player state the tooltip's red lines and the usable gate compare against.
@@ -328,7 +335,7 @@ fn equip_loc_token(inventory_type: u32) -> &'static str {
 /// The reference's `SStrToInt` (`0x64ac60`) over an `item:` field: an optional `-`, then digits up
 /// to the first non-digit, with no whitespace skip and no `+`. Deviation: an overflow saturates at
 /// `u32::MAX` where the reference wraps, because only a script can overflow it.
-fn reference_atoi(s: &str) -> i64 {
+pub(super) fn reference_atoi(s: &str) -> i64 {
     let b = s.as_bytes();
     let (neg, mut i) = match b.first() {
         Some(b'-') => (true, 1),
@@ -398,6 +405,7 @@ fn parse_item_arg(v: &Value) -> mlua::Result<ItemArg> {
 }
 
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+    item_stat_table::install(lua)?;
     // GetItemQualityColor(quality) → r, g, b, escapeString (`0x48dfb0`). 7 and up, or a negative
     // quality, answer Common (`0x52ad70`/`0x52ad90`: an unsigned `cmp ecx,7; jb`), so
     // `ITEM_QUALITY_COLORS[-1]` is white, the colour of an uncached loot row (`0x4c2435`).
@@ -845,41 +853,5 @@ mod get_item_info_tests {
 }
 
 #[cfg(test)]
-mod quality_color_tests {
-    use crate::script::UiScript;
-
-    #[test]
-    fn get_item_quality_color_is_the_references_own_table() {
-        let s = UiScript::new().unwrap();
-        let hex = |q: i64| {
-            s.eval::<String>(&format!(
-                "local r,g,b,h = GetItemQualityColor({q}) return h"
-            ))
-            .unwrap()
-        };
-        for (q, want) in [
-            (0, "|cff9d9d9d"),
-            (1, "|cffffffff"),
-            (2, "|cff1eff00"),
-            (3, "|cff0070dd"),
-            (4, "|cffa335ee"),
-            (5, "|cffff8000"),
-            (6, "|cffe6cc80"),
-        ] {
-            assert_eq!(hex(q), want, "quality {q}");
-        }
-
-        // The floats are byte / 255: Epic's red is 0xa3.
-        let r = s
-            .eval::<f64>("local r = GetItemQualityColor(4) return r")
-            .unwrap();
-        assert!((r - 163.0 / 255.0).abs() < 1e-9, "epic red was {r}");
-
-        // 7 and up answer Common (`0x52ad70`).
-        assert_eq!(hex(7), "|cffffffff");
-        assert_eq!(hex(99), "|cffffffff");
-        // The compare is unsigned, so a negative answers Common too.
-        assert_eq!(hex(-1), "|cffffffff");
-        assert_eq!(hex(-99), "|cffffffff");
-    }
-}
+#[path = "item_stats_quality_tests.rs"]
+mod quality_color_tests;
