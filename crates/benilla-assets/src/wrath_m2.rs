@@ -310,11 +310,6 @@ fn build_cameras(
             .into_iter()
             .any(|track| track.sequences.iter().any(|keys| keys.len() > 1))
             || camera.roll.sequences.iter().any(|keys| keys.len() > 1);
-        if moving {
-            return Err(std::io::Error::other(format!(
-                "unsupported animated Wrath camera {index}: PaneCamera cannot retain nested v264 tracks"
-            )));
-        }
         let pose = benilla_formats::sample_wrath_camera(camera, 0, 0, 0).map_err(|error| {
             std::io::Error::other(format!("sampling Wrath camera {index}: {error:#}"))
         })?;
@@ -328,7 +323,7 @@ fn build_cameras(
                 near: pose.near_clip,
                 far: pose.far_clip,
             },
-            tracks: None,
+            tracks: moving.then(|| std::sync::Arc::new(camera.clone())),
         });
     }
     let portrait = semantic
@@ -747,5 +742,60 @@ mod installed_tests {
             human_anims.hand_close.iter().all(Option::is_some),
             "both hands close on a held weapon"
         );
+    }
+
+    /// Every glue stage the 3.3.5 screens stand: the login's Lich King (`UI_MainMenu_Northrend`)
+    /// and the nine select/create stages (no Gnome or Troll stage ships). Each loads through the
+    /// client's loader with its stage point (attachment 0, where the character stands) and an
+    /// authored light rig to fold.
+    #[test]
+    fn installed_glue_stages_load_with_a_stage_point_and_lights() {
+        let names = [
+            "MainMenu_Northrend",
+            "Human",
+            "Orc",
+            "Dwarf",
+            "NightElf",
+            "Scourge",
+            "Tauren",
+            "BloodElf",
+            "Draenei",
+            "DeathKnight",
+        ];
+        let paths: Vec<String> = names
+            .iter()
+            .map(|n| format!("Interface\\Glues\\Models\\UI_{n}\\UI_{n}.m2"))
+            .collect();
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        let Some(models) = load_installed(&refs) else {
+            return;
+        };
+        for (name, model) in names.iter().zip(&models) {
+            let moving = model.cameras.first().is_some_and(|c| c.tracks.is_some());
+            eprintln!(
+                "UI_{name}: {} light(s), attachments {:?}, camera 0 moving {moving}",
+                model.lights.len(),
+                model.attachments.iter().map(|a| a.id).collect::<Vec<_>>()
+            );
+            if *name == "Scourge" {
+                // The animated stage that used to fail the load: its camera keeps its v264
+                // tracks and samples to a finite rig through sequence 0.
+                assert!(moving, "UI_Scourge's camera 0 moves");
+                let rig = model.cameras[0].at(0, 2_000);
+                assert!(
+                    rig.eye.is_finite() && rig.target.is_finite(),
+                    "{:?} -> {:?}",
+                    rig.eye,
+                    rig.target
+                );
+            }
+            assert!(!model.lights.is_empty(), "UI_{name} has no light rig");
+            if *name != "MainMenu_Northrend" {
+                assert!(
+                    model.attachments.iter().any(|a| a.id == 0),
+                    "UI_{name} has no stage point"
+                );
+            }
+        }
     }
 }

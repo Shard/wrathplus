@@ -54,7 +54,10 @@ pub(super) fn enter_create(
         sel.name.set_text(&t.name);
         sel.clamp(catalog.as_deref());
     }
-    preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
+    preview.scene = Some(crate::portrait::GlueScene::Race {
+        race: sel.race,
+        class: sel.class,
+    });
     preview.look = Some(GlueLook::Create(sel.look()));
     preview.yaw = INITIAL_FACING;
     if let Some(mut wa) = world_assets {
