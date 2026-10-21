@@ -121,6 +121,8 @@ impl Mixer {
             master,
             output,
             audio_pos,
+            // Dropped, so the probe writers detach and run until the mixer goes.
+            probe_writers: _probe_writers,
         } = main_track(&level, &limiter_on, sample_rate, probe_dir);
         let settings = AudioManagerSettings::<OutputBackend> {
             backend_settings,
@@ -341,12 +343,13 @@ fn main_track(
     meter::install(&mut main, level);
     // A probing run brackets the limiter with two taps.
     let probe = probe_dir.zip(sample_rate);
-    let audio_pos = probe
+    let pre = probe
         .and_then(|(dir, rate)| super::mix_tap::install_at(&mut main, &dir.join("pre.wav"), rate));
     limiter::install(&mut main, level, limiter_on);
-    if let Some((dir, rate)) = probe {
-        super::mix_tap::install_at(&mut main, &dir.join("post.wav"), rate);
-    }
+    let post = probe
+        .and_then(|(dir, rate)| super::mix_tap::install_at(&mut main, &dir.join("post.wav"), rate));
+    let audio_pos = pre.as_ref().map(|tap| Arc::clone(&tap.frames));
+    let probe_writers = pre.into_iter().chain(post).map(|tap| tap.writer).collect();
     let mut main = super::mix_tap::install(main, sample_rate);
     let output = main.add_effect(VolumeControlBuilder::new(Decibels::IDENTITY));
     MainChain {
@@ -354,6 +357,7 @@ fn main_track(
         master,
         output,
         audio_pos,
+        probe_writers,
     }
 }
 
@@ -364,6 +368,9 @@ struct MainChain {
     master: VolumeControlHandle,
     output: VolumeControlHandle,
     audio_pos: Option<Arc<AtomicU64>>,
+    /// The probe taps' writers, which a caller may join once the mixer drops: dropping them
+    /// detaches, as a running probe does.
+    probe_writers: Vec<std::thread::JoinHandle<()>>,
 }
 
 /// `SoundBufferSize`, the mix-ahead in ms, read once from the stored config at sound init, as
@@ -1048,7 +1055,8 @@ pub(super) mod tests {
     }
 
     /// An over-scale mix reads far past full scale in `pre.wav` and under it in `post.wav`. The
-    /// capture stays in the temp dir as a known answer for `scripts/soundprobe.py`.
+    /// capture stays in the temp dir as a known answer for `scripts/soundprobe.py`, under this
+    /// process's id, so a concurrent run of the suite cannot remove it mid-read.
     #[test]
     fn the_probe_taps_bracket_the_limiter() {
         use kira::backend::mock::{MockBackend, MockBackendSettings};
@@ -1056,17 +1064,20 @@ pub(super) mod tests {
         const RATE: u32 = 44_100;
         const COPIES: usize = 5;
 
-        let dir = std::env::temp_dir().join("benilla-probe-selftest");
+        let dir =
+            std::env::temp_dir().join(format!("benilla-probe-selftest-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp capture dir");
 
         let wav = full_scale_tone(RATE);
+        let writers;
 
         {
             let level = Arc::new(MixLevel::default());
             let limiter_on = Arc::new(AtomicBool::new(true));
             let chain = main_track(&level, &limiter_on, Some(RATE), Some(&dir));
             let (main, audio_pos) = (chain.builder, chain.audio_pos);
+            writers = chain.probe_writers;
             let audio_pos = audio_pos.expect("the pre-tap publishes a frame clock");
             let mut manager = AudioManager::<MockBackend>::new(AudioManagerSettings {
                 backend_settings: MockBackendSettings { sample_rate: RATE },
@@ -1091,8 +1102,11 @@ pub(super) mod tests {
             );
         } // manager dropped: the tap producers abandon, the writers do their final flush.
 
-        // The writers wake on a 250 ms cadence; give them room to drain and exit.
-        std::thread::sleep(std::time::Duration::from_millis(900));
+        // Each writer exits after that flush, so joining them is the file being whole.
+        assert_eq!(writers.len(), 2, "both probe taps record");
+        for writer in writers {
+            writer.join().expect("a tap writer panicked");
+        }
 
         let peak = |name: &str| -> (f32, u64) {
             let bytes = std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
