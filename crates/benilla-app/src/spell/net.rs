@@ -19,7 +19,7 @@ use super::{
 use crate::creature_anim::{CastEvent, CastEventKind, Casting, SpellGoTargets};
 use crate::ui_action::{CastErrors, PlayerActions, Spells, UiError, UiErrorKeys};
 use crate::ui_aura::AuraDurations;
-use crate::ui_cast::{CastBarEdge, CastBarFeed};
+use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
 use crate::ui_spellbook::LearnedInTab;
 
 use benilla_protocol::{SessionEvent, SessionEventKind};

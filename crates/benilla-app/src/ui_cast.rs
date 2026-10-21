@@ -14,28 +14,7 @@ use crate::spell::{inflight, PendingCast, QueuedMeleeSpell};
 use crate::ui_action::Spells;
 use crate::ui_unit::UnitFeed;
 
-/// One edge of our own cast, queued by the spell's packet handlers and its local cancel.
-pub(crate) enum CastBarEdge {
-    /// `SMSG_SPELL_START` with a nonzero cast time; an instant opens no bar, as in the reference.
-    Start { spell_id: u32, cast_time_ms: u32 },
-    /// `SMSG_SPELL_GO`: the cast completed.
-    Stop,
-    /// `SMSG_CAST_RESULT` failure: the bar, if shown, reads "Failed".
-    Failed,
-    /// `SMSG_SPELL_FAILED_OTHER`: our cast was interrupted.
-    Interrupted,
-    /// `SMSG_SPELL_DELAYED`: pushback extends the cast by `delay_ms`; the bar slides, never
-    /// cancels.
-    Delayed { delay_ms: u32 },
-    /// `MSG_CHANNEL_START`, sent by vmangos to the caster only; gated by [`channel_start_args`].
-    ChannelStart { spell_id: u32, duration_ms: u32 },
-    /// `MSG_CHANNEL_UPDATE`, also caster-only: the time left, 0 when the channel is over.
-    ChannelUpdate { remaining_ms: u32 },
-}
-
-/// The queue of [`CastBarEdge`]s, drained by [`feed_cast_bar`].
-#[derive(Resource, Default)]
-pub(crate) struct CastBarFeed(pub(crate) Vec<CastBarEdge>);
+pub(crate) use crate::spell::cast_bar::{CastBarEdge, CastBarFeed};
 
 /// `SPELLCAST_START`'s name argument: empty for an unknown spell, or when `AttributesEx3 & 0x4`
 /// is set, where the reference pushes `""` (`0x6e7a2d`) and still fires, so the bar is a
@@ -201,6 +180,10 @@ impl Plugin for UiCastPlugin {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "ui_cast_esc_tests.rs"]
+mod esc_tests;
 
 #[cfg(test)]
 mod tests {
