@@ -705,10 +705,10 @@ fn a_raise_with_a_hidden_child_keeps_the_windows_own_siblings_level() {
     assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
-/// `SetFrameLevel` (`0x774560`) calls `0x76a4f0` with `propagate=0`, so the children stay put;
-/// stock `BonusActionBarFrame.xml:13-15` raises a button and then its cooldown by hand.
+/// `SetFrameLevel` (12340 `0x49e9d0`) calls `0x4910a0(level, 1)`: same-strata children shift by
+/// the same delta, recursively; a raise moves at most `0x80` levels, and a negative level raises.
 #[test]
-fn a_script_level_change_leaves_the_children_where_they_were() {
+fn a_script_level_change_carries_the_children() {
     let mut s = script();
     s.run(
         r#"
@@ -723,7 +723,18 @@ fn a_script_level_change_leaves_the_children_where_they_were() {
     assert_eq!(level(&mut s, "Parent"), 7);
     assert_eq!(
         (level(&mut s, "Child"), level(&mut s, "Grandchild")),
-        (child, grandchild),
-        "the children keep their absolute levels"
+        (child + 7, grandchild + 7),
+        "the children move with it"
+    );
+    s.run("Parent:SetFrameLevel(1000)").unwrap();
+    assert_eq!(
+        level(&mut s, "Parent"),
+        7 + 0x80,
+        "one raise moves at most 0x80 levels"
+    );
+    assert_eq!(level(&mut s, "Child"), child + 7 + 0x80);
+    assert!(
+        s.run("Parent:SetFrameLevel(-1)").is_err(),
+        "a negative level raises"
     );
 }
