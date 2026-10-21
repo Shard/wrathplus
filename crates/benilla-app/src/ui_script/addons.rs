@@ -15,6 +15,10 @@ use benilla_ui::toc::Toc;
 
 use super::content;
 
+#[path = "addons_blizzard.rs"]
+mod blizzard;
+pub(super) use blizzard::load_wrath_startup_blizzard;
+
 /// The addon folder's name, the reference's own spelling.
 const ADDONS_DIR: &str = "AddOns";
 
@@ -855,26 +859,6 @@ pub(super) fn load_wrath_third_party(
         }
         script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
         let _ = state.load(script, &addons, &addon.name);
-    }
-    state.failures
-}
-
-/// The archive's startup Blizzard addons (`Blizzard_TokenUI`), loaded right after the core, as a
-/// clean login has them. Outside the registry walk, whose rows stay the LoadOnDemand ones: no row
-/// is registered and no folder is read, so a caller's own registry (the rig, the harness) stands.
-pub(super) fn load_wrath_startup_blizzard(script: &mut UiScript) -> Vec<String> {
-    let startup: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
-        .into_iter()
-        .filter(|addon| !addon.toc.load_on_demand())
-        .collect();
-    let mut state = Walk {
-        version_check: true,
-        client_interface: 30300,
-        ..Walk::default()
-    };
-    for addon in &startup {
-        script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
-        let _ = state.load(script, &startup, &addon.name);
     }
     state.failures
 }

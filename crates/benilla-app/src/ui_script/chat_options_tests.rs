@@ -19,6 +19,9 @@ fn bake_strings(s: &UiScript) {
     .unwrap();
 }
 
+/// The default window's Background swatch row.
+const BACKGROUND_ROW: &str = "DropDownList1Button8";
+
 fn chat_with_menu() -> UiScript {
     let mut s = UiScript::new().unwrap();
     for file in [
@@ -109,15 +112,17 @@ fn right_clicking_a_chat_tab_opens_its_options_menu() {
         s.eval::<bool>("return DropDownList1:IsVisible()").unwrap(),
         "the tab's right-click opens the options menu"
     );
-    // The default window's level-1 rows (`FCFOptionsDropDown_Initialize`); any other window
-    // adds Close before Display.
+    // The default window's level-1 rows (`FCFOptionsDropDown_Initialize`,
+    // FloatingChatFrame.lua:178-340); only the default window has New and Reset.
     for (n, key) in [
         (1, "UNLOCK_WINDOW"),
-        (2, "RENAME_CHAT_WINDOW"),
-        (3, "NEW_CHAT_WINDOW"),
-        (4, "DISPLAY"),
-        (5, "FONT_SIZE"),
-        (6, "BACKGROUND"),
+        (2, "MAKE_UNINTERACTABLE"),
+        (3, "RENAME_CHAT_WINDOW"),
+        (4, "NEW_CHAT_WINDOW"),
+        (5, "RESET_ALL_WINDOWS"),
+        (6, "DISPLAY"),
+        (7, "FONT_SIZE"),
+        (8, "BACKGROUND"),
     ] {
         assert!(
             s.eval::<bool>(&format!("return DropDownList1Button{n}:GetText() == {key}"))
@@ -146,6 +151,9 @@ fn a_left_click_still_selects_the_tab_and_opens_no_menu() {
     );
     right_click(&mut s, "ChatFrame1Tab");
     assert!(s.eval::<bool>("return DropDownList1:IsVisible()").unwrap());
+    // A second release on the same tab inside the double-click window is its `OnDoubleClick`, not
+    // a click, so the player's left click comes a beat later.
+    s.tick(0.5);
     left_click(&mut s, "ChatFrame1Tab");
     assert!(
         s.eval::<bool>("return not DropDownList1:IsVisible()")
@@ -169,12 +177,12 @@ fn the_background_row_opens_the_picker_and_its_opacity_slider_drives_the_window(
         0.0
     );
     assert_eq!(
-        s.eval::<f64>("return DropDownList1Button6.opacity")
+        s.eval::<f64>(&format!("return {BACKGROUND_ROW}.opacity"))
             .unwrap(),
         1.0,
-        "info.opacity is 1 - a (the ref's own 'the slider is reversed')"
+        "info.opacity is 1 - a (FloatingChatFrame.lua:321-325: 'the slider is reversed')"
     );
-    left_click(&mut s, "DropDownList1Button6ColorSwatch");
+    left_click(&mut s, &format!("{BACKGROUND_ROW}ColorSwatch"));
     assert!(
         s.eval::<bool>("return ColorPickerFrame:IsVisible()")
             .unwrap(),
@@ -203,8 +211,10 @@ fn the_background_row_opens_the_picker_and_its_opacity_slider_drives_the_window(
         .unwrap();
     // `valueStep="0.01"` rebuilds `1 - 0.8` as `n * step`, a hair below the literal, so
     // `1 - value` is a hair above 0.8 and the store's floor quantizer keeps 204, not 203.
+    // The getter scales the byte by an f32 reciprocal (`wrath_chat_window.rs`, `unit`).
+    let byte = f64::from(204.0f32 * (1.0f32 / 255.0f32));
     assert!(
-        (stored - 204.0 / 255.0).abs() < 1e-9,
+        (stored - byte).abs() < 1e-12,
         "the drag reached the engine store, quantized to its byte: {stored}"
     );
     s.mouse_move(1500.0, 850.0);
@@ -250,7 +260,7 @@ fn the_font_size_submenu_resizes_the_window_and_stores_the_pick() {
     let mut s = chat_with_menu();
     reveal_then(&mut s);
     right_click(&mut s, "ChatFrame1Tab");
-    hover(&mut s, "DropDownList1Button5");
+    hover(&mut s, "DropDownList1Button7");
     assert_eq!(
         s.eval::<i64>("return DropDownList2.numButtons").unwrap(),
         4,
@@ -305,11 +315,11 @@ fn each_tabs_menu_writes_its_own_window() {
         s.eval::<i64>("return FCF_GetCurrentChatFrameID()").unwrap(),
         2
     );
-    // A non-default window's menu adds Close before Display, so Background is row 7.
+    // The docked combat log has no New, Reset or Close rows, so Background is row 6.
     assert!(s
-        .eval::<bool>("return DropDownList1Button7:GetText() == BACKGROUND")
+        .eval::<bool>("return DropDownList1Button6:GetText() == BACKGROUND")
         .unwrap());
-    left_click(&mut s, "DropDownList1Button7ColorSwatch");
+    left_click(&mut s, "DropDownList1Button6ColorSwatch");
     s.run("OpacitySliderFrame:SetValue(0)").unwrap(); // reversed: 0 = fully opaque
     assert_eq!(
         s.eval::<f64>("local _,_,_,_,_,a = GetChatWindowInfo(2) return a")
@@ -337,7 +347,7 @@ fn cancelling_the_picker_puts_the_window_back() {
         .unwrap();
     reveal_then(&mut s);
     right_click(&mut s, "ChatFrame1Tab");
-    left_click(&mut s, "DropDownList1Button6ColorSwatch");
+    left_click(&mut s, &format!("{BACKGROUND_ROW}ColorSwatch"));
     s.run("OpacitySliderFrame:SetValue(0)").unwrap();
     assert_eq!(
         s.eval::<f64>("local _,_,_,_,_,a = GetChatWindowInfo(1) return a")

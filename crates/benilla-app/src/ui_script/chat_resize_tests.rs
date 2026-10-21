@@ -1,4 +1,6 @@
-//! The chat window's move, resize and lock, driven from the mouse through the stock frames.
+//! The chat window's move, resize and lock, driven from the mouse through the stock 3.3.5 frames:
+//! one `$parentResizeButton` grip (FloatingChatFrame.xml:539-570) and a tab drag that
+//! `FCFTab_OnUpdate` ends once the button is up (FloatingChatFrame.lua:1164-1185).
 
 use benilla_ui::script::UiScript;
 
@@ -74,8 +76,7 @@ fn left_click(s: &mut UiScript, frame: &str) {
     s.resolve();
 }
 
-/// The tabs ship hidden until a stationary hover reveals them (`FCF_OnUpdate`), and a window
-/// moves by its tab (`OnDragStart` calls `StartMoving`), so every drag starts here.
+/// A stationary hover fades the window in (`FCF_OnUpdate`, FloatingChatFrame.lua:1074-1083).
 fn reveal(s: &mut UiScript) {
     let (cx, cy) = centre(s, "ChatFrame1");
     s.mouse_move(cx, cy);
@@ -85,15 +86,20 @@ fn reveal(s: &mut UiScript) {
     }
 }
 
-fn drag_tab(s: &mut UiScript, dx: f32, dy: f32) {
+/// Press the tab, cross the drag threshold, move, release, then tick once: the tab's `OnUpdate`
+/// sees the button up and stops the move (FloatingChatFrame.lua:1181-1185).
+fn drag_tab(s: &mut UiScript, tab: &str, dx: f32, dy: f32) {
     reveal(s);
-    let (tx, ty) = centre(s, "ChatFrame1Tab");
+    let (tx, ty) = centre(s, tab);
     s.mouse_button(tx, ty, "LeftButton", true);
-    s.mouse_move(tx + 5.0, ty); // past the 4px threshold: OnDragStart -> StartMoving
+    s.mouse_move(tx + 5.0, ty);
     s.mouse_move(tx + dx, ty + dy);
     s.mouse_button(tx + dx, ty + dy, "LeftButton", false);
+    s.tick(0.016);
     s.resolve();
 }
+
+const GRIP: &str = "ChatFrame1ResizeButton";
 
 fn grab_grip(s: &mut UiScript, grip: &str) -> (f32, f32) {
     let (x, y) = centre(s, grip);
@@ -102,33 +108,38 @@ fn grab_grip(s: &mut UiScript, grip: &str) -> (f32, f32) {
     (x, y)
 }
 
-/// The stock chat cache carries `LOCKED 1` for both dock windows.
+fn shown(s: &UiScript, frame: &str) -> bool {
+    s.eval::<bool>(&format!("return {frame}:IsShown() == 1"))
+        .unwrap()
+}
+
+/// Both dock windows ship locked, and `FCF_SetLocked` hides a locked window's grip
+/// (FloatingChatFrame.lua:950-959).
 #[test]
-fn both_dock_windows_ship_locked() {
+fn both_dock_windows_ship_locked_without_a_grip() {
     let _data = benilla_formats::wow_data_or_skip!();
     let s = chat_ui();
     for i in 1..=2 {
-        assert_eq!(
-            s.eval::<i64>(&format!(
-                "local _,_,_,_,_,_,_,locked = GetChatWindowInfo({i}) return locked"
-            ))
-            .unwrap(),
-            1,
-            "window {i} ships locked (the boot init's LOCKED 1)"
-        );
         assert!(
             s.eval::<bool>(&format!("return ChatFrame{i}.isLocked ~= nil"))
                 .unwrap(),
-            "…and the frame was seated from it by FloatingChatFrame_Update"
+            "window {i} is seated locked"
+        );
+        assert!(
+            !shown(&s, &format!("ChatFrame{i}ResizeButton")),
+            "a locked window hides its grip"
         );
     }
-    assert!(s
-        .eval::<Option<i64>>("return FCF_Get_ChatLocked()")
-        .unwrap()
-        .is_none());
+    assert_eq!(
+        s.eval::<i64>("local _,_,_,_,_,_,_,locked = GetChatWindowInfo(1) return locked")
+            .unwrap(),
+        1,
+        "GetChatWindowInfo carries the lock"
+    );
 }
 
-/// The lock verb is the menu's first row (`FloatingChatFrame.lua:239`).
+/// The lock verb is the tab menu's first row (`FCF_Tab_OnClick` → the dropdown,
+/// FloatingChatFrame.lua:209-219): Unlock while locked, Lock while not.
 #[test]
 fn the_tab_menus_lock_row_toggles_the_window_and_flips_its_label() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -138,12 +149,6 @@ fn the_tab_menus_lock_row_toggles_the_window_and_flips_its_label() {
     assert!(s
         .eval::<bool>("return DropDownList1Button1:GetText() == UNLOCK_WINDOW")
         .unwrap());
-    assert_eq!(
-        s.eval::<i64>("return DropDownList1Button1.notCheckable")
-            .unwrap(),
-        1,
-        "a verb, not a tick"
-    );
     left_click(&mut s, "DropDownList1Button1");
     assert!(
         s.eval::<Option<i64>>("return ChatFrame1.isLocked")
@@ -151,12 +156,14 @@ fn the_tab_menus_lock_row_toggles_the_window_and_flips_its_label() {
             .is_none(),
         "the row unlocked the window"
     );
+    assert!(shown(&s, GRIP), "and showed its grip");
     assert!(
         s.eval::<Option<i64>>("local _,_,_,_,_,_,_,l = GetChatWindowInfo(1) return l")
             .unwrap()
             .is_none(),
-        "…and wrote it through SetChatWindowLocked, so it can be persisted"
+        "written through SetChatWindowLocked, so it persists"
     );
+    reveal(&mut s);
     right_click(&mut s, "ChatFrame1Tab");
     assert!(s
         .eval::<bool>("return DropDownList1Button1:GetText() == LOCK_WINDOW")
@@ -170,110 +177,66 @@ fn the_tab_menus_lock_row_toggles_the_window_and_flips_its_label() {
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// Authored 430x120 with `<ResizeBounds>` 296x120 to 608x400 (FloatingChatFrame.xml:517-524); the
+/// grip's `OnMouseDown` sizes from `BOTTOMRIGHT` (:547-556).
 #[test]
-fn a_locked_window_refuses_a_grip_drag() {
+fn an_unlocked_grip_resizes_and_clamps_at_the_bounds() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
-    let before = width(&mut s);
-    assert_eq!(before, 430.0, "the authored width");
-    // The grips take the mouse whatever the lock; `FCF_Resize`'s `isLocked` gate refuses.
-    assert!(s
-        .eval::<bool>("return ChatFrame1ResizeBottomRight:IsMouseEnabled()")
-        .unwrap());
-    let (x, y) = grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
-    s.mouse_move(x + 60.0, y - 40.0);
-    assert_eq!(width(&mut s), before, "a locked window does not resize");
-    assert!(
-        s.eval::<Option<i64>>("return ChatFrame1.resizing")
-            .unwrap()
-            .is_none(),
-        "FCF_Resize returned before StartSizing"
-    );
-    s.mouse_button(x + 60.0, y - 40.0, "LeftButton", false);
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// Authored 430x120; `<ResizeBounds>` 296x75 to 608x400 (`FloatingChatFrame.xml`).
-#[test]
-fn an_unlocked_bottom_right_grip_resizes_and_clamps_at_the_bounds() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = chat_ui();
+    assert_eq!(width(&mut s), 430.0, "the authored width");
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
-    assert!(
-        s.eval::<bool>("return ChatFrame1ResizeBottomRight:IsMouseEnabled()")
-            .unwrap(),
-        "unlocking hands the edges to the mouse"
-    );
-    let (x, y) = centre(&mut s, "ChatFrame1ResizeBottomRight");
+    let (x, y) = centre(&mut s, GRIP);
     assert_eq!(
         s.hit_test_name(x, y).as_deref(),
-        Some("ChatFrame1ResizeBottomRight"),
-        "the grip is the topmost hit — a lowered frame level would put the window on top of it"
+        Some(GRIP),
+        "the grip is the topmost hit"
     );
 
-    let bottom_before: f64 = s.eval("return ChatFrame1:GetBottom()").unwrap();
-    grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
-    // Right and down: the `BOTTOMRIGHT` corner follows the cursor, so both grow.
+    let top_before: f64 = s.eval("return ChatFrame1:GetTop()").unwrap();
+    grab_grip(&mut s, GRIP);
     s.mouse_move(x + 50.0, y - 30.0);
     assert_eq!(width(&mut s), 480.0, "the right edge followed the cursor");
     assert_eq!(height(&mut s), 150.0, "and the bottom edge with it");
-    let bottom_after: f64 = s.eval("return ChatFrame1:GetBottom()").unwrap();
+    let top_after: f64 = s.eval("return ChatFrame1:GetTop()").unwrap();
     assert!(
-        (bottom_after - (bottom_before - 30.0)).abs() < 1e-3,
-        "the planted TOP edge stayed put: {bottom_before} -> {bottom_after}"
+        (top_after - top_before).abs() < 1e-3,
+        "the TOP edge stayed put"
     );
 
     s.mouse_move(x + 900.0, y - 900.0);
-    assert_eq!(width(&mut s), 608.0, "maxResize x");
-    assert_eq!(height(&mut s), 400.0, "maxResize y");
+    assert_eq!((width(&mut s), height(&mut s)), (608.0, 400.0), "maxResize");
     s.mouse_move(x - 900.0, y + 900.0);
-    assert_eq!(width(&mut s), 296.0, "minResize x");
-    assert_eq!(height(&mut s), 75.0, "minResize y");
-
-    s.run("ChatFrame1:StopMovingOrSizing()").unwrap();
+    assert_eq!((width(&mut s), height(&mut s)), (296.0, 120.0), "minResize");
+    s.mouse_button(x - 900.0, y + 900.0, "LeftButton", false);
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// `OnMouseUp` goes to the button that took the press, not to the frame under the cursor.
+/// `OnMouseUp` goes to the button that took the press, wherever the cursor is, and its
+/// `StopMovingOrSizing` ends the resize (FloatingChatFrame.xml:558-566).
 #[test]
 fn the_release_ends_the_resize_from_anywhere_on_screen() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
-    let (x, y) = grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
-
+    let (x, y) = grab_grip(&mut s, GRIP);
     s.mouse_move(x + 900.0, y);
     assert_eq!(width(&mut s), 608.0, "held against the maximum");
     s.mouse_button(x + 900.0, y, "LeftButton", false);
     s.resolve();
-    assert!(
-        s.eval::<Option<i64>>("return ChatFrame1.resizing")
-            .unwrap()
-            .is_none(),
-        "FCF_StopResize ran"
-    );
-
-    // With the drag still live, walking back would shrink the window.
     s.mouse_move(x - 200.0, y);
-    assert_eq!(
-        width(&mut s),
-        608.0,
-        "the drag is over; the window is not moving"
-    );
+    assert_eq!(width(&mut s), 608.0, "the resize is over");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
+/// The default window's tab `OnDragStart` returns while it is locked, else starts the move
+/// (FloatingChatFrame.xml:445-452); the tab's `OnUpdate` stops it once the button is up.
 #[test]
 fn the_tab_drag_moves_an_unlocked_window_and_a_locked_one_stays_put() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
     let start = left(&mut s);
-    drag_tab(&mut s, 80.0, 0.0);
-    assert_eq!(
-        left(&mut s),
-        start,
-        "a locked window does not drag — ChatTabTemplate's OnDragStart returns on isLocked"
-    );
+    drag_tab(&mut s, "ChatFrame1Tab", 80.0, 0.0);
+    assert_eq!(left(&mut s), start, "a locked window does not drag");
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
     reveal(&mut s);
     let (tx, ty) = centre(&mut s, "ChatFrame1Tab");
@@ -286,11 +249,12 @@ fn the_tab_drag_moves_an_unlocked_window_and_a_locked_one_stays_put() {
         "the window followed the cursor from where the drag started"
     );
     s.mouse_button(tx + 80.0, ty, "LeftButton", false);
+    s.tick(0.016);
     s.mouse_move(tx + 400.0, ty);
     assert_eq!(
         left(&mut s),
         start + 75.0,
-        "OnDragStop ended it — a move that outlived the button would keep going"
+        "the tab's OnUpdate stopped the move once the button was up"
     );
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
@@ -308,7 +272,7 @@ fn a_moved_window_is_user_placed_and_the_managed_pass_skips_it() {
         "nothing has placed it yet"
     );
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
-    drag_tab(&mut s, 120.0, 0.0);
+    drag_tab(&mut s, "ChatFrame1Tab", 120.0, 0.0);
     let moved = left(&mut s);
     assert_eq!(
         moved,
@@ -334,10 +298,10 @@ fn the_geometry_round_trips_through_the_save_file() {
     let mut s = chat_ui();
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
 
-    let (gx, gy) = grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
+    let (gx, gy) = grab_grip(&mut s, GRIP);
     s.mouse_move(gx + 70.0, gy - 40.0);
     s.mouse_button(gx + 70.0, gy - 40.0, "LeftButton", false);
-    drag_tab(&mut s, 90.0, 60.0);
+    drag_tab(&mut s, "ChatFrame1Tab", 90.0, 60.0);
 
     let want = (
         width(&mut s),
@@ -386,9 +350,10 @@ fn the_geometry_round_trips_through_the_save_file() {
     );
 }
 
-/// `CHAT_FRAME_TEXTURES` fades and tints the background and the eight grip pieces as one.
+/// `CHAT_FRAME_TEXTURES` (FloatingChatFrame.lua:30-46) fade in together on a hover to
+/// `DEFAULT_CHATFRAME_ALPHA`, and `FCF_SetWindowColor` tints them as one.
 #[test]
-fn the_grip_art_follows_the_windows_reveal_and_tint() {
+fn the_chrome_follows_the_windows_reveal_and_tint() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
     s.mouse_move(1500.0, 850.0);
@@ -396,7 +361,8 @@ fn the_grip_art_follows_the_windows_reveal_and_tint() {
         s.tick(0.016);
         s.resolve();
     }
-    for piece in ["Background", "ResizeBottomRightTexture", "ResizeTopTexture"] {
+    let pieces = ["Background", "BottomRightTexture", "TopTexture"];
+    for piece in pieces {
         assert_eq!(
             s.eval::<f64>(&format!("return ChatFrame1{piece}:GetAlpha()"))
                 .unwrap(),
@@ -405,35 +371,36 @@ fn the_grip_art_follows_the_windows_reveal_and_tint() {
         );
     }
     reveal(&mut s);
-    for piece in ["Background", "ResizeBottomRightTexture", "ResizeTopTexture"] {
+    for piece in pieces {
         let alpha: f64 = s
             .eval(&format!("return ChatFrame1{piece}:GetAlpha()"))
             .unwrap();
         assert!(
             (alpha - 0.25).abs() < 1e-6,
-            "{piece} reveals with the box (DEFAULT_CHATFRAME_ALPHA): {alpha}"
+            "{piece} reveals to DEFAULT_CHATFRAME_ALPHA: {alpha}"
         );
     }
     s.run("FCF_SetWindowColor(ChatFrame1, 1, 0, 0)").unwrap();
     let (r, g, b): (f64, f64, f64) = s
-        .eval("return ChatFrame1ResizeTopTexture:GetVertexColor()")
+        .eval("return ChatFrame1TopTexture:GetVertexColor()")
         .unwrap();
     assert_eq!((r, g, b), (1.0, 0.0, 0.0));
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
 
-/// `FCF_OnUpdate`'s `or chatFrame.resizing` clause keeps the box open with the cursor off it.
+/// A pushed grip holds the window faded in with the cursor off it (`FCF_OnUpdate`'s
+/// `resizeButton:GetButtonState() == "PUSHED"`, FloatingChatFrame.lua:1066-1072).
 #[test]
-fn a_drag_in_flight_holds_the_chrome_visible() {
+fn a_resize_in_flight_holds_the_chrome_visible() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
     s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
     reveal(&mut s);
-    grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
+    grab_grip(&mut s, GRIP);
     assert_eq!(
-        s.eval::<i64>("return ChatFrame1.resizing").unwrap(),
-        1,
-        "FCF_Resize marked the frame"
+        s.eval::<String>(&format!("return {GRIP}:GetButtonState()"))
+            .unwrap(),
+        "PUSHED"
     );
     s.mouse_move(1500.0, 820.0);
     for _ in 0..45 {
@@ -443,75 +410,41 @@ fn a_drag_in_flight_holds_the_chrome_visible() {
     let alpha: f64 = s.eval("return ChatFrame1Background:GetAlpha()").unwrap();
     assert!(
         (alpha - 0.25).abs() < 1e-6,
-        "the resize holds the reveal open with the cursor off the window (`or chatFrame.resizing`): {alpha}"
+        "the pushed grip holds the reveal open: {alpha}"
     );
     s.mouse_button(1500.0, 820.0, "LeftButton", false);
-    assert!(
-        s.eval::<Option<i64>>("return ChatFrame1.resizing")
-            .unwrap()
-            .is_none(),
-        "FCF_StopResize cleared it"
-    );
-    for _ in 0..45 {
+    // `CHAT_TAB_HIDE_DELAY` 1 s, then `CHAT_FRAME_FADE_OUT_TIME` 2 s (FloatingChatFrame.lua:9-11).
+    for _ in 0..200 {
         s.tick(0.016);
         s.resolve();
     }
     let alpha: f64 = s.eval("return ChatFrame1Background:GetAlpha()").unwrap();
     assert!(
         alpha < 1e-6,
-        "and the box fades once the drag ends: {alpha}"
+        "and the chrome fades once it is let go: {alpha}"
     );
 }
 
-/// `FCF_Get_ChatLocked()` is `FCF_Resize`'s first gate, ahead of the window's own lock.
+/// Dragging a docked window's tab tears it off the dock, unlocked, as its own window
+/// (FloatingChatFrame.xml:453-478).
 #[test]
-fn the_chat_locked_global_overrides_the_per_window_lock() {
+fn dragging_the_docked_combat_logs_tab_tears_it_off_the_dock() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_ui();
-    s.run("FCF_SetLocked(ChatFrame1, nil)").unwrap();
-    let before = width(&mut s);
-    s.run("FCF_Set_ChatLocked(1)").unwrap();
-    assert_eq!(s.eval::<String>("return CHAT_LOCKED").unwrap(), "1");
-    let (x, y) = grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
-    s.mouse_move(x + 50.0, y - 30.0);
-    assert_eq!(
-        width(&mut s),
-        before,
-        "the blanket switch wins over an unlocked window — FCF_Resize's first gate"
+    s.run("FCF_SelectDockFrame(ChatFrame2)").unwrap();
+    assert!(s.eval::<bool>("return ChatFrame2.isDocked ~= nil").unwrap());
+    drag_tab(&mut s, "ChatFrame2Tab", 60.0, 120.0);
+    assert!(
+        s.eval::<bool>("return ChatFrame2.isDocked == nil").unwrap(),
+        "the drag undocked it"
     );
-    s.mouse_button(x + 50.0, y - 30.0, "LeftButton", false);
-    s.run("FCF_Set_ChatLocked(nil)").unwrap();
-    let (x, y) = grab_grip(&mut s, "ChatFrame1ResizeBottomRight");
-    s.mouse_move(x + 50.0, y - 30.0);
-    assert_eq!(width(&mut s), before + 50.0, "and lets go when cleared");
-    s.mouse_button(x + 50.0, y - 30.0, "LeftButton", false);
-    assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
-}
-
-/// A docked non-default window takes its rect from `ChatFrame1`, so `FCF_Resize`'s third gate
-/// (`isDocked and chatFrame ~= DEFAULT_CHAT_FRAME`) refuses it.
-#[test]
-fn the_docked_combat_log_cannot_be_moved_or_resized_on_its_own() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = chat_ui();
-    s.run("FCF_SelectDockFrame(ChatFrame2) FCF_SetLocked(ChatFrame2, nil)")
-        .unwrap();
-    s.resolve();
-    let before: f64 = s.eval("return ChatFrame2:GetWidth()").unwrap();
-    let (x, y) = grab_grip(&mut s, "ChatFrame2ResizeBottomRight");
-    s.mouse_move(x + 50.0, y - 30.0);
-    s.resolve();
-    assert_eq!(
-        s.eval::<f64>("return ChatFrame2:GetWidth()").unwrap(),
-        before,
-        "a docked window that is not the default one owns no geometry — FCF_Resize's third gate"
+    assert!(
+        s.eval::<bool>("return ChatFrame2.isLocked == nil").unwrap(),
+        "and unlocked it"
     );
-    s.mouse_button(x + 50.0, y - 30.0, "LeftButton", false);
-    s.run("FCF_SelectDockFrame(ChatFrame1) FCF_SetLocked(ChatFrame1, nil)")
+    let (one, two): (f64, f64) = s
+        .eval("return ChatFrame1:GetLeft(), ChatFrame2:GetLeft()")
         .unwrap();
-    drag_tab(&mut s, 60.0, 0.0);
-    let one: f64 = s.eval("return ChatFrame1:GetLeft()").unwrap();
-    let two: f64 = s.eval("return ChatFrame2:GetLeft()").unwrap();
-    assert_eq!(one, two, "the dock moved as one");
+    assert_ne!(one, two, "it no longer shares the dock's rect");
     assert!(s.errors().is_empty(), "script errors: {:?}", s.errors());
 }
