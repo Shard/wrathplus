@@ -390,7 +390,7 @@ mod tests {
         assert!(has_ui && s.hunter_pet);
         assert_eq!(s.happiness, Some(3));
         assert_eq!(s.damage_percentage, 125.0);
-        assert_eq!(s.loyalty_rate, 20.0);
+        assert_eq!(s.loyalty_rate, 0.0, "12340 has no loyalty");
         assert_eq!(s.loyalty, None);
         assert_eq!(s.training_points, (0, 0));
         assert_eq!(s.experience, (4200, 8000));
@@ -488,8 +488,7 @@ mod tests {
             "the damage line formats the percentage in: {:?}",
             g("PET_DAMAGE_PERCENTAGE")
         );
-        assert!(!g("LOSING_LOYALTY").is_empty());
-        assert!(!g("GAINING_LOYALTY").is_empty());
+        assert!(g("LOSING_LOYALTY").is_empty() && g("GAINING_LOYALTY").is_empty());
     }
 
     #[test]
@@ -540,9 +539,9 @@ mod tests {
             family_for(Some(&pet), &names, &cmds, Some(&t)),
             (
                 Some("Imp".into()),
-                // Rows 15 (Felhunter) and 23 (Imp) ship this placeholder; the stable, the
-                // column's only reader, never shows it for a warlock.
-                Some("Interface\\Icons\\Ability_Druid_CatForm".into()),
+                // 3.3.5's Imp row (23) ships no icon; the stable, the column's only reader, never
+                // shows one for a warlock.
+                None,
                 Vec::new()
             )
         );

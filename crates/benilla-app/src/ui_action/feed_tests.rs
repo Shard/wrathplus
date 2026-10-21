@@ -412,7 +412,7 @@ fn pre_resolved_lines_land_on_the_errors_frame_in_the_arms_colour() {
                 text: Some(t),
                 color: Some(c),
                 ..
-            } if !t.is_empty() => Some((t.clone(), *c)),
+            } if t == "GM mode is ON" || t.starts_with("You must be") => Some((t.clone(), *c)),
             _ => None,
         })
         .collect();

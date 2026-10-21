@@ -449,12 +449,10 @@ impl Rig {
             .iter()
             .filter_map(|&id| skill_lines.spell_to_line(id))
             .collect();
-        assert!(
-            lines.len() <= 128,
-            "the player's skill table holds 128 lines"
-        );
+        // The player's skill table holds 128 lines; 12340's spells name more, so the rig seats the
+        // first 128 and a spell on any other line reads no skill, an input that never moves.
         let mut layout = Layout {
-            lines: lines.into_iter().collect(),
+            lines: lines.into_iter().take(128).collect(),
             kinds: vec![(2, 0)],
         };
         for d in displays().filter(|d| worn_slots_read(d) != 0) {

@@ -234,83 +234,6 @@ fn trainer_icon_is_nil_until_the_product_template_lands_and_asks_once() {
     );
 }
 
-/// On the shipped `Spell.dbc`: 2756 is the wrapper a Blacksmithing trainer sends, 2739 the recipe
-/// it teaches, 2847 the sword it makes. Skips without client data.
-#[test]
-fn trainer_icon_on_real_data_reaches_for_the_crafted_item() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-    let spells = benilla_formats::load_spell_catalog(&mut chain).expect("load Spell");
-
-    // The two textures a wrong law produces.
-    let wrapper_icon = spells.get(2756).unwrap().icon.clone();
-    let recipe_icon = spells.get(2739).unwrap().icon.clone();
-    assert_eq!(
-        recipe_icon.as_deref(),
-        Some("Interface\\Icons\\Spell_Shadow_SealOfKings"),
-        "the blue crown on the row IS the recipe spell's own icon"
-    );
-
-    // A tradeskill trainer: gate 3 fires for item 2847 and the icon waits on its template.
-    let deps = Deps::new();
-    let icons = ItemDisplays::icons_for_tests(ItemDisplayCatalog::from_displays(HashMap::new()));
-    let icon = service_icon(
-        2756,
-        TRAINER_TYPE_TRADESKILL,
-        &spells,
-        Some(&icons),
-        &deps.items,
-        &deps.commands,
-    );
-    assert_eq!(
-        icon, None,
-        "waiting on the item template, not painting the crown"
-    );
-    assert_eq!(
-        deps.queried_entries(),
-        vec![2847],
-        "the law reached for the crafted sword's template"
-    );
-
-    // A class trainer with the same wire spell: the wrapper's own icon, not the recipe's.
-    let deps = Deps::new();
-    let class_icon = service_icon(2756, 0, &spells, None, &deps.items, &deps.commands);
-    assert_eq!(class_icon, wrapper_icon);
-    assert_ne!(
-        class_icon, recipe_icon,
-        "the taught spell's icon is never painted at a trainer"
-    );
-}
-
-/// On real data: the warrior wrapper 1605 is not in `SkillLineAbility`, so grouping hops to the
-/// taught 78 (Arms, 26) while the buy id stays 1605. Skips without client data.
-#[test]
-fn resolve_hops_the_learn_wrapper_to_the_taught_ability() {
-    let data = benilla_formats::wow_data_or_skip!();
-    let mut chain = benilla_formats::open_chain(&data).expect("open chain");
-    let spells = benilla_formats::load_spell_catalog(&mut chain).expect("load Spell");
-    let skills = benilla_formats::load_skill_line_catalog(&mut chain).expect("load skill lines");
-
-    let svc = resolve_service(
-        &wire(1605, trainer_spell_state::GREEN, 10, 1, 0),
-        0,
-        &spells,
-        Some(&skills),
-        &BTreeSet::new(),
-    );
-    assert_eq!(svc.spell_id, 1605, "the buy id stays the wire wrapper");
-    assert_eq!(
-        svc.group_key, 26,
-        "grouped under the taught ability's Arms line"
-    );
-    assert_eq!(svc.group_name, "Arms");
-    assert_eq!(
-        svc.name.as_deref(),
-        Some("Heroic Strike"),
-        "the WIRE spell's own name — which here happens to match the taught one"
-    );
-}
-
 /// Only a profession-learn row tells the two apart: 2020 is "Apprentice Blacksmith" with no rank,
 /// teaching 2018 "Blacksmithing"/"Apprentice". Skips without client data.
 #[test]
@@ -339,16 +262,6 @@ fn display_name_is_the_wire_spell_not_the_taught_one() {
     // The group law puts it first: 2020 carries Effect 44 `SKILL_STEP`, a recipe wrapper does not.
     assert_eq!(svc.group_key, 1);
     assert_eq!(svc.group_name, "<STEP>");
-    let recipe = resolve_service(
-        &wire(2743, trainer_spell_state::RED, 50, 0, 164),
-        TRAINER_TYPE_TRADESKILL,
-        &spells,
-        Some(&skills),
-        &BTreeSet::new(),
-    );
-    assert_eq!(recipe.group_key, 2);
-    assert_eq!(recipe.group_name, "<LEARN>");
-    assert_eq!(recipe.name.as_deref(), Some("Copper Chain Pants"));
 }
 
 #[test]

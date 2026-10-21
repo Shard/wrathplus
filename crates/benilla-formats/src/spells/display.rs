@@ -621,7 +621,11 @@ impl SpellDisplay {
     /// flagged as a stance (warrior stances, stealth) does not count as shapeshifted, and the
     /// refusal reasons split as in vmangos's `SpellEntry::GetErrorAtShapeshiftedCast`.
     pub fn form_refusal(&self, form: u8, form_is_stance: bool) -> Option<FormRefusal> {
-        let stance_bit = if form == 0 { 0 } else { 1u32 << (form - 1) };
+        // A form past 32 names no bit of the 32-bit masks.
+        let stance_bit = match form {
+            0 => 0,
+            f => 1u32.checked_shl(u32::from(f) - 1).unwrap_or(0),
+        };
         if self.stances_not & stance_bit != 0 {
             return Some(FormRefusal::NotShapeshift);
         }

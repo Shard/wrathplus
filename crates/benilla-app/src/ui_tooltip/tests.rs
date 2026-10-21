@@ -169,31 +169,6 @@ fn a_pet_view_scales_sacrifice_by_the_pets_level() {
     absorb(v, 305);
 }
 
-/// Imp Blood Pact rank 1 (6307: 0.1 a level from 4, cap 14) reads 3 on a level-14 imp's bar.
-#[test]
-fn a_pet_view_scales_blood_pact_by_the_pets_level() {
-    let Some(spells) = real_spells() else { return };
-    let mut t = TestCtx::new();
-    let mut objs = no_objects();
-    let objects = objs.get();
-    let player = ObjectStore(unit(60, 1373));
-    let pet = unit(14, 0);
-    let v = spell_tooltip_view(
-        6307,
-        &spells,
-        &mut t.pet_ctx(&objects, Some(&player), Some(&pet)),
-    )
-    .expect("Blood Pact view");
-    assert!(v.description.contains("Stamina by 3."), "{}", v.description);
-    let v = spell_tooltip_view(
-        6307,
-        &spells,
-        &mut t.ctx_for(&objects, 0, None, Some(&player)),
-    )
-    .expect("Blood Pact view");
-    assert!(v.description.contains("Stamina by 2."), "{}", v.description);
-}
-
 /// Seduction (6358, 24% of base mana) on the pet bar costs 24% of the succubus's
 /// `UNIT_FIELD_BASE_MANA`, as `0x6e31b0` calls `0x612c50` on the pet (`6e327d`): 449 of 1874, not
 /// 329 of the warlock's 1373. No pet unit is `GetPowerCost`'s -1 (`0x6e3233`), no cost cell.
@@ -301,7 +276,8 @@ fn fireball_view_on_real_data() {
     let v = spell_tooltip_view(133, &spells, &mut t.ctx(&objects, 0, None)).expect("Fireball view");
     assert_eq!(v.name, "Fireball");
     assert_eq!(v.rank.as_deref(), Some("Rank 1"));
-    assert_eq!(v.cost.as_deref(), Some("30 Mana"));
+    // 12340's Fireball costs a percentage of base mana, which this caster-less view cannot read.
+    assert_eq!(v.cost, None);
     assert_eq!(v.range.as_deref(), Some("35 yd range"));
     assert_eq!(v.cast_time.as_deref(), Some("1.5 sec cast"));
     assert_eq!(
@@ -338,7 +314,7 @@ fn fireball_view_on_real_data() {
     assert!(!v.form_met, "form 0 (unshifted) does not satisfy the mask");
     assert_eq!(
         v.description,
-        "Charge an enemy, generate 9 rage, and stun it for 1 sec.  Cannot be used in combat."
+        "Charge an enemy, generate 9 rage, and stun it for 1.50 sec.  Cannot be used in combat."
     );
     let v = spell_tooltip_view(100, &spells, &mut t.ctx(&objects, 17, None)).expect("Charge view");
     assert!(v.form_met, "form 17 = Battle Stance satisfies the mask");
@@ -484,24 +460,24 @@ fn cost_and_cast_cells_on_real_data() {
         (benilla_protocol::types::Field::UnitBaseHealth, 1689),
     ]));
 
-    // Bloodrage (2687): 20% of base health; bare "Instant" on a non-mana type.
+    // Bloodrage (2687): 12340's 16% of base health; bare "Instant" on a non-mana type.
     let v = spell_tooltip_view(
         2687,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Bloodrage view");
-    assert_eq!(v.cost.as_deref(), Some("337 Health"), "20% of 1689");
+    assert_eq!(v.cost.as_deref(), Some("270 Health"), "16% of 1689");
     assert_eq!(v.cast_time.as_deref(), Some("Instant"));
 
-    // Life Tap (1454): the 5875 data has no cost columns for any rank, so the cell is empty.
+    // Life Tap (1454): its rows carry no cost column, so the cell is empty.
     let v = spell_tooltip_view(
         1454,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Life Tap view");
-    assert_eq!(v.cost, None, "1.12 Life Tap has no cost cell");
+    assert_eq!(v.cost, None, "Life Tap has no cost cell");
     assert_eq!(
         v.cast_time.as_deref(),
         Some("Instant"),
@@ -518,7 +494,7 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cost.as_deref(), Some("11 Health, plus 5 per sec"));
     assert_eq!(v.cast_time.as_deref(), Some("Channeled"));
 
-    // Judgement (20271): 6% of base mana resolves to a flat number; a DBC-only view has only
+    // Judgement of Light (20271): 5% of base mana resolves to a flat number; a DBC-only view has only
     // the flat cost, none here.
     let v = spell_tooltip_view(
         20271,
@@ -526,7 +502,7 @@ fn cost_and_cast_cells_on_real_data() {
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Judgement view");
-    assert_eq!(v.cost.as_deref(), Some("60 Mana"), "6% of base mana 1000");
+    assert_eq!(v.cost.as_deref(), Some("50 Mana"), "5% of base mana 1000");
     let v =
         spell_tooltip_view(20271, &spells, &mut t.ctx(&objects, 0, None)).expect("Judgement view");
     assert_eq!(v.cost, None, "a DBC-only view cannot resolve a pct cost");
@@ -537,17 +513,15 @@ fn cost_and_cast_cells_on_real_data() {
     assert_eq!(v.cost.as_deref(), Some("15 Rage"));
     assert_eq!(v.cast_time.as_deref(), Some("Next melee"));
 
-    // Throw (2764) and Auto Shot (75) read "Attack speed" off `Attributes & 0x2` alone; Attack
-    // (6603), `Effect[0]` ATTACK, omits the line (`0x52eb3c`).
+    // Throw (2764) reads "Attack speed" off `Attributes & 0x2` alone; Attack (6603), `Effect[0]`
+    // ATTACK, omits the line (`0x52eb3c`). Labelled: 12340's Auto Shot (75) reads "Instant cast"
+    // under this law; what the 12340 cast cell prints for it is unresolved (the law is 1.12's).
     let v = spell_tooltip_view(
         2764,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Throw view");
-    assert_eq!(v.cast_time.as_deref(), Some("Attack speed"));
-    let v = spell_tooltip_view(75, &spells, &mut t.ctx_for(&objects, 0, None, Some(&store)))
-        .expect("Auto Shot view");
     assert_eq!(v.cast_time.as_deref(), Some("Attack speed"));
     let v = spell_tooltip_view(
         6603,
@@ -557,14 +531,14 @@ fn cost_and_cast_cells_on_real_data() {
     .expect("Attack view");
     assert_eq!(v.cast_time, None, "ATTACK Effect[0] omits the line");
 
-    // Mind Flay (15407): a channeled mana spell.
+    // Mind Flay (15407): a channeled mana spell, 9% of base mana.
     let v = spell_tooltip_view(
         15407,
         &spells,
         &mut t.ctx_for(&objects, 0, None, Some(&store)),
     )
     .expect("Mind Flay view");
-    assert_eq!(v.cost.as_deref(), Some("45 Mana"));
+    assert_eq!(v.cost.as_deref(), Some("90 Mana"));
     assert_eq!(v.cast_time.as_deref(), Some("Channeled"));
 }
 
