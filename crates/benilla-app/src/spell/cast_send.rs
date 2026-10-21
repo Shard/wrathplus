@@ -73,7 +73,7 @@ impl CastCommit {
 const CLASS_ROGUE: u8 = 4;
 
 /// A player's spell press held at TryCast's attack pick (`6e4edf` → `0x612df0`), which can move
-/// the selection the ladder only reads. [`crate::script_calls`] runs the pick and resumes it.
+/// the selection the ladder only reads. The UI's `script_calls` pass runs the pick and resumes it.
 #[derive(Resource, Default)]
 pub(crate) struct HeldForPick(Option<HeldCast>);
 
