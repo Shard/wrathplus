@@ -407,7 +407,10 @@ pub(super) fn seed(s: &mut UiScript) {
         }),
     );
 
-    // The dungeon finder: a catalog row, a queue and a proposal.
+    // The dungeon finder: a catalog row, a queue and a proposal. The random row is named as the
+    // client names the type, off the loaded `GlobalStrings.lua`.
+    let random_dungeon =
+        benilla_ui::strings::global(s.lua(), "LFG_TYPE_RANDOM_DUNGEON").unwrap_or_default();
     s.set_wrath_lfg_catalog(
         std::sync::Arc::new(WrathLfgCatalog {
             dungeons: vec![
@@ -422,7 +425,7 @@ pub(super) fn seed(s: &mut UiScript) {
                 },
                 WrathLfgDungeon {
                     id: 2,
-                    name: "Random Dungeon".into(),
+                    name: random_dungeon,
                     dungeon_type: 6,
                     min_level: 15,
                     target_min_level: 15,

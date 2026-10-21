@@ -74,9 +74,9 @@ pub(crate) struct ViewCtx<'a, 'w, 's> {
 }
 
 /// Build one spell's tooltip view, every cell resolved here where the catalogs live, and what it
-/// read ([`Deps`]). The range, cast, cooldown, form and item cells fill their `GlobalStrings.lua`
-/// keys; the cost, reagents and chance cells are composed in English, where the reference fills
-/// `MANA_COST` and its kin, `SPELL_REAGENTS` and `CHANCE_TO_*`.
+/// read ([`Deps`]). The range, cast, cooldown, form, item and cost cells fill their
+/// `GlobalStrings.lua` keys; the reagents and chance cells are composed in English, where the
+/// reference fills `SPELL_REAGENTS` and `CHANCE_TO_*`.
 pub(crate) fn build_view(
     spell_id: u32,
     spells: &Spells,
@@ -159,24 +159,39 @@ pub(crate) fn build_view(
     let cost = {
         // The shared per-type divisor (`0x6e7130`), never a local `power_type == 1` test.
         let div = benilla_protocol::types::power_display_scale(d.power_type);
-        let unit = match d.power_type {
-            0 => "Mana",
-            1 => "Rage",
-            2 => "Focus",
-            3 => "Energy",
-            4 => "Happiness",
-            _ => "Health",
+        // The power's name by its GlobalString; runic power is 6, and anything else unmapped reads
+        // as health, as before (rune costs, type 5, are unresolved here).
+        let unit_key = match d.power_type {
+            0 => "MANA",
+            1 => "RAGE",
+            2 => "FOCUS",
+            3 => "ENERGY",
+            4 => "HAPPINESS",
+            6 => "RUNIC_POWER",
+            _ => "HEALTH",
         };
+        let unit = (vctx.get)(unit_key).unwrap_or_default();
+        let cost = i64::from(resolved_cost / div);
         if resolved_cost == 0 && d.mana_per_second == 0 {
             None
         } else if d.mana_per_second > 0 {
-            Some(format!(
-                "{} {unit}, plus {} per sec",
-                resolved_cost / div,
-                d.mana_per_second / div
-            ))
+            // `POWER_DISPLAY_COST_PER_TIME`, "%d %s, plus %d per sec".
+            keyed(
+                vctx.get,
+                "POWER_DISPLAY_COST_PER_TIME",
+                &[
+                    Arg::D(cost),
+                    Arg::S(&unit),
+                    Arg::D(i64::from(d.mana_per_second / div)),
+                ],
+            )
         } else {
-            Some(format!("{} {unit}", resolved_cost / div))
+            // `POWER_DISPLAY_COST`, "%d %s".
+            keyed(
+                vctx.get,
+                "POWER_DISPLAY_COST",
+                &[Arg::D(cost), Arg::S(&unit)],
+            )
         }
     };
     // The range cell: two attribute gates, `GetMinMaxRange` (`0x6e3480`, `0x52e9c2`), then

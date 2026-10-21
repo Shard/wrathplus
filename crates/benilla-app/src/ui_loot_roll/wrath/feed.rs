@@ -90,6 +90,10 @@ pub(super) fn feed(
         }
         lifecycle.receive(roll);
     }
+    // The lines read their `LOOT_ROLL_*` templates off the VM's `GlobalStrings.lua`.
+    let strings = script
+        .as_deref()
+        .map(|s| move |key: &str| s.lua().globals().get::<String>(key).ok());
     super::outcomes::drain(
         lines,
         &items,
@@ -98,6 +102,9 @@ pub(super) fn feed(
         own.0,
         &mut chat,
         loot.show_loot_spam,
+        strings
+            .as_ref()
+            .map(|g| g as &dyn Fn(&str) -> Option<String>),
     );
     // Queries also progress while no VM exists; negative answers drop rather than resurrect.
     let mut ready = std::collections::HashMap::new();
