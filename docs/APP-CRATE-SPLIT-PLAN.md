@@ -455,7 +455,7 @@ Each lands as a behaviour-neutral unit with the usual gates, in this order.
 
 | Group | References | Mechanism | Status |
 |---|---|---|---|
-| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Event.** `ui_script` sets a core `InGameUi` resource that world systems read as their run condition; `seam_scale` is a pure fn and moves down; `load_stock_bindings`' caller (vplates) moves up. | claimed |
+| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller is a `vplates` test the 12340 nameplate port (Assets) rewrites; it goes with that port. | in review |
 | Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down** to a world-layer overlay module beside the pure moves. | claimed |
 | Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** World writes a cast-bar message; `ui_cast` drains it in its set, the same frame. | claimed |
 | Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | **Drained message** per row: world writes the request, the UI system that owns the session drains it in its existing set; frame order checked per row. | claimed |
