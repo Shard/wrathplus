@@ -146,6 +146,8 @@ pub(super) fn load_session_ui(script: &mut UiScript, addons: bool) -> Vec<String
     // No sound during the load, as on the live edge (`silenced_ui_load`).
     script.push_sound_suppression();
     let mut failures = load_core(script);
+    // As [`load_wrath_ui`]: the archive's startup Blizzard addon with the core.
+    failures.extend(super::addons::load_wrath_startup_blizzard(script));
     failures.extend(super::wrath_addons::load_bootstrap(script));
     if addons {
         failures.extend(super::addons::load_wrath_third_party(
@@ -285,6 +287,9 @@ pub(crate) fn load_wrath_ui(
 ) -> Vec<String> {
     script.set_instruction_budget(super::addons::LOAD_INSTRUCTION_BUDGET);
     let mut failures = load_core(script);
+    // The archive's startup Blizzard addon with the core, as a clean login has it: stock
+    // `CharacterFrame_ShowSubFrame` walks its `TokenFrame` unguarded.
+    failures.extend(super::addons::load_wrath_startup_blizzard(script));
     failures.extend(super::wrath_addons::load_bootstrap(script));
     failures.extend(super::addons::load_wrath_third_party(
         script,

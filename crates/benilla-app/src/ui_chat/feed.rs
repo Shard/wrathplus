@@ -129,7 +129,7 @@ impl ChatLog {
         self.pending.push(Pending::Event(event));
     }
 
-    /// Queue one combat-log line, classified at the packet by [`super::combat`], for its names.
+    /// Queue one client-composed line ([`super::combat`]); the drain fills its template.
     pub(crate) fn push_combat(&mut self, line: super::combat::PendingCombat) {
         self.pending.push(Pending::Combat(Box::new(line)));
     }
@@ -622,8 +622,6 @@ pub(crate) fn feed_chat(
     states: Res<crate::world_state::WorldStates>,
     // The language gate: the word pool, this character's fluency and the GM bit.
     langs: Res<super::language::ChatLanguages>,
-    // Item names for `TRADESKILL_LOG`, `FEEDPET_LOG`, `ITEMENCHANTMENT*`, `SPELLDURABILITYDAMAGE`.
-    items: Res<crate::items::Items>,
     // The spam and profanity filters, which run in the reference's display function `0x49a870`.
     mut text_filter: crate::text_filter::ChatTextFilter,
 ) {
@@ -1073,56 +1071,8 @@ pub(crate) fn feed_chat(
                 let Some(event) = event else { continue };
                 route(&mut script, &mut windows, &event);
             }
-            Pending::Combat(mut line) => {
-                // Both names, ask-once within `tries`; guid 0 is already filled (`/chattest`).
-                let mut wait = false;
-                for (guid, slot) in [(line.subject, 0usize), (line.object, 1usize)] {
-                    if guid == 0 {
-                        continue;
-                    }
-                    match super::combat::object_name(
-                        guid,
-                        guids.0.get(&guid).and_then(|e| stores.get(*e).ok()),
-                        &names,
-                        &commands,
-                    ) {
-                        Some(name) if slot == 0 => line.fills.attacker = name,
-                        Some(name) => line.fills.victim = name,
-                        None => wait = true,
-                    }
-                }
-                // An item the server answered unknown does not wait: the line composes with what
-                // the arm left in `named` (the reference falls back to `"UKNOWNOBJECT"`).
-                match line.named {
-                    super::combat::Named::Ready => {}
-                    super::combat::Named::Item(entry) => {
-                        match items.template(entry, 0, &commands).map(|t| t.name.clone()) {
-                            Some(name) => line.fills.named = name,
-                            None if !items.template_answered_unknown(entry) => wait = true,
-                            None => {}
-                        }
-                    }
-                    super::combat::Named::Unit(guid) => {
-                        match super::combat::object_name(
-                            guid,
-                            guids.0.get(&guid).and_then(|e| stores.get(*e).ok()),
-                            &names,
-                            &commands,
-                        ) {
-                            Some(name) => line.fills.named = name,
-                            None => wait = true,
-                        }
-                    }
-                }
-                if wait {
-                    if line.tries < NAME_MAX_TRIES {
-                        line.tries += 1;
-                        still.push(Pending::Combat(line));
-                    }
-                    continue;
-                }
-                let composed =
-                    super::combat::compose_line(&script, line.family, line.variant, &line.fills);
+            Pending::Combat(line) => {
+                let composed = super::combat::compose_line(&script, line.family, &line.fills);
                 if let Some(text) = composed {
                     route(
                         &mut script,

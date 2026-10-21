@@ -805,7 +805,6 @@ fn cvar_app() -> App {
         })
         .init_resource::<LookConfig>()
         .init_resource::<crate::player::camera_dynamics::CameraOptions>()
-        .init_resource::<crate::ui_chat::combat::CombatLogRanges>()
         .init_resource::<crate::combat_text::DamageTextGates>()
         .init_resource::<crate::ui_chat::combat::LogPeriodicSpells>()
         .init_resource::<benilla_world::weather::WeatherState>()
