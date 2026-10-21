@@ -14,7 +14,9 @@ use benilla_assets::{LockRecover, WorldAssets};
 use super::kit::{self, KitRef, SoundCategory, SoundKits};
 use super::{mixer, SoundConfig, SoundOutput};
 
-const GLUE_MUSIC: &str = "Sound\\Music\\GlueScreenMusic\\wow_main_theme.mp3";
+/// `GS_LichKing`, stock `GlueParent.lua`'s `CurrentGlueMusic`: its one `SoundEntries.dbc` file
+/// (row 12765, volume 1.0).
+const GLUE_MUSIC: &str = "Sound\\Music\\GlueScreenMusic\\WotLK_main_title.mp3";
 
 /// The theme's own volume, multiplied into the Music slider: `0x45aeb0` starts the glue stream at
 /// 0.8 (`0x3f4ccccd`) on the MusicVolume category (flag word 2, bit `0x2` = `[0x87cef8]`).
@@ -193,8 +195,8 @@ pub(super) fn plugin(app: &mut App) {
             Update,
             (
                 play_glue_sounds,
-                // The theme starts at the login screen (`AccountLogin_OnShow` sets the same
-                // `wow_main_theme`) and keeps across the glue screens.
+                // The theme starts at the login screen (`AccountLogin_OnShow` plays the same
+                // `GS_LichKing`) and keeps across the glue screens.
                 start_glue_music
                     .run_if(in_state(ClientState::Login).or(in_state(ClientState::CharSelect))),
                 // No run condition: the theme plays into `InWorld`, and the entry load burst is

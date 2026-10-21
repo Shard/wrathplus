@@ -18,11 +18,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn aggregate_uses_existing_modifier_snapshot_and_native_arity() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         for bits in 0..8 {
             script.set_modifiers(bits & 1 != 0, bits & 2 != 0, bits & 4 != 0);
             script
@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn arguments_are_ignored_not_parsed_as_modifier_filters() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         for held in [false, true] {
             script.set_modifiers(held, false, false);
             script

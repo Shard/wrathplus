@@ -478,7 +478,7 @@ fn pow2_low_byte(n: u32) -> u32 {
 mod tests {
     use super::*;
     use crate::script::worldmap::{WorldMapContinentView, WorldMapZoneView};
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
     use std::collections::HashMap;
 
     fn area(
@@ -513,7 +513,7 @@ mod tests {
     /// Northrend (WMA 485, map 571) with Crystalsong (510) and Dalaran (504, floors 27/28), plus
     /// Naxxramas (535, map 533, floors 56/57, parent Dragonblight 488) and Ulduar (529, terrain).
     fn script() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let zone = |wma_id: u32, name: &str| WorldMapZoneView {
             name: name.into(),
             wma_id,

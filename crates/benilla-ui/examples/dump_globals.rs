@@ -5,9 +5,9 @@
 //! cargo run -q -p benilla-ui --example dump_globals --members  # plus the stdlib tables' members
 //! ```
 //!
-//! The namespace is [`UiScript::new`]'s, the engine half before any FrameXML loads, which
-//! `scripts/api-coverage.sh` compares with `reference/1.12-globals.tsv`. `--members` adds what `_G`
-//! cannot show: the stdlib tables' members (`table.setn` is one) and the per-type metatables.
+//! The namespace is [`UiScript::new`]'s, the engine half before any FrameXML loads; the installed
+//! FrameXML census (`wrath_framexml_tests`) measures what the client calls. `--members` adds what
+//! `_G` cannot show: the stdlib tables' members (`table.setn` is one) and the per-type metatables.
 use benilla_ui::script::UiScript;
 
 /// The stdlib tables whose members an addon can observe: a fixed list, since `_G` would recurse

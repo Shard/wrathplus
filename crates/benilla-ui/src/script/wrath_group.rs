@@ -108,12 +108,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyState, RaidMemberInfo, ScriptDialect, UiScript, UnitState, WrathGroup,
+        PartyState, RaidMemberInfo, UiScript, UnitState, WrathGroup,
         WrathGroupMember,
     };
     #[test]
     fn wrath_group_tuple_roles_and_difficulty_use_pushed_native_data() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_party(PartyState {
             raid: vec![RaidMemberInfo {
                 guid: 7,

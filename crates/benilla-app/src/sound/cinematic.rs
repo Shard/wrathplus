@@ -1,7 +1,8 @@
 //! The cinematic narration: the race intro's voice-over, held by a handle so a skip cuts it off.
 //!
-//! Each race fly-by's `CinematicCamera` row names one streamed `<Race>Narration.mp3` kit (type
-//! 31); the two non-intro rows name id 0. A dropped kira handle keeps playing, so the handle is
+//! Each intro fly-by's `CinematicCamera` row (the ten races' and the Death Knight's) names one
+//! streamed `<Name>Narration.mp3` kit (type 31); of the other rows the Sunwell fly-by names its
+//! music kit, also type 31, and two name id 0. A dropped kira handle keeps playing, so the handle is
 //! held here. The reference keeps the narration in `[0xb4e274]` (written at `0x48ef3e`) and
 //! releases it on shot advance (`0x48efef`), stop/ESC (`0x48f055`) and local abort (`0x490b8d`);
 //! this module follows [`Cinematic`]'s published shot the same way.

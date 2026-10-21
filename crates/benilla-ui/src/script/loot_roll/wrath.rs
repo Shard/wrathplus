@@ -166,8 +166,8 @@ mod tests {
     use super::*;
     #[test]
     fn wrath_readers_have_native_arity_flags_and_signed_skill_without_legacy_fallback() {
-        use crate::script::{LootRollEntry, LootRollsState, ScriptDialect, UiScript};
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        use crate::script::{LootRollEntry, LootRollsState, UiScript};
+        let mut script = UiScript::new().unwrap();
         script.run("function count(...) return arg.n end").unwrap();
         script.set_loot_rolls(LootRollsState {
             rolls: vec![LootRollEntry {
@@ -330,10 +330,10 @@ pub(in crate::script) fn install_actions(lua: &mlua::Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod action_tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
     #[test]
     fn native_actions_never_grant_votes_outside_any_server_mask() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         for mask in 0..=u8::MAX {
             script.set_wrath_loot_rolls(State {
                 rolls: vec![Entry {
@@ -356,7 +356,7 @@ mod action_tests {
     }
     #[test]
     fn native_bop_confirmation_and_expiry_do_not_fall_through_to_vanilla() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_wrath_loot_rolls(State {
             rolls: vec![Entry {
                 roll_id: 7,
@@ -386,7 +386,7 @@ mod action_tests {
     }
     #[test]
     fn native_disenchant_prompt_is_signed_quality_not_bonding_and_mask_only_gates_send() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         for quality in [0, 2, 3, 4, u32::MAX] {
             for bop in [false, true] {
                 script.set_wrath_loot_rolls(State {

@@ -212,10 +212,9 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::*;
     use crate::bindings_xml::{parse_modified_clicks, ModifiedClick};
-    use crate::script::ScriptDialect;
-
+    
     fn vm() -> UiScript {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.register_modified_clicks(
             &parse_modified_clicks(
                 r#"<Bindings>

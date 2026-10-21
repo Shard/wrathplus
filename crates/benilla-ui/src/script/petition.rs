@@ -336,7 +336,7 @@ mod tests {
     /// Build 12340 names a guild charter `"guild"`, an arena one `"arena"`, and adds the minimum.
     #[test]
     fn a_wrath_petition_answers_seven_values_with_the_native_types() {
-        let mut s = UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert_eq!(s.eval::<i64>("return select('#', GetPetitionInfo())").unwrap(), 7);
         s.set_petition(PetitionState {
             record: Some(PetitionRecordView {

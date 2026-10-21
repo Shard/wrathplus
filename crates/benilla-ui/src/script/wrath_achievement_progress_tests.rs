@@ -1,5 +1,4 @@
 use super::*;
-use crate::script::ScriptDialect;
 use crate::script::wrath_achievements::{
     WrathAchievementCategory, WrathAchievementCriterion, WrathAchievementMetadata,
 };
@@ -24,7 +23,7 @@ fn achievement(id: u32, category: u32, parent: u32, faction: i32, flags: u32) ->
 }
 
 fn script() -> UiScript {
-    let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut ui = UiScript::new().unwrap();
     let mut meta = WrathAchievementMetadata::default();
     for row in [
         achievement(10, 92, 0, -1, 0),

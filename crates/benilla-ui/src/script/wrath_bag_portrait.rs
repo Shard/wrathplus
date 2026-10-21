@@ -41,11 +41,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{InvSlotView, InventorySlots, ScriptDialect, UiScript};
+    use super::super::{InvSlotView, InventorySlots, UiScript};
 
     #[test]
     fn stock_bag_portrait_spelling_handles_backpack_worn_and_seventh_bank_bag() {
-        let mut ui = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut ui = UiScript::new().unwrap();
         let mut slots: InventorySlots = Default::default();
         slots[20] = Some(InvSlotView {
             icon: Some("Interface\\Icons\\Bag1".into()),

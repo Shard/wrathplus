@@ -124,7 +124,8 @@ pub(super) fn arm_ground_effects(
             debug!("dest_fx: dynobj spell {spell_id} has no visual row — invisible area");
             continue;
         };
-        // 12340 descriptors carry no `DYNAMICOBJECT_FACING`.
+        // 12340 has no `DYNAMICOBJECT_FACING`: the create block's stationary orientation turns
+        // the anchor (`wire_yaw`), and this child inherits it, so its own turn is 0.
         let facing = 0.0;
         // Visual A (`0x5d57c0`): field 12's model when field 11 is set, at the object's position
         // with no terrain projection, turned by `DYNAMICOBJECT_FACING` (`0x613ef0`, `0x7bdd60`);

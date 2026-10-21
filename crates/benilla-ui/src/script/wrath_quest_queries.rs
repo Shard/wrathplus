@@ -317,10 +317,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 mod tests {
     use super::*;
     use crate::script::quest_log::{QuestLogEntryView, QuestLogState};
-    use crate::script::{ScriptDialect, UnitState};
+    use crate::script::{UnitState};
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit(
             "player",
             Some(UnitState {

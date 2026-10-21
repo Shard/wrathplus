@@ -45,11 +45,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{ScriptDialect, ShapeshiftFormView, UiScript};
+    use super::super::super::{ShapeshiftFormView, UiScript};
 
     #[test]
     fn wrath_attack_power_stat_contributions_follow_class_not_level_or_label() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         for (class, strength, agility) in [
             ("WARRIOR", 2., 0.),
             ("PALADIN", 2., 0.),
@@ -81,13 +81,13 @@ mod tests {
 
     #[test]
     fn wrath_max_health_display_multiplier_is_neutral_for_every_unit() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.run("for _, unit in ipairs({'player', 'target', 'pet', 'party1', 'unknown'}) do assert(GetUnitMaxHealthModifier(unit) == 1) end assert(GetUnitMaxHealthModifier() == 1)").unwrap();
     }
 
     #[test]
     fn wrath_druid_agility_only_contributes_in_active_cat_form() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.model_mut().player_record.class = Some(("Druide".into(), "DRUID".into()));
         for (spell_id, active, expected) in [
             (768, true, 40.),

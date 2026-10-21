@@ -174,7 +174,10 @@ fn debug_pick(
             sel.dials[i] = want.min(n - 1);
         }
     }
-    preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
+    preview.scene = Some(crate::portrait::GlueScene::Race {
+        race: sel.race,
+        class: sel.class,
+    });
     preview.look = Some(GlueLook::Create(sel.look()));
     info!(
         "char create: pick instrument set race {} sex {} class {} dials {:?}",
@@ -500,7 +503,10 @@ fn create_input(
         }
     }
     if changed_look {
-        preview.scene = Some(crate::portrait::GlueScene::Race(sel.race));
+        preview.scene = Some(crate::portrait::GlueScene::Race {
+            race: sel.race,
+            class: sel.class,
+        });
         preview.look = Some(GlueLook::Create(sel.look()));
     }
 }

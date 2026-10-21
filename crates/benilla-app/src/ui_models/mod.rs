@@ -1030,13 +1030,13 @@ fn sync_tiles(
         });
         let mut leg_trace = String::from("ortho");
         if let Some((slot, cam)) = perspective {
-            // Camera tracks read the file's absolute timeline and the play head is a cursor in
-            // the armed band, so the band's start is added.
-            let file_ms = seq_slot
-                .and_then(|slot| assets.m2s.get(&tile.m2)?.sequences.get(slot))
-                .map_or(0, |seq| seq.start_ms)
-                + pane.play.map_or(0, |ph| ph.cursor_ms);
-            let record = cam.at(file_ms);
+            // v264 camera tracks are per sequence: the armed band's file slot, at the play head's
+            // cursor in it; an unarmed pane reads sequence 0 at its start.
+            let (cam_seq, cam_ms) = (
+                seq_slot.unwrap_or(0),
+                pane.play.map_or(0, |ph| ph.cursor_ms),
+            );
+            let record = cam.at(cam_seq, cam_ms);
             let aspect = req.size_px.x as f32 / req.size_px.y.max(1) as f32;
             let leg = perspective_rig(&record, req, aspect);
             *tf = leg.root;
@@ -1067,7 +1067,7 @@ fn sync_tiles(
                 let eye = leg.camera.translation;
                 let fwd = leg.camera.forward().as_vec3();
                 leg_trace = format!(
-                    "persp[cam {:?} slot {slot} t={file_ms}ms] fov={:.5} aspect={aspect:.4} near={:.4} far={:.3} eye={:.3},{:.3},{:.3} fwd={:.3},{:.3},{:.3} root(s={:.4} pos={:?}) m00={:.4} m11={:.4}",
+                    "persp[cam {:?} slot {slot} t={cam_seq}:{cam_ms}ms] fov={:.5} aspect={aspect:.4} near={:.4} far={:.3} eye={:.3},{:.3},{:.3} fwd={:.3},{:.3},{:.3} root(s={:.4} pos={:?}) m00={:.4} m11={:.4}",
                     req.camera,
                     record.fov,
                     record.near,

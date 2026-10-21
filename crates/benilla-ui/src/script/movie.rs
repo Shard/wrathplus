@@ -91,11 +91,11 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn a_movie_that_cannot_play_finishes_through_the_stock_frame_path() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             r#"
             local f = CreateFrame("MovieFrame", "TestMovie", UIParent)

@@ -747,10 +747,10 @@ pub(super) fn install_wrath(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit(
             "player",
             Some(crate::script::UnitState {

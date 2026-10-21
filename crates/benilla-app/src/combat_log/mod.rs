@@ -70,7 +70,7 @@ impl Plugin for CombatLogPlugin {
             Update,
             native::feed
                 .in_set(crate::ui_script::UiFeed)
-                .run_if(crate::ui_script::ingame_ui_up),
+                .run_if(crate::app_core::ui_state::ingame_ui_up),
         );
         app.net_handler(K::WrathAttackerState, on_native_logged)
             .net_handler(K::SpellDamageLog, on_spell_damage_log)

@@ -1143,10 +1143,10 @@ mod tests {
 #[cfg(test)]
 mod wrath_cooldown_tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
     #[test]
     fn native_hold_uses_now_and_invalid_or_token_is_disabled() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         assert_eq!(
             script
                 .eval::<(f64, f64, u32)>("return GetPetActionCooldown(1)")

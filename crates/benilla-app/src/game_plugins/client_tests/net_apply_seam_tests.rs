@@ -29,6 +29,7 @@ fn create() -> SessionEvent {
         display_id: None,
         position: [1.0, 2.0, 3.0],
         orientation: 0.0,
+        rotation: None,
         scale: 1.0,
         speeds: Some(MoveSpeeds {
             walk: 2.5,
@@ -152,6 +153,7 @@ fn create_with_speeds(speeds: Option<MoveSpeeds>) -> SessionEvent {
             display_id,
             position,
             orientation,
+            rotation,
             scale,
             mover,
             transport_progress,
@@ -165,6 +167,7 @@ fn create_with_speeds(speeds: Option<MoveSpeeds>) -> SessionEvent {
             display_id,
             position,
             orientation,
+            rotation,
             scale,
             speeds,
             mover,
@@ -280,4 +283,47 @@ fn a_change_on_a_live_mover_keeps_its_other_slots() {
 #[test]
 fn a_change_with_no_speed_set_invents_none() {
     assert!(speeds_after(vec![create_with_speeds(None), force_run(7.0)]).is_none());
+}
+
+/// A GameObject stands on its create block's `UPDATEFLAG_ROTATION` quaternion, tilt included,
+/// not on the yaw-only orientation that rides beside it.
+#[test]
+fn a_gameobject_stands_on_its_packed_rotation_tilt_included() {
+    const GO: u64 = 0xF110_0000_2222_0001;
+    // A 70° tilt about x: no yaw could produce it.
+    let (s, c) = (35f32.to_radians().sin(), 35f32.to_radians().cos());
+    let quat = [s, 0.0, 0.0, c];
+    let mut app = crate::game_plugins::schedule_tests::headless_client();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    app.insert_resource(NetEvents(rx));
+    tx.send(SessionEvent::ObjectCreate {
+        guid: GO,
+        kind: EntityKind::GameObject,
+        display_id: None,
+        position: [1.0, 2.0, 3.0],
+        orientation: 1.0,
+        rotation: Some(quat),
+        scale: 1.0,
+        speeds: None,
+        mover: None,
+        transport_progress: None,
+        transport: None,
+        spline: None,
+        fields: ObjectFields::from_pairs(&[]).into_created(ObjectType::GameObject),
+    })
+    .unwrap();
+    let world = app.world_mut();
+    crate::net::apply::apply_net_updates(world);
+    let e = *world
+        .resource::<GuidIndex>()
+        .0
+        .get(&GO)
+        .expect("the create indexed the object");
+    let got = world.get::<Transform>(e).expect("placed").rotation;
+    let want = crate::app_core::movement::gameobject_rotation(Some(quat), 1.0);
+    assert!(got.angle_between(want) < 1e-4, "{got:?} vs {want:?}");
+    assert!(
+        got.angle_between(crate::app_core::movement::wire_yaw(1.0)) > 0.5,
+        "not the yaw-only fallback"
+    );
 }

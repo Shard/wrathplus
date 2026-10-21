@@ -1,9 +1,9 @@
 use super::*;
 use crate::script::cursor::{CursorItem, CursorPayload};
-use crate::script::{ScriptDialect, UiScript};
+use crate::script::UiScript;
 
 fn script() -> UiScript {
-    UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    UiScript::new().unwrap()
 }
 
 fn gem(name: &str, matches: bool) -> SocketGemView {

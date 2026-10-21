@@ -786,6 +786,7 @@ impl WrathEventAdapter {
                             display_id,
                             position,
                             orientation,
+                            rotation: movement.rotation.map(crate::wrath_gameplay::unpack_rotation),
                             scale,
                             speeds: project_speeds(movement.speeds),
                             mover: project_mover(&movement),

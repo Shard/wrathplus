@@ -448,6 +448,19 @@ Taken by App Migration: the `ui_items`, `ui_loot` and `ui_action` helpers world 
 | Reputation lines | `combat_log::chat::faction_standing` from `net::session` | **A drained message carrying the old and new standing.** Today it runs before the store is overwritten; the message keeps that, and `combat_log` composes the lines. |
 | Doc links | `ui_trade::answer_trade_request`, `char_select::char_login_refusal_text`, `ui_action::show_messages`, `ui_loot::drain_loot` named from `net`, `sound` | **Plain text.** Intra-doc links count as references; they become prose. The `sound` one is done; the two in `net.rs` land with the step-4 batch. |
 
+#### Native UI's groups (claimed 2026-10-21)
+
+Taken by Native UI: the UI-side design groups of the table above that App Migration did not claim.
+Each lands as a behaviour-neutral unit with the usual gates, in this order.
+
+| Group | References | Mechanism | Status |
+|---|---|---|---|
+| Run conditions | `ui_script::{ingame_ui_up, seam_scale, load_stock_bindings}` | **Move down.** `ingame_ui_up` reads only `PendingEntryUiLoad` and `ClientState`, both already core, so the run condition itself moves to `app_core::ui_state` (no new resource, no frame of lag); `seam_scale` is pure and goes with it; world callers name the core path, `ui_script` re-exports both. `load_stock_bindings`' one world caller is a `vplates` test the 12340 nameplate port (Assets) rewrites; it goes with that port. | in review |
+| Drawing helpers | `ui_pass::{project_overlay, tile_quad_mesh, overlay_z, ui_render_layers}`, `ui_models::spawn_warm_tile_cam` | **Move down** to a world-layer overlay module beside the pure moves. | claimed |
+| Cast-bar feedback | `ui_cast::feed_cast_bar` from world | **Drained message.** World writes a cast-bar message; `ui_cast` drains it in its set, the same frame. | claimed |
+| Other action requests | `ui_session::feed_interact_npc`, `ui_pet::pet_stop_on_old_target_clear`, `ui_world_map::world_enter_selection`, `script_calls::{apply_script_calls, in_call_order}` | **Drained message** per row: world writes the request, the UI system that owns the session drains it in its existing set; frame order checked per row. | claimed |
+| `VmMemo` (17) | `ui_script::VmMemo` users in area, cinematic, cursor, death, minimap, sound, spell, video, vplates | **Move the caller up.** Each world user is a Lua feed that already takes `UiScript`; the feed systems move to UI-side modules beside their world state, and `VmMemo` stays in `ui`. | claimed |
+
 When the pure moves and the in-flight items land, the move phase can start with `core` and `net`;
 `world` and `ui` wait for the design items above.
 

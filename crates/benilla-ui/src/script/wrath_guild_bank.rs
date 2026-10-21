@@ -593,10 +593,10 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript, WrathGuildBankTab, WrathGuildBankView};
+    use crate::script::{UiScript, WrathGuildBankTab, WrathGuildBankView};
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 0x10;
         s.set_wrath_guild_bank(WrathGuildBankView {
             tabs: vec![WrathGuildBankTab::default(), WrathGuildBankTab::default()],

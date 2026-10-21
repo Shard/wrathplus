@@ -717,7 +717,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript, UnitState};
+    use crate::script::{UiScript, UnitState};
 
     const ME: u64 = 0x10;
     const CAR: u64 = 0xF150_0000_0000_0007;
@@ -743,7 +743,7 @@ mod tests {
     }
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         for (token, guid) in [("player", ME), ("party1", PAL)] {
             s.set_unit(
                 token,

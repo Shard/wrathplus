@@ -25,11 +25,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn the_skill_point_verbs_check_usage_and_buy_nothing() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run("AddSkillUp(1) RemoveSkillUp('2') BuySkillTier(3) assert(not pcall(AddSkillUp)) assert(not pcall(BuySkillTier, {}))")
             .unwrap();
         assert!(s.take_script_calls().is_empty());

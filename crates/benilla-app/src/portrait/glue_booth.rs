@@ -1,7 +1,7 @@
 //! The glue booth: one booth slot, with no wire entity, standing the glue screens' background
-//! scene (`UI_MainMenu` at login, `UI_<Race>` at create and select) with a live, rotatable
-//! character in it. The parts come pre-assembled in [`GluePreviewBake`]; this module lights,
-//! poses, seats and yaws them, and the bake lands in [`super::PortraitImages`] under
+//! scene (`UI_MainMenu_Northrend` at login, a race's or class's stage at create and select) with
+//! a live, rotatable character in it. The parts come pre-assembled in [`GluePreviewBake`]; this
+//! module lights, poses, seats and yaws them, and the bake lands in [`super::PortraitImages`] under
 //! [`GLUE_SLOT`].
 
 use benilla_assets::M2Model;
@@ -129,10 +129,11 @@ impl GlueLook {
 /// The main menu always fogs; a race stage fogs at create only.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GlueScene {
-    /// `UI_MainMenu`, the login screen's burning gate (`AccountLogin.xml`'s ModelFFX).
+    /// `UI_MainMenu_Northrend`, the login screen's Lich King: stock `AccountLogin.lua`'s `OnLoad`
+    /// sets it on `AccountLogin`'s ModelFFX; its `UI_MainMenu` is the streaming-trial branch.
     MainMenu,
-    /// A race's `UI_<Race>` stage (Gnome uses Dwarf's, Troll uses Orc's).
-    Race(u8),
+    /// A character's stage, [`glue_stage`] of its race and class.
+    Race { race: u8, class: u8 },
 }
 
 /// The glue screens' input to the booth: the scene (`None` tears the booth down; select shows Orc
@@ -226,16 +227,40 @@ const GLUE_SWAP_HOLD_SECS: f32 = 2.0;
 /// mapping is `GlueParent.lua`'s `SetBackgroundModel`; the main menu is `AccountLogin.xml`'s.
 fn scene_token(scene: GlueScene) -> &'static str {
     match scene {
-        GlueScene::MainMenu => "MainMenu",
-        GlueScene::Race(race) => match race {
-            2 | 8 => "Orc",   // Troll shares Orc's scene
-            3 | 7 => "Dwarf", // Gnome shares Dwarf's
-            4 => "NightElf",
-            5 => "Scourge",
-            6 => "Tauren",
-            _ => "Human",
-        },
+        GlueScene::MainMenu => "MainMenu_Northrend",
+        GlueScene::Race { race, class } => glue_stage(race, class),
     }
+}
+
+/// The `UI_<name>` stage a character stands on at select and create, build 12340's
+/// `GetSelectBackgroundModel` (`0x4e3620`): a Death Knight (class 6) stands on its class's
+/// `ChrClasses` file name, `DeathKnight`, whatever its race; a Gnome (7) borrows Dwarf's (3) and a
+/// Troll (8) Orc's (2) stage; every other race stands on its own `ChrRaces` file name. The names
+/// are the shipped models' spelling; the archive is case-insensitive.
+///
+/// Deviation: a race outside the ten playable ones stands on Human's, where the reference names a
+/// `UI_<file>` that does not ship and shows no stage. Unresolved, labelled: the trial-build arm
+/// (`0x422140`, `"CharacterSelect"`) is not modelled, and the create screen's own getter was not
+/// pinned; stock `CharacterCreate.lua` swaps to the Death Knight stage by class the same way.
+pub(crate) fn glue_stage(race: u8, class: u8) -> &'static str {
+    if class == 6 {
+        return "DeathKnight";
+    }
+    match race {
+        2 | 8 => "Orc",
+        3 | 7 => "Dwarf",
+        4 => "NightElf",
+        5 => "Scourge",
+        6 => "Tauren",
+        10 => "BloodElf",
+        11 => "Draenei",
+        _ => "Human",
+    }
+}
+
+/// A stage's model, as stock `GlueParent.lua`'s `SetBackgroundModel` builds it from the name.
+pub(crate) fn glue_stage_model_path(stage: &str) -> String {
+    format!("Interface\\Glues\\Models\\UI_{stage}\\UI_{stage}.m2")
 }
 
 /// Whether the stage may swap this frame: nothing coherent is `standing`, both the requested art
@@ -330,17 +355,19 @@ fn scene_light_blob(
 }
 
 /// The per-scene fog, colour and far (near is 0): the race rows are `GlueParent.lua`'s
-/// `CharModelFogInfo`; the main menu's is `AccountLogin.xml`'s `<FogColor>` and `fogFar`.
-fn scene_fog(token: &str) -> ([f32; 3], f32) {
-    match token {
-        "MainMenu" => ([0.25, 0.06, 0.015], 1200.0),
+/// `CharModelFogInfo`; the main menu's is `AccountLogin.xml`'s `<FogColor>` and `fogFar`. A stage
+/// with no row (Blood Elf, Draenei, Death Knight) is `SetLighting`'s `ClearFog`: no fog.
+fn scene_fog(token: &str) -> Option<([f32; 3], f32)> {
+    Some(match token {
+        "MainMenu_Northrend" => ([0.25, 0.06, 0.015], 1200.0),
+        "Human" => ([0.8, 0.65, 0.73], 222.0),
         "Orc" => ([0.5, 0.5, 0.5], 270.0),
         "Dwarf" => ([0.85, 0.88, 1.0], 500.0),
         "NightElf" => ([0.25, 0.22, 0.55], 611.0),
         "Scourge" => ([0.0, 0.22, 0.22], 26.0),
         "Tauren" => ([1.0, 0.61, 0.42], 153.0),
-        _ => ([0.8, 0.65, 0.73], 222.0), // Human
-    }
+        _ => return None,
+    })
 }
 
 /// One assembled preview mesh, the tuple-driven counterpart of [`super::PortraitPart`].
@@ -669,7 +696,7 @@ pub(super) fn sync_glue_scene(
     // main menu always fogs.
     let fog = match which {
         GlueScene::MainMenu => true,
-        GlueScene::Race(_) => matches!(preview.look, Some(GlueLook::Create(_))),
+        GlueScene::Race { .. } => matches!(preview.look, Some(GlueLook::Create(_))),
     };
     // The ghost light fork (`0x472150`, [`ghost_rig`]), shared by the scene, character and pet.
     let ghost = matches!(
@@ -687,9 +714,7 @@ pub(super) fn sync_glue_scene(
             Some(p) if p.token == token => p,
             _ => PendingSwap {
                 token,
-                handle: asset_server.load(m2_url(&format!(
-                    "Interface\\Glues\\Models\\UI_{token}\\UI_{token}.mdx"
-                ))),
+                handle: asset_server.load(m2_url(&glue_stage_model_path(token))),
                 since: now,
             },
         };
@@ -736,7 +761,8 @@ pub(super) fn sync_glue_scene(
             } else {
                 scene_rig(&model.lights)
             };
-            let (fog_rgb, fog_far) = scene_fog(token);
+            let (fog_rgb, fog_far) = scene_fog(token).unwrap_or_default();
+            let fog = fog && scene_fog(token).is_some();
             scene_light_blob(&rig, fog_rgb, fog_far, fog).write(&queue, &light);
             scene.ghost = ghost;
             // The character and the pet re-bake onto the rewritten buffer.
@@ -769,7 +795,8 @@ pub(super) fn sync_glue_scene(
         } else {
             scene_rig(&model.lights)
         };
-        let (fog_rgb, fog_far) = scene_fog(token);
+        let (fog_rgb, fog_far) = scene_fog(token).unwrap_or_default();
+        let fog = fog && scene_fog(token).is_some();
         let blob = scene_light_blob(&rig, fog_rgb, fog_far, fog);
         let light = scene
             .light
@@ -908,6 +935,8 @@ pub(super) fn sync_glue_scene(
         }
         scene_rig.finish(&mut commands);
         scene.spawned = true;
+        // Unresolved, labelled: a stage whose camera moves (`UI_Scourge`) holds its sequence-0
+        // start here; the reference's `SetCamera(0)`/`SetSequence(0)` may fly it.
         scene.cam = model.camera0;
         scene.art = benilla_formats::shipped_glue_art_extent(token);
         if let (Some(art), Some(cam)) = (scene.art, model.camera0.as_ref()) {
@@ -1525,7 +1554,10 @@ pub(super) fn drive_create_test(
         look.hair_color,
         look.facial_hair
     );
-    preview.scene = Some(GlueScene::Race(look.race));
+    preview.scene = Some(GlueScene::Race {
+        race: look.race,
+        class: look.class,
+    });
     preview.look = Some(GlueLook::Create(look));
     // Show the booth's render target full-screen, so a live shot shows the body.
     if let Some(PortraitSource::Live(image)) = portraits.0.get(GLUE_SLOT) {
@@ -1547,6 +1579,49 @@ mod tests {
     use super::*;
     use benilla_assets::ModelLight;
     use benilla_formats::M2Light;
+
+    /// Build 12340's `GetSelectBackgroundModel` (`0x4e3620`): the Death Knight's class stage wins
+    /// over any race, Gnome and Troll borrow, and the two Burning Crusade races stand on their own.
+    #[test]
+    fn the_stage_follows_the_12340_race_and_class_rule() {
+        for (race, class, want) in [
+            (1, 1, "Human"),
+            (2, 1, "Orc"),
+            (3, 1, "Dwarf"),
+            (4, 1, "NightElf"),
+            (5, 1, "Scourge"),
+            (6, 1, "Tauren"),
+            (7, 1, "Dwarf"),
+            (8, 1, "Orc"),
+            (10, 2, "BloodElf"),
+            (11, 2, "Draenei"),
+            (1, 6, "DeathKnight"),
+            (10, 6, "DeathKnight"),
+            (6, 6, "DeathKnight"),
+        ] {
+            assert_eq!(glue_stage(race, class), want, "race {race} class {class}");
+            assert_eq!(scene_token(GlueScene::Race { race, class }), want);
+        }
+        assert_eq!(scene_token(GlueScene::MainMenu), "MainMenu_Northrend");
+        assert_eq!(
+            glue_stage_model_path("DeathKnight"),
+            "Interface\\Glues\\Models\\UI_DeathKnight\\UI_DeathKnight.m2"
+        );
+    }
+
+    /// `CharModelFogInfo` has no Blood Elf, Draenei or Death Knight row, so `SetLighting` clears
+    /// the fog there; the login keeps `AccountLogin.xml`'s.
+    #[test]
+    fn stages_without_a_fog_row_are_unfogged() {
+        for token in ["BloodElf", "Draenei", "DeathKnight"] {
+            assert_eq!(scene_fog(token), None, "{token}");
+        }
+        assert_eq!(
+            scene_fog("MainMenu_Northrend"),
+            Some(([0.25, 0.06, 0.015], 1200.0))
+        );
+        assert_eq!(scene_fog("Human"), Some(([0.8, 0.65, 0.73], 222.0)));
+    }
 
     /// `petDisplayId == 0` is the client's whole gate: the server zeroes the triple for all but a
     /// living hunter or warlock (vmangos `Player::BuildEnumData`).

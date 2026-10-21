@@ -511,12 +511,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyMemberInfo, PartyState, ScriptDialect, UiScript, UnitState, WrathChatLine,
+        PartyMemberInfo, PartyState, UiScript, UnitState, WrathChatLine,
         WrathUnitPopupRequest as R, WrathUnitPopupState,
     };
 
     fn script() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_unit(
             "player",
             Some(UnitState {

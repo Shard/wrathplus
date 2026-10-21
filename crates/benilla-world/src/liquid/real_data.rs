@@ -387,3 +387,65 @@ fn the_felfire_channel_falls_about_a_tenth_of_a_yard_per_yard() {
         "the channel's gradient over 60 yd (got {slope})"
     );
 }
+
+/// The session checklist's collision routes (`benilla-app`'s `player::route_real_data`) stand dry:
+/// no liquid the query would answer over any waypoint's feet, so the mover never takes a swim hold
+/// there. Covers the 10-15 Abbey regression's walk, the Goldshire inn, Stormwind's gate deck and
+/// ramp, and the tram entrance.
+#[test]
+fn the_checklist_collision_spots_are_dry() {
+    if benilla_formats::wow_data().is_none() {
+        eprintln!("skipping: no WoW client data");
+        return;
+    }
+    let spots: [&[[f32; 3]]; 4] = [
+        &[
+            [-8904.2, -157.8, 82.0],
+            [-8910.6, -143.6, 82.0],
+            [-8913.5, -137.2, 80.7],
+            [-8918.4, -122.1, 81.9],
+            [-8879.4, -125.9, 81.4],
+        ],
+        &[
+            [-9448.5, 68.2, 56.3],
+            [-9460.0, 36.0, 57.0],
+            [-9467.5, 28.0, 57.0],
+            [-9477.0, 14.0, 60.2],
+            [-9471.7, 34.5, 63.9],
+        ],
+        &[
+            [-8995.8, 496.2, 96.9],
+            [-8938.2, 518.2, 96.5],
+            [-8918.7, 495.7, 93.9],
+        ],
+        &[
+            [-8364.6, 536.0, 91.8],
+            [-8384.0, 560.0, 91.8],
+            [-8389.0, 576.0, 91.4],
+        ],
+    ];
+    let mut checked = 0;
+    for spot in spots {
+        // No surface anywhere near: nothing to swim in.
+        let Some(scene) = liquid_scene("Azeroth", spot[0]) else {
+            continue;
+        };
+        for &feet in spot {
+            checked += 1;
+            let claim = scene
+                .containing_room(feet)
+                .map_or(LiquidClaim::Outdoors, LiquidClaim::inside);
+            let hit = liquid_at(scene.surfaces.iter(), feet, claim);
+            assert!(
+                hit.as_ref().is_none_or(|h| h.surface_z <= feet[2]),
+                "{feet:?} ({claim:?}) stands under liquid at {:?}",
+                hit.map(|h| h.surface_z)
+            );
+        }
+    }
+    eprintln!("{checked} waypoints checked against nearby liquid");
+    assert!(
+        checked > 0,
+        "Elwynn and Stormwind carry liquid near every spot"
+    );
+}
