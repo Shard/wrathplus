@@ -576,6 +576,10 @@ relative hop.
 | `net` drains UI state | 4 | `ui_party::net::{member_deactivated, roster_deactivated}` (3), `combat_log::chat::faction_standing` | App Migration's groups (unchanged) |
 | Root module alias | 2 | `names` reaches `NativePetNamePackets` through the root's `use net::{wrath_pet_name_capture as ui_native_pet_name}` | Done (Wire B): `names` names `net::wrath_pet_name_capture` |
 
+After those (860a358f, with `launch_plan` moved as core): **core 3, core+net 6**. Left: `ItemUse` and the four
+`net` drains (App Migration, in flight), the `vm_memo` test helper, and in core alone
+`app_core::interaction`'s read of `names::NameCache`.
+
 `ConsoleCommandApp` and `capture::ProbeAuctionPlugin` are not net-side. The console trait is used by
 `experience`, `video` (world) and `ui_script`. The probe plugin is named only by `dev` (tools) and in a
 plain-text `ui_auction` comment. They stay with the world → ui rows.
