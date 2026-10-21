@@ -4,6 +4,7 @@
 //! mid-air, as a 1.12.1 capture shows the reference's do; the pose word freezes them at takeoff.
 
 use crate::creature_anim::move_flags;
+use crate::player::arc::PlayerArc;
 
 use super::{input, state, Player};
 

@@ -8,6 +8,8 @@
 //! The tab strip shows only with two or more categories holding a realm (`RealmList_UpdateTabs`),
 //! one tab per category, and the rows are the front tab's.
 
+use crate::realm_select::category::RealmsCategory;
+use crate::realm_select::RealmsSelect;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;

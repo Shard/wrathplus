@@ -33,36 +33,6 @@ mod tests;
 pub(crate) mod usable_tests;
 
 pub(crate) use crate::app_core::state::PetBar;
-impl PetBar {
-    /// `PetHasActionBar()`: a nonzero cached guid, with no alive or control check (`0x4bdc20`).
-    pub(crate) fn has_bar(&self) -> bool {
-        self.guid() != 0
-    }
-
-    /// The authoritative packet owner's GUID; native state is never copied into the legacy bar.
-    pub(crate) fn guid(&self) -> u64 {
-        self.native
-            .as_ref()
-            .map_or(self.spells.pet_guid, |pet| pet.guid)
-    }
-
-    pub(super) fn bar_disabled(&self) -> bool {
-        self.native
-            .as_ref()
-            .map_or_else(|| self.spells.bar_disabled(), |pet| pet.flags & 0x0800 != 0)
-    }
-
-    /// No pet: every field back to its default, the cooldown list emptied with its counters kept
-    /// ([`crate::spell::Cooldowns::clear_silent`]), for the teardown packet and the session end.
-    pub(crate) fn clear(&mut self) {
-        let mut cooldowns = std::mem::take(&mut self.cooldowns);
-        cooldowns.clear_silent();
-        *self = Self {
-            cooldowns,
-            ..Default::default()
-        };
-    }
-}
 
 pub(crate) struct UiPetPlugin;
 

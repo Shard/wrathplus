@@ -2,6 +2,7 @@
 //! The corpse-guid latch's hooks on the object lifecycle live with their caller, the wire layer's
 //! object arms (`net::objects`).
 
+use crate::ui_chat::feed::ChatLogFeed;
 use benilla_protocol::{MoveMode, SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 

@@ -20,52 +20,6 @@ use super::kit::{
 use super::{AudioListener, SoundConfig, SoundOutput};
 
 pub(crate) use crate::app_core::state::EmoteSounds;
-impl EmoteSounds {
-    /// Resolve a `/command` name (case-insensitive) to its EmotesText id.
-    pub(crate) fn text_id(&self, name: &str) -> Option<u32> {
-        self.0.text_id(name)
-    }
-
-    /// An `Emotes.dbc` id's `AnimID`.
-    pub(crate) fn anim(&self, emote_id: u32) -> Option<u32> {
-        self.0.anim(emote_id)
-    }
-
-    /// An `Emotes.dbc` row's raw `AnimID` for the `UNIT_NPC_EMOTESTATE` resolver, `0` included.
-    pub(crate) fn state_anim(&self, emote_id: u32) -> Option<u32> {
-        self.0.state_anim(emote_id)
-    }
-
-    /// A text emote's `Emotes.dbc` id (`EmotesText.dbc` `EmoteID`); 0 is chat-only (`/thank`).
-    pub(crate) fn text_emote(&self, text_id: u32) -> Option<u32> {
-        self.0.text_emote(text_id)
-    }
-
-    /// The `Emotes.dbc` id in one of the five hard-coded gesture slots.
-    pub(crate) fn gesture(&self, slot: usize) -> Option<u32> {
-        self.0.gesture(slot)
-    }
-
-    /// An `Emotes.dbc` id's raw `EmoteFlags`, read by the posture-eligibility gate (`0x47db40`).
-    pub(crate) fn emote_flags(&self, emote_id: u32) -> Option<u32> {
-        self.0.emote_flags(emote_id)
-    }
-
-    /// The stand state a posture emote (`EmoteSpecProc == 1`) sets, as in `DoEmote`'s state
-    /// branch (`0x5ef560` → `0x5ed430`).
-    pub(crate) fn posture_state(&self, emote_id: u32) -> Option<u32> {
-        self.0.posture_state(emote_id)
-    }
-
-    /// The `$ESD` anim event's kit for a looping state emote: `EventSoundID` only when
-    /// `EmoteSpecProc == 2` (`row[+0x10] == 2` in the handler `0x6239f0`), so a one-shot emote id
-    /// in the state field stays silent.
-    pub(crate) fn state_event_sound(&self, emote_id: u32) -> Option<u32> {
-        (self.0.spec_proc(emote_id) == Some(2))
-            .then(|| self.0.event_sound(emote_id))
-            .flatten()
-    }
-}
 
 fn load_emote_sounds(mut commands: Commands, assets: Option<Res<WorldAssets>>) {
     let Some(assets) = assets else { return };

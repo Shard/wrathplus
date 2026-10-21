@@ -65,36 +65,6 @@ impl crate::query_cache::AskOnce for MailOpen {
     }
 }
 
-impl MailOpen {
-    /// A mailbox right-click. A different mailbox resets the rows and the throttle; the same one
-    /// only re-shows, as the reference fires `MAIL_SHOW` on every use.
-    pub(crate) fn click(&mut self, mailbox: u64) {
-        if self.mailbox != Some(mailbox) {
-            self.mailbox = Some(mailbox);
-            self.mails.clear();
-            self.wrath_inbox = None;
-            self.last_list_query = None;
-        }
-        self.show_requested = true;
-    }
-
-    /// A client-side close, sending nothing as 1.12 does; a re-open re-lists.
-    pub(crate) fn clear(&mut self) {
-        self.mailbox = None;
-        self.mails.clear();
-        self.wrath_inbox = None;
-        self.bodies.clear();
-        self.show_requested = false;
-        self.last_list_query = None;
-        self.send_acks.clear();
-        self.errors.clear();
-    }
-
-    pub(crate) fn clear_session(&mut self) {
-        self.clear();
-    }
-}
-
 /// The range guard ([`crate::ui_session`]) closes the window, the `CloseMail` clear, past the
 /// client's own interaction gate (`0x493230`, 5.5556 yd); the server's `CheckMailBox`
 /// (`MailHandler.cpp:69`) checks 5 yd on each mailbox `CMSG`.
