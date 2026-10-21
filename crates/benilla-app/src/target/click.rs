@@ -1385,32 +1385,10 @@ pub(crate) fn service_arm_native(
     })
 }
 
-/// [`service_arm_native`] for a [`cursor_mode::npc_flags`] word.
+/// [`service_arm_native`] for a raw [`cursor_mode::npc_flags`] word.
 #[cfg(test)]
 pub(crate) fn service_arm(bits: u32, status: Option<u32>) -> Option<ServiceArm> {
-    use cursor_mode::npc_flags as f;
-    // Each [`cursor_mode::npc_flags`] bit at its build-12340 position (AzerothCore `NPCFlags`).
-    let native = [
-        (f::GOSSIP, 0x1),
-        (f::QUESTGIVER, 0x2),
-        (f::VENDOR, 0x80),
-        (f::FLIGHTMASTER, 0x2000),
-        (f::TRAINER, 0x10),
-        (f::SPIRITHEALER, 0x4000),
-        (f::SPIRITGUIDE, 0x8000),
-        (f::INNKEEPER, 0x10000),
-        (f::BANKER, 0x20000),
-        (f::PETITIONER, 0x40000),
-        (f::TABARDDESIGNER, 0x80000),
-        (f::BATTLEMASTER, 0x100000),
-        (f::AUCTIONEER, 0x200000),
-        (f::STABLEMASTER, 0x400000),
-        (0x4000, 0x1000), // REPAIR
-    ]
-    .into_iter()
-    .filter(|&(legacy, _)| bits & legacy != 0)
-    .fold(0, |word, (_, bit)| word | bit);
-    service_arm_native(benilla_protocol::types::NpcFlags::from_bits(native), status)
+    service_arm_native(benilla_protocol::types::NpcFlags::from_bits(bits), status)
 }
 
 /// What a taken [`ServiceArm`] does.
@@ -1773,8 +1751,8 @@ mod tests {
             Some(ServiceArm::Questgiver)
         );
         assert_eq!(service_arm(f::QUESTGIVER, None), None);
-        // REPAIR (bit 14) has no arm, and an empty field matches nothing.
-        assert_eq!(service_arm(0x4000, None), None);
+        // REPAIR (`0x1000` on 12340) has no arm, and an empty field matches nothing.
+        assert_eq!(service_arm(0x1000, None), None);
         assert_eq!(service_arm(0, None), None);
     }
 
