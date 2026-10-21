@@ -22,10 +22,6 @@ pub(crate) fn columns(
                 .loc(19, 35)
                 .run(28, 52, 1);
         }),
-        // Five (not four) fidgets: shift custom attacks and the remaining voice kits by one.
-        "CreatureSoundData" => (30, 38, |m| {
-            m.same(0, 18).run(18, 19, 12);
-        }),
         "CreatureModelData" => (16, 28, |m| {
             m.same(0, 16);
         }),
@@ -293,7 +289,6 @@ mod tests {
     /// Every mapped table: name, 1.12 schema slots, build-12340 file fields.
     const MAPPED: &[(&str, usize, usize)] = &[
         ("AreaPOI", 29, 54),
-        ("CreatureSoundData", 30, 38),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
         ("Spell", 188, 234),
@@ -387,10 +382,6 @@ mod tests {
         assert_eq!(poi[18], Some(34)); // name locale flags
         assert_eq!(poi[19], Some(35)); // description enUS
         assert_eq!(poi[28], Some(52)); // world-state
-        let sound = columns("CreatureSoundData", 30, 38).unwrap();
-        assert_eq!(sound[17], Some(17));
-        assert_eq!(sound[18], Some(19)); // skip fifth fidget, retain custom attack 0
-        assert_eq!(sound[29], Some(30)); // pet dismiss
         let pet = columns("PetPersonality", 19, 24).unwrap();
         assert_eq!(pet[9], Some(17)); // widened localized name flags
         assert_eq!(&pet[10..13], &[Some(18), Some(19), Some(20)]);
