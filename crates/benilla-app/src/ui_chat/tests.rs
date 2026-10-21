@@ -1115,7 +1115,7 @@ fn colors_match_the_shipped_table() {
     assert_eq!(default_color(K::Loot), [0, 170, 0]);
     assert_eq!(default_color(K::Money), [255, 255, 0]);
     assert_eq!(default_color(K::ChannelNotice), [192, 192, 192]);
-    assert_eq!(default_color(K::RaidWarning), [255, 219, 183]);
+    assert_eq!(default_color(K::RaidWarning), [255, 72, 0]);
     assert_eq!(default_color(K::BgSystemAlliance), [0, 174, 239]);
 }
 

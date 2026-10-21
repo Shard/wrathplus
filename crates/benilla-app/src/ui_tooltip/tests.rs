@@ -7,7 +7,7 @@ use crate::net::{NetCommands, ObjectStore, Objects, SelfPlayer};
 use crate::ui_action::{PlayerActions, Spells};
 
 /// The view alone, for the cell tests; the feed keeps what it read beside it.
-fn spell_tooltip_view(
+pub(super) fn spell_tooltip_view(
     spell_id: u32,
     spells: &Spells,
     vctx: &mut ViewCtx,
@@ -46,7 +46,7 @@ impl TestCtx {
         }
     }
 
-    fn ctx<'a, 'w, 's>(
+    pub(super) fn ctx<'a, 'w, 's>(
         &'a mut self,
         objects: &'a Objects<'w, 's>,
         form: u8,
@@ -225,7 +225,7 @@ fn a_pet_view_costs_seduction_from_the_pets_base_mana() {
 }
 
 /// An object index with nothing streamed: no worn item, and every reagent count 0.
-fn no_objects() -> crate::ui_items::TestObjects {
+pub(super) fn no_objects() -> crate::ui_items::TestObjects {
     crate::ui_items::TestObjects::new()
 }
 
@@ -1291,21 +1291,4 @@ fn the_feed_builds_the_pet_views_against_the_pet_and_rebuilds_them_on_its_level(
             Some("Stamina by 10.".to_string())
         )
     );
-}
-
-/// A Death Knight strike's runes, off `SpellRuneCost.dbc` as build 12340's cost cell lists them
-/// (`0x623d21`, Blood, Unholy, Frost, joined by a space): Icy Touch (45477) costs one Frost and
-/// Death Strike (49998) one Unholy and one Frost.
-#[test]
-fn rune_costs_list_each_rune_in_the_clients_order() {
-    let Some(spells) = real_spells() else {
-        return;
-    };
-    let mut t = TestCtx::new();
-    let mut objs = no_objects();
-    let objects = objs.get();
-    for (id, want) in [(45477, "1 Frost"), (49998, "1 Unholy 1 Frost")] {
-        let v = spell_tooltip_view(id, &spells, &mut t.ctx(&objects, 0, None)).expect("a view");
-        assert_eq!(v.cost.as_deref(), Some(want), "spell {id}");
-    }
 }
