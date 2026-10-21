@@ -53,11 +53,14 @@ impl Loader<'_> {
                 let func = if let Some(global) = named {
                     match self.lua().globals().get::<Function>(global) {
                         Ok(function) => Some(function),
-                        Err(e) => {
-                            self.report.errors.push(format!(
-                                "{dbg}: resolving <{name} function=\"{global}\">: {e}"
+                        // `0x48fef0`: a global that is no function yet is logged, and the
+                        // handler is cleared; the stock templates name some that only a later
+                        // LoadOnDemand addon defines (`ClassTrainerSkillButton_OnClick`).
+                        Err(_) => {
+                            self.report.warnings.push(format!(
+                                "Frame {owner}: Unknown function {global} in element {name}"
                             ));
-                            continue;
+                            None
                         }
                     }
                 } else if cleared {
