@@ -102,6 +102,8 @@ pub struct PlateState {
     pub elite: bool,
     /// The cast bar, for the target only (`0x720e50`); `None` hides it (`0x715b20`).
     pub cast: Option<PlateCast>,
+    /// The threat flash's colour, `None` hidden (`0x98eaef`): the app's threat warning decides.
+    pub threat: Option<[f32; 3]>,
 }
 
 /// The cast bar's state, `0x98f040`'s arguments: the bar runs from 0 to `max` seconds at `value`,
@@ -649,6 +651,7 @@ impl Plate {
             p.elite,
             p.cast_fill,
         );
+        let flash = p.flash;
         let last = p.last.clone();
         let world_id = model.frame_id(world);
 
@@ -762,6 +765,14 @@ impl Plate {
                     data.hidden = false;
                 }
                 None => model.region_data.entry(raid).or_default().hidden = true,
+            }
+        }
+
+        if last.as_ref().is_none_or(|l| l.threat != state.threat) {
+            let data = model.region_data.entry(flash).or_default();
+            data.hidden = state.threat.is_none();
+            if let Some(c) = state.threat {
+                data.vertex_color = Some([c[0], c[1], c[2], 1.0]);
             }
         }
 
