@@ -101,6 +101,32 @@ impl Plugin for CombatLogPlugin {
     }
 }
 
+/// The reputation line's handler, added right after [`crate::net::NetPlugin`] (unlike
+/// [`CombatLogPlugin`]) so it runs behind `net`'s own `SMSG_SET_FACTION_STANDING` handler, which
+/// writes the before-and-after it drains: the line keeps the packet's place among the dispatch's
+/// other chat lines.
+pub(crate) struct FactionStandingPlugin;
+
+impl Plugin for FactionStandingPlugin {
+    fn build(&self, app: &mut App) {
+        use SessionEventKind as K;
+        app.net_handler(K::ReputationDelta, on_faction_standing);
+    }
+}
+
+/// `SMSG_SET_FACTION_STANDING`'s chat lines ([`chat::faction_standing`]) from `net`'s
+/// [`crate::net::StandingChanged`], written ahead of the store's overwrite.
+fn on_faction_standing(
+    In(ev): In<SessionEvent>,
+    mut changes: MessageReader<crate::net::StandingChanged>,
+    factions: Option<Res<crate::target::ring::Factions>>,
+    mut chat_log: ResMut<ChatLog>,
+) {
+    if let SessionEvent::ReputationDelta { .. } = ev {
+        chat::faction_standing(changes.read(), factions.as_deref(), &mut chat_log);
+    }
+}
+
 /// The kinds only the build-12340 log reads: casts, aura snapshots, a unit leaving (its aura
 /// snapshot goes) and a spell steal, beside `net::wrath_spell_log_capture`'s receipt. Our
 /// refused casts record from their sole owner ([`crate::spell::native_failure`]).

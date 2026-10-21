@@ -504,7 +504,7 @@ impl Dispatch<'_, '_> {
             return;
         }
         debug!("right-click loot: {guid:#x}");
-        crate::ui_loot::begin_wrath_corpse_loot(
+        crate::loot::begin_wrath_corpse_loot(
             &mut self.seam.loot,
             &mut self.seam.loot_latch,
             &self.seam.net,
@@ -1078,7 +1078,7 @@ pub(crate) enum GoAction {
     /// A satisfied key slot: use the key at the object, `CMSG_USE_ITEM` targeting it (the cast
     /// sender `0x6e54f0` takes its item arm), since the server honours a key slot only with
     /// `m_CastItem` set (`Spell.cpp:7892`). `on_object` is the lock's guid.
-    OpenByKey(crate::ui_items::ItemUse),
+    OpenByKey(crate::app_core::state::ItemUse),
     /// An unopenable lock: the client-local refusal, `None` where the reference is silent too.
     Refuse(Option<crate::ui_action::UiError>),
 }
@@ -1177,7 +1177,7 @@ pub(crate) fn resolve_go_action(
     let Some(spell_index) = tmpl.use_spell_index() else {
         return GoAction::Refuse(None);
     };
-    GoAction::OpenByKey(crate::ui_items::ItemUse {
+    GoAction::OpenByKey(crate::app_core::state::ItemUse {
         guid: Some(key_guid),
         start_quest: tmpl.start_quest,
         bag_index,
@@ -2011,8 +2011,8 @@ mod tests {
             world.init_resource::<InspectMode>();
             world.init_resource::<crate::spell::QueuedMeleeSpell>();
             world.init_resource::<crate::spell::AutoRepeatActive>();
-            world.init_resource::<crate::ui_loot::LootState>();
-            world.init_resource::<crate::ui_loot::LootLatch>();
+            world.init_resource::<crate::app_core::loot::LootState>();
+            world.init_resource::<crate::app_core::state::LootLatch>();
             world.init_resource::<crate::ui_script::CursorPayloadHeld>();
             world.init_resource::<crate::spell::SpellTargeting>();
             world.init_resource::<ClickConfig>();
@@ -2104,8 +2104,8 @@ mod tests {
         world.init_resource::<crate::ui_session::InteractNpc>();
         world.init_resource::<crate::ui_action::UiErrorKeys>();
         world.init_resource::<crate::ui_action::CastErrors>();
-        world.init_resource::<crate::ui_loot::LootState>();
-        world.init_resource::<crate::ui_loot::LootLatch>();
+        world.init_resource::<crate::app_core::loot::LootState>();
+        world.init_resource::<crate::app_core::state::LootLatch>();
         world.init_resource::<crate::ui_mail::MailOpen>();
         world.init_resource::<crate::ui_guild_bank::GuildBankOpen>();
         world.init_resource::<crate::ui_item_text::ItemTextOpen>();
@@ -2117,7 +2117,7 @@ mod tests {
         world.init_resource::<crate::ui_script::CursorPayloadHeld>();
         world.init_resource::<Messages<Interact>>();
         world.init_resource::<crate::net::Reputations>();
-        world.init_resource::<crate::ui_loot::LootConfig>();
+        world.init_resource::<crate::app_core::state::LootConfig>();
         world.init_resource::<ButtonInput<KeyCode>>();
         world.spawn((SelfPlayer, Guid(ME)));
         let boar = world

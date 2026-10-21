@@ -40,6 +40,7 @@ use drain::{
     drain_container_moves, drain_container_repairs,
 };
 // `UseContainerItem` and `UseInventoryItem`, applied in call order by `crate::script_calls`.
+pub(crate) use crate::app_core::state::ItemUse;
 pub(crate) use drain::ScriptItemUse;
 use feed::{
     feed_containers, feed_item_sets, feed_item_stats, feed_player_req, feed_random_properties,
@@ -185,31 +186,6 @@ impl TestObjects {
 /// The wire's player-array bag index, `INVENTORY_SLOT_BAG_0`; with it, [`ItemUse::slot`] is the
 /// equipment index (0-18 worn, 19-22 the equipped bags).
 pub(crate) const PLAYER_ARRAY: u8 = 255;
-
-/// One resolved item-use click, as [`send_item_use`] needs it.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ItemUse {
-    /// The live instance's guid; `None` falls through to a plain use.
-    pub(crate) guid: Option<u64>,
-    /// Template `StartQuest`: non-zero diverts to the quest offer, ahead of the cast tail.
-    pub(crate) start_quest: u32,
-    /// The wire position (`255` = the player array).
-    pub(crate) bag_index: u8,
-    /// The wire slot, 0-based.
-    pub(crate) slot: u8,
-    /// The template entry: the cooldown store keys item records on `(use_spell, entry)` (the
-    /// client's `[eax+8]==spellId && [eax+0xc]==itemID`).
-    pub(crate) entry: u32,
-    /// The template spell block ordinal the server should cast.
-    pub(crate) spell_index: u8,
-    /// The ON_USE spell, `0x5d8c80`'s answer: the first block with `SpellId != 0` and
-    /// `SpellTrigger == 0`.
-    pub(crate) use_spell: Option<u32>,
-    /// The GameObject a key is used on, `CGItem::Use`'s target argument.
-    pub(crate) on_object: Option<u64>,
-    /// The template's `ITEM_FLAG_CHARTER` (`0x2000`), a signable petition.
-    pub(crate) is_charter: bool,
-}
 
 /// What using an item sends: the reference's `CGItem::Use` (`0x5d8d00`), the one fork behind the
 /// bag click (`0x4fa430`), the doll click (`0x4c7af0`) and the action bar (`0x4e607b`).

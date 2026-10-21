@@ -299,7 +299,7 @@ pub(super) fn drive_animations(
         // Its `Emotes.dbc` → `AnimID` column resolves the `UNIT_NPC_EMOTESTATE` idle.
         Option<Res<EmoteSounds>>,
         // Whether the latched loot target is one the self unit kneels at; false while cold.
-        Option<Res<crate::ui_loot::LootKneel>>,
+        Option<Res<crate::loot::LootKneel>>,
         // The key-bone cross-fade's clock: its retiring node is frozen, so it has no playback
         // clock of its own.
         Res<Time>,
