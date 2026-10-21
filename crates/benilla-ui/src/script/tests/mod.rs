@@ -18,6 +18,7 @@ mod font_object;
 mod frame_api;
 mod generic_for;
 mod gm_ticket;
+mod grammar;
 mod handler_prof;
 mod host_state;
 mod input;
