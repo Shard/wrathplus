@@ -2,6 +2,12 @@
 //! re-assignment, the hide and show round-trip, and the binding's errors.
 
 use super::common::script;
+use crate::script::UiScript;
+
+fn level(s: &UiScript, frame: &str) -> i64 {
+    s.eval::<i64>(&format!("return {frame}:GetFrameLevel()"))
+        .unwrap()
+}
 
 /// `strata := parent.strata` (`0x491020`), `level := parent.level + 1` through `0x4910a0(level, 1)`,
 /// which shifts the same-strata subtree by the same delta.
@@ -202,5 +208,39 @@ fn a_reparent_under_a_scale_change_moves_the_childs_rect() {
     assert!(
         widths.iter().any(|w| (w - 200.0).abs() < 1e-3),
         "the reparented child should be 100 x scale 2 = 200 screen units wide; got {widths:?}"
+    );
+}
+
+/// `SetFrameLevel` (12340 `0x49e9d0`) calls `0x4910a0(level, 1)`: same-strata children shift by
+/// the same delta, recursively; a raise moves at most `0x80` levels, and a negative level raises.
+#[test]
+fn a_script_level_change_carries_the_children() {
+    let s = script();
+    s.run(
+        r#"
+        Parent = CreateFrame("Frame", "Parent")
+        Child = CreateFrame("Frame", "Child", Parent)
+        Grandchild = CreateFrame("Frame", "Grandchild", Child)
+        "#,
+    )
+    .unwrap();
+    let (child, grandchild) = (level(&s, "Child"), level(&s, "Grandchild"));
+    s.run("Parent:SetFrameLevel(7)").unwrap();
+    assert_eq!(level(&s, "Parent"), 7);
+    assert_eq!(
+        (level(&s, "Child"), level(&s, "Grandchild")),
+        (child + 7, grandchild + 7),
+        "the children move with it"
+    );
+    s.run("Parent:SetFrameLevel(1000)").unwrap();
+    assert_eq!(
+        level(&s, "Parent"),
+        7 + 0x80,
+        "one raise moves at most 0x80 levels"
+    );
+    assert_eq!(level(&s, "Child"), child + 7 + 0x80);
+    assert!(
+        s.run("Parent:SetFrameLevel(-1)").is_err(),
+        "a negative level raises"
     );
 }

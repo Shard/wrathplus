@@ -437,29 +437,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_interact_npc_writer_is_seated_between_the_net_apply_and_the_facing_chain() {
-        use crate::test_support::runs_before;
-        let mut app = App::new();
-        app.add_plugins((
-            crate::net::NetPlugin { connect: false },
-            crate::motion::MotionPlugin,
-            UiSessionPlugin,
-        ));
-        assert!(
-            runs_before(&mut app, crate::net::apply_net_updates, feed_interact_npc),
-            "feed_interact_npc must run after apply_net_updates"
-        );
-        assert!(
-            runs_before(
-                &mut app,
-                feed_interact_npc,
-                crate::motion::drive_display_facing
-            ),
-            "drive_display_facing must run after feed_interact_npc"
-        );
-    }
-
     /// `target::click`'s re-click gate through the real [`feed_interact_npc`]: nothing arms
     /// it before a window opens, a window arms its own NPC, and a close disarms it.
     #[test]

@@ -249,6 +249,23 @@ pub(crate) fn write_atomic_bytes(path: &Path, contents: &[u8]) -> std::io::Resul
     std::fs::rename(&tmp, path)
 }
 
+/// The addon folder's name, the reference's own spelling.
+const ADDONS_DIR: &str = "AddOns";
+
+/// The addon folder, `<benilla-config>/AddOns/`, or `None` (always under `$WOW_CAPTURE`); addon
+/// textures and fonts resolve onto it too (`ui_script::addons`, the font engine). Deviation: the
+/// reference reads the install's `Interface\AddOns\`; benilla reads an install and does not live
+/// in one, so its addons live in its own state folder, and only there.
+pub(crate) fn addons_root() -> Option<PathBuf> {
+    addons_root_from(home())
+}
+
+/// [`addons_root`] with its one environment fact passed in, so a test need not set the
+/// environment.
+fn addons_root_from(home: Option<PathBuf>) -> Option<PathBuf> {
+    home.map(|h| h.join(ADDONS_DIR))
+}
+
 /// Test plumbing for the persistence env vars: `set_var` is process-global, so every such test
 /// takes [`ENV_LOCK`] and scopes its overrides in [`EnvGuard`]s.
 #[cfg(test)]
@@ -282,6 +299,20 @@ pub(crate) mod test_env {
 mod tests {
     use super::test_env::{EnvGuard, ENV_LOCK};
     use super::*;
+
+    /// `home()` is `None` under `$WOW_CAPTURE`, so `None` here is the capture case.
+    #[test]
+    fn there_is_one_addon_root_and_it_is_ours() {
+        assert_eq!(
+            addons_root_from(Some(PathBuf::from("/state"))),
+            Some(PathBuf::from("/state/AddOns"))
+        );
+        assert_eq!(
+            addons_root_from(None),
+            None,
+            "a capture run has no addon root"
+        );
+    }
 
     /// Every per-character file keys on this token; ASCII names map unchanged.
     #[test]

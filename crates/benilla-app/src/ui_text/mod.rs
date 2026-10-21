@@ -64,6 +64,12 @@ pub(crate) fn drawn_px(font_height: Option<f32>, text_height: Option<f32>, s: f3
     }
 }
 
+/// The WoW UI font, straight off the patch chain (Bevy's TTF loader over the `mpq://` source), for
+/// the Bevy text the glue screens and the loading tip draw.
+pub(crate) fn wow_font(assets: &bevy::asset::AssetServer) -> bevy::asset::Handle<bevy::text::Font> {
+    assets.load("mpq://Fonts/FRIZQT__.ttf")
+}
+
 #[cfg(test)]
 mod cap_tests {
     use super::*;

@@ -33,8 +33,6 @@ fn receive(
     unit_casts: Option<ResMut<super::unit_cast::CastEdges>>,
     spells: Option<Res<crate::ui_action::Spells>>,
     mut errors: Option<ResMut<crate::ui_action::UiErrorKeys>>,
-    // `SPELL_CAST_FAILED` for the build-12340 combat log (`0x751ad0`).
-    native_log: Option<ResMut<crate::combat_log::native::NativeCombatLog>>,
     // Out of ammo stops our Auto Shot.
     auto_repeat: (
         Option<Res<crate::net::SelfGuid>>,
@@ -44,9 +42,6 @@ fn receive(
         Commands,
     ),
 ) {
-    if let Some(mut log) = native_log {
-        log.record(&event);
-    }
     match event {
         SessionEvent::WrathSpellFailure(value) => {
             // `0x809c70`: our own failure for want of ammo (`NEED_AMMO`, `_AMMO_POUCH`,

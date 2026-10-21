@@ -213,6 +213,24 @@ pub(crate) struct LootConfig {
     pub(crate) show_loot_spam: bool,
 }
 
+impl Default for LootConfig {
+    fn default() -> Self {
+        Self {
+            // Off leaves 1.12's shift-click as the only auto-loot.
+            auto_loot: false,
+            // The reference's registered `"1"`.
+            show_loot_spam: true,
+        }
+    }
+}
+
+/// A movement start that closes the loot: the reference's guard `0x60e990`, called by every
+/// movement-start emitter, turning included, but not by mouse-look facing. No loot target reaches
+/// the range gate `0x493230`, so there is no distance leash. vmangos also releases on movement
+/// (`MovementHandler.cpp:1104`), but the close is the client's.
+#[derive(Resource, Default)]
+pub(crate) struct LootMoveStart(pub(crate) bool);
+
 /// The loot-target latch, the reference's `[player+0x1d28]` guid: a loot session is open on this
 /// object; kneeling is [`LootKneel`]'s question. Armed at the `CMSG_LOOT` send
 /// (`0x5df253`/`0x5df40d`), at `SMSG_SPELL_GO` for an `OPEN_LOCK` on a chest (`0x6e831b`), by an
@@ -898,7 +916,40 @@ pub(crate) struct AuraDurations {
     pub(crate) by_slot: HashMap<u8, DurationStamp>,
 }
 
-impl AuraDurations {}
+impl AuraDurations {
+    /// Records one `SMSG_UPDATE_AURA_DURATION`.
+    pub(crate) fn set(&mut self, slot: u8, remaining_ms: u32, now: f64) {
+        let total = f64::from(remaining_ms) / 1000.0;
+        if aura_trace_period().is_some() {
+            info!(
+                "aura trace: SMSG_UPDATE_AURA_DURATION slot {slot} = {remaining_ms} ms @ {now:.2}"
+            );
+        }
+        self.by_slot.insert(
+            slot,
+            DurationStamp {
+                total,
+                expires_at: now + total,
+                received_at: now,
+            },
+        );
+    }
+}
+
+/// The `BENILLA_AURA_TRACE` period in seconds; a set value that is not a positive number means 1 s.
+pub(crate) fn aura_trace_period() -> Option<f64> {
+    static PERIOD: std::sync::OnceLock<Option<f64>> = std::sync::OnceLock::new();
+    *PERIOD.get_or_init(|| {
+        let v = std::env::var("BENILLA_AURA_TRACE").ok()?;
+        Some(
+            v.trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|p| *p > 0.0)
+                .unwrap_or(1.0),
+        )
+    })
+}
 
 pub(crate) struct DurationStamp {
     /// Seconds: the full duration on an apply or refresh, only the remainder on a relog

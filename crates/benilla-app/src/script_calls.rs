@@ -24,7 +24,7 @@ pub(crate) fn apply_script_calls(
     script: Option<NonSendMut<UiScript>>,
     binds: Res<crate::bindings::BindingsState>,
     mut appliers: ParamSet<(
-        crate::target::ScriptSelect,
+        crate::target::script::ScriptSelect,
         crate::spell::ScriptCursor,
         crate::spell::SelfCancel,
         crate::spell::ScriptCast,

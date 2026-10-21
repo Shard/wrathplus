@@ -71,6 +71,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
 
     // GetLeft/GetRight/GetTop/GetBottom: the resolved edges in the owner's units (y up, screen
     // over the owner's effective scale, which a region shares); nil for a region never resolved.
+    // The region table is the frames' (`0xac1480`): a dirty rect resolves first ([`settled`]).
     for (name, pick) in [
         ("GetLeft", 0u8),
         ("GetRight", 1u8),
@@ -78,7 +79,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
         ("GetBottom", 3u8),
     ] {
         set_shared(lua, m, Side::Region, name, move |lua, this: Table| {
-            let rh = region_handle_of(lua, &this)?;
+            let rh = settled(lua, &this)?;
             let model = lua.app_data_ref::<Model>().expect("model");
             let inv = 1.0 / owner_scale(&model, rh);
             Ok(model.region_resolved.get(&rh).map(|r| {
@@ -173,7 +174,7 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
     // GetCenter: the resolved rect's midpoint in the owner's units, as the edge readers answer, or
     // two nils before the first resolve.
     set_shared(lua, m, Side::Region, "GetCenter", |lua, this: Table| {
-        let rh = region_handle_of(lua, &this)?;
+        let rh = settled(lua, &this)?;
         let model = lua.app_data_ref::<Model>().expect("model");
         let inv = 1.0 / owner_scale(&model, rh);
         Ok(match model.region_resolved.get(&rh) {
@@ -243,6 +244,17 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
 
 /// The owner frame's effective scale (1 for an orphan), the divisor from a resolved screen rect to
 /// the owner's units every region getter answers in.
+/// The region's handle once its rect is current: `GetLeft 0x49d0b0` resolves a dirty rect
+/// (`0x488cf0`, `0x489de0`) before reading it, and a FontString's setter dirties it, so the
+/// re-measured box of a fresh `SetText` or `SetWidth` is what the edge readers see.
+fn settled(lua: &Lua, this: &Table) -> mlua::Result<crate::widget::RegionHandle> {
+    let rh = region_handle_of(lua, this)?;
+    crate::script::measure::measure_pending(lua, Some(rh));
+    let mut model = lua.app_data_mut::<Model>().expect("model");
+    crate::script::UiScript::resolve_layout(&mut model);
+    Ok(rh)
+}
+
 fn owner_scale(model: &Model, rh: crate::widget::RegionHandle) -> f32 {
     model
         .arena

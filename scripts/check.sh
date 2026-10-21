@@ -109,6 +109,7 @@ run() {
 }
 
 run fmt cargo fmt --all -- --check
+run loc scripts/quality/run.sh loc
 run clippy env AZB_QUALITY_LOCKED=1 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}" \
     scripts/quality/run.sh clippy $pflags
 run test env BENILLA_SKIP_LOG="$skips" cargo test $pflags

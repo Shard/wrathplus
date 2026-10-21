@@ -13,5 +13,5 @@ fn built_client_has_one_native_owner() {
     let owners = &census[&SessionEventKind::WrathGuild];
     assert_eq!(owners.len(), 1);
     assert!(owners[0].contains("ui_guild::wrath::receive"));
-    assert!(census[&SessionEventKind::GuildRoster][0].contains("ui_guild::net::on_roster"));
+    assert!(census[&SessionEventKind::GuildRoster][0].contains("guild::net::on_roster"));
 }

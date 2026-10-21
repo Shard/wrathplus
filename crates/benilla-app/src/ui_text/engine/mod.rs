@@ -106,7 +106,7 @@ struct CacheStats {
 /// The two stores a font path can come from: the patch chain, then the AddOns folder.
 struct FontSource {
     chain: Arc<Mutex<benilla_formats::Chain>>,
-    /// `ui_script::addons::root()`; `None` under `$WOW_CAPTURE`, which keeps a capture hermetic.
+    /// `local_state::addons_root()`; `None` under `$WOW_CAPTURE`, which keeps a capture hermetic.
     loose_root: Option<std::path::PathBuf>,
 }
 
@@ -197,7 +197,7 @@ impl TextEngine {
             path_to_face,
             source: Some(FontSource {
                 chain: world_assets.chain.clone(),
-                loose_root: crate::ui_script::addons::root(),
+                loose_root: crate::local_state::addons_root(),
             }),
             missing_fonts: HashSet::new(),
             default_face,

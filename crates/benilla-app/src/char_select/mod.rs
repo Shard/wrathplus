@@ -926,10 +926,7 @@ fn debug_select_shot(
     *done = true;
 }
 
-/// The WoW UI font, straight off the patch chain (Bevy's TTF loader over the `mpq://` source).
-pub(crate) fn wow_font(assets: &AssetServer) -> Handle<Font> {
-    assets.load("mpq://Fonts/FRIZQT__.ttf")
-}
+pub(crate) use crate::ui_text::wow_font;
 
 // ── Display names ──────────────────────────────────────────────────────────────────────────
 

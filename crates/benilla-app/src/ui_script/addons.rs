@@ -15,8 +15,9 @@ use benilla_ui::toc::Toc;
 
 use super::content;
 
-/// The addon folder's name, the reference's own spelling.
-const ADDONS_DIR: &str = "AddOns";
+#[path = "addons_blizzard.rs"]
+mod blizzard;
+pub(super) use blizzard::load_wrath_startup_blizzard;
 
 /// The VM instruction bound for one addon's load, shared with the addon harness: about 50x the
 /// corpus's heaviest (4M), so an addon that crosses it is in a runaway loop and fails alone.
@@ -327,18 +328,7 @@ fn under_addons(req: &str) -> Option<&str> {
 /// A `Dir` addon's base before its folder name ([`Addon::prefix`]), `/`-separated as `join_ref` is.
 const ADDONS_PREFIX: &str = "Interface/AddOns/";
 
-/// The addon folder, `<benilla-config>/AddOns/`, or `None` (always under `$WOW_CAPTURE`); addon
-/// textures and fonts resolve onto it too. Deviation: the reference reads the install's
-/// `Interface\AddOns\`; benilla reads an install and does not live in one, so its addons live in
-/// its own state folder, and only there.
-pub(crate) fn root() -> Option<PathBuf> {
-    root_from(crate::local_state::home())
-}
-
-/// [`root`] with its one environment fact passed in, so a test need not set the environment.
-fn root_from(home: Option<PathBuf>) -> Option<PathBuf> {
-    home.map(|h| h.join(ADDONS_DIR))
-}
+pub(crate) use crate::local_state::addons_root as root;
 
 /// Build 12340's `Blizzard_*` addons, carried in its archives the same way.
 pub(super) const WRATH_BLIZZARD_ADDONS: [&str; 24] = [
@@ -855,26 +845,6 @@ pub(super) fn load_wrath_third_party(
         }
         script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
         let _ = state.load(script, &addons, &addon.name);
-    }
-    state.failures
-}
-
-/// The archive's startup Blizzard addons (`Blizzard_TokenUI`), loaded right after the core, as a
-/// clean login has them. Outside the registry walk, whose rows stay the LoadOnDemand ones: no row
-/// is registered and no folder is read, so a caller's own registry (the rig, the harness) stands.
-pub(super) fn load_wrath_startup_blizzard(script: &mut UiScript) -> Vec<String> {
-    let startup: Vec<Addon> = chain_addons(&WRATH_BLIZZARD_ADDONS)
-        .into_iter()
-        .filter(|addon| !addon.toc.load_on_demand())
-        .collect();
-    let mut state = Walk {
-        version_check: true,
-        client_interface: 30300,
-        ..Walk::default()
-    };
-    for addon in &startup {
-        script.set_instruction_budget(LOAD_INSTRUCTION_BUDGET);
-        let _ = state.load(script, &startup, &addon.name);
     }
     state.failures
 }
@@ -1529,16 +1499,6 @@ mod tests {
             w.failures
         );
         let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    /// `local_state::home()` is `None` under `$WOW_CAPTURE`, so `None` here is the capture case.
-    #[test]
-    fn there_is_one_addon_root_and_it_is_ours() {
-        assert_eq!(
-            root_from(Some(PathBuf::from("/state"))),
-            Some(PathBuf::from("/state/AddOns"))
-        );
-        assert_eq!(root_from(None), None, "a capture run has no addon root");
     }
 
     #[test]

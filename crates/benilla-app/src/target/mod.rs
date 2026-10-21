@@ -42,9 +42,8 @@ mod wrath_relations;
 // `pub(crate)` for the hover inspector too: its faction catalog feeds `go_highlightable`.
 pub(crate) mod ring;
 mod scan;
-mod script;
+pub(crate) mod script;
 pub(crate) mod unit_tokens;
-pub(crate) use script::ScriptSelect;
 
 /// `Faction.dbc` and our reputation table as one [`SystemParam`], since every reaction function
 /// takes both; `factions` is `Option` so a UI-only harness runs without client data.
