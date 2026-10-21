@@ -17,9 +17,8 @@ use super::{
     CharListMessage, CharacterLoginFailedMessage, CinematicTriggeredMessage, ClientControlMessage,
     DisconnectedMessage, DroppedOpcodes, EnteredWorldMessage, GameTime, GuidIndex, HomeBind,
     KnockBackMessage, LoggedOutMessage, LoginFailedMessage, LoginQueuedMessage, LoginStageMessage,
-    NetCommands, NetHandlerApp, NetStatus, ObjectStore, PendingTransfer, Proficiencies,
-    RealmListMessage, Reputations, SelfGuid, ServerTime, ServerWallClock, TeleportMessage,
-    WorldportMessage,
+    NetHandlerApp, NetStatus, ObjectStore, PendingTransfer, Proficiencies, RealmListMessage,
+    Reputations, SelfGuid, ServerTime, ServerWallClock, TeleportMessage, WorldportMessage,
 };
 
 /// Registers the session handlers.
@@ -92,7 +91,6 @@ pub(crate) struct Bridge<'w, 's> {
     home_bind: ResMut<'w, HomeBind>,
     proficiencies: ResMut<'w, Proficiencies>,
     dropped: ResMut<'w, DroppedOpcodes>,
-    net: Res<'w, NetCommands>,
     stores: Query<'w, 's, &'static mut ObjectStore>,
     transports: Query<'w, 's, &'static crate::app_core::movement::TransportMaps>,
 }
@@ -247,7 +245,8 @@ fn on_worldport(
     In(ev): In<SessionEvent>,
     mut e: Edges,
     mut b: Bridge,
-    mut group: ResMut<crate::ui_party::GroupState>,
+    group: Res<crate::app_core::group::GroupState>,
+    mut deactivated: MessageWriter<super::MemberDeactivated>,
 ) {
     let (map_id, position, orientation, needs_ack, native_token) = match ev {
         SessionEvent::Worldport {
@@ -283,7 +282,13 @@ fn on_worldport(
     };
     {
         // Every streamed roster member is about to be purged; the reference deactivates each.
-        crate::ui_party::net::roster_deactivated(&mut group, &b.index, &b.stores, &b.names, &b.net);
+        let held = |g: u64| b.index.0.get(&g).and_then(|e| b.stores.get(*e).ok());
+        deactivated.write_batch(
+            group
+                .members
+                .iter()
+                .filter_map(|m| super::objects::member_deactivated(m.guid, &group, held)),
+        );
         worldport(
             map_id,
             position,
@@ -335,21 +340,16 @@ fn on_reputations(In(ev): In<SessionEvent>, mut b: Bridge) {
     }
 }
 
-/// The chat line reads the deltas against the store, so it must run before the overwrite.
+/// The chat line reads the deltas against the store, so the before-and-after goes out before the
+/// overwrite.
 fn on_reputation_delta(
     In(ev): In<SessionEvent>,
     mut b: Bridge,
-    factions: Option<Res<crate::target::ring::Factions>>,
-    mut chat_log: ResMut<crate::ui_chat::ChatLog>,
+    mut changes: MessageWriter<super::StandingChanged>,
     mut quest: ResMut<QuestGiver>,
 ) {
     if let SessionEvent::ReputationDelta { standings } = ev {
-        crate::combat_log::chat::faction_standing(
-            &standings,
-            &b.reputations,
-            factions.as_deref(),
-            &mut chat_log,
-        );
+        changes.write_batch(standings_changed(&standings, &b.reputations));
         reputation_delta(standings, &mut b.reputations, &mut quest);
     }
 }
@@ -679,6 +679,23 @@ fn reputations(standings: Vec<(u8, i32)>, reputations: &mut Reputations) {
 
 /// `SMSG_SET_FACTION_STANDING`: overwrites the changed slots, growing the store with flags 0,
 /// and makes each visible unless it is `HIDDEN`, as the reference's handler does (`0x4d5760`).
+/// Each slot's standing in the store and on the wire; a slot the store lacks reads 0.
+fn standings_changed<'a>(
+    standings: &'a [(u32, i32)],
+    reputations: &'a Reputations,
+) -> impl Iterator<Item = super::StandingChanged> + 'a {
+    standings
+        .iter()
+        .map(|&(list_id, new)| super::StandingChanged {
+            list_id,
+            old: reputations
+                .0
+                .get(list_id as usize)
+                .map_or(0, |(_, standing)| *standing),
+            new,
+        })
+}
+
 fn reputation_delta(
     standings: Vec<(u32, i32)>,
     reputations: &mut Reputations,
