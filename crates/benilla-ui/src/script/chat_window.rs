@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn wrath_combat_log_docks_after_the_primary_window() {
-        let s = UiScript::new_with_dialect(super::super::ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<i64>("local _,_,_,_,_,_,_,_,d = GetChatWindowInfo(2) return d")
                 .unwrap(),

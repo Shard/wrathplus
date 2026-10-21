@@ -213,11 +213,10 @@ fn dungeon_info(lua: &Lua, state: &State, row: &WrathLfgDungeon) -> mlua::Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::ScriptDialect;
-
+    
     #[test]
     fn dungeon_tuple_abi_and_expansion_override() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         assert_eq!(
             script
                 .eval::<u32>("return select('#', GetLFGDungeonInfo(42))")
@@ -268,7 +267,7 @@ mod tests {
 
     #[test]
     fn missing_map_join_and_expansion_do_not_invent_defaults() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_wrath_lfg_catalog(
             Arc::new(WrathLfgCatalog {
                 dungeons: vec![WrathLfgDungeon {

@@ -153,12 +153,12 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript, WrathLfgCatalog, WrathLfgGroup};
+    use crate::script::{UiScript, WrathLfgCatalog, WrathLfgGroup};
     use std::sync::Arc;
 
     #[test]
     fn native_order_filters_bounds_and_safe_header_ties() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         let row = |id, name: &str, group, order, min, max| WrathLfgDungeon {
             id,
             name: name.into(),

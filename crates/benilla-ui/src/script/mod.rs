@@ -711,18 +711,6 @@ fn instruction_budget_error(used: u64) -> mlua::Error {
     ))
 }
 
-/// The client script language and handler ABI hosted by [`UiScript`].
-///
-/// This does not claim every global API for that client build is implemented. In particular, the
-/// Wrath dialect supplies Lua 5.1 and Wrath's handler/addon argument conventions while the engine
-/// API remains the explicitly incomplete surface implemented by this crate.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ScriptDialect {
-    /// WoW 3.3.5a/build 12340: native Lua 5.1 and positional handler/addon arguments.
-    #[default]
-    Wrath12340,
-}
-
 /// Hands out [`UiScript::session`] ids: process-global and monotone, so an id is never reused.
 static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -742,13 +730,9 @@ pub fn addon_chunk_name(folder: &str, file: &str) -> String {
 }
 
 impl UiScript {
-    /// Build a fully sandboxed, stdlib- and object-model-equipped host: build 12340's dialect.
+    /// Build a fully sandboxed, stdlib- and object-model-equipped host for build 12340: Lua 5.1 and
+    /// the client's handler and addon argument conventions.
     pub fn new() -> mlua::Result<UiScript> {
-        Self::new_with_dialect(ScriptDialect::Wrath12340)
-    }
-
-    /// [`UiScript::new`], for callers that still name the dialect.
-    pub fn new_with_dialect(_dialect: ScriptDialect) -> mlua::Result<UiScript> {
         let lua = Lua::new();
         lua.set_memory_limit(WRATH_MEMORY_LIMIT)?;
         let instruction_budget = std::sync::Arc::new(InstructionBudget::new());
@@ -948,11 +932,6 @@ impl UiScript {
             session: NEXT_SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         };
         Ok(s)
-    }
-
-    /// The client script dialect: always build 12340's.
-    pub fn dialect(&self) -> ScriptDialect {
-        ScriptDialect::Wrath12340
     }
 
     /// The embedded VM, for the app and the loader to add their bindings over this object model.

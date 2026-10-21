@@ -2,12 +2,11 @@ use std::collections::HashMap;
 
 use crate::framexml;
 use crate::loader;
-use crate::script::{ScriptDialect, ScriptValue, SeededCvar, UiScript, UnitGuids, UnitState};
+use crate::script::{ScriptValue, SeededCvar, UiScript, UnitGuids, UnitState};
 
 #[test]
 fn wrath_keeps_native_lua51_select_length_and_table_semantics() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
-    assert_eq!(s.dialect(), ScriptDialect::Wrath12340);
+    let s = UiScript::new().unwrap();
     assert_eq!(s.eval::<i64>("return select('#', 1, nil, 3)").unwrap(), 3);
     assert_eq!(s.eval::<i64>("return #{10,20,30}").unwrap(), 3);
     assert!(s
@@ -58,7 +57,7 @@ fn observed_unit(exists: bool, guid: u64) -> UnitState {
 
 #[test]
 fn wrath_unit_is_unit_compares_only_existing_observed_identities() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_unit("player", Some(observed_unit(true, 0x10)));
     s.set_unit("target", Some(observed_unit(true, 0x10)));
     s.set_unit("party1", Some(observed_unit(true, 0x20)));
@@ -110,7 +109,7 @@ fn wrath_unit_is_unit_uses_the_existing_target_chain_resolver() {
     const TARGET: u64 = 0xF130_0000_0000_0001;
     const TARGET_TARGET: u64 = 0x21;
 
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_unit_guids(&UnitGuids {
         target: TARGET,
         held: HashMap::from([(TARGET, TARGET_TARGET)]),
@@ -128,7 +127,7 @@ fn wrath_unit_is_unit_uses_the_existing_target_chain_resolver() {
 
 #[test]
 fn wrath_setscript_and_xml_handlers_receive_arguments_and_restore_the_legacy_globals() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.run(
         "this,event,arg1='sentinel-this','sentinel-event','sentinel-arg'; \
          f=CreateFrame('Button','WrathButton'); f:RegisterEvent('E'); \
@@ -174,7 +173,7 @@ fn wrath_setscript_and_xml_handlers_receive_arguments_and_restore_the_legacy_glo
 
 #[test]
 fn wrath_nested_handlers_restore_the_legacy_globals() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.run(
         "outer=CreateFrame('Frame'); inner=CreateFrame('Frame'); \
          inner:SetScript('OnShow',function(self) INNER=self end); \
@@ -195,7 +194,7 @@ fn wrath_nested_handlers_restore_the_legacy_globals() {
 /// dispatch (`0x819ea0`): the frame, the event name on an event, and the values after it.
 #[test]
 fn wrath_this_style_addon_handlers_read_the_legacy_globals() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.run(
         r#"
         local f = CreateFrame("Button", "OldAddonFrame")
@@ -242,7 +241,7 @@ fn wrath_this_style_addon_handlers_read_the_legacy_globals() {
 
 #[test]
 fn wrath_native_pattern_backtracking_and_recursion_are_bounded() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let s = UiScript::new().unwrap();
     for source in [
         "return string.find(string.rep('a', 32), 'a*a*a*a*a*a*a*a*a*a*b')",
         "return string.match(string.rep('a', 32), 'a*a*a*a*a*a*a*a*a*a*b')",
@@ -263,7 +262,7 @@ fn wrath_native_pattern_backtracking_and_recursion_are_bounded() {
 
 #[test]
 fn wrath_addon_chunks_share_private_table_per_addon() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let s = UiScript::new().unwrap();
     s.run_addon_chunk_named(
         "Probe",
         b"local name,p=...; p.value=name",
@@ -285,7 +284,7 @@ fn wrath_addon_chunks_share_private_table_per_addon() {
 
 #[test]
 fn wrath_pointer_focus_tracks_real_hit_testing_visibility_and_button_state() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_screen_size(800.0, 600.0);
     s.run(
         r#"
@@ -346,7 +345,7 @@ fn wrath_pointer_focus_tracks_real_hit_testing_visibility_and_button_state() {
 
 #[test]
 fn wrath_cursor_position_is_screen_space_and_callers_apply_effective_scale() {
-    let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut s = UiScript::new().unwrap();
     s.set_screen_size(800.0, 600.0);
     s.run(
         "Scaled = CreateFrame('Frame'); Scaled:SetScale(0.5); \

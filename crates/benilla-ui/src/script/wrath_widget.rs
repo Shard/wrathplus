@@ -1,9 +1,9 @@
 //! Regression tests for native Wrath widget edges and diagnostics.
-use crate::script::{ScriptDialect, UiScript};
+use crate::script::UiScript;
 
 #[test]
 fn wrath_script_slots_and_button_edges() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let s = UiScript::new().unwrap();
     s.run(r#"
         local b = CreateFrame('Button')
         local calls = {}
@@ -44,7 +44,7 @@ fn wrath_script_slots_and_button_edges() {
 
 #[test]
 fn wrath_debuglocals_is_bounded_and_does_not_expose_debug_library() {
-    let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let s = UiScript::new().unwrap();
     s.run(
         r#"
         assert(debug == nil)

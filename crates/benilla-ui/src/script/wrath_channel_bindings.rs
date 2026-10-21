@@ -253,11 +253,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::{
-        PartyMemberInfo, PartyState, ScriptDialect, UiScript, UnitState, WrathChannelRosterMember,
+        PartyMemberInfo, PartyState, UiScript, UnitState, WrathChannelRosterMember,
         WrathDisplayChannel,
     };
     fn script() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_display_channels(vec![
             WrathDisplayChannel {
                 slot: 1,
@@ -391,12 +391,12 @@ mod tests {
 #[cfg(test)]
 mod lifetime_tests {
     use crate::script::{
-        PartyState, RaidMemberInfo, ScriptDialect, UiScript, WrathChannelRosterMember,
+        PartyState, RaidMemberInfo, UiScript, WrathChannelRosterMember,
         WrathDisplayChannel,
     };
     #[test]
     fn raid_and_battleground_indices_and_roster_changes_use_current_membership() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut party = PartyState {
             own_guid: 1,
             leader_guid: 1,
@@ -427,7 +427,7 @@ mod lifetime_tests {
     }
     #[test]
     fn leave_invalidates_pending_names_and_hidden_custom_rows_do_not_shift_as_joined_slots() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let row = |slot, name: &str, state| WrathDisplayChannel {
             slot,
             name: name.into(),
@@ -456,7 +456,7 @@ mod lifetime_tests {
     }
     #[test]
     fn hiding_confirmed_selected_custom_row_invalidates_pending_revision() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut row = WrathDisplayChannel {
             slot: 9,
             name: "Custom".into(),
@@ -490,7 +490,7 @@ mod lifetime_tests {
     }
     #[test]
     fn suspended_custom_activity_uses_raw_custom_state_not_confirmation() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_wrath_display_channels(vec![WrathDisplayChannel {
             slot: 9,
             name: "Custom".into(),

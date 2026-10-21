@@ -549,7 +549,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     const MINE_PLAYER: u32 = 0x511; // mine, friendly, player-controlled, player
     const HOSTILE_NPC: u32 = 0xa48; // outsider, hostile, npc-controlled, npc
@@ -574,7 +574,7 @@ mod tests {
     }
 
     fn vm() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(
             "F, U = {}, {} local f = CreateFrame('Frame') \
              f:RegisterEvent('COMBAT_LOG_EVENT') f:RegisterEvent('COMBAT_LOG_EVENT_UNFILTERED') \

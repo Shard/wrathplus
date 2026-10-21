@@ -131,11 +131,11 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     #[test]
     fn mute_status_reads_the_ignore_list_and_mutes_change_nothing() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.set_social(crate::script::SocialState {
             ignores: vec!["Grief".into()],
             ..Default::default()
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn range_and_vehicle_answers_miss_without_a_unit() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         assert!(s
             .eval::<bool>("return UnitInRange('raid1') == nil")
             .unwrap());

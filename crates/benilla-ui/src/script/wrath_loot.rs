@@ -70,7 +70,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::script::{LootRow, LootState, ScriptDialect, UiScript};
+    use crate::script::{LootRow, LootState, UiScript};
 
     fn row() -> LootRow {
         LootRow {
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn wrath_loot_slot_is_take_and_info_fifth_result_is_locked() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         script.set_loot(Some(LootState {
             rows: vec![Some(row())],
             ..LootState::default()
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn wrath_auto_loot_key_reports_the_real_shift_modifier() {
-        let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut script = UiScript::new().unwrap();
         assert!(!script.eval::<bool>("return IsAutoLootKeyDown()").unwrap());
         script.set_modifiers(true, false, false);
         assert!(script.eval::<bool>("return IsAutoLootKeyDown()").unwrap());

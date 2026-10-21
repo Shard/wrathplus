@@ -363,7 +363,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::script::talent::{TalentPrereqView, TalentTabView, TalentView};
-    use crate::script::{ScriptDialect, TalentUiState, UiScript};
+    use crate::script::{TalentUiState, UiScript};
 
     fn talent(id: u32, tier: u32, column: u32, rank: u32, max_rank: u32) -> TalentView {
         TalentView {
@@ -380,7 +380,7 @@ mod tests {
 
     /// Tier 1: A (5 ranks, 2 learned) and B (1 rank); tier 2: C (3 ranks) needing A at 5.
     fn script(unspent: u32) -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut c = talent(30, 2, 1, 0, 3);
         c.prereqs = vec![TalentPrereqView {
             tier: 1,

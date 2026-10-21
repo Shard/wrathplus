@@ -438,8 +438,8 @@ fn queue_move(
     });
 }
 
-/// Register the container verbs as bare globals, as `reference/1.12-globals.tsv` lists them;
-/// `C_Container` is a later client's namespace, and an addon that finds it assumes that client.
+/// Register the container verbs as bare globals, as build 12340 has them; `C_Container` is a later
+/// client's namespace, and an addon that finds it assumes that client.
 pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     // ContainerIDToInventoryID(containerID) (`0x4f94e0`): `id - 1`, then +20 below 4 else +60, so
     // the keyring -2 → 17, the backpack 0 → 19, bags 1-4 → 20-23 and bank bags 5-10 → 64-69, with

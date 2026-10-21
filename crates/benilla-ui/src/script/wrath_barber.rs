@@ -307,7 +307,7 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn style(id: u32, name: &str, cost_modifier: f32, data: u32) -> WrathBarberStyle {
         WrathBarberStyle { id, name: name.into(), description: format!("{name} desc"), cost_modifier, data }
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn styles_costs_cycling_and_verbs() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         assert!(s.eval::<bool>("return select('#', GetBarberShopStyleInfo(1)) == 0 and GetBarberShopTotalCost() == 0 and CanAlterSkin() == false and GetHairCustomization() == 'NORMAL'").unwrap());
         s.set_wrath_barber_shop(Some(WrathBarberShop {
             base_cost: 101.0,

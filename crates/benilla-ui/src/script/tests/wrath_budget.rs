@@ -1,7 +1,7 @@
-use crate::script::{ScriptDialect, UiScript, WRATH_INSTRUCTION_HOOK_STEP, WRATH_MEMORY_LIMIT};
+use crate::script::{UiScript, WRATH_INSTRUCTION_HOOK_STEP, WRATH_MEMORY_LIMIT};
 
 fn wrath() -> UiScript {
-    UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap()
+    UiScript::new().unwrap()
 }
 
 fn assert_budget_error(error: mlua::Error) {

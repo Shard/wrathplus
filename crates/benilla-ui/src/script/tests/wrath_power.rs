@@ -1,8 +1,8 @@
-use crate::script::{ScriptDialect, UiScript, UnitPowerState, UnitState};
+use crate::script::{UiScript, UnitPowerState, UnitState};
 
 #[test]
 fn wrath_current_power_uses_identity() {
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     let mut unit = UnitState {
         exists: true,
         guid: 42,
@@ -63,7 +63,7 @@ fn wrath_current_power_uses_identity() {
 
 #[test]
 fn wrath_power_readers_use_all_resources_and_native_integer_scaling() {
-    let mut script = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut script = UiScript::new().unwrap();
     script.set_unit(
         "player",
         Some(UnitState {
@@ -132,7 +132,7 @@ fn wrath_power_readers_use_all_resources_and_native_integer_scaling() {
 
 #[test]
 fn wrath_power_reads_zero_before_the_snapshot() {
-    let mut wrath = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+    let mut wrath = UiScript::new().unwrap();
     wrath.set_unit(
         "player",
         Some(UnitState {

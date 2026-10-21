@@ -206,10 +206,10 @@ pub(crate) fn extract(model: &Model, out: &mut [super::super::ExtractedQuad]) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{ScriptDialect, UiScript};
+    use super::super::super::UiScript;
     #[test]
     fn scale_rotation_render_only_pause_bounce_and_restore() {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.run(r#"f=CreateFrame('Frame','TransformTest'); f:SetSize(100,40); f:SetPoint('BOTTOMLEFT',UIParent,'BOTTOMLEFT',10,20)
             tex=f:CreateTexture(); tex:SetAllPoints(f); tex:SetTexture(1,1,1)
             g=f:CreateAnimationGroup(); g:SetLooping('BOUNCE')

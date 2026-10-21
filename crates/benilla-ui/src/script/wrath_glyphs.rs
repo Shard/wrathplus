@@ -261,10 +261,10 @@ pub(super) fn install_tooltip_method(lua: &Lua, m: &Table) -> mlua::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn script() -> UiScript {
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         let mut sockets: [GlyphSocketView; 6] = Default::default();
         sockets[0] = GlyphSocketView {
             enabled: true,
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn no_player_answers_the_native_misses() {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         assert_eq!(
             s.eval::<i64>("return select('#', GlyphMatchesSocket(1))")
                 .unwrap(),

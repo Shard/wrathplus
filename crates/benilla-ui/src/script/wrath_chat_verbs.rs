@@ -618,10 +618,10 @@ fn parse_guid(s: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::WrathChatVerbRequest as R;
-    use crate::script::{ScriptDialect, UiScript};
+    use crate::script::UiScript;
 
     fn vm() -> UiScript {
-        let s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 0x10;
         s
     }
@@ -871,7 +871,7 @@ mod tests {
     #[test]
     fn temp_enchant_cancel_dressable_and_sound_restart() {
         use crate::script::{InvSlotView, ItemTemplateView};
-        let mut s = UiScript::new_with_dialect(ScriptDialect::Wrath12340).unwrap();
+        let mut s = UiScript::new().unwrap();
         s.model_mut().unit_guids.player = 0x10;
         s.set_unit("player", Some(crate::script::UnitState { guid: 0x10, exists: true, ..Default::default() }));
         let mut slots: crate::script::InventorySlots = Default::default();

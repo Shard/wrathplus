@@ -55,7 +55,7 @@ impl crate::script::UiScript {
 mod tests {
     #[test]
     fn trivial_tracking_is_the_one_type_and_can_be_cleared() {
-        let s = crate::script::UiScript::new_with_dialect(crate::script::ScriptDialect::Wrath12340)
+        let s = crate::script::UiScript::new()
             .unwrap();
         s.lua().load("assert(GetNumTrackingTypes()==1); SetTracking(1); local n,t,a,c=GetTrackingInfo(1); assert(n and t and a and c=='other'); assert(GetTrackingTexture()==t)").exec().unwrap();
         assert!(s.track_trivial_quests());
