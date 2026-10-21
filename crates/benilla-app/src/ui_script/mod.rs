@@ -40,7 +40,7 @@ pub(crate) use crate::app_core::vm_memo::VmMemo;
 
 // Not test-only: the addon harness loads the whole shipped interface under each addon.
 pub(crate) use manifest::default_bindings;
-pub(crate) use manifest::load_default_ui;
+pub use manifest::load_default_ui;
 #[cfg(test)]
 pub(crate) use manifest::{load_stock_bindings, stock_bindings_file};
 

@@ -7,8 +7,6 @@ use benilla_ui::script::{ItemTextState, UiScript};
 #[path = "common/mod.rs"]
 mod common;
 
-const UI_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/ui");
-
 /// The reader's dependency prefix, in the production order; the page's scroll frame inherits
 /// `UIPanelScrollFrameTemplate` (`UIPanelTemplates.xml`).
 const FILES: &[&str] = &[
@@ -17,7 +15,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     // `GetMaterialTextColors` (`UIParent.lua:1880`), which picks the page and title ink.
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
@@ -26,40 +23,12 @@ const FILES: &[&str] = &[
     r"Interface\FrameXML\UIPanelTemplates.xml",
     "Interface\\FrameXML\\StaticPopup.xml", // the dialog engine
     "Interface\\FrameXML\\ItemTextFrame.xml",
-    "ScrollTemplates.xml",
 ];
 
-/// Loads `FILES`: a bare filename from `assets/ui`, a path off the player's chain. The provider
-/// also serves chain paths, since `ItemTextFrame.xml` pulls its Lua through a relative
-/// `<Script file=…>` resolved against its own directory.
-fn load_ui(script: &UiScript) {
-    let dir = std::path::Path::new(UI_DIR);
-    let chain = benilla_formats::wow_data()
-        .and_then(|data| benilla_formats::open_chain(&data).ok())
-        .expect("client data — every test here gates on it");
-    let read = |req: &str| -> Option<Vec<u8>> {
-        if req.contains('\\') || req.contains('/') {
-            return chain.read(req).ok();
-        }
-        std::fs::read(dir.join(req)).ok()
-    };
+/// Loads `FILES` through the kit ([`common::load_ui`]), which seats the session interface.
+fn load_ui(script: &mut UiScript) {
     for file in FILES {
-        let bytes = read(file).unwrap_or_else(|| panic!("reading {file}"));
-        // A `.lua` entry is a chunk, passed as raw bytes; only an XML parse decodes.
-        if file.to_ascii_lowercase().ends_with(".lua") {
-            script
-                .run_chunk_named(&bytes, &format!("@{file}"))
-                .unwrap_or_else(|e| panic!("running {file}: {e}"));
-            continue;
-        }
-        let doc = benilla_ui::framexml::parse(&benilla_ui::source::decode(&bytes))
-            .unwrap_or_else(|e| panic!("parsing {file}: {e}"));
-        let report = benilla_ui::loader::load_in(script, &doc, &file.replace('\\', "/"), &read);
-        assert!(
-            report.errors.is_empty(),
-            "{file} loaded with errors: {:#?}",
-            report.errors
-        );
+        common::load_ui(script, file);
     }
 }
 
@@ -93,7 +62,7 @@ fn letter() -> ItemTextState {
 fn a_letter_reads_with_the_creator_tail() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     assert!(!s.eval::<bool>("return ItemTextFrame:IsShown()").unwrap());
 
     s.set_item_text(Some(letter()));
@@ -133,7 +102,7 @@ fn a_letter_reads_with_the_creator_tail() {
 fn the_scrollbar_track_sits_right_of_the_page() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     let unresolved: Vec<String> = s
         .warnings()
         .into_iter()
@@ -164,7 +133,7 @@ fn the_scrollbar_track_sits_right_of_the_page() {
 fn a_book_page_shows_the_paging_chrome() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_item_text(Some(ItemTextState {
         item: "Lament of the Highborne".into(),
         creator: None,
@@ -202,7 +171,7 @@ fn a_book_page_shows_the_paging_chrome() {
 fn closing_queues_the_close_intent() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_item_text(Some(letter()));
     s.fire_event("ITEM_TEXT_BEGIN", vec![]);
     s.fire_event("ITEM_TEXT_READY", vec![]);
@@ -224,7 +193,7 @@ fn closing_queues_the_close_intent() {
 fn the_reported_html_page_draws_as_blocks_not_as_its_own_markup() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_item_text(Some(ItemTextState {
         item: "Alliance Military Ranks".into(),
         creator: None,
@@ -286,7 +255,7 @@ fn the_reported_book_crest_draws_at_the_blps_own_size() {
     s.set_texture_size_probe(Box::new(move |path| {
         benilla_assets::sprite_dimensions(&chain, None, path)
     }));
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_item_text(Some(ItemTextState {
         item: "A Treatise on Military Ranks".into(),
         creator: None,
@@ -390,9 +359,9 @@ fn a_quest_givers_gossip_displaces_the_open_reader() {
     use benilla_ui::script::GossipMenu;
 
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     // The stock gossip window, off the chain.
-    common::load_ui(&s, "Interface\\FrameXML\\GossipFrame.xml");
+    common::load_ui(&mut s, "Interface\\FrameXML\\GossipFrame.xml");
 
     s.set_item_text(Some(letter()));
     s.fire_event("ITEM_TEXT_BEGIN", vec![]);

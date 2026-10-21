@@ -30,6 +30,8 @@ mod modelframe;
 mod movable;
 mod name_targets;
 mod nameplate;
+mod nameplate_cast;
+mod nameplate_input;
 mod numeric_shape_gate;
 mod object_model;
 mod reference_surface;

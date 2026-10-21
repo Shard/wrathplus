@@ -65,11 +65,11 @@ fn group_prefixed_kinds_wear_their_brackets() {
     let _data = benilla_formats::wow_data_or_skip!();
     assert_eq!(
         compose(&ev(K::Party, "inc 3", "Ann"), K::Party, "Common").unwrap(),
-        "[Party] |Hplayer:Ann|h[Ann]|h: inc 3"
+        "|Hchannel:PARTY|h[Party]|h |Hplayer:Ann|h[Ann]|h: inc 3"
     );
     assert_eq!(
         compose(&ev(K::Guild, "gz", "Ann"), K::Guild, "Common").unwrap(),
-        "[Guild] |Hplayer:Ann|h[Ann]|h: gz"
+        "|Hchannel:GUILD|h[Guild]|h |Hplayer:Ann|h[Ann]|h: gz"
     );
     assert_eq!(
         compose(&ev(K::RaidWarning, "move", "Ann"), K::RaidWarning, "Common").unwrap(),
@@ -84,11 +84,11 @@ fn flags_prefix_the_name_and_afk_uses_its_get() {
     e.flag = "GM".into();
     assert_eq!(
         compose(&e, K::Say, "Common").unwrap(),
-        "<GM>|Hplayer:Bob|h[Bob]|h says: brb"
+        r"|TInterface\ChatFrame\UI-ChatIcon-Blizz.blp:0:2:0:-3|t |Hplayer:Bob|h[Bob]|h says: brb"
     );
     assert_eq!(
         compose(&ev(K::Afk, "farming", "Bob"), K::Afk, "Common").unwrap(),
-        "|Hplayer:Bob|h[Bob]|h is Away From Keyboard: farming"
+        "|Hplayer:Bob|h[Bob]|h is Away: farming"
     );
 }
 
@@ -283,7 +283,7 @@ fn honor_gain_lines_pick_the_reference_form() {
     assert_eq!(
         with_strings(|g| super::feed::honor_gain_line(Some("Grimtusk"), Some("Sergeant"), 137, g))
             .as_deref(),
-        Some("Grimtusk dies, honorable kill Rank: Sergeant (Estimated Honor Points: 137)")
+        Some("Grimtusk dies, honorable kill Rank: Sergeant (137 Honor Points)")
     );
     // A dishonorable kill: vmangos sends a negative honor (`HonorMgr.cpp:807`).
     assert_eq!(
@@ -300,7 +300,7 @@ fn honor_gain_lines_pick_the_reference_form() {
     // No rank title: the clause stays, empty.
     assert_eq!(
         with_strings(|g| super::feed::honor_gain_line(Some("Grimtusk"), None, 5, g)).as_deref(),
-        Some("Grimtusk dies, honorable kill Rank:  (Estimated Honor Points: 5)")
+        Some("Grimtusk dies, honorable kill Rank:  (5 Honor Points)")
     );
 }
 
@@ -371,7 +371,7 @@ fn channel_line_prefixes_the_stripped_channel() {
     e.channel = "General - Elwynn Forest".into();
     assert_eq!(
         compose(&e, K::Channel, "Common").unwrap(),
-        "[General] |Hplayer:Bob|h[Bob]|h: wts boar livers"
+        "|Hchannel:channel:0|h[General]|h |Hplayer:Bob|h[Bob]|h: wts boar livers"
     );
 }
 
@@ -393,18 +393,18 @@ fn channel_notices_compose_by_the_notice_law() {
     };
     assert_eq!(
         notice(0x02, "General - Elwynn Forest", None, None).unwrap(), // YOU_JOINED
-        "Joined Channel: [General - Elwynn Forest]"
+        "Joined Channel: |Hchannel:CHANNEL:0|h[General - Elwynn Forest]|h"
     );
     assert_eq!(
         notice(0x12, "World", Some("Ann"), Some("Mod")).unwrap(), // PLAYER_KICKED
-        "[World] Player Ann kicked by Mod."
+        "|Hchannel:CHANNEL:0|h[World]|h Player Ann kicked by Mod."
     );
     // A member join is a CHANNEL_JOIN event, linked like a player line.
     let mut join = ev(K::ChannelJoin, "", "Ann");
     join.channel = "World".into();
     assert_eq!(
         compose(&join, K::ChannelJoin, "Common").unwrap(),
-        "[World] |Hplayer:Ann|h[Ann]|h joined channel."
+        "|Hchannel:channel:0|h[World]|h |Hplayer:Ann|h[Ann]|h joined channel."
     );
 }
 
@@ -672,9 +672,8 @@ fn stamping_a_channel_splits_the_display_form_from_the_base_name() {
 #[test]
 fn a_channel_notice_renders_in_the_channels_color_not_the_notice_row() {
     let _data = benilla_formats::wow_data_or_skip!();
-    use benilla_ui::script::QuadContent;
-
     let mut s = chat_vm();
+    s.run(super::stock_print_tests::PRINTED).unwrap();
     let mut windows = super::frames::ChatWindows::default();
     let mut channels = super::edit::ChannelState::default();
     channels.claim_slot("General - Elwynn Forest");
@@ -686,21 +685,12 @@ fn a_channel_notice_renders_in_the_channels_color_not_the_notice_row() {
     e.channel = "General - Elwynn Forest".into();
     e.notice = "2".into(); // YOU_JOINED
     super::feed::deliver(&mut s, &mut windows, &mut channels, &mut e);
-    s.resolve();
 
-    let line = "Joined Channel: [1. General - Elwynn Forest]";
-    let color = s
-        .extract()
-        .iter()
-        .find_map(|q| match &q.content {
-            QuadContent::Text {
-                text: Some(t),
-                color: Some(c),
-                ..
-            } if t == line => Some(*c),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("the notice line {line:?} rendered"));
+    assert_eq!(
+        super::stock_print_tests::printed(&s),
+        ["Joined Channel: |Hchannel:CHANNEL:1|h[1. General - Elwynn Forest]|h"]
+    );
+    let color: Vec<f32> = s.eval("return PrintedColor[1]").unwrap();
     let near = |a: f32, b: f32| (a - b).abs() < 0.01;
     assert!(
         near(color[0], 1.0) && near(color[1], 192.0 / 255.0) && near(color[2], 192.0 / 255.0),
@@ -821,6 +811,7 @@ fn a_zone_change_must_not_deregister_the_channel_it_renames() {
 fn leaving_a_capital_suspends_trade_rather_than_deregistering_it() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_vm();
+    s.run(super::stock_print_tests::PRINTED).unwrap();
     let mut windows = super::frames::ChatWindows::default();
     let mut channels = super::edit::ChannelState {
         channels: benilla_formats::ChatChannelsCatalog::from_rows(vec![
@@ -858,13 +849,12 @@ fn leaving_a_capital_suspends_trade_rather_than_deregistering_it() {
     // `CHAT_SUSPENDED_NOTICE` reads as `CHAT_YOU_LEFT_NOTICE` does; only arg1, which the stock
     // handler branches on, differs.
     assert_eq!(lines_in_window(&s), before + 1);
-    assert!(
-        s.extract().iter().any(|q| matches!(
-            &q.content,
-            benilla_ui::script::QuadContent::Text { text: Some(t), .. }
-                if t == "Left Channel: [1. Trade - City]"
-        )),
-        "the suspended leave renders the same text as an ordinary one"
+    assert_eq!(
+        super::stock_print_tests::printed(&s)
+            .last()
+            .map(String::as_str),
+        Some("Left Channel: |Hchannel:CHANNEL:1|h[1. Trade - City]|h"),
+        "the suspended leave prints the same text as an ordinary one"
     );
 
     assert_eq!(
@@ -907,6 +897,7 @@ fn leaving_a_capital_suspends_trade_rather_than_deregistering_it() {
 fn a_renamed_zone_channel_confirms_as_changed_not_joined() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = chat_vm();
+    s.run(super::stock_print_tests::PRINTED).unwrap();
     let mut windows = super::frames::ChatWindows::default();
     let mut channels = super::edit::ChannelState {
         channels: benilla_formats::ChatChannelsCatalog::from_rows(vec![
@@ -930,12 +921,12 @@ fn a_renamed_zone_channel_confirms_as_changed_not_joined() {
     super::feed::deliver(&mut s, &mut windows, &mut channels, &mut e);
     s.resolve();
 
-    let want = "Changed Channel: [1. General - Westfall]";
-    assert!(
-        s.extract().iter().any(|q| matches!(
-            &q.content,
-            benilla_ui::script::QuadContent::Text { text: Some(t), .. } if t == want
-        )),
+    let want = "Changed Channel: |Hchannel:CHANNEL:1|h[1. General - Westfall]|h";
+    assert_eq!(
+        super::stock_print_tests::printed(&s)
+            .last()
+            .map(String::as_str),
+        Some(want),
         "expected {want:?} in the window"
     );
     assert_eq!(
@@ -969,7 +960,7 @@ fn a_leave_notice_keeps_its_number_because_the_record_dies_after_the_line() {
     );
     assert_eq!(
         compose(&e, K::ChannelNotice, "Common").unwrap(),
-        "Left Channel: [2. General - Elwynn Forest]"
+        "Left Channel: |Hchannel:CHANNEL:2|h[2. General - Elwynn Forest]|h"
     );
     assert_eq!(
         channels.names(),
@@ -1102,7 +1093,6 @@ fn the_invite_notice_reorders_its_two_names() {
 /// A new kind breaks [`super::event::event_name`]'s exhaustive match; this makes it join `ALL`.
 #[test]
 fn every_kind_is_in_all() {
-    let _data = benilla_formats::wow_data_or_skip!();
     let mut seen: Vec<&str> = K::ALL
         .iter()
         .map(|&k| super::event::event_name(k))
@@ -1111,7 +1101,7 @@ fn every_kind_is_in_all() {
     seen.sort_unstable();
     seen.dedup();
     assert_eq!(seen.len(), before, "a kind is listed twice in ALL");
-    assert_eq!(before, 93, "93 kinds — update this when the kind set grows");
+    assert_eq!(before, 42, "42 kinds — update this when the kind set grows");
 }
 
 #[test]
@@ -1604,12 +1594,20 @@ fn the_addon_event_reaches_lua_with_four_arguments_in_order() {
     );
 }
 
-/// The send joins on a tab (`0x49f9b3`) and the receive splits on the first (`0x49a8d0`), so a
-/// payload's own tabs come back intact.
+/// The 12340 send joins on a tab (`0x500608`) and the receive splits on the first (`0x509dd0`), so
+/// a payload's own tabs come back intact.
 #[test]
 fn an_addon_message_survives_its_own_send_and_receive() {
-    let _data = benilla_formats::wow_data_or_skip!();
     let mut s = benilla_ui::script::UiScript::new().unwrap();
+    // 12340 sends nothing without the player object, and PARTY nothing outside a group.
+    s.set_unit_guids(&benilla_ui::script::UnitGuids {
+        player: 7,
+        ..Default::default()
+    });
+    s.set_party(benilla_ui::script::PartyState {
+        members: vec![Default::default()],
+        ..Default::default()
+    });
     s.run(r#"SendAddonMessage("oRA", "SYNC\t1\t2", "PARTY")"#)
         .unwrap();
     assert!(s.errors().is_empty(), "send raised: {:?}", s.errors());
@@ -1619,17 +1617,30 @@ fn an_addon_message_survives_its_own_send_and_receive() {
     let sent = &sends[0];
     assert_eq!(sent.distribution.token(), "PARTY");
 
-    // The same text arrives as a PARTY line in LANG_ADDON.
-    let mut log = super::feed::ChatLog::default();
-    log.push_addon(&sent.text, 0x01, 7);
-
+    // The same text arrives as a PARTY (`0x02`) line in LANG_ADDON.
+    let line = benilla_protocol::wrath_chat::Message {
+        gm: false,
+        chat_type: 0x02,
+        language: 0xFFFF_FFFF,
+        sender_guid: 7,
+        flags: 0,
+        sender_name: None,
+        receiver_guid: 0,
+        receiver_name: None,
+        channel: None,
+        text: sent.text.clone().into_bytes(),
+        chat_tag: 0,
+        achievement_id: None,
+    };
+    use benilla_ui::script::ScriptValue as V;
     assert_eq!(
-        log.pending_addons(),
-        vec![(
-            "oRA".to_string(),
-            "SYNC\t1\t2".to_string(),
-            "PARTY".to_string()
-        )],
+        super::native_message::addon_args(&line, "Someone".into()),
+        vec![
+            V::Bytes(b"oRA".to_vec()),
+            V::Bytes(b"SYNC\t1\t2".to_vec()),
+            V::Str("PARTY".into()),
+            V::Str("Someone".into()),
+        ],
         "what one half composed, the other must recover — tabs in the payload included"
     );
 }
@@ -1881,21 +1892,21 @@ fn the_combat_log_window_has_the_docks_rect() {
             "ChatFrame2:{get}() must equal ChatFrame1's — a docked window shares the dock's rect"
         );
     }
-    // `FCF_DockUpdate` anchors a docked window by three points (`FloatingChatFrame.lua:1059-1063`),
-    // so 3 means the dock seeding ran.
+    // `FCFDock_AddChatFrame` anchors a docked window with `SetAllPoints(dock.primary)`, two points,
+    // so 2 means the dock seeding ran.
     assert_eq!(
         s.eval::<i64>("return ChatFrame2:GetNumPoints()").unwrap(),
-        3,
-        "FCF_DockUpdate's three points — any other count means the dock never seeded this window"
+        2,
+        "SetAllPoints' two points — any other count means the dock never seeded this window"
     );
     assert_eq!(
-        s.eval::<i64>("return table.getn(DOCKED_CHAT_FRAMES)")
+        s.eval::<i64>("return #GENERAL_CHAT_DOCK.DOCKED_CHAT_FRAMES")
             .unwrap(),
         2,
         "the dock is ChatFrame1 + ChatFrame2, seeded from GetChatWindowInfo's stored positions"
     );
     assert_eq!(
-        s.eval::<String>("return SELECTED_DOCK_FRAME:GetName()")
+        s.eval::<String>("return FCFDock_GetSelectedWindow(GENERAL_CHAT_DOCK):GetName()")
             .unwrap(),
         "ChatFrame1"
     );
@@ -1908,23 +1919,23 @@ fn the_combat_log_window_has_the_docks_rect() {
     );
 }
 
-/// The stock fade and tint walk `CHAT_FRAME_TEXTURES` by frame name (`FloatingChatFrame.lua:14`),
-/// so each dock window carries all nine pieces.
+/// The stock fade and tint walk `CHAT_FRAME_TEXTURES` by frame name (`FCF_SetWindowAlpha`), so each
+/// dock window carries every piece, and its one `$parentResizeButton` grip.
 #[test]
 fn both_dock_windows_carry_the_same_chrome() {
     let _data = benilla_formats::wow_data_or_skip!();
     let s = chat_vm();
     // Read out of the VM, so the check follows the list.
-    let suffixes: Vec<String> = (1..=9)
+    let count = s.eval::<i64>("return #CHAT_FRAME_TEXTURES").unwrap();
+    let suffixes: Vec<String> = (1..=count)
         .map(|i| {
             s.eval::<String>(&format!("return CHAT_FRAME_TEXTURES[{i}]"))
                 .unwrap()
         })
         .collect();
-    assert_eq!(
-        suffixes.len(),
-        9,
-        "the background plus the eight resize grips' textures"
+    assert!(
+        suffixes.iter().any(|t| t == "Background"),
+        "the list starts with the background: {suffixes:?}"
     );
     for suffix in &suffixes {
         for id in [1, 2] {
@@ -1935,24 +1946,13 @@ fn both_dock_windows_carry_the_same_chrome() {
             );
         }
     }
-    // Each texture's owning grip Button exists too.
-    for grip in [
-        "TopLeft",
-        "TopRight",
-        "BottomLeft",
-        "BottomRight",
-        "Top",
-        "Bottom",
-        "Left",
-        "Right",
-    ] {
-        for id in [1, 2] {
-            assert!(
-                s.eval::<bool>(&format!("return ChatFrame{id}Resize{grip} ~= nil"))
-                    .unwrap(),
-                "ChatFrame{id}Resize{grip} is missing — the window has art where a handle should be"
-            );
-        }
+    // The one resize grip (`FloatingChatFrame.xml`'s `$parentResizeButton`).
+    for id in [1, 2] {
+        assert!(
+            s.eval::<bool>(&format!("return ChatFrame{id}ResizeButton ~= nil"))
+                .unwrap(),
+            "ChatFrame{id}ResizeButton is missing — the window has art where a handle should be"
+        );
     }
 }
 
@@ -2087,7 +2087,7 @@ fn the_ding_block_is_printed_once() {
         local add = ChatFrame1.AddMessage
         ChatFrame1.AddMessage = function(self, text, ...)
             table.insert(DingLines, text)
-            return add(self, text, unpack(arg))
+            return add(self, text, ...)
         end
         "#,
     )
@@ -2106,7 +2106,8 @@ fn the_ding_block_is_printed_once() {
         "LEVEL_UP, the health/mana pair, CHAR_POINTS, and one STAT — once each"
     );
 
-    // The singular `LEVEL_UP_CHAR_POINTS` (`GetText`'s plural pick) and one `LEVEL_UP_STAT`.
+    // `LEVEL_UP_CHAR_POINTS` as AddMessage takes it, its `|4` plural left for the text renderer,
+    // and one `LEVEL_UP_STAT`.
     let lines: Vec<String> = (1..=4)
         .map(|i| s.eval::<String>(&format!("return DingLines[{i}]")).unwrap())
         .collect();
@@ -2115,7 +2116,7 @@ fn the_ding_block_is_printed_once() {
         [
             "Congratulations, you have reached level 10!",
             "You have gained 22 hit points and 15 mana.",
-            "You have gained 1 talent point.",
+            "You have gained 1 talent |4point:points;.",
             "Your Strength increases by 1.",
         ]
     );
@@ -2137,7 +2138,7 @@ fn the_free_professions_line_is_printed_once() {
         local add = ChatFrame1.AddMessage
         ChatFrame1.AddMessage = function(self, text, ...)
             table.insert(SkillLines, text)
-            return add(self, text, unpack(arg))
+            return add(self, text, ...)
         end
         "#,
     )
@@ -2159,8 +2160,8 @@ fn the_free_professions_line_is_printed_once() {
     );
     assert_eq!(
         s.eval::<String>("return SkillLines[1]").unwrap(),
-        "You now have 2 free professions.",
-        "LEVEL_UP_SKILL_POINTS_P1, plural-picked by GetText on cp2"
+        "You now have 2 free |4profession:professions;.",
+        "LEVEL_UP_SKILL_POINTS, its `|4` plural left for the text renderer"
     );
 }
 
@@ -2182,7 +2183,7 @@ fn the_chat_cache_restore_is_finished_before_player_login() {
     std::fs::create_dir_all(&probe).expect("hermetic home + probe addon dir");
     std::fs::write(
         probe.join("ChatOrderProbe.toc"),
-        "## Interface: 11200\nChatOrderProbe.lua\n",
+        "## Interface: 30300\nChatOrderProbe.lua\n",
     )
     .expect("probe toc");
     std::fs::write(

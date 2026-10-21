@@ -22,10 +22,6 @@ pub(crate) fn columns(
                 .loc(19, 35)
                 .run(28, 52, 1);
         }),
-        // Five (not four) fidgets: shift custom attacks and the remaining voice kits by one.
-        "CreatureSoundData" => (30, 38, |m| {
-            m.same(0, 18).run(18, 19, 12);
-        }),
         "CreatureModelData" => (16, 28, |m| {
             m.same(0, 16);
         }),
@@ -83,10 +79,6 @@ pub(crate) fn columns(
         // shifting WorldEffect, Sound, Shake and the four parallel CharProc arrays.
         "SpellVisualKit" => (35, 38, |m| {
             m.same(0, 1).same(2, 10).run(12, 14, 23);
-        }),
-        // Min and max allowed scale appended.
-        "SpellVisualEffectName" => (5, 7, |m| {
-            m.same(0, 5);
         }),
         // Four doodad weights between the doodads and the density.
         "GroundEffectTexture" => (7, 11, |m| {
@@ -293,7 +285,6 @@ mod tests {
     /// Every mapped table: name, 1.12 schema slots, build-12340 file fields.
     const MAPPED: &[(&str, usize, usize)] = &[
         ("AreaPOI", 29, 54),
-        ("CreatureSoundData", 30, 38),
         ("CreatureModelData", 16, 28),
         ("PetPersonality", 19, 24),
         ("Spell", 188, 234),
@@ -320,7 +311,6 @@ mod tests {
         ("SpellVisual", 16, 32),
         ("GroundEffectTexture", 7, 11),
         ("SpellVisualKit", 35, 38),
-        ("SpellVisualEffectName", 5, 7),
     ];
 
     #[test]
@@ -387,10 +377,6 @@ mod tests {
         assert_eq!(poi[18], Some(34)); // name locale flags
         assert_eq!(poi[19], Some(35)); // description enUS
         assert_eq!(poi[28], Some(52)); // world-state
-        let sound = columns("CreatureSoundData", 30, 38).unwrap();
-        assert_eq!(sound[17], Some(17));
-        assert_eq!(sound[18], Some(19)); // skip fifth fidget, retain custom attack 0
-        assert_eq!(sound[29], Some(30)); // pet dismiss
         let pet = columns("PetPersonality", 19, 24).unwrap();
         assert_eq!(pet[9], Some(17)); // widened localized name flags
         assert_eq!(&pet[10..13], &[Some(18), Some(19), Some(20)]);

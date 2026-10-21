@@ -211,15 +211,18 @@ fn adapt_ribbon(
         .first()
         .and_then(|&index| wrath.model().textures.get(index as usize))
         .and_then(|t| super::wrath::resolve_texture(t, dir, skins).0);
-    let blend_mode = r
+    let material = r
         .material_indices
         .first()
-        .and_then(|&index| wrath.model().materials.get(index as usize))
-        .map(|m| m.blend_mode.bits());
+        .and_then(|&index| wrath.model().materials.get(index as usize));
+    let blend_mode = material.map(|m| m.blend_mode.bits());
+    let material_flags = material.map_or(0, |m| m.flags.bits());
     let blend = match blend_mode {
         Some(3 | 4) | None => ParticleBlend::Add,
         Some(2) => ParticleBlend::Alpha,
         Some(1) => ParticleBlend::AlphaKey,
+        Some(5) => ParticleBlend::Mod,
+        Some(6) => ParticleBlend::Mod2x,
         _ => ParticleBlend::Opaque,
     };
     let globals = wrath.model().global_sequences.as_slice();
@@ -281,6 +284,8 @@ fn adapt_ribbon(
                 .map(|a| (a.id, a.duration_ms))
                 .collect(),
         ),
+        unlit: material_flags & 0x1 != 0,
+        unfogged: material_flags & 0x2 != 0,
     })
 }
 

@@ -14,7 +14,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -32,12 +31,11 @@ const FILES: &[&str] = &[
     // ADDON_LOAD_FAILED through `message`, a shown frame, not an error.
     // Both addons inherit the trainer window's list and detail templates.
     r"Interface\FrameXML\ClassTrainerFrameTemplates.xml",
-    "ScrollTemplates.xml",
     r"Interface\AddOns\Blizzard_TradeSkillUI\Blizzard_TradeSkillUI.xml",
     r"Interface\AddOns\Blizzard_CraftUI\Blizzard_CraftUI.xml",
 ];
 
-fn load_ui(script: &UiScript) {
+fn load_ui(script: &mut UiScript) {
     // `common::load_ui`: an entry with a path separator is a stock file read off the player's
     // chain, not from `assets/ui`.
     for file in FILES {
@@ -107,7 +105,7 @@ fn pump(script: &mut UiScript) {
 fn collapse_all_tab_and_filter_dropdowns_work_end_to_end() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
 
     s.set_trade_skill(Some(state()));
     s.fire_event("TRADE_SKILL_SHOW", vec![]);
@@ -197,7 +195,7 @@ fn collapse_all_tab_and_filter_dropdowns_work_end_to_end() {
 fn craft_collapse_tab_loads_with_text_and_stays_hidden_for_a_flat_list() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
 
     assert_eq!(
         s.eval::<String>("return CraftCollapseAllButton:GetText()")
@@ -224,7 +222,7 @@ fn craft_collapse_tab_loads_with_text_and_stays_hidden_for_a_flat_list() {
 fn reagent_slots_carry_the_questitemtemplate_shape_in_both_windows() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
 
     // Both windows open so the anchors resolve against a laid-out parent; the slots are shown as
     // SetSelection shows one per reagent.
@@ -350,7 +348,7 @@ fn reagent_slots_carry_the_questitemtemplate_shape_in_both_windows() {
 fn a_row_click_shows_the_selection_glow_and_a_row_hover_shows_nothing() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_trade_skill(Some(state()));
     s.fire_event("TRADE_SKILL_SHOW", vec![]);
 
@@ -430,7 +428,7 @@ fn a_row_click_shows_the_selection_glow_and_a_row_hover_shows_nothing() {
 fn a_hovered_or_selected_recipe_row_paints_its_label_white() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_screen_size(1024.0, 768.0);
     s.set_trade_skill(Some(state()));
     s.fire_event("TRADE_SKILL_SHOW", vec![]);
@@ -536,7 +534,7 @@ fn a_hovered_or_selected_recipe_row_paints_its_label_white() {
 fn a_hovered_or_selected_craft_row_paints_its_label_white() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    load_ui(&s);
+    load_ui(&mut s);
     s.set_screen_size(1024.0, 768.0);
 
     let recipe = |spell_id: u32, name: &str| CraftRecipe {

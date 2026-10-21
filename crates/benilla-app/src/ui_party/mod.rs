@@ -43,6 +43,8 @@ impl Plugin for UiPartyPlugin {
     }
 }
 
+#[cfg(test)]
+mod unstreamed_tests;
 pub(crate) use crate::app_core::group::GroupState;
 
 #[cfg(test)]

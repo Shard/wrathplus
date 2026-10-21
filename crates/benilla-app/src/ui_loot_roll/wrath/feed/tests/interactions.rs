@@ -4,6 +4,15 @@ use benilla_protocol::wrath_roll::Roll;
 #[test]
 fn queued_native_outcomes_reach_chatlog_in_order_once() {
     let (mut app, rx) = app();
+    // The three templates the lines fill, as build 12340's `GlobalStrings.lua` ships them.
+    app.world_mut()
+        .non_send_resource_mut::<benilla_ui::script::UiScript>()
+        .run(
+            r#"LOOT_ROLL_NEED_SELF = "You have selected Need for: %s"
+               LOOT_ROLL_YOU_WON = "You won: %s"
+               LOOT_ROLL_ALL_PASSED = "Everyone passed on: %s""#,
+        )
+        .unwrap();
     start(&mut app, 0, 0);
     app.world_mut()
         .resource_mut::<crate::ui_loot::LootConfig>()
