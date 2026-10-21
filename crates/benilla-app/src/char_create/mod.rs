@@ -772,8 +772,7 @@ mod tests {
                 .clone();
             (creating, state, created, line)
         };
-        let (creating, state, created, _) =
-            run(benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS);
+        let (creating, state, created, _) = run(benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS);
         assert!(!creating);
         assert_eq!(state, ClientState::CharSelect);
         assert_eq!(created.as_deref(), Some("Newbie"));
