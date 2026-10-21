@@ -248,7 +248,7 @@ pub use spells::{
     load_spell_catalog, load_spell_dispel_types, load_spell_durations, load_spell_radii,
     load_spell_ranges, min_max_range, min_max_range_reads_units, soft_modify, substitute,
     CcExemption, FormRefusal, LearnAnnouncement, LearnEffect, OpenLock, RangeTargets, RangeUnit,
-    ShapeshiftForm, SpellCastTime, SpellCastTimeCatalog, SpellCatalog, SpellDispelTypes,
+    RuneCost, ShapeshiftForm, SpellCastTime, SpellCastTimeCatalog, SpellCatalog, SpellDispelTypes,
     SpellDisplay, SpellDuration, SpellDurationCatalog, SpellMods, SpellRadius, SpellRadiusCatalog,
     SpellRange, SpellRangeCatalog, TokenContext, TokenNumber, UnitMotion, ATTR_CASTABLE_WHILE_DEAD,
     ATTR_NOT_IN_COMBAT, ATTR_ONLY_STEALTHED, COMBAT_REACH_ADD, MELEE_RANGE_FLOOR,

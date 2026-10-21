@@ -11,6 +11,7 @@ pub(crate) mod cooldowns;
 pub(crate) mod death;
 pub(crate) mod errors;
 pub(crate) mod group;
+pub(crate) mod raid_rows;
 pub(crate) mod interaction;
 pub(crate) mod loot;
 pub(crate) mod movement;

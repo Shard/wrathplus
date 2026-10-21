@@ -22,6 +22,9 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             } else {
                 crate::script::binding_abi::text_arg(lua, text)?
             };
+            // The setter (`0x483910`) runs the grammar pass before storing (`0x482110`), so a
+            // `|4point:points;` is stored, drawn and read back resolved.
+            let text = text.map(crate::grammar::resolve_owned);
             let rh = region_handle_of(lua, &this)?;
             let mut model = lua.app_data_mut::<Model>().expect("model");
             let data = model.region_data.entry(rh).or_default();

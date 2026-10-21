@@ -1,6 +1,7 @@
 //! Drives the stock `Blizzard_TalentUI` addon through the engine with a synthetic two-talent page
 //! shaped like the warrior's Improved Rend and Deep Wounds column, asserting the Lua state
-//! (`TALENT_BRANCH_ARRAY`), the frame state (`IsShown`) and the quads the renderer draws.
+//! (`PlayerTalentFrame.TALENT_BRANCH_ARRAY`), the frame state (`IsShown`) and the quads the
+//! renderer draws.
 
 mod common;
 
@@ -28,8 +29,8 @@ const FILES: &[&str] = &[
     // `TalentTabTemplate` inherits `CharacterFrameTabButtonTemplate`; `inherits=` resolves at load.
     r"Interface\FrameXML\CharacterFrameTemplates.xml",
     "Interface\\FrameXML\\StaticPopup.xml", // the dialog engine
-    // `TalentFrame_OnShow` pulses `TalentMicroButton` and calls `UpdateMicroButtons()`
-    // (`Blizzard_TalentUI.lua:97-100`); a nil button throws before `TalentFrame_Update()`.
+    // `PlayerTalentFrame_OnShow` pulses `TalentMicroButton` and calls `UpdateMicroButtons()`
+    // (`Blizzard_TalentUI.lua:97-100`); a nil button throws before `PlayerTalentFrame_Update()`.
     r"Interface\FrameXML\MainMenuBarMicroButtons.xml",
     // `SetItemButtonDesaturated`, which the talent buttons grey through.
     "Interface\\FrameXML\\ItemButtonTemplate.xml",
@@ -156,8 +157,8 @@ fn branch_lines_draw_for_a_same_column_prereq() {
     script
         .run(
             r#"
-            assert(TalentFrame:IsVisible(), "window visible")
-            local a = TALENT_BRANCH_ARRAY
+            assert(PlayerTalentFrame:IsVisible(), "window visible")
+            local a = PlayerTalentFrame.TALENT_BRANCH_ARRAY
             assert(a[1][3].down == 1, "tier1 down, got " .. tostring(a[1][3].down))
             assert(a[2][3].up == 1, "tier2 up, got " .. tostring(a[2][3].up))
             assert(a[2][3].down == 1, "tier2 down, got " .. tostring(a[2][3].down))
@@ -169,8 +170,8 @@ fn branch_lines_draw_for_a_same_column_prereq() {
     script
         .run(
             r#"
-            assert(TalentFrameBranch1:IsShown(), "branch 1 shown")
-            assert(TalentFrameArrow1:IsShown(), "arrow 1 shown")
+            assert(PlayerTalentFrameBranch1:IsShown(), "branch 1 shown")
+            assert(PlayerTalentFrameArrow1:IsShown(), "arrow 1 shown")
             "#,
         )
         .expect("pool state");
@@ -211,7 +212,7 @@ fn tooltip_is_complete_on_the_first_hover() {
     // With the talent spell views stored up front, the first OnEnter renders the full tooltip.
     script.set_spell_tooltip(201, view("Improved Rend", "Bleed harder."));
     script.set_spell_tooltip(301, view("Deep Wounds", "Bleed on crit."));
-    hover(&mut script, "TalentFrameTalent2");
+    hover(&mut script, "PlayerTalentFrameTalent2");
     script
         .run(
             r#"
@@ -228,7 +229,7 @@ fn tooltip_miss_still_shows_the_rank_line() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut script = open_window(10);
     // An empty store: the fallback still shows the talent head and records the ask.
-    hover(&mut script, "TalentFrameTalent2");
+    hover(&mut script, "PlayerTalentFrameTalent2");
     script
         .run(
             r#"
@@ -253,11 +254,11 @@ fn a_locked_tier_still_draws_the_branch_gray() {
     script
         .run(
             r#"
-            local a = TALENT_BRANCH_ARRAY
+            local a = PlayerTalentFrame.TALENT_BRANCH_ARRAY
             assert(a[1][3].down == -1, "tier1 down gray, got " .. tostring(a[1][3].down))
             assert(a[3][3].topArrow == -1, "tier3 topArrow gray, got " .. tostring(a[3][3].topArrow))
-            assert(TalentFrameBranch1:IsShown(), "gray branch shown")
-            assert(TalentFrameArrow1:IsShown(), "gray arrow shown")
+            assert(PlayerTalentFrameBranch1:IsShown(), "gray branch shown")
+            assert(PlayerTalentFrameArrow1:IsShown(), "gray arrow shown")
             "#,
         )
         .expect("gray branch");
@@ -322,18 +323,18 @@ fn a_wheel_spin_over_the_grid_scrolls_the_tree() {
     // Rects must be resolved before the wheel's hit-test can land on the grid.
     script.resolve();
     let (x, y): (f32, f32) = script
-        .eval("return TalentFrameTalent1:GetCenter()")
+        .eval("return PlayerTalentFrameTalent1:GetCenter()")
         .expect("talent 1 center");
     // One notch down is -1; the handler steps the bar one valueStep forward.
     script.mouse_wheel(x, y, -1.0);
     script
         .run(
             r#"
-            local scroll = TalentFrameScrollFrame:GetVerticalScroll()
+            local scroll = PlayerTalentFrameScrollFrame:GetVerticalScroll()
             assert(scroll > 0,
                 "one notch down pans the frame, got " .. tostring(scroll))
-            assert(TalentFrameScrollFrameScrollBar:GetValue() == scroll,
-                "the bar follows the frame, got " .. tostring(TalentFrameScrollFrameScrollBar:GetValue()))
+            assert(PlayerTalentFrameScrollFrameScrollBar:GetValue() == scroll,
+                "the bar follows the frame, got " .. tostring(PlayerTalentFrameScrollFrameScrollBar:GetValue()))
             "#,
         )
         .expect("wheel down");
@@ -341,8 +342,8 @@ fn a_wheel_spin_over_the_grid_scrolls_the_tree() {
     script
         .run(
             r#"
-            assert(TalentFrameScrollFrame:GetVerticalScroll() == 0,
-                "a notch up rewinds to the top, got " .. tostring(TalentFrameScrollFrame:GetVerticalScroll()))
+            assert(PlayerTalentFrameScrollFrame:GetVerticalScroll() == 0,
+                "a notch up rewinds to the top, got " .. tostring(PlayerTalentFrameScrollFrame:GetVerticalScroll()))
             "#,
         )
         .expect("wheel up");
