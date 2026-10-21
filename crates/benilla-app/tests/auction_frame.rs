@@ -234,49 +234,6 @@ fn auction_house_show_opens_the_window_on_the_browse_tab() {
     assert!(s.errors().is_empty(), "clean open: {:?}", s.errors());
 }
 
-/// `AuctionFrameAuctions_Update` does arithmetic on `AuctionFrameAuctions.page`, which only that
-/// pane's `OnShow` assigns, so `AUCTION_OWNED_LIST_UPDATE` is safe only once the tab has shown.
-/// The reference never sends it earlier: every `GetOwnerAuctionItems` caller lives in that pane.
-#[test]
-fn the_auctions_tab_cannot_repaint_before_it_has_been_shown() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    load_ui_with_classes(&mut s);
-    seat_player(&mut s, 500_000);
-    s.set_auction(Some(state(vec![row(
-        "Linen Cloth",
-        1000,
-        5000,
-        0,
-        "Seller",
-    )])));
-
-    // Open, and land a browse result: the whole of a search.
-    s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    s.fire_event("AUCTION_ITEM_LIST_UPDATE", vec![]);
-    assert!(
-        s.take_errors().is_empty(),
-        "a browse result on the Browse tab is clean"
-    );
-
-    // The owned-list event before the Auctions tab has shown: its `page` is nil.
-    s.fire_event("AUCTION_OWNED_LIST_UPDATE", vec![]);
-    let errors = s.take_errors();
-    assert!(
-        errors.iter().any(|e| e.contains("page")),
-        "the never-shown Auctions tab raises the nil-page error: {errors:?}"
-    );
-
-    // Harmless once the tab has shown, the only state the app sends it in.
-    s.run("AuctionFrameTab_OnClick(AuctionFrameTab3)").unwrap();
-    assert!(s.take_errors().is_empty(), "opening the tab is clean");
-    s.fire_event("AUCTION_OWNED_LIST_UPDATE", vec![]);
-    assert!(
-        s.take_errors().is_empty(),
-        "and now the owned list may announce itself"
-    );
-}
-
 /// The Auctions tab's High Bidder column prints `GetAuctionItemInfo`'s eleventh value, and
 /// `NO_BIDS` in red only for nil (`AuctionFrameAuctions_Update`): a bid-on auction names its
 /// bidder, as the reference answers on the owner list (`0x4cf144`–`0x4cf174`).
@@ -318,127 +275,6 @@ fn the_auctions_tab_names_the_high_bidder() {
         "an unbid auction reads No Bids in red"
     );
     assert!(s.errors().is_empty(), "clean repaint: {:?}", s.errors());
-}
-
-/// Each pane assigns `page` only in its `OnShow`. `AuctionFrameBid` alone is declared
-/// `hidden="false"` (`Blizzard_AuctionUI.xml:960`), so it shows with the window on the first
-/// `AUCTION_HOUSE_SHOW` before tab 1 hides it; the Auctions pane has no `page` until tab 3.
-#[test]
-fn only_the_bids_pane_gets_its_page_without_being_opened() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    load_ui_with_classes(&mut s);
-
-    let page = |s: &UiScript, pane: &str| {
-        s.eval::<String>(&format!("return tostring({pane}.page)"))
-            .unwrap()
-    };
-
-    // At load, with no session: no pane has been shown, so none has a page.
-    for pane in [
-        "AuctionFrameBrowse",
-        "AuctionFrameBid",
-        "AuctionFrameAuctions",
-    ] {
-        assert_eq!(page(&s, pane), "nil", "{pane} before the window opens");
-    }
-
-    // Browse is shown by the tab click; Bid is shown with the window and hidden again, keeping
-    // the page its OnShow assigned.
-    seat_player(&mut s, 500_000);
-    s.set_auction(Some(state(vec![row(
-        "Linen Cloth",
-        1000,
-        5000,
-        0,
-        "Seller",
-    )])));
-    s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    assert_eq!(page(&s, "AuctionFrameBrowse"), "0");
-    assert_eq!(
-        page(&s, "AuctionFrameBid"),
-        "0",
-        "hidden=\"false\": the Bids pane rode the window up and back down"
-    );
-    assert!(
-        !s.eval::<bool>("return AuctionFrameBid:IsShown()").unwrap(),
-        "and it is not the visible tab"
-    );
-    assert_eq!(
-        page(&s, "AuctionFrameAuctions"),
-        "nil",
-        "the Auctions pane is the one an unowed event can still kill"
-    );
-    assert!(s.take_errors().is_empty());
-}
-
-/// The reference's show cascade `0x76ae10` is post-order: a frame marks itself visible
-/// (`0x76ae7b`), walks its children re-reading live links, and fires its own `OnShow` last
-/// (`0x76aef5`). benilla's is pre-order, a gap in the engine; for this window both orders reach
-/// the same state, so only the `ShowOrder` assertions are benilla's order.
-#[test]
-fn the_show_cascade_notifies_the_bids_pane_once_and_keeps_its_page() {
-    let _data = benilla_formats::wow_data_or_skip!();
-    let mut s = UiScript::new().unwrap();
-    load_ui_with_classes(&mut s);
-    seat_player(&mut s, 500_000);
-    s.set_auction(Some(state(vec![row(
-        "Linen Cloth",
-        1000,
-        5000,
-        0,
-        "Seller",
-    )])));
-
-    // Both `<OnShow>`s call their handler by global name, so wrapping the globals records the
-    // order.
-    s.run(
-        "ShowOrder = {}          local pane, window = AuctionFrameBid_OnShow, AuctionFrame_OnShow          AuctionFrameBid_OnShow = function() table.insert(ShowOrder, \"pane\") pane() end          AuctionFrame_OnShow = function() table.insert(ShowOrder, \"window\") window() end",
-    )
-    .unwrap();
-    let order = |s: &UiScript| {
-        s.eval::<String>("return table.concat(ShowOrder, \",\")")
-            .unwrap()
-    };
-    let page = |s: &UiScript| {
-        s.eval::<String>("return tostring(AuctionFrameBid.page)")
-            .unwrap()
-    };
-
-    s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    assert_eq!(
-        order(&s),
-        "window,pane",
-        "OURS, and a known deviation: the reference's cascade is post-order, \"pane,window\""
-    );
-    assert_eq!(
-        page(&s),
-        "0",
-        "the pane the XML leaves shown takes its page riding the window up — this is what keeps a \
-         mis-aimed AUCTION_BIDDER_LIST_UPDATE off the nil-page path"
-    );
-    assert_eq!(
-        s.take_auction_bidder_query(),
-        Some(0),
-        "and that OnShow is what asks for the bids list"
-    );
-
-    // Reopen: the tab click left the pane's shown flag clear, so it is skipped and keeps its page.
-    s.run("HideUIPanel(AuctionFrame)").unwrap();
-    let _ = s.take_auction_close();
-    s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
-    assert_eq!(
-        order(&s),
-        "window,pane,window",
-        "the reopen notifies the window and not the pane it left hidden"
-    );
-    assert_eq!(page(&s), "0", "kept from the first open, not re-assigned");
-    assert_eq!(
-        s.take_auction_bidder_query(),
-        None,
-        "and the reopen puts no second bids query on the wire"
-    );
-    assert!(s.errors().is_empty(), "{:?}", s.errors());
 }
 
 /// A fed snapshot paints the Browse rows.
@@ -511,10 +347,10 @@ fn the_browse_list_populates_from_the_fed_snapshot() {
     );
     // Row 1 has a buyout, so its buyout line shows; row 2 has none, so it hides.
     assert!(s
-        .eval::<bool>("return BrowseButton1BuyoutMoneyFrame:IsShown()")
+        .eval::<bool>("return BrowseButton1BuyoutFrame:IsShown()")
         .unwrap());
     assert!(!s
-        .eval::<bool>("return BrowseButton2BuyoutMoneyFrame:IsShown()")
+        .eval::<bool>("return BrowseButton2BuyoutFrame:IsShown()")
         .unwrap());
     // The stack count shows for a stack of 5.
     assert!(s
@@ -600,10 +436,17 @@ fn the_bid_and_buyout_gates_read_the_purse() {
         "6g is not affordable on 2g"
     );
 
-    // Back to row 1 and press Bid: the intent reaches the app with the seated amount.
+    // Back to row 1 and press Bid: the `BID_AUCTION` confirm opens, and its Accept sends the
+    // intent with the seated amount.
     s.run("BrowseButton1:Click()").unwrap();
     let _ = s.take_auction_bids();
     s.run("BrowseBidButton:Click()").unwrap();
+    assert!(
+        s.take_auction_bids().is_empty(),
+        "the click only asks for confirmation"
+    );
+    s.run("StaticPopup_OnClick(StaticPopup_FindVisible(\"BID_AUCTION\"), 1)")
+        .unwrap();
     let bids = s.take_auction_bids();
     assert_eq!(bids.len(), 1, "one bid queued, got {bids:?}");
     assert_eq!(bids[0].list, LIST);
@@ -618,9 +461,10 @@ fn the_bid_and_buyout_gates_read_the_purse() {
     assert!(s.errors().is_empty(), "clean gating: {:?}", s.errors());
 }
 
-/// The one leg of the Browse bid gate that is not about money.
+/// The leg of the Browse bid and buyout gates that is not about money: 3.3.5 closes both on the
+/// player's own listing (`owner ~= UnitName("player")`).
 #[test]
-fn you_cannot_bid_on_your_own_auction() {
+fn you_cannot_bid_on_or_buy_out_your_own_auction() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui_with_classes(&mut s);
@@ -641,10 +485,11 @@ fn you_cannot_bid_on_your_own_auction() {
             .unwrap(),
         "the row's owner is the player"
     );
-    // The buyout gate has no such leg: the reference lets you buy out your own listing.
-    assert!(s
-        .eval::<bool>("return BrowseBuyoutButton:IsEnabled() ~= 0")
-        .unwrap());
+    assert!(
+        !s.eval::<bool>("return BrowseBuyoutButton:IsEnabled() ~= 0")
+            .unwrap(),
+        "nor buy it out"
+    );
     assert!(s.errors().is_empty());
 }
 
@@ -720,23 +565,23 @@ fn the_create_gate_and_the_deposit() {
             .unwrap(),
         "no item in the sell slot"
     );
-    // The default run time is the middle one, 8 hours.
+    // The run time is `DurationDropDown`'s index, the middle one (24 hours) by default.
     assert_eq!(
         s.eval::<i64>("return AuctionFrameAuctions.duration")
             .unwrap(),
-        480
+        2
     );
-    s.run("AuctionsShortAuctionButton:Click()").unwrap();
+    s.run("DurationDropDown_OnClick({ value = 1 })").unwrap();
     assert_eq!(
         s.eval::<i64>("return AuctionFrameAuctions.duration")
             .unwrap(),
-        120
+        1
     );
-    s.run("AuctionsLongAuctionButton:Click()").unwrap();
+    s.run("DurationDropDown_OnClick({ value = 3 })").unwrap();
     assert_eq!(
         s.eval::<i64>("return AuctionFrameAuctions.duration")
             .unwrap(),
-        1440
+        3
     );
 
     // With no item the form never reaches the price checks: the buyout error stays hidden.
@@ -749,7 +594,7 @@ fn the_create_gate_and_the_deposit() {
         .eval::<bool>("return AuctionsCreateAuctionButton:IsEnabled() ~= 0")
         .unwrap());
     assert!(!s
-        .eval::<bool>("return AuctionsBuyoutErrorText:IsShown()")
+        .eval::<bool>("return AuctionsBuyoutError:IsShown()")
         .unwrap());
 
     // Fill the slot through the cursor: pick a bag item up and click the slot
@@ -777,11 +622,12 @@ fn the_create_gate_and_the_deposit() {
         benilla_ui::script::ItemTemplateView {
             name: "Linen Cloth".into(),
             sell_price: 25,
+            stackable: 20,
             ..Default::default()
         },
     );
-    // A split pickup: after a whole-stack pickup (`count: None`) `GetAuctionSellItemInfo`
-    // answers a count of 1, an engine gap in `script/auction.rs`'s `sell_item_info`.
+    // A split pickup of two; 3.3.5's slot then shows `GetAuctionSellItemInfo`'s `totalCount`, every
+    // unit of the item in the bags (`Blizzard_AuctionUI.lua:1468`), not the two picked up.
     s.run("SplitContainerItem(0, 1, 2)").unwrap();
     s.run("AuctionsItemButton:Click()").unwrap();
     // The create pane paints on NEW_AUCTION_UPDATE, which the app fires when the slot changes.
@@ -795,7 +641,7 @@ fn the_create_gate_and_the_deposit() {
     assert_eq!(
         s.eval::<String>("return AuctionsItemButtonCount:GetText()")
             .unwrap(),
-        "2"
+        "4"
     );
     assert!(s
         .eval::<bool>("return AuctionsItemButtonCount:IsShown()")
@@ -810,7 +656,7 @@ fn the_create_gate_and_the_deposit() {
     // With an item in the slot, a buyout under the start price shows its error.
     s.run("AuctionsFrameAuctions_ValidateAuction()").unwrap();
     assert!(
-        s.eval::<bool>("return AuctionsBuyoutErrorText:IsShown()")
+        s.eval::<bool>("return AuctionsBuyoutError:IsShown()")
             .unwrap(),
         "a 50s buyout under a 1g start price is an error, and it is shown"
     );
@@ -818,31 +664,36 @@ fn the_create_gate_and_the_deposit() {
         .eval::<bool>("return AuctionsCreateAuctionButton:IsEnabled() ~= 0")
         .unwrap());
 
-    // Clear the buyout and the form opens; pressing Create sends exactly what is on screen.
+    // Clear the buyout, and with 3.3.5's stack form filled (one stack of two) the form opens;
+    // pressing Create sends exactly what is on screen.
     s.run("MoneyInputFrame_SetCopper(BuyoutPrice, 0)").unwrap();
+    s.run("AuctionsStackSizeEntry:SetNumber(2) AuctionsNumStacksEntry:SetNumber(1)")
+        .unwrap();
     s.run("AuctionsFrameAuctions_ValidateAuction()").unwrap();
     assert!(
         s.eval::<bool>("return AuctionsCreateAuctionButton:IsEnabled() ~= 0")
             .unwrap(),
         "an item, a 1g start price and no buyout is a valid auction"
     );
-    // 5% of the stack's vendor value (2 x 25c = 50c) floors to 2c, per two-hour unit: 24h is 24c.
-    assert_eq!(
-        s.eval::<i64>("return CalculateAuctionDeposit(1440)")
-            .unwrap(),
-        24
-    );
-    assert_eq!(
-        s.eval::<i64>("return CalculateAuctionDeposit(120)")
-            .unwrap(),
-        2
-    );
+    // 12340's deposit is `round(minutes x floor(5% of 50c) / 240)`, at least 100c: this stack's
+    // 2c base pays the floor at every run time.
+    for run in 1..=3 {
+        assert_eq!(
+            s.eval::<i64>(&format!("return CalculateAuctionDeposit({run})"))
+                .unwrap(),
+            100,
+            "run time {run}"
+        );
+    }
     let _ = s.take_auction_start();
     s.run("AuctionsCreateAuctionButton:Click()").unwrap();
     let start = s.take_auction_start().expect("Create queues one auction");
     assert_eq!(start.min_bid, 10000);
     assert_eq!(start.buyout, 0);
-    assert_eq!(start.duration, 1440, "the long run time is still selected");
+    assert_eq!(
+        start.duration, 2880,
+        "the long run time, 48 hours, is still selected"
+    );
 
     assert!(s.errors().is_empty(), "clean create form: {:?}", s.errors());
 }
@@ -874,10 +725,10 @@ fn hiding_the_window_closes_the_session() {
     assert!(s.errors().is_empty(), "clean close: {:?}", s.errors());
 }
 
-/// With more matches than the 50-row page, the turners appear only with the list scrolled to the
-/// bottom; the list is fed one extra row so the bar can get there.
+/// With more matches than the 50-row page, the turners enable by page and the result count shows
+/// with the list scrolled to the bottom; the list is fed one extra row so the bar can get there.
 #[test]
-fn paging_shows_the_turners_only_at_the_end_of_the_list() {
+fn paging_enables_the_turners_by_page_and_shows_the_count_at_the_end() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui_with_classes(&mut s);
@@ -892,24 +743,25 @@ fn paging_shows_the_turners_only_at_the_end_of_the_list() {
     s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
     s.fire_event("AUCTION_ITEM_LIST_UPDATE", vec![]);
 
+    // 3.3.5 never hides the turners: the update sets their `isEnabled` off the page count.
     assert!(
-        !s.eval::<bool>("return BrowseNextPageButton:IsShown()")
+        s.eval::<bool>("return BrowseNextPageButton.isEnabled")
             .unwrap(),
-        "at the top of a full page the turners stay out of the way"
+        "120 matches over a 50-row page: a next page"
+    );
+    assert!(
+        !s.eval::<bool>("return BrowsePrevPageButton.isEnabled")
+            .unwrap(),
+        "and none before the first"
     );
 
-    // 51 rows over 8 slots: offset 43 leaves slot 8 empty, which reveals the turners.
+    // 51 rows over 8 slots: offset 43 leaves slot 8 empty, which shows the result count.
     s.run("FauxScrollFrame_SetOffset(BrowseScrollFrame, 43)")
         .unwrap();
     s.run("AuctionFrameBrowse_Update()").unwrap();
     assert!(
         !s.eval::<bool>("return BrowseButton8:IsShown()").unwrap(),
-        "the extra row slot is empty at the bottom — that is what reveals the turners"
-    );
-    assert!(
-        s.eval::<bool>("return BrowseNextPageButton:IsShown()")
-            .unwrap(),
-        "120 matches over a 50-row page, scrolled to the end: the turners appear"
+        "the extra row slot is empty at the bottom"
     );
     assert!(s
         .eval::<bool>("return BrowseSearchCountText:IsShown()")
@@ -960,4 +812,40 @@ fn a_row_hover_goes_through_the_reference_tooltip_verb() {
     // An empty sell slot is a no-op, not an error.
     s.run("GameTooltip:SetAuctionSellItem()").unwrap();
     assert!(s.take_errors().is_empty());
+}
+
+/// Build 12340's `AuctionFrame_OnShow` seats every pane at page 0 and asks for the bidder and
+/// owner lists, so an `AUCTION_OWNED_LIST_UPDATE` before the Auctions tab has shown repaints
+/// cleanly: 1.12's nil-page hazard, where only a pane's own `OnShow` set its page, is gone.
+#[test]
+fn opening_the_window_seats_every_pane_at_page_zero() {
+    let _data = benilla_formats::wow_data_or_skip!();
+    let mut s = UiScript::new().unwrap();
+    load_ui_with_classes(&mut s);
+    seat_player(&mut s, 500_000);
+    s.set_auction(Some(state(vec![row(
+        "Linen Cloth",
+        1000,
+        5000,
+        0,
+        "Seller",
+    )])));
+    s.fire_event("AUCTION_HOUSE_SHOW", vec![]);
+    for pane in [
+        "AuctionFrameBrowse",
+        "AuctionFrameBid",
+        "AuctionFrameAuctions",
+    ] {
+        assert_eq!(
+            s.eval::<String>(&format!("return tostring({pane}.page)"))
+                .unwrap(),
+            "0",
+            "{pane}"
+        );
+    }
+    s.fire_event("AUCTION_OWNED_LIST_UPDATE", vec![]);
+    assert!(
+        s.take_errors().is_empty(),
+        "the owned list repaints cleanly"
+    );
 }

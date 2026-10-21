@@ -2,10 +2,13 @@
 //! own `MAIL_SHOW`/`MAIL_INBOX_UPDATE` events, and asserts what it paints and queues.
 
 mod common;
+#[path = "mail_frame/native.rs"]
+mod native;
+use native::{native, row, small_inbox};
 
 use benilla_ui::script::{
-    EditAction, EditBoxAdvanceRequest, EditUnit, MailInboxRow, MailInvoice, MailState,
-    MeasureRequest, TextMeasure, UiScript,
+    EditAction, EditBoxAdvanceRequest, EditUnit, MailInvoice, MailState, MeasureRequest,
+    TextMeasure, UiScript,
 };
 
 /// The mail window's load prefix, in the app's order.
@@ -38,36 +41,6 @@ fn load_ui(script: &mut UiScript) {
     }
 }
 
-/// One inbox row with the fields the window paints.
-fn row(sender: &str, subject: &str, was_read: bool, item_id: u32, cod: u32) -> MailInboxRow {
-    MailInboxRow {
-        package_icon: (item_id != 0).then(|| "Interface\\Icons\\INV_Misc_Bag_08".to_string()),
-        stationery_icon: Some("Interface\\Icons\\INV_Misc_Note_01".to_string()),
-        sender: Some(sender.to_string()),
-        subject: subject.to_string(),
-        money: 0,
-        cod,
-        days_left: 29.0,
-        item_count: if item_id != 0 { 2 } else { 0 },
-        was_read,
-        was_returned: false,
-        text_created: false,
-        can_reply: true,
-        is_gm: false,
-        body: Some("body".into()),
-        stationery_texture: "STATIONERYTEST".into(),
-        is_invoice: false,
-        invoice: None,
-        has_body: true,
-        item_id,
-        item_name: (item_id != 0).then(|| "Linen Cloth".to_string()),
-        item_texture: (item_id != 0).then(|| "Interface\\Icons\\INV_Fabric_Linen_01".to_string()),
-        item_quality: (item_id != 0).then_some(1),
-        can_delete: false,
-        item_random_property_id: 0,
-    }
-}
-
 /// A Linen Cloth stack in the backpack, the send tab's attachment: `GetSendMailItem` answers off
 /// its bag slot, so it needs a real name and texture.
 fn one_linen_backpack() -> benilla_ui::script::ContainerState {
@@ -88,16 +61,6 @@ fn one_linen_backpack() -> benilla_ui::script::ContainerState {
         name: Some("Backpack".into()),
         num_slots: 16,
         slots,
-    }
-}
-
-/// A one-page inbox (2 mails).
-fn small_inbox() -> MailState {
-    MailState {
-        inbox: vec![
-            row("Thrall", "Warchief's orders", false, 2589, 0),
-            row("Jaina", "A letter", true, 0, 0),
-        ],
     }
 }
 
@@ -134,7 +97,7 @@ fn mail_show_opens_and_inbox_populates() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
 
     s.fire_event("MAIL_SHOW", vec![]);
     assert!(
@@ -176,7 +139,7 @@ fn paging_math_enables_next_only_when_overflowing() {
     for i in 0..9 {
         inbox.push(row(&format!("S{i}"), &format!("subj{i}"), false, 0, 0));
     }
-    s.set_mail(Some(MailState { inbox }));
+    s.set_wrath_mail(Some(native(MailState { inbox })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
 
@@ -202,12 +165,12 @@ fn cod_tag_shows_on_a_cod_mail() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(MailState {
+    s.set_wrath_mail(Some(native(MailState {
         inbox: vec![
             row("Auctioneer", "COD parcel", false, 2589, 5000), // COD 50s
             row("Jaina", "A letter", true, 0, 0),               // no COD
         ],
-    }));
+    })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
 
@@ -229,7 +192,7 @@ fn opening_a_letter_shows_the_open_frame_and_queues_the_body() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     let _ = s.take_mail_opens();
@@ -257,7 +220,7 @@ fn a_letter_and_the_centre_occupant_evict_each_other() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     let _ = s.take_mail_opens();
@@ -271,7 +234,7 @@ fn a_letter_and_the_centre_occupant_evict_each_other() {
     assert!(
         s.eval::<bool>(
             "return GetUIPanel('left'):GetName() == 'MailFrame' \
-             and GetCenterFrame():GetName() == 'CharacterFrame'"
+             and GetUIPanel('center'):GetName() == 'CharacterFrame'"
         )
         .unwrap(),
         "mail holds left, the sheet was pushed to centre"
@@ -289,7 +252,8 @@ fn a_letter_and_the_centre_occupant_evict_each_other() {
         "the centre occupant was evicted, not covered (the reported bug)"
     );
     assert!(
-        s.eval::<bool>("return GetCenterFrame() == nil").unwrap(),
+        s.eval::<bool>("return GetUIPanel('center') == nil")
+            .unwrap(),
         "the eviction is a plain vacate — nothing slides"
     );
     assert!(
@@ -315,7 +279,7 @@ fn reply_switches_to_send_tab_prefilled() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     // A programmatic click toggles the check button on, then fires OnClick (this = the button).
@@ -343,9 +307,9 @@ fn closing_a_plain_letter_does_not_delete_it() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(MailState {
+    s.set_wrath_mail(Some(native(MailState {
         inbox: vec![row("One", "test", false, 0, 0)],
-    }));
+    })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     let _ = s.take_mail_opens();
@@ -372,7 +336,7 @@ fn closing_a_taken_husk_deletes_it() {
     load_ui(&mut s);
     let mut husk = row("One", "test", false, 0, 0);
     husk.text_created = true;
-    s.set_mail(Some(MailState { inbox: vec![husk] }));
+    s.set_wrath_mail(Some(native(MailState { inbox: vec![husk] })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     let _ = s.take_mail_opens();
@@ -397,9 +361,9 @@ fn expiry_text_pluralizes_days() {
     load_ui(&mut s);
     let mut one_day = row("Two", "b", false, 0, 0);
     one_day.days_left = 1.7;
-    s.set_mail(Some(MailState {
+    s.set_wrath_mail(Some(native(MailState {
         inbox: vec![row("One", "a", false, 0, 0), one_day],
-    }));
+    })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     assert_eq!(
@@ -410,7 +374,8 @@ fn expiry_text_pluralizes_days() {
     assert_eq!(
         s.eval::<String>("return MailItem2ExpireTime:GetText()")
             .unwrap(),
-        "|cff20ff201 Day |r"
+        "|cff20ff201 Days |r",
+        "the plural picks the last digit run before `|4`, here the colour's hex 20 run into the 1: 201"
     );
     assert!(s.take_errors().is_empty());
 }
@@ -424,7 +389,7 @@ fn letter_button_shows_for_a_body_letter_and_click_queues_the_copy() {
     load_ui(&mut s);
     let mut mail = row("One", "asd", false, 0, 0);
     mail.money = 10000;
-    s.set_mail(Some(MailState { inbox: vec![mail] }));
+    s.set_wrath_mail(Some(native(MailState { inbox: vec![mail] })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
 
@@ -460,7 +425,7 @@ fn letter_button_hides_once_copied() {
     let mut mail = row("One", "asd", false, 0, 0);
     mail.money = 10000;
     mail.text_created = true;
-    s.set_mail(Some(MailState { inbox: vec![mail] }));
+    s.set_wrath_mail(Some(native(MailState { inbox: vec![mail] })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
 
@@ -474,7 +439,8 @@ fn letter_button_hides_once_copied() {
     assert!(s.take_errors().is_empty());
 }
 
-/// Hovering the coins shows the money tooltip (`MailFrame.xml:1823-1829`).
+/// Hovering the coins shows the money tooltip; 3.3.5 builds its coin rows on demand,
+/// `GameTooltipMoneyFrame1` first.
 #[test]
 fn money_button_hover_shows_the_amount_tooltip() {
     let _data = benilla_formats::wow_data_or_skip!();
@@ -482,7 +448,7 @@ fn money_button_hover_shows_the_amount_tooltip() {
     load_ui(&mut s);
     let mut mail = row("One", "asd", false, 0, 0);
     mail.money = 10000;
-    s.set_mail(Some(MailState { inbox: vec![mail] }));
+    s.set_wrath_mail(Some(native(MailState { inbox: vec![mail] })));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     s.run("MailItem1Button:Click()").unwrap();
@@ -495,7 +461,7 @@ fn money_button_hover_shows_the_amount_tooltip() {
         "the money tooltip shows on hover"
     );
     assert!(
-        s.eval::<bool>("return GameTooltipMoneyFrame:IsShown()")
+        s.eval::<bool>("return GameTooltipMoneyFrame1:IsShown()")
             .unwrap(),
         "the coin row rendered (SetTooltipMoney path)"
     );
@@ -508,7 +474,7 @@ fn inbox_page_label_stays_empty_like_the_reference() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     let text = s
@@ -562,7 +528,7 @@ fn an_auction_invoice_renders_as_a_receipt() {
         let mut inbox = small_inbox();
         inbox.inbox[0].is_invoice = true;
         inbox.inbox[0].invoice = Some(invoice);
-        s.set_mail(Some(inbox));
+        s.set_wrath_mail(Some(native(inbox)));
         s.fire_event("MAIL_SHOW", vec![]);
         s.fire_event("MAIL_INBOX_UPDATE", vec![]);
         s.run("MailItem1Button:Click()").unwrap();
@@ -665,7 +631,7 @@ fn a_plain_letter_keeps_its_body_and_shows_no_receipt() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     s.run("MailItem1Button:Click()").unwrap();
@@ -690,7 +656,7 @@ fn the_open_letters_ring_icon_is_masked_but_the_inboxs_is_not() {
     let mut s = UiScript::new().unwrap();
     load_ui(&mut s);
     s.set_screen_size(1024.0, 768.0);
-    s.set_mail(Some(small_inbox()));
+    s.set_wrath_mail(Some(native(small_inbox())));
     s.fire_event("MAIL_SHOW", vec![]);
     s.fire_event("MAIL_INBOX_UPDATE", vec![]);
     s.run("MailItem1Button:Click()").unwrap();
