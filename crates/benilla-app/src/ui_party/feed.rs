@@ -21,7 +21,7 @@ use crate::ui_script::gate;
 use super::pets::{self, Roster};
 use super::GroupState;
 pub(crate) use crate::app_core::group::GROUP_MEMBER_SUBGROUP;
-pub(crate) use crate::app_core::group::{raid_row_guid, raid_row_guids};
+pub(crate) use crate::app_core::raid_rows::{raid_row_guid, raid_row_guids};
 
 // ─── The VM feed and drain ───────────────────────────────────────────────────────────────────────
 
