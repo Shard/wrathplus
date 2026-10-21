@@ -13,6 +13,7 @@ use crate::ui_unit::UnitFeed;
 use benilla_world::schedule::WorldStage;
 
 mod bind_gates;
+pub(crate) mod cast_bar;
 pub(crate) mod cast_fail_keys;
 mod cast_send;
 pub(crate) mod cast_target;
@@ -37,6 +38,8 @@ pub(crate) use inflight::{
     inflight, ActiveChannel, AutoRepeatActive, LocalMoveStart, PendingCast, QueuedMeleeSpell,
     SelfCancel, SPELL_INTERRUPT_MOVEMENT,
 };
+#[cfg(test)]
+pub(crate) use inflight::cast_test_support;
 pub(crate) use mods::{ModsDiff, SpellModifiers, OP_CAST_TIME, OP_COST, OP_GCD, OP_RADIUS};
 #[cfg(test)]
 pub(crate) use mods::{OP_COOLDOWN, OP_RANGE};
