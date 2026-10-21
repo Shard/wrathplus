@@ -477,6 +477,8 @@ pub(crate) struct Model {
     pub(crate) wrath_chat_verbs: Vec<super::wrath_chat_verbs::WrathChatVerbRequest>,
     /// StaticPopup's dialog answers and the state its dialogs read.
     pub(crate) wrath_popup: super::wrath_static_popup::State,
+    /// The glue VM's login-slice state ([`super::glue`]).
+    pub(crate) glue: super::glue::GlueState,
     pub(crate) wrath_unit_popup: super::wrath_unit_popup::State,
     pub(crate) wrath_titles: super::wrath_titles::State,
     /// Socketed gems by `(bag, slot)`, [`super::cursor::EQUIPMENT_BAG`] for worn items.
@@ -1315,6 +1317,7 @@ impl Model {
             wrath_combat_log: Default::default(),
             wrath_chat_verbs: Vec::new(),
             wrath_popup: Default::default(),
+            glue: Default::default(),
             wrath_unit_popup: Default::default(),
             wrath_titles: Default::default(),
             wrath_item_gems: Vec::new(),

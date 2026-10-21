@@ -297,11 +297,12 @@ mod tests {
             text: "|cffffff00Sentinel Hill is under attack!|r".into(),
             // arg4 as `stamp_channel` leaves it once the channel is joined: numbered.
             channel: "3. LocalDefense - Westfall".into(),
+            channel_number: 3,
             ..Default::default()
         };
         assert_eq!(
             crate::ui_chat::tests::compose(&event, ChatEventKind::Channel, "Common").unwrap(),
-            "[3. LocalDefense] : |cffffff00Sentinel Hill is under attack!|r"
+            "|Hchannel:channel:3|h[3. LocalDefense]|h : |cffffff00Sentinel Hill is under attack!|r"
         );
     }
 }

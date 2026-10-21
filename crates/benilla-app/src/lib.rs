@@ -240,6 +240,10 @@ pub use bevy::app::AppExit;
 pub use benilla_protocol::{types::ObjectType, ObjectFields};
 pub use net::Objects;
 pub use target::Interact;
+/// The session interface load, for the integration tests' kit (`tests/common`), which cannot
+/// reach this crate's `#[cfg(test)]` loaders. Not an API.
+#[doc(hidden)]
+pub use ui_script::load_default_ui;
 
 /// Builds and runs the client app. `build` is the launcher's compile-time git stamp, passed in as
 /// data so the sha lives in the shim's fingerprint and a commit does not recompile this crate.
