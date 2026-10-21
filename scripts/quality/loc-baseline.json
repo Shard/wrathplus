@@ -52,7 +52,6 @@
     "crates/benilla-app/src/cursor.rs": 747,
     "crates/benilla-app/src/cvars/mod.rs": 2374,
     "crates/benilla-app/src/cvars/table.rs": 721,
-    "crates/benilla-app/src/death/mod.rs": 863,
     "crates/benilla-app/src/debug_panel/inspect.rs": 776,
     "crates/benilla-app/src/debug_panel/mod.rs": 632,
     "crates/benilla-app/src/entities.rs": 1442,

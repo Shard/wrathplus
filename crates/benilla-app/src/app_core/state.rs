@@ -867,14 +867,39 @@ pub(crate) struct PlayerActions {
 #[derive(Resource, Default)]
 pub(crate) struct GoOpenerCasts(pub(crate) Vec<GoOpener>);
 
+/// One resolved item-use click, as `ui_items::send_item_use` needs it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ItemUse {
+    /// The live instance's guid; `None` falls through to a plain use.
+    pub(crate) guid: Option<u64>,
+    /// Template `StartQuest`: non-zero diverts to the quest offer, ahead of the cast tail.
+    pub(crate) start_quest: u32,
+    /// The wire position (`255` = the player array).
+    pub(crate) bag_index: u8,
+    /// The wire slot, 0-based.
+    pub(crate) slot: u8,
+    /// The template entry: the cooldown store keys item records on `(use_spell, entry)` (the
+    /// client's `[eax+8]==spellId && [eax+0xc]==itemID`).
+    pub(crate) entry: u32,
+    /// The template spell block ordinal the server should cast.
+    pub(crate) spell_index: u8,
+    /// The ON_USE spell, `0x5d8c80`'s answer: the first block with `SpellId != 0` and
+    /// `SpellTrigger == 0`.
+    pub(crate) use_spell: Option<u32>,
+    /// The GameObject a key is used on, `CGItem::Use`'s target argument.
+    pub(crate) on_object: Option<u64>,
+    /// The template's `ITEM_FLAG_CHARTER` (`0x2000`), a signable petition.
+    pub(crate) is_charter: bool,
+}
+
 /// A right-click's resolved opener ([`crate::target::click::resolve_go_action`]).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum GoOpener {
     /// A known `OPEN_LOCK` spell, cast with a GameObject target block.
     Spell { spell_id: u32, go_guid: u64 },
     /// A carried key: `CMSG_USE_ITEM` with `TARGET_FLAG_GAMEOBJECT`, the object's guid in
-    /// [`crate::ui_items::ItemUse::on_object`].
-    Key(crate::ui_items::ItemUse),
+    /// [`ItemUse::on_object`].
+    Key(ItemUse),
 }
 
 /// One `COMBAT_TEXT_UPDATE` (event `0x21E`, via `0x703f50`), fired at packet parse by every

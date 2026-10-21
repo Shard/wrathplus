@@ -1291,7 +1291,7 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
     use benilla_protocol::types::ObjectFields;
 
     let mut app = app();
-    app.init_resource::<crate::ui_loot::LootKneel>();
+    app.init_resource::<crate::loot::LootKneel>();
     let model = ModelAnimations {
         graph: Handle::default(),
         clips: vec![clip(0, 1, true), clip(50, 2, false), clip(5, 3, true)],
@@ -1324,15 +1324,11 @@ fn the_self_kneel_rides_the_loot_latch_not_the_flag() {
         "the self unit ignores its own descriptor flag"
     );
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = true;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = true;
     app.update();
     assert_eq!(gait(&app), Some(50), "the armed latch kneels the self unit");
 
-    app.world_mut()
-        .resource_mut::<crate::ui_loot::LootKneel>()
-        .0 = false;
+    app.world_mut().resource_mut::<crate::loot::LootKneel>().0 = false;
     app.update();
     assert_eq!(
         gait(&app),

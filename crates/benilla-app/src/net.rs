@@ -175,6 +175,8 @@ impl Plugin for NetPlugin {
             .init_resource::<crate::world_state::WorldStates>()
             .add_message::<TeleportMessage>()
             .add_message::<FieldChanged>()
+            .add_message::<StandingChanged>()
+            .add_message::<MemberDeactivated>()
             .add_message::<SelfMoveMessage>()
             .add_message::<SpeedChangeMessage>()
             .add_message::<ClientControlMessage>()
@@ -794,6 +796,27 @@ fn send_query_time(
 /// and `SMSG_SET_FACTION_VISIBLE`. Flag bit `0x08` marks a pane header.
 #[derive(Resource, Default)]
 pub(crate) struct Reputations(pub(crate) Vec<(u8, i32)>);
+
+/// One `SMSG_SET_FACTION_STANDING` slot, its standing before and after the packet. Written ahead of
+/// the [`Reputations`] overwrite, so `old` is the pre-packet value the reference's chat line
+/// subtracts (`0x62c5f0`); `combat_log` drains it in the same dispatch.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StandingChanged {
+    pub(crate) list_id: u32,
+    pub(crate) old: i32,
+    pub(crate) new: i32,
+}
+
+/// A roster member's object leaving the stream (destroyed, out of range, or purged by a transfer)
+/// with the descriptors the reference's deactivate hook `0x5e9aa0` reads, cloned before the
+/// despawn: the member's, and its pet's while we hold it. `ui_party` drains it in the
+/// same dispatch.
+#[derive(Message, Clone)]
+pub(crate) struct MemberDeactivated {
+    pub(crate) guid: u64,
+    pub(crate) member: ObjectStore,
+    pub(crate) pet: Option<(u64, ObjectStore)>,
+}
 
 /// The hearthstone bind point (`SMSG_BINDPOINTUPDATE`): the AreaTable id the tooltip's `$z`
 /// token names.

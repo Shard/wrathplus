@@ -8,6 +8,7 @@ mod net;
 mod net_apply_motion_seam_tests;
 mod net_apply_seam_tests;
 mod net_capture_replay_tests;
+mod net_drained_lines_tests;
 mod net_handlers;
 mod net_objects;
 mod net_wrath_achievement_capture_tests;
