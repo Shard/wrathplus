@@ -49,6 +49,8 @@ fn plate(name: &str, health: f32, max: f32) -> PlateState {
         alpha: 1.0,
         lit: false,
         hovered: false,
+        elite: false,
+        cast: None,
     }
 }
 
@@ -102,7 +104,8 @@ fn the_worldframe_child_list_only_grows_and_keeps_its_order() {
 }
 
 /// pfUI's `IsNamePlate` (`nameplates.lua:70`) and ShaguTweaks' (`libnameplate.lua:12`): a `Button`
-/// whose first region is a `Texture` reading `Interface\Tooltips\Nameplate-Border`.
+/// whose second region is a `Texture` reading `Interface\Tooltips\Nameplate-Border`, the test 3.3.5
+/// plate addons make (`select(2, frame:GetRegions())`).
 #[test]
 fn a_plate_identifies_by_button_plus_the_border_texture() {
     let mut s = vm();
@@ -112,7 +115,7 @@ fn a_plate_identifies_by_button_plus_the_border_texture() {
             r#"
             local plate = WorldFrame:GetChildren()
             if plate:GetObjectType() ~= "Button" then return false end
-            local region = plate:GetRegions()
+            local _, region = plate:GetRegions()
             if not region or not region.GetTexture then return false end
             if region:GetObjectType() ~= "Texture" then return false end
             return region:GetTexture() == "Interface\\Tooltips\\Nameplate-Border"
@@ -121,51 +124,142 @@ fn a_plate_identifies_by_button_plus_the_border_texture() {
         .unwrap());
 }
 
-/// Six regions in `CustomNameplates.lua:212`'s order (`Border, Glow, Name, Level, Boss,
-/// RaidTargetIcon`) and one child; pfUI blanks a seventh region, and a second child as a cast bar.
+/// Build 12340's constructor order (`0x98f790`), which 3.3.5 plate addons destructure: eleven
+/// regions (threat flash, health border, cast border, cast shield, spell icon, highlight, name,
+/// level, boss skull, raid icon, elite icon) and two children, the health bar then the cast bar.
 #[test]
-fn the_region_and_child_tuples_are_six_and_one() {
+fn the_region_and_child_tuples_are_eleven_and_two() {
     let mut s = vm();
     drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
 
     assert_eq!(
         s.eval::<i64>("local p = WorldFrame:GetChildren() return p:GetNumRegions()")
             .unwrap(),
-        6
+        11
     );
     assert_eq!(
         s.eval::<i64>("local p = WorldFrame:GetChildren() return p:GetNumChildren()")
             .unwrap(),
-        1
+        2
     );
     assert!(s
         .eval::<bool>(
             r#"
             local p = WorldFrame:GetChildren()
-            local border, glow, name, level, levelicon, raidicon = p:GetRegions()
-            return border:GetTexture()   == "Interface\\Tooltips\\Nameplate-Border"
-               and glow:GetTexture()     == "Interface\\Tooltips\\Nameplate-Glow"
-               and name:GetObjectType()  == "FontString"
-               and level:GetObjectType() == "FontString"
-               and levelicon:GetTexture() == "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
-               and raidicon:GetTexture() == "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+            local flash, border, castborder, shield, icon, glow, name, level, skull, raid, elite =
+                p:GetRegions()
+            return flash:GetTexture()      == "Interface\\TargetingFrame\\UI-TargetingFrame-Flash"
+               and border:GetTexture()     == "Interface\\Tooltips\\Nameplate-Border"
+               and castborder:GetTexture() == "Interface\\Tooltips\\Nameplate-Border"
+               and shield:GetTexture()     == "Interface\\Tooltips\\Nameplate-CastBar-Shield"
+               and icon:GetObjectType()    == "Texture"
+               and glow:GetTexture()       == "Interface\\Tooltips\\Nameplate-Glow"
+               and name:GetObjectType()    == "FontString"
+               and level:GetObjectType()   == "FontString"
+               and skull:GetTexture()      == "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
+               and raid:GetTexture()       == "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+               and elite:GetTexture()      == "Interface\\Tooltips\\EliteNameplateIcon"
         "#
         )
         .unwrap());
-    // `libnameplate.lua:39` takes the one child as the health bar: a StatusBar whose only region
-    // is its fill.
+    // Both children are StatusBars whose only region is the `BarFill`.
     assert!(s
         .eval::<bool>(
             r#"
             local p = WorldFrame:GetChildren()
-            local healthbar = p:GetChildren()
-            if healthbar:GetObjectType() ~= "StatusBar" then return false end
-            if healthbar:GetNumRegions() ~= 1 then return false end
-            local fill = healthbar:GetStatusBarTexture()
-            return fill:GetTexture() == "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill"
+            for _, bar in ipairs({ p:GetChildren() }) do
+                if bar:GetObjectType() ~= "StatusBar" then return false end
+                if bar:GetNumRegions() ~= 1 then return false end
+                local fill = bar:GetStatusBarTexture()
+                if fill:GetTexture() ~= "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill" then
+                    return false
+                end
+            end
+            return true
         "#
         )
         .unwrap());
+}
+
+/// The cast bar (`0x98f040`): hidden without a cast; a cast shows the bar at its value in cast
+/// orange with the spell's icon and the border, and an uninterruptible one swaps the border for
+/// the shield; the cast's end hides the bar again.
+#[test]
+fn the_cast_bar_follows_the_targets_cast() {
+    let mut s = vm();
+    let mut state = plate("Wolf", 30.0, 40.0);
+    drive(&mut s, std::slice::from_ref(&state));
+    let castbar_shown = |s: &UiScript| {
+        s.eval::<bool>(
+            "local _, cast = WorldFrame:GetChildren():GetChildren() return cast:IsShown() == 1",
+        )
+        .unwrap()
+    };
+    assert!(!castbar_shown(&s), "no cast, no bar");
+
+    state.cast = Some(benilla_ui_plate_cast(1.5, 0.5, false));
+    drive(&mut s, std::slice::from_ref(&state));
+    assert!(castbar_shown(&s));
+    assert!(s
+        .eval::<bool>(
+            r#"
+            local p = WorldFrame:GetChildren()
+            local _, cast = p:GetChildren()
+            local _, _, castborder, shield, icon = p:GetRegions()
+            local lo, hi = cast:GetMinMaxValues()
+            local r, g, b = cast:GetStatusBarColor()
+            return lo == 0 and math.abs(hi - 1.5) < 1e-6 and math.abs(cast:GetValue() - 0.5) < 1e-6
+               and math.abs(r - 1) < 1e-6 and math.abs(g - 0.7) < 1e-6 and b == 0
+               and castborder:IsShown() == 1 and shield:IsShown() == nil
+               and icon:IsShown() == 1 and icon:GetTexture() == "Interface\\Icons\\Spell_Fire_Fireball02"
+        "#
+        )
+        .unwrap());
+
+    state.cast = Some(benilla_ui_plate_cast(1.5, 0.75, true));
+    drive(&mut s, std::slice::from_ref(&state));
+    assert!(s
+        .eval::<bool>(
+            r#"
+            local _, _, castborder, shield = WorldFrame:GetChildren():GetRegions()
+            return castborder:IsShown() == nil and shield:IsShown() == 1
+        "#
+        )
+        .unwrap());
+
+    state.cast = None;
+    drive(&mut s, std::slice::from_ref(&state));
+    assert!(!castbar_shown(&s), "the cast's end hides the bar");
+}
+
+fn benilla_ui_plate_cast(
+    max: f32,
+    value: f32,
+    not_interruptible: bool,
+) -> crate::script::PlateCast {
+    crate::script::PlateCast {
+        max,
+        value,
+        icon: Some("Interface\\Icons\\Spell_Fire_Fireball02".into()),
+        channel: false,
+        not_interruptible,
+    }
+}
+
+/// The elite dragon shows for an elite unit only (`0x98e6e0`).
+#[test]
+fn the_elite_icon_marks_an_elite() {
+    let mut s = vm();
+    let mut state = plate("Ogre", 30.0, 40.0);
+    drive(&mut s, std::slice::from_ref(&state));
+    let elite = |s: &UiScript| {
+        s.eval::<bool>("return select(11, WorldFrame:GetChildren():GetRegions()):IsShown() == 1")
+            .unwrap()
+    };
+    assert!(!elite(&s));
+    state.elite = true;
+    drive(&mut s, std::slice::from_ref(&state));
+    assert!(elite(&s));
 }
 
 /// `_Nameplates.lua:163` rejects a plate unless its name is anchored `BOTTOM` to `CENTER` and its
@@ -246,7 +340,7 @@ fn a_plate_belongs_to_its_unit_across_a_sort_order_swap() {
         r#"
         WolfPlate = nil
         for _, p in ipairs({ WorldFrame:GetChildren() }) do
-            local _, _, name = p:GetRegions()
+            local name = select(7, p:GetRegions())
             if name:GetText() == "Wolf" then WolfPlate = p end
         end
     "#,
@@ -262,7 +356,7 @@ fn a_plate_belongs_to_its_unit_across_a_sort_order_swap() {
     assert!(s
         .eval::<bool>(
             r#"
-            local _, _, name = WolfPlate:GetRegions()
+            local name = select(7, WolfPlate:GetRegions())
             return name:GetText() == "Wolf"
         "#
         )
@@ -314,7 +408,7 @@ fn an_engine_health_write_fires_onvaluechanged_with_the_plate_as_parent() {
 }
 
 /// The driver writes a plate's static properties once, at creation, so an addon's takeover (pfUI
-/// blanks all six regions, ShaguTweaks reparents the raid icon) survives.
+/// blanks all its regions, ShaguTweaks reparents the raid icon) survives.
 #[test]
 fn the_driver_does_not_overwrite_an_addons_takeover() {
     let mut s = vm();
@@ -337,7 +431,7 @@ fn the_driver_does_not_overwrite_an_addons_takeover() {
     assert!(s
         .eval::<bool>(
             r#"
-            local border = WorldFrame:GetChildren():GetRegions()
+            local _, border = WorldFrame:GetChildren():GetRegions()
             return border:GetTexture() == "" or border:GetTexture() == nil
         "#
         )
@@ -358,7 +452,7 @@ fn a_hovered_plate_emits_no_glow_quad() {
 
     assert!(s
         .eval::<bool>(
-            r#"local _, glow = WorldFrame:GetChildren():GetRegions()
+            r#"local glow = select(6, WorldFrame:GetChildren():GetRegions())
                return glow:IsShown() == 1
                   and glow:GetTexture() == "Interface\\Tooltips\\Nameplate-Glow"
                   and glow:GetBlendMode() == "ADD""#
@@ -447,7 +541,7 @@ fn an_addon_that_retextures_the_glow_gets_its_art_painted() {
     p.hovered = true;
     drive(&mut s, &[p]);
     s.run(
-        r#"local _, glow = WorldFrame:GetChildren():GetRegions()
+        r#"local glow = select(6, WorldFrame:GetChildren():GetRegions())
            glow:SetTexture("Interface\\AddOns\\pfUI\\img\\glow")"#,
     )
     .unwrap();
@@ -471,7 +565,7 @@ fn the_glow_region_is_the_mouseover_signal() {
     drive(&mut s, &[plate("Wolf", 30.0, 40.0)]);
     assert!(s
         .eval::<bool>(
-            "local _, glow = WorldFrame:GetChildren():GetRegions() return glow:IsShown() == nil"
+            "local glow = select(6, WorldFrame:GetChildren():GetRegions()) return glow:IsShown() == nil"
         )
         .unwrap());
     let mut hovered = plate("Wolf", 30.0, 40.0);
@@ -479,7 +573,7 @@ fn the_glow_region_is_the_mouseover_signal() {
     drive(&mut s, &[hovered]);
     assert!(s
         .eval::<bool>(
-            "local _, glow = WorldFrame:GetChildren():GetRegions() return glow:IsShown() == 1"
+            "local glow = select(6, WorldFrame:GetChildren():GetRegions()) return glow:IsShown() == 1"
         )
         .unwrap());
 }
@@ -495,7 +589,7 @@ fn the_skull_replaces_the_level_number() {
     assert!(s
         .eval::<bool>(
             r#"
-            local _, _, _, level, levelicon = WorldFrame:GetChildren():GetRegions()
+            local level, levelicon = select(8, WorldFrame:GetChildren():GetRegions())
             return level:IsShown() == nil and levelicon:IsShown() == 1
                    and levelicon:IsVisible() == 1
         "#
@@ -513,7 +607,7 @@ fn a_unit_with_no_level_yet_wears_no_skull() {
     assert!(s
         .eval::<bool>(
             r#"
-            local _, _, _, level, levelicon = WorldFrame:GetChildren():GetRegions()
+            local level, levelicon = select(8, WorldFrame:GetChildren():GetRegions())
             return level:IsShown() == nil and levelicon:IsShown() == nil
         "#
         )
@@ -537,7 +631,7 @@ fn a_plate_created_after_the_first_frame_is_laid_out() {
     assert!(s
         .eval::<bool>(
             r#"local _, b = WorldFrame:GetChildren()
-               local border = b:GetRegions()
+               local _, border = b:GetRegions()
                return border:GetLeft() == b:GetLeft() and border:GetRight() == b:GetRight()"#
         )
         .unwrap());
@@ -560,7 +654,7 @@ fn an_addon_frame_under_the_worldframe_is_not_a_plate() {
             r#"
             local found = 0
             for _, frame in ipairs({ WorldFrame:GetChildren() }) do
-                local region = frame:GetRegions()
+                local _, region = frame:GetRegions()
                 if frame:GetObjectType() == "Button" and region and region.GetTexture
                    and region:GetTexture() == "Interface\\Tooltips\\Nameplate-Border" then
                     found = found + 1

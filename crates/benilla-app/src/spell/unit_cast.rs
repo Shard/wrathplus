@@ -100,6 +100,18 @@ pub(crate) struct UnitCasts {
     channels: HashMap<u64, Slot>,
 }
 
+impl UnitCasts {
+    /// `guid`'s channel, else its cast, as the plate's cast-bar driver (`0x720e50`) reads them:
+    /// `(spell, start_ms, end_ms, channel)` on [`UiScript::now`]'s millisecond clock.
+    pub(crate) fn bar_of(&self, guid: u64) -> Option<(u32, u32, u32, bool)> {
+        let row = |slot: &Slot, channel| (slot.spell_id, slot.start_ms, slot.end_ms, channel);
+        self.channels
+            .get(&guid)
+            .map(|s| row(s, true))
+            .or_else(|| self.casts.get(&guid).map(|s| row(s, false)))
+    }
+}
+
 pub(super) fn register(app: &mut App) {
     app.init_resource::<CastEdges>()
         .init_resource::<UnitCasts>()
