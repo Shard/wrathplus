@@ -31,7 +31,7 @@ use bevy::prelude::*;
 
 use crate::net::{RealmChoice, RealmListMessage, RealmRequest};
 use benilla_protocol::RealmInfo;
-use category::RealmsCategory;
+pub(crate) use category::RealmsCategory;
 
 /// The persisted 1.12 CVar naming the last realm connected to (`0x83f2d0`); the SavedVariables
 /// path (`0x8539a8`) is built from it.
@@ -70,8 +70,10 @@ impl Plugin for RealmSelectPlugin {
                 Update,
                 (
                     apply_realm_policy,
-                    // Ungated by state: the dialog stands over login and character select alike.
-                    screen::drive_screen,
+                    // Ungated by state: the dialog stands over login and character select alike,
+                    // except the login screen the stock glue hosts, whose RealmList is its own.
+                    screen::drive_screen
+                        .run_if(not(crate::ui_script::glue::stock_login_up)),
                     // Input before the row refresh, so a click shows on the frame it landed.
                     smoke::debug_realm_smoke,
                     (
@@ -81,7 +83,8 @@ impl Plugin for RealmSelectPlugin {
                         screen::refresh_list,
                     )
                         .chain()
-                        .run_if(|realms: Res<Realms>| realms.shown),
+                        .run_if(|realms: Res<Realms>| realms.shown)
+                        .run_if(not(crate::ui_script::glue::stock_login_up)),
                 )
                     .chain()
                     .after(benilla_world::schedule::WorldStage::Net)
@@ -277,6 +280,86 @@ impl RealmsSelect for Realms {
         self.current = Some(name.clone());
         let _ = choice.0.send(RealmRequest::Enter(name));
     }
+}
+
+// ── The stock glue's realm list (`crate::ui_script::glue`) ──────────────────────────────────────
+
+/// The refresh period `RealmListUpdateRate` answers: this list's own.
+pub(crate) const GLUE_UPDATE_RATE: f32 = REFRESH_SECS;
+
+/// Every tab by ordinal (1..), each tab's rows in the list's order, as the stock `GetRealmInfo`
+/// reads them: the load band against every realm, `(pvp, rp)` by realm type, down, invalid and
+/// current as the native list paints them. Labelled: `locked` reads false; the shared realm
+/// record does not carry it. `realms`' front tab is restored.
+pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::GlueRealmTab> {
+    let names: Vec<String> = realms.tabs().into_iter().map(str::to_string).collect();
+    let (mean, stddev) = realms.stats();
+    let front = realms.category;
+    let mut out = Vec::new();
+    for ordinal in 1..=names.len().max(1) {
+        realms.category = Some(ordinal);
+        let rows = realms
+            .rows()
+            .into_iter()
+            .map(|i| {
+                let r = &realms.realms[i];
+                let (pvp, rp) = load::pvp_rp(r.realm_type);
+                benilla_ui::script::GlueRealm {
+                    name: r.name.clone(),
+                    num_characters: u32::from(r.characters),
+                    invalid: is_invalid(r),
+                    down: is_down(r),
+                    current: realms
+                        .current
+                        .as_deref()
+                        .is_some_and(|c| c.eq_ignore_ascii_case(&r.name)),
+                    pvp,
+                    rp,
+                    load: load::realm_load_classify(r.flags, r.population, mean, stddev),
+                    locked: false,
+                    realm_type: r.realm_type,
+                }
+            })
+            .collect();
+        out.push(benilla_ui::script::GlueRealmTab {
+            name: names.get(ordinal - 1).cloned().unwrap_or_default(),
+            realms: rows,
+        });
+    }
+    realms.category = front;
+    out
+}
+
+/// The stock `ChangeRealm(category, index)`: the `index`-th row (1-based) of tab `category`
+/// answers the park, as the native OK does; a down realm or a row past the end does nothing.
+pub(crate) fn glue_change_realm(realms: &mut Realms, choice: &RealmChoice, category: usize, index: usize) {
+    realms.category = Some(category.max(1));
+    let rows = realms.rows();
+    let Some(realm) = index
+        .checked_sub(1)
+        .and_then(|i| rows.get(i))
+        .map(|&i| &realms.realms[i])
+    else {
+        return;
+    };
+    if is_down(realm) {
+        return;
+    }
+    let name = realm.name.clone();
+    realms.hide();
+    realms.store_front_category();
+    realms.enter(choice, name);
+}
+
+/// The stock `RealmListDialogCancelled`: the native Cancel, which abandons the park.
+pub(crate) fn glue_cancel(realms: &mut Realms, choice: &RealmChoice) {
+    realms.hide();
+    let _ = choice.0.send(RealmRequest::Abandon);
+}
+
+/// The stock `RequestRealmList`: the refresh.
+pub(crate) fn glue_refresh(choice: &RealmChoice) {
+    let _ = choice.0.send(RealmRequest::Refresh);
 }
 
 #[cfg(test)]

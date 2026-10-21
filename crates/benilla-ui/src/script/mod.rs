@@ -75,7 +75,7 @@ pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
-pub use glue::GlueRequest;
+pub use glue::{GlueRealm, GlueRealmTab, GlueRequest};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
