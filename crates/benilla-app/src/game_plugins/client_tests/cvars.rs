@@ -195,6 +195,11 @@ fn registered_defaults_mirror_the_code_truths() {
         plates.cast_bar,
         "the binary registers showVKeyCastbar \"1\""
     );
+    assert_eq!(d["threatWarning"], f32::from(plates.threat_warning));
+    assert_eq!(
+        plates.threat_warning, 3,
+        "the binary registers threatWarning \"3\""
+    );
     assert_eq!(
         d["nameplateShowFriendlyGuardians"] != 0.0,
         plates.friendly_guardians

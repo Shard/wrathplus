@@ -51,6 +51,7 @@ fn plate(name: &str, health: f32, max: f32) -> PlateState {
         hovered: false,
         elite: false,
         cast: None,
+        threat: None,
     }
 }
 
@@ -828,4 +829,28 @@ fn a_ground_target_veto_refuses_the_hit_without_disabling_the_mouse() {
         s.hovered_nameplate().is_some(),
         "and the plate takes it back when the cast is gone"
     );
+}
+
+/// The threat flash (region 1) shows in the warning's colour, and hides without one (`0x98eaef`).
+#[test]
+fn the_threat_flash_shows_in_the_warnings_colour() {
+    let mut s = vm();
+    let mut state = plate("Ogre", 30.0, 40.0);
+    drive(&mut s, std::slice::from_ref(&state));
+    let flash = |s: &UiScript| {
+        s.eval::<(bool, f64, f64, f64)>(
+            "local f = WorldFrame:GetChildren():GetRegions() \
+             local r, g, b = f:GetVertexColor() return f:IsShown() == 1, r, g, b",
+        )
+        .unwrap()
+    };
+    assert!(!flash(&s).0, "no warning, no flash");
+    state.threat = Some([1.0, 0.6, 0.0]);
+    drive(&mut s, std::slice::from_ref(&state));
+    let (shown, r, g, b) = flash(&s);
+    assert!(shown);
+    assert!((r - 1.0).abs() < 1e-6 && (g - 0.6).abs() < 1e-6 && b == 0.0);
+    state.threat = None;
+    drive(&mut s, std::slice::from_ref(&state));
+    assert!(!flash(&s).0);
 }
