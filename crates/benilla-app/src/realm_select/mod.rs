@@ -72,7 +72,7 @@ impl Plugin for RealmSelectPlugin {
                     apply_realm_policy,
                     // Ungated by state: the dialog stands over login and character select alike,
                     // except the login screen the stock glue hosts, whose RealmList is its own.
-                    screen::drive_screen.run_if(not(crate::ui_script::glue::stock_login_up)),
+                    screen::drive_screen.run_if(not(crate::ui_script::glue::stock_glue_up)),
                     // Input before the row refresh, so a click shows on the frame it landed.
                     smoke::debug_realm_smoke,
                     (
@@ -83,7 +83,7 @@ impl Plugin for RealmSelectPlugin {
                     )
                         .chain()
                         .run_if(|realms: Res<Realms>| realms.shown)
-                        .run_if(not(crate::ui_script::glue::stock_login_up)),
+                        .run_if(not(crate::ui_script::glue::stock_glue_up)),
                 )
                     .chain()
                     .after(benilla_world::schedule::WorldStage::Net)
@@ -290,7 +290,7 @@ pub(crate) const GLUE_UPDATE_RATE: f32 = REFRESH_SECS;
 /// reads them: the load band against every realm, `(pvp, rp)` by realm type, down, invalid and
 /// current as the native list paints them. Labelled: `locked` reads false; the shared realm
 /// record does not carry it. `realms`' front tab is restored.
-pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::GlueRealmTab> {
+pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::glue::GlueRealmTab> {
     let names: Vec<String> = realms.tabs().into_iter().map(str::to_string).collect();
     let (mean, stddev) = realms.stats();
     let front = realms.category;
@@ -303,7 +303,7 @@ pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::GlueReal
             .map(|i| {
                 let r = &realms.realms[i];
                 let (pvp, rp) = load::pvp_rp(r.realm_type);
-                benilla_ui::script::GlueRealm {
+                benilla_ui::script::glue::GlueRealm {
                     name: r.name.clone(),
                     num_characters: u32::from(r.characters),
                     invalid: is_invalid(r),
@@ -320,7 +320,7 @@ pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::GlueReal
                 }
             })
             .collect();
-        out.push(benilla_ui::script::GlueRealmTab {
+        out.push(benilla_ui::script::glue::GlueRealmTab {
             name: names.get(ordinal - 1).cloned().unwrap_or_default(),
             realms: rows,
         });

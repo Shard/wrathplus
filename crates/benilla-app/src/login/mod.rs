@@ -62,13 +62,7 @@ impl Plugin for LoginPlugin {
                     crate::ui_script::glue::enter_stock_login,
                 ),
             )
-            .add_systems(
-                OnExit(ClientState::Login),
-                (
-                    screen::exit_login,
-                    crate::ui_script::glue::leave_stock_login,
-                ),
-            )
+            .add_systems(OnExit(ClientState::Login), screen::exit_login)
             .add_systems(
                 Update,
                 (
@@ -101,9 +95,13 @@ impl Plugin for LoginPlugin {
                         .after(crate::ui_script::UiInput)
                         .run_if(in_state(ClientState::Login))
                         .run_if(|| !crate::ui_script::glue::stock_glue_active()),
-                    crate::ui_script::glue::stock_login
+                    crate::ui_script::glue::stock_glue
                         .after(crate::ui_script::UiInput)
-                        .run_if(crate::ui_script::glue::stock_login_up),
+                        .after(crate::glue::GlueScreens::Select)
+                        .after(crate::glue::GlueScreens::Create)
+                        .before(crate::portrait::BoothSync)
+                        .before(crate::glue::GlueVisuals)
+                        .run_if(crate::ui_script::glue::stock_glue_up),
                     (smoke::debug_login_smoke, screen::debug_login_shot),
                 )
                     .chain()
@@ -136,6 +134,11 @@ impl Attempt<'_> {
     /// The realmlist the next attempt dials, for the stock glue's Realmlist button.
     pub(crate) fn realmlist_mut(&mut self) -> &mut crate::realmlist::Realmlist {
         &mut self.realmlist
+    }
+
+    /// Forget the credentials and park intents, as select's Back does: no auto-relogin.
+    pub(crate) fn forget(&mut self) {
+        self.intent.clear();
     }
 
     /// Cancel the attempt in flight, if any: bump the abandon generation and drop the credentials.

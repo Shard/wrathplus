@@ -54,10 +54,13 @@ use booth::{
 mod dressup;
 pub(crate) use dressup::{DressUpBake, DressUpLook, DressUpPreview};
 mod glue_booth;
+pub(crate) use glue_booth::glue_stage;
 pub(crate) use glue_booth::{
     CreateLook, GhostKit, GlueLook, GluePetBake, GluePreview, GluePreviewBake, GlueScene, PetLook,
     PreviewBillboard, PreviewEffects, PreviewPart, PreviewRider, SelectLook, GLUE_SLOT,
 };
+mod glue_stage;
+pub(crate) use glue_stage::stage_from_path;
 mod light;
 pub(crate) use light::{material_variant, VariantLane};
 use light::{model_pane_light, studio_light, BoothLight};

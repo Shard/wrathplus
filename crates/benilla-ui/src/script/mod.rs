@@ -43,7 +43,7 @@ mod wrath_unit_casts;
 mod wrath_combat_log;
 mod wrath_chat_verbs;
 mod wrath_static_popup;
-mod glue;
+pub mod glue;
 pub mod glue_create;
 mod wrath_friends_frame;
 mod wrath_guild_bank;
@@ -76,7 +76,6 @@ pub use wrath_friends_frame::{
     WrathGuildBankRankRights, WrathGuildBankRequest, WrathGuildBankTab, WrathGuildBankView,
     WrathGuildEvent,
 };
-pub use glue::{GlueRealm, GlueRealmTab, GlueRequest};
 pub use wrath_static_popup::{WrathInstanceLock, WrathPopupRequest, WrathPopupState};
 pub use wrath_unit_popup::{WrathChatLine, WrathUnitPopupRequest, WrathUnitPopupState};
 pub use wrath_chat_verbs::WrathChatVerbRequest;
@@ -626,11 +625,9 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
             &["OnMovieFinished", "OnMovieShowSubtitle", "OnMovieHideSubtitle"],
             NONE,
         ),
-        FrameKind::Model
-        | FrameKind::PlayerModel
-        | FrameKind::DressUpModel
-        | FrameKind::TabardModel
-        | FrameKind::ModelFFX => (&["OnUpdateModel", "OnAnimFinished"], NONE),
+        FrameKind::Model | FrameKind::PlayerModel | FrameKind::DressUpModel | FrameKind::TabardModel => {
+            (&["OnUpdateModel", "OnAnimFinished"], NONE)
+        }
         FrameKind::StatusBar | FrameKind::Slider => (&["OnValueChanged", "OnMinMaxChanged"], NONE),
         FrameKind::ScrollFrame => (
             &["OnHorizontalScroll", "OnVerticalScroll", "OnScrollRangeChanged"],

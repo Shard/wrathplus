@@ -274,8 +274,7 @@ impl Plugin for UiScriptPlugin {
                 Update,
                 (
                     extract::tick_script,
-                    // In the world, and on the login screen the stock glue hosts.
-                    input::feed_ui_input.run_if(ui_input_live),
+                    input::feed_ui_input.run_if(glue::ui_input_live),
                 )
                     .chain()
                     .in_set(UiInput)
@@ -308,13 +307,6 @@ impl Plugin for UiScriptPlugin {
                 .run_if(capture_ui_active),
         );
     }
-}
-
-/// UI input's run condition: the in-game UI in the world, or the stock glue's login screen.
-fn ui_input_live(state: Option<Res<State<crate::char_select::ClientState>>>) -> bool {
-    let state = state.map(|s| *s.get());
-    state == Some(crate::char_select::ClientState::InWorld)
-        || (glue::stock_glue_active() && state == Some(crate::char_select::ClientState::Login))
 }
 
 fn uses_native_wrath_route(profile: Option<&benilla_formats::DataProfile>) -> bool {
