@@ -62,6 +62,9 @@ fn install_compat(lua: &Lua) -> mlua::Result<()> {
         .exec()
 }
 
+/// The `Cooldown` kind's own method table: the sweep verbs a plain `Frame` lacks.
+pub(super) const REG_COOLDOWN_METHODS: &str = "__benilla_cooldown_methods";
+
 /// Wrath-era methods every frame kind shares: attributes (the state the secure templates key
 /// on), `HookScript`, and the protection queries, which answer "not protected" for every frame.
 fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
@@ -94,12 +97,14 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
         })?,
     )?;
     let methods: mlua::Table = lua.named_registry_value(super::REG_FRAME_METHODS)?;
+    let cooldowns = lua.create_table()?;
+    lua.set_named_registry_value(REG_COOLDOWN_METHODS, &cooldowns)?;
     let table = |name: &str| lua.named_registry_value::<mlua::Table>(name);
     let install: mlua::Function = lua
         .load(
             r##"
             local methods, regions, fontstrings, buttons, editboxes, minimaps, sliders, textures,
-                tooltips = ...
+                tooltips, cooldowns = ...
             -- A tooltip remembers its owner.
             local owners = setmetatable({}, { __mode = "k" })
             local setOwner = tooltips.SetOwner
@@ -108,18 +113,20 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
                 return setOwner(self, owner, ...)
             end
             function tooltips.GetOwner(self) return owners[self] end
-            -- Cooldown frames: the engine draws the sweep from the model's record.
+            -- Cooldown frames: the engine draws the sweep from the model's record. The verbs are
+            -- the Cooldown kind's, so a plain Frame has none.
             local setCooldown, getCooldown, setReverse = __azb_cooldown_set,
                 __azb_cooldown_get, __azb_cooldown_reverse
             __azb_cooldown_set, __azb_cooldown_get, __azb_cooldown_reverse = nil, nil, nil
-            function methods.SetCooldown(self, start, duration)
+            function cooldowns.SetCooldown(self, start, duration)
                 setCooldown(self, tonumber(start) or 0, tonumber(duration) or 0)
             end
-            function methods.GetCooldownTimes(self)
+            function cooldowns.GetCooldownTimes(self)
                 local start, duration = getCooldown(self)
                 return start * 1000, duration * 1000
             end
-            function methods.SetReverse(self, reverse) setReverse(self, reverse and true or false) end
+            function cooldowns.SetReverse(self, reverse) setReverse(self, reverse and true or false) end
+            function cooldowns.SetDrawEdge() end
             -- QuestPOIFrame (the world map's quest blobs): accepted, not drawn.
             for _, name in ipairs({ "DrawQuestBlob", "DrawBlob", "DrawNone", "SetFillTexture",
                 "SetBorderTexture", "SetFillAlpha", "SetBorderAlpha", "SetBorderScalar",
@@ -128,7 +135,6 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
             end
             function methods.GetNumTooltips() return 0 end
             function methods.GetTooltipIndex() return nil end
-            function methods.SetDrawEdge() end
             -- Sliders enable and disable like buttons.
             local disabled = setmetatable({}, { __mode = "k" })
             function sliders.Enable(self)
@@ -233,6 +239,7 @@ fn install_frame_methods(lua: &Lua) -> mlua::Result<()> {
         table(super::slider::REG_SLIDER_METHODS)?,
         table(super::REG_TEXTURE_METHODS)?,
         table(super::tooltip::REG_TOOLTIP_METHODS)?,
+        cooldowns,
     ))
 }
 

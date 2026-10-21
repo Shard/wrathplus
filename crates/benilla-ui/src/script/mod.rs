@@ -638,7 +638,9 @@ fn own_script_kinds(kind: FrameKind) -> (&'static [&'static str], &'static [&'st
         FrameKind::ColorSelect => (&["OnColorSelect"], NONE),
         FrameKind::SimpleHtml | FrameKind::MessageFrame => (&HYPERLINK_SCRIPT_KINDS, NONE),
         FrameKind::ScrollingMessageFrame => (&["OnMessageScrollChanged"], &HYPERLINK_SCRIPT_KINDS),
-        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap => (NONE, NONE),
+        FrameKind::Frame | FrameKind::WorldFrame | FrameKind::Minimap | FrameKind::Cooldown => {
+            (NONE, NONE)
+        }
     }
 }
 
@@ -1237,6 +1239,7 @@ impl UiScript {
     pub fn resolve(&mut self) {
         self.resolve_and_measure();
         event::fire_size_changes(&self.lua);
+        scrollframe::fire_range_changes(&self.lua);
         // The EditBox's own `OnSizeChanged` (`0x77a8d0`) runs after the script fire and re-seats a
         // resized box's text, which the reference's drain resolves in the same pass.
         let reseated = editbox::reseat_resized(&mut self.model_mut());
@@ -1509,6 +1512,7 @@ impl UiScript {
                 crate::widget::FrameKind::MovieFrame => "MovieFrame",
                 crate::widget::FrameKind::GameTooltip => "GameTooltip",
                 crate::widget::FrameKind::Minimap => "Minimap",
+                crate::widget::FrameKind::Cooldown => "Cooldown",
             });
         }
         // Region leaves publish into their own name table, not the arena's.
