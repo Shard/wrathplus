@@ -55,6 +55,8 @@ mod posture;
 // `pub(crate)`: a remote mover's dead-reckon (`crate::motion::remote`) steps through the same
 // walk resolve, as the reference runs every mover through one controller.
 pub(crate) mod mover;
+#[cfg(test)]
+mod route_real_data;
 mod scoped_view;
 // Riding a transport: the deck carry and attach.
 mod ride;
