@@ -16,7 +16,7 @@ use benilla_protocol::types::{ObjectType, OwnerFallback};
 
 use super::cast_target::TargetRelations;
 use crate::net::{ObjectStore, SelfGuid};
-use crate::ui_party::{raid_row_guids, GroupState};
+use crate::app_core::group::{raid_row_guids, GroupState};
 
 /// `UNIT_FIELD_FLAGS & 0x8`, `UNIT_FLAG_PLAYER_CONTROLLED` (vmangos `UnitDefines.h:548`), which
 /// both predicates test on both units (`606c5e`, `606c76`, `606d5e`, `606d76`).
