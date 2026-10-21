@@ -181,6 +181,9 @@ impl Plugin for UiCastPlugin {
     }
 }
 
+#[path = "ui_spell_targeting.rs"]
+pub(crate) mod spell_targeting;
+
 #[cfg(test)]
 #[path = "ui_cast_esc_tests.rs"]
 mod esc_tests;

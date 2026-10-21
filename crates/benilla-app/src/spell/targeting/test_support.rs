@@ -1,5 +1,5 @@
 //! The cast ladder, unit-resolver and VM harness `spell::targeting`'s tests and
-//! `ui_spell_targeting`'s VM-feed tests share.
+//! `ui_cast::spell_targeting`'s VM-feed tests share.
 
 use super::*;
 use crate::net::{ClientCommand, Guid, NetCommands, ObjectStore, SelfPlayer};
