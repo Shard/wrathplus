@@ -8,7 +8,7 @@
 //! The IO thread publishes the list from two parks (`crate::net::io`), the login-side realm park
 //! and the character park, and takes one answer. The policy, in order:
 //!
-//! 1. `WOW_REALM`, matched case-insensitively; a name not on the list falls through.
+//! 1. `--realm` (or `WOW_REALM`), matched case-insensitively; a name not on the list falls through.
 //! 2. The realm this session is on, so a logout or a dropped connection returns to it.
 //! 3. The remembered realm, the persisted `realmName` CVar.
 //! 4. An unattended run (`crate::run_mode::unattended`) takes the first realm that is up.
@@ -219,7 +219,7 @@ fn apply_realm_policy(
 ) {
     if !realms.env_read {
         realms.env_read = true;
-        realms.env_realm = std::env::var("WOW_REALM").ok().filter(|s| !s.is_empty());
+        realms.env_realm = crate::launch_plan::plan().realm;
     }
     for msg in msgs.read() {
         realms.realms = msg.realms.clone();

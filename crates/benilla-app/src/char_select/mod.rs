@@ -15,8 +15,8 @@ use bevy::prelude::*;
 use crate::glue_strings::GlueStrings;
 
 use crate::net::{
-    CharActionResultMessage, CharListMessage, CharPick, CharRequest, CharacterLoginFailedMessage,
-    EnteredWorldMessage, LoggedOutMessage,
+    CharListMessage, CharPick, CharRequest, CharacterLoginFailedMessage, EnteredWorldMessage,
+    LoggedOutMessage,
 };
 
 pub(crate) use crate::app_core::schedule::InWorldGated;
@@ -281,7 +281,8 @@ pub(crate) fn send_pick(roster: &mut Roster, pick: &CharPick, guid: u64) {
 }
 
 /// Drain each [`CharListMessage`] into the roster, then answer it with the pending pick
-/// (reconnect), the `WOW_CHAR` fast path (first roster only), or nothing, leaving the screen up.
+/// (reconnect), the launch plan's character and Enter World (first roster only), or nothing, leaving
+/// the screen up.
 fn apply_roster_policy(
     mut msgs: MessageReader<CharListMessage>,
     mut roster: ResMut<Roster>,
@@ -290,26 +291,39 @@ fn apply_roster_policy(
     cvars: Res<crate::cvars::Cvars>,
     // Present only when a rig drives the run and picks its own character.
     rig: Option<Res<crate::run_mode::RigCharacter>>,
+    // A test's stand-in plan; the run's own otherwise.
+    launch: Option<Res<crate::launch_plan::LaunchPlan>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !roster.env_read {
         roster.env_read = true;
-        // `WOW_RIG` outranks `WOW_CHAR`: the rig may have to create its character first, which
-        // this one-shot fast path cannot wait for.
-        roster.env_char = match rig.as_deref() {
+        // `WOW_RIG` outranks the plan's character: the rig may have to create its character
+        // first, which this one-shot fast path cannot wait for.
+        let plan = launch
+            .as_deref()
+            .cloned()
+            .unwrap_or_else(crate::launch_plan::plan);
+        match rig.as_deref() {
             Some(crate::run_mode::RigCharacter(name)) => {
-                if let Ok(ignored) = std::env::var("WOW_CHAR") {
-                    warn!("char select: WOW_RIG names {name} — ignoring WOW_CHAR={ignored}");
+                if let Some(ignored) = &plan.character {
+                    warn!("char select: WOW_RIG names {name} — ignoring the character {ignored}");
                 }
-                None
             }
-            // `WOW_CHAR`, or the login smoke's optional third field.
-            None => std::env::var("WOW_CHAR").ok().or_else(|| {
-                std::env::var("WOW_LOGIN_SMOKE")
-                    .ok()
-                    .and_then(|s| crate::login::smoke_character(&s))
-            }),
-        };
+            None => {
+                roster.env_char = plan.character.clone();
+                roster.env_enter = plan.enter_world;
+                // The login smoke's optional third field picks and enters.
+                if roster.env_char.is_none() {
+                    if let Some(name) = std::env::var("WOW_LOGIN_SMOKE")
+                        .ok()
+                        .and_then(|s| crate::login::smoke_character(&s))
+                    {
+                        roster.env_char = Some(name);
+                        roster.env_enter = true;
+                    }
+                }
+            }
+        }
     }
     for msg in msgs.read() {
         roster.chars = msg.characters.clone();
@@ -356,28 +370,42 @@ fn apply_roster_policy(
         if let Some(guid) = roster.pending_pick {
             // A reconnect, or a pick that raced a dying socket: re-answer without the screen.
             send_pick(&mut roster, &pick, guid);
-        } else if let Some(name) = roster.env_char.take() {
-            match roster
-                .chars
-                .iter()
-                .find(|c| c.name.eq_ignore_ascii_case(&name))
-            {
-                Some(c) => {
-                    let guid = c.guid;
-                    info!("char select: WOW_CHAR={name} — fast path");
-                    send_pick(&mut roster, &pick, guid);
+        } else if roster.env_char.is_some() || roster.env_enter {
+            // The plan's steps, first roster only: `--character` selects, `--enter-world` enters
+            // the selected row (the named one, else the remembered one).
+            let name = roster.env_char.take();
+            let enter = std::mem::take(&mut roster.env_enter);
+            let row = match &name {
+                Some(name) => roster
+                    .chars
+                    .iter()
+                    .position(|c| c.name.eq_ignore_ascii_case(name)),
+                None => roster.selected,
+            };
+            match (row, name) {
+                (Some(row), name) => {
+                    if let Some(name) = name {
+                        info!("char select: character {name} — selecting row {row}");
+                        roster.select(Some(row));
+                    }
+                    if enter {
+                        let guid = roster.chars[row].guid;
+                        info!("char select: entering the world on row {row}");
+                        send_pick(&mut roster, &pick, guid);
+                    }
                 }
-                None => {
-                    warn!("char select: WOW_CHAR={name} not on this account — showing roster");
+                (None, Some(name)) => {
+                    warn!("char select: character {name} is not on this account — showing roster");
                     // A driverless run cannot pick another row, so it fails rather than idles.
                     if std::env::var_os("WOW_LOGIN_SMOKE").is_none()
                         && crate::run_mode::fatal_when_driverless(&format!(
-                            "WOW_CHAR={name} is not on this account"
+                            "character {name} is not on this account"
                         ))
                     {
                         exit.write(AppExit::error());
                     }
                 }
+                (None, None) => warn!("char select: no character to enter the world with"),
             }
         }
     }
@@ -499,7 +527,6 @@ pub(super) enum GlueRaise {
 }
 
 fn delete_result(
-    mut msgs: MessageReader<CharActionResultMessage>,
     native: Option<MessageReader<crate::net::WrathCharActionResultMessage>>,
     services: Option<
         ResMut<crate::net::wrath_char_service_capture::NativeCharServiceReplies>,
@@ -567,18 +594,6 @@ fn delete_result(
             msg.code
         );
         dialog.open_error(text);
-    }
-    for msg in msgs.read() {
-        if msg.action != CharAction::Delete {
-            continue;
-        }
-        if let Some(text) = char_delete_refusal_text(strings, msg.code) {
-            info!(
-                "char select: delete refused (code {:#04x}) — {text}",
-                msg.code
-            );
-            dialog.open_error(text);
-        }
     }
 }
 
@@ -696,25 +711,6 @@ const WRATH_RESPONSE_KEYS: [&str; 104] = [
 /// table.
 pub(crate) fn wrath_char_result_key(code: u8) -> Option<&'static str> {
     WRATH_RESPONSE_KEYS.get(usize::from(code)).copied()
-}
-
-/// A `SMSG_CHAR_DELETE` result byte as the refusal sentence, `None` for success (`0x39`). The keys
-/// are the `CHAR_DELETE_*` block (`0x38..=0x3b`) of the status-key table `0x85cae8`, numbered as
-/// vmangos's `ResponseCodes`; vmangos sends only `0x39` and `0x3a` (guild master). Any other byte
-/// reads `CHAR_DELETE_FAILED`; the reference indexes its whole 83-row table with it, which is not
-/// transcribed here, and no server sends one.
-pub(crate) fn char_delete_refusal_text(strings: &GlueStrings, code: u8) -> Option<&str> {
-    let (key, fallback): (&str, &str) = match code {
-        benilla_protocol::types::CHAR_DELETE_SUCCESS => return None,
-        0x38 => ("CHAR_DELETE_IN_PROGRESS", "Deleting character"),
-        0x3B => (
-            "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
-            "Your character is currently locked as part of the paid character transfer process.",
-        ),
-        // `0x3a`, the guild-master refusal, and every unnamed byte.
-        _ => ("CHAR_DELETE_FAILED", "Character deletion failed"),
-    };
-    Some(strings.text(key, fallback))
 }
 
 /// Glue-flow smoke (`WOW_GLUE_ROUNDTRIP=1`): once a roster is up, go to CharCreate, Back to
@@ -1267,38 +1263,6 @@ mod tests {
         }
     }
 
-    /// A refused delete (vmangos's guild-master `CHAR_DELETE_FAILED`, 0x3a) opens the one-button
-    /// glue dialog; a success opens nothing.
-    #[test]
-    fn a_refused_delete_raises_the_glue_dialog() {
-        use crate::glue::dialog::{DialogKind, GlueDialog};
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .add_message::<CharActionResultMessage>()
-            .init_resource::<GlueDialog>()
-            .add_systems(Update, delete_result);
-
-        app.world_mut().write_message(CharActionResultMessage {
-            action: CharAction::Delete,
-            code: benilla_protocol::types::CHAR_DELETE_SUCCESS,
-        });
-        app.update();
-        assert!(
-            !app.world().resource::<GlueDialog>().is_open(),
-            "a success is answered by the roster, not a dialog"
-        );
-
-        app.world_mut().write_message(CharActionResultMessage {
-            action: CharAction::Delete,
-            code: 0x3A,
-        });
-        app.update();
-        let dialog = app.world().resource::<GlueDialog>();
-        assert_eq!(dialog.kind, Some(DialogKind::Error), "the OKAY dialog");
-        // No GlueStrings here, so the fallback literal; the shipped one is checked below.
-        assert_eq!(dialog.text, "Character deletion failed");
-    }
-
     /// Build 12340's status table (`0xad91f0`): create 0x2e-0x45, delete 0x46-0x4b, by AC code.
     #[test]
     fn the_native_result_keys_follow_the_12340_table() {
@@ -1324,7 +1288,6 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_message::<Native>()
-            .add_message::<CharActionResultMessage>()
             .init_resource::<GlueDialog>()
             .add_systems(Update, delete_result);
         app.world_mut().write_message(Native {
@@ -1355,7 +1318,6 @@ mod tests {
         use benilla_protocol::wrath_char_services::Reply;
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-            .add_message::<CharActionResultMessage>()
             .init_resource::<GlueDialog>()
             .init_resource::<NativeCharServiceReplies>()
             .add_systems(Update, delete_result);
@@ -1393,7 +1355,6 @@ mod tests {
         use benilla_protocol::wrath_char_services::Reply;
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-            .add_message::<CharActionResultMessage>()
             .add_message::<GlueDialogAnswer>()
             .init_resource::<GlueDialog>()
             .init_resource::<NativeCharServiceReplies>()
@@ -1464,33 +1425,26 @@ mod tests {
         assert_eq!(rename_check("Arthas", "Ärthäs"), RenameCheck::Send);
     }
 
-    /// The delete refusals resolve to the sentences 1.12 ships, each off a real key.
+    /// The 3.3.5 delete results (AzerothCore `ResponseCodes` `0x46..=0x4b`) resolve through the
+    /// 12340 status-key table to the sentences the installed GlueStrings ship.
     #[test]
     fn every_delete_result_resolves_in_the_real_glue_strings() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let strings = crate::glue_strings::table_from_chain(&mut chain);
-
-        assert_eq!(char_delete_refusal_text(&strings, 0x39), None);
-        assert_eq!(
-            char_delete_refusal_text(&strings, 0x3A),
-            Some("Character deletion failed")
-        );
-        assert_eq!(
-            char_delete_refusal_text(&strings, 0x3B),
-            Some(
-                "Your character is currently locked as part of the paid character transfer \
-                 process."
-            )
-        );
-        let map = strings.into_map();
-        for key in [
-            "CHAR_DELETE_IN_PROGRESS",
-            "CHAR_DELETE_FAILED",
-            "CHAR_DELETE_FAILED_LOCKED_FOR_TRANSFER",
-        ] {
-            assert!(map.contains_key(key), "{key} is not in the shipped table");
-        }
+        let text = |code: u8| {
+            let key = wrath_char_result_key(code).expect("a CHAR_DELETE_* row");
+            assert!(key.starts_with("CHAR_DELETE_"), "{code:#04x}: {key}");
+            strings
+                .get(key)
+                .unwrap_or_else(|| panic!("{key} is not in the shipped table"))
+        };
+        assert_eq!(text(0x46), "Deleting character");
+        assert_eq!(text(0x47), "Character deleted");
+        assert_eq!(text(0x48), "Character deletion failed");
+        assert!(text(0x49).starts_with("You cannot log in until the character update process"));
+        assert!(text(0x4A).contains("Guild Master"));
+        assert!(text(0x4B).contains("Arena Captain"));
     }
 
     /// A created character is selected against the roster already in hand: `net::io` emits the
@@ -1543,6 +1497,7 @@ mod tests {
                 }
                 None => crate::cvars::Cvars::with_rows(&[CVARS]),
             })
+            .insert_resource(crate::launch_plan::LaunchPlan::default())
             .add_message::<CharListMessage>()
             .add_message::<AppExit>()
             .add_systems(Update, apply_roster_policy);
@@ -1559,6 +1514,71 @@ mod tests {
         });
         app.update();
         app.world().resource::<Roster>().selected()
+    }
+
+    /// The launch plan's character select steps on the first roster: `--character` selects and
+    /// stays, `--enter-world` enters the selected (remembered) row, both enter the named one, and
+    /// with neither the screen stays up. (A later roster re-applies the remembered row, as the
+    /// stock list rebuild does, and re-answers a pending pick, the reconnect path.)
+    #[test]
+    fn the_launch_plan_answers_only_its_own_select_steps() {
+        let run = |plan: crate::launch_plan::LaunchPlan| {
+            let (tx, rx) = crossbeam_channel::unbounded();
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins)
+                .init_resource::<Roster>()
+                .insert_resource(CharPick(tx))
+                .insert_resource(crate::cvars::Cvars::with_rows_and_value(
+                    &[CVARS],
+                    CVAR_LAST_CHARACTER,
+                    "1",
+                ))
+                .insert_resource(plan)
+                .add_message::<CharListMessage>()
+                .add_message::<AppExit>()
+                .add_systems(Update, apply_roster_policy);
+            let roster = || CharListMessage {
+                characters: vec![
+                    character(1, "Kerwind"),
+                    character(2, "Xero"),
+                    character(3, "Zed"),
+                ],
+                realm: None,
+            };
+            app.world_mut().write_message(roster());
+            app.update();
+            let selected = app.world().resource::<Roster>().selected();
+            let sent: Vec<u64> = rx
+                .try_iter()
+                .filter_map(|r| match r {
+                    CharRequest::Enter(guid) => Some(guid),
+                    _ => None,
+                })
+                .collect();
+            (selected, sent)
+        };
+        use crate::launch_plan::LaunchPlan as P;
+        assert_eq!(
+            run(P::default()),
+            (Some(1), vec![]),
+            "the screen, on the remembered row"
+        );
+        assert_eq!(
+            run(P::for_steps(Some("zed"), false)),
+            (Some(2), vec![]),
+            "selected, not entered"
+        );
+        assert_eq!(
+            run(P::for_steps(None, true)),
+            (Some(1), vec![2]),
+            "the remembered row entered"
+        );
+        assert_eq!(
+            run(P::for_steps(Some("Zed"), true)),
+            (Some(2), vec![3]),
+            "the named row entered"
+        );
+        assert_eq!(run(P::for_steps(Some("Nobody"), false)), (Some(1), vec![]));
     }
 
     /// The screen opens on the character last logged in as; the stored value is 0-based.

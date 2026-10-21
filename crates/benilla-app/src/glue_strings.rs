@@ -205,9 +205,11 @@ end
         assert!(parse_localize_overrides("function Localize()\n\tK = \"v\";\n").is_empty());
     }
 
-    /// Three keys whose base and patched text differ. Skips without client data.
+    /// Build 12340's enUS `GlueLocalization.lua` patches no string key (its `Localize()` sets only
+    /// `ALLOW_RANDOM_NAME_BUTTON`), so the table is the shipped `GlueStrings.lua` unchanged. Skips
+    /// without client data.
     #[test]
-    fn the_real_chain_patches_the_login_refusals_and_the_realm_suffixes() {
+    fn the_real_chain_keeps_the_shipped_strings_through_localize() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
 
@@ -216,20 +218,14 @@ end
         let table = table_from_chain(&mut chain);
 
         for key in ["AUTH_BANNED", "LOGIN_UNKNOWN_ACCOUNT", "PVP_PARENTHESES"] {
-            let before = base.get(key).expect("key in the base file").as_str();
-            let after = table.get(key).expect("key in the patched table");
-            assert_ne!(before, after, "{key} was not patched by Localize()");
+            assert_eq!(
+                base.get(key).map(String::as_str),
+                table.get(key),
+                "{key} changed under Localize()"
+            );
         }
-
-        // The enGB patch drops the parentheses: `CharSelectRealmName` reads "Realm PVP".
-        assert_eq!(
-            base.get("PVP_PARENTHESES").map(String::as_str),
-            Some("(PVP)")
-        );
-        assert_eq!(table.get("PVP_PARENTHESES"), Some("PVP"));
-
-        // The patch overwrites keys; it does not replace the table.
+        assert_eq!(table.get("PVP_PARENTHESES"), Some("(PVP)"));
         assert!(table.get("FACTION_INFO_HORDE").is_some(), "base lost");
-        assert!(base.len() > 100 && table.0.len() >= base.len());
+        assert!(base.len() > 100 && table.0.len() == base.len());
     }
 }
