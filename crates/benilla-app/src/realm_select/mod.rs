@@ -72,8 +72,7 @@ impl Plugin for RealmSelectPlugin {
                     apply_realm_policy,
                     // Ungated by state: the dialog stands over login and character select alike,
                     // except the login screen the stock glue hosts, whose RealmList is its own.
-                    screen::drive_screen
-                        .run_if(not(crate::ui_script::glue::stock_login_up)),
+                    screen::drive_screen.run_if(not(crate::ui_script::glue::stock_login_up)),
                     // Input before the row refresh, so a click shows on the frame it landed.
                     smoke::debug_realm_smoke,
                     (
@@ -332,7 +331,12 @@ pub(crate) fn glue_tabs(realms: &mut Realms) -> Vec<benilla_ui::script::GlueReal
 
 /// The stock `ChangeRealm(category, index)`: the `index`-th row (1-based) of tab `category`
 /// answers the park, as the native OK does; a down realm or a row past the end does nothing.
-pub(crate) fn glue_change_realm(realms: &mut Realms, choice: &RealmChoice, category: usize, index: usize) {
+pub(crate) fn glue_change_realm(
+    realms: &mut Realms,
+    choice: &RealmChoice,
+    category: usize,
+    index: usize,
+) {
     realms.category = Some(category.max(1));
     let rows = realms.rows();
     let Some(realm) = index
