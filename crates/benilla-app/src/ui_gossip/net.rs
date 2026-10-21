@@ -4,7 +4,7 @@ use benilla_protocol::types::{GossipOption, NpcTextBlock};
 use benilla_protocol::{SessionEvent, SessionEventKind};
 use bevy::prelude::*;
 
-use super::GossipState;
+use super::{GossipGreeting, GossipState};
 use crate::net::{ClientCommand, GuidIndex, NetCommands, NetHandlerApp, ObjectStore};
 use crate::ui_quest::QuestGiver;
 

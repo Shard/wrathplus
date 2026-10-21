@@ -8,13 +8,6 @@ use crate::net::{NetEntity, ObjectStore};
 use super::Creatures;
 
 pub(crate) use crate::app_core::state::CollisionHeight;
-impl Default for CollisionHeight {
-    /// The `CMovement` ctor's default, never `0.0`, at which every depth line collapses and the
-    /// unit swims on dry land.
-    fn default() -> Self {
-        Self(crate::player::DEFAULT_COLLISION_HEIGHT)
-    }
-}
 
 /// The display the collision height derives from: `UNIT_FIELD_NATIVEDISPLAYID`, else the rendered
 /// display when that is absent or `0` (no descriptor block yet, a synthetic mount child).
