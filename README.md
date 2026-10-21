@@ -56,9 +56,13 @@ WOW_DATA=/path/to/WoW/Data cargo run --release -p benilla
 ```
 
 `WOW_DATA` names the install's `Data` folder; a link to the install named `WoW` at the repo root
-does the same. The server defaults to `localhost:3724`; point `WOW_HOST` at another, or set it from
-the Realmlist button on the login screen. Credentials go in at the login screen, or set `WOW_USER`
-and `WOW_PASS` to skip it.
+does the same. The server defaults to `127.0.0.1:3724`, or what the install's
+`Data/<locale>/realmlist.wtf` sets; change it from the Realmlist button on the login screen, or for
+one session with `--server <host[:port]>` (`WOW_HOST`). Credentials go in at the login screen.
+Flags skip steps, each only its own: `--account <name>` with `--password-env <VAR>` or
+`--password-stdin` logs in (the password is never an argument), `--realm <name>`,
+`--character <name>` and `--enter-world`; `WOW_USER`, `WOW_PASS`, `WOW_REALM` and `WOW_CHAR`
+(pick and enter) map onto the same steps. See `crates/benilla-app/src/launch_plan.rs`.
 
 Settings, screenshots and addons live in `benilla-config/` at the repo root; addons go in
 `benilla-config/AddOns/`. [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) has the rest, from the

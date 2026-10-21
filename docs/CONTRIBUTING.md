@@ -89,8 +89,9 @@ out of scope is closed with the reason.
   third-party content that is not in this repo. `scripts/gates.sh` and `scripts/check.sh` print
   how many tests skipped and why. Where the data is, `BENILLA_REQUIRE_DATA=1` turns a skip into a
   failure, and the gates set it themselves when the install and the corpus both resolve.
-- **A server to test against.** An AzerothCore 3.3.5a server; `WOW_HOST` names it (default
-  `localhost:3724`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
+- **A server to test against.** An AzerothCore 3.3.5a server; `--server` or `WOW_HOST` names it
+  for the session (default `127.0.0.1:3724`, or the install's `realmlist.wtf`; the launch flags
+  are in `crates/benilla-app/src/launch_plan.rs`). A scripted run has no default account: `WOW_USER`, `WOW_PASS` and
   `WOW_CHAR` name a test account on your server whose login kicks nobody, all three, either in
   the environment or in a `.probe-identity` file at the repo root (one per line, never
   committed), and `scripts/smoke.sh` (the live login gate) refuses without them. `WOW_CHAR`

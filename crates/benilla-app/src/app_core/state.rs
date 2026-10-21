@@ -124,8 +124,11 @@ pub(crate) struct Roster {
     /// The guid picked; kept in-world so a reconnect's roster is answered with it, cleared by a
     /// logout so the roster is shown.
     pub(crate) pending_pick: Option<u64>,
-    /// `WOW_CHAR`: auto-pick this name on the first roster only.
+    /// `--character` (or `WOW_CHAR`): select this name on the first roster only
+    /// ([`crate::launch_plan`]).
     pub(crate) env_char: Option<String>,
+    /// `--enter-world` (or `WOW_CHAR`): press Enter World on the selected row, first roster only.
+    pub(crate) env_enter: bool,
     /// A just-created character's name, whose row gets selected (the reference's
     /// `SELECT_LAST_CHARACTER`, keyed by name to survive the create/enum race).
     pub(crate) just_created: Option<String>,
