@@ -674,7 +674,7 @@ pub(in crate::entities) fn resolve_corpse_equipment(
 
 #[cfg(test)]
 mod tests {
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use bevy::prelude::*;
 
     use super::super::HELD_SLOTS;
@@ -689,13 +689,10 @@ mod tests {
     fn corpse_dresses_from_its_own_snapshot() {
         use benilla_protocol::types::ObjectType;
 
-        let at = |field| FieldLayout::Wrath12340.index_of(field);
+        let at = |field: Field| field.index();
         /// `CORPSE_FIELD_ITEM`, each slot `DisplayInfoID | InventoryType << 24`.
         fn item(slot: u16, display: u32, inv: u32) -> (u16, u32) {
-            (
-                FieldLayout::Wrath12340.index_of(Field::CorpseItem) + slot,
-                display | (inv << 24),
-            )
+            (Field::CorpseItem.index() + slot, display | (inv << 24))
         }
         // `CORPSE_FIELD_BYTES_1` (race and sex in bytes 1 and 2), `CORPSE_FIELD_BYTES_2` and
         // `CORPSE_FIELD_FLAGS`.
@@ -821,8 +818,8 @@ mod tests {
 
     /// `PLAYER_FLAGS`, and `UNIT_FIELD_BYTES_0`; the visible items are two dwords per slot, the
     /// entry first.
-    const PLAYER_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::PlayerFlags);
-    const BYTES_0: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes0);
+    const PLAYER_FLAGS: u16 = Field::PlayerFlags.index();
+    const BYTES_0: u16 = Field::UnitBytes0.index();
 
     fn wearing(flags: u32, entries: &[(u8, u32)]) -> ObjectStore {
         let mut pairs = vec![
@@ -831,7 +828,7 @@ mod tests {
         ];
         for (slot, entry) in entries {
             pairs.push((
-                FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * u16::from(*slot),
+                Field::PlayerVisibleItems.index() + 2 * u16::from(*slot),
                 *entry,
             ));
         }
@@ -991,10 +988,11 @@ mod tests {
             .unwrap()
             .bypass_change_detection()
             .0
-            .merge(ObjectFields::from_field_slots(
-                FieldLayout::Wrath12340,
-                &[(Field::PlayerVisibleItems, 0, 101)],
-            ));
+            .merge(ObjectFields::from_field_slots(&[(
+                Field::PlayerVisibleItems,
+                0,
+                101,
+            )]));
         app.update();
         assert_eq!(
             app.world().get::<Equipment>(player).unwrap().helm,
@@ -1025,8 +1023,8 @@ mod tests {
         use crate::creature_anim::Wielded;
         use benilla_formats::{ItemRecord, ItemRecordCatalog};
 
-        const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
-        const VIRTUAL_ITEM: u16 = FieldLayout::Wrath12340.index_of(Field::UnitVirtualItemSlotId);
+        const UNIT_BYTES_2: u16 = Field::UnitBytes2.index();
+        const VIRTUAL_ITEM: u16 = Field::UnitVirtualItemSlotId.index();
         let spawn = |records: bool| {
             let mut app = App::new();
             app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
@@ -1107,10 +1105,9 @@ mod tests {
         use crate::creature_anim::Wielded;
 
         /// Raw field indices; byte 0 of `UNIT_FIELD_BYTES_2` is the sheath state.
-        const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-        const UNIT_BYTES_2: u16 = FieldLayout::Wrath12340.index_of(Field::UnitBytes2);
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * 15;
+        const UNIT_FLAGS: u16 = Field::UnitFlags.index();
+        const UNIT_BYTES_2: u16 = Field::UnitBytes2.index();
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = Field::PlayerVisibleItems.index() + 2 * 15;
         /// `UNIT_FLAG_DISARMED`.
         const DISARMED: u32 = 0x0020_0000;
 
@@ -1230,9 +1227,8 @@ mod tests {
     fn the_hands_keep_the_worn_reading_through_a_disarm() {
         use crate::creature_anim::Wielded;
 
-        const UNIT_FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
-        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 =
-            FieldLayout::Wrath12340.index_of(Field::PlayerVisibleItems) + 2 * 15;
+        const UNIT_FLAGS: u16 = Field::UnitFlags.index();
+        const VISIBLE_ITEM_MAINHAND_ENTRY: u16 = Field::PlayerVisibleItems.index() + 2 * 15;
         const DISARMED: u32 = 0x0020_0000;
 
         let mut app = App::new();

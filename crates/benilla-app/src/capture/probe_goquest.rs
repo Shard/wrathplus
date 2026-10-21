@@ -38,7 +38,7 @@ use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectSt
 use crate::player::Player;
 use crate::ui_quest::QuestGiver;
 
-/// The probe's default object: the `Wanted Poster` outside the Goldshire inn (`gameobject` 26843,
+/// The probe's default object: the `Wanted Poster` outside the Goldshire inn (AzerothCore `gameobject` 26843,
 /// template 68, quest 176). `[x, y, z, map]`.
 const POSTER_AT: [f32; 4] = [-9668.23, 683.39, 36.33, 0.0];
 /// `GAMEOBJECT_TYPE_QUESTGIVER`, the type a wanted poster carries.

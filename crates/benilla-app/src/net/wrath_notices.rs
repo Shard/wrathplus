@@ -60,15 +60,15 @@ fn on_power(
 }
 
 fn write_power(store: &mut ObjectFields, power_type: u8, value: u32) {
-    use benilla_protocol::types::{Field, FieldLayout};
-    let Some(span) = store.layout().resolve(Field::UnitPower) else {
+    use benilla_protocol::types::Field;
+    let Some(span) = Field::UnitPower.span() else {
         return;
     };
     if u16::from(power_type) < span.width {
-        store.merge(ObjectFields::from_native_pairs(
-            FieldLayout::Wrath12340,
-            &[(span.index + u16::from(power_type), value)],
-        ));
+        store.merge(ObjectFields::from_pairs(&[(
+            span.index + u16::from(power_type),
+            value,
+        )]));
     }
 }
 
@@ -132,10 +132,9 @@ mod tests {
 
     #[test]
     fn power_updates_preserve_all_seven_native_resources_and_maxima() {
-        use benilla_protocol::types::{Field, FieldLayout};
-        let layout = FieldLayout::Wrath12340;
-        let power = layout.resolve(Field::UnitPower).unwrap();
-        let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
+        use benilla_protocol::types::Field;
+        let power = Field::UnitPower.span().unwrap();
+        let maximum = Field::UnitMaxPower.span().unwrap();
         let pairs: Vec<_> = (0..7u16)
             .flat_map(|slot| {
                 [
@@ -145,7 +144,7 @@ mod tests {
             })
             .collect();
         for changed in 0..7u8 {
-            let mut store = ObjectFields::from_native_pairs(layout, &pairs);
+            let mut store = ObjectFields::from_pairs(&pairs);
             write_power(&mut store, changed, 439);
             for slot in 0..7u8 {
                 assert_eq!(
@@ -168,18 +167,14 @@ mod tests {
 
     #[test]
     fn power_update_writes_native_layout_without_touching_maxima() {
-        use benilla_protocol::types::{Field, FieldLayout};
-        let layout = FieldLayout::Wrath12340;
-        let power = layout.resolve(Field::UnitPower).unwrap();
-        let maximum = layout.resolve(Field::UnitMaxPower).unwrap();
-        let mut store = ObjectFields::from_native_pairs(
-            layout,
-            &[
-                (power.index, 50),
-                (power.index + 6, 100),
-                (maximum.index + 6, 1000),
-            ],
-        );
+        use benilla_protocol::types::Field;
+        let power = Field::UnitPower.span().unwrap();
+        let maximum = Field::UnitMaxPower.span().unwrap();
+        let mut store = ObjectFields::from_pairs(&[
+            (power.index, 50),
+            (power.index + 6, 100),
+            (maximum.index + 6, 1000),
+        ]);
         write_power(&mut store, 6, 439);
         assert_eq!(store.unit_power(6), Some(439));
         assert_eq!(store.unit_max_power(6), Some(1000));

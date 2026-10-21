@@ -98,7 +98,7 @@ fn the_self_menu_row_gates_on_the_binding_and_confirms_before_sending() {
         "Interface\\FrameXML\\PetFrame.xml",
         r"Interface\FrameXML\RaidFrame.xml",
     ] {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
     // Blizzard_RaidUI is LoadOnDemand: seated as an addon row, as the app does, then loaded by
     // `RaidFrame_LoadUI` (`UIParent.lua:182`).

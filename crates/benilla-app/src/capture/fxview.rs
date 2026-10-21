@@ -1,7 +1,7 @@
 //! The `fxview` fixture's driver: stands the effect-viewer's subject up in the world; the
 //! request, its knobs and the camera are [`super`]'s.
 
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use bevy::prelude::*;
 
 use benilla_assets::m2_url;
@@ -73,15 +73,12 @@ pub(crate) fn drive_fx_view(
                         display_id: Some(display),
                         scale: req.scale,
                     },
-                    crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
-                        FieldLayout::Wrath12340,
-                        &[
-                            (Field::UnitHealth, 100),
-                            (Field::UnitMaxHealth, 100),
-                            (Field::UnitLevel, 60),
-                            (Field::UnitFactionTemplate, 35), // friendly, no combat pose
-                        ],
-                    )),
+                    crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(&[
+                        (Field::UnitHealth, 100),
+                        (Field::UnitMaxHealth, 100),
+                        (Field::UnitLevel, 60),
+                        (Field::UnitFactionTemplate, 35), // friendly, no combat pose
+                    ])),
                     Transform::from_translation(pos)
                         .with_rotation(Quat::from_rotation_y(req.yaw_deg.to_radians())),
                     Visibility::default(),
@@ -111,7 +108,6 @@ pub(crate) fn drive_fx_view(
                         scale: req.scale,
                     },
                     crate::net::ObjectStore(benilla_protocol::types::ObjectFields::from_fields(
-                        FieldLayout::Wrath12340,
                         // `GAMEOBJECT_BYTES_1`: state byte 0, type byte 1.
                         &[(Field::GameobjectBytes1, req.go_state | (req.go_type << 8))],
                     )),

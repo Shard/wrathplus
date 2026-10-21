@@ -167,10 +167,8 @@ fn feed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use benilla_protocol::types::FieldLayout;
     #[test]
     fn named_wrath_fields_feed_values_and_signed_school_bonuses() {
-        let layout = FieldLayout::Wrath12340;
         let data = [
             (Field::PlayerCombatRating1, 24, 177),
             (Field::PlayerSpellCritPercentage1, 6, 12.5f32.to_bits()),
@@ -192,9 +190,9 @@ mod tests {
         ];
         let pairs: Vec<_> = data
             .iter()
-            .map(|&(field, offset, value)| (layout.resolve(field).unwrap().index + offset, value))
+            .map(|&(field, offset, value)| (field.span().unwrap().index + offset, value))
             .collect();
-        let stats = snapshot(&ObjectFields::from_native_pairs(layout, &pairs));
+        let stats = snapshot(&ObjectFields::from_pairs(&pairs));
         assert_eq!(stats.ratings[24], 177);
         assert_eq!(stats.spell_crit[6], 12.5);
         assert_eq!(stats.melee_crit, 8.25);
@@ -209,8 +207,7 @@ mod tests {
     }
     #[test]
     fn feed_clears_logout_and_reseeds_a_new_vm() {
-        let layout = FieldLayout::Wrath12340;
-        let index = layout.resolve(Field::PlayerCritPercentage).unwrap().index;
+        let index = Field::PlayerCritPercentage.span().unwrap().index;
         let mut app = App::new();
         app.add_plugins(UiPaperDollPlugin);
         app.insert_non_send_resource(UiScript::new().unwrap());
@@ -218,10 +215,7 @@ mod tests {
             .world_mut()
             .spawn((
                 SelfPlayer,
-                ObjectStore(ObjectFields::from_native_pairs(
-                    layout,
-                    &[(index, 8.25f32.to_bits())],
-                )),
+                ObjectStore(ObjectFields::from_pairs(&[(index, 8.25f32.to_bits())])),
             ))
             .id();
         app.update();

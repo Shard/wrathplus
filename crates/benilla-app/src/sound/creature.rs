@@ -689,16 +689,14 @@ mod tests {
     fn death_edges_preserve_health_and_feign_transitions_in_both_layouts() {
         use benilla_protocol::{
             field::UNIT_DYNFLAG_DEAD,
-            types::{Field, FieldLayout, ObjectType},
+            types::{Field, ObjectType},
         };
-        let layout = FieldLayout::Wrath12340;
         let mut edge = FieldChanged {
             entity: Entity::PLACEHOLDER,
             guid: 42,
             kind: ObjectType::Unit,
             field: Field::UnitHealth,
             offset: 0,
-            layout,
             old: 100,
             new: 0,
         };

@@ -21,7 +21,7 @@ use crate::net::{ChatKind, ClientCommand, Guid, NetCommands, NetEntity, ObjectSt
 use crate::player::Player;
 use crate::ui_bank::{BankOpen, BankPrices};
 
-/// Soleil Stonemantle's spawn (vmangos `creature` guid 12629, map 0).
+/// Soleil Stonemantle's spawn (AzerothCore `creature` guid 111, map 0).
 const BANKER_AT: [f32; 3] = [-4895.64, -1004.66, 504.024];
 /// Her creature template entry, one of the two identity checks.
 const BANKER_ENTRY: u32 = 5099;

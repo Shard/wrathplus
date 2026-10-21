@@ -74,9 +74,9 @@ fn setup_counted(extra: &[&str]) -> (UiScript, usize) {
     let mut built = 0;
     for file in super::test_ui::production_order(&[BARS, GROUP_LOOT, extra]) {
         if file.ends_with("LootFrame.xml") {
-            built = load_xml_no_warnings(&s, file);
+            built = load_xml_no_warnings(&mut s, file);
         } else {
-            load_xml(&s, file);
+            load_xml(&mut s, file);
         }
     }
     (s, built)
@@ -462,7 +462,7 @@ fn managed_positions_engage_for_the_bare_frame_name() {
         ],
         GROUP_LOOT,
     ]) {
-        load_xml(&s, file);
+        load_xml(&mut s, file);
     }
 
     let bottom = |s: &UiScript| s.eval::<f64>("return GroupLootFrame1:GetBottom()").unwrap();
@@ -613,7 +613,7 @@ fn the_stock_group_loot_frame_survives_an_in_flight_roll() {
         super::test_ui::LOOT_UI,
         &["Interface\\FrameXML\\LootFrame.xml"],
     ]) {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_loot_rolls(rolls());
 

@@ -9,7 +9,7 @@ fn ui_parent() -> UiScript {
         "Interface\\FrameXML\\Fonts.xml",
         r"Interface\FrameXML\UIParent.xml",
     ] {
-        crate::ui_script::test_ui::load_ui(&s, file);
+        crate::ui_script::test_ui::load_ui(&mut s, file);
     }
     s.set_screen_size(1024.0, 768.0);
     s.run(
@@ -138,7 +138,7 @@ fn mouse_is_over_survives_a_frame_with_no_resolved_rect() {
 fn raid_class_colors_is_the_references_own_nine() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Fonts.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
     s.set_screen_size(1024.0, 768.0);
 
     let n: i64 = s
@@ -179,7 +179,7 @@ fn raid_class_colors_is_the_references_own_nine() {
 fn the_font_path_globals_are_the_references_own_four() {
     benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
-    super::test_ui::load_ui(&s, "Interface\\FrameXML\\Fonts.xml");
+    super::test_ui::load_ui(&mut s, "Interface\\FrameXML\\Fonts.xml");
     s.set_screen_size(1024.0, 768.0);
 
     for name in [

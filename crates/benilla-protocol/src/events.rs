@@ -38,7 +38,7 @@ pub enum EntityKind {
     Other,
 }
 
-/// Which character verb a [`SessionEvent::CharActionResult`] answers, and so which code family.
+/// Which character verb a [`SessionEvent::WrathCharActionResult`] answers, and so which code family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharAction {
     Create,
@@ -155,8 +155,6 @@ pub enum SessionEvent {
         characters: Vec<Character>,
         realm: Option<crate::RealmInfo>,
     },
-    /// `SMSG_CHAR_CREATE`/`_DELETE`'s raw `WorldResult`; on success a fresh roster comes first.
-    CharActionResult { action: CharAction, code: u8 },
     /// Build-12340 character mutation result. Raw codes are NOT Vanilla WorldResult values.
     WrathCharActionResult { action: CharAction, code: u8 },
     /// Build-12340 character-screen service reply (rename, customize, faction/race change, declined
@@ -195,7 +193,8 @@ pub enum SessionEvent {
         position: [f32; 3],
         orientation: f32,
         /// `UPDATEFLAG_ROTATION`'s quaternion `[x, y, z, w]`, unpacked: a GameObject's placement,
-        /// its tilt included; `None` without the flag.
+        /// its tilt included; `None` without the flag or for a zero word (AzerothCore's identity,
+        /// an object spawned with no rotation), which faces `orientation`.
         rotation: Option<[f32; 4]>,
         /// `OBJECT_FIELD_SCALE_X`, the complete render scale; `1.0` when absent.
         scale: f32,

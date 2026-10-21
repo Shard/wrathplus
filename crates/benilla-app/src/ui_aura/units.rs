@@ -389,10 +389,10 @@ impl UnitAuras {
 
 #[cfg(test)]
 mod tests {
+    use benilla_protocol::types::Field;
     use benilla_protocol::types::{
         member_status, GroupMemberEntry, ObjectFields, PartyMemberStatsInfo,
     };
-    use benilla_protocol::types::{Field, FieldLayout};
     use benilla_ui::script::UiScript;
     use bevy::prelude::*;
 
@@ -500,9 +500,9 @@ mod tests {
     const ME: u64 = 0x10;
     const MEMBER: u64 = 0x1234;
     const PET: u64 = 0xF140_0000_0000_0077;
-    const SUMMON: u16 = FieldLayout::Wrath12340.index_of(Field::UnitSummon);
+    const SUMMON: u16 = Field::UnitSummon.index();
     /// `UNIT_FIELD_FLAGS`; bit 27 is `UNIT_FLAG_AURAS_VISIBLE`, which opens `UnitBuff`'s gate.
-    const FLAGS: u16 = FieldLayout::Wrath12340.index_of(Field::UnitFlags);
+    const FLAGS: u16 = Field::UnitFlags.index();
 
     /// The feed on a bare app with a VM, us, and a party of one, `MEMBER`, with no record.
     fn party_app() -> App {
@@ -1124,9 +1124,9 @@ mod tests {
     // == Any token the resolver parses ==
 
     /// `OBJECT_FIELD_TYPE`; a unit's typemask is `0x9`, a player's `0x19`.
-    const TYPE: u16 = FieldLayout::Wrath12340.index_of(Field::ObjectType);
+    const TYPE: u16 = Field::ObjectType.index();
     /// `UNIT_FIELD_TARGET`'s low dword; the high half is the next index.
-    const TARGET: u16 = FieldLayout::Wrath12340.index_of(Field::UnitTarget);
+    const TARGET: u16 = Field::UnitTarget.index();
     const MOB: u64 = 0xF130_0000_0000_0001;
     const ADD: u64 = 0xF130_0000_0000_0002;
 

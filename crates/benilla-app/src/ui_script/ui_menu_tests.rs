@@ -26,7 +26,7 @@ fn chat_menu() -> UiScript {
         r"Interface\FrameXML\ChatFrame.xml",
         r"Interface\FrameXML\FloatingChatFrame.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.set_text_measurer(Box::new(super::FixedWidthFont(8.0)));
     s.fire_event("PLAYER_ENTERING_WORLD", vec![]);

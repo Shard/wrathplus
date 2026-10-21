@@ -8,7 +8,7 @@
 use benilla_protocol::{types, CharAction, CharCreateReq};
 use bevy::prelude::*;
 
-use crate::net::{CharActionResultMessage, CharListMessage, CharPick, CharRequest};
+use crate::net::{CharListMessage, CharPick, CharRequest, WrathCharActionResultMessage};
 
 pub(crate) struct ProbeCharCreatePlugin;
 
@@ -77,7 +77,7 @@ fn drive_charcreate_probe(
     mut probe: ResMut<CharCreateProbe>,
     pick: Res<CharPick>,
     mut lists: MessageReader<CharListMessage>,
-    mut results: MessageReader<CharActionResultMessage>,
+    mut results: MessageReader<WrathCharActionResultMessage>,
 ) {
     // The fresh roster arrives before each successful action's result.
     let got_roster = lists.read().fold(false, |_, m| {
@@ -115,7 +115,7 @@ fn drive_charcreate_probe(
                     r.code,
                     result_label(CharAction::Create, r.code)
                 );
-                let created = r.code == types::CHAR_CREATE_SUCCESS;
+                let created = r.code == benilla_protocol::wrath_world::CHAR_CREATE_SUCCESS;
                 if created && !probe.keep {
                     match probe
                         .roster
@@ -160,12 +160,7 @@ fn drive_charcreate_probe(
     }
 }
 
-/// A name for the result bytes the probe checks; the create screen has the full table.
-fn result_label(action: CharAction, code: u8) -> &'static str {
-    match (action, code) {
-        (CharAction::Create, types::CHAR_CREATE_SUCCESS) => "CHAR_CREATE_SUCCESS",
-        (CharAction::Create, types::CHAR_CREATE_NAME_IN_USE) => "CHAR_NAME_ALREADY_IN_USE",
-        (CharAction::Delete, types::CHAR_DELETE_SUCCESS) => "CHAR_DELETE_SUCCESS",
-        _ => "other",
-    }
+/// Build 12340's `ResponseCodes` name for a result, as the character screens read it.
+fn result_label(_action: CharAction, code: u8) -> &'static str {
+    crate::char_select::wrath_char_result_key(code).unwrap_or("other")
 }

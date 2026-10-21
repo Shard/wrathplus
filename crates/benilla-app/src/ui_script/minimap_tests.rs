@@ -19,16 +19,16 @@ fn minimap_zoom_buttons_resync_when_switching_inside_and_outside() {
     s.run("function GetMinimapZoneText() return '' end")
         .unwrap();
     s.run("function PlaySound() end").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
     // `GameTooltip` before the cluster, as shipped: `Minimap_Update` touches it from `OnLoad` on.
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
 
     // The zoom CVar defaults to 3, a middle level, so both buttons start enabled.
     assert_eq!(s.eval::<u8>("return Minimap:GetZoom()").unwrap(), 3);
@@ -82,15 +82,15 @@ fn tracking_frame_follows_get_tracking_texture_across_player_auras_changed() {
     s.run("function GetMinimapZoneText() return '' end")
         .unwrap();
     s.run("function PlaySound() end").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
 
     let vis = |s: &UiScript| {
         s.eval::<bool>("return MiniMapTrackingFrame:IsVisible()")
@@ -123,21 +123,21 @@ fn game_time_session(hour: u32, minute: u32) -> UiScript {
     s.set_game_time(hour, minute);
     // `GameTime.lua` reads `TwentyFourHourTime`, which `LocalizeFrames` sets; the reference calls
     // that on `VARIABLES_LOADED` (`UIParent.lua:231-232`), and this session has no UIParent.
-    load_xml(&s, "Interface\\FrameXML\\GlobalStrings.lua");
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, "Interface\\FrameXML\\Localization.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GlobalStrings.lua");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Localization.xml");
     s.run("LocalizeFrames()").unwrap();
     // `TEXT()`, which the tooltip formatting goes through.
-    load_xml(&s, "Interface\\FrameXML\\BasicControls.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTime.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BasicControls.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTime.xml");
     s
 }
 
@@ -225,15 +225,15 @@ fn a_click_on_the_minimap_parks_a_centre_relative_ping_request() {
     s.run("function GetMinimapZoneText() return '' end")
         .unwrap();
     s.run("function PlaySound() end").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
     s.resolve();
 
     let cx = s
@@ -272,15 +272,15 @@ fn get_ping_position_answers_two_numbers_always() {
     s.run("function GetMinimapZoneText() return '' end")
         .unwrap();
     s.run("function PlaySound() end").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
 
     assert_eq!(s.arity("Minimap:GetPingPosition()").unwrap(), 2);
     assert_eq!(
@@ -362,7 +362,7 @@ fn the_meeting_stone_icon_follows_the_queue_across_meetingstone_changed() {
         "Interface\\FrameXML\\BattlefieldFrame.xml",
         "Interface\\FrameXML\\Minimap.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.resolve();
     let vis = |s: &UiScript| {
@@ -416,15 +416,15 @@ fn a_shown_ping_pane_asks_for_a_tile_and_draws_its_cell() {
     s.run("function GetMinimapZoneText() return '' end")
         .unwrap();
     s.run("function PlaySound() end").unwrap();
-    load_xml(&s, "Interface\\FrameXML\\Fonts.xml");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.lua");
-    load_xml(&s, r"Interface\FrameXML\MoneyFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\GameTooltip.xml");
-    load_xml(&s, "Interface\\FrameXML\\UIDropDownMenu.xml");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.lua");
-    load_xml(&s, r"Interface\FrameXML\UIPanelTemplates.xml");
-    load_xml(&s, "Interface\\FrameXML\\BattlefieldFrame.xml");
-    load_xml(&s, "Interface\\FrameXML\\Minimap.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Fonts.xml");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.lua");
+    load_xml(&mut s, r"Interface\FrameXML\MoneyFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\GameTooltip.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\UIDropDownMenu.xml");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.lua");
+    load_xml(&mut s, r"Interface\FrameXML\UIPanelTemplates.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\BattlefieldFrame.xml");
+    load_xml(&mut s, "Interface\\FrameXML\\Minimap.xml");
 
     // The file's facts, as `benilla-extract m2seq` reads them; the `OnLoad`'s `SetSequence(0)`
     // waited for them and replays now.

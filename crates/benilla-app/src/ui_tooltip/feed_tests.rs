@@ -1,6 +1,6 @@
 //! The feed re-pushing only the views a change reaches, through [`feed_spell_tooltips`] itself.
 
-use benilla_protocol::types::{Field, FieldLayout};
+use benilla_protocol::types::Field;
 use benilla_protocol::ObjectFields;
 use benilla_ui::script::UiScript;
 
@@ -12,7 +12,7 @@ use bevy::prelude::*;
 
 /// `field`'s native descriptor index.
 const fn at(field: Field) -> u16 {
-    FieldLayout::Wrath12340.index_of(field)
+    field.index()
 }
 
 /// `SpellRange.dbc` rows 2, the melee row, and 4, an authored 0 to 35.
@@ -310,10 +310,10 @@ fn a_units_run_rebuilds_only_the_melee_range_views() {
         .world_mut()
         .spawn((
             speeds,
-            ObjectStore(ObjectFields::from_fields(
-                benilla_protocol::types::FieldLayout::Wrath12340,
-                &[(benilla_protocol::types::Field::UnitHealth, 100)],
-            )),
+            ObjectStore(ObjectFields::from_fields(&[(
+                benilla_protocol::types::Field::UnitHealth,
+                100,
+            )])),
         ))
         .id();
     feed.app

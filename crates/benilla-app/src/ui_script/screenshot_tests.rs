@@ -20,7 +20,7 @@ fn harness() -> UiScript {
         r"Interface\FrameXML\UIPanelTemplates.xml",
         "Interface\\FrameXML\\StaticPopup.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s
 }

@@ -21,7 +21,7 @@ fn session() -> UiScript {
         r"Interface\FrameXML\UIPanelTemplates.xml",
         "Interface\\FrameXML\\TutorialFrame.xml",
     ] {
-        load_xml(&s, f);
+        load_xml(&mut s, f);
     }
     s.resolve();
     s

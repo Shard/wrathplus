@@ -8,7 +8,7 @@ use super::test_ui::load_ui as load_xml;
 
 /// The files the popups need, in the production order, ending with `FriendsFrame.xml`, home of
 /// `FriendsFrame_ShowDropdown` and `FriendsDropDown`.
-fn load_popup_frames(s: &UiScript) {
+fn load_popup_frames(s: &mut UiScript) {
     for file in [
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
@@ -88,7 +88,7 @@ fn chat_name_right_click_opens_the_invite_menu() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
-    load_popup_frames(&s);
+    load_popup_frames(&mut s);
     s.resolve();
     assert!(s.errors().is_empty(), "load errors: {:?}", s.errors());
 
@@ -164,7 +164,7 @@ fn solo_target_right_click_invites_a_player() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
-    load_popup_frames(&s);
+    load_popup_frames(&mut s);
 
     s.set_unit(
         "player",
@@ -258,7 +258,7 @@ fn solo_target_trade_click_queues_an_initiate() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
-    load_popup_frames(&s);
+    load_popup_frames(&mut s);
 
     s.set_unit(
         "player",
@@ -322,7 +322,7 @@ fn solo_target_follow_click_queues_an_exact_by_name_follow() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
-    load_popup_frames(&s);
+    load_popup_frames(&mut s);
 
     s.set_unit(
         "player",
@@ -388,7 +388,7 @@ fn solo_target_inspect_click_reaches_inspect_unit() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_strings(&s);
-    load_popup_frames(&s);
+    load_popup_frames(&mut s);
     s.run("BENILLA_TEST_INSPECTED = nil; function InspectUnit(unit) BENILLA_TEST_INSPECTED = unit end")
         .unwrap();
 
@@ -447,7 +447,7 @@ fn solo_target_inspect_click_reaches_inspect_unit() {
 // ── The PET menu ─────────────────────────────────────────────────────────────────────
 
 /// The pet menu's files, with `StaticPopup.xml` for the rename and abandon dialogs.
-fn load_pet_menu_frames(s: &UiScript) {
+fn load_pet_menu_frames(s: &mut UiScript) {
     for file in [
         "Interface\\FrameXML\\GlobalStrings.lua",
         "Interface\\FrameXML\\Fonts.xml",
@@ -574,7 +574,7 @@ fn the_pet_menu_forks_between_abandon_and_dismiss() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_pet_strings(&s);
-    load_pet_menu_frames(&s);
+    load_pet_menu_frames(&mut s);
     a_pet(&mut s, "Bruce");
 
     // A freshly tamed hunter pet: both bits set.
@@ -642,7 +642,7 @@ fn dismiss_sends_immediately_and_abandon_waits_for_the_confirm() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_pet_strings(&s);
-    load_pet_menu_frames(&s);
+    load_pet_menu_frames(&mut s);
     a_pet(&mut s, "Snuffles");
 
     // A demon: Dismiss is row 2, and clicking it queues the verb with no dialog in between.
@@ -694,7 +694,7 @@ fn renaming_a_pet_reads_the_name_back_before_sending_it() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_pet_strings(&s);
-    load_pet_menu_frames(&s);
+    load_pet_menu_frames(&mut s);
     a_pet(&mut s, "Bruce");
     s.set_pet_menu(true, true);
 
@@ -745,7 +745,7 @@ fn the_pet_details_row_opens_the_pet_paper_doll() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     bake_pet_strings(&s);
-    load_pet_menu_frames(&s);
+    load_pet_menu_frames(&mut s);
     a_pet(&mut s, "Bruce");
     s.set_pet_menu(true, true);
 

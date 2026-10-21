@@ -45,7 +45,7 @@ fn shown_skills_page_with(measurer: Option<Box<dyn benilla_ui::script::TextMeasu
         s.set_text_measurer(m);
     }
     for f in super::test_ui::CHARACTER_UI {
-        super::test_ui::load_ui_strict(&s, f);
+        super::test_ui::load_ui_strict(&mut s, f);
     }
     // Stock `PaperDollFrame_SetLevel` formats level, race and class unguarded on every show
     // (`PaperDollFrame.lua:100-104`).
@@ -451,7 +451,7 @@ fn the_list_reaches_its_last_row_at_the_bars_end() {
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
     for f in super::test_ui::CHARACTER_UI {
-        super::test_ui::load_ui_strict(&s, f);
+        super::test_ui::load_ui_strict(&mut s, f);
     }
     s.set_unit(
         "player",

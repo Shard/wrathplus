@@ -35,19 +35,6 @@ impl Replay {
         else {
             panic!("unhandled replay packet {opcode:x}")
         };
-        for event in &session_events {
-            match event {
-                SessionEvent::ObjectCreate { fields, .. }
-                | SessionEvent::ItemCreate { fields, .. }
-                | SessionEvent::ObjectValues { fields, .. } => {
-                    assert_eq!(
-                        fields.layout(),
-                        benilla_protocol::types::FieldLayout::Wrath12340
-                    );
-                }
-                _ => {}
-            }
-        }
         if matches!(opcode, 0x495 | 0x496) {
             assert!(
                 !session_events
@@ -68,10 +55,6 @@ impl Replay {
             .unwrap()
             .0
             .clone();
-        assert_eq!(
-            fields.layout(),
-            benilla_protocol::types::FieldLayout::Wrath12340
-        );
         fields
     }
 }

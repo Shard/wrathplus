@@ -269,14 +269,10 @@ pub(in crate::ui_party) mod tests {
 
     /// Unit descriptor field indices, build 5875: the pair a member's `SUMMON` holds, and a pet's
     /// health, maximum health and pet number.
-    const SUMMON: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitSummon);
-    const HEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitHealth);
-    const MAXHEALTH: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitMaxHealth);
-    const PETNUMBER: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitPetnumber);
+    const SUMMON: u16 = benilla_protocol::types::Field::UnitSummon.index();
+    const HEALTH: u16 = benilla_protocol::types::Field::UnitHealth.index();
+    const MAXHEALTH: u16 = benilla_protocol::types::Field::UnitMaxHealth.index();
+    const PETNUMBER: u16 = benilla_protocol::types::Field::UnitPetnumber.index();
 
     pub(in crate::ui_party) const ME: u64 = 0x10;
 
@@ -957,12 +953,9 @@ pub(in crate::ui_party) mod tests {
     }
 
     /// `UNIT_FIELD_BYTES_0` and `_1`, `OBJECT_FIELD_ENTRY`, a Night Elf and Cat Form.
-    const BYTES_0: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitBytes0);
-    const BYTES_2: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::UnitBytes2);
-    const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::types::FieldLayout::Wrath12340
-        .index_of(benilla_protocol::types::Field::ObjectEntry);
+    const BYTES_0: u16 = benilla_protocol::types::Field::UnitBytes0.index();
+    const BYTES_2: u16 = benilla_protocol::types::Field::UnitBytes2.index();
+    const OBJECT_FIELD_ENTRY: u16 = benilla_protocol::types::Field::ObjectEntry.index();
     const NIGHT_ELF: u32 = 4;
     const CAT_FORM: u32 = 1;
 

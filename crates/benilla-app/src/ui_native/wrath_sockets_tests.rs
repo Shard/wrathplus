@@ -92,15 +92,12 @@ fn placed_gems_move_accept_names_them_and_the_result_clears_them() {
 
 #[test]
 fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
-    use benilla_protocol::types::{Field, FieldLayout};
+    use benilla_protocol::types::Field;
     use benilla_protocol::ObjectFields;
-    let wrath = FieldLayout::Wrath12340;
     let chest = 0x4000_0000_0000_0011u64;
     // The chest (player slot 4) and an item with nothing in its sockets in slot 5.
     let plain = 0x4000_0000_0000_0012u64;
-    let store = ObjectStore(ObjectFields::from_field_slots(
-        wrath,
-        &[
+    let store = ObjectStore(ObjectFields::from_field_slots(&[
             (Field::PlayerInvSlotHead, 8, chest as u32),
             (Field::PlayerInvSlotHead, 9, (chest >> 32) as u32),
             (Field::PlayerInvSlotHead, 10, plain as u32),
@@ -111,12 +108,15 @@ fn a_worn_items_gems_are_listed_by_its_inventory_slot() {
     // Socket 1 (enchant slot 2) holds enchant 3312, socket 3 (slot 4) an enchant with no gem.
     objs.spawn(
         chest,
-        ObjectFields::from_field_slots(
-            wrath,
-            &[(Field::ItemEnchantment, 6, 3312), (Field::ItemEnchantment, 12, 99)],
-        ),
+        ObjectFields::from_field_slots(&[
+            (Field::ItemEnchantment, 6, 3312),
+            (Field::ItemEnchantment, 12, 99),
+        ]),
     );
-    objs.spawn(plain, ObjectFields::from_field_slots(wrath, &[(Field::ObjectEntry, 0, 1)]));
+    objs.spawn(
+        plain,
+        ObjectFields::from_field_slots(&[(Field::ObjectEntry, 0, 1)]),
+    );
     let gems = GemCatalog::from_rows(HashMap::from([(3312, 40112)]), HashMap::new());
     let objects = objs.get();
     assert_eq!(
