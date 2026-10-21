@@ -1,4 +1,4 @@
-//! Overhead unit names, the 1.12 world-text name system.
+//! Overhead unit names, the world-text name system.
 //!
 //! - Geometry: a camera-facing glyph mesh in the world pass, depth-tested like the reference's name
 //!   batch (`0x6c7470` calls `0x5c1d60(1,1)`), so walls occlude names. Deviation:
@@ -11,7 +11,7 @@
 //!   pitch per line (`0x5cdc20`'s rotated branch).
 //! - Show gate (`ShouldShowName`, `0x6070a0`): the own unit by `UnitNameOwn`, before the target
 //!   rescue; the current target (`[0xb4e2d8]`, the selection) regardless of CVars; a dead creature
-//!   only through that rescue; others by `UnitNamePlayer` or `UnitNameNPC`.
+//!   only through that rescue; others by their kind's `UnitName*` CVar ([`NameConfig::shows`]).
 //! - Lines (`0x608f50`): an NPC's name and `<Subname>`; a player's `<AFK>`/`<DND>`/`<GM>` prefixes,
 //!   name and `<Guild>`. The guild (a5) and subname (a6) slots share the format `"\n<%s>"`
 //!   (`0x860f9c`) and are never both reached; a5 alone is CVar-gated (`0x609085`).
@@ -39,26 +39,88 @@ const SCALE_FLOOR: f32 = 0.2; // [0x80679c]
 const SCALE_KNEE: f32 = 4.0; // [0x8112a8]
 const SCALE_RATE: f32 = 1.5; // [0x8112ac]
 
-/// The `UnitNamePlayer`/`UnitNameNPC`/`UnitNameOwn` CVars (the reference's `0xce8720` mask), with
-/// the reference's defaults `"1"`, `"0"`, `"0"` (`0x6c7470`).
-#[derive(Resource, Clone, Copy)]
-pub(crate) struct NameConfig {
-    pub(crate) player: bool,
-    pub(crate) npc: bool,
-    pub(crate) own: bool,
-    /// `UnitNamePlayerGuild`, mask bit `0x10`, registered `"1"`: gates the a5 guild line
-    /// (`0x609085`), not a whole name.
-    pub(crate) player_guild: bool,
+/// The thirteen `UnitName*` CVars as build 12340's mask `[0xd380a0]`, each folded into its bit by
+/// the change callback `0x7e60e0` (registered at `0x7e6150`), with the registered defaults.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct NameConfig(pub(crate) u32);
+
+/// The mask's bits, in the registration's order.
+pub(crate) mod name_bit {
+    pub(crate) const OWN: u32 = 0x1;
+    pub(crate) const NPC: u32 = 0x2;
+    /// `UnitNamePlayerGuild`: the guild line, not a whole name.
+    pub(crate) const GUILD: u32 = 0x4;
+    pub(crate) const PVP_TITLE: u32 = 0x8;
+    pub(crate) const ENEMY_PLAYER: u32 = 0x10;
+    pub(crate) const ENEMY_PET: u32 = 0x20;
+    pub(crate) const ENEMY_TOTEM: u32 = 0x40;
+    pub(crate) const FRIENDLY_PLAYER: u32 = 0x80;
+    pub(crate) const FRIENDLY_PET: u32 = 0x100;
+    pub(crate) const FRIENDLY_TOTEM: u32 = 0x200;
+    pub(crate) const NON_COMBAT: u32 = 0x400;
+    pub(crate) const ENEMY_GUARDIAN: u32 = 0x1000;
+    pub(crate) const FRIENDLY_GUARDIAN: u32 = 0x2000;
+
+    /// A CVar's bit, by its lowercase name.
+    pub(crate) fn of(key: &str) -> Option<u32> {
+        Some(match key {
+            "unitnameown" => OWN,
+            "unitnamenpc" => NPC,
+            "unitnameplayerguild" => GUILD,
+            "unitnameplayerpvptitle" => PVP_TITLE,
+            "unitnameenemyplayername" => ENEMY_PLAYER,
+            "unitnameenemypetname" => ENEMY_PET,
+            "unitnameenemyguardianname" => ENEMY_GUARDIAN,
+            "unitnameenemytotemname" => ENEMY_TOTEM,
+            "unitnamefriendlyplayername" => FRIENDLY_PLAYER,
+            "unitnamefriendlypetname" => FRIENDLY_PET,
+            "unitnamefriendlyguardianname" => FRIENDLY_GUARDIAN,
+            "unitnamefriendlytotemname" => FRIENDLY_TOTEM,
+            "unitnamenoncombatcreaturename" => NON_COMBAT,
+            _ => return None,
+        })
+    }
 }
 
 impl Default for NameConfig {
+    /// `"1"` (`0x9e1464`) for the guild, the PvP title and both reactions' player and pet names;
+    /// `"0"` (`0x9e14a0`) for the rest.
     fn default() -> Self {
-        Self {
-            player: true,
-            npc: false,
-            own: false,
-            player_guild: true,
-        }
+        use name_bit::*;
+        Self(GUILD | PVP_TITLE | ENEMY_PLAYER | ENEMY_PET | FRIENDLY_PLAYER | FRIENDLY_PET)
+    }
+}
+
+impl NameConfig {
+    pub(crate) fn on(self, bit: u32) -> bool {
+        self.0 & bit != 0
+    }
+
+    /// Whether a non-own, non-target unit's name shows: its kind's CVar, the kind being the plate
+    /// gate's [`crate::vplates::UnitSort`] and reaction. Unresolved, labelled: build 12340 asks
+    /// the unit's own virtual (`vtable+0xd0`, called at `0x7e567d` and `0x7e63f6` with the mask),
+    /// untraced; this pairs each CVar with the kind its name and options text describe.
+    pub(crate) fn shows(self, friendly: bool, sort: crate::vplates::UnitSort) -> bool {
+        use crate::vplates::UnitSort;
+        use name_bit::*;
+        let (player, pet, guardian, totem) = if friendly {
+            (
+                FRIENDLY_PLAYER,
+                FRIENDLY_PET,
+                FRIENDLY_GUARDIAN,
+                FRIENDLY_TOTEM,
+            )
+        } else {
+            (ENEMY_PLAYER, ENEMY_PET, ENEMY_GUARDIAN, ENEMY_TOTEM)
+        };
+        self.on(match sort {
+            UnitSort::Player => player,
+            UnitSort::Pet => pet,
+            UnitSort::Guardian => guardian,
+            UnitSort::Totem => totem,
+            UnitSort::NonCombat => NON_COMBAT,
+            UnitSort::Creature => NPC,
+        })
     }
 }
 
@@ -289,6 +351,8 @@ pub(crate) fn drive_nameplates(
         Res<crate::ui_party::GroupState>,
         // The UnitName* CVar mask.
         Res<NameConfig>,
+        // `CanAttack`'s controller lookup, for a kind's reaction.
+        crate::target::RelationInputs,
     ),
     names: Res<NameCache>,
     // The guild cache, the a5 line's text; `ResMut` because a miss sends `CMSG_GUILD_QUERY`.
@@ -310,7 +374,7 @@ pub(crate) fn drive_nameplates(
         Query<(), With<crate::entities::mount::MountChild>>,
     ),
 ) {
-    let (selection, flash, rig, vplates, bubbles, group, name_cfg) = gates;
+    let (selection, flash, rig, vplates, bubbles, group, name_cfg, relations) = gates;
     let (Ok(cam_tf), Some(atlas)) = (camera.single(), atlas.as_mut()) else {
         return;
     };
@@ -369,7 +433,7 @@ pub(crate) fn drive_nameplates(
         } else if is_self {
             // The own CVar, before the rescue; no name over a fully faded first-person avatar
             // (our reading of `ShouldShowName`'s untraced `vtable+0x58` leg).
-            name_cfg.own
+            name_cfg.on(name_bit::OWN)
                 && rig
                     .as_deref()
                     .map_or(1.0, crate::player::CameraControl::self_fade)
@@ -379,11 +443,27 @@ pub(crate) fn drive_nameplates(
         } else if net.kind == EntityKind::Unit && store.is_some_and(|s| s.0.unit_is_dead()) {
             false
         } else {
-            match net.kind {
-                EntityKind::Player => name_cfg.player,
-                EntityKind::Unit => name_cfg.npc,
-                _ => false,
-            }
+            let is_player = net.kind == EntityKind::Player;
+            let own = self_store.single().ok();
+            let friendly = crate::target::ring::plate_is_friendly(
+                factions.as_deref(),
+                &reputations,
+                store,
+                own,
+                is_player,
+                relations.context(),
+            );
+            let creature_type = store
+                .and_then(|s| s.0.object_entry())
+                .filter(|_| !is_player)
+                .and_then(|entry| names.creature_type(entry));
+            matches!(net.kind, EntityKind::Player | EntityKind::Unit)
+                && store.is_some_and(|s| {
+                    name_cfg.shows(
+                        friendly,
+                        crate::vplates::unit_sort(is_player, &s.0, creature_type),
+                    )
+                })
         };
         if !show {
             continue;
@@ -415,7 +495,7 @@ pub(crate) fn drive_nameplates(
                 .and_then(|e| names.creature_subname(e))
                 // vmangos sends "" for most templates: an empty subname is no line.
                 .filter(|s| !s.trim().is_empty()),
-            EntityKind::Player if name_cfg.player_guild => store
+            EntityKind::Player if name_cfg.on(name_bit::GUILD) => store
                 .and_then(|s| crate::ui_guild::unit_guild_name(&s.0, &mut guilds, &net_commands)),
             _ => None,
         };
@@ -601,14 +681,15 @@ pub(crate) struct NameplatesPlugin;
 #[derive(Resource)]
 struct NameAnchorTrace(bool);
 
-/// The overhead-name rows' change callback: the name trio and the guild line.
+/// The `UnitName*` rows' change callback, `0x7e60e0`: the row's bit set or cleared in the mask.
 pub(crate) fn on_cvar(ev: On<crate::cvars::CvarChanged>, mut names: ResMut<NameConfig>) {
-    match ev.key().as_str() {
-        "unitnameplayer" => names.player = ev.flag(),
-        "unitnamenpc" => names.npc = ev.flag(),
-        "unitnameown" => names.own = ev.flag(),
-        "unitnameplayerguild" => names.player_guild = ev.flag(),
-        _ => {}
+    let Some(bit) = name_bit::of(ev.key().as_str()) else {
+        return;
+    };
+    if ev.flag() {
+        names.0 |= bit;
+    } else {
+        names.0 &= !bit;
     }
 }
 
