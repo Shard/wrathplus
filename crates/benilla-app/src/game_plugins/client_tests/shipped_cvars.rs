@@ -46,7 +46,7 @@ fn a_built_client_registers_exactly_the_shipped_cvar_rows() {
         built, shipped,
         "the client registers the shipped table, no more, no less"
     );
-    assert_eq!(shipped.len(), 130, "the shipped row count moved");
+    assert_eq!(shipped.len(), 147, "the shipped row count moved");
 
     let latched: Vec<&str> = cvars
         .rows()
@@ -103,6 +103,7 @@ const HOOK_ORDER: &[&str] = &[
     "spell::cast_target::on_cvar",
     "combat_text::on_cvar",
     "nameplates::on_cvar",
+    "vplates::on_cvar",
     "chat_bubble::on_cvar",
     "ui_trade::on_cvar",
     "ui_loot::on_cvar",

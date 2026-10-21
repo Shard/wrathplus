@@ -175,15 +175,28 @@ fn registered_defaults_mirror_the_code_truths() {
         crate::ui_trade::BlockTrades::default().0
     );
     assert_eq!(d["BlockTrades"], 0.0, "an unset BlockTrades allows trades");
+    // Each `UnitName*` row's default is its bit of the mask's boot value.
     let names = NameConfig::default();
-    assert_eq!(d["UnitNamePlayer"] != 0.0, names.player);
-    assert_eq!(d["UnitNameNPC"] != 0.0, names.npc);
-    assert_eq!(d["UnitNameOwn"] != 0.0, names.own);
-    assert_eq!(d["UnitNamePlayerGuild"] != 0.0, names.player_guild);
+    for (row, value) in &d {
+        if let Some(bit) = crate::nameplates::name_bit::of(&row.to_ascii_lowercase()) {
+            assert_eq!(*value != 0.0, names.on(bit), "{row}");
+        }
+    }
+    assert_eq!(
+        names.0, 0x1bc,
+        "the binary's \"1\" rows: guild, PvP title, both reactions' player and pet names"
+    );
+    let plates = crate::vplates::VPlateMode::default();
+    assert_eq!(d["nameplateShowEnemies"] != 0.0, plates.enemies);
+    assert_eq!(d["nameplateShowFriends"] != 0.0, plates.friends);
+    assert_eq!(d["nameplateShowEnemyTotems"] != 0.0, plates.enemy_totems);
+    assert_eq!(
+        d["nameplateShowFriendlyGuardians"] != 0.0,
+        plates.friendly_guardians
+    );
     assert!(
-        names.player && !names.npc && !names.own && names.player_guild,
-        "the binary registers UnitNamePlayer \"1\", NPC \"0\", Own \"0\", \
-         PlayerGuild \"1\""
+        !plates.enemies && !plates.friends && plates.enemy_pets && plates.friendly_totems,
+        "the binary registers both categories \"0\" and every sub-gate \"1\""
     );
     let camera_opts = crate::player::camera_dynamics::CameraOptions::default();
     assert_eq!(d["cameraPivot"] != 0.0, camera_opts.pivot);
@@ -450,10 +463,21 @@ fn the_observers_apply_every_arm() {
     assert!(res::<crate::ui_guild::GuildMemberNotify>(&app).0);
     apply(&mut app, "BlockTrades", "1");
     assert!(res::<crate::ui_trade::BlockTrades>(&app).0);
+    use crate::nameplates::name_bit;
     apply(&mut app, "UnitNameNPC", "0");
-    assert!(!res::<NameConfig>(&app).npc);
+    assert!(!res::<NameConfig>(&app).on(name_bit::NPC));
     apply(&mut app, "unitnameown", "1");
-    assert!(res::<NameConfig>(&app).own);
+    assert!(res::<NameConfig>(&app).on(name_bit::OWN));
+    apply(&mut app, "UnitNameEnemyPlayerName", "0");
+    assert!(!res::<NameConfig>(&app).on(name_bit::ENEMY_PLAYER));
+    assert!(
+        res::<NameConfig>(&app).on(name_bit::FRIENDLY_PLAYER),
+        "one bit at a time"
+    );
+    apply(&mut app, "nameplateShowEnemies", "1");
+    assert!(res::<crate::vplates::VPlateMode>(&app).enemies);
+    apply(&mut app, "nameplateshowfriendlypets", "0");
+    assert!(!res::<crate::vplates::VPlateMode>(&app).friendly_pets);
     apply(&mut app, "ChatBubbles", "0");
     assert!(!res::<BubbleConfig>(&app).all);
     apply(&mut app, "chatbubblesparty", "0");
@@ -815,6 +839,7 @@ fn cvar_app() -> App {
         .init_resource::<crate::target::AssistAttack>()
         .init_resource::<LootConfig>()
         .init_resource::<NameConfig>()
+        .init_resource::<crate::vplates::VPlateMode>()
         .init_resource::<ClutterConfig>()
         .init_resource::<MinimapZoom>()
         .init_resource::<BubbleConfig>()
@@ -882,6 +907,9 @@ const ALL_OBSERVERS: &[fn(&mut App)] = &[
     },
     |app| {
         app.add_observer(crate::nameplates::on_cvar);
+    },
+    |app| {
+        app.add_observer(crate::vplates::on_cvar);
     },
     |app| {
         app.add_observer(crate::game_tip::on_cvar);
@@ -1449,4 +1477,76 @@ fn the_latched_rows_are_the_references_own() {
             "gxWindow",
         ]
     );
+}
+
+/// The stock 3.3.5 V, Shift-V and Ctrl-V bodies (`Bindings.xml`) write `nameplateShowEnemies` and
+/// `nameplateShowFriends` through `SetCVar`, and the plate gate's [`crate::vplates::VPlateMode`]
+/// follows through the CVar host. Build 12340 has no plate verbs.
+#[test]
+fn the_v_keys_move_the_plate_cvars_and_the_plates_follow() {
+    use crate::local_state::test_env::{EnvGuard, ENV_LOCK};
+    benilla_formats::wow_data_or_skip!();
+    let _l = ENV_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let tmp = std::env::temp_dir().join(format!("benilla-cvar-vkeys-{}", std::process::id()));
+    std::fs::remove_dir_all(&tmp).ok();
+    let _c = EnvGuard::unset("WOW_CAPTURE");
+    let _u = EnvGuard::unset("WOW_UI_SCALE");
+    let _f = EnvGuard::unset("WOW_FARCLIP");
+    let _d = EnvGuard::unset("WOW_CLUTTER_DENSITY");
+    let _h = EnvGuard::set("BENILLA_HOME", tmp.to_str().unwrap());
+
+    let mut app = cvar_app();
+    app.update();
+    crate::ui_script::load_stock_bindings(&mut app.world_mut().non_send_resource_mut::<UiScript>());
+    let key = |app: &mut App, command: &str| {
+        assert!(app
+            .world()
+            .non_send_resource::<UiScript>()
+            .execute_binding(command, true)
+            .unwrap());
+        app.update();
+    };
+    let mode = |app: &App| {
+        let m = res::<crate::vplates::VPlateMode>(app);
+        (m.enemies, m.friends)
+    };
+
+    assert_eq!(mode(&app), (false, false), "both register \"0\"");
+    key(&mut app, "NAMEPLATES");
+    assert_eq!(mode(&app), (true, false), "V: enemies on");
+    key(&mut app, "FRIENDNAMEPLATES");
+    assert_eq!(
+        mode(&app),
+        (false, true),
+        "Shift-V: friends on, enemies off"
+    );
+    key(&mut app, "NAMEPLATES");
+    assert_eq!(
+        mode(&app),
+        (true, false),
+        "V with friends showing: enemies on, friends off"
+    );
+    key(&mut app, "NAMEPLATES");
+    assert_eq!(mode(&app), (false, false), "V again: off");
+    key(&mut app, "ALLNAMEPLATES");
+    assert_eq!(
+        mode(&app),
+        (true, true),
+        "Ctrl-V with none showing: both on"
+    );
+    key(&mut app, "NAMEPLATES");
+    assert_eq!(
+        mode(&app),
+        (true, false),
+        "V with both on turns friends off"
+    );
+    key(&mut app, "ALLNAMEPLATES");
+    assert_eq!(
+        mode(&app),
+        (false, false),
+        "Ctrl-V with any showing: both off"
+    );
+    std::fs::remove_dir_all(&tmp).ok();
 }

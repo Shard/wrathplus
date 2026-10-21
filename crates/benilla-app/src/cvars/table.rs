@@ -213,17 +213,36 @@ pub(crate) const REGISTERED: &[Registered] = &[
         "1.12 has no auto-loot CVar at all — vanilla offers only the shift gesture, so OFF \
          IS the reference's own behaviour; the spelling is era's",
     ),
-    // The overhead-name gates, registered at `0x6c7470` into mask `0xce8720`: `UnitNamePlayer`
-    // (`0x86c694`) "1" (`0x82e748`), `UnitNameNPC` (`0x86c6a4`) and `UnitNameOwn` (`0x86c6b0`) "0"
-    // (`0x82e570`).
-    same("UnitNamePlayer", "1"),
-    same("UnitNameNPC", "0"),
+    // The overhead-name gates, registered at `0x7e6150` with callback `0x7e60e0`, which folds
+    // each into its bit of the mask `[0xd380a0]`; defaults are `0x9e1464` "1" and `0x9e14a0`
+    // "0". Bits: Own 0x1, NPC 0x2, PlayerGuild 0x4, PlayerPVPTitle 0x8, EnemyPlayerName 0x10,
+    // EnemyPetName 0x20, EnemyGuardianName 0x1000, EnemyTotemName 0x40, FriendlyPlayerName 0x80,
+    // FriendlyPetName 0x100, FriendlyGuardianName 0x2000, FriendlyTotemName 0x200,
+    // NonCombatCreatureName 0x400. 12340 has no `UnitNamePlayer`.
     same("UnitNameOwn", "0"),
-    // `UnitNamePlayerGuild` (`0x86c680`, "1", mask bit `0x10`) is not a show gate: `ShouldShowName`
-    // (`0x6070a0`) reads bits `0x1/0x2/0x4`, and this gates the `"\n<%s>"` guild line at
-    // `0x609085`. `UnitNamePlayerPVPTitle` (bit `0x20`, "1") has no row: nothing here draws the
-    // rank prefix.
+    same("UnitNameNPC", "0"),
     same("UnitNamePlayerGuild", "1"),
+    same("UnitNamePlayerPVPTitle", "1"),
+    same("UnitNameEnemyPlayerName", "1"),
+    same("UnitNameEnemyPetName", "1"),
+    same("UnitNameEnemyGuardianName", "0"),
+    same("UnitNameEnemyTotemName", "0"),
+    same("UnitNameFriendlyPlayerName", "1"),
+    same("UnitNameFriendlyPetName", "1"),
+    same("UnitNameFriendlyGuardianName", "0"),
+    same("UnitNameFriendlyTotemName", "0"),
+    same("UnitNameNonCombatCreatureName", "0"),
+    // The V-key plate gates, registered in `0x51d9b0` (`0x51ebb4`-`0x51ecae`) into
+    // `[0xbd09b8]`..`[0xbd09d4]` and read by the plate gate `0x72b060`: the two categories "0",
+    // their pet, guardian and totem sub-gates "1". The stock V keys write the first two.
+    same("nameplateShowEnemies", "0"),
+    same("nameplateShowEnemyPets", "1"),
+    same("nameplateShowEnemyGuardians", "1"),
+    same("nameplateShowEnemyTotems", "1"),
+    same("nameplateShowFriends", "0"),
+    same("nameplateShowFriendlyPets", "1"),
+    same("nameplateShowFriendlyGuardians", "1"),
+    same("nameplateShowFriendlyTotems", "1"),
     // `WorldDetail` is no 1.12 CVar but the `GetWorldDetail`/`SetWorldDetail` verb name
     // (`OptionsFrame.lua:27`); stops 0/1/2 are `frillDensity` 16/32/48. `SetWorldDetail 0x488dd0`
     // also writes `SmallCull` {0.07, 0.04, 0.01}, and `GetWorldDetail` reads only `SmallCull`,

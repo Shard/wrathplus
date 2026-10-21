@@ -136,7 +136,7 @@ mod merchant;
 mod messageframe;
 mod minimap;
 pub mod nameplate;
-pub use nameplate::{PlateBitWrites, PlateGeometry, PlateState, PLATE_BIT_ENEMY, PLATE_BIT_FRIEND};
+pub use nameplate::{PlateGeometry, PlateState};
 mod model;
 mod modelframe;
 mod net_stats;
@@ -792,7 +792,6 @@ impl UiScript {
         death::install(&lua)?;
         aura::install(&lua)?;
         cvars::install(&lua)?;
-        nameplate::install_verbs(&lua)?;
         saved::install(&lua)?;
         keybind::install(&lua)?;
         sound::install(&lua)?;
