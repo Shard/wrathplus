@@ -582,12 +582,12 @@ impl SocialState {
     }
 
     /// `SetFriendNotes(index | name, notes)`' friend: the 1-based row as last shown, else the
-    /// friend whose known name matches, case-insensitively.
-    pub(crate) fn friend_guid(
+    /// friend whose known name (`name_of`, the name cache's peek) matches, case-insensitively.
+    pub(crate) fn friend_guid<'n>(
         &self,
         index: Option<u32>,
         name: Option<&str>,
-        names: &crate::names::NameCache,
+        name_of: impl Fn(u64) -> Option<&'n str>,
     ) -> Option<u64> {
         if let Some(i) = index {
             return (i as usize)
@@ -598,7 +598,7 @@ impl SocialState {
         self.friends
             .iter()
             .map(|f| f.guid)
-            .find(|&g| names.peek(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+            .find(|&g| name_of(g).is_some_and(|n| n.eq_ignore_ascii_case(name)))
     }
 
     /// Is `guid` on the friend list? The reference's `FindFriendSlot` (`0x5ae810`), which keeps the
