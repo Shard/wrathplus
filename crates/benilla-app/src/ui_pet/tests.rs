@@ -870,17 +870,18 @@ fn a_held_pet_reads_connected_and_its_stock_power_bar_shows_its_power() {
     use bevy::prelude::*;
     benilla_formats::wow_data_or_skip!();
     const PET: u64 = 0xF140_0000_0000_002A;
-    // `UNIT_FIELD_` HEALTH, MAXHEALTH, LEVEL, BYTES_0 (power type in byte 3), and focus, the power
-    // type a hunter's pet runs on, at POWER1 + 2 and MAXPOWER1 + 2.
-    const FOCUS: u32 = 2;
-    let fields = [
-        (22, 72),
-        (28, 100),
-        (34, 60),
-        (36, FOCUS << 24),
-        (25, 45),
-        (31, 80),
-    ];
+    use benilla_protocol::types::{Field as F, ObjectType};
+    let store = ObjectStore(
+        benilla_protocol::ObjectFields::from_field_slots(&[
+            (F::UnitHealth, 0, 72),
+            (F::UnitMaxHealth, 0, 100),
+            (F::UnitLevel, 0, 60),
+            (F::UnitBytes0, 0, 2 << 24),
+            (F::UnitPower, 2, 45),
+            (F::UnitMaxPower, 2, 80),
+        ])
+        .into_created(ObjectType::Unit),
+    );
 
     let mut script = benilla_ui::script::UiScript::new().unwrap();
     script.set_screen_size(1024.0, 768.0);
@@ -904,13 +905,7 @@ fn a_held_pet_reads_connected_and_its_stock_power_bar_shows_its_power() {
     // Kept alive for the run: a dropped receiver would fail the name query.
     std::mem::forget(rx);
     app.insert_resource(NetCommands(tx));
-    let pet = app
-        .world_mut()
-        .spawn((
-            crate::net::Guid(PET),
-            ObjectStore(benilla_protocol::ObjectFields::from_pairs(&fields)),
-        ))
-        .id();
+    let pet = app.world_mut().spawn((crate::net::Guid(PET), store)).id();
     app.world_mut()
         .resource_mut::<crate::net::GuidIndex>()
         .0

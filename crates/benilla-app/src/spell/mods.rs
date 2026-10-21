@@ -507,43 +507,43 @@ mod tests {
         assert!(mods.flat.iter().chain(mods.pct.iter()).all(|&v| v == 0));
     }
 
-    /// Real `Spell.dbc` family masks; Cleanse 4987 sets bits 12 and 33, across both dwords.
+    /// Real `Spell.dbc` family masks, read off the 12340 rows: each set bit of the spell's own
+    /// family takes its cell, and another family's spell is refused at the family gate.
     #[test]
     fn real_spells_sum_their_own_family_bits() {
         let data = benilla_formats::wow_data_or_skip!();
         let mut chain = benilla_formats::open_chain(&data).expect("open chain");
         let cat = benilla_formats::load_spell_catalog(&mut chain).expect("load Spell.dbc");
+        let bits = |d: &benilla_formats::SpellDisplay| -> Vec<u8> {
+            (0..96u8)
+                .filter(|&b| d.has_family_bit(u32::from(b)))
+                .collect()
+        };
 
-        // A paladin: Cleanse 4987 is family 10, bits 12 and 33.
+        let frostbolt = cat.get(116).expect("Frostbolt");
+        let set = bits(frostbolt);
+        assert!(!set.is_empty(), "Frostbolt carries family bits");
         let mut mods = SpellModifiers::default();
-        mods.set_class_family(10);
-        mods.set(true, 12, OP_COST, -5);
-        mods.set(true, 33, OP_COST, -7);
-        mods.set(false, 33, OP_COST, -25);
-        let cleanse = cat.get(4987).expect("Cleanse");
-        assert_eq!(
-            mods.apply(cleanse, OP_COST, 100),
-            (100 - 12) * 75 / 100,
-            "both dwords contribute"
-        );
-        // Cure Poison 526 is a shaman spell (family 11) setting only bit 35: the family gate
-        // refuses it.
-        mods.set(true, 35, OP_COST, -50);
-        assert_eq!(
-            mods.apply(cat.get(526).expect("Cure Poison"), OP_COST, 100),
-            100
-        );
-
-        // A mage: Frostbolt 116, bits 5, 19, 20 and 30.
-        let mut mods = SpellModifiers::default();
-        mods.set_class_family(3);
-        for bit in [5u8, 19, 20, 30] {
+        mods.set_class_family(frostbolt.spell_family);
+        for &bit in &set {
             mods.set(true, bit, OP_COST, -1);
         }
         assert_eq!(
-            mods.apply(cat.get(116).expect("Frostbolt"), OP_COST, 100),
-            96,
-            "four set bits, four cells"
+            mods.apply(frostbolt, OP_COST, 100),
+            100 - set.len() as i32,
+            "every set bit takes its cell: {set:?}"
+        );
+
+        // A paladin's Cleanse 4987 under the mage's family: the gate refuses it whatever its bits.
+        let cleanse = cat.get(4987).expect("Cleanse");
+        assert_ne!(cleanse.spell_family, frostbolt.spell_family);
+        for bit in bits(cleanse) {
+            mods.set(true, bit, OP_COST, -50);
+        }
+        assert_eq!(
+            mods.apply(cleanse, OP_COST, 100),
+            100,
+            "another family's spell"
         );
     }
 

@@ -519,8 +519,8 @@ mod tests {
         assert_eq!(duel.countdown.as_ref().map(|c| c.remaining), Some(3));
     }
 
-    /// 7266 "Duel", which vmangos grants every race and class (`playercreateinfo_spell`), is the
-    /// only `SPELL_EFFECT_DUEL` spell in the shipped `Spell.dbc`, so `[0xb71130]` is unambiguous.
+    /// 7266 "Duel" is the duel spell a player learns; 12340's two other `SPELL_EFFECT_DUEL` rows
+    /// are learned by no one, so `[0xb71130]`, a learned-spell lookup, stays unambiguous.
     #[test]
     fn the_duel_spell_resolves_to_7266_on_real_data() {
         let data = benilla_formats::wow_data_or_skip!();
@@ -532,7 +532,7 @@ mod tests {
             .map(|(id, _)| id)
             .collect();
         hits.sort_unstable();
-        assert_eq!(hits, vec![7266], "exactly one SPELL_EFFECT_DUEL spell");
+        assert_eq!(hits, vec![7266, 47739, 62875], "the SPELL_EFFECT_DUEL rows");
         assert_eq!(catalog.get(7266).unwrap().name, "Duel");
     }
 
