@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
 """Rewrite `crate::` paths that go through a re-export to the item's canonical path.
 
 The crate split (docs/APP-CRATE-SPLIT-PLAN.md) moves items down a layer and leaves a
@@ -10,11 +14,13 @@ follows chains to the defining path, and rewrites references that go through the
 - `crate::old::X` in a path or type becomes `crate::home::X`;
 - `use crate::old::{A, B};` becomes one `use` per item that moved, beside the rest.
 
-  scripts/split/canonical-paths.py                  # dry run: the rewrites, per file
-  scripts/split/canonical-paths.py --apply          # write them
-  scripts/split/canonical-paths.py --via net        # only re-exports declared in `net` (and below)
-  scripts/split/canonical-paths.py --home app_core  # only those whose home is under `app_core`
-  scripts/split/canonical-paths.py --drop-reexports # with --via: delete the re-export lines too
+  uv run scripts/split/canonical-paths.py                  # dry run: the rewrites, per file
+  uv run scripts/split/canonical-paths.py --apply          # write them
+  uv run scripts/split/canonical-paths.py --via net        # only re-exports declared in `net` (and below)
+  uv run scripts/split/canonical-paths.py --home app_core  # only those whose home is under `app_core`
+  uv run scripts/split/canonical-paths.py --drop-reexports # with --via: delete the re-export lines too
+
+Python on this machine runs only through `uv run` (stdlib only; no environment to install).
 
 It never touches comments, string literals or the re-export lines themselves (unless
 --drop-reexports), and never commits. Run `cargo check` afterwards; an item the re-export renamed

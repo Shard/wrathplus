@@ -2,7 +2,7 @@
 //! (`ChatEvent`, `ChatEventKind`), the client-composed lines, pending broadcasts and
 //! the drain's log. `ui_chat` keeps the systems and re-exports these from their old paths.
 
-use benilla_protocol::types::{ChatMessage, LevelUpInfo};
+use benilla_protocol::types::{ChatMessage, LevelUpInfo, XpGain};
 use bevy::prelude::*;
 
 /// One value slot of a client-composed line's format string, in the order the shipped template
@@ -109,6 +109,67 @@ pub(crate) enum ChatEventKind {
     PetInfo,
 }
 
+impl ChatEventKind {
+    /// The combat log's own kinds. The reference tests the `COMBAT_`/`SPELL_` prefix
+    /// (`ChatFrame.lua:1397-1399`); `COMBAT_XP_GAIN` and `COMBAT_HONOR_GAIN`, composed apart from
+    /// the combat log, are outside this set.
+    pub(crate) fn is_combat_log(self) -> bool {
+        use ChatEventKind as K;
+        matches!(self, K::CombatMiscInfo | K::CombatFactionChange)
+    }
+
+    /// Every kind, for the exhaustive sweeps; `ui_chat::tests::every_kind_is_in_all` fails when one
+    /// is missing.
+    #[cfg(test)]
+    pub(crate) const ALL: &'static [ChatEventKind] = {
+        use ChatEventKind as K;
+        &[
+            K::Say,
+            K::Party,
+            K::Raid,
+            K::Guild,
+            K::Officer,
+            K::Yell,
+            K::Whisper,
+            K::WhisperInform,
+            K::Emote,
+            K::TextEmote,
+            K::System,
+            K::MonsterSay,
+            K::MonsterYell,
+            K::MonsterEmote,
+            K::MonsterWhisper,
+            K::Channel,
+            K::ChannelJoin,
+            K::ChannelLeave,
+            K::ChannelNotice,
+            K::ChannelNoticeUser,
+            K::ChannelList,
+            K::Afk,
+            K::Dnd,
+            K::Ignored,
+            K::Skill,
+            K::Loot,
+            K::Money,
+            K::CombatXpGain,
+            K::CombatHonorGain,
+            K::RaidLeader,
+            K::RaidWarning,
+            K::RaidBossEmote,
+            K::Filtered,
+            K::Battleground,
+            K::BattlegroundLeader,
+            K::BgSystemNeutral,
+            K::BgSystemAlliance,
+            K::BgSystemHorde,
+            K::CombatMiscInfo,
+            K::CombatFactionChange,
+            K::Tradeskills,
+            K::PetInfo,
+        ]
+    };
+}
+
 /// One `CHAT_MSG_*` fire, typed. The fire helper `0x49b0b0` signals it (`0x703f50`) with the
 /// format `"%s%s%s%s%s%s%d%d%s%d"` (`.rdata 0x844608`): arg7, arg8 and arg10 are numbers, the
 /// rest strings, never nil, as `ChatFrame_OnEvent` compares `arg7 > 0` bare.
@@ -147,6 +208,22 @@ pub(crate) struct ChatEvent {
     /// `ui_chat::feed::deliver` changes it: the reference's notice arms read `slot+0x9c` for the
     /// token (`0x49c0c2`) before they write it (`0x49bb20`).
     pub slot_state: Option<SlotState>,
+}
+
+impl ChatEvent {
+    /// A bare kind+text event (SYSTEM lines, loot receive lines, TEXT_EMOTE sentences).
+    pub(crate) fn text_only(kind: ChatEventKind, text: String) -> Self {
+        ChatEvent {
+            kind: Some(kind),
+            text,
+            ..Default::default()
+        }
+    }
+
+    /// The `SMSG_CHANNEL_NOTIFY` byte behind a channel notice, which `notice` holds in decimal.
+    pub(crate) fn notice_byte(&self) -> Option<u8> {
+        self.notice.parse().ok()
+    }
 }
 
 /// One parked world broadcast, as the wire sent it, awaiting the catalogs and the channel walk.
@@ -238,6 +315,168 @@ pub(crate) struct ChatLog {
     /// A level-up's gains for `ui_unit`'s `PLAYER_LEVEL_UP` fire, matched by level: the fire
     /// follows a descriptor change and the gains a packet.
     pub(crate) level_up_gains: Vec<(LevelUpInfo, u32)>,
+}
+
+impl ChatLog {
+    /// Queue a decoded wire line (`SMSG_MESSAGECHAT`).
+    pub(crate) fn push_wire(&mut self, msg: ChatMessage) {
+        self.pending.push(Pending::Wire { msg, tries: 0 });
+    }
+
+    /// Queue a client-composed event: loot, quest and system lines, the `/played` answer.
+    pub(crate) fn push_event(&mut self, event: ChatEvent) {
+        self.pending.push(Pending::Event(event));
+    }
+
+    /// Queue an inbound addon line for its sender's name. The text splits on its first tab, and
+    /// with none it is all prefix (`0x49a8d0`); `distribution` names PARTY, RAID, GUILD and
+    /// BATTLEGROUND, any other type `"UNKNOWN"` (`0x49aff4`).
+    pub(crate) fn push_addon(&mut self, text: &str, chat_type: u8, guid: u64) {
+        let (prefix, message) = match text.find('\t') {
+            Some(i) => (text[..i].to_string(), text[i + 1..].to_string()),
+            None => (text.to_string(), String::new()),
+        };
+        // The protocol's `CHAT_TYPE_*` constants.
+        let distribution = {
+            use benilla_protocol::types as m;
+            match u32::from(chat_type) {
+                m::CHAT_TYPE_PARTY => "PARTY",
+                m::CHAT_TYPE_RAID => "RAID",
+                m::CHAT_TYPE_GUILD => "GUILD",
+                m::CHAT_TYPE_BATTLEGROUND => "BATTLEGROUND",
+                _ => "UNKNOWN",
+            }
+        }
+        .to_string();
+        self.pending.push(Pending::Addon {
+            prefix,
+            message,
+            distribution,
+            guid,
+            tries: 0,
+        });
+    }
+
+    /// Queue a `/random` broadcast (`MSG_RANDOM_ROLL`) for the roller-name resolve.
+    pub(crate) fn push_roll(&mut self, min: u32, max: u32, roll: u32, guid: u64) {
+        self.pending.push(Pending::Roll {
+            min,
+            max,
+            roll,
+            guid,
+            tries: 0,
+        });
+    }
+
+    /// Queue an XP award's line (`SMSG_LOG_XPGAIN`); a kill waits on the victim's name.
+    pub(crate) fn push_xp_gain(&mut self, x: &XpGain) {
+        // Both forks park: the template resolves at the drain; `victim: 0` is the unnamed form.
+        let named = x.kill && x.victim != 0;
+        self.pending.push(Pending::XpGain {
+            victim: if named { x.victim } else { 0 },
+            total: x.total,
+            bonus: if named {
+                x.total.saturating_sub(x.base)
+            } else {
+                0
+            },
+            tries: 0,
+        });
+    }
+
+    /// Queue an honor award's line (`SMSG_PVP_CREDIT`); victim 0 is a bonus or objective award.
+    pub(crate) fn push_pvp_credit(&mut self, honor: i32, victim: u64, rank: u8) {
+        // Both forks park: the template resolves at the drain.
+        self.pending.push(Pending::HonorGain {
+            victim,
+            honor,
+            rank,
+            tries: 0,
+        });
+    }
+
+    /// Queue a text emote (`SMSG_TEXT_EMOTE`) for its performer's name, then its sentence.
+    pub(crate) fn push_text_emote(&mut self, performer: u64, text_id: u32, target: String) {
+        self.pending.push(Pending::TextEmote {
+            performer,
+            text_id,
+            target,
+            tries: 0,
+        });
+    }
+
+    /// Queue an area discovery: the `ERR_ZONE_EXPLORED` toast on every packet, never chat, and the
+    /// `ERR_ZONE_EXPLORED_XP` system line when `xp > 0`.
+    pub(crate) fn push_exploration(&mut self, area_name: &str, xp: u32) {
+        self.pending.push(Pending::Discovery {
+            area: area_name.to_string(),
+            xp,
+        });
+    }
+
+    /// Drop every pending item on disconnect.
+    pub(crate) fn clear_session(&mut self) {
+        self.pending.clear();
+    }
+
+    /// The parked addon lines as `(prefix, message, distribution)`.
+    #[cfg(test)]
+    pub(crate) fn pending_addons(&self) -> Vec<(String, String, String)> {
+        self.pending
+            .iter()
+            .filter_map(|p| match p {
+                Pending::Addon {
+                    prefix,
+                    message,
+                    distribution,
+                    ..
+                } => Some((prefix.clone(), message.clone(), distribution.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// How many parked items will render in a chat window; addon lines never do.
+    #[cfg(test)]
+    pub(crate) fn pending_len(&self) -> usize {
+        self.pending
+            .iter()
+            .filter(|p| !matches!(p, Pending::Addon { .. }))
+            .count()
+    }
+
+    /// The text of every composed line waiting to render, in order.
+    #[cfg(test)]
+    pub(crate) fn pending_lines(&self) -> Vec<String> {
+        self.pending
+            .iter()
+            .filter_map(|p| match p {
+                Pending::Event(e) => Some(e.text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+impl ChatLog {
+    /// How many broadcasts are waiting, the drain's early-out.
+    pub(crate) fn broadcasts_pending(&self) -> usize {
+        self.broadcasts.len()
+    }
+
+    /// Park a level-up's gains for the `PLAYER_LEVEL_UP` fire.
+    pub(crate) fn push_level_up_gains(&mut self, info: &LevelUpInfo, talent_points: u32) {
+        self.level_up_gains.push((*info, talent_points));
+    }
+
+    /// Take the parked gains for `level`; with none (a GM's level write), the caller fires zeros.
+    pub(crate) fn take_level_up_gains(&mut self, level: u32) -> Option<(LevelUpInfo, u32)> {
+        let i = self
+            .level_up_gains
+            .iter()
+            .position(|(l, _)| l.level == level)?;
+        Some(self.level_up_gains.remove(i))
+    }
 }
 
 /// The reference's per-slot state (`+0x9c`), in the values whose notice token differs: the stock

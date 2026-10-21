@@ -3,6 +3,7 @@
 //! [`compose`] transcribes that composition for the log, every format resolved by key from the
 //! player's `GlobalStrings.lua` as `ChatFrame_OnEvent` resolves it.
 
+use crate::ui_chat::event::ChatEventScript;
 use bevy::prelude::*;
 
 use benilla_ui::strings::{fill, Arg};

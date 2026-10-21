@@ -1,5 +1,8 @@
 //! What the crate's structural tests share: source readers over its own code, and a check of
 //! the order its `Update` schedule builds.
+// Under `test-support` outside a test build nothing calls these yet; after the crate split they are
+// `pub` for the other crates' tests.
+#![cfg_attr(not(test), allow(dead_code))]
 
 /// Every `.rs` file under `root`, recursively.
 pub(crate) fn rust_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {

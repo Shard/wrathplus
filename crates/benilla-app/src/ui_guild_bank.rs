@@ -29,18 +29,6 @@ const TAB_VIEW: u32 = 1;
 const TAB_DEPOSIT: u32 = 2;
 
 pub(crate) use crate::app_core::interaction::GuildBankOpen;
-impl GuildBankOpen {
-    /// The object click on a guild vault (`GAMEOBJECT_TYPE_GUILD_BANK`).
-    pub(crate) fn open(&mut self, banker: u64) {
-        self.banker = Some(banker);
-        self.pending = true;
-    }
-
-    /// The vault in use, for the bank writers that name it.
-    pub(crate) fn banker(&self) -> Option<u64> {
-        self.banker
-    }
-}
 
 #[derive(Resource, Default)]
 pub(crate) struct GuildBank {

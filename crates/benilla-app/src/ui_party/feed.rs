@@ -20,6 +20,7 @@ use crate::ui_script::gate;
 
 use super::pets::{self, Roster};
 use super::GroupState;
+pub(crate) use crate::app_core::group::GROUP_MEMBER_SUBGROUP;
 
 // ─── The VM feed and drain ───────────────────────────────────────────────────────────────────────
 
@@ -154,10 +155,6 @@ pub(crate) const RAID_PET_TOKENS: [&str; 40] = [
 ];
 
 pub(crate) use crate::app_core::state::GROUPTYPE_RAID;
-
-/// The subgroup bits (0-2) of a member's flags byte; `0x80` is the assistant bit.
-pub(crate) const GROUP_MEMBER_SUBGROUP: u8 = 0x07;
-
 /// Push the roster and the party unit snapshots into the VM and fire the party events on their
 /// edges. A member's unit state is their live descriptor when streamed, else their roster record.
 pub(super) fn feed_party(

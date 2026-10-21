@@ -57,13 +57,12 @@ pub(crate) fn capture_ui_opted_in() -> bool {
     DEV_SEAM.get().is_some_and(|s| (s.capture_ui_opted_in)())
 }
 
-/// Do the credentials come from the environment (`$WOW_USER` and `$WOW_PASS`, both)? That means
-/// "log in without typing" and nothing about who is present; [`unattended`] answers that. One
-/// credential alone is a typed login, and `$WOW_CHAR` alone is only the roster's fast path.
+/// Do the credentials come from the launch plan (an account and a password, by flag or by
+/// `$WOW_USER` and `$WOW_PASS`)? That means "log in without typing" and nothing about who is
+/// present; [`unattended`] answers that. One credential alone is a typed login, and a character
+/// alone is only the roster's fast path.
 pub(crate) fn env_login() -> bool {
-    ["WOW_USER", "WOW_PASS"]
-        .iter()
-        .all(|k| std::env::var_os(k).is_some())
+    crate::launch_plan::plan().logs_in()
 }
 
 /// Is nobody at the keyboard? `false` unless the run declares itself with `$WOW_UNATTENDED`, or is

@@ -1,7 +1,7 @@
 //! Whole-client tests of `crate::ui_native::wrath_death_capture`, from `ui_native/wrath_death_capture_tests.rs`.
 //! They build the client with `headless_client`, so they live in the root layer.
 
-use crate::net::wrath_death_capture::tests::{captured, dispatch};
+use crate::net::test_support::death::{captured, dispatch};
 use benilla_protocol::wrath_death::Packet;
 use benilla_protocol::wrath_events::WrathEventAdapter;
 use benilla_protocol::SessionEvent;

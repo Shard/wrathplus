@@ -1,4 +1,5 @@
-//! Whole-client tests of `crate::ui_party::saved_instances`, from `ui_party/saved_instances.rs` (`tests`).
+//! Whole-client tests of `ui_party`'s saved-instance receipts
+//! (`app_core::group::NativeSavedInstances`).
 //! They build the client with `headless_client`, so they live in the root layer.
 
 use crate::net::handlers::dispatch;

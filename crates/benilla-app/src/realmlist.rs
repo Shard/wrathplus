@@ -1,13 +1,17 @@
 //! The realmlist: the `host[:port]` benilla dials for the logon handshake.
 //!
-//! The reference registers the CVar `realmList` (help "Address of realm list server", at
-//! `0x5ab6a6`) and loads it from `realmlist.wtf` beside the executable, with no UI. benilla keeps
-//! the name, the shape and the help string. Deviation: the value lives in `config.toml` with every
-//! other CVar and is edited from a login-screen control, because local state is one folder and one
-//! config file.
+//! Build 12340 loads `Config.wtf` first (`0x406c70` → `0x4067f0`), then registers `realmList`
+//! (help "Address of realm list server", `0x6b0bf0`) and runs `data\<locale>\realmlist.wtf`, else
+//! `realmlist.wtf` beside the executable, as a console script: that file's `set realmlist` wins
+//! over `Config.wtf`'s saved `SET realmList` at every launch. There is no UI for it.
 //!
-//! `$WOW_HOST` wins for the session, is never written to the file, and is taken verbatim, not
-//! through [`normalize`].
+//! benilla keeps that order ([`realmlist_wtf`], [`apply_realmlist_wtf`]): `config.toml` holds the
+//! saved CVar as `Config.wtf` does, and the first `realmlist.wtf` found overrides it. Deviation:
+//! the login screen edits it, and an edit writes `$BENILLA_HOME/realmlist.wtf`, searched first, so
+//! benilla never writes into the game install ([`write_realmlist_wtf`]).
+//!
+//! `--server` (or `$WOW_HOST`) wins for the session, is never written to the file, and is taken
+//! verbatim, not through [`normalize`].
 
 use bevy::prelude::*;
 
@@ -45,7 +49,7 @@ pub(crate) const CVARS: &[crate::cvars::Registered] = {
 /// `$WOW_HOST` is the session's realmlist, which a test run must never write into the file.
 pub(crate) const SESSION_LEVER: crate::cvars::SessionLever = crate::cvars::SessionLever {
     name: "WOW_HOST",
-    taken: || crate::cvars::env_set("WOW_HOST"),
+    taken: || crate::launch_plan::plan().server.is_some(),
     read: |world| {
         let v = world.get_resource::<Realmlist>();
         vec![(CVAR_REALMLIST, v.map(|r| r.address().to_string()))]
@@ -58,7 +62,78 @@ impl Plugin for RealmlistPlugin {
         crate::cvars::RegisterCvars::register_session_lever(app, SESSION_LEVER);
         app.add_observer(on_cvar);
         app.init_resource::<Realmlist>();
+        app.add_systems(Startup, apply_realmlist_wtf.after(crate::cvars::CvarLoad));
     }
+}
+
+/// The override file's name.
+const REALMLIST_WTF: &str = "realmlist.wtf";
+
+/// Where a `realmlist.wtf` is looked for, first found wins: benilla's own (the login edit's), then
+/// the install's `Data\<locale>\realmlist.wtf` and the one beside its executable, 12340's order.
+fn realmlist_wtf_candidates() -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    if let Some(home) = crate::local_state::home() {
+        out.push(home.join(REALMLIST_WTF));
+    }
+    if let Some(data) = benilla_formats::wow_data() {
+        let locale = match benilla_formats::DataProfile::from_env() {
+            Ok(benilla_formats::DataProfile::Wrath { locale }) => locale,
+            Err(_) => "enUS".to_string(),
+        };
+        out.push(data.join(&locale).join(REALMLIST_WTF));
+        if let Some(root) = data.parent() {
+            out.push(root.join(REALMLIST_WTF));
+        }
+    }
+    out
+}
+
+/// The address a `realmlist.wtf` sets: its last `set realmlist <value>` line, as the console runs
+/// the file top to bottom. Other lines (`set patchlist …`) are skipped.
+fn parse_realmlist_wtf(text: &str) -> Option<String> {
+    text.lines()
+        .rev()
+        .filter(|line| {
+            strip_prefix_ci(line.trim(), "set")
+                .filter(|rest| rest.starts_with(|c: char| c.is_whitespace()))
+                .and_then(|rest| strip_prefix_ci(rest.trim_start(), "realmlist"))
+                .is_some_and(|rest| rest.starts_with(|c: char| c.is_whitespace() || c == '='))
+        })
+        .find_map(normalize)
+}
+
+/// The first `realmlist.wtf` that sets an address ([`realmlist_wtf_candidates`]).
+pub(crate) fn realmlist_wtf() -> Option<String> {
+    realmlist_wtf_candidates().into_iter().find_map(|path| {
+        let address = parse_realmlist_wtf(&std::fs::read_to_string(&path).ok()?)?;
+        info!("realmlist: {} sets {address}", path.display());
+        Some(address)
+    })
+}
+
+/// At startup, after `config.toml` is folded in: the override file wins, as 12340's does over
+/// `Config.wtf`. A `--server`/`$WOW_HOST` pin outranks both for the session.
+fn apply_realmlist_wtf(mut realmlist: ResMut<Realmlist>) {
+    if realmlist.pinned_by_env() {
+        return;
+    }
+    if let Some(address) = realmlist_wtf() {
+        realmlist.set(&address);
+    }
+}
+
+/// The login edit's persistence: `$BENILLA_HOME/realmlist.wtf`, in the file's own syntax, so the
+/// next launch finds it before the install's.
+pub(crate) fn write_realmlist_wtf(address: &str) -> std::io::Result<()> {
+    let Some(home) = crate::local_state::home() else {
+        return Ok(()); // a unit test with no state folder
+    };
+    std::fs::create_dir_all(&home)?;
+    std::fs::write(
+        home.join(REALMLIST_WTF),
+        format!("set realmlist {address}\n"),
+    )
 }
 
 /// The CVar name, the reference's spelling.
@@ -66,7 +141,7 @@ pub(crate) const CVAR_REALMLIST: &str = "realmList";
 
 /// Deviation: the local machine's server, not the reference's
 /// `us.logon.worldofwarcraft.com:3724`, because that host no longer resolves.
-pub(crate) const DEFAULT_REALMLIST: &str = "localhost";
+pub(crate) const DEFAULT_REALMLIST: &str = "127.0.0.1";
 
 /// The dialog box's `letters` cap. Deviation: 64, where the reference's login boxes cap at 16
 /// (`AccountLogin.xml`), because a hostname needs more.
@@ -84,9 +159,10 @@ pub(crate) struct Realmlist {
 
 impl Default for Realmlist {
     fn default() -> Self {
-        match std::env::var("WOW_HOST") {
+        // `--server` or `$WOW_HOST`.
+        match crate::launch_plan::plan().server {
             // Verbatim, not normalized.
-            Ok(host) if !host.trim().is_empty() => Realmlist {
+            Some(host) => Realmlist {
                 address: host,
                 pinned_by_env: true,
             },
@@ -174,6 +250,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_realmlist_wtf_sets_its_last_realmlist_line() {
+        let file = "set realmlist 10.0.0.1\r\nset patchlist localhost\r\nSET realmList \"127.0.0.1:3725\"\r\n";
+        assert_eq!(parse_realmlist_wtf(file).as_deref(), Some("127.0.0.1:3725"));
+        assert_eq!(parse_realmlist_wtf("set patchlist x\n"), None);
+        assert_eq!(
+            parse_realmlist_wtf("set realmlistbn x\n"),
+            None,
+            "not realmListbn"
+        );
+        assert_eq!(parse_realmlist_wtf(""), None);
+    }
+
+    #[test]
+    fn the_login_edit_is_found_first_on_the_next_launch() {
+        let dir = std::env::temp_dir().join(format!("azb-realmlist-{}", std::process::id()));
+        let _home =
+            crate::local_state::test_env::EnvGuard::set("BENILLA_HOME", dir.to_str().unwrap());
+        write_realmlist_wtf("logon.example.org:3724").unwrap();
+        assert_eq!(
+            realmlist_wtf_candidates().first(),
+            Some(&dir.join(REALMLIST_WTF))
+        );
+        assert_eq!(realmlist_wtf().as_deref(), Some("logon.example.org:3724"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_bare_host_passes_through() {
         assert_eq!(normalize("localhost").as_deref(), Some("localhost"));
         assert_eq!(
@@ -250,7 +353,7 @@ mod tests {
     fn the_default_is_a_host_the_protocol_can_split() {
         let (host, port) =
             benilla_protocol::host_port(DEFAULT_REALMLIST, benilla_protocol::AUTH_PORT);
-        assert_eq!(host, "localhost");
+        assert_eq!(host, "127.0.0.1");
         assert_eq!(port, benilla_protocol::AUTH_PORT);
     }
 

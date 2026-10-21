@@ -1,12 +1,6 @@
 use super::*;
+use crate::net::test_support::instance_control::dispatch;
 use benilla_protocol::wrath_events::{WrathDispatch, WrathEventAdapter};
-
-pub(crate) fn dispatch(app: &mut App, adapter: &mut WrathEventAdapter, body: &[u8]) {
-    if let WrathDispatch::Handled { session_events, .. } = adapter.dispatch(0x329, body, 0).unwrap()
-    {
-        crate::net::handlers::dispatch(app.world_mut(), session_events);
-    }
-}
 
 #[test]
 fn ordered_replies_keep_zero_duplicates_and_reject_malformed() {
