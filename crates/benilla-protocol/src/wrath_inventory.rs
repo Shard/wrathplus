@@ -4,10 +4,10 @@
 //! QueryHandler.cpp (page text), CharacterHandler.cpp (equipment sets), Item.cpp, Player.cpp.
 //!
 //! Replies whose meaning matches an existing shared event (item cooldown, item and enchant timers,
-//! bank-slot result, show-bank, page text) decode into it. The rest are capture-only [`Packet`]s:
-//! no equipment sets, refunds, sockets, read permission or item text are inferred. Strict framing
-//! of the AC emitted shapes; raw codes are preserved.
-use crate::types::UseItemTarget;
+//! bank-slot result, show-bank, page text, the enchantment log) decode into it. The rest are
+//! capture-only [`Packet`]s: no equipment sets, refunds, sockets, read permission or item text are
+//! inferred. Strict framing of the AC emitted shapes; raw codes are preserved.
+use crate::types::{EnchantmentLog, UseItemTarget};
 use crate::wire::{read_cstring, read_packed_guid, write_packed_guid};
 use crate::SessionEvent;
 use std::io::{self, Cursor, Read};
@@ -54,14 +54,6 @@ pub enum Packet {
     ReadItemFailed { item_guid: u64 },
     /// `SMSG_EQUIPMENT_SET_SAVED`: a new set's server GUID.
     EquipmentSetSaved { index: u32, set_guid: u64 },
-    /// `SMSG_ENCHANTMENTLOG`: `enchant_id` is a SpellItemEnchantment id, not a spell; an empty
-    /// caster is the removal of the item's previous enchant (`Item::SetEnchantment`).
-    EnchantmentLog {
-        target: u64,
-        caster: u64,
-        item_entry: u32,
-        enchant_id: u32,
-    },
     /// `SMSG_ITEM_TEXT_QUERY_RESPONSE`: status 0 carries the item and its text; AC writes 1 alone
     /// for an unknown item.
     ItemText {
@@ -172,7 +164,7 @@ pub fn decode(opcode: u16, body: &[u8]) -> io::Result<SessionEvent> {
         }),
         0x01b8 => SessionEvent::ShowBank { banker: u64_(r)? },
         0x01ba => SessionEvent::BuyBankSlotResult { result: u32_(r)? },
-        0x01d7 => capture(Packet::EnchantmentLog {
+        0x01d7 => SessionEvent::EnchantmentLog(EnchantmentLog {
             target: read_packed_guid(r)?,
             caster: read_packed_guid(r)?,
             item_entry: u32_(r)?,

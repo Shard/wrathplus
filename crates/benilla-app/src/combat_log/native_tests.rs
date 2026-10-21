@@ -438,9 +438,13 @@ fn a_unit_dies_when_its_health_falls_to_zero() {
     let (alive, dead) = (unit(40), unit(0));
     let mut health = HashMap::new();
     let mut log = NativeCombatLog::default();
-    deaths([(5, &dead), (6, &alive)], &mut health, &mut log);
+    deaths([(5, &dead), (6, &alive)], &mut health, &mut log, |_| {
+        event::UNIT_DIED
+    });
     assert!(log.0.is_empty());
-    deaths([(6, &dead), (5, &dead)], &mut health, &mut log);
+    deaths([(6, &dead), (5, &dead)], &mut health, &mut log, |_| {
+        event::UNIT_DIED
+    });
     assert_eq!(
         log.0
             .iter()
@@ -448,4 +452,136 @@ fn a_unit_dies_when_its_health_falls_to_zero() {
             .collect::<Vec<_>>(),
         [(event::UNIT_DIED, 0, 6)]
     );
+}
+
+/// `0x752ed0`'s split: a gas cloud dissipates, a totem-slot summon is destroyed, the rest die; the
+/// event `deaths` logs is the one its picker returns.
+#[test]
+fn a_gas_cloud_dissipates_and_a_totem_is_destroyed() {
+    assert_eq!(death_event(Some(13), Some(1)), event::UNIT_DISSIPATES);
+    assert_eq!(death_event(Some(4), Some(1)), event::UNIT_DESTROYED);
+    assert_eq!(death_event(None, Some(4)), event::UNIT_DESTROYED);
+    assert_eq!(
+        death_event(Some(7), Some(5)),
+        event::UNIT_DIED,
+        "a minipet's slot"
+    );
+    assert_eq!(death_event(Some(7), Some(0)), event::UNIT_DIED);
+    assert_eq!(death_event(None, None), event::UNIT_DIED);
+
+    use benilla_protocol::types::{Field, FieldLayout, ObjectFields};
+    let unit = |health: u32| {
+        crate::net::ObjectStore(ObjectFields::from_field_slots(
+            FieldLayout::Wrath12340,
+            &[(Field::ObjectType, 0, 9), (Field::UnitHealth, 0, health)],
+        ))
+    };
+    let (alive, dead) = (unit(40), unit(0));
+    let mut health = HashMap::new();
+    let mut log = NativeCombatLog::default();
+    let totem = |_: &crate::net::ObjectStore| event::UNIT_DESTROYED;
+    deaths([(7, &alive)], &mut health, &mut log, totem);
+    deaths([(7, &dead)], &mut health, &mut log, totem);
+    assert_eq!(
+        log.0
+            .iter()
+            .map(|p| (p.event, p.source, p.dest))
+            .collect::<Vec<_>>(),
+        [(event::UNIT_DESTROYED, 0, 7)]
+    );
+}
+
+/// `0x750d40`, `0x751050` and `0x752de0`: a resisted proc, an enchant landing and fading, and a
+/// split damage share.
+#[test]
+fn proc_resists_enchants_and_split_damage_take_their_native_events() {
+    let resist = recorded(SessionEvent::ProcResist(SpellOutcomeLog {
+        caster: 1,
+        target: 2,
+        spell_id: 20_271,
+        log_format: 0,
+    }));
+    assert_eq!(
+        resist
+            .iter()
+            .map(|p| (p.event, p.source, p.dest, p.spell, p.suffix.clone()))
+            .collect::<Vec<_>>(),
+        [(
+            event::SPELL_MISSED,
+            1,
+            2,
+            Some(20_271),
+            vec![V::Str("RESIST".into()), V::Int(0)]
+        )]
+    );
+
+    let enchant = |caster| {
+        recorded(SessionEvent::EnchantmentLog(EnchantmentLog {
+            target: 2,
+            caster,
+            item_entry: 19_019,
+            enchant_id: 1900,
+        }))
+    };
+    for (caster, event) in [(1, event::ENCHANT_APPLIED), (0, event::ENCHANT_REMOVED)] {
+        let entries = enchant(caster);
+        assert_eq!(
+            entries
+                .iter()
+                .map(|p| (p.event, p.source, p.dest, p.spell, p.fill))
+                .collect::<Vec<_>>(),
+            [(event, caster, 2, None, Fill::Enchant)]
+        );
+        assert_eq!(entries[0].suffix, [V::Int(1900), V::Int(19_019)]);
+    }
+
+    let catalog = crate::items::Enchants(benilla_formats::EnchantCatalog::from_rows(
+        HashMap::new(),
+        HashMap::from([
+            (1900, "Crusader".to_string()),
+            (7, "Flametongue".to_string()),
+        ]),
+        HashMap::from([(1900, 0), (7, 0x2), (8, 0)]),
+    ));
+    assert_eq!(
+        enchant_name(Some(&catalog), 1900),
+        Some(V::Str("Crusader".into()))
+    );
+    assert_eq!(
+        enchant_name(Some(&catalog), 7),
+        None,
+        "Flags & 0x2 logs nothing"
+    );
+    assert_eq!(
+        enchant_name(Some(&catalog), 8),
+        Some(V::Nil),
+        "an empty name"
+    );
+    assert_eq!(enchant_name(Some(&catalog), 9), None, "no row");
+    assert_eq!(enchant_name(None, 9), Some(V::Nil));
+
+    let damage = |hit_info, periodic| {
+        recorded(SessionEvent::SpellDamageLog(SpellDamageLog {
+            target: 2,
+            attacker: 1,
+            spell_id: 6229,
+            damage: 120,
+            school: 5,
+            absorb: 0,
+            resist: 0,
+            periodic,
+            blocked: 0,
+            hit_info,
+            overkill: 0,
+        }))
+    };
+    let split = damage(SPELL_HIT_SPLIT | SPELL_HIT_CRIT, true);
+    assert_eq!(
+        (split[0].event, split[0].source, split[0].dest),
+        (event::DAMAGE_SPLIT, 1, 2)
+    );
+    assert_eq!(split[0].suffix[0], V::Int(120));
+    assert_eq!(split[0].suffix[6], V::Int(1), "critical");
+    assert_eq!(damage(0, false)[0].event, event::SPELL_DAMAGE);
+    assert_eq!(damage(0, true)[0].event, event::SPELL_PERIODIC_DAMAGE);
 }
