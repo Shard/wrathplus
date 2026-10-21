@@ -70,7 +70,7 @@ pub(super) fn silenced_ui_load<S: std::borrow::Borrow<UiScript>, R>(
 /// (`UpdateMenuBarTop` divides by it, `UIParent.lua:1171`); and, unless the caller seated one, a
 /// player with a race and class (`DressUpFrame.lua:16` uppercases the race file). Returns every
 /// failure; a loader error is tagged `"<Addon>/<file>: <error>"`.
-pub(crate) fn load_default_ui(script: &mut UiScript) -> Vec<String> {
+pub fn load_default_ui(script: &mut UiScript) -> Vec<String> {
     load_session_ui(script, false)
 }
 

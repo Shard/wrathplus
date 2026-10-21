@@ -12,7 +12,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\GlobalStrings.lua",
     "Interface\\FrameXML\\Fonts.xml",
     "Interface\\FrameXML\\BasicControls.xml", // `TEXT`, which StaticPopup.lua reads at file scope
-    "Interface\\FrameXML\\LocaleProperties.lua",
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
     r"Interface\FrameXML\MoneyFrame.xml",
@@ -23,10 +22,9 @@ const FILES: &[&str] = &[
     // only if resolved against the document's own directory. It has no `inherits=` and its Lua
     // has no file-scope statements, so it needs nothing before it.
     "Interface\\FrameXML\\FadingFrame.xml",
-    "ScrollTemplates.xml",
 ];
 
-fn load_ui(script: &UiScript) {
+fn load_ui(script: &mut UiScript) {
     for file in FILES {
         common::load_ui(script, file);
     }
@@ -39,7 +37,7 @@ fn a_real_template_reaches_an_addon_through_create_frame() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_ui(&s);
+    load_ui(&mut s);
     // Clear what the UI load itself reported.
     let _ = s.take_warnings();
     let _ = s.take_errors();
@@ -127,7 +125,7 @@ fn the_corpus_favourite_template_composes_parent_two_levels_deep() {
     let _data = benilla_formats::wow_data_or_skip!();
     let mut s = UiScript::new().unwrap();
     s.set_screen_size(1024.0, 768.0);
-    load_ui(&s);
+    load_ui(&mut s);
     let _ = s.take_warnings();
     let _ = s.take_errors();
 

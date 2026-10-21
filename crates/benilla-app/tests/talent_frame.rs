@@ -16,7 +16,6 @@ const FILES: &[&str] = &[
     "Interface\\FrameXML\\Fonts.xml",
     // `TEXT`.
     "Interface\\FrameXML\\BasicControls.xml",
-    "Interface\\FrameXML\\LocaleProperties.lua",
     // `ToggleTalentFrame` (`UIParent.lua:205`).
     r"Interface\FrameXML\UIParent.xml",
     r"Interface\FrameXML\MoneyFrame.lua",
@@ -34,12 +33,11 @@ const FILES: &[&str] = &[
     r"Interface\FrameXML\MainMenuBarMicroButtons.xml",
     // `SetItemButtonDesaturated`, which the talent buttons grey through.
     "Interface\\FrameXML\\ItemButtonTemplate.xml",
-    "ScrollTemplates.xml",
     // Sources its own `.lua` and `<Include>`s the templates file.
     "Interface\\AddOns\\Blizzard_TalentUI\\Blizzard_TalentUI.xml",
 ];
 
-fn load_ui(script: &UiScript) {
+fn load_ui(script: &mut UiScript) {
     for file in FILES {
         common::load_ui(script, file);
     }
@@ -143,7 +141,7 @@ fn probe_player() -> UnitState {
 fn open_window(points_spent: u32) -> UiScript {
     let mut script = UiScript::new().expect("engine");
     script.set_screen_size(1024.0, 768.0);
-    load_ui(&script);
+    load_ui(&mut script);
     script.set_unit("player", Some(probe_player()));
     script.set_talents(fixture(points_spent));
     script.run("ToggleTalentFrame()").expect("toggle");
@@ -317,7 +315,7 @@ fn a_wheel_spin_over_the_grid_scrolls_the_tree() {
     // step the Slider, whose OnValueChanged pans the frame.
     let mut script = UiScript::new().expect("engine");
     script.set_screen_size(1024.0, 768.0);
-    load_ui(&script);
+    load_ui(&mut script);
     script.set_unit("player", Some(probe_player()));
     script.set_talents(tall_fixture());
     script.run("ToggleTalentFrame()").expect("toggle");
