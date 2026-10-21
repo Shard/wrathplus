@@ -2,24 +2,19 @@
 //! in a system that holds the VM is a `VmMemo`. It scans the whole source tree, so it lives in the
 //! root layer.
 
-use crate::test_support::{fn_parameter_lists, rust_files};
+use crate::test_support::fn_parameter_lists;
 
 /// A `Local` in a system that takes the VM must be a [`VmMemo`](crate::app_core::vm_memo::VmMemo) or be listed in [`EXEMPT`]: a
 /// stale memo fails silently, so the check is structural.
 #[test]
 fn a_local_in_a_system_that_holds_the_vm_is_keyed_on_the_session() {
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut offenders = Vec::new();
-    for file in rust_files(&src) {
+    // The whole app: every layer crate after the split.
+    for (rel, file) in crate::app_core::source_tree::rust_files() {
         let text = std::fs::read_to_string(&file).expect("readable source");
         if !text.contains("UiScript") {
             continue; // no VM in this file, so no memory about one
         }
-        let rel = file
-            .strip_prefix(&src)
-            .unwrap_or(&file)
-            .to_string_lossy()
-            .replace('\\', "/");
         for params in fn_parameter_lists(&text) {
             if !params.contains("UiScript") {
                 continue;

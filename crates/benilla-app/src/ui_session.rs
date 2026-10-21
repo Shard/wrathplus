@@ -368,8 +368,6 @@ mod tests {
     /// chain or on the exclusion list with a reason; one missing renders a black portrait disc.
     #[test]
     fn every_npc_session_is_portrait_bound_or_explicitly_excluded() {
-        use std::path::Path;
-
         /// Sessions that do not own the `"npc"` portrait token, each with its reason.
         const EXCLUDED: &[(&str, &str)] = &[
             // Its icon is art, not a unit bake, and must not take a portrait window's token.
@@ -393,39 +391,28 @@ mod tests {
             .0;
 
         let mut missing = Vec::new();
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut stack = vec![root];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("read_dir") {
-                let path = entry.expect("dir entry").path();
-                if path.is_dir() {
-                    stack.push(path);
+        // The whole app: every layer crate after the split.
+        for (_, path) in crate::app_core::source_tree::rust_files() {
+            // This file defines the trait and no session, but its own text spells the pattern.
+            if path.file_name().is_some_and(|f| f == "ui_session.rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).expect("read source");
+            for (_, rest) in src
+                .match_indices("impl NpcSession for ")
+                .map(|(i, _)| (i, &src[i + "impl NpcSession for ".len()..]))
+            {
+                let ty: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                if ty.is_empty() || EXCLUDED.iter().any(|(name, _)| *name == ty) {
                     continue;
                 }
-                if path.extension().is_none_or(|e| e != "rs") {
-                    continue;
-                }
-                // This file defines the trait and no session, but its own text spells the pattern.
-                if path.file_name().is_some_and(|f| f == "ui_session.rs") {
-                    continue;
-                }
-                let src = std::fs::read_to_string(&path).expect("read source");
-                for (_, rest) in src
-                    .match_indices("impl NpcSession for ")
-                    .map(|(i, _)| (i, &src[i + "impl NpcSession for ".len()..]))
-                {
-                    let ty: String = rest
-                        .chars()
-                        .take_while(|c| c.is_alphanumeric() || *c == '_')
-                        .collect();
-                    if ty.is_empty() || EXCLUDED.iter().any(|(name, _)| *name == ty) {
-                        continue;
-                    }
-                    // Wired means the chain's text names the type, as its `Res<...>` parameter
-                    // does; a comment naming it counts too.
-                    if !chain.contains(&ty) {
-                        missing.push(format!("{ty} (in {})", path.display()));
-                    }
+                // Wired means the chain's text names the type, as its `Res<...>` parameter
+                // does; a comment naming it counts too.
+                if !chain.contains(&ty) {
+                    missing.push(format!("{ty} (in {})", path.display()));
                 }
             }
         }

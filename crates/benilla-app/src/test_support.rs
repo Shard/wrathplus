@@ -24,20 +24,6 @@ pub(crate) fn rust_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     out
 }
 
-/// This crate's `src/` directory.
-pub(crate) fn src_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
-}
-
-/// A file's path under `src/`, with forward slashes: the key every `EXEMPT` table uses.
-pub(crate) fn rel_path(file: &std::path::Path) -> String {
-    let src = src_dir();
-    file.strip_prefix(&src)
-        .unwrap_or(file)
-        .to_string_lossy()
-        .replace('\\', "/")
-}
-
 /// One `fn` item: name, parameter list and body, each found by bracket matching.
 pub(crate) struct FnItem<'a> {
     pub name: &'a str,

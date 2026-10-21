@@ -402,7 +402,7 @@ fn launch(build: BuildId, extend: Option<Extension<'_>>) -> AppExit {
     }
 
     // No `game://` source: the five UI shaders are compiled in by `crate::shaders`
-    // (`embedded://benilla_app/shaders/…`), so no build-machine path reaches the binary.
+    // (`embedded://<its crate>/shaders/…`), so no build-machine path reaches the binary.
 
     app.add_plugins(benilla_world::boot::tuned_default_plugins(Window {
         title: "benilla".into(),

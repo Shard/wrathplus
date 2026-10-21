@@ -1277,14 +1277,13 @@ pub(crate) mod schedule_tests {
     /// row fails too.
     #[test]
     fn every_one_shot_consumer_that_holds_the_vm_is_gated_or_argued() {
-        use crate::test_support::{fn_items, rel_path, rust_files, src_dir};
+        use crate::test_support::fn_items;
         let mut consumers = Vec::new();
-        for file in rust_files(&src_dir()) {
+        for (rel, file) in crate::app_core::source_tree::rust_files() {
             let text = std::fs::read_to_string(&file).expect("readable source");
             if !text.contains("UiScript") {
                 continue;
             }
-            let rel = rel_path(&file);
             for f in fn_items(&text) {
                 let holds_vm = f.params.contains("NonSendMut<UiScript>")
                     || f.params.contains("NonSend<UiScript>");
