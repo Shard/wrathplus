@@ -48,6 +48,7 @@ pub(crate) fn compose_line(
         .slots
         .iter()
         .map(|slot| match slot {
+            Slot::Subject => Arg::Str(&fills.subject),
             Slot::Named => Arg::Str(&fills.named),
             Slot::Amount => Arg::Num(fills.amount),
         })
@@ -136,6 +137,26 @@ family!(
     [Named, Amount],
     "`\"Your %s reputation has decreased by %d.\"`"
 );
+family!(
+    TRADESKILL_LOG_FIRSTPERSON,
+    [Named],
+    "`\"You create %s.\"` — the item's name (`0x50bd90`, chat type `0x1e`)."
+);
+family!(
+    TRADESKILL_LOG_THIRDPERSON,
+    [Subject, Named],
+    "`\"%s creates %s.\"`"
+);
+family!(
+    FEEDPET_LOG_FIRSTPERSON,
+    [Named],
+    "`\"Your pet begins eating the %s.\"` (`0x50baf0`, chat type `0x1f`)."
+);
+family!(
+    FEEDPET_LOG_THIRDPERSON,
+    [Subject, Named],
+    "`\"%s's pet begins eating a %s.\"`"
+);
 
 /// The CVar rows this feature owns ([`crate::cvars::RegisterCvars`]), each with the
 /// reference's register site and its default's standing ([`crate::cvars::Registered`]).
@@ -154,6 +175,10 @@ pub(crate) const ALL_FAMILIES: &[Family] = &[
     DURABILITYDAMAGE_DEATH,
     FACTION_STANDING_INCREASED,
     FACTION_STANDING_DECREASED,
+    TRADESKILL_LOG_FIRSTPERSON,
+    TRADESKILL_LOG_THIRDPERSON,
+    FEEDPET_LOG_FIRSTPERSON,
+    FEEDPET_LOG_THIRDPERSON,
 ];
 
 #[cfg(test)]
