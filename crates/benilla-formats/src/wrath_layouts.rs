@@ -80,10 +80,6 @@ pub(crate) fn columns(
         "SpellVisualKit" => (35, 38, |m| {
             m.same(0, 1).same(2, 10).run(12, 14, 23);
         }),
-        // Min and max allowed scale appended.
-        "SpellVisualEffectName" => (5, 7, |m| {
-            m.same(0, 5);
-        }),
         // Four doodad weights between the doodads and the density.
         "GroundEffectTexture" => (7, 11, |m| {
             m.same(0, 5).run(5, 9, 2);
@@ -315,7 +311,6 @@ mod tests {
         ("SpellVisual", 16, 32),
         ("GroundEffectTexture", 7, 11),
         ("SpellVisualKit", 35, 38),
-        ("SpellVisualEffectName", 5, 7),
     ];
 
     #[test]
