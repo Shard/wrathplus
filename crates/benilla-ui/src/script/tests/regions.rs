@@ -799,10 +799,10 @@ fn the_two_region_leaves_answer_their_own_maps() {
             "{m} is the Region map"
         );
     }
-    // 1.12 has no `GetStringHeight` on any table; `GetHeight` reads the same measurement.
+    // 12340's `GetStringHeight` (`0x48df00`) is the FontString's alone.
     assert!(
-        !has(&s, "Str", "GetStringHeight"),
-        "1.12 has no GetStringHeight"
+        has(&s, "Str", "GetStringHeight") && !has(&s, "Tex", "GetStringHeight"),
+        "GetStringHeight is FontString-only"
     );
     assert!(
         has(&s, "Str", "GetStringWidth"),
@@ -1087,7 +1087,7 @@ fn an_empty_fontstring_reads_back_nil_and_an_edit_box_does_not() {
     s.run(r#"held:SetText("back"); held:SetText(nil)"#).unwrap();
     assert_eq!(text_of(&s, "held"), None);
 
-    // `Button:SetText(nil)` leaves the label alone.
+    // 12340 `Button:SetText(nil)` on a labelled button clears it (`0x96f860` into `0x483910`).
     s.run(
         r#"
         local b = CreateFrame("Button", "TextCellButton")
@@ -1098,8 +1098,8 @@ fn an_empty_fontstring_reads_back_nil_and_an_edit_box_does_not() {
     .unwrap();
     assert_eq!(
         text_of(&s, "TextCellButton").as_deref(),
-        Some("Accept"),
-        "a nil never reaches the button's label (`0x778dcc`)"
+        None,
+        "a nil reaches the label and clears it"
     );
     s.run(r#"TextCellButton:SetText("")"#).unwrap();
     assert_eq!(text_of(&s, "TextCellButton"), None, "an empty label is nil");

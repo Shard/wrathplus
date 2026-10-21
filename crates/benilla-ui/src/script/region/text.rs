@@ -65,9 +65,14 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
 
     // GetStringWidth (`0x79e510`): the natural, unwrapped width of the current text, 0 until
     // measured. Never the declared width, which `PanelTemplates_TabResize` sets from this; on an
-    // axis sized 0, `GetWidth` reads the same cell (`[fs+0xfc]`, `0x772890`). 1.12 has no
-    // `GetStringHeight`; `GetHeight` (`0x7a2030`) serves.
-    fn natural_w(lua: &Lua, this: &Table) -> mlua::Result<f32> {
+    // axis sized 0, `GetWidth` reads the same cell (`[fs+0xfc]`, `0x772890`). GetStringHeight
+    // (`0x48df00` over `0x483fa0`): the laid-out, wrapped height at the string's width, measured
+    // on demand, 0 for no text and with no one-unit floor, unlike `GetHeight`.
+    fn measured(
+        lua: &Lua,
+        this: &Table,
+        pick: fn(&crate::script::types::MeasuredText) -> f32,
+    ) -> mlua::Result<f32> {
         let rh = region_handle_of(lua, this)?;
         // Measure now when a host font engine is installed, as the reference measures inline, so
         // `SetText` then `GetStringWidth` works in one tick; without one it is 0 until the host
@@ -85,12 +90,16 @@ pub(super) fn install(lua: &Lua, m: &Table) -> mlua::Result<()> {
             .unwrap_or(1.0);
         Ok(d.measured
             .filter(|m| m.key == d.measure_key(scale))
-            .map(|m| m.natural_w)
+            .map(|m| pick(&m))
             .unwrap_or(0.0))
     }
     m.set(
         "GetStringWidth",
-        lua.create_function(|lua, this: Table| natural_w(lua, &this))?,
+        lua.create_function(|lua, this: Table| measured(lua, &this, |m| m.natural_w))?,
+    )?;
+    m.set(
+        "GetStringHeight",
+        lua.create_function(|lua, this: Table| measured(lua, &this, |m| m.h))?,
     )?;
 
     // SetJustifyH (XML `justifyH`): the parse, the raise on a miss and the cross-axis clear are

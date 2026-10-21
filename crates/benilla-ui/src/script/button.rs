@@ -480,13 +480,17 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
         "SetText",
         lua.create_function(|lua, (this, text): (Table, Option<Value>)| {
             let text = super::binding_abi::text_arg(lua, text)?;
-            // A nil returns at once (`0x778dcc`): no clear, no label created. The guard is the
-            // button's own; `FontString:SetText(nil)` clears (`0x771d80`).
-            let Some(text) = text else { return Ok(()) };
+            // 12340 (`0x977960` → `0x96f860`): nil or empty text on a button with no label
+            // returns at once, creating none; otherwise the label goes through the FontString
+            // setter with its grammar pass (`0x483910(text, 1)`), so nil or "" clears it.
+            let has_label = with_button(lua, &this, |bs| bs.text)?.is_some();
+            if !has_label && text.as_deref().is_none_or(str::is_empty) {
+                return Ok(());
+            }
             let id = ensure_slot(lua, &this, Slot::Text)?;
             let mut model = lua.app_data_mut::<Model>().expect("model app_data");
             let rh = *model.id_to_region.get(&id).expect("text region id");
-            model.region_data.entry(rh).or_default().text = Some(text);
+            model.region_data.entry(rh).or_default().text = text.map(crate::grammar::resolve_owned);
             model.touch_measure(rh);
             Ok(())
         })?,
@@ -917,115 +921,6 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
     Ok(())
 }
 
-/// Whether `h` fires `OnClick` for the transition `name` (e.g. `"RightButtonDown"`): a Button
-/// checks its `RegisterForClicks` set, ignoring case, where `AnyUp`/`AnyDown` (2.0+) cover every
-/// button; any other kind fires on release only.
-pub(super) fn wants_click(model: &Model, h: FrameHandle, name: &str) -> bool {
-    match model.arena.frame(h).map(|f| &f.kind_state) {
-        Some(KindState::Button(bs)) => bs.registered_clicks.iter().any(|s| {
-            s.eq_ignore_ascii_case(name)
-                || (s.eq_ignore_ascii_case("AnyUp") && name.ends_with("Up"))
-                || (s.eq_ignore_ascii_case("AnyDown") && name.ends_with("Down"))
-        }),
-        _ => name.ends_with("Up"),
-    }
-}
-
-/// Whether `h` is registered for `button` (`"LeftButton"`, …) as Up or Down, the press-art gate.
-/// `OnMouseDown` (`0x779210`) tests `m | m << 8` against `[this+0x330]` (Down in byte 0, Up in
-/// byte 1, `0x77924b`) before the Down-only `OnClick` test (`0x77926b`), so any registration for
-/// that button pushes the art, click or not.
-pub(super) fn wants_press_visual(model: &Model, h: FrameHandle, button: &str) -> bool {
-    match model.arena.frame(h).map(|f| &f.kind_state) {
-        // `AnyUp`/`AnyDown` (2.0+, `ActionButton.lua:90`) register every button.
-        Some(KindState::Button(bs)) => bs.registered_clicks.iter().any(|s| {
-            s.strip_suffix("Up")
-                .or_else(|| s.strip_suffix("Down"))
-                .is_some_and(|b| b.eq_ignore_ascii_case(button) || b.eq_ignore_ascii_case("Any"))
-        }),
-        _ => false,
-    }
-}
-
-/// The click shared by the input path and `Click()`: a disabled Button fires nothing, a CheckButton
-/// toggles before `OnClick` runs (`0x785550`), then `OnClick` gets the button name alone as `arg1`
-/// (`0x779540` fires it with the format `"%s"`); `down`, true only for a click a `…ButtonDown`
-/// registration fired, reaches the nameplate's select alone. `scripted` marks a Lua `Click()`
-/// (`0x7826c0` passes 1, the mouse `0x779280`/`0x7793a4` pass 0): a LootButton then does nothing at
-/// all, not even its `OnClick` (`0x4c182b`); every other kind ignores it.
-pub(super) fn click_button(lua: &Lua, id: u32, button: &str, down: bool, scripted: bool) {
-    let mut take_loot = None;
-    let fire = {
-        let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-        let Some(&h) = model.id_to_frame.get(&id) else {
-            return;
-        };
-        let is_loot = model
-            .arena
-            .frame(h)
-            .is_some_and(|f| f.kind == crate::widget::FrameKind::LootButton);
-        if is_loot {
-            if scripted {
-                return;
-            }
-            // Deviation: the slot is read before the handler, where the reference reads it after
-            // (`[esi+0x4dc]`), because reading first keeps the borrow simple and no stock handler
-            // re-slots its row. Shift, ctrl or alt suppresses the take (`0x4c183a`/`0x4c1848`/
-            // `0x4c1856`).
-            let (shift, ctrl, alt) = model.modifiers;
-            if !shift && !ctrl && !alt {
-                take_loot = model.arena.frame(h).and_then(|f| match &f.kind_state {
-                    KindState::Button(bs) => bs.loot_slot,
-                    _ => None,
-                });
-            }
-        }
-        let Some(frame) = model.arena.frame_mut(h) else {
-            return;
-        };
-        let is_check = frame.kind == FrameKind::CheckButton;
-        match &mut frame.kind_state {
-            // A Button fires only while enabled;
-            KindState::Button(bs) => {
-                if bs.enabled() {
-                    if is_check {
-                        bs.checked = !bs.checked;
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-            // any other kind with an `OnClick` just fires.
-            _ => true,
-        }
-    };
-    if !fire {
-        return;
-    }
-    let btn = match lua.create_string(button) {
-        Ok(s) => Value::String(s),
-        Err(_) => return,
-    };
-    for script in ["PreClick", "OnClick", "PostClick"] {
-        let args = vec![btn.clone(), Value::Boolean(down)];
-        if let Err(e) = event::fire_widget_handler(lua, id, script, args) {
-            lua.app_data_mut::<Model>().expect("model app_data").record_script_error(e.to_string());
-        }
-    }
-    // A nameplate click selects its unit, from the pointer or `Click()` alike (the plate's
-    // override `0x7cb910` chains the base), after the handler so an erroring hook cannot eat it. A
-    // press selects nothing: the plate registers Up clicks only (`0x7cb637`).
-    if !down {
-        super::nameplate::note_click(lua, id, button);
-    }
-    // The take runs whatever the handler did (`0x4c1867`): a row whose `OnClick` errored still
-    // loots.
-    if let Some(slot) = take_loot {
-        // The slot is 0-based; the take queue speaks the 1-based row.
-        lua.app_data_mut::<Model>()
-            .expect("model app_data")
-            .loot_picks
-            .push(slot + 1);
-    }
-}
+#[path = "button_click.rs"]
+mod click;
+pub(super) use click::{click_button, wants_click, wants_press_visual};

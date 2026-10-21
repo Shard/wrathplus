@@ -33,9 +33,9 @@ pub(super) use scrolling::REG_SCROLLINGMESSAGEFRAME_METHODS;
 /// line in white (`0x79581c`), and the receiver checks (`0x847ef8`) still raise. A number becomes
 /// its decimal text (`0x6f7c80`).
 ///
-/// The line is stored grammar-resolved ([`crate::grammar`]), as its fontstring's setter
-/// (`0x483910`, called from the line set `0x61c620`) would draw it. Inferred: that call's flag was
-/// not read.
+/// The line is stored grammar-resolved ([`crate::grammar`]), as the FontString setter (`0x483910`)
+/// stores text. Inferred: the message frames' own line set was not traced; the stock client shows
+/// `LEVEL_UP_CHAR_POINTS` resolved in chat.
 pub(super) fn message_text(lua: &mlua::Lua, v: &mlua::Value) -> Option<String> {
     super::binding_abi::optional_string(lua, v)
         .filter(|s| !s.is_empty())
