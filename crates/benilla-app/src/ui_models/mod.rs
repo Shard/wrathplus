@@ -422,15 +422,13 @@ impl Tile {
 /// Frames a tile survives off the paint list, so a re-arming cooldown or a ping keeps its tree.
 const TILE_LINGER_FRAMES: u64 = 600;
 
-/// The atlas edge the first tile allocates, and the cap a grown atlas stops at.
-const ATLAS_MIN: u32 = 512;
+/// The cap a grown atlas stops at; the first edge is [`ATLAS_MIN`].
 const ATLAS_MAX: u32 = 4096;
 
 /// Gutter between cells (texels): a tile's bilinear edge never samples a neighbour.
 const GUTTER: u32 = 2;
 
-/// The tile camera's order: after every booth (`-100 …`), before the UI camera (`1`).
-const TILE_CAMERA_ORDER: isize = -10;
+use crate::portrait::{ATLAS_MIN, TILE_CAMERA_ORDER};
 
 /// The renderer's state beyond the bridge, most of it one VM's: the VM is built at world entry,
 /// dropped at the character screen and rebuilt by `ReloadUI()`.
@@ -589,42 +587,6 @@ fn setup_tiles(
     }
     commands.insert_resource(rig);
     let _ = light_buf;
-}
-
-/// `pipe_warm`'s orthographic twin of [`setup_tiles`]' camera, kept in its shape: bevy_pbr keys
-/// mesh pipelines on the projection class (`bevy_pbr-0.18.1` `render/mesh.rs:397`). The real one
-/// is not borrowed, since switching it on would draw the warm models into the live atlas.
-pub(crate) fn spawn_warm_tile_cam(
-    commands: &mut Commands,
-    images: &mut Assets<Image>,
-) -> (Entity, RenderLayers) {
-    let layer = RenderLayers::layer(crate::portrait::WARM_ORTHO_LAYER);
-    // The atlas's minimum size, like the camera it warms; size reaches no pipeline key.
-    let image = images.add(new_target_image_sized(ATLAS_MIN, ATLAS_MIN));
-    let cam = commands
-        .spawn((
-            Name::new("pipe_warm orthographic twin camera"),
-            booth_view_shape(),
-            Camera {
-                order: TILE_CAMERA_ORDER - 1,
-                clear_color: ClearColorConfig::Custom(Color::NONE),
-                ..default()
-            },
-            RenderTarget::Image(image.into()),
-            benilla_world::ffx_glow::FfxGlow::UI_PANE,
-            Projection::Orthographic(OrthographicProjection {
-                near: 0.1,
-                far: 2000.0,
-                scaling_mode: ScalingMode::Fixed {
-                    width: ATLAS_MIN as f32,
-                    height: ATLAS_MIN as f32,
-                },
-                ..OrthographicProjection::default_3d()
-            }),
-            layer.clone(),
-        ))
-        .id();
-    (cam, layer)
 }
 
 /// Bevy space to tile-camera space: WoW `+X` right, `+Y` up, `+Z` toward the viewer, the ortho

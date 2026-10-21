@@ -90,7 +90,7 @@ pub(super) fn setup_composite(
 
     // A 1×1 quad at the origin, every tile a Transform of it. `pipe_warm` warms this same mesh (its
     // layout is a pipeline key axis), so both take it from one builder.
-    let quad = meshes.add(crate::ui_pass::tile_quad_mesh());
+    let quad = meshes.add(crate::overlay::tile_quad_mesh());
 
     let camera = commands
         .spawn((

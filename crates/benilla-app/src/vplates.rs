@@ -526,7 +526,7 @@ fn drive_vplates(
             &anchor_q.4,
         );
         let Some(screen) =
-            crate::ui_pass::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
+            crate::overlay::project_overlay(cam, &cam_tf, anchor + Vec3::Y * PLATE_LIFT, viewport)
         else {
             continue;
         };
